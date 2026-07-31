@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auth_source_xoauth2_batch};
+use super::ParityBatchCase;
 
 fn auth_source_xoauth2_real_auth_source_search_returns_access_token() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_real_auth_source_search_returns_access_token",
         r##"(let ((auth-sources
                 '(xoauth2))
@@ -39,7 +39,6 @@ fn auth_source_xoauth2_real_auth_source_search_returns_access_token() -> ParityB
                   (plist-get entry :secret)))
                matches)
               (nreverse calls)))))"##,
-        true,
         expect![[
             r#"OK (((:host "smtp.example" :port 587 :user "alice@example" :secret "integration-token")) (("smtp.example" 587 "alice@example" "integration-token")) (("https://token.example" "client_id=client&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
         ]],
@@ -47,7 +46,7 @@ fn auth_source_xoauth2_real_auth_source_search_returns_access_token() -> ParityB
 }
 
 fn auth_source_xoauth2_real_password_lookup_returns_access_token() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_real_password_lookup_returns_access_token",
         r##"(let ((auth-sources
                 '(xoauth2))
@@ -75,7 +74,6 @@ fn auth_source_xoauth2_real_password_lookup_returns_access_token() -> ParityBatc
              :user "alice"
              :port "submission")
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ("password-token" (("https://smtp.example/token" "client_id=alice&client_secret=secret&refresh_token=refresh-submission&grant_type=refresh_token")))"#
         ]],
@@ -83,7 +81,7 @@ fn auth_source_xoauth2_real_password_lookup_returns_access_token() -> ParityBatc
 }
 
 fn auth_source_xoauth2_enable_then_search_models_application_startup() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_enable_then_search_models_application_startup",
         r##"(let ((auth-sources
                 '("~/.authinfo"))
@@ -111,7 +109,6 @@ fn auth_source_xoauth2_enable_then_search_models_application_startup() -> Parity
               auth-sources
               (car matches)
               (nreverse calls)))))"##,
-        true,
         expect![[
             r#"OK ((xoauth2 "~/.authinfo") (:host "imap.example" :port 993 :user "alice" :secret "startup-token") (("url" "client_id=id&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
         ]],
@@ -119,7 +116,7 @@ fn auth_source_xoauth2_enable_then_search_models_application_startup() -> Parity
 }
 
 fn auth_source_xoauth2_file_provider_drives_full_token_workflow() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_file_provider_drives_full_token_workflow",
         r##"(let ((file-name-handler-alist nil)
                (file
@@ -160,20 +157,17 @@ fn auth_source_xoauth2_file_provider_drives_full_token_workflow() -> ParityBatch
                :user "alice"
                :port 587)
               (nreverse calls)))))"##,
-        true,
         expect![[
             r#"OK ("file-workflow-token" nil (("https://token.example" "client_id=client&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auth_source_xoauth2_real_auth_source_search_returns_access_token(),
         auth_source_xoauth2_real_password_lookup_returns_access_token(),
         auth_source_xoauth2_enable_then_search_models_application_startup(),
         auth_source_xoauth2_file_provider_drives_full_token_workflow(),
-    ];
-    assert_auth_source_xoauth2_batch(&cases);
+    ]
 }

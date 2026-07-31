@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_anakondo_batch};
+use super::ParityBatchCase;
 
 fn turning_the_mode_on_analyses_the_project_with_the_documented_commands() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "turning_the_mode_on_analyses_the_project_with_the_documented_commands",
         r##"
         ;; A user opens a namespace in a `deps.edn' project and turns
@@ -52,7 +52,6 @@ fn turning_the_mode_on_analyses_the_project_with_the_documented_commands() -> Pa
             :commands (ak-test-commands)
             :messages (ak-test-messages "^Analysing project for completion\\.\\.\\..*$"))))
     "##,
-        true,
         expect![[
             r#"OK (:major-mode clojure-mode :clojure-mode-available t :project-el-available nil :enabled (:on t :lighter " k" :capf (anakondo-completion-at-point t) :capf-buffer-local t) :root (:cached-roots 1 :is-clojure-project-dir t :root "[ORACLE-SANDBOX]/project/") :caches (":java-classes-cache" ":ns-def-cache" ":ns-usage-cache" ":var-def-cache") :namespaces (":inventory.core" ":inventory.util") :var-namespaces (":inventory.core" ":inventory.util") :java-classes ((":com.warehouse.Barcode" "com.warehouse.Barcode" lazy)) :commands (("-Spath") ("--lint" "[ORACLE-SANDBOX]/project/src:[ORACLE-SANDBOX]/project/lib/warehouse.jar\\n" "--config" "{:output {:analysis true :format :json}}" "--lang" "clj" "cwd [ORACLE-SANDBOX]/project/src/inventory") ("-Spath")) :messages ("Analysing project for completion...done"))"#
         ]],
@@ -60,7 +59,7 @@ fn turning_the_mode_on_analyses_the_project_with_the_documented_commands() -> Pa
 }
 
 fn completing_a_var_pipes_the_unsaved_buffer_to_clj_kondo() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "completing_a_var_pipes_the_unsaved_buffer_to_clj_kondo",
         r##"
         ;; The user starts a new function that is not on disk yet and asks for
@@ -88,7 +87,6 @@ fn completing_a_var_pipes_the_unsaved_buffer_to_clj_kondo() -> ParityBatchCase {
                                             (buffer-substring-no-properties (point-min) (point-max))
                                             "\n" t)))))))
     "##,
-        true,
         expect![[
             r#"OK (:offered (:start-column 3 :prefix "tot" :candidates ("total-price")) :modified t :stdin-is-the-buffer t :stdin-tail "  (tot" :buffer-analysis-command ("--lint" "-" "--config" "{:output {:analysis true :format :json}}" "--lang" "clj" "cwd [ORACLE-SANDBOX]/project/src/inventory" "stdin-bytes 751") :completed (:line 31 :column 14 :text "  (total-price") :buffer-tail "  (total-price")"#
         ]],
@@ -96,7 +94,7 @@ fn completing_a_var_pipes_the_unsaved_buffer_to_clj_kondo() -> ParityBatchCase {
 }
 
 fn completing_an_aliased_namespace_qualifies_every_var_with_the_alias() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "completing_an_aliased_namespace_qualifies_every_var_with_the_alias",
         r##"
         ;; `inventory.core' requires `inventory.util' as `util' and
@@ -123,7 +121,6 @@ fn completing_an_aliased_namespace_qualifies_every_var_with_the_alias() -> Parit
                                           (insert "\n(defn d [] (describ")
                                           (ak-test-candidates)))))
     "##,
-        true,
         expect![[
             r#"OK (:aliased (:start-column 12 :prefix "util/" :candidates ("util/apply-discount" "util/default-price" "util/normalize-name")) :aliased-but-unanalysed (:start-column 12 :prefix "str/" :candidates nil) :namespace-names (:start-column 12 :prefix "inventory." :candidates ("inventory.core" "inventory.util")) :current-namespace-var (:start-column 12 :prefix "describ" :candidates ("describe")))"#
         ]],
@@ -131,7 +128,7 @@ fn completing_an_aliased_namespace_qualifies_every_var_with_the_alias() -> Parit
 }
 
 fn java_classes_and_public_static_members_come_from_a_real_jar() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "java_classes_and_public_static_members_come_from_a_real_jar",
         r##"
         ;; The Java half runs against a real jar built by the real JDK tools.
@@ -174,7 +171,6 @@ fn java_classes_and_public_static_members_come_from_a_real_jar() -> ParityBatchC
                                   (insert "\n(defn c [] (com.warehouse.Barcode/")
                                   (ak-test-candidates)))))
     "##,
-        true,
         expect![[
             r#"OK (:tools (:javac t :jar t :javap t) :enabled t :class-prefix (:start-column 12 :prefix "com.warehouse.Bar" :candidates ("com.warehouse.Barcode")) :still-lazy lazy :members (:start-column 12 :prefix "com.warehouse.Barcode/" :candidates ("com.warehouse.Barcode/LENGTH" "com.warehouse.Barcode/PREFIX" "com.warehouse.Barcode/format" "com.warehouse.Barcode/valid")) :resolved (("LENGTH" "int" nil nil) ("PREFIX" "java.lang.String" nil nil) ("format" "java.lang.String" "(java.lang.String)" t) ("valid" "boolean" "(java.lang.String)" t)) :members-again (:start-column 12 :prefix "com.warehouse.Barcode/" :candidates ("com.warehouse.Barcode/LENGTH" "com.warehouse.Barcode/PREFIX" "com.warehouse.Barcode/format" "com.warehouse.Barcode/valid")))"#
         ]],
@@ -182,7 +178,7 @@ fn java_classes_and_public_static_members_come_from_a_real_jar() -> ParityBatchC
 }
 
 fn clojure_default_imports_are_offered_but_cannot_be_resolved_on_a_modern_jdk() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "clojure_default_imports_are_offered_but_cannot_be_resolved_on_a_modern_jdk",
         r##"
         ;; anakondo ships Clojure's default `java.lang' imports, so `Integ'
@@ -213,7 +209,6 @@ fn clojure_default_imports_are_offered_but_cannot_be_resolved_on_a_modern_jdk() 
                                                  (insert "\n(defn c [] (com.warehouse.Barcode/")
                                                  (ak-test-candidates)))))
     "##,
-        true,
         expect![[
             r#"OK (:java-version-property-exists nil :default-import-offered (:start-column 12 :prefix "Integ" :candidates ("Integer")) :default-import-members (:start-column 12 :prefix "Integer/" :candidates nil) :project-class-still-resolves (:start-column 12 :prefix "com.warehouse.Barcode/" :candidates ("com.warehouse.Barcode/LENGTH" "com.warehouse.Barcode/PREFIX" "com.warehouse.Barcode/format" "com.warehouse.Barcode/valid")))"#
         ]],
@@ -221,7 +216,7 @@ fn clojure_default_imports_are_offered_but_cannot_be_resolved_on_a_modern_jdk() 
 }
 
 fn refreshing_rebuilds_the_analysis_and_refuses_when_the_mode_is_off() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "refreshing_rebuilds_the_analysis_and_refuses_when_the_mode_is_off",
         r##"
         ;; `anakondo-refresh-project-cache' is the documented way to resync
@@ -248,15 +243,15 @@ fn refreshing_rebuilds_the_analysis_and_refuses_when_the_mode_is_off() -> Parity
                          (error (list :signal (car error) :data (cdr error)))))
                 :commands-after-refusal (length (ak-test-commands)))))))
     "##,
-        true,
         expect![[
             r#"OK (:commands (:after-enable 3 :after-refresh 6) :announced 2 :still-one-root 1 :interactive t :refused-when-off (:signal error :data ("Anakondo minor mode not on in current buffer")) :commands-after-refusal 6)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn turning_the_mode_off_releases_the_project_cache_and_unhooks_completion() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "turning_the_mode_off_releases_the_project_cache_and_unhooks_completion",
         r##"
         ;; Turning the mode off has to give the memory back and stop answering
@@ -294,7 +289,6 @@ fn turning_the_mode_off_releases_the_project_cache_and_unhooks_completion() -> P
                (with-current-buffer second (set-buffer-modified-p nil))
                (kill-buffer second)))))
     "##,
-        true,
         expect![[
             r#"OK (:with-one-buffer (:roots 1 :capf #1=(anakondo-completion-at-point t)) :second-buffer (:roots 1 :capf (anakondo-completion-at-point t) :candidates (:start-column 12 :prefix "apply-disc" :candidates ("apply-discount"))) :second-off (:on nil :capf (tags-completion-at-point-function) :roots 0 :candidates nil) :first-still-analysed (:on t :capf #1#))"#
         ]],
@@ -302,7 +296,7 @@ fn turning_the_mode_off_releases_the_project_cache_and_unhooks_completion() -> P
 }
 
 fn a_clj_kondo_that_cannot_run_leaves_the_mode_on_with_nothing_analysed() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_clj_kondo_that_cannot_run_leaves_the_mode_on_with_nothing_analysed",
         r##"
         ;; A clj-kondo that is installed but fails - a bad config, an
@@ -342,16 +336,15 @@ fn a_clj_kondo_that_cannot_run_leaves_the_mode_on_with_nothing_analysed() -> Par
               (kill-buffer buffer))
             (ak-test-teardown)))
     "##,
-        true,
         expect![[
             r#"OK (:enabling (:signal json-readtable-error :data (99)) :mode-left-on t :capf (anakondo-completion-at-point t) :roots 1 :caches-empty ((":var-def-cache" 0) (":ns-def-cache" 0) (":ns-usage-cache" 0) (":java-classes-cache" 0)) :process-buffer-cleaned nil :completion (:signal json-readtable-error :data (99)) :commands (("-Spath") ("--lint" "[ORACLE-SANDBOX]/project/src:[ORACLE-SANDBOX]/project/lib/warehouse.jar\\n" "--config" "{:output {:analysis true :format :json}}" "--lang" "clj") ("--lint" "-" "--config" "{:output {:analysis true :format :json}}" "--lang" "clj")) :messages ("Analysing project for completion..."))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         turning_the_mode_on_analyses_the_project_with_the_documented_commands(),
         completing_a_var_pipes_the_unsaved_buffer_to_clj_kondo(),
         completing_an_aliased_namespace_qualifies_every_var_with_the_alias(),
@@ -360,6 +353,5 @@ fn workflows_public_surface_batch() {
         refreshing_rebuilds_the_analysis_and_refuses_when_the_mode_is_off(),
         turning_the_mode_off_releases_the_project_cache_and_unhooks_completion(),
         a_clj_kondo_that_cannot_run_leaves_the_mode_on_with_nothing_analysed(),
-    ];
-    assert_anakondo_batch(&cases);
+    ]
 }

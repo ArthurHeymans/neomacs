@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{AFFE_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -32,26 +31,6 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed affe parity test").into()
 }
 
-fn assert_affe_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = affe_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("affe parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_affe_parity(elisp_form: &str, expected: Expect) {
-    assert_affe_source_parity("affe.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_affe_backend_parity(elisp_form: &str, expected: Expect) {
-    assert_affe_source_parity("affe-backend.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_affe_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_affe_source_parity("affe-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_affe_autoload_parity` cases (2a).
 pub(crate) fn assert_affe_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -79,3 +58,45 @@ pub(crate) fn assert_affe_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(affe_oracle("affe.el"), &name, "affe_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn affe_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [autoloads::autoloads_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_affe_autoload_batch(&cases);
+}
+
+#[test]
+fn affe_backend_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        backend_producer::backend_producer_public_surface_batch_cases(),
+        backend_protocol::backend_protocol_public_surface_batch_cases(),
+        backend_search::backend_search_public_surface_batch_cases(),
+        surface::surface_affe_backend_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_affe_backend_batch(&cases);
+}
+
+#[test]
+fn affe_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        async_frontend::async_frontend_public_surface_batch_cases(),
+        commands::commands_public_surface_batch_cases(),
+        surface::surface_affe_batch_cases(),
+        transport::transport_public_surface_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_affe_batch(&cases);
+}
+
+// END generated package batch tests

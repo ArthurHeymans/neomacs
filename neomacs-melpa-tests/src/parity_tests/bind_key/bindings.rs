@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_bind_key_batch};
+use super::ParityBatchCase;
 
 fn bind_key_binds_string_vector_and_remap_events_and_records_original_bindings() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "bind_key_binds_string_vector_and_remap_events_and_records_original_bindings",
         r##"(let ((personal-keybindings nil)
                     (map (make-sparse-keymap)))
@@ -17,7 +17,6 @@ fn bind_key_binds_string_vector_and_remap_events_and_records_original_bindings()
                 (lookup-key map [f8])
                 (lookup-key map [remap forward-char])
                 personal-keybindings))"##,
-        true,
         expect![[
             r#"OK (forward-line ignore backward-char ((("<remap> <forward-char>" . map) backward-char nil) (("<f8>" . map) ignore nil) (("C-c a" . map) forward-line beginning-of-line)))"#
         ]],
@@ -26,7 +25,7 @@ fn bind_key_binds_string_vector_and_remap_events_and_records_original_bindings()
 
 fn bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entry()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entry",
         r##"(progn
                (defvar neomacs-bind-key-test-map (make-sparse-keymap))
@@ -39,7 +38,6 @@ fn bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entr
                   (lookup-key neomacs-bind-key-test-map
                               (kbd "C-c q"))
                   personal-keybindings)))"##,
-        true,
         expect![[
             r#"OK (backward-char ((("C-c q" . neomacs-bind-key-test-map) backward-char forward-char)))"#
         ]],
@@ -48,7 +46,7 @@ fn bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entr
 
 fn bind_key_predicate_filter_tracks_live_state_and_preserves_registry_metadata() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "bind_key_predicate_filter_tracks_live_state_and_preserves_registry_metadata",
         r##"(let ((personal-keybindings nil)
                     (map (make-sparse-keymap)))
@@ -64,13 +62,12 @@ fn bind_key_predicate_filter_tracks_live_state_and_preserves_registry_metadata()
                     disabled
                     (key-binding (kbd "C-c p"))
                     personal-keybindings))))"##,
-        true,
         expect![[r#"OK (nil forward-char ((("C-c p" . map) forward-char nil)))"#]],
     )
 }
 
 fn unbind_key_removes_nested_empty_prefixes_and_its_personal_registry_entry() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "unbind_key_removes_nested_empty_prefixes_and_its_personal_registry_entry",
         r##"(let ((personal-keybindings nil)
                     (map (make-sparse-keymap)))
@@ -89,13 +86,12 @@ fn unbind_key_removes_nested_empty_prefixes_and_its_personal_registry_entry() ->
                   (lookup-key map (kbd "C-c"))
                   (lookup-key map (kbd "C-c x"))
                   personal-keybindings)))"##,
-        true,
         expect![[r#"OK ((t ignore 1) nil 1 nil)"#]],
     )
 }
 
 fn unbind_key_removes_meta_bindings_stored_through_the_escape_prefix() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "unbind_key_removes_meta_bindings_stored_through_the_escape_prefix",
         r##"(let ((personal-keybindings nil)
                     (map (make-sparse-keymap)))
@@ -110,13 +106,12 @@ fn unbind_key_removes_meta_bindings_stored_through_the_escape_prefix() -> Parity
                   (lookup-key map (kbd "M-z"))
                   (lookup-key map (kbd "ESC z"))
                   personal-keybindings)))"##,
-        true,
         expect![[r#"OK ((zap-to-char zap-to-char) nil 1 nil)"#]],
     )
 }
 
 fn bind_key_star_wins_over_a_local_map_through_the_emulation_map() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "bind_key_star_wins_over_a_local_map_through_the_emulation_map",
         r##"(let ((personal-keybindings nil)
                     (local (make-sparse-keymap)))
@@ -130,7 +125,6 @@ fn bind_key_star_wins_over_a_local_map_through_the_emulation_map() -> ParityBatc
                   (lookup-key local (kbd "<f8>"))
                   (key-binding (kbd "<f8>"))
                   personal-keybindings)))"##,
-        true,
         expect![[
             r#"OK (t forward-char backward-char forward-char ((("<f8>" . override-global-map) forward-char nil)))"#
         ]],
@@ -138,7 +132,7 @@ fn bind_key_star_wins_over_a_local_map_through_the_emulation_map() -> ParityBatc
 }
 
 fn bind_keys_and_bind_keys_star_bind_multiple_commands_in_the_requested_maps() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "bind_keys_and_bind_keys_star_bind_multiple_commands_in_the_requested_maps",
         r##"(progn
                (defvar neomacs-bind-keys-map (make-sparse-keymap))
@@ -156,16 +150,14 @@ fn bind_keys_and_bind_keys_star_bind_multiple_commands_in_the_requested_maps() -
                   (lookup-key override-global-map (kbd "C-c n"))
                   (lookup-key override-global-map (kbd "C-c p"))
                   (mapcar #'car personal-keybindings))))"##,
-        true,
         expect![[
             r#"OK (beginning-of-line end-of-line next-line previous-line (("C-c p" . override-global-map) ("C-c n" . override-global-map) ("e" . neomacs-bind-keys-map) ("a" . neomacs-bind-keys-map)))"#
         ]],
     )
 }
 
-#[test]
-fn bindings_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn bindings_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         bind_key_binds_string_vector_and_remap_events_and_records_original_bindings(),
         bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entry(),
         bind_key_predicate_filter_tracks_live_state_and_preserves_registry_metadata(),
@@ -173,6 +165,5 @@ fn bindings_public_surface_batch() {
         unbind_key_removes_meta_bindings_stored_through_the_escape_prefix(),
         bind_key_star_wins_over_a_local_map_through_the_emulation_map(),
         bind_keys_and_bind_keys_star_bind_multiple_commands_in_the_requested_maps(),
-    ];
-    assert_bind_key_batch(&cases);
+    ]
 }

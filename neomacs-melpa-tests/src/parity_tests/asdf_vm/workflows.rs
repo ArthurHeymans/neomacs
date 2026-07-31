@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asdf_vm_batch};
+use super::ParityBatchCase;
 
 /// The two queries a user runs first, driven through the package's real
 /// asynchronous process layer against real asdf 0.15.0 replies.
@@ -19,9 +19,8 @@ use super::{ParityBatchCase, assert_asdf_vm_batch};
 /// the package never defines anywhere, so the docstring names something that
 /// does not exist.  What the user can actually observe from a synchronous call
 /// is the return value and the argument vector, both asserted below.
-
 fn version_and_current_render_real_asdf_replies_from_both_output_streams() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "version_and_current_render_real_asdf_replies_from_both_output_streams",
         r##"(progn
   (asdf-vm-test-install)
@@ -37,16 +36,16 @@ fn version_and_current_render_real_asdf_replies_from_both_output_streams() -> Pa
                 :stderr (asdf-vm-test-buffer asdf-vm-process-stderr-buffer-name))
           :calls (asdf-vm-test-calls-made)
           :unrecorded (asdf-vm-test-unrecorded))))"##,
-        true,
         expect![[
             r#"OK (:version (:stdout no-such-buffer :stderr no-such-buffer) :after-current (:stdout no-such-buffer :stderr no-such-buffer) :calls ("version" "current") :unrecorded nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn setting_a_version_uses_the_0_16_subcommand_name_against_an_undeclared_floor() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "setting_a_version_uses_the_0_16_subcommand_name_against_an_undeclared_floor",
         r##"(progn
   (asdf-vm-test-install)
@@ -65,16 +64,16 @@ fn setting_a_version_uses_the_0_16_subcommand_name_against_an_undeclared_floor()
         (file-exists-p (expand-file-name ".tool-versions" default-directory))
         :calls (asdf-vm-test-calls-made)
         :unrecorded (asdf-vm-test-unrecorded)))"##,
-        true,
         expect![[
             r#"OK (:declared-requirements "((emacs \"29.1\"))" :probes-the-asdf-version t :stdout no-such-buffer :stderr no-such-buffer :tool-versions-written nil :calls ("set nodejs 20.0.0") :unrecorded nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn listing_versions_of_an_uninstalled_plugin_fails_on_stderr_with_an_empty_stdout()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "listing_versions_of_an_uninstalled_plugin_fails_on_stderr_with_an_empty_stdout",
         r##"(progn
   (asdf-vm-test-install)
@@ -85,19 +84,17 @@ fn listing_versions_of_an_uninstalled_plugin_fails_on_stderr_with_an_empty_stdou
               :stderr (asdf-vm-test-buffer asdf-vm-process-stderr-buffer-name))
         :calls (asdf-vm-test-calls-made)
         :unrecorded (asdf-vm-test-unrecorded)))"##,
-        true,
         expect![[
             r#"OK (:list-all (:stdout no-such-buffer :stderr no-such-buffer) :calls ("list all nodejs") :unrecorded nil)"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         version_and_current_render_real_asdf_replies_from_both_output_streams(),
         setting_a_version_uses_the_0_16_subcommand_name_against_an_undeclared_floor(),
         listing_versions_of_an_uninstalled_plugin_fails_on_stderr_with_an_empty_stdout(),
-    ];
-    assert_asdf_vm_batch(&cases);
+    ]
 }

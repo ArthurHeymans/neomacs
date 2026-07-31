@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ace_jump_mode_batch};
+use super::ParityBatchCase;
 
 /// The headline workflow of the package: with `C-c SPC' bound as the README
 /// suggests, `C-u C-c SPC' starts char mode, the query char paints one labelled
@@ -8,9 +8,8 @@ use super::{ParityBatchCase, assert_ace_jump_mode_batch};
 /// there in one keystroke.  The trace also pins the mode line, that the session
 /// tears itself down (no overlays, no `overriding-local-map', no search tree)
 /// and that the position the user came from is recorded on both mark rings.
-
 fn char_mode_labels_every_match_and_jumps_to_the_chosen_one() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "char_mode_labels_every_match_and_jumps_to_the_chosen_one",
         r##"(aj-test-with-live-buffer
  (insert aj-test-prose)
@@ -30,7 +29,6 @@ fn char_mode_labels_every_match_and_jumps_to_the_chosen_one() -> ParityBatchCase
         (aj-test-mark-ring)
         (mark t)
         (buffer-substring-no-properties (point-min) (point-max)))))"##,
-        true,
         expect![[
             r#"OK (((nil "" 50 nil nil nil) (nil "C-u" 50 nil nil nil) (ace-jump-mode "C-c SPC e" 50 ace-jump-char-mode " AceJump - Char" ((1 165 nil ace-jump-face-background) (3 4 "a" ace-jump-face-foreground) (29 30 "b" ace-jump-face-foreground) (34 35 "c" ace-jump-face-foreground) (66 67 "d" ace-jump-face-foreground) (71 72 "e" ace-jump-face-foreground) (92 93 "f" ace-jump-face-foreground) (112 113 "g" ace-jump-face-foreground) (127 128 "h" ace-jump-face-foreground) (143 144 "i" ace-jump-face-foreground) (150 151 "j" ace-jump-face-foreground) (162 163 "k" ace-jump-face-foreground))) (ace-jump-move "c" 34 nil nil nil)) 34 33 1 "e lazy dog." nil nil nil nil nil nil ((50 . "*ace-jump-workflow*")) 50 "The quick brown fox jumps over the lazy dog.\nPack my box with five dozen liquor jugs.\nHow vexingly quick daft zebras jump!\nQuiet quails quibble by the Quarry gate.\n")"#
         ]],
@@ -38,7 +36,7 @@ fn char_mode_labels_every_match_and_jumps_to_the_chosen_one() -> ParityBatchCase
 }
 
 fn word_mode_marks_word_starts_and_honours_case_folding() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "word_mode_marks_word_starts_and_honours_case_folding",
         r##"(aj-test-with-live-buffer
  (insert aj-test-prose)
@@ -53,7 +51,6 @@ fn word_mode_marks_word_starts_and_honours_case_folding() -> ParityBatchCase {
       (aj-test-tracing
        (execute-kbd-macro (kbd "C-c SPC q c"))
        (list (point) (buffer-substring-no-properties (point) (+ (point) 7))))))))"##,
-        true,
         expect![[
             r#"OK ((((nil "" 1 nil nil nil) (ace-jump-mode "C-c SPC q" 1 ace-jump-word-mode " AceJump - Word" ((1 165 nil ace-jump-face-background) (5 6 "a" ace-jump-face-foreground) (100 101 "b" ace-jump-face-foreground) (124 125 "c" ace-jump-face-foreground) (130 131 "d" ace-jump-face-foreground) (137 138 "e" ace-jump-face-foreground) (152 153 "f" ace-jump-face-foreground))) (ace-jump-move "d" 130 nil nil nil)) 130 "quails") (((nil "" 1 nil nil nil) (ace-jump-mode "C-c SPC q" 1 ace-jump-word-mode " AceJump - Word" ((1 165 nil ace-jump-face-background) (5 6 "a" ace-jump-face-foreground) (100 101 "b" ace-jump-face-foreground) (130 131 "c" ace-jump-face-foreground) (137 138 "d" ace-jump-face-foreground))) (ace-jump-move "c" 130 nil nil nil)) 130 "quails "))"#
         ]],
@@ -61,7 +58,7 @@ fn word_mode_marks_word_starts_and_honours_case_folding() -> ParityBatchCase {
 }
 
 fn line_mode_marks_every_line_and_keeps_the_column() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "line_mode_marks_every_line_and_keeps_the_column",
         r##"(aj-test-with-live-buffer
  (insert aj-test-prose)
@@ -74,7 +71,6 @@ fn line_mode_marks_every_line_and_keeps_the_column() -> ParityBatchCase {
         (buffer-substring-no-properties (line-beginning-position) (line-end-position))
         ace-jump-current-mode
         (aj-test-mark-ring))))"##,
-        true,
         expect![[
             r#"OK (((nil "" 34 nil nil nil) (nil "C-u" 34 nil nil nil) (nil "C-u" 34 nil nil nil) (ace-jump-mode "C-c SPC" 34 ace-jump-line-mode " AceJump - Line" ((1 2 "a" ace-jump-face-foreground) (1 165 nil ace-jump-face-background) (46 47 "b" ace-jump-face-foreground) (87 88 "c" ace-jump-face-foreground) (124 125 "d" ace-jump-face-foreground))) (ace-jump-move "c" 120 nil nil nil)) 120 33 3 "How vexingly quick daft zebras jump!" nil ((34 . "*ace-jump-workflow*")))"#
         ]],
@@ -82,7 +78,7 @@ fn line_mode_marks_every_line_and_keeps_the_column() -> ParityBatchCase {
 }
 
 fn custom_move_keys_build_a_two_level_search_tree() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "custom_move_keys_build_a_two_level_search_tree",
         r##"(aj-test-with-live-buffer
  (insert aj-test-prose)
@@ -94,7 +90,6 @@ fn custom_move_keys_build_a_two_level_search_tree() -> ParityBatchCase {
           (buffer-substring-no-properties (point) (+ (point) 8))
           ace-jump-current-mode
           (aj-test-mark-ring)))))"##,
-        true,
         expect![[
             r#"OK (((nil "" 1 nil nil nil) (nil "C-u" 1 nil nil nil) (ace-jump-mode "C-c SPC e" 1 ace-jump-char-mode " AceJump - Char" ((1 165 nil ace-jump-face-background) (3 4 "a" ace-jump-face-foreground) (29 30 "a" ace-jump-face-foreground) (34 35 "a" ace-jump-face-foreground) (66 67 "a" ace-jump-face-foreground) (71 72 "a" ace-jump-face-foreground) (92 93 "s" ace-jump-face-foreground) (112 113 "s" ace-jump-face-foreground) (127 128 "s" ace-jump-face-foreground) (143 144 "d" ace-jump-face-foreground) (150 151 "d" ace-jump-face-foreground) (162 163 "d" ace-jump-face-foreground))) (ace-jump-move "a" 1 ace-jump-char-mode " AceJump - Char" ((1 165 nil ace-jump-face-background) (3 4 "a" ace-jump-face-foreground) (29 30 "a" ace-jump-face-foreground) (34 35 "a" ace-jump-face-foreground) (66 67 "s" ace-jump-face-foreground) (71 72 "d" ace-jump-face-foreground))) (ace-jump-move "s" 66 nil nil nil)) 66 "e dozen " nil ((1 . "*ace-jump-workflow*")))"#
         ]],
@@ -102,7 +97,7 @@ fn custom_move_keys_build_a_two_level_search_tree() -> ParityBatchCase {
 }
 
 fn pop_mark_walks_back_through_the_ace_jump_mark_ring() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "pop_mark_walks_back_through_the_ace_jump_mark_ring",
         r##"(aj-test-with-live-buffer
  (insert aj-test-prose)
@@ -126,7 +121,6 @@ fn pop_mark_walks_back_through_the_ace_jump_mark_ring() -> ParityBatchCase {
                      ace-jump-sync-emacs-mark-ring
                      (mapcar #'marker-position mark-ring)))))))
    (ace-jump-mode-disable-mark-sync)))"##,
-        true,
         expect![[
             r#"OK ((34 ((50 . "*ace-jump-workflow*")) 50) (38 ((34 . "*ace-jump-workflow*") (50 . "*ace-jump-workflow*"))) (34 ((50 . "*ace-jump-workflow*") (34 . "*ace-jump-workflow*"))) (50 ((34 . "*ace-jump-workflow*") (50 . "*ace-jump-workflow*"))) t (50))"#
         ]],
@@ -134,7 +128,7 @@ fn pop_mark_walks_back_through_the_ace_jump_mark_ring() -> ParityBatchCase {
 }
 
 fn an_unassigned_key_ends_ace_jump_mode_and_leaves_point_alone() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_unassigned_key_ends_ace_jump_mode_and_leaves_point_alone",
         r##"(aj-test-with-live-buffer
  (insert aj-test-prose)
@@ -155,7 +149,6 @@ fn an_unassigned_key_ends_ace_jump_mode_and_leaves_point_alone() -> ParityBatchC
     (list (point) ace-jump-current-mode overriding-local-map
           (length (overlays-in (point-min) (point-max)))
           (aj-test-mark-ring)))))"##,
-        true,
         expect![[
             r#"OK ((((nil "" 50 nil nil nil) (nil "C-u" 50 nil nil nil) (ace-jump-mode "C-c SPC e" 50 ace-jump-char-mode " AceJump - Char" ((1 165 nil ace-jump-face-background) (3 4 "a" ace-jump-face-foreground) (29 30 "b" ace-jump-face-foreground) (34 35 "c" ace-jump-face-foreground) (66 67 "d" ace-jump-face-foreground) (71 72 "e" ace-jump-face-foreground) (92 93 "f" ace-jump-face-foreground) (112 113 "g" ace-jump-face-foreground) (127 128 "h" ace-jump-face-foreground) (143 144 "i" ace-jump-face-foreground) (150 151 "j" ace-jump-face-foreground) (162 163 "k" ace-jump-face-foreground))) (ace-jump-done "!" 50 nil nil nil)) 50 nil nil nil) (((nil "" 50 nil nil nil) (nil "C-u" 50 nil nil nil) (ace-jump-mode "C-c SPC e" 50 ace-jump-char-mode " AceJump - Char" ((1 165 nil ace-jump-face-background) (3 4 "a" ace-jump-face-foreground) (29 30 "b" ace-jump-face-foreground) (34 35 "c" ace-jump-face-foreground) (66 67 "d" ace-jump-face-foreground) (71 72 "e" ace-jump-face-foreground) (92 93 "f" ace-jump-face-foreground) (112 113 "g" ace-jump-face-foreground) (127 128 "h" ace-jump-face-foreground) (143 144 "i" ace-jump-face-foreground) (150 151 "j" ace-jump-face-foreground) (162 163 "k" ace-jump-face-foreground))) (ace-jump-move "Z" 50 nil nil nil)) 50 nil "No such position candidate." nil) :no-quit (50 nil nil 0 nil))"#
         ]],
@@ -163,7 +156,7 @@ fn an_unassigned_key_ends_ace_jump_mode_and_leaves_point_alone() -> ParityBatchC
 }
 
 fn degenerate_queries_jump_directly_fall_back_or_report_no_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "degenerate_queries_jump_directly_fall_back_or_report_no_match",
         r##"(aj-test-with-live-buffer
  (insert aj-test-prose)
@@ -189,7 +182,6 @@ fn degenerate_queries_jump_directly_fall_back_or_report_no_match() -> ParityBatc
       (condition-case error
           (progn (execute-kbd-macro (kbd "C-c SPC !")) :no-error)
         (error error))))))"##,
-        true,
         expect![[
             r#"OK ((((nil "" 50 nil nil nil) (ace-jump-mode "C-c SPC !" 122 ace-jump-char-mode nil nil)) 122 "How vexingly quick daft zebras jump" ace-jump-char-mode "[AceJump] One candidate, move to it directly" ((50 . "*ace-jump-workflow*"))) ((error "[AceJump] No one found") t nil 0 nil) (error "[AceJump] Not a valid word constituent"))"#
         ]],
@@ -197,7 +189,7 @@ fn degenerate_queries_jump_directly_fall_back_or_report_no_match() -> ParityBatc
 }
 
 fn global_scope_labels_every_window_and_jumps_across_buffers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "global_scope_labels_every_window_and_jumps_across_buffers",
         r##"(aj-test-with-live-buffer
  (insert aj-test-prose)
@@ -236,16 +228,14 @@ fn global_scope_labels_every_window_and_jumps_across_buffers() -> ParityBatchCas
                                     (overlays-in (point-min) (point-max))))))
                   (aj-test-workflow-buffers))))
      (kill-buffer notes))))"##,
-        true,
         expect![[
             r#"OK (2 ("*ace-jump-workflow*" 70 "*ace-jump-workflow*" (("*ace-jump-notes*") ("*ace-jump-workflow*" (1 165 nil ace-jump-face-background) (38 39 "a" ace-jump-face-foreground) (70 71 "b" ace-jump-face-foreground) (111 112 "c" ace-jump-face-foreground))) ((50 . "*ace-jump-workflow*"))) ("*ace-jump-notes*" 1 "*ace-jump-notes*" "Zebra notes:" (("*ace-jump-notes*" (1 2 "d" ace-jump-face-foreground) (1 37 nil ace-jump-face-background) (16 17 "e" ace-jump-face-foreground) (22 23 "f" ace-jump-face-foreground) (30 31 "g" ace-jump-face-foreground)) ("*ace-jump-workflow*" (1 165 nil ace-jump-face-background) (38 39 "a" ace-jump-face-foreground) (70 71 "b" ace-jump-face-foreground) (111 112 "c" ace-jump-face-foreground))) ((50 . "*ace-jump-workflow*") (50 . "*ace-jump-workflow*"))) (("*ace-jump-notes*" . 0) ("*ace-jump-workflow*" . 0)))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         char_mode_labels_every_match_and_jumps_to_the_chosen_one(),
         word_mode_marks_word_starts_and_honours_case_folding(),
         line_mode_marks_every_line_and_keeps_the_column(),
@@ -254,6 +244,5 @@ fn workflows_public_surface_batch() {
         an_unassigned_key_ends_ace_jump_mode_and_leaves_point_alone(),
         degenerate_queries_jump_directly_fall_back_or_report_no_match(),
         global_scope_labels_every_window_and_jumps_across_buffers(),
-    ];
-    assert_ace_jump_mode_batch(&cases);
+    ]
 }

@@ -1,9 +1,9 @@
-use expect_test::{Expect, expect};
+use expect_test::expect;
 
-use super::{ParityBatchCase, assert_async_job_queue_batch};
+use super::ParityBatchCase;
 
 fn queue_creation_builds_fixed_doubly_linked_slots_and_stable_display_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "queue_creation_builds_fixed_doubly_linked_slots_and_stable_display_state",
         r##"
 (let ((async-job-queue--num-tables-created 0)
@@ -24,7 +24,6 @@ fn queue_creation_builds_fixed_doubly_linked_slots_and_stable_display_state() ->
      (async-job-queue-displayable-table inactive)
      async-job-queue--num-tables-created)))
 "##,
-        true,
         expect![
             "OK ((:id async-job-queue-table-1 :active t :in-use 0 :free 3 :used-slots nil :free-slots (0 1 2) :queued 0 :timer nil) ((async-job-queue--slot (table async-job-queue-table-1) (index 0) (next 1) (prev nil) (job nil)) (async-job-queue--slot (table async-job-queue-table-1) (index 1) (next 2) (prev 0) (job nil)) (async-job-queue--slot (table async-job-queue-table-1) (index 2) (next nil) (prev 1) (job nil))) (async-job-queue--table (id fixture-inactive) (slots 2) (active nil) (in-use 0 nil nil nil) (free 2 0 1 (0 1)) (queue 0) (on-empty nil) (freq 1) (timer nil)) 2)"
         ],
@@ -32,7 +31,7 @@ fn queue_creation_builds_fixed_doubly_linked_slots_and_stable_display_state() ->
 }
 
 fn zero_slot_public_construction_signals_before_a_queue_can_be_scheduled() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_slot_public_construction_signals_before_a_queue_can_be_scheduled",
         r##"
 (let ((async-job-queue--num-tables-created 0))
@@ -58,7 +57,6 @@ fn zero_slot_public_construction_signals_before_a_queue_can_be_scheduled() -> Pa
      defaulted
      async-job-queue--num-tables-created)))
 "##,
-        true,
         expect![
             "OK ((wrong-type-argument async-job-queue--slot nil) (wrong-type-argument async-job-queue--slot nil) 2)"
         ],
@@ -66,7 +64,7 @@ fn zero_slot_public_construction_signals_before_a_queue_can_be_scheduled() -> Pa
 }
 
 fn slot_allocation_reclamation_and_fifo_reuse_preserve_all_list_invariants() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "slot_allocation_reclamation_and_fifo_reuse_preserve_all_list_invariants",
         r##"
 (let* ((table
@@ -124,7 +122,6 @@ fn slot_allocation_reclamation_and_fifo_reuse_preserve_all_list_invariants() -> 
      (async-job-queue--table-slots table)
      nil))))
 "##,
-        true,
         expect![
             "OK ((0 1 2 1) #s(async-job-queue--job job-one nil nil nil nil nil nil nil nil nil nil nil nil nil) (:id slots :active nil :in-use 1 :free 2 :used-slots (0) :free-slots (1 2) :queued 0 :timer nil) (:id slots :active nil :in-use 3 :free 0 :used-slots (0 1 2) :free-slots nil :queued 0 :timer nil) (:id slots :active nil :in-use 2 :free 1 :used-slots (0 2) :free-slots (1) :queued 0 :timer nil) (:id slots :active nil :in-use 2 :free 1 :used-slots (2 1) :free-slots (0) :queued 0 :timer nil) ((async-job-queue--slot (table slots) (index 0) (next nil) (prev nil) (job nil)) (async-job-queue--slot (table slots) (index 1) (next nil) (prev 2) (job job-reused)) (async-job-queue--slot (table slots) (index 2) (next 1) (prev nil) (job job-two))))"
         ],
@@ -132,7 +129,7 @@ fn slot_allocation_reclamation_and_fifo_reuse_preserve_all_list_invariants() -> 
 }
 
 fn allocation_and_double_reclamation_fail_atomically_with_named_conditions() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "allocation_and_double_reclamation_fail_atomically_with_named_conditions",
         r##"
 (let* ((table
@@ -168,7 +165,6 @@ fn allocation_and_double_reclamation_fail_atomically_with_named_conditions() -> 
      (async-job-queue-parity-table-state table)
      (async-job-queue-displayable-slot slot))))
 "##,
-        true,
         expect![
             "OK (async-job-queue--table-no-free-slot only-job async-job-queue-slot-already-free (:id errors :active nil :in-use 0 :free 1 :used-slots nil :free-slots (0) :queued 0 :timer nil) (async-job-queue--slot (table errors) (index 0) (next nil) (prev nil) (job nil)))"
         ],
@@ -177,7 +173,7 @@ fn allocation_and_double_reclamation_fail_atomically_with_named_conditions() -> 
 
 fn generated_struct_constructors_copies_accessors_and_setters_have_value_semantics()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "generated_struct_constructors_copies_accessors_and_setters_have_value_semantics",
         r##"
 (let* ((queue
@@ -243,13 +239,12 @@ fn generated_struct_constructors_copies_accessors_and_setters_have_value_semanti
      (async-job-queue--job-program job)
      (async-job-queue--job-program job-copy)))))
 "##,
-        true,
         expect!["OK ((t alpha omega changed) (t original copy t) (t 0 9 t) (t job-a job-copy t))"],
     )
 }
 
 fn display_helpers_and_job_slot_cover_nil_queued_running_and_completed_shapes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "display_helpers_and_job_slot_cover_nil_queued_running_and_completed_shapes",
         r##"
 (let* ((table
@@ -294,7 +289,6 @@ fn display_helpers_and_job_slot_cover_nil_queued_running_and_completed_shapes() 
       nil)
      (async-job-queue--job-slot job))))
 "##,
-        true,
         expect![
             "OK ((async-job-queue--table nil) (async-job-queue--slot nil) (async-job-queue--job nil) (async-job-queue--table (id display) (slots 2) (active nil) (in-use 1 0 0 (0)) (free 1 1 1 (1)) (queue 0) (on-empty nil) (freq 0.5) (timer nil)) (async-job-queue--slot (table display) (index 0) (next nil) (prev nil) (job report)) (async-job-queue--job (id report) (table display) (run-slot 0) (started (26000 10 0 0)) (ended (26000 20 0 0)) (max-time 12) (future future-token) (returned t) (result (:ok 42)) (dispatched t) (succeed t) (timeout t) (quit t)) t nil)"
         ],
@@ -302,7 +296,7 @@ fn display_helpers_and_job_slot_cover_nil_queued_running_and_completed_shapes() 
 }
 
 fn expression_conversion_and_cycle_safe_slot_walks_match_exactly() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "expression_conversion_and_cycle_safe_slot_walks_match_exactly",
         r##"
 (let* ((closure
@@ -347,16 +341,14 @@ fn expression_conversion_and_cycle_safe_slot_walks_match_exactly() -> ParityBatc
    (async-job-queue--slots-free-list
     table)))
 "##,
-        true,
         expect![
             "OK (t t t (lambda nil named-symbol) (lambda nil (+ 1 2)) (lambda nil 42) (0 1 0) (2))"
         ],
     )
 }
 
-#[test]
-fn structures_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn structures_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         queue_creation_builds_fixed_doubly_linked_slots_and_stable_display_state(),
         zero_slot_public_construction_signals_before_a_queue_can_be_scheduled(),
         slot_allocation_reclamation_and_fifo_reuse_preserve_all_list_invariants(),
@@ -364,6 +356,5 @@ fn structures_public_surface_batch() {
         generated_struct_constructors_copies_accessors_and_setters_have_value_semantics(),
         display_helpers_and_job_slot_cover_nil_queued_running_and_completed_shapes(),
         expression_conversion_and_cycle_safe_slot_walks_match_exactly(),
-    ];
-    assert_async_job_queue_batch(&cases);
+    ]
 }

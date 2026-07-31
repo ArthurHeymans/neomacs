@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ASYNC1_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -128,22 +127,6 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed async1 parity test").into()
 }
 
-fn assert_async1_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = async1_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("async1 parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_async1_parity(elisp_form: &str, expected: Expect) {
-    assert_async1_source_parity("async1.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_async1_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_async1_source_parity("async1-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_async1_autoload_parity` cases (2a).
 pub(crate) fn assert_async1_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -160,3 +143,31 @@ pub(crate) fn assert_async1_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(async1_oracle("async1.el"), &name, "async1_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn async1_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_async1_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_async1_autoload_batch(&cases);
+}
+
+#[test]
+fn async1_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        construction::construction_public_surface_batch_cases(),
+        pipelines::pipelines_public_surface_batch_cases(),
+        plist::plist_public_surface_batch_cases(),
+        registry::registry_async1_batch_cases(),
+        timers::timers_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_async1_batch(&cases);
+}
+
+// END generated package batch tests

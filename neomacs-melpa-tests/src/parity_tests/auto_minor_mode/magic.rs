@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_minor_mode_batch};
+use super::ParityBatchCase;
 
 fn auto_minor_mode_magic_regex_matches_practical_file_headers_only_at_start() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_magic_regex_matches_practical_file_headers_only_at_start",
         r##"(mapcar
                            (lambda (contents)
@@ -23,7 +23,6 @@ fn auto_minor_mode_magic_regex_matches_practical_file_headers_only_at_start() ->
                              "#!/bin/sh\npython app.py\n"
                              "\n#!/usr/bin/env python\n"
                              ""))"##,
-        true,
         expect![[
             r##"OK (("#!/usr/bin/env python\nprint('ok')\n" t) ("#!/usr/bin/python3\n" nil) ("#!/bin/sh\npython app.py\n" nil) ("\n#!/usr/bin/env python\n" nil) ("" nil))"##
         ]],
@@ -31,7 +30,7 @@ fn auto_minor_mode_magic_regex_matches_practical_file_headers_only_at_start() ->
 }
 
 fn auto_minor_mode_magic_matching_is_always_case_folded() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_magic_matching_is_always_case_folded",
         r##"(mapcar
                            (lambda (contents)
@@ -50,7 +49,6 @@ fn auto_minor_mode_magic_matching_is_always_case_folded() -> ParityBatchCase {
                              "Project: beta"
                              "project: gamma"
                              "xPROJECT: delta"))"##,
-        true,
         expect![[
             r#"OK (("PROJECT: alpha" t) ("Project: beta" t) ("project: gamma" t) ("xPROJECT: delta" nil))"#
         ]],
@@ -59,7 +57,7 @@ fn auto_minor_mode_magic_matching_is_always_case_folded() -> ParityBatchCase {
 
 fn auto_minor_mode_magic_runner_enables_all_matching_modes_and_preserves_order() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_magic_runner_enables_all_matching_modes_and_preserves_order",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -82,7 +80,6 @@ fn auto_minor_mode_magic_runner_enables_all_matching_modes_and_preserves_order()
                             auto-minor-mode-test-gamma-mode
                             (nreverse
                              auto-minor-mode-test-events)))"##,
-        true,
         expect![
             "OK (t t t ((:alpha 1 t 1 fundamental-mode) (:beta 1 t 1 fundamental-mode) (:gamma 1 t 1 fundamental-mode)))"
         ],
@@ -90,7 +87,7 @@ fn auto_minor_mode_magic_runner_enables_all_matching_modes_and_preserves_order()
 }
 
 fn auto_minor_mode_magic_function_matchers_see_reset_point_and_limited_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_magic_function_matchers_see_reset_point_and_limited_buffer",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -135,7 +132,6 @@ fn auto_minor_mode_magic_function_matchers_see_reset_point_and_limited_buffer() 
                                auto-minor-mode-test-events)
                               auto-minor-mode-test-alpha-mode
                               auto-minor-mode-test-beta-mode)))"##,
-        true,
         expect![[
             r#"OK (((:first 1 1 14 "MAGIC payload") (:second 1 1 14 "MAGIC payload")) ((:alpha 1 t 14 fundamental-mode) (:beta 1 t 1 fundamental-mode)) t t)"#
         ]],
@@ -143,7 +139,7 @@ fn auto_minor_mode_magic_function_matchers_see_reset_point_and_limited_buffer() 
 }
 
 fn auto_minor_mode_magic_match_limit_has_exact_boundary_behavior() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_magic_match_limit_has_exact_boundary_behavior",
         r##"(mapcar
                            (lambda (contents)
@@ -165,7 +161,6 @@ fn auto_minor_mode_magic_match_limit_has_exact_boundary_behavior() -> ParityBatc
                              " aaaax"
                              "x"
                              "aaaa"))"##,
-        true,
         expect![[
             r#"OK (("aaaax" 5 t) ("aaaaax" 6 nil) (" aaaax" 6 nil) ("x" 1 t) ("aaaa" 4 nil))"#
         ]],
@@ -173,7 +168,7 @@ fn auto_minor_mode_magic_match_limit_has_exact_boundary_behavior() -> ParityBatc
 }
 
 fn auto_minor_mode_magic_scan_restores_point_mark_and_full_restriction() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_magic_scan_restores_point_mark_and_full_restriction",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -205,13 +200,12 @@ fn auto_minor_mode_magic_scan_restores_point_mark_and_full_restriction() -> Pari
                                (point-max))
                               (nreverse
                                auto-minor-mode-test-events))))"##,
-        true,
         expect!["OK ((12 4 1 25) (12 4 1 25) ((:alpha 1 t 25 fundamental-mode)))"],
     )
 }
 
 fn auto_minor_mode_magic_scan_honors_preexisting_narrowing() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_magic_scan_honors_preexisting_narrowing",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -228,13 +222,12 @@ fn auto_minor_mode_magic_scan_honors_preexisting_narrowing() -> ParityBatchCase 
                               (point-min)
                               (point-max)
                               (buffer-string))))"##,
-        true,
         expect![[r#"OK (t 11 9 14 "MAGIC")"#]],
     )
 }
 
 fn auto_minor_mode_magic_keep_skips_enabled_mode_and_runs_disabled_mode() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_magic_keep_skips_enabled_mode_and_runs_disabled_mode",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -253,13 +246,12 @@ fn auto_minor_mode_magic_keep_skips_enabled_mode_and_runs_disabled_mode() -> Par
                             auto-minor-mode-test-beta-mode
                             (nreverse
                              auto-minor-mode-test-events)))"##,
-        true,
         expect!["OK (t t ((:beta 1 t 1 fundamental-mode)))"],
     )
 }
 
 fn auto_minor_mode_magic_rules_work_in_non_file_buffers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_magic_rules_work_in_non_file_buffers",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -278,14 +270,13 @@ fn auto_minor_mode_magic_rules_work_in_non_file_buffers() -> ParityBatchCase {
                             auto-minor-mode-test-alpha-mode
                             (nreverse
                              auto-minor-mode-test-events)))"##,
-        true,
         expect![[r#"OK ("generated-config" nil t ((:alpha 1 t 1 fundamental-mode)))"#]],
     )
 }
 
 fn auto_minor_mode_magic_function_runs_after_major_mode_selection_and_invalid_matcher_signals()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_magic_function_runs_after_major_mode_selection_and_invalid_matcher_signals",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -317,16 +308,14 @@ fn auto_minor_mode_magic_function_runs_after_major_mode_selection_and_invalid_ma
                                   '((17
                                      . auto-minor-mode-test-beta-mode))
                                   nil))))))"##,
-        true,
         expect![
             "OK ((text-mode t ((:alpha 1 t 1 text-mode))) (:signal wrong-type-argument (stringp 17)))"
         ],
     )
 }
 
-#[test]
-fn magic_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn magic_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_minor_mode_magic_regex_matches_practical_file_headers_only_at_start(),
         auto_minor_mode_magic_matching_is_always_case_folded(),
         auto_minor_mode_magic_runner_enables_all_matching_modes_and_preserves_order(),
@@ -338,6 +327,5 @@ fn magic_public_surface_batch() {
         auto_minor_mode_magic_rules_work_in_non_file_buffers(),
         auto_minor_mode_magic_function_runs_after_major_mode_selection_and_invalid_matcher_signals(
         ),
-    ];
-    assert_auto_minor_mode_batch(&cases);
+    ]
 }

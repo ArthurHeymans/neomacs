@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_transient_batch};
+use super::ParityBatchCase;
 
 fn transient_parse_suffixes_returns_canonical_layout_specs() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "transient_parse_suffixes_returns_canonical_layout_specs",
         r##"(progn
                (transient-define-suffix neomacs-test-run ()
@@ -25,7 +25,6 @@ fn transient_parse_suffixes_returns_canonical_layout_specs() -> ParityBatchCase 
                         '((neomacs-test-run)
                           (neomacs-test-verbose)))))
                  specs))"##,
-        true,
         expect![[
             r#"OK ((transient-suffix :command neomacs-test-run) (transient-suffix :command neomacs-test-verbose))"#
         ]],
@@ -33,7 +32,7 @@ fn transient_parse_suffixes_returns_canonical_layout_specs() -> ParityBatchCase 
 }
 
 fn transient_scope_resolves_active_matching_and_default_prefix_scope() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "transient_scope_resolves_active_matching_and_default_prefix_scope",
         r##"(progn
                (transient-define-prefix neomacs-test-menu ()
@@ -54,13 +53,12 @@ fn transient_scope_resolves_active_matching_and_default_prefix_scope() -> Parity
                   (copy-tree
                    (transient-scope
                     nil 'transient-prefix)))))"##,
-        true,
         expect![[r#"OK ((other scope) (other scope) default-scope (other scope))"#]],
     )
 }
 
 fn transient_history_key_initialization_and_push_deduplicate_values() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "transient_history_key_initialization_and_push_deduplicate_values",
         r##"(progn
                (transient-define-prefix neomacs-test-menu ()
@@ -84,7 +82,6 @@ fn transient_history_key_initialization_and_push_deduplicate_values() -> ParityB
                     (alist-get
                      'neomacs-shared-history
                      transient-history)))))"##,
-        true,
         expect![[
             r#"OK (neomacs-shared-history (nil ("old") ("duplicate") ("old")) (("old") ("new") ("duplicate")))"#
         ]],
@@ -93,7 +90,7 @@ fn transient_history_key_initialization_and_push_deduplicate_values() -> ParityB
 
 fn transient_suffix_dispatch_metadata_selects_no_export_call_and_exit_behaviors() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "transient_suffix_dispatch_metadata_selects_no_export_call_and_exit_behaviors",
         r##"(progn
                (transient-define-suffix neomacs-test-no-export ()
@@ -124,13 +121,12 @@ fn transient_suffix_dispatch_metadata_selects_no_export_call_and_exit_behaviors(
                   '(neomacs-test-no-export
                     neomacs-test-call
                     neomacs-test-exit))))"##,
-        true,
         expect![[r#"OK (transient--do-stay transient--do-call transient--do-exit)"#]],
     )
 }
 
 fn transient_dispatch_executes_suffixes_and_exports_call_and_exit_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "transient_dispatch_executes_suffixes_and_exports_call_and_exit_state",
         r##"(progn
                (setq neomacs-test-events nil)
@@ -180,7 +176,6 @@ fn transient_dispatch_executes_suffixes_and_exports_call_and_exit_state() -> Par
                  (list
                   (nreverse results)
                   (nreverse neomacs-test-events))))"##,
-        true,
         expect![[
             r#"OK (((neomacs-test-no-export t transient--do-stay nil nil) (neomacs-test-call t transient--do-call neomacs-test-menu nil) (neomacs-test-exit nil transient--do-exit neomacs-test-menu t)) (no-export call exit))"#
         ]],
@@ -188,26 +183,23 @@ fn transient_dispatch_executes_suffixes_and_exports_call_and_exit_state() -> Par
 }
 
 fn transient_get_suffix_signals_for_missing_binding() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "transient_get_suffix_signals_for_missing_binding",
         r##"(progn
                (transient-define-prefix neomacs-test-menu () [])
                (transient-get-suffix
                 'neomacs-test-menu "missing"))"##,
-        false,
         expect![[r#"ERR (error "missing not found in neomacs-test-menu")"#]],
     )
 }
 
-#[test]
-fn state_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn state_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         transient_parse_suffixes_returns_canonical_layout_specs(),
         transient_scope_resolves_active_matching_and_default_prefix_scope(),
         transient_history_key_initialization_and_push_deduplicate_values(),
         transient_suffix_dispatch_metadata_selects_no_export_call_and_exit_behaviors(),
         transient_dispatch_executes_suffixes_and_exports_call_and_exit_state(),
         transient_get_suffix_signals_for_missing_binding(),
-    ];
-    assert_transient_batch(&cases);
+    ]
 }

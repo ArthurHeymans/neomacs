@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_zero_b_layout_batch};
+use super::ParityBatchCase;
 
 fn zero_b_layout_rebinding_replaces_the_previous_prefix() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_rebinding_replaces_the_previous_prefix",
         r##"(progn
                (0blayout-add-keybindings-with-prefix "C-x C-z")
@@ -20,13 +20,12 @@ fn zero_b_layout_rebinding_replaces_the_previous_prefix() -> ParityBatchCase {
                  '("C-x C-z C-c"
                    "C-x C-z C-k"
                    "C-x C-z C-b"))))"##,
-        true,
         expect!["OK ((1 1 1) (0blayout-new 0blayout-kill 0blayout-switch))"],
     )
 }
 
 fn zero_b_layout_rebinding_honors_a_replaced_key_specification() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_rebinding_honors_a_replaced_key_specification",
         r##"(let ((0blayout-keys-map
                       '(("n" . next-line)
@@ -40,13 +39,12 @@ fn zero_b_layout_rebinding_honors_a_replaced_key_specification() -> ParityBatchC
                 (lookup-key
                  0blayout-mode-map
                  (kbd "C-c C-l C-c"))))"##,
-        true,
         expect!["OK (next-line previous-line newline 2)"],
     )
 }
 
 fn zero_b_layout_accepts_an_empty_binding_specification() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_accepts_an_empty_binding_specification",
         r##"(let ((0blayout-keys-map nil))
                (0blayout-add-keybindings-with-prefix "C-c z")
@@ -56,27 +54,23 @@ fn zero_b_layout_accepts_an_empty_binding_specification() -> ParityBatchCase {
                 (lookup-key
                  0blayout-mode-map
                  (kbd "C-c C-l C-c"))))"##,
-        true,
         expect!["OK (t nil 1)"],
     )
 }
 
 fn zero_b_layout_rebinding_accepts_an_unterminated_event_name() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_rebinding_accepts_an_unterminated_event_name",
         r##"(0blayout-add-keybindings-with-prefix "<definitely-not-a-key")"##,
-        true,
         expect!["OK nil"],
     )
 }
 
-#[test]
-fn keybindings_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn keybindings_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         zero_b_layout_rebinding_replaces_the_previous_prefix(),
         zero_b_layout_rebinding_honors_a_replaced_key_specification(),
         zero_b_layout_accepts_an_empty_binding_specification(),
         zero_b_layout_rebinding_accepts_an_unterminated_event_name(),
-    ];
-    assert_zero_b_layout_batch(&cases);
+    ]
 }

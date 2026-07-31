@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asyncloop_batch};
+use super::ParityBatchCase;
 
 fn asyncloop_run_processes_a_practical_import_pipeline_once_in_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_run_processes_a_practical_import_pipeline_once_in_order",
         r##"(let ((records
                 '(" one " "two" " one " "three"))
@@ -59,7 +59,6 @@ fn asyncloop_run_processes_a_practical_import_pipeline_once_in_order() -> Parity
               (asyncloop-just-launched loop)
               (asyncloop-remainder loop)
               (length asyncloop-objects)))))"##,
-        true,
         expect![[
             r#"OK ((nil t t 3) ((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) ("one" "three" "two") ((:normalized ("one" "two" "one" "three")) (:deduplicated ("one" "two" "three")) (:sorted ("one" "three" "two"))) nil nil nil 1)"#
         ]],
@@ -67,7 +66,7 @@ fn asyncloop_run_processes_a_practical_import_pipeline_once_in_order() -> Parity
 }
 
 fn asyncloop_run_deduplicates_back_to_back_hook_invocations_before_launch() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_run_deduplicates_back_to_back_hook_invocations_before_launch",
         r##"(let (events)
          (asyncloop-test-reset)
@@ -92,14 +91,13 @@ fn asyncloop_run_deduplicates_back_to_back_hook_invocations_before_launch() -> P
               events
               (length asyncloop-objects)
               (asyncloop-remainder first)))))"##,
-        true,
         expect!["OK (t 1 ((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:ran) 1 nil)"],
     )
 }
 
 fn asyncloop_run_deduplicates_already_scheduled_hook_invocation_and_logs_reason() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_run_deduplicates_already_scheduled_hook_invocation_and_logs_reason",
         r##"(let (events logged)
          (asyncloop-test-reset)
@@ -131,7 +129,6 @@ fn asyncloop_run_deduplicates_already_scheduled_hook_invocation_and_logs_reason(
                   logged
                   (asyncloop-test-drain)
                   events))))))"##,
-        true,
         expect![[
             r#"OK (t 1 ("Already running, letting it continue") ((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:ran))"#
         ]],
@@ -139,7 +136,7 @@ fn asyncloop_run_deduplicates_already_scheduled_hook_invocation_and_logs_reason(
 }
 
 fn asyncloop_completed_loop_reuses_identity_but_runs_full_series_again() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_completed_loop_reuses_identity_but_runs_full_series_again",
         r##"(let (events)
          (asyncloop-test-reset)
@@ -170,7 +167,6 @@ fn asyncloop_completed_loop_reuses_identity_but_runs_full_series_again() -> Pari
               (nreverse events)
               (length asyncloop-objects)
               (asyncloop-remainder second)))))"##,
-        true,
         expect![
             "OK (t ((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) 1 ((:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (1 2) 1 nil)"
         ],
@@ -178,7 +174,7 @@ fn asyncloop_completed_loop_reuses_identity_but_runs_full_series_again() -> Pari
 }
 
 fn asyncloop_identity_distinguishes_behavioral_options_and_log_destination() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_identity_distinguishes_behavioral_options_and_log_destination",
         r##"(let ((buffer
                 (generate-new-buffer
@@ -217,13 +213,12 @@ fn asyncloop_identity_distinguishes_behavioral_options_and_log_destination() -> 
                     (length
                      asyncloop-test-timer-queue)))))
            (kill-buffer buffer)))"##,
-        true,
         expect![[r#"OK (nil nil nil 3 ((nil nil) (t nil) (nil " *asyncloop-identity*")) 3)"#]],
     )
 }
 
 fn asyncloop_run_recovers_half_finished_series_and_calls_recovery_hook_first() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_run_recovers_half_finished_series_and_calls_recovery_hook_first",
         r##"(let (events)
          (asyncloop-test-reset)
@@ -264,7 +259,6 @@ fn asyncloop_run_recovers_half_finished_series_and_calls_recovery_hook_first() -
                 (asyncloop-remainder loop)
                 (asyncloop-scheduled loop)
                 (asyncloop-just-launched loop))))))"##,
-        true,
         expect![
             "OK (t ((:skipped :at 0 :id 1) (:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:recovered :second :third) nil nil nil)"
         ],
@@ -272,7 +266,7 @@ fn asyncloop_run_recovers_half_finished_series_and_calls_recovery_hook_first() -
 }
 
 fn asyncloop_recovery_hook_can_cancel_stale_transaction_instead_of_resuming() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_recovery_hook_can_cancel_stale_transaction_instead_of_resuming",
         r##"(let (events)
          (asyncloop-test-reset)
@@ -314,13 +308,12 @@ fn asyncloop_recovery_hook_can_cancel_stale_transaction_instead_of_resuming() ->
                (copy-sequence
                 asyncloop-test-cancelled)
                #'<)))))"##,
-        true,
         expect!["OK (((:skipped :at 0 :id 1)) (:cleanup) nil nil nil (1))"],
     )
 }
 
 fn asyncloop_run_refuses_implicit_resume_of_a_paused_partial_series() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_run_refuses_implicit_resume_of_a_paused_partial_series",
         r##"(let (events logged)
          (asyncloop-test-reset)
@@ -362,7 +355,6 @@ fn asyncloop_run_refuses_implicit_resume_of_a_paused_partial_series() -> ParityB
                   (asyncloop-paused loop)
                   (length
                    (asyncloop-remainder loop))))))))"##,
-        true,
         expect![[
             r#"OK (t ("Loop was paused, must be explicitly unpaused via `asyncloop-resume' or `asyncloop-cancel'") 1 nil t 1)"#
         ]],
@@ -370,7 +362,7 @@ fn asyncloop_run_refuses_implicit_resume_of_a_paused_partial_series() -> ParityB
 }
 
 fn asyncloop_worker_can_replace_remainder_with_a_runtime_selected_branch() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_worker_can_replace_remainder_with_a_runtime_selected_branch",
         r##"(let (events loop)
          (asyncloop-test-reset)
@@ -402,7 +394,6 @@ fn asyncloop_worker_can_replace_remainder_with_a_runtime_selected_branch() -> Pa
               (asyncloop-test-drain)
               (nreverse events)
               (asyncloop-remainder loop)))))"##,
-        true,
         expect![
             "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:validate :audit :publish) nil)"
         ],
@@ -411,7 +402,7 @@ fn asyncloop_worker_can_replace_remainder_with_a_runtime_selected_branch() -> Pa
 
 fn asyncloop_reentrant_same_series_invocation_has_deterministic_single_registry_lifecycle()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_reentrant_same_series_invocation_has_deterministic_single_registry_lifecycle",
         r##"(let (events functions outer-loop nested-loop)
          (asyncloop-test-reset)
@@ -438,7 +429,6 @@ fn asyncloop_reentrant_same_series_invocation_has_deterministic_single_registry_
               (asyncloop-remainder outer-loop)
               (asyncloop-scheduled outer-loop)
               asyncloop-test-timer-queue))))"##,
-        true,
         expect![
             "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat) (:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:first-enter :first-exit :second) t 1 nil nil nil)"
         ],
@@ -447,7 +437,7 @@ fn asyncloop_reentrant_same_series_invocation_has_deterministic_single_registry_
 
 fn asyncloop_worker_error_preserves_current_stage_then_same_run_retries_from_start()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_worker_error_preserves_current_stage_then_same_run_retries_from_start",
         r##"(let ((attempt 0)
                events
@@ -502,7 +492,6 @@ fn asyncloop_worker_error_preserves_current_stage_then_same_run_retries_from_sta
               recovered
               attempt
               (asyncloop-remainder loop)))))"##,
-        true,
         expect![[
             r#"OK ((:signal error ("transient import failure")) (2 nil nil) ((:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) ((:attempt 1) (:attempt 2) :saved) nil 2 nil)"#
         ]],
@@ -511,7 +500,7 @@ fn asyncloop_worker_error_preserves_current_stage_then_same_run_retries_from_sta
 
 fn asyncloop_two_simultaneous_series_follow_timer_insertion_order_without_cross_talk()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_two_simultaneous_series_follow_timer_insertion_order_without_cross_talk",
         r##"(let (events loop-a loop-b)
          (asyncloop-test-reset)
@@ -538,7 +527,6 @@ fn asyncloop_two_simultaneous_series_follow_timer_insertion_order_without_cross_
             (asyncloop-remainder loop-a)
             (asyncloop-remainder loop-b)
             (length asyncloop-objects))))"##,
-        true,
         expect![
             "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat) (:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:a-load :a-save :b-load :b-save) nil nil 2)"
         ],
@@ -546,7 +534,7 @@ fn asyncloop_two_simultaneous_series_follow_timer_insertion_order_without_cross_
 }
 
 fn asyncloop_with_slots_reads_and_mutates_live_struct_places_lexically() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_with_slots_reads_and_mutates_live_struct_places_lexically",
         r##"(let ((loop
                 (asyncloop-create
@@ -569,14 +557,12 @@ fn asyncloop_with_slots_reads_and_mutates_live_struct_places_lexically() -> Pari
             (asyncloop-paused loop)
             (asyncloop-scheduled loop)
             (asyncloop-remainder loop))))"##,
-        true,
         expect!["OK ((t nil #1=(zero one two)) t nil #1#)"],
     )
 }
 
-#[test]
-fn series_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn series_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asyncloop_run_processes_a_practical_import_pipeline_once_in_order(),
         asyncloop_run_deduplicates_back_to_back_hook_invocations_before_launch(),
         asyncloop_run_deduplicates_already_scheduled_hook_invocation_and_logs_reason(),
@@ -590,6 +576,5 @@ fn series_public_surface_batch() {
         asyncloop_worker_error_preserves_current_stage_then_same_run_retries_from_start(),
         asyncloop_two_simultaneous_series_follow_timer_insertion_order_without_cross_talk(),
         asyncloop_with_slots_reads_and_mutates_live_struct_places_lexically(),
-    ];
-    assert_asyncloop_batch(&cases);
+    ]
 }

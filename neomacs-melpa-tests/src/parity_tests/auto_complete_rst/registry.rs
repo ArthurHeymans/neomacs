@@ -1,11 +1,9 @@
 use expect_test::expect;
 
-use super::{
-    ParityBatchCase, assert_auto_complete_rst_autoload_batch, assert_auto_complete_rst_batch,
-};
+use super::ParityBatchCase;
 
 fn auto_complete_rst_exact_descriptor_and_archive_payload_bytes_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_exact_descriptor_and_archive_payload_bytes_match",
         r##"(let* ((descriptor
                                  (cadr
@@ -41,7 +39,6 @@ fn auto_complete_rst_exact_descriptor_and_archive_payload_bytes_match() -> Parit
                              '("auto-complete-rst-pkg.el"
                                "auto-complete-rst.el"
                                "genesource.py"))))"##,
-        true,
         expect![[
             r####"OK (auto-complete-rst "20140225.944" "Auto-complete extension for ReST and Sphinx." ((auto-complete (1 4))) nil ((:revdesc . "4803ce41a962") (:commit . "4803ce41a96224e6fa54e6741a5b5f40ebed7351") (:url . "https://github.com/tkf/auto-complete-rst")) (("auto-complete-rst-pkg.el" 309 "e9f01f4813414c2b458f062f7f9feece539cd8087281ed622b3a24d6b0548580") ("auto-complete-rst.el" 6567 "a280e014e925c9cd301ad1c24d6f47fe823334210afde99babf02e54f9265b00") ("genesource.py" 7490 "95c1d9d3ac8d08ba6fcb74fd5390bb865f2e7a7a81d3441a0a6233807c9ab5b7")))"####
         ]],
@@ -49,7 +46,7 @@ fn auto_complete_rst_exact_descriptor_and_archive_payload_bytes_match() -> Parit
 }
 
 fn auto_complete_rst_complete_target_symbol_inventory_matches() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_complete_target_symbol_inventory_matches",
         r##"(let (symbols)
                            (mapatoms
@@ -80,15 +77,15 @@ fn auto_complete_rst_complete_target_symbol_inventory_matches() -> ParityBatchCa
                               (string<
                                (symbol-name (car left))
                                (symbol-name (car right))))))"##,
-        true,
         expect![[
             r####"OK ((auto-complete-rst-add-sources t nil nil nil "auto-complete-rst.el") (auto-complete-rst-autoloads nil nil nil nil "auto-complete-rst-autoloads.el") (auto-complete-rst-complete-colon t nil t nil "auto-complete-rst.el") (auto-complete-rst-complete-space t nil t nil "auto-complete-rst.el") (auto-complete-rst-directive-name-at-option t nil nil nil "auto-complete-rst.el") (auto-complete-rst-directive-options-map nil t nil nil "auto-complete-rst.el") (auto-complete-rst-directives-candidates nil nil nil nil "") (auto-complete-rst-genesource-command t nil nil nil "auto-complete-rst.el") (auto-complete-rst-genesource-eval t nil nil nil "auto-complete-rst.el") (auto-complete-rst-genesource-py nil t nil nil "auto-complete-rst.el") (auto-complete-rst-get-option t nil nil nil "auto-complete-rst.el") (auto-complete-rst-goto-directive-from-option t nil nil nil "auto-complete-rst.el") (auto-complete-rst-init t nil nil nil "auto-complete-rst.el") (auto-complete-rst-insert-two-backquotes t nil nil nil "auto-complete-rst.el") (auto-complete-rst-options-candidates t nil nil nil "auto-complete-rst.el") (auto-complete-rst-other-sources nil t nil nil "auto-complete-rst.el") (auto-complete-rst-regenerate-source t nil t nil "auto-complete-rst.el") (auto-complete-rst-roles-candidates nil nil nil nil "") (auto-complete-rst-sphinx-extensions nil t nil nil "auto-complete-rst.el"))"####
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_rst_callable_signatures_docs_interactivity_and_origins_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_callable_signatures_docs_interactivity_and_origins_match",
         r##"(mapcar
                            (lambda (symbol)
@@ -114,7 +111,6 @@ fn auto_complete_rst_callable_signatures_docs_interactivity_and_origins_match() 
                              auto-complete-rst-complete-colon
                              auto-complete-rst-add-sources
                              auto-complete-rst-init))"##,
-        true,
         expect![[
             r####"OK ((auto-complete-rst-genesource-command nil nil nil nil "auto-complete-rst.el") (auto-complete-rst-genesource-eval nil nil nil nil "auto-complete-rst.el") (auto-complete-rst-regenerate-source nil t t "Recreate sources for auto-complete-rst.\nUseful, for example, to add new extension(s) after modifying\n`auto-complete-rst-sphinx-extensions'." "auto-complete-rst.el") (auto-complete-rst-options-candidates nil nil nil nil "auto-complete-rst.el") (auto-complete-rst-get-option (directive) nil nil "Get options (list of string) of given directive" "auto-complete-rst.el") (auto-complete-rst-directive-name-at-option (&optional bound) nil nil "Get the directive name when the cursor is at the option" "auto-complete-rst.el") (auto-complete-rst-goto-directive-from-option (&optional bound) nil nil "Go to the position right after the :: of directive (#) from option (@)\n\n.. DIRECTIVE::#\n   :OPTION:\n   :OPT@\n\n" "auto-complete-rst.el") (auto-complete-rst-insert-two-backquotes nil nil nil nil "auto-complete-rst.el") (auto-complete-rst-complete-space nil t t nil "auto-complete-rst.el") (auto-complete-rst-complete-colon nil t t nil "auto-complete-rst.el") (auto-complete-rst-add-sources nil nil nil nil "auto-complete-rst.el") (auto-complete-rst-init nil nil nil nil "auto-complete-rst.el"))"####
         ]],
@@ -122,7 +118,7 @@ fn auto_complete_rst_callable_signatures_docs_interactivity_and_origins_match() 
 }
 
 fn auto_complete_rst_variable_defaults_docs_locality_and_sources_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_variable_defaults_docs_locality_and_sources_match",
         r##"(list
                            (mapcar
@@ -158,15 +154,15 @@ fn auto_complete_rst_variable_defaults_docs_locality_and_sources_match() -> Pari
                             '(ac-source-rst-directives
                               ac-source-rst-roles
                               ac-source-rst-options)))"##,
-        true,
         expect![[
             r####"OK (((auto-complete-rst-sphinx-extensions nil nil "Paths to Sphinx extensions." "auto-complete-rst.el") (auto-complete-rst-genesource-py "genesource.py" nil nil "auto-complete-rst.el") (auto-complete-rst-directive-options-map #s(hash-table test equal) nil "A map from directive name (string) to its options (list of string)" "auto-complete-rst.el") (auto-complete-rst-other-sources nil nil "Sources to use other than the sources defined in `auto-complete-rst'\n\nDefault `ac-sources' will be used if it is `nil' (default)." "auto-complete-rst.el")) ((ac-source-rst-directives ((candidates . auto-complete-rst-directives-candidates) (available fboundp 'auto-complete-rst-directives-candidates) (prefix . "[[:space:]]\\.\\. \\([[:alnum:]-:]*\\)") (symbol . "D") (requires . 0))) (ac-source-rst-roles ((candidates . auto-complete-rst-roles-candidates) (available fboundp 'auto-complete-rst-roles-candidates) (prefix . "[^[:alnum:]:]:\\([[:alnum:]-:]*\\)") (symbol . "R") (requires . 0) (action . :function))) (ac-source-rst-options ((candidates . :function) (prefix . "[[:space:]]\\{4,\\}:\\([^:]*\\)") (symbol . "O") (requires . 0)))))"####
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_rst_load_history_records_definition_order_and_requirements() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_load_history_records_definition_order_and_requirements",
         r##"(let* ((history
                                  (seq-find
@@ -190,7 +186,6 @@ fn auto_complete_rst_load_history_records_definition_order_and_requirements() ->
                             (featurep 'auto-complete-rst)
                             (featurep 'auto-complete)
                             (featurep 'popup)))"##,
-        true,
         expect![[
             r####"OK ("auto-complete-rst.el" ((require . cl) (require . auto-complete) (defun . auto-complete-rst-genesource-command) (defun . auto-complete-rst-genesource-eval) (defun . auto-complete-rst-regenerate-source) (defun . auto-complete-rst-options-candidates) (defun . auto-complete-rst-get-option) (defun . auto-complete-rst-directive-name-at-option) (defun . auto-complete-rst-goto-directive-from-option) (defun . auto-complete-rst-insert-two-backquotes) (defun . auto-complete-rst-complete-space) (defun . auto-complete-rst-complete-colon) (defun . auto-complete-rst-add-sources) (defun . auto-complete-rst-init) (provide . auto-complete-rst)) t t t)"####
         ]],
@@ -198,7 +193,7 @@ fn auto_complete_rst_load_history_records_definition_order_and_requirements() ->
 }
 
 fn auto_complete_rst_exact_dependency_versions_and_loaded_features_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_exact_dependency_versions_and_loaded_features_match",
         r##"(mapcar
                            (lambda (name)
@@ -214,7 +209,6 @@ fn auto_complete_rst_exact_dependency_versions_and_loaded_features_match() -> Pa
                            '(auto-complete-rst
                              auto-complete
                              popup))"##,
-        true,
         expect![[
             r####"OK ((auto-complete-rst "20140225.944" ((auto-complete (1 4))) t) (auto-complete "20251231.1622" ((emacs (25 1)) (popup (0 5 8))) t) (popup "20251231.1622" ((emacs (24 3))) t))"####
         ]],
@@ -222,7 +216,7 @@ fn auto_complete_rst_exact_dependency_versions_and_loaded_features_match() -> Pa
 }
 
 fn auto_complete_rst_generated_autoload_contains_only_feature_contract() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_generated_autoload_contains_only_feature_contract",
         r##"(let* ((history
                                  (seq-find
@@ -249,27 +243,21 @@ fn auto_complete_rst_generated_autoload_contains_only_feature_contract() -> Pari
                             (boundp
                              'auto-complete-rst-sphinx-extensions)
                             events))"##,
-        true,
         expect![[r####"OK (t nil nil nil ((provide . auto-complete-rst-autoloads)))"####]],
     )
 }
 
-#[test]
-fn registry_auto_complete_rst_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn registry_auto_complete_rst_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_rst_exact_descriptor_and_archive_payload_bytes_match(),
         auto_complete_rst_complete_target_symbol_inventory_matches(),
         auto_complete_rst_callable_signatures_docs_interactivity_and_origins_match(),
         auto_complete_rst_variable_defaults_docs_locality_and_sources_match(),
         auto_complete_rst_load_history_records_definition_order_and_requirements(),
         auto_complete_rst_exact_dependency_versions_and_loaded_features_match(),
-    ];
-    assert_auto_complete_rst_batch(&cases);
+    ]
 }
 
-#[test]
-fn registry_auto_complete_rst_autoload_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![auto_complete_rst_generated_autoload_contains_only_feature_contract()];
-    assert_auto_complete_rst_autoload_batch(&cases);
+pub(super) fn registry_auto_complete_rst_autoload_batch_cases() -> Vec<ParityBatchCase> {
+    vec![auto_complete_rst_generated_autoload_contains_only_feature_contract()]
 }

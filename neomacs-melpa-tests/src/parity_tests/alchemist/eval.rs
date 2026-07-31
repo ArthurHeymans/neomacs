@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alchemist_batch};
+use super::ParityBatchCase;
 
 fn alchemist_eval_line_region_buffer_and_print_workflows_write_local_temp_payloads_and_callbacks()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_eval_line_region_buffer_and_print_workflows_write_local_temp_payloads_and_callbacks",
         r##"(with-temp-buffer
                       (insert
@@ -56,7 +56,6 @@ fn alchemist_eval_line_region_buffer_and_print_workflows_write_local_temp_payloa
                              print-line print-region print-buffer
                              (nreverse requests)
                              (point))))))"##,
-        true,
         expect![[
             r#"OK (requested requested requested requested requested requested (("alchemist-eval*.exs" t "first = 20\n" alchemist-eval-filter) ("alchemist-eval*.exs" t "second = 22\nfirst + second" alchemist-eval-filter) ("alchemist-eval*.exs" t "first = 20\nsecond = 22\nfirst + second\n" alchemist-eval-filter) ("alchemist-eval*.exs" t "first = 20\n" alchemist-eval-insert-filter) ("alchemist-eval*.exs" t "first = 20\nsecond = 22" alchemist-eval-insert-filter) ("alchemist-eval*.exs" t "first = 20\nsecond = 22\nfirst + second\n" alchemist-eval-insert-filter)) 39)"#
         ]],
@@ -65,7 +64,7 @@ fn alchemist_eval_line_region_buffer_and_print_workflows_write_local_temp_payloa
 
 fn alchemist_quoted_eval_variants_preserve_payload_region_direction_and_quote_protocol()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_quoted_eval_variants_preserve_payload_region_direction_and_quote_protocol",
         r##"(with-temp-buffer
                       (insert
@@ -103,7 +102,6 @@ fn alchemist_quoted_eval_variants_preserve_payload_region_direction_and_quote_pr
                            (nreverse requests)
                            (point)
                            (mark t)))))"##,
-        true,
         expect![[
             r#"OK (quoted quoted quoted quoted quoted quoted ((t "|> Enum.sort()\n" alchemist-eval-quoted-filter t) (t "[4, 2, 1, 3]\n|> Enum.sort()\n" alchemist-eval-quoted-filter t) (t "[4, 2, 1, 3]\n|> Enum.sort()\n" alchemist-eval-quoted-filter t) (t "|> Enum.sort()\n" alchemist-eval-quoted-insert-filter t) (t "[4, 2, 1, 3]\n|> Enum.sort()\n" alchemist-eval-quoted-insert-filter t) (t "[4, 2, 1, 3]\n|> Enum.sort()\n" alchemist-eval-quoted-insert-filter t)) 29 nil)"#
         ]],
@@ -112,7 +110,7 @@ fn alchemist_quoted_eval_variants_preserve_payload_region_direction_and_quote_pr
 
 fn alchemist_eval_filters_accumulate_chunked_server_output_into_popup_and_inline_results()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_eval_filters_accumulate_chunked_server_output_into_popup_and_inline_results",
         r##"(let ((alchemist-eval-filter-output nil)
                           events)
@@ -148,7 +146,6 @@ fn alchemist_eval_filters_accumulate_chunked_server_output_into_popup_and_inline
                           'process "{:ok, 1}\nEND-OF-EVAL\n")
                          alchemist-eval-filter-output
                          (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (nil ("first\n") nil nil nil nil nil nil ((popup "*alchemist-eval-mode*" "first\nsecond" :anonymous-mode) (insert "42") (popup "*alchemist-eval-mode*" "{:+, [], [1, 2]}" alchemist-eval-mode) (insert "{:ok, 1}")))"#
         ]],
@@ -157,7 +154,7 @@ fn alchemist_eval_filters_accumulate_chunked_server_output_into_popup_and_inline
 
 fn alchemist_macroexpand_line_and_region_workflows_write_local_payloads_and_select_exact_protocol()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_macroexpand_line_and_region_workflows_write_local_payloads_and_select_exact_protocol",
         r##"(with-temp-buffer
                       (insert
@@ -206,7 +203,6 @@ fn alchemist_macroexpand_line_and_region_workflows_write_local_payloads_and_sele
                            (nreverse requests)
                            (point)
                            (mark t)))))"##,
-        true,
         expect![[
             r#"OK (expanded expanded expanded expanded expanded expanded expanded expanded ((:expand "unless false do\n" alchemist-macroexpand-filter t) (:expand "unless false do\n" alchemist-macroexpand-insert-filter t) (:expand-once "unless false do\n" alchemist-macroexpand-filter t) (:expand-once "unless false do\n" alchemist-macroexpand-insert-filter t) (:expand "unless false do\n  IO.puts(\"kept\")\nend\n" alchemist-macroexpand-filter t) (:expand "unless false do\n  IO.puts(\"kept\")\nend\n" alchemist-macroexpand-insert-filter t) (:expand-once "unless false do\n  IO.puts(\"kept\")\nend\n" alchemist-macroexpand-filter t) (:expand-once "unless false do\n  IO.puts(\"kept\")\nend\n" alchemist-macroexpand-insert-filter t)) 1 nil)"#
         ]],
@@ -215,7 +211,7 @@ fn alchemist_macroexpand_line_and_region_workflows_write_local_payloads_and_sele
 
 fn alchemist_macroexpand_filters_render_chunked_popup_and_inline_expansion_exactly()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_macroexpand_filters_render_chunked_popup_and_inline_expansion_exactly",
         r##"(let ((alchemist-macroexpand-filter-output nil)
                           events)
@@ -247,21 +243,18 @@ fn alchemist_macroexpand_filters_render_chunked_popup_and_inline_expansion_exact
                           'process "if(true), do: :ok\nEND-OF-EVAL\n")
                          alchemist-macroexpand-filter-output
                          (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (nil ("case(false) do\n") nil nil nil nil ((popup "*alchemist macroexpand*" "case(false) do\nend" :anonymous-mode) (insert "if(true), do: :ok")))"#
         ]],
     )
 }
 
-#[test]
-fn eval_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn eval_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         alchemist_eval_line_region_buffer_and_print_workflows_write_local_temp_payloads_and_callbacks(),
         alchemist_quoted_eval_variants_preserve_payload_region_direction_and_quote_protocol(),
         alchemist_eval_filters_accumulate_chunked_server_output_into_popup_and_inline_results(),
         alchemist_macroexpand_line_and_region_workflows_write_local_payloads_and_select_exact_protocol(),
         alchemist_macroexpand_filters_render_chunked_popup_and_inline_expansion_exactly(),
-    ];
-    assert_alchemist_batch(&cases);
+    ]
 }

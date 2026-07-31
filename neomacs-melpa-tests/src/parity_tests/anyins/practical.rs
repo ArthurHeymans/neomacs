@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_anyins_batch};
+use super::ParityBatchCase;
 
 fn anyins_documented_yank_fills_an_irregular_status_column_from_the_current_point()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anyins_documented_yank_fills_an_irregular_status_column_from_the_current_point",
         r##"(with-temp-buffer
   (insert "Name Status\nAda\nBob\nCy")
@@ -34,7 +34,6 @@ fn anyins_documented_yank_fills_an_irregular_status_column_from_the_current_poin
         :read-only buffer-read-only
         :highlight-count
         (neomacs-anyins-highlight-count))))))"##,
-        true,
         expect![[
             r#"OK (:yank-binding anyins-yank :enabled (:result t :mode t :read-only t) :yank-result nil :document "Name Status\nAda | active\nBob | invited\nCy  | disabled" :point 54 :finished (:mode nil :read-only nil :highlight-count 0))"#
         ]],
@@ -42,7 +41,7 @@ fn anyins_documented_yank_fills_an_irregular_status_column_from_the_current_poin
 }
 
 fn anyins_marked_yank_prefixes_multiple_fields_per_line_in_recording_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anyins_marked_yank_prefixes_multiple_fields_per_line_in_recording_order",
         r##"(with-temp-buffer
   (insert "host port\napi 443\ncache 6379")
@@ -84,7 +83,6 @@ fn anyins_marked_yank_prefixes_multiple_fields_per_line_in_recording_order() -> 
         :read-only buffer-read-only
         :highlight-count
         (neomacs-anyins-highlight-count))))))"##,
-        true,
         expect![[
             r#"OK (:yank-binding anyins-yank :duplicate-mark (:points (1) :faces (anyins-recorded-positions) :highlight-count 1 :read-only t) :marked (:points (1 6 11 15 19 25) :faces (anyins-recorded-positions anyins-recorded-positions anyins-recorded-positions anyins-recorded-positions anyins-recorded-positions anyins-recorded-positions) :highlight-count 6 :read-only t) :document "server=host number=port\nserver=api number=443\nserver=cache number=6379" :point 67 :finished (:mode nil :read-only nil :highlight-count 0))"#
         ]],
@@ -93,7 +91,7 @@ fn anyins_marked_yank_prefixes_multiple_fields_per_line_in_recording_order() -> 
 
 fn anyins_shell_workflow_runs_a_real_generator_through_the_interactive_command() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anyins_shell_workflow_runs_a_real_generator_through_the_interactive_command",
         r##"(let* ((root
          (file-name-as-directory
@@ -170,7 +168,6 @@ fn anyins_shell_workflow_runs_a_real_generator_through_the_interactive_command()
     (setenv "NEOMACS_ANYINS_TRACE" nil)
     (when (file-exists-p root)
       (delete-directory root t))))"##,
-        true,
         expect![[
             r#"OK (:insert-binding anyins-insert-command :prompt "Shell command: " :answer "[ORACLE-SANDBOX]/anyins-shell-workflow/generate-statuses production" :invocation (anyins-insert-command "[ORACLE-SANDBOX]/anyins-shell-workflow/generate-statuses production") :marked (:points (4 11 21) :faces (anyins-recorded-positions anyins-recorded-positions nil) :highlight-count 2 :read-only t) :document "api | active\nworker | paused\nscheduler | active" :point 48 :generator-trace "production\n" :finished (:mode nil :read-only nil :highlight-count 0))"#
         ]],
@@ -179,7 +176,7 @@ fn anyins_shell_workflow_runs_a_real_generator_through_the_interactive_command()
 
 fn anyins_shell_output_cardinality_handles_exact_short_and_long_real_process_results()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anyins_shell_output_cardinality_handles_exact_short_and_long_real_process_results",
         r##"(let* ((root
          (file-name-as-directory
@@ -246,7 +243,6 @@ fn anyins_shell_output_cardinality_handles_exact_short_and_long_real_process_res
     (setenv "NEOMACS_ANYINS_TRACE" nil)
     (when (file-exists-p root)
       (delete-directory root t))))"##,
-        true,
         expect![[
             r#"OK (:phases ((:case "exact" :command "[ORACLE-SANDBOX]/anyins-shell-cardinality/generate-prefixes exact" :document "1.alpha\n2.beta\n3.gamma" :point 18 :finished (:mode nil :read-only nil :highlight-count 0)) (:case "short" :command "[ORACLE-SANDBOX]/anyins-shell-cardinality/generate-prefixes short" :document "1.alpha\n2.beta\ngamma\ndelta" :point 22 :finished (:mode nil :read-only nil :highlight-count 0)) (:case "long" :command "[ORACLE-SANDBOX]/anyins-shell-cardinality/generate-prefixes long" :document "1.alpha\n2.beta" :point 11 :finished (:mode nil :read-only nil :highlight-count 0))) :generator-trace "exact\nshort\nlong\n")"#
         ]],
@@ -254,7 +250,7 @@ fn anyins_shell_output_cardinality_handles_exact_short_and_long_real_process_res
 }
 
 fn anyins_abort_key_leaves_the_document_untouched_and_removes_every_marker() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anyins_abort_key_leaves_the_document_untouched_and_removes_every_marker",
         r##"(with-temp-buffer
   (insert
@@ -317,21 +313,18 @@ fn anyins_abort_key_leaves_the_document_untouched_and_removes_every_marker() -> 
         :read-only buffer-read-only
         :highlight-count
         (neomacs-anyins-highlight-count))))))"##,
-        true,
         expect![[
             r#"OK (:abort-binding anyins-disable-mode :other-buffer (:document "isolated document" :marked (:points (10) :faces (anyins-recorded-positions) :highlight-count 1 :read-only t) :finished (:mode nil :read-only nil :highlight-count 0)) :marked (:points (17 53 78) :faces (anyins-recorded-positions anyins-recorded-positions anyins-recorded-positions) :highlight-count 3 :read-only t) :unchanged t :document "A computer is a general purpose device.\nIt performs arithmetic operations.\nA sequence can be changed safely." :point 86 :finished (:mode nil :read-only nil :highlight-count 0))"#
         ]],
     )
 }
 
-#[test]
-fn practical_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn practical_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         anyins_documented_yank_fills_an_irregular_status_column_from_the_current_point(),
         anyins_marked_yank_prefixes_multiple_fields_per_line_in_recording_order(),
         anyins_shell_workflow_runs_a_real_generator_through_the_interactive_command(),
         anyins_shell_output_cardinality_handles_exact_short_and_long_real_process_results(),
         anyins_abort_key_leaves_the_document_untouched_and_removes_every_marker(),
-    ];
-    assert_anyins_batch(&cases);
+    ]
 }

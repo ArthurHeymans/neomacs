@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_magit_batch};
+use super::ParityBatchCase;
 
 fn magit_repository_identity_config_and_branch_queries_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_repository_identity_config_and_branch_queries_match",
         r##"(let* ((root (make-temp-file "magit-repo-" t))
                     (default-directory (file-name-as-directory root)))
@@ -34,7 +34,6 @@ fn magit_repository_identity_config_and_branch_queries_match() -> ParityBatchCas
                       (magit-list-remote-branch-names "origin")
                       (magit-list-remote-branch-names "origin" t)))
                  (delete-directory root t)))"##,
-        true,
         expect![[
             r#"OK (t nil ("first" "second") "second" t ("master" "origin/master" "upstream/main") ("master") ("origin/master" "upstream/main") ("origin/master") ("master"))"#
         ]],
@@ -42,7 +41,7 @@ fn magit_repository_identity_config_and_branch_queries_match() -> ParityBatchCas
 }
 
 fn magit_tag_queries_distinguish_current_reachable_and_next_tags() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_tag_queries_distinguish_current_reachable_and_next_tags",
         r##"(let* ((root (make-temp-file "magit-tags-" t))
                     (default-directory (file-name-as-directory root)))
@@ -79,13 +78,12 @@ fn magit_tag_queries_distinguish_current_reachable_and_next_tags() -> ParityBatc
                             (magit-get-current-tag)
                             (magit-get-next-tag))))))
                  (delete-directory root t)))"##,
-        true,
         expect![[r#"OK ((nil nil) ("v1" nil) ("v2" nil) "v2" "v4")"#]],
     )
 }
 
 fn magit_toplevel_handles_nested_directories_gitdir_and_symlink_entry() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_toplevel_handles_nested_directories_gitdir_and_symlink_entry",
         r##"(let* ((root (make-temp-file "magit-top-" t))
                     (default-directory (file-name-as-directory root))
@@ -115,13 +113,12 @@ fn magit_toplevel_handles_nested_directories_gitdir_and_symlink_entry() -> Parit
                         (expand-file-name "repo-link/" root))
                        (expand-file-name "repo-link/" root))))
                  (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (t t t t)"#]],
     )
 }
 
 fn magit_bare_repository_detection_distinguishes_repository_kinds() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_bare_repository_detection_distinguishes_repository_kinds",
         r##"(let* ((root (make-temp-file "magit-bare-" t))
                     (bare (expand-file-name "bare.git/" root))
@@ -145,13 +142,12 @@ fn magit_bare_repository_detection_distinguishes_repository_kinds() -> ParityBat
                        (magit-toplevel work)
                        (file-name-as-directory work))))
                  (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (t nil t t)"#]],
     )
 }
 
 fn magit_revision_and_process_queries_preserve_values_order_and_exit_codes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_revision_and_process_queries_preserve_values_order_and_exit_codes",
         r##"(let* ((root (make-temp-file "magit-revisions-" t))
                     (default-directory (file-name-as-directory root)))
@@ -184,19 +180,16 @@ fn magit_revision_and_process_queries_preserve_values_order_and_exit_codes() -> 
                         (magit-git-exit-code
                          "diff" "--quiet" "HEAD"))))
                  (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (t t t nil ("beta" "alpha") "master" 0 1)"#]],
     )
 }
 
-#[test]
-fn git_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn git_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         magit_repository_identity_config_and_branch_queries_match(),
         magit_tag_queries_distinguish_current_reachable_and_next_tags(),
         magit_toplevel_handles_nested_directories_gitdir_and_symlink_entry(),
         magit_bare_repository_detection_distinguishes_repository_kinds(),
         magit_revision_and_process_queries_preserve_values_order_and_exit_codes(),
-    ];
-    assert_magit_batch(&cases);
+    ]
 }

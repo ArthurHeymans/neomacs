@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_astute_batch};
+use super::ParityBatchCase;
 
 fn astute_default_keyword_builder_emits_all_eight_rules_in_precedence_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "astute_default_keyword_builder_emits_all_eight_rules_in_precedence_order",
         r##"(let ((keywords
                 (astute-init-font-lock)))
@@ -12,7 +12,6 @@ fn astute_default_keyword_builder_emits_all_eight_rules_in_precedence_order() ->
           keywords
           astute-transform-list
           astute-prefix-single-quote-exceptions))"##,
-        true,
         expect![[
             r#"OK (8 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))) ("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—")))) (single-quote double-quote en-dash em-dash) ("bout" "em" "n'" "cause" "round" "twas" "tis"))"#
         ]],
@@ -20,12 +19,11 @@ fn astute_default_keyword_builder_emits_all_eight_rules_in_precedence_order() ->
 }
 
 fn astute_single_quote_keyword_set_contains_open_inner_close_and_prefix_rules() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "astute_single_quote_keyword_set_contains_open_inner_close_and_prefix_rules",
         r##"(let ((astute-transform-list
                 '(single-quote)))
          (astute-init-font-lock))"##,
-        true,
         expect![[
             r#"OK (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))))"#
         ]],
@@ -33,7 +31,7 @@ fn astute_single_quote_keyword_set_contains_open_inner_close_and_prefix_rules() 
 }
 
 fn astute_each_non_single_transform_selects_only_its_owned_typography_rules() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "astute_each_non_single_transform_selects_only_its_owned_typography_rules",
         r##"(mapcar
          (lambda (transforms)
@@ -47,7 +45,6 @@ fn astute_each_non_single_transform_selects_only_its_owned_typography_rules() ->
            (em-dash)
            (double-quote em-dash)
            (en-dash double-quote)))"##,
-        true,
         expect![[
             r#"OK (((double-quote) (("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))))) ((en-dash) (("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))))) ((em-dash) (("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((double-quote em-dash) (("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((en-dash double-quote) (("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))))))"#
         ]],
@@ -55,7 +52,7 @@ fn astute_each_non_single_transform_selects_only_its_owned_typography_rules() ->
 }
 
 fn astute_empty_unknown_and_duplicate_transform_entries_have_set_semantics() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "astute_empty_unknown_and_duplicate_transform_entries_have_set_semantics",
         r##"(mapcar
          (lambda (transforms)
@@ -72,7 +69,6 @@ fn astute_empty_unknown_and_duplicate_transform_entries_have_set_semantics() -> 
            (em-dash unknown em-dash)
            (em-dash single-quote double-quote en-dash)
            (en-dash double-quote single-quote em-dash)))"##,
-        true,
         expect![[
             r#"OK ((nil 0 nil) ((unknown) 0 nil) ((single-quote single-quote) 4 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))))) ((em-dash unknown em-dash) 1 (("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((em-dash single-quote double-quote en-dash) 8 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))) ("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((en-dash double-quote single-quote em-dash) 8 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))) ("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))))"#
         ]],
@@ -80,7 +76,7 @@ fn astute_empty_unknown_and_duplicate_transform_entries_have_set_semantics() -> 
 }
 
 fn astute_keyword_builder_uses_current_custom_exception_values_on_every_call() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "astute_keyword_builder_uses_current_custom_exception_values_on_every_call",
         r##"(let ((first
                 (let ((astute-prefix-single-quote-exceptions
@@ -101,7 +97,6 @@ fn astute_keyword_builder_uses_current_custom_exception_values_on_every_call() -
           (eq
            (nth 0 first)
            (nth 0 second))))"##,
-        true,
         expect![[
             r#"OK ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Aa][Ll][Pp][Hh][Aa]" "\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Ee][Tt][Aa]\\|\\(?1:'\\)[Gg][Aa][Mm][Mm][Aa]" nil nil nil)"#
         ]],
@@ -110,7 +105,7 @@ fn astute_keyword_builder_uses_current_custom_exception_values_on_every_call() -
 
 fn astute_keyword_builder_returns_fresh_mutable_lists_without_altering_custom_defaults()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "astute_keyword_builder_returns_fresh_mutable_lists_without_altering_custom_defaults",
         r##"(let* ((default-transforms
                   (copy-tree
@@ -139,22 +134,19 @@ fn astute_keyword_builder_returns_fresh_mutable_lists_without_altering_custom_de
            (setq
             astute-prefix-single-quote-exceptions
             default-exceptions)))"##,
-        true,
         expect![[
             r#"OK (mutated ("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) nil t ("temporarily-mutated" "em" "n'" "cause" "round" "twas" "tis") ("bout" "em" "n'" "cause" "round" "twas" "tis"))"#
         ]],
     )
 }
 
-#[test]
-fn keywords_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn keywords_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         astute_default_keyword_builder_emits_all_eight_rules_in_precedence_order(),
         astute_single_quote_keyword_set_contains_open_inner_close_and_prefix_rules(),
         astute_each_non_single_transform_selects_only_its_owned_typography_rules(),
         astute_empty_unknown_and_duplicate_transform_entries_have_set_semantics(),
         astute_keyword_builder_uses_current_custom_exception_values_on_every_call(),
         astute_keyword_builder_returns_fresh_mutable_lists_without_altering_custom_defaults(),
-    ];
-    assert_astute_batch(&cases);
+    ]
 }

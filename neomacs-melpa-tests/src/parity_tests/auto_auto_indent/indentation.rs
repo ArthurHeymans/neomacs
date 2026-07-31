@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_auto_indent_batch};
+use super::ParityBatchCase;
 
 fn auto_auto_indent_indent_line_maybe_reindents_real_elisp_and_preserves_logical_location()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indent_line_maybe_reindents_real_elisp_and_preserves_logical_location",
         r##"(with-temp-buffer
           (emacs-lisp-mode)
@@ -21,7 +21,6 @@ fn auto_auto_indent_indent_line_maybe_reindents_real_elisp_and_preserves_logical
              before
              (aai-indent-line-maybe)
              (auto-auto-indent-test-buffer-state))))"##,
-        true,
         expect![[
             r#"OK (("(let ((value 1))\n(message \"%s\" value))\n" 26 2 8 nil nil t) 28 ("(let ((value 1))\n  (message \"%s\" value))\n" 28 2 10 nil nil t))"#
         ]],
@@ -30,7 +29,7 @@ fn auto_auto_indent_indent_line_maybe_reindents_real_elisp_and_preserves_logical
 
 fn auto_auto_indent_indent_line_maybe_obeys_mode_indent_function_and_predicate_gates()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indent_line_maybe_obeys_mode_indent_function_and_predicate_gates",
         r##"(mapcar
           (lambda (case)
@@ -59,7 +58,6 @@ fn auto_auto_indent_indent_line_maybe_obeys_mode_indent_function_and_predicate_g
             predicate-off
             insert-tab
             indent-relative))"##,
-        true,
         expect![[
             r#"OK ((normal nil "body<indent>") (mode-off nil "body") (predicate-off nil "body") (insert-tab nil "body") (indent-relative nil "body"))"#
         ]],
@@ -68,7 +66,7 @@ fn auto_auto_indent_indent_line_maybe_obeys_mode_indent_function_and_predicate_g
 
 fn auto_auto_indent_indent_line_maybe_swallows_indent_errors_but_not_predicate_errors()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indent_line_maybe_swallows_indent_errors_but_not_predicate_errors",
         r##"(mapcar
           (lambda (case)
@@ -91,7 +89,6 @@ fn auto_auto_indent_indent_line_maybe_swallows_indent_errors_but_not_predicate_e
                   #'aai-indent-line-maybe)
                  (buffer-string)))))
           '(indent-error predicate-error))"##,
-        true,
         expect![[
             r#"OK ((indent-error (:ok nil) "unchanged") (predicate-error (:error error ("predicate fixture failed")) "unchanged"))"#
         ]],
@@ -100,7 +97,7 @@ fn auto_auto_indent_indent_line_maybe_swallows_indent_errors_but_not_predicate_e
 
 fn auto_auto_indent_indent_forward_visits_exact_limit_lines_and_repeats_eof_position()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indent_forward_visits_exact_limit_lines_and_repeats_eof_position",
         r##"(with-temp-buffer
           (insert "one\ntwo\nthree")
@@ -121,14 +118,13 @@ fn auto_auto_indent_indent_forward_visits_exact_limit_lines_and_repeats_eof_posi
              (point)
              (line-number-at-pos)
              (nreverse calls))))"##,
-        true,
         expect!["OK (nil 1 1 ((1 1) (2 5) (3 9) (3 14) (3 14)))"],
     )
 }
 
 fn auto_auto_indent_indent_forward_reindents_only_configured_real_elisp_window() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indent_forward_reindents_only_configured_real_elisp_window",
         r##"(with-temp-buffer
           (emacs-lisp-mode)
@@ -146,7 +142,6 @@ fn auto_auto_indent_indent_forward_reindents_only_configured_real_elisp_window()
             (list
              (point)
              (buffer-string))))"##,
-        true,
         expect![[
             r#"OK (8 "(progn\n  (message \"one\")\n  (when t\n    (message \"two\"))\n(message \"three\"))\n")"#
         ]],
@@ -154,7 +149,7 @@ fn auto_auto_indent_indent_forward_reindents_only_configured_real_elisp_window()
 }
 
 fn auto_auto_indent_indent_region_uses_inclusive_end_line_and_stops_at_eof() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indent_region_uses_inclusive_end_line_and_stops_at_eof",
         r##"(with-temp-buffer
           (insert "one\ntwo\nthree\nfour")
@@ -181,14 +176,13 @@ fn auto_auto_indent_indent_region_uses_inclusive_end_line_and_stops_at_eof() -> 
                   9
                   (point-max))
                  (nreverse calls))))))"##,
-        true,
         expect!["OK (nil 2 2 ((1 2) (2 5) (3 9)) ((3 9) (4 15) (4 19)))"],
     )
 }
 
 fn auto_auto_indent_indent_region_reformats_practical_elisp_and_preserves_point() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indent_region_reformats_practical_elisp_and_preserves_point",
         r##"(with-temp-buffer
           (emacs-lisp-mode)
@@ -212,7 +206,6 @@ fn auto_auto_indent_indent_region_reformats_practical_elisp_and_preserves_point(
              before
              (point)
              (buffer-string))))"##,
-        true,
         expect![[
             r#"OK (64 74 "(let ((ready t))\n  (when ready\n    (message \"first\")\n    (message \"second\")))\n(message \"outside\")\n")"#
         ]],
@@ -220,7 +213,7 @@ fn auto_auto_indent_indent_region_reformats_practical_elisp_and_preserves_point(
 }
 
 fn auto_auto_indent_indent_defun_reformats_only_small_current_definition() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indent_defun_reformats_only_small_current_definition",
         r##"(with-temp-buffer
           (emacs-lisp-mode)
@@ -240,7 +233,6 @@ fn auto_auto_indent_indent_defun_reformats_only_small_current_definition() -> Pa
              before
              (point)
              (buffer-string))))"##,
-        true,
         expect![[
             r#"OK (33 33 "(defun first (value)\n(let ((next (+ value 1)))\n  (message \"%s\" next)))\n\n(defun second ()\n(message \"untouched\"))\n")"#
         ]],
@@ -249,7 +241,7 @@ fn auto_auto_indent_indent_defun_reformats_only_small_current_definition() -> Pa
 
 fn auto_auto_indent_indent_defun_falls_back_to_forward_window_for_large_definition()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indent_defun_falls_back_to_forward_window_for_large_definition",
         r##"(with-temp-buffer
           (emacs-lisp-mode)
@@ -269,7 +261,6 @@ fn auto_auto_indent_indent_defun_falls_back_to_forward_window_for_large_definiti
              before
              (point)
              (buffer-string))))"##,
-        true,
         expect![[
             r#"OK (17 17 "(defun large ()\n(let ((one 1))\n(message \"%s\" one)\n(when one\n  (message \"still large\"))))\n")"#
         ]],
@@ -278,7 +269,7 @@ fn auto_auto_indent_indent_defun_falls_back_to_forward_window_for_large_definiti
 
 fn auto_auto_indent_indent_defun_falls_back_when_definition_navigation_signals() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indent_defun_falls_back_when_definition_navigation_signals",
         r##"(with-temp-buffer
           (insert "first\nsecond\nthird\n")
@@ -301,14 +292,13 @@ fn auto_auto_indent_indent_defun_falls_back_when_definition_navigation_signals()
                (aai-indent-defun)
                (point)
                (nreverse calls)))))"##,
-        true,
         expect!["OK (nil 1 (1 2))"],
     )
 }
 
 fn auto_auto_indent_indentable_predicate_can_skip_real_generated_or_literal_lines()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_indentable_predicate_can_skip_real_generated_or_literal_lines",
         r##"(with-temp-buffer
           (emacs-lisp-mode)
@@ -333,7 +323,6 @@ fn auto_auto_indent_indentable_predicate_can_skip_real_generated_or_literal_line
              (point-min)
              (point-max))
             (buffer-string)))"##,
-        true,
         expect![[
             r#"OK "(progn\n;; GENERATED: preserve column zero\n  (message \"indent me\")\n  \"literal line\"\n  (message \"also indent\"))\n""#
         ]],
@@ -341,7 +330,7 @@ fn auto_auto_indent_indentable_predicate_can_skip_real_generated_or_literal_line
 }
 
 fn auto_auto_indent_correct_position_moves_only_points_before_indentation() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_correct_position_moves_only_points_before_indentation",
         r##"(mapcar
           (lambda (column)
@@ -355,14 +344,12 @@ fn auto_auto_indent_correct_position_moves_only_points_before_indentation() -> P
                (point)
                (current-column))))
           '(0 2 4 7))"##,
-        true,
         expect!["OK ((0 5 5 4) (2 5 5 4) (4 nil 5 4) (7 nil 8 7))"],
     )
 }
 
-#[test]
-fn indentation_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn indentation_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_auto_indent_indent_line_maybe_reindents_real_elisp_and_preserves_logical_location(),
         auto_auto_indent_indent_line_maybe_obeys_mode_indent_function_and_predicate_gates(),
         auto_auto_indent_indent_line_maybe_swallows_indent_errors_but_not_predicate_errors(),
@@ -375,6 +362,5 @@ fn indentation_public_surface_batch() {
         auto_auto_indent_indent_defun_falls_back_when_definition_navigation_signals(),
         auto_auto_indent_indentable_predicate_can_skip_real_generated_or_literal_lines(),
         auto_auto_indent_correct_position_moves_only_points_before_indentation(),
-    ];
-    assert_auto_auto_indent_batch(&cases);
+    ]
 }

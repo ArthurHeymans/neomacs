@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_php_batch};
+use super::ParityBatchCase;
 
 /// Indexing, which is the first thing that has to happen and the thing every
 /// other workflow depends on.
@@ -13,9 +13,8 @@ use super::{ParityBatchCase, assert_ac_php_batch};
 /// that appeared where the package looks for them, the progress the process
 /// filter parsed out of the indexer's output, and the classes that ended up in
 /// the loaded index.
-
 fn indexing_the_project_runs_the_real_indexer_contract_and_loads_the_symbols() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "indexing_the_project_runs_the_real_indexer_contract_and_loads_the_symbols",
         r##"
 (let ((root (ac-php-test-make-project))
@@ -46,7 +45,6 @@ fn indexing_the_project_runs_the_real_indexer_contract_and_loads_the_symbols() -
            :indexed-files (mapcar (lambda (file) (file-relative-name file root))
                                   (append (ac-php-g--file-list tags-data) nil))))))
 "##,
-        true,
         expect![[
             r##"OK (:major-mode php-mode :indexer-finished t :calls (("phpctags" ".ac-php-conf.json" "cache" "--rebuild=no" "--realpath_flag=yes")) :config "{\n  \"use-cscope\": null,\n  \"tag-dir\": null,\n  \"filter\": {\n    \"php-file-ext-list\": [\n      \"php\"\n    ],\n    \"php-path-list\": [\n      \".\"\n    ],\n    \"ignore-ruleset\": [\n      \"# like .gitignore file \",\n      \"/vendor/**/[tT]ests/**/*.php\",\n      \"/vendor/**/[Ee]xamples/**/*.php\",\n      \"/vendor/composer/*.php\",\n      \"/vendor/*.php\",\n      \"# not need php_codesniffer\",\n      \"/vendor/squizlabs/php_codesniffer/**/*.php\",\n      \"#  -- end -- \"\n    ]\n  }\n}" :index-files ("tags-vendor.el" "tags.el") :progress 83 :classes ("\\Shop\\Model\\Product" "\\Shop\\Service\\BaseCart" "\\Shop\\Service\\Cart") :indexed-files ("src/Model/Product.php" "src/Service/BaseCart.php" "src/Service/Cart.php"))"##
         ]],
@@ -54,7 +52,7 @@ fn indexing_the_project_runs_the_real_indexer_contract_and_loads_the_symbols() -
 }
 
 fn completing_this_arrow_offers_the_class_and_its_inherited_members() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "completing_this_arrow_offers_the_class_and_its_inherited_members",
         r##"
 (let ((root (ac-php-test-make-project))
@@ -73,7 +71,6 @@ fn completing_this_arrow_offers_the_class_and_its_inherited_members() -> ParityB
            :candidates (ac-php-test-plain candidates)
            :annotated (ac-php-test-annotated candidates)))))
 "##,
-        true,
         expect![[
             r#"OK (:prefix-point 166 :point 166 :candidates ("itemCount(" "reset(" "total(") :annotated (("itemCount(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Service\\BaseCart" :help "") ("reset(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Service\\BaseCart" :help "") ("total(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Service\\Cart" :help "")))"#
         ]],
@@ -81,7 +78,7 @@ fn completing_this_arrow_offers_the_class_and_its_inherited_members() -> ParityB
 }
 
 fn a_local_typed_by_new_completes_the_other_class_without_hiding_anything() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_local_typed_by_new_completes_the_other_class_without_hiding_anything",
         r##"
 (let ((root (ac-php-test-make-project))
@@ -105,7 +102,6 @@ fn a_local_typed_by_new_completes_the_other_class_without_hiding_anything() -> P
              :same-list (equal (ac-php-test-plain instance) (ac-php-test-plain static))
              :annotated (ac-php-test-annotated instance))))))
 "##,
-        true,
         expect![[
             r#"OK (:instance ("CURRENCY" "__construct(" "auditLog(" "getName(" "name" "priceCents" "setPrice(") :static ("CURRENCY" "__construct(" "auditLog(" "getName(" "name" "priceCents" "setPrice(") :same-list t :annotated (("CURRENCY" :tag-type "d" :access "public" :return-type "void" :from "\\Shop\\Model\\Product" :help "") ("__construct(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Model\\Product" :help "$name, $priceCents") ("auditLog(" :tag-type "m" :access "protected" :return-type "" :from "\\Shop\\Model\\Product" :help "$message") ("getName(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Model\\Product" :help "") ("name" :tag-type "p" :access "private" :return-type "string" :from "\\Shop\\Model\\Product" :help "") ("priceCents" :tag-type "p" :access "public" :return-type "int" :from "\\Shop\\Model\\Product" :help "") ("setPrice(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Model\\Product" :help "$cents, $vat=19")))"#
         ]],
@@ -113,7 +109,7 @@ fn a_local_typed_by_new_completes_the_other_class_without_hiding_anything() -> P
 }
 
 fn an_unqualified_function_completes_only_inside_its_own_namespace() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_unqualified_function_completes_only_inside_its_own_namespace",
         r##"
 (let ((root (ac-php-test-make-project))
@@ -138,7 +134,6 @@ fn an_unqualified_function_completes_only_inside_its_own_namespace() -> ParityBa
             (insert "form")
             (ac-php-test-plain (ac-php-test-candidates)))))))
 "##,
-        true,
         expect![[
             r#"OK (:in-declaring-namespace ("formatMoney(") :annotated (("formatMoney(" :tag-type "f" :access nil :return-type "" :from nil :help "$cents, $currency='EUR'")) :in-other-namespace nil)"#
         ]],
@@ -146,7 +141,7 @@ fn an_unqualified_function_completes_only_inside_its_own_namespace() -> ParityBa
 }
 
 fn the_documentation_beside_a_candidate_renders_every_kind_of_entry() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_documentation_beside_a_candidate_renders_every_kind_of_entry",
         r##"
 (let ((root (ac-php-test-make-project))
@@ -179,7 +174,6 @@ fn the_documentation_beside_a_candidate_renders_every_kind_of_entry() -> ParityB
                        (cons "getName(" (lambda () (funcall named "getName(")))
                        (cons "formatMoney(" (lambda () (car functions))))))))))
 "##,
-        true,
         expect![[
             r#"OK (("CURRENCY" "CURRENCY\n\11[  type]:void\n\11[access]:public\n\11[  from]:\\Shop\\Model\\Product") ("name" "name\n\11[  type]:string\n\11[access]:private\n\11[  from]:\\Shop\\Model\\Product") ("setPrice(" "setPrice($cents, $vat=19)\n\11[  type]:\n\11[access]:public\n\11[  from]:\\Shop\\Model\\Product") ("getName(" "getName()\n\11[  type]:\n\11[access]:public\n\11[  from]:\\Shop\\Model\\Product") ("formatMoney(" " formatMoney($cents, $currency='EUR') "))"#
         ]],
@@ -187,7 +181,7 @@ fn the_documentation_beside_a_candidate_renders_every_kind_of_entry() -> ParityB
 }
 
 fn choosing_a_method_offers_its_argument_lists_and_expands_the_chosen_one() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "choosing_a_method_offers_its_argument_lists_and_expands_the_chosen_one",
         r##"
 (require 'yasnippet)
@@ -219,22 +213,19 @@ fn choosing_a_method_offers_its_argument_lists_and_expands_the_chosen_one() -> P
                     (line-beginning-position) (line-end-position))
              :live-snippets (length (yas-active-snippets)))))))
 "##,
-        true,
         expect![[
             r#"OK (:first-round ("setPrice(") :templates ("$cents)" "$cents, $vat)") :second-source ((candidates . ac-php-template-candidate)) :line "$product->setPrice($cents)return $product;" :live-snippets 1)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         indexing_the_project_runs_the_real_indexer_contract_and_loads_the_symbols(),
         completing_this_arrow_offers_the_class_and_its_inherited_members(),
         a_local_typed_by_new_completes_the_other_class_without_hiding_anything(),
         an_unqualified_function_completes_only_inside_its_own_namespace(),
         the_documentation_beside_a_candidate_renders_every_kind_of_entry(),
         choosing_a_method_offers_its_argument_lists_and_expands_the_chosen_one(),
-    ];
-    assert_ac_php_batch(&cases);
+    ]
 }

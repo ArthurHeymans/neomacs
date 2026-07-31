@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aider_batch, assert_aider_helm_batch};
+use super::ParityBatchCase;
 
 fn aider_markdown_safety_advice_contains_failures_only_inside_aider_mode() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_markdown_safety_advice_contains_failures_only_inside_aider_mode",
         r##"(let* (calls
                 (original-fn
@@ -32,7 +32,6 @@ fn aider_markdown_safety_advice_contains_failures_only_inside_aider_mode() -> Pa
                (aider--safe-get-start-fence-regexp
                 original-fn 'outside)))
             (nreverse calls)))"##,
-        true,
         expect![[
             r#"OK (("dynamic" "literal" "" "" "\\`never-match\\`") ("original" "original") ((boom) ("outside" nil) (outside)))"#
         ]],
@@ -40,7 +39,7 @@ fn aider_markdown_safety_advice_contains_failures_only_inside_aider_mode() -> Pa
 }
 
 fn aider_highlight_refinement_creates_and_clears_real_diff_overlays() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_highlight_refinement_creates_and_clears_real_diff_overlays",
         r##"(with-temp-buffer
          (insert "<<<<<<< SEARCH\nalpha beta\n=======\nalpha gamma\n>>>>>>> REPLACE\n")
@@ -62,7 +61,6 @@ fn aider_highlight_refinement_creates_and_clears_real_diff_overlays() -> ParityB
                          (lambda (left right)
                            (< (car left) (car right))))
                    (overlays-in (point-min) (point-max))))))"##,
-        true,
         expect![
             "OK ((15 27 34 47) ((15 27 nil 1000) (22 26 smerge-refined-removed 1000) (34 47 nil 1000) (41 46 smerge-refined-added 1000)) (#<overlay in no buffer> #<overlay in no buffer>))"
         ],
@@ -70,7 +68,7 @@ fn aider_highlight_refinement_creates_and_clears_real_diff_overlays() -> ParityB
 }
 
 fn aider_git_branch_resolution_and_diff_parameter_workflows_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_git_branch_resolution_and_diff_parameter_workflows_match",
         r##"(let (checks)
          (cl-letf (((symbol-function 'magit-branch-p)
@@ -93,7 +91,6 @@ fn aider_git_branch_resolution_and_diff_parameter_workflows_match() -> ParityBat
             (aider--resolve-diff-branches
              'branch-range "main" "topic" 'remote)
             (nreverse checks))))"##,
-        true,
         expect![[
             r#"OK (("main" "origin/topic" "origin/topic" "abc123" "missing") ("abc123^" . "abc123") ("main" . "HEAD") ("main" . "topic") ("origin/main" . "origin/topic") ((branch "origin/main") (branch "main") (branch "origin/topic") (branch "origin/topic") (branch "origin/abc123") (branch "abc123") (rev "abc123") (branch "origin/missing") (branch "missing") (rev "missing") (branch "origin/main") (branch "main")))"#
         ]],
@@ -101,7 +98,7 @@ fn aider_git_branch_resolution_and_diff_parameter_workflows_match() -> ParityBat
 }
 
 fn aider_real_git_staged_diff_generation_writes_expected_patch() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_real_git_staged_diff_generation_writes_expected_patch",
         r##"(let* ((root (expand-file-name "git-diff"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
@@ -124,7 +121,6 @@ fn aider_real_git_staged_diff_generation_writes_expected_patch() -> ParityBatchC
             (file-exists-p diff-file)
             (buffer-string)
             (process-lines "git" "status" "--short"))))"##,
-        true,
         expect![[
             r#"OK (t "diff --git a/demo.txt b/demo.txt\nindex 5626abf..814f4a4 100644\n--- a/demo.txt\n+++ b/demo.txt\n@@ -1 +1,2 @@\n one\n+two\n" ("M  demo.txt" "?? staged.diff"))"#
         ]],
@@ -132,7 +128,7 @@ fn aider_real_git_staged_diff_generation_writes_expected_patch() -> ParityBatchC
 }
 
 fn aider_log_prompt_builders_cover_keyword_and_whole_repository_analysis() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_log_prompt_builders_cover_keyword_and_whole_repository_analysis",
         r##"(list
          (aider--default-log-analysis-instructions "")
@@ -151,7 +147,6 @@ fn aider_log_prompt_builders_cover_keyword_and_whole_repository_analysis() -> Pa
                          t)))
               (aider--plot-module-architecture)
               sent))))"##,
-        true,
         expect![[
             r#"OK ("Please analyze the following Git log for the entire repository. Provide insights on:\n1. Overall project evolution and major development phases, with author name in each phase.\n2. Identification of key features, refactorings, or architectural changes and their timeline, with author name for each one.\n3. Patterns in development activity (e.g., periods of rapid development, bug fixing, etc.), with author name.\n4. Significant contributors or shifts in contribution patterns (if discernible from commit messages).\n5. Potential areas of technical debt or architectural concerns suggested by the commit history.\n6. General trends in the project's direction or focus over time." "Analyze the commits filtered by keyword 'parser'. Provide insights on:\n1. Overall 'parser' related feature evolution and major development phases, with author name in each phase.\n2. Frequency and patterns of 'parser' related commits.\n3. Files or areas most impacted by 'parser' changes.\n4. Main contributors and their roles in 'parser' work.\n5. Trends or hotspots in 'parser' related development.\n6. Suggestions for improving or refactoring 'parser' implementation.\n" "Analyze the Git commit history for the entire repository 'neomacs'.\n\nRepository: neomacs\n\nThe detailed Git log content is in the 'git.log' file (which has been added to the chat).\nPlease use its content for your analysis, following these instructions:\nFocus on correctness and regressions." 135)"#
         ]],
@@ -159,7 +154,7 @@ fn aider_log_prompt_builders_cover_keyword_and_whole_repository_analysis() -> Pa
 }
 
 fn aider_question_and_code_read_workflows_build_contextual_commands() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_question_and_code_read_workflows_build_contextual_commands",
         r##"(let (calls)
          (cl-letf (((symbol-function 'aider-read-string)
@@ -189,7 +184,6 @@ fn aider_question_and_code_read_workflows_build_contextual_commands() -> ParityB
            (aider--analyze-code-unit)
            (aider--analyze-for-maintainability)
            (nreverse calls)))"##,
-        true,
         expect![[
             r#"OK ((read "Question for the selected region in function 'calculate': " nil 11) (current "/ask " "Question for the selected region in function 'calculate': What are the invariants?: first line\nsecond line") (read "Enter analysis instructions: " "In the current file, analyze function 'calculate' using bottom-up reading approach.\nExplain its basic operations, data structures, and control flow." 0) (send "/ask What are the invariants?" t) (read "Enter maintainability analysis instructions: " "Please analyze the code in the current file for maintainability and code quality:\n1. Readability: Is the code clear, well-formatted, and easy to understand? Are variable/function names meaningful?\n2. Complexity: Are functions/methods too long or complex (high cyclomatic complexity)? Are classes too large (violating SRP)?\n3. Duplication: Is there significant duplicated code (potential for DRY principle violation)?\n4. Code Smells: Are there common code smells (e.g., magic numbers, feature envy, inappropriate intimacy)?\n5. Comments/Documentation: Is the code adequately commented? Is documentation (e.g., docstrings) present and accurate?\n6. Testability: Is the code structured in a way that makes it easy to write unit tests (e.g., low coupling, dependency injection)?\n7. Consistency: Is the code style consistent throughout the file?\n8. Modularity: Is the code well-modularized with clear responsibilities?" 0) (send "/ask What are the invariants?" t))"#
         ]],
@@ -198,7 +192,7 @@ fn aider_question_and_code_read_workflows_build_contextual_commands() -> ParityB
 
 fn aider_model_selection_sends_model_then_reasoning_effort_for_openai_models_only()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_model_selection_sends_model_then_reasoning_effort_for_openai_models_only",
         r##"(let (sent messages answers)
          (setq answers '("/model" "o4-mini" "high"
@@ -217,7 +211,6 @@ fn aider_model_selection_sends_model_then_reasoning_effort_for_openai_models_onl
            (aider-change-model nil)
            (aider-change-model nil)
            (list (nreverse sent) (nreverse messages))))"##,
-        true,
         expect![[
             r#"OK ((("/model o4-mini" t) ("/reasoning-effort high" t) ("/editor-model sonnet" t)) ("model changed to o4-mini, customize aider-popular-models for the model candidates" "Reasoning effort set to high for model o4-mini" "editor-model changed to sonnet, customize aider-popular-models for the model candidates"))"#
         ]],
@@ -225,7 +218,7 @@ fn aider_model_selection_sends_model_then_reasoning_effort_for_openai_models_onl
 }
 
 fn aider_helm_history_merges_cli_candidates_and_persists_latest_input() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_helm_history_merges_cli_candidates_and_persists_latest_input",
         r##"(let* ((user-emacs-directory
                   (file-name-as-directory
@@ -264,16 +257,14 @@ fn aider_helm_history_merges_cli_candidates_and_persists_latest_input() -> Parit
               (with-temp-buffer
                 (insert-file-contents helm-file)
                 (read (buffer-string)))))))"##,
-        true,
         expect![[
             r#"OK ("new answer" ("Prompt: " ("helm-new" "candidate" "shared" "==================== HISTORY ========================================" "shared" "helm-old" "cli-new" "cli-old") (:must-match nil :name "Helm Read String, Use C-c C-y to edit selected command. C-b and C-f to move cursor during editing" :fuzzy t :initial-input "seed")) ("new answer" "helm-new" "shared" "helm-old" "cli-new" "cli-old"))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_aider_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_aider_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         aider_markdown_safety_advice_contains_failures_only_inside_aider_mode(),
         aider_highlight_refinement_creates_and_clears_real_diff_overlays(),
         aider_git_branch_resolution_and_diff_parameter_workflows_match(),
@@ -281,13 +272,9 @@ fn workflows_aider_batch() {
         aider_log_prompt_builders_cover_keyword_and_whole_repository_analysis(),
         aider_question_and_code_read_workflows_build_contextual_commands(),
         aider_model_selection_sends_model_then_reasoning_effort_for_openai_models_only(),
-    ];
-    assert_aider_batch(&cases);
+    ]
 }
 
-#[test]
-fn workflows_aider_helm_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![aider_helm_history_merges_cli_candidates_and_persists_latest_input()];
-    assert_aider_helm_batch(&cases);
+pub(super) fn workflows_aider_helm_batch_cases() -> Vec<ParityBatchCase> {
+    vec![aider_helm_history_merges_cli_candidates_and_persists_latest_input()]
 }

@@ -4,7 +4,6 @@ use crate::{
     AUTO_COMPLETE_MELPA_PIN, AUTO_COMPLETE_SAGE_MELPA_PIN, CachedMelpaOracle, DEFERRED_MELPA_PIN,
     LET_ALIST_GNU_ELPA_PIN, POPUP_MELPA_PIN, SAGE_SHELL_MODE_MELPA_PIN,
 };
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -71,26 +70,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_auto_complete_sage_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = auto_complete_sage_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("auto-complete-sage parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_auto_complete_sage_parity(elisp_form: &str, expected: Expect) {
-    assert_auto_complete_sage_source_parity("auto-complete-sage.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_auto_complete_sage_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_auto_complete_sage_source_parity(
-        "auto-complete-sage-autoloads.el",
-        elisp_form,
-        expected,
-    );
-}
-
 /// Multi-probe batch for `assert_auto_complete_sage_autoload_parity` cases (2a).
 pub(crate) fn assert_auto_complete_sage_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -112,3 +91,32 @@ pub(crate) fn assert_auto_complete_sage_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn auto_complete_sage_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> =
+        [registry::registry_auto_complete_sage_autoload_batch_cases()]
+            .into_iter()
+            .flatten()
+            .collect();
+    assert_auto_complete_sage_autoload_batch(&cases);
+}
+
+#[test]
+fn auto_complete_sage_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        cache_docs::cache_docs_public_surface_batch_cases(),
+        edit::edit_public_surface_batch_cases(),
+        registry::registry_auto_complete_sage_batch_cases(),
+        repl::repl_public_surface_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_auto_complete_sage_batch(&cases);
+}
+
+// END generated package batch tests

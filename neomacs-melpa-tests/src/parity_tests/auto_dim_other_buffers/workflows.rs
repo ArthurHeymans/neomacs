@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_dim_other_buffers_batch};
+use super::ParityBatchCase;
 
 fn auto_dim_other_buffers_practical_two_buffer_editing_workflow_tracks_selection_content_and_remaps()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dim_other_buffers_practical_two_buffer_editing_workflow_tracks_selection_content_and_remaps",
         r##"(save-window-excursion
           (let ((notes
@@ -67,7 +67,6 @@ fn auto_dim_other_buffers_practical_two_buffer_editing_workflow_tracks_selection
                 (kill-buffer notes))
               (when (buffer-live-p code)
                 (kill-buffer code)))))"##,
-        true,
         expect![[
             r#"OK (((t " *adob-notes*" nil) (nil " *adob-code*" t)) ((t " *adob-code*" nil) (nil " *adob-notes*" t)) "project notes\n- first task\n" "(defun fixture ()\n  :ready)\n\n(message \"edited\")" (t 2 (default mode-line) ((mode-line ((:filtered (:window adob--dim nil) bold))) (default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 2 (default mode-line) ((mode-line ((:filtered (:window adob--dim nil) bold))) (default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
         ]],
@@ -76,7 +75,7 @@ fn auto_dim_other_buffers_practical_two_buffer_editing_workflow_tracks_selection
 
 fn auto_dim_other_buffers_practical_same_buffer_two_view_workflow_dims_only_unselected_view()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dim_other_buffers_practical_same_buffer_two_view_workflow_dims_only_unselected_view",
         r##"(save-window-excursion
           (let ((buffer
@@ -124,7 +123,6 @@ fn auto_dim_other_buffers_practical_same_buffer_two_view_workflow_dims_only_unse
               (auto-dim-other-buffers-mode -1)
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))))"##,
-        true,
         expect![[
             r#"OK ((((t " *adob-two-views*" nil) (nil " *adob-two-views*" t)) (1 22)) ((t " *adob-two-views*" nil) (nil " *adob-two-views*" t)) (22 1) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
         ]],
@@ -133,7 +131,7 @@ fn auto_dim_other_buffers_practical_same_buffer_two_view_workflow_dims_only_unse
 
 fn auto_dim_other_buffers_practical_special_buffer_exemption_stays_lit_across_window_switches()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dim_other_buffers_practical_special_buffer_exemption_stays_lit_across_window_switches",
         r##"(save-window-excursion
           (let ((editing
@@ -191,7 +189,6 @@ fn auto_dim_other_buffers_practical_special_buffer_exemption_stays_lit_across_wi
                 (kill-buffer editing))
               (when (buffer-live-p special)
                 (kill-buffer special)))))"##,
-        true,
         expect![[
             r#"OK ((((t " *adob-editing*" nil) (nil " *adob-special*" nil)) (t 1 (default) ((default (#1=(:filtered (:window adob--dim t) auto-dim-other-buffers))))) (nil 0 nil nil)) ((t " *adob-special*" nil) (nil " *adob-editing*" t)) (t 1 (default) ((default (#1#)))) (nil 0 nil nil))"#
         ]],
@@ -200,7 +197,7 @@ fn auto_dim_other_buffers_practical_special_buffer_exemption_stays_lit_across_wi
 
 fn auto_dim_other_buffers_live_customize_changes_real_dim_and_highlight_remapping_specs()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dim_other_buffers_live_customize_changes_real_dim_and_highlight_remapping_specs",
         r##"(save-window-excursion
           (let ((buffer
@@ -235,7 +232,6 @@ fn auto_dim_other_buffers_live_customize_changes_real_dim_and_highlight_remappin
               (auto-dim-other-buffers-mode -1)
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))))"##,
-        true,
         expect![
             "OK ((t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) ((default nil . bold) (mode-line auto-dim-other-buffers . mode-line-active)) (t 2 (default mode-line) ((mode-line nil) (default ((:filtered (:window adob--dim nil) bold))))))"
         ],
@@ -244,7 +240,7 @@ fn auto_dim_other_buffers_live_customize_changes_real_dim_and_highlight_remappin
 
 fn auto_dim_other_buffers_enabled_advice_restores_mapping_after_real_major_mode_change()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dim_other_buffers_enabled_advice_restores_mapping_after_real_major_mode_change",
         r##"(save-window-excursion
           (let ((buffer
@@ -279,7 +275,6 @@ fn auto_dim_other_buffers_enabled_advice_restores_mapping_after_real_major_mode_
               (auto-dim-other-buffers-mode -1)
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))))"##,
-        true,
         expect![
             "OK ((t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) text-mode nil (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"
         ],
@@ -288,7 +283,7 @@ fn auto_dim_other_buffers_enabled_advice_restores_mapping_after_real_major_mode_
 
 fn auto_dim_other_buffers_direct_face_assignment_is_stale_until_disable_reenable_rebuilds_it()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dim_other_buffers_direct_face_assignment_is_stale_until_disable_reenable_rebuilds_it",
         r##"(save-window-excursion
           (let ((buffer
@@ -327,7 +322,6 @@ fn auto_dim_other_buffers_direct_face_assignment_is_stale_until_disable_reenable
               (auto-dim-other-buffers-mode -1)
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))))"##,
-        true,
         expect![
             "OK ((t 1 (default) ((default (#1=(:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default (#1#)))) (t 1 (mode-line) ((mode-line ((:filtered (:window adob--dim nil) bold))))))"
         ],
@@ -336,7 +330,7 @@ fn auto_dim_other_buffers_direct_face_assignment_is_stale_until_disable_reenable
 
 fn auto_dim_other_buffers_source_reload_while_enabled_keeps_runtime_integrations_and_can_disable_cleanly()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dim_other_buffers_source_reload_while_enabled_keeps_runtime_integrations_and_can_disable_cleanly",
         r##"(save-window-excursion
           (let ((buffer
@@ -400,16 +394,15 @@ fn auto_dim_other_buffers_source_reload_while_enabled_keeps_runtime_integrations
               (auto-dim-other-buffers-mode -1)
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))))"##,
-        true,
         expect![
             "OK ((t 1 1 t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers)))))) (t 1 1 t (t 4 (default fringe org-block org-hide) ((org-hide ((:filtered (:window adob--dim t) auto-dim-other-buffers-hide))) (org-block ((:filtered (:window adob--dim t) auto-dim-other-buffers))) (fringe ((:filtered (:window adob--dim t) auto-dim-other-buffers))) (default ((:filtered (:window adob--dim t) auto-dim-other-buffers)))))) nil (nil 0 nil nil))"
         ],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_dim_other_buffers_practical_two_buffer_editing_workflow_tracks_selection_content_and_remaps(),
         auto_dim_other_buffers_practical_same_buffer_two_view_workflow_dims_only_unselected_view(),
         auto_dim_other_buffers_practical_special_buffer_exemption_stays_lit_across_window_switches(),
@@ -417,6 +410,5 @@ fn workflows_public_surface_batch() {
         auto_dim_other_buffers_enabled_advice_restores_mapping_after_real_major_mode_change(),
         auto_dim_other_buffers_direct_face_assignment_is_stale_until_disable_reenable_rebuilds_it(),
         auto_dim_other_buffers_source_reload_while_enabled_keeps_runtime_integrations_and_can_disable_cleanly(),
-    ];
-    assert_auto_dim_other_buffers_batch(&cases);
+    ]
 }

@@ -14,6 +14,22 @@ pub enum EvalOutcome {
     Signal(String),
 }
 
+/// The protocol variant a parity case is required to produce.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExpectedOutcome {
+    Value,
+    Signal,
+}
+
+impl ExpectedOutcome {
+    pub fn matches(self, outcome: &EvalOutcome) -> bool {
+        matches!(
+            (self, outcome),
+            (Self::Value, EvalOutcome::Value(_)) | (Self::Signal, EvalOutcome::Signal(_))
+        )
+    }
+}
+
 impl EvalOutcome {
     /// Parse the `OK …` / `ERR …` protocol emitted by an editor adapter.
     pub fn parse(encoded: &str) -> Result<Self, String> {
@@ -60,45 +76,136 @@ pub struct MarkedBatchOutcome {
     pub outcome: EvalOutcome,
 }
 
-/// Extract every batch outcome line `MARKER<id>:<OK|ERR> …` in order.
-///
-/// Case ids must not contain `:`. Duplicate ids in the same stdout are an error.
-pub fn extract_marked_batch_outcomes(
-    stdout: &str,
-    marker: &str,
-) -> Result<Vec<MarkedBatchOutcome>, String> {
-    let mut results = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for line in stdout.lines() {
-        let Some(rest) = line.split_once(marker).map(|(_, rest)| rest.trim()) else {
-            continue;
-        };
-        // Skip non-batch single-outcome lines that lack `id:`.
-        let Some((id, encoded)) = rest.split_once(':') else {
-            continue;
-        };
-        let id = id.trim();
-        if id.is_empty() {
-            return Err(format!(
-                "editor output contained an empty batch outcome id after `{marker}`"
-            ));
-        }
-        if !seen.insert(id.to_string()) {
-            return Err(format!(
-                "editor output contained duplicate batch outcome id `{id}`"
-            ));
-        }
-        results.push(MarkedBatchOutcome {
-            id: id.to_string(),
-            outcome: EvalOutcome::parse(encoded.trim())?,
-        });
-    }
-    if results.is_empty() {
+fn marked_batch_outcome(line: &str, marker: &str) -> Result<Option<MarkedBatchOutcome>, String> {
+    let Some(rest) = line.strip_prefix(marker).map(str::trim) else {
+        return Ok(None);
+    };
+    let Some((id, encoded)) = rest.split_once(':') else {
         return Err(format!(
-            "editor output did not contain any batch outcome markers `{marker}<id>:`"
+            "editor output contained malformed batch outcome record `{rest}` after `{marker}`"
         ));
+    };
+    let id = id.trim();
+    validate_batch_case_id(id).map_err(|error| {
+        format!("editor output contained malformed batch outcome id `{id}`: {error}")
+    })?;
+    Ok(Some(MarkedBatchOutcome {
+        id: id.to_string(),
+        outcome: EvalOutcome::parse(encoded.trim())?,
+    }))
+}
+
+/// One strictly ordered batch protocol stream.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MarkedBatchProtocol {
+    /// Case ids in the order their `BEGIN` records appeared.
+    pub case_ids: Vec<String>,
+    /// Outcomes in the same order, one between each case's begin and complete.
+    pub outcomes: Vec<MarkedBatchOutcome>,
+    /// The case that began but did not complete, if the stream ended mid-case.
+    pub unfinished_case_id: Option<String>,
+}
+
+/// Parse `BEGIN -> outcome -> COMPLETE` records from one ordered stream.
+///
+/// The final case may be unfinished so timeout diagnostics can identify it.
+/// Every other ordering, duplicate, malformed, or mismatched record is an
+/// infrastructure error.
+pub fn extract_marked_batch_protocol(
+    output: &str,
+    begin_marker: &str,
+    outcome_marker: &str,
+    completion_marker: &str,
+) -> Result<MarkedBatchProtocol, String> {
+    let mut case_ids = Vec::new();
+    let mut outcomes = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut active: Option<(String, bool)> = None;
+
+    for line in output.lines() {
+        let begin = marked_batch_case_id(line, begin_marker, "begin")?;
+        let outcome = marked_batch_outcome(line, outcome_marker)?;
+        let completion = marked_batch_case_id(line, completion_marker, "completion")?;
+        let record_count = usize::from(begin.is_some())
+            + usize::from(outcome.is_some())
+            + usize::from(completion.is_some());
+        if record_count > 1 {
+            return Err(format!(
+                "editor output line contained multiple batch protocol records: `{line}`"
+            ));
+        }
+
+        if let Some(id) = begin {
+            if let Some((current, _)) = active.as_ref() {
+                return Err(format!(
+                    "batch case `{id}` began before active case `{current}` completed"
+                ));
+            }
+            if !seen.insert(id.clone()) {
+                return Err(format!(
+                    "editor output contained duplicate batch begin id `{id}`"
+                ));
+            }
+            case_ids.push(id.clone());
+            active = Some((id, false));
+        } else if let Some(outcome) = outcome {
+            let Some((current, has_outcome)) = active.as_mut() else {
+                return Err(format!(
+                    "batch case `{}` emitted an outcome without a matching active begin record",
+                    outcome.id
+                ));
+            };
+            if outcome.id != *current {
+                return Err(format!(
+                    "batch case `{}` emitted an outcome while active case `{current}` was unfinished",
+                    outcome.id
+                ));
+            }
+            if *has_outcome {
+                return Err(format!(
+                    "batch case `{current}` emitted more than one outcome record"
+                ));
+            }
+            *has_outcome = true;
+            outcomes.push(outcome);
+        } else if let Some(id) = completion {
+            let Some((current, has_outcome)) = active.take() else {
+                return Err(format!(
+                    "batch case `{id}` completed without a matching active begin record"
+                ));
+            };
+            if id != current {
+                return Err(format!(
+                    "batch case `{id}` completed while active case `{current}` was unfinished"
+                ));
+            }
+            if !has_outcome {
+                return Err(format!(
+                    "batch case `{id}` completed before emitting its outcome"
+                ));
+            }
+        }
     }
-    Ok(results)
+
+    Ok(MarkedBatchProtocol {
+        case_ids,
+        outcomes,
+        unfinished_case_id: active.map(|(id, _)| id),
+    })
+}
+
+fn marked_batch_case_id(
+    line: &str,
+    marker: &str,
+    record_kind: &str,
+) -> Result<Option<String>, String> {
+    let Some(rest) = line.strip_prefix(marker).map(str::trim) else {
+        return Ok(None);
+    };
+    validate_batch_case_id(rest).map_err(|error| {
+        format!("editor output contained malformed batch {record_kind} record `{rest}`: {error}")
+    })?;
+    Ok(Some(rest.to_string()))
 }
 
 /// Lisp that defines the shared normalizer used by single- and multi-probe wrappers.
@@ -229,14 +336,16 @@ pub fn wrap_elisp_outcome(setup: &str, probe: &str, marker: &str) -> String {
                  (princ "OK ")
                  (prin1
                   (neomacs--test-oracle-normalized
-                   neomacs--oracle-result)))
+                   neomacs--oracle-result))
+                 (terpri))
              (error
               (princ "\n")
               (princ {marker})
               (princ "ERR ")
               (prin1
                (neomacs--test-oracle-normalized
-                neomacs--oracle-error)))))"##,
+                neomacs--oracle-error))
+              (terpri))))"##,
         normalizer = oracle_normalizer_elisp(),
         setup = setup,
         probe = probe,
@@ -265,12 +374,16 @@ pub struct BatchProbe<'a> {
 pub fn wrap_elisp_batch_outcomes(
     setup: &str,
     cases: &[BatchProbe<'_>],
-    marker: &str,
+    begin_marker: &str,
+    completion_marker: &str,
+    outcome_marker: &str,
 ) -> Result<String, String> {
     if cases.is_empty() {
         return Err("batch outcomes require at least one probe".into());
     }
-    let marker_lit = elisp_string(marker);
+    let begin_marker_lit = elisp_string(begin_marker);
+    let completion_marker_lit = elisp_string(completion_marker);
+    let outcome_marker_lit = elisp_string(outcome_marker);
     let mut body = String::new();
     body.push_str(setup);
     body.push('\n');
@@ -283,30 +396,36 @@ pub fn wrap_elisp_batch_outcomes(
         let id_lit = elisp_string(case.id);
         body.push_str(&format!(
             r##"
+           (neomacs--test-oracle-case-begin {id})
            (condition-case neomacs--oracle-error
                (let ((neomacs--oracle-result
                       (progn
                         {probe})))
-                 (princ "\n")
-                 (princ {marker})
-                 (princ {id})
-                 (princ ":")
-                 (princ "OK ")
+                 (princ "\n" 'external-debugging-output)
+                 (princ {marker} 'external-debugging-output)
+                 (princ {id} 'external-debugging-output)
+                 (princ ":" 'external-debugging-output)
+                 (princ "OK " 'external-debugging-output)
                  (prin1
                   (neomacs--test-oracle-normalized
-                   neomacs--oracle-result)))
+                   neomacs--oracle-result)
+                  'external-debugging-output)
+                 (terpri 'external-debugging-output))
              (error
-              (princ "\n")
-              (princ {marker})
-              (princ {id})
-              (princ ":")
-              (princ "ERR ")
+              (princ "\n" 'external-debugging-output)
+              (princ {marker} 'external-debugging-output)
+              (princ {id} 'external-debugging-output)
+              (princ ":" 'external-debugging-output)
+              (princ "ERR " 'external-debugging-output)
               (prin1
                (neomacs--test-oracle-normalized
-                neomacs--oracle-error))))
+                neomacs--oracle-error)
+               'external-debugging-output)
+              (terpri 'external-debugging-output)))
+           (neomacs--test-oracle-case-complete {id})
 "##,
             probe = case.probe,
-            marker = marker_lit,
+            marker = outcome_marker_lit,
             id = id_lit,
         ));
     }
@@ -318,9 +437,19 @@ pub fn wrap_elisp_batch_outcomes(
                   (print-escape-newlines t)
                   (print-escape-control-characters t))
            {normalizer}
+           (defun neomacs--test-oracle-case-begin (id)
+             (princ {begin_marker} 'external-debugging-output)
+             (princ id 'external-debugging-output)
+             (terpri 'external-debugging-output))
+           (defun neomacs--test-oracle-case-complete (id)
+             (princ {completion_marker} 'external-debugging-output)
+             (princ id 'external-debugging-output)
+             (terpri 'external-debugging-output))
            (progn
              {body}))"##,
         normalizer = oracle_normalizer_elisp(),
+        begin_marker = begin_marker_lit,
+        completion_marker = completion_marker_lit,
         body = body,
     ))
 }

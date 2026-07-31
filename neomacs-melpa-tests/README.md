@@ -26,22 +26,26 @@ phase-specific failures.
 - Multi-probe batches (`CachedPackageOracle::run_batch` /
   `parity_tests::batch_support`) run many named Elisp probes in one GNU Emacs
   process and one Neomacs process (setup once per editor; cases keep separate
-  expect-test snapshots). Each probe is a `fn …() -> ParityBatchCase` constructor;
-  the package `#[test]` builds a `Vec<ParityBatchCase>` and runs one dual-editor
-  batch. A few isolation-sensitive tests remain single-probe.
-- `src/parity_tests/dash/` uses 103 ordinary Rust `#[test]` functions.
-  Each case isolates one API family and covers normal, empty, boundary,
-  mutation, evaluation-count, or signal behavior. Together they exercise the
-  pinned package's public functions, macros, and compatibility aliases.
-- `src/parity_tests/s/` uses 55 ordinary Rust `#[test]` functions to exercise all 92
-  public `s` functions, macros, and compatibility aliases, plus its public
-  lexical-format variable, boundary values, Unicode behavior, evaluation
-  semantics, and representative signals.
-- Both corpora install each package once into a validated, locked cache below
-  `./tmp`, then evaluate each form in isolated GNU Emacs and Neomacs processes.
-  Inline `expect-test` snapshots pin the complete normalized `OK` value or
-  `ERR` signal after differential equality succeeds, so matching-but-unexpected
-  editor results are failures too.
+  expect-test snapshots). Each logical probe is a named
+  `fn …() -> ParityBatchCase` constructor; the package-level Rust `#[test]`
+  builds a `Vec<ParityBatchCase>` and runs one dual-editor batch. A case that
+  cannot restore global editor state must opt into `.fresh_process()` while
+  other cases in the suite remain batched.
+- `src/parity_tests/dash/` and `src/parity_tests/s/` use the same package-level
+  batch model for their comprehensive API corpora. Named logical cases cover
+  normal, empty, boundary, mutation, evaluation-count, Unicode, and signal
+  behavior without paying a process pair for every snapshot.
+- Inline `expect-test` snapshots pin the complete normalized `OK` value or
+  `ERR` signal. The harness reports differential, outcome-kind, GNU Emacs
+  snapshot, and Neomacs snapshot failures together instead of short-circuiting
+  after the first class of failure. Set
+  `NEOMACS_MELPA_AUDIT_BATCH_ISOLATION=1` to compare every batch-capable case
+  with fresh-process results, including fresh-process quarantines, and fail if
+  sharing changes either editor's outcome. Setup-outcome cases are excluded
+  because their package setup deliberately signals outside batch catchers.
+  Normal runs never retry a divergent shared case in a fresh process; explicit
+  isolation and the opt-in audit keep that diagnostic cost out of the main
+  parity run.
 - `upstream_package_ert.rs` runs grouped contracts from GNU Emacs's
   `test/lisp/emacs-lisp/package-tests.el` through a structured ERT adapter.
   The EOL and asynchronous-refresh groups remain explicit ignored tests until

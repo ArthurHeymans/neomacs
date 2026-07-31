@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_projectile_batch};
+use super::ParityBatchCase;
 
 fn projectile_version_and_platform_helpers_are_stable() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_version_and_platform_helpers_are_stable",
         r##"(list
               (projectile-version)
@@ -11,13 +11,12 @@ fn projectile_version_and_platform_helpers_are_stable() -> ParityBatchCase {
               (projectile-parent "/alpha/beta/gamma/")
               (projectile-default-project-name "/alpha/beta/")
               (projectile-uniquify-dirname-transform "/alpha/beta/"))"##,
-        true,
         expect![[r#"OK ("3.4.0-snapshot" t "/alpha/beta" "beta" "/alpha/beta/")"#]],
     )
 }
 
 fn projectile_path_pattern_normalization_partitions_rooted_entries() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_path_pattern_normalization_partitions_rooted_entries",
         r##"(list
               (projectile-normalise-paths
@@ -28,13 +27,12 @@ fn projectile_path_pattern_normalization_partitions_rooted_entries() -> ParityBa
               (projectile--directory-ancestors "top.el")
               (projectile--wildcard-p "*.el")
               (projectile--wildcard-p "plain.el"))"##,
-        true,
         expect![[r#"OK (("rooted" "nested/path" "") ("plain" "") ("src/" "src/foo/") nil 0 nil)"#]],
     )
 }
 
 fn projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes",
         r##"(let ((samples
                     '("foo.el" "src/foo.el" "build/" "build/x.o"
@@ -50,7 +48,6 @@ fn projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes() -> 
                            samples))))
                 '("*.el" "build/" "/build/" "src/generated/**"
                   "src/?eep/*.c")))"##,
-        true,
         expect![[
             r#"OK (("*.el" t t nil nil nil nil) ("build/" nil nil t t nil nil) ("/build/" nil nil t t nil nil) ("src/generated/**" nil nil nil nil t nil) ("src/?eep/*.c" nil nil nil nil nil t))"#
         ]],
@@ -59,7 +56,7 @@ fn projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes() -> 
 
 fn projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries",
         r##"(let* ((projectile-dirconfig-comment-prefix ?#)
                     (config
@@ -73,7 +70,6 @@ fn projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries()
                 (projectile--dirconfig-classify-line " \t+ lib ")
                 (projectile--dirconfig-classify-line "  # note")
                 (projectile--dirconfig-classify-line "")))"##,
-        true,
         expect![[
             r#"OK (("src/" "tests/") ("build/" "legacy") ("build/keep.txt") ("legacy") (:keep . "lib") (:comment) nil)"#
         ]],
@@ -81,7 +77,7 @@ fn projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries()
 }
 
 fn projectile_project_type_registration_and_updates_preserve_attributes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_project_type_registration_and_updates_preserve_attributes",
         r##"(let ((projectile-project-types nil)
                     (projectile-project-root-files nil)
@@ -103,7 +99,6 @@ fn projectile_project_type_registration_and_updates_preserve_attributes() -> Par
                 (projectile-project-type-attribute 'demo 'compile-command)
                 projectile-project-root-files
                 projectile-project-root-files-bottom-up))"##,
-        true,
         expect![[
             r#"OK (("demo.toml" "demo.json") "_spec" "test_" "make all" ("demo.json" "demo.toml") (".git"))"#
         ]],
@@ -111,7 +106,7 @@ fn projectile_project_type_registration_and_updates_preserve_attributes() -> Par
 }
 
 fn projectile_combine_plists_uses_rightmost_values_including_nil() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_combine_plists_uses_rightmost_values_including_nil",
         r##"(list
               (projectile--combine-plists
@@ -120,20 +115,17 @@ fn projectile_combine_plists_uses_rightmost_values_including_nil() -> ParityBatc
                '(:bar nil))
               (projectile--combine-plists nil '(:x 1))
               (projectile--combine-plists '(:x 1) nil))"##,
-        true,
         expect![[r#"OK ((:foo "second" :bar nil :baz "baz") (:x 1) (:x 1))"#]],
     )
 }
 
-#[test]
-fn core_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn core_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         projectile_version_and_platform_helpers_are_stable(),
         projectile_path_pattern_normalization_partitions_rooted_entries(),
         projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes(),
         projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries(),
         projectile_project_type_registration_and_updates_preserve_attributes(),
         projectile_combine_plists_uses_rightmost_values_including_nil(),
-    ];
-    assert_projectile_batch(&cases);
+    ]
 }

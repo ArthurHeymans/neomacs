@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{APEL_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -50,16 +49,75 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed APEL parity test").into()
 }
 
-pub(crate) fn assert_apel_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = apel_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("APEL parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch loading one source file (2a).
 pub(crate) fn assert_apel_source_batch(source_file: &str, cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(apel_oracle(source_file), &name, "apel_source_batch", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn apel_source_15e30782_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_calist_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_apel_source_batch("calist.el", &cases);
+}
+
+#[test]
+fn apel_source_1f9c7678_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_mcharset_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_apel_source_batch("mcharset.el", &cases);
+}
+
+#[test]
+fn apel_source_5c7e7bb5_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_path_util_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_apel_source_batch("path-util.el", &cases);
+}
+
+#[test]
+fn apel_source_f9ef646e_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_pccl_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_apel_source_batch("pccl.el", &cases);
+}
+
+#[test]
+fn apel_source_570df411_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_product_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_apel_source_batch("product.el", &cases);
+}
+
+#[test]
+fn apel_source_3e9d8c52_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_pym_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_apel_source_batch("pym.el", &cases);
+}
+
+#[test]
+fn apel_source_effc4f1f_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_richtext_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_apel_source_batch("richtext.el", &cases);
+}
+
+// END generated package batch tests

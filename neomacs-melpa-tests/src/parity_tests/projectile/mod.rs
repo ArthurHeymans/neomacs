@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{CachedMelpaOracle, PROJECTILE_MELPA_PIN};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -31,24 +30,28 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_projectile_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = projectile_oracle()
-        .run_value(&name, form)
-        .unwrap_or_else(|error| panic!("Projectile parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_projectile_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = projectile_oracle()
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| panic!("Projectile signal parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_projectile_parity` cases (2a).
 pub(crate) fn assert_projectile_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(projectile_oracle(), &name, "projectile_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn projectile_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        async_process::async_process_public_surface_batch_cases(),
+        core::core_public_surface_batch_cases(),
+        filesystem::filesystem_public_surface_batch_cases(),
+        relations::relations_public_surface_batch_cases(),
+        state::state_public_surface_batch_cases(),
+        tasks::tasks_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_projectile_batch(&cases);
+}
+
+// END generated package batch tests

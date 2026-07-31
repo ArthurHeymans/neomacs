@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_seven_fifty_words_batch};
+use super::ParityBatchCase;
 
 fn seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel",
         r##"(let ((750words-client-command
                     "client --input=%s")
@@ -60,7 +60,6 @@ fn seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sen
                   (750words-file
                    "draft with spaces.txt")
                   (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (installed ((generate "*750words-client-command*") (async "client --input=draft with spaces.txt" output-buffer) (get-process output-buffer) (live client-process) (sentinel client-process t) (callback output-buffer client-process "done")))"#
         ]],
@@ -69,7 +68,7 @@ fn seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sen
 
 fn seven_fifty_words_file_reports_non_live_process_without_installing_sentinel() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "seven_fifty_words_file_reports_non_live_process_without_installing_sentinel",
         r##"(let ((750words-client-command
                     "post %s")
@@ -105,7 +104,6 @@ fn seven_fifty_words_file_reports_non_live_process_without_installing_sentinel()
                  (list
                   (750words-file "draft.txt")
                   (nreverse events))))"##,
-        true,
         expect![[
             r#"OK ("Running 'post draft.txt' failed." ("Running 'post draft.txt' failed."))"#
         ]],
@@ -113,7 +111,7 @@ fn seven_fifty_words_file_reports_non_live_process_without_installing_sentinel()
 }
 
 fn seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order",
         r##"(let ((statuses '(exit signal))
                    events)
@@ -156,7 +154,6 @@ fn seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order() -> Pa
                    'second-process
                    "killed\n")
                   (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (handled handled ((status first-process) (switch first-output) special (shell first-process "finished\n") (status second-process) (switch second-output) special (shell second-process "killed\n")))"#
         ]],
@@ -164,7 +161,7 @@ fn seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order() -> Pa
 }
 
 fn seven_fifty_words_post_process_ignores_running_and_stopped_processes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "seven_fifty_words_post_process_ignores_running_and_stopped_processes",
         r##"(let ((statuses '(run stop))
                    events)
@@ -194,13 +191,12 @@ fn seven_fifty_words_post_process_ignores_running_and_stopped_processes() -> Par
                   (750words--post-process-fn
                    'output 'process "stopped")
                   events)))"##,
-        true,
         expect!["OK (nil nil nil)"],
     )
 }
 
 fn seven_fifty_words_region_writes_exact_bounds_then_posts_the_sandbox_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "seven_fifty_words_region_writes_exact_bounds_then_posts_the_sandbox_file",
         r##"(let ((file
                     (expand-file-name
@@ -239,13 +235,12 @@ fn seven_fifty_words_region_writes_exact_bounds_then_posts_the_sandbox_file() ->
                         (file-exists-p file))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-        true,
         expect![[r#"OK ((posted "ONE") (prefix "750words" post "[ORACLE-TMPDIR]/region.txt") t)"#]],
     )
 }
 
 fn seven_fifty_words_buffer_forwards_current_minimum_and_maximum() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "seven_fifty_words_buffer_forwards_current_minimum_and_maximum",
         r##"(with-temp-buffer
                (insert "payload")
@@ -263,14 +258,13 @@ fn seven_fifty_words_buffer_forwards_current_minimum_and_maximum() -> ParityBatc
                     observed
                     (point-min)
                     (point-max)))))"##,
-        true,
         expect!["OK (posted (2 7) 2 7)"],
     )
 }
 
 fn seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim",
         r##"(let (events)
                (cl-letf
@@ -297,13 +291,12 @@ fn seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim()
                  (list
                   (750words-region-or-buffer)
                   (nreverse events))))"##,
-        true,
         expect!["OK (region-posted ((region 9 3)))"],
     )
 }
 
 fn seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region",
         r##"(let (events)
                (cl-letf
@@ -322,14 +315,12 @@ fn seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region() 
                  (list
                   (750words-region-or-buffer)
                   (nreverse events))))"##,
-        true,
         expect!["OK (buffer-posted (buffer))"],
     )
 }
 
-#[test]
-fn posting_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn posting_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel(),
         seven_fifty_words_file_reports_non_live_process_without_installing_sentinel(),
         seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order(),
@@ -338,6 +329,5 @@ fn posting_public_surface_batch() {
         seven_fifty_words_buffer_forwards_current_minimum_and_maximum(),
         seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim(),
         seven_fifty_words_region_or_buffer_uses_whole_buffer_without_active_region(),
-    ];
-    assert_seven_fifty_words_batch(&cases);
+    ]
 }

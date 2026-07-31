@@ -1,16 +1,15 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_which_key_batch};
+use super::ParityBatchCase;
 
 fn which_key_column_normalization_and_joining_preserve_row_and_column_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "which_key_column_normalization_and_joining_preserve_row_and_column_order",
         r##"(list
                (which-key--normalize-columns
                 '(("a" "b") ("c") () ("d" "e" "f")))
                (which-key--join-columns
                 '(("A1" "A2") ("B1") ("C1" "C2" "C3"))))"##,
-        true,
         expect![[
             r#"OK ((("a" "b" "") ("c" "" "") ("" "" "") ("d" "e" "f")) "C1 B1 A1\nC2  A2\nC3  ")"#
         ]],
@@ -18,7 +17,7 @@ fn which_key_column_normalization_and_joining_preserve_row_and_column_order() ->
 }
 
 fn which_key_partition_list_handles_even_remainder_oversized_and_empty_inputs() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "which_key_partition_list_handles_even_remainder_oversized_and_empty_inputs",
         r##"(list
                (which-key--partition-list 2 '(a b c d))
@@ -26,13 +25,12 @@ fn which_key_partition_list_handles_even_remainder_oversized_and_empty_inputs() 
                (which-key--partition-list 9 '(a b))
                (which-key--partition-list 1 '(a b c))
                (which-key--partition-list 3 nil))"##,
-        true,
         expect!["OK (((a b) (c d)) ((a b) (c d) (e)) ((a b)) ((a) (b) (c)) nil)"],
     )
 }
 
 fn which_key_list_to_pages_reports_exact_page_strings_and_metadata() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "which_key_list_to_pages_reports_exact_page_strings_and_metadata",
         r##"(let* ((which-key-add-column-padding 0)
                     (which-key-min-column-description-width 0)
@@ -51,7 +49,6 @@ fn which_key_list_to_pages_reports_exact_page_strings_and_metadata() -> ParityBa
                 (which-key--pages-page-nums pages)
                 (which-key--pages-num-pages pages)
                 (which-key--pages-total-keys pages)))"##,
-        true,
         expect![[
             r#"OK (("a:alpha c:charlie\nb:beta  d:delta  " "e:echo") 2 (17 6) (4 1) (1 2) 2 5)"#
         ]],
@@ -59,7 +56,7 @@ fn which_key_list_to_pages_reports_exact_page_strings_and_metadata() -> ParityBa
 }
 
 fn which_key_list_to_pages_respects_the_maximum_column_limit() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "which_key_list_to_pages_respects_the_maximum_column_limit",
         r##"(let ((keys '(("a" ":" "alpha" nil)
                            ("b" ":" "beta" nil)
@@ -71,26 +68,24 @@ fn which_key_list_to_pages_respects_the_maximum_column_limit() -> ParityBatchCas
                     (which-key--pages-num-pages pages)
                     (which-key--pages-keys/page pages)
                     (which-key--pages-pages pages)))))"##,
-        true,
         expect![[r#"OK (2 (2 2) ("a:alpha\nb:beta " "c:charlie\nd:delta  "))"#]],
     )
 }
 
 fn which_key_list_to_pages_signals_when_no_cell_can_fit_the_width() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "which_key_list_to_pages_signals_when_no_cell_can_fit_the_width",
         r##"(which-key--list-to-pages
                '(("a" ":" "alpha" nil)
                  ("b" ":" "beta" nil))
                2
                3)"##,
-        false,
         expect!["ERR (wrong-type-argument wholenump -4)"],
     )
 }
 
 fn which_key_page_rotation_updates_every_parallel_page_field() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "which_key_page_rotation_updates_every_parallel_page_field",
         r##"(let ((pages
                     (make-which-key--pages
@@ -114,7 +109,6 @@ fn which_key_page_rotation_updates_every_parallel_page_field() -> ParityBatchCas
                   (which-key--pages-widths pages)
                   (which-key--pages-keys/page pages)
                   (which-key--pages-page-nums pages))))"##,
-        true,
         expect![[
             r#"OK ((("two" "three" "one") (20 30 10) (2 3 1) (2 3 1)) ("three" "one" "two") (30 10 20) (3 1 2) (3 1 2))"#
         ]],
@@ -123,7 +117,7 @@ fn which_key_page_rotation_updates_every_parallel_page_field() -> ParityBatchCas
 
 fn which_key_formatting_replaces_groups_extracts_keys_and_truncates_descriptions() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "which_key_formatting_replaces_groups_extracts_keys_and_truncates_descriptions",
         r##"(let ((which-key-separator " : ")
                     (which-key-prefix-prefix "+")
@@ -148,7 +142,6 @@ fn which_key_formatting_replaces_groups_extracts_keys_and_truncates_descriptions
                    (which-key--format-and-replace
                     '(("C-c a" . "forward-char"))
                     t)))))"##,
-        true,
         expect![[
             r#"OK ((("a" " : " "move-..") ("p" " : " "+proj..") ("x" " : " "+prefix")) (("C-c a" " : " "move-..")))"#
         ]],
@@ -156,7 +149,7 @@ fn which_key_formatting_replaces_groups_extracts_keys_and_truncates_descriptions
 }
 
 fn which_key_docstring_formatting_covers_append_only_and_disabled_modes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "which_key_docstring_formatting_covers_append_only_and_disabled_modes",
         r##"(progn
                (defun neomacs-which-key-documented-command ()
@@ -183,16 +176,14 @@ Second documentation line."
                   (which-key--maybe-add-docstring
                    "missing"
                    "neomacs-which-key-unknown-command"))))"##,
-        true,
         expect![[
             r#"OK ("command" "command First documentation line." "First documentation line." "missing")"#
         ]],
     )
 }
 
-#[test]
-fn layout_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn layout_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         which_key_column_normalization_and_joining_preserve_row_and_column_order(),
         which_key_partition_list_handles_even_remainder_oversized_and_empty_inputs(),
         which_key_list_to_pages_reports_exact_page_strings_and_metadata(),
@@ -201,6 +192,5 @@ fn layout_public_surface_batch() {
         which_key_page_rotation_updates_every_parallel_page_field(),
         which_key_formatting_replaces_groups_extracts_keys_and_truncates_descriptions(),
         which_key_docstring_formatting_covers_append_only_and_disabled_modes(),
-    ];
-    assert_which_key_batch(&cases);
+    ]
 }

@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{AGTAGS_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -454,16 +453,27 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed agtags parity test").into()
 }
 
-pub(crate) fn assert_agtags_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = agtags_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("agtags parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_agtags_parity` cases (2a).
 pub(crate) fn assert_agtags_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(agtags_oracle(), &name, "agtags_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn agtags_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        completion::completion_public_surface_batch_cases(),
+        database::database_public_surface_batch_cases(),
+        editing::editing_public_surface_batch_cases(),
+        search::search_public_surface_batch_cases(),
+        xref::xref_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_agtags_batch(&cases);
+}
+
+// END generated package batch tests

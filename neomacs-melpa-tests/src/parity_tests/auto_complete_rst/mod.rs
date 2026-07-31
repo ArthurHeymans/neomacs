@@ -3,7 +3,6 @@ use std::time::Duration;
 use crate::{
     AUTO_COMPLETE_MELPA_PIN, AUTO_COMPLETE_RST_MELPA_PIN, CachedMelpaOracle, POPUP_MELPA_PIN,
 };
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -100,22 +99,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_auto_complete_rst_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = auto_complete_rst_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("auto-complete-rst parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_auto_complete_rst_parity(elisp_form: &str, expected: Expect) {
-    assert_auto_complete_rst_source_parity("auto-complete-rst.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_auto_complete_rst_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_auto_complete_rst_source_parity("auto-complete-rst-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_auto_complete_rst_autoload_parity` cases (2a).
 pub(crate) fn assert_auto_complete_rst_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -137,3 +120,31 @@ pub(crate) fn assert_auto_complete_rst_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn auto_complete_rst_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_auto_complete_rst_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_auto_complete_rst_autoload_batch(&cases);
+}
+
+#[test]
+fn auto_complete_rst_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        generation::generation_public_surface_batch_cases(),
+        parsing::parsing_public_surface_batch_cases(),
+        registry::registry_auto_complete_rst_batch_cases(),
+        sources::sources_public_surface_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_auto_complete_rst_batch(&cases);
+}
+
+// END generated package batch tests

@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alchemist_batch};
+use super::ParityBatchCase;
 
 fn alchemist_server_codes_requests_markers_and_chunk_reassembly_match_wire_protocol()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_server_codes_requests_markers_and_chunk_reassembly_match_wire_protocol",
         r##"(list
                       alchemist-server-codes
@@ -33,7 +33,6 @@ fn alchemist_server_codes_requests_markers_and_chunk_reassembly_match_wire_proto
                        '("third\nEND-OF-INFO\n"
                          "second\n"
                          "first\n")))"##,
-        true,
         expect![[
             r#"OK (((server-eval "EVAL") (server-defl "DEFL") (server-info "INFO") (server-docl "DOCL") (server-comp "COMP")) ("EVAL" "DEFL" "INFO" "DOCL" "COMP" nil) ("EVAL { :eval, '/x.exs' }\n" "DEFL { \"List,flatten\", [ context: Elixir ] }\n" "INFO\n" "DOCL { \"Enum.map\", [] }\n" "COMP { \"Str\", [] }\n") (nil nil 0 8 nil 0) "first\nsecond\nthird")"#
         ]],
@@ -42,7 +41,7 @@ fn alchemist_server_codes_requests_markers_and_chunk_reassembly_match_wire_proto
 
 fn alchemist_server_high_level_api_starts_filters_and_sends_every_exact_request() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_server_high_level_api_starts_filters_and_sends_every_exact_request",
         r##"(let (events)
                       (cl-letf
@@ -84,7 +83,6 @@ fn alchemist_server_high_level_api_starts_filters_and_sends_every_exact_request(
                           "{ \"Str\", [] }"
                           #'alchemist-company-filter)
                          (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (sent sent sent sent sent sent (#1=(start) #1# (filter server-process alchemist-goto-filter) (send server-process "DEFL { \"List,flatten\", [] }\n") #1# #1# (filter server-process alchemist-help-modules-filter) (send server-process "INFO { :type, :modules }\n") #1# #1# (filter server-process alchemist-help-modules-filter) (send server-process "INFO\n") #1# #1# (filter server-process alchemist-help-filter-output) (send server-process "DOCL { \"Enum.map\", [] }\n") #1# #1# (filter server-process alchemist-eval-filter) (send server-process "EVAL { :eval, 'code.exs' }\n") #1# #1# (filter server-process alchemist-company-filter) (send server-process "COMP { \"Str\", [] }\n")))"#
         ]],
@@ -93,7 +91,7 @@ fn alchemist_server_high_level_api_starts_filters_and_sends_every_exact_request(
 
 fn alchemist_server_process_names_follow_project_elixir_and_global_contexts_and_replace_cache_entries()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_server_process_names_follow_project_elixir_and_global_contexts_and_replace_cache_entries",
         r##"(let* ((sandbox
                            (file-name-as-directory
@@ -128,7 +126,6 @@ fn alchemist_server_process_names_follow_project_elixir_and_global_contexts_and_
                          (let ((default-directory sandbox)
                                (alchemist-project-root-path-cache nil))
                            (alchemist-server-process-name)))))"##,
-        true,
         expect![[
             r#"OK ("project/" new-process (("[ORACLE-SANDBOX]/project/" . new-process)) "alchemist-server" "alchemist-server")"#
         ]],
@@ -137,7 +134,7 @@ fn alchemist_server_process_names_follow_project_elixir_and_global_contexts_and_
 
 fn alchemist_server_start_in_environment_uses_project_cwd_quoted_command_and_nonquerying_cache()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_server_start_in_environment_uses_project_cwd_quoted_command_and_nonquerying_cache",
         r##"(let* ((sandbox
                            (file-name-as-directory
@@ -199,7 +196,6 @@ fn alchemist_server_start_in_environment_uses_project_cwd_quoted_command_and_non
                         (list
                          (alchemist-server-start-in-env "shared env")
                          (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (stored ((start "server app/" "[ORACLE-SANDBOX]/server app/" "*alchemist-server*" "/tools/elixir runtime [PACKAGE]/alchemist-server/run.exs shared\\ env") (query server-process nil) (store server-process)))"#
         ]],
@@ -208,7 +204,7 @@ fn alchemist_server_start_in_environment_uses_project_cwd_quoted_command_and_non
 
 fn alchemist_iex_command_line_region_compile_reload_and_project_workflows_send_real_user_intent()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_iex_command_line_region_compile_reload_and_project_workflows_send_real_user_intent",
         r##"(let* ((sandbox
                            (file-name-as-directory
@@ -268,7 +264,6 @@ fn alchemist_iex_command_line_region_compile_reload_and_project_workflows_send_r
                            (alchemist-iex-reload-module)
                            (alchemist-iex-project-run)
                            (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK (("iex" "--erl" "+S 2") ("iex" "--sname" "parity") sent sent sent sent popped ((process nil) (send iex-process "  def total, do: 42\n") (process nil) (send iex-process "defmodule Shop.Cart do\n  def total, do: 42\nend\n") (process nil) (send iex-process "c(\"[ORACLE-SANDBOX]/shop/lib/shop/cart.ex\", \"[ORACLE-SANDBOX]/shop//_build/dev/\")") (process nil) (send iex-process "r(Shop.Cart)") (process " -S mix") (pop iex-buffer)))"#
         ]],
@@ -277,7 +272,7 @@ fn alchemist_iex_command_line_region_compile_reload_and_project_workflows_send_r
 
 fn alchemist_iex_send_command_preserves_multiline_input_process_mark_and_comint_history()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_iex_send_command_preserves_multiline_input_process_mark_and_comint_history",
         r##"(let* ((buffer
                            (generate-new-buffer
@@ -308,7 +303,6 @@ fn alchemist_iex_send_command_preserves_multiline_input_process_mark_and_comint_
                           (delete-process process))
                         (when (buffer-live-p buffer)
                           (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK ("first = 20\nsecond = 22\nfirst + second\nfirst = 20\nsecond = 22\nfirst + second\n" 77 77 (run open listen connect stop))"#
         ]],
@@ -317,7 +311,7 @@ fn alchemist_iex_send_command_preserves_multiline_input_process_mark_and_comint_
 
 fn alchemist_hex_dependency_parser_reads_real_mix_file_ignores_comments_and_renders_popup()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_hex_dependency_parser_reads_real_mix_file_ignores_comments_and_renders_popup",
         r##"(let* ((sandbox
                            (file-name-as-directory
@@ -362,7 +356,6 @@ fn alchemist_hex_dependency_parser_reads_real_mix_file_ignores_comments_and_rend
                            (search-backward "ecto_sql")
                            (forward-char 4)
                            (alchemist-hex--deps-name-at-point)))))"##,
-        true,
         expect![[
             r#"OK (popup ("*alchemist-hex*" ":ecto\11\11 github: \"elixir-ecto/ecto\"\n:phoenix\11 \"~> 1.2\"\n:plug\11\11 \">= 0.0.0\"\n" :anonymous-mode) "ecto_sql")"#
         ]],
@@ -371,7 +364,7 @@ fn alchemist_hex_dependency_parser_reads_real_mix_file_ignores_comments_and_rend
 
 fn alchemist_hex_offline_package_info_renders_description_config_links_releases_and_button_urls()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_hex_offline_package_info_renders_description_config_links_releases_and_button_urls",
         r##"(let ((information
                            '((meta
@@ -426,7 +419,6 @@ fn alchemist_hex_offline_package_info_renders_description_config_links_releases_
                           (when (get-buffer alchemist-hex-buffer-name)
                             (kill-buffer
                              alchemist-hex-buffer-name)))))"##,
-        true,
         expect![[
             r#"OK ("*alchemist-hex*" #("Composable web middleware\n\nConfig: {:plug, => \"~> 1.12.1\"}\nLatest release: 1.12.1\n\nMaintainers: \n  - José Valim\n  - Community\nLicenses: Apache-2.0\nLinks: \n  GitHub: https://github.com/elixir-plug/plug\n  Docs: https://hexdocs.pm/plug\nReleases: \n  - 1.12.1\11     (docs)\n  - 1.11.0\11     (docs)\n" 27 35 (face font-lock-string-face) 59 75 (face font-lock-string-face) 83 96 (face font-lock-string-face) 126 136 (face font-lock-string-face) 147 154 (face font-lock-string-face) 233 244 (face font-lock-string-face)) t t (("1.12.1" "https://hex.pm/packages/plug/1.12.1") ("https://github.com/elixir-plug/plug" "https://github.com/elixir-plug/plug") ("https://hexdocs.pm/plug" "https://hexdocs.pm/plug") ("1.12.1" "https://hex.pm/packages/plug/1.12.1") ("docs" "https://hexdocs.pm/plug/1.12.1") ("1.11.0" "https://hex.pm/packages/plug/1.11.0") ("docs" "https://hexdocs.pm/plug/1.11.0")))"#
         ]],
@@ -435,7 +427,7 @@ fn alchemist_hex_offline_package_info_renders_description_config_links_releases_
 
 fn alchemist_hex_offline_release_and_search_views_render_dates_docs_and_filtered_results()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_hex_offline_release_and_search_views_render_dates_docs_and_filtered_results",
         r##"(let* ((plug
                            '((name . "plug")
@@ -517,16 +509,14 @@ fn alchemist_hex_offline_release_and_search_views_render_dates_docs_and_filtered
                           (when (get-buffer alchemist-hex-buffer-name)
                             (kill-buffer
                              alchemist-hex-buffer-name)))))"##,
-        true,
         expect![[
             r#"OK ("*alchemist-hex*" (#("plug versions  (latest version 1.4.0)\n\n1.4.0\11    (released on 2017-03-01)   (docs)\n1.3.0\11    (released on 2016-10-01)   (docs)\n" 0 31 (face font-lock-variable-name-face) 50 61 (face font-lock-string-face) 94 105 (face font-lock-string-face)) (("1.4.0" "https://hex.pm/packages/plug/1.4.0") ("1.4.0" "https://hex.pm/packages/plug/1.4.0") ("docs" "https://hexdocs.pm/plug/1.4.0") ("1.3.0" "https://hex.pm/packages/plug/1.3.0") ("docs" "https://hexdocs.pm/plug/1.3.0"))) (#("search results for: plug \n\nplug\11  1.4.0   (released on 2017-03-01)\11  (docs)\n" 0 20 (face font-lock-variable-name-face) 20 27 (face font-lock-builtin-face) 43 54 (face font-lock-string-face)) (("plug" "https://hex.pm/packages/plug") ("1.4.0" "https://hex.pm/packages/plug/1.4.0") ("docs" "https://hexdocs.pm/plug/1.4.0"))))"#
         ]],
     )
 }
 
-#[test]
-fn process_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn process_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         alchemist_server_codes_requests_markers_and_chunk_reassembly_match_wire_protocol(),
         alchemist_server_high_level_api_starts_filters_and_sends_every_exact_request(),
         alchemist_server_process_names_follow_project_elixir_and_global_contexts_and_replace_cache_entries(),
@@ -536,6 +526,5 @@ fn process_public_surface_batch() {
         alchemist_hex_dependency_parser_reads_real_mix_file_ignores_comments_and_renders_popup(),
         alchemist_hex_offline_package_info_renders_description_config_links_releases_and_button_urls(),
         alchemist_hex_offline_release_and_search_views_render_dates_docs_and_filtered_results(),
-    ];
-    assert_alchemist_batch(&cases);
+    ]
 }

@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alchemist_batch};
+use super::ParityBatchCase;
 
 fn alchemist_project_discovers_nested_mix_root_skips_hex_boundaries_and_reuses_cache()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_project_discovers_nested_mix_root_skips_hex_boundaries_and_reuses_cache",
         r##"(let* ((sandbox
                            (file-name-as-directory
@@ -44,14 +44,13 @@ fn alchemist_project_discovers_nested_mix_root_skips_hex_boundaries_and_reuses_c
                          (file-relative-name
                           alchemist-project-root-path-cache
                           sandbox))))"##,
-        true,
         expect![[r#"OK ("umbrella/" t "umbrella" "umbrella/" "umbrella/" "umbrella/")"#]],
     )
 }
 
 fn alchemist_project_maps_library_web_and_umbrella_files_to_real_tests_and_back() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_project_maps_library_web_and_umbrella_files_to_real_tests_and_back",
         r##"(let* ((sandbox
                            (file-name-as-directory
@@ -101,7 +100,6 @@ fn alchemist_project_maps_library_web_and_umbrella_files_to_real_tests_and_back(
                            "apps/admin/test/admin/audit_test.exs"
                            "apps/site/web/views/layout_view.ex"
                            "apps/site/test/views/layout_view_test.exs"))))"##,
-        true,
         expect![[
             r#"OK (("lib/accounts/user.ex" "test/accounts/user_test.exs") ("test/accounts/user_test.exs" "lib/accounts/user.ex") ("web/controllers/page_controller.ex" "test/controllers/page_controller_test.exs") ("test/controllers/page_controller_test.exs" "web/controllers/page_controller.ex") ("apps/admin/lib/admin/audit.ex" "apps/admin/test/admin/audit_test.exs") ("apps/admin/test/admin/audit_test.exs" "apps/admin/test/admin/audit.ex") ("apps/site/web/views/layout_view.ex" "apps/site/test/views/layout_view_test.exs") ("apps/site/test/views/layout_view_test.exs" "apps/site/test/views/layout_view.ex"))"#
         ]],
@@ -110,7 +108,7 @@ fn alchemist_project_maps_library_web_and_umbrella_files_to_real_tests_and_back(
 
 fn alchemist_project_creates_missing_test_with_real_module_boilerplate_and_cursor_position()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_project_creates_missing_test_with_real_module_boilerplate_and_cursor_position",
         r##"(let* ((sandbox
                            (file-name-as-directory
@@ -158,7 +156,6 @@ fn alchemist_project_creates_missing_test_with_real_module_boilerplate_and_curso
                           (when (buffer-live-p created)
                             (set-buffer-modified-p nil)
                             (kill-buffer created)))))"##,
-        true,
         expect![[
             r#"OK ("test/billing/invoice_test.exs" "defmodule Billing.InvoiceTest do\n  use ExUnit.Case\n\n  \nend\n" 55 4 2 t)"#
         ]],
@@ -167,7 +164,7 @@ fn alchemist_project_creates_missing_test_with_real_module_boilerplate_and_curso
 
 fn alchemist_project_create_file_turns_nested_user_path_into_real_module_and_editing_position()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_project_create_file_turns_nested_user_path_into_real_module_and_editing_position",
         r##"(let* ((sandbox
                            (file-name-as-directory
@@ -204,7 +201,6 @@ fn alchemist_project_create_file_turns_nested_user_path_into_real_module_and_edi
                               (when (buffer-live-p buffer)
                                 (set-buffer-modified-p nil)
                                 (kill-buffer buffer)))))))"##,
-        true,
         expect![[
             r#"OK ("lib/inventory/stock_item.ex" "defmodule Inventory.StockItem do\n  \nend\n" 36 2 2 t)"#
         ]],
@@ -213,7 +209,7 @@ fn alchemist_project_create_file_turns_nested_user_path_into_real_module_and_edi
 
 fn alchemist_file_recursively_lists_real_project_files_and_prompt_opens_selection()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_file_recursively_lists_real_project_files_and_prompt_opens_selection",
         r##"(let* ((sandbox
                            (file-name-as-directory
@@ -247,7 +243,6 @@ fn alchemist_file_recursively_lists_real_project_files_and_prompt_opens_selectio
                          prompt
                          candidates
                          opened)))"##,
-        true,
         expect![[
             r#"OK (("lib/.hidden.ex" "lib/a.ex" "lib/nested/b.ex" "lib/nested/deep/c.ex") "lib/nested/deep/c.ex" "[catalog] lib: " ("lib/.hidden.ex" "lib/a.ex" "lib/nested/b.ex" "lib/nested/deep/c.ex") "lib/nested/deep/c.ex")"#
         ]],
@@ -256,7 +251,7 @@ fn alchemist_file_recursively_lists_real_project_files_and_prompt_opens_selectio
 
 fn alchemist_phoenix_discovers_real_web_tree_router_routes_and_mode_activation() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_phoenix_discovers_real_web_tree_router_routes_and_mode_activation",
         r##"(let* ((sandbox
                            (file-name-as-directory
@@ -312,16 +307,14 @@ fn alchemist_phoenix_discovers_real_web_tree_router_routes_and_mode_activation()
                            (alchemist-phoenix-enable-mode)
                            alchemist-phoenix-mode)
                          (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (t "web" "web/controllers" "web/templates" router routes t ((find "phoenix_app/" "web") (find "phoenix_app/" "web/controllers") (find "phoenix_app/" "web/templates") (router "web/router.ex") (routes ("phoenix.routes") (4))))"#
         ]],
     )
 }
 
-#[test]
-fn project_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn project_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         alchemist_project_discovers_nested_mix_root_skips_hex_boundaries_and_reuses_cache(),
         alchemist_project_maps_library_web_and_umbrella_files_to_real_tests_and_back(),
         alchemist_project_creates_missing_test_with_real_module_boilerplate_and_cursor_position(),
@@ -329,6 +322,5 @@ fn project_public_surface_batch() {
         ),
         alchemist_file_recursively_lists_real_project_files_and_prompt_opens_selection(),
         alchemist_phoenix_discovers_real_web_tree_router_routes_and_mode_activation(),
-    ];
-    assert_alchemist_batch(&cases);
+    ]
 }

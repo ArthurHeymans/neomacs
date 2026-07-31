@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_annoying_arrows_mode_batch};
+use super::ParityBatchCase;
 
 fn repeated_vertical_navigation_moves_the_window_then_recommends_a_larger_jump() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "repeated_vertical_navigation_moves_the_window_then_recommends_a_larger_jump",
         r##"(let ((buffer (generate-new-buffer " *annoying-navigation*"))
                (annoying-arrows-too-far-count 2)
@@ -77,7 +77,6 @@ fn repeated_vertical_navigation_moves_the_window_then_recommends_a_larger_jump()
                                      bells))))))))
            (when (buffer-live-p buffer)
              (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK ((6 32 32 1) (2 7 7 1 previous-line #("Annoying! How about using backward-paragraph (M-{) instead?" 46 49 (face help-key-binding font-lock-face help-key-binding)) 1) (3 13 next-line "" 1) (5 25 25 1 next-line nil "" 1))"#
         ]],
@@ -86,7 +85,7 @@ fn repeated_vertical_navigation_moves_the_window_then_recommends_a_larger_jump()
 
 fn repeated_deletion_warns_while_a_real_typo_correction_keeps_editing_normally() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "repeated_deletion_warns_while_a_real_typo_correction_keeps_editing_normally",
         r##"(let ((buffer (generate-new-buffer " *annoying-editing*"))
                (annoying-arrows-too-far-count 0)
@@ -153,7 +152,6 @@ fn repeated_deletion_warns_while_a_real_typo_correction_keeps_editing_normally()
                                    bells)))))))
            (when (buffer-live-p buffer)
              (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK (("release: readxy" 16 15 backward-delete-char-untabify "Annoying! How about using backward-kill-word (M-DEL) instead?" 1) ("release: ready" 15 14 right-char "" 1) ("release: ready" 13 12 left-char nil 1))"#
         ]],
@@ -161,7 +159,7 @@ fn repeated_deletion_warns_while_a_real_typo_correction_keeps_editing_normally()
 }
 
 fn global_mode_and_a_public_suggestion_drive_navigation_across_two_buffers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "global_mode_and_a_public_suggestion_drive_navigation_across_two_buffers",
         r##"(let ((first (generate-new-buffer " *annoying-plan-a*"))
                (second (generate-new-buffer " *annoying-plan-b*"))
@@ -248,19 +246,16 @@ fn global_mode_and_a_public_suggestion_drive_navigation_across_two_buffers() -> 
              (kill-buffer first))
            (when (buffer-live-p second)
              (kill-buffer second))))"##,
-        true,
         expect![[
             r#"OK ((" *annoying-plan-a*" 4 20 20 next-line "Annoying! How about using beginning-of-buffer (M-<) instead?" 1) (" *annoying-plan-b*" 2 6 6 next-line "" 1) (nil nil nil " *annoying-plan-b*" 4 20 20 next-line "" 1))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         repeated_vertical_navigation_moves_the_window_then_recommends_a_larger_jump(),
         repeated_deletion_warns_while_a_real_typo_correction_keeps_editing_normally(),
         global_mode_and_a_public_suggestion_drive_navigation_across_two_buffers(),
-    ];
-    assert_annoying_arrows_mode_batch(&cases);
+    ]
 }

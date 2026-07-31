@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_evil_batch};
+use super::ParityBatchCase;
 
 fn evil_normal_motion_keys_move_by_words_lines_and_line_boundaries() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_normal_motion_keys_move_by_words_lines_and_line_boundaries",
         r##"(with-temp-buffer
                (insert "alpha beta gamma\nsecond line\n")
@@ -19,7 +19,6 @@ fn evil_normal_motion_keys_move_by_words_lines_and_line_boundaries() -> ParityBa
                           evil-state)
                     positions))
                  (nreverse positions)))"##,
-        true,
         expect![[
             r#"OK (("w" 2 nil nil) ("e" 3 nil nil) ("b" 4 nil nil) ("$" 5 nil nil) ("j" 6 nil nil) ("0" 7 nil nil) ("k" 8 nil nil))"#
         ]],
@@ -28,7 +27,7 @@ fn evil_normal_motion_keys_move_by_words_lines_and_line_boundaries() -> ParityBa
 
 fn evil_insert_append_and_line_open_commands_preserve_text_point_and_final_state() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_insert_append_and_line_open_commands_preserve_text_point_and_final_state",
         r##"(mapcar
                (lambda (case)
@@ -48,16 +47,16 @@ fn evil_insert_append_and_line_open_commands_preserve_text_point_and_final_state
                  ("alpha\nbeta" 7 "O X ESC")
                  ("alpha" 3 "I X ESC")
                  ("alpha" 3 "A X ESC")))"##,
-        true,
         expect![[
             r#"OK (("iX" 3 nil) ("iXaX" 5 nil) ("iXaXoX" 7 nil) ("iXaXoXOX" 9 nil) ("iXaXoXOXIX" 11 nil) ("iXaXoXOXIXAX" 13 nil))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn evil_delete_change_and_substitute_commands_apply_counts_and_enter_expected_states()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_delete_change_and_substitute_commands_apply_counts_and_enter_expected_states",
         r##"(mapcar
                (lambda (case)
@@ -72,15 +71,15 @@ fn evil_delete_change_and_substitute_commands_apply_counts_and_enter_expected_st
                          (point)
                          evil-state)))
                '("dw" "2dw" "dd" "cw X ESC" "cc X ESC" "s X ESC" "2x"))"##,
-        true,
         expect![[
             r#"OK (("dw" "dw" 3 nil) ("2dw" "dw2dw" 6 nil) ("dd" "dw2dwdd" 8 nil) ("cw X ESC" "dw2dwddcwX" 11 nil) ("cc X ESC" "dw2dwddcwXccX" 14 nil) ("s X ESC" "dw2dwddcwXccXsX" 16 nil) ("2x" "dw2dwddcwXccXsX2x" 18 nil))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn evil_yank_and_paste_commands_preserve_characterwise_and_linewise_shapes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_yank_and_paste_commands_preserve_characterwise_and_linewise_shapes",
         r##"(mapcar
                (lambda (keys)
@@ -98,15 +97,15 @@ fn evil_yank_and_paste_commands_preserve_characterwise_and_linewise_shapes() -> 
                       (point)
                       (car kill-ring)))))
                '("yw w p" "yy j p" "2yy G P" "ye $ p"))"##,
-        true,
         expect![[
             r#"OK (("yw w p" "ywwp" 5 nil) ("yy j p" "ywwpyyjp" 9 nil) ("2yy G P" "ywwpyyjp2yyGP" 14 nil) ("ye $ p" "ywwpyyjp2yyGPye$p" 18 nil))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn evil_visual_character_and_line_operations_transform_exact_regions() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_visual_character_and_line_operations_transform_exact_regions",
         r##"(mapcar
                (lambda (keys)
@@ -122,15 +121,15 @@ fn evil_visual_character_and_line_operations_transform_exact_regions() -> Parity
                     (point)
                     evil-state)))
                '("v e d" "v e ~" "V j d" "v w y $ p"))"##,
-        true,
         expect![[
             r#"OK (("v e d" "ved" 4 nil) ("v e ~" "vedve~" 7 nil) ("V j d" "vedve~Vjd" 10 nil) ("v w y $ p" "vedve~Vjdvwy$p" 15 nil))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn evil_find_till_and_repeat_find_commands_track_direction_and_offsets() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_find_till_and_repeat_find_commands_track_direction_and_offsets",
         r##"(with-temp-buffer
                (insert "a1b2c3b4a")
@@ -144,15 +143,15 @@ fn evil_find_till_and_repeat_find_commands_track_direction_and_offsets() -> Pari
                     (list keys (point) evil-last-find)
                     positions))
                  (nreverse positions)))"##,
-        true,
         expect![[
             r#"OK (("f b" 3 nil) (";" 4 nil) ("," 5 nil) ("t a" 7 nil) (";" 8 nil) ("," 9 nil))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn evil_join_case_inversion_and_rot13_commands_match_vim_text_transformations() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_join_case_inversion_and_rot13_commands_match_vim_text_transformations",
         r##"(mapcar
                (lambda (case)
@@ -170,14 +169,14 @@ fn evil_join_case_inversion_and_rot13_commands_match_vim_text_transformations() 
                  ("Alpha beta" . "~")
                  ("Alpha beta" . "v e ~")
                  ("Alpha beta" . "g ? e")))"##,
-        true,
         expect![[r#"OK (("J" 2 nil) ("J~" 3 nil) ("J~ve~" 6 nil) ("J~ve~g?e" 9 nil))"#]],
     )
+    .fresh_process()
 }
 
 fn evil_numeric_increment_and_decrement_find_numbers_after_point_and_apply_counts()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_numeric_increment_and_decrement_find_numbers_after_point_and_apply_counts",
         r##"(mapcar
                (lambda (keys)
@@ -189,16 +188,15 @@ fn evil_numeric_increment_and_decrement_find_numbers_after_point_and_apply_count
                    (execute-kbd-macro (kbd keys))
                    (list keys (buffer-string) (point))))
                '("C-a" "3 C-a" "C-x" "w C-a" "3 w 2 C-a"))"##,
-        true,
         expect![[
             r#"OK (("C-a" "" 1) ("3 C-a" "3" 1) ("C-x" "3" 1) ("w C-a" "w3" 1) ("3 w 2 C-a" "3w2w3" 1))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn editing_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn editing_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         evil_normal_motion_keys_move_by_words_lines_and_line_boundaries(),
         evil_insert_append_and_line_open_commands_preserve_text_point_and_final_state(),
         evil_delete_change_and_substitute_commands_apply_counts_and_enter_expected_states(),
@@ -207,6 +205,5 @@ fn editing_public_surface_batch() {
         evil_find_till_and_repeat_find_commands_track_direction_and_offsets(),
         evil_join_case_inversion_and_rot13_commands_match_vim_text_transformations(),
         evil_numeric_increment_and_decrement_find_numbers_after_point_and_apply_counts(),
-    ];
-    assert_evil_batch(&cases);
+    ]
 }

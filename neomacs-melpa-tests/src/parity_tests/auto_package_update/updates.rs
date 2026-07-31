@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_package_update_batch};
+use super::ParityBatchCase;
 
 fn auto_package_update_async_creates_named_thread_and_stores_it() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_async_creates_named_thread_and_stores_it",
         r##"(let
                              ((apu--update-thread nil)
@@ -27,13 +27,12 @@ fn auto_package_update_async_creates_named_thread_and_stores_it() -> ParityBatch
                                 captured-name
                                 (functionp
                                  captured-function)))))"##,
-        true,
         expect![[r#"OK (fixture-thread fixture-thread "auto-package-update-now-async" t)"#]],
     )
 }
 
 fn auto_package_update_async_rejects_second_live_thread_without_force() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_async_rejects_second_live_thread_without_force",
         r##"(let
                              ((apu--update-thread
@@ -65,7 +64,6 @@ fn auto_package_update_async_rejects_second_live_thread_without_force() -> Parit
                                #'auto-package-update-now-async)
                               apu--update-thread
                               (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((:signal error ("auto-package-update thread is still running.")) existing-thread ((:live existing-thread)))"#
         ]],
@@ -73,7 +71,7 @@ fn auto_package_update_async_rejects_second_live_thread_without_force() -> Parit
 }
 
 fn auto_package_update_async_force_signals_live_thread_clears_and_replaces_it() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_async_force_signals_live_thread_clears_and_replaces_it",
         r##"(let
                              ((apu--update-thread
@@ -116,19 +114,16 @@ fn auto_package_update_async_force_signals_live_thread_clears_and_replaces_it() 
                                t)
                               apu--update-thread
                               (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (replacement-thread replacement-thread ((:live existing-thread) (:signal existing-thread nil nil) (:make t "auto-package-update-now-async")))"#
         ]],
     )
 }
 
-#[test]
-fn updates_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn updates_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_package_update_async_creates_named_thread_and_stores_it(),
         auto_package_update_async_rejects_second_live_thread_without_force(),
         auto_package_update_async_force_signals_live_thread_clears_and_replaces_it(),
-    ];
-    assert_auto_package_update_batch(&cases);
+    ]
 }

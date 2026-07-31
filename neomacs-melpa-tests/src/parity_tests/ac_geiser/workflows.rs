@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_geiser_batch};
+use super::ParityBatchCase;
 
 /// The installation the README prescribes: hook `ac-geiser-setup' into the
 /// geiser modes and add `geiser-repl-mode' to `ac-modes'.  The command's
@@ -11,9 +11,8 @@ use super::{ParityBatchCase, assert_ac_geiser_batch};
 /// auto-complete knows `scheme-mode' out of the box but not
 /// `geiser-repl-mode' -- which is exactly why the README asks the user to add
 /// it.
-
 fn setup_puts_the_geiser_source_first_for_the_current_buffer_only() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "setup_puts_the_geiser_source_first_for_the_current_buffer_only",
         r##"(progn
   (acg-test-configure)
@@ -34,7 +33,6 @@ fn setup_puts_the_geiser_source_first_for_the_current_buffer_only() -> ParityBat
     (with-current-buffer other
       (push (list :other-sources ac-sources) observed))
     (nreverse observed)))"##,
-        true,
         expect![
             "OK ((:default-sources #1=(ac-source-words-in-same-mode-buffers) :repl-mode-known nil :scheme-mode-known t) (:sources (ac-source-geiser . #1#) :buffer-local t :repl-mode-known t) (:other-sources #1#))"
         ],
@@ -42,7 +40,7 @@ fn setup_puts_the_geiser_source_first_for_the_current_buffer_only() -> ParityBat
 }
 
 fn completing_at_the_repl_asks_the_live_scheme_and_inserts_the_choice() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "completing_at_the_repl_asks_the_live_scheme_and_inserts_the_choice",
         r##"(progn
   (acg-test-start-repl)
@@ -64,7 +62,6 @@ fn completing_at_the_repl_asks_the_live_scheme_and_inserts_the_choice() -> Parit
                   :column (current-column)
                   :buffer (buffer-name)
                   :mode major-mode))))"##,
-        true,
         expect![[
             r#"OK (:prefix "ca" :candidates ("car" "case" "cadr" "call-with-values") :annotation "g" :properties (symbol "g" document ac-geiser-documentation) :requests ("(geiser:eval #f (geiser:completions \"ca\"))") :line "car" :column 21 :buffer "*Geiser Fake REPL*" :mode geiser-repl-mode)"#
         ]],
@@ -72,7 +69,7 @@ fn completing_at_the_repl_asks_the_live_scheme_and_inserts_the_choice() -> Parit
 }
 
 fn completing_in_a_scheme_buffer_merges_local_bindings_with_repl_symbols() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "completing_in_a_scheme_buffer_merges_local_bindings_with_repl_symbols",
         r##"(progn
   (acg-test-configure)
@@ -88,15 +85,15 @@ fn completing_in_a_scheme_buffer_merges_local_bindings_with_repl_symbols() -> Pa
           :from-geiser (ac-source-geiser-candidates)
           :candidates (acg-test-candidates)
           :requests (acg-test-requests))))"##,
-        true,
         expect![[
             r#"OK (:live t :prefix "ca" :from-geiser ("carriage" "cadence" "call-with-values" "car" "case" "cadr") :candidates ("car" "case" "cadr" "cadence" "cadence" "carriage" "carriage" "call-with-values") :requests ("(geiser:eval #f (geiser:completions \"ca\"))" "(geiser:eval #f (geiser:completions \"ca\"))"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn each_candidate_documents_itself_from_the_running_scheme() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "each_candidate_documents_itself_from_the_running_scheme",
         r##"(progn
   (acg-test-start-repl)
@@ -108,15 +105,15 @@ fn each_candidate_documents_itself_from_the_running_scheme() -> ParityBatchCase 
         :case (popup-item-documentation (acg-test-candidate "case"))
         :cadr (popup-item-documentation (acg-test-candidate "cadr"))
         :requests (acg-test-requests)))"##,
-        true,
         expect![[
             r#"OK (:car #("(car pair)\n----\nReturn the contents of the car of PAIR." 1 4 (face geiser-font-lock-autodoc-identifier)) :case #("(case key clauses)\n----\nEvaluate the clause whose datum matches KEY." 1 5 (face geiser-font-lock-autodoc-identifier)) :cadr #("(cadr pair)\n----\n" 1 5 (face geiser-font-lock-autodoc-identifier)) :requests ("(geiser:eval #f (geiser:completions \"ca\"))" "(geiser:eval #f (geiser:symbol-documentation (quote car)))" "(geiser:eval #f (geiser:symbol-documentation (quote case)))" "(geiser:eval #f (geiser:symbol-documentation (quote cadr)))"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn a_prefix_the_scheme_does_not_know_produces_no_candidates() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_prefix_the_scheme_does_not_know_produces_no_candidates",
         r##"(progn
   (acg-test-start-repl)
@@ -129,15 +126,15 @@ fn a_prefix_the_scheme_does_not_know_produces_no_candidates() -> ParityBatchCase
         :candidates (acg-test-candidates)
         :line (acg-test-line)
         :requests (acg-test-requests)))"##,
-        true,
         expect![[
             r#"OK (:prefix "zzz" :from-geiser nil :candidates nil :line "zzz" :requests ("(geiser:eval #f (geiser:completions \"zzz\"))" "(geiser:eval #f (geiser:completions \"zzz\"))"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn without_a_running_repl_the_source_stays_silent_and_contacts_no_scheme() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "without_a_running_repl_the_source_stays_silent_and_contacts_no_scheme",
         r##"(progn
   (acg-test-configure)
@@ -152,22 +149,20 @@ fn without_a_running_repl_the_source_stays_silent_and_contacts_no_scheme() -> Pa
         :sources ac-sources
         :requests (acg-test-requests)
         :line (acg-test-line)))"##,
-        true,
         expect![[
             r#"OK (:live nil :from-geiser nil :prefix "ca" :candidates ("cabbage" "carriage") :sources (ac-source-geiser ac-source-words-in-same-mode-buffers) :requests no-request :line "ca")"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         setup_puts_the_geiser_source_first_for_the_current_buffer_only(),
         completing_at_the_repl_asks_the_live_scheme_and_inserts_the_choice(),
         completing_in_a_scheme_buffer_merges_local_bindings_with_repl_symbols(),
         each_candidate_documents_itself_from_the_running_scheme(),
         a_prefix_the_scheme_does_not_know_produces_no_candidates(),
         without_a_running_repl_the_source_stays_silent_and_contacts_no_scheme(),
-    ];
-    assert_ac_geiser_batch(&cases);
+    ]
 }

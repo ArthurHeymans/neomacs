@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_two_bit_batch};
+use super::ParityBatchCase;
 
 fn two_bit_location_prompt_parses_dash_and_dot_ranges_without_numeric_prompts() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_location_prompt_parses_dash_and_dot_ranges_without_numeric_prompts",
         r##"(let ((selections
                     '("alpha:2-9"
@@ -47,7 +47,6 @@ fn two_bit_location_prompt_parses_dash_and_dot_ranges_without_numeric_prompts() 
                   (2bit--location-prompt)
                   (2bit--location-prompt)
                   (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (("genome.2bit" "alpha" 2 9) ("genome.2bit" "beta" 1 7) ((file "2bit file: ") (names "genome.2bit") (complete "Sequence: " ("alpha" "beta")) (file "2bit file: ") (names "genome.2bit") (complete "Sequence: " ("alpha" "beta"))))"#
         ]],
@@ -55,7 +54,7 @@ fn two_bit_location_prompt_parses_dash_and_dot_ranges_without_numeric_prompts() 
 }
 
 fn two_bit_location_prompt_reads_start_and_defaults_end_to_sequence_size() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_location_prompt_reads_start_and_defaults_end_to_sequence_size",
         r##"(let ((numbers '(3 8))
                    events)
@@ -91,7 +90,6 @@ fn two_bit_location_prompt_reads_start_and_defaults_end_to_sequence_size() -> Pa
                  (list
                   (2bit--location-prompt)
                   (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (("genome.2bit" "alpha" 3 8) ((number "alpha; Start: " 0) (sequence "genome.2bit" "alpha") (number "alpha; Start: 3; End: " 12)))"#
         ]],
@@ -99,7 +97,7 @@ fn two_bit_location_prompt_reads_start_and_defaults_end_to_sequence_size() -> Pa
 }
 
 fn two_bit_location_prompt_restores_the_callers_match_data() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_location_prompt_restores_the_callers_match_data",
         r##"(progn
                (string-match
@@ -121,13 +119,12 @@ fn two_bit_location_prompt_restores_the_callers_match_data() -> ParityBatchCase 
                     (2bit--location-prompt)
                     before
                     (match-data t)))))"##,
-        true,
         expect![[r#"OK (("genome.2bit" "alpha" 2 9) (0 5 0 5) (0 5 0 5))"#]],
     )
 }
 
 fn two_bit_insert_bases_inserts_at_point_and_forwards_prefix_masking() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_insert_bases_inserts_at_point_and_forwards_prefix_masking",
         r##"(let ((file
                     (expand-file-name
@@ -150,13 +147,12 @@ fn two_bit_insert_bases_inserts_at_point_and_forwards_prefix_masking() -> Parity
                           (point)))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-        true,
         expect![[r#"OK (nil "before|TCNNNCagtcAGafter" 20)"#]],
     )
 }
 
 fn two_bit_insert_fasta_formats_header_and_short_sequence() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_insert_fasta_formats_header_and_short_sequence",
         r##"(let ((file
                     (expand-file-name
@@ -174,13 +170,12 @@ fn two_bit_insert_fasta_formats_header_and_short_sequence() -> ParityBatchCase {
                         (point))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-        true,
         expect![[r#"OK (nil "> sample.genome; beta:0-8\nGGGGAAAA\n" 36)"#]],
     )
 }
 
 fn two_bit_insert_fasta_wraps_every_complete_eighty_character_chunk() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_insert_fasta_wraps_every_complete_eighty_character_chunk",
         r##"(cl-letf
               (((symbol-function '2bit-open)
@@ -205,7 +200,6 @@ fn two_bit_insert_fasta_wraps_every_complete_eighty_character_chunk() -> ParityB
                   "ignored.2bit"
                   "chr1" 10 172)
                  (buffer-string))))"##,
-        true,
         expect![[
             r#"OK (nil "> fixture; chr1:10-172\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\nGG\n")"#
         ]],
@@ -213,7 +207,7 @@ fn two_bit_insert_fasta_wraps_every_complete_eighty_character_chunk() -> ParityB
 }
 
 fn two_bit_insert_commands_publish_the_exact_interactive_argument_contract() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_insert_commands_publish_the_exact_interactive_argument_contract",
         r##"(list
               (interactive-form
@@ -227,16 +221,14 @@ fn two_bit_insert_commands_publish_the_exact_interactive_argument_contract() -> 
                '2bit-insert-bases)
               (commandp
                '2bit-insert-fasta))"##,
-        true,
         expect![[
             r#"OK ((interactive (2bit--location-prompt)) (interactive (2bit--location-prompt)) nil t t)"#
         ]],
     )
 }
 
-#[test]
-fn commands_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn commands_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         two_bit_location_prompt_parses_dash_and_dot_ranges_without_numeric_prompts(),
         two_bit_location_prompt_reads_start_and_defaults_end_to_sequence_size(),
         two_bit_location_prompt_restores_the_callers_match_data(),
@@ -244,6 +236,5 @@ fn commands_public_surface_batch() {
         two_bit_insert_fasta_formats_header_and_short_sequence(),
         two_bit_insert_fasta_wraps_every_complete_eighty_character_chunk(),
         two_bit_insert_commands_publish_the_exact_interactive_argument_contract(),
-    ];
-    assert_two_bit_batch(&cases);
+    ]
 }

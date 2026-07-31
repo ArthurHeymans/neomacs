@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ASYNC_HTTP_QUEUE_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -148,22 +147,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_async_http_queue_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = async_http_queue_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("async-http-queue parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_async_http_queue_parity(elisp_form: &str, expected: Expect) {
-    assert_async_http_queue_source_parity("async-http-queue.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_async_http_queue_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_async_http_queue_source_parity("async-http-queue-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_async_http_queue_autoload_parity` cases (2a).
 pub(crate) fn assert_async_http_queue_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -185,3 +168,31 @@ pub(crate) fn assert_async_http_queue_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn async_http_queue_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_async_http_queue_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_async_http_queue_autoload_batch(&cases);
+}
+
+#[test]
+fn async_http_queue_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        registry::registry_async_http_queue_batch_cases(),
+        responses::responses_public_surface_batch_cases(),
+        scheduling::scheduling_public_surface_batch_cases(),
+        state::state_public_surface_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_async_http_queue_batch(&cases);
+}
+
+// END generated package batch tests

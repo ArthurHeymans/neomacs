@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atl_long_lines_batch};
+use super::ParityBatchCase;
 
 fn atl_long_lines_toggle_is_a_true_noop_when_minor_mode_is_disabled() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_toggle_is_a_true_noop_when_minor_mode_is_disabled",
         r##"(with-temp-buffer
          (let ((atl-long-lines-mode nil)
@@ -26,14 +26,13 @@ fn atl_long_lines_toggle_is_a_true_noop_when_minor_mode_is_disabled() -> ParityB
               measurements
               toggles
               truncate-lines))))"##,
-        true,
         expect!["OK (nil 0 nil nil)"],
     )
 }
 
 fn atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above_width()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above_width",
         r##"(mapcar
          (lambda (case)
@@ -68,7 +67,6 @@ fn atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above
            (80 81)
            (1 1)
            (0 1)))"##,
-        true,
         expect![
             "OK ((80 0 :toggled (1)) (80 79 :toggled (1)) (80 80 :toggled (1)) (80 81 :toggled (-1)) (1 1 :toggled (1)) (0 1 :toggled (-1)))"
         ],
@@ -76,7 +74,7 @@ fn atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above
 }
 
 fn atl_long_lines_toggle_changes_real_buffer_local_truncation_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_toggle_changes_real_buffer_local_truncation_state",
         r##"(with-temp-buffer
          (setq-local
@@ -112,13 +110,12 @@ fn atl_long_lines_toggle_changes_real_buffer_local_truncation_state() -> ParityB
             (nreverse results)
             (local-variable-p
              'truncate-lines))))"##,
-        true,
         expect!["OK ((t nil t) t)"],
     )
 }
 
 fn atl_long_lines_toggle_reacts_to_the_line_at_point_in_a_mixed_document() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_toggle_reacts_to_the_line_at_point_in_a_mixed_document",
         r##"(with-temp-buffer
          (insert
@@ -146,14 +143,13 @@ fn atl_long_lines_toggle_reacts_to_the_line_at_point_in_a_mixed_document() -> Pa
                  truncate-lines)
                 states)))
            (nreverse states)))"##,
-        true,
         expect!["OK ((1 4 t) (2 37 nil) (3 6 t) (2 37 nil) (1 4 t))"],
     )
 }
 
 fn atl_long_lines_toggle_measures_and_toggles_exactly_once_per_enabled_invocation()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_toggle_measures_and_toggles_exactly_once_per_enabled_invocation",
         r##"(with-temp-buffer
          (let ((atl-long-lines-mode t)
@@ -188,14 +184,13 @@ fn atl_long_lines_toggle_measures_and_toggles_exactly_once_per_enabled_invocatio
               width-reads
               measurements
               toggles))))"##,
-        true,
         expect!["OK (4 4 4)"],
     )
 }
 
 fn atl_long_lines_mute_apply_returns_last_value_and_preserves_body_evaluation_order()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_mute_apply_returns_last_value_and_preserves_body_evaluation_order",
         r##"(let (events)
          (list
@@ -205,14 +200,13 @@ fn atl_long_lines_mute_apply_returns_last_value_and_preserves_body_evaluation_or
             (list :result
                   (length events)))
           (nreverse events)))"##,
-        true,
         expect!["OK ((:result 2) (:first :second))"],
     )
 }
 
 fn atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_message_policy()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_message_policy",
         r##"(let ((message-log-max t)
                (inhibit-message nil)
@@ -240,14 +234,13 @@ fn atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_messa
               (nreverse messages)
               message-log-max
               inhibit-message))))"##,
-        true,
         expect![[r#"OK ((nil t "fixture-message") ("hidden 7") t nil)"#]],
     )
 }
 
 fn atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicalization()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicalization",
         r##"(let ((message-log-max 321)
                (inhibit-message :outer))
@@ -265,14 +258,13 @@ fn atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicaliz
                (cadr error-data)
                message-log-max
                inhibit-message)))))"##,
-        true,
         expect![[r#"OK (t error "fixture failure nil/t" 321 t)"#]],
     )
 }
 
 fn atl_long_lines_mute_apply_macro_declaration_and_expansion_keep_all_body_forms() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_mute_apply_macro_declaration_and_expansion_keep_all_body_forms",
         r##"(let ((expansion
                 (macroexpand
@@ -299,14 +291,12 @@ fn atl_long_lines_mute_apply_macro_declaration_and_expansion_keep_all_body_forms
            t)
           (let (first)
             (eval expansion t))))"##,
-        true,
         expect!["OK (0 t let t t 3)"],
     )
 }
 
-#[test]
-fn toggling_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn toggling_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         atl_long_lines_toggle_is_a_true_noop_when_minor_mode_is_disabled(),
         atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above_width(),
         atl_long_lines_toggle_changes_real_buffer_local_truncation_state(),
@@ -316,6 +306,5 @@ fn toggling_public_surface_batch() {
         atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_message_policy(),
         atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicalization(),
         atl_long_lines_mute_apply_macro_declaration_and_expansion_keep_all_body_forms(),
-    ];
-    assert_atl_long_lines_batch(&cases);
+    ]
 }

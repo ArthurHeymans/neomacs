@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aqi_batch};
+use super::ParityBatchCase;
 
 fn aqi_report_refreshes_a_real_org_buffer_with_the_latest_station_reading() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aqi_report_refreshes_a_real_org_buffer_with_the_latest_station_reading",
         r##"(let ((aqi-api-key "monitor-token")
                (aqi-use-cache nil)
@@ -55,7 +55,6 @@ fn aqi_report_refreshes_a_real_org_buffer_with_the_latest_station_reading() -> P
                   calls
                   readings)))
            (aqi-test-kill-report-buffers)))"##,
-        true,
         expect![[
             r#"OK ("* Air Quality index in Višnjan is 40\n\nMost recent report at 2023-05-30 12:00:00 (UTC+02:00).\n\n| Dominant pollutant                   |   o3 |\n| PM2.5 (fine particulate matter)      |   12 |\n| PM10 (respirable particulate matter) |   21 |\n| NO2 (Nitrogen Dioxide)               |   7 |\n| CO (Carbon Monoxide)                 |   3 |\n|                                      |    |\n| Temperature (Celsius)                |   24 |\n| Humidity                             |   61 |\n| Air pressure                         |   1014 |\n| Wind                                 |   5 |\n\nFurther details can be found at [[https://aqicn.example/station][aqicn]].\n\nData provided by World Air Quality Index and Local Sensor Network" t ("Air Quality Index in Višnjan is 65 and the dominant pollutant is pm25" org-mode t) "*Air Quality - Višnjan*" (("https://api.waqi.info/feed/Višnjan/" t (("token" . "monitor-token")) json-read) ("https://api.waqi.info/feed/Višnjan/" t (("token" . "monitor-token")) json-read)) nil)"#
         ]],
@@ -63,7 +62,7 @@ fn aqi_report_refreshes_a_real_org_buffer_with_the_latest_station_reading() -> P
 }
 
 fn aqi_cached_dashboard_reuses_each_station_reading_without_another_request() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aqi_cached_dashboard_reuses_each_station_reading_without_another_request",
         r##"(let ((aqi-api-key "dashboard-token")
                (aqi-use-cache t)
@@ -94,7 +93,6 @@ fn aqi_cached_dashboard_reuses_each_station_reading_without_another_request() ->
               first-station
               second-station
               calls))))"##,
-        true,
         expect![[
             r#"OK ("Air Quality Index in Taipei is 17 and the dominant pollutant is pm25 (cached)" "Air Quality Index in Taipei is 17 and the dominant pollutant is pm25 (cached)" "Air Quality Index in Station 7397 is 54 and the dominant pollutant is pm10 (cached)" "Air Quality Index in Station 7397 is 54 and the dominant pollutant is pm10 (cached)" ("https://api.waqi.info/feed/Taipei/" "https://api.waqi.info/feed/@7397/"))"#
         ]],
@@ -102,7 +100,7 @@ fn aqi_cached_dashboard_reuses_each_station_reading_without_another_request() ->
 }
 
 fn aqi_accessors_select_the_cleanest_destination_and_render_its_summary() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aqi_accessors_select_the_cleanest_destination_and_render_its_summary",
         r##"(let ((aqi-use-cache nil)
                (aqi-cached-data '(("None" . "None")))
@@ -145,7 +143,6 @@ fn aqi_accessors_select_the_cleanest_destination_and_render_its_summary() -> Par
               (aqi-city-lonlat city)
               (aqi-report-brief city)
               calls))))"##,
-        true,
         expect![[
             r#"OK ((("Osaka" . 42) ("Taipei" . 17) ("New Delhi" . 73)) (("Taipei" . 17) ("Osaka" . 42) ("New Delhi" . 73)) "45.274, 13.721" "Air Quality Index in Taipei is 17 and the dominant pollutant is pm25" ("https://api.waqi.info/feed/Osaka/" "https://api.waqi.info/feed/Taipei/" "https://api.waqi.info/feed/New Delhi/" "https://api.waqi.info/feed/Taipei/" "https://api.waqi.info/feed/Taipei/"))"#
         ]],
@@ -153,7 +150,7 @@ fn aqi_accessors_select_the_cleanest_destination_and_render_its_summary() -> Par
 }
 
 fn aqi_programmatic_report_recovers_from_an_unknown_station_on_the_next_fetch() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aqi_programmatic_report_recovers_from_an_unknown_station_on_the_next_fetch",
         r##"(let ((aqi-use-cache nil)
                (aqi-cached-data '(("None" . "None")))
@@ -182,7 +179,6 @@ fn aqi_programmatic_report_recovers_from_an_unknown_station_on_the_next_fetch() 
             (aqi-report-full "@missing")
             calls
             attempt)))"##,
-        true,
         expect![[
             r#"OK ("Request error: Unknown station (@missing)" "* Air Quality index in Central Station is 28\n\nMost recent report at 2023-05-30 12:00:00 (UTC+02:00).\n\n| Dominant pollutant                   |   pm25 |\n| PM2.5 (fine particulate matter)      |   12 |\n| PM10 (respirable particulate matter) |   21 |\n| NO2 (Nitrogen Dioxide)               |   7 |\n| CO (Carbon Monoxide)                 |   3 |\n|                                      |    |\n| Temperature (Celsius)                |   24 |\n| Humidity                             |   61 |\n| Air pressure                         |   1014 |\n| Wind                                 |   5 |\n\nFurther details can be found at [[https://aqicn.example/station][aqicn]].\n\nData provided by World Air Quality Index and Local Sensor Network" ("https://api.waqi.info/feed/@missing/" "https://api.waqi.info/feed/@missing/") 2)"#
         ]],
@@ -190,7 +186,7 @@ fn aqi_programmatic_report_recovers_from_an_unknown_station_on_the_next_fetch() 
 }
 
 fn aqi_station_search_and_geo_lookup_surface_success_and_transport_failure() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aqi_station_search_and_geo_lookup_surface_success_and_transport_failure",
         r##"(let* ((aqi-api-key "field-token")
                (message-log-max t)
@@ -264,21 +260,18 @@ fn aqi_station_search_and_geo_lookup_surface_success_and_transport_failure() -> 
                message-start
                (point-max)))
             calls)))"##,
-        true,
         expect![[
             r#"OK ("Search: [((station (name . Delhi Central) (uid . 7397)) (aqi . 54))]\n" "200: ((status . ok) (data (aqi . 51) (city (name . Sydney))))\n" "WAQI error: (file-error network unreachable)\n" (("https://api.waqi.info/search/?keyword=New Delhi&" t (("token" . "field-token")) json-read) ("https://api.waqi.info/feed/geo:-33.8688;151.2093/" t (("token" . "field-token")) json-read) ("https://api.waqi.info/search/?keyword=Offline&" t (("token" . "field-token")) json-read)))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         aqi_report_refreshes_a_real_org_buffer_with_the_latest_station_reading(),
         aqi_cached_dashboard_reuses_each_station_reading_without_another_request(),
         aqi_accessors_select_the_cleanest_destination_and_render_its_summary(),
         aqi_programmatic_report_recovers_from_an_unknown_station_on_the_next_fetch(),
         aqi_station_search_and_geo_lookup_surface_success_and_transport_failure(),
-    ];
-    assert_aqi_batch(&cases);
+    ]
 }

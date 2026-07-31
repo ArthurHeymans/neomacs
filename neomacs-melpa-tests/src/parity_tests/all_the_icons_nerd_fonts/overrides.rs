@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_all_the_icons_nerd_fonts_batch};
+use super::ParityBatchCase;
 
 fn readme_preference_routes_specific_overrides_family_conversions_and_real_fallbacks()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "readme_preference_routes_specific_overrides_family_conversions_and_real_fallbacks",
         r##"(let* ((override-map
                       (all-the-icons-nerd-fonts--build-override-map))
@@ -78,16 +78,16 @@ fn readme_preference_routes_specific_overrides_family_conversions_and_real_fallb
                          :face 'warning))))
                      (list fallback before preferred))
                  (all-the-icons-nerd-fonts-unprefer)))"##,
-        true,
         expect![[
             r#"OK ("3d_rotation" (("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit font-lock-constant-face) (raise -0.24)) ("" (57910) "Material Icons" (:family "Material Icons" :height 1.2 :inherit font-lock-keyword-face) (raise -0.24)) ("" (59469) "Material Icons" (:family "Material Icons" :height 1.2 :inherit warning) (raise -0.24))) (("" (60036) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-constant-face) (raise -0.24)) ("󰉢" (983650) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-keyword-face) (raise -0.24)) ("" (59469) "Material Icons" (:family "Material Icons" :height 1.2 :inherit warning) (raise -0.24))))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn user_override_customization_redirects_a_real_direct_call_with_arguments_intact()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "user_override_customization_redirects_a_real_direct_call_with_arguments_intact",
         r##"(let
                ((all-the-icons-nerd-fonts-overrides
@@ -123,7 +123,6 @@ fn user_override_customization_redirects_a_real_direct_call_with_arguments_intac
                          'all-the-icons-nerd-fonts
                          'all-the-icons-faicon)))))
                  (all-the-icons-nerd-fonts-unprefer)))"##,
-        true,
         expect![[
             r#"OK ("" (59304) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.7999999999999998 :inherit font-lock-type-face) (raise 0.12) t t)"#
         ]],
@@ -132,7 +131,7 @@ fn user_override_customization_redirects_a_real_direct_call_with_arguments_intac
 
 fn unprefer_restores_original_direct_rendering_after_a_real_preference_session() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "unprefer_restores_original_direct_rendering_after_a_real_preference_session",
         r##"(let* ((describe
                       (lambda (icon)
@@ -178,19 +177,17 @@ fn unprefer_restores_original_direct_rendering_after_a_real_preference_session()
                        'all-the-icons-nerd-fonts
                        'all-the-icons-faicon)))
                  (all-the-icons-nerd-fonts-unprefer)))"##,
-        true,
         expect![[
             r#"OK (("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit success)) ("" (60036) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit success)) ("" (61595) "FontAwesome" (:family "FontAwesome" :height 1.2 :inherit success)) t nil nil)"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn overrides_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn overrides_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         readme_preference_routes_specific_overrides_family_conversions_and_real_fallbacks(),
         user_override_customization_redirects_a_real_direct_call_with_arguments_intact(),
         unprefer_restores_original_direct_rendering_after_a_real_preference_session(),
-    ];
-    assert_all_the_icons_nerd_fonts_batch(&cases);
+    ]
 }

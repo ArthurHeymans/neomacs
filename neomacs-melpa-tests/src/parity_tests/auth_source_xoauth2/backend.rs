@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auth_source_xoauth2_batch};
+use super::ParityBatchCase;
 
 fn auth_source_xoauth2_search_builds_token_request_and_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_search_builds_token_request_and_match",
         r##"(let ((auth-source-xoauth2-creds
                 '(:token-url "https://token.example/oauth"
@@ -27,7 +27,6 @@ fn auth_source_xoauth2_search_builds_token_request_and_match() -> ParityBatchCas
              "alice@example"
              587)
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((:host "smtp.example" :port 587 :user "alice@example" :secret "access-token") ((:post "https://token.example/oauth" "client_id=client id&client_secret=s&cret&refresh_token=refresh+token&grant_type=refresh_token") (:debug "XOAUTH2 access token (user=%s host=%s): %s" ("alice@example" "smtp.example" "access-token"))))"#
         ]],
@@ -35,7 +34,7 @@ fn auth_source_xoauth2_search_builds_token_request_and_match() -> ParityBatchCas
 }
 
 fn auth_source_xoauth2_search_requires_every_credential_field() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_search_requires_every_credential_field",
         r##"(let (posts)
          (cl-letf
@@ -63,13 +62,12 @@ fn auth_source_xoauth2_search_requires_every_credential_field() -> ParityBatchCa
                 :client-id "id"
                 :client-secret "secret")))
             posts)))"##,
-        true,
         expect!["OK ((nil nil nil nil nil) nil)"],
     )
 }
 
 fn auth_source_xoauth2_search_requires_access_token_in_reply() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_search_requires_access_token_in_reply",
         r##"(let ((auth-source-xoauth2-creds
                 '(:token-url "url"
@@ -83,13 +81,12 @@ fn auth_source_xoauth2_search_requires_access_token_in_reply() -> ParityBatchCas
                    (expires_in . 3600)))))
            (auth-source-xoauth2--search
             "host" "user" 443)))"##,
-        true,
         expect!["OK nil"],
     )
 }
 
 fn auth_source_xoauth2_function_provider_receives_exact_coordinates() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_function_provider_receives_exact_coordinates",
         r##"(let (provider-calls
                posts)
@@ -112,7 +109,6 @@ fn auth_source_xoauth2_function_provider_receives_exact_coordinates() -> ParityB
                "imap.example" "alice" 993)
               (nreverse provider-calls)
               (nreverse posts)))))"##,
-        true,
         expect![[
             r#"OK ((:host "imap.example" :port 993 :user "alice" :secret "token") (("imap.example" "alice" 993)) (("url" "client_id=id&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
         ]],
@@ -120,7 +116,7 @@ fn auth_source_xoauth2_function_provider_receives_exact_coordinates() -> ParityB
 }
 
 fn auth_source_xoauth2_string_provider_delegates_to_file_backend() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_string_provider_delegates_to_file_backend",
         r##"(let ((auth-source-xoauth2-creds
                 "/fixture/credentials.gpg")
@@ -143,7 +139,6 @@ fn auth_source_xoauth2_string_provider_delegates_to_file_backend() -> ParityBatc
             (auth-source-xoauth2--search
              "host" "user" "port")
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((:host "host" :port "port" :user "user" :secret "file-token") (("/fixture/credentials.gpg" "host" "user" "port") ("url" "client_id=id&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
         ]],
@@ -152,7 +147,7 @@ fn auth_source_xoauth2_string_provider_delegates_to_file_backend() -> ParityBatc
 
 fn auth_source_xoauth2_public_search_scans_host_port_product_until_first_match() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_public_search_scans_host_port_product_until_first_match",
         r##"(let ((backend
                 auth-source-xoauth2-backend)
@@ -179,7 +174,6 @@ fn auth_source_xoauth2_public_search_scans_host_port_product_until_first_match()
              :port '(143 993 995)
              :max 1)
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (((:host "second.example" :user "alice" :port 993 :secret "token")) (("first.example" "alice" 143) ("first.example" "alice" 993) ("first.example" "alice" 995) ("second.example" "alice" 143) ("second.example" "alice" 993)))"#
         ]],
@@ -187,7 +181,7 @@ fn auth_source_xoauth2_public_search_scans_host_port_product_until_first_match()
 }
 
 fn auth_source_xoauth2_public_search_exhausts_product_and_normalizes_scalars() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_public_search_exhausts_product_and_normalizes_scalars",
         r##"(let ((backend
                 auth-source-xoauth2-backend)
@@ -209,13 +203,12 @@ fn auth_source_xoauth2_public_search_exhausts_product_and_normalizes_scalars() -
              :user nil
              :port nil)
             (nreverse calls))))"##,
-        true,
         expect![[r#"OK (nil nil (("one.example" "alice" 443) (nil nil nil)))"#]],
     )
 }
 
 fn auth_source_xoauth2_public_search_validates_requested_type() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_public_search_validates_requested_type",
         r##"(let ((backend
                 auth-source-xoauth2-backend))
@@ -234,7 +227,6 @@ fn auth_source_xoauth2_public_search_validates_requested_type() -> ParityBatchCa
                   :user "user"
                   :port 443))))
             '(nil xoauth2 password-store pass))))"##,
-        true,
         expect![[
             r#"OK ((:ok nil) (:ok nil) (:error error ("Invalid XOAuth2 search: nil nil")) (:error error ("Invalid XOAuth2 search: nil nil")))"#
         ]],
@@ -242,7 +234,7 @@ fn auth_source_xoauth2_public_search_validates_requested_type() -> ParityBatchCa
 }
 
 fn auth_source_xoauth2_backend_parser_and_slots_match_registration() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_backend_parser_and_slots_match_registration",
         r##"(let ((parsed
                 (auth-source-backend-parse
@@ -262,16 +254,14 @@ fn auth_source_xoauth2_backend_parser_and_slots_match_registration() -> ParityBa
           (mapcar
            #'auth-source-xoauth2-backend-parse
            '(nil "xoauth2" pass default xoauth2-other))))"##,
-        true,
         expect![[
             r#"OK (t (xoauth2 "." t t t auth-source-xoauth2-search) t (nil nil nil nil nil))"#
         ]],
     )
 }
 
-#[test]
-fn backend_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn backend_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auth_source_xoauth2_search_builds_token_request_and_match(),
         auth_source_xoauth2_search_requires_every_credential_field(),
         auth_source_xoauth2_search_requires_access_token_in_reply(),
@@ -281,6 +271,5 @@ fn backend_public_surface_batch() {
         auth_source_xoauth2_public_search_exhausts_product_and_normalizes_scalars(),
         auth_source_xoauth2_public_search_validates_requested_type(),
         auth_source_xoauth2_backend_parser_and_slots_match_registration(),
-    ];
-    assert_auth_source_xoauth2_batch(&cases);
+    ]
 }

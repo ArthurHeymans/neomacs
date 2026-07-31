@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asciidoc_mode_batch};
+use super::ParityBatchCase;
 
 fn real_pinned_grammars_activate_both_parsers_and_the_complete_mode_integration() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "real_pinned_grammars_activate_both_parsers_and_the_complete_mode_integration",
         r##"(with-temp-buffer
   (insert
@@ -39,7 +39,6 @@ fn real_pinned_grammars_activate_both_parsers_and_the_complete_mode_integration(
          flymake-diagnostic-functions)
    comment-start
    comment-start-skip))"##,
-        true,
         expect![[
             r#"OK (asciidoc-mode "AsciiDoc" text-mode t t t (asciidoc asciidoc-inline) asciidoc ((comment title) (block delimiter table list attribute macro metadata) (inline-markup inline-link inline-macro inline-reference) (replacement)) (("Section" "\\`title[1-5]\\'" nil asciidoc--imenu-name)) "\\`\\(?:document_title\\|title[1-5]\\)\\'" "\\`\\(?:document_title\\|title[1-5]\\)\\'" t t (asciidoc--xref-backend t) (asciidoc--capf t ispell-completion-at-point) (asciidoc-flymake t) "// " "^//+\\s-*")"#
         ]],
@@ -48,7 +47,7 @@ fn real_pinned_grammars_activate_both_parsers_and_the_complete_mode_integration(
 
 fn grammar_install_command_installs_only_missing_languages_with_exact_recipes_and_messages()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "grammar_install_command_installs_only_missing_languages_with_exact_recipes_and_messages",
         r##"(let ((available '(asciidoc))
        installs
@@ -81,7 +80,6 @@ fn grammar_install_command_installs_only_missing_languages_with_exact_recipes_an
      (nreverse messages)
      (nreverse source-alists)
      available)))"##,
-        true,
         expect![[
             r#"OK (nil (asciidoc-inline) ("Installing tree-sitter grammar for asciidoc-inline..." "Installing tree-sitter grammar for asciidoc-inline...done") (((asciidoc "https://github.com/cathaysia/tree-sitter-asciidoc" nil "tree-sitter-asciidoc/src") (asciidoc-inline "https://github.com/cathaysia/tree-sitter-asciidoc" nil "tree-sitter-asciidoc_inline/src"))) (asciidoc-inline asciidoc))"#
         ]],
@@ -90,7 +88,7 @@ fn grammar_install_command_installs_only_missing_languages_with_exact_recipes_an
 
 fn grammar_install_command_propagates_install_failure_without_attempting_later_messages()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "grammar_install_command_propagates_install_failure_without_attempting_later_messages",
         r##"(let (calls)
   (cl-letf
@@ -118,7 +116,6 @@ fn grammar_install_command_propagates_install_failure_without_attempting_later_m
         (car error)
         (cdr error)
         (nreverse calls))))))"##,
-        true,
         expect![[
             r#"OK (error ("compiler rejected asciidoc") ((available asciidoc) (message "Installing tree-sitter grammar for asciidoc...") (install asciidoc)))"#
         ]],
@@ -127,7 +124,7 @@ fn grammar_install_command_propagates_install_failure_without_attempting_later_m
 
 fn grammarless_fallback_remains_a_usable_text_mode_with_comments_filling_and_flymake()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "grammarless_fallback_remains_a_usable_text_mode_with_comments_filling_and_flymake",
         r##"(cl-letf
     (((symbol-function 'asciidoc--ensure-grammars)
@@ -158,20 +155,17 @@ fn grammarless_fallback_remains_a_usable_text_mode_with_comments_filling_and_fly
      (string-match-p
       "^[ \t]*//"
       (buffer-string)))))"##,
-        true,
         expect![[
             r#"OK (asciidoc-mode text-mode nil nil nil nil (asciidoc-flymake t) "// " "^//+\\s-*" "= Fallback Document\n\nVisit https://example.com/a/b for\npractical details about the project.\n" nil)"#
         ]],
     )
 }
 
-#[test]
-fn activation_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn activation_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         real_pinned_grammars_activate_both_parsers_and_the_complete_mode_integration(),
         grammar_install_command_installs_only_missing_languages_with_exact_recipes_and_messages(),
         grammar_install_command_propagates_install_failure_without_attempting_later_messages(),
         grammarless_fallback_remains_a_usable_text_mode_with_comments_filling_and_flymake(),
-    ];
-    assert_asciidoc_mode_batch(&cases);
+    ]
 }

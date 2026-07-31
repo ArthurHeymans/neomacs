@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ASM_BLOX_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -285,22 +284,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_asm_blox_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = asm_blox_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("asm-blox parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_asm_blox_parity(elisp_form: &str, expected: Expect) {
-    assert_asm_blox_source_parity("asm-blox.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_asm_blox_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_asm_blox_source_parity("asm-blox-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_asm_blox_autoload_parity` cases (2a).
 pub(crate) fn assert_asm_blox_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -322,3 +305,35 @@ pub(crate) fn assert_asm_blox_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn asm_blox_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_asm_blox_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_asm_blox_autoload_batch(&cases);
+}
+
+#[test]
+fn asm_blox_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        editing::editing_public_surface_batch_cases(),
+        files::files_public_surface_batch_cases(),
+        parser::parser_public_surface_batch_cases(),
+        puzzles::puzzles_public_surface_batch_cases(),
+        registry::registry_asm_blox_batch_cases(),
+        runtime::runtime_public_surface_batch_cases(),
+        sources_sinks::sources_sinks_public_surface_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+        yaml_cells::yaml_cells_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_asm_blox_batch(&cases);
+}
+
+// END generated package batch tests

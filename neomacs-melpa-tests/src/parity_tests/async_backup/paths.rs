@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_async_backup_batch};
+use super::ParityBatchCase;
 
 fn async_backup_explicit_file_builds_exact_timestamped_output_tree_and_child_command()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_explicit_file_builds_exact_timestamped_output_tree_and_child_command",
         r##"(let* ((file
                 (async-backup-test-write-file
@@ -34,7 +34,6 @@ fn async_backup_explicit_file_builds_exact_timestamped_output_tree_and_child_com
                (directory-file-name async-backup-location)
                (file-name-directory file)))
              (file-exists-p file))))"##,
-        true,
         expect![[
             r#"OK (:child ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//project/src/report.txt\" \"$ROOT//backups$ROOT//project/src/report-2026-07-27T13-20-45.txt\")") t t)"#
         ]],
@@ -42,7 +41,7 @@ fn async_backup_explicit_file_builds_exact_timestamped_output_tree_and_child_com
 }
 
 fn async_backup_file_without_extension_keeps_complete_base_name() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_file_without_extension_keeps_complete_base_name",
         r##"(let* ((file
                 (async-backup-test-write-file
@@ -63,7 +62,6 @@ fn async_backup_file_without_extension_keeps_complete_base_name() -> ParityBatch
              (file-directory-p
               (async-backup-test-path
                "backup-root")))))"##,
-        true,
         expect![[
             r#"OK (:started ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//project/bin/LICENSE\" \"$ROOT//backup-root$ROOT//project/bin/LICENSE-STAMP\")") t)"#
         ]],
@@ -72,7 +70,7 @@ fn async_backup_file_without_extension_keeps_complete_base_name() -> ParityBatch
 
 fn async_backup_multi_extension_dotfile_unicode_and_quoted_names_are_escaped_exactly()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_multi_extension_dotfile_unicode_and_quoted_names_are_escaped_exactly",
         r##"(let ((async-backup-location
                 (async-backup-test-path "backups"))
@@ -97,7 +95,6 @@ fn async_backup_multi_extension_dotfile_unicode_and_quoted_names_are_escaped_exa
                            :started)))
                 (async-backup file))))
           (nreverse commands))"##,
-        true,
         expect![[
             r#"OK (("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//names/archive.tar.gz\" \"$ROOT//backups$ROOT//names/archive.tar-T.gz\")") ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//names/.env\" \"$ROOT//backups$ROOT//names/.env-T\")") ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//names/β界 file.el\" \"$ROOT//backups$ROOT//names/β界 file-T.el\")") ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//names/quote\\\"and\\\\\\\\slash.org\" \"$ROOT//backups$ROOT//names/quote\\\"and\\\\\\\\slash-T.org\")"))"#
         ]],
@@ -105,7 +102,7 @@ fn async_backup_multi_extension_dotfile_unicode_and_quoted_names_are_escaped_exa
 }
 
 fn async_backup_without_argument_uses_current_buffer_visited_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_without_argument_uses_current_buffer_visited_file",
         r##"(let* ((file
                 (async-backup-test-write-file
@@ -129,7 +126,6 @@ fn async_backup_without_argument_uses_current_buffer_visited_file() -> ParityBat
                    (async-backup-test-normalize-command
                     captured))))
             (async-backup-test-kill-file-buffer file)))"##,
-        true,
         expect![[
             r#"OK (:buffer-child t ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//buffers/current.org\" \"$ROOT//buffer-backups$ROOT//buffers/current-CURRENT.org\")"))"#
         ]],
@@ -137,7 +133,7 @@ fn async_backup_without_argument_uses_current_buffer_visited_file() -> ParityBat
 }
 
 fn async_backup_relative_file_is_expanded_against_current_default_directory() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_relative_file_is_expanded_against_current_default_directory",
         r##"(let* ((work
                 (async-backup-test-path
@@ -164,7 +160,6 @@ fn async_backup_relative_file_is_expanded_against_current_default_directory() ->
                      "src/code.rs"
                      default-directory))
              (async-backup-test-normalize-command captured))))"##,
-        true,
         expect![[
             r#"OK (:started t ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//relative/project/src/code.rs\" \"$ROOT//relative/backups$ROOT//relative/project/src/code-REL.rs\")"))"#
         ]],
@@ -173,7 +168,7 @@ fn async_backup_relative_file_is_expanded_against_current_default_directory() ->
 
 fn async_backup_relative_location_is_expanded_before_appending_source_directory() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_relative_location_is_expanded_before_appending_source_directory",
         r##"(let* ((work
                 (async-backup-test-path "location-work/"))
@@ -197,7 +192,6 @@ fn async_backup_relative_location_is_expanded_before_appending_source_directory(
              (file-directory-p
               (async-backup-test-path
                "relative-backups")))))"##,
-        true,
         expect![[
             r#"OK (:started ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//location-work/input/a.md\" \"$ROOT//relative-backups$ROOT//location-work/input/a-LOC.md\")") t)"#
         ]],
@@ -206,7 +200,7 @@ fn async_backup_relative_location_is_expanded_before_appending_source_directory(
 
 fn async_backup_location_with_or_without_trailing_separator_produces_same_target() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_location_with_or_without_trailing_separator_produces_same_target",
         r##"(let* ((file
                 (async-backup-test-write-file
@@ -234,7 +228,6 @@ fn async_backup_location_with_or_without_trailing_separator_produces_same_target
              ordered
              (equal (car ordered)
                     (cadr ordered)))))"##,
-        true,
         expect![[
             r#"OK ((("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//slash/input.data\" \"$ROOT//slash/backups$ROOT//slash/input-SAME.data\")") ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//slash/input.data\" \"$ROOT//slash/backups$ROOT//slash/input-SAME.data\")")) t)"#
         ]],
@@ -243,7 +236,7 @@ fn async_backup_location_with_or_without_trailing_separator_produces_same_target
 
 fn async_backup_non_file_buffer_signals_before_creating_backup_tree_or_process() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_non_file_buffer_signals_before_creating_backup_tree_or_process",
         r##"(let ((async-backup-location
                 (async-backup-test-path "nil-buffer/backups"))
@@ -259,13 +252,12 @@ fn async_backup_non_file_buffer_signals_before_creating_backup_tree_or_process()
                (file-exists-p
                 async-backup-location)
                started))))"##,
-        true,
         expect!["OK ((:error wrong-type-argument (stringp nil)) nil nil)"],
     )
 }
 
 fn async_backup_output_parent_collision_signals_before_predicates_or_process() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_output_parent_collision_signals_before_predicates_or_process",
         r##"(let* ((file
                 (async-backup-test-write-file
@@ -294,7 +286,6 @@ fn async_backup_output_parent_collision_signals_before_predicates_or_process() -
                predicate-called
                started
                (file-regular-p root)))))"##,
-        true,
         expect![[
             r#"OK ((:error file-already-exists ("File exists" "[ORACLE-SANDBOX]/blocked/root-as-file")) nil nil t)"#
         ]],
@@ -302,7 +293,7 @@ fn async_backup_output_parent_collision_signals_before_predicates_or_process() -
 }
 
 fn async_backup_directory_input_still_builds_a_child_copy_command() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_directory_input_still_builds_a_child_copy_command",
         r##"(let* ((directory
                 (async-backup-test-path "directory-input/source/"))
@@ -321,7 +312,6 @@ fn async_backup_directory_input_still_builds_a_child_copy_command() -> ParityBat
               (lambda ()
                 (async-backup directory)))
              (async-backup-test-normalize-command captured))))"##,
-        true,
         expect![[
             r#"OK ((:ok :started) ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//directory-input/source/\" \"$ROOT//directory-input/backups$ROOT//directory-input/source/-DIR\")"))"#
         ]],
@@ -329,7 +319,7 @@ fn async_backup_directory_input_still_builds_a_child_copy_command() -> ParityBat
 }
 
 fn async_backup_missing_input_still_constructs_target_and_launches_child() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_missing_input_still_constructs_target_and_launches_child",
         r##"(let* ((file
                 (async-backup-test-path "missing/source.txt"))
@@ -350,7 +340,6 @@ fn async_backup_missing_input_still_constructs_target_and_launches_child() -> Pa
               (concat
                (directory-file-name async-backup-location)
                (file-name-directory file))))))"##,
-        true,
         expect![[
             r#"OK (nil :started ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//missing/source.txt\" \"$ROOT//missing/backups$ROOT//missing/source-MISS.txt\")") t)"#
         ]],
@@ -358,7 +347,7 @@ fn async_backup_missing_input_still_constructs_target_and_launches_child() -> Pa
 }
 
 fn async_backup_symlink_path_is_preserved_in_predicate_and_child_command() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_backup_symlink_path_is_preserved_in_predicate_and_child_command",
         r##"(let* ((target
                 (async-backup-test-write-file
@@ -390,16 +379,14 @@ fn async_backup_symlink_path_is_preserved_in_predicate_and_child_command() -> Pa
                (file-symlink-p link)
                (async-backup-test-normalize-command
                 captured)))))"##,
-        true,
         expect![[
             r#"OK (:started t "[ORACLE-SANDBOX]/symlink/real/source.txt" ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//symlink/alias/source-link.txt\" \"$ROOT//symlink/backups$ROOT//symlink/alias/source-link-LINK.txt\")"))"#
         ]],
     )
 }
 
-#[test]
-fn paths_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn paths_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         async_backup_explicit_file_builds_exact_timestamped_output_tree_and_child_command(),
         async_backup_file_without_extension_keeps_complete_base_name(),
         async_backup_multi_extension_dotfile_unicode_and_quoted_names_are_escaped_exactly(),
@@ -412,6 +399,5 @@ fn paths_public_surface_batch() {
         async_backup_directory_input_still_builds_a_child_copy_command(),
         async_backup_missing_input_still_constructs_target_and_launches_child(),
         async_backup_symlink_path_is_preserved_in_predicate_and_child_command(),
-    ];
-    assert_async_backup_batch(&cases);
+    ]
 }

@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ACE_WINDOW_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -123,16 +122,21 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_ace_window_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ace_window_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("ace-window parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_ace_window_parity` cases (2a).
 pub(crate) fn assert_ace_window_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(ace_window_oracle(), &name, "ace_window_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn ace_window_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_ace_window_batch(&cases);
+}
+
+// END generated package batch tests

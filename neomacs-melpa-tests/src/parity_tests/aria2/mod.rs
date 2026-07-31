@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ARIA2_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -93,16 +92,21 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed aria2 parity test").into()
 }
 
-pub(crate) fn assert_aria2_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = aria2_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("aria2 parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_aria2_parity` cases (2a).
 pub(crate) fn assert_aria2_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(aria2_oracle(), &name, "aria2_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn aria2_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_aria2_batch(&cases);
+}
+
+// END generated package batch tests

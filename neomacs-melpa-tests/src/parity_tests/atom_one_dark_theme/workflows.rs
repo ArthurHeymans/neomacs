@@ -9,7 +9,7 @@
 
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atom_one_dark_theme_batch};
+use super::ParityBatchCase;
 
 /// The same HTML buffer with the remapping on and off, side by side.
 ///
@@ -34,9 +34,8 @@ use super::{ParityBatchCase, assert_atom_one_dark_theme_batch};
 /// manufacturing one would be inventing the capability. The relative-spec
 /// lookup here is what the display engine does with the same alist, and the
 /// unremapped `face-attribute` value beside it is what the entry overrides.
-
 fn the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched",
         r##"(cl-labels
               ((observe
@@ -87,16 +86,12 @@ fn the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched() ->
                                  (plist-get off :remapped))))))
               (when (custom-theme-enabled-p 'atom-one-dark)
                 (disable-theme 'atom-one-dark))))"##,
-        true,
         expect![[
             r##"OK (:with-remapping (:face-properties (font-lock-function-name-face font-lock-variable-name-face) :remapped ((font-lock-function-name-face "#61AFEF" "#E06C75") (font-lock-variable-name-face "#E06C75" "#D19A66"))) :without-remapping (:face-properties (font-lock-function-name-face font-lock-variable-name-face) :remapped ((font-lock-function-name-face "#61AFEF" nil) (font-lock-variable-name-face "#E06C75" nil))) :face-properties-are-identical t :colours-differ t)"##
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched()];
-    assert_atom_one_dark_theme_batch(&cases);
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched()]
 }

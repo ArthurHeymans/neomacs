@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_anaphora_batch};
+use super::ParityBatchCase;
 
 /// The reason to reach for `aif' at all: look something up once, then use the
 /// result without naming it.  The lookup counter is the point -- four forms,
@@ -8,10 +8,9 @@ use super::{ParityBatchCase, assert_anaphora_batch};
 /// branches show what plain `if' cannot give you, `it' bound to the nil the
 /// lookup returned.  `awhen' returns nil for a missing project and the value of
 /// its last body form for a found one, including when that project is empty.
-
 fn looking_a_project_up_binds_it_in_both_branches_and_evaluates_the_lookup_once() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "looking_a_project_up_binds_it_in_both_branches_and_evaluates_the_lookup_once",
         r##"(let ((lookups 0))
   (cl-flet ((project (name)
@@ -27,7 +26,6 @@ fn looking_a_project_up_binds_it_in_both_branches_and_evaluates_the_lookup_once(
                         (list (plist-get it :name) (plist-get it :tasks)))
           :when-missing (awhen (project "nope") :never)
           :lookups lookups)))"##,
-        true,
         expect![[
             r#"OK (:found ("neomacs" 3) :missing (:fallback nil) :when-found ("scratch" nil) :when-missing nil :lookups 4)"#
         ]],
@@ -35,7 +33,7 @@ fn looking_a_project_up_binds_it_in_both_branches_and_evaluates_the_lookup_once(
 }
 
 fn nested_anaphoric_forms_shadow_it_and_restore_the_outer_binding() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "nested_anaphoric_forms_shadow_it_and_restore_the_outer_binding",
         r##"(alet (anaphora-test-project "neomacs")
   (list :outer (plist-get it :name)
@@ -53,7 +51,6 @@ fn nested_anaphoric_forms_shadow_it_and_restore_the_outer_binding() -> ParityBat
                                       (upcase it)
                                     (list :no-email (plist-get it :login))))))
         :restored-again (plist-get it :name)))"##,
-        true,
         expect![[
             r#"OK (:outer "neomacs" :inner (:login "eval-exec" :deeper "EXEC@EXAMPLE.COM") :restored "neomacs" :captured "neomacs" :second-project ("scratch" (:no-email nil)) :restored-again "neomacs")"#
         ]],
@@ -61,7 +58,7 @@ fn nested_anaphoric_forms_shadow_it_and_restore_the_outer_binding() -> ParityBat
 }
 
 fn aand_walks_into_nested_data_and_stops_at_the_first_missing_step() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aand_walks_into_nested_data_and_stops_at_the_first_missing_step",
         r##"(let ((steps nil))
   (cl-flet ((note (label value) (push label steps) value))
@@ -79,7 +76,6 @@ fn aand_walks_into_nested_data_and_stops_at_the_first_missing_step() -> ParityBa
             :short short
             :none none
             :steps (nreverse steps)))))"##,
-        true,
         expect![[
             r#"OK (:full "EXEC@EXAMPLE.COM" :short nil :none nil :steps (:owner :email :upcase :owner :email))"#
         ]],
@@ -87,7 +83,7 @@ fn aand_walks_into_nested_data_and_stops_at_the_first_missing_step() -> ParityBa
 }
 
 fn acond_classifies_each_record_with_the_value_its_own_clause_tested() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "acond_classifies_each_record_with_the_value_its_own_clause_tested",
         r##"(let ((tests 0))
   (cl-flet ((points (task) (setq tests (1+ tests)) (plist-get task :points)))
@@ -102,7 +98,6 @@ fn acond_classifies_each_record_with_the_value_its_own_clause_tested() -> Parity
           :tests tests
           :no-clause-matches (acond (nil :never) ((cdr nil) :never-either))
           :bare-clause-value (acond ((plist-get (car (anaphora-test-tasks "neomacs")) :title))))))"##,
-        true,
         expect![[
             r#"OK (:classified ((:done t) (:estimated 8 16) "write docs") :tests 2 :no-clause-matches nil :bare-clause-value "port isearch")"#
         ]],
@@ -110,7 +105,7 @@ fn acond_classifies_each_record_with_the_value_its_own_clause_tested() -> Parity
 }
 
 fn a_recursive_walk_a_work_queue_and_the_arithmetic_macros_build_a_report() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_recursive_walk_a_work_queue_and_the_arithmetic_macros_build_a_report",
         r##"(let* ((points (mapcar (lambda (task) (or (plist-get task :points) 0))
                        (anaphora-test-tasks "neomacs")))
@@ -134,7 +129,6 @@ fn a_recursive_walk_a_work_queue_and_the_arithmetic_macros_build_a_report() -> P
         :quotient (a/ 100 5 it)
         :no-it-in-the-dividend (condition-case error (a- 10 (/ it 2) it) (error error))
         :empty-sums (list (a+) (a*) (a- 4))))"##,
-        true,
         expect![[
             r#"OK (:tree-total 15 :titles (("port isearch" 12) ("fix the collector" 17) ("write docs" 10)) :points (5 8 0) :sum 13 :product 48 :difference 2 :quotient 4 :no-it-in-the-dividend (void-variable it) :empty-sums (0 1 -4))"#
         ]],
@@ -143,7 +137,7 @@ fn a_recursive_walk_a_work_queue_and_the_arithmetic_macros_build_a_report() -> P
 
 fn the_long_names_are_the_same_macros_and_the_short_aliases_carry_their_metadata() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_long_names_are_the_same_macros_and_the_short_aliases_carry_their_metadata",
         r##"(let ((installed
        (list :same-result
@@ -171,7 +165,6 @@ fn the_long_names_are_the_same_macros_and_the_short_aliases_carry_their_metadata
                                  (aif (anaphora-test-project "scratch")
                                      (plist-get it :name)
                                    :none)))))"##,
-        true,
         expect![[
             r#"OK (:installed (:same-result ("neomacs" "neomacs") :alias anaphoric-if :indent (2 2 1) :edebug (t cond lambda) :long-names-only nil) :after-removal (:short (nil nil nil) :long (t t) :long-still-works "scratch") :after-reinstall (t anaphoric-+ "scratch"))"#
         ]],
@@ -179,7 +172,7 @@ fn the_long_names_are_the_same_macros_and_the_short_aliases_carry_their_metadata
 }
 
 fn byte_compiling_the_same_anaphoric_code_gives_the_same_answers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "byte_compiling_the_same_anaphoric_code_gives_the_same_answers",
         r##"(let* ((source '(lambda (projects)
                     (list :login (aand (car projects)
@@ -209,16 +202,14 @@ fn byte_compiling_the_same_anaphoric_code_gives_the_same_answers() -> ParityBatc
         :agree (equal interpreted-result compiled-result)
         :compiled-is-byte-code (byte-code-function-p compiled)
         :interpreted-is-byte-code (byte-code-function-p interpreted)))"##,
-        true,
         expect![[
             r#"OK (:interpreted (:login "EVAL-EXEC" :states ((:done t) 80 :none) :depth 3 :drained (1 4 9)) :agree t :compiled-is-byte-code t :interpreted-is-byte-code nil)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         looking_a_project_up_binds_it_in_both_branches_and_evaluates_the_lookup_once(),
         nested_anaphoric_forms_shadow_it_and_restore_the_outer_binding(),
         aand_walks_into_nested_data_and_stops_at_the_first_missing_step(),
@@ -226,6 +217,5 @@ fn workflows_public_surface_batch() {
         a_recursive_walk_a_work_queue_and_the_arithmetic_macros_build_a_report(),
         the_long_names_are_the_same_macros_and_the_short_aliases_carry_their_metadata(),
         byte_compiling_the_same_anaphoric_code_gives_the_same_answers(),
-    ];
-    assert_anaphora_batch(&cases);
+    ]
 }

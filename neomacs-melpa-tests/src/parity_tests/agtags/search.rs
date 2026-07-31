@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_agtags_batch};
+use super::ParityBatchCase;
 
 /// The everyday loop: point sits on `parser_reset' in main.c, `agtags-find-tag'
 /// offers it as the default, the hit list is rendered in `*agtags-grep*', and
@@ -8,10 +8,9 @@ use super::{ParityBatchCase, assert_agtags_batch};
 /// searches for a symbol GNU GLOBAL does not know: real global 6.6.14 exits 0
 /// with no output, so the result buffer reports no matches rather than an
 /// error, and the previous hit list is gone.
-
 fn agtags_find_tag_lists_the_definition_jumps_to_it_and_reports_an_unknown_tag() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agtags_find_tag_lists_the_definition_jumps_to_it_and_reports_an_unknown_tag",
         r####"
 (let* ((start (neomacs-agtags-test-start "agtags-find-tag-workflow"))
@@ -63,7 +62,6 @@ fn agtags_find_tag_lists_the_definition_jumps_to_it_and_reports_an_unknown_tag()
     (neomacs-agtags-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (("*agtags-grep*" (agtags-grep-mode "Global Grep") "-*- mode: agtags-grep; default-directory: \"[ORACLE-SANDBOX]/agtags-find-tag-workflow/\" -*-\nGlobal Grep started at TIME\n\nglobal --result=grep parser_reset\nsrc/parser.c:11:int parser_reset(int state) {\n\nGlobal Grep finished with matches found at TIME\n") (("src/parser.c" 11 0 "int parser_reset(int state) {") "parser.c" c-mode) "-*- mode: agtags-grep; default-directory: \"[ORACLE-SANDBOX]/agtags-find-tag-workflow/\" -*-\nGlobal Grep started at TIME\n\nglobal --result=grep zzz_absent\n\nGlobal Grep finished with no matches found at TIME\n" ("Find tag (default parser_reset): " "Find tag (default int): ") "gtags cwd=[ORACLE-SANDBOX]/agtags-find-tag-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-find-tag-workflow <--result=grep> <parser_reset>\nglobal cwd=[ORACLE-SANDBOX]/agtags-find-tag-workflow <--result=grep> <zzz_absent>\n")"#
         ]],
@@ -71,7 +69,7 @@ fn agtags_find_tag_lists_the_definition_jumps_to_it_and_reports_an_unknown_tag()
 }
 
 fn agtags_find_file_opens_a_listed_file_and_the_next_search_retires_the_list() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agtags_find_file_opens_a_listed_file_and_the_next_search_retires_the_list",
         r####"
 (let* ((start (neomacs-agtags-test-start "agtags-find-file-workflow"))
@@ -123,7 +121,6 @@ fn agtags_find_file_opens_a_listed_file_and_the_next_search_retires_the_list() -
     (neomacs-agtags-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r##"OK (("*agtags-path*" (agtags-path-mode "Global Files") "-*- mode: agtags-path; default-directory: \"[ORACLE-SANDBOX]/agtags-find-file-workflow/\" -*-\nGlobal Files started at TIME\n\nglobal --result=path -P \\\\.c\\$\nsrc/main.c\nsrc/parser.c\n\nGlobal Files finished at TIME\n") (("src/parser.c" 1 0 "#include \"parser.h\"") c-mode) "-*- mode: agtags-grep; default-directory: \"[ORACLE-SANDBOX]/agtags-find-file-workflow/\" -*-\nGlobal Grep started at TIME\n\nglobal --result=grep parser_reset\nsrc/parser.c:11:int parser_reset(int state) {\n\nGlobal Grep finished with matches found at TIME\n" (t nil) "*agtags-grep*" ("Find files: " "Find tag: ") "gtags cwd=[ORACLE-SANDBOX]/agtags-find-file-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-find-file-workflow <--result=path> <-P> <\\.c$>\nglobal cwd=[ORACLE-SANDBOX]/agtags-find-file-workflow <--result=grep> <parser_reset>\n")"##
         ]],
@@ -131,7 +128,7 @@ fn agtags_find_file_opens_a_listed_file_and_the_next_search_retires_the_list() -
 }
 
 fn agtags_search_options_add_global_flags_and_change_which_lines_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agtags_search_options_add_global_flags_and_change_which_lines_match",
         r####"
 (let* ((start (neomacs-agtags-test-start "agtags-options-workflow"))
@@ -180,19 +177,16 @@ fn agtags_search_options_add_global_flags_and_change_which_lines_match() -> Pari
     (neomacs-agtags-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK ("-*- mode: agtags-grep; default-directory: \"[ORACLE-SANDBOX]/agtags-options-workflow/\" -*-\nGlobal Grep started at TIME\n\nglobal --result=grep -g parser_reset\ninclude/parser.h:4:int parser_reset(int state);\nsrc/main.c:11:  return parser_reset(input);\nsrc/parser.c:11:int parser_reset(int state) {\nsrc/parser.c:18:  return parser_reset(state - 1);\n\nGlobal Grep finished with matches found at TIME\n" "-*- mode: agtags-grep; default-directory: \"[ORACLE-SANDBOX]/agtags-options-workflow/\" -*-\nGlobal Grep started at TIME\n\nglobal --result=grep -o -g parser_reset\ndocs/notes.txt:4:parser_reset returns the next state.\ninclude/parser.h:4:int parser_reset(int state);\nsrc/main.c:11:  return parser_reset(input);\nsrc/parser.c:11:int parser_reset(int state) {\nsrc/parser.c:18:  return parser_reset(state - 1);\n\nGlobal Grep finished with matches found at TIME\n" "-*- mode: agtags-grep; default-directory: \"[ORACLE-SANDBOX]/agtags-options-workflow/\" -*-\nGlobal Grep started at TIME\n\nglobal --result=grep -i parser_reset\nsrc/parser.c:11:int parser_reset(int state) {\n\nGlobal Grep finished with matches found at TIME\n" "-*- mode: agtags-grep; default-directory: \"[ORACLE-SANDBOX]/agtags-options-workflow/\" -*-\nGlobal Grep started at TIME\n\nglobal --result=grep -g \\状\\態\nsrc/parser.c:12:  /* 状態をリセットする */\n\nGlobal Grep finished with matches found at TIME\n" "gtags cwd=[ORACLE-SANDBOX]/agtags-options-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-options-workflow <--result=grep> <-g> <parser_reset>\nglobal cwd=[ORACLE-SANDBOX]/agtags-options-workflow <--result=grep> <-o> <-g> <parser_reset>\nglobal cwd=[ORACLE-SANDBOX]/agtags-options-workflow <--result=grep> <-i> <parser_reset>\nglobal cwd=[ORACLE-SANDBOX]/agtags-options-workflow <--result=grep> <-g> <状態>\n")"#
         ]],
     )
 }
 
-#[test]
-fn search_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn search_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         agtags_find_tag_lists_the_definition_jumps_to_it_and_reports_an_unknown_tag(),
         agtags_find_file_opens_a_listed_file_and_the_next_search_retires_the_list(),
         agtags_search_options_add_global_flags_and_change_which_lines_match(),
-    ];
-    assert_agtags_batch(&cases);
+    ]
 }

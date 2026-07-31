@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_audio_notes_mode_batch};
+use super::ParityBatchCase;
 
 fn audio_notes_mode_real_directory_scan_filters_supported_files_and_keeps_matching_directories()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audio_notes_mode_real_directory_scan_filters_supported_files_and_keeps_matching_directories",
         r##"(let* ((directory
                                  (audio-notes-test-directory
@@ -37,7 +37,6 @@ fn audio_notes_mode_real_directory_scan_filters_supported_files_and_keeps_matchi
                                (file-regular-p path)
                                (file-directory-p path)))
                             (anm/list-files)))"##,
-        true,
         expect![[
             r#"OK (("alpha.mp3" t nil) ("bravo.wav" t nil) ("charlie.mp4" t nil) ("delta.3ga" t nil) ("echo.3gpp" t nil) ("folder.wav" nil t) ("foxtrot.m4a" t nil))"#
         ]],
@@ -45,7 +44,7 @@ fn audio_notes_mode_real_directory_scan_filters_supported_files_and_keeps_matchi
 }
 
 fn audio_notes_mode_live_custom_regexp_controls_real_directory_selection() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audio_notes_mode_live_custom_regexp_controls_real_directory_selection",
         r##"(let* ((directory
                                  (audio-notes-test-directory
@@ -74,7 +73,6 @@ fn audio_notes_mode_live_custom_regexp_controls_real_directory_selection() -> Pa
                                #'file-name-nondirectory
                                (anm/list-files))
                               anm/file-regexp)))"##,
-        true,
         expect![[
             r#"OK (("memo.wav") ("voice-01.txt" "voice-02.txt") "\\`voice-[0-9]+\\.txt\\'")"#
         ]],
@@ -83,7 +81,7 @@ fn audio_notes_mode_live_custom_regexp_controls_real_directory_selection() -> Pa
 
 fn audio_notes_mode_global_mode_string_counts_real_notes_and_preserves_face_property()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audio_notes_mode_global_mode_string_counts_real_notes_and_preserves_face_property",
         r##"(let* ((directory
                                  (audio-notes-test-directory
@@ -118,7 +116,6 @@ fn audio_notes_mode_global_mode_string_counts_real_notes_and_preserves_face_prop
                                    two)
                                   (audio-notes-test-face-property
                                    one))))))"##,
-        true,
         expect![[
             r##"OK (nil ("2 Notes" (:foreground "#12ab34")) ("1 Notes" (:foreground "#12ab34")))"##
         ]],
@@ -127,7 +124,7 @@ fn audio_notes_mode_global_mode_string_counts_real_notes_and_preserves_face_prop
 
 fn audio_notes_mode_noninteractive_modeline_control_is_idempotent_and_updates_color_only_for_strings()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audio_notes_mode_noninteractive_modeline_control_is_idempotent_and_updates_color_only_for_strings",
         r##"(let ((global-mode-string
                                 '("left" (:eval unrelated) "right"))
@@ -171,7 +168,6 @@ fn audio_notes_mode_noninteractive_modeline_control_is_idempotent_and_updates_co
                                     color-after-string
                                     remove
                                     anm/mode-line-color))))))"##,
-        true,
         expect![[
             r#"OK (((:eval (anm/global-mode-string)) "left" (:eval unrelated) "right") "ForestGreen" ((:eval (anm/global-mode-string)) "left" (:eval unrelated) "right") "ForestGreen" ((:eval (anm/global-mode-string)) "left" (:eval unrelated) "right") "DeepSkyBlue" ("left" (:eval unrelated) "right") "DeepSkyBlue")"#
         ]],
@@ -180,7 +176,7 @@ fn audio_notes_mode_noninteractive_modeline_control_is_idempotent_and_updates_co
 
 fn audio_notes_mode_interactive_modeline_command_toggles_exact_entry_without_changing_color()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audio_notes_mode_interactive_modeline_command_toggles_exact_entry_without_changing_color",
         r##"(let ((global-mode-string
                                 '("base"))
@@ -209,7 +205,6 @@ fn audio_notes_mode_interactive_modeline_command_toggles_exact_entry_without_cha
                                   second
                                   third
                                   anm/mode-line-color)))))"##,
-        true,
         expect![[
             r#"OK (((:eval (anm/global-mode-string)) "base") ("base") ((:eval (anm/global-mode-string)) "base") "OrangeRed")"#
         ]],
@@ -218,7 +213,7 @@ fn audio_notes_mode_interactive_modeline_command_toggles_exact_entry_without_cha
 
 fn audio_notes_mode_play_next_deletes_real_current_file_then_requests_next_playback()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audio_notes_mode_play_next_deletes_real_current_file_then_requests_next_playback",
         r##"(let* ((directory
                                  (audio-notes-test-directory
@@ -247,13 +242,12 @@ fn audio_notes_mode_play_next_deletes_real_current_file_then_requests_next_playb
                               anm/current
                               (file-exists-p current)
                               (nreverse calls))))"##,
-        true,
         expect!["OK (:played-next nil nil ((:play nil)))"],
     )
 }
 
 fn audio_notes_mode_play_next_supports_practical_custom_archive_command() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audio_notes_mode_play_next_supports_practical_custom_archive_command",
         r##"(let* ((directory
                                  (audio-notes-test-directory
@@ -292,14 +286,13 @@ fn audio_notes_mode_play_next_supports_practical_custom_archive_command() -> Par
                                  destination)
                                 (buffer-string))
                               (nreverse calls))))"##,
-        true,
         expect![[r#"OK (:next nil nil t "voice memo" (:play-next))"#]],
     )
 }
 
 fn audio_notes_mode_play_next_warns_for_missing_current_but_continues_workflow() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audio_notes_mode_play_next_warns_for_missing_current_but_continues_workflow",
         r##"(let ((anm/current
                                 (expand-file-name
@@ -318,7 +311,6 @@ fn audio_notes_mode_play_next_warns_for_missing_current_but_continues_workflow()
                                  (anm/play-next)))
                               anm/current
                               (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((:continued ((emacs "File [ORACLE-SANDBOX]/missing.wav not found for deletion." nil nil))) "[ORACLE-SANDBOX]/missing.wav" (:play-next))"#
         ]],
@@ -327,7 +319,7 @@ fn audio_notes_mode_play_next_warns_for_missing_current_but_continues_workflow()
 
 fn audio_notes_mode_play_next_unwritable_file_disables_mode_and_signals_exact_error()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audio_notes_mode_play_next_unwritable_file_disables_mode_and_signals_exact_error",
         r##"(let ((anm/current
                                 "/fixed/read-only.wav")
@@ -365,16 +357,14 @@ fn audio_notes_mode_play_next_unwritable_file_disables_mode_and_signals_exact_er
                                  (anm/play-next)))
                               anm/current
                               (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((:signal error ("File /fixed/read-only.wav can’t be deleted.\nCheck file permissions and fix this.\n(Exiting)")) "/fixed/read-only.wav" ((:readable "/fixed/read-only.wav") (:writable "/fixed/read-only.wav") (:mode -1)))"#
         ]],
     )
 }
 
-#[test]
-fn filesystem_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn filesystem_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         audio_notes_mode_real_directory_scan_filters_supported_files_and_keeps_matching_directories(),
         audio_notes_mode_live_custom_regexp_controls_real_directory_selection(),
         audio_notes_mode_global_mode_string_counts_real_notes_and_preserves_face_property(),
@@ -384,6 +374,5 @@ fn filesystem_public_surface_batch() {
         audio_notes_mode_play_next_supports_practical_custom_archive_command(),
         audio_notes_mode_play_next_warns_for_missing_current_but_continues_workflow(),
         audio_notes_mode_play_next_unwritable_file_disables_mode_and_signals_exact_error(),
-    ];
-    assert_audio_notes_mode_batch(&cases);
+    ]
 }

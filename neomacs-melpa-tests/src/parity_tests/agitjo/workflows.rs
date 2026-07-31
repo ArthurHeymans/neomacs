@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_agitjo_batch};
+use super::ParityBatchCase;
 
 /// The block the Commentary documents for installation:
 ///
@@ -17,9 +17,8 @@ use super::{ParityBatchCase, assert_agitjo_batch};
 ///
 /// The `agitjo-push' menu's own layout is pinned whole beside it, because that
 /// is the surface steps 3 and 4 of the documented workflow are performed on.
-
 fn the_documented_setup_block_adds_one_key_to_magit_status_and_magit_dispatch() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_documented_setup_block_adds_one_key_to_magit_status_and_magit_dispatch",
         r##"(let* ((before (agitjo-test-transient-keys 'magit-dispatch))
        (observed nil))
@@ -44,7 +43,6 @@ fn the_documented_setup_block_adds_one_key_to_magit_status_and_magit_dispatch() 
   (push (list :agitjo-push-menu (agitjo-test-transient-keys 'agitjo-push))
         observed)
   (nreverse observed))"##,
-        true,
         expect![[
             r##"OK ((:before (:status-key nil :dispatch-entry nil :dispatch-keys 51)) (:after (:status-key agitjo-push :dispatch-entry ("#" . agitjo-push) :dispatch-keys 52 :added (("#" . agitjo-push)) :nothing-else-changed t)) (:agitjo-push-menu (("-f" . agitjo-force-push-switch) ("-s" . agitjo-topic-variable) ("-t" . agitjo-title-option) ("+" . agitjo--pullreq-type-switches) ("u" . agitjo-push-pullreq-current-to-upstream) ("e" . agitjo-push-pullreq-current) ("l" . agitjo-push-pullreq-local-branch) ("r" . agitjo-push-pullreq-local-branch-or-ref) ("C" . magit-branch-configure) ("V" . agitjo-visit-last-pushed-pullreq))))"##
         ]],
@@ -53,7 +51,7 @@ fn the_documented_setup_block_adds_one_key_to_magit_status_and_magit_dispatch() 
 
 fn without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch",
         r##"(let* ((agitjo--current-topics nil)
        (agitjo-test-push-requests nil)
@@ -90,7 +88,6 @@ fn without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch
                         :refspec (nth 3 (car (last (agitjo-test-requests))))))
             observed)))
   (nreverse observed))"##,
-        true,
         expect![[
             r#"OK ((:untopiced (:topic nil :refspec "feature/parser-recovery:refs/for/main/feature/parser-recovery")) (:topiced (:topic "team/handbook-42" :refspec "feature/handbook:refs/for/main/team/handbook-42")))"#
         ]],
@@ -99,7 +96,7 @@ fn without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch
 
 fn the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_given()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_given",
         r##"(let* ((agitjo--current-topics nil)
        (agitjo-test-push-requests nil)
@@ -141,7 +138,6 @@ fn the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_
             observed)))
   (push (list :commit-subject (magit-rev-format "%s" branch)) observed)
   (nreverse observed))"##,
-        true,
         expect![[
             r#"OK ((:draft-with-an-explicit-title ("--push-option=title=WIP: Parser recovery")) (:draft-without-a-title ("--push-option=title=WIP: Recover parser transitions after lookahead reset")) (:normal-with-an-explicit-title ("--push-option=title=Parser recovery")) (:commit-subject "Recover parser transitions after lookahead reset"))"#
         ]],
@@ -150,7 +146,7 @@ fn the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_
 
 fn visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_output()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_output",
         r##"(let* ((agitjo--current-topics nil)
        (agitjo-test-push-requests nil)
@@ -201,7 +197,6 @@ fn visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_out
                 :opened (reverse visited))
           observed))
   (nreverse observed))"##,
-        true,
         expect![[
             r#"OK ((:before-any-push (user-error "No pull request link could be found") :opened nil) (:after-two-pushes opened :opened ("https://forge.invalid/halvin/agitjo/pulls/42")))"#
         ]],
@@ -209,7 +204,7 @@ fn visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_out
 }
 
 fn the_draft_template_comes_from_the_remote_main_branch_and_prefers_forgejo() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_draft_template_comes_from_the_remote_main_branch_and_prefers_forgejo",
         r####"(let* ((agitjo--current-topics nil)
        (observed nil))
@@ -261,7 +256,6 @@ fn the_draft_template_comes_from_the_remote_main_branch_and_prefers_forgejo() ->
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer)))
   (nreverse observed))"####,
-        true,
         expect![[
             r###"OK ((:three-candidate-templates (:draft "## From origin main\n\nDescribe the change.\n" :draft-file "template-origin/.git/agitjo/pullreq-draft")) (:forgejo-and-github-templates (:draft "## Forgejo template\n")))"###
         ]],
@@ -269,7 +263,7 @@ fn the_draft_template_comes_from_the_remote_main_branch_and_prefers_forgejo() ->
 }
 
 fn confirming_from_an_unrelated_buffer_refuses_and_pushes_nothing() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "confirming_from_an_unrelated_buffer_refuses_and_pushes_nothing",
         r##"(let* ((agitjo--current-topics nil)
        (agitjo-test-push-requests nil)
@@ -301,22 +295,19 @@ fn confirming_from_an_unrelated_buffer_refuses_and_pushes_nothing() -> ParityBat
                            (with-current-buffer scratch (buffer-string))))
         observed)
   (nreverse observed))"##,
-        true,
         expect![[
             r#"OK ((:before (:draft-directory-exists nil :draft no-draft-file)) (:refusal (user-error "Function called outside AGitjo post buffer")) (:after (:draft-directory-exists t :draft no-draft-file :pushes nil :unrelated-buffer-text "not a pull request draft\n")))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         the_documented_setup_block_adds_one_key_to_magit_status_and_magit_dispatch(),
         without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch(),
         the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_given(),
         visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_output(),
         the_draft_template_comes_from_the_remote_main_branch_and_prefers_forgejo(),
         confirming_from_an_unrelated_buffer_refuses_and_pushes_nothing(),
-    ];
-    assert_agitjo_batch(&cases);
+    ]
 }

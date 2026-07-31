@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_c_headers_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_c_headers_default_directory_provider_returns_configured_value_by_identity()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_default_directory_provider_returns_configured_value_by_identity",
         r##"(let ((achead:include-directories
                 '("project" "/sdk/include"
@@ -18,14 +18,13 @@ fn auto_complete_c_headers_default_directory_provider_returns_configured_value_b
             (progn
               (setcar result "changed")
               achead:include-directories))))"##,
-        true,
         expect![[r#"OK (#1=("changed" "/sdk/include" "/opt/vendor/include") t #1#)"#]],
     )
 }
 
 fn auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidate_scan()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidate_scan",
         r##"(let* ((calls 0)
                (achead:include-patterns
@@ -40,14 +39,13 @@ fn auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidat
           (achead:get-include-file-candidates
            "nested/")
           calls))"##,
-        true,
         expect!["OK (nil 1 nil 2)"],
     )
 }
 
 fn auto_complete_c_headers_extracts_include_options_in_order_with_empty_and_duplicate_values()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_extracts_include_options_in_order_with_empty_and_duplicate_values",
         r##"(achead:get-include-directories-from-options
          '("-Wall"
@@ -59,13 +57,12 @@ fn auto_complete_c_headers_extracts_include_options_in_order_with_empty_and_dupl
            "-I/usr/include"
            "-DNAME=-Iinside"
            "-Ipath with spaces"))"##,
-        true,
         expect![[r#"OK ("/usr/include" "" "../relative" "/usr/include" "path with spaces")"#]],
     )
 }
 
 fn auto_complete_c_headers_include_option_matching_is_strictly_case_sensitive() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_include_option_matching_is_strictly_case_sensitive",
         r##"(let ((case-fold-search t))
          (list
@@ -76,14 +73,13 @@ fn auto_complete_c_headers_include_option_matching_is_strictly_case_sensitive() 
              "-include"
              "-I./local"))
           case-fold-search))"##,
-        true,
         expect![[r#"OK (("/upper" "Ünicode" "./local") t)"#]],
     )
 }
 
 fn auto_complete_c_headers_option_parser_signals_on_non_string_members_after_prior_matches()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_option_parser_signals_on_non_string_members_after_prior_matches",
         r##"(list
          (achead-test-error
@@ -94,14 +90,13 @@ fn auto_complete_c_headers_option_parser_signals_on_non_string_members_after_pri
           (lambda ()
             (achead:get-include-directories-from-options
              nil))))"##,
-        true,
         expect!["OK ((:signal wrong-type-argument (stringp 17)) (:value nil))"],
     )
 }
 
 fn auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffix_free_cpp_names()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffix_free_cpp_names",
         r##"(mapcar
          (lambda (path)
@@ -122,7 +117,6 @@ fn auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffi
            "/sdk/vector2"
            "/sdk/.hidden.h"
            "/sdk/space name"))"##,
-        true,
         expect![[
             r#"OK (("/sdk/vector" t) ("/sdk/unordered_map" t) ("/sdk/x86-vector" nil) ("/sdk/foo.h" t) ("/sdk/foo.hpp" t) ("/sdk/foo.hh" t) ("/sdk/foo.H" t) ("/sdk/foo.hxx" nil) ("/sdk/foo.h.in" nil) ("vector" nil) ("/sdk/vector2" nil) ("/sdk/.hidden.h" t) ("/sdk/space name" nil))"#
         ]],
@@ -131,7 +125,7 @@ fn auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffi
 
 fn auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exact_semantics()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exact_semantics",
         r##"(list
          (let ((achead:include-patterns
@@ -151,14 +145,13 @@ fn auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exac
                 '("never" "\\.h\\'")))
            (achead:path-should-be-displayed
             "yes.h")))"##,
-        true,
         expect!["OK ((t t nil nil) nil t t)"],
     )
 }
 
 fn auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragments()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragments",
         r##"(mapcar
          (lambda (line)
@@ -181,16 +174,14 @@ fn auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragme
            "#include <two words"
            "#include 'single"
            "#include <nested/file.hpp>"))"##,
-        true,
         expect![[
             r##"OK (("#include <vector" "vector" 11 17) ("#include \"project/api" "project/api" 11 22) nil ("#include <ignored" "ignored" 13 20) nil ("#include <two" "two" 11 14) nil ("#include <nested/file.hpp" "nested/file.hpp" 11 26))"##
         ]],
     )
 }
 
-#[test]
-fn options_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn options_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_c_headers_default_directory_provider_returns_configured_value_by_identity(),
         auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidate_scan(),
         auto_complete_c_headers_extracts_include_options_in_order_with_empty_and_duplicate_values(),
@@ -199,6 +190,5 @@ fn options_public_surface_batch() {
         auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffix_free_cpp_names(),
         auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exact_semantics(),
         auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragments(),
-    ];
-    assert_auto_complete_c_headers_batch(&cases);
+    ]
 }

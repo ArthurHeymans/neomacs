@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_anki_mode_batch};
+use super::ParityBatchCase;
 
 fn opening_the_menu_refreshes_real_decks_models_and_fields_before_rendering() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "opening_the_menu_refreshes_real_decks_models_and_fields_before_rendering",
         r##"(let ((anki-mode--decks nil)
       (anki-mode--card-types nil)
@@ -47,7 +47,6 @@ fn opening_the_menu_refreshes_real_decks_models_and_fields_before_rendering() ->
          (buffer-substring-no-properties (point-min) (point-max))))
     (when (buffer-live-p menu-buffer)
       (kill-buffer menu-buffer))))"##,
-        true,
         expect![[
             r#"OK ((((action . "version") (version . 6)) ((action . "deckNames") (version . 6)) ((action . "modelNames") (version . 6)) ((action . "modelFieldNames") (version . 6) (params (modelName . "Basic"))) ((action . "modelFieldNames") (version . 6) (params (modelName . "Cloze")))) ("Computing" "Languages::Japanese") (("Cloze" "Text" "Extra") ("Basic" "Front" "Back")) anki-mode-menu-mode "Anki Mode\n---------------\n[n]: New card\n[a]: New card with current settings (deck: 'NULL', card type: 'NULL')\n[r]: Refresh decks list\n\n\n\nDecks\n---------------\n* Computing\n* Languages::Japanese\n")"#
         ]],
@@ -55,7 +54,7 @@ fn opening_the_menu_refreshes_real_decks_models_and_fields_before_rendering() ->
 }
 
 fn authors_a_basic_card_with_math_and_sends_the_complete_ankiconnect_note() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "authors_a_basic_card_with_math_and_sends_the_complete_ankiconnect_note",
         r##"(let ((anki-mode--decks '("Computer Science"))
       (anki-mode--card-types
@@ -127,7 +126,6 @@ fn authors_a_basic_card_with_math_and_sends_the_complete_ankiconnect_note() -> P
       (kill-buffer menu-buffer))
     (when (and card-file (file-exists-p card-file))
       (delete-file card-file))))"##,
-        true,
         expect![[
             r#"OK ("Computer Science" "Basic" "@Front\nWhat is the complexity of binary search over [$][/$]O(log n) items?\n\n@Back\nIt halves the remaining sorted search space after each comparison.\n\n" "@Front\nWhat is the complexity of binary search over [$][/$]O(log n) items?\n\n@Back\nIt halves the remaining sorted search space after each comparison.\n\n" (((action . "addNotes") (version . 6) (params (notes ((deckName . "Computer Science") (modelName . "Basic") (tags) (options (allowDuplicate . :json-false)) (fields (Front . "What is the complexity of binary search over [$][/$]O(log n) items?") (Back . "It halves the remaining sorted search space after each comparison."))))))) "Anki Mode\n---------------\n[n]: New card\n[a]: New card with current settings (deck: 'Computer Science', card type: 'Basic')\n[r]: Refresh decks list\n\n\n\nDecks\n---------------\n* Computer Science\n" ("Created card, got back [555001]"))"#
         ]],
@@ -135,7 +133,7 @@ fn authors_a_basic_card_with_math_and_sends_the_complete_ankiconnect_note() -> P
 }
 
 fn creates_sequential_clozes_and_sends_the_edited_card_fields() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "creates_sequential_clozes_and_sends_the_edited_card_fields",
         r##"(let ((anki-mode--decks '("Biology"))
       (anki-mode--card-types '(("Cloze" "Text" "Extra")))
@@ -180,19 +178,16 @@ fn creates_sequential_clozes_and_sends_the_edited_card_fields() -> ParityBatchCa
       (kill-buffer menu-buffer))
     (when (and card-file (file-exists-p card-file))
       (delete-file card-file))))"##,
-        true,
         expect![[
             r#"OK ("@Text\nThe {{c1::mitochondria}} produce {{c2::ATP}} during cellular respiration.\n\n@Extra\nReview the electron transport chain and chemiosmosis.\n\n" (((action . "addNotes") (version . 6) (params (notes ((deckName . "Biology") (modelName . "Cloze") (tags) (options (allowDuplicate . :json-false)) (fields (Text . "The {{c1::mitochondria}} produce {{c2::ATP}} during cellular respiration.") (Extra . "Review the electron transport chain and chemiosmosis."))))))))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         opening_the_menu_refreshes_real_decks_models_and_fields_before_rendering(),
         authors_a_basic_card_with_math_and_sends_the_complete_ankiconnect_note(),
         creates_sequential_clozes_and_sends_the_edited_card_fields(),
-    ];
-    assert_anki_mode_batch(&cases);
+    ]
 }

@@ -15,8 +15,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use neomacs_test_oracle::{
-    BatchProbe, EvalOutcome, extract_marked_batch_outcomes, extract_marked_outcome,
-    wrap_elisp_batch_outcomes, wrap_elisp_outcome,
+    BatchProbe, EvalOutcome, ExpectedOutcome, extract_marked_batch_protocol,
+    extract_marked_outcome, wrap_elisp_batch_outcomes, wrap_elisp_outcome,
 };
 use wait_timeout::ChildExt;
 
@@ -29,6 +29,9 @@ pub use source_lock::{
 
 const RESULT_MARKER: &str = "NEOMACS-MELPA-RESULT:";
 const OUTCOME_MARKER: &str = "NEOMACS-MELPA-OUTCOME:";
+const BATCH_BEGIN_MARKER: &str = "NEOMACS-MELPA-BEGIN:";
+const BATCH_COMPLETE_MARKER: &str = "NEOMACS-MELPA-COMPLETE:";
+const TRANSPORTED_FORM_FUNCTION: &str = "neomacs--melpa-oracle-transported-form";
 const INSTALLED_MARKER: &str = "NEOMACS-MELPA-INSTALLED:";
 const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -1842,8 +1845,8 @@ pub struct OracleBatchCase<'a> {
     pub id: &'a str,
     /// Elisp forms evaluated after shared package setup.
     pub probe: &'a str,
-    /// When true, require an `OK` value; when false, require an `ERR` signal.
-    pub expect_value: bool,
+    /// Whether this case must return a value or signal an error.
+    pub expected_outcome: ExpectedOutcome,
 }
 
 /// Differential outcomes for one case inside a multi-probe batch.
@@ -1852,6 +1855,78 @@ pub struct OracleBatchCaseReport {
     pub id: String,
     pub neomacs: EvalOutcome,
     pub gnu_emacs: EvalOutcome,
+}
+
+/// The editor whose outcome violated a typed batch expectation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OracleEditor {
+    GnuEmacs,
+    Neomacs,
+}
+
+/// A behavioral failure for one case in an otherwise valid batch protocol.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OracleBatchFailure {
+    OutcomeMismatch {
+        id: String,
+        neomacs: EvalOutcome,
+        gnu_emacs: EvalOutcome,
+    },
+    UnexpectedOutcome {
+        id: String,
+        editor: OracleEditor,
+        expected: ExpectedOutcome,
+        actual: EvalOutcome,
+    },
+}
+
+impl OracleBatchFailure {
+    pub fn id(&self) -> &str {
+        match self {
+            Self::OutcomeMismatch { id, .. } | Self::UnexpectedOutcome { id, .. } => id,
+        }
+    }
+}
+
+impl std::fmt::Display for OracleBatchFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OutcomeMismatch {
+                id,
+                neomacs,
+                gnu_emacs,
+            } => write!(
+                formatter,
+                "case `{id}` outcome mismatch:\n  Neomacs: {neomacs}\n  GNU Emacs: {gnu_emacs}"
+            ),
+            Self::UnexpectedOutcome {
+                id,
+                editor,
+                expected,
+                actual,
+            } => {
+                let editor = match editor {
+                    OracleEditor::GnuEmacs => "GNU Emacs",
+                    OracleEditor::Neomacs => "Neomacs",
+                };
+                let expected = match expected {
+                    ExpectedOutcome::Value => "a value",
+                    ExpectedOutcome::Signal => "a signal",
+                };
+                write!(
+                    formatter,
+                    "case `{id}` expected {editor} to return {expected}, got {actual}"
+                )
+            }
+        }
+    }
+}
+
+/// All case outcomes and behavioral failures from one valid batch execution.
+#[derive(Debug)]
+pub struct OracleBatchReport {
+    pub cases: Vec<OracleBatchCaseReport>,
+    pub failures: Vec<OracleBatchFailure>,
 }
 
 /// Differential oracle for one exact package cached below `./tmp`.
@@ -1979,12 +2054,72 @@ impl CachedPackageOracle {
 
     /// Run a parity case that must complete with a value in both editors.
     pub fn run_value(&self, name: &str, probe: &str) -> Result<ElispOracleReport, String> {
-        self.run_expected(name, probe, true)
+        self.run_expected(name, probe, ExpectedOutcome::Value)
     }
 
     /// Run a parity case that must signal in both editors.
     pub fn run_signal(&self, name: &str, probe: &str) -> Result<ElispOracleReport, String> {
-        self.run_expected(name, probe, false)
+        self.run_expected(name, probe, ExpectedOutcome::Signal)
+    }
+
+    /// Run one probe with setup inside the outcome catcher and retain every
+    /// behavioral failure as report data.
+    pub fn run_case(
+        &self,
+        name: &str,
+        probe: &str,
+        expected: ExpectedOutcome,
+    ) -> Result<OracleBatchReport, String> {
+        let neomacs = EmacsRuntime::neomacs()
+            .with_env(
+                "NEOMACS_PACKAGE_USER_DIR",
+                self.package_user_dir.as_os_str(),
+            )
+            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
+            .with_timeout(self.timeout);
+        let gnu_emacs = EmacsRuntime::gnu_emacs()
+            .with_env(
+                "NEOMACS_PACKAGE_USER_DIR",
+                self.package_user_dir.as_os_str(),
+            )
+            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
+            .with_timeout(self.timeout);
+        let observed = run_elisp_oracle_case(
+            &neomacs,
+            &gnu_emacs,
+            name,
+            &self.package_setup_elisp(),
+            probe,
+        )?;
+        let mut failures = Vec::new();
+        if observed.neomacs != observed.gnu_emacs {
+            failures.push(OracleBatchFailure::OutcomeMismatch {
+                id: name.to_string(),
+                neomacs: observed.neomacs.clone(),
+                gnu_emacs: observed.gnu_emacs.clone(),
+            });
+        }
+        for (editor, actual) in [
+            (OracleEditor::GnuEmacs, &observed.gnu_emacs),
+            (OracleEditor::Neomacs, &observed.neomacs),
+        ] {
+            if !expected.matches(actual) {
+                failures.push(OracleBatchFailure::UnexpectedOutcome {
+                    id: name.to_string(),
+                    editor,
+                    expected,
+                    actual: actual.clone(),
+                });
+            }
+        }
+        Ok(OracleBatchReport {
+            cases: vec![OracleBatchCaseReport {
+                id: name.to_string(),
+                neomacs: observed.neomacs,
+                gnu_emacs: observed.gnu_emacs,
+            }],
+            failures,
+        })
     }
 
     /// Run many named probes in one GNU Emacs process and one Neomacs process.
@@ -1996,7 +2131,7 @@ impl CachedPackageOracle {
         &self,
         batch_name: &str,
         cases: &[OracleBatchCase<'_>],
-    ) -> Result<Vec<OracleBatchCaseReport>, String> {
+    ) -> Result<OracleBatchReport, String> {
         if cases.is_empty() {
             return Err(format!(
                 "{} batch `{batch_name}` requires at least one probe",
@@ -2025,29 +2160,23 @@ impl CachedPackageOracle {
             .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
             .with_timeout(self.timeout);
         let setup = self.package_setup_elisp();
-        let reports = run_elisp_oracle_batch(&neomacs, &gnu_emacs, batch_name, &setup, &probes)?;
-        let mut errors = Vec::new();
-        for (case, report) in cases.iter().zip(reports.iter()) {
-            if report.neomacs.is_value() != case.expect_value {
-                let expected = if case.expect_value {
-                    "a value"
-                } else {
-                    "a signal"
-                };
-                errors.push(format!(
-                    "  case `{}`: expected {expected}, got {}",
-                    case.id, report.neomacs
-                ));
+        let mut report = run_elisp_oracle_batch(&neomacs, &gnu_emacs, batch_name, &setup, &probes)?;
+        for (case, observed) in cases.iter().zip(report.cases.iter()) {
+            for (editor, actual) in [
+                (OracleEditor::GnuEmacs, &observed.gnu_emacs),
+                (OracleEditor::Neomacs, &observed.neomacs),
+            ] {
+                if !case.expected_outcome.matches(actual) {
+                    report.failures.push(OracleBatchFailure::UnexpectedOutcome {
+                        id: case.id.to_string(),
+                        editor,
+                        expected: case.expected_outcome,
+                        actual: actual.clone(),
+                    });
+                }
             }
         }
-        if !errors.is_empty() {
-            return Err(format!(
-                "{} batch `{batch_name}` had expectation mismatches:\n{}",
-                self.package_name,
-                errors.join("\n")
-            ));
-        }
-        Ok(reports)
+        Ok(report)
     }
 
     fn package_setup_elisp(&self) -> String {
@@ -2092,32 +2221,26 @@ impl CachedPackageOracle {
         &self,
         name: &str,
         probe: &str,
-        expect_value: bool,
+        expected_outcome: ExpectedOutcome,
     ) -> Result<ElispOracleReport, String> {
-        let neomacs = EmacsRuntime::neomacs()
-            .with_env(
-                "NEOMACS_PACKAGE_USER_DIR",
-                self.package_user_dir.as_os_str(),
-            )
-            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
-            .with_timeout(self.timeout);
-        let gnu_emacs = EmacsRuntime::gnu_emacs()
-            .with_env(
-                "NEOMACS_PACKAGE_USER_DIR",
-                self.package_user_dir.as_os_str(),
-            )
-            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
-            .with_timeout(self.timeout);
-        let setup = self.package_setup_elisp();
-        let report = run_elisp_oracle(&neomacs, &gnu_emacs, name, &setup, probe)?;
-        if report.neomacs.is_value() != expect_value {
-            let expected = if expect_value { "a value" } else { "a signal" };
+        let mut report = self.run_case(name, probe, expected_outcome)?;
+        if !report.failures.is_empty() {
             return Err(format!(
-                "{} parity case `{name}` expected {expected}, got {}",
-                self.package_name, report.neomacs
+                "{} parity case `{name}` failed:\n{}",
+                self.package_name,
+                report
+                    .failures
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("\n")
             ));
         }
-        Ok(report)
+        let report = report.cases.remove(0);
+        Ok(ElispOracleReport {
+            neomacs: report.neomacs,
+            gnu_emacs: report.gnu_emacs,
+        })
     }
 }
 
@@ -2503,7 +2626,7 @@ fn prepare_cached_tree_sitter_grammar_with_source_directory(
                 CommandError::Launch(error) => format!(
                     "failed to launch git for cached Tree-sitter grammar `{language}`: {error}"
                 ),
-                CommandError::TimedOut => format!(
+                CommandError::TimedOut(_) => format!(
                     "git timed out while preparing cached Tree-sitter grammar `{language}`"
                 ),
                 CommandError::Capture(error) => format!(
@@ -2575,7 +2698,7 @@ fn prepare_cached_tree_sitter_grammar_with_source_directory(
                 gnu_emacs.name,
                 root.display()
             ),
-            CommandError::TimedOut => format!(
+            CommandError::TimedOut(_) => format!(
                 "{} cached Tree-sitter grammar `{language}` timed out after {:?} in {}",
                 gnu_emacs.name,
                 gnu_emacs.timeout,
@@ -2806,7 +2929,7 @@ fn prepare_cached_package(
                     gnu_emacs.name,
                     root.display()
                 ),
-                CommandError::TimedOut => format!(
+                CommandError::TimedOut(_) => format!(
                     "{} cached package `{name}` timed out after {:?} in {}",
                     gnu_emacs.name,
                     gnu_emacs.timeout,
@@ -2909,6 +3032,23 @@ pub fn run_elisp_oracle(
     setup: &str,
     probe: &str,
 ) -> Result<ElispOracleReport, String> {
+    let report = run_elisp_oracle_case(neomacs, gnu_emacs, name, setup, probe)?;
+    if report.neomacs != report.gnu_emacs {
+        return Err(format!(
+            "oracle outcome mismatch for direct form `{name}`\n  Neomacs: {}\n  GNU Emacs: {}",
+            report.neomacs, report.gnu_emacs
+        ));
+    }
+    Ok(report)
+}
+
+fn run_elisp_oracle_case(
+    neomacs: &EmacsRuntime,
+    gnu_emacs: &EmacsRuntime,
+    name: &str,
+    setup: &str,
+    probe: &str,
+) -> Result<ElispOracleReport, String> {
     fn evaluate(
         runtime: &EmacsRuntime,
         name: &str,
@@ -2930,12 +3070,6 @@ pub fn run_elisp_oracle(
         .map_err(|error| format!("GNU Emacs baseline failed: {error}"))?;
     let neomacs_outcome = evaluate(neomacs, name, setup, probe)
         .map_err(|error| format!("Neomacs comparison failed: {error}"))?;
-    if neomacs_outcome != gnu_outcome {
-        return Err(format!(
-            "oracle outcome mismatch for direct form `{name}`\n  Neomacs: {neomacs_outcome}\n  GNU Emacs: {gnu_outcome}"
-        ));
-    }
-
     Ok(ElispOracleReport {
         neomacs: neomacs_outcome,
         gnu_emacs: gnu_outcome,
@@ -2945,15 +3079,15 @@ pub fn run_elisp_oracle(
 /// Run the same setup and many named probes in one process per editor.
 ///
 /// GNU Emacs and Neomacs evaluations run concurrently. Each probe id must
-/// appear exactly once in both editors' stdout, and the ordered outcomes must
-/// match pairwise.
+/// appear exactly once in both editors' ordered debugging-output protocol,
+/// and the outcomes must match pairwise.
 pub fn run_elisp_oracle_batch(
     neomacs: &EmacsRuntime,
     gnu_emacs: &EmacsRuntime,
     batch_name: &str,
     setup: &str,
     cases: &[BatchProbe<'_>],
-) -> Result<Vec<OracleBatchCaseReport>, String> {
+) -> Result<OracleBatchReport, String> {
     fn evaluate_batch(
         runtime: &EmacsRuntime,
         batch_name: &str,
@@ -2961,7 +3095,13 @@ pub fn run_elisp_oracle_batch(
         cases: &[BatchProbe<'_>],
     ) -> Result<Vec<(String, EvalOutcome)>, String> {
         let sandbox = MelpaSandbox::new(batch_name)?;
-        let form = wrap_elisp_batch_outcomes(setup, cases, OUTCOME_MARKER)?;
+        let form = wrap_elisp_batch_outcomes(
+            setup,
+            cases,
+            BATCH_BEGIN_MARKER,
+            BATCH_COMPLETE_MARKER,
+            OUTCOME_MARKER,
+        )?;
         let phase = run_outcome_phase(
             runtime,
             &sandbox,
@@ -2969,23 +3109,45 @@ pub fn run_elisp_oracle_batch(
             ScenarioPhase::RestartProbe,
             &form,
         )?;
-        let outcomes = extract_marked_batch_outcomes(&phase.stdout, OUTCOME_MARKER).map_err(
-            |error| {
-                format!(
-                    "{} batch oracle `{batch_name}` emitted invalid outcomes: {error}\nstdout:\n{}\nstderr:\n{}",
-                    runtime.name, phase.stdout, phase.stderr
-                )
-            },
-        )?;
         let expected_ids: Vec<&str> = cases.iter().map(|case| case.id).collect();
-        let got_ids: Vec<&str> = outcomes.iter().map(|item| item.id.as_str()).collect();
+        let protocol = extract_marked_batch_protocol(
+            &phase.stderr,
+            BATCH_BEGIN_MARKER,
+            OUTCOME_MARKER,
+            BATCH_COMPLETE_MARKER,
+        )
+        .map_err(|error| {
+            format!(
+                "{} batch oracle `{batch_name}` emitted invalid protocol records: {error}\nstdout:\n{}\nstderr:\n{}",
+                runtime.name, phase.stdout, phase.stderr
+            )
+        })?;
+        let got_case_ids: Vec<&str> = protocol.case_ids.iter().map(String::as_str).collect();
+        if got_case_ids != expected_ids {
+            return Err(format!(
+                "{} batch oracle `{batch_name}` ran cases {got_case_ids:?}, expected {expected_ids:?}\nstdout:\n{}\nstderr:\n{}",
+                runtime.name, phase.stdout, phase.stderr
+            ));
+        }
+        if let Some(active) = protocol.unfinished_case_id {
+            return Err(format!(
+                "{} batch oracle `{batch_name}` exited with unfinished case `{active}`\nstdout:\n{}\nstderr:\n{}",
+                runtime.name, phase.stdout, phase.stderr
+            ));
+        }
+        let got_ids: Vec<&str> = protocol
+            .outcomes
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect();
         if got_ids != expected_ids {
             return Err(format!(
                 "{} batch oracle `{batch_name}` returned case ids {got_ids:?}, expected {expected_ids:?}\nstdout:\n{}\nstderr:\n{}",
                 runtime.name, phase.stdout, phase.stderr
             ));
         }
-        Ok(outcomes
+        Ok(protocol
+            .outcomes
             .into_iter()
             .map(|item| (item.id, item.outcome))
             .collect())
@@ -3017,15 +3179,17 @@ pub fn run_elisp_oracle_batch(
     }
 
     let mut reports = Vec::with_capacity(cases.len());
-    let mut mismatches = Vec::new();
+    let mut failures = Vec::new();
     for ((gnu_id, gnu_outcome), (neo_id, neo_outcome)) in
-        gnu_outcomes.into_iter().zip(neomacs_outcomes.into_iter())
+        gnu_outcomes.into_iter().zip(neomacs_outcomes)
     {
         debug_assert_eq!(gnu_id, neo_id);
         if neo_outcome != gnu_outcome {
-            mismatches.push(format!(
-                "  case `{gnu_id}`:\n    Neomacs: {neo_outcome}\n    GNU Emacs: {gnu_outcome}"
-            ));
+            failures.push(OracleBatchFailure::OutcomeMismatch {
+                id: gnu_id.clone(),
+                neomacs: neo_outcome.clone(),
+                gnu_emacs: gnu_outcome.clone(),
+            });
         }
         reports.push(OracleBatchCaseReport {
             id: gnu_id,
@@ -3033,13 +3197,10 @@ pub fn run_elisp_oracle_batch(
             gnu_emacs: gnu_outcome,
         });
     }
-    if !mismatches.is_empty() {
-        return Err(format!(
-            "oracle outcome mismatch for batch `{batch_name}`\n{}",
-            mismatches.join("\n")
-        ));
-    }
-    Ok(reports)
+    Ok(OracleBatchReport {
+        cases: reports,
+        failures,
+    })
 }
 
 /// Install packages, generate `package-quickstart-file`, then load that file
@@ -3409,11 +3570,64 @@ fn run_phase_with_validation(
     form: &str,
     check_editor_error_output: bool,
 ) -> Result<PhaseReport, String> {
+    let form_directory = workspace_root().join("tmp/melpa/editor-forms");
+    fs::create_dir_all(&form_directory).map_err(|error| {
+        format!(
+            "failed to create editor-form directory {}: {error}",
+            form_directory.display()
+        )
+    })?;
+    let form_file = tempfile::Builder::new()
+        .prefix(&format!("{}-", sanitize_label(scenario_name)))
+        .suffix(".form.el")
+        .tempfile_in(&form_directory)
+        .map_err(|error| {
+            format!(
+                "failed to create {phase:?} form for scenario `{scenario_name}` in {}: {error}",
+                form_directory.display()
+            )
+        })?;
+    fs::write(form_file.path(), form).map_err(|error| {
+        format!(
+            "failed to write {phase:?} form for scenario `{scenario_name}` to {}: {error}",
+            form_file.path().display()
+        )
+    })?;
+    let loader_file = tempfile::Builder::new()
+        .prefix(&format!("{}-", sanitize_label(scenario_name)))
+        .suffix(".loader.el")
+        .tempfile_in(&form_directory)
+        .map_err(|error| {
+            format!(
+                "failed to create {phase:?} loader for scenario `{scenario_name}` in {}: {error}",
+                form_directory.display()
+            )
+        })?;
+    let loader = format!(
+        r##";;; -*- lexical-binding: t; -*-
+(defun {TRANSPORTED_FORM_FUNCTION} ()
+  (let ((form
+         (with-temp-buffer
+           (insert-file-contents (getenv "NEOMACS_MELPA_ORACLE_FORM_FILE"))
+           (goto-char (point-min))
+           (read (current-buffer)))))
+    (eval form t)))
+"##
+    );
+    fs::write(loader_file.path(), loader).map_err(|error| {
+        format!(
+            "failed to write {phase:?} loader for scenario `{scenario_name}` to {}: {error}",
+            loader_file.path().display()
+        )
+    })?;
     let mut command = runtime.command();
     sandbox.configure(&mut command);
     command
         .env("NEOMACS_RUNTIME_ROOT", workspace_root())
-        .args(["--batch", "--quick", "--eval", form]);
+        .env("NEOMACS_MELPA_ORACLE_FORM_FILE", form_file.path())
+        .args(["--batch", "--quick", "--load"])
+        .arg(loader_file.path())
+        .args(["--eval", &format!("({TRANSPORTED_FORM_FUNCTION})")]);
     let started = Instant::now();
     let output = output_with_timeout(&mut command, runtime.timeout)
         .map_err(|error| command_error_message(error, runtime, sandbox, scenario_name, phase))?;
@@ -3448,12 +3662,28 @@ fn command_error_message(
             runtime.name,
             sandbox.root().display()
         ),
-        CommandError::TimedOut => format!(
-            "{} scenario `{scenario_name}` timed out during {phase:?} after {:?} in sandbox {}",
-            runtime.name,
-            runtime.timeout,
-            sandbox.root().display()
-        ),
+        CommandError::TimedOut(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let protocol_context = match extract_marked_batch_protocol(
+                &stderr,
+                BATCH_BEGIN_MARKER,
+                OUTCOME_MARKER,
+                BATCH_COMPLETE_MARKER,
+            ) {
+                Ok(protocol) => protocol
+                    .unfinished_case_id
+                    .map(|id| format!("; active case `{id}`"))
+                    .unwrap_or_default(),
+                Err(error) => format!("; invalid partial batch protocol: {error}"),
+            };
+            format!(
+                "{} scenario `{scenario_name}` timed out during {phase:?} after {:?} in sandbox {}{protocol_context}\npartial stdout:\n{stdout}\npartial stderr:\n{stderr}",
+                runtime.name,
+                runtime.timeout,
+                sandbox.root().display()
+            )
+        }
         CommandError::Capture(error) => format!(
             "failed to capture {} scenario `{scenario_name}` output during {phase:?}: {error}",
             runtime.name
@@ -3463,7 +3693,7 @@ fn command_error_message(
 
 enum CommandError {
     Launch(std::io::Error),
-    TimedOut,
+    TimedOut(Output),
     Capture(String),
 }
 
@@ -3485,10 +3715,24 @@ fn output_with_timeout(command: &mut Command, timeout: Duration) -> Result<Outpu
         Some(status) => status,
         None => {
             let _ = child.kill();
-            let _ = child.wait();
-            let _ = stdout_reader.join();
-            let _ = stderr_reader.join();
-            return Err(CommandError::TimedOut);
+            let status = child.wait().map_err(CommandError::Launch)?;
+            let stdout = stdout_reader
+                .join()
+                .map_err(|_| CommandError::Capture("stdout reader panicked".to_string()))?
+                .map_err(|error| {
+                    CommandError::Capture(format!("failed to read stdout: {error}"))
+                })?;
+            let stderr = stderr_reader
+                .join()
+                .map_err(|_| CommandError::Capture("stderr reader panicked".to_string()))?
+                .map_err(|error| {
+                    CommandError::Capture(format!("failed to read stderr: {error}"))
+                })?;
+            return Err(CommandError::TimedOut(Output {
+                status,
+                stdout,
+                stderr,
+            }));
         }
     };
     let stdout = stdout_reader

@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ASYNC_BACKUP_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -126,22 +125,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_async_backup_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = async_backup_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("async-backup parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_async_backup_parity(elisp_form: &str, expected: Expect) {
-    assert_async_backup_source_parity("async-backup.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_async_backup_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_async_backup_source_parity("async-backup-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_async_backup_autoload_parity` cases (2a).
 pub(crate) fn assert_async_backup_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -163,3 +146,31 @@ pub(crate) fn assert_async_backup_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn async_backup_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_async_backup_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_async_backup_autoload_batch(&cases);
+}
+
+#[test]
+fn async_backup_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        hooks::hooks_public_surface_batch_cases(),
+        paths::paths_public_surface_batch_cases(),
+        predicates::predicates_public_surface_batch_cases(),
+        process::process_public_surface_batch_cases(),
+        registry::registry_async_backup_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_async_backup_batch(&cases);
+}
+
+// END generated package batch tests

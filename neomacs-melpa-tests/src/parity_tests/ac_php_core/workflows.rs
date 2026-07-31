@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_php_core_batch};
+use super::ParityBatchCase;
 
 /// Indexing, which everything else depends on.
 ///
@@ -10,9 +10,8 @@ use super::{ParityBatchCase, assert_ac_php_core_batch};
 /// index where the package looks for it.  The loaded result is then asserted
 /// in full: the classes, the inheritance edges read from `extends`, the
 /// namespaced function, and the file list the index's positions refer to.
-
 fn indexing_a_project_writes_its_configuration_and_loads_every_class() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "indexing_a_project_writes_its_configuration_and_loads_every_class",
         r##"
 (let ((root (ac-php-test-make-project))
@@ -49,7 +48,6 @@ fn indexing_a_project_writes_its_configuration_and_loads_every_class() -> Parity
            :indexed-files (mapcar (lambda (file) (file-relative-name file root))
                                   (append (ac-php-g--file-list tags-data) nil))))))
 "##,
-        true,
         expect![[
             r##"OK (:indexer-finished t :calls (("phpctags" ".ac-php-conf.json" "cache" "--rebuild=no" "--realpath_flag=yes")) :config "{\n  \"use-cscope\": null,\n  \"tag-dir\": null,\n  \"filter\": {\n    \"php-file-ext-list\": [\n      \"php\"\n    ],\n    \"php-path-list\": [\n      \".\"\n    ],\n    \"ignore-ruleset\": [\n      \"# like .gitignore file \",\n      \"/vendor/**/[tT]ests/**/*.php\",\n      \"/vendor/**/[Ee]xamples/**/*.php\",\n      \"/vendor/composer/*.php\",\n      \"/vendor/*.php\",\n      \"# not need php_codesniffer\",\n      \"/vendor/squizlabs/php_codesniffer/**/*.php\",\n      \"#  -- end -- \"\n    ]\n  }\n}" :index-files ("tags-vendor.el" "tags.el") :progress 83 :classes ("\\Shop\\Model\\Product" "\\Shop\\Service\\BaseCart" "\\Shop\\Service\\Cart") :inheritance (("\\Shop\\Service\\Cart" "\\Shop\\Service\\BaseCart")) :functions ("\\Shop\\Model\\Product" "\\Shop\\Model\\Product(" "\\Shop\\Model\\formatMoney(" "\\Shop\\Service\\BaseCart" "\\Shop\\Service\\BaseCart(" "\\Shop\\Service\\Cart" "\\Shop\\Service\\Cart(") :indexed-files ("src/Model/Product.php" "src/Service/BaseCart.php" "src/Service/Cart.php"))"##
         ]],
@@ -57,7 +55,7 @@ fn indexing_a_project_writes_its_configuration_and_loads_every_class() -> Parity
 }
 
 fn the_project_root_is_found_by_any_marker_and_the_command_fails_without_one() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_project_root_is_found_by_any_marker_and_the_command_fails_without_one",
         r##"
 (let ((base (expand-file-name "markers" ac-php-test-root))
@@ -101,7 +99,6 @@ fn the_project_root_is_found_by_any_marker_and_the_command_fails_without_one() -
      ("composer" . "vendor/autoload.php")
      ("nothing" . nil))))
 "##,
-        true,
         expect![[
             r#"OK (("projectile" :outcome (:ok t) :indexed-root ("projectile")) ("conf" :outcome (:ok t) :indexed-root ("conf")) ("composer" :outcome (:ok t) :indexed-root ("composer")) ("nothing" :outcome (:error wrong-type-argument (stringp nil)) :indexed-root nil))"#
         ]],
@@ -109,7 +106,7 @@ fn the_project_root_is_found_by_any_marker_and_the_command_fails_without_one() -
 }
 
 fn jumping_to_a_definition_needs_xref_and_then_the_location_stack_returns() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "jumping_to_a_definition_needs_xref_and_then_the_location_stack_returns",
         r##"
 (let ((root (ac-php-test-make-project))
@@ -142,7 +139,6 @@ fn jumping_to_a_definition_needs_xref_and_then_the_location_stack_returns() -> P
                                  (line-number-at-pos))
                  :stack-depth (length ac-php-location-stack))))))))
 "##,
-        true,
         expect![[
             r#"OK (:without-xref (:error void-variable (find-tag-marker-ring)) :started ("Cart.php" 10) :arrived ("Product.php" 7 "class Product") :returned ("Cart.php" 10) :stack-depth 1)"#
         ]],
@@ -150,7 +146,7 @@ fn jumping_to_a_definition_needs_xref_and_then_the_location_stack_returns() -> P
 }
 
 fn the_type_at_point_is_resolved_from_the_buffer_and_the_index() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_type_at_point_is_resolved_from_the_buffer_and_the_index",
         r##"
 (let ((root (ac-php-test-make-project))
@@ -171,7 +167,6 @@ fn the_type_at_point_is_resolved_from_the_buffer_and_the_index() -> ParityBatchC
         (list text (if (stringp resolved) (substring-no-properties resolved) resolved))))
     '("$this->" "$product->" "Product::" "self::" "parent::"))))
 "##,
-        true,
         expect![[
             r#"OK (("$this->" "\\Shop\\Service\\Cart.") ("$product->" "\\Shop\\Model\\Product.") ("Product::" "\\Shop\\Model\\Product.") ("self::" "\\Shop\\Service\\Cart.") ("parent::" "\\Shop\\Service\\Cart.__parent__."))"#
         ]],
@@ -179,7 +174,7 @@ fn the_type_at_point_is_resolved_from_the_buffer_and_the_index() -> ParityBatchC
 }
 
 fn a_missing_vendor_index_turns_every_lookup_into_a_type_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_missing_vendor_index_turns_every_lookup_into_a_type_error",
         r##"
 (let ((root (ac-php-test-make-project))
@@ -208,21 +203,19 @@ fn a_missing_vendor_index_turns_every_lookup_into_a_type_error() -> ParityBatchC
                    (ac-php-test-outcome
                     (ac-php-get-class-at-point (ac-php-get-tags-data)))))))))
 "##,
-        true,
         expect![
             "OK (:both-present (t t) :loads-with-vendor t :after-deleting-the-vendor-index (:load-data (:error wrong-type-argument (hash-table-p nil)) :tags-data-returns ac-php-phptags-index-process-filter :class-at-point (:ok nil)))"
         ],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         indexing_a_project_writes_its_configuration_and_loads_every_class(),
         the_project_root_is_found_by_any_marker_and_the_command_fails_without_one(),
         jumping_to_a_definition_needs_xref_and_then_the_location_stack_returns(),
         the_type_at_point_is_resolved_from_the_buffer_and_the_index(),
         a_missing_vendor_index_turns_every_lookup_into_a_type_error(),
-    ];
-    assert_ac_php_core_batch(&cases);
+    ]
 }

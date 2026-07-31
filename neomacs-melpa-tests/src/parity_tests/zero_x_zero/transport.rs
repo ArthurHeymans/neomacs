@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_zero_x_zero_batch};
+use super::ParityBatchCase;
 
 fn zero_x_zero_host_uri_supports_plain_and_basic_auth_servers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_host_uri_supports_plain_and_basic_auth_servers",
         r##"(let ((server
                       '(:scheme "https"
@@ -15,7 +15,6 @@ fn zero_x_zero_host_uri_supports_plain_and_basic_auth_servers() -> ParityBatchCa
                  '(:user "alice" :pass "s3cret"))
                 (0x0--make-server-host-uri
                  '(:scheme nil :host nil))))"##,
-        true,
         expect![[
             r#"OK ("https://upload.example" "https://alice:s3cret@upload.example" "nil://nil")"#
         ]],
@@ -23,7 +22,7 @@ fn zero_x_zero_host_uri_supports_plain_and_basic_auth_servers() -> ParityBatchCa
 }
 
 fn zero_x_zero_curl_arguments_distinguish_file_and_buffer_uploads() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_curl_arguments_distinguish_file_and_buffer_uploads",
         r##"(let ((server
                       '(:scheme "https"
@@ -33,7 +32,6 @@ fn zero_x_zero_curl_arguments_distinguish_file_and_buffer_uploads() -> ParityBat
                  server "/path/a b.txt")
                 (0x0--make-0x0-curl-args
                  server "upload.txt" t)))"##,
-        true,
         expect![[
             r#"OK (("-s" "-S" "-F" "file=@/path/a b.txt" "https://example.test") ("-s" "-S" "-F" "file=@-;filename=upload.txt" "https://example.test"))"#
         ]],
@@ -41,7 +39,7 @@ fn zero_x_zero_curl_arguments_distinguish_file_and_buffer_uploads() -> ParityBat
 }
 
 fn zero_x_zero_curl_dispatches_files_and_regions_to_exact_process_apis() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_curl_dispatches_files_and_regions_to_exact_process_apis",
         r##"(let (calls buffers)
                (cl-letf (((symbol-function 'call-process)
@@ -87,7 +85,6 @@ fn zero_x_zero_curl_dispatches_files_and_regions_to_exact_process_apis() -> Pari
                       (when (buffer-live-p buffer)
                         (kill-buffer buffer)))
                     buffers))))"##,
-        true,
         expect![[
             r#"OK ((call-process "/custom/curl" nil :buffer nil "-s" "https://one") (call-process-region 2 5 "/custom/curl" nil :buffer nil "-s" "https://two"))"#
         ]],
@@ -95,7 +92,7 @@ fn zero_x_zero_curl_dispatches_files_and_regions_to_exact_process_apis() -> Pari
 }
 
 fn zero_x_zero_url_properties_distinguish_file_and_bounded_sources() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_url_properties_distinguish_file_and_bounded_sources",
         r##"(let ((server
                       '(:scheme "http"
@@ -105,7 +102,6 @@ fn zero_x_zero_url_properties_distinguish_file_and_bounded_sources() -> ParityBa
                  server "/path/to/file.txt")
                 (0x0--make-url-props
                  server "/path/to/file.txt" t)))"##,
-        true,
         expect![[
             r#"OK ((:file-path "/path/to/file.txt" :query-str "name=\"file\"; filename=\"file.txt\"" :host-uri "http://local.test") (:file-path nil :query-str "name=\"file\"; filename=\"file.txt\"" :host-uri "http://local.test"))"#
         ]],
@@ -113,7 +109,7 @@ fn zero_x_zero_url_properties_distinguish_file_and_bounded_sources() -> ParityBa
 }
 
 fn zero_x_zero_url_builds_multipart_body_and_strips_response_headers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_url_builds_multipart_body_and_strips_response_headers",
         r##"(let (request)
                (cl-letf (((symbol-function 'random)
@@ -161,7 +157,6 @@ fn zero_x_zero_url_builds_multipart_body_and_strips_response_headers() -> Parity
                              (buffer-string))))
                        (when (buffer-live-p response)
                          (kill-buffer response)))))))"##,
-        true,
         expect![[
             r#"OK (("https://local.test" "POST" (("Content-Type" . "multipart/form-data; boundary=A-B-C")) "--A-B-C\15\nContent-Disposition: form-data; name=\"file\"; filename=\"x.txt\"\15\nContent-type: text/plain\15\n\15\n123\15\n--A-B-C--") ("*0x0 response*" "\nhttps://local.test/id\n"))"#
         ]],
@@ -169,7 +164,7 @@ fn zero_x_zero_url_builds_multipart_body_and_strips_response_headers() -> Parity
 }
 
 fn zero_x_zero_send_selects_each_curl_policy_and_url_fallback() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_send_selects_each_curl_policy_and_url_fallback",
         r##"(let ((server
                       '(:scheme "https"
@@ -216,7 +211,6 @@ fn zero_x_zero_send_selects_each_curl_policy_and_url_fallback() -> ParityBatchCa
                       (0x0--send
                        server "four.txt" bounds))
                     (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK (curl-result curl-result curl-result url-result ((curl ("-s" "-S" "-F" "file=@-;filename=one.txt" "https://example.test") #1=(:start 2 :end 4)) (executable-find "curl") (curl ("-s" "-S" "-F" "file=@-;filename=two.txt" "https://example.test") #1#) (curl ("-s" "-S" "-F" "file=@three.txt" "https://example.test") nil) (url (:file-path nil :query-str "name=\"file\"; filename=\"four.txt\"" :host-uri "https://example.test") #1#)))"#
         ]],
@@ -224,7 +218,7 @@ fn zero_x_zero_send_selects_each_curl_policy_and_url_fallback() -> ParityBatchCa
 }
 
 fn zero_x_zero_handle_response_yanks_uri_reports_timeout_and_kills_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_handle_response_yanks_uri_reports_timeout_and_kills_buffer",
         r##"(let ((server
                       '(:scheme "https"
@@ -260,7 +254,6 @@ fn zero_x_zero_handle_response_yanks_uri_reports_timeout_and_kills_buffer() -> P
                     (current-kill 0)
                     (nreverse messages)
                     (buffer-live-p response)))))"##,
-        true,
         expect![[
             r#"OK ("https://example.test/item.txt" "https://example.test/item.txt" ("yanked `https://example.test/item.txt' into kill ring. Should last ~71.875 days.") nil)"#
         ]],
@@ -268,7 +261,7 @@ fn zero_x_zero_handle_response_yanks_uri_reports_timeout_and_kills_buffer() -> P
 }
 
 fn zero_x_zero_handle_response_failure_preserves_the_response_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "zero_x_zero_handle_response_failure_preserves_the_response_buffer",
         r##"(let ((server
                       '(:scheme "https"
@@ -283,16 +276,14 @@ fn zero_x_zero_handle_response_failure_preserves_the_response_buffer() -> Parity
                     server 1 response)
                  (when (buffer-live-p response)
                    (kill-buffer response))))"##,
-        false,
         expect![[
             r#"ERR (error "Failed to upload/parse. see *0x0 bad response* for more details")"#
         ]],
     )
 }
 
-#[test]
-fn transport_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn transport_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         zero_x_zero_host_uri_supports_plain_and_basic_auth_servers(),
         zero_x_zero_curl_arguments_distinguish_file_and_buffer_uploads(),
         zero_x_zero_curl_dispatches_files_and_regions_to_exact_process_apis(),
@@ -301,6 +292,5 @@ fn transport_public_surface_batch() {
         zero_x_zero_send_selects_each_curl_policy_and_url_fallback(),
         zero_x_zero_handle_response_yanks_uri_reports_timeout_and_kills_buffer(),
         zero_x_zero_handle_response_failure_preserves_the_response_buffer(),
-    ];
-    assert_zero_x_zero_batch(&cases);
+    ]
 }

@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aiken_mode_batch};
+use super::ParityBatchCase;
 
 fn comment_and_uncomment_region_roundtrip_preserves_aiken_program() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "comment_and_uncomment_region_roundtrip_preserves_aiken_program",
         r##"
 (with-temp-buffer
@@ -19,7 +19,6 @@ trace @\"validated\"\n")
       (list original commented (buffer-string)
             (equal original (buffer-string))))))
 "##,
-        true,
         expect![[
             r#"OK ("let amount = 42\nexpect amount > 0\ntrace @\"validated\"\n" "// let amount = 42\n// expect amount > 0\n// trace @\"validated\"\n" "let amount = 42\nexpect amount > 0\ntrace @\"validated\"\n" t)"#
         ]],
@@ -27,7 +26,7 @@ trace @\"validated\"\n")
 }
 
 fn syntax_parser_tracks_code_line_comments_strings_and_nested_delimiters() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "syntax_parser_tracks_code_line_comments_strings_and_nested_delimiters",
         r##"
 (with-temp-buffer
@@ -49,7 +48,6 @@ fn syntax_parser_tracks_code_line_comments_strings_and_nested_delimiters() -> Pa
              (and (nth 4 state) t))))
    '("fn" "// not" "real comment" "when" "fields, _" "}")))
 "##,
-        true,
         expect![[
             r#"OK (("fn" 0 nil nil) ("// not" 1 t nil) ("real comment" 1 nil t) ("when" 1 nil nil) ("fields, _" 2 nil nil) ("}" 1 nil t))"#
         ]],
@@ -57,7 +55,7 @@ fn syntax_parser_tracks_code_line_comments_strings_and_nested_delimiters() -> Pa
 }
 
 fn underscore_identifiers_move_and_extract_as_single_symbols() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "underscore_identifiers_move_and_extract_as_single_symbols",
         r##"
 (with-temp-buffer
@@ -77,13 +75,12 @@ fn underscore_identifiers_move_and_extract_as_single_symbols() -> ParityBatchCas
         (progn (forward-symbol 1) (point))))
      (char-syntax ?_))))
 "##,
-        true,
         expect![[r#"OK ("payment_output_reference" 29 "payment_output_reference" 119)"#]],
     )
 }
 
 fn balanced_expression_navigation_skips_strings_and_comment_delimiters() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "balanced_expression_navigation_skips_strings_and_comment_delimiters",
         r##"
 (with-temp-buffer
@@ -100,7 +97,6 @@ fn balanced_expression_navigation_skips_strings_and_comment_delimiters() -> Pari
     (list text end (point) (= end (point))
           (char-before end))))
 "##,
-        true,
         expect![[
             r#"OK ("{ Payment { owner: \"}\" }, // ignored }\n  [Some(1), Some(2)] }" 62 62 t 125)"#
         ]],
@@ -108,7 +104,7 @@ fn balanced_expression_navigation_skips_strings_and_comment_delimiters() -> Pari
 }
 
 fn inherited_indent_region_produces_stable_tabs_free_editing_result() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "inherited_indent_region_produces_stable_tabs_free_editing_result",
         r##"
 (with-temp-buffer
@@ -129,7 +125,6 @@ _ -> False\n\
    indent-line-function
    indent-tabs-mode))
 "##,
-        true,
         expect![[
             r#"OK ("validator spend {\nspend(datum: Data) {\nwhen datum is {\nConstr(fields) -> True\n_ -> False\n}\n}\n}\n" nil indent-relative nil)"#
         ]],
@@ -137,7 +132,7 @@ _ -> False\n\
 }
 
 fn newline_and_indent_uses_inherited_prog_mode_behavior_inside_validator() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "newline_and_indent_uses_inherited_prog_mode_behavior_inside_validator",
         r##"
 (with-temp-buffer
@@ -161,13 +156,12 @@ fn newline_and_indent_uses_inherited_prog_mode_behavior_inside_validator() -> Pa
         (current-indentation)))
     '(0 1 2 3 4))))
 "##,
-        true,
         expect![[r#"OK ("validator spend {\nspend(datum: Data) {\nTrue\n}\n}" (0 0 0 0 0))"#]],
     )
 }
 
 fn comment_filling_changes_only_comment_text_not_neighboring_code() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "comment_filling_changes_only_comment_text_not_neighboring_code",
         r##"
 (with-temp-buffer
@@ -188,7 +182,6 @@ let amount = calculate_payment_amount(transaction)\n")
     "let amount = calculate_payment_amount(transaction)"
     (buffer-string))))
 "##,
-        true,
         expect![[
             r#"OK ("// This validator checks that every\n// payment output remains positive\n// and belongs to the expected owner\n// before settlement.\nlet amount = calculate_payment_amount(transaction)\n" t 130)"#
         ]],
@@ -196,7 +189,7 @@ let amount = calculate_payment_amount(transaction)\n")
 }
 
 fn comment_dwim_appends_and_removes_end_of_line_comment_practically() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "comment_dwim_appends_and_removes_end_of_line_comment_practically",
         r##"
 (with-temp-buffer
@@ -211,16 +204,14 @@ fn comment_dwim_appends_and_removes_end_of_line_comment_practically() -> ParityB
     (comment-kill nil)
     (list commented (buffer-string) (current-column))))
 "##,
-        true,
         expect![[
             r#"OK ("let amount = 42                 // positive amount" "let amount = 42" 15)"#
         ]],
     )
 }
 
-#[test]
-fn editing_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn editing_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         comment_and_uncomment_region_roundtrip_preserves_aiken_program(),
         syntax_parser_tracks_code_line_comments_strings_and_nested_delimiters(),
         underscore_identifiers_move_and_extract_as_single_symbols(),
@@ -229,6 +220,5 @@ fn editing_public_surface_batch() {
         newline_and_indent_uses_inherited_prog_mode_behavior_inside_validator(),
         comment_filling_changes_only_comment_text_not_neighboring_code(),
         comment_dwim_appends_and_removes_end_of_line_comment_practically(),
-    ];
-    assert_aiken_mode_batch(&cases);
+    ]
 }

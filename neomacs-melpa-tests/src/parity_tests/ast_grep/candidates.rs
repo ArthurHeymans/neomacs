@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ast_grep_batch};
+use super::ParityBatchCase;
 
 fn ast_grep_json_match_normalization_and_candidate_format_preserve_structured_data()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ast_grep_json_match_normalization_and_candidate_format_preserve_structured_data",
         r##"(let* ((json
                 '(:file "src/lib:parser.rs"
@@ -21,7 +21,6 @@ fn ast_grep_json_match_normalization_and_candidate_format_preserve_structured_da
            (ast-grep-test-match-summary
             (substring-no-properties candidate))
            (hash-table-count ast-grep--candidate-table)))"##,
-        true,
         expect![[
             r#"OK (#1=(:file "src/lib:parser.rs" :start-line 8 :start-column 13 :text "  parse(\n value,\15\n other)  ") "src/lib:parser.rs:9:13:parse(  value,  other)" (ast-grep-match #1#) ("src/lib:parser.rs" 8 13 nil nil "  parse(\n value,\15\n other)  " nil) ("src/lib:parser.rs" 8 13 nil nil "  parse(\n value,\15\n other)  " nil) 1)"#
         ]],
@@ -29,7 +28,7 @@ fn ast_grep_json_match_normalization_and_candidate_format_preserve_structured_da
 }
 
 fn ast_grep_candidate_display_text_normalizes_multiline_real_source_snippets() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ast_grep_candidate_display_text_normalizes_multiline_real_source_snippets",
         r##"(mapcar
           #'ast-grep--candidate-display-text
@@ -38,14 +37,13 @@ fn ast_grep_candidate_display_text_normalizes_multiline_real_source_snippets() -
             " \n\t "
             "\r\n  function call(\n  alpha,\r\n  beta)\n"
             "single β界 line"))"##,
-        true,
         expect![[r#"OK ("" "" "" "function call(   alpha,   beta)" "single β界 line")"#]],
     )
 }
 
 fn ast_grep_candidate_lookup_supports_plists_properties_registry_and_legacy_paths()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ast_grep_candidate_lookup_supports_plists_properties_registry_and_legacy_paths",
         r##"(let* ((match
                 '(:file "C:/work/lib:thing.ts"
@@ -66,7 +64,6 @@ fn ast_grep_candidate_lookup_supports_plists_properties_registry_and_legacy_path
            (ast-grep-test-match-summary legacy-unregistered)
            (ast-grep-test-match-summary 42)
            (ast-grep-test-match-summary "not-a-match")))"##,
-        true,
         expect![[
             r#"OK (("C:/work/lib:thing.ts" 4 11 nil nil "target()" nil) ("C:/work/lib:thing.ts" 4 11 nil nil "target()" nil) ("C:/work/lib:thing.ts" 4 11 nil nil "target()" nil) ("C:/work/lib:thing.ts" 4 11 nil nil nil nil) ("D:/other/path:with:colon.rs" 16 9 nil nil nil nil) nil nil)"#
         ]],
@@ -75,7 +72,7 @@ fn ast_grep_candidate_lookup_supports_plists_properties_registry_and_legacy_path
 
 fn ast_grep_stream_parser_handles_multiple_files_unicode_and_malformed_records() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ast_grep_stream_parser_handles_multiple_files_unicode_and_malformed_records",
         r##"(let* ((output
                 (concat
@@ -92,7 +89,6 @@ fn ast_grep_stream_parser_handles_multiple_files_unicode_and_malformed_records()
            (ast-grep--parse-stream-line nil)
            (ast-grep--parse-stream-output "")
            (ast-grep--parse-stream-output nil)))"##,
-        true,
         expect![[
             r#"OK (("src/a.js:1:0:let α = one()" "src/b.rs:12:7:界::call(   x)") (("src/a.js" 0 0 nil nil "let α = one()" nil) ("src/b.rs" 11 7 nil nil "界::call(\n  x)" nil)) 2 nil nil nil)"#
         ]],
@@ -101,7 +97,7 @@ fn ast_grep_stream_parser_handles_multiple_files_unicode_and_malformed_records()
 
 fn ast_grep_completion_table_filters_real_candidates_and_exposes_affixation_metadata()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ast_grep_completion_table_filters_real_candidates_and_exposes_affixation_metadata",
         r##"(let* ((ast-grep-use-nerd-icons nil)
                (candidates
@@ -126,7 +122,6 @@ fn ast_grep_completion_table_filters_real_candidates_and_exposes_affixation_meta
             (substring-no-properties (car candidates))
             table)
            (ast-grep--affixation candidates)))"##,
-        true,
         expect![[
             r#"OK ((metadata (affixation-function . ast-grep--affixation)) ("src/apple.rs:1:1:apple()") ("test/apple_test.rs:5:5:apple_test()") t ((#("src/apple.rs:1:1:apple()" 0 24 (ast-grep-match (:file "src/apple.rs" :start-line 0 :start-column 1 :text "apple()"))) "" "") (#("src/banana.rs:3:3:banana()" 0 26 (ast-grep-match (:file "src/banana.rs" :start-line 2 :start-column 3 :text "banana()"))) "" "") (#("test/apple_test.rs:5:5:apple_test()" 0 35 (ast-grep-match (:file "test/apple_test.rs" :start-line 4 :start-column 5 :text "apple_test()"))) "" "")))"#
         ]],
@@ -135,7 +130,7 @@ fn ast_grep_completion_table_filters_real_candidates_and_exposes_affixation_meta
 
 fn ast_grep_nerd_icon_probe_caches_by_setting_and_affixes_without_mutating_candidate()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ast_grep_nerd_icon_probe_caches_by_setting_and_affixes_without_mutating_candidate",
         r##"(let* ((match
                 '(:file "src/render.tsx"
@@ -167,7 +162,6 @@ fn ast_grep_nerd_icon_probe_caches_by_setting_and_affixes_without_mutating_candi
              (let ((ast-grep-use-nerd-icons t))
                (ast-grep--candidate-icon-prefix candidate))
              loads)))"##,
-        true,
         expect![[
             r#"OK ("ICON " "ICON " 1 ("src/render.tsx" "src/render.tsx") "src/render.tsx:1:0:render()" "" "ICON " 2)"#
         ]],
@@ -176,7 +170,7 @@ fn ast_grep_nerd_icon_probe_caches_by_setting_and_affixes_without_mutating_candi
 
 fn ast_grep_character_column_navigation_handles_tabs_unicode_and_double_width_text()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ast_grep_character_column_navigation_handles_tabs_unicode_and_double_width_text",
         r##"(with-temp-buffer
           (insert "\tα界target\nsecond\tβeta\nthird")
@@ -204,7 +198,6 @@ fn ast_grep_character_column_navigation_handles_tabs_unicode_and_double_width_te
                         (cdr error-data))
                   positions))))
             (nreverse positions)))"##,
-        true,
         expect![[
             r#"OK (((0 0) 1 9 "\11α界target") ((0 1) 2 945 "\11α界target") ((0 2) 3 30028 "\11α界target") ((0 3) 4 116 "\11α界target") ((0 8) 9 116 "\11α界target") ((1 7) 18 946 "second\11βeta") ((2 5) 28 nil "third"))"#
         ]],
@@ -212,7 +205,7 @@ fn ast_grep_character_column_navigation_handles_tabs_unicode_and_double_width_te
 }
 
 fn ast_grep_goto_match_visits_real_file_and_lands_on_character_index() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ast_grep_goto_match_visits_real_file_and_lands_on_character_index",
         r##"(let* ((file
                 (ast-grep-test-write-file
@@ -237,13 +230,12 @@ fn ast_grep_goto_match_visits_real_file_and_lands_on_character_index() -> Parity
                   (point)
                   (min (+ (point) 6) (point-max)))))
             (ast-grep-test-kill-file-buffer file)))"##,
-        true,
         expect![[r#"OK (t 2 3 "target")"#]],
     )
 }
 
 fn ast_grep_reset_candidate_table_removes_only_registered_session_data() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ast_grep_reset_candidate_table_removes_only_registered_session_data",
         r##"(let* ((first
                 (ast-grep--format-candidate
@@ -265,16 +257,15 @@ fn ast_grep_reset_candidate_table_removes_only_registered_session_data() -> Pari
            (ast-grep-test-match-summary
             (substring-no-properties first))
            (ast-grep-test-match-summary first)))"##,
-        true,
         expect![[
             r#"OK ((2 ("a.rs" 0 0 nil nil "a" nil) ("b.rs" 1 2 nil nil "b" nil)) 0 ("a.rs" 0 0 nil nil nil nil) ("a.rs" 0 0 nil nil "a" nil))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn candidates_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn candidates_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         ast_grep_json_match_normalization_and_candidate_format_preserve_structured_data(),
         ast_grep_candidate_display_text_normalizes_multiline_real_source_snippets(),
         ast_grep_candidate_lookup_supports_plists_properties_registry_and_legacy_paths(),
@@ -284,6 +275,5 @@ fn candidates_public_surface_batch() {
         ast_grep_character_column_navigation_handles_tabs_unicode_and_double_width_text(),
         ast_grep_goto_match_visits_real_file_and_lands_on_character_index(),
         ast_grep_reset_candidate_table_removes_only_registered_session_data(),
-    ];
-    assert_ast_grep_batch(&cases);
+    ]
 }

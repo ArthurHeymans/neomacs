@@ -1,14 +1,9 @@
 use expect_test::expect;
 
-use super::{
-    ParityBatchCase, assert_arjen_grey_theme_autoload_batch,
-    assert_arjen_grey_theme_autoload_parity, assert_arjen_grey_theme_batch,
-    assert_arjen_grey_theme_parity, assert_arjen_grey_theme_with_helm_batch,
-    assert_arjen_grey_theme_with_helm_parity, assert_arjen_grey_theme_with_prelude_parity,
-};
+use super::{ParityBatchCase, assert_arjen_grey_theme_with_prelude_batch};
 
 fn installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle",
         r##"(let ((before
                     (list
@@ -73,7 +68,6 @@ fn installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle() 
                      (custom-theme-enabled-p 'arjen-grey)
                    (disable-theme 'arjen-grey)))
                (list before first second after))"##,
-        true,
         expect![[
             r##"OK ((nil nil nil "unspecified-bg") (#1=(arjen-grey) #1# "#bdc3ce" "#2a2f38" "#bdc3ce" "#242a34" 1) (#2=(arjen-grey) #2# "#bdc3ce" "#2a2f38" "#e1cb8c" "#3c4449") (nil nil "unspecified-fg" "unspecified-bg"))"##
         ]],
@@ -81,7 +75,7 @@ fn installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle() 
 }
 
 fn styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces",
         r##"(unwind-protect
                (progn
@@ -158,7 +152,6 @@ fn styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces() -> Pa
              (when
                  (custom-theme-enabled-p 'arjen-grey)
                (disable-theme 'arjen-grey)))"##,
-        true,
         expect![[
             r##"OK (";; Publish one validated release artifact.\n(defun publish-release (artifact)\n  (if (file-exists-p artifact)\n      (message \"Publishing %s\" artifact)\n    (error \"Missing artifact\")))\n" (("Publish one" font-lock-comment-face "#63747c" unspecified) ("defun" font-lock-keyword-face "#b894b0" unspecified) ("publish-release" font-lock-function-name-face "#909fab" unspecified) ("if (" font-lock-keyword-face "#b894b0" unspecified) ("file-exists-p" nil nil nil) ("message" nil nil nil) ("\"Publishing %s\"" font-lock-string-face "#a8c194" unspecified) ("error" font-lock-warning-face "red" bold)) (:default "#bdc3ce" "#2a2f38" :cursor "#e1cb8c" :mode-line "#bdc3ce" "#242a34" :region "#3c4449" :selection "  (if (file-exists-p artifact)"))"##
         ]],
@@ -166,7 +159,7 @@ fn styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces() -> Pa
 }
 
 fn filters_and_selects_a_deployment_target_in_a_real_helm_session() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "filters_and_selects_a_deployment_target_in_a_real_helm_session",
         r##"(progn
                (require 'helm)
@@ -263,36 +256,26 @@ fn filters_and_selects_a_deployment_target_in_a_real_helm_session() -> ParityBat
                       "*helm deployment targets*"))
                    (fmakunbound
                     'arjen-grey-deployment-target))))"##,
-        true,
         expect![[
             r##"OK ((:environment staging :directory "/srv/app-staging") ("stag" "staging — /srv/app-staging" "#bdc3ce" "#2a2f38" bold (:line-width -1 :style released-button) "#3c4449" nil))"##
         ]],
     )
 }
 
-#[test]
-fn workflows_arjen_grey_theme_autoload_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle()];
-    assert_arjen_grey_theme_autoload_batch(&cases);
+pub(super) fn workflows_arjen_grey_theme_autoload_batch_cases() -> Vec<ParityBatchCase> {
+    vec![installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle()]
 }
 
-#[test]
-fn workflows_arjen_grey_theme_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces()];
-    assert_arjen_grey_theme_batch(&cases);
+pub(super) fn workflows_arjen_grey_theme_batch_cases() -> Vec<ParityBatchCase> {
+    vec![styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces()]
 }
 
-#[test]
-fn workflows_arjen_grey_theme_with_helm_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![filters_and_selects_a_deployment_target_in_a_real_helm_session()];
-    assert_arjen_grey_theme_with_helm_batch(&cases);
+pub(super) fn workflows_arjen_grey_theme_with_helm_batch_cases() -> Vec<ParityBatchCase> {
+    vec![filters_and_selects_a_deployment_target_in_a_real_helm_session()]
 }
 
-#[test]
-fn stacks_over_a_user_theme_and_restores_the_previous_palette_and_faces() {
+fn stacks_over_a_user_theme_and_restores_the_previous_palette_and_faces()
+-> (&'static str, ParityBatchCase) {
     let prelude = r##"(progn
                  (defvar hl-paren-colors nil)
                  (custom-declare-theme
@@ -393,5 +376,18 @@ fn stacks_over_a_user_theme_and_restores_the_previous_palette_and_faces() {
     let expect = expect![[
         r##"OK ((#1=(arjen-grey-parity-base) "#d8dee9" "#1b2028" "#ffcc66" "#3b4252" ("#ff79c6" "#8be9fd")) ((arjen-grey . #1#) "#bdc3ce" "#2a2f38" "#b894b0" "#3c4449" ("#B9F" "#B8D" "#B7B" "#B69" "#B57" "#B45" "#B33" "#B11")) (#1# "#d8dee9" "#1b2028" "#ffcc66" "#3b4252" ("#ff79c6" "#8be9fd")) ((arjen-grey . #1#) ("#B9F" "#B8D" "#B7B" "#B69" "#B57" "#B45" "#B33" "#B11")) nil)"##
     ]];
-    assert_arjen_grey_theme_with_prelude_parity(prelude, elisp_form, expect);
+    (
+        prelude,
+        ParityBatchCase::value(
+            "stacks_over_a_user_theme_and_restores_the_previous_palette_and_faces",
+            elisp_form,
+            expect,
+        ),
+    )
+}
+
+#[test]
+fn workflows_arjen_grey_theme_with_prelude_batch() {
+    let (prelude, case) = stacks_over_a_user_theme_and_restores_the_previous_palette_and_faces();
+    assert_arjen_grey_theme_with_prelude_batch(prelude, &[case]);
 }

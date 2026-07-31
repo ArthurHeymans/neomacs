@@ -381,7 +381,7 @@ fn run_command(
     let display = format!("{command:?}");
     let output = output_with_timeout(command, timeout).map_err(|error| match error {
         CommandError::Launch(error) => format!("failed to launch {label} `{display}`: {error}"),
-        CommandError::TimedOut => format!("{label} timed out after {timeout:?}: `{display}`"),
+        CommandError::TimedOut(_) => format!("{label} timed out after {timeout:?}: `{display}`"),
         CommandError::Capture(error) => {
             format!("failed to capture {label} output for `{display}`: {error}")
         }
@@ -793,7 +793,7 @@ fn prepare_cached_source_artifact_with_tools(
                     "failed to launch {} to build {} from source: {error}",
                     gnu_emacs.name, source.name
                 ),
-                CommandError::TimedOut => format!(
+                CommandError::TimedOut(_) => format!(
                     "{} source build for {} timed out after {:?}",
                     gnu_emacs.name, source.name, gnu_emacs.timeout
                 ),
@@ -1010,7 +1010,7 @@ pub fn prepare_cached_locked_package_plan(
                     "failed to launch {} to install {} from source: {error}",
                     gnu_emacs.name, root_source.name
                 ),
-                CommandError::TimedOut => format!(
+                CommandError::TimedOut(_) => format!(
                     "{} source installation for {} timed out after {:?}",
                     gnu_emacs.name, root_source.name, gnu_emacs.timeout
                 ),
@@ -1307,8 +1307,7 @@ printf 'NEOMACS-SOURCE-PACKAGE:ready:%s:%s\n' \
              root\t1.0\thttps://example.invalid/root\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/root\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\tzeta,alpha\n\
              zeta\t1.0\thttps://example.invalid/zeta\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/zeta\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\t-\n",
         )
-        .err()
-        .expect("dependency names must have one canonical order");
+        .expect_err("dependency names must have one canonical order");
 
         assert!(error.contains("sorted"));
     }
@@ -1319,8 +1318,7 @@ printf 'NEOMACS-SOURCE-PACKAGE:ready:%s:%s\n' \
             "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
              recursive\t1.0\thttps://example.invalid/recursive\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/recursive\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\trecursive\n",
         )
-        .err()
-        .expect("a package cannot directly depend on itself");
+        .expect_err("a package cannot directly depend on itself");
 
         assert!(error.contains("depends on itself"));
         assert!(error.contains("line 2"));
@@ -1333,8 +1331,7 @@ printf 'NEOMACS-SOURCE-PACKAGE:ready:%s:%s\n' \
              zeta\t1.0\thttps://example.invalid/zeta\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/zeta\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\t-\n\
              alpha\t1.0\thttps://example.invalid/alpha\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/alpha\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\t-\n",
         )
-        .err()
-        .expect("package rows must have one canonical order");
+        .expect_err("package rows must have one canonical order");
 
         assert!(error.contains("package rows must be sorted"));
     }
@@ -1345,8 +1342,7 @@ printf 'NEOMACS-SOURCE-PACKAGE:ready:%s:%s\n' \
             "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
              demo\t1.0\thttps://example.invalid/demo\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/demo\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\t\n",
         )
-        .err()
-        .expect("an empty final field is ambiguous and leaves trailing whitespace");
+        .expect_err("an empty final field is ambiguous and leaves trailing whitespace");
 
         assert!(error.contains("use `-` for no dependencies"));
     }

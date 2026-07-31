@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auth_source_gopass_batch};
+use super::ParityBatchCase;
 
 fn auth_source_gopass_enable_prepends_source_and_flushes_cache_once() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_enable_prepends_source_and_flushes_cache_once",
         r##"(let ((auth-sources
                 '("~/.authinfo" default))
@@ -18,13 +18,12 @@ fn auth_source_gopass_enable_prepends_source_and_flushes_cache_once() -> ParityB
             (auth-source-gopass-enable)
             auth-sources
             (nreverse calls))))"##,
-        true,
         expect![[r#"OK (:forgotten (gopass "~/.authinfo" default) (:forget))"#]],
     )
 }
 
 fn auth_source_gopass_enable_deduplicates_existing_source_in_any_position() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_enable_deduplicates_existing_source_in_any_position",
         r##"(mapcar
          (lambda (initial)
@@ -45,7 +44,6 @@ fn auth_source_gopass_enable_deduplicates_existing_source_in_any_position() -> P
            (gopass)
            ("~/.authinfo" gopass default)
            (gopass "~/.authinfo" gopass)))"##,
-        true,
         expect![[
             r#"OK (((gopass) (:forget :forget)) ((gopass) (:forget :forget)) (("~/.authinfo" gopass default) (:forget :forget)) ((gopass "~/.authinfo" gopass) (:forget :forget)))"#
         ]],
@@ -53,7 +51,7 @@ fn auth_source_gopass_enable_deduplicates_existing_source_in_any_position() -> P
 }
 
 fn auth_source_gopass_real_auth_source_search_resolves_credential() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_real_auth_source_search_resolves_credential",
         r##"(let ((auth-sources
                 '(gopass))
@@ -83,15 +81,15 @@ fn auth_source_gopass_real_auth_source_search_resolves_credential() -> ParityBat
                   (plist-get entry :secret)))
                matches)
               (nreverse commands)))))"##,
-        true,
         expect![[
             r#"OK (((:user "alice@example" :secret "integration-secret")) (("alice@example" "integration-secret")) ("gopass show -o accounts/smtp.example/alice\\@example"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auth_source_gopass_real_password_lookup_returns_secret() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_real_password_lookup_returns_secret",
         r##"(let ((auth-sources
                 '(gopass))
@@ -111,15 +109,15 @@ fn auth_source_gopass_real_password_lookup_returns_secret() -> ParityBatchCase {
              :user "alice@example"
              :port "submission")
             (nreverse commands))))"##,
-        true,
         expect![[
             r#"OK ("smtp-password" ("gopass show -o accounts/smtp.example/alice\\@example"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auth_source_gopass_enable_then_search_models_application_startup() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_enable_then_search_models_application_startup",
         r##"(let ((auth-sources
                 '("~/.authinfo"))
@@ -144,15 +142,15 @@ fn auth_source_gopass_enable_then_search_models_application_startup() -> ParityB
               auth-sources
               result
               (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK ((gopass "~/.authinfo") ((:user "alice" :secret "startup-secret")) ((:find "gopass") (:shell "gopass show -o accounts/imap.example/alice")))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auth_source_gopass_application_can_customize_full_vault_layout() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_application_can_customize_full_vault_layout",
         r##"(let ((auth-sources
                 '(gopass))
@@ -184,22 +182,19 @@ fn auth_source_gopass_application_can_customize_full_vault_layout() -> ParityBat
              :user "alice"
              :port 465)
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK ("company-secret" ((:find "gopass-company") (:shell "gopass-company show -o teams/./gopass/alice\\@smtp.internal\\:465")))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auth_source_gopass_enable_prepends_source_and_flushes_cache_once(),
         auth_source_gopass_enable_deduplicates_existing_source_in_any_position(),
         auth_source_gopass_real_auth_source_search_resolves_credential(),
         auth_source_gopass_real_password_lookup_returns_secret(),
         auth_source_gopass_enable_then_search_models_application_startup(),
         auth_source_gopass_application_can_customize_full_vault_layout(),
-    ];
-    assert_auth_source_gopass_batch(&cases);
+    ]
 }

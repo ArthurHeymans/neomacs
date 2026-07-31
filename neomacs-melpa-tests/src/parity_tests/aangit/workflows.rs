@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aangit_batch};
+use super::ParityBatchCase;
 
 fn aangit_menu_scaffolds_a_new_angular_workspace_with_the_default_switches() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aangit_menu_scaffolds_a_new_angular_workspace_with_the_default_switches",
         r##"(progn
   (aangit-test-setup-cli)
@@ -18,7 +18,6 @@ fn aangit_menu_scaffolds_a_new_angular_workspace_with_the_default_switches() -> 
    (aangit-test-relative-files "storefront")
    (aangit-test-active-prefix)
    (length (window-list))))"##,
-        true,
         expect![[
             r#"OK (("ng new --defaults storefront --style=css --routing --standalone" "ng add --defaults --skip-confirmation @angular-eslint/schematics") "storefront" dired-mode "storefront/" ("angular.json" "src/app/app.component.ts" "src/main.ts") aangit-menu--generate-submenu 2)"#
         ]],
@@ -26,7 +25,7 @@ fn aangit_menu_scaffolds_a_new_angular_workspace_with_the_default_switches() -> 
 }
 
 fn aangit_new_project_switches_and_style_option_reach_the_ng_command_line() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aangit_new_project_switches_and_style_option_reach_the_ng_command_line",
         r##"(progn
   (aangit-test-setup-cli)
@@ -42,7 +41,6 @@ fn aangit_new_project_switches_and_style_option_reach_the_ng_command_line() -> P
    (aangit-test-commands)
    (aangit-test-relative-files "dashboard")
    (aangit-test-active-prefix)))"##,
-        true,
         expect![[
             r#"OK (("ng new --defaults dashboard --skip-tests --style=scss --inline-template --inline-style --standalone" "ng add --defaults --skip-confirmation @angular-eslint/schematics") ("angular.json" "src/app/app.component.ts" "src/main.ts") aangit-menu--generate-submenu)"#
         ]],
@@ -51,7 +49,7 @@ fn aangit_new_project_switches_and_style_option_reach_the_ng_command_line() -> P
 
 fn aangit_generate_component_prompts_for_a_name_and_writes_it_into_the_workspace() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aangit_generate_component_prompts_for_a_name_and_writes_it_into_the_workspace",
         r##"(progn
   (aangit-test-setup-cli)
@@ -66,7 +64,6 @@ fn aangit_generate_component_prompts_for_a_name_and_writes_it_into_the_workspace
    (aangit-test-commands)
    (aangit-test-relative-files "src")
    (aangit-test-active-prefix)))"##,
-        true,
         expect![[
             r#"OK (("ng generate component product-card --defaults --export --module=shared.module --standalone") ("app/product-card/product-card.component.ts") nil)"#
         ]],
@@ -74,7 +71,7 @@ fn aangit_generate_component_prompts_for_a_name_and_writes_it_into_the_workspace
 }
 
 fn aangit_generate_service_and_module_submenus_issue_their_own_ng_commands() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aangit_generate_service_and_module_submenus_issue_their_own_ng_commands",
         r##"(progn
   (aangit-test-setup-cli)
@@ -87,15 +84,15 @@ fn aangit_generate_service_and_module_submenus_issue_their_own_ng_commands() -> 
   (list
    (aangit-test-commands)
    (aangit-test-active-prefix)))"##,
-        true,
         expect![[
             r#"OK (("ng generate service auth" "ng generate module admin --defaults --routing --flat" "ng generate interface order") nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn aangit_adds_each_selected_schematic_and_installs_an_npm_package() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aangit_adds_each_selected_schematic_and_installs_an_npm_package",
         r##"(progn
   (aangit-test-setup-cli)
@@ -110,15 +107,15 @@ fn aangit_adds_each_selected_schematic_and_installs_an_npm_package() -> ParityBa
   (list
    (aangit-test-commands)
    (aangit-test-active-prefix)))"##,
-        true,
         expect![[
             r#"OK (("ng add --defaults --skip-confirmation @ngrx/store" "ng add --defaults --skip-confirmation @angular/cdk/schematics" "ng add --defaults --skip-confirmation @angular/material" "npm install rxjs@7.8.1 @types/node") nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn aangit_reports_missing_names_and_runs_no_command_line_tool_at_all() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aangit_reports_missing_names_and_runs_no_command_line_tool_at_all",
         r##"(progn
   (aangit-test-setup-cli)
@@ -144,22 +141,20 @@ fn aangit_reports_missing_names_and_runs_no_command_line_tool_at_all() -> Parity
     (list (nreverse observed)
           (aangit-test-commands)
           (file-exists-p aangit-test-log))))"##,
-        true,
         expect![[
             r#"OK (((component "missing component name") (service "missing service name") (module "missing module name") (interface "missing interface name") (npm "missing package name") (schematic "missing schematic name")) no-command-ran nil)"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         aangit_menu_scaffolds_a_new_angular_workspace_with_the_default_switches(),
         aangit_new_project_switches_and_style_option_reach_the_ng_command_line(),
         aangit_generate_component_prompts_for_a_name_and_writes_it_into_the_workspace(),
         aangit_generate_service_and_module_submenus_issue_their_own_ng_commands(),
         aangit_adds_each_selected_schematic_and_installs_an_npm_package(),
         aangit_reports_missing_names_and_runs_no_command_line_tool_at_all(),
-    ];
-    assert_aangit_batch(&cases);
+    ]
 }

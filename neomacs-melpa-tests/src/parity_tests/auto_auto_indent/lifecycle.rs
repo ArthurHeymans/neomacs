@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_auto_indent_batch};
+use super::ParityBatchCase;
 
 fn auto_auto_indent_raw_source_enable_without_legacy_cl_pushnew_surfaces_upstream_failure()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_raw_source_enable_without_legacy_cl_pushnew_surfaces_upstream_failure",
         r##"(let ((definition
                                 (symbol-function
@@ -33,13 +33,13 @@ fn auto_auto_indent_raw_source_enable_without_legacy_cl_pushnew_surfaces_upstrea
                     'aai-before-change-function
                     before-change-functions))))
             (fset 'pushnew definition)))"##,
-        true,
         expect!["OK ((:error void-function (pushnew)) t (aai-post-command-hook) nil)"],
     )
+    .fresh_process()
 }
 
 fn auto_auto_indent_enable_installs_buffer_local_hooks_keymap_and_mode_line() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_enable_installs_buffer_local_hooks_keymap_and_mode_line",
         r##"(with-temp-buffer
           (fundamental-mode)
@@ -67,7 +67,6 @@ fn auto_auto_indent_enable_installs_buffer_local_hooks_keymap_and_mode_line() ->
             [remap yank])
            (minor-mode-key-binding
             [remap delete-char])))"##,
-        true,
         expect![[
             r#"OK (t t (auto-auto-indent-mode " aai") 1 1 t nil aai-indent-line-maybe ((auto-auto-indent-mode . aai-newline-and-indent)) ((auto-auto-indent-mode . aai-indented-yank)) ((auto-auto-indent-mode . aai-delete-char)))"#
         ]],
@@ -75,7 +74,7 @@ fn auto_auto_indent_enable_installs_buffer_local_hooks_keymap_and_mode_line() ->
 }
 
 fn auto_auto_indent_repeated_enable_disable_and_reenable_are_hook_idempotent() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_repeated_enable_disable_and_reenable_are_hook_idempotent",
         r##"(with-temp-buffer
           (fundamental-mode)
@@ -96,7 +95,6 @@ fn auto_auto_indent_repeated_enable_disable_and_reenable_are_hook_idempotent() -
                  [remap newline]))
                states))
             (nreverse states)))"##,
-        true,
         expect![
             "OK ((1 t 1 1 ((auto-auto-indent-mode . aai-newline-and-indent))) (1 t 1 1 ((auto-auto-indent-mode . aai-newline-and-indent))) (-1 nil 1 1 nil) (-1 nil 1 1 nil) (1 t 1 1 ((auto-auto-indent-mode . aai-newline-and-indent))))"
         ],
@@ -105,7 +103,7 @@ fn auto_auto_indent_repeated_enable_disable_and_reenable_are_hook_idempotent() -
 
 fn auto_auto_indent_major_mode_setup_selects_defun_strategy_only_for_lisp_modes() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_major_mode_setup_selects_defun_strategy_only_for_lisp_modes",
         r##"(mapcar
           (lambda (mode)
@@ -122,7 +120,6 @@ fn auto_auto_indent_major_mode_setup_selects_defun_strategy_only_for_lisp_modes(
             lisp-interaction-mode
             fundamental-mode
             text-mode))"##,
-        true,
         expect![
             "OK ((emacs-lisp-mode emacs-lisp-mode aai-indent-defun t) (lisp-interaction-mode lisp-interaction-mode aai-indent-defun t) (fundamental-mode fundamental-mode aai-indent-line-maybe nil) (text-mode text-mode aai-indent-line-maybe nil))"
         ],
@@ -131,7 +128,7 @@ fn auto_auto_indent_major_mode_setup_selects_defun_strategy_only_for_lisp_modes(
 
 fn auto_auto_indent_mode_hook_runs_before_internal_hook_key_and_strategy_setup() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_mode_hook_runs_before_internal_hook_key_and_strategy_setup",
         r##"(with-temp-buffer
           (emacs-lisp-mode)
@@ -167,16 +164,16 @@ fn auto_auto_indent_mode_hook_runs_before_internal_hook_key_and_strategy_setup()
              (lookup-key
               auto-auto-indent-mode-map
               [remap newline]))))"##,
-        true,
         expect![
             "OK ((t aai-indent-line-maybe nil nil 1) aai-indent-defun (aai-post-command-hook) (aai-before-change-function) aai-newline-and-indent)"
         ],
     )
+    .fresh_process()
 }
 
 fn auto_auto_indent_c_v_binding_is_added_only_when_current_binding_is_cua_paste() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_c_v_binding_is_added_only_when_current_binding_is_cua_paste",
         r##"(mapcar
           (lambda (binding)
@@ -202,7 +199,6 @@ fn auto_auto_indent_c_v_binding_is_added_only_when_current_binding_is_cua_paste(
           '(cua-paste
             scroll-up-command
             ignore))"##,
-        true,
         expect![
             "OK ((cua-paste aai-indented-yank aai-indented-yank) (scroll-up-command scroll-up-command nil) (ignore ignore nil))"
         ],
@@ -210,7 +206,7 @@ fn auto_auto_indent_c_v_binding_is_added_only_when_current_binding_is_cua_paste(
 }
 
 fn auto_auto_indent_mode_map_contains_every_documented_command_remapping() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_mode_map_contains_every_documented_command_remapping",
         r##"(with-temp-buffer
           (fundamental-mode)
@@ -234,7 +230,6 @@ fn auto_auto_indent_mode_map_contains_every_documented_command_remapping() -> Pa
              autopair-backspace
              backward-delete-char
              delete-backward-char)))"##,
-        true,
         expect![
             "OK ((yank aai-indented-yank ((auto-auto-indent-mode . aai-indented-yank))) (cua-paste aai-indented-yank ((auto-auto-indent-mode . aai-indented-yank))) (newline aai-newline-and-indent ((auto-auto-indent-mode . aai-newline-and-indent))) (open-line aai-open-line ((auto-auto-indent-mode . aai-open-line))) (delete-char aai-delete-char ((auto-auto-indent-mode . aai-delete-char))) (forward-delete aai-delete-char ((auto-auto-indent-mode . aai-delete-char))) (backward-delete-char-untabify aai-backspace ((auto-auto-indent-mode . aai-backspace))) (autopair-backspace aai-backspace ((auto-auto-indent-mode . aai-backspace))) (backward-delete-char aai-backspace ((auto-auto-indent-mode . aai-backspace))) (delete-backward-char aai-backspace ((auto-auto-indent-mode . aai-backspace))))"
         ],
@@ -242,7 +237,7 @@ fn auto_auto_indent_mode_map_contains_every_documented_command_remapping() -> Pa
 }
 
 fn auto_auto_indent_mode_state_hooks_and_change_flags_are_isolated_per_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_mode_state_hooks_and_change_flags_are_isolated_per_buffer",
         r##"(let ((first
                                 (generate-new-buffer
@@ -284,7 +279,6 @@ fn auto_auto_indent_mode_state_hooks_and_change_flags_are_isolated_per_buffer() 
               (kill-buffer first))
             (when (buffer-live-p second)
               (kill-buffer second))))"##,
-        true,
         expect![
             "OK ((t aai-indent-defun :first (aai-post-command-hook)) (nil aai-indent-line-maybe :second nil) nil)"
         ],
@@ -292,7 +286,7 @@ fn auto_auto_indent_mode_state_hooks_and_change_flags_are_isolated_per_buffer() 
 }
 
 fn auto_auto_indent_aai_mode_function_and_variable_aliases_stay_synchronized() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_aai_mode_function_and_variable_aliases_stay_synchronized",
         r##"(with-temp-buffer
           (fundamental-mode)
@@ -321,7 +315,6 @@ fn auto_auto_indent_aai_mode_function_and_variable_aliases_stay_synchronized() -
              (indirect-variable
               'aai-mode)
              (nreverse states))))"##,
-        true,
         expect![
             "OK (t auto-auto-indent-mode (((aai-mode 1) t t) ((auto-auto-indent-mode -1) nil nil) ((setq aai-mode t) t t) ((setq auto-auto-indent-mode nil) nil nil)))"
         ],
@@ -329,7 +322,7 @@ fn auto_auto_indent_aai_mode_function_and_variable_aliases_stay_synchronized() -
 }
 
 fn auto_auto_indent_late_multiple_cursors_and_paredit_integrations_apply_once() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_auto_indent_late_multiple_cursors_and_paredit_integrations_apply_once",
         r##"(progn
           (defvar mc/unsupported-minor-modes nil)
@@ -354,14 +347,12 @@ fn auto_auto_indent_late_multiple_cursors_and_paredit_integrations_apply_once() 
            (lookup-key
             auto-auto-indent-mode-map
             [remap paredit-backward-delete])))"##,
-        true,
         expect!["OK ((aai-mode) 1 aai-delete-char aai-backspace)"],
     )
 }
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn lifecycle_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_auto_indent_raw_source_enable_without_legacy_cl_pushnew_surfaces_upstream_failure(),
         auto_auto_indent_enable_installs_buffer_local_hooks_keymap_and_mode_line(),
         auto_auto_indent_repeated_enable_disable_and_reenable_are_hook_idempotent(),
@@ -372,6 +363,5 @@ fn lifecycle_public_surface_batch() {
         auto_auto_indent_mode_state_hooks_and_change_flags_are_isolated_per_buffer(),
         auto_auto_indent_aai_mode_function_and_variable_aliases_stay_synchronized(),
         auto_auto_indent_late_multiple_cursors_and_paredit_integrations_apply_once(),
-    ];
-    assert_auto_auto_indent_batch(&cases);
+    ]
 }

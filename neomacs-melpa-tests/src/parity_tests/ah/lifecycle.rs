@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ah_autoload_batch};
+use super::ParityBatchCase;
 
 fn autoloaded_public_mode_enables_hooks_updates_its_lighter_and_disables_cleanly() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "autoloaded_public_mode_enables_hooks_updates_its_lighter_and_disables_cleanly",
         r##"
 (let ((was-autoloaded (autoloadp (symbol-function 'ah-mode)))
@@ -55,16 +55,12 @@ fn autoloaded_public_mode_enables_hooks_updates_its_lighter_and_disables_cleanly
          ah-mode))
     (ah-mode -1)))
 "##,
-        true,
         expect![[
             r#"OK (t nil (t t " Hooks" #1=((:eval (format "%s" ah-lighter))) 2) (" AH!" #1#) 1 ((before 1) (after 2)) nil)"#
         ]],
     )
 }
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![autoloaded_public_mode_enables_hooks_updates_its_lighter_and_disables_cleanly()];
-    assert_ah_autoload_batch(&cases);
+pub(super) fn lifecycle_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![autoloaded_public_mode_enables_hooks_updates_its_lighter_and_disables_cleanly()]
 }

@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ah_batch};
+use super::ParityBatchCase;
 
 fn enabled_mode_observes_real_navigation_but_not_programmatic_or_disabled_motion() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "enabled_mode_observes_real_navigation_but_not_programmatic_or_disabled_motion",
         r##"
 (with-temp-buffer
@@ -80,16 +80,12 @@ fn enabled_mode_observes_real_navigation_but_not_programmatic_or_disabled_motion
            ah-mode))
       (ah-mode -1))))
 "##,
-        true,
         expect![[
             r#"OK ("alphaBeta gamma\nsecond line\nthird" 2 (end-of-buffer nil) ((before forward-char 1 1 0) (after forward-char 2 1 1) (before backward-char 2 1 1) (after backward-char 1 1 0) (before next-line 1 1 0) (after next-line 17 2 0) (before end-of-line 17 2 0) (after end-of-line 28 2 11) (before previous-line 28 2 11) (after previous-line 12 1 11) (before beginning-of-line 12 1 11) (after beginning-of-line 1 1 0) (before end-of-buffer 1 1 0) (after end-of-buffer 34 3 5) (before beginning-of-buffer 34 3 5) (after beginning-of-buffer 1 1 0) (before failed-forward 34 3 5)) nil nil)"#
         ]],
     )
 }
 
-#[test]
-fn cursor_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![enabled_mode_observes_real_navigation_but_not_programmatic_or_disabled_motion()];
-    assert_ah_batch(&cases);
+pub(super) fn cursor_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![enabled_mode_observes_real_navigation_but_not_programmatic_or_disabled_motion()]
 }

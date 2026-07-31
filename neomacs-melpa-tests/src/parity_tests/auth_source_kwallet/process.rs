@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auth_source_kwallet_batch};
+use super::ParityBatchCase;
 
 fn auth_source_kwallet_default_search_invokes_exact_cli_and_trims_secret() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_default_search_invokes_exact_cli_and_trims_secret",
         r##"(progn
                           (auth-source-kwallet-test-reset-process)
@@ -22,7 +22,6 @@ fn auth_source_kwallet_default_search_invokes_exact_cli_and_trims_secret() -> Pa
                            (nreverse
                             auth-source-kwallet-test-process-calls)
                            (get-buffer "*kwallet-output*")))"##,
-        true,
         expect![[
             r#"OK (((:user "alice" :secret "correct horse battery staple")) ("kwallet-query") (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@mail.example") t)) nil)"#
         ]],
@@ -31,7 +30,7 @@ fn auth_source_kwallet_default_search_invokes_exact_cli_and_trims_secret() -> Pa
 
 fn auth_source_kwallet_custom_wallet_folder_separator_and_executable_reach_cli_exactly()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_custom_wallet_folder_separator_and_executable_reach_cli_exactly",
         r##"(let ((auth-source-kwallet-wallet
                                 "Engineering Wallet")
@@ -54,7 +53,6 @@ fn auth_source_kwallet_custom_wallet_folder_separator_and_executable_reach_cli_e
                              auth-source-kwallet-test-executable-calls)
                             (nreverse
                              auth-source-kwallet-test-process-calls)))"##,
-        true,
         expect![[
             r#"OK (((:user "deploy" :secret "deploy-token")) ("kwallet-query-v2") (("kwallet-query-v2" nil "*kwallet-output*" nil ("Engineering Wallet" "-f" "Production Tokens" "-r" "deploy::api.internal") t)))"#
         ]],
@@ -62,7 +60,7 @@ fn auth_source_kwallet_custom_wallet_folder_separator_and_executable_reach_cli_e
 }
 
 fn auth_source_kwallet_secret_trimming_removes_all_edge_whitespace_only() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_secret_trimming_removes_all_edge_whitespace_only",
         r##"(mapcar
                           (lambda (output)
@@ -82,7 +80,6 @@ fn auth_source_kwallet_secret_trimming_removes_all_edge_whitespace_only() -> Par
                             "\nsecret\n"
                             "\t\r\n secret \f\v"
                             "  two words  "))"##,
-        true,
         expect![[
             r#"OK (("secret" ((:user "trim-user" :secret "secret"))) (" secret " ((:user "trim-user" :secret "secret"))) ("\nsecret\n" ((:user "trim-user" :secret "secret"))) ("\11\15\n secret \f\13" ((:user "trim-user" :secret "secret \f\13"))) ("  two words  " ((:user "trim-user" :secret "two words"))))"#
         ]],
@@ -91,7 +88,7 @@ fn auth_source_kwallet_secret_trimming_removes_all_edge_whitespace_only() -> Par
 
 fn auth_source_kwallet_multiline_and_unicode_secret_preserves_interior_content() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_multiline_and_unicode_secret_preserves_interior_content",
         r##"(progn
                           (auth-source-kwallet-test-reset-process)
@@ -102,14 +99,13 @@ fn auth_source_kwallet_multiline_and_unicode_secret_preserves_interior_content()
                            "unicode.example"
                            :user
                            "δοκιμή"))"##,
-        true,
         expect![[r#"OK ((:user "δοκιμή" :secret "première ligne\n密碼 line\nlast\11field"))"#]],
     )
 }
 
 fn auth_source_kwallet_empty_and_whitespace_only_outputs_are_successful_empty_secrets()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_empty_and_whitespace_only_outputs_are_successful_empty_secrets",
         r##"(mapcar
                           (lambda (output)
@@ -125,7 +121,6 @@ fn auth_source_kwallet_empty_and_whitespace_only_outputs_are_successful_empty_se
                               :user
                               "service")))
                           '("" " " "\n\t\r"))"##,
-        true,
         expect![[
             r#"OK (("" ((:user "service" :secret ""))) (" " ((:user "service" :secret ""))) ("\n\11\15" ((:user "service" :secret ""))))"#
         ]],
@@ -134,7 +129,7 @@ fn auth_source_kwallet_empty_and_whitespace_only_outputs_are_successful_empty_se
 
 fn auth_source_kwallet_every_nonzero_process_status_returns_nil_after_exact_call() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_every_nonzero_process_status_returns_nil_after_exact_call",
         r##"(mapcar
                           (lambda (status)
@@ -156,7 +151,6 @@ fn auth_source_kwallet_every_nonzero_process_status_returns_nil_after_exact_call
                              (get-buffer
                               "*kwallet-output*")))
                           '(1 2 7 126 127 255))"##,
-        true,
         expect![[
             r#"OK ((1 nil (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "service@failure.example") t)) nil) (2 nil (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "service@failure.example") t)) nil) (7 nil (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "service@failure.example") t)) nil) (126 nil (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "service@failure.example") t)) nil) (127 nil (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "service@failure.example") t)) nil) (255 nil (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "service@failure.example") t)) nil))"#
         ]],
@@ -165,7 +159,7 @@ fn auth_source_kwallet_every_nonzero_process_status_returns_nil_after_exact_call
 
 fn auth_source_kwallet_missing_executable_surfaces_upstream_comma_form_failure_without_process()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_missing_executable_surfaces_upstream_comma_form_failure_without_process",
         r##"(progn
                           (auth-source-kwallet-test-reset-process)
@@ -185,13 +179,12 @@ fn auth_source_kwallet_missing_executable_surfaces_upstream_comma_form_failure_w
                            auth-source-kwallet-test-process-calls
                            (get-buffer
                             "*kwallet-output*")))"##,
-        true,
         expect![[r#"OK ((:signal void-function (\,)) ("kwallet-query") nil nil)"#]],
     )
 }
 
 fn auth_source_kwallet_success_always_kills_generated_output_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_success_always_kills_generated_output_buffer",
         r##"(progn
                           (auth-source-kwallet-test-reset-process)
@@ -215,13 +208,12 @@ fn auth_source_kwallet_success_always_kills_generated_output_buffer() -> ParityB
                               (seq-difference
                                (buffer-list)
                                before)))))"##,
-        true,
         expect![[r#"OK (((:user "alice" :secret "fixture-secret")) nil nil)"#]],
     )
 }
 
 fn auth_source_kwallet_failure_always_kills_generated_output_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_failure_always_kills_generated_output_buffer",
         r##"(progn
                           (auth-source-kwallet-test-reset-process)
@@ -248,14 +240,13 @@ fn auth_source_kwallet_failure_always_kills_generated_output_buffer() -> ParityB
                               (seq-difference
                                (buffer-list)
                                before)))))"##,
-        true,
         expect!["OK (nil nil nil)"],
     )
 }
 
 fn auth_source_kwallet_process_signal_propagates_and_still_kills_generated_buffer()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_process_signal_propagates_and_still_kills_generated_buffer",
         r##"(progn
                           (auth-source-kwallet-test-reset-process)
@@ -276,7 +267,6 @@ fn auth_source_kwallet_process_signal_propagates_and_still_kills_generated_buffe
                             auth-source-kwallet-test-process-calls)
                            (get-buffer
                             "*kwallet-output*")))"##,
-        true,
         expect![[
             r#"OK ((:signal file-error ("fixture process failed" "/fixture/bin/kwallet-query")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@signal.example") t)) nil)"#
         ]],
@@ -285,7 +275,7 @@ fn auth_source_kwallet_process_signal_propagates_and_still_kills_generated_buffe
 
 fn auth_source_kwallet_preexisting_output_buffer_is_preserved_and_collision_buffer_is_cleaned()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_preexisting_output_buffer_is_preserved_and_collision_buffer_is_cleaned",
         r##"(let ((existing
                                 (get-buffer-create
@@ -311,7 +301,6 @@ fn auth_source_kwallet_preexisting_output_buffer_is_preserved_and_collision_buff
                              (when
                                  (buffer-live-p existing)
                                (kill-buffer existing))))"##,
-        true,
         expect![[
             r#"OK (((:user "alice" :secret "fixture-secret")) t "keep-me" (("kwallet-query" nil "*kwallet-output*<2>" nil ("Passwords" "-f" "Passwords" "-r" "alice@collision.example") t)) nil)"#
         ]],
@@ -320,7 +309,7 @@ fn auth_source_kwallet_preexisting_output_buffer_is_preserved_and_collision_buff
 
 fn auth_source_kwallet_nil_user_and_host_form_separator_only_key_without_signaling()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_nil_user_and_host_form_separator_only_key_without_signaling",
         r##"(progn
                           (auth-source-kwallet-test-reset-process)
@@ -328,7 +317,6 @@ fn auth_source_kwallet_nil_user_and_host_form_separator_only_key_without_signali
                            (auth-source-kwallet--kwallet-search)
                            (nreverse
                             auth-source-kwallet-test-process-calls)))"##,
-        true,
         expect![[
             r#"OK (((:user nil :secret "fixture-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "@") t)))"#
         ]],
@@ -337,7 +325,7 @@ fn auth_source_kwallet_nil_user_and_host_form_separator_only_key_without_signali
 
 fn auth_source_kwallet_nonstring_user_and_host_inputs_surface_concat_contract_and_cleanup()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_nonstring_user_and_host_inputs_surface_concat_contract_and_cleanup",
         r##"(mapcar
                           (lambda (pair)
@@ -361,7 +349,6 @@ fn auth_source_kwallet_nonstring_user_and_host_inputs_surface_concat_contract_an
                             ("alice" 443)
                             (("alice") "host.example")
                             ("alice" ("host.example"))))"##,
-        true,
         expect![[
             r#"OK (((alice "host.example") (:signal wrong-type-argument (sequencep alice)) nil nil) (("alice" host.example) (:signal wrong-type-argument (sequencep host.example)) nil nil) ((17 "host.example") (:signal wrong-type-argument (sequencep 17)) nil nil) (("alice" 443) (:signal wrong-type-argument (sequencep 443)) nil nil) ((("alice") "host.example") (:signal wrong-type-argument (characterp "alice")) nil nil) (("alice" ("host.example")) (:signal wrong-type-argument (characterp "host.example")) nil nil))"#
         ]],
@@ -370,7 +357,7 @@ fn auth_source_kwallet_nonstring_user_and_host_inputs_surface_concat_contract_an
 
 fn auth_source_kwallet_meta_and_unknown_search_keys_are_ignored_but_forwarded_key_is_stable()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_meta_and_unknown_search_keys_are_ignored_but_forwarded_key_is_stable",
         r##"(progn
                           (auth-source-kwallet-test-reset-process)
@@ -400,7 +387,6 @@ fn auth_source_kwallet_meta_and_unknown_search_keys_are_ignored_but_forwarded_ke
                             "deploy")
                            (nreverse
                             auth-source-kwallet-test-process-calls)))"##,
-        true,
         expect![[
             r#"OK (((:user "alice" :secret "meta-secret")) (("kwallet-query" nil "*kwallet-output*" nil ("Passwords" "-f" "Passwords" "-r" "alice@meta.example") t)))"#
         ]],
@@ -409,7 +395,7 @@ fn auth_source_kwallet_meta_and_unknown_search_keys_are_ignored_but_forwarded_ke
 
 fn auth_source_kwallet_invalid_process_status_surfaces_zerop_type_error_after_cleanup()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_kwallet_invalid_process_status_surfaces_zerop_type_error_after_cleanup",
         r##"(mapcar
                           (lambda (status)
@@ -429,16 +415,14 @@ fn auth_source_kwallet_invalid_process_status_surfaces_zerop_type_error_after_cl
                              (get-buffer
                               "*kwallet-output*")))
                           '(nil "finished" ok (0)))"##,
-        true,
         expect![[
             r#"OK ((nil (:signal wrong-type-argument (number-or-marker-p nil)) nil) ("finished" (:signal wrong-type-argument (number-or-marker-p "finished")) nil) (ok (:signal wrong-type-argument (number-or-marker-p ok)) nil) (#1=(0) (:signal wrong-type-argument (number-or-marker-p #1#)) nil))"#
         ]],
     )
 }
 
-#[test]
-fn process_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn process_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auth_source_kwallet_default_search_invokes_exact_cli_and_trims_secret(),
         auth_source_kwallet_custom_wallet_folder_separator_and_executable_reach_cli_exactly(),
         auth_source_kwallet_secret_trimming_removes_all_edge_whitespace_only(),
@@ -456,6 +440,5 @@ fn process_public_surface_batch() {
         auth_source_kwallet_nonstring_user_and_host_inputs_surface_concat_contract_and_cleanup(),
         auth_source_kwallet_meta_and_unknown_search_keys_are_ignored_but_forwarded_key_is_stable(),
         auth_source_kwallet_invalid_process_status_surfaces_zerop_type_error_after_cleanup(),
-    ];
-    assert_auth_source_kwallet_batch(&cases);
+    ]
 }

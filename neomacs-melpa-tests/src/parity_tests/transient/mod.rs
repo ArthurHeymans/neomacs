@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{CachedMelpaOracle, TRANSIENT_MELPA_PIN};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -28,24 +27,24 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_transient_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = transient_oracle()
-        .run_value(&name, form)
-        .unwrap_or_else(|error| panic!("Transient parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_transient_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = transient_oracle()
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| panic!("Transient signal parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_transient_parity` cases (2a).
 pub(crate) fn assert_transient_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(transient_oracle(), &name, "transient_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn transient_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        layout::layout_public_surface_batch_cases(),
+        state::state_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_transient_batch(&cases);
+}
+
+// END generated package batch tests

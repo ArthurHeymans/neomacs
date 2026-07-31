@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_anki_editor_batch};
+use super::ParityBatchCase;
 
 fn pushes_a_readme_style_card_with_real_html_and_media_through_ankiconnect() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "pushes_a_readme_style_card_with_real_html_and_media_through_ankiconnect",
         r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (project (expand-file-name "anki-editor-create" sandbox))
@@ -93,7 +93,6 @@ fn pushes_a_readme_style_card_with_real_html_and_media_through_ankiconnect() -> 
           (with-current-buffer buffer
             (set-buffer-modified-p nil))
           (kill-buffer buffer)))))"##,
-        true,
         expect![[
             r#"OK ((((action . "modelNames") (version . 6)) ((action . "multi") (version . 6) (params (actions ((action . "modelFieldNames") (version . 6) (params (modelName . "Basic")))))) ((action . "retrieveMediaFile") (version . 6) (params (filename . "osi-25c9b37ae36a0a08318d4dca7ca57ea98d776821.gif"))) ((action . "storeMediaFile") (version . 6) (params (filename . "osi-25c9b37ae36a0a08318d4dca7ca57ea98d776821.gif") (data . "R0lGODlh"))) ((action . "multi") (version . 6) (params (actions ((action . "createDeck") (version . 6) (params (deck . "Computing::Networks"))) ((action . "addNote") (version . 6) (params (note (id . 0) (deckName . "Computing::Networks") (modelName . "Basic") (fields (Back . "<p>\nThe <b>transport layer</b>.\n</p>\n\n<p>\n<a href=\"osi-25c9b37ae36a0a08318d4dca7ca57ea98d776821.gif\">OSI diagram</a>\n</p>\n") (Front . "<p>\nWhich layer provides end-to-end delivery?\n</p>\n")) (options (allowDuplicate . :json-false)) (tags "exam" "osi" "study")))))))) "* Network layers :study:noexport:\n:PROPERTIES:\n:ANKI_DECK: Computing::Networks\n:ANKI_NOTE_TYPE: Basic\n:ANKI_TAGS: exam osi\n:ANKI_NOTE_ID: 424242\n:ANKI_NOTE_HASH: 228e4bb11039df47d3051bb539dcc795\n:END:\n** Front\nWhich layer provides end-to-end delivery?\n** Back\nThe *transport layer*.\n\n[[file:osi.gif][OSI diagram]]\n" "* Network layers :study:noexport:\n:PROPERTIES:\n:ANKI_DECK: Computing::Networks\n:ANKI_NOTE_TYPE: Basic\n:ANKI_TAGS: exam osi\n:ANKI_NOTE_ID: 424242\n:ANKI_NOTE_HASH: 228e4bb11039df47d3051bb539dcc795\n:END:\n** Front\nWhich layer provides end-to-end delivery?\n** Back\nThe *transport layer*.\n\n[[file:osi.gif][OSI diagram]]\n")"#
         ]],
@@ -101,7 +100,7 @@ fn pushes_a_readme_style_card_with_real_html_and_media_through_ankiconnect() -> 
 }
 
 fn updates_an_existing_card_and_preserves_server_managed_tags() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "updates_an_existing_card_and_preserves_server_managed_tags",
         r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (project (expand-file-name "anki-editor-update" sandbox))
@@ -185,7 +184,6 @@ fn updates_an_existing_card_and_preserves_server_managed_tags() -> ParityBatchCa
           (with-current-buffer buffer
             (set-buffer-modified-p nil))
           (kill-buffer buffer)))))"##,
-        true,
         expect![[
             r#"OK ((((action . "modelNames") (version . 6)) ((action . "multi") (version . 6) (params (actions ((action . "modelFieldNames") (version . 6) (params (modelName . "Basic")))))) ((action . "multi") (version . 6) (params (actions ((action . "notesInfo") (version . 6) (params (notes 9001)))))) ((action . "multi") (version . 6) (params (actions ((action . "updateNote") (version . 6) (params (note (id . 9001) (deckName . "Computing::Networks") (modelName . "Basic") (fields (Back . "<p>\nSYN, SYN-ACK, ACK.\n</p>\n") (Front . "<p>\nWhat is the TCP handshake?\n</p>\n")) (options (allowDuplicate . :json-false)) (tags "protected" "current" "review"))))))) ((action . "multi") (version . 6) (params (actions ((action . "changeDeck") (version . 6) (params (deck . "Computing::Networks") (cards 71 72))))))) "* TCP handshake :review:\n:PROPERTIES:\n:ANKI_DECK: Computing::Networks\n:ANKI_NOTE_TYPE: Basic\n:ANKI_NOTE_ID: 9001\n:ANKI_NOTE_HASH: 02d71d167a5678f4ffed4582a61777f1\n:ANKI_TAGS: current\n:END:\n** Front\nWhat is the TCP handshake?\n** Back\nSYN, SYN-ACK, ACK.\n" "* TCP handshake :review:\n:PROPERTIES:\n:ANKI_DECK: Computing::Networks\n:ANKI_NOTE_TYPE: Basic\n:ANKI_NOTE_ID: 9001\n:ANKI_NOTE_HASH: 02d71d167a5678f4ffed4582a61777f1\n:ANKI_TAGS: current\n:END:\n** Front\nWhat is the TCP handshake?\n** Back\nSYN, SYN-ACK, ACK.\n")"#
         ]],
@@ -193,7 +191,7 @@ fn updates_an_existing_card_and_preserves_server_managed_tags() -> ParityBatchCa
 }
 
 fn records_a_rejected_note_without_silently_saving_the_failed_edit() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "records_a_rejected_note_without_silently_saving_the_failed_edit",
         r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
          (project (expand-file-name "anki-editor-rejection" sandbox))
@@ -278,7 +276,6 @@ fn records_a_rejected_note_without_silently_saving_the_failed_edit() -> ParityBa
           (with-current-buffer buffer
             (set-buffer-modified-p nil))
           (kill-buffer buffer)))))"##,
-        true,
         expect![[
             r#"OK ((user-error "Push failed; see ANKI_FAILURE_REASON property") (((action . "modelNames") (version . 6)) ((action . "multi") (version . 6) (params (actions ((action . "modelFieldNames") (version . 6) (params (modelName . "Basic")))))) ((action . "multi") (version . 6) (params (actions ((action . "createDeck") (version . 6) (params (deck . "Computing"))) ((action . "addNote") (version . 6) (params (note (id . 0) (deckName . "Computing") (modelName . "Basic") (fields (Back . "<p>\nIt resolves names to addresses.\n</p>\n") (Front . "<p>\nWhat does DNS do?\n</p>\n")) (options (allowDuplicate . :json-false)) (tags)))))))) "* Duplicate card\n:PROPERTIES:\n:ANKI_DECK: Computing\n:ANKI_NOTE_TYPE: Basic\n:ANKI_FAILURE_REASON: duplicate note\n:END:\n** Front\nWhat does DNS do?\n** Back\nIt resolves names to addresses.\n" t "* Duplicate card\n:PROPERTIES:\n:ANKI_DECK: Computing\n:ANKI_NOTE_TYPE: Basic\n:END:\n** Front\nWhat does DNS do?\n** Back\nIt resolves names to addresses.\n")"#
         ]],
@@ -286,7 +283,7 @@ fn records_a_rejected_note_without_silently_saving_the_failed_edit() -> ParityBa
 }
 
 fn creates_and_exports_a_cloze_card_from_an_actual_org_edit() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "creates_and_exports_a_cloze_card_from_an_actual_org_edit",
         r##"(with-temp-buffer
     (org-mode)
@@ -318,20 +315,17 @@ fn creates_and_exports_a_cloze_card_from_an_actual_org_edit() -> ParityBatchCase
              (note (anki-editor-note-at-point))
              (anki-payload (anki-editor-api--note note)))
         (list edited-org anki-payload))))"##,
-        true,
         expect![[
             r#"OK ("* OSI model :networking:\n:PROPERTIES:\n:ANKI_DECK: Computing::Networks\n:ANKI_NOTE_TYPE: Cloze\n:ANKI_TAGS: exam\n:END:\n** Text\nThe {{c2::transport layer::OSI layer}} provides end-to-end delivery.\n** Extra\nRemember TCP and UDP.\n" (:id 0 :deckName "Computing::Networks" :modelName "Cloze" :fields (("Extra" . "<p>\nRemember TCP and UDP.\n</p>\n") ("Text" . "<p>\nThe {{c2::transport layer::OSI layer}} provides end-to-end delivery.\n</p>\n")) :options (:allowDuplicate :json-false) :tags ["exam" "networking"]))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         pushes_a_readme_style_card_with_real_html_and_media_through_ankiconnect(),
         updates_an_existing_card_and_preserves_server_managed_tags(),
         records_a_rejected_note_without_silently_saving_the_failed_edit(),
         creates_and_exports_a_cloze_card_from_an_actual_org_edit(),
-    ];
-    assert_anki_editor_batch(&cases);
+    ]
 }

@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ANSIBLE_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -132,20 +131,21 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_ansible_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ansible_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("ansible parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ansible_parity(elisp_form: &str, expected: Expect) {
-    assert_ansible_source_parity("ansible.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_ansible_parity` cases (2a).
 pub(crate) fn assert_ansible_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(ansible_oracle("ansible.el"), &name, "ansible_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn ansible_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_ansible_batch(&cases);
+}
+
+// END generated package batch tests

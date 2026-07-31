@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_at_batch};
+use super::ParityBatchCase;
 
 fn at_list_all_includes_only_bound_at_prefixed_objects() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "at_list_all_includes_only_bound_at_prefixed_objects",
         r##"(unwind-protect
                (progn
@@ -45,13 +45,12 @@ fn at_list_all_includes_only_bound_at_prefixed_objects() -> ParityBatchCase {
               '(@neomacs-parity-object
                 @neomacs-parity-value
                 neomacs-parity-object)))"##,
-        true,
         expect!["OK (t nil nil t t)"],
     )
 }
 
 fn at_describe_delegates_the_resolved_method_to_describe_function() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "at_describe_delegates_the_resolved_method_to_describe_function",
         r##"(let ((object (@extend)))
                (def@ object :method ()
@@ -71,13 +70,12 @@ fn at_describe_delegates_the_resolved_method_to_describe_function() -> ParityBat
                     (describe-@
                      object :method)
                     observed))))"##,
-        true,
         expect!["OK (described t)"],
     )
 }
 
 fn at_describe_interactive_form_filters_prototypes_and_function_properties() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "at_describe_interactive_form_filters_prototypes_and_function_properties",
         r##"(unwind-protect
                (progn
@@ -127,7 +125,6 @@ fn at_describe_interactive_form_filters_prototypes_and_function_properties() -> 
                   '@neomacs-describe-proto)
                (makunbound
                 '@neomacs-describe-proto)))"##,
-        true,
         expect![[
             r#"OK (described (("Describe prototype: " t nil t "@") ("Describe property: " t nil t ":")))"#
         ]],
@@ -135,7 +132,7 @@ fn at_describe_interactive_form_filters_prototypes_and_function_properties() -> 
 }
 
 fn at_undefine_all_makunbounds_every_symbol_returned_by_reflection() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "at_undefine_all_makunbounds_every_symbol_returned_by_reflection",
         r##"(progn
                (set
@@ -156,13 +153,12 @@ fn at_undefine_all_makunbounds_every_symbol_returned_by_reflection() -> ParityBa
                    '@neomacs-first)
                   (boundp
                    '@neomacs-second))))"##,
-        true,
         expect!["OK ((@neomacs-first @neomacs-second) nil nil)"],
     )
 }
 
 fn at_byte_compile_all_compiles_only_function_valued_direct_properties() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "at_byte_compile_all_compiles_only_function_valued_direct_properties",
         r##"(let ((prototype
                     (@extend
@@ -198,19 +194,16 @@ fn at_byte_compile_all_compiles_only_function_valued_direct_properties() -> Pari
                       (nreverse events)))
                  (makunbound
                   '@neomacs-compile)))"##,
-        true,
         expect!["OK (nil (car cdr))"],
     )
 }
 
-#[test]
-fn reflection_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn reflection_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         at_list_all_includes_only_bound_at_prefixed_objects(),
         at_describe_delegates_the_resolved_method_to_describe_function(),
         at_describe_interactive_form_filters_prototypes_and_function_properties(),
         at_undefine_all_makunbounds_every_symbol_returned_by_reflection(),
         at_byte_compile_all_compiles_only_function_valued_direct_properties(),
-    ];
-    assert_at_batch(&cases);
+    ]
 }

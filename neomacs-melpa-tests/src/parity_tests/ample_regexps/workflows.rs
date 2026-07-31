@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ample_regexps_batch};
+use super::ParityBatchCase;
 
 /// One `define-arx' call is the whole installation: it leaves behind a macro, a
 /// `-to-string' function for building the same regexp at run time, a
@@ -8,9 +8,8 @@ use super::{ParityBatchCase, assert_ample_regexps_batch};
 /// mark them as belonging to this arx.  The regexp a realistic composition
 /// produces is pinned whole, from both the macro and the function, and the
 /// bindings are pinned as the package translated them.
-
 fn define_arx_builds_the_macro_its_to_string_function_and_its_bindings() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "define_arx_builds_the_macro_its_to_string_function_and_its_bindings",
         r##"(progn
   (arx-test-define-log-rx)
@@ -21,7 +20,6 @@ fn define_arx_builds_the_macro_its_to_string_function_and_its_bindings() -> Pari
         :macro-and-function-agree
         (equal (arx-test-expand '(log-rx stamp ws level ws qualified))
                (log-rx-to-string '(seq stamp ws level ws qualified) t))))"##,
-        true,
         expect![[
             r#"OK (:surface (:macro t :to-string t :bindings-bound t :arx-name "log-rx" :to-string-arx-name "log-rx" :form-count 6) :bindings ((ws (regexp "[ \11]+")) (level (or "DEBUG" "INFO" "WARN" "ERROR")) (ident (regexp "[A-Za-z_][A-Za-z0-9_]*")) (qualified (seq ident (* "." ident))) (stamp (seq (= 4 digit) "-" (= 2 digit) "-" (= 2 digit))) (bracketed (&rest bracketed-args) (eval (arx--apply-func-post-27 '(1 2) nil #[(form &rest args) "��������\10B��BBB��\"��" [args rx-to-string seq "[" ("]") t] 5] 'bracketed '(bracketed-args))))) :log-line "[[:digit:]]\\{4\\}-[[:digit:]]\\{2\\}-[[:digit:]]\\{2\\}\\(?:[ \11]+\\)\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\(?:[ \11]+\\)\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*" :same-from-to-string "[[:digit:]]\\{4\\}-[[:digit:]]\\{2\\}-[[:digit:]]\\{2\\}\\(?:[ \11]+\\)\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\(?:[ \11]+\\)\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*" :macro-and-function-agree t)"#
         ]],
@@ -29,7 +27,7 @@ fn define_arx_builds_the_macro_its_to_string_function_and_its_bindings() -> Pari
 }
 
 fn named_forms_compose_with_each_other_and_with_plain_rx_forms() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "named_forms_compose_with_each_other_and_with_plain_rx_forms",
         r##"(progn
   (arx-test-define-log-rx)
@@ -49,7 +47,6 @@ fn named_forms_compose_with_each_other_and_with_plain_rx_forms() -> ParityBatchC
          :classes (arx-test-expand '(log-rx (any "a-z" ?_) (not (any digit)) word-boundary))
          :nested (arx-test-expand '(log-rx (seq (or (seq stamp ws) (seq level ws))
                                                 (zero-or-more qualified)))))))"##,
-        true,
         expect![[
             r#"OK (:each-form ((ws . "[ \11]+") (level . "\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)") (ident . "[A-Za-z_][A-Za-z0-9_]*") (qualified . "\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*") (stamp . "[[:digit:]]\\{4\\}-[[:digit:]]\\{2\\}-[[:digit:]]\\{2\\}")) :composition (:grouped "\\(\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\): \\(\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*\\)" :alternation "\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\|[A-Za-z_][A-Za-z0-9_]*" :anchored "^[[:digit:]]\\{4\\}-[[:digit:]]\\{2\\}-[[:digit:]]\\{2\\}\\(?:[ \11]+\\)\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)$" :repetition "\\(?:[A-Za-z_][A-Za-z0-9_]*\\)+\\(?:[ \11]+\\)?\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\{3\\}\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\{1,4\\}\\(?:[[:digit:]]\\{4\\}-[[:digit:]]\\{2\\}-[[:digit:]]\\{2\\}\\)\\{2\\}" :classes "[_a-z][^[:digit:]]\\b" :nested "\\(?:[[:digit:]]\\{4\\}-[[:digit:]]\\{2\\}-[[:digit:]]\\{2\\}\\(?:[ \11]+\\)\\|\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\(?:[ \11]+\\)\\)\\(?:\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*\\)*"))"#
         ]],
@@ -57,7 +54,7 @@ fn named_forms_compose_with_each_other_and_with_plain_rx_forms() -> ParityBatchC
 }
 
 fn func_forms_run_while_expanding_and_their_arity_and_predicate_are_enforced() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "func_forms_run_while_expanding_and_their_arity_and_predicate_are_enforced",
         r##"(progn
   (arx-test-define-log-rx)
@@ -82,7 +79,6 @@ fn func_forms_run_while_expanding_and_their_arity_and_predicate_are_enforced() -
         :predicate-violated (arx-test-expand '(pred-rx (tagged 42)))
         :predicate-named-as-a-symbol
         (arx-test-expand '(symbol-pred-rx (tagged "a")))))"##,
-        true,
         expect![[
             r#"OK (:one-argument "\\[\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)]" :two-arguments "\\[\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\(?:[ \11]+\\)]" :inside-a-composition "^\\(?:\\[\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)]\\)\\(?:[ \11]+\\)\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*" :too-few (error "rx form ‘bracketed’ requires at least 1 arg") :too-many (error "rx form ‘bracketed’ accepts at most 2 args") :unknown-form (error "Unknown rx symbol ‘nosuchform’") :predicate-satisfied "<ab>" :predicate-violated "<\\*>" :predicate-named-as-a-symbol (void-variable stringp))"#
         ]],
@@ -90,7 +86,7 @@ fn func_forms_run_while_expanding_and_their_arity_and_predicate_are_enforced() -
 }
 
 fn the_generated_macro_produces_the_same_regexps_when_byte_compiled() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_generated_macro_produces_the_same_regexps_when_byte_compiled",
         r##"(let ((source (arx-test-write
                 "lib/logmatch.el"
@@ -125,7 +121,6 @@ fn the_generated_macro_produces_the_same_regexps_when_byte_compiled() -> ParityB
                        (bc-rx-to-string '(seq line-start level ws qualified line-end) t))
                 (equal (bc-wrapped-regexp)
                        (bc-rx-to-string '(wrapped ident) t))))))"##,
-        true,
         expect![[
             r#"OK (:compiled t :elc-exists t :functions-are-byte-code (t t) :surface (:macro t :to-string t :bindings-bound t :arx-name "bc-rx" :to-string-arx-name "bc-rx" :form-count 5) :line "^\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\(?:[ \11]+\\)\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*$" :wrapped "<\\(?:[A-Za-z_][A-Za-z0-9_]*\\)>" :matches-interpreted (t t))"#
         ]],
@@ -133,14 +128,13 @@ fn the_generated_macro_produces_the_same_regexps_when_byte_compiled() -> ParityB
 }
 
 fn the_generated_macro_documents_every_named_form_it_offers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_generated_macro_documents_every_named_form_it_offers",
         r##"(progn
   (arx-test-define-log-rx)
   (list :macro-documentation (documentation 'log-rx)
         :to-string-documentation (documentation 'log-rx-to-string)
         :bindings-documentation (get 'log-rx-bindings 'variable-documentation)))"##,
-        true,
         expect![[
             r#"OK (:macro-documentation "Translate regular expressions REGEXPS in sexp form to a regexp string.\n\nSee macro ‘rx’ for more documentation on REGEXPS parameter.\nThis macro additionally supports the following forms:\n\n‘ws’\n    An alias for (regexp \"[ \\11]+\").\n\n‘level’\n    An alias for (or \"DEBUG\" \"INFO\" \"WARN\" \"ERROR\").\n\n‘ident’\n    An alias for (regexp \"[A-Za-z_][A-Za-z0-9_]*\").\n\n‘qualified’\n    An alias for (seq ident (* \".\" ident)).\n\n‘stamp’\n    An alias for (seq (= 4 digit) \"-\" (= 2 digit) \"-\" (= 2 digit)).\n\n‘(bracketed &rest args)’\n    Function without documentation.\n\nUse function ‘log-rx-to-string’ to do such a translation at run-time." :to-string-documentation "Parse and produce code for regular expression FORM.\n\nFORM is a regular expression in sexp form as supported by ‘log-rx’.\nNO-GROUP non-nil means don’t put shy groups around the result." :bindings-documentation "List of bindings for `log-rx' and `log-rx-to-string' functions.\n\nSee `log-rx' for a human readable list of defined forms.\n\nSee parameter BINDINGS for function `rx-let' for more information\nabout format of elements of this list.")"#
         ]],
@@ -148,7 +142,7 @@ fn the_generated_macro_documents_every_named_form_it_offers() -> ParityBatchCase
 }
 
 fn the_func_helpers_and_the_builder_no_longer_work_on_a_current_emacs() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_func_helpers_and_the_builder_no_longer_work_on_a_current_emacs",
         r##"(progn
   (arx-test-define-log-rx)
@@ -164,22 +158,19 @@ fn the_func_helpers_and_the_builder_no_longer_work_on_a_current_emacs() -> Parit
    (arx-test-expand '(define-arx sharp-rx
                        '((wrapped (:func #'arx-test-wrap)))))
    :lambda-func-works (arx-test-expand '(log-rx (bracketed level)))))"##,
-        true,
         expect![[
             r#"OK (:arx-and (void-function rx-and) :arx-or (void-function rx-or) :arx-builder (void-variable log-rx-constituents) :symbol-func (:defining symbol-rx :using (void-variable arx-test-wrap)) :sharp-quoted-func (error "Not a function: #'arx-test-wrap") :lambda-func-works "\\[\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)]")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         define_arx_builds_the_macro_its_to_string_function_and_its_bindings(),
         named_forms_compose_with_each_other_and_with_plain_rx_forms(),
         func_forms_run_while_expanding_and_their_arity_and_predicate_are_enforced(),
         the_generated_macro_produces_the_same_regexps_when_byte_compiled(),
         the_generated_macro_documents_every_named_form_it_offers(),
         the_func_helpers_and_the_builder_no_longer_work_on_a_current_emacs(),
-    ];
-    assert_ample_regexps_batch(&cases);
+    ]
 }

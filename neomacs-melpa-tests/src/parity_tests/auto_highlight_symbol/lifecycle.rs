@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_highlight_symbol_batch};
+use super::ParityBatchCase;
 
 fn auto_highlight_symbol_mode_enable_disable_installs_and_removes_local_hooks_and_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_mode_enable_disable_installs_and_removes_local_hooks_and_state",
         r##"(with-temp-buffer
                            (emacs-lisp-mode)
@@ -28,16 +28,16 @@ fn auto_highlight_symbol_mode_enable_disable_installs_and_removes_local_hooks_an
                                   enabled
                                   (auto-highlight-symbol-test-mode-state)
                                   auto-highlight-symbol-test-events)))))"##,
-        true,
         expect![[
             r#"OK ((nil nil nil nil nil nil 0 0) (t #1=((name . "display area") (lighter . "HS") (start . window-start) (end . window-end)) " HS" nil (ahs-start-timer eldoc-schedule-timer t) (ahs-start-timer t) 0 0) (nil #1# " HS" nil nil nil 0 0) (:disabled :enabled))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_highlight_symbol_repeated_enable_disable_is_hook_idempotent_and_buffer_local()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_repeated_enable_disable_is_hook_idempotent_and_buffer_local",
         r##"(let ((first
                                 (generate-new-buffer
@@ -77,7 +77,6 @@ fn auto_highlight_symbol_repeated_enable_disable_is_hook_idempotent_and_buffer_l
                                       (auto-highlight-symbol-test-mode-state)))))
                              (kill-buffer first)
                              (kill-buffer second)))"##,
-        true,
         expect![[
             r#"OK (((t 1 #1=((name . "display area") (lighter . "HS") (start . window-start) (end . window-end))) (t 1 #1#)) (nil #1# " HS" nil nil nil 0 0) (t #1# " HS" nil (ahs-start-timer t) (ahs-start-timer t) 0 0))"#
         ]],
@@ -85,7 +84,7 @@ fn auto_highlight_symbol_repeated_enable_disable_is_hook_idempotent_and_buffer_l
 }
 
 fn auto_highlight_symbol_global_mode_enables_only_configured_major_modes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_global_mode_enables_only_configured_major_modes",
         r##"(let ((elisp-buffer
                                 (generate-new-buffer
@@ -139,14 +138,13 @@ fn auto_highlight_symbol_global_mode_enables_only_configured_major_modes() -> Pa
                              (kill-buffer elisp-buffer)
                              (kill-buffer text-buffer)
                              (kill-buffer fundamental-buffer)))"##,
-        true,
         expect!["OK (((emacs-lisp-mode t) (text-mode t) (fundamental-mode nil)) (nil nil nil))"],
     )
 }
 
 fn auto_highlight_symbol_start_timer_cleans_old_state_and_uses_window_switch_delay_policy()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_start_timer_cleans_old_state_and_uses_window_switch_delay_policy",
         r##"(save-window-excursion
                            (with-temp-buffer
@@ -224,7 +222,6 @@ fn auto_highlight_symbol_start_timer_cleans_old_state_and_uses_window_switch_del
                                   '(same-window
                                     switched-window
                                     switch-disabled))))))"##,
-        true,
         expect![
             "OK ((same-window (:timer 1.25) (:edit-post (:unhighlight nil) (:cancel fixture-old-timer) (:schedule 1.25 nil ahs-idle-function))) (switched-window (:timer 0) (:edit-post (:unhighlight nil) (:cancel fixture-old-timer) (:schedule 0 nil ahs-idle-function))) (switch-disabled (:timer 1.25) (:edit-post (:unhighlight nil) (:cancel fixture-old-timer) (:schedule 1.25 nil ahs-idle-function))))"
         ],
@@ -232,7 +229,7 @@ fn auto_highlight_symbol_start_timer_cleans_old_state_and_uses_window_switch_del
 }
 
 fn auto_highlight_symbol_stop_timer_cancels_only_live_timer_values() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_stop_timer_cancels_only_live_timer_values",
         r##"(let (calls)
                            (cl-letf
@@ -260,14 +257,13 @@ fn auto_highlight_symbol_stop_timer_cancels_only_live_timer_values() -> ParityBa
                               '(nil
                                 stale
                                 live))))"##,
-        true,
         expect!["OK ((nil nil nil) (stale nil nil) (live #1=(live) #1#))"],
     )
 }
 
 fn auto_highlight_symbol_idle_function_dispatches_selected_or_all_windows_deterministically()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_idle_function_dispatches_selected_or_all_windows_deterministically",
         r##"(save-window-excursion
                            (with-temp-buffer
@@ -304,14 +300,13 @@ fn auto_highlight_symbol_idle_function_dispatches_selected_or_all_windows_determ
                                       ahs-selected-window
                                       (selected-window))))
                                   '(nil t))))))"##,
-        true,
         expect!["OK ((nil (:first) t) (t (:first :second) t))"],
     )
 }
 
 fn auto_highlight_symbol_focus_hooks_obey_configuration_and_change_selected_window_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_focus_hooks_obey_configuration_and_change_selected_window_state",
         r##"(let (calls)
                            (cl-letf
@@ -341,14 +336,13 @@ fn auto_highlight_symbol_focus_hooks_obey_configuration_and_change_selected_wind
                                   :ignored)
                                  (nreverse calls)))
                               '(nil t))))"##,
-        true,
         expect!["OK ((nil nil nil nil) (t #2=(:highlight . #1=(:unfocus)) #1# #2#))"],
     )
 }
 
 fn auto_highlight_symbol_clear_exits_edit_then_second_call_removes_map_and_hooks() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_clear_exits_edit_then_second_call_removes_map_and_hooks",
         r##"(save-window-excursion
                            (with-temp-buffer
@@ -393,16 +387,16 @@ fn auto_highlight_symbol_clear_exits_edit_then_second_call_removes_map_and_hooks
                                   (ht-size
                                    ahs-window-map)
                                   (auto-highlight-symbol-test-overlays))))))"##,
-        true,
         expect![[
             r#"OK (((t #1=((name . "whole buffer") (lighter . "HSA") (face . ahs-plugin-whole-buffer-face) (start . point-min) (end . point-max)) " *HSA*" t #2=(ahs-start-timer t) #3=(ahs-start-timer t) 1 2) 1 ((1 6 current ahs-edit-mode-face 1000 t t) (1 6 others ahs-face nil t t) (7 12 others ahs-face nil t t))) ((t #1# " HSA" nil #2# #3# 0 0) 1 nil) (t #1# " HSA" nil nil nil 0 0) 0 nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_highlight_symbol_set_idle_interval_distinguishes_integer_zero_float_zero_and_non_numbers()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_set_idle_interval_distinguishes_integer_zero_float_zero_and_non_numbers",
         r##"(let ((ahs-idle-interval
                                 1.0))
@@ -419,7 +413,6 @@ fn auto_highlight_symbol_set_idle_interval_distinguishes_integer_zero_float_zero
                               -1
                               "2"
                               nil)))"##,
-        true,
         expect![[
             r#"OK ((0 nil 1.0) (0.0 0.0 0.0) (0.25 0.25 0.25) (-1 -1 -1) ("2" nil -1) (nil nil -1))"#
         ]],
@@ -428,7 +421,7 @@ fn auto_highlight_symbol_set_idle_interval_distinguishes_integer_zero_float_zero
 
 fn auto_highlight_symbol_mode_maybe_obeys_mode_list_and_does_not_enable_other_buffers()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_mode_maybe_obeys_mode_list_and_does_not_enable_other_buffers",
         r##"(let ((ahs-modes
                                 '(emacs-lisp-mode
@@ -448,16 +441,14 @@ fn auto_highlight_symbol_mode_maybe_obeys_mode_list_and_does_not_enable_other_bu
                               text-mode
                               fundamental-mode
                               python-mode)))"##,
-        true,
         expect![[
             r#"OK ((emacs-lisp-mode t t #1=((name . "display area") (lighter . "HS") (start . window-start) (end . window-end))) (text-mode t t #1#) (fundamental-mode nil nil nil) (python-mode nil nil nil))"#
         ]],
     )
 }
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn lifecycle_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_highlight_symbol_mode_enable_disable_installs_and_removes_local_hooks_and_state(),
         auto_highlight_symbol_repeated_enable_disable_is_hook_idempotent_and_buffer_local(),
         auto_highlight_symbol_global_mode_enables_only_configured_major_modes(),
@@ -468,6 +459,5 @@ fn lifecycle_public_surface_batch() {
         auto_highlight_symbol_clear_exits_edit_then_second_call_removes_map_and_hooks(),
         auto_highlight_symbol_set_idle_interval_distinguishes_integer_zero_float_zero_and_non_numbers(),
         auto_highlight_symbol_mode_maybe_obeys_mode_list_and_does_not_enable_other_buffers(),
-    ];
-    assert_auto_highlight_symbol_batch(&cases);
+    ]
 }

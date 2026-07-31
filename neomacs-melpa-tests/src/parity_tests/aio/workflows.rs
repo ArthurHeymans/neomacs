@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aio_batch};
+use super::ParityBatchCase;
 
 fn async_functions_await_each_other_and_the_caller_gets_the_final_value() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_functions_await_each_other_and_the_caller_gets_the_final_value",
         r##"
 (progn
@@ -42,7 +42,6 @@ fn async_functions_await_each_other_and_the_caller_gets_the_final_value() -> Par
                      (push (aio-await promise) results))
                    (nreverse results))))))))
 "##,
-        true,
         expect![
             "OK (:returns-a-promise t :unresolved-at-first t :value 16 :resolved-afterwards t :result-is-a-function t :calling-it-again 16 :awaiting-a-plain-value 42 :awaiting-many (a b c))"
         ],
@@ -50,7 +49,7 @@ fn async_functions_await_each_other_and_the_caller_gets_the_final_value() -> Par
 }
 
 fn an_error_inside_an_async_function_reaches_whoever_awaits_it() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_error_inside_an_async_function_reaches_whoever_awaits_it",
         r##"
 (progn
@@ -86,7 +85,6 @@ fn an_error_inside_an_async_function_reaches_whoever_awaits_it() -> ParityBatchC
            (condition-case error (funcall (aio-result promise))
              (error (aio-test-plain error)))))))
 "##,
-        true,
         expect![[
             r#"OK (:signalled (error "kaboom 7") :through-a-caller (error "kaboom 7") :caught-failure (:error error "kaboom 7") :caught-success (:success . ok) :handled-inside (:tag :error :data (error "kaboom 7")) :signals-every-time ((error "kaboom 7") (error "kaboom 7")))"#
         ]],
@@ -94,7 +92,7 @@ fn an_error_inside_an_async_function_reaches_whoever_awaits_it() -> ParityBatchC
 }
 
 fn racing_promises_against_each_other_and_against_a_timeout() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "racing_promises_against_each_other_and_against_a_timeout",
         r##"
 (progn
@@ -123,7 +121,6 @@ fn racing_promises_against_each_other_and_against_a_timeout() -> ParityBatchCase
    :misses-the-clock
    (aio-test-plain (aio-wait-for (aio-test-against-timeout 0.4 0.02)))))
 "##,
-        true,
         expect![
             "OK (:both-in-finishing-order (fast slow) :beats-the-clock (:success . finished) :misses-the-clock (:error aio-timeout . 0.02))"
         ],
@@ -131,7 +128,7 @@ fn racing_promises_against_each_other_and_against_a_timeout() -> ParityBatchCase
 }
 
 fn a_real_subprocess_feeds_a_chain_of_promises_through_one_callback() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_real_subprocess_feeds_a_chain_of_promises_through_one_callback",
         r##"
 (progn
@@ -163,7 +160,6 @@ fn a_real_subprocess_feeds_a_chain_of_promises_through_one_callback() -> ParityB
         (list :text text :exit ended))))
   (aio-test-plain (aio-wait-for (aio-test-run))))
 "##,
-        true,
         expect![[
             r#"OK (:text "alpha\nbeta\ngamma\n" :exit (exited 3 "exited abnormally with code 3"))"#
         ]],
@@ -171,7 +167,7 @@ fn a_real_subprocess_feeds_a_chain_of_promises_through_one_callback() -> ParityB
 }
 
 fn a_promise_settles_once_and_cancel_never_reports_that_it_worked() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_promise_settles_once_and_cancel_never_reports_that_it_worked",
         r##"
 (list
@@ -218,7 +214,6 @@ fn a_promise_settles_once_and_cancel_never_reports_that_it_worked() -> ParityBat
    (aio-wait-for (aio-sleep 0.05))
    seen))
 "##,
-        true,
         expect![
             "OK (:resolved-twice first :cancelled (:return-value nil :awaiting (aio-cancel . because)) :cancel-after-settling (:return-value nil :value already) :cancel-return-values-are-indistinguishable (:on-a-fresh-promise nil :on-a-settled-promise nil :but-the-fresh-one-did-cancel aio-cancel :and-the-settled-one-kept-its-value done) :late-listener value)"
         ],
@@ -226,7 +221,7 @@ fn a_promise_settles_once_and_cancel_never_reports_that_it_worked() -> ParityBat
 }
 
 fn aio_with_async_forces_its_result_and_drops_the_bindings_around_it() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aio_with_async_forces_its_result_and_drops_the_bindings_around_it",
         r##"
 (progn
@@ -253,22 +248,19 @@ fn aio_with_async_forces_its_result_and_drops_the_bindings_around_it() -> Parity
        (aio-wait-for (aio-with-async (error "unattended %s" 'failure)))
      (error (aio-test-plain error)))))
 "##,
-        true,
         expect![[
             r#"OK (:value 3 :awaiting slept :dynamic-binding-does-not-reach-it outer :without-any-binding global :error-is-realised (error "unattended failure"))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         async_functions_await_each_other_and_the_caller_gets_the_final_value(),
         an_error_inside_an_async_function_reaches_whoever_awaits_it(),
         racing_promises_against_each_other_and_against_a_timeout(),
         a_real_subprocess_feeds_a_chain_of_promises_through_one_callback(),
         a_promise_settles_once_and_cancel_never_reports_that_it_worked(),
         aio_with_async_forces_its_result_and_drops_the_bindings_around_it(),
-    ];
-    assert_aio_batch(&cases);
+    ]
 }

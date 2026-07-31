@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atl_long_lines_autoload_batch, assert_atl_long_lines_batch};
+use super::ParityBatchCase;
 
 fn atl_long_lines_exact_package_descriptor_origin_dependency_and_feature_contract_match()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_exact_package_descriptor_origin_dependency_and_feature_contract_match",
         r##"(let ((descriptor
                 (cadr
@@ -24,7 +24,6 @@ fn atl_long_lines_exact_package_descriptor_origin_dependency_and_feature_contrac
           (file-name-nondirectory
            (locate-library
             "atl-long-lines"))))"##,
-        true,
         expect![[
             r#"OK (atl-long-lines "20240101.929" "Turn off truncate-lines when the line is long." nil ((emacs (24 3))) ((:maintainers ("Jen-Chieh" . "jcs090218@gmail.com")) (:authors ("Jen-Chieh" . "jcs090218@gmail.com")) (:keywords "convenience" "truncate" "lines" "auto" "long") (:revdesc . "82cdd4edefba") (:commit . "82cdd4edefba2d5b1d491bf3fcc487385819d713") (:url . "https://github.com/jcs-elpa/atl-long-lines")) t t "atl-long-lines.el")"#
         ]],
@@ -32,7 +31,7 @@ fn atl_long_lines_exact_package_descriptor_origin_dependency_and_feature_contrac
 }
 
 fn atl_long_lines_archive_provided_payload_sizes_and_content_digests_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_archive_provided_payload_sizes_and_content_digests_match",
         r##"(let* ((descriptor
                   (cadr
@@ -57,7 +56,6 @@ fn atl_long_lines_archive_provided_payload_sizes_and_content_digests_match() -> 
                   (current-buffer))))))
           '("atl-long-lines.el"
             "atl-long-lines-pkg.el")))"##,
-        true,
         expect![[
             r#"OK (("atl-long-lines.el" 3803 "665e06b1058f1bf78ff2d217aa2d7b8ebb5cf850b671c3a4596c29eabc6a9f47") ("atl-long-lines-pkg.el" 473 "aace490034490f7eccbb4d209c1727544a1dfb219a12be1566cbed444db7d36f"))"#
         ]],
@@ -66,7 +64,7 @@ fn atl_long_lines_archive_provided_payload_sizes_and_content_digests_match() -> 
 
 fn atl_long_lines_complete_callable_command_arglist_and_source_surface_matches() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_complete_callable_command_arglist_and_source_surface_matches",
         r##"(let (symbols)
          (mapatoms
@@ -104,7 +102,6 @@ fn atl_long_lines_complete_callable_command_arglist_and_source_surface_matches()
              (string<
               (symbol-name left)
               (symbol-name right))))))"##,
-        true,
         expect![[
             r#"OK ((atl-long-lines--disable nil nil nil "nil" "atl-long-lines.el") (atl-long-lines--enable nil nil nil "nil" "atl-long-lines.el") (atl-long-lines--end-line-column nil nil nil "nil" "atl-long-lines.el") (atl-long-lines--mute-apply t nil nil "(&rest body)" "atl-long-lines.el") (atl-long-lines--start-timer nil nil nil "nil" "atl-long-lines.el") (atl-long-lines--turn-on-atl-long-lines-mode nil nil nil "nil" "atl-long-lines.el") (atl-long-lines-do-toggle nil nil nil "nil" "atl-long-lines.el") (atl-long-lines-mode nil t (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) "(&optional arg)" "atl-long-lines.el") (atl-long-lines-mode--set-explicitly nil nil nil "nil" "atl-long-lines.el"))"#
         ]],
@@ -113,7 +110,7 @@ fn atl_long_lines_complete_callable_command_arglist_and_source_surface_matches()
 
 fn atl_long_lines_complete_declared_variable_defaults_custom_and_source_surface_matches()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_complete_declared_variable_defaults_custom_and_source_surface_matches",
         r##"(let (symbols)
          (mapatoms
@@ -167,7 +164,6 @@ fn atl_long_lines_complete_declared_variable_defaults_custom_and_source_surface_
              (string<
               (symbol-name left)
               (symbol-name right))))))"##,
-        true,
         expect![[
             r#"OK ((atl-long-lines--timer nil t nil nil nil nil nil nil "atl-long-lines.el") (atl-long-lines-delay 0.4 t nil t float nil t t "atl-long-lines.el") (atl-long-lines-mode nil t t nil nil nil nil nil "atl-long-lines.el") (atl-long-lines-mode--set-explicitly nil t t nil nil nil nil nil "atl-long-lines.el") (atl-long-lines-mode--suppress-set-explicitly nil t nil nil nil nil nil nil "atl-long-lines.el") (atl-long-lines-mode-hook (atl-long-lines-mode--set-explicitly) t nil t hook nil nil nil "atl-long-lines.el"))"#
         ]],
@@ -175,7 +171,7 @@ fn atl_long_lines_complete_declared_variable_defaults_custom_and_source_surface_
 }
 
 fn atl_long_lines_custom_group_mode_metadata_and_documentation_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_custom_group_mode_metadata_and_documentation_match",
         r##"(list
          (get 'atl-long-lines
@@ -212,7 +208,6 @@ fn atl_long_lines_custom_group_mode_metadata_and_documentation_match() -> Parity
           'atl-long-lines-do-toggle)
          (documentation
           'atl-long-lines--mute-apply))"##,
-        true,
         expect![[
             r#"OK (((atl-long-lines-delay custom-variable) (global-atl-long-lines-mode custom-variable)) "Turn off truncate-lines when the line is long." "atl-long-lines-" ((url-link :tag "Repository" "https://github.com/jcs-elpa/atl-long-lines")) (0.4 float nil "Seconds to delay before trigger function ‘toggle-truncate-lines’.") (nil nil "Non-nil if Atl-Long-Lines mode is enabled.\nUse the command `atl-long-lines-mode' to change this variable.") (nil "Non-nil if Global Atl-Long-Lines mode is enabled.\nSee the `global-atl-long-lines-mode' command\nfor a description of this minor mode.\nSetting this variable directly does not take effect;\neither customize it (see the info node `Easy Customization')\nor call the function `global-atl-long-lines-mode'.") "Do toggle truncate lines at current position." "Execute BODY without message.")"#
         ]],
@@ -220,7 +215,7 @@ fn atl_long_lines_custom_group_mode_metadata_and_documentation_match() -> Parity
 }
 
 fn atl_long_lines_generated_global_mode_public_command_surface_matches() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_generated_global_mode_public_command_surface_matches",
         r##"(list
          (fboundp
@@ -281,7 +276,6 @@ fn atl_long_lines_generated_global_mode_public_command_surface_matches() -> Pari
            (symbol-file
             'global-atl-long-lines-mode-hook
             'defvar))))"##,
-        true,
         expect![[
             r#"OK (t t (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) "(&optional arg)" "Toggle Atl-Long-Lines mode in many buffers.\nSpecifically, Atl-Long-Lines mode is enabled in all buffers where\n‘atl-long-lines--turn-on-atl-long-lines-mode’ would do it.\n\nWith prefix ARG, enable Global Atl-Long-Lines mode if ARG is positive;\notherwise, disable it.\n\nIf called from Lisp, toggle the mode if ARG is ‘toggle’.\nEnable the mode if ARG is nil, omitted, or is a positive number.\nDisable the mode if ARG is a negative number.\n\nSee ‘atl-long-lines-mode’ for more information on Atl-Long-Lines\nmode." t nil t boolean nil (t nil "nil" nil "atl-long-lines.el") (t nil t nil t "atl-long-lines.el"))"#
         ]],
@@ -290,7 +284,7 @@ fn atl_long_lines_generated_global_mode_public_command_surface_matches() -> Pari
 
 fn atl_long_lines_reloading_source_preserves_customized_default_and_existing_timer_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_reloading_source_preserves_customized_default_and_existing_timer_state",
         r##"(let* ((source
                   (getenv
@@ -316,14 +310,13 @@ fn atl_long_lines_reloading_source_preserves_customized_default_and_existing_tim
            (symbol-file
             'atl-long-lines-do-toggle
             'defun))))"##,
-        true,
         expect![[r#"OK (1.75 t t "atl-long-lines.el")"#]],
     )
 }
 
 fn atl_long_lines_generated_autoload_contract_registers_modes_without_loading_source()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_generated_autoload_contract_registers_modes_without_loading_source",
         r##"(let ((autoload-file
                 (symbol-file
@@ -454,16 +447,14 @@ mode.
                   (car-safe event)
                   '(defun provide)))
               (cdr history)))))))"##,
-        true,
         expect![[
             r#"OK (t nil t t t t "atl-long-lines.el" t nil t nil t t ("atl-long-lines") ((atl-long-lines-mode "[Arg list not available until function definition is loaded.]" t) (global-atl-long-lines-mode "[Arg list not available until function definition is loaded.]" t)) ("atl-long-lines") (t ((defun atl-long-lines-mode) (defun global-atl-long-lines-mode) (provide atl-long-lines-autoloads))))"#
         ]],
     )
 }
 
-#[test]
-fn registry_atl_long_lines_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn registry_atl_long_lines_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         atl_long_lines_exact_package_descriptor_origin_dependency_and_feature_contract_match(),
         atl_long_lines_archive_provided_payload_sizes_and_content_digests_match(),
         atl_long_lines_complete_callable_command_arglist_and_source_surface_matches(),
@@ -471,13 +462,9 @@ fn registry_atl_long_lines_batch() {
         atl_long_lines_custom_group_mode_metadata_and_documentation_match(),
         atl_long_lines_generated_global_mode_public_command_surface_matches(),
         atl_long_lines_reloading_source_preserves_customized_default_and_existing_timer_state(),
-    ];
-    assert_atl_long_lines_batch(&cases);
+    ]
 }
 
-#[test]
-fn registry_atl_long_lines_autoload_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![atl_long_lines_generated_autoload_contract_registers_modes_without_loading_source()];
-    assert_atl_long_lines_autoload_batch(&cases);
+pub(super) fn registry_atl_long_lines_autoload_batch_cases() -> Vec<ParityBatchCase> {
+    vec![atl_long_lines_generated_autoload_contract_registers_modes_without_loading_source()]
 }

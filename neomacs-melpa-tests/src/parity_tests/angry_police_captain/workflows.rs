@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_angry_police_captain_batch};
+use super::ParityBatchCase;
 
 fn fetching_a_quote_sends_a_real_request_and_echoes_the_line_it_scrapes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "fetching_a_quote_sends_a_real_request_and_echoes_the_line_it_scrapes",
         r##"
 (progn
@@ -25,7 +25,6 @@ fn fetching_a_quote_sends_a_real_request_and_echoes_the_line_it_scrapes() -> Par
           :request (apc-test-request)
           :autoloaded (and (commandp 'angry-police-captain) t))))
 "##,
-        true,
         expect![[
             r#"OK (:result (:echoed ("You have 24 hours, Sanchez") :requests-served 1 :leftover-buffers nil) :request ("GET http://theangrypolicecaptain.com HTTP/1.1\15\nMIME-Version: 1.0\15\nConnection: close\15\nHost: theangrypolicecaptain.com\15\nAccept-encoding: gzip\15\nAccept: */*\15\nUser-Agent: URL/Emacs Emacs/<VERSION> (TTY; x86_64-pc-linux-gnu)\15\n\15\n") :autoloaded t)"#
         ]],
@@ -33,7 +32,7 @@ fn fetching_a_quote_sends_a_real_request_and_echoes_the_line_it_scrapes() -> Par
 }
 
 fn the_scraper_takes_the_first_marked_link_and_drops_its_last_character() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_scraper_takes_the_first_marked_link_and_drops_its_last_character",
         r##"
 (progn
@@ -70,15 +69,15 @@ fn the_scraper_takes_the_first_marked_link_and_drops_its_last_character() -> Par
     (concat "<a href=\"http://theangrypolicecaptain.com\">"
             "Sánchez &mdash; hand it over!</a>\n"))))
 "##,
-        true,
         expect![[
             r#"OK (:trailing-period ("You have 24 hours, Sanchez." . "You have 24 hours, Sanchez") :trailing-exclamation ("Give me the badge!" . "Give me the badge") :empty-link ">" :two-links "First, and the only one" :entities-and-accents "S\303\241nchez &mdash; hand it over")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn the_command_can_only_finish_when_it_is_invoked_the_way_the_menu_invokes_it() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_command_can_only_finish_when_it_is_invoked_the_way_the_menu_invokes_it",
         r##"
 (list
@@ -100,7 +99,6 @@ fn the_command_can_only_finish_when_it_is_invoked_the_way_the_menu_invokes_it() 
      (list :killed (progn (kill-this-buffer)
                           (not (buffer-live-p (get-buffer "*apc-doomed*"))))))))
 "##,
-        true,
         expect![[
             r#"OK (:invoked-from-m-x (error "This command must be called from a menu or a tool bar") :invoked-from-a-key (error "This command must be called from a menu or a tool bar") :invoked-from-the-menu (:killed t))"#
         ]],
@@ -109,7 +107,7 @@ fn the_command_can_only_finish_when_it_is_invoked_the_way_the_menu_invokes_it() 
 
 fn the_response_status_is_ignored_and_a_redirect_leaves_its_first_buffer_behind() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_response_status_is_ignored_and_a_redirect_leaves_its_first_buffer_behind",
         r##"
 (progn
@@ -139,20 +137,17 @@ fn the_response_status_is_ignored_and_a_redirect_leaves_its_first_buffer_behind(
          "Location: http://theangrypolicecaptain.com/moved\r\n"))))
    :requests (apc-test-request)))
 "##,
-        true,
         expect![[
             r#"OK (:not-found (:echoed ("Gone, but still quotable") :requests-served 1 :leftover-buffers nil) :redirected (:echoed ("Found me after all") :requests-served 2 :leftover-buffers (" *http theangrypolicecaptain.com:80*")) :requests ("GET http://theangrypolicecaptain.com HTTP/1.1\15\nMIME-Version: 1.0\15\nConnection: close\15\nHost: theangrypolicecaptain.com\15\nAccept-encoding: gzip\15\nAccept: */*\15\nUser-Agent: URL/Emacs Emacs/<VERSION> (TTY; x86_64-pc-linux-gnu)\15\n\15\n" "GET http://theangrypolicecaptain.com/moved HTTP/1.1\15\nMIME-Version: 1.0\15\nConnection: close\15\nHost: theangrypolicecaptain.com\15\nAccept-encoding: gzip\15\nAccept: */*\15\nUser-Agent: URL/Emacs Emacs/<VERSION> (TTY; x86_64-pc-linux-gnu)\15\n\15\n"))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         fetching_a_quote_sends_a_real_request_and_echoes_the_line_it_scrapes(),
         the_scraper_takes_the_first_marked_link_and_drops_its_last_character(),
         the_command_can_only_finish_when_it_is_invoked_the_way_the_menu_invokes_it(),
         the_response_status_is_ignored_and_a_redirect_leaves_its_first_buffer_behind(),
-    ];
-    assert_angry_police_captain_batch(&cases);
+    ]
 }

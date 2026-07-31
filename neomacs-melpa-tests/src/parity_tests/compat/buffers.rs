@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_compat_batch};
+use super::ParityBatchCase;
 
 fn compat_with_work_buffer_nests_distinct_reusable_buffers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "compat_with_work_buffer_nests_distinct_reusable_buffers",
         r##"(let (outer inner result)
                (setq result
@@ -27,13 +27,12 @@ fn compat_with_work_buffer_nests_distinct_reusable_buffers() -> ParityBatchCase 
                (list result
                      (buffer-live-p outer)
                      (buffer-live-p inner)))"##,
-        true,
         expect![[r#"OK ((0 "outer" (t 0 "inner")) t t)"#]],
     )
 }
 
 fn compat_insert_into_buffer_honors_default_start_and_end_ranges() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "compat_insert_into_buffer_honors_default_start_and_end_ranges",
         r##"(list
                (with-temp-buffer
@@ -57,13 +56,12 @@ fn compat_insert_into_buffer_honors_default_start_and_end_ranges() -> ParityBatc
                      (insert "def")
                      (insert-into-buffer destination 2 3))
                    (buffer-string))))"##,
-        true,
         expect![[r#"OK ("abcdef" "abcef" "abce")"#]],
     )
 }
 
 fn compat_with_buffer_unmodified_if_unchanged_tracks_net_and_real_edits() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "compat_with_buffer_unmodified_if_unchanged_tracks_net_and_real_edits",
         r##"(with-temp-buffer
                (insert "base")
@@ -83,14 +81,13 @@ fn compat_with_buffer_unmodified_if_unchanged_tracks_net_and_real_edits() -> Par
                  (list unchanged
                        changed
                        (buffer-string))))"##,
-        true,
         expect![[r#"OK (nil t "base!")"#]],
     )
 }
 
 fn compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms",
         r##"(let* ((first (generate-new-buffer
                             "*compat-alpha*"))
@@ -138,18 +135,15 @@ fn compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms
                     (when (buffer-live-p buffer)
                       (kill-buffer buffer)))
                   (list first second third))))"##,
-        true,
         expect![[r#"OK ((t nil t t t t t t) ("*compat-beta*" "*compat-alpha*"))"#]],
     )
 }
 
-#[test]
-fn buffers_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn buffers_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         compat_with_work_buffer_nests_distinct_reusable_buffers(),
         compat_insert_into_buffer_honors_default_start_and_end_ranges(),
         compat_with_buffer_unmodified_if_unchanged_tracks_net_and_real_edits(),
         compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms(),
-    ];
-    assert_compat_batch(&cases);
+    ]
 }

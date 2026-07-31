@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ah_batch};
+use super::ParityBatchCase;
 
 fn keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks",
         r##"
 (let* ((events nil)
@@ -76,16 +76,12 @@ fn keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks() -> Parity
     (when (buffer-live-p search-buffer)
       (kill-buffer search-buffer))))
 "##,
-        true,
         expect![
             "OK ((quit nil) (quit nil) 1 nil ((before keyboard-quit nil 1) (after keyboard-quit nil 1) (before isearch-abort t 11) (after isearch-abort nil 1)) nil)"
         ],
     )
 }
 
-#[test]
-fn quit_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks()];
-    assert_ah_batch(&cases);
+pub(super) fn quit_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks()]
 }

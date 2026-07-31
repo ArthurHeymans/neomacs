@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aidermacs_batch};
+use super::ParityBatchCase;
 
 fn aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_commands()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_commands",
         r##"(let (calls)
                       (cl-letf (((symbol-function 'aidermacs-run-comint)
@@ -34,7 +34,6 @@ fn aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_command
                           (aidermacs-run-backend "aider-ce" nil "*v*")
                           (aidermacs--send-command-backend "*v*" "/ask hi" t))
                         (nreverse calls)))"##,
-        true,
         expect![[
             r#"OK ((comint "aider" ("--model" "x") "*a*") "scoped" (send-comint "*a*" "/ls") (redirect "*a*" "/models") (vterm "aider-ce" nil "*v*") (send-vterm "*v*" "/ask hi"))"#
         ]],
@@ -42,7 +41,7 @@ fn aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_command
 }
 
 fn aidermacs_vterm_text_filter_and_theme_argument_builder_cover_color_modes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aidermacs_vterm_text_filter_and_theme_argument_builder_cover_color_modes",
         r##"(let ((aidermacs-vterm-theme-foreground-colors-plist
                            '("--user-input-color" "#112233"
@@ -70,7 +69,6 @@ fn aidermacs_vterm_text_filter_and_theme_argument_builder_cover_color_modes() ->
                            (aidermacs--vterm-convert-color-arg
                             :foreground 42)
                          (error (error-message-string err)))))"##,
-        true,
         expect![[
             r#"OK ("one\ntwo\n\nthree\nfour" ("--user-input-color" "\\#112233" "--tool-error-color" "\\#AABBCC" "--completion-menu-bg-color" "\\#010203") ("--dark-mode") ("--light-mode") "Invalid face or colour value: 42")"#
         ]],
@@ -79,7 +77,7 @@ fn aidermacs_vterm_text_filter_and_theme_argument_builder_cover_color_modes() ->
 
 fn aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbacks()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbacks",
         r##"(let ((auto-mode-alist
                            '(("\\.py\\'" . python-mode)
@@ -95,14 +93,13 @@ fn aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbac
                          "File: src/tool.py\n```\nprint(1)\n"
                          "lib/setup.el\n```\n(message \"x\")\n"
                          "```\nplain text\n")))"##,
-        true,
         expect!["OK (emacs-lisp-mode sh-mode python-mode emacs-lisp-mode fundamental-mode)"],
     )
 }
 
 fn aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_callback()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_callback",
         r##"(with-temp-buffer
                       (rename-buffer (aidermacs-get-buffer-name) t)
@@ -135,7 +132,6 @@ fn aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_cal
                            aidermacs--tracked-files
                            (mapcar #'cdr aidermacs--output-history)
                            aidermacs--current-callback))))"##,
-        true,
         expect![[
             r#"OK ((nil "Added ./src/main.el" nil) t "Added ./src/main.el to the chat.\nfixture> " "Added ./src/main.el to the chat.\nfixture> " nil ("Added ./src/main.el to the chat.\nfixture> ") nil)"#
         ]],
@@ -143,7 +139,7 @@ fn aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_cal
 }
 
 fn aidermacs_real_comint_process_runs_a_multistep_fake_aider_session() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aidermacs_real_comint_process_runs_a_multistep_fake_aider_session",
         r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
                           (default-directory
@@ -205,21 +201,18 @@ fn aidermacs_real_comint_process_runs_a_multistep_fake_aider_session() -> Parity
                           (when-let ((process (get-buffer-process buffer)))
                             (delete-process process))
                           (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK ((t aidermacs-comint-mode (run open listen connect stop)) t "explain src/main.el" 28 (0 nil))"#
         ]],
     )
 }
 
-#[test]
-fn backends_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn backends_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_commands(),
         aidermacs_vterm_text_filter_and_theme_argument_builder_cover_color_modes(),
         aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbacks(),
         aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_callback(),
         aidermacs_real_comint_process_runs_a_multistep_fake_aider_session(),
-    ];
-    assert_aidermacs_batch(&cases);
+    ]
 }

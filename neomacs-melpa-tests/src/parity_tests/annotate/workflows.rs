@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_annotate_batch};
+use super::ParityBatchCase;
 
 fn review_notes_survive_reopen_and_follow_their_code_after_an_external_edit() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "review_notes_survive_reopen_and_follow_their_code_after_an_external_edit",
         r##"
 (let* ((root
@@ -131,7 +131,6 @@ fn review_notes_survive_reopen_and_follow_their_code_after_an_external_edit() ->
     (when (file-directory-p root)
       (delete-directory root t))))
 "##,
-        true,
         expect![[
             r#"OK (((23 28 "items" "Document whether ITEMS may contain negative values.") (107 124 "(+ subtotal item)" "This accumulator update needs an overflow policy.")) (((48 53 "items" "Document whether ITEMS may contain negative values.") (132 149 "(+ subtotal item)" "This accumulator update needs an overflow policy.")) ((2 "Document whether ITEMS may contain negative values.") (5 "This accumulator update needs an overflow policy.")) ";;; invoice calculations\n(defun invoice-total (items)\n  (let ((subtotal 0))\n    (dolist (item items subtotal)\n      (setq subtotal (+ subtotal item)))))\n" t))"#
         ]],
@@ -139,7 +138,7 @@ fn review_notes_survive_reopen_and_follow_their_code_after_an_external_edit() ->
 }
 
 fn reviewer_edits_styles_hides_and_deletes_a_note_through_documented_commands() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "reviewer_edits_styles_hides_and_deletes_a_note_through_documented_commands",
         r##"
 (let* ((root
@@ -226,7 +225,6 @@ fn reviewer_edits_styles_hides_and_deletes_a_note_through_documented_commands() 
     (when (file-directory-p root)
       (delete-directory root t))))
 "##,
-        true,
         expect![[
             r##"OK ((nil (:underline "#EEF192") (:background "#EEF192" :foreground "black")) ("split-string" "Use a CSV parser so quoted commas remain inside fields." :margin (:underline "#92EEF1") (:background "#92EEF1" :foreground "black") t 1 t) (nil nil "(defun parse-record (line)\n  (split-string line \",\" t))\n" "(defun parse-record (line)\n  (split-string line \",\" t))\n"))"##
         ]],
@@ -235,7 +233,7 @@ fn reviewer_edits_styles_hides_and_deletes_a_note_through_documented_commands() 
 
 fn code_review_annotations_integrate_as_real_lisp_comments_and_clear_the_database()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "code_review_annotations_integrate_as_real_lisp_comments_and_clear_the_database",
         r##"
 (let* ((root
@@ -320,7 +318,6 @@ fn code_review_annotations_integrate_as_real_lisp_comments_and_clear_the_databas
     (when (file-directory-p root)
       (delete-directory root t))))
 "##,
-        true,
         expect![[
             r#"OK ((nil 2 t "(defun total-with-tax (subtotal rate)\n  (* subtotal (+ 1 rate)))\n") ("(defun total-with-tax (subtotal rate)\n;                               ~~~~\n; ANNOTATION: \n;Define whether RATE is a fraction or a percentage.\n  (* subtotal (+ 1 rate)))\n; ~~~~~~~~~~~~~~~~~~~~~~~\n; ANNOTATION: \n;Name the rounding rule used for currency.\n" nil nil) nil "(defun total-with-tax (subtotal rate)\n;                               ~~~~\n; ANNOTATION: \n;Define whether RATE is a fraction or a percentage.\n  (* subtotal (+ 1 rate)))\n; ~~~~~~~~~~~~~~~~~~~~~~~\n; ANNOTATION: \n;Name the rounding rule used for currency.\n")"#
         ]],
@@ -328,7 +325,7 @@ fn code_review_annotations_integrate_as_real_lisp_comments_and_clear_the_databas
 }
 
 fn review_thread_and_filtered_summary_render_saved_notes_from_real_files() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "review_thread_and_filtered_summary_render_saved_notes_from_real_files",
         r##"
 (let* ((root
@@ -422,20 +419,17 @@ fn review_thread_and_filtered_summary_render_saved_notes_from_real_files() -> Pa
     (when (file-directory-p root)
       (delete-directory root t))))
 "##,
-        true,
         expect![[
             r#"OK ("┏\n┃gateway-charge\n┗\nSECURITY: redact card data from gateway errors.\n│  ✏️add reply\n│  \n╰▶from: reviewer@example.test\n   Agreed; sanitize the exception before logging.\n    \n   ❌delete ✏️add reply\n  \n" "* File: [ORACLE-SANDBOX]/annotate-threaded-review/checkout.el\n\n** Annotated text: \"gateway-charge\"\n    SECURITY: redact card data from gateway errors.\n\n      ❌delete\n      📝replace\n      🧵show thread\n\n" 3 "(defun charge-card (card cents)\n  (gateway-charge card cents))\n\n(defun send-receipt (address)\n  (mail-send address))\n")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         review_notes_survive_reopen_and_follow_their_code_after_an_external_edit(),
         reviewer_edits_styles_hides_and_deletes_a_note_through_documented_commands(),
         code_review_annotations_integrate_as_real_lisp_comments_and_clear_the_database(),
         review_thread_and_filtered_summary_render_saved_notes_from_real_files(),
-    ];
-    assert_annotate_batch(&cases);
+    ]
 }

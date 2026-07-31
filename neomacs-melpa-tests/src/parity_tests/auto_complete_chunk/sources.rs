@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_chunk_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_chunk_list_is_buffer_local_and_accessor_returns_each_buffer_dictionary()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_list_is_buffer_local_and_accessor_returns_each_buffer_dictionary",
         r##"(let ((first (generate-new-buffer " *chunk-first*"))
                              (second (generate-new-buffer " *chunk-second*")))
@@ -29,7 +29,6 @@ fn auto_complete_chunk_list_is_buffer_local_and_accessor_returns_each_buffer_dic
                                    (ac-chunk-list)))))
                            (kill-buffer first)
                            (kill-buffer second)))"##,
-        true,
         expect![[
             r#"OK (nil (t ("os.path.abspath" "os.path.basename")) (t ("json.decoder.JSONDecoder")))"#
         ]],
@@ -38,7 +37,7 @@ fn auto_complete_chunk_list_is_buffer_local_and_accessor_returns_each_buffer_dic
 
 fn auto_complete_chunk_default_dictionary_is_inherited_until_a_buffer_overrides_it()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_default_dictionary_is_inherited_until_a_buffer_overrides_it",
         r##"(let ((old-default
                                 (default-value 'ac-chunk-list))
@@ -68,7 +67,6 @@ fn auto_complete_chunk_default_dictionary_is_inherited_until_a_buffer_overrides_
                              (set-default 'ac-chunk-list old-default)
                              (kill-buffer inherited)
                              (kill-buffer overridden)))"##,
-        true,
         expect![[
             r#"OK ((nil #1=("pathlib.Path" "pathlib.PurePath")) (t ("pathlib.PosixPath")) #1#)"#
         ]],
@@ -77,7 +75,7 @@ fn auto_complete_chunk_default_dictionary_is_inherited_until_a_buffer_overrides_
 
 fn auto_complete_chunk_list_candidates_use_the_active_buffers_dictionary_and_prefix()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_list_candidates_use_the_active_buffers_dictionary_and_prefix",
         r##"(let ((python (generate-new-buffer " *chunk-python*"))
                              (json (generate-new-buffer " *chunk-json*")))
@@ -110,16 +108,16 @@ fn auto_complete_chunk_list_candidates_use_the_active_buffers_dictionary_and_pre
                                    (ac-chunk-list-candidates)))))
                            (kill-buffer python)
                            (kill-buffer json)))"##,
-        true,
         expect![[
             r#"OK (("target = os.path.a" 10 ("os.path.abspath" "os.path.altsep")) ("(json.decoder.JSOND" 2 ("json.decoder.JSONDecoder" "json.decoder.JSONDecodeError")))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_chunk_dictionary_candidates_delegate_once_and_preserve_dictionary_order()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_dictionary_candidates_delegate_once_and_preserve_dictionary_order",
         r##"(with-temp-buffer
                            (python-mode)
@@ -143,16 +141,16 @@ fn auto_complete_chunk_dictionary_candidates_delegate_once_and_preserve_dictiona
                                   result
                                   (eq result dictionary)
                                   dictionary)))))"##,
-        true,
         expect![[
             r#"OK (1 ("module.service.fetch" "module.service.flush" "module.service.fetch") nil ("module.service.fetch" "other.service.fetch" "module.service.flush" "module.service.fetch"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_chunk_source_alists_invoke_real_prefix_candidate_and_symbol_contracts()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_source_alists_invoke_real_prefix_candidate_and_symbol_contracts",
         r##"(with-temp-buffer
                            (python-mode)
@@ -176,14 +174,14 @@ fn auto_complete_chunk_source_alists_invoke_real_prefix_candidate_and_symbol_con
                                  (cdr
                                   (assq 'symbol definition)))))
                             '(ac-source-chunk-list)))"##,
-        true,
         expect![[r#"OK ((ac-source-chunk-list 10 ("client.api.create" "client.api.close") "c"))"#]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_chunk_dictionary_source_alist_uses_real_dictionary_provider_result()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_dictionary_source_alist_uses_real_dictionary_provider_result",
         r##"(with-temp-buffer
                            (fundamental-mode)
@@ -209,14 +207,14 @@ fn auto_complete_chunk_dictionary_source_alist_uses_real_dictionary_provider_res
                                   (cdr
                                    (assq 'symbol definition))
                                   calls)))))"##,
-        true,
         expect![[r#"OK (1 ("project.cache.read" "project.cache.reset") "c" 1)"#]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_chunk_dictionary_swap_removes_all_identical_builtin_entries_and_prepends_once()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_dictionary_swap_removes_all_identical_builtin_entries_and_prepends_once",
         r##"(let ((ac-sources
                                '(ac-source-words-in-same-mode-buffers
@@ -242,7 +240,6 @@ fn auto_complete_chunk_dictionary_swap_removes_all_identical_builtin_entries_and
                              (memq
                               'ac-source-dictionary
                               ac-sources))))"##,
-        true,
         expect![
             "OK ((ac-source-words-in-same-mode-buffers ac-source-filename ac-source-dictionary-chunk) (ac-source-words-in-same-mode-buffers ac-source-filename ac-source-dictionary-chunk) 1 nil)"
         ],
@@ -251,7 +248,7 @@ fn auto_complete_chunk_dictionary_swap_removes_all_identical_builtin_entries_and
 
 fn auto_complete_chunk_dictionary_swap_changes_only_the_current_buffers_sources() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_dictionary_swap_changes_only_the_current_buffers_sources",
         r##"(let ((first (generate-new-buffer " *chunk-sources-first*"))
                              (second (generate-new-buffer " *chunk-sources-second*")))
@@ -277,16 +274,14 @@ fn auto_complete_chunk_dictionary_swap_changes_only_the_current_buffers_sources(
                                    ac-sources))))
                            (kill-buffer first)
                            (kill-buffer second)))"##,
-        true,
         expect![
             "OK ((t (ac-source-dictionary-chunk ac-source-filename)) (t (ac-source-dictionary ac-source-words-in-buffer)))"
         ],
     )
 }
 
-#[test]
-fn sources_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn sources_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_chunk_list_is_buffer_local_and_accessor_returns_each_buffer_dictionary(),
         auto_complete_chunk_default_dictionary_is_inherited_until_a_buffer_overrides_it(),
         auto_complete_chunk_list_candidates_use_the_active_buffers_dictionary_and_prefix(),
@@ -296,6 +291,5 @@ fn sources_public_surface_batch() {
         auto_complete_chunk_dictionary_swap_removes_all_identical_builtin_entries_and_prepends_once(
         ),
         auto_complete_chunk_dictionary_swap_changes_only_the_current_buffers_sources(),
-    ];
-    assert_auto_complete_chunk_batch(&cases);
+    ]
 }

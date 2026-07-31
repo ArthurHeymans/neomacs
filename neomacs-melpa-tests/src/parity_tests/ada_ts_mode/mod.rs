@@ -4,7 +4,6 @@ use crate::{
     ADA_TS_MODE_MELPA_PIN, CachedMelpaOracle, EmacsRuntime, elisp_string,
     prepare_cached_tree_sitter_grammar,
 };
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -129,16 +128,21 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_ada_ts_mode_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ada_ts_mode_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("ada-ts-mode parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_ada_ts_mode_parity` cases (2a).
 pub(crate) fn assert_ada_ts_mode_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(ada_ts_mode_oracle(), &name, "ada_ts_mode_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn ada_ts_mode_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_ada_ts_mode_batch(&cases);
+}
+
+// END generated package batch tests

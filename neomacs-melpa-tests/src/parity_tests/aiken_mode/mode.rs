@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aiken_mode_batch};
+use super::ParityBatchCase;
 
 fn package_loads_exact_release_and_complete_public_data_surface() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "package_loads_exact_release_and_complete_public_data_surface",
         r##"
 (list
@@ -17,7 +17,6 @@ fn package_loads_exact_release_and_complete_public_data_surface() -> ParityBatch
  (commandp 'aiken-mode)
  (derived-mode-p 'prog-mode))
 "##,
-        true,
         expect![[
             r#"OK (t "20230920.1210" ("if" "else" "when" "is" "fn" "use" "let" "pub" "type" "opaque" "const" "todo" "error" "expect" "test" "trace" "fail" "validator" "and" "or") ("=" "->" ".." "|>" ">=" "<=" ">" "<" "!=" "==" "&&" "||" "!" "+" "-" "/" "*" "%" "?") 7 t prog-mode)"#
         ]],
@@ -25,7 +24,7 @@ fn package_loads_exact_release_and_complete_public_data_surface() -> ParityBatch
 }
 
 fn auto_mode_selects_aiken_only_for_final_ak_extension() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_mode_selects_aiken_only_for_final_ak_extension",
         r##"
 (let ((cases
@@ -42,7 +41,6 @@ fn auto_mode_selects_aiken_only_for_final_ak_extension() -> ParityBatchCase {
        (list (car case) major-mode (eq major-mode (cdr case)))))
    cases))
 "##,
-        true,
         expect![[
             r#"OK (("validator.ak" aiken-mode t) ("src/payment.ak" aiken-mode t) ("validator.aka" fundamental-mode t) ("validator.ak.bak" aiken-mode nil) ("AK" fundamental-mode t))"#
         ]],
@@ -50,7 +48,7 @@ fn auto_mode_selects_aiken_only_for_final_ak_extension() -> ParityBatchCase {
 }
 
 fn entering_mode_configures_prog_editing_comments_words_and_font_lock() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "entering_mode_configures_prog_editing_comments_words_and_font_lock",
         r##"
 (with-temp-buffer
@@ -68,7 +66,6 @@ fn entering_mode_configures_prog_editing_comments_words_and_font_lock() -> Parit
    (local-variable-p 'font-lock-defaults)
    (local-variable-p 'comment-start)))
 "##,
-        true,
         expect![[
             r#"OK (aiken-mode "Aiken" prog-mode nil "// " "" "//+ *" t t (aiken-font-lock-keywords) 119 46 62 t t)"#
         ]],
@@ -76,7 +73,7 @@ fn entering_mode_configures_prog_editing_comments_words_and_font_lock() -> Parit
 }
 
 fn mode_settings_are_buffer_local_and_do_not_leak_to_neighboring_buffers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "mode_settings_are_buffer_local_and_do_not_leak_to_neighboring_buffers",
         r##"
 (let ((aiken (generate-new-buffer "contract.ak"))
@@ -100,13 +97,12 @@ fn mode_settings_are_buffer_local_and_do_not_leak_to_neighboring_buffers() -> Pa
     (kill-buffer aiken)
     (kill-buffer plain)))
 "##,
-        true,
         expect![[r##"OK ((aiken-mode nil "// " 119) (text-mode t "# " 95))"##]],
     )
 }
 
 fn repeated_mode_activation_resets_local_contract_without_destroying_text() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "repeated_mode_activation_resets_local_contract_without_destroying_text",
         r##"
 (with-temp-buffer
@@ -124,13 +120,12 @@ fn repeated_mode_activation_resets_local_contract_without_destroying_text() -> P
        'aiken-font-lock-keywords)
    (= (point) (point-min))))
 "##,
-        true,
         expect![[r#"OK ("fn add(x: Int, y: Int) { x + y }\n" aiken-mode "// " nil t nil)"#]],
     )
 }
 
 fn unsupported_formatter_indenter_lsp_and_navigation_apis_remain_absent() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "unsupported_formatter_indenter_lsp_and_navigation_apis_remain_absent",
         r##"
 (let ((compile-command "workspace-defined build"))
@@ -154,22 +149,19 @@ fn unsupported_formatter_indenter_lsp_and_navigation_apis_remain_absent() -> Par
        compile-command
        (local-variable-p 'compile-command)))))
 "##,
-        true,
         expect![[
             r#"OK ((nil nil nil nil nil nil) indent-relative nil nil t 10 "{ first }" "workspace-defined build" nil)"#
         ]],
     )
 }
 
-#[test]
-fn mode_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn mode_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         package_loads_exact_release_and_complete_public_data_surface(),
         auto_mode_selects_aiken_only_for_final_ak_extension(),
         entering_mode_configures_prog_editing_comments_words_and_font_lock(),
         mode_settings_are_buffer_local_and_do_not_leak_to_neighboring_buffers(),
         repeated_mode_activation_resets_local_contract_without_destroying_text(),
         unsupported_formatter_indenter_lsp_and_navigation_apis_remain_absent(),
-    ];
-    assert_aiken_mode_batch(&cases);
+    ]
 }

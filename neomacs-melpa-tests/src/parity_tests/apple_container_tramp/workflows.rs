@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_apple_container_tramp_batch};
+use super::ParityBatchCase;
 
 fn apple_container_completion_discovers_live_hosts_with_the_selected_cli_context() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apple_container_completion_discovers_live_hosts_with_the_selected_cli_context",
         r####"
 (let* ((runtime
@@ -75,16 +75,16 @@ fn apple_container_completion_discovers_live_hosts_with_the_selected_cli_context
     (neomacs-apple-container-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:payments "/container:payments:" :worker "/container:worker:" :container-calls "--context development ls\n--context development ls\n--context development exec -it payments sh\n--context development ls\n--context development ls\n--context development exec -it worker sh\n")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn apple_container_supports_a_real_remote_edit_write_rename_and_directory_session()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apple_container_supports_a_real_remote_edit_write_rename_and_directory_session",
         r####"
 (let* ((runtime
@@ -215,16 +215,16 @@ fn apple_container_supports_a_real_remote_edit_write_rename_and_directory_sessio
     (neomacs-apple-container-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:remote ("/container:payments:" nil "payments" "[ORACLE-SANDBOX]/apple-container-remote-session/containers/payments/workspace/config.txt") :buffer ("mode=development\nworkers=4\n" 2 9 nil) :directory ("config.txt" "deploy-report.txt") :sizes (27 27) :config-on-disk "mode=development\nworkers=4\n" :report-on-disk "deployment=ready\nworkers=4\n" :container-calls "--context development exec -it payments sh\n")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edits()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edits",
         r####"
 (let* ((runtime
@@ -368,19 +368,17 @@ fn apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edi
     (neomacs-apple-container-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:remote-uid-cache (:configured-before t :stale-before-cleanup t :refreshed-after-cleanup t) :payments ("healthy\npayments-checked\n" nil) :retired ("healthy\nretired-checked\n" nil) :payments-on-disk "healthy\npayments-checked\n" :retired-on-disk "healthy\nretired-checked\n" :container-calls "--context development exec -it -u root payments sh\n--context development exec -it -u root retired sh\n--context development ls\n")"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         apple_container_completion_discovers_live_hosts_with_the_selected_cli_context(),
         apple_container_supports_a_real_remote_edit_write_rename_and_directory_session(),
         apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edits(),
-    ];
-    assert_apple_container_tramp_batch(&cases);
+    ]
 }

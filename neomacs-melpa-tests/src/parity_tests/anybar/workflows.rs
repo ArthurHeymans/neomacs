@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_anybar_batch};
+use super::ParityBatchCase;
 
 fn documented_indicator_lifecycle_updates_the_default_anybar_instance() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "documented_indicator_lifecycle_updates_the_default_anybar_instance",
         r##"
 (progn
@@ -25,7 +25,6 @@ fn documented_indicator_lifecycle_updates_the_default_anybar_instance() -> Parit
      (reverse states)
      (neomacs-anybar-test-events))))
 "##,
-        true,
         expect![[
             r#"OK ((nil ((:port 1738 :application "/Users/demo/Applications/AnyBar.app" :style "white")) ((:port 1738 :application "/Users/demo/Applications/AnyBar.app" :style "green")) ((:port 1738 :application "/Users/demo/Applications/AnyBar.app" :style "purple")) nil) ((launch :port 1738 :application "/Users/demo/Applications/AnyBar.app" :output-buffer nil :error-buffer nil) (connect :name "anybar" :type datagram :host local :port 1738) (send :port 1738 :command "green") (close :port 1738) (connect :name "anybar" :type datagram :host local :port 1738) (send :port 1738 :command "purple") (close :port 1738) (connect :name "anybar" :type datagram :host local :port 1738) (send :port 1738 :command "quit") (close :port 1738)))"#
         ]],
@@ -33,7 +32,7 @@ fn documented_indicator_lifecycle_updates_the_default_anybar_instance() -> Parit
 }
 
 fn custom_images_refresh_while_two_ports_keep_independent_indicator_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "custom_images_refresh_while_two_ports_keep_independent_indicator_state",
         r##"
 (let* ((home (getenv "HOME"))
@@ -107,7 +106,6 @@ fn custom_images_refresh_while_two_ports_keep_independent_indicator_state() -> P
       (delete-directory image-directory t)))
   result)
 "##,
-        true,
         expect![[
             r#"OK (:initial-images ("deploy" "review") :before-refresh ((:port 2401 :application "/Applications/AnyBar.app" :style "deploy") (:port 2402 :application "/Applications/AnyBar.app" :style "review")) :refreshed-images ("canary" "review") :after-refresh ((:port 2401 :application "/Applications/AnyBar.app" :style "canary") (:port 2402 :application "/Applications/AnyBar.app" :style "review")) :warning-buffer "Warning (AnyBar): Not a style: deploy\n" :events ((launch :port 2401 :application "/Applications/AnyBar.app" :output-buffer nil :error-buffer nil) (launch :port 2402 :application "/Applications/AnyBar.app" :output-buffer nil :error-buffer nil) (connect :name "anybar" :type datagram :host local :port 2401) (send :port 2401 :command "deploy") (close :port 2401) (connect :name "anybar" :type datagram :host local :port 2402) (send :port 2402 :command "review") (close :port 2402) (connect :name "anybar" :type datagram :host local :port 2401) (send :port 2401 :command "canary") (close :port 2401)))"#
         ]],
@@ -116,7 +114,7 @@ fn custom_images_refresh_while_two_ports_keep_independent_indicator_state() -> P
 
 fn interactive_commands_drive_a_complete_indicator_session_through_their_prompts() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "interactive_commands_drive_a_complete_indicator_session_through_their_prompts",
         r##"
 (progn
@@ -188,19 +186,17 @@ fn interactive_commands_drive_a_complete_indicator_session_through_their_prompts
      :events (neomacs-anybar-test-events)
      :unused-input (list ports styles commands))))
 "##,
-        true,
         expect![[
             r#"OK (:prompts ((:kind port :prompt "Port: " :default 1738 :answer 4173) (:kind style :prompt "Style: " :choices ("white" "red" "orange" "yellow" "green" "cyan" "blue" "purple" "black" "question" "exclamation") :require-match nil :initial-input nil :history nil :default nil :inherit-input-method nil :answer "orange") (:kind port :prompt "Port: " :default 1738 :answer 4173) (:kind command :prompt "Command: " :initial-input nil :history nil :default-value nil :inherit-input-method nil :answer "question") (:kind port :prompt "Port: " :default 1738 :answer 4173) (:kind port :prompt "Port: " :default 1738 :answer 4173)) :states (((:port 4173 :application "/Applications/AnyBar.app" :style "white")) ((:port 4173 :application "/Applications/AnyBar.app" :style "orange")) ((:port 4173 :application "/Applications/AnyBar.app" :style "question")) nil) :events ((launch :port 4173 :application "/Applications/AnyBar.app" :output-buffer nil :error-buffer nil) (connect :name "anybar" :type datagram :host local :port 4173) (send :port 4173 :command "orange") (close :port 4173) (connect :name "anybar" :type datagram :host local :port 4173) (send :port 4173 :command "question") (close :port 4173) (connect :name "anybar" :type datagram :host local :port 4173) (send :port 4173 :command "quit") (close :port 4173)) :unused-input (nil nil nil))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         documented_indicator_lifecycle_updates_the_default_anybar_instance(),
         custom_images_refresh_while_two_ports_keep_independent_indicator_state(),
         interactive_commands_drive_a_complete_indicator_session_through_their_prompts(),
-    ];
-    assert_anybar_batch(&cases);
+    ]
 }

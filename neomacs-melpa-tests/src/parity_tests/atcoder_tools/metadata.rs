@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atcoder_tools_batch};
+use super::ParityBatchCase;
 
 fn atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact_url()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact_url",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -43,7 +43,6 @@ fn atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact
               'sha256
               (atcoder-tools-test-read-file
                metadata)))))"##,
-        true,
         expect![[
             r#"OK (:opened ("https://atcoder.jp/contests/abc133/tasks/abc133_a" nil) "abc133/A/metadata.json" "c06bc8bc02204bf1743d3a4ad0fc93f6619b47c4e02a7f5076631ce56ae580a9")"#
         ]],
@@ -52,7 +51,7 @@ fn atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact
 
 fn atcoder_tools_open_problem_interpolates_unicode_spaces_and_reserved_ids_without_encoding()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_open_problem_interpolates_unicode_spaces_and_reserved_ids_without_encoding",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -75,13 +74,12 @@ fn atcoder_tools_open_problem_interpolates_unicode_spaces_and_reserved_ids_witho
              (atcoder-tools--open-problem
               metadata)
              (nreverse urls))))"##,
-        true,
         expect![[r#"OK (:opened ("https://atcoder.jp/contests/春 2026/x?y/tasks/task #1/β"))"#]],
     )
 }
 
 fn atcoder_tools_missing_unreadable_metadata_has_exact_early_error_contract() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_missing_unreadable_metadata_has_exact_early_error_contract",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -101,7 +99,6 @@ fn atcoder_tools_missing_unreadable_metadata_has_exact_early_error_contract() ->
                 (atcoder-tools--open-problem
                  missing)))
              browse-calls)))"##,
-        true,
         expect![[
             r#"OK (nil (:error error ("Could not retrieve information from metadata.json")) nil)"#
         ]],
@@ -110,7 +107,7 @@ fn atcoder_tools_missing_unreadable_metadata_has_exact_early_error_contract() ->
 
 fn atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_browser_calls()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_browser_calls",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -146,7 +143,6 @@ fn atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_brow
           (list
            (nreverse observations)
            (nreverse browse-calls)))"##,
-        true,
         expect![[
             r#"OK ((("empty" (:error json-end-of-file nil)) ("truncated" (:error json-end-of-file nil)) ("trailing" (:ok :opened)) ("scalar" (:error wrong-type-argument (listp 42))) ("array" (:error wrong-type-argument (listp [])))) (("https://atcoder.jp/contests/nil/tasks/nil")))"#
         ]],
@@ -154,7 +150,7 @@ fn atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_brow
 }
 
 fn atcoder_tools_partial_metadata_interpolates_missing_fields_as_nil() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_partial_metadata_interpolates_missing_fields_as_nil",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -188,7 +184,6 @@ fn atcoder_tools_partial_metadata_interpolates_missing_fields_as_nil() -> Parity
                       file))))
                  observations))))
           (nreverse observations))"##,
-        true,
         expect![[
             r#"OK (("empty-object" (:ok "https://atcoder.jp/contests/nil/tasks/nil")) ("empty-problem" (:ok "https://atcoder.jp/contests/nil/tasks/nil")) ("contest-only" (:ok "https://atcoder.jp/contests/abc/tasks/nil")) ("problem-only" (:ok "https://atcoder.jp/contests/nil/tasks/task")))"#
         ]],
@@ -196,7 +191,7 @@ fn atcoder_tools_partial_metadata_interpolates_missing_fields_as_nil() -> Parity
 }
 
 fn atcoder_tools_metadata_value_types_follow_format_string_coercion_exactly() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_metadata_value_types_follow_format_string_coercion_exactly",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -229,7 +224,6 @@ fn atcoder_tools_metadata_value_types_follow_format_string_coercion_exactly() ->
                       file))))
                  observations))))
           (nreverse observations))"##,
-        true,
         expect![[
             r#"OK (("number-bool" (:ok "https://atcoder.jp/contests/123/tasks/:json-false")) ("array-object" (:ok "https://atcoder.jp/contests/[a b]/tasks/((x . 1))")) ("null-number" (:ok "https://atcoder.jp/contests/nil/tasks/0")))"#
         ]],
@@ -237,7 +231,7 @@ fn atcoder_tools_metadata_value_types_follow_format_string_coercion_exactly() ->
 }
 
 fn atcoder_tools_public_open_problem_uses_metadata_sibling_of_buffer_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_public_open_problem_uses_metadata_sibling_of_buffer_file",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -262,14 +256,13 @@ fn atcoder_tools_public_open_problem_uses_metadata_sibling_of_buffer_file() -> P
                (call-interactively
                 #'atcoder-tools-open-problem)
                observed))))"##,
-        true,
         expect![[r#"OK (:delegated :delegated "[ROOT]/contest 100/A/metadata.json")"#]],
     )
 }
 
 fn atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error",
         r##"(with-temp-buffer
           (setq buffer-file-name nil)
@@ -281,7 +274,6 @@ fn atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error()
             (lambda ()
               (call-interactively
                #'atcoder-tools-open-problem)))))"##,
-        true,
         expect![
             "OK ((:error wrong-type-argument (stringp nil)) (:error wrong-type-argument (stringp nil)))"
         ],
@@ -289,7 +281,7 @@ fn atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error()
 }
 
 fn atcoder_tools_browser_failure_propagates_after_successful_metadata_parse() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_browser_failure_propagates_after_successful_metadata_parse",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -311,16 +303,14 @@ fn atcoder_tools_browser_failure_propagates_after_successful_metadata_parse() ->
                  metadata)))
              (nreverse calls)
              (file-readable-p metadata))))"##,
-        true,
         expect![[
             r#"OK ((:error error ("browser unavailable")) ("https://atcoder.jp/contests/abc500/tasks/abc500_c") t)"#
         ]],
     )
 }
 
-#[test]
-fn metadata_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn metadata_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact_url(),
         atcoder_tools_open_problem_interpolates_unicode_spaces_and_reserved_ids_without_encoding(),
         atcoder_tools_missing_unreadable_metadata_has_exact_early_error_contract(),
@@ -330,6 +320,5 @@ fn metadata_public_surface_batch() {
         atcoder_tools_public_open_problem_uses_metadata_sibling_of_buffer_file(),
         atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error(),
         atcoder_tools_browser_failure_propagates_after_successful_metadata_parse(),
-    ];
-    assert_atcoder_tools_batch(&cases);
+    ]
 }

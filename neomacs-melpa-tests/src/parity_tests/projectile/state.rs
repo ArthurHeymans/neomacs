@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_projectile_batch};
+use super::ParityBatchCase;
 
 fn projectile_known_project_serialization_and_merge_preserve_disk_and_memory_changes()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_known_project_serialization_and_merge_preserve_disk_and_memory_changes",
         r##"(let* ((root (make-temp-file "projectile-state-" t))
                     (projectile-known-projects-file
@@ -29,7 +29,6 @@ fn projectile_known_project_serialization_and_merge_preserve_disk_and_memory_cha
                         (projectile-unserialize
                          projectile-known-projects-file))))
                  (delete-directory root t)))"##,
-        true,
         expect![[
             r#"OK (("a1" "a2" "a3" "a4" "a5") ("a6" "a1" "a3" "b1" "b2") ("a6" "a1" "a3" "b1" "b2"))"#
         ]],
@@ -38,7 +37,7 @@ fn projectile_known_project_serialization_and_merge_preserve_disk_and_memory_cha
 
 fn projectile_known_project_cleanup_and_recursive_forget_update_persisted_state() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_known_project_cleanup_and_recursive_forget_update_persisted_state",
         r##"(let* ((root (file-name-as-directory
                               (make-temp-file "projectile-clean-" t)))
@@ -89,13 +88,12 @@ fn projectile_known_project_cleanup_and_recursive_forget_update_persisted_state(
                           projectile-known-projects-file)))))
                  (delete-directory root t)
                  (delete-directory outside t)))"##,
-        true,
         expect![[r#"OK (("a/" "a/nested/" "outside/") 2 ("outside/") ("outside/"))"#]],
     )
 }
 
 fn projectile_buffer_conditions_compose_name_mode_file_and_boolean_operators() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_buffer_conditions_compose_name_mode_file_and_boolean_operators",
         r##"(let ((buffer (generate-new-buffer
                            "*projectile-condition-test*")))
@@ -129,31 +127,27 @@ fn projectile_buffer_conditions_compose_name_mode_file_and_boolean_operators() -
                               (derived-mode . text-mode))))
                       (projectile--buffer-matches-conditions buffer nil)))
                  (kill-buffer buffer)))"##,
-        true,
         expect![[r#"OK (t t t t t t t nil nil)"#]],
     )
 }
 
 fn projectile_project_info_outside_a_project_signals_the_friendly_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "projectile_project_info_outside_a_project_signals_the_friendly_error",
         r##"(let ((default-directory "/virtual/no-project/")
                    (projectile-require-project-root t))
                (projectile-ensure-project nil))"##,
-        false,
         expect![[
             r#"ERR (user-error "Projectile cannot find a project definition in /virtual/no-project/")"#
         ]],
     )
 }
 
-#[test]
-fn state_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn state_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         projectile_known_project_serialization_and_merge_preserve_disk_and_memory_changes(),
         projectile_known_project_cleanup_and_recursive_forget_update_persisted_state(),
         projectile_buffer_conditions_compose_name_mode_file_and_boolean_operators(),
         projectile_project_info_outside_a_project_signals_the_friendly_error(),
-    ];
-    assert_projectile_batch(&cases);
+    ]
 }

@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aggressive_fill_paragraph_batch};
+use super::ParityBatchCase;
 
 fn aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_comments_and_prose()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_comments_and_prose",
         r####"(list
                             (with-temp-buffer
@@ -96,17 +96,14 @@ fn aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_co
                                (point)
                                (line-number-at-pos)
                                (current-column))))"####,
-        true,
         expect![[
             r#"OK (("// * Deploy the parser canary to one region before promoting it to every production region \n\n// This ordinary explanation is\n// deliberately long enough to require\n// comment-aware wrapping " 191 5 26) ("| Owner Name | Status |\n| Parser | Canary |\n\n#+BEGIN_SRC emacs-lisp :results output\n(message \"deploy\")\n#+END_SRC\n\nThis operational note explains why the\nparser canary remains isolated until\nevery recovery check succeeds. " 222 10 31))"#
         ]],
     )
 }
 
-#[test]
-fn suppression_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn suppression_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_comments_and_prose(),
-    ];
-    assert_aggressive_fill_paragraph_batch(&cases);
+    ]
 }

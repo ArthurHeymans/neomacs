@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_read_only_batch};
+use super::ParityBatchCase;
 
 fn auto_read_only_find_file_hook_checks_selected_buffer_then_project_then_delegates()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_read_only_find_file_hook_checks_selected_buffer_then_project_then_delegates",
         r##"(let (events)
          (cl-letf
@@ -24,14 +24,13 @@ fn auto_read_only_find_file_hook_checks_selected_buffer_then_project_then_delega
            (list
             (auto-read-only--hook-find-file)
             (nreverse events))))"##,
-        true,
         expect!["OK (:protected (:window-buffer :project-current :auto-read-only))"],
     )
 }
 
 fn auto_read_only_find_file_hook_short_circuits_before_project_for_nonselected_buffer()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_read_only_find_file_hook_short_circuits_before_project_for_nonselected_buffer",
         r##"(let ((selected
                 (generate-new-buffer
@@ -57,14 +56,13 @@ fn auto_read_only_find_file_hook_short_circuits_before_project_for_nonselected_b
                 (nreverse events)))
            (when (buffer-live-p selected)
              (kill-buffer selected))))"##,
-        true,
         expect!["OK (nil (:window-buffer))"],
     )
 }
 
 fn auto_read_only_find_file_hook_suppresses_files_inside_real_shaped_project_value()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_read_only_find_file_hook_suppresses_files_inside_real_shaped_project_value",
         r##"(let (events)
          (cl-letf
@@ -85,14 +83,13 @@ fn auto_read_only_find_file_hook_suppresses_files_inside_real_shaped_project_val
            (list
             (auto-read-only--hook-find-file)
             (nreverse events))))"##,
-        true,
         expect!["OK (nil ((:project nil)))"],
     )
 }
 
 fn auto_read_only_find_file_hook_treats_nil_and_singleton_project_values_as_unowned()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_read_only_find_file_hook_treats_nil_and_singleton_project_values_as_unowned",
         r##"(mapcar
          (lambda (project)
@@ -116,7 +113,6 @@ fn auto_read_only_find_file_hook_treats_nil_and_singleton_project_values_as_unow
            (transient)
            (vc . nil)
            (vc . "/workspace/project/")))"##,
-        true,
         expect![[
             r#"OK ((nil :applied (nil)) (#1=(transient) :applied (#1#)) (#2=(vc) :applied (#2#)) ((vc . "/workspace/project/") nil nil))"#
         ]],
@@ -124,7 +120,7 @@ fn auto_read_only_find_file_hook_treats_nil_and_singleton_project_values_as_unow
 }
 
 fn auto_read_only_find_file_hook_propagates_errors_from_each_reached_stage() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_read_only_find_file_hook_propagates_errors_from_each_reached_stage",
         r##"(list
          (cl-letf
@@ -154,7 +150,6 @@ fn auto_read_only_find_file_hook_propagates_errors_from_each_reached_stage() -> 
                  (error "action failure"))))
            (auto-read-only-test-error-data
             #'auto-read-only--hook-find-file)))"##,
-        true,
         expect![[
             r#"OK ((:error error ("window failure")) (:error error ("project failure")) (:error error ("action failure")))"#
         ]],
@@ -163,7 +158,7 @@ fn auto_read_only_find_file_hook_propagates_errors_from_each_reached_stage() -> 
 
 fn auto_read_only_find_file_hook_uses_current_default_directory_for_project_lookup()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_read_only_find_file_hook_uses_current_default_directory_for_project_lookup",
         r##"(with-temp-buffer
          (setq default-directory
@@ -187,7 +182,6 @@ fn auto_read_only_find_file_hook_uses_current_default_directory_for_project_look
               (auto-read-only--hook-find-file)
               arguments
               default-directory))))"##,
-        true,
         expect![[
             r#"OK (:applied (nil "/workspace/project/subdir/") "/workspace/project/subdir/")"#
         ]],
@@ -196,7 +190,7 @@ fn auto_read_only_find_file_hook_uses_current_default_directory_for_project_look
 
 fn auto_read_only_find_file_hook_tracks_real_window_selection_across_two_buffers() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_read_only_find_file_hook_tracks_real_window_selection_across_two_buffers",
         r##"(save-window-excursion
          (let ((first
@@ -242,14 +236,12 @@ fn auto_read_only_find_file_hook_tracks_real_window_selection_across_two_buffers
                (kill-buffer first))
              (when (buffer-live-p second)
                (kill-buffer second)))))"##,
-        true,
         expect![[r#"OK (nil :applied (" *auto-read-only-window-second*"))"#]],
     )
 }
 
-#[test]
-fn hook_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn hook_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_read_only_find_file_hook_checks_selected_buffer_then_project_then_delegates(),
         auto_read_only_find_file_hook_short_circuits_before_project_for_nonselected_buffer(),
         auto_read_only_find_file_hook_suppresses_files_inside_real_shaped_project_value(),
@@ -257,6 +249,5 @@ fn hook_public_surface_batch() {
         auto_read_only_find_file_hook_propagates_errors_from_each_reached_stage(),
         auto_read_only_find_file_hook_uses_current_default_directory_for_project_lookup(),
         auto_read_only_find_file_hook_tracks_real_window_selection_across_two_buffers(),
-    ];
-    assert_auto_read_only_batch(&cases);
+    ]
 }

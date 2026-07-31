@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_amsreftex_batch};
+use super::ParityBatchCase;
 
 fn turning_amsreftex_on_takes_over_reftexs_citation_machinery_and_off_leaves_one_override()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "turning_amsreftex_on_takes_over_reftexs_citation_machinery_and_off_leaves_one_override",
         r##"
 (let ((registered
@@ -46,7 +46,6 @@ fn turning_amsreftex_on_takes_over_reftexs_citation_machinery_and_off_leaves_one
      (condition-case failure (amsreftex-turn-off)
        (error (amsref-test-plain failure))))))
 "##,
-        true,
         expect![[
             r#"OK (:registered-when-loaded (:auto-mode latex-mode :extensions ("ltb" ".ltb") :external-finder ("ltb" . "kpsewhich %f.ltb") :path-variables ("TEXINPUTS")) :before-turn-on (:amsreftex-p nil :advice nil :latex-font-lock nil) :after-turn-on (:amsreftex-p t :advice ((reftex-locate-bibliography-files amsreftex-advise-reftex-locate-bibliography-files) (reftex-parse-bibtex-entry amsreftex-advise-reftex-parse-bibtex-entry) (reftex-get-crossref-alist amsreftex-advise-reftex-get-crossref-alist) (reftex-extract-bib-entries amsreftex-advise-reftex-extract-bib-entries) (reftex-extract-bib-entries-from-thebibliography amsreftex-advise-reftex-extract-bib-entries-from-thebibliography) (reftex-pop-to-bibtex-entry amsreftex-advise-reftex-pop-to-bibtex-entry) (reftex-echo-cite amsreftex-set-last-arg-to-nil) (reftex-parse-from-file amsreftex-parse-from-file) (reftex-bibtex-selection-callback amsreftex-database-selection-callback) (reftex-end-of-bib-entry amsreftex-end-of-bib-entry)) :latex-font-lock (((("^[ \11]*\\(\\\\bib[*]?\\){\\(\\(?:\\w\\|\\s_\\)+\\)}{\\(\\w+\\)}{" (1 font-lock-keyword-face) (2 font-lock-type-face) (3 font-lock-function-name-face)) ("^[ \11]*\\(\\(?:\\w\\|-\\)+\\)[ \11\n\15]*=[ \11\n\15]*{" (1 font-lock-variable-name-face)))))) :after-turn-off (:amsreftex-p nil :advice ((reftex-end-of-bib-entry amsreftex-end-of-bib-entry)) :latex-font-lock nil) :end-of-bib-entry-with-amsreftex-off (:end 56 :covers "\\bib{noether1918}{article}{\n  author={Noether, Emmy},\n}") :turning-off-again (user-error "Amsreftex is not turned on!"))"#
         ]],
@@ -55,7 +54,7 @@ fn turning_amsreftex_on_takes_over_reftexs_citation_machinery_and_off_leaves_one
 
 fn an_amsrefs_document_is_recognised_and_each_named_database_is_located_or_dropped()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_amsrefs_document_is_recognised_and_each_named_database_is_located_or_dropped",
         r##"
 (progn
@@ -133,7 +132,6 @@ Curvature \\cite{gauss1827}.
                 :bib (amsref-test-plain
                       (assq 'bib (symbol-value reftex-docstruct-symbol)))))))
 "##,
-        true,
         expect![[
             r#"OK (:amsrefs-document (:docstruct ((xr nil "\\\\\\\\\\\\") (index-tags) (is-multi nil) (bibview-cache) (master-dir . "[ORACLE-SANDBOX]/recognition/") (label-numbers) (bof "[ORACLE-SANDBOX]/recognition/master.tex") (toc "toc" "    1 Symmetry" "[ORACLE-SANDBOX]/recognition/master.tex" (:marker 63 "master.tex") 2 "1" "\\section{Symmetry}" 63) ("sec:symmetry" "s" "Conservation laws follow from symmetry \\cite{noether1918}. \\bibselect{mathbib, faraway, nosuchbase} " "[ORACLE-SANDBOX]/recognition/master.tex" nil) (database . "amsrefs") (bib "[ORACLE-SANDBOX]/recognition/mathbib.ltb" "[ORACLE-SANDBOX]/recognition/elsewhere/faraway.ltb") (eof "[ORACLE-SANDBOX]/recognition/master.tex")) :bib-or-thebib bib :bibfiles ("[ORACLE-SANDBOX]/recognition/mathbib.ltb" "[ORACLE-SANDBOX]/recognition/elsewhere/faraway.ltb") :using-amsrefs-p t) :after-reset (:tex-path-status nil :bib-path-status nil :ltb-path-status split :ltb-path ("[ORACLE-SANDBOX]/recognition/elsewhere/") :bib nil))"#
         ]],
@@ -142,7 +140,7 @@ Curvature \\cite{gauss1827}.
 
 fn citing_from_an_amsrefs_database_offers_the_matches_and_inserts_the_selected_key()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "citing_from_an_amsrefs_database_offers_the_matches_and_inserts_the_selected_key",
         r##"
 (progn
@@ -209,7 +207,6 @@ Index theory rests on elliptic operators .
             :cite-format reftex-cite-format
             :select-buffer-killed (null (get-buffer "*RefTeX Select*"))))))
 "##,
-        true,
         expect![[
             r#"OK (:citing-one-match (:signalled nil :displays 1 :selection "atiyah1966\n     Atiyah, Segal                  1966 Topology 4, 531-545\n     The index of elliptic operators\n\n" :faces ((font-lock-constant-face . "atiyah1966") (font-lock-keyword-face . "Atiyah, Segal                 ") (font-lock-comment-face . "1966") (font-lock-comment-face . "Topology 4, 531-545") (font-lock-function-name-face . "The index of elliptic operators")) :offered-keys ("atiyah1966") :buffer "\\documentclass{article}\n\\usepackage{amsrefs}\n\\begin{document}\nConservation laws follow from symmetry \\cite{atiyah1966}.\nIndex theory rests on elliptic operators .\n\\bibselect{mathbib}\n\\end{document}\n" :point 119) :citing-the-second-of-two (:signalled nil :selection "atiyah1966\n     Atiyah, Segal                  1966 Topology 4, 531-545\n     The index of elliptic operators\n\nnoether1918\n     Noether                        1918 Nachr. Ges. Wiss. G\\\"ottingen , 235-257\n     Invariante Variationsprobleme\n\n" :offered-keys ("atiyah1966" "noether1918")) :buffer "\\documentclass{article}\n\\usepackage{amsrefs}\n\\begin{document}\nConservation laws follow from symmetry \\cite{atiyah1966}.\nIndex theory rests on elliptic operators \\cite{noether1918}.\n\\bibselect{mathbib}\n\\end{document}\n" :point 180 :cite-format default :select-buffer-killed t)"#
         ]],
@@ -218,7 +215,7 @@ Index theory rests on elliptic operators .
 
 fn the_selection_carries_every_amsrefs_field_translated_into_the_bibtex_names_reftex_reads()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_selection_carries_every_amsrefs_field_translated_into_the_bibtex_names_reftex_reads",
         r##"
 (progn
@@ -316,7 +313,6 @@ A survey .
           :buffer-unchanged
           (buffer-substring-no-properties (point-min) (point-max)))))
 "##,
-        true,
         expect![[
             r#"OK (:quitting-the-selection (error "Quit") :selection "devlin2011\n     Devlin                         2011 Master: University of Elsewhere\n     Kernel methods for a small corpus\n\natiyah1966\n     Atiyah, Segal                  1966 in: Global Analysis\n     The index of elliptic operators\n\nnoether1918\n     Noether                        1918 Nachr. Ges. Wiss. G\\\"ottingen , 235-257\n     Invariante Variationsprobleme\n\ncurie1903\n     Curie                          1903 PhD: Universit\\'e de Paris\n     Recherches sur les substances radioactives\n\nbourbaki\n     Bourbaki                        book ()\n     \\'El\\'ements de math\\'ematique\n\nweil1948\n     Weil                             , 7-11\n     Sur les courbes alg\\'ebriques\n\n" :entries (("devlin2011" ("&formatted" . "devlin2011\n     Devlin                         2011 Master: University of Elsewhere\n     Kernel methods for a small corpus\n\n") ("&entry" . "\\bib{devlin2011}{thesis}{\n  author={Devlin, Sam},\n  title={Kernel methods for a small corpus},\n  type={M.Sc. thesis},\n  organization={University of Elsewhere},\n  date={2011},\n}") ("school" . "University of Elsewhere") ("&type" . "mastersthesis") ("&key" . "devlin2011") ("title" . "Kernel methods for a small corpus") ("type" . "M.Sc. thesis") ("organization" . "University of Elsewhere") ("year" . "2011") ("author" . "Devlin, Sam")) ("atiyah1966" ("&formatted" . "atiyah1966\n     Atiyah, Segal                  1966 in: Global Analysis\n     The index of elliptic operators\n\n") ("&entry" . "\\bib{atiyah1966}{article}{\n  author={Atiyah, Michael},\n  author={Segal, Graeme},\n  title={The index of elliptic operators},\n  date={1966-11},\n  pages={531\\ndash 545},\n  book={\n    title={Global Analysis},\n    editor={Spencer, Donald},\n    publisher={Univ. Tokyo Press},\n    date={1966},\n  },\n}") ("&type" . "incollection") ("&key" . "atiyah1966") ("title" . "The index of elliptic operators") ("year" . "1966") ("month" . "11") ("pages" . "531-545") ("booktitle" . "Global Analysis") ("author" . "Atiyah, Michael and Segal, Graeme")) ("noether1918" ("&formatted" . "noether1918\n     Noether                        1918 Nachr. Ges. Wiss. G\\\"ottingen , 235-257\n     Invariante Variationsprobleme\n\n") ("&entry" . "\\bib{noether1918}{article}{\n  author={Noether, Emmy},\n  title={Invariante Variationsprobleme},\n  journal={Nachr. Ges. Wiss. G\\\"ottingen},\n  date={1918},\n  pages={235\\ndash 257},\n}") ("&type" . "article") ("&key" . "noether1918") ("title" . "Invariante Variationsprobleme") ("journal" . "Nachr. Ges. Wiss. G\\\"ottingen") ("year" . "1918") ("pages" . "235-257") ("author" . "Noether, Emmy")) ("curie1903" ("&formatted" . "curie1903\n     Curie                          1903 PhD: Universit\\'e de Paris\n     Recherches sur les substances radioactives\n\n") ("&entry" . "\\bib{curie1903}{thesis}{\n  author={Curie, Marie},\n  title={Recherches sur les substances radioactives},\n  type={Doctoral dissertation},\n  organization={Universit\\'e de Paris},\n  date={1903},\n}") ("school" . "Universit\\'e de Paris") ("&type" . "phdthesis") ("&key" . "curie1903") ("title" . "Recherches sur les substances radioactives") ("type" . "Doctoral dissertation") ("organization" . "Universit\\'e de Paris") ("year" . "1903") ("author" . "Curie, Marie")) ("bourbaki" ("&formatted" . "bourbaki\n     Bourbaki                        book ()\n     \\'El\\'ements de math\\'ematique\n\n") ("&entry" . "\\bib{bourbaki}{book}{\n  editor={Bourbaki, Nicolas},\n  title={\\'El\\'ements de math\\'ematique},\n}") ("&type" . "book") ("&key" . "bourbaki") ("title" . "\\'El\\'ements de math\\'ematique") ("editor" . "Bourbaki, Nicolas")) ("weil1948" ("&formatted" . "weil1948\n     Weil                             , 7-11\n     Sur les courbes alg\\'ebriques\n\n") ("&entry" . "\\bib{weil1948}{article}{\n  author={Weil, Andr\\'e},\n  title={Sur les courbes alg\\'ebriques},\n  xref={proc1948},\n  pages={7\\ndash 11},\n}") ("&type" . "article") ("&key" . "weil1948") ("title" . "Sur les courbes alg\\'ebriques") ("xref" . "proc1948") ("pages" . "7-11") ("author" . "Weil, Andr\\'e") ("booktitle" . "Actes du Congr\\`es") ("book-publisher" . "Hermann") ("book-year" . "1948") ("book-editor" . "Cartan, Henri"))) :sort-orders ((nil "bourbaki" "weil1948" "devlin2011" "curie1903" "atiyah1966" "noether1918") (author "atiyah1966" "bourbaki" "curie1903" "devlin2011" "noether1918" "weil1948") (year "bourbaki" "weil1948" "curie1903" "noether1918" "atiyah1966" "devlin2011") (reverse-year "devlin2011" "atiyah1966" "noether1918" "curie1903" "bourbaki" "weil1948")) :buffer-unchanged "\\documentclass{article}\n\\usepackage{amsrefs}\n\\begin{document}\nA survey .\n\\bibselect{mathbib}\n\\end{document}\n")"#
         ]],
@@ -325,7 +321,7 @@ A survey .
 
 fn viewing_the_crossref_of_a_citation_pops_to_the_amsrefs_record_and_echoes_it() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "viewing_the_crossref_of_a_citation_pops_to_the_amsrefs_record_and_echoes_it",
         r##"
 (progn
@@ -396,16 +392,16 @@ Conservation laws \\cite{atiyah1966} and \\cite{nosuchkey}.
             :document-unchanged
             (buffer-substring-no-properties (point-min) (point-max))))))
 "##,
-        true,
         expect![[
             r#"OK (:popped-to-record (:windows ("master.tex" "mathbib.ltb") :selected-buffer "master.tex" :point 93 :database (:point 199 :line "\\bib{atiyah1966}{article}{" :overlays ((199 225 highlight)))) :echo-cache (bibview-cache ("atiyah1966" . "Atiyah & Segal 1966, index elliptic operators, Topology 4:531")) :missing-key (error "No amsrefs entry with citation key nosuchkey") :document-unchanged "\\documentclass{article}\n\\usepackage{amsrefs}\n\\begin{document}\nConservation laws \\cite{atiyah1966} and \\cite{nosuchkey}.\n\\bibselect{mathbib}\n\\end{document}\n")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn a_bibtex_document_still_gets_vanilla_reftex_behaviour_while_amsreftex_is_on() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_bibtex_document_still_gets_vanilla_reftex_behaviour_while_amsreftex_is_on",
         r##"
 (progn
@@ -452,7 +448,6 @@ Symmetry .
           :entry (car (amsref-test-selection 0 :entries))
           :buffer (buffer-substring-no-properties (point-min) (point-max)))))
 "##,
-        true,
         expect![[
             r#"OK (:amsreftex-p t :database-cell nil :bib-or-thebib bib :bibfiles ("[ORACLE-SANDBOX]/bibtex/refs.bib") :using-amsrefs-p nil :signalled nil :selection "noether1918\n     Noether                        1918 Nachr. Ges. Wiss. G\\\"ottingen , 235--257\n     Invariante Variationsprobleme\n\n" :entry ("noether1918" ("&formatted" . "noether1918\n     Noether                        1918 Nachr. Ges. Wiss. G\\\"ottingen , 235--257\n     Invariante Variationsprobleme\n\n") ("&entry" . "@article{noether1918,\n  author = {Noether, Emmy},\n  title = {Invariante Variationsprobleme},\n  journal = {Nachr. Ges. Wiss. G\\\"ottingen},\n  year = {1918},\n  pages = {235--257}\n}") ("pages" . "235--257") ("year" . "1918") ("journal" . "Nachr. Ges. Wiss. G\\\"ottingen") ("title" . "Invariante Variationsprobleme") ("author" . "Noether, Emmy") ("&type" . "article") ("&key" . "noether1918")) :buffer "\\documentclass{article}\n\\begin{document}\n\\section{Classical}\nSymmetry \\cite{noether1918}.\n\\bibliography{refs}\n\\end{document}\n")"#
         ]],
@@ -461,7 +456,7 @@ Symmetry .
 
 fn sorting_a_bibliography_orders_the_records_by_the_configured_fields_and_name_parts()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "sorting_a_bibliography_orders_the_records_by_the_configured_fields_and_name_parts",
         r##"
 (progn
@@ -547,16 +542,14 @@ fn sorting_a_bibliography_orders_the_records_by_the_configured_fields_and_name_p
        (amsreftex-sort-bibliography)
        (buffer-substring-no-properties (point-min) (point-max))))))
 "##,
-        true,
         expect![[
             r#"OK (:sort-fields ("author" "year") :sort-name-parts (last initial) :by-author-then-year (:mode latex-mode :text "\\begin{biblist}\n\n\\bib{atiyah1961}{article}{\n  author={Atiyah, Michael},\n  title={Zeta functions},\n  date={1961},\n}\n\n\\bib{atiyah1966}{article}{\n  author={Atiyah, Michael},\n  title={Equivariant K-theory},\n  date={1966},\n}\n\n\\bib{atiyahsegal1969}{article}{\n  author={Atiyah, Michael},\n  author={Segal, Graeme},\n  title={Exponential isomorphisms},\n  date={1969},\n}\n\n\\bib{orsted1990}{article}{\n  author={\\O rsted, Bent},\n  title={A note on spherical functions},\n  date={1990},\n}\n\n\\bib{segal1968}{article}{\n  author={Segal, Graeme},\n  title={Classifying spaces},\n  date={1968},\n}\n\n\\end{biblist}\n") :by-author-then-title (:mode latex-mode :text "\\begin{biblist}\n\n\\bib{atiyah1966}{article}{\n  author={Atiyah, Michael},\n  title={Equivariant K-theory},\n  date={1966},\n}\n\n\\bib{atiyah1961}{article}{\n  author={Atiyah, Michael},\n  title={Zeta functions},\n  date={1961},\n}\n\n\\bib{atiyahsegal1969}{article}{\n  author={Atiyah, Michael},\n  author={Segal, Graeme},\n  title={Exponential isomorphisms},\n  date={1969},\n}\n\n\\bib{orsted1990}{article}{\n  author={\\O rsted, Bent},\n  title={A note on spherical functions},\n  date={1990},\n}\n\n\\bib{segal1968}{article}{\n  author={Segal, Graeme},\n  title={Classifying spaces},\n  date={1968},\n}\n\n\\end{biblist}\n") :by-first-then-last-name (:mode latex-mode :text "\\begin{biblist}\n\n\\bib{orsted1990}{article}{\n  author={\\O rsted, Bent},\n  title={A note on spherical functions},\n  date={1990},\n}\n\n\\bib{segal1968}{article}{\n  author={Segal, Graeme},\n  title={Classifying spaces},\n  date={1968},\n}\n\n\\bib{atiyah1961}{article}{\n  author={Atiyah, Michael},\n  title={Zeta functions},\n  date={1961},\n}\n\n\\bib{atiyah1966}{article}{\n  author={Atiyah, Michael},\n  title={Equivariant K-theory},\n  date={1966},\n}\n\n\\bib{atiyahsegal1969}{article}{\n  author={Atiyah, Michael},\n  author={Segal, Graeme},\n  title={Exponential isomorphisms},\n  date={1969},\n}\n\n\\end{biblist}\n") :only-the-biblist-is-sorted "\\documentclass{article}\n\\usepackage{amsrefs}\n\\begin{document}\n\n\\bib{outside1900}{article}{\n  author={Zeta, Zoe},\n  title={Outside the biblist},\n  date={1900},\n}\n\n\\begin{biblist}\n\n\\bib{atiyah1961}{article}{\n  author={Atiyah, Michael},\n  title={Zeta functions},\n  date={1961},\n}\n\n\\bib{atiyah1966}{article}{\n  author={Atiyah, Michael},\n  title={Equivariant K-theory},\n  date={1966},\n}\n\n\\bib{atiyahsegal1969}{article}{\n  author={Atiyah, Michael},\n  author={Segal, Graeme},\n  title={Exponential isomorphisms},\n  date={1969},\n}\n\n\\bib{orsted1990}{article}{\n  author={\\O rsted, Bent},\n  title={A note on spherical functions},\n  date={1990},\n}\n\n\\bib{segal1968}{article}{\n  author={Segal, Graeme},\n  title={Classifying spaces},\n  date={1968},\n}\n\n\\end{biblist}\n\n\\end{document}\n")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         turning_amsreftex_on_takes_over_reftexs_citation_machinery_and_off_leaves_one_override(),
         an_amsrefs_document_is_recognised_and_each_named_database_is_located_or_dropped(),
         citing_from_an_amsrefs_database_offers_the_matches_and_inserts_the_selected_key(),
@@ -564,6 +557,5 @@ fn workflows_public_surface_batch() {
         viewing_the_crossref_of_a_citation_pops_to_the_amsrefs_record_and_echoes_it(),
         a_bibtex_document_still_gets_vanilla_reftex_behaviour_while_amsreftex_is_on(),
         sorting_a_bibliography_orders_the_records_by_the_configured_fields_and_name_parts(),
-    ];
-    assert_amsreftex_batch(&cases);
+    ]
 }

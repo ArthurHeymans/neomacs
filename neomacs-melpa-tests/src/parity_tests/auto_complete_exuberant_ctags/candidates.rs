@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_exuberant_ctags_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_exuberant_ctags_candidates_match_practical_prefix_and_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_exuberant_ctags_candidates_match_practical_prefix_and_order",
         r##"(with-temp-buffer
                            (insert "    ren")
@@ -17,13 +17,12 @@ fn auto_complete_exuberant_ctags_candidates_match_practical_prefix_and_order() -
                                     "other f C")))
                              (auto-complete-exuberant-ctags-test-candidate
                               candidates)))"##,
-        true,
         expect![[r#"OK ("renew" "render" "rename")"#]],
     )
 }
 
 fn auto_complete_exuberant_ctags_candidates_are_case_sensitive() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_exuberant_ctags_candidates_are_case_sensitive",
         r##"(with-temp-buffer
                            (insert "    Fo")
@@ -37,13 +36,12 @@ fn auto_complete_exuberant_ctags_candidates_are_case_sensitive() -> ParityBatchC
                                     "FOO v Go")))
                              (auto-complete-exuberant-ctags-test-candidate
                               candidates)))"##,
-        true,
         expect![[r#"OK ("Foobar" "Foo")"#]],
     )
 }
 
 fn auto_complete_exuberant_ctags_candidates_preserve_duplicate_names() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_exuberant_ctags_candidates_preserve_duplicate_names",
         r##"(with-temp-buffer
                            (insert "    sa")
@@ -57,13 +55,12 @@ fn auto_complete_exuberant_ctags_candidates_preserve_duplicate_names() -> Parity
                                     "safe f Rust")))
                              (auto-complete-exuberant-ctags-test-candidate
                               candidates)))"##,
-        true,
         expect![[r#"OK ("save" "save" "save" "safe")"#]],
     )
 }
 
 fn auto_complete_exuberant_ctags_candidates_ignore_malformed_index_entries() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_exuberant_ctags_candidates_ignore_malformed_index_entries",
         r##"(with-temp-buffer
                            (insert "    al")
@@ -78,13 +75,12 @@ fn auto_complete_exuberant_ctags_candidates_ignore_malformed_index_entries() -> 
                                     "beta f C")))
                              (auto-complete-exuberant-ctags-test-candidate
                               candidates)))"##,
-        true,
         expect![[r#"OK ("alpha" "al")"#]],
     )
 }
 
 fn auto_complete_exuberant_ctags_candidate_limit_is_count_with_off_by_one() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_exuberant_ctags_candidate_limit_is_count_with_off_by_one",
         r##"(mapcar
                            (lambda (limit)
@@ -105,7 +101,6 @@ fn auto_complete_exuberant_ctags_candidate_limit_is_count_with_off_by_one() -> P
                                   (auto-complete-exuberant-ctags-test-candidate
                                    candidates)))))
                            '(0 1 2 3 10))"##,
-        true,
         expect![[
             r#"OK ((0 ("a1")) (1 ("a2" "a1")) (2 ("a3" "a2" "a1")) (3 ("a4" "a3" "a2" "a1")) (10 ("a4" "a3" "a2" "a1")))"#
         ]],
@@ -113,7 +108,7 @@ fn auto_complete_exuberant_ctags_candidate_limit_is_count_with_off_by_one() -> P
 }
 
 fn auto_complete_exuberant_ctags_long_names_are_not_length_filtered() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_exuberant_ctags_long_names_are_not_length_filtered",
         r##"(with-temp-buffer
                            (insert "    super")
@@ -127,13 +122,12 @@ fn auto_complete_exuberant_ctags_long_names_are_not_length_filtered() -> ParityB
                                     "supervisor m Rust")))
                              (auto-complete-exuberant-ctags-test-candidate
                               candidates)))"##,
-        true,
         expect![[r#"OK ("supervisor" "supercalifragilistic")"#]],
     )
 }
 
 fn auto_complete_exuberant_ctags_candidate_near_buffer_start_signals() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_exuberant_ctags_candidate_near_buffer_start_signals",
         r##"(with-temp-buffer
                            (insert "ab")
@@ -146,13 +140,12 @@ fn auto_complete_exuberant_ctags_candidate_near_buffer_start_signals() -> Parity
                               (lambda ()
                                 (auto-complete-exuberant-ctags-test-candidate
                                  candidates)))))"##,
-        true,
         expect!["OK (:signal args-out-of-range ((:buffer nil) -1 2))"],
     )
 }
 
 fn auto_complete_exuberant_ctags_candidate_reads_dynamic_caller_candidates() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_exuberant_ctags_candidate_reads_dynamic_caller_candidates",
         r##"(with-temp-buffer
                            (insert "    al")
@@ -172,14 +165,12 @@ fn auto_complete_exuberant_ctags_candidate_reads_dynamic_caller_candidates() -> 
                                  (lambda ()
                                    (auto-complete-exuberant-ctags-test-candidate
                                     candidates)))))))"##,
-        true,
         expect![[r#"OK (("alpha") ("alpha") (:signal wrong-type-argument (sequencep 17)))"#]],
     )
 }
 
-#[test]
-fn candidates_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn candidates_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_exuberant_ctags_candidates_match_practical_prefix_and_order(),
         auto_complete_exuberant_ctags_candidates_are_case_sensitive(),
         auto_complete_exuberant_ctags_candidates_preserve_duplicate_names(),
@@ -188,6 +179,5 @@ fn candidates_public_surface_batch() {
         auto_complete_exuberant_ctags_long_names_are_not_length_filtered(),
         auto_complete_exuberant_ctags_candidate_near_buffer_start_signals(),
         auto_complete_exuberant_ctags_candidate_reads_dynamic_caller_candidates(),
-    ];
-    assert_auto_complete_exuberant_ctags_batch(&cases);
+    ]
 }

@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ARDUINO_MODE_FLYCHECK_MELPA_PIN, ARDUINO_MODE_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -187,52 +186,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_arduino_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = arduino_mode_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("arduino-mode parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-fn assert_arduino_source_signal_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = arduino_mode_oracle(source_file)
-        .run_signal(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("arduino-mode signal parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_arduino_mode_parity(elisp_form: &str, expected: Expect) {
-    assert_arduino_source_parity("arduino-mode.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_arduino_init_parity(elisp_form: &str, expected: Expect) {
-    assert_arduino_source_parity("arduino-mode-init.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_ede_arduino_parity(elisp_form: &str, expected: Expect) {
-    assert_arduino_source_parity("ede-arduino.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_ede_arduino_signal_parity(elisp_form: &str, expected: Expect) {
-    assert_arduino_source_signal_parity("ede-arduino.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_flycheck_arduino_parity(elisp_form: &str, expected: Expect) {
-    assert_arduino_source_parity("flycheck-arduino.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_ob_arduino_parity(elisp_form: &str, expected: Expect) {
-    assert_arduino_source_parity("ob-arduino.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_ob_arduino_signal_parity(elisp_form: &str, expected: Expect) {
-    assert_arduino_source_signal_parity("ob-arduino.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_arduino_init_parity` cases (2a).
 pub(crate) fn assert_arduino_init_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -287,3 +240,62 @@ pub(crate) fn assert_ob_arduino_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn arduino_init_package_batch() {
+    let cases: Vec<ParityBatchCase> = [surface::surface_arduino_init_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_arduino_init_batch(&cases);
+}
+
+#[test]
+fn arduino_mode_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        editing::editing_public_surface_batch_cases(),
+        processes::processes_public_surface_batch_cases(),
+        surface::surface_arduino_mode_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_arduino_mode_batch(&cases);
+}
+
+#[test]
+fn ede_arduino_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        ede_makefile::ede_makefile_public_surface_batch_cases(),
+        ede_preferences::ede_preferences_public_surface_batch_cases(),
+        ede_projects::ede_projects_public_surface_batch_cases(),
+        surface::surface_ede_arduino_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_ede_arduino_batch(&cases);
+}
+
+#[test]
+fn flycheck_arduino_package_batch() {
+    let cases: Vec<ParityBatchCase> = [flycheck::flycheck_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_flycheck_arduino_batch(&cases);
+}
+
+#[test]
+fn ob_arduino_package_batch() {
+    let cases: Vec<ParityBatchCase> = [org_babel::org_babel_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_ob_arduino_batch(&cases);
+}
+
+// END generated package batch tests

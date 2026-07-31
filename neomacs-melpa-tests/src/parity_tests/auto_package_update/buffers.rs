@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_package_update_batch};
+use super::ParityBatchCase;
 
 fn auto_package_update_visible_write_creates_real_read_only_results_buffer_and_mode()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_visible_write_creates_real_read_only_results_buffer_and_mode",
         r##"(let ((name
                                 " *apu-visible-results*"))
@@ -29,7 +29,6 @@ fn auto_package_update_visible_write_creates_real_read_only_results_buffer_and_m
                                        (get-buffer name))))))
                              (auto-package-update-test-kill-buffers
                               name)))"##,
-        true,
         expect![[
             r#"OK (t " *apu-visible-results*" "alpha up to date.\nbeta failed" t t quit-window t t)"#
         ]],
@@ -38,7 +37,7 @@ fn auto_package_update_visible_write_creates_real_read_only_results_buffer_and_m
 
 fn auto_package_update_write_replaces_existing_read_only_contents_without_duplicate_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_write_replaces_existing_read_only_contents_without_duplicate_state",
         r##"(let ((name
                                 " *apu-overwrite-results*"))
@@ -64,13 +63,12 @@ fn auto_package_update_write_replaces_existing_read_only_contents_without_duplic
                                      'auto-package-update-minor-mode))))
                              (auto-package-update-test-kill-buffers
                               name)))"##,
-        true,
         expect![[r#"OK ("fresh\nreport" t t quit-window 12 t)"#]],
     )
 }
 
 fn auto_package_update_hidden_write_avoids_popup_and_buries_named_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_hidden_write_avoids_popup_and_buries_named_buffer",
         r##"(let
                              ((name
@@ -112,14 +110,13 @@ fn auto_package_update_hidden_write_avoids_popup_and_buries_named_buffer() -> Pa
                                       auto-package-update-minor-mode))))
                              (auto-package-update-test-kill-buffers
                               name)))"##,
-        true,
         expect![[r#"OK (t ((:bury " *apu-hidden-results*")) "quiet report" t t)"#]],
     )
 }
 
 fn auto_package_update_hide_preview_selects_and_kills_existing_preview_window_buffer()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_hide_preview_selects_and_kills_existing_preview_window_buffer",
         r##"(let
                              ((auto-package-preview-buffer-name
@@ -148,18 +145,15 @@ fn auto_package_update_hide_preview_selects_and_kills_existing_preview_window_bu
                               (nreverse events)
                               (get-buffer
                                auto-package-preview-buffer-name))))"##,
-        true,
         expect![[r#"OK (:killed ((:kill " *apu-hide-preview*" t)) nil)"#]],
     )
 }
 
-#[test]
-fn buffers_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn buffers_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_package_update_visible_write_creates_real_read_only_results_buffer_and_mode(),
         auto_package_update_write_replaces_existing_read_only_contents_without_duplicate_state(),
         auto_package_update_hidden_write_avoids_popup_and_buries_named_buffer(),
         auto_package_update_hide_preview_selects_and_kills_existing_preview_window_buffer(),
-    ];
-    assert_auto_package_update_batch(&cases);
+    ]
 }

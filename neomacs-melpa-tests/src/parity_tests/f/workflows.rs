@@ -1,10 +1,11 @@
 use expect_test::expect;
 
-use super::assert_f_parity;
+use super::ParityBatchCase;
 
-#[test]
-fn walking_a_real_project_tree_and_selecting_the_files_that_matter() {
-    let elisp_form = r##"
+fn walking_a_real_project_tree_and_selecting_the_files_that_matter() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "walking_a_real_project_tree_and_selecting_the_files_that_matter",
+        r##"
 (let ((root (f-test-build)))
   (list
    :tree (f-test-tree root)
@@ -28,18 +29,17 @@ fn walking_a_real_project_tree_and_selecting_the_files_that_matter() {
    :counts (list :entries (length (f-entries root nil t))
                  :files (length (f-files root nil t))
                  :directories (length (f-directories root nil t)))))
-"##;
-
-    let expect = expect![[
-        r#"OK (:tree ((".git" . directory) (".git/config" . file) (".hidden" . file) ("README.md" . file) ("docs" . directory) ("docs/guide.md" . file) ("src" . directory) ("src/core" . directory) ("src/core/engine-test.el" . file) ("src/core/engine.el" . file) ("src/util" . directory) ("src/util/strings.el" . file)) :top-level (".git" ".hidden" "README.md" "docs" "src") :every-directory (".git" "docs" "src" "src/core" "src/util") :every-file (".git/config" ".hidden" "README.md" "docs/guide.md" "src/core/engine-test.el" "src/core/engine.el" "src/util/strings.el") :elisp-only ("src/core/engine-test.el" "src/core/engine.el" "src/util/strings.el") :markdown-only ("README.md" "docs/guide.md") :globbed ("src/core/engine-test.el" "src/core/engine.el" "src/util/strings.el") :hidden nil :counts (:entries 12 :files 7 :directories 5))"#
-    ]];
-
-    assert_f_parity(elisp_form, expect);
+"##,
+        expect![[
+            r#"OK (:tree ((".git" . directory) (".git/config" . file) (".hidden" . file) ("README.md" . file) ("docs" . directory) ("docs/guide.md" . file) ("src" . directory) ("src/core" . directory) ("src/core/engine-test.el" . file) ("src/core/engine.el" . file) ("src/util" . directory) ("src/util/strings.el" . file)) :top-level (".git" ".hidden" "README.md" "docs" "src") :every-directory (".git" "docs" "src" "src/core" "src/util") :every-file (".git/config" ".hidden" "README.md" "docs/guide.md" "src/core/engine-test.el" "src/core/engine.el" "src/util/strings.el") :elisp-only ("src/core/engine-test.el" "src/core/engine.el" "src/util/strings.el") :markdown-only ("README.md" "docs/guide.md") :globbed ("src/core/engine-test.el" "src/core/engine.el" "src/util/strings.el") :hidden nil :counts (:entries 12 :files 7 :directories 5))"#
+        ]],
+    )
 }
 
-#[test]
-fn taking_paths_apart_and_putting_them_back_together() {
-    let elisp_form = r##"
+fn taking_paths_apart_and_putting_them_back_together() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "taking_paths_apart_and_putting_them_back_together",
+        r##"
 (list
  :join (list (f-join "a" "b" "c.el")
              ;; An absolute component discards everything before it.
@@ -74,18 +74,17 @@ fn taking_paths_apart_and_putting_them_back_together() {
  :shape (list (f-absolute-p "/a") (f-relative-p "a")
               (f-root-p "/") (f-root-p "/a")
               (f-slash "/a/b") (f-slash "/a/b/")))
-"##;
-
-    let expect = expect![[
-        r#"OK (:join ("a/b/c.el" "/b/c.el" "/b/c.el" "a") :split (("/" "a" "b" "c.el") ("a" "b" "c.el") ("/") ("a")) :extensions ("c.tar" "gz" "/a/b/c.tar" "/a/b/c.elc" nil "noext" nil) :names ("b" "/a" "b" "/a" "" nil) :relative ("b/c" "." "../b") :depth (0 1 3) :common-parent ("/a/b/" "/a/b/" "/") :uniquify (("b/c.el" "d/c.el" "z.el") ("a/b/f.el" "c/b/f.el" "other/f.el") (("/one/two/f.el" . "two/f.el") ("/one/three/f.el" . "three/f.el"))) :shape (t t t nil "/a/b" "/a/b/"))"#
-    ]];
-
-    assert_f_parity(elisp_form, expect);
+"##,
+        expect![[
+            r#"OK (:join ("a/b/c.el" "/b/c.el" "/b/c.el" "a") :split (("/" "a" "b" "c.el") ("a" "b" "c.el") ("/") ("a")) :extensions ("c.tar" "gz" "/a/b/c.tar" "/a/b/c.elc" nil "noext" nil) :names ("b" "/a" "b" "/a" "" nil) :relative ("b/c" "." "../b") :depth (0 1 3) :common-parent ("/a/b/" "/a/b/" "/") :uniquify (("b/c.el" "d/c.el" "z.el") ("a/b/f.el" "c/b/f.el" "other/f.el") (("/one/two/f.el" . "two/f.el") ("/one/three/f.el" . "three/f.el"))) :shape (t t t nil "/a/b" "/a/b/"))"#
+        ]],
+    )
 }
 
-#[test]
-fn writing_reading_and_appending_text_and_bytes_round_trip() {
-    let elisp_form = r##"
+fn writing_reading_and_appending_text_and_bytes_round_trip() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "writing_reading_and_appending_text_and_bytes_round_trip",
+        r##"
 (let* ((root (f-test-build))
        (notes (f-join root "notes.txt"))
        (blob (f-join root "blob.bin")))
@@ -121,18 +120,17 @@ fn writing_reading_and_appending_text_and_bytes_round_trip() {
                     (condition-case error
                         (f-write-bytes (string ?\N{LATIN SMALL LETTER E WITH ACUTE}) blob)
                       (error (f-test-plain error)))))))))
-"##;
-
-    let expect = expect![[
-        r#"OK (:after-write "first line\n" :after-append "first line\nsecond line\n" :size-on-disk 23 :bytes (0 65 200 10 255) :bytes-are-unibyte t :blob-size 5 :after-append-bytes (0 65 200 10 255 1 2) :after-rewrite ("replaced\n" 9) :unibyte-check (t t nil (wrong-type-argument f-unibyte-string-p "é")))"#
-    ]];
-
-    assert_f_parity(elisp_form, expect);
+"##,
+        expect![[
+            r#"OK (:after-write "first line\n" :after-append "first line\nsecond line\n" :size-on-disk 23 :bytes (0 65 200 10 255) :bytes-are-unibyte t :blob-size 5 :after-append-bytes (0 65 200 10 255 1 2) :after-rewrite ("replaced\n" 9) :unibyte-check (t t nil (wrong-type-argument f-unibyte-string-p "é")))"#
+        ]],
+    )
 }
 
-#[test]
-fn copying_moving_and_deleting_a_subtree() {
-    let elisp_form = r##"
+fn copying_moving_and_deleting_a_subtree() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "copying_moving_and_deleting_a_subtree",
+        r##"
 (let* ((root (f-test-build))
        (src (f-join root "src"))
        (fresh (f-join root "fresh-target"))
@@ -170,18 +168,17 @@ fn copying_moving_and_deleting_a_subtree() {
             :touched (list (f-exists-p (f-join root "fresh.txt"))
                            (f-size (f-join root "fresh.txt")))
             :final (f-test-relative root (f-entries root))))))
-"##;
-
-    let expect = expect![[
-        r##"OK (:copy-to-a-new-name ("fresh-target/core" "fresh-target/core/engine-test.el" "fresh-target/core/engine.el" "fresh-target/util" "fresh-target/util/strings.el") :copy-onto-an-existing-name (file-already-exists "File exists" "[ORACLE-SANDBOX]/tree/existing-target") :copy-contents-only ("contents-target/core" "contents-target/core/engine-test.el" "contents-target/core/engine.el" "contents-target/util" "contents-target/util/strings.el") :after-move (:gone nil :arrived t :text "# Project\n") :deleted-target-still-exists nil :non-recursive-delete (file-error "Removing directory" "Directory not empty" "[ORACLE-SANDBOX]/tree/contents-target") :touched (t 0) :final (".git" ".hidden" "contents-target" "docs" "existing-target" "fresh.txt" "src"))"##
-    ]];
-
-    assert_f_parity(elisp_form, expect);
+"##,
+        expect![[
+            r##"OK (:copy-to-a-new-name ("fresh-target/core" "fresh-target/core/engine-test.el" "fresh-target/core/engine.el" "fresh-target/util" "fresh-target/util/strings.el") :copy-onto-an-existing-name (file-already-exists "File exists" "[ORACLE-SANDBOX]/tree/existing-target") :copy-contents-only ("contents-target/core" "contents-target/core/engine-test.el" "contents-target/core/engine.el" "contents-target/util" "contents-target/util/strings.el") :after-move (:gone nil :arrived t :text "# Project\n") :deleted-target-still-exists nil :non-recursive-delete (file-error "Removing directory" "Directory not empty" "[ORACLE-SANDBOX]/tree/contents-target") :touched (t 0) :final (".git" ".hidden" "contents-target" "docs" "existing-target" "fresh.txt" "src"))"##
+        ]],
+    )
 }
 
-#[test]
-fn the_predicates_that_compare_two_paths_and_two_timestamps() {
-    let elisp_form = r##"
+fn the_predicates_that_compare_two_paths_and_two_timestamps() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "the_predicates_that_compare_two_paths_and_two_timestamps",
+        r##"
 (let* ((root (f-test-build))
        (older (f-join root "older.txt"))
        (newer (f-join root "newer.txt")))
@@ -189,8 +186,8 @@ fn the_predicates_that_compare_two_paths_and_two_timestamps() {
   (f-write-text "wait\n" 'utf-8 newer)
   ;; Set the times explicitly rather than racing the clock: a fixed hour
   ;; apart is stable where `sleep-for' is not.
-  (f-change-time older '(25000 0))
-  (f-change-time newer '(25000 3600))
+  (set-file-times older (seconds-to-time 1700000000))
+  (set-file-times newer (seconds-to-time 1700003600))
   (list
    :relationships
    (list :ancestor (f-ancestor-of-p "/a" "/a/b/c")
@@ -220,18 +217,17 @@ fn the_predicates_that_compare_two_paths_and_two_timestamps() {
          :seconds-apart
          (round (- (float-time (f-modification-time newer))
                    (float-time (f-modification-time older)))))))
-"##;
-
-    let expect = expect![
-        "OK (:relationships (:ancestor t :not-its-own-ancestor nil :descendant t :parent t :child t :grandchild-is-not-a-child nil :same t :same-through-dots t) :kinds (:hidden t :not-hidden nil :empty-directory t :empty-file t :populated nil :ext-p (t nil t)) :times (:older nil :newer nil :not-older-than-itself nil :same-time t :seconds-apart 0))"
-    ];
-
-    assert_f_parity(elisp_form, expect);
+"##,
+        expect![
+            "OK (:relationships (:ancestor t :not-its-own-ancestor nil :descendant t :parent t :child t :grandchild-is-not-a-child nil :same t :same-through-dots t) :kinds (:hidden t :not-hidden nil :empty-directory t :empty-file t :populated nil :ext-p (t nil t)) :times (:older t :newer t :not-older-than-itself nil :same-time t :seconds-apart 3600))"
+        ],
+    )
 }
 
-#[test]
-fn the_sandbox_guard_refuses_every_destructive_call_that_would_escape() {
-    let elisp_form = r##"
+fn the_sandbox_guard_refuses_every_destructive_call_that_would_escape() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "the_sandbox_guard_refuses_every_destructive_call_that_would_escape",
+        r##"
 (let* ((root (f-test-build))
        (allowed (f-join root "allowed"))
        (outside (f-join root "outside.txt")))
@@ -265,18 +261,17 @@ fn the_sandbox_guard_refuses_every_destructive_call_that_would_escape() {
    (progn (f-with-sandbox (list allowed (f-join root "docs"))
             (f-write-text "ok\n" 'utf-8 (f-join root "docs/extra.txt")))
           (f-exists-p (f-join root "docs/extra.txt")))))
-"##;
-
-    let expect = expect![[
-        r#"OK (:inside (t "kept\n") :outside (:signalled (f-guard-error "[ORACLE-SANDBOX]/tree/outside.txt" ("[ORACLE-SANDBOX]/tree/allowed")) :file-created nil) :deleting-outside (:signalled (f-guard-error "[ORACLE-SANDBOX]/tree/docs" ("[ORACLE-SANDBOX]/tree/allowed")) :docs-still-there t) :reading-outside "guide\n" :two-sandboxes t)"#
-    ]];
-
-    assert_f_parity(elisp_form, expect);
+"##,
+        expect![[
+            r#"OK (:inside (t "kept\n") :outside (:signalled (f-guard-error "[ORACLE-SANDBOX]/tree/outside.txt" ("[ORACLE-SANDBOX]/tree/allowed")) :file-created nil) :deleting-outside (:signalled (f-guard-error "[ORACLE-SANDBOX]/tree/docs" ("[ORACLE-SANDBOX]/tree/allowed")) :docs-still-there t) :reading-outside "guide\n" :two-sandboxes t)"#
+        ]],
+    )
 }
 
-#[test]
-fn climbing_out_of_a_nested_directory_to_find_the_project_root() {
-    let elisp_form = r##"
+fn climbing_out_of_a_nested_directory_to_find_the_project_root() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "climbing_out_of_a_nested_directory_to_find_the_project_root",
+        r##"
 (let* ((root (f-test-build))
        (deep (f-join root "src/core")))
   (f-touch (f-join root ".projectroot"))
@@ -301,11 +296,21 @@ fn climbing_out_of_a_nested_directory_to_find_the_project_root() {
    :root (f-root)
    ;; The root has no parent at all, which is what stops the climb.
    :root-has-no-parent (f-dirname (f-root))))
-"##;
+"##,
+        expect![[
+            r#"OK (:found "." :starts-where-it-is "src/core" :never-found nil :root "/" :root-has-no-parent nil)"#
+        ]],
+    )
+}
 
-    let expect = expect![[
-        r#"OK (:found "." :starts-where-it-is "src/core" :never-found nil :root "/" :root-has-no-parent nil)"#
-    ]];
-
-    assert_f_parity(elisp_form, expect);
+pub(super) fn f_practical_workflows_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
+        walking_a_real_project_tree_and_selecting_the_files_that_matter(),
+        taking_paths_apart_and_putting_them_back_together(),
+        writing_reading_and_appending_text_and_bytes_round_trip(),
+        copying_moving_and_deleting_a_subtree(),
+        the_predicates_that_compare_two_paths_and_two_timestamps(),
+        the_sandbox_guard_refuses_every_destructive_call_that_would_escape(),
+        climbing_out_of_a_nested_directory_to_find_the_project_root(),
+    ]
 }

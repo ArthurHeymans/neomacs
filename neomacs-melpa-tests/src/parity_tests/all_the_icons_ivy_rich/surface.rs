@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_all_the_icons_ivy_rich_batch};
+use super::ParityBatchCase;
 
 fn pinned_package_loads_its_real_ivy_rich_ivy_and_all_the_icons_dependency_graph() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "pinned_package_loads_its_real_ivy_rich_ivy_and_all_the_icons_dependency_graph",
         r##"(let ((packages
                     '(all-the-icons-ivy-rich
@@ -29,7 +29,6 @@ fn pinned_package_loads_its_real_ivy_rich_ivy_and_all_the_icons_dependency_graph
                  (lambda (feature)
                    (and (featurep feature) feature))
                  '(cl-lib subr-x package bookmark project))))"##,
-        true,
         expect![[
             r#"OK (((all-the-icons-ivy-rich t "20230420.1234" "all-the-icons-ivy-rich.el") (ivy-rich t "20230425.1422" "ivy-rich.el") (ivy t "20260413.2102" "ivy.el") (all-the-icons t "20250527.927" "all-the-icons.el")) (cl-lib subr-x package bookmark project))"#
         ]],
@@ -37,7 +36,7 @@ fn pinned_package_loads_its_real_ivy_rich_ivy_and_all_the_icons_dependency_graph
 }
 
 fn readme_color_size_and_icon_customizations_change_a_rendered_file_candidate() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "readme_color_size_and_icon_customizations_change_a_rendered_file_candidate",
         r##"(progn
                (require 'cl-lib)
@@ -66,7 +65,6 @@ fn readme_color_size_and_icon_customizations_change_a_rendered_file_candidate() 
                      (get-text-property 1 'face plain)
                      (get-text-property 1 'display plain))
                     disabled))))"##,
-        true,
         expect![[
             r#"OK ((" " (:inherit all-the-icons-lcyan :family "github-octicons" :height 1.4) #1=(raise 0.0)) (" " (:inherit all-the-icons-ivy-rich-icon-face :family "github-octicons" :height 0.75) #1#) nil)"#
         ]],
@@ -74,7 +72,7 @@ fn readme_color_size_and_icon_customizations_change_a_rendered_file_candidate() 
 }
 
 fn enabled_package_mode_builds_and_applies_real_file_and_buffer_transformers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "enabled_package_mode_builds_and_applies_real_file_and_buffer_transformers",
         r##"(let* ((root
                      (file-name-as-directory
@@ -192,7 +190,6 @@ fn enabled_package_mode_builds_and_applies_real_file_and_buffer_transformers() -
                  (when (file-exists-p root)
                    (delete-directory root t)))
                rendered)"##,
-        true,
         expect![[
             r#"OK (t t (" " "work-notes.el" "" "-rw-r-----" "18" "Jan 02 12:34") (" " "work-notes.el" "29" "*" "" "air" "src" (:inherit all-the-icons-purple :family "file-icons" :height 1.0) all-the-icons-ivy-rich-major-mode-face))"#
         ]],
@@ -200,7 +197,7 @@ fn enabled_package_mode_builds_and_applies_real_file_and_buffer_transformers() -
 }
 
 fn global_mode_enable_reload_and_disable_manage_hooks_advice_and_transformers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "global_mode_enable_reload_and_disable_manage_hooks_advice_and_transformers",
         r##"(let ((original
                     ivy-rich-display-transformers-list)
@@ -257,13 +254,12 @@ fn global_mode_enable_reload_and_disable_manage_hooks_advice_and_transformers() 
                      (list enabled reloaded disabled))
                  (when all-the-icons-ivy-rich-mode
                    (all-the-icons-ivy-rich-mode -1))))"##,
-        true,
         expect!["OK ((t t t t) (t t t) (nil nil nil t))"],
     )
 }
 
 fn graphical_icon_gate_and_buffer_alignment_follow_runtime_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "graphical_icon_gate_and_buffer_alignment_follow_runtime_state",
         r##"(progn
                (require 'cl-lib)
@@ -293,19 +289,16 @@ fn graphical_icon_gate_and_buffer_alignment_follow_runtime_state() -> ParityBatc
                    (all-the-icons-ivy-rich-minibuffer-align-icons)
                    (setq aligned tab-width))
                  (list graphical nongraphical disabled aligned)))"##,
-        true,
         expect!["OK (t nil nil 1)"],
     )
 }
 
-#[test]
-fn surface_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn surface_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         pinned_package_loads_its_real_ivy_rich_ivy_and_all_the_icons_dependency_graph(),
         readme_color_size_and_icon_customizations_change_a_rendered_file_candidate(),
         enabled_package_mode_builds_and_applies_real_file_and_buffer_transformers(),
         global_mode_enable_reload_and_disable_manage_hooks_advice_and_transformers(),
         graphical_icon_gate_and_buffer_alignment_follow_runtime_state(),
-    ];
-    assert_all_the_icons_ivy_rich_batch(&cases);
+    ]
 }

@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_angular_mode_batch};
+use super::ParityBatchCase;
 
 fn opening_a_controller_highlights_the_angular_api_and_keeps_javascript_editing() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "opening_a_controller_highlights_the_angular_api_and_keeps_javascript_editing",
         r##"
         ;; A user opens an AngularJS controller and turns the mode on.  Every
@@ -32,7 +32,6 @@ fn opening_a_controller_highlights_the_angular_api_and_keeps_javascript_editing(
                  :string-still-a-string (ang-test-face-of "'/api/widgets'")))
             (when (buffer-live-p buffer) (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:mode angular-mode :derived-from javascript-mode :mode-name "JavaScript[Angular]" :api-calls ("$apply" "$broadcast" "$http" "$timeout" "$watch" ".controller" ".directive" "angular.copy" "angular.forEach" "angular.module") :declaration-line ((nil "  ") (font-lock-builtin-face ".controller") (nil "(") (font-lock-string-face "'WidgetCtrl'") (nil ", ") (font-lock-keyword-face "function") (nil " (") (font-lock-variable-name-face "$scope") (nil ", ") (font-lock-builtin-face "$http") (nil ", ") (font-lock-builtin-face "$timeout") (nil ") {")) :scope-is-not-a-package-keyword (:token "$scope" :face font-lock-variable-name-face :column 38 :line 2) :watch (:token "$watch" :face font-lock-builtin-face :column 11 :line 4) :for-each (:token "angular.forEach" :face font-lock-builtin-face :column 6 :line 5) :module (:token "angular.module" :face font-lock-builtin-face :column 0 :line 1) :string-still-a-string (:token "'/api/widgets'" :face font-lock-string-face :column 14 :line 9))"#
         ]],
@@ -40,7 +39,7 @@ fn opening_a_controller_highlights_the_angular_api_and_keeps_javascript_editing(
 }
 
 fn directive_properties_and_test_blocks_carry_the_type_face() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "directive_properties_and_test_blocks_carry_the_type_face",
         r##"
         ;; The package paints two more groups with the type face: the property
@@ -68,7 +67,6 @@ fn directive_properties_and_test_blocks_carry_the_type_face() -> ParityBatchCase
                  :controller-keywords-are-empty angular-controller-definition-keywords))
             (when (buffer-live-p buffer) (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:typed-tokens ("beforeEach(" "controllerAs:" "describe(" "it(" "link:" "scope:" "templateUrl:" "transclude:") :directive-object ((:token "scope:" :face font-lock-type-face :column 6 :line 16) (:token "templateUrl:" :face font-lock-type-face :column 6 :line 17) (:token "transclude:" :face font-lock-type-face :column 6 :line 18) (:token "controllerAs:" :face font-lock-type-face :column 6 :line 19) (:token "link:" :face font-lock-type-face :column 6 :line 20)) :spec-blocks ((:token "describe(" :face font-lock-type-face :column 0 :line 24) (:token "beforeEach(" :face font-lock-type-face :column 2 :line 25) (:token "it(" :face font-lock-type-face :column 2 :line 26)) :directive-line ((nil "    ") (font-lock-keyword-face "return") (nil " {")) :controller-keywords-are-empty nil)"#
         ]],
@@ -77,7 +75,7 @@ fn directive_properties_and_test_blocks_carry_the_type_face() -> ParityBatchCase
 
 fn the_keyword_lists_match_substrings_so_unrelated_identifiers_are_highlighted() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_keyword_lists_match_substrings_so_unrelated_identifiers_are_highlighted",
         r##"
         ;; The keyword lists go through `regexp-opt' with no word boundaries,
@@ -105,7 +103,6 @@ fn the_keyword_lists_match_substrings_so_unrelated_identifiers_are_highlighted()
                  :describe-needs-its-paren (ang-test-face-of "describeTheWidget(")))
             (when (buffer-live-p buffer) (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:highlighted-as-api ("$id" ".controller" ".forEach" "angular.module") :highlighted-as-type nil :dollar-id-inside-idle ((font-lock-keyword-face "var") (nil " ") (font-lock-builtin-face "$id") (nil "le = ") (font-lock-constant-face "true") (nil ";")) :controller-inside-controllers ((nil "inventory") (font-lock-builtin-face ".controller") (nil "s.push(") (font-lock-string-face "'WidgetCtrl'") (nil ");")) :for-each-inside-for-each-child (:token "forEachChild" :face font-lock-builtin-face :column 8 :line 6) :module-on-another-library ((nil "my") (font-lock-builtin-face "angular.module") (nil "(") (font-lock-string-face "'fake'") (nil ");")) :describe-needs-its-paren (:token "describeTheWidget(" :face nil :column 0 :line 7))"#
         ]],
@@ -114,7 +111,7 @@ fn the_keyword_lists_match_substrings_so_unrelated_identifiers_are_highlighted()
 
 fn an_angular_template_highlights_interpolations_only_where_html_has_not_claimed_them()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_angular_template_highlights_interpolations_only_where_html_has_not_claimed_them",
         r##"
         ;; `angular-html-mode' appends its two patterns after the sgml rules,
@@ -171,7 +168,6 @@ fn an_angular_template_highlights_interpolations_only_where_html_has_not_claimed
             (when (buffer-live-p angular) (kill-buffer angular))
             (when (buffer-live-p plain) (kill-buffer plain))))
     "##,
-        true,
         expect![[
             r#"OK (:angular (:mode angular-html-mode :derived-from html-mode :mode-name "HTML[Angular]" :interpolation-in-a-plain-element (:token "{{ widgets.length }}" :face font-lock-keyword-face :column 9 :line 13) :interpolation-inside-a-heading (:token "{{ ctrl.title }}" :face (bold underline) :column 8 :line 4) :directive-attribute (:token "ng-repeat" :face font-lock-variable-name-face :column 10 :line 6) :doctype ((font-lock-string-face "<!DOCTYPE html>")) :own-keyword-face ("{{ widgets.length }}")) :plain-html (:interpolation-in-a-plain-element (:token "{{ widgets.length }}" :face nil :column 9 :line 13) :directive-attribute (:token "ng-repeat" :face font-lock-variable-name-face :column 10 :line 6) :doctype ((nil "<") (font-lock-keyword-face "!DOCTYPE") (nil " html>")) :own-keyword-face ("!DOCTYPE")) :characters-compared 503 :characters-that-differ 35)"#
         ]],
@@ -179,7 +175,7 @@ fn an_angular_template_highlights_interpolations_only_where_html_has_not_claimed
 }
 
 fn editing_behaviour_comes_from_the_parent_modes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "editing_behaviour_comes_from_the_parent_modes",
         r##"
         ;; Both modes are derivations, so the editing a user actually does -
@@ -216,7 +212,6 @@ $scope.total = items.length;
               (with-current-buffer buffer (set-buffer-modified-p nil))
               (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:indented "angular.module('inventory')\n    .controller('Ctrl', function ($scope) {\n\11$scope.total = 0;\n\11$scope.$watch('items', function (items) {\n\11    $scope.total = items.length;\n\11});\n    });\n" :comment-syntax ("// " "") :commented "\11// $scope.total = 0;" :still-angular-after-editing ("$watch" ".controller" "angular.module"))"#
         ]],
@@ -225,7 +220,7 @@ $scope.total = items.length;
 
 fn neither_mode_claims_a_file_extension_and_the_shipped_snippets_are_not_registered()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "neither_mode_claims_a_file_extension_and_the_shipped_snippets_are_not_registered",
         r##"
         ;; Both modes are autoloaded, so `M-x angular-mode' works without
@@ -269,22 +264,19 @@ fn neither_mode_claims_a_file_extension_and_the_shipped_snippets_are_not_registe
                  :snippets-registered (and (boundp 'yas-snippet-dirs) yas-snippet-dirs)))
             (when (buffer-live-p buffer) (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:javascript-file-gets-the-stock-mode js-mode :template-file-gets-the-stock-mode mhtml-mode :auto-mode-alist-entries nil :both-modes-are-commands (t t) :snippets-shipped (:exists t :trees ("angular-html-mode" "angular-mode") :names ("config" "controller" "module" "stateprovider")) :snippets-registered nil)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         opening_a_controller_highlights_the_angular_api_and_keeps_javascript_editing(),
         directive_properties_and_test_blocks_carry_the_type_face(),
         the_keyword_lists_match_substrings_so_unrelated_identifiers_are_highlighted(),
         an_angular_template_highlights_interpolations_only_where_html_has_not_claimed_them(),
         editing_behaviour_comes_from_the_parent_modes(),
         neither_mode_claims_a_file_extension_and_the_shipped_snippets_are_not_registered(),
-    ];
-    assert_angular_mode_batch(&cases);
+    ]
 }

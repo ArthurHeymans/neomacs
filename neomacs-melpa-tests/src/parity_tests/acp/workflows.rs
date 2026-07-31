@@ -1,14 +1,13 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_acp_batch};
+use super::ParityBatchCase;
 
 /// The protocol's primary session: initialize, open a session, prompt, and read
 /// the agent's streamed answer.  Everything the client puts on the wire is
 /// pinned from the agent's side, so the JSON-RPC envelope, the monotonic
 /// request ids and the capabilities the constructors derive are all covered.
-
 fn a_real_agent_handshake_streams_updates_and_completes_the_prompt() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_real_agent_handshake_streams_updates_and_completes_the_prompt",
         r##"(acp-test-with-client
  ((client (acp-make-client :command agent)))
@@ -36,7 +35,6 @@ fn a_real_agent_handshake_streams_updates_and_completes_the_prompt() -> ParityBa
      (list :init init :session session :prompt prompt
            :updates (reverse updates)
            :received (acp-test-agent-received)))))"##,
-        true,
         expect![[
             r#"OK (:init ((protocolVersion . 1) (agentCapabilities (loadSession . t) (promptCapabilities (embeddedContext . t))) (authMethods . [((id . "api-key") (name . "API key"))])) :session ((sessionId . "sess-42") (modes (currentModeId . "ask") (availableModes . [((id . "ask") (name . "Ask")) ((id . "code") (name . "Code"))]))) :prompt ((stopReason . "end_turn")) :updates (((jsonrpc . "2.0") (method . "session/update") (params (sessionId . "sess-42") (update (sessionUpdate . "agent_message_chunk") (content (type . "text") (text . "Grüße! "))))) ((jsonrpc . "2.0") (method . "session/update") (params (sessionId . "sess-42") (update (sessionUpdate . "agent_message_chunk") (content (type . "text") (text . "Fertig.")))))) :received ("{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"neomacs-parity\",\"version\":\"1.0\"},\"protocolVersion\":1,\"clientCapabilities\":{\"fs\":{\"readTextFile\":false,\"writeTextFile\":false}}}}" "{\"jsonrpc\":\"2.0\",\"method\":\"session/new\",\"id\":2,\"params\":{\"cwd\":\"/work/project\",\"mcpServers\":[]}}" "{\"jsonrpc\":\"2.0\",\"method\":\"session/prompt\",\"id\":3,\"params\":{\"sessionId\":\"sess-42\",\"prompt\":[{\"type\":\"text\",\"text\":\"Sag Grüße\"}]}}"))"#
         ]],
@@ -44,7 +42,7 @@ fn a_real_agent_handshake_streams_updates_and_completes_the_prompt() -> ParityBa
 }
 
 fn the_agent_asks_the_client_for_permission_and_gets_an_answer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_agent_asks_the_client_for_permission_and_gets_an_answer",
         r##"(acp-test-with-client
  ((client (acp-make-client :command agent)))
@@ -68,15 +66,15 @@ fn the_agent_asks_the_client_for_permission_and_gets_an_answer() -> ParityBatchC
      (list :prompt prompt
            :requests (reverse seen-requests)
            :received (acp-test-agent-received)))))"##,
-        true,
         expect![[
             r#"OK (:prompt ((stopReason . "end_turn") (granted . "allow")) :requests (((jsonrpc . "2.0") (id . 9001) (method . "session/request_permission") (params (sessionId . "sess-42") (toolCall (toolCallId . "call-1") (title . "Write README.md")) (options . [((optionId . "allow") (name . "Allow") (kind . "allow_once")) ((optionId . "reject") (name . "Reject") (kind . "reject_once"))])))) :received ("{\"jsonrpc\":\"2.0\",\"method\":\"session/prompt\",\"id\":1,\"params\":{\"sessionId\":\"sess-42\",\"prompt\":[{\"type\":\"text\",\"text\":\"PERMISSION please write\"}]}}" "{\"jsonrpc\":\"2.0\",\"id\":9001,\"result\":{\"outcome\":{\"outcome\":\"selected\",\"optionId\":\"allow\"}}}"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn a_json_rpc_error_reaches_the_failure_callback_and_signals_when_sync() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_json_rpc_error_reaches_the_failure_callback_and_signals_when_sync",
         r##"(acp-test-with-client
  ((client (acp-make-client :command agent)))
@@ -99,7 +97,6 @@ fn a_json_rpc_error_reaches_the_failure_callback_and_signals_when_sync() -> Pari
      (list :failures (reverse failures)
            :sync-error sync-error
            :pending (map-elt client :pending-requests)))))"##,
-        true,
         expect![[
             r#"OK (:failures (((code . -32601) (message . "Method not found") (data (method . "session/prompt")))) :sync-error (error "ACP request failed: ((code . -32601) (message . Method not found) (data (method . session/prompt)))") :pending nil)"#
         ]],
@@ -107,7 +104,7 @@ fn a_json_rpc_error_reaches_the_failure_callback_and_signals_when_sync() -> Pari
 }
 
 fn agent_stderr_becomes_a_parsed_api_error_or_a_generic_internal_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agent_stderr_becomes_a_parsed_api_error_or_a_generic_internal_error",
         r##"(acp-test-with-client
  ((client (acp-make-client :command agent)))
@@ -128,7 +125,6 @@ fn agent_stderr_becomes_a_parsed_api_error_or_a_generic_internal_error() -> Pari
       :sync t)
      (acp-test-wait-until (lambda () agent-errors))
      (list :parsed parsed :generic (reverse agent-errors)))))"##,
-        true,
         expect![[
             r#"OK (:parsed (((type . "rate_limit_error") (message . "Quota exceeded"))) :generic (((code . -32603) (message . "agent: could not reach api.example.test\n"))))"#
         ]],
@@ -136,7 +132,7 @@ fn agent_stderr_becomes_a_parsed_api_error_or_a_generic_internal_error() -> Pari
 }
 
 fn an_agent_that_dies_mid_request_fails_every_pending_request() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_agent_that_dies_mid_request_fails_every_pending_request",
         r##"(acp-test-with-client
  ((client (acp-make-client :command agent)))
@@ -150,7 +146,6 @@ fn an_agent_that_dies_mid_request_fails_every_pending_request() -> ParityBatchCa
    (list :failures (reverse failures)
          :pending (map-elt client :pending-requests)
          :live (and (process-live-p (map-elt client :process)) t))))"##,
-        true,
         expect![[
             r#"OK (:failures (((code . -32603) (message . "Agent process ended before completing request: exited abnormally with code 3"))) :pending nil :live nil)"#
         ]],
@@ -158,7 +153,7 @@ fn an_agent_that_dies_mid_request_fails_every_pending_request() -> ParityBatchCa
 }
 
 fn logging_renders_the_whole_session_in_the_traffic_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "logging_renders_the_whole_session_in_the_traffic_buffer",
         r##"(let ((acp-logging-enabled t))
   (acp-test-with-client
@@ -184,15 +179,15 @@ fn logging_renders_the_whole_session_in_the_traffic_buffer() -> ParityBatchCase 
                                   (acp-test-buffer-text
                                    (buffer-name (acp-logs-buffer :client client))))
                                  t))))"##,
-        true,
         expect![[
             r#"OK (:traffic ("TIME → request      initialize" "TIME ← response     result" "TIME → request      session/prompt" "TIME ← notification session/update" "TIME ← notification session/update" "TIME ← response     result") :buffers ("*acp-([ORACLE-SANDBOX]/bin/acp-test-agent)-1 log*" "*acp-([ORACLE-SANDBOX]/bin/acp-test-agent)-1 traffic*") :read-only (nil t) :logs-has-outgoing t)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn callbacks_run_in_the_context_buffer_and_shutdown_releases_everything() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "callbacks_run_in_the_context_buffer_and_shutdown_releases_everything",
         r##"(let ((context (generate-new-buffer "*acp-context*")))
   (unwind-protect
@@ -230,16 +225,15 @@ fn callbacks_run_in_the_context_buffer_and_shutdown_releases_everything() -> Par
                    :message (with-current-buffer "*Messages*"
                               (car (last (split-string (buffer-string) "\n" t)))))))))
     (kill-buffer context)))"##,
-        true,
         expect![[
             r#"OK (:callback-buffers ("*acp-context*" "*acp-context*") :received ("{\"jsonrpc\":\"2.0\",\"method\":\"session/prompt\",\"id\":1,\"params\":{\"sessionId\":\"sess-42\",\"prompt\":[{\"type\":\"text\",\"text\":\"Hallo\"}]}}" "{\"jsonrpc\":\"2.0\",\"method\":\"session/cancel\",\"params\":{\"sessionId\":\"sess-42\",\"reason\":\"user_cancelled\"}}") :before (t t t) :after (nil nil nil) :message "Client already shut down")"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         a_real_agent_handshake_streams_updates_and_completes_the_prompt(),
         the_agent_asks_the_client_for_permission_and_gets_an_answer(),
         a_json_rpc_error_reaches_the_failure_callback_and_signals_when_sync(),
@@ -247,6 +241,5 @@ fn workflows_public_surface_batch() {
         an_agent_that_dies_mid_request_fails_every_pending_request(),
         logging_renders_the_whole_session_in_the_traffic_buffer(),
         callbacks_run_in_the_context_buffer_and_shutdown_releases_everything(),
-    ];
-    assert_acp_batch(&cases);
+    ]
 }

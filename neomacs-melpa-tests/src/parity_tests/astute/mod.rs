@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ASTUTE_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -93,22 +92,6 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed astute parity test").into()
 }
 
-fn assert_astute_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = astute_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("astute parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_astute_parity(elisp_form: &str, expected: Expect) {
-    assert_astute_source_parity("astute.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_astute_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_astute_source_parity("astute-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_astute_autoload_parity` cases (2a).
 pub(crate) fn assert_astute_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -125,3 +108,31 @@ pub(crate) fn assert_astute_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(astute_oracle("astute.el"), &name, "astute_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn astute_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_astute_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_astute_autoload_batch(&cases);
+}
+
+#[test]
+fn astute_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        casefold::casefold_public_surface_batch_cases(),
+        font_lock::font_lock_public_surface_batch_cases(),
+        keywords::keywords_public_surface_batch_cases(),
+        mode::mode_public_surface_batch_cases(),
+        registry::registry_astute_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_astute_batch(&cases);
+}
+
+// END generated package batch tests

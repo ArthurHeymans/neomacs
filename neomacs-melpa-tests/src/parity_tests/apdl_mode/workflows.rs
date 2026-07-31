@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_apdl_mode_batch};
+use super::ParityBatchCase;
 
 fn apdl_mode_authors_and_navigates_a_structural_analysis_model() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apdl_mode_authors_and_navigates_a_structural_analysis_model",
         r####"
 (let* ((root
@@ -142,7 +142,6 @@ fn apdl_mode_authors_and_navigates_a_structural_analysis_model() -> ParityBatchC
     (neomacs-apdl-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:file "models/cantilever.mac" :mode apdl-mode :point (16 9 4) :variables (("youngs" 3) ("poisson_ratio" 4) ("density" 5) ("load_scale" 6) ("node_count" 11) ("load_step" 14)) :selected-block "*if,node_count,gt,0,then\n  f,all,fy,-1000\n  *do,load_step,1,3\n    time,load_step\n    solve\n  *enddo\n*else\n  /com,No nodes were generated\n*endif\n" :variable-report "-*- APDL variables of cantilever.mac click with mouse-2 -*-\n Line | Definition\n    3 | youngs        = 210000       ! MPa\n    4 | poisson_ratio =      0.3     ! dimensionless\n    5 | density       =      7.85e-9 ! tonne/mm3\n    6 | load_scale    =      1.25    ! production multiplier\n   11 | *get,node_count,node,0,count\n   14 | *do,load_step,1,3\n" :variable-buttons (("3" 43) ("4" 78) ("5" 123) ("6" 164) ("11" 288) ("14" 359)) :jump ("cantilever.mac" "models/cantilever.mac" 11 0 "*get,node_count,node,0,count") :faces (("/title" font-lock-keyword-face) ("Cantilever production model" font-lock-doc-face) ("/prep7" font-lock-keyword-face) ("youngs" font-lock-variable-name-face) ("load_scale" font-lock-variable-name-face) ("solid186" font-lock-builtin-face) ("*if" font-lock-keyword-face) ("solve" font-lock-keyword-face) ("No nodes were generated" font-lock-doc-face)) :lines ((1 0 "/title,Cantilever production model") (2 0 "/prep7") (3 0 "youngs        = 210000       ! MPa") (4 0 "poisson_ratio =      0.3     ! dimensionless") (5 0 "density       =      7.85e-9 ! tonne/mm3") (6 0 "load_scale    =      1.25    ! production multiplier") (7 0 "mp,ex,1,youngs") (8 0 "mp,prxy,1,poisson_ratio") (9 0 "mp,dens,1,density") (10 0 "et,1,solid186") (11 0 "*get,node_count,node,0,count") (12 0 "*if,node_count,gt,0,then") (13 2 "  f,all,fy,-1000") (14 2 "  *do,load_step,1,3") (15 4 "    time,load_step") (16 4 "    solve") (17 2 "  *enddo") (18 0 "*else") (19 2 "  /com,No nodes were generated") (20 0 "*endif") (21 0 "finish")) :modified nil :disk "/title,Cantilever production model\n/prep7\nyoungs        = 210000       ! MPa\npoisson_ratio =      0.3     ! dimensionless\ndensity       =      7.85e-9 ! tonne/mm3\nload_scale    =      1.25    ! production multiplier\nmp,ex,1,youngs\nmp,prxy,1,poisson_ratio\nmp,dens,1,density\net,1,solid186\n*get,node_count,node,0,count\n*if,node_count,gt,0,then\n  f,all,fy,-1000\n  *do,load_step,1,3\n    time,load_step\n    solve\n  *enddo\n*else\n  /com,No nodes were generated\n*endif\nfinish\n")"#
         ]],
@@ -150,7 +149,7 @@ fn apdl_mode_authors_and_navigates_a_structural_analysis_model() -> ParityBatchC
 }
 
 fn apdl_mode_inspects_workbench_mesh_data_and_control_flow() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apdl_mode_inspects_workbench_mesh_data_and_control_flow",
         r####"
 (let* ((root
@@ -280,7 +279,6 @@ fn apdl_mode_inspects_workbench_mesh_data_and_control_flow() -> ParityBatchCase 
     (neomacs-apdl-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:file "workbench/ds.dat" :mode apdl-mode :outline t :hidden-number-blocks ((5 10 t t "![ ... hidden" " region ... ]")) :unhidden (nil 0) :number-boundaries ((3 0 "(1i9,3e20.9e3)") (12 2 "-1")) :outline-hidden (14 2 "*if,load_case,eq,1,then") :selected-branch "*if,load_case,eq,1,then\n  nsel,s,loc,x,0\n  f,all,fy,-1000\n*else\n  /com,Load case disabled\n*endif\n" :content "!@ === Workbench mesh ===\nnblock,3,solid\n(1i9,3e20.9e3)\n1,0.0,0.0,0.0\n2,1.0,0.0,0.0\n3,1.0,1.0,0.0\n4,0.0,1.0,0.0\n5,0.0,0.0,1.0\n6,1.0,0.0,1.0\n7,1.0,1.0,1.0\n8,0.0,1.0,1.0\n-1\n!@ === Load selection ===\n*if,load_case,eq,1,then\n  nsel,s,loc,x,0\n  f,all,fy,-1000\n*else\n  /com,Load case disabled\n*endif\n" :modified nil)"#
         ]],
@@ -288,7 +286,7 @@ fn apdl_mode_inspects_workbench_mesh_data_and_control_flow() -> ParityBatchCase 
 }
 
 fn apdl_mode_completes_documents_and_inserts_a_previewed_code_template() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apdl_mode_completes_documents_and_inserts_a_previewed_code_template",
         r####"
 (let* ((root
@@ -421,7 +419,6 @@ fn apdl_mode_completes_documents_and_inserts_a_previewed_code_template() -> Pari
     (neomacs-apdl-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:file "models/load-sweep.inp" :mode apdl-mode :parameter-help "MP - Defines a linear material property as a constant or a function of temperature.\nMP, Lab, MAT, C0, C1, C2, C3, C4\n--1----2----3---4---5---6---7---\n" :parameter-highlight (91 96 ", MAT") :template-prompts (("Preview template [TAB to complete]: " "apdl-skeleton-" "apdl_do") ("Insert template [TAB to complete]: " "apdl_do" "apdl_do")) :preview (:mode apdl-mode :read-only t :point 1 :banner "-*- APDL template: apdl_do -*-\n" :content "*do,I,1,10,1\n\n*cycle ! continue loop but bypass below commands\nnplot ! this command is not executed *cycle\n*enddo") :point (7 6 0) :faces (("/prep7" font-lock-keyword-face) ("solid186" font-lock-builtin-face) ("Load sweep" font-lock-comment-face) ("*do" font-lock-keyword-face) ("*cycle" font-lock-keyword-face) ("*enddo" font-lock-keyword-face)) :lines ((1 0 "/prep7") (2 0 "et,1,solid186") (3 0 "mp,ex,1,210000") (4 0 "!@ === Load sweep ===") (5 0 "*do,I,1,10,1") (6 2 "  ") (7 0 "*cycle ! continue loop but bypass below commands") (8 2 "  nplot ! this command is not executed *cycle") (9 0 "*enddo")) :modified nil :disk "/prep7\net,1,solid186\nmp,ex,1,210000\n!@ === Load sweep ===\n*do,I,1,10,1\n  \n*cycle ! continue loop but bypass below commands\n  nplot ! this command is not executed *cycle\n*enddo")"#
         ]],
@@ -429,7 +426,7 @@ fn apdl_mode_completes_documents_and_inserts_a_previewed_code_template() -> Pari
 }
 
 fn apdl_mode_runs_a_saved_model_and_opens_real_solver_artifacts() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apdl_mode_runs_a_saved_model_and_opens_real_solver_artifacts",
         r####"
 (let* ((root
@@ -570,7 +567,6 @@ fn apdl_mode_runs_a_saved_model_and_opens_real_solver_artifacts() -> ParityBatch
     (neomacs-apdl-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:file "run/beam.mac" :mode apdl-mode :process ("MAPDL-Batch" exit 0) :process-output "solver stdout: [ORACLE-SANDBOX]/apdl-batch-workflow/run/beam.mac\n\nProcess MAPDL-Batch finished\n" :confirmations ((:batch "Start batch run: [ORACLE-SANDBOX]/apdl-batch-workflow/tools/mapdl, input file: [ORACLE-SANDBOX]/apdl-batch-workflow/run/beam.mac, license: meba, job: beam in [ORACLE-SANDBOX]/apdl-batch-workflow/run/, lic server: 1055@license.example.test ") (:stop "Write stop file \"[ORACLE-SANDBOX]/apdl-batch-workflow/run/beam.abt\"? ")) :trace "cwd=[ORACLE-SANDBOX]/apdl-batch-workflow/run\narg=<-p>\narg=<meba>\narg=<-lch>\narg=<[ORACLE-SANDBOX]/apdl-batch-workflow/run/>\narg=<-smp>\narg=<-np>\narg=<3>\narg=<-j>\narg=<beam>\narg=<-s>\narg=<noread>\narg=<-l en-us>\narg=<-b>\narg=<-i>\narg=<[ORACLE-SANDBOX]/apdl-batch-workflow/run/beam.mac>\narg=<-o>\narg=<beam.out>\n" :out ("beam.out" t t "MAPDL batch completed\ninput=[ORACLE-SANDBOX]/apdl-batch-workflow/run/beam.mac\n") :error ("beam.err" t t "MAPDL warning: unconverged load step 3\n") :out-disk "MAPDL batch completed\ninput=[ORACLE-SANDBOX]/apdl-batch-workflow/run/beam.mac\n" :error-disk "MAPDL warning: unconverged load step 3\n" :stop-message "Wrote MAPDL stop file beam.abt in [ORACLE-SANDBOX]/apdl-batch-workflow/run/." :stop-disk "nonlinear\n" :model-disk "/filname,beam\n/prep7\net,1,beam188\nfinish\n")"#
         ]],
@@ -579,7 +575,7 @@ fn apdl_mode_runs_a_saved_model_and_opens_real_solver_artifacts() -> ParityBatch
 
 fn apdl_mode_routes_contextual_commands_elements_and_topics_to_exact_help_pages() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apdl_mode_routes_contextual_commands_elements_and_topics_to_exact_help_pages",
         r####"
 (let* ((root
@@ -668,7 +664,6 @@ fn apdl_mode_routes_contextual_commands_elements_and_topics_to_exact_help_pages(
     (neomacs-apdl-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:file "models/help-tour.mac" :mode apdl-mode :prompts (("Browse help for keyword [TAB to complete]: " "\"PARAMETRIC DESIGN LANGUAGE GUIDE\"")) :routes ((:online "https://ansyshelp.ansys.com/public//Views/Secured/corp/v251/en/ans_elem/Hlp_E_SOLID186.html") (:online "https://ansyshelp.ansys.com/public//Views/Secured/corp/v251/en/ans_apdl/Hlp_P_APDL3_9.html") (:online "https://ansyshelp.ansys.com/public//Views/Secured/corp/v251/en/ans_cmd/Hlp_C_SOLVE.html") (:online "https://ansyshelp.ansys.com/public//Views/Secured/corp/v251/en/ans_apdl/Hlp_P_APDLTOC.html") (:local "[ORACLE-SANDBOX]/apdl-help-workflow/ansys-help/ans_elem/Hlp_E_SOLID186.html")) :point (2 11 "et,1,solid186") :modified nil :disk "/prep7\net,1,solid186\nradius = acos(-1)\nsolve\n")"#
         ]],
@@ -676,7 +671,7 @@ fn apdl_mode_routes_contextual_commands_elements_and_topics_to_exact_help_pages(
 }
 
 fn apdl_mode_repairs_an_incomplete_model_and_preserves_existing_content() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apdl_mode_repairs_an_incomplete_model_and_preserves_existing_content",
         r####"
 (let* ((root
@@ -781,7 +776,6 @@ fn apdl_mode_repairs_an_incomplete_model_and_preserves_existing_content() -> Par
     (neomacs-apdl-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:file "models/repaired.mac" :mode apdl-mode :failed-close ("Cannot find a proper block command to close" nil 1 t nil) :format-after-split "*vwrite,node_id,displacement,label\n(I8 &\n    ,E16.8,A8)\n" :condensed-command (5 12 "n,2,1,0,0 $ n,3,2,0,0 ! beam nodes") :point (8 6 0) :faces (("production beam model" font-lock-string-face) ("*vwrite" font-lock-keyword-face) ("&" font-lock-type-face) ("beam nodes" font-lock-comment-face) ("*if" font-lock-keyword-face) ("solve" font-lock-keyword-face) ("*endif" font-lock-keyword-face)) :lines ((1 0 "jobname = 'production beam model'") (2 0 "*vwrite,node_id,displacement,label") (3 0 "(I8 &") (4 4 "    ,E16.8,A8)") (5 0 "n,1,0,0,0 $ n,2,1,0,0 $ n,3,2,0,0 ! beam nodes") (6 0 "*if,load_case,eq,1,then") (7 2 "  solve") (8 0 "*endif") (9 0 "finish")) :modified nil :disk "jobname = 'production beam model'\n*vwrite,node_id,displacement,label\n(I8 &\n    ,E16.8,A8)\nn,1,0,0,0 $ n,2,1,0,0 $ n,3,2,0,0 ! beam nodes\n*if,load_case,eq,1,then\n  solve\n*endif\nfinish\n")"#
         ]],
@@ -789,7 +783,7 @@ fn apdl_mode_repairs_an_incomplete_model_and_preserves_existing_content() -> Par
 }
 
 fn apdl_mode_drives_an_interactive_solver_then_falls_back_to_copying_code() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apdl_mode_drives_an_interactive_solver_then_falls_back_to_copying_code",
         r####"
 (let* ((root
@@ -964,7 +958,6 @@ fn apdl_mode_drives_an_interactive_solver_then_falls_back_to_copying_code() -> P
     (neomacs-apdl-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:file "run/interactive.mac" :mode apdl-mode :confirmations ((:start "Start run?  (version: v251, license type: meba, No of processors: 4, job: interactive-beam in [ORACLE-SANDBOX]/apdl-interactive-workflow/run/, server: 1055@license.example.test") (:exit "Do you want to exit the Ansys run?")) :query-prompt ("Send to interpreter: " "*STATUS") :sent-line (2 0 "et,1,beam188") :sent-region (2 0 t) :process ("MAPDL" exit 0) :process-output "BEGIN:\naccepted: /prep7\naccepted: *STATUS\naccepted: /prep7\naccepted: et,1,beam188\naccepted: mp,ex,1,210000\naccepted: solve\naccepted: finish $ /exit,all\n\nProcess MAPDL finished\n" :trace "argv=<-np 4 -p meba -j interactive-beam>\ncommand=</prep7>\ncommand=<*STATUS>\ncommand=</prep7>\ncommand=<et,1,beam188>\ncommand=<mp,ex,1,210000>\ncommand=<solve>\ncommand=<finish $ /exit,all>\n" :fallback ("/prep7\n" nil 1 0) :modified nil :disk "/prep7\net,1,beam188\nmp,ex,1,210000\nsolve\n")"#
         ]],
@@ -972,7 +965,7 @@ fn apdl_mode_drives_an_interactive_solver_then_falls_back_to_copying_code() -> P
 }
 
 fn apdl_mode_filters_real_license_manager_output_for_operators() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apdl_mode_filters_real_license_manager_output_for_operators",
         r####"
 (let* ((root
@@ -1059,16 +1052,14 @@ fn apdl_mode_filters_real_license_manager_output_for_operators() -> ParityBatchC
     (neomacs-apdl-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:license-report " -*- License status, type h or ? for help -*-\nlmutil - Copyright Ansys\nLicense server status: 1055@license.example.test\nmeba: (5 licenses issued; 2 licenses in use)\n    exec workstation /dev/pts/1 (v2025.1) (license/1055 123), start Mon\n    teammate node /dev/pts/2 (v2025.1) (license/1055 456), start Mon\npreppost: (4 licenses issued; 1 license in use)\n    exec workstation /dev/pts/1 (v2025.1) (license/1055 789), start Mon\nansys: (3 licenses issued; 0 licenses in use)\n\nMon Jan 15 10:30:00 2024\n" :down-report " -*- License status, type h or ? for help -*-\nmeba:ANSYS Mechanical Batch (5 licenses issued; 2 licenses in use)\npreppost:ANSYS Mechanical PrepPost (4 licenses issued; 1 license in use)\nansys:ANSYS Mechanical (3 licenses issued; 0 licenses in use)\n\nMon Jan 15 10:30:00 2024\n" :license-face font-lock-warning-face :user-report " -*- User license status type h or ? for help -*-\nmeba: (5 licenses issued; 2 licenses in use)\n    exec workstation /dev/pts/1 (v2025.1) (license/1055 123), start Mon\npreppost: (4 licenses issued; 1 license in use)\n    exec workstation /dev/pts/1 (v2025.1) (license/1055 789), start Mon\n\nMon Jan 15 10:30:00 2024\n" :user-buffer "*User-licenses*" :trace "argv=<lmstat -c  1055@license.example.test -a>\nargv=<lmstat -c  1055@license.example.test -a>\nargv=<lmstat -c  1055@license.example.test -a>\n")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         apdl_mode_authors_and_navigates_a_structural_analysis_model(),
         apdl_mode_inspects_workbench_mesh_data_and_control_flow(),
         apdl_mode_completes_documents_and_inserts_a_previewed_code_template(),
@@ -1077,6 +1068,5 @@ fn workflows_public_surface_batch() {
         apdl_mode_repairs_an_incomplete_model_and_preserves_existing_content(),
         apdl_mode_drives_an_interactive_solver_then_falls_back_to_copying_code(),
         apdl_mode_filters_real_license_manager_output_for_operators(),
-    ];
-    assert_apdl_mode_batch(&cases);
+    ]
 }

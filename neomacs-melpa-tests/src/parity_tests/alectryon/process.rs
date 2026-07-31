@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alectryon_batch};
+use super::ParityBatchCase;
 
 fn alectryon_run_converter_sends_widened_input_and_exact_cli_arguments_to_a_real_executable()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_run_converter_sends_widened_input_and_exact_cli_arguments_to_a_real_executable",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "record-converter.sh" root))
@@ -33,7 +33,6 @@ fn alectryon_run_converter_sends_widened_input_and_exact_cli_arguments_to_a_real
                     (insert-file-contents standard-input)
                     (buffer-string))))))
     (kill-buffer input)))"##,
-        true,
         expect![[
             r#"OK ("converted document\n" "--frontend\ncoq+rst\n--backend\nrst\n--traceback\n-\n" "hidden prefix\nselected proof\nhidden suffix")"#
         ]],
@@ -42,7 +41,7 @@ fn alectryon_run_converter_sends_widened_input_and_exact_cli_arguments_to_a_real
 
 fn alectryon_run_converter_surfaces_real_nonzero_status_command_and_stderr_payload()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_run_converter_surfaces_real_nonzero_status_command_and_stderr_payload",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "failing converter with spaces.sh" root))
@@ -67,7 +66,6 @@ fn alectryon_run_converter_surfaces_real_nonzero_status_command_and_stderr_paylo
                (list (car err) (error-message-string err)
                      (buffer-string)))))))
     (kill-buffer input)))"##,
-        true,
         expect![[
             r#"OK (error "Conversion error (23) when running ‘[ORACLE-SANDBOX]/failing\\ converter\\ with\\ spaces.sh --frontend coq\\+rst --backend rst --traceback -’:\nline 7: malformed literate directive\n" "line 7: malformed literate directive\n")"#
         ]],
@@ -76,7 +74,7 @@ fn alectryon_run_converter_surfaces_real_nonzero_status_command_and_stderr_paylo
 
 fn alectryon_run_converter_reports_a_practical_install_hint_for_missing_executables()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_run_converter_reports_a_practical_install_hint_for_missing_executables",
         r##"(let ((alectryon-executable
        (expand-file-name "not-installed/alectryon"
@@ -89,14 +87,13 @@ fn alectryon_run_converter_reports_a_practical_install_hint_for_missing_executab
           (error
            (list (car err) (error-message-string err)))))
     (kill-buffer input)))"##,
-        true,
         expect![[r#"OK (user-error "Alectryon binary not found; try ‘pip install alectryon’")"#]],
     )
 }
 
 fn alectryon_convert_from_uses_a_real_point_marker_restores_editability_and_widens_input()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_convert_from_uses_a_real_point_marker_restores_editability_and_widens_input",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "point-converter.sh" root))
@@ -127,7 +124,6 @@ fn alectryon_convert_from_uses_a_real_point_marker_restores_editability_and_wide
           (with-temp-buffer
             (insert-file-contents captured)
             (buffer-string)))))"##,
-        true,
         expect![[
             r#"OK ("Converted: ABCD\n" 14 nil nil "--mark-point\n11\n￼127919￼\n--frontend\ncoq+rst\n--backend\nrst\n--traceback\n-\n")"#
         ]],
@@ -136,7 +132,7 @@ fn alectryon_convert_from_uses_a_real_point_marker_restores_editability_and_wide
 
 fn alectryon_toggle_performs_a_real_code_to_markup_to_code_workflow_and_preserves_modified_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_toggle_performs_a_real_code_to_markup_to_code_workflow_and_preserves_modified_state",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "roundtrip-converter.sh" root)))
@@ -178,7 +174,6 @@ fn alectryon_toggle_performs_a_real_code_to_markup_to_code_workflow_and_preserve
               alectryon-mode alectryon--original-mode
               (buffer-modified-p)
               (consp buffer-undo-list))))))"##,
-        true,
         expect![[
             r#"OK ((rst-mode "A practical proof\n=================\n\n.. coq::\n\n   Check nat.\n" 57 t coq-mode nil) coq-mode "(*|\nA practical proof\n=================\n|*)\n\nCheck nat.\n" 52 t coq-mode nil nil)"#
         ]],
@@ -187,7 +182,7 @@ fn alectryon_toggle_performs_a_real_code_to_markup_to_code_workflow_and_preserve
 
 fn alectryon_save_writes_the_code_representation_while_preserving_the_markup_buffer()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_save_writes_the_code_representation_while_preserving_the_markup_buffer",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "save-converter.sh" root))
@@ -217,7 +212,6 @@ fn alectryon_save_writes_the_code_representation_while_preserving_the_markup_buf
        (with-temp-buffer
          (insert-file-contents document)
          (buffer-string))))))"##,
-        true,
         expect![[
             r#"OK (t rst-mode "Saved from markup\n=================\n" nil "(*|Saved from markup.|*)\nCheck saved.\n")"#
         ]],
@@ -226,7 +220,7 @@ fn alectryon_save_writes_the_code_representation_while_preserving_the_markup_buf
 
 fn alectryon_preview_builds_a_real_sandboxed_webpage_and_opens_the_generated_file()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_preview_builds_a_real_sandboxed_webpage_and_opens_the_generated_file",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
        (script (expand-file-name "preview-converter.sh" root))
@@ -258,16 +252,14 @@ fn alectryon_preview_builds_a_real_sandboxed_webpage_and_opens_the_generated_fil
             (insert-file-contents browsed)
             (buffer-string))
           (current-message))))"##,
-        true,
         expect![[
             r#"OK ("[ORACLE-TMPDIR]/" "html" t "<html><body><h1>Rendered proof</h1></body></html>\n" nil)"#
         ]],
     )
 }
 
-#[test]
-fn process_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn process_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         alectryon_run_converter_sends_widened_input_and_exact_cli_arguments_to_a_real_executable(),
         alectryon_run_converter_surfaces_real_nonzero_status_command_and_stderr_payload(),
         alectryon_run_converter_reports_a_practical_install_hint_for_missing_executables(),
@@ -275,6 +267,5 @@ fn process_public_surface_batch() {
         alectryon_toggle_performs_a_real_code_to_markup_to_code_workflow_and_preserves_modified_state(),
         alectryon_save_writes_the_code_representation_while_preserving_the_markup_buffer(),
         alectryon_preview_builds_a_real_sandboxed_webpage_and_opens_the_generated_file(),
-    ];
-    assert_alectryon_batch(&cases);
+    ]
 }

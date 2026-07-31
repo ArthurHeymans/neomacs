@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use crate::{CachedMelpaOracle, DASH_MELPA_PIN, F_MELPA_PIN, S_MELPA_PIN};
-use expect_test::Expect;
+
+use super::batch_support::assert_oracle_batch_cases;
+
+pub(crate) use super::batch_support::ParityBatchCase;
 
 mod workflows;
 
@@ -76,10 +79,20 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed f parity test").into()
 }
 
-pub(crate) fn assert_f_parity(elisp_form: &str, expected: Expect) {
+pub(crate) fn assert_f_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    let report = f_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("f parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
+    assert_oracle_batch_cases(f_oracle(), &name, "f_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn f_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::f_practical_workflows_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_f_batch(&cases);
+}
+
+// END generated package batch tests

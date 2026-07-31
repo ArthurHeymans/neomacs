@@ -1,15 +1,14 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aes_batch};
+use super::ParityBatchCase;
 
 /// The published known-answer test.  NIST FIPS-197 appendix C.1 fixes the
 /// AES-128 output for one key and one block, so this pins the cipher core to an
 /// external authority rather than to whatever the package happens to produce:
 /// encrypting the vector must yield exactly 69c4e0d86a7b0430d8cdb78070b4c55a,
 /// decrypting must give the input back, and the plaintext must be left alone.
-
 fn the_fips_197_known_answer_vector_encrypts_and_decrypts_exactly() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_fips_197_known_answer_vector_encrypts_and_decrypts_exactly",
         r##"(let* ((key (aes-test-unhex "000102030405060708090a0b0c0d0e0f"))
        (plain (aes-test-unhex "00112233445566778899aabbccddeeff"))
@@ -23,7 +22,6 @@ fn the_fips_197_known_answer_vector_encrypts_and_decrypts_exactly() -> ParityBat
         :matches (string= (aes-test-hex cipher) "69c4e0d86a7b0430d8cdb78070b4c55a")
         :roundtrip (aes-test-hex back)
         :plain-unchanged (aes-test-hex plain)))"##,
-        true,
         expect![[
             r#"OK (:cipher "69c4e0d86a7b0430d8cdb78070b4c55a" :expected "69c4e0d86a7b0430d8cdb78070b4c55a" :matches t :roundtrip "00112233445566778899aabbccddeeff" :plain-unchanged "00112233445566778899aabbccddeeff")"#
         ]],
@@ -31,7 +29,7 @@ fn the_fips_197_known_answer_vector_encrypts_and_decrypts_exactly() -> ParityBat
 }
 
 fn a_real_file_round_trips_through_the_buffer_commands() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_real_file_round_trips_through_the_buffer_commands",
         r##"(let* ((path (aes-test-path "notes/geheim.txt"))
        (plaintext "Grüße, Welt!\nZeile zwei — mit Unicode.\n"))
@@ -61,7 +59,6 @@ fn a_real_file_round_trips_through_the_buffer_commands() -> ParityBatchCase {
       (when (buffer-live-p buffer)
         (with-current-buffer buffer (set-buffer-modified-p nil))
         (kill-buffer buffer)))))"##,
-        true,
         expect![[
             r#"OK (:header "aes-encrypted V 1.3-OCB-B-4-4-M" :encrypted-all-ascii t :encrypted-length 134 :decrypted "Grüße, Welt!\nZeile zwei — mit Unicode.\n" :roundtrip-exact t)"#
         ]],
@@ -69,7 +66,7 @@ fn a_real_file_round_trips_through_the_buffer_commands() -> ParityBatchCase {
 }
 
 fn raw_ciphertext_survives_a_binary_write_and_is_destroyed_by_a_legacy_coding() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "raw_ciphertext_survives_a_binary_write_and_is_destroyed_by_a_legacy_coding",
         r##"(let* ((plaintext "Grüße — streng geheim\n")
        (binary (aes-encrypt-buffer-or-string plaintext "pw" "CBC" nil nil t))
@@ -111,7 +108,6 @@ fn raw_ciphertext_survives_a_binary_write_and_is_destroyed_by_a_legacy_coding() 
           :fips-binary-bytes (aes-test-bytes fips-binary)
           :fips-shift-jis-bytes (aes-test-bytes fips-sjis)
           :fips-latin-1-bytes (aes-test-bytes fips-latin))))"##,
-        true,
         expect![[
             r#"OK (:header "aes-encrypted V 1.3-CBC-N-4-4-M" :has-high-bytes t :length 80 :on-disk-length 80 :bytes-survived t :decrypts "Grüße — streng geheim\n" :fips-hex "69c4e0d86a7b0430d8cdb78070b4c55a" :fips-binary-bytes (105 196 224 216 106 123 4 48 216 205 183 128 112 180 197 90) :fips-shift-jis-bytes (105 196 224 216 106 123 4 48 216 32 128 112 180 197 90) :fips-latin-1-bytes (105 196 224 216 106 123 4 48 216 32 128 112 180 197 90))"#
         ]],
@@ -119,7 +115,7 @@ fn raw_ciphertext_survives_a_binary_write_and_is_destroyed_by_a_legacy_coding() 
 }
 
 fn a_wrong_password_or_damaged_ciphertext_yields_nothing() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_wrong_password_or_damaged_ciphertext_yields_nothing",
         r##"(let* ((plaintext "streng geheim\n")
        (encrypted (aes-encrypt-buffer-or-string plaintext "richtig")))
@@ -134,7 +130,6 @@ fn a_wrong_password_or_damaged_ciphertext_yields_nothing() -> ParityBatchCase {
                         (substring encrypted 0 (- (length encrypted) 20)) "richtig")
                      (error (list 'error (car error))))
         :correct (aes-decrypt-buffer-or-string encrypted "richtig")))"##,
-        true,
         expect![[
             r#"OK (:wrong-password nil :not-encrypted nil :truncated nil :correct "streng geheim\n")"#
         ]],
@@ -142,7 +137,7 @@ fn a_wrong_password_or_damaged_ciphertext_yields_nothing() -> ParityBatchCase {
 }
 
 fn the_password_prompt_and_every_cipher_and_key_size_round_trip() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_password_prompt_and_every_cipher_and_key_size_round_trip",
         r##"(let (prompts)
   (cl-letf (((symbol-function 'read-passwd)
@@ -162,21 +157,18 @@ fn the_password_prompt_and_every_cipher_and_key_size_round_trip() -> ParityBatch
                         (list type nk (aes-test-header enc)
                               (aes-decrypt-buffer-or-string enc "pw"))))
                     '(("CBC" 4) ("OCB" 6) ("CBC" 8)))))))"##,
-        true,
         expect![[
             r#"OK (:prompts (("encryption Password for string: " t) ("decryption Password for string: " nil)) :header "aes-encrypted V 1.3-OCB-B-4-4-U" :decrypted "Geheimnis\n" :variants (("CBC" 4 "aes-encrypted V 1.3-CBC-B-4-4-U" "Daten\n") ("OCB" 6 "aes-encrypted V 1.3-OCB-B-4-6-U" "Daten\n") ("CBC" 8 "aes-encrypted V 1.3-CBC-B-4-8-U" "Daten\n")))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         the_fips_197_known_answer_vector_encrypts_and_decrypts_exactly(),
         a_real_file_round_trips_through_the_buffer_commands(),
         raw_ciphertext_survives_a_binary_write_and_is_destroyed_by_a_legacy_coding(),
         a_wrong_password_or_damaged_ciphertext_yields_nothing(),
         the_password_prompt_and_every_cipher_and_key_size_round_trip(),
-    ];
-    assert_aes_batch(&cases);
+    ]
 }

@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alda_mode_batch};
+use super::ParityBatchCase;
 
 /// The package's central action: select a phrase in a real `.alda' score and
 /// play it.  `alda-play-region' composes the command, `alda-run-cmd' starts the
@@ -12,10 +12,9 @@ use super::{ParityBatchCase, assert_alda_mode_batch};
 /// 2.3.2 really printed for it, on the stream it really used: "Starting player
 /// processes...\nPlaying...\n" arrives on *stderr*, which `start-process'
 /// merges into the buffer the user reads.
-
 fn playing_a_selected_phrase_sends_the_score_to_the_alda_binary_and_shows_its_output()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "playing_a_selected_phrase_sends_the_score_to_the_alda_binary_and_shows_its_output",
         r##"(progn
   (alda-test-install-alda)
@@ -30,7 +29,6 @@ fn playing_a_selected_phrase_sends_the_score_to_the_alda_binary_and_shows_its_ou
                     (alda-test-calls))
           :output (alda-test-output)
           :unrecorded (alda-test-unrecorded))))"##,
-        true,
         expect![[
             r#"OK (:mode alda-mode :discovered-binary "alda" :played ("play|-F||--code|piano: o4 c d e|") :output "Playing...\n\nProcess alda-playback finished\n" :unrecorded nil)"#
         ]],
@@ -39,7 +37,7 @@ fn playing_a_selected_phrase_sends_the_score_to_the_alda_binary_and_shows_its_ou
 
 fn appending_to_history_then_playing_seeks_past_the_accumulated_score_to_a_marker()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "appending_to_history_then_playing_seeks_past_the_accumulated_score_to_a_marker",
         r##"(progn
   (alda-test-install-alda)
@@ -53,16 +51,16 @@ fn appending_to_history_then_playing_seeks_past_the_accumulated_score_to_a_marke
             :calls (alda-test-calls)
             :output (alda-test-output)
             :unrecorded (alda-test-unrecorded)))))"##,
-        true,
         expect![[
             r#"OK (:history "\npiano:\n  o4 c d e\n" :calls ("play|-F|alda-mode-internal-marker|--code|~piano:~  o4 c d e~~%alda-mode-internal-marker~f g a|") :output "Playing...\n\nProcess alda-playback finished\n" :unrecorded nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn playing_the_whole_file_then_stopping_uses_the_clis_real_file_and_stop_commands()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "playing_the_whole_file_then_stopping_uses_the_clis_real_file_and_stop_commands",
         r##"(progn
   (alda-test-install-alda)
@@ -75,15 +73,15 @@ fn playing_the_whole_file_then_stopping_uses_the_clis_real_file_and_stop_command
     (list :calls (mapcar #'file-name-nondirectory (alda-test-calls))
           :output (alda-test-output)
           :unrecorded (alda-test-unrecorded))))"##,
-        true,
         expect![[
             r#"OK (:calls ("score.alda|" "stop|") :output "Starting player processes...\nPlaying...\n\nProcess alda-playback finished\nStopping playback.\n\nProcess alda-playback finished\n" :unrecorded nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn alda_down_invokes_a_subcommand_the_alda_cli_does_not_have() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alda_down_invokes_a_subcommand_the_alda_cli_does_not_have",
         r##"(progn
   (alda-test-install-alda)
@@ -95,15 +93,15 @@ fn alda_down_invokes_a_subcommand_the_alda_cli_does_not_have() -> ParityBatchCas
           (with-current-buffer "*Shell Command Output*"
             (seq-take (split-string (buffer-string) "\n") 3))
           :unrecorded (alda-test-unrecorded))))"##,
-        true,
         expect![[
             r#"OK (:composed-command "alda down" :shell-exit 1 :calls ("down|") :banner-first-lines ("Usage:" "  alda [command]" "") :unrecorded nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn the_binary_is_taken_from_the_option_then_exec_path_and_refused_when_absent() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_binary_is_taken_from_the_option_then_exec_path_and_refused_when_absent",
         r##"(progn
   (alda-test-install-alda)
@@ -135,21 +133,18 @@ fn the_binary_is_taken_from_the_option_then_exec_path_and_refused_when_absent() 
             observed))
     (push (list :unrecorded (alda-test-unrecorded)) observed)
     (nreverse observed)))"##,
-        true,
         expect![[
             r#"OK ((:from-the-option (:location "/opt/alda/bin/alda" :repl "/opt/alda/bin/alda repl")) (:from-exec-path (:location "alda" :repl "alda repl")) (:with-no-binary-anywhere (:location nil :no-new-calls t :message "Alda was not found on your $PATH and alda-binary-location was nil.")) (:unrecorded nil))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         playing_a_selected_phrase_sends_the_score_to_the_alda_binary_and_shows_its_output(),
         appending_to_history_then_playing_seeks_past_the_accumulated_score_to_a_marker(),
         playing_the_whole_file_then_stopping_uses_the_clis_real_file_and_stop_commands(),
         alda_down_invokes_a_subcommand_the_alda_cli_does_not_have(),
         the_binary_is_taken_from_the_option_then_exec_path_and_refused_when_absent(),
-    ];
-    assert_alda_mode_batch(&cases);
+    ]
 }

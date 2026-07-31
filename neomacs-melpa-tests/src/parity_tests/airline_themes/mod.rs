@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{AIRLINE_THEMES_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -132,22 +131,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_airline_themes_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = airline_themes_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("airline-themes parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_airline_themes_parity(elisp_form: &str, expected: Expect) {
-    assert_airline_themes_source_parity("airline-themes.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_airline_themes_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_airline_themes_source_parity("airline-themes-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_airline_themes_autoload_parity` cases (2a).
 pub(crate) fn assert_airline_themes_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -169,3 +152,32 @@ pub(crate) fn assert_airline_themes_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn airline_themes_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_airline_themes_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_airline_themes_autoload_batch(&cases);
+}
+
+#[test]
+fn airline_themes_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        filesystem::filesystem_public_surface_batch_cases(),
+        lifecycle::lifecycle_public_surface_batch_cases(),
+        modeline::modeline_public_surface_batch_cases(),
+        palettes::palettes_public_surface_batch_cases(),
+        registry::registry_airline_themes_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_airline_themes_batch(&cases);
+}
+
+// END generated package batch tests

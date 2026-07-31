@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aider_batch};
+use super::ParityBatchCase;
 
 fn aider_file_paths_are_repo_relative_local_and_shell_space_aware() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_file_paths_are_repo_relative_local_and_shell_space_aware",
         r##"(list
          (cl-letf (((symbol-function 'magit-toplevel)
@@ -21,7 +21,6 @@ fn aider_file_paths_are_repo_relative_local_and_shell_space_aware() -> ParityBat
                    '("/outside/file.py" "./relative.el")))
          (mapcar #'aider--format-file-path
                  '("plain.el" "two words.el" "tabs\tstay.el")))"##,
-        true,
         expect![[
             r#"OK (("src/main.py" "\"docs/user guide.md\"" "../../outside/data.txt") ("/outside/file.py" "[ORACLE-SANDBOX]/relative.el") ("plain.el" "\"two words.el\"" "tabs\11stay.el"))"#
         ]],
@@ -29,7 +28,7 @@ fn aider_file_paths_are_repo_relative_local_and_shell_space_aware() -> ParityBat
 }
 
 fn aider_real_directory_suffix_and_content_filter_pipeline_matches() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_real_directory_suffix_and_content_filter_pipeline_matches",
         r##"(let* ((root (expand-file-name "module"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
@@ -56,7 +55,6 @@ fn aider_real_directory_suffix_and_content_filter_pipeline_matches() -> ParityBa
             (aider--filter-files-by-content-regex python "NO_MATCH")
             (length
              (aider--filter-files-by-content-regex python nil)))))"##,
-        true,
         expect![[
             r#"OK (("helper.py" "main.py" "view.py" "test_main.py") ("main.py" "nested/view.py" "test_main.py") nil 4)"#
         ]],
@@ -64,7 +62,7 @@ fn aider_real_directory_suffix_and_content_filter_pipeline_matches() -> ParityBa
 }
 
 fn aider_dependency_scanner_ignores_comments_strings_tests_and_flycheck_files() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_dependency_scanner_ignores_comments_strings_tests_and_flycheck_files",
         r##"(let* ((root (expand-file-name "context"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
@@ -93,7 +91,6 @@ fn aider_dependency_scanner_ignores_comments_strings_tests_and_flycheck_files() 
                     (aider--filter-test-files dependents nil))
             (mapcar #'file-name-nondirectory
                     (aider--filter-test-files dependents t)))))"##,
-        true,
         expect![[
             r#"OK (("helper.py" "ignored.py") ("client.py" "test_main.py") ("client.py" "test_main.py") ("client.py" "test_main.py"))"#
         ]],
@@ -102,7 +99,7 @@ fn aider_dependency_scanner_ignores_comments_strings_tests_and_flycheck_files() 
 
 fn aider_context_processing_deduplicates_and_sends_one_formatted_command_per_file()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_context_processing_deduplicates_and_sends_one_formatted_command_per_file",
         r##"(let (sent switched)
          (cl-letf (((symbol-function 'completing-read)
@@ -120,7 +117,6 @@ fn aider_context_processing_deduplicates_and_sends_one_formatted_command_per_fil
             '("/repo/helper.py" "/repo/shared file.py")
             '("/repo/client.py" "/repo/helper.py"))
            (list (nreverse sent) switched)))"##,
-        true,
         expect![[
             r#"OK ((("/read-only main.py" nil) ("/read-only helper.py" nil) ("/read-only \"shared file.py\"" nil) ("/read-only client.py" nil)) t)"#
         ]],
@@ -129,7 +125,7 @@ fn aider_context_processing_deduplicates_and_sends_one_formatted_command_per_fil
 
 fn aider_current_file_and_dired_command_workflows_build_exact_session_messages() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_current_file_and_dired_command_workflows_build_exact_session_messages",
         r##"(let* ((root (expand-file-name "files"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
@@ -154,7 +150,6 @@ fn aider_current_file_and_dired_command_workflows_build_exact_session_messages()
              (aider--batch-add-dired-marked-files-with-command
               "/read-only"))
            (nreverse sent)))"##,
-        true,
         expect![[
             r#"OK (("/add one.el" nil) ("/drop one.el" nil) ("/read-only one.el \"two words.el\"" t))"#
         ]],
@@ -162,7 +157,7 @@ fn aider_current_file_and_dired_command_workflows_build_exact_session_messages()
 }
 
 fn aider_source_pattern_file_discovery_and_import_keyword_detection_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_source_pattern_file_discovery_and_import_keyword_detection_match",
         r##"(let* ((root (expand-file-name "patterns"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
@@ -188,13 +183,12 @@ fn aider_source_pattern_file_discovery_and_import_keyword_detection_match() -> P
                     "  require('x')"
                     "ordinary prose"
                     "// import only comment"))))"##,
-        true,
         expect![[r#"OK (("*.rs") ("a.rs" "b.rs") (nil 7 2 nil 3))"#]],
     )
 }
 
 fn aider_file_at_point_resolution_and_drop_command_use_real_workspace_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aider_file_at_point_resolution_and_drop_command_use_real_workspace_file",
         r##"(let* ((root (expand-file-name "cursor-file"
                                            (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
@@ -219,14 +213,12 @@ fn aider_file_at_point_resolution_and_drop_command_use_real_workspace_file() -> 
               (aider--file-path-under-cursor-is-file)
               (aider--drop-file-under-cursor)
               sent))))"##,
-        true,
         expect![[r#"OK ("src/demo file.el" t sent "/drop \"src/demo file.el\"")"#]],
     )
 }
 
-#[test]
-fn files_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn files_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         aider_file_paths_are_repo_relative_local_and_shell_space_aware(),
         aider_real_directory_suffix_and_content_filter_pipeline_matches(),
         aider_dependency_scanner_ignores_comments_strings_tests_and_flycheck_files(),
@@ -234,6 +226,5 @@ fn files_public_surface_batch() {
         aider_current_file_and_dired_command_workflows_build_exact_session_messages(),
         aider_source_pattern_file_discovery_and_import_keyword_detection_match(),
         aider_file_at_point_resolution_and_drop_command_use_real_workspace_file(),
-    ];
-    assert_aider_batch(&cases);
+    ]
 }

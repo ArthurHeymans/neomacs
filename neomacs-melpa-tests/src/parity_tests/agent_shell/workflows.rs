@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_agent_shell_batch};
+use super::ParityBatchCase;
 
 fn real_acp_session_boots_submits_markdown_and_cleans_up_its_process() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "real_acp_session_boots_submits_markdown_and_cleans_up_its_process",
         r##"
 (let* ((root
@@ -85,15 +85,15 @@ fn real_acp_session_boots_submits_markdown_and_cleans_up_its_process() -> Parity
    (and (process-live-p (map-elt client :process)) t)
    (file-exists-p transcript)))
 "##,
-        true,
         expect![[
             r##"OK (("Parity Agent @ agent-shell-real-session" agent-shell-mode t "parity-session" "Review **src/lib.rs** and explain the safe merge path." (("initialize" nil nil) ("session/new" nil nil) ("session/prompt" "parity-session" [((type . "text") (text . "Review **src/lib.rs** and explain the safe merge path."))])) (((:data (:stop-reason . "end_turn") (:usage (:total-tokens . 0) (:input-tokens . 0) (:output-tokens . 0) (:thought-tokens . 0) (:cached-read-tokens . 0) (:cached-write-tokens . 0) (:context-used . 0) (:context-size . 0) (:cost-amount . 0.0) (:cost-currency))) (:event . turn-complete))) nil nil "\n\n▶ [✓] Starting agent\n\n▶ Agent capabilities\n\n▶ Available config options\n\n▶ Available models\n\n  Available /commands\n\nParity> Review **src/lib.rs** and explain the safe merge path.\n\nI reviewed both paths. Run cargo nextest before merging.\n\nParity>" "# Agent Shell Transcript\n\n**Agent:** Parity\n**Started:** TIME\n**Working Directory:** [ORACLE-SANDBOX]/agent-shell-real-session/\n**Session ID:** parity-session\n\n---\n\n## User (TIME)\n\nReview **src/lib.rs** and explain the safe merge path.\n\n\n## Agent (TIME)\n\nI reviewed **both paths**. Run `cargo nextest` before merging.\n\n" t) nil nil t)"##
         ]],
     )
+    .fresh_process()
 }
 
 fn real_provider_turn_renders_thought_tool_diff_and_streamed_markdown() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "real_provider_turn_renders_thought_tool_diff_and_streamed_markdown",
         r##"
 (let* ((root
@@ -237,15 +237,15 @@ fn real_provider_turn_renders_thought_tool_diff_and_streamed_markdown() -> Parit
     (neomacs-agent-shell-test-kill shell))
   snapshot)
 "##,
-        true,
         expect![[
             r##"OK ("\n\n▶ [✓] Starting agent\n\n▶ Agent capabilities\n\n▶ Available config options\n\n▶ Available models\n\n  Available /commands\n\nParity> Update `value`, add a regression test, and summarize the diff.\n\n▼ Thought, edited a file\n\n▼ 💡 Thinking\n\nI will inspect the implementation, edit it, and verify the result.\n\n▼ [✓][edit] Updated src/lib.rs Change the return value and add a test +6 -1\n\nChanged the return value and added a regression test.\n\n\n\n╭────────────╮\n│ src/lib.rs │\n╰────────────╯\n\n@@ -1,3 +1,8 @@\n fn value() -> i32 {\n-    1\n+    2\n+}\n+\n+#[test]\n+fn value_is_two() {\n+    assert_eq!(value(), 2);\n }\n\nImplemented the change.\n\n│ Check   │ Result │\n├─────────┼────────┤\n│ nextest │ passed │\n\n\nrust ⧉\n\nassert_eq!(value(), 2);\n\n\nNo unrelated files changed.\n\nParity>" (((:tool-call-id . "edit-1") (:tool-call (:title . "Update src/lib.rs") (:status . "in_progress") (:kind . "edit") (:description . "Change the return value and add a test") (:content . []) (:raw-input . #1=((description . "Change the return value and add a test"))))) ((:tool-call-id . "edit-1") (:tool-call (:title . "Updated src/lib.rs") (:status . "completed") (:kind . "edit") (:description . "Change the return value and add a test") (:content . [((type . "diff") (oldText . "fn value() -> i32 {\n    1\n}\n") (newText . "fn value() -> i32 {\n    2\n}\n\n#[test]\nfn value_is_two() {\n    assert_eq!(value(), 2);\n}\n") (path . "[ORACLE-SANDBOX]/agent-shell-real-tool-turn/src/lib.rs")) ((type . "content") (content (type . "text") (text . "Changed the return value and added a regression test.")))]) (:raw-input . #1#) (:group-id . "activity-1") (:locations . [((path . "[ORACLE-SANDBOX]/agent-shell-real-tool-turn/src/lib.rs") (line . 2))]) (:diffs ((:old . "fn value() -> i32 {\n    1\n}\n") (:new . "fn value() -> i32 {\n    2\n}\n\n#[test]\nfn value_is_two() {\n    assert_eq!(value(), 2);\n}\n") (:file . "[ORACLE-SANDBOX]/agent-shell-real-tool-turn/src/lib.rs") (:line . 2)))))) "agent_message_chunk" 1 (("activity-1" . 1)) 2 "# Agent Shell Transcript\n\n**Agent:** Parity\n**Started:** TIME\n**Working Directory:** [ORACLE-SANDBOX]/agent-shell-real-tool-turn/\n**Session ID:** parity-session\n\n---\n\n## User (TIME)\n\nUpdate `value`, add a regression test, and summarize the diff.\n\n## Agent's Thoughts (TIME)\n\nI will inspect the implementation, edit it, and verify the result.\n\n### Tool Call [completed]: Updated src/lib.rs\n\n**Tool:** edit\n**Timestamp:** TIME\n**Description:** Change the return value and add a test\n\n```\nChanged the return value and added a regression test.\n\n\n\n╭────────────╮\n│ src/lib.rs │\n╰────────────╯\n\n@@ -1,3 +1,8 @@\n fn value() -> i32 {\n-    1\n+    2\n+}\n+\n+#[test]\n+fn value_is_two() {\n+    assert_eq!(value(), 2);\n }\n```\n\n## Agent (TIME)\n\nImplemented the change.\n\n| Check | Result |\n|---|---|\n| nextest | **passed** |\n\n```rust\nassert_eq!(value(), 2);\n```\nNo unrelated files changed.\n\n")"##
         ]],
     )
+    .fresh_process()
 }
 
 fn real_prompt_and_usage_notifications_accumulate_into_visible_session_totals() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "real_prompt_and_usage_notifications_accumulate_into_visible_session_totals",
         r##"
 (let* ((root
@@ -322,19 +322,17 @@ fn real_prompt_and_usage_notifications_accumulate_into_visible_session_totals() 
     (neomacs-agent-shell-test-kill shell))
   snapshot)
 "##,
-        true,
         expect![[
             r##"OK (((:total-tokens . 15342) (:input-tokens . 12000) (:output-tokens . 2410) (:thought-tokens . 932) (:cached-read-tokens . 8000) (:cached-write-tokens . 400) (:context-used . 62500) (:context-size . 200000) (:cost-amount . 1.375) (:cost-currency . "USD")) "\n\n▶ [✓] Starting agent\n\n▶ Agent capabilities\n\n▶ Available config options\n\n▶ Available models\n\n  Available /commands\n\nParity> Audit this change and report token and cost usage.\n\nThe review consumed cached context but stayed inside budget.\n\n▶ Usage\n\nParity>" "# Agent Shell Transcript\n\n**Agent:** Parity\n**Started:** TIME\n**Working Directory:** [ORACLE-SANDBOX]/agent-shell-real-usage-turn/\n**Session ID:** parity-session\n\n---\n\n## User (TIME)\n\nAudit this change and report token and cost usage.\n\n\n## Agent (TIME)\n\nThe review consumed cached context but stayed inside budget.\n\n")"##
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         real_acp_session_boots_submits_markdown_and_cleans_up_its_process(),
         real_provider_turn_renders_thought_tool_diff_and_streamed_markdown(),
         real_prompt_and_usage_notifications_accumulate_into_visible_session_totals(),
-    ];
-    assert_agent_shell_batch(&cases);
+    ]
 }

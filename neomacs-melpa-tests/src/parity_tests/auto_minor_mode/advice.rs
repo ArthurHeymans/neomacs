@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_minor_mode_batch};
+use super::ParityBatchCase;
 
 fn auto_minor_mode_set_auto_mode_advice_is_installed_exactly_once() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_set_auto_mode_advice_is_installed_exactly_once",
         r##"(let ((count 0)
                                 members)
@@ -28,13 +28,12 @@ fn auto_minor_mode_set_auto_mode_advice_is_installed_exactly_once() -> ParityBat
                              t)
                             count
                             members))"##,
-        true,
         expect!["OK (t 1 ((auto-minor-mode-set nil)))"],
     )
 }
 
 fn auto_minor_mode_real_set_auto_mode_selects_major_then_filename_minor_modes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_real_set_auto_mode_selects_major_then_filename_minor_modes",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -56,7 +55,6 @@ fn auto_minor_mode_real_set_auto_mode_selects_major_then_filename_minor_modes() 
                             auto-minor-mode-test-beta-mode
                             (nreverse
                              auto-minor-mode-test-events)))"##,
-        true,
         expect![
             "OK (emacs-lisp-mode t t ((:alpha 1 t 19 emacs-lisp-mode) (:beta 1 t 19 emacs-lisp-mode)))"
         ],
@@ -64,7 +62,7 @@ fn auto_minor_mode_real_set_auto_mode_selects_major_then_filename_minor_modes() 
 }
 
 fn auto_minor_mode_real_set_auto_mode_reactivation_obeys_keep_flag() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_real_set_auto_mode_reactivation_obeys_keep_flag",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -98,7 +96,6 @@ fn auto_minor_mode_real_set_auto_mode_reactivation_obeys_keep_flag() -> ParityBa
                                    auto-minor-mode-test-events)
                                   (nreverse
                                    auto-minor-mode-test-events))))))"##,
-        true,
         expect![
             "OK (1 2 2 3 ((:alpha 1 t 1 emacs-lisp-mode) (:alpha 1 t 1 emacs-lisp-mode) (:alpha 1 t 1 emacs-lisp-mode)))"
         ],
@@ -107,7 +104,7 @@ fn auto_minor_mode_real_set_auto_mode_reactivation_obeys_keep_flag() -> ParityBa
 
 fn auto_minor_mode_same_mode_matching_filename_and_magic_runs_twice_unless_kept() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_same_mode_matching_filename_and_magic_runs_twice_unless_kept",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -134,13 +131,12 @@ fn auto_minor_mode_same_mode_matching_filename_and_magic_runs_twice_unless_kept(
                               (nreverse
                                auto-minor-mode-test-events)
                               auto-minor-mode-test-alpha-mode)))"##,
-        true,
         expect!["OK (((:alpha 1 t 15 fundamental-mode) (:alpha 1 t 1 fundamental-mode)) nil t)"],
     )
 }
 
 fn auto_minor_mode_filename_rules_run_before_magic_rules() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_filename_rules_run_before_magic_rules",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -165,13 +161,12 @@ fn auto_minor_mode_filename_rules_run_before_magic_rules() -> ParityBatchCase {
                             auto-minor-mode-test-beta-mode
                             (nreverse
                              auto-minor-mode-test-events)))"##,
-        true,
         expect!["OK (t t ((:alpha 1 t 8 fundamental-mode) (:beta 1 t 1 fundamental-mode)))"],
     )
 }
 
 fn auto_minor_mode_advice_can_be_removed_and_restored_without_leaking_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_advice_can_be_removed_and_restored_without_leaking_state",
         r##"(with-temp-buffer
                            (auto-minor-mode-test-reset)
@@ -217,14 +212,14 @@ fn auto_minor_mode_advice_can_be_removed_and_restored_without_leaking_state() ->
                                 #'set-auto-mode
                                 :after
                                 #'auto-minor-mode-set))))"##,
-        true,
         expect!["OK ((nil nil) t ((:alpha 1 t 1 fundamental-mode)) t)"],
     )
+    .fresh_process()
 }
 
 fn auto_minor_mode_reloading_source_keeps_single_advice_and_deferred_integration() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_minor_mode_reloading_source_keeps_single_advice_and_deferred_integration",
         r##"(let ((count-advice
                                 (lambda ()
@@ -257,14 +252,12 @@ fn auto_minor_mode_reloading_source_keeps_single_advice_and_deferred_integration
                                 'use-package
                                 after-load-alist)
                                t))))"##,
-        true,
         expect!["OK (1 1 t t)"],
     )
 }
 
-#[test]
-fn advice_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn advice_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_minor_mode_set_auto_mode_advice_is_installed_exactly_once(),
         auto_minor_mode_real_set_auto_mode_selects_major_then_filename_minor_modes(),
         auto_minor_mode_real_set_auto_mode_reactivation_obeys_keep_flag(),
@@ -272,6 +265,5 @@ fn advice_public_surface_batch() {
         auto_minor_mode_filename_rules_run_before_magic_rules(),
         auto_minor_mode_advice_can_be_removed_and_restored_without_leaking_state(),
         auto_minor_mode_reloading_source_keeps_single_advice_and_deferred_integration(),
-    ];
-    assert_auto_minor_mode_batch(&cases);
+    ]
 }

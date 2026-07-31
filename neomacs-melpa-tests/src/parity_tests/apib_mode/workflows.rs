@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_apib_mode_batch};
+use super::ParityBatchCase;
 
 fn apib_mode_authors_navigates_and_reviews_a_real_inventory_blueprint() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apib_mode_authors_navigates_and_reviews_a_real_inventory_blueprint",
         r####"
 (let* ((root
@@ -143,7 +143,6 @@ fn apib_mode_authors_navigates_and_reviews_a_real_inventory_blueprint() -> Parit
     (neomacs-apib-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#####"OK (:file "contracts/Inventory API.apib" :mode apib-mode :parent markdown-mode :drafter "tools/drafter" :headings ((4 "# Inventory API") (8 "# Group Products") (10 "## Products Collection [/products]") (12 "### List Products [GET]") (20 "### Create Product [POST]")) :hierarchy ((4 1 "# Inventory API") (8 1 "# Group Products") (10 2 "## Products Collection [/products]") (12 3 "### List Products [GET]") (20 3 "### Create Product [POST]")) :hidden (10 2 "## Products Collection [/products]") :point (26 14) :faces (("Inventory API" markdown-header-face-1) ("Response" font-lock-keyword-face) ("200" font-lock-constant-face) ("application/json" font-lock-variable-name-face) ("Attributes" font-lock-keyword-face) ("42" font-lock-constant-face) ("number, required" font-lock-constant-face) ("available" nil) ("true" font-lock-constant-face) ("boolean, required" font-lock-constant-face) ("Request" font-lock-keyword-face) ("Headers" font-lock-keyword-face)) :modified nil :disk "FORMAT: 1A\nHOST: https://inventory.example.test\n\n# Inventory API\n\nInventory availability for warehouse clients.\n\n# Group Products\n\n## Products Collection [/products]\n\n### List Products [GET]\n\n+ Response 200 (application/json)\n    + Attributes (array[Product], fixed-type)\n        + id: 42 (number, required) - Product identifier\n        + name: Hammer (string, required) - Display name\n        + available: true (boolean, required) - Stock state\n\n### Create Product [POST]\n\n+ Request (application/json)\n    + Attributes\n        + name: Saw (string, required)\n\n+ Response 201 (application/json)\n    + Headers\n\n            Location: /products/43\n\n")"#####
         ]],
@@ -151,7 +150,7 @@ fn apib_mode_authors_navigates_and_reviews_a_real_inventory_blueprint() -> Parit
 }
 
 fn apib_mode_validates_parses_and_exports_assets_from_a_saved_blueprint() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apib_mode_validates_parses_and_exports_assets_from_a_saved_blueprint",
         r####"
 (let* ((root
@@ -248,7 +247,6 @@ fn apib_mode_validates_parses_and_exports_assets_from_a_saved_blueprint() -> Par
     (neomacs-apib-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#####"OK (:file "contracts/Inventory API.apib" :mode apib-mode :validation (compilation-mode "[ORACLE-SANDBOX]/apib-publish-workflow/tools/drafter -lu [ORACLE-SANDBOX]/apib-publish-workflow/contracts/Inventory API.apib\nOK: API Blueprint is valid\n") :parse (compilation-mode "[ORACLE-SANDBOX]/apib-publish-workflow/tools/drafter -f json -u [ORACLE-SANDBOX]/apib-publish-workflow/contracts/Inventory API.apib\n{\"element\":\"parseResult\",\"content\":[{\"element\":\"category\",\"content\":[{\"element\":\"asset\",\"attributes\":{\"contentType\":{\"element\":\"string\",\"content\":\"application/json\"}},\"content\":\"{\\\"id\\\":42,\\\"name\\\":\\\"Hammer\\\",\\\"available\\\":true}\"},{\"element\":\"asset\",\"attributes\":{\"contentType\":{\"element\":\"string\",\"content\":\"application/schema+json\"}},\"content\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-04/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"required\\\":[\\\"id\\\",\\\"name\\\"],\\\"properties\\\":{\\\"id\\\":{\\\"type\\\":\\\"number\\\"},\\\"name\\\":{\\\"type\\\":\\\"string\\\"},\\\"available\\\":{\\\"type\\\":\\\"boolean\\\"}}}\"}]},{\"element\":\"asset\",\"attributes\":{\"contentType\":{\"element\":\"string\",\"content\":\"application/json\"}},\"content\":\"{\\\"id\\\":43,\\\"name\\\":\\\"Saw\\\",\\\"available\\\":false}\"}]}\n") :json-assets "{\"id\":43,\"name\":\"Saw\",\"available\":false}\n\n{\"id\":42,\"name\":\"Hammer\",\"available\":true}\n" :schema-assets "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"required\":[\"id\",\"name\"],\"properties\":{\"id\":{\"type\":\"number\"},\"name\":{\"type\":\"string\"},\"available\":{\"type\":\"boolean\"}}}\n" :valid t :trace "argv=<-lu><[ORACLE-SANDBOX]/apib-publish-workflow/contracts/Inventory API.apib>\nargv=<-f><json><-u><[ORACLE-SANDBOX]/apib-publish-workflow/contracts/Inventory API.apib>\nargv=<-f><json><-u><[ORACLE-SANDBOX]/apib-publish-workflow/contracts/Inventory API.apib>\nargv=<-f><json><-u><[ORACLE-SANDBOX]/apib-publish-workflow/contracts/Inventory API.apib>\nargv=<-lu>\nstdin=<FORMAT: 1A\nHOST: https://inventory.example.test\n\n# Inventory API\n\n## Product [/products/{id}]\n\n### Retrieve Product [GET]\n\n+ Parameters\n    + id: 42 (number, required)\n\n+ Response 200 (application/json)\n    + Attributes\n        + id: 42 (number)\n        + name: Hammer (string)\n        + available: true (boolean)>\n" :modified nil :disk "FORMAT: 1A\nHOST: https://inventory.example.test\n\n# Inventory API\n\n## Product [/products/{id}]\n\n### Retrieve Product [GET]\n\n+ Parameters\n    + id: 42 (number, required)\n\n+ Response 200 (application/json)\n    + Attributes\n        + id: 42 (number)\n        + name: Hammer (string)\n        + available: true (boolean)\n")"#####
         ]],
@@ -256,7 +254,7 @@ fn apib_mode_validates_parses_and_exports_assets_from_a_saved_blueprint() -> Par
 }
 
 fn apib_mode_guides_an_author_from_a_drafter_error_back_to_the_broken_source() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apib_mode_guides_an_author_from_a_drafter_error_back_to_the_broken_source",
         r####"
 (let* ((root
@@ -342,19 +340,16 @@ fn apib_mode_guides_an_author_from_a_drafter_error_back_to_the_broken_source() -
     (neomacs-apib-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#####"OK (:file "contracts/Broken Inventory.apib" :mode apib-mode :validation (compilation-mode "[ORACLE-SANDBOX]/apib-diagnostic-workflow/tools/drafter -lu [ORACLE-SANDBOX]/apib-diagnostic-workflow/contracts/Broken Inventory.apib\nerror: API description parse error, line 12, column 3 - line 12, column 16\n") :destination ("Broken Inventory.apib" "contracts/Broken Inventory.apib" 12 15 "    + id forty-two (number, required)") :valid nil :trace "argv=<-lu><[ORACLE-SANDBOX]/apib-diagnostic-workflow/contracts/Broken Inventory.apib>\nargv=<-lu>\nstdin=<FORMAT: 1A\nHOST: https://inventory.example.test\n\n# Inventory API\n\n## Product [/products/{id}]\n\n### Retrieve Product [GET]\n\n+ Response 200 (application/json)\n    + Attributes\n    + id forty-two (number, required)>\n" :modified nil :disk "FORMAT: 1A\nHOST: https://inventory.example.test\n\n# Inventory API\n\n## Product [/products/{id}]\n\n### Retrieve Product [GET]\n\n+ Response 200 (application/json)\n    + Attributes\n    + id forty-two (number, required)\n")"#####
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         apib_mode_authors_navigates_and_reviews_a_real_inventory_blueprint(),
         apib_mode_validates_parses_and_exports_assets_from_a_saved_blueprint(),
         apib_mode_guides_an_author_from_a_drafter_error_back_to_the_broken_source(),
-    ];
-    assert_apib_mode_batch(&cases);
+    ]
 }

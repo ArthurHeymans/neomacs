@@ -1,14 +1,13 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_helm_batch};
+use super::ParityBatchCase;
 
 /// The package's whole story: `C-:' hands auto-complete's candidates to helm
 /// and the chosen one replaces the prefix.  Pins the list helm renders --
 /// including ac-helm's own annotation of candidates that carry an `action'
 /// property -- and the buffer, point and text properties afterwards.
-
 fn completing_an_api_symbol_through_a_real_helm_session() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "completing_an_api_symbol_through_a_real_helm_session",
         r####"
 (ach-test-in-buffer
@@ -36,7 +35,6 @@ fn completing_an_api_symbol_through_a_real_helm_session() -> ParityBatchCase {
                (assoc-default 'ac-candidates
                               helm-source-auto-complete-candidates)))))
 "####,
-        true,
         expect![[
             r#"OK (:before (:buffer "(ledger-s" :point 10 :ac-completing nil :ac-prefix nil :ac-candidates nil) :result nil :helm-lines ("Auto Complete" "ledger-settle        <ach-test-mark-settled>" "ledger-summary       <ach-test-mark-summarised>" "ledger-settle-all") :after (:buffer "(ledger-settle ;; settled" :point 26 :ac-completing nil :ac-prefix nil :ac-candidates nil) :inserted-properties (:document "ledger-settle (INVOICE)\n\nSettle INVOICE and return its new state." :action ach-test-mark-settled :symbol "f") :source-attributes (:name "Auto Complete" :persistent-action popup-item-show-help :cached-candidates nil))"#
         ]],
@@ -44,7 +42,7 @@ fn completing_an_api_symbol_through_a_real_helm_session() -> ParityBatchCase {
 }
 
 fn choosing_a_later_candidate_runs_that_candidates_own_action() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "choosing_a_later_candidate_runs_that_candidates_own_action",
         r####"
 (list
@@ -72,7 +70,6 @@ fn choosing_a_later_candidate_runs_that_candidates_own_action() -> ParityBatchCa
   (list :result ach-test-result
         :state (ach-test-state))))
 "####,
-        true,
         expect![[
             r#"OK (:second-candidate (:result nil :helm-lines ("Auto Complete" "ledger-settle        <ach-test-mark-settled>" "ledger-summary       <ach-test-mark-summarised>" "ledger-settle-all") :state (:buffer "(ledger-summary ;; summarised" :point 30 :ac-completing nil :ac-prefix nil :ac-candidates nil)) :third-candidate-has-no-action (:result nil :state (:buffer "(ledger-settle-all" :point 19 :ac-completing nil :ac-prefix nil :ac-candidates nil) :inserted-action nil) :back-up-again (:result nil :state (:buffer "(ledger-summary ;; summarised" :point 30 :ac-completing nil :ac-prefix nil :ac-candidates nil)))"#
         ]],
@@ -80,7 +77,7 @@ fn choosing_a_later_candidate_runs_that_candidates_own_action() -> ParityBatchCa
 }
 
 fn the_persistent_action_shows_the_selected_candidates_documentation() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_persistent_action_shows_the_selected_candidates_documentation",
         r####"
 (ach-test-in-buffer
@@ -104,7 +101,6 @@ fn the_persistent_action_shows_the_selected_candidates_documentation() -> Parity
        :help-snapshots (nreverse ach-help-snapshots)
        :state (ach-test-state)))
 "####,
-        true,
         expect![[
             r#"OK (:result nil :help-snapshots ((:exists nil :text nil :point nil) (:exists t :text "ledger-settle (INVOICE)\n\nSettle INVOICE and return its new state." :point 1) (:exists t :text "ledger-summary ()\n\nReturn a summary alist for the open ledger." :point 1)) :state (:buffer "(ledger-summary ;; summarised" :point 30 :ac-completing nil :ac-prefix nil :ac-candidates nil))"#
         ]],
@@ -112,7 +108,7 @@ fn the_persistent_action_shows_the_selected_candidates_documentation() -> Parity
 }
 
 fn aborting_the_helm_session_leaves_the_buffer_untouched() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aborting_the_helm_session_leaves_the_buffer_untouched",
         r####"
 (ach-test-in-buffer
@@ -132,7 +128,6 @@ fn aborting_the_helm_session_leaves_the_buffer_untouched() -> ParityBatchCase {
            :recovered-result ach-test-result
            :after-recovery (ach-test-state)))))
 "####,
-        true,
         expect![[
             r#"OK (:before (:buffer "(ledger-s" :point 10 :ac-completing nil :ac-prefix nil :ac-candidates nil) :aborted-result nil :after-abort (:buffer "(ledger-s" :point 10 :ac-completing nil :ac-prefix nil :ac-candidates nil) :buffer-untouched t :point-untouched t :recovered-result nil :after-recovery (:buffer "(ledger-settle ;; settled" :point 26 :ac-completing nil :ac-prefix nil :ac-candidates nil))"#
         ]],
@@ -140,7 +135,7 @@ fn aborting_the_helm_session_leaves_the_buffer_untouched() -> ParityBatchCase {
 }
 
 fn an_already_running_auto_complete_session_is_handed_straight_to_helm() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_already_running_auto_complete_session_is_handed_straight_to_helm",
         r####"
 (ach-test-in-buffer
@@ -159,7 +154,6 @@ fn an_already_running_auto_complete_session_is_handed_straight_to_helm() -> Pari
          :helm-lines (ach-test-helm-lines)
          :state (ach-test-state))))
 "####,
-        true,
         expect![[
             r#"OK (:armed (:ac-completing t :ac-prefix "ledger-s" :ac-point 2 :ac-candidates ("ledger-settle" "ledger-summary" "ledger-settle-all")) :result nil :helm-lines ("Auto Complete" "ledger-settle        <ach-test-mark-settled>" "ledger-summary       <ach-test-mark-summarised>" "ledger-settle-all") :state (:buffer "(ledger-settle ;; settled" :point 26 :ac-completing nil :ac-prefix nil :ac-candidates nil))"#
         ]],
@@ -168,7 +162,7 @@ fn an_already_running_auto_complete_session_is_handed_straight_to_helm() -> Pari
 
 fn a_prefix_with_a_single_candidate_hits_the_packages_exit_minibuffer_shortcut() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_prefix_with_a_single_candidate_hits_the_packages_exit_minibuffer_shortcut",
         r####"
 (ach-test-in-buffer
@@ -181,7 +175,6 @@ fn a_prefix_with_a_single_candidate_hits_the_packages_exit_minibuffer_shortcut()
          :helm-lines (ach-test-helm-lines)
          :after (ach-test-state))))
 "####,
-        true,
         expect![[
             r#"OK (:before (:buffer "(ledger-r" :point 10 :ac-completing nil :ac-prefix nil :ac-candidates nil) :result (:error no-catch (exit nil)) :helm-lines nil :after (:buffer "(ledger-reset" :point 14 :ac-completing nil :ac-prefix nil :ac-candidates nil))"#
         ]],
@@ -189,7 +182,7 @@ fn a_prefix_with_a_single_candidate_hits_the_packages_exit_minibuffer_shortcut()
 }
 
 fn the_default_show_completion_setting_breaks_the_command_on_current_helm() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_default_show_completion_setting_breaks_the_command_on_current_helm",
         r####"
 (ach-test-in-buffer
@@ -206,16 +199,15 @@ fn the_default_show_completion_setting_breaks_the_command_on_current_helm() -> P
          :helm-lines (ach-test-helm-lines)
          :after (ach-test-state))))
 "####,
-        true,
         expect![[
             r#"OK (:turn-on-show-completion t :lexical-binding-in-package nil :before (:buffer "(ledger-s" :point 10 :ac-completing nil :ac-prefix nil :ac-candidates nil) :result (:error void-variable (helm--hook)) :helm-lines ("Auto Complete" "ledger-settle        <ach-test-mark-settled>" "ledger-summary       <ach-test-mark-summarised>" "ledger-settle-all") :after (:buffer "(ledger-s" :point 10 :ac-completing nil :ac-prefix nil :ac-candidates nil))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         completing_an_api_symbol_through_a_real_helm_session(),
         choosing_a_later_candidate_runs_that_candidates_own_action(),
         the_persistent_action_shows_the_selected_candidates_documentation(),
@@ -223,6 +215,5 @@ fn workflows_public_surface_batch() {
         an_already_running_auto_complete_session_is_handed_straight_to_helm(),
         a_prefix_with_a_single_candidate_hits_the_packages_exit_minibuffer_shortcut(),
         the_default_show_completion_setting_breaks_the_command_on_current_helm(),
-    ];
-    assert_ac_helm_batch(&cases);
+    ]
 }

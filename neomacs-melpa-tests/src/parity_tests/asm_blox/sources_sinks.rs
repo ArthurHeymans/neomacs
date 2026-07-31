@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asm_blox_batch};
+use super::ParityBatchCase;
 
 fn asm_blox_sources_peek_and_pop_zero_negative_and_exhausted_values_in_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asm_blox_sources_peek_and_pop_zero_negative_and_exhausted_values_in_order",
         r##"(let ((source
                 (asm-blox--cell-source-create
@@ -28,7 +28,6 @@ fn asm_blox_sources_peek_and_pop_zero_negative_and_exhausted_values_in_order() -
              (list
               (car error)
               (cdr error))))))"##,
-        true,
         expect![[
             r#"OK ((-1 2 #1=(0 -7 42) "I" 0) 0 0 -7 -7 42 nil nil (-1 2 #1# "I" 4) (error ("Cell-source-pop type error")))"#
         ]],
@@ -37,7 +36,7 @@ fn asm_blox_sources_peek_and_pop_zero_negative_and_exhausted_values_in_order() -
 
 fn asm_blox_boundary_sources_feed_real_get_instructions_and_advance_only_when_consumed()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asm_blox_boundary_sources_feed_real_get_instructions_and_advance_only_when_consumed",
         r##"(let* ((source-top
                  (asm-blox--cell-source-create
@@ -72,7 +71,6 @@ fn asm_blox_boundary_sources_feed_real_get_instructions_and_advance_only_when_co
              (asm-blox-test-source-summary source-right))
             trace))
          (nreverse trace))"##,
-        true,
         expect![[
             r#"OK (((:row 0 :col 0 :pc 1 :stack #1=(10) :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 3 :pc 0 :stack #2=(30) :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (-1 0 #3=(10 20) "T" 1) (2 4 #4=(30) "R" 1)) ((:row 0 :col 0 :pc 2 :stack (20 . #1#) :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 3 :pc 0 :stack #2# :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (-1 0 #3# "T" 2) (2 4 #4# "R" 1)) ((:row 0 :col 0 :pc 0 :stack #5=(30) :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 3 :pc 0 :stack #2# :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (-1 0 #3# "T" 2) (2 4 #4# "R" 1)) ((:row 0 :col 0 :pc 0 :stack #5# :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 3 :pc 0 :stack #2# :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (-1 0 #3# "T" 2) (2 4 #4# "R" 1)))"#
         ]],
@@ -81,7 +79,7 @@ fn asm_blox_boundary_sources_feed_real_get_instructions_and_advance_only_when_co
 
 fn asm_blox_sinks_consume_every_board_edge_and_record_first_practical_mismatch() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asm_blox_sinks_consume_every_board_edge_and_record_first_practical_mismatch",
         r##"(let* ((asm-blox--gameboard
                  (asm-blox-test-create-gameboard nil))
@@ -126,7 +124,6 @@ fn asm_blox_sinks_consume_every_board_edge_and_record_first_practical_mismatch()
               (asm-blox--cell-at-row-col 2 1)
               (asm-blox--cell-at-row-col 1 0)
               (asm-blox--cell-at-row-col 2 3))))))"##,
-        true,
         expect![[
             r#"OK ((nil nil nil nil) ((-1 0 (11) "T" 1 nil nil nil nil) (3 1 (22) "B" 1 nil nil nil nil) (1 -1 (33) "L" 1 nil nil nil nil) (2 4 (99) "R" 1 44 nil nil nil)) error ((:row 0 :col 0 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 1 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 1 :col 0 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (:row 2 :col 3 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil)))"#
         ]],
@@ -135,7 +132,7 @@ fn asm_blox_sinks_consume_every_board_edge_and_record_first_practical_mismatch()
 
 fn asm_blox_editor_sink_supports_insert_newline_backspace_delete_and_bounded_cursor_workflows()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asm_blox_editor_sink_supports_insert_newline_backspace_delete_and_bounded_cursor_workflows",
         r##"(let ((sink
                 (asm-blox--cell-sink-create
@@ -170,7 +167,6 @@ fn asm_blox_editor_sink_supports_insert_newline_backspace_delete_and_bounded_cur
                (asm-blox--cell-sink-editor-point sink))
               trace))
            (nreverse trace)))"##,
-        true,
         expect![[
             r#"OK (((insert 33) "alpha !beta" 8) ((insert 10) "alpha !\nbeta" 9) ((move 100) "alpha !\nbeta" 13) ((insert 63) "alpha !\nbeta?" 14) ((insert 8) "alpha !\nbeta" 13) ((move -20) "alpha !\nbeta" 1) ((insert 8) "alpha !\nbeta" 1) ((move 4) "alpha !\nbeta" 4) ((insert -2) "alpa !\nbeta" 4))"#
         ]],
@@ -179,7 +175,7 @@ fn asm_blox_editor_sink_supports_insert_newline_backspace_delete_and_bounded_cur
 
 fn asm_blox_reset_restores_sources_numeric_sinks_and_editor_sinks_to_initial_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asm_blox_reset_restores_sources_numeric_sinks_and_editor_sinks_to_initial_state",
         r##"(let* ((source
                  (asm-blox--cell-source-create
@@ -220,7 +216,6 @@ fn asm_blox_reset_restores_sources_numeric_sinks_and_editor_sinks_to_initial_sta
           (mapcar
            #'asm-blox-test-sink-summary
            (list numeric editor-default editor-empty))))"##,
-        true,
         expect![[
             r#"OK ((-1 0 (1 2) "I" 0) ((3 0 (3) "N" 0 nil nil nil nil) (3 1 nil "D" 0 nil "seed" 1 "target") (3 2 nil "E" 0 nil "" 1 "target")))"#
         ]],
@@ -229,7 +224,7 @@ fn asm_blox_reset_restores_sources_numeric_sinks_and_editor_sinks_to_initial_sta
 
 fn asm_blox_winning_conditions_require_complete_clean_data_and_trimmed_editor_line_parity()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asm_blox_winning_conditions_require_complete_clean_data_and_trimmed_editor_line_parity",
         r##"(let* ((data-sink
                  (asm-blox--cell-sink-create
@@ -278,14 +273,13 @@ fn asm_blox_winning_conditions_require_complete_clean_data_and_trimmed_editor_li
                 (list
                  asm-blox--gameboard-state
                  wins))))))"##,
-        true,
         expect!["OK ((nil nil) (win #1=(:win-file)) (nil #1#))"],
     )
 }
 
 fn asm_blox_display_register_helpers_map_sources_sinks_and_internal_ports_to_correct_edges()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asm_blox_display_register_helpers_map_sources_sinks_and_internal_ports_to_correct_edges",
         r##"(let* ((source-top
                  (asm-blox--cell-source-create
@@ -351,16 +345,14 @@ fn asm_blox_display_register_helpers_map_sources_sinks_and_internal_ports_to_cor
                #'asm-blox--get-sink-name-at-position
                coords)))
            '((-1 1) (2 -1) (3 2) (0 4) (1 1)))))"##,
-        true,
         expect![[
             r#"OK ((((2 0 RIGHT) 23) ((0 4 LEFT) nil) ((1 2 RIGHT) 31) ((1 2 LEFT) nil)) (((0 1 DOWN) 17) ((3 2 UP) nil) ((1 2 DOWN) 37) ((1 2 UP) nil)) (((-1 1) "T" nil) ((2 -1) "L" nil) ((3 2) nil "B") ((0 4) nil "R") ((1 1) nil nil)))"#
         ]],
     )
 }
 
-#[test]
-fn sources_sinks_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn sources_sinks_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asm_blox_sources_peek_and_pop_zero_negative_and_exhausted_values_in_order(),
         asm_blox_boundary_sources_feed_real_get_instructions_and_advance_only_when_consumed(),
         asm_blox_sinks_consume_every_board_edge_and_record_first_practical_mismatch(),
@@ -369,6 +361,5 @@ fn sources_sinks_public_surface_batch() {
         asm_blox_reset_restores_sources_numeric_sinks_and_editor_sinks_to_initial_state(),
         asm_blox_winning_conditions_require_complete_clean_data_and_trimmed_editor_line_parity(),
         asm_blox_display_register_helpers_map_sources_sinks_and_internal_ports_to_correct_edges(),
-    ];
-    assert_asm_blox_batch(&cases);
+    ]
 }

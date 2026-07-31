@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ALMOST_MONO_THEMES_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -103,14 +102,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_almost_mono_themes_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = almost_mono_themes_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("almost-mono-themes parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_almost_mono_themes_parity` cases (2a).
 pub(crate) fn assert_almost_mono_themes_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -121,3 +112,16 @@ pub(crate) fn assert_almost_mono_themes_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn almost_mono_themes_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_almost_mono_themes_batch(&cases);
+}
+
+// END generated package batch tests

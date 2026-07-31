@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_c_headers_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_directories()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_directories",
         r##"(let* ((root
                  (expand-file-name
@@ -42,7 +42,6 @@ fn auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_
                 (achead:get-include-file-candidates)
                 root))
            (delete-directory root t)))"##,
-        true,
         expect![[
             r#"OK (("README" . "README") ("api.h" . "api.h") ("dir.h/" . "dir.h") ("engine.hpp" . "engine.hpp") ("legacy.hh" . "legacy.hh") ("project/" . "project") ("upper.H" . "upper.H") ("vector" . "vector"))"#
         ]],
@@ -51,7 +50,7 @@ fn auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_
 
 fn auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves_candidate_prefix()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves_candidate_prefix",
         r##"(let* ((root
                  (expand-file-name
@@ -80,7 +79,6 @@ fn auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves
                  "pkg/")
                 root))
            (delete-directory root t)))"##,
-        true,
         expect![[
             r#"OK (("pkg/deeper/" . "pkg/deeper") ("pkg/detail.h" . "pkg/detail.h") ("pkg/vector" . "pkg/vector"))"#
         ]],
@@ -89,7 +87,7 @@ fn auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves
 
 fn auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_in_order()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_in_order",
         r##"(let* ((first-root
                  (expand-file-name
@@ -136,14 +134,13 @@ fn auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_
                    achead:include-cache))))
            (delete-directory first-root t)
            (delete-directory second-root t)))"##,
-        true,
         expect![[r#"OK (("second.h" "first.h") (second-root first-root) 2)"#]],
     )
 }
 
 fn auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_paths_and_first_lookup()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_paths_and_first_lookup",
         r##"(let* ((first-root
                  (expand-file-name
@@ -184,7 +181,6 @@ fn auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_pat
                    "shared.h"))))
            (delete-directory first-root t)
            (delete-directory second-root t)))"##,
-        true,
         expect![[
             r#"OK (("shared.h" "shared.h") ("first" "second") "[ORACLE-SANDBOX]/achead-shadow-first/shared.h\n--------------------------\nfirst")"#
         ]],
@@ -192,7 +188,7 @@ fn auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_pat
 }
 
 fn auto_complete_c_headers_nil_patterns_still_offer_directories_but_no_files() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_nil_patterns_still_offer_directories_but_no_files",
         r##"(let* ((root
                  (expand-file-name
@@ -217,14 +213,13 @@ fn auto_complete_c_headers_nil_patterns_still_offer_directories_but_no_files() -
                 (achead:get-include-file-candidates)
                 root))
            (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (("nested/" . "nested"))"#]],
     )
 }
 
 fn auto_complete_c_headers_custom_pattern_can_include_arbitrary_files_without_hiding_directories()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_custom_pattern_can_include_arbitrary_files_without_hiding_directories",
         r##"(let* ((root
                  (expand-file-name
@@ -252,14 +247,13 @@ fn auto_complete_c_headers_custom_pattern_can_include_arbitrary_files_without_hi
                 (achead:get-include-file-candidates)
                 root))
            (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (("config.inc" . "config.inc") ("directory.txt/" . "directory.txt"))"#]],
     )
 }
 
 fn auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_probe()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_probe",
         r##"(let ((default-directory
                 "/ssh:host:/project/")
@@ -294,7 +288,6 @@ fn auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_pro
             (achead:get-include-file-candidates)
             (nreverse directory-probes)
             (nreverse directory-checks))))"##,
-        true,
         expect![[
             r#"OK ((("api.h" . "/usr/include/api.h") ("subdir/" . "/usr/include/subdir")) (("/ssh:host:/usr/include/" "^[^.]")) ("/usr/include/api.h" "/usr/include/api.h" "/usr/include/subdir" "/usr/include/subdir"))"#
         ]],
@@ -303,7 +296,7 @@ fn auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_pro
 
 fn auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory",
         r##"(let ((default-directory
                 "/ssh:host:/project/")
@@ -331,14 +324,13 @@ fn auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory(
            (list
             (achead:get-include-file-candidates)
             probes)))"##,
-        true,
         expect![[r#"OK ((("api.h" . "/usr/include/api.h")) ("/usr/include/"))"#]],
     )
 }
 
 fn auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_default_directory()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_default_directory",
         r##"(let* ((root
                  (expand-file-name
@@ -368,14 +360,13 @@ fn auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_de
                     (cdr entry)))
                  (achead:get-include-file-candidates))))
            (delete-directory root t)))"##,
-        true,
         expect![[r#"OK ((("local.h" . "include/local.h") ("sub/" . "include/sub")) (t t))"#]],
     )
 }
 
 fn auto_complete_c_headers_non_directory_basedir_uses_parent_scan_but_concatenates_raw_suffix()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_non_directory_basedir_uses_parent_scan_but_concatenates_raw_suffix",
         r##"(let* ((root
                  (expand-file-name
@@ -397,14 +388,12 @@ fn auto_complete_c_headers_non_directory_basedir_uses_parent_scan_but_concatenat
                  "pkg/ap")
                 root))
            (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (("pkg/apapi.h" . "pkg/api.h") ("pkg/apvector" . "pkg/vector"))"#]],
     )
 }
 
-#[test]
-fn candidates_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn candidates_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_directories(),
         auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves_candidate_prefix(),
         auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_in_order(),
@@ -415,6 +404,5 @@ fn candidates_public_surface_batch() {
         auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory(),
         auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_default_directory(),
         auto_complete_c_headers_non_directory_basedir_uses_parent_scan_but_concatenates_raw_suffix(),
-    ];
-    assert_auto_complete_c_headers_batch(&cases);
+    ]
 }

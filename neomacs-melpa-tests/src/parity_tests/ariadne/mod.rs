@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ARIADNE_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -27,22 +26,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_ariadne_source_parity(prelude: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ariadne_oracle(prelude)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("Ariadne parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_ariadne_parity(elisp_form: &str, expected: Expect) {
-    assert_ariadne_source_parity("", elisp_form, expected);
-}
-
-pub(crate) fn assert_ariadne_with_legacy_cl_parity(elisp_form: &str, expected: Expect) {
-    assert_ariadne_source_parity("(require 'cl)", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_ariadne_parity` cases (2a).
 pub(crate) fn assert_ariadne_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -59,3 +42,25 @@ pub(crate) fn assert_ariadne_with_legacy_cl_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn ariadne_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_ariadne_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_ariadne_batch(&cases);
+}
+
+#[test]
+fn ariadne_with_legacy_cl_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_ariadne_with_legacy_cl_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_ariadne_with_legacy_cl_batch(&cases);
+}
+
+// END generated package batch tests

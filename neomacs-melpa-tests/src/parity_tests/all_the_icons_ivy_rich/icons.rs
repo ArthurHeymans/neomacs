@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_all_the_icons_ivy_rich_batch};
+use super::ParityBatchCase;
 
 fn icon_formatter_preserves_the_real_dependency_glyph_and_rebuilds_color_and_geometry_properties()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "icon_formatter_preserves_the_real_dependency_glyph_and_rebuilds_color_and_geometry_properties",
         r##"(let* ((icon
                      (all-the-icons-faicon
@@ -36,7 +36,6 @@ fn icon_formatter_preserves_the_real_dependency_glyph_and_rebuilds_color_and_geo
                  (get-text-property 0 'display plain)
                  (get-text-property 1 'face plain)
                  (get-text-property 1 'display plain))))"##,
-        true,
         expect![[
             r#"OK (("" (61459) (:family "FontAwesome" :height 1.14 :inherit all-the-icons-blue) #1=(raise -0.06)) (" " #2=((space :relative-width 0.1)) (:inherit all-the-icons-blue :family "FontAwesome" :height 1.25) #1#) (" " #2# (:inherit all-the-icons-ivy-rich-icon-face :family "FontAwesome" :height 1.25) #1#))"#
         ]],
@@ -45,7 +44,7 @@ fn icon_formatter_preserves_the_real_dependency_glyph_and_rebuilds_color_and_geo
 
 fn real_all_the_icons_file_lookup_renders_directory_source_document_and_fallback_candidates()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "real_all_the_icons_file_lookup_renders_directory_source_document_and_fallback_candidates",
         r##"(progn
                (require 'cl-lib)
@@ -70,7 +69,6 @@ fn real_all_the_icons_file_lookup_renders_directory_source_document_and_fallback
                     "README.md"
                     "archive.unknown-extension"
                     ""))))"##,
-        true,
         expect![[
             r#"OK (("src/" " " (32 61462) (:inherit all-the-icons-ivy-rich-dir-face :family "github-octicons" :height 1.0) #1=(raise 0.0)) ("main.rs" " " (32 59692) (:inherit all-the-icons-maroon :family "all-the-icons" :height 1.0) #1#) ("init.el" " " (32 59686) (:inherit all-the-icons-purple :family "file-icons" :height 1.0) #1#) ("README.md" " " (32 61447) (:inherit all-the-icons-lcyan :family "github-octicons" :height 1.0) #1#) ("archive.unknown-extension" " " (32 61462) (:inherit all-the-icons-dsilver :family "FontAwesome" :height 1.0) #1#) ("" " " (32 61462) (:inherit all-the-icons-dsilver :family "FontAwesome" :height 1.0) (raise 0.0)))"#
         ]],
@@ -79,7 +77,7 @@ fn real_all_the_icons_file_lookup_renders_directory_source_document_and_fallback
 
 fn installed_symbol_transformer_renders_real_command_and_custom_variable_candidates()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "installed_symbol_transformer_renders_real_command_and_custom_variable_candidates",
         r##"(progn
                (require 'cl-lib)
@@ -128,7 +126,6 @@ fn installed_symbol_transformer_renders_real_command_and_custom_variable_candida
                    (when all-the-icons-ivy-rich-mode
                      (all-the-icons-ivy-rich-mode -1)))
                  rendered))"##,
-        true,
         expect![[
             r#"OK (((" " (:inherit all-the-icons-blue :family "FontAwesome" :height 1.0)) ("all-the-icons-ivy-rich-…" nil) ("c" all-the-icons-ivy-rich-type-face) ("Open PATH and optionally FORCE the operation." all-the-icons-ivy-rich-doc-face)) ((" " (:inherit all-the-icons-lblue :family "FontAwesome" :height 1.0)) ("all-the-icons-ivy-rich-…" nil) ("u" all-the-icons-ivy-rich-type-face) ("Number of entries rendered by the workflow." all-the-icons-ivy-rich-doc-face)))"#
         ]],
@@ -137,7 +134,7 @@ fn installed_symbol_transformer_renders_real_command_and_custom_variable_candida
 
 fn dynamic_function_variable_symbol_and_imenu_icons_follow_real_candidate_semantics()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "dynamic_function_variable_symbol_and_imenu_icons_follow_real_candidate_semantics",
         r##"(progn
                (require 'cl-lib)
@@ -181,7 +178,6 @@ fn dynamic_function_variable_symbol_and_imenu_icons_follow_real_candidate_semant
                      . "Functions: all-the-icons-ivy-rich-icon-function")
                     (all-the-icons-ivy-rich-imenu-icon
                      . "Variables: all-the-icons-ivy-rich-icon-variable")))))"##,
-        true,
         expect![[
             r#"OK ((all-the-icons-ivy-rich-function-icon "all-the-icons-ivy-rich-icon-command" " " (:inherit all-the-icons-blue :family "FontAwesome" :height 1.0)) (all-the-icons-ivy-rich-function-icon "all-the-icons-ivy-rich-icon-function" " " (:inherit all-the-icons-purple :family "FontAwesome" :height 1.0)) (all-the-icons-ivy-rich-variable-icon "all-the-icons-ivy-rich-icon-custom" " " (:inherit all-the-icons-lblue :family "FontAwesome" :height 1.0)) (all-the-icons-ivy-rich-variable-icon "all-the-icons-ivy-rich-icon-variable" " " (:inherit all-the-icons-lblue :family "github-octicons" :height 1.0)) (all-the-icons-ivy-rich-symbol-icon "all-the-icons-ivy-rich-icon-face-fixture" " " (:inherit all-the-icons-blue :family "Material Icons" :height 1.0)) (all-the-icons-ivy-rich-symbol-icon "Packages: fixture" " " (:inherit all-the-icons-silver :family "FontAwesome" :height 1.0)) (all-the-icons-ivy-rich-imenu-icon "Functions: all-the-icons-ivy-rich-icon-function" " " (:inherit all-the-icons-purple :family "FontAwesome" :height 1.0)) (all-the-icons-ivy-rich-imenu-icon "Variables: all-the-icons-ivy-rich-icon-variable" " " (:inherit all-the-icons-lblue :family "github-octicons" :height 1.0)))"#
         ]],
@@ -189,7 +185,7 @@ fn dynamic_function_variable_symbol_and_imenu_icons_follow_real_candidate_semant
 }
 
 fn bookmark_icons_distinguish_real_file_directory_and_missing_targets() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "bookmark_icons_distinguish_real_file_directory_and_missing_targets",
         r##"(progn
                (require 'cl-lib)
@@ -235,7 +231,6 @@ fn bookmark_icons_distinguish_real_file_directory_and_missing_targets() -> Parit
                             "missing"))))
                    (when (file-exists-p root)
                      (delete-directory root t)))))"##,
-        true,
         expect![[
             r#"OK (("file" " " (32 61641) (:inherit all-the-icons-lblue :family "github-octicons" :height 1.0) "[ORACLE-TMPDIR]/all-the-icons-ivy-rich-icon-bookmarks/notes.md") ("directory" " " (32 61462) (:inherit (:family "github-octicons" :height 1.08) :family "github-octicons" :height 1.0) "[ORACLE-TMPDIR]/all-the-icons-ivy-rich-icon-bookmarks/") ("missing" " " (32 57675) (:inherit all-the-icons-ivy-rich-error-face :family "Material Icons" :height 1.0) "[ORACLE-TMPDIR]/all-the-icons-ivy-rich-icon-bookmarks/missing.el"))"#
         ]],
@@ -243,7 +238,7 @@ fn bookmark_icons_distinguish_real_file_directory_and_missing_targets() -> Parit
 }
 
 fn grep_icons_parse_real_line_error_and_non_result_candidates() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "grep_icons_parse_real_line_error_and_non_result_candidates",
         r##"(progn
                (require 'cl-lib)
@@ -262,7 +257,6 @@ fn grep_icons_parse_real_line_error_and_non_result_candidates() -> ParityBatchCa
                   '("notes.md:12:heading"
                     "notes.md:error(failed)"
                     "not-a-result"))))"##,
-        true,
         expect![[
             r#"OK (("notes.md:12:heading" " ") ("notes.md:error(failed)" " ") ("not-a-result" nil))"#
         ]],
@@ -270,7 +264,7 @@ fn grep_icons_parse_real_line_error_and_non_result_candidates() -> ParityBatchCa
 }
 
 fn markdown_link_icons_distinguish_anchor_and_external_link_candidates() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "markdown_link_icons_distinguish_anchor_and_external_link_candidates",
         r##"(progn
                (require 'cl-lib)
@@ -288,7 +282,6 @@ fn markdown_link_icons_distinguish_anchor_and_external_link_candidates() -> Pari
                        (get-text-property 1 'face icon))))
                   '("#section"
                     "https://example.invalid/page"))))"##,
-        true,
         expect![[
             r##"OK (("#section" " " (:inherit all-the-icons-green :family "FontAwesome" :height 1.0)) ("https://example.invalid/page" " " (:inherit all-the-icons-blue :family "Material Icons" :height 1.0)))"##
         ]],
@@ -297,7 +290,7 @@ fn markdown_link_icons_distinguish_anchor_and_external_link_candidates() -> Pari
 
 fn nongraphical_file_transformer_keeps_useful_metadata_while_suppressing_only_the_icon()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "nongraphical_file_transformer_keeps_useful_metadata_while_suppressing_only_the_icon",
         r##"(let* ((root
                      (file-name-as-directory
@@ -350,16 +343,14 @@ fn nongraphical_file_transformer_keeps_useful_metadata_while_suppressing_only_th
                  (when (file-exists-p root)
                    (delete-directory root t)))
                rendered)"##,
-        true,
         expect![[
             r#"OK (nil ("" "report.md" "" "-rw-r-----" "14" "Jan 02 12:34") (nil nil all-the-icons-ivy-rich-file-owner-face all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-size-face all-the-icons-ivy-rich-time-face))"#
         ]],
     )
 }
 
-#[test]
-fn icons_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn icons_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         icon_formatter_preserves_the_real_dependency_glyph_and_rebuilds_color_and_geometry_properties(),
         real_all_the_icons_file_lookup_renders_directory_source_document_and_fallback_candidates(),
         installed_symbol_transformer_renders_real_command_and_custom_variable_candidates(),
@@ -368,6 +359,5 @@ fn icons_public_surface_batch() {
         grep_icons_parse_real_line_error_and_non_result_candidates(),
         markdown_link_icons_distinguish_anchor_and_external_link_candidates(),
         nongraphical_file_transformer_keeps_useful_metadata_while_suppressing_only_the_icon(),
-    ];
-    assert_all_the_icons_ivy_rich_batch(&cases);
+    ]
 }

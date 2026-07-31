@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_distel_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module",
         r##"(save-window-excursion
           (with-temp-buffer
@@ -74,7 +74,6 @@ fn auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module()
                            ac-completing
                            ac-prefix))))
                   (auto-complete-mode -1))))))"##,
-        true,
         expect![[
             r#"OK (("li" (("lists" "m") ("lib" "m") ("linux" "m")) t "lists") "lib" "handle(Items) -> lib" ((:module "li" " *temp*") (:sleep 0.1)) nil nil nil)"#
         ]],
@@ -83,7 +82,7 @@ fn auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module()
 
 fn auto_complete_distel_real_function_menu_prefixes_distel_results_with_module() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_real_function_menu_prefixes_distel_results_with_module",
         r##"(save-window-excursion
           (with-temp-buffer
@@ -147,7 +146,6 @@ fn auto_complete_distel_real_function_menu_prefixes_distel_results_with_module()
                            ac-menu
                            ac-completing))))
                   (auto-complete-mode -1))))))"##,
-        true,
         expect![[
             r#"OK (("lists:ma" ("lists:map" "lists:mapfoldl" "lists:mapfoldr") "lists:map") "lists:mapfoldr" "Result = lists:mapfoldr" ((:function "lists" "ma") (:sleep 0.1)) nil nil)"#
         ]],
@@ -156,7 +154,7 @@ fn auto_complete_distel_real_function_menu_prefixes_distel_results_with_module()
 
 fn auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows_menu()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows_menu",
         r##"(save-window-excursion
           (with-temp-buffer
@@ -238,7 +236,6 @@ fn auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows
                               (line-end-position))
                              (nreverse events))))))
                   (auto-complete-mode -1))))))"##,
-        true,
         expect![[
             r#"OK (("lists:m" ("lists:map" "lists:mapfoldl" "lists:mapfoldr" "lists:member")) ("lists:ma" ("lists:map" "lists:mapfoldl" "lists:mapfoldr")) ("lists:mapf" ("lists:mapfoldl" "lists:mapfoldr")) "lists:mapfoldr" (("lists" "m") ("lists" "ma") ("lists" "mapf")))"#
         ]],
@@ -247,7 +244,7 @@ fn auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows
 
 fn auto_complete_distel_real_candidates_retain_document_function_for_selected_item()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_real_candidates_retain_document_function_for_selected_item",
         r##"(save-window-excursion
           (with-temp-buffer
@@ -300,7 +297,6 @@ fn auto_complete_distel_real_candidates_retain_document_function_for_selected_it
                            selected))
                          document-calls)))
                   (auto-complete-mode -1))))))"##,
-        true,
         expect![[
             r#"OK ("lists:map" distel-completion-get-doc-string "DOC[lists:map]" ("lists:map"))"#
         ]],
@@ -309,7 +305,7 @@ fn auto_complete_distel_real_candidates_retain_document_function_for_selected_it
 
 fn auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_completion()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_completion",
         r##"(save-window-excursion
           (mapcar
@@ -345,7 +341,6 @@ fn auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_comple
                             ac-completing)))
                      (auto-complete-mode -1))))))
            '("." "module2" "lists:map(")))"##,
-        true,
         expect![[
             r#"OK (("." nil nil nil nil nil nil) ("module2" nil nil nil nil nil nil) ("lists:map(" nil nil nil nil nil nil))"#
         ]],
@@ -354,7 +349,7 @@ fn auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_comple
 
 fn auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_isolated()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_isolated",
         r##"(save-window-excursion
           (let ((first
@@ -427,22 +422,19 @@ fn auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_i
             (list
              results
              (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (((" *distel-orders*" "orders:f" ("orders:fetch" "orders:find") "orders:fetch") (" *distel-users*" "users:f" ("users:fetch" "users:filter") "users:fetch")) ((" *distel-orders*" "orders" "f") (" *distel-users*" "users" "f")))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_distel_real_module_menu_navigates_and_completes_erlang_module(),
         auto_complete_distel_real_function_menu_prefixes_distel_results_with_module(),
         auto_complete_distel_incremental_erlang_function_typing_requeries_and_narrows_menu(),
         auto_complete_distel_real_candidates_retain_document_function_for_selected_item(),
         auto_complete_distel_punctuation_or_digit_suffix_does_not_start_remote_completion(),
         auto_complete_distel_two_erlang_buffers_keep_prefix_remote_query_and_result_isolated(),
-    ];
-    assert_auto_complete_distel_batch(&cases);
+    ]
 }

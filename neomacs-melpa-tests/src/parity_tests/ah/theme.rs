@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ah_batch};
+use super::ParityBatchCase;
 
 fn loading_a_real_custom_theme_observes_hook_state_and_applies_its_setting() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "loading_a_real_custom_theme_observes_hook_state_and_applies_its_setting",
         r##"
 (let* ((root
@@ -61,14 +61,10 @@ fn loading_a_real_custom_theme_observes_hook_state_and_applies_its_setting() -> 
     (when (file-directory-p root)
       (delete-directory root t))))
 "##,
-        true,
         expect!["OK (t 91 ((before (ah-practical-theme) 91) (after (ah-practical-theme) 91)) t)"],
     )
 }
 
-#[test]
-fn theme_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![loading_a_real_custom_theme_observes_hook_state_and_applies_its_setting()];
-    assert_ah_batch(&cases);
+pub(super) fn theme_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![loading_a_real_custom_theme_observes_hook_state_and_applies_its_setting()]
 }

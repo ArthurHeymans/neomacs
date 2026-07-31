@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aggressive_indent_batch};
+use super::ParityBatchCase;
 
 /// Wrapping existing code in a new form, by typing it: with point at the start
 /// of `(message', the user types `(when request' and RET.  While the new form
@@ -9,9 +9,8 @@ use super::{ParityBatchCase, assert_aggressive_indent_batch};
 /// is typed the whole defun is reindented and `(process request)' lands inside
 /// the `when'.  That second step is the thing `electric-indent-mode' cannot do:
 /// it is a line the user is not typing on.
-
 fn typing_a_wrapper_form_reindents_the_lines_it_encloses_once_it_is_balanced() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "typing_a_wrapper_form_reindents_the_lines_it_encloses_once_it_is_balanced",
         r##"(agi-test-with-buffer
  'emacs-lisp-mode agi-test-lisp-defun
@@ -29,7 +28,6 @@ fn typing_a_wrapper_form_reindents_the_lines_it_encloses_once_it_is_balanced() -
      (list :typed typed
            :while-unbalanced still-open
            :after-closing (agi-test-state)))))"##,
-        true,
         expect![[
             r#"OK (:typed "(defun handler (request)\n  (when request\n    (message \"start\")\n  (process request))\n" :while-unbalanced (:text "(defun handler (request)\n  (when request\n    (message \"start\")\n  (process request))\n" :point 46 :line 3 :column 4 :mode t :electric t) :after-closing (:text "(defun handler (request)\n  (when request\n    (message \"start\")\n    (process request)))\n" :point 87 :line 4 :column 23 :mode t :electric t))"#
         ]],
@@ -37,7 +35,7 @@ fn typing_a_wrapper_form_reindents_the_lines_it_encloses_once_it_is_balanced() -
 }
 
 fn deleting_the_enclosing_form_dedents_the_lines_it_contained() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "deleting_the_enclosing_form_dedents_the_lines_it_contained",
         r##"(agi-test-with-buffer
  'emacs-lisp-mode agi-test-nested-lisp-defun
@@ -48,7 +46,6 @@ fn deleting_the_enclosing_form_dedents_the_lines_it_contained() -> ParityBatchCa
    (agi-test-idle)
    (list :after-killing killed
          :after-idle (agi-test-state))))"##,
-        true,
         expect![[
             r#"OK (:after-killing (:text "(defun handler (request)\n    (message \"start\")\n    (process request)))\n" :point 26 :line 2 :column 0 :mode t :electric t) :after-idle (:text "(defun handler (request)\n  (message \"start\")\n  (process request)))\n" :point 26 :line 2 :column 0 :mode t :electric t))"#
         ]],
@@ -56,7 +53,7 @@ fn deleting_the_enclosing_form_dedents_the_lines_it_contained() -> ParityBatchCa
 }
 
 fn opening_a_block_in_a_c_buffer_reindents_the_statements_it_swallows() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "opening_a_block_in_a_c_buffer_reindents_the_statements_it_swallows",
         r##"(agi-test-with-buffer
  'c-mode agi-test-c-function
@@ -74,7 +71,6 @@ fn opening_a_block_in_a_c_buffer_reindents_the_statements_it_swallows() -> Parit
      (list :typed typed
            :after-opening opened
            :after-closing (agi-test-state)))))"##,
-        true,
         expect![[
             r#"OK (:typed "int handler(int ready) {\n  if (ready) {\n    log(\"start\");\n  process(ready);\n}\n" :after-opening (:text "int handler(int ready) {\n  if (ready) {\n    log(\"start\");\n    process(ready);\n}\n" :point 45 :line 3 :column 4 :mode t :electric t) :after-closing (:text "int handler(int ready) {\n  if (ready) {\n    log(\"start\");\n    process(ready);\n  }\n}\n" :point 82 :line 5 :column 3 :mode t :electric t))"#
         ]],
@@ -83,7 +79,7 @@ fn opening_a_block_in_a_c_buffer_reindents_the_statements_it_swallows() -> Parit
 
 fn backspace_on_the_leading_indentation_joins_the_line_instead_of_deleting_a_space()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "backspace_on_the_leading_indentation_joins_the_line_instead_of_deleting_a_space",
         r##"(list
  :after-indentation
@@ -106,7 +102,6 @@ fn backspace_on_the_leading_indentation_joins_the_line_instead_of_deleting_a_spa
     (let ((deleted (agi-test-text)))
       (agi-test-idle)
       (list :binding binding :deleted deleted :after-idle (agi-test-text))))))"##,
-        true,
         expect![[
             r#"OK (:after-indentation (:binding delete-indentation :joined "(defun f () (message \"x\"))\n" :after-idle "(defun f () (message \"x\"))\n") :at-beginning-of-line (:binding nil :deleted "(defun f ()  (message \"x\"))\n" :after-idle "(defun f ()  (message \"x\"))\n"))"#
         ]],
@@ -114,7 +109,7 @@ fn backspace_on_the_leading_indentation_joins_the_line_instead_of_deleting_a_spa
 }
 
 fn the_dont_indent_if_and_protected_commands_policies_keep_it_quiet() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_dont_indent_if_and_protected_commands_policies_keep_it_quiet",
         r##"(list
  :dont-indent-if
@@ -159,7 +154,6 @@ fn the_dont_indent_if_and_protected_commands_policies_keep_it_quiet() -> ParityB
     (list :last-command last-command
           :protected aggressive-indent-protected-commands
           :text (agi-test-text)))))"##,
-        true,
         expect![[
             r#"OK (:dont-indent-if "(defun handler (request)\n    (message \"start\")\n    (process request)))\n" :without-that-guard "(defun handler (request)\n  (message \"start\")\n  (process request)))\n" :protected-after-undo (:last-command undo :protected (undo undo-tree-undo undo-tree-redo undo-tree-visualize undo-tree-visualize-undo undo-tree-visualize-redo whitespace-cleanup) :text "(defun handler (request)\n\n    (message \"start\")\n    (process request)))\n") :unprotected-after-undo (:last-command undo :protected nil :text "(defun handler (request)\n\n  (message \"start\")\n  (process request)))\n"))"#
         ]],
@@ -167,7 +161,7 @@ fn the_dont_indent_if_and_protected_commands_policies_keep_it_quiet() -> ParityB
 }
 
 fn one_undo_takes_back_both_the_edit_and_the_reindentation() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "one_undo_takes_back_both_the_edit_and_the_reindentation",
         r##"(agi-test-with-buffer
  'emacs-lisp-mode agi-test-nested-lisp-defun
@@ -182,7 +176,6 @@ fn one_undo_takes_back_both_the_edit_and_the_reindentation() -> ParityBatchCase 
          :after-edit reindented
          :after-one-undo (agi-test-text)
          :point (point))))"##,
-        true,
         expect![[
             r#"OK (:original "(defun handler (request)\n  (when request\n    (message \"start\")\n    (process request)))\n" :after-edit "(defun handler (request)\n  (message \"start\")\n  (process request)))\n" :after-one-undo "(defun handler (request)\n\n    (message \"start\")\n    (process request)))\n" :point 26)"#
         ]],
@@ -190,7 +183,7 @@ fn one_undo_takes_back_both_the_edit_and_the_reindentation() -> ParityBatchCase 
 }
 
 fn the_global_mode_skips_excluded_modes_while_the_local_command_does_not() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_global_mode_skips_excluded_modes_while_the_local_command_does_not",
         r##"(progn
   (global-aggressive-indent-mode 1)
@@ -223,7 +216,6 @@ fn the_global_mode_skips_excluded_modes_while_the_local_command_does_not() -> Pa
                  (and (memq #'aggressive-indent--keep-track-of-changes
                             after-change-functions)
                       t))))))"##,
-        true,
         expect![
             "OK (:excluded (elm-mode haskell-mode inf-ruby-mode makefile-mode makefile-gmake-mode python-mode sql-interactive-mode text-mode yaml-mode) :under-global ((emacs-lisp-mode t t) (c-mode t t) (text-mode nil nil) (fundamental-mode nil nil)) :global-off (nil nil) :local-in-excluded-mode (t t))"
         ],
@@ -231,7 +223,7 @@ fn the_global_mode_skips_excluded_modes_while_the_local_command_does_not() -> Pa
 }
 
 fn saving_the_buffer_indents_what_was_typed_before_writing_it_to_disk() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "saving_the_buffer_indents_what_was_typed_before_writing_it_to_disk",
         r##"(let ((path (agi-test-sandbox-file "project/handler.el")))
   (agi-test-with-buffer
@@ -248,16 +240,15 @@ fn saving_the_buffer_indents_what_was_typed_before_writing_it_to_disk() -> Parit
            :hook (and (memq #'aggressive-indent--process-changed-list-and-indent
                             before-save-hook)
                       t)))))"##,
-        true,
         expect![[
             r#"OK (:before-save "(defun f (x)\n(when x\n(message \"hi\")))\n" :after-save "(defun f (x)\n  (when x\n    (message \"hi\")))\n" :on-disk "(defun f (x)\n  (when x\n    (message \"hi\")))\n" :modified nil :hook t)"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         typing_a_wrapper_form_reindents_the_lines_it_encloses_once_it_is_balanced(),
         deleting_the_enclosing_form_dedents_the_lines_it_contained(),
         opening_a_block_in_a_c_buffer_reindents_the_statements_it_swallows(),
@@ -266,6 +257,5 @@ fn workflows_public_surface_batch() {
         one_undo_takes_back_both_the_edit_and_the_reindentation(),
         the_global_mode_skips_excluded_modes_while_the_local_command_does_not(),
         saving_the_buffer_indents_what_was_typed_before_writing_it_to_disk(),
-    ];
-    assert_aggressive_indent_batch(&cases);
+    ]
 }

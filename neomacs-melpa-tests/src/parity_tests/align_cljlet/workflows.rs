@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_align_cljlet_batch};
+use super::ParityBatchCase;
 
 /// The package in one command: point anywhere inside a `let', `M-x
 /// align-cljlet', and the values line up in a column one space past the longest
@@ -9,9 +9,8 @@ use super::{ParityBatchCase, assert_align_cljlet_batch};
 /// it -- at the same place in the same line, though not at the same character
 /// number, since spaces were inserted before it -- the mark is untouched, and
 /// running the command again changes nothing.
-
 fn aligning_a_let_lines_the_values_up_into_one_column() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aligning_a_let_lines_the_values_up_into_one_column",
         r##"(acl-test-with-file
  "src/compute.clj"
@@ -35,7 +34,6 @@ fn aligning_a_let_lines_the_values_up_into_one_column() -> ParityBatchCase {
              :file-on-disk (with-temp-buffer
                              (insert-file-contents (acl-test-path "src/compute.clj"))
                              (buffer-string)))))))"##,
-        true,
         expect![[
             r#"OK (:before (:text "(defn compute [items]\n  (let [total (reduce + items)\n        n (count items)\n        average (/ total n)]\n    average))\n" :where (:line 3 :before-point "        n (count") :mark 1 :modified nil) :outcome aligned :after (:text "(defn compute [items]\n  (let [total   (reduce + items)\n        n       (count items)\n        average (/ total n)]\n    average))\n" :where (:line 3 :before-point "        n       (count") :mark 1 :modified t) :idempotent t :file-on-disk "(defn compute [items]\n  (let [total (reduce + items)\n        n (count items)\n        average (/ total n)]\n    average))\n")"#
         ]],
@@ -43,7 +41,7 @@ fn aligning_a_let_lines_the_values_up_into_one_column() -> ParityBatchCase {
 }
 
 fn map_literals_and_cond_forms_align_into_the_same_shape() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "map_literals_and_cond_forms_align_into_the_same_shape",
         r##"(list
  :map
@@ -66,7 +64,6 @@ fn map_literals_and_cond_forms_align_into_the_same_shape() -> ParityBatchCase {
           :outcome (acl-test-align)
           :after (acl-test-text)
           :where (acl-test-where)))))"##,
-        true,
         expect![[
             r#"OK (:map (:before "(def config\n  {:host \"localhost\"\n   :port 8080\n   :retry-count 3})\n" :outcome aligned :after "(def config\n  {:host        \"localhost\"\n   :port        8080\n   :retry-count 3})\n" :where (:line 3 :before-point "   :port")) :cond (:before "(defn classify [n]\n  (cond\n    (< n 0) :negative\n    (zero? n) :zero\n    :else :positive))\n" :outcome aligned :after "(defn classify [n]\n  (cond\n    (< n 0)   :negative\n    (zero? n) :zero\n    :else     :positive))\n" :where (:line 4 :before-point "    (zero?")))"#
         ]],
@@ -74,7 +71,7 @@ fn map_literals_and_cond_forms_align_into_the_same_shape() -> ParityBatchCase {
 }
 
 fn defroutes_alignment_follows_the_defroute_columns_setting() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "defroutes_alignment_follows_the_defroute_columns_setting",
         r##"(let ((source "(defroutes app-routes\n  (GET \"/\" [] home)\n  (POST \"/users\" [] create-user)\n  (GET \"/users/:id\" [] show-user))\n"))
   (list
@@ -97,7 +94,6 @@ fn defroutes_alignment_follows_the_defroute_columns_setting() -> ParityBatchCase
        (list :columns defroute-columns
              :outcome (acl-test-align)
              :after (acl-test-text))))))"##,
-        true,
         expect![[
             r#"OK (:default-columns 1 :one-column (:outcome aligned :after "(defroutes app-routes\n  (GET  \"/\" [] home)\n  (POST \"/users\" [] create-user)\n  (GET  \"/users/:id\" [] show-user))\n") :two-columns (:columns 2 :outcome aligned :after "(defroutes app-routes\n  (GET  \"/\"          [] home)\n  (POST \"/users\"     [] create-user)\n  (GET  \"/users/:id\" [] show-user))\n") :restored (:columns 1 :outcome aligned :after "(defroutes app-routes\n  (GET  \"/\" [] home)\n  (POST \"/users\" [] create-user)\n  (GET  \"/users/:id\" [] show-user))\n"))"#
         ]],
@@ -105,7 +101,7 @@ fn defroutes_alignment_follows_the_defroute_columns_setting() -> ParityBatchCase
 }
 
 fn only_the_form_point_is_standing_in_is_aligned() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "only_the_form_point_is_standing_in_is_aligned",
         r##"(acl-test-with-file
  "src/nested.clj"
@@ -122,7 +118,6 @@ fn only_the_form_point_is_standing_in_is_aligned() -> ParityBatchCase {
                :after-inner after-inner
                :outer-outcome outer-outcome
                :after-outer (acl-test-text)))))))"##,
-        true,
         expect![[
             r#"OK (:before "(defn outer [xs]\n  (let [first-value 1\n        second 2]\n    (let [inner-a 10\n          b 20]\n      (+ inner-a b))))\n" :inner-outcome aligned :after-inner "(defn outer [xs]\n  (let [first-value 1\n        second 2]\n    (let [inner-a 10\n          b       20]\n      (+ inner-a b))))\n" :outer-outcome aligned :after-outer "(defn outer [xs]\n  (let [first-value 1\n        second      2]\n    (let [inner-a 10\n          b       20]\n      (+ inner-a b))))\n")"#
         ]],
@@ -130,7 +125,7 @@ fn only_the_form_point_is_standing_in_is_aligned() -> ParityBatchCase {
 }
 
 fn an_aligned_form_a_crowded_one_and_a_wrong_position_are_all_left_alone() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_aligned_form_a_crowded_one_and_a_wrong_position_are_all_left_alone",
         r##"(list
  :already-aligned
@@ -166,7 +161,6 @@ fn an_aligned_form_a_crowded_one_and_a_wrong_position_are_all_left_alone() -> Pa
             :unchanged (equal before (acl-test-text))
             :modified (buffer-modified-p)
             :text (acl-test-text))))))"##,
-        true,
         expect![[
             r#"OK (:already-aligned (:outcome aligned :unchanged t :modified nil :text "(defn compute [items]\n  (let [total   (reduce + items)\n        n       (count items)\n        average (/ total n)]\n    average))\n") :multiple-pairs-per-line (:outcome (error "multiple pairs on one line") :unchanged t :modified nil :text "(defn crowded [xs]\n  (let [a 1 b 2\n        c 3]\n    c))\n") :not-in-a-form (:outcome (error "Not in a \"let\" form") :unchanged t :modified nil :text "(defn plain [x]\n  (+ x 1))\n"))"#
         ]],
@@ -174,7 +168,7 @@ fn an_aligned_form_a_crowded_one_and_a_wrong_position_are_all_left_alone() -> Pa
 }
 
 fn an_unclosed_binding_vector_is_reindented_without_losing_any_text() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_unclosed_binding_vector_is_reindented_without_losing_any_text",
         r##"(acl-test-with-file
  "src/unclosed.clj"
@@ -188,22 +182,19 @@ fn an_unclosed_binding_vector_is_reindented_without_losing_any_text() -> ParityB
            :modified (buffer-modified-p)
            :same-characters (equal (acl-test-visible-characters before)
                                    (acl-test-visible-characters (acl-test-text)))))))"##,
-        true,
         expect![[
             r#"OK (:before "(defn broken [xs]\n  (let [a 1\n        bb 2\n    a))\n" :outcome aligned :after "(defn broken [xs]\n  (let [a  1\n        bb 2\n        a))\n" :modified t :same-characters t)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         aligning_a_let_lines_the_values_up_into_one_column(),
         map_literals_and_cond_forms_align_into_the_same_shape(),
         defroutes_alignment_follows_the_defroute_columns_setting(),
         only_the_form_point_is_standing_in_is_aligned(),
         an_aligned_form_a_crowded_one_and_a_wrong_position_are_all_left_alone(),
         an_unclosed_binding_vector_is_reindented_without_losing_any_text(),
-    ];
-    assert_align_cljlet_batch(&cases);
+    ]
 }

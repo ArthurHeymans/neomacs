@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{AMSREFTEX_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -166,16 +165,21 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_amsreftex_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = amsreftex_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("amsreftex parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_amsreftex_parity` cases (2a).
 pub(crate) fn assert_amsreftex_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(amsreftex_oracle(), &name, "amsreftex_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn amsreftex_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_amsreftex_batch(&cases);
+}
+
+// END generated package batch tests

@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asdf_vm_batch};
+use super::ParityBatchCase;
 
 fn asdf_vm_current_parses_realistic_multi_tool_output_and_reports_interactive_table()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_current_parses_realistic_multi_tool_output_and_reports_interactive_table",
         r##"(let (calls)
                (cl-letf
@@ -24,7 +24,6 @@ fn asdf_vm_current_parses_realistic_multi_tool_output_and_reports_interactive_ta
                   (asdf-vm-current
                    "ruby" 1)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((("nodejs" "20.11.0" "/work/.tool-versions") ("python" "______" "No version is set")) (("nodejs" "20.11.0" "/work/.tool-versions") ("python" "______" "No version is set")) ((:call :command current :command-arguments nil :output t) (:call :command current :command-arguments ("ruby") :output t)))"#
         ]],
@@ -32,7 +31,7 @@ fn asdf_vm_current_parses_realistic_multi_tool_output_and_reports_interactive_ta
 }
 
 fn asdf_vm_help_formats_long_lines_into_read_only_help_buffer_and_displays_it() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_help_formats_long_lines_into_read_only_help_buffer_and_displays_it",
         r##"(let ((asdf-vm-help-buffer-name
                     "*asdf-vm-test-help*")
@@ -70,7 +69,6 @@ fn asdf_vm_help_formats_long_lines_into_read_only_help_buffer_and_displays_it() 
                     major-mode
                     buffer-read-only
                     (nreverse calls)))))"##,
-        true,
         expect![[
             r#"OK ("Ruby plugin\ndocumentation has a\ndeliberately long first\nline for wrapping.\nshort second line\n" help-mode t ((:call :command help :command-arguments ("ruby" "3.3.1") :output t) (:display "*asdf-vm-test-help*" nil)))"#
         ]],
@@ -79,7 +77,7 @@ fn asdf_vm_help_formats_long_lines_into_read_only_help_buffer_and_displays_it() 
 
 fn asdf_vm_install_forwards_tool_versions_or_explicit_version_and_blocking_intent()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_install_forwards_tool_versions_or_explicit_version_and_blocking_intent",
         r##"(let (calls)
                (cl-letf
@@ -99,7 +97,6 @@ fn asdf_vm_install_forwards_tool_versions_or_explicit_version_and_blocking_inten
                    "3.3.1"
                    1)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (:started :started ((:call :command install :command-arguments ("ruby") :blocking nil) (:call :command install :command-arguments ("ruby" "3.3.1") :blocking 1)))"#
         ]],
@@ -108,7 +105,7 @@ fn asdf_vm_install_forwards_tool_versions_or_explicit_version_and_blocking_inten
 
 fn asdf_vm_latest_list_and_list_all_transform_cli_whitespace_and_filters_exactly() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_latest_list_and_list_all_transform_cli_whitespace_and_filters_exactly",
         r##"(let (calls)
                (cl-letf
@@ -139,7 +136,6 @@ fn asdf_vm_latest_list_and_list_all_transform_cli_whitespace_and_filters_exactly
                    "ruby"
                    "3.")
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ("3.3.1-rc1" ("*3.3.1" "3.2.4") ("3.4.0-dev" "3.3.1" "3.2.4") ((:command latest :command-arguments ("ruby" "3.3") :output t) (:command list :command-arguments ("ruby" "3") :output t) (:command (list all) :command-arguments ("ruby" "3.") :output t)))"#
         ]],
@@ -148,7 +144,7 @@ fn asdf_vm_latest_list_and_list_all_transform_cli_whitespace_and_filters_exactly
 
 fn asdf_vm_installed_version_completion_forwards_all_options_and_strips_active_marker()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installed_version_completion_forwards_all_options_and_strips_active_marker",
         r##"(let (calls)
                (cl-letf
@@ -178,7 +174,6 @@ fn asdf_vm_installed_version_completion_forwards_all_options_and_strips_active_m
                    "3.2.4"
                    t)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ("3.3.1" ((:list "ruby") (:complete "Package version: " ("* 3.3.1" "3.2.4") predicate t "3." history "3.2.4" t)))"#
         ]],
@@ -187,7 +182,7 @@ fn asdf_vm_installed_version_completion_forwards_all_options_and_strips_active_m
 
 fn asdf_vm_set_uninstall_and_reshim_build_exact_mutating_commands_and_messages() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_set_uninstall_and_reshim_build_exact_mutating_commands_and_messages",
         r##"(let (calls)
                (cl-letf
@@ -207,7 +202,6 @@ fn asdf_vm_set_uninstall_and_reshim_build_exact_mutating_commands_and_messages()
                   (asdf-vm-reshim
                    "python" "3.12.2" 1)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (:queued :queued :queued ((:call :command set :command-arguments ("ruby" "3.3.1") :blocking 4) (:call :command uninstall :command-arguments ("nodejs" "18.0") :blocking nil) (:call :command reshim :command-arguments ("python" "3.12.2") :blocking 1)))"#
         ]],
@@ -216,7 +210,7 @@ fn asdf_vm_set_uninstall_and_reshim_build_exact_mutating_commands_and_messages()
 
 fn asdf_vm_where_which_and_version_trim_paths_versions_and_emit_exact_messages() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_where_which_and_version_trim_paths_versions_and_emit_exact_messages",
         r##"(let (calls)
                (cl-letf
@@ -246,7 +240,6 @@ fn asdf_vm_where_which_and_version_trim_paths_versions_and_emit_exact_messages()
                    "ruby" 1)
                   (asdf-vm-version 1)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ("/opt/asdf/installs/ruby/3.3.1" "/opt/asdf/installs/ruby/3.3.1" "/opt/asdf/shims/ruby" "v0.16.2" ((:call :command where :command-arguments ("ruby" "3.3.1") :output t) (:call :command where :command-arguments ("ruby") :output t) (:call :command which :command-arguments ("ruby") :output t) (:call :command version :output t)))"#
         ]],
@@ -255,7 +248,7 @@ fn asdf_vm_where_which_and_version_trim_paths_versions_and_emit_exact_messages()
 
 fn asdf_vm_info_preserves_multiline_debug_output_and_interactive_message_payload() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_info_preserves_multiline_debug_output_and_interactive_message_payload",
         r##"(let ((output
                     (concat
@@ -276,7 +269,6 @@ fn asdf_vm_info_preserves_multiline_debug_output_and_interactive_message_payload
                   (asdf-vm-info)
                   (asdf-vm-info 1)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ("OS:\\nLinux fixture\\nSHELL:\\nzsh\\nASDF VERSION:\\nv0.16.2\\n" "OS:\\nLinux fixture\\nSHELL:\\nzsh\\nASDF VERSION:\\nv0.16.2\\n" ((:call :command info :output t) (:call :command info :output t)))"#
         ]],
@@ -285,7 +277,7 @@ fn asdf_vm_info_preserves_multiline_debug_output_and_interactive_message_payload
 
 fn asdf_vm_shim_versions_splits_real_provider_lines_and_preserves_multiword_tail() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_shim_versions_splits_real_provider_lines_and_preserves_multiword_tail",
         r##"(let (calls)
                (cl-letf
@@ -304,7 +296,6 @@ fn asdf_vm_shim_versions_splits_real_provider_lines_and_preserves_multiword_tail
                   (asdf-vm-shim-versions
                    "ruby" 1)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((("ruby" "3.3.1") ("ruby" "3.2.4") ("custom" "ref" "feature" "branch")) ((:call :command shim-versions :command-arguments ("ruby") :output t)))"#
         ]],
@@ -313,7 +304,7 @@ fn asdf_vm_shim_versions_splits_real_provider_lines_and_preserves_multiword_tail
 
 fn asdf_vm_core_commands_use_real_stub_executable_and_preserve_cli_parsing_end_to_end()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_core_commands_use_real_stub_executable_and_preserve_cli_parsing_end_to_end",
         r##"(let* ((executable
                      (asdf-vm-test-make-executable
@@ -346,16 +337,14 @@ fn asdf_vm_core_commands_use_real_stub_executable_and_preserve_cli_parsing_end_t
                 (asdf-vm-version)
                 (asdf-vm-shim-versions
                  "ruby")))"##,
-        true,
         expect![[
             r#"OK ((("nodejs" "20.0" "/work/.tool-versions")) "3.3.1" ("*3.3.1" "3.2.4") "/opt/ruby/3.3.1" "/opt/shims/ruby" "v0.16.2" (("ruby" "3.3.1") ("ruby" "3.2.4")))"#
         ]],
     )
 }
 
-#[test]
-fn core_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn core_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asdf_vm_current_parses_realistic_multi_tool_output_and_reports_interactive_table(),
         asdf_vm_help_formats_long_lines_into_read_only_help_buffer_and_displays_it(),
         asdf_vm_install_forwards_tool_versions_or_explicit_version_and_blocking_intent(),
@@ -366,6 +355,5 @@ fn core_public_surface_batch() {
         asdf_vm_info_preserves_multiline_debug_output_and_interactive_message_payload(),
         asdf_vm_shim_versions_splits_real_provider_lines_and_preserves_multiword_tail(),
         asdf_vm_core_commands_use_real_stub_executable_and_preserve_cli_parsing_end_to_end(),
-    ];
-    assert_asdf_vm_batch(&cases);
+    ]
 }

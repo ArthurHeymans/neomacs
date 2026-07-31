@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_etags_batch};
+use super::ParityBatchCase;
 
 fn ac_etags_completes_a_tag_prefix_from_a_real_tags_table() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_etags_completes_a_tag_prefix_from_a_real_tags_table",
         r#"
     ;; The README's whole setup: build a TAGS table for the project, select it
@@ -35,7 +35,6 @@ fn ac_etags_completes_a_tag_prefix_from_a_real_tags_table() -> ParityBatchCase {
                   (face-attribute 'ac-etags-candidate-face :inherit nil t)
                   (face-attribute 'ac-etags-selection-face :inherit nil t))))))
 "#,
-        true,
         expect![[
             r#"OK ((ac-source-etags) t ("bank") "bank_" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung") (("bank_open" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_close" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_audit" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_transfer" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_überweisung" "s" ac-etags-candidate-face ac-etags-selection-face)) "int main(void) { bank_open" 27 3 "s" ac-etags--candidates (("bank_" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")) ac-candidate-face ac-selection-face)"#
         ]],
@@ -43,7 +42,7 @@ fn ac_etags_completes_a_tag_prefix_from_a_real_tags_table() -> ParityBatchCase {
 }
 
 fn ac_etags_requires_option_sets_the_minimum_prefix_length() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_etags_requires_option_sets_the_minimum_prefix_length",
         r#"
     ;; `ac-etags-requires' is the package's one knob and its default is 3, so a
@@ -75,7 +74,6 @@ fn ac_etags_requires_option_sets_the_minimum_prefix_length() -> ParityBatchCase 
               (attempt 5 "int x = bank")
               (attempt 5 "int x = bank_"))))
 "#,
-        true,
         expect![[
             r#"OK (3 integer ("int x = b" 3 nil nil) ("int x = ba" 3 nil nil) ("int x = ban" 3 "ban" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) ("int x = b" 1 "b" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) ("int x = bank" 5 nil nil) ("int x = bank_" 5 "bank_" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")))"#
         ]],
@@ -83,7 +81,7 @@ fn ac_etags_requires_option_sets_the_minimum_prefix_length() -> ParityBatchCase 
 }
 
 fn ac_etags_cache_serves_a_repeated_prefix_until_the_cache_is_cleared() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_etags_cache_serves_a_repeated_prefix_until_the_cache_is_cleared",
         r#"
     ;; The completion cache is keyed only by prefix, so after switching to
@@ -111,15 +109,15 @@ fn ac_etags_cache_serves_a_repeated_prefix_until_the_cache_is_cleared() -> Parit
                   (ac-etags-test-cache-entries)
                   (commandp 'ac-etags-clear-cache))))))
 "#,
-        true,
         expect![[
             r#"OK ((("bank") ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) (("bank_" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")) (("ledger") ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) 0 (("ledger") ("bank_settle" "bank_reconcile")) (("bank_" "bank_reconcile" "bank_settle")) t)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn ac_etags_completes_across_several_tags_tables_at_once() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_etags_completes_across_several_tags_tables_at_once",
         r#"
     ;; With `tags-add-tables' set to t, a second `visit-tags-table' keeps the
@@ -143,15 +141,15 @@ fn ac_etags_completes_across_several_tags_tables_at_once() -> ParityBatchCase {
                     (point)
                     (ac-etags-test-cache-entries)))))))
 "#,
-        true,
         expect![[
             r#"OK (("bank") ("ledger" "bank") ("bank_open" "bank_close" "bank_audit" "bank_settle" "bank_transfer" "bank_reconcile" "bank_überweisung") "call bank_open" 15 (("bank_" "bank_reconcile" "bank_settle" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn ac_etags_offers_nothing_and_caches_nothing_without_a_tags_table() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_etags_offers_nothing_and_caches_nothing_without_a_tags_table",
         r#"
     ;; Without a tags table the source must stay completely quiet: no
@@ -175,19 +173,17 @@ fn ac_etags_offers_nothing_and_caches_nothing_without_a_tags_table() -> ParityBa
                 (hash-table-count ac-etags--completion-cache)
                 (buffer-name (window-buffer (selected-window)))))))
 "#,
-        true,
         expect![[r#"OK (nil nil "bank_" nil nil nil "call bank_" 11 0 "*ac-etags-workflow*")"#]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         ac_etags_completes_a_tag_prefix_from_a_real_tags_table(),
         ac_etags_requires_option_sets_the_minimum_prefix_length(),
         ac_etags_cache_serves_a_repeated_prefix_until_the_cache_is_cleared(),
         ac_etags_completes_across_several_tags_tables_at_once(),
         ac_etags_offers_nothing_and_caches_nothing_without_a_tags_table(),
-    ];
-    assert_ac_etags_batch(&cases);
+    ]
 }

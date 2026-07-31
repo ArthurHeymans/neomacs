@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ob_arduino_batch};
+use super::ParityBatchCase;
 
 fn org_babel_module_defaults_callable_surface_and_language_registration_are_exact()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "org_babel_module_defaults_callable_surface_and_language_registration_are_exact",
         r##"(list
                     (featurep 'ob-arduino)
@@ -32,7 +32,6 @@ fn org_babel_module_defaults_callable_surface_and_language_registration_are_exac
                      "arduino"
                      org-babel-tangle-lang-exts)
                     org-babel-default-header-args:sclang)"##,
-        true,
         expect![[
             r#"OK (t t ((ob-arduino:program "arduino" string nil "Default Arduino program name.") (ob-arduino:port "/dev/ttyACM0" string nil "Default Arduino port.") (ob-arduino:board "arduino:avr:uno" string nil "Default Arduino board.")) (body params) nil nil nil nil)"#
         ]],
@@ -41,7 +40,7 @@ fn org_babel_module_defaults_callable_surface_and_language_registration_are_exac
 
 fn practical_babel_execution_expands_code_cleans_stale_sketches_writes_source_and_uploads()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "practical_babel_execution_expands_code_cleans_stale_sketches_writes_source_and_uploads",
         r##"(let* ((root
                           (file-name-as-directory
@@ -118,7 +117,6 @@ fn practical_babel_execution_expands_code_cleans_stale_sketches_writes_source_an
                                (file-exists-p stale)
                                (file-exists-p keep)))))
                       (delete-directory root t)))"##,
-        true,
         expect![[
             r#"OK ("uploaded" ((:expand "void setup() {}\n" ((:port . "/dev/ttyACM3") (:board . "arduino:avr:mega"))) (:eval "arduino-cli --upload --port /dev/ttyACM3 --board arduino:avr:mega <SOURCE>" "" t "// expanded\nvoid setup() {}\n")) nil t)"#
         ]],
@@ -127,7 +125,7 @@ fn practical_babel_execution_expands_code_cleans_stale_sketches_writes_source_an
 
 fn babel_cleanup_surfaces_relative_directory_misclassification_from_upstream_source()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "babel_cleanup_surfaces_relative_directory_misclassification_from_upstream_source",
         r##"(let* ((root
                           (file-name-as-directory
@@ -155,7 +153,6 @@ fn babel_cleanup_surfaces_relative_directory_misclassification_from_upstream_sou
                           (org-babel-execute:arduino
                            "void setup() {}\n" nil))
                       (delete-directory root t)))"##,
-        false,
         expect![[
             r#"ERR (file-error "Removing old name: is a directory" "[ORACLE-TMPDIR]/ob-arduino-directory-contract/directory.ino")"#
         ]],
@@ -163,7 +160,7 @@ fn babel_cleanup_surfaces_relative_directory_misclassification_from_upstream_sou
 }
 
 fn babel_execution_without_optional_headers_preserves_exact_command_spacing() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "babel_execution_without_optional_headers_preserves_exact_command_spacing",
         r##"(let* ((root
                           (file-name-as-directory
@@ -204,7 +201,6 @@ fn babel_execution_without_optional_headers_preserves_exact_command_spacing() ->
                             nil)
                            captured))
                       (delete-directory root t)))"##,
-        true,
         expect![[
             r#"OK (:done ("arduino --upload   <SOURCE>" "" "void loop() { delay(10); }\n"))"#
         ]],
@@ -212,7 +208,7 @@ fn babel_execution_without_optional_headers_preserves_exact_command_spacing() ->
 }
 
 fn reloading_module_keeps_org_language_and_tangle_registration_idempotent() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "reloading_module_keeps_org_language_and_tangle_registration_idempotent",
         r##"(progn
                     (load
@@ -235,19 +231,16 @@ fn reloading_module_keeps_org_language_and_tangle_registration_idempotent() -> P
                          '("arduino" . "ino")))
                       org-babel-tangle-lang-exts)
                      (featurep 'ob-arduino)))"##,
-        true,
         expect!["OK (0 0 t)"],
     )
 }
 
-#[test]
-fn org_babel_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn org_babel_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         org_babel_module_defaults_callable_surface_and_language_registration_are_exact(),
         practical_babel_execution_expands_code_cleans_stale_sketches_writes_source_and_uploads(),
         babel_cleanup_surfaces_relative_directory_misclassification_from_upstream_source(),
         babel_execution_without_optional_headers_preserves_exact_command_spacing(),
         reloading_module_keeps_org_language_and_tangle_registration_idempotent(),
-    ];
-    assert_ob_arduino_batch(&cases);
+    ]
 }

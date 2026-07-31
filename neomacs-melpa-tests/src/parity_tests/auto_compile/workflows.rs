@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_compile_batch};
+use super::ParityBatchCase;
 
 fn auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nosearch_trees()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nosearch_trees",
         r##"(let* ((root
                  (auto-compile-test-path
@@ -36,7 +36,6 @@ fn auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nos
              (file-exists-p
               (auto-compile-test-dest source))))
           (list top nested hidden nosearch)))"##,
-        true,
         expect![[
             r#"OK (("top.el" t) ("lib/nested.el" t) (".hidden/hidden.el" nil) ("vendor/skipped.el" nil))"#
         ]],
@@ -45,7 +44,7 @@ fn auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nos
 
 fn auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respects_skipped_trees()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respects_skipped_trees",
         r##"(let* ((root
                  (auto-compile-test-path
@@ -81,14 +80,13 @@ fn auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respec
           (file-exists-p stray)
           (file-exists-p hidden)
           (file-exists-p nosearch)))"##,
-        true,
         expect!["OK (t nil nil t t)"],
     )
 }
 
 fn auto_compile_recursive_quit_option_controls_nonlibrary_source_destination_removal()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_recursive_quit_option_controls_nonlibrary_source_destination_removal",
         r##"(let* ((root
                  (auto-compile-test-path
@@ -115,13 +113,12 @@ fn auto_compile_recursive_quit_option_controls_nonlibrary_source_destination_rem
             (file-exists-p source)
             kept
             (file-exists-p dest))))"##,
-        true,
         expect!["OK (t t nil)"],
     )
 }
 
 fn auto_compile_recursive_start_honors_recompile_option_and_source_freshness() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_recursive_start_honors_recompile_option_and_source_freshness",
         r##"(let* ((root
                  (auto-compile-test-path
@@ -163,13 +160,12 @@ fn auto_compile_recursive_start_honors_recompile_option_and_source_freshness() -
                       t)))
            (toggle-auto-compile root 'start)
            (nreverse compiled)))"##,
-        true,
         expect![[r#"OK (("stale.el" t))"#]],
     )
 }
 
 fn auto_compile_on_load_rebuilds_outdated_bytecode_and_executes_new_behavior() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_on_load_rebuilds_outdated_bytecode_and_executes_new_behavior",
         r##"(let* ((directory
                  (auto-compile-test-path
@@ -208,13 +204,12 @@ fn auto_compile_on_load_rebuilds_outdated_bytecode_and_executes_new_behavior() -
             (auto-compile-reloadable-value)
             (featurep
              'auto-compile-reloadable))))"##,
-        true,
         expect!["OK (t new t)"],
     )
 }
 
 fn auto_compile_require_advice_rebuilds_then_loads_new_bytecode_behavior() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_require_advice_rebuilds_then_loads_new_bytecode_behavior",
         r##"(let* ((directory
                  (auto-compile-test-path
@@ -253,14 +248,13 @@ fn auto_compile_require_advice_rebuilds_then_loads_new_bytecode_behavior() -> Pa
                     'auto-compile-required)
                (unload-feature
                 'auto-compile-required t)))))"##,
-        true,
         expect![[r#"OK (auto-compile-required 99 t "elc")"#]],
     )
 }
 
 fn auto_compile_load_advice_is_inert_when_mode_disabled_and_active_when_enabled() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_load_advice_is_inert_when_mode_disabled_and_active_when_enabled",
         r##"(let ((calls nil))
          (cl-letf (((symbol-function
@@ -285,14 +279,13 @@ fn auto_compile_load_advice_is_inert_when_mode_disabled_and_active_when_enabled(
              (list
               disabled
               (nreverse calls)))))"##,
-        true,
         expect![[r#"OK (nil (("subr-x.el" t)))"#]],
     )
 }
 
 fn auto_compile_on_load_removes_earlier_stray_bytecode_that_would_shadow_real_source()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_on_load_removes_earlier_stray_bytecode_that_would_shadow_real_source",
         r##"(let* ((early
                  (auto-compile-test-path
@@ -325,14 +318,13 @@ fn auto_compile_on_load_removes_earlier_stray_bytecode_that_would_shadow_real_so
           (file-name-nondirectory
            (auto-compile--locate-library
             "shadowed" nil))))"##,
-        true,
         expect![[r#"OK (t nil "shadowed.el")"#]],
     )
 }
 
 fn auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure",
         r##"(let* ((source
                  (auto-compile-test-write
@@ -357,7 +349,6 @@ fn auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure(
             (auto-compile-on-load "broken")
             (file-exists-p dest)
             (current-message))))"##,
-        true,
         expect![[
             r#"OK ("Deleting [ORACLE-SANDBOX]/auto-compile-fixture/load-error/broken.elc...done" nil nil)"#
         ]],
@@ -365,7 +356,7 @@ fn auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure(
 }
 
 fn auto_compile_loading_guard_prevents_recursive_reentry_for_same_library() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_loading_guard_prevents_recursive_reentry_for_same_library",
         r##"(let ((calls 0)
                (auto-compile--loading
@@ -381,13 +372,12 @@ fn auto_compile_loading_guard_prevents_recursive_reentry_for_same_library() -> P
              "already-loading")
             calls
             auto-compile--loading)))"##,
-        true,
         expect![[r#"OK (nil 0 ("already-loading"))"#]],
     )
 }
 
 fn auto_compile_git_inhibit_distinguishes_attached_and_detached_head() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_compile_git_inhibit_distinguishes_attached_and_detached_head",
         r##"(let* ((repository
                  (auto-compile-test-path
@@ -414,14 +404,12 @@ fn auto_compile_git_inhibit_distinguishes_attached_and_detached_head() -> Parity
            (list
             attached
             (auto-compile-inhibit-compile-detached-git-head))))"##,
-        true,
         expect!["OK (nil t)"],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nosearch_trees(),
         auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respects_skipped_trees(),
         auto_compile_recursive_quit_option_controls_nonlibrary_source_destination_removal(),
@@ -433,6 +421,5 @@ fn workflows_public_surface_batch() {
         auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure(),
         auto_compile_loading_guard_prevents_recursive_reentry_for_same_library(),
         auto_compile_git_inhibit_distinguishes_attached_and_detached_head(),
-    ];
-    assert_auto_compile_batch(&cases);
+    ]
 }

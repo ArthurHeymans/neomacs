@@ -1,9 +1,9 @@
-use super::{ParityBatchCase, assert_async_melpa_batch};
-use expect_test::{Expect, expect};
+use super::ParityBatchCase;
+use expect_test::expect;
 
 fn current_public_defaults_aliases_and_custom_metadata_match_the_melpa_release() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "current_public_defaults_aliases_and_custom_metadata_match_the_melpa_release",
         r##"
 (list
@@ -35,7 +35,6 @@ fn current_public_defaults_aliases_and_custom_metadata_match_the_melpa_release()
   (get 'async-variables-noprops-function
        'custom-type)))
 "##,
-        true,
         expect![[
             r#"OK (t nil nil t nil nil nil nil nil nil nil "-Q" nil ("-syntax-table\\'" "-abbrev-table\\'") t t (boolean function))"#
         ]],
@@ -44,7 +43,7 @@ fn current_public_defaults_aliases_and_custom_metadata_match_the_melpa_release()
 
 fn purecopy_strips_nested_string_properties_and_preserves_nonstrings_and_input() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "purecopy_strips_nested_string_properties_and_preserves_nonstrings_and_input",
         r##"
 (let* ((top
@@ -90,7 +89,6 @@ fn purecopy_strips_nested_string_properties_and_preserves_nonstrings_and_input()
    (async--purecopy 42)
    (async--purecopy nil)))
 "##,
-        true,
         expect![[
             r#"OK (("top" (inside "nested") ("key" . "value") 17 [vector]) (nil nil nil nil) ((face bold) (help-echo "tip") (category key) (category value)) t 42 nil)"#
         ]],
@@ -99,7 +97,7 @@ fn purecopy_strips_nested_string_properties_and_preserves_nonstrings_and_input()
 
 fn inject_variables_honors_include_predicate_exclusions_quoting_vectors_and_noprops()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "inject_variables_honors_include_predicate_exclusions_quoting_vectors_and_noprops",
         r##"
 (progn
@@ -152,7 +150,6 @@ fn inject_variables_honors_include_predicate_exclusions_quoting_vectors_and_nopr
      (boundp
       'async-melpa-syntax-table))))
 "##,
-        true,
         expect![[
             r#"OK ((setq async-melpa-vector #2=[1 two "three"] async-melpa-alpha "alpha" async-melpa-beta '#1=(one (two . three))) "alpha" nil #1# #2# nil nil nil)"#
         ]],
@@ -160,7 +157,7 @@ fn inject_variables_honors_include_predicate_exclusions_quoting_vectors_and_nopr
 }
 
 fn message_packet_recognition_preserves_marker_values_and_rejects_nonplists() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "message_packet_recognition_preserves_marker_values_and_rejects_nonplists",
         r##"
 (mapcar
@@ -177,13 +174,12 @@ fn message_packet_recognition_preserves_marker_values_and_rejects_nonplists() ->
    (:async-message 0
     :payload "value")))
 "##,
-        true,
         expect!["OK (nil nil nil nil nil t marker nil 0)"],
     )
 }
 
 fn wire_encoding_round_trips_unicode_vectors_dotted_pairs_and_embedded_eof() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "wire_encoding_round_trips_unicode_vectors_dotted_pairs_and_embedded_eof",
         r##"
 (let ((value
@@ -208,7 +204,6 @@ fn wire_encoding_round_trips_unicode_vectors_dotted_pairs_and_embedded_eof() -> 
        (async--receive-sexp
         wire)))))
 "##,
-        true,
         expect![[
             r#"OK (t t 102 ("λ雪" [alpha 17 "β"] (left . right) (:nested (1 2 3)) "before\4after"))"#
         ]],
@@ -216,7 +211,7 @@ fn wire_encoding_round_trips_unicode_vectors_dotted_pairs_and_embedded_eof() -> 
 }
 
 fn wire_encoding_preserves_shared_and_circular_structure() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "wire_encoding_preserves_shared_and_circular_structure",
         r##"
 (let* ((shared
@@ -246,14 +241,13 @@ fn wire_encoding_preserves_shared_and_circular_structure() -> ParityBatchCase {
         (cdr decoded-cycle))
        (car decoded-cycle)))))
 "##,
-        true,
         expect!["OK (t t t cycle)"],
     )
 }
 
 fn handle_result_stores_future_values_and_callback_values_with_expected_cleanup() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "handle_result_stores_future_values_and_callback_values_with_expected_cleanup",
         r##"
 (let ((future-buffer
@@ -303,13 +297,12 @@ fn handle_result_stores_future_values_and_callback_values_with_expected_cleanup(
       (kill-buffer
        callback-buffer))))
 "##,
-        true,
         expect!["OK ((t (:answer 42)) ((:done t) t) t nil)"],
     )
 }
 
 fn handle_result_resignals_exact_child_error_and_cleans_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "handle_result_resignals_exact_child_error_and_cleans_buffer",
         r##"
 (let ((buffer
@@ -323,14 +316,13 @@ fn handle_result_resignals_exact_child_error_and_cleans_buffer() -> ParityBatchC
       integerp not-an-integer))
    buffer))
 "##,
-        false,
         expect!["ERR (wrong-type-argument integerp not-an-integer)"],
     )
 }
 
 fn child_program_arguments_cover_pipe_argument_child_init_cached_library_and_quiet_switch()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "child_program_arguments_cover_pipe_argument_child_init_cached_library_and_quiet_switch",
         r##"
 (let* ((async-quiet-switch
@@ -367,7 +359,6 @@ fn child_program_arguments_cover_pipe_argument_child_init_cached_library_and_qui
      (let ((async-child-init nil))
        (async--emacs-program-args))))))
 "##,
-        true,
         expect![[
             r#"OK ("-q" "-l" "async.el" "-l" t "-batch" "-f" "async-batch-invoke" (lambda nil (list "λ" 42)) "<none>")"#
         ]],
@@ -375,7 +366,7 @@ fn child_program_arguments_cover_pipe_argument_child_init_cached_library_and_qui
 }
 
 fn sandbox_let_and_fold_left_expand_to_current_callback_shapes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "sandbox_let_and_fold_left_expand_to_current_callback_shapes",
         r##"
 (list
@@ -399,7 +390,6 @@ fn sandbox_let_and_fold_left_expand_to_current_callback_shapes() -> ParityBatchC
     (beta 2)
     gamma)))
 "##,
-        true,
         expect![
             "OK ((async-get (async-start (lambda nil 42))) (async-start (lambda nil (+ 1 2)) (lambda (x) (async-start (lambda nil (+ x 4)) (lambda (y) (progn (list x y)))))) (:binding (gamma) :inside (:binding (beta 2) :inside (:binding (alpha) :inside (done)))))"
         ],
@@ -408,7 +398,7 @@ fn sandbox_let_and_fold_left_expand_to_current_callback_shapes() -> ParityBatchC
 
 fn send_parent_branch_transmits_quoted_message_and_child_branch_prints_wire_packet()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "send_parent_branch_transmits_quoted_message_and_child_branch_prints_wire_packet",
         r##"
 (let (transmissions
@@ -447,7 +437,6 @@ fn send_parent_branch_transmits_quoted_message_and_child_branch_prints_wire_pack
         (substring child-output 1)))
       'utf-8-emacs-unix)))))
 "##,
-        true,
         expect![[
             r#"OK (((fixture-process '(:operation sum :values (2 3 5) :async-message t))) t (:phase complete :payload "λ" :async-message t))"#
         ]],
@@ -456,7 +445,7 @@ fn send_parent_branch_transmits_quoted_message_and_child_branch_prints_wire_pack
 
 fn receive_delegates_to_wire_receiver_and_batch_invoke_prints_value_and_signal_protocols()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "receive_delegates_to_wire_receiver_and_batch_invoke_prints_value_and_signal_protocols",
         r##"
 (let (receive-calls
@@ -501,7 +490,6 @@ fn receive_delegates_to_wire_receiver_and_batch_invoke_prints_value_and_signal_p
    async-in-child-emacs
    command-line-args-left))
 "##,
-        true,
         expect![[
             r#"OK ((nil) "\n(:value \"λ\")\n" "\n(async-signal (error \"child failure\"))\n" t nil)"#
         ]],
@@ -509,7 +497,7 @@ fn receive_delegates_to_wire_receiver_and_batch_invoke_prints_value_and_signal_p
 }
 
 fn read_from_client_reassembles_fragmented_multiple_wire_messages() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "read_from_client_reassembles_fragmented_multiple_wire_messages",
         r##"
 (let* ((buffer
@@ -575,7 +563,6 @@ fn read_from_client_reassembles_fragmented_multiple_wire_messages() -> ParityBat
         (buffer-live-p buffer)
       (kill-buffer buffer))))
 "##,
-        true,
         expect![[
             r#"OK (((:phase first :async-message t) (:phase second :payload "����" :async-message t)) 115 "\"KDpwaGFzZSBmaXJzdCA6YXN5bmMtbWVzc2FnZSB0KQ==\"\n\"KDpwaGFzZSBzZWNvbmQgOnBheWxvYWQgIs67IiA6YXN5bmMtbWVzc2FnZSB0KQ==\"\n")"#
         ]],
@@ -583,7 +570,7 @@ fn read_from_client_reassembles_fragmented_multiple_wire_messages() -> ParityBat
 }
 
 fn start_future_returns_structured_unicode_and_transitions_to_ready() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "start_future_returns_structured_unicode_and_transitions_to_ready",
         r##"
 (let* ((future
@@ -606,13 +593,12 @@ fn start_future_returns_structured_unicode_and_transitions_to_ready() -> ParityB
    (buffer-live-p
     (process-buffer future))))
 "##,
-        true,
         expect![[r#"OK (nil ("λ雪" [1 two 3] (:nested ((left . right)))) t nil)"#]],
     )
 }
 
 fn start_future_resignals_exact_child_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "start_future_resignals_exact_child_error",
         r##"
 (async-get
@@ -622,13 +608,12 @@ fn start_future_resignals_exact_child_error() -> ParityBatchCase {
      'wrong-type-argument
      '(integerp child-value)))))
 "##,
-        false,
         expect!["ERR (wrong-type-argument integerp child-value)"],
     )
 }
 
 fn callback_receives_messages_before_final_result_and_future_then_yields_nil() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "callback_receives_messages_before_final_result_and_future_then_yields_nil",
         r##"
 (let (events)
@@ -652,7 +637,6 @@ fn callback_receives_messages_before_final_result_and_future_then_yields_nil() -
      (buffer-live-p
       (process-buffer future)))))
 "##,
-        true,
         expect![[
             r#"OK (((:phase first :payload "����" :async-message t) (:phase second :payload (1 2 3) :async-message t) finished) nil t nil)"#
         ]],
@@ -660,7 +644,7 @@ fn callback_receives_messages_before_final_result_and_future_then_yields_nil() -
 }
 
 fn parent_to_child_message_roundtrip_supports_real_request_response_workflow() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "parent_to_child_message_roundtrip_supports_real_request_response_workflow",
         r##"
 (let (received)
@@ -690,13 +674,13 @@ fn parent_to_child_message_roundtrip_supports_real_request_response_workflow() -
      (async-get future)
      (async-ready future))))
 "##,
-        true,
         expect!["OK ((sum 17 t) nil t)"],
     )
+    .fresh_process()
 }
 
 fn callback_reassembles_message_larger_than_process_chunk_with_unicode_edges() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "callback_reassembles_message_larger_than_process_chunk_with_unicode_edges",
         r##"
 (let (events)
@@ -731,13 +715,12 @@ fn callback_reassembles_message_larger_than_process_chunk_with_unicode_edges() -
     (async-wait future)
     (nreverse events)))
 "##,
-        true,
         expect![[r#"OK ((message 65541 "����" "����") finished)"#]],
     )
 }
 
 fn sandbox_and_async_let_execute_real_child_workflows() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "sandbox_and_async_let_execute_real_child_workflows",
         r##"
 (let ((sandbox-value
@@ -767,14 +750,13 @@ fn sandbox_and_async_let_execute_real_child_workflows() -> ParityBatchCase {
      sandbox-value
      received)))
 "##,
-        true,
         expect![[r#"OK ((15 (1 4 9 16 25) "λ雪") (3 7))"#]],
     )
 }
 
 fn start_process_future_callback_failure_and_noquery_cover_real_process_lifecycle()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "start_process_future_callback_failure_and_noquery_cover_real_process_lifecycle",
         r##"
 (let (callback-result
@@ -849,16 +831,14 @@ fn start_process_future_callback_failure_and_noquery_cover_real_process_lifecycl
          success callback failure
          query noquery))))))
 "##,
-        true,
         expect![[
             r#"OK (t 0 (0 "callback-output") nil (error "Async process 'async-melpa-failure' failed with exit code 7") 7 (t nil) (nil nil nil nil nil))"#
         ]],
     )
 }
 
-#[test]
-fn core_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn core_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         current_public_defaults_aliases_and_custom_metadata_match_the_melpa_release(),
         purecopy_strips_nested_string_properties_and_preserves_nonstrings_and_input(),
         inject_variables_honors_include_predicate_exclusions_quoting_vectors_and_noprops(),
@@ -879,6 +859,5 @@ fn core_public_surface_batch() {
         callback_reassembles_message_larger_than_process_chunk_with_unicode_edges(),
         sandbox_and_async_let_execute_real_child_workflows(),
         start_process_future_callback_failure_and_noquery_cover_real_process_lifecycle(),
-    ];
-    assert_async_melpa_batch(&cases);
+    ]
 }

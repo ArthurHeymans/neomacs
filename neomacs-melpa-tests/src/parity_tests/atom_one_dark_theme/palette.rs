@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atom_one_dark_theme_batch};
+use super::ParityBatchCase;
 
 fn atom_one_dark_theme_complete_palette_key_order_values_and_uniqueness_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_one_dark_theme_complete_palette_key_order_values_and_uniqueness_match",
         r##"(list
          (display-color-cells
@@ -22,7 +22,6 @@ fn atom_one_dark_theme_complete_palette_key_order_values_and_uniqueness_match() 
          (seq-every-p #'stringp
                       (mapcar #'cdr
                               atom-one-dark-colors-alist)))"##,
-        true,
         expect![[
             r##"OK (0 30 (("atom-one-dark-accent" . "#528BFF") ("atom-one-dark-fg" if nil "color-248" "#ABB2BF") ("atom-one-dark-bg" if nil "color-235" "#282C34") ("atom-one-dark-bg-1" if nil "color-234" "#121417") ("atom-one-dark-bg-hl" if nil "color-236" "#2C323C") ("atom-one-dark-gutter" if nil "color-239" "#4B5363") ("atom-one-dark-insert" . "#43D08A") ("atom-one-dark-change" . "#E0C285") ("atom-one-dark-delete" . "#E05252") ("atom-one-dark-info" . "#6494ED") ("atom-one-dark-success" . "#73C900") ("atom-one-dark-warning" . "#E2C08D") ("atom-one-dark-error" . "#FF6347") ("atom-one-dark-mono-1" if nil "color-248" "#ABB2BF") ("atom-one-dark-mono-2" if nil "color-244" "#828997") ("atom-one-dark-mono-3" if nil "color-240" "#5C6370") ("atom-one-dark-cyan" . "#56B6C2") ("atom-one-dark-blue" . "#61AFEF") ("atom-one-dark-purple" . "#C678DD") ("atom-one-dark-green" . "#98C379") ("atom-one-dark-red-1" . "#E06C75") ("atom-one-dark-red-2" . "#BE5046") ("atom-one-dark-orange-1" . "#D19A66") ("atom-one-dark-orange-2" . "#E5C07B") ("atom-one-dark-gray" if nil "color-237" "#3E4451") ("atom-one-dark-silver" if nil "color-247" "#9DA5B4") ("atom-one-dark-black" if nil "color-233" "#21252B") ("atom-one-dark-ui-fg" if nil "color-247" "#9DA5B4") ("atom-one-dark-level-3-color" if nil "color-233" "#21252B") ("atom-one-dark-border" if nil "color-232" "#181A1F")) 30 t nil)"##
         ]],
@@ -31,7 +30,7 @@ fn atom_one_dark_theme_complete_palette_key_order_values_and_uniqueness_match() 
 
 fn atom_one_dark_theme_color_macro_expansion_arglist_documentation_and_indent_match()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_one_dark_theme_color_macro_expansion_arglist_documentation_and_indent_match",
         r##"(list
          (macrop
@@ -53,7 +52,6 @@ fn atom_one_dark_theme_color_macro_expansion_arglist_documentation_and_indent_ma
               atom-one-dark-fg
               atom-one-dark-bg
               atom-one-dark-accent))))"##,
-        true,
         expect![[
             r##"OK (t "(&rest body)" "Bind the colors list around BODY." 0 (let ((class '((class color) (min-colors 89))) (atom-one-dark-accent "#528BFF") (atom-one-dark-fg (if nil "color-248" "#ABB2BF")) (atom-one-dark-bg (if nil "color-235" "#282C34")) (atom-one-dark-bg-1 (if nil "color-234" "#121417")) (atom-one-dark-bg-hl (if nil "color-236" "#2C323C")) (atom-one-dark-gutter (if nil "color-239" "#4B5363")) (atom-one-dark-insert "#43D08A") (atom-one-dark-change "#E0C285") (atom-one-dark-delete "#E05252") (atom-one-dark-info "#6494ED") (atom-one-dark-success "#73C900") (atom-one-dark-warning "#E2C08D") (atom-one-dark-error "#FF6347") (atom-one-dark-mono-1 (if nil "color-248" "#ABB2BF")) (atom-one-dark-mono-2 (if nil "color-244" "#828997")) (atom-one-dark-mono-3 (if nil "color-240" "#5C6370")) (atom-one-dark-cyan "#56B6C2") (atom-one-dark-blue "#61AFEF") (atom-one-dark-purple "#C678DD") (atom-one-dark-green "#98C379") (atom-one-dark-red-1 "#E06C75") (atom-one-dark-red-2 "#BE5046") (atom-one-dark-orange-1 "#D19A66") (atom-one-dark-orange-2 "#E5C07B") (atom-one-dark-gray (if nil "color-237" "#3E4451")) (atom-one-dark-silver (if nil "color-247" "#9DA5B4")) (atom-one-dark-black (if nil "color-233" "#21252B")) (atom-one-dark-ui-fg (if nil "color-247" "#9DA5B4")) (atom-one-dark-level-3-color (if nil "color-233" "#21252B")) (atom-one-dark-border (if nil "color-232" "#181A1F"))) (list class atom-one-dark-fg atom-one-dark-bg atom-one-dark-accent)))"##
         ]],
@@ -62,7 +60,7 @@ fn atom_one_dark_theme_color_macro_expansion_arglist_documentation_and_indent_ma
 
 fn atom_one_dark_theme_color_macro_binds_all_thirty_symbols_without_leaking_them() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_one_dark_theme_color_macro_binds_all_thirty_symbols_without_leaking_them",
         r##"(let ((symbols
                 (mapcar
@@ -119,7 +117,6 @@ fn atom_one_dark_theme_color_macro_binds_all_thirty_symbols_without_leaking_them
               symbol
               (boundp symbol)))
            symbols)))"##,
-        true,
         expect![[
             r##"OK (((atom-one-dark-accent nil) (atom-one-dark-fg nil) (atom-one-dark-bg nil) (atom-one-dark-bg-1 nil) (atom-one-dark-bg-hl nil) (atom-one-dark-gutter nil) (atom-one-dark-insert nil) (atom-one-dark-change nil) (atom-one-dark-delete nil) (atom-one-dark-info nil) (atom-one-dark-success nil) (atom-one-dark-warning nil) (atom-one-dark-error nil) (atom-one-dark-mono-1 nil) (atom-one-dark-mono-2 nil) (atom-one-dark-mono-3 nil) (atom-one-dark-cyan nil) (atom-one-dark-blue nil) (atom-one-dark-purple nil) (atom-one-dark-green nil) (atom-one-dark-red-1 nil) (atom-one-dark-red-2 nil) (atom-one-dark-orange-1 nil) (atom-one-dark-orange-2 nil) (atom-one-dark-gray nil) (atom-one-dark-silver nil) (atom-one-dark-black nil) (atom-one-dark-ui-fg nil) (atom-one-dark-level-3-color nil) (atom-one-dark-border nil)) ((atom-one-dark-accent "#528BFF") (atom-one-dark-fg "#ABB2BF") (atom-one-dark-bg "#282C34") (atom-one-dark-bg-1 "#121417") (atom-one-dark-bg-hl "#2C323C") (atom-one-dark-gutter "#4B5363") (atom-one-dark-insert "#43D08A") (atom-one-dark-change "#E0C285") (atom-one-dark-delete "#E05252") (atom-one-dark-info "#6494ED") (atom-one-dark-success "#73C900") (atom-one-dark-warning "#E2C08D") (atom-one-dark-error "#FF6347") (atom-one-dark-mono-1 "#ABB2BF") (atom-one-dark-mono-2 "#828997") (atom-one-dark-mono-3 "#5C6370") (atom-one-dark-cyan "#56B6C2") (atom-one-dark-blue "#61AFEF") (atom-one-dark-purple "#C678DD") (atom-one-dark-green "#98C379") (atom-one-dark-red-1 "#E06C75") (atom-one-dark-red-2 "#BE5046") (atom-one-dark-orange-1 "#D19A66") (atom-one-dark-orange-2 "#E5C07B") (atom-one-dark-gray "#3E4451") (atom-one-dark-silver "#9DA5B4") (atom-one-dark-black "#21252B") (atom-one-dark-ui-fg "#9DA5B4") (atom-one-dark-level-3-color "#21252B") (atom-one-dark-border "#181A1F")) ((atom-one-dark-accent nil) (atom-one-dark-fg nil) (atom-one-dark-bg nil) (atom-one-dark-bg-1 nil) (atom-one-dark-bg-hl nil) (atom-one-dark-gutter nil) (atom-one-dark-insert nil) (atom-one-dark-change nil) (atom-one-dark-delete nil) (atom-one-dark-info nil) (atom-one-dark-success nil) (atom-one-dark-warning nil) (atom-one-dark-error nil) (atom-one-dark-mono-1 nil) (atom-one-dark-mono-2 nil) (atom-one-dark-mono-3 nil) (atom-one-dark-cyan nil) (atom-one-dark-blue nil) (atom-one-dark-purple nil) (atom-one-dark-green nil) (atom-one-dark-red-1 nil) (atom-one-dark-red-2 nil) (atom-one-dark-orange-1 nil) (atom-one-dark-orange-2 nil) (atom-one-dark-gray nil) (atom-one-dark-silver nil) (atom-one-dark-black nil) (atom-one-dark-ui-fg nil) (atom-one-dark-level-3-color nil) (atom-one-dark-border nil)))"##
         ]],
@@ -127,7 +124,7 @@ fn atom_one_dark_theme_color_macro_binds_all_thirty_symbols_without_leaking_them
 }
 
 fn atom_one_dark_theme_color_macro_uses_palette_present_when_form_is_expanded() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_one_dark_theme_color_macro_uses_palette_present_when_form_is_expanded",
         r##"(let ((original
                 (copy-tree
@@ -157,14 +154,13 @@ fn atom_one_dark_theme_color_macro_uses_palette_present_when_form_is_expanded() 
                   atom-one-dark-colors-alist))))
            (setq atom-one-dark-colors-alist
                  original)))"##,
-        true,
         expect![[r##"OK (("#010203" "#111213" "#282C34") "#010203")"##]],
     )
 }
 
 fn atom_one_dark_theme_forced_256_color_reload_recomputes_palette_and_new_face_specs()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_one_dark_theme_forced_256_color_reload_recomputes_palette_and_new_face_specs",
         r##"(let ((source
                 (getenv "NEOMACS_PACKAGE_SOURCE")))
@@ -194,7 +190,6 @@ fn atom_one_dark_theme_forced_256_color_reload_recomputes_palette_and_new_face_s
            (last
             (atom-one-dark-test-face-specs
              'line-number)))))"##,
-        true,
         expect![[
             r##"OK ((("atom-one-dark-accent" . "#528BFF") ("atom-one-dark-fg" if t "color-248" "#ABB2BF") ("atom-one-dark-bg" if t "color-235" "#282C34") ("atom-one-dark-bg-1" if t "color-234" "#121417") ("atom-one-dark-bg-hl" if t "color-236" "#2C323C") ("atom-one-dark-gutter" if t "color-239" "#4B5363") ("atom-one-dark-insert" . "#43D08A") ("atom-one-dark-change" . "#E0C285") ("atom-one-dark-delete" . "#E05252") ("atom-one-dark-info" . "#6494ED") ("atom-one-dark-success" . "#73C900") ("atom-one-dark-warning" . "#E2C08D") ("atom-one-dark-error" . "#FF6347") ("atom-one-dark-mono-1" if t "color-248" "#ABB2BF") ("atom-one-dark-mono-2" if t "color-244" "#828997") ("atom-one-dark-mono-3" if t "color-240" "#5C6370") ("atom-one-dark-cyan" . "#56B6C2") ("atom-one-dark-blue" . "#61AFEF") ("atom-one-dark-purple" . "#C678DD") ("atom-one-dark-green" . "#98C379") ("atom-one-dark-red-1" . "#E06C75") ("atom-one-dark-red-2" . "#BE5046") ("atom-one-dark-orange-1" . "#D19A66") ("atom-one-dark-orange-2" . "#E5C07B") ("atom-one-dark-gray" if t "color-237" "#3E4451") ("atom-one-dark-silver" if t "color-247" "#9DA5B4") ("atom-one-dark-black" if t "color-233" "#21252B") ("atom-one-dark-ui-fg" if t "color-247" "#9DA5B4") ("atom-one-dark-level-3-color" if t "color-233" "#21252B") ("atom-one-dark-border" if t "color-232" "#181A1F")) ((t (:foreground "color-248" :background "color-235"))) ((t (:foreground "color-240" :slant italic))) ((t (:background "color-233" :foreground "color-247" :box (:color "color-232" :line-width 1)))) ((t (:foreground "color-239" :background "color-235"))))"##
         ]],
@@ -203,7 +198,7 @@ fn atom_one_dark_theme_forced_256_color_reload_recomputes_palette_and_new_face_s
 
 fn atom_one_dark_theme_color_macro_duplicate_palette_keys_follow_let_binding_order()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_one_dark_theme_color_macro_duplicate_palette_keys_follow_let_binding_order",
         r##"(let ((atom-one-dark-colors-alist
                 '(("atom-one-dark-fg" . "first")
@@ -215,7 +210,6 @@ fn atom_one_dark_theme_color_macro_duplicate_palette_keys_follow_let_binding_ord
           (eval
            '(atom-one-dark-with-color-variables
               atom-one-dark-fg))))"##,
-        true,
         expect![[
             r#"OK ((let ((class '((class color) (min-colors 89))) (atom-one-dark-fg "first") (atom-one-dark-fg "second")) atom-one-dark-fg) "second")"#
         ]],
@@ -224,7 +218,7 @@ fn atom_one_dark_theme_color_macro_duplicate_palette_keys_follow_let_binding_ord
 
 fn atom_one_dark_theme_color_macro_malformed_palette_entries_signal_exact_errors() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_one_dark_theme_color_macro_malformed_palette_entries_signal_exact_errors",
         r##"(mapcar
          (lambda (palette)
@@ -239,16 +233,14 @@ fn atom_one_dark_theme_color_macro_malformed_palette_entries_signal_exact_errors
            ((nil . "#fff"))
            (not-a-cons)
            nil))"##,
-        true,
         expect![
             "OK ((:signal wrong-type-argument (stringp 42)) (:signal wrong-type-argument (stringp nil)) (:signal wrong-type-argument (listp not-a-cons)) (:ok (let ((class '((class color) (min-colors 89)))) atom-one-dark-fg)))"
         ],
     )
 }
 
-#[test]
-fn palette_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn palette_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         atom_one_dark_theme_complete_palette_key_order_values_and_uniqueness_match(),
         atom_one_dark_theme_color_macro_expansion_arglist_documentation_and_indent_match(),
         atom_one_dark_theme_color_macro_binds_all_thirty_symbols_without_leaking_them(),
@@ -256,6 +248,5 @@ fn palette_public_surface_batch() {
         atom_one_dark_theme_forced_256_color_reload_recomputes_palette_and_new_face_specs(),
         atom_one_dark_theme_color_macro_duplicate_palette_keys_follow_let_binding_order(),
         atom_one_dark_theme_color_macro_malformed_palette_entries_signal_exact_errors(),
-    ];
-    assert_atom_one_dark_theme_batch(&cases);
+    ]
 }

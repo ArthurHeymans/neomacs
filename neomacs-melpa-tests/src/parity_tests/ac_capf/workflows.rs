@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_capf_batch};
+use super::ParityBatchCase;
 
 /// The package's headline workflow: a user edits a real Emacs Lisp file whose
 /// major mode supplies `elisp-completion-at-point', enables ac-capf with the
@@ -8,9 +8,8 @@ use super::{ParityBatchCase, assert_ac_capf_batch};
 /// and completes.  Only `fboundp' symbols may appear because point sits in a
 /// function-call position; the shorter `neomacs-ac-capf-fixture-annals'
 /// variable would sort first if the predicate were dropped.
-
 fn emacs_lisp_mode_capf_completes_a_typed_symbol_through_the_trigger_key() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "emacs_lisp_mode_capf_completes_a_typed_symbol_through_the_trigger_key",
         r##"(progn
  (defun neomacs-ac-capf-fixture-annotate (entry) entry)
@@ -38,7 +37,6 @@ fn emacs_lisp_mode_capf_completes_a_typed_symbol_through_the_trigger_key() -> Pa
               :after completed
               :session session
               :file (ac-capf-test-read "notes/session.el")))))))"##,
-        true,
         expect![[
             r#"OK (:offered ((:prefix "neomacs-ac-capf-fixture-ann" :prefix-start 92 :common "neomacs-ac-capf-fixture-ann" :menu-live t :selected "neomacs-ac-capf-fixture-annotate" :completing t) (("neomacs-ac-capf-fixture-annotate" "s" nil nil (symbol "s")) ("neomacs-ac-capf-fixture-annotation" "s" nil nil (symbol "s")) ("neomacs-ac-capf-fixture-anniversary" "s" nil nil (symbol "s")))) :moved (:prefix "neomacs-ac-capf-fixture-ann" :prefix-start 92 :common "neomacs-ac-capf-fixture-ann" :menu-live t :selected "neomacs-ac-capf-fixture-annotation" :completing t) :after (:text ";;; session.el --- session notes  -*- lexical-binding: t; -*-\n(defun session-run (entry)\n  (neomacs-ac-capf-fixture-annotation" :point 126 :mode emacs-lisp-mode :auto-complete t :sources (ac-source-capf) :capfs (elisp-completion-at-point t)) :session (:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil :completing nil) :file ";;; session.el --- session notes  -*- lexical-binding: t; -*-\n(defun session-run (entry)\n  (neomacs-ac-capf-fixture-annotation\n")"#
         ]],
@@ -47,7 +45,7 @@ fn emacs_lisp_mode_capf_completes_a_typed_symbol_through_the_trigger_key() -> Pa
 
 fn a_custom_capf_loses_its_annotation_document_and_exit_metadata_through_ac_capf() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_custom_capf_loses_its_annotation_document_and_exit_metadata_through_ac_capf",
         r##"(progn
  (defvar ac-capf-test-exits nil)
@@ -99,7 +97,6 @@ fn a_custom_capf_loses_its_annotation_document_and_exit_metadata_through_ac_capf
               :standard-text (buffer-substring-no-properties (point-min) (point-max))
               :standard-point (- (point) (point-min))
               :standard-exits ac-capf-test-exits))))))"##,
-        true,
         expect![[
             r#"OK (:offered ((:prefix "na" :prefix-start 23 :common "na" :menu-live t :selected "naïve" :completing t) (("naïve" "s" nil nil (symbol "s")) ("naïveté" "s" nil nil (symbol "s")) ("narrator" "g" nil nil (symbol "g")) ("narrative" "s" nil nil (symbol "s")))) :after (:text "The reviewer called it naïve" :point 28 :mode text-mode :auto-complete t :sources (ac-source-capf ac-source-project-glossary) :capfs (ac-capf-test-glossary-capf t ispell-completion-at-point)) :ac-exits nil :ac-annotations nil :ac-docs nil :ac-doc-buffer nil :standard t :standard-text "The reviewer called it naïve and narrative" :standard-point 42 :standard-exits ((#("narrative" 0 9 (face bold)) finished)))"#
         ]],
@@ -107,7 +104,7 @@ fn a_custom_capf_loses_its_annotation_document_and_exit_metadata_through_ac_capf
 }
 
 fn a_capf_whose_collection_is_a_function_drives_the_auto_complete_menu() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_capf_whose_collection_is_a_function_drives_the_auto_complete_menu",
         r##"(progn
  (defvar ac-capf-test-table-calls nil)
@@ -138,7 +135,6 @@ fn a_capf_whose_collection_is_a_function_drives_the_auto_complete_menu() -> Pari
             :calls (nreverse ac-capf-test-table-calls)
             :after (ac-capf-test-buffer-state)
             :session (ac-capf-test-session))))))"##,
-        true,
         expect![[
             r#"OK (:offered ((:prefix "che" :prefix-start 4 :common "che" :menu-live t :selected "cherry-pick" :completing t) (("cherry-pick" "s" nil nil (symbol "s")) ("check-status" "s" nil nil (symbol "s")) ("checkout-branch" "s" nil nil (symbol "s")))) :moved (:prefix "che" :prefix-start 4 :common "che" :menu-live t :selected "check-status" :completing t) :calls (("che" metadata) ("che" metadata) ("che" (boundaries . "")) ("che" t)) :after (:text "git check-status" :point 16 :mode text-mode :auto-complete t :sources (ac-source-capf) :capfs (ac-capf-test-branch-capf t ispell-completion-at-point)) :session (:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil :completing nil))"#
         ]],
@@ -146,7 +142,7 @@ fn a_capf_whose_collection_is_a_function_drives_the_auto_complete_menu() -> Pari
 }
 
 fn capfs_that_offer_nothing_leave_the_buffer_and_the_session_untouched() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "capfs_that_offer_nothing_leave_the_buffer_and_the_session_untouched",
         r##"(progn
  (defvar ac-capf-test-consulted nil)
@@ -182,7 +178,6 @@ fn capfs_that_offer_nothing_leave_the_buffer_and_the_session_untouched() -> Pari
               :consulted-again (nreverse ac-capf-test-consulted)
               :menu (ac-capf-test-menu)
               :after (ac-capf-test-buffer-state)))))))"##,
-        true,
         expect![[
             r#"OK (:first t :after-first ((:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil :completing nil) nil (:text "nothing matches zzz" :point 19 :mode text-mode :auto-complete t :sources #1=(ac-source-capf) :capfs #2=(ac-capf-test-broken-capf ac-capf-test-silent-capf ac-capf-test-empty-capf t ispell-completion-at-point)) (broken)) :misbehaving (ac-capf-test-broken-capf) :second t :consulted-again (silent empty) :menu nil :after (:text "nothing matches zzz" :point 19 :mode text-mode :auto-complete t :sources #1# :capfs #2#))"#
         ]],
@@ -190,7 +185,7 @@ fn capfs_that_offer_nothing_leave_the_buffer_and_the_session_untouched() -> Pari
 }
 
 fn ac_capf_skips_the_tags_capf_and_falls_through_a_non_exclusive_one() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_capf_skips_the_tags_capf_and_falls_through_a_non_exclusive_one",
         r##"(progn
  (defvar ac-capf-test-consulted nil)
@@ -237,15 +232,15 @@ fn ac_capf_skips_the_tags_capf_and_falls_through_a_non_exclusive_one() -> Parity
                           (sort (all-completions "disp" (nth 2 response)) #'string<)
                           (nthcdr 3 response)))))))
      (setq-default completion-at-point-functions default-capfs))))"##,
-        true,
         expect![[
             r#"OK (:offered ((:prefix "disp" :prefix-start 4 :common "disp" :menu-live t :selected "display" :completing t) (("display" "s" nil nil (symbol "s")) ("dispatch" "s" nil nil (symbol "s")) ("dispatcher" "s" nil nil (symbol "s")))) :consulted (keyword glossary) :after (:text "the display" :point 11 :mode text-mode :auto-complete t :sources (ac-source-capf) :capfs (ac-capf-test-keyword-capf t ispell-completion-at-point)) :default-capfs (tags-completion-at-point-function ac-capf-test-glossary-capf) :tags-capf (4 11 ("dispatch-legacy" "dispatch-table") (:exclusive no)))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn a_file_name_capf_makes_auto_complete_fail_on_the_unbound_arg_variable() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_file_name_capf_makes_auto_complete_fail_on_the_unbound_arg_variable",
         r##"(progn
  (defvar ac-capf-test-requested nil)
@@ -269,22 +264,19 @@ fn a_file_name_capf_makes_auto_complete_fail_on_the_unbound_arg_variable() -> Pa
                                  #'string<)
           :session (ac-capf-test-session)
           :after (ac-capf-test-buffer-state)))))"##,
-        true,
         expect![[
             r#"OK (:outcome (void-variable arg) :requested ("lib/fi") :file-name-table ("files.el" "finder.el") :session (:prefix "lib/fi" :prefix-start 12 :common nil :menu-live nil :selected nil :completing nil) :after (:text "(load-file \"lib/fi\n" :point 18 :mode emacs-lisp-mode :auto-complete t :sources (ac-source-capf) :capfs (ac-capf-test-include-capf elisp-completion-at-point t)))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         emacs_lisp_mode_capf_completes_a_typed_symbol_through_the_trigger_key(),
         a_custom_capf_loses_its_annotation_document_and_exit_metadata_through_ac_capf(),
         a_capf_whose_collection_is_a_function_drives_the_auto_complete_menu(),
         capfs_that_offer_nothing_leave_the_buffer_and_the_session_untouched(),
         ac_capf_skips_the_tags_capf_and_falls_through_a_non_exclusive_one(),
         a_file_name_capf_makes_auto_complete_fail_on_the_unbound_arg_variable(),
-    ];
-    assert_ac_capf_batch(&cases);
+    ]
 }

@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ANGULAR_SNIPPETS_MELPA_PIN, CachedMelpaOracle, YASNIPPET_MELPA_PIN};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -139,14 +138,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_angular_snippets_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = angular_snippets_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("angular-snippets parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_angular_snippets_parity` cases (2a).
 pub(crate) fn assert_angular_snippets_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -157,3 +148,16 @@ pub(crate) fn assert_angular_snippets_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn angular_snippets_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_angular_snippets_batch(&cases);
+}
+
+// END generated package batch tests

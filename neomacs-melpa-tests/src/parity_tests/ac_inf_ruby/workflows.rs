@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_inf_ruby_batch};
+use super::ParityBatchCase;
 
 /// The package's headline workflow, set up exactly as its commentary
 /// prescribes: `inf-ruby-mode' added to `ac-modes', TAB rebound to
@@ -10,9 +10,8 @@ use super::{ParityBatchCase, assert_ac_inf_ruby_batch};
 /// what the live Ruby process reports, and a second, narrower prefix is asked
 /// of the process again and is unique, so auto-complete's dwim expansion
 /// inserts it straight away.
-
 fn ac_inf_ruby_completes_a_repl_expression_from_the_live_ruby_process() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_inf_ruby_completes_a_repl_expression_from_the_live_ruby_process",
         r##"(ac-inf-ruby-test-with-repl
  (setq ac-modes (cons 'inf-ruby-mode ac-modes))
@@ -43,7 +42,6 @@ fn ac_inf_ruby_completes_a_repl_expression_from_the_live_ruby_process() -> Parit
                :completed completed
                :unique (ac-inf-ruby-test-buffer-state)
                :requests (ac-inf-ruby-test-requests)))))))"##,
-        true,
         expect![[
             r#"OK (:installed (:sources #1=(ac-source-inf-ruby) :buffer-local t :source ((available . ac-inf-ruby-available) (candidates . ac-inf-ruby-candidates) (symbol . "r") (prefix . ac-inf-ruby-prefix)) :in-ac-modes t :auto-complete t :tab auto-complete) :offered ((:prefix "Str" :prefix-start 17 :common "Str" :menu-live t :selected "Str") (("Str" "r") ("String" "r") ("Struct" "r") ("StringIO" "r"))) :moved (:prefix "Str" :prefix-start 17 :common "Str" :menu-live t :selected "String") :completed (:text "irb(main):001:0> String" :point 23 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources #1#) :unique (:text "irb(main):001:0> String\n=> nil\nirb(main):003:0> Struct" :point 54 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources #1#) :requests ("Str" "Stru"))"#
         ]],
@@ -51,7 +49,7 @@ fn ac_inf_ruby_completes_a_repl_expression_from_the_live_ruby_process() -> Parit
 }
 
 fn ac_inf_ruby_declines_to_complete_at_a_continuation_prompt() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_inf_ruby_declines_to_complete_at_a_continuation_prompt",
         r##"(ac-inf-ruby-test-with-repl
  (define-key inf-ruby-mode-map (kbd "TAB") #'auto-complete)
@@ -79,15 +77,15 @@ fn ac_inf_ruby_declines_to_complete_at_a_continuation_prompt() -> ParityBatchCas
                :offered offered
                :requests (ac-inf-ruby-test-requests)
                :after (ac-inf-ruby-test-buffer-state)))))))"##,
-        true,
         expect![[
             r#"OK (:blocked (:prompt "irb(main):002:1* " :top-level nil :prefix nil :started nil :menu nil :requests nil) :closed "irb(main):003:0> " :top-level 0 :offered ((:prefix "Str" :prefix-start 74 :common "Str" :menu-live t :selected "Str") (("Str" "r") ("String" "r") ("Struct" "r") ("StringIO" "r"))) :requests ("Str") :after (:text "irb(main):001:0> def greet\nirb(main):002:1* end\n=> :done\nirb(main):003:0> Str" :point 77 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn ac_inf_ruby_asks_the_repl_for_a_doubled_receiver_on_a_dotted_expression() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_inf_ruby_asks_the_repl_for_a_doubled_receiver_on_a_dotted_expression",
         r##"(ac-inf-ruby-test-with-repl
  (define-key inf-ruby-mode-map (kbd "TAB") #'auto-complete)
@@ -107,15 +105,15 @@ fn ac_inf_ruby_asks_the_repl_for_a_doubled_receiver_on_a_dotted_expression() -> 
            :inf-ruby-completions control
            :all-requests (ac-inf-ruby-test-requests)
            :after (ac-inf-ruby-test-buffer-state)))))"##,
-        true,
         expect![[
             r#"OK (:dotted ((:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil) nil "str.") :package-requests ("str.str.to_s") :inf-ruby-completions ("to_s" "to_str" "to_sym") :all-requests ("str.str.to_s" "str.to_s") :after (:text "irb(main):001:0> str.to_s" :point 25 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn ac_inf_ruby_source_stays_disabled_once_it_was_compiled_outside_the_repl() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_inf_ruby_source_stays_disabled_once_it_was_compiled_outside_the_repl",
         r##"(ac-inf-ruby-test-with-repl
  (define-key inf-ruby-mode-map (kbd "TAB") #'auto-complete)
@@ -145,15 +143,15 @@ fn ac_inf_ruby_source_stays_disabled_once_it_was_compiled_outside_the_repl() -> 
            :in-repl in-repl
            :requests (ac-inf-ruby-test-requests)
            :after (ac-inf-ruby-test-buffer-state)))))"##,
-        true,
         expect![[
             r#"OK (:elsewhere (:mode fundamental-mode :started nil :menu nil :cached no) :cached no :in-repl ((:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil) nil) :requests nothing-recorded :after (:text "irb(main):001:0> Str" :point 20 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn ac_inf_ruby_reports_a_dead_repl_out_of_the_public_command() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_inf_ruby_reports_a_dead_repl_out_of_the_public_command",
         r##"(ac-inf-ruby-test-with-repl
  (define-key inf-ruby-mode-map (kbd "TAB") #'auto-complete)
@@ -168,21 +166,19 @@ fn ac_inf_ruby_reports_a_dead_repl_out_of_the_public_command() -> ParityBatchCas
        :menu (ac-inf-ruby-test-menu)
        :requests (ac-inf-ruby-test-requests)
        :after (ac-inf-ruby-test-buffer-state)))"##,
-        true,
         expect![[
             r#"OK (:process nil :outcome (error "No current process. See variable inf-ruby-buffers") :menu nil :requests nothing-recorded :after (:text "irb(main):001:0> \nProcess ruby killed\nStr\n" :point 41 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         ac_inf_ruby_completes_a_repl_expression_from_the_live_ruby_process(),
         ac_inf_ruby_declines_to_complete_at_a_continuation_prompt(),
         ac_inf_ruby_asks_the_repl_for_a_doubled_receiver_on_a_dotted_expression(),
         ac_inf_ruby_source_stays_disabled_once_it_was_compiled_outside_the_repl(),
         ac_inf_ruby_reports_a_dead_repl_out_of_the_public_command(),
-    ];
-    assert_ac_inf_ruby_batch(&cases);
+    ]
 }

@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auth_source_xoauth2_batch};
+use super::ParityBatchCase;
 
 fn auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file",
         r##"(let ((file-name-handler-alist nil)
                (file
@@ -20,13 +20,12 @@ fn auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file() -> ParityBat
           "ignored.example"
           "ignored-user"
           443))"##,
-        true,
         expect![[r#"OK "Symbol’s function definition is void: :token-url""#]],
     )
 }
 
 fn auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple",
         r##"(let ((file-name-handler-alist nil)
                (file
@@ -62,7 +61,6 @@ fn auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple() -> ParityBatchCa
            file "smtp.two" "bob" 587)
           (auth-source-xoauth2--file-creds
            file "missing" "alice" 993)))"##,
-        true,
         expect![[
             r#"OK ((:token-url "one" :client-id "id-one" :client-secret "secret-one" :refresh-token "refresh-one") (:token-url "two" :client-id "id-two" :client-secret "secret-two" :refresh-token "refresh-two") nil nil)"#
         ]],
@@ -70,7 +68,7 @@ fn auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple() -> ParityBatchCa
 }
 
 fn auth_source_xoauth2_file_creds_requires_gpg_extension() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_file_creds_requires_gpg_extension",
         r##"(mapcar
          (lambda (name)
@@ -82,7 +80,6 @@ fn auth_source_xoauth2_file_creds_requires_gpg_extension() -> ParityBatchCase {
            "/fixture/creds.gpg~"
            "/fixture/no-extension"
            "/fixture/GPG"))"##,
-        true,
         expect![[
             r#"OK ((:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")) (:ok "GPG error: \"no usable configuration\", OpenPGP") (:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")) (:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")))"#
         ]],
@@ -90,7 +87,7 @@ fn auth_source_xoauth2_file_creds_requires_gpg_extension() -> ParityBatchCase {
 }
 
 fn auth_source_xoauth2_file_creds_reports_read_and_eval_failures() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_file_creds_reports_read_and_eval_failures",
         r##"(let ((file-name-handler-alist nil)
                (invalid
@@ -113,7 +110,6 @@ fn auth_source_xoauth2_file_creds_reports_read_and_eval_failures() -> ParityBatc
                (auth-source-xoauth2--file-creds
                 file "host" "user" "port"))))
           (list invalid runtime-error missing)))"##,
-        true,
         expect![[
             r#"OK ((:ok "End of file during parsing: #<killed buffer>") (:ok "credential exploded") (:ok "Opening input file: No such file or directory, [ORACLE-SANDBOX]/missing.gpg"))"#
         ]],
@@ -121,7 +117,7 @@ fn auth_source_xoauth2_file_creds_reports_read_and_eval_failures() -> ParityBatc
 }
 
 fn auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding",
         r##"(let ((file-name-handler-alist nil)
                (file
@@ -136,7 +132,6 @@ fn auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding() -> Parit
             "        :refresh-token \"refresh\"))"))
          (auth-source-xoauth2--file-creds
           file "host" "user" "port"))"##,
-        true,
         expect![[
             r#"OK (:token-url "computed-url" :client-id "computed-id" :client-secret "secret" :refresh-token "refresh")"#
         ]],
@@ -144,7 +139,7 @@ fn auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding() -> Parit
 }
 
 fn auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates",
         r##"(let ((file-name-handler-alist nil)
                (file
@@ -172,22 +167,19 @@ fn auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates() -> Parit
             (auth-source-xoauth2--file-creds
              file "host" "user" 443)
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((:token-url "url") (("Searching hash table for (%S %S %S)" ("host" "user" 443))))"#
         ]],
     )
 }
 
-#[test]
-fn credentials_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn credentials_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auth_source_xoauth2_file_creds_reads_plist_from_gpg_named_file(),
         auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple(),
         auth_source_xoauth2_file_creds_requires_gpg_extension(),
         auth_source_xoauth2_file_creds_reports_read_and_eval_failures(),
         auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding(),
         auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates(),
-    ];
-    assert_auth_source_xoauth2_batch(&cases);
+    ]
 }

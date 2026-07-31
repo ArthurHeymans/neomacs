@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_package_update_batch};
+use super::ParityBatchCase;
 
 fn auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_directories()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_directories",
         r##"(let*
                              ((root
@@ -45,15 +45,10 @@ fn auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_dire
                                 (file-exists-p alpha-file)
                                 (file-exists-p beta-file)
                                 (file-directory-p root)))))"##,
-        true,
         expect!["OK (nil nil nil nil nil nil t)"],
     )
 }
 
-#[test]
-fn install_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_directories(),
-    ];
-    assert_auto_package_update_batch(&cases);
+pub(super) fn install_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_directories()]
 }

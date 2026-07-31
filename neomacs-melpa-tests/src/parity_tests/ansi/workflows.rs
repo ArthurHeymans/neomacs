@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ansi_batch};
+use super::ParityBatchCase;
 
 fn runtime_selected_effects_render_a_complete_ci_summary_with_exact_formatting() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "runtime_selected_effects_render_a_complete_ci_summary_with_exact_formatting",
         r##"(let ((jobs
        '((compile success 42 42 3.14)
@@ -41,7 +41,6 @@ fn runtime_selected_effects_render_a_complete_ci_summary_with_exact_formatting()
         (ansi-dark " %6.2fs" seconds))))
    jobs
    "\n"))"##,
-        true,
         expect![[
             r#"OK "\33[1mcompile     \33[0m \33[32mPASS  \33[0m \33[36m 42/42 \33[0m\33[2m   3.14s\33[0m\n\33[1mlint        \33[0m \33[33mWARN  \33[0m \33[36m 18/20 \33[0m\33[2m   0.87s\33[0m\n\33[1mintegration \33[0m \33[41m\33[97m FAIL \33[0m\33[0m \33[36m127/130\33[0m\33[2m  12.50s\33[0m""#
         ]],
@@ -49,7 +48,7 @@ fn runtime_selected_effects_render_a_complete_ci_summary_with_exact_formatting()
 }
 
 fn documented_direct_dsl_and_runtime_interfaces_render_the_same_nested_alert() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "documented_direct_dsl_and_runtime_interfaces_render_the_same_nested_alert",
         r##"(let* ((direct
         (ansi-bold
@@ -73,7 +72,6 @@ fn documented_direct_dsl_and_runtime_interfaces_render_the_same_nested_alert() -
    (equal direct dsl)
    (equal dsl runtime)
    (string-to-list dsl)))"##,
-        true,
         expect![[
             r#"OK ("\33[1m\33[41m\33[97m DEPLOY BLOCKED \33[0m\33[0m\33[0m" "\33[1m\33[41m\33[97m DEPLOY BLOCKED \33[0m\33[0m\33[0m" "\33[1m\33[41m\33[97m DEPLOY BLOCKED \33[0m\33[0m\33[0m" t t (27 91 49 109 27 91 52 49 109 27 91 57 55 109 32 68 69 80 76 79 89 32 66 76 79 67 75 69 68 32 27 91 48 109 27 91 48 109 27 91 48 109))"#
         ]],
@@ -81,7 +79,7 @@ fn documented_direct_dsl_and_runtime_interfaces_render_the_same_nested_alert() -
 }
 
 fn terminal_progress_redraws_emit_an_exact_incremental_csi_transcript() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "terminal_progress_redraws_emit_an_exact_incremental_csi_transcript",
         r##"(with-output-to-string
   (with-ansi-princ
@@ -106,7 +104,6 @@ fn terminal_progress_redraws_emit_an_exact_incremental_csi_transcript() -> Parit
    " "
    (green "✓")
    "\n"))"##,
-        true,
         expect![[
             r#"OK "\33[1G\33[2K\33[1mcompile \33[0m\33[36m  0%\33[0m\n\33[1F\33[1G\33[2K\33[1mcompile \33[0m\33[33m 50%\33[0m\n\33[1F\33[1G\33[2K\33[1mcompile \33[0m\33[32m100%\33[0m \33[32m✓\33[0m\n""#
         ]],
@@ -114,7 +111,7 @@ fn terminal_progress_redraws_emit_an_exact_incremental_csi_transcript() -> Parit
 }
 
 fn with_ansi_princ_writes_one_exact_multiline_release_report_to_a_real_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "with_ansi_princ_writes_one_exact_multiline_release_report_to_a_real_buffer",
         r##"(let ((output (generate-new-buffer " *ansi-release-report*")))
   (unwind-protect
@@ -134,7 +131,6 @@ fn with_ansi_princ_writes_one_exact_multiline_release_report_to_a_real_buffer() 
            (buffer-size)
            (line-number-at-pos (point-max)))))
     (kill-buffer output)))"##,
-        true,
         expect![[
             r#"OK ("\33[1m\33[97mneomacs 0.14.0\33[0m\33[0m\n\33[32m  ✓ core               2048 tests\33[0m\n\33[32m  ✓ oracle              512 tests\33[0m\n\33[33m  ! docs               2 warnings\33[0m\n" 161 5)"#
         ]],
@@ -142,7 +138,7 @@ fn with_ansi_princ_writes_one_exact_multiline_release_report_to_a_real_buffer() 
 }
 
 fn dumb_terminal_inhibition_keeps_the_report_text_and_restores_colored_output() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "dumb_terminal_inhibition_keeps_the_report_text_and_restores_colored_output",
         r##"(let ((ansi-inhibit-ansi nil))
   (let* ((render
@@ -168,21 +164,18 @@ fn dumb_terminal_inhibition_keeps_the_report_text_and_restores_colored_output() 
      (equal colored-before colored-after)
      ansi-inhibit-ansi
      (string-match-p (regexp-quote "\e[") plain))))"##,
-        true,
         expect![[
             r#"OK ("\33[1G\33[2K\33[1m\33[31mERROR\33[0m\33[0m: \33[43m\33[30m/var/lib/neomacs at 99%\33[0m\33[0m\n\33[3mfree space: 0.2 GiB\33[0m\n" "ERROR: /var/lib/neomacs at 99%\nfree space: 0.2 GiB\n" "\33[1G\33[2K\33[1m\33[31mERROR\33[0m\33[0m: \33[43m\33[30m/var/lib/neomacs at 99%\33[0m\33[0m\n\33[3mfree space: 0.2 GiB\33[0m\n" t nil nil)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         runtime_selected_effects_render_a_complete_ci_summary_with_exact_formatting(),
         documented_direct_dsl_and_runtime_interfaces_render_the_same_nested_alert(),
         terminal_progress_redraws_emit_an_exact_incremental_csi_transcript(),
         with_ansi_princ_writes_one_exact_multiline_release_report_to_a_real_buffer(),
         dumb_terminal_inhibition_keeps_the_report_text_and_restores_colored_output(),
-    ];
-    assert_ansi_batch(&cases);
+    ]
 }

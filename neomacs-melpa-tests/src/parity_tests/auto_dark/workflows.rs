@@ -22,7 +22,7 @@
 
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_dark_batch};
+use super::ParityBatchCase;
 
 /// Run the osascript and termux detectors against real programs.
 ///
@@ -48,9 +48,8 @@ use super::{ParityBatchCase, assert_auto_dark_batch};
 /// That is worth pinning precisely because the intuition it corrects is the
 /// obvious one -- a reader who assumes the redirect is load-bearing would also
 /// assume a detector could be broken by removing it.
-
 fn the_shell_detectors_reach_real_programs_with_one_argument_vector_each() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_shell_detectors_reach_real_programs_with_one_argument_vector_each",
         r##"(let* ((root (file-name-as-directory
                      (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
@@ -103,16 +102,12 @@ fn the_shell_detectors_reach_real_programs_with_one_argument_vector_each() -> Pa
              :with-the-redirect
              (shell-command-to-string
               "cmd uimode night 2>&1 </dev/null"))))"##,
-        true,
         expect![[
             r#"OK (:osascript-said t :osascript-argv ("-e" "tell application \"System Events\" to tell appearance preferences to return dark mode") :termux-said t :termux-argv ("uimode" "night") :without-the-redirect "Night mode: yes" :with-the-redirect "Night mode: yes")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![the_shell_detectors_reach_real_programs_with_one_argument_vector_each()];
-    assert_auto_dark_batch(&cases);
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![the_shell_detectors_reach_real_programs_with_one_argument_vector_each()]
 }

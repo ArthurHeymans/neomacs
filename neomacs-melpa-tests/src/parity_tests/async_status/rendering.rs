@@ -1,8 +1,8 @@
-use super::{ParityBatchCase, assert_async_status_batch};
+use super::ParityBatchCase;
 use expect_test::expect;
 
 fn truncation_preserves_short_strings_and_enforces_normal_maximum_widths() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "truncation_preserves_short_strings_and_enforces_normal_maximum_widths",
         r##"(mapcar
  (lambda (case)
@@ -13,13 +13,12 @@ fn truncation_preserves_short_strings_and_enforces_normal_maximum_widths() -> Pa
    ("1234567" 6)
    ("abcdefghijklmnop" 10)
    ("雪λalphaβgamma" 8)))"##,
-        true,
         expect!["OK (\"\" \"short\" \"sixsix\" \"123...\" \"abcdefg...\" \"雪λalp...\")"],
     )
 }
 
 fn truncation_exposes_the_package_behavior_for_tiny_and_negative_limits() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "truncation_exposes_the_package_behavior_for_tiny_and_negative_limits",
         r##"(mapcar
  (lambda (limit)
@@ -28,7 +27,6 @@ fn truncation_exposes_the_package_behavior_for_tiny_and_negative_limits() -> Par
       (async-status--print-truncated-string
        "abcdef" limit))))
  '(3 2 1 0 -1 -10))"##,
-        true,
         expect![[
             r#"OK ((:ok "...") (:ok "abcde...") (:ok "abcd...") (:ok "abc...") (:ok "ab...") (:error args-out-of-range ("abcdef" 0 -13)))"#
         ]],
@@ -36,7 +34,7 @@ fn truncation_exposes_the_package_behavior_for_tiny_and_negative_limits() -> Par
 }
 
 fn redraw_formats_numeric_progress_and_forwards_complete_svg_geometry() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "redraw_formats_numeric_progress_and_forwards_complete_svg_geometry",
         r##"(let ((buffer (get-buffer-create "*async-status*"))
       (item
@@ -64,7 +62,6 @@ fn redraw_formats_numeric_progress_and_forwards_complete_svg_geometry() -> Parit
        (nreverse async-status-test-svg-calls)
        (nreverse inserted-images))
     (kill-buffer buffer)))"##,
-        true,
         expect![[
             r#"OK ("Compile                   <image>\n" ((0.375 (:background "test-background" :foreground "test-foreground") :height 2.0 :width 30.0)) ((image :type svg :progress 0.375)))"#
         ]],
@@ -72,7 +69,7 @@ fn redraw_formats_numeric_progress_and_forwards_complete_svg_geometry() -> Parit
 }
 
 fn redraw_converts_string_progress_and_truncates_long_labels() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "redraw_converts_string_progress_and_truncates_long_labels",
         r##"(let ((buffer (get-buffer-create "*async-status*"))
       (item
@@ -100,13 +97,12 @@ fn redraw_converts_string_progress_and_truncates_long_labels() -> ParityBatchCas
        (with-current-buffer buffer
          (buffer-string)))
     (kill-buffer buffer)))"##,
-        true,
         expect![[r#"OK (0.875 "A very long compil...     [bar]\n")"#]],
     )
 }
 
 fn redraw_treats_non_numeric_progress_strings_as_zero() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "redraw_treats_non_numeric_progress_strings_as_zero",
         r##"(let ((buffer (get-buffer-create "*async-status*"))
       (item
@@ -130,13 +126,12 @@ fn redraw_treats_non_numeric_progress_strings_as_zero() -> ParityBatchCase {
        (with-current-buffer buffer
          (buffer-string)))
     (kill-buffer buffer)))"##,
-        true,
         expect![[r#"OK (0 "Waiting                   [zero]\n")"#]],
     )
 }
 
 fn refresh_erases_stale_content_and_redraws_items_in_list_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "refresh_erases_stale_content_and_redraws_items_in_list_order",
         r##"(let ((buffer (get-buffer-create "*async-status*"))
       calls)
@@ -168,13 +163,12 @@ fn refresh_erases_stale_content_and_redraws_items_in_list_order() -> ParityBatch
          (buffer-string)))
     (setq async-status--shown-items nil)
     (kill-buffer buffer)))"##,
-        true,
         expect![[r#"OK (("second" "first") "Second\nFirst\n")"#]],
     )
 }
 
 fn show_forwards_the_complete_posframe_contract_then_refreshes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "show_forwards_the_complete_posframe_contract_then_refreshes",
         r##"(let ((async-status-indicator-width 44)
       (async-status--shown-items
@@ -197,7 +191,6 @@ fn show_forwards_the_complete_posframe_contract_then_refreshes() -> ParityBatchC
         (eq (car result) :refresh)
         (= (length result) 2))
        (nreverse calls)))))"##,
-        true,
         expect![[
             r#"OK (t ((:show "*async-status*" :border-color "test-fg" :border-width 2 :left-fringe 10 :right-fringe 10 :min-width 44 :max-width 44 :min-height 2 :max-height 2 :poshandler posframe-poshandler-frame-top-center) :refresh))"#
         ]],
@@ -205,7 +198,7 @@ fn show_forwards_the_complete_posframe_contract_then_refreshes() -> ParityBatchC
 }
 
 fn show_uses_zero_height_for_an_empty_indicator_collection() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "show_uses_zero_height_for_an_empty_indicator_collection",
         r##"(let ((async-status--shown-items nil)
       observed)
@@ -221,13 +214,12 @@ fn show_uses_zero_height_for_an_empty_indicator_collection() -> ParityBatchCase 
      (plist-get (cdr observed) :min-height)
      (plist-get (cdr observed) :max-height)
      (car observed))))"##,
-        true,
         expect!["OK (0 0 \"*async-status*\")"],
     )
 }
 
 fn hide_obeys_force_and_empty_collection_rules_without_extra_calls() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "hide_obeys_force_and_empty_collection_rules_without_extra_calls",
         r##"(let (calls active-results empty-results)
   (cl-letf (((symbol-function 'posframe-hide)
@@ -253,16 +245,14 @@ fn hide_obeys_force_and_empty_collection_rules_without_extra_calls() -> ParityBa
      active-results
      empty-results
      (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((nil nil :hidden) (:hidden :hidden :hidden) (("*async-status*") ("*async-status*") ("*async-status*") ("*async-status*")))"#
         ]],
     )
 }
 
-#[test]
-fn rendering_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn rendering_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         truncation_preserves_short_strings_and_enforces_normal_maximum_widths(),
         truncation_exposes_the_package_behavior_for_tiny_and_negative_limits(),
         redraw_formats_numeric_progress_and_forwards_complete_svg_geometry(),
@@ -272,6 +262,5 @@ fn rendering_public_surface_batch() {
         show_forwards_the_complete_posframe_contract_then_refreshes(),
         show_uses_zero_height_for_an_empty_indicator_collection(),
         hide_obeys_force_and_empty_collection_rules_without_extra_calls(),
-    ];
-    assert_async_status_batch(&cases);
+    ]
 }

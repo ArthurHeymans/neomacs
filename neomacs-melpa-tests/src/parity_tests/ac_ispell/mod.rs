@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{AC_ISPELL_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -188,16 +187,21 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_ac_ispell_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ac_ispell_oracle()
-        .run_value(&name, form)
-        .unwrap_or_else(|error| panic!("ac-ispell parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_ac_ispell_parity` cases (2a).
 pub(crate) fn assert_ac_ispell_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(ac_ispell_oracle(), &name, "ac_ispell_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn ac_ispell_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_ac_ispell_batch(&cases);
+}
+
+// END generated package batch tests

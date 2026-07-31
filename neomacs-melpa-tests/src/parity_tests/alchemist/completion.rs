@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alchemist_batch};
+use super::ParityBatchCase;
 
 fn alchemist_completion_builds_real_elixir_erlang_module_and_arity_candidates_with_metadata()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_completion_builds_real_elixir_erlang_module_and_arity_candidates_with_metadata",
         r##"(let (rows)
                       (dolist
@@ -38,7 +38,6 @@ fn alchemist_completion_builds_real_elixir_erlang_module_and_arity_candidates_wi
                              candidates))
                            rows)))
                       (nreverse rows))"##,
-        true,
         expect![[
             r#"OK (("Lis" (("List" nil) ("List.delete" "/2") ("List.to_string" "/1"))) ("List." (("List.delete" "/2") ("List.delete_at" "/2"))) ("List.del" (("List.delete" "/2") ("List.delete_at" "/2"))) (":file" ((":filename" nil) (":file_server" nil))) (":file." ((":file.pid2name" "/1") (":file.set_cwd" "/1"))) ("En" (("Enum" "") ("Enumerable" ""))))"#
         ]],
@@ -47,7 +46,7 @@ fn alchemist_completion_builds_real_elixir_erlang_module_and_arity_candidates_wi
 
 fn alchemist_help_completion_preserves_qualified_modules_overloads_and_prompt_decisions()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_help_completion_preserves_qualified_modules_overloads_and_prompt_decisions",
         r##"(let (prompts)
                       (cl-letf
@@ -71,7 +70,6 @@ fn alchemist_help_completion_preserves_qualified_modules_overloads_and_prompt_de
                           "Missing"
                           '("Missing" "Missing.other/1"))
                          (nreverse prompts))))"##,
-        true,
         expect![[
             r#"OK (("List" "List.delete/2" "List.delete/3" "List.to_string/1") ("String.Chars.Atom" "String.Chars.Atom.to_string/1") "List.delete_at/2" "Only" "Missing.other/1" (("Elixir help: " ("List.delete/2" "List.delete_at/2") (nil nil "List.del")) ("Elixir help: " ("Missing" "Missing.other/1") (nil nil "Missing"))))"#
         ]],
@@ -80,7 +78,7 @@ fn alchemist_help_completion_preserves_qualified_modules_overloads_and_prompt_de
 
 fn alchemist_completion_process_output_removes_markers_ansi_duplicates_and_falls_back_to_dabbrev()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_completion_process_output_removes_markers_ansi_duplicates_and_falls_back_to_dabbrev",
         r##"(let ((alchemist-company-last-completion "List.del")
                           (alchemist-company-filter-output nil)
@@ -114,7 +112,6 @@ fn alchemist_completion_process_output_removes_markers_ansi_duplicates_and_falls
                                    (setq delivered candidates)))
                            (alchemist-company-serve-candidates-to-callback nil))
                          delivered)))"##,
-        true,
         expect![[
             r#"OK ((#("delete_at" 0 9 (meta "/2")) #("List.delete" 0 11 (meta "")) #("delete" 0 6 (meta "/2"))) nil ("List.delete\ndelete/2\n") #1=(#("List.delete" 0 11 (meta "/2")) #("List.delete_at" 0 14 (meta "/2"))) #1# nil #2=("local_helper" "local_other") #2#)"#
         ]],
@@ -123,7 +120,7 @@ fn alchemist_completion_process_output_removes_markers_ansi_duplicates_and_falls
 
 fn alchemist_company_builds_context_from_real_nested_source_and_switches_iex_protocol()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_company_builds_context_from_real_nested_source_and_switches_iex_protocol",
         r##"(with-temp-buffer
                       (insert
@@ -147,7 +144,6 @@ fn alchemist_company_builds_context_from_real_nested_source_and_switches_iex_pro
                          (alchemist-company--annotation
                           (propertize
                            "flatten" 'meta "/1")))))"##,
-        true,
         expect![[
             r#"OK ("{ \"Cash.ne\", [ context: Elixir, imports: [Enum,GenServer,Shop.Checkout], aliases: [{Cash, Money}] ] }" "{ \"Cash.ne\", [ context: Elixir, imports: [Enum,GenServer,Shop.Checkout], aliases: [{Cash, Money}] ] }" "{ \"Cash.ne\", [ context: [], imports: [], aliases: [] ] }" "/1")"#
         ]],
@@ -156,7 +152,7 @@ fn alchemist_company_builds_context_from_real_nested_source_and_switches_iex_pro
 
 fn alchemist_company_backend_runs_real_prefix_candidate_doc_and_location_boundaries()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alchemist_company_backend_runs_real_prefix_candidate_doc_and_location_boundaries",
         r##"(with-temp-buffer
                       (insert
@@ -219,21 +215,18 @@ fn alchemist_company_backend_runs_real_prefix_candidate_doc_and_location_boundar
                              async-callback
                              alchemist-company-last-completion
                              (nreverse events))))))"##,
-        true,
         expect![[
             r#"OK (t "Items.del" :async :async opened "/2" (requested documented) "Items.del" ((complete "{ \"Items.del\", [ context: Elixir, imports: [Shop], aliases: [{Items, List}] ] }" alchemist-company-filter) (doc "Items.delete") (location "Items.delete")))"#
         ]],
     )
 }
 
-#[test]
-fn completion_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn completion_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         alchemist_completion_builds_real_elixir_erlang_module_and_arity_candidates_with_metadata(),
         alchemist_help_completion_preserves_qualified_modules_overloads_and_prompt_decisions(),
         alchemist_completion_process_output_removes_markers_ansi_duplicates_and_falls_back_to_dabbrev(),
         alchemist_company_builds_context_from_real_nested_source_and_switches_iex_protocol(),
         alchemist_company_backend_runs_real_prefix_candidate_doc_and_location_boundaries(),
-    ];
-    assert_alchemist_batch(&cases);
+    ]
 }

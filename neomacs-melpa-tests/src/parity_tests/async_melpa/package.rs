@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_async_melpa_package_batch};
+use super::ParityBatchCase;
 
 fn current_package_modeline_mode_counts_only_install_jobs_and_dings_on_disable() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "current_package_modeline_mode_counts_only_install_jobs_and_dings_on_disable",
         r##"
 (let (dinged observed)
@@ -31,7 +31,6 @@ fn current_package_modeline_mode_counts_only_install_jobs_and_dings_on_disable()
                   async-package--modeline-mode)))
       (async-package--modeline-mode -1))))
 "##,
-        true,
         expect![[
             r#"OK (" [3 async job Installing package(s)]" async-package-message async-pkg-install t nil)"#
         ]],
@@ -40,7 +39,7 @@ fn current_package_modeline_mode_counts_only_install_jobs_and_dings_on_disable()
 
 fn current_package_install_builds_child_executes_packages_and_finishes_lifecycle() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "current_package_install_builds_child_executes_packages_and_finishes_lifecycle",
         r##"
 (let* ((root (file-name-as-directory
@@ -106,7 +105,6 @@ fn current_package_install_builds_child_executes_packages_and_finishes_lifecycle
            (file-exists-p error-file))))
     (remove-hook 'async-pkg-install-after-hook after-hook)))
 "##,
-        true,
         expect![[
             r#"OK ((one two) (one two) ((fixture-install-process async-pkg-install t)) (one two) (package-selected-packages (one two existing)) t (1 -1) ("Installing 2 package(s)..." "Installing 2 packages done") (("%s %d package(s) done" async-package-message "Installing" 2)) 1 nil)"#
         ]],
@@ -114,7 +112,7 @@ fn current_package_install_builds_child_executes_packages_and_finishes_lifecycle
 }
 
 fn current_package_upgrade_and_reinstall_select_exact_functions_and_messages() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "current_package_upgrade_and_reinstall_select_exact_functions_and_messages",
         r##"
 (let* ((root (file-name-as-directory
@@ -153,7 +151,6 @@ fn current_package_upgrade_and_reinstall_select_exact_functions_and_messages() -
      (nreverse modeline)
      (nreverse process-properties))))
 "##,
-        true,
         expect![[
             r#"OK (((upgrade nil t) (nil reinstall t)) ("Upgrading 3 package(s)..." "Reinstalling 1 package(s)...") (1 1) ((fixture-process async-pkg-install t) (fixture-process async-pkg-install t)))"#
         ]],
@@ -162,7 +159,7 @@ fn current_package_upgrade_and_reinstall_select_exact_functions_and_messages() -
 
 fn current_package_error_callback_opens_special_buffer_deletes_error_and_runs_hook()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "current_package_error_callback_opens_special_buffer_deletes_error_and_runs_hook",
         r##"
 (let* ((root (file-name-as-directory
@@ -204,20 +201,17 @@ fn current_package_error_callback_opens_special_buffer_deletes_error_and_runs_ho
             (when buffer (kill-buffer buffer)))))
     (remove-hook 'async-pkg-install-after-hook #'ignore)))
 "##,
-        true,
         expect![[
             r#"OK (lambda ("errors.log" (nil (window-height . fit-window-to-buffer))) ("fixture package failure" special-mode) nil (-1 1) (async-pkg-install-after-hook))"#
         ]],
     )
 }
 
-#[test]
-fn package_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn package_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         current_package_modeline_mode_counts_only_install_jobs_and_dings_on_disable(),
         current_package_install_builds_child_executes_packages_and_finishes_lifecycle(),
         current_package_upgrade_and_reinstall_select_exact_functions_and_messages(),
         current_package_error_callback_opens_special_buffer_deletes_error_and_runs_hook(),
-    ];
-    assert_async_melpa_package_batch(&cases);
+    ]
 }

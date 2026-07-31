@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{AIDER_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -25,26 +24,6 @@ fn aider_oracle(source_file: &str) -> CachedMelpaOracle {
 fn current_test_name() -> String {
     let thread = std::thread::current();
     thread.name().unwrap_or("unnamed aider parity test").into()
-}
-
-fn assert_aider_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = aider_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("aider parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_aider_parity(elisp_form: &str, expected: Expect) {
-    assert_aider_source_parity("aider.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_aider_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_aider_source_parity("aider-autoloads.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_aider_helm_parity(elisp_form: &str, expected: Expect) {
-    assert_aider_source_parity("aider-helm.el", elisp_form, expected);
 }
 
 /// Multi-probe batch for `assert_aider_autoload_parity` cases (2a).
@@ -74,3 +53,40 @@ pub(crate) fn assert_aider_helm_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn aider_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_aider_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_aider_autoload_batch(&cases);
+}
+
+#[test]
+fn aider_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        core::core_public_surface_batch_cases(),
+        editing::editing_public_surface_batch_cases(),
+        files::files_public_surface_batch_cases(),
+        registry::registry_aider_batch_cases(),
+        workflows::workflows_aider_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_aider_batch(&cases);
+}
+
+#[test]
+fn aider_helm_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_aider_helm_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_aider_helm_batch(&cases);
+}
+
+// END generated package batch tests

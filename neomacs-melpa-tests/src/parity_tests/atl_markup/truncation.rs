@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atl_markup_batch};
+use super::ParityBatchCase;
 
 fn atl_markup_practical_html_navigation_enables_inside_tags_and_disables_in_text() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_practical_html_navigation_enables_inside_tags_and_disables_in_text",
         r##"(with-temp-buffer
           (insert
@@ -39,7 +39,6 @@ fn atl_markup_practical_html_navigation_enables_inside_tags_and_disables_in_text
               original-text
               (buffer-string))
              (buffer-modified-p))))"##,
-        true,
         expect![[
             r#"OK ((("class" "Truncate long lines enabled" t 15) ("Hello" "Truncate long lines disabled" nil 35) ("</art" "Truncate long lines enabled" t 52) ("tail" nil t 62)) t nil)"#
         ]],
@@ -48,7 +47,7 @@ fn atl_markup_practical_html_navigation_enables_inside_tags_and_disables_in_text
 
 fn atl_markup_truncation_guard_matrix_skips_boundaries_whitespace_comments_and_eol()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_truncation_guard_matrix_skips_boundaries_whitespace_comments_and_eol",
         r##"(mapcar
           (lambda (specification)
@@ -85,7 +84,6 @@ fn atl_markup_truncation_guard_matrix_skips_boundaries_whitespace_comments_and_e
             (elisp-comment ";; comment bod|y\n(value)" emacs-lisp-mode)
             (ordinary-tag "<tag attrib|ute>value</tag>" nil)
             (ordinary-text "<tag>val|ue</tag>" nil)))"##,
-        true,
         expect![
             "OK ((bob nil nil :unchanged 1) (eob nil nil :unchanged 17) (space nil nil :unchanged 12) (tab nil nil :unchanged 12) (newline nil nil :unchanged 12) (eol nil nil :unchanged 11) (elisp-comment nil nil :unchanged 15) (ordinary-tag :toggled (1) :unchanged 12) (ordinary-text :toggled (-1) :unchanged 9))"
         ],
@@ -94,7 +92,7 @@ fn atl_markup_truncation_guard_matrix_skips_boundaries_whitespace_comments_and_e
 
 fn atl_markup_custom_ignore_regex_controls_exact_previous_character_gate_and_errors()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_custom_ignore_regex_controls_exact_previous_character_gate_and_errors",
         r##"(mapcar
           (lambda (specification)
@@ -135,7 +133,6 @@ fn atl_markup_custom_ignore_regex_controls_exact_previous_character_gate_and_err
             ("[[:digit:]]" "<tag>a|value</tag>")
             ("[" "<tag>a|value</tag>")
             (nil "<tag>a|value</tag>")))"##,
-        true,
         expect![[
             r#"OK (("[ \11\15\n]" "<tag>space |value</tag>" (:ok nil) nil 12) ("x" "<tag>x|value</tag>" (:ok nil) nil 7) ("x" "<tag> |value</tag>" (:ok :toggled) (1) 7) ("" "<tag>a|value</tag>" (:ok nil) nil 7) ("β" "<tag>β|value</tag>" (:ok nil) nil 7) ("[[:digit:]]" "<tag>7|value</tag>" (:ok nil) nil 7) ("[[:digit:]]" "<tag>a|value</tag>" (:ok :toggled) (1) 7) ("[" "<tag>a|value</tag>" (:error invalid-regexp ("Unmatched [ or [^")) nil 7) (nil "<tag>a|value</tag>" (:error wrong-type-argument (stringp nil)) nil 7))"#
         ]],
@@ -144,7 +141,7 @@ fn atl_markup_custom_ignore_regex_controls_exact_previous_character_gate_and_err
 
 fn atl_markup_markup_comments_block_tag_shaped_text_but_real_tags_still_toggle() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_markup_comments_block_tag_shaped_text_but_real_tags_still_toggle",
         r##"(mapcar
           (lambda (contents)
@@ -171,7 +168,6 @@ fn atl_markup_markup_comments_block_tag_shaped_text_but_real_tags_still_toggle()
             "<article><!-- comment bod|y --></article>"
             "<article>visible bod|y</article>"
             "<!-- multiline\n <nested attrib|ute>\n --><p>x</p>"))"##,
-        true,
         expect![[
             r#"OK (("<!-- <article class=\"car|d\">hidden</article> -->" t t nil nil 25) ("<article class=\"car|d\">visible</article>" nil t :toggled (1) 20) ("<article><!-- comment bod|y --></article>" t t nil nil 26) ("<article>visible bod|y</article>" nil nil :toggled (-1) 21) ("<!-- multiline\n <nested attrib|ute>\n --><p>x</p>" t t nil nil 31))"#
         ]],
@@ -180,7 +176,7 @@ fn atl_markup_markup_comments_block_tag_shaped_text_but_real_tags_still_toggle()
 
 fn atl_markup_web_truncation_is_independent_of_fontification_and_face_properties() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_web_truncation_is_independent_of_fontification_and_face_properties",
         r##"(mapcar
           (lambda (face)
@@ -224,7 +220,6 @@ fn atl_markup_web_truncation_is_independent_of_fontification_and_face_properties
             font-lock-keyword-face
             (:foreground "red" :weight bold)
             (font-lock-comment-face underline)))"##,
-        true,
         expect![[
             r#"OK ((nil 1 -1 (1 -1) nil t) (font-lock-keyword-face 1 -1 (1 -1) font-lock-keyword-face t) ((:foreground "red" :weight bold) 1 -1 (1 -1) (:foreground "red" :weight bold) t) ((font-lock-comment-face underline) 1 -1 (1 -1) (font-lock-comment-face underline) t))"#
         ]],
@@ -232,7 +227,7 @@ fn atl_markup_web_truncation_is_independent_of_fontification_and_face_properties
 }
 
 fn atl_markup_web_truncation_propagates_guard_classifier_and_toggle_failures() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_web_truncation_propagates_guard_classifier_and_toggle_failures",
         r##"(mapcar
           (lambda (failure)
@@ -275,7 +270,6 @@ fn atl_markup_web_truncation_propagates_guard_classifier_and_toggle_failures() -
                    inhibit-message
                    (point))))))
           '(none comment inside toggle))"##,
-        true,
         expect![[
             r#"OK ((none (:ok :toggled) 21 nil 15) (comment (:error error ("comment failed")) 21 nil 15) (inside (:error error ("inside failed")) 21 nil 15) (toggle (:error error ("toggle failed")) 21 nil 15))"#
         ]],
@@ -284,7 +278,7 @@ fn atl_markup_web_truncation_propagates_guard_classifier_and_toggle_failures() -
 
 fn atl_markup_web_truncation_preserves_text_point_and_modified_state_but_records_match_data_effect()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_web_truncation_preserves_text_point_and_modified_state_but_records_match_data_effect",
         r##"(with-temp-buffer
           (insert
@@ -329,14 +323,12 @@ fn atl_markup_web_truncation_preserves_text_point_and_modified_state_but_records
              (equal
               before-match
               after-match))))"##,
-        true,
         expect!["OK ((:toggle 1) t t nil (0 4 1 4) (22 23 (:buffer nil)) nil)"],
     )
 }
 
-#[test]
-fn truncation_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn truncation_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         atl_markup_practical_html_navigation_enables_inside_tags_and_disables_in_text(),
         atl_markup_truncation_guard_matrix_skips_boundaries_whitespace_comments_and_eol(),
         atl_markup_custom_ignore_regex_controls_exact_previous_character_gate_and_errors(),
@@ -344,6 +336,5 @@ fn truncation_public_surface_batch() {
         atl_markup_web_truncation_is_independent_of_fontification_and_face_properties(),
         atl_markup_web_truncation_propagates_guard_classifier_and_toggle_failures(),
         atl_markup_web_truncation_preserves_text_point_and_modified_state_but_records_match_data_effect(),
-    ];
-    assert_atl_markup_batch(&cases);
+    ]
 }

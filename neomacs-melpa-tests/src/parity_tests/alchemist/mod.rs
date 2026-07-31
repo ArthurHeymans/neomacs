@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ALCHEMIST_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -225,16 +224,31 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_alchemist_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = alchemist_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("Alchemist parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_alchemist_parity` cases (2a).
 pub(crate) fn assert_alchemist_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(alchemist_oracle(), &name, "alchemist_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn alchemist_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        completion::completion_public_surface_batch_cases(),
+        eval::eval_public_surface_batch_cases(),
+        help_navigation::help_navigation_public_surface_batch_cases(),
+        mix_test::mix_test_public_surface_batch_cases(),
+        modes::modes_public_surface_batch_cases(),
+        process::process_public_surface_batch_cases(),
+        project::project_public_surface_batch_cases(),
+        utils_scope::utils_scope_public_surface_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_alchemist_batch(&cases);
+}
+
+// END generated package batch tests

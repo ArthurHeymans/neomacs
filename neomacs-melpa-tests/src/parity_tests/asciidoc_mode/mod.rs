@@ -4,7 +4,6 @@ use crate::{
     ASCIIDOC_MODE_MELPA_PIN, CachedMelpaOracle, EmacsRuntime, elisp_string,
     prepare_cached_tree_sitter_grammar_from_subdirectory,
 };
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -60,22 +59,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_asciidoc_mode_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = asciidoc_mode_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("asciidoc-mode parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_asciidoc_mode_parity(elisp_form: &str, expected: Expect) {
-    assert_asciidoc_mode_source_parity("asciidoc-mode.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_asciidoc_mode_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_asciidoc_mode_source_parity("asciidoc-mode-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_asciidoc_mode_autoload_parity` cases (2a).
 pub(crate) fn assert_asciidoc_mode_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -97,3 +80,33 @@ pub(crate) fn assert_asciidoc_mode_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn asciidoc_mode_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [surface::surface_asciidoc_mode_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_asciidoc_mode_autoload_batch(&cases);
+}
+
+#[test]
+fn asciidoc_mode_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        activation::activation_public_surface_batch_cases(),
+        completion::completion_public_surface_batch_cases(),
+        diagnostics::diagnostics_public_surface_batch_cases(),
+        editing::editing_public_surface_batch_cases(),
+        font_lock::font_lock_public_surface_batch_cases(),
+        navigation::navigation_public_surface_batch_cases(),
+        surface::surface_asciidoc_mode_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_asciidoc_mode_batch(&cases);
+}
+
+// END generated package batch tests

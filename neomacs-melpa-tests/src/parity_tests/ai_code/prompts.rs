@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ai_code_batch};
+use super::ParityBatchCase;
 
 fn prompt_suffix_pipeline_preserves_provider_order_and_memoizes_nil() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "prompt_suffix_pipeline_preserves_provider_order_and_memoizes_nil",
         r##"
 (progn
@@ -29,7 +29,6 @@ fn prompt_suffix_pipeline_preserves_provider_order_and_memoizes_nil() -> ParityB
                 ai-code-test-provider-calls)))
     (makunbound 'ai-code-test-provider-calls)))
 "##,
-        true,
         expect![[
             r#"OK (("Verify focused tests." "Report changed files.") ("Verify focused tests." "Report changed files.") 1 "Implement bounded retries.\nVerify focused tests.\nReport changed files." 2)"#
         ]],
@@ -37,7 +36,7 @@ fn prompt_suffix_pipeline_preserves_provider_order_and_memoizes_nil() -> ParityB
 }
 
 fn prompt_command_detection_accepts_only_true_single_token_cli_commands() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "prompt_command_detection_accepts_only_true_single_token_cli_commands",
         r##"
 (mapcar
@@ -45,7 +44,6 @@ fn prompt_command_detection_accepts_only_true_single_token_cli_commands() -> Par
  '("/help" "/resume" "/model opus" " /help" "/help\nnext"
    "Explain /help" "/" "/compact"))
 "##,
-        true,
         expect![[
             r#"OK (("/help" t) ("/resume" t) ("/model opus" nil) (" /help" nil) ("/help\nnext" t) ("Explain /help" nil) ("/" t) ("/compact" t))"#
         ]],
@@ -53,7 +51,7 @@ fn prompt_command_detection_accepts_only_true_single_token_cli_commands() -> Par
 }
 
 fn structured_change_and_question_briefs_preserve_scope_and_boundaries() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "structured_change_and_question_briefs_preserve_scope_and_boundaries",
         r##"
 (list
@@ -70,7 +68,6 @@ fn structured_change_and_question_briefs_preserve_scope_and_boundaries() -> Pari
   :context "The worker acknowledges after committing."
   :instruction "Trace the state transitions and identify the race window."))
 "##,
-        true,
         expect![[
             r#"OK ("Goal:\nMake payment retries idempotent.\n\nScope:\nsrc/payments/retry.rs::schedule_retry\n\nContext:\nDuplicate delivery occurs after a worker restart.\n\nClipboard context:\ntrace-id=abc; attempts=2\n\nBoundaries:\nPreserve the public API and database schema.\n\nAgent responsibilities:\nInspect the relevant files before editing. Plan briefly, then edit the code. Run appropriate project verification for the change. Fix failures caused by the change.\n\nVerification evidence:\nReport the exact verification command(s), result, and any remaining risk or blocker.\n\nInstruction:\nAdd focused property tests before editing production code." "Goal:\nExplain why the retry can execute twice.\n\nScope:\nschedule_retry and its transaction boundary\n\nContext:\nThe worker acknowledges after committing.\n\nBoundaries:\nAnswer the question only. Do not make code changes.\n\nInstruction:\nTrace the state transitions and identify the race window.")"#
         ]],
@@ -78,7 +75,7 @@ fn structured_change_and_question_briefs_preserve_scope_and_boundaries() -> Pari
 }
 
 fn task_helpers_generate_safe_names_initial_content_and_search_handoff() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "task_helpers_generate_safe_names_initial_content_and_search_handoff",
         r##"
 (let ((timestamp "2026-07-27T12:00:00-0400"))
@@ -98,7 +95,6 @@ fn task_helpers_generate_safe_names_initial_content_and_search_handoff() -> Pari
       "/workspace/tasks/"
       "OAuth incidents involving refresh-token reuse"))))
 "##,
-        true,
         expect![[
             r#"OK (nil "rdar://problem/12345678 - Sync race" "task_2026-07-27T12:00:00-0400_fix_oauth_refresh_retry_race.org" nil "Search the content of all .org files recursively under directory: /workspace/tasks/\nSearch target description: OAuth incidents involving refresh-token reuse\nFocus on matching content inside the files, not just file names.\nReturn the relevant file paths, matched excerpts, and a concise summary.")"#
         ]],
@@ -106,7 +102,7 @@ fn task_helpers_generate_safe_names_initial_content_and_search_handoff() -> Pari
 }
 
 fn input_symbol_pipeline_flattens_nested_imenu_and_extracts_real_languages() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "input_symbol_pipeline_flattens_nested_imenu_and_extracts_real_languages",
         r##"
 (let* ((index
@@ -128,7 +124,6 @@ fn input_symbol_pipeline_flattens_nested_imenu_and_extracts_real_languages() -> 
       "export function settleInvoice() {"
       "let total = 0;"))))
 "##,
-        true,
         expect![[
             r#"OK (("retry_payment" "PaymentService" "*" "charge" "MAX_RETRIES") ("retry_payment" "PaymentService" "fetchLedger" nil nil))"#
         ]],
@@ -136,7 +131,7 @@ fn input_symbol_pipeline_flattens_nested_imenu_and_extracts_real_languages() -> 
 }
 
 fn prompt_path_preprocessing_relativizes_repo_files_and_keeps_external_paths() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "prompt_path_preprocessing_relativizes_repo_files_and_keeps_external_paths",
         r##"
 (let* ((root (make-temp-file "ai-code-prompt-paths-" t))
@@ -163,7 +158,6 @@ fn prompt_path_preprocessing_relativizes_repo_files_and_keeps_external_paths() -
     (delete-directory root t)
     (delete-file outside)))
 "##,
-        true,
         expect![[
             r#"OK ("Compare @$ROOT//src/payment_retry.el with @$OUTSIDE and keep spacing." "@src/payment_retry.el" t)"#
         ]],
@@ -171,7 +165,7 @@ fn prompt_path_preprocessing_relativizes_repo_files_and_keeps_external_paths() -
 }
 
 fn git_and_github_prompt_builders_create_review_ready_handoffs() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "git_and_github_prompt_builders_create_review_ready_handoffs",
         r##"
 (list
@@ -188,7 +182,6 @@ fn git_and_github_prompt_builders_create_review_ready_handoffs() -> ParityBatchC
   "https://github.com/acme/payment-service/issues/91"
   t))
 "##,
-        true,
         expect![[
             r#"OK ("  refs/heads/feature/oauth-race  " nil "Analyze the Git commit history for the entire repository 'payment-service'.\n\nRepository: payment-service\n\nThe detailed Git log content is in the 'git.log' file (which has been added to the chat).\nPlease use its content for your analysis, following these instructions:\nFind the commit that introduced duplicate settlement." "Review pull request: https://github.com/acme/payment-service/pull/77\n\nReview this pull request.\n\nReview Steps:\n1. Requirement Fit: Verify the PR implementation against requirements.\n2. Code Quality: Check code quality, security, and performance concerns.\n3. Findings: For each issue include location, issue, fix suggestion, and priority.\n\nProvide an overall assessment at the end." "Investigate issue: https://github.com/acme/payment-service/issues/91\n\nInvestigate this GitHub issue using the repository as context.\n\nIssue Investigation Steps:\n1. Understand the issue description, reproduction details, and expected behavior.\n2. Analyze relevant code in this repository as context and identify likely root causes.\n3. Provide concrete insights on how to fix it, including likely files or areas to change.\n4. No need to make code change. Provide analysis only.")"#
         ]],
@@ -196,7 +189,7 @@ fn git_and_github_prompt_builders_create_review_ready_handoffs() -> ParityBatchC
 }
 
 fn discussion_and_note_prompts_capture_locations_and_search_scope() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "discussion_and_note_prompts_capture_locations_and_search_scope",
         r##"
 (list
@@ -215,16 +208,14 @@ fn discussion_and_note_prompts_capture_locations_and_search_scope() -> ParityBat
     '("/workspace/tasks/" "/workspace/notes/incidents/")
     "refresh-token reuse incidents")))
 "##,
-        true,
         expect![[
             r#"OK ("Explanation Steps:\n1. Summarize the behavior change.\n2. Trace data flow and state transitions.\n3. Identify risks, compatibility impact, and verification evidence.\n4. Focus on understanding the change. Do not make code changes." "Insert the note into the current Org file.\nTarget file: /workspace/notes/payments.org\nInsert location: around line 42 (current cursor position)\n\nNote request:\nRecord the retry invariants and operational warning.\n\nOnly update the requested insertion location. Do not change unrelated sections. Go ahead and start do the work." "Create a new Org note file under directory: /workspace/notes/incidents/\nAutomatically determine a concise filename from the note title/content you identified. Use lowercase letters, numbers, and underscores for the filename, with .org extension.\n\nNote request:\nCreate a postmortem note for duplicate settlement.\n\nDo not modify unrelated files. Go ahead and start the work." "Search my notes and related files for: refresh-token reuse incidents\nSearch scope paths:\n- /workspace/tasks/\n- /workspace/notes/incidents/\nUse the available search tools to inspect the selected paths.\nFocus on relevant information inside files, not just file names.\nReturn the most relevant paths, matched excerpts, and a concise answer.")"#
         ]],
     )
 }
 
-#[test]
-fn prompts_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn prompts_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         prompt_suffix_pipeline_preserves_provider_order_and_memoizes_nil(),
         prompt_command_detection_accepts_only_true_single_token_cli_commands(),
         structured_change_and_question_briefs_preserve_scope_and_boundaries(),
@@ -233,6 +224,5 @@ fn prompts_public_surface_batch() {
         prompt_path_preprocessing_relativizes_repo_files_and_keeps_external_paths(),
         git_and_github_prompt_builders_create_review_ready_handoffs(),
         discussion_and_note_prompts_capture_locations_and_search_scope(),
-    ];
-    assert_ai_code_batch(&cases);
+    ]
 }

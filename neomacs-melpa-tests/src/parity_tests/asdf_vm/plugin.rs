@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asdf_vm_batch};
+use super::ParityBatchCase;
 
 fn asdf_vm_plugin_index_parser_reads_real_repository_files_and_signals_exact_failures()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_plugin_index_parser_reads_real_repository_files_and_signals_exact_failures",
         r##"(let* ((valid
                      (asdf-vm-test-path
@@ -40,7 +40,6 @@ fn asdf_vm_plugin_index_parser_reads_real_repository_files_and_signals_exact_fai
                  unicode
                  missing
                  malformed)))"##,
-        true,
         expect![[
             r#"OK ((:ok ("ruby" . "https://github.com/asdf-vm/asdf-ruby.git")) (:ok ("資料" . "ssh://example/資料 λ.git")) (:error asdf-vm-plugin-unreadable-repository-file ("[ORACLE-SANDBOX]/plugin-index/missing")) (:error search-failed ("repository = ")))"#
         ]],
@@ -49,7 +48,7 @@ fn asdf_vm_plugin_index_parser_reads_real_repository_files_and_signals_exact_fai
 
 fn asdf_vm_plugin_repository_alist_loads_real_disk_index_memoizes_then_refreshes_when_cleared()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_plugin_repository_alist_loads_real_disk_index_memoizes_then_refreshes_when_cleared",
         r##"(let* ((root
                      (asdf-vm-test-path
@@ -90,7 +89,6 @@ fn asdf_vm_plugin_repository_alist_loads_real_disk_index_memoizes_then_refreshes
                     first
                     memoized
                     (asdf-vm-plugin--repository-alist)))))"##,
-        true,
         expect![[
             r#"OK (#1=(("nodejs" . "https://example/node.git") ("ruby" . "https://example/ruby-v1.git")) #1# (("nodejs" . "https://example/node.git") ("ruby" . "https://example/ruby-v2.git")))"#
         ]],
@@ -99,7 +97,7 @@ fn asdf_vm_plugin_repository_alist_loads_real_disk_index_memoizes_then_refreshes
 
 fn asdf_vm_plugin_name_and_url_readers_forward_completion_options_and_repository_default()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_plugin_name_and_url_readers_forward_completion_options_and_repository_default",
         r##"(let ((asdf-vm-plugin--repository-alist
                     '(("ruby" .
@@ -141,7 +139,6 @@ fn asdf_vm_plugin_name_and_url_readers_forward_completion_options_and_repository
                    "default"
                    t)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ("ruby" "https://chosen/repository.git" "https://chosen/repository.git" ((:complete "Plugin name: " ("ruby" "nodejs") predicate t "ru" history "ruby" t) (:read "Plugin git url: " "https://example/ruby.git" nil nil nil) (:read "Plugin git url: " "https://initial/value.git" history "default" t)))"#
         ]],
@@ -150,7 +147,7 @@ fn asdf_vm_plugin_name_and_url_readers_forward_completion_options_and_repository
 
 fn asdf_vm_plugin_installed_and_available_lists_reflect_real_filesystem_and_messages()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_plugin_installed_and_available_lists_reflect_real_filesystem_and_messages",
         r##"(let* ((asdf-vm--plugins-directory
                      (file-name-as-directory
@@ -186,7 +183,6 @@ fn asdf_vm_plugin_installed_and_available_lists_reflect_real_filesystem_and_mess
                (list
                 (asdf-vm-plugin-list)
                 (asdf-vm-plugin-list-all)))"##,
-        true,
         expect![[
             r#"OK (("ruby" "standalone" "資料") (("ruby" "https://example/ruby.git") ("nodejs" "https://example/node.git") ("資料" "https://example/資料.git")))"#
         ]],
@@ -195,7 +191,7 @@ fn asdf_vm_plugin_installed_and_available_lists_reflect_real_filesystem_and_mess
 
 fn asdf_vm_plugin_installed_completion_forwards_all_arguments_and_disk_candidates()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_plugin_installed_completion_forwards_all_arguments_and_disk_candidates",
         r##"(let (calls)
                (cl-letf
@@ -219,7 +215,6 @@ fn asdf_vm_plugin_installed_completion_forwards_all_arguments_and_disk_candidate
                    "ruby"
                    t)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ("資料" (("Installed plugin name: " ("ruby" "nodejs" "資料") predicate t "資" history "ruby" t)))"#
         ]],
@@ -228,7 +223,7 @@ fn asdf_vm_plugin_installed_completion_forwards_all_arguments_and_disk_candidate
 
 fn asdf_vm_plugin_mutating_commands_construct_add_remove_update_and_update_all_calls_exactly()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_plugin_mutating_commands_construct_add_remove_update_and_update_all_calls_exactly",
         r##"(let (calls)
                (cl-letf
@@ -256,16 +251,14 @@ fn asdf_vm_plugin_mutating_commands_construct_add_remove_update_and_update_all_c
                   (asdf-vm-plugin-update-all
                    1)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (:queued :queued :queued :queued :queued ((:call :command (plugin add) :command-arguments ("ruby" "https://example/ruby.git") :blocking 1) (:call :command (plugin remove) :command-arguments ("nodejs") :blocking nil) (:call :command #1=(plugin update) :command-arguments ("python") :blocking nil) (:call :command #1# :command-arguments ("python" "feature/λ") :blocking 4) (:call :command (plugin update) :command-arguments ("--all") :blocking 1)))"#
         ]],
     )
 }
 
-#[test]
-fn plugin_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn plugin_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asdf_vm_plugin_index_parser_reads_real_repository_files_and_signals_exact_failures(),
         asdf_vm_plugin_repository_alist_loads_real_disk_index_memoizes_then_refreshes_when_cleared(
         ),
@@ -273,6 +266,5 @@ fn plugin_public_surface_batch() {
         asdf_vm_plugin_installed_and_available_lists_reflect_real_filesystem_and_messages(),
         asdf_vm_plugin_installed_completion_forwards_all_arguments_and_disk_candidates(),
         asdf_vm_plugin_mutating_commands_construct_add_remove_update_and_update_all_calls_exactly(),
-    ];
-    assert_asdf_vm_batch(&cases);
+    ]
 }

@@ -1,14 +1,13 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ada_ts_mode_batch};
+use super::ParityBatchCase;
 
 /// Opening a real Ada spec: `auto-mode-alist` routes the file to the mode, the
 /// mode refuses to start without a usable grammar, and what comes up is a live
 /// Ada parse tree rather than a fallback.  The parser's root node and its child
 /// count are pinned so a mode that silently degraded could not pass.
-
 fn opening_an_ada_spec_activates_the_tree_sitter_mode_with_a_live_parser() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "opening_an_ada_spec_activates_the_tree_sitter_mode_with_a_live_parser",
         r##"(ada-test-in-file
  "src/shop-inventory.ads" ada-test-spec
@@ -22,7 +21,6 @@ fn opening_an_ada_spec_activates_the_tree_sitter_mode_with_a_live_parser() -> Pa
        :indent (list indent-line-function indent-region-function)
        :imenu imenu-create-index-function
        :defun-name-fn treesit-defun-name-function))"##,
-        true,
         expect![[
             r#"OK (:mode ada-ts-mode :routing ada-ts-mode :ready t :parsers (ada) :root "compilation" :children 2 :comment ("--" "") :indent (ada-ts-mode--indent-line ada-ts-mode--indent-region) :imenu ada-ts-imenu :defun-name-fn ada-ts-mode--defun-name)"#
         ]],
@@ -30,7 +28,7 @@ fn opening_an_ada_spec_activates_the_tree_sitter_mode_with_a_live_parser() -> Pa
 }
 
 fn font_lock_assigns_faces_by_feature_level_across_the_spec() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "font_lock_assigns_faces_by_feature_level_across_the_spec",
         r##"(ada-test-in-file
  "src/shop-inventory.ads" ada-test-spec
@@ -46,7 +44,6 @@ fn font_lock_assigns_faces_by_feature_level_across_the_spec() -> ParityBatchCase
                         (font-lock-ensure)
                         (ada-test-faces-at '("--  Inventory" "package" "100")))
          :features treesit-font-lock-feature-list)))"##,
-        true,
         expect![[
             r#"OK (:level4 (("--  Inventory" 1 font-lock-comment-face) ("package" 45 font-lock-keyword-face) ("Max_Items" 75 (font-lock-constant-face font-lock-variable-name-face)) ("100" 107 font-lock-number-face) ("Item_Id" 121 font-lock-type-face) ("Name_Of" 159 (font-lock-function-name-face))) :level1 (("--  Inventory" 1 font-lock-comment-face) ("package" 45 nil) ("100" 107 nil)) :features ((comment definition) (keyword preprocessor string type) (attribute assignment constant control function number operator) (bracket delimiter error label)))"#
         ]],
@@ -54,7 +51,7 @@ fn font_lock_assigns_faces_by_feature_level_across_the_spec() -> ParityBatchCase
 }
 
 fn indenting_a_flattened_package_body_reproduces_the_original_layout() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "indenting_a_flattened_package_body_reproduces_the_original_layout",
         r##"(ada-test-in-file
  "src/shop-inventory.adb" ada-test-body
@@ -68,7 +65,6 @@ fn indenting_a_flattened_package_body_reproduces_the_original_layout() -> Parity
          :matches-original (string= (buffer-substring-no-properties (point-min) (point-max))
                                     ada-test-body)
          :offset ada-ts-mode-indent-offset)))"##,
-        true,
         expect![[
             r#"OK (:flattened "package body Shop.Inventory is\n\nfunction Name_Of (Id : Item_Id) return String is\nbegin\nreturn \"Artikel\";\nend Name_Of;\n\nprocedure Restock (Id : Item_Id; Count : Natural) is\nRemaining : Natural := Count;\nbegin\nwhile Remaining > 0 loop\nRemaining := Remaining - 1;\nend loop;\nend Restock;\n\nend Shop.Inventory;\n" :indented "package body Shop.Inventory is\n\n   function Name_Of (Id : Item_Id) return String is\n   begin\n      return \"Artikel\";\n   end Name_Of;\n\n   procedure Restock (Id : Item_Id; Count : Natural) is\n      Remaining : Natural := Count;\n   begin\n      while Remaining > 0 loop\n         Remaining := Remaining - 1;\n      end loop;\n   end Restock;\n\nend Shop.Inventory;\n" :matches-original t :offset 3)"#
         ]],
@@ -76,7 +72,7 @@ fn indenting_a_flattened_package_body_reproduces_the_original_layout() -> Parity
 }
 
 fn imenu_and_defun_navigation_follow_the_parse_tree() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "imenu_and_defun_navigation_follow_the_parse_tree",
         r##"(ada-test-in-file
  "src/shop-inventory.adb" ada-test-body
@@ -96,7 +92,6 @@ fn imenu_and_defun_navigation_follow_the_parse_tree() -> ParityBatchCase {
          (list :index index :inside inside :start start :finish finish
                :outer (list (point) (buffer-substring-no-properties
                                      (point) (line-end-position)))))))))"##,
-        true,
         expect![[
             r#"OK (:index (("Package" ("Shop.Inventory" . 1)) ("Subprogram" ("Shop.Inventory" ("Name_Of" . 36) ("Restock" . 138)))) :inside (116 "Name_Of") :start (33 "   function Name_Of (Id : Item_Id) return String is") :finish (134 "   end Name_Of;\n") :outer (1 "package body Shop.Inventory is"))"#
         ]],
@@ -104,7 +99,7 @@ fn imenu_and_defun_navigation_follow_the_parse_tree() -> ParityBatchCase {
 }
 
 fn the_comment_box_command_frames_the_subprogram_at_point() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_comment_box_command_frames_the_subprogram_at_point",
         r##"(ada-test-in-file
  "src/shop-inventory.adb" ada-test-body
@@ -114,21 +109,18 @@ fn the_comment_box_command_frames_the_subprogram_at_point() -> ParityBatchCase {
  (call-interactively 'ada-ts-mode-defun-comment-box)
  (list :boxed (buffer-substring-no-properties (point-min) (point-max))
        :point (point)))"##,
-        true,
         expect![[
             r#"OK (:boxed "package body Shop.Inventory is\n\n   function Name_Of (Id : Item_Id) return String is\n   begin\n      return \"Artikel\";\n   end Name_Of;\n\n   -------------\n   -- Restock --\n   -------------\n\n   procedure Restock (Id : Item_Id; Count : Natural) is\n      Remaining : Natural := Count;\n   begin\n      while Remaining > 0 loop\n         Remaining := Remaining - 1;\n      end loop;\n   end Restock;\n\nend Shop.Inventory;\n" :point 207)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         opening_an_ada_spec_activates_the_tree_sitter_mode_with_a_live_parser(),
         font_lock_assigns_faces_by_feature_level_across_the_spec(),
         indenting_a_flattened_package_body_reproduces_the_original_layout(),
         imenu_and_defun_navigation_follow_the_parse_tree(),
         the_comment_box_command_frames_the_subprogram_at_point(),
-    ];
-    assert_ada_ts_mode_batch(&cases);
+    ]
 }

@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ANKI_CONNECT_MELPA_PIN, CachedMelpaOracle, S_MELPA_PIN};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -37,33 +36,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_anki_connect_source_parity(
-    source_file: &str,
-    include_undeclared_s_dependency: bool,
-    elisp_form: &str,
-    expected: Expect,
-) {
-    let name = current_test_name();
-    let report = anki_connect_oracle(source_file, include_undeclared_s_dependency)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("anki-connect parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_anki_connect_parity(elisp_form: &str, expected: Expect) {
-    assert_anki_connect_source_parity("anki-connect.el", true, elisp_form, expected);
-}
-
-pub(crate) fn assert_anki_connect_missing_dependency_signal(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = anki_connect_oracle("anki-connect.el", false)
-        .run_signal(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("anki-connect missing-dependency parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_anki_connect_parity` cases (2a).
 pub(crate) fn assert_anki_connect_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -85,3 +57,26 @@ pub(crate) fn assert_anki_connect_missing_dependency_batch(cases: &[ParityBatchC
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn anki_connect_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_anki_connect_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_anki_connect_batch(&cases);
+}
+
+#[test]
+fn anki_connect_missing_dependency_package_batch() {
+    let cases: Vec<ParityBatchCase> =
+        [workflows::workflows_anki_connect_missing_dependency_batch_cases()]
+            .into_iter()
+            .flatten()
+            .collect();
+    assert_anki_connect_missing_dependency_batch(&cases);
+}
+
+// END generated package batch tests

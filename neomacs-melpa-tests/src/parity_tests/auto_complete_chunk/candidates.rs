@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_chunk_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_chunk_ports_all_upstream_candidate_match_no_match_and_after_word_cases()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_ports_all_upstream_candidate_match_no_match_and_after_word_cases",
         r##"(mapcar
                            (lambda (case)
@@ -22,16 +22,16 @@ fn auto_complete_chunk_ports_all_upstream_candidate_match_no_match_and_after_wor
                               ("a.xx" "a.xy" "b.xx" "b.xy"))
                              ("c."
                               ("a.x" "a.y" "b.x" "b.y"))))"##,
-        true,
         expect![[
             r#"OK (("a." ("a.x" "a.y" "b.x" "b.y") ("a.x" "a.y")) ("a.x" ("a.xx" "a.xy" "b.xx" "b.xy") ("a.xx" "a.xy")) ("c." ("a.x" "a.y" "b.x" "b.y") nil))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_chunk_candidates_preserve_input_order_duplicates_and_exact_prefix_matches()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_candidates_preserve_input_order_duplicates_and_exact_prefix_matches",
         r##"(with-temp-buffer
                            (emacs-lisp-mode)
@@ -47,7 +47,6 @@ fn auto_complete_chunk_candidates_preserve_input_order_duplicates_and_exact_pref
                               dictionary
                               (ac-chunk-candidates-from-list
                                dictionary))))"##,
-        true,
         expect![[
             r#"OK (("api.users.list" "api.user" "api.users.get" "other.api.user" "api.users.list" "api.User") ("api.users.list" "api.user" "api.users.get" "api.users.list"))"#
         ]],
@@ -56,7 +55,7 @@ fn auto_complete_chunk_candidates_preserve_input_order_duplicates_and_exact_pref
 
 fn auto_complete_chunk_candidate_filtering_is_case_sensitive_across_mixed_case_prefixes()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_candidate_filtering_is_case_sensitive_across_mixed_case_prefixes",
         r##"(mapcar
                            (lambda (prefix)
@@ -73,7 +72,6 @@ fn auto_complete_chunk_candidate_filtering_is_case_sensitive_across_mixed_case_p
                            '("Pkg."
                              "pkg."
                              "PKG."))"##,
-        true,
         expect![[
             r#"OK (("Pkg." ("Pkg.Module" "Pkg.module")) ("pkg." ("pkg.Module" "pkg.module")) ("PKG." nil))"#
         ]],
@@ -82,7 +80,7 @@ fn auto_complete_chunk_candidate_filtering_is_case_sensitive_across_mixed_case_p
 
 fn auto_complete_chunk_candidates_use_only_text_before_point_during_incremental_editing()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_candidates_use_only_text_before_point_during_incremental_editing",
         r##"(with-temp-buffer
                            (emacs-lisp-mode)
@@ -114,7 +112,6 @@ fn auto_complete_chunk_candidates_use_only_text_before_point_during_incremental_
                                 "service.c"
                                 "service.client."
                                 "service.client.r"))))"##,
-        true,
         expect![[
             r#"OK (("service." 9 1 "service." ("service.cache.clear" "service.client.close" "service.client.request" "service.client.retry")) ("service.c" 10 1 "service.c" ("service.cache.clear" "service.client.close" "service.client.request" "service.client.retry")) ("service.client." 16 1 "service.client." ("service.client.close" "service.client.request" "service.client.retry")) ("service.client.r" 17 1 "service.client.r" ("service.client.request" "service.client.retry")))"#
         ]],
@@ -122,7 +119,7 @@ fn auto_complete_chunk_candidates_use_only_text_before_point_during_incremental_
 }
 
 fn auto_complete_chunk_no_boundary_short_circuits_invalid_candidate_elements() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_no_boundary_short_circuits_invalid_candidate_elements",
         r##"(mapcar
                            (lambda (text)
@@ -137,14 +134,13 @@ fn auto_complete_chunk_no_boundary_short_circuits_invalid_candidate_elements() -
                            '(""
                              "two words"
                              "a.."))"##,
-        true,
         expect!["OK ((:value nil) (:signal wrong-type-argument (sequencep 42)) (:value nil))"],
     )
 }
 
 fn auto_complete_chunk_valid_prefix_surfaces_exact_invalid_candidate_type_signals()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_valid_prefix_surfaces_exact_invalid_candidate_type_signals",
         r##"(mapcar
                            (lambda (dictionary)
@@ -162,7 +158,6 @@ fn auto_complete_chunk_valid_prefix_surfaces_exact_invalid_candidate_type_signal
                              (("a.x"))
                              ("a.x" 42)
                              nil))"##,
-        true,
         expect![[
             r#"OK (((42) (:signal wrong-type-argument (sequencep 42))) ((fixture-symbol) (:signal wrong-type-argument (sequencep fixture-symbol))) ((("a.x")) (:value nil)) (("a.x" 42) (:signal wrong-type-argument (sequencep 42))) (nil (:value nil)))"#
         ]],
@@ -171,7 +166,7 @@ fn auto_complete_chunk_valid_prefix_surfaces_exact_invalid_candidate_type_signal
 
 fn auto_complete_chunk_candidate_objects_keep_text_properties_and_object_identity()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_candidate_objects_keep_text_properties_and_object_identity",
         r##"(with-temp-buffer
                            (emacs-lisp-mode)
@@ -208,7 +203,6 @@ fn auto_complete_chunk_candidate_objects_keep_text_properties_and_object_identit
                                    (eq candidate second))))
                                result)
                               dictionary)))"##,
-        true,
         expect![[
             r#"OK ((#("api.first" 0 9 (kind :method)) #("api.second" 0 10 (kind :field))) ((:method t) (:field t)) (#("api.first" 0 9 (kind :method)) "other" #("api.second" 0 10 (kind :field))))"#
         ]],
@@ -217,7 +211,7 @@ fn auto_complete_chunk_candidate_objects_keep_text_properties_and_object_identit
 
 fn auto_complete_chunk_filter_does_not_mutate_dictionary_and_returns_fresh_result_spine()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_filter_does_not_mutate_dictionary_and_returns_fresh_result_spine",
         r##"(with-temp-buffer
                            (emacs-lisp-mode)
@@ -244,14 +238,13 @@ fn auto_complete_chunk_filter_does_not_mutate_dictionary_and_returns_fresh_resul
                               (eq
                                (cadr result)
                                (caddr dictionary)))))"##,
-        true,
         expect![[r#"OK (("a.x" "a.y") ("a.x" "b.x" "a.y") t nil t t)"#]],
     )
 }
 
 fn auto_complete_chunk_dynamic_boundary_regex_drives_candidate_prefix_contract() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_dynamic_boundary_regex_drives_candidate_prefix_contract",
         r##"(with-temp-buffer
                            (insert
@@ -280,16 +273,14 @@ fn auto_complete_chunk_dynamic_boundary_regex_drives_candidate_prefix_contract()
                                 (group bol)
                                 (+ any)
                                 point)))))"##,
-        true,
         expect![[
             r#"OK (("\\(\\s-\\|\\s(\\|\\s)\\|^\\)\\(?:\\(?:\\w\\|\\s_\\)+\\s.\\)*\\(?:\\w\\|\\s_\\)+\\s.?\\=" nil nil) ("\\(::\\)[[:word:]]+\\=" 9 ("member")) ("\\(^\\).+\\=" 1 ("prefix::member")))"#
         ]],
     )
 }
 
-#[test]
-fn candidates_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn candidates_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_chunk_ports_all_upstream_candidate_match_no_match_and_after_word_cases(),
         auto_complete_chunk_candidates_preserve_input_order_duplicates_and_exact_prefix_matches(),
         auto_complete_chunk_candidate_filtering_is_case_sensitive_across_mixed_case_prefixes(),
@@ -299,6 +290,5 @@ fn candidates_public_surface_batch() {
         auto_complete_chunk_candidate_objects_keep_text_properties_and_object_identity(),
         auto_complete_chunk_filter_does_not_mutate_dictionary_and_returns_fresh_result_spine(),
         auto_complete_chunk_dynamic_boundary_regex_drives_candidate_prefix_contract(),
-    ];
-    assert_auto_complete_chunk_batch(&cases);
+    ]
 }

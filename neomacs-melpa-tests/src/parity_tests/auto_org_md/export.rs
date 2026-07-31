@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_org_md_batch};
+use super::ParityBatchCase;
 
 fn auto_org_md_export_skips_fundamental_mode_without_touching_exporter() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_skips_fundamental_mode_without_touching_exporter",
         r##"(let (calls)
          (cl-letf (((symbol-function 'org-md-export-to-markdown)
@@ -17,13 +17,12 @@ fn auto_org_md_export_skips_fundamental_mode_without_touching_exporter() -> Pari
               calls
               major-mode
               (buffer-string)))))"##,
-        true,
         expect![[r#"OK (nil nil fundamental-mode "")"#]],
     )
 }
 
 fn auto_org_md_export_skips_text_and_markdown_modes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_skips_text_and_markdown_modes",
         r##"(progn
          (define-derived-mode
@@ -44,13 +43,12 @@ fn auto_org_md_export_skips_text_and_markdown_modes() -> ParityBatchCase {
                       calls)))
             '(text-mode
               auto-org-md-test-markdown-mode)))))"##,
-        true,
         expect!["OK ((text-mode nil nil) (auto-org-md-test-markdown-mode nil nil))"],
     )
 }
 
 fn auto_org_md_export_invokes_markdown_exporter_once_in_org_mode() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_invokes_markdown_exporter_once_in_org_mode",
         r##"(let (calls)
          (cl-letf (((symbol-function 'org-md-export-to-markdown)
@@ -65,13 +63,12 @@ fn auto_org_md_export_invokes_markdown_exporter_once_in_org_mode() -> ParityBatc
               (nreverse calls)
               (buffer-string)
               major-mode))))"##,
-        true,
         expect![[r#"OK (:exported (nil) "* Heading\nBody" org-mode)"#]],
     )
 }
 
 fn auto_org_md_export_recognizes_modes_derived_from_org_mode() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_recognizes_modes_derived_from_org_mode",
         r##"(progn
          (define-derived-mode
@@ -90,13 +87,12 @@ fn auto_org_md_export_recognizes_modes_derived_from_org_mode() -> ParityBatchCas
                 (auto-org-md-export)
                 (nreverse calls)
                 major-mode)))))"##,
-        true,
         expect!["OK (org-mode :derived-export (nil) auto-org-md-test-derived-mode)"],
     )
 }
 
 fn auto_org_md_export_forwards_exporter_return_values_exactly() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_forwards_exporter_return_values_exactly",
         r##"(mapcar
          (lambda (value)
@@ -108,7 +104,6 @@ fn auto_org_md_export_forwards_exporter_return_values_exactly() -> ParityBatchCa
                (list value
                      (auto-org-md-export)))))
          '(nil t :file "notes.md" 42 (nested value)))"##,
-        true,
         expect![[
             r#"OK ((nil nil) (t t) (:file :file) ("notes.md" "notes.md") (42 42) (#1=(nested value) #1#))"#
         ]],
@@ -116,7 +111,7 @@ fn auto_org_md_export_forwards_exporter_return_values_exactly() -> ParityBatchCa
 }
 
 fn auto_org_md_export_propagates_exporter_error_data() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_propagates_exporter_error_data",
         r##"(with-temp-buffer
          (org-mode)
@@ -129,13 +124,12 @@ fn auto_org_md_export_propagates_exporter_error_data() -> ParityBatchCase {
                          "notes.org")))))
            (auto-org-md-test-error
             #'auto-org-md-export)))"##,
-        true,
         expect![[r#"OK (:signal file-error ("fixture export failed" "notes.org"))"#]],
     )
 }
 
 fn auto_org_md_export_calls_exporter_without_arguments() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_calls_exporter_without_arguments",
         r##"(with-temp-buffer
          (org-mode)
@@ -148,13 +142,12 @@ fn auto_org_md_export_calls_exporter_without_arguments() -> ParityBatchCase {
              (list
               (auto-org-md-export)
               observed))))"##,
-        true,
         expect!["OK (:done nil)"],
     )
 }
 
 fn auto_org_md_export_preserves_current_buffer_context_for_exporter() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_preserves_current_buffer_context_for_exporter",
         r##"(with-temp-buffer
          (org-mode)
@@ -183,13 +176,12 @@ fn auto_org_md_export_preserves_current_buffer_context_for_exporter() -> ParityB
             (point-min)
             (point-max)
             (buffer-modified-p))))"##,
-        true,
         expect![[r#"OK ((org-mode 10 9 18 t "context.org") 10 9 18 t)"#]],
     )
 }
 
 fn auto_org_md_export_uses_runtime_derived_mode_predicate() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_uses_runtime_derived_mode_predicate",
         r##"(let (calls)
          (cl-letf (((symbol-function 'derived-mode-p)
@@ -204,14 +196,13 @@ fn auto_org_md_export_uses_runtime_derived_mode_predicate() -> ParityBatchCase {
              (list
               (auto-org-md-export)
               (nreverse calls)))))"##,
-        true,
         expect!["OK (:exported ((org-mode)))"],
     )
 }
 
 fn auto_org_md_export_is_noninteractive_but_callable_via_funcall_interactively() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_is_noninteractive_but_callable_via_funcall_interactively",
         r##"(with-temp-buffer
          (org-mode)
@@ -226,14 +217,12 @@ fn auto_org_md_export_is_noninteractive_but_callable_via_funcall_interactively()
             (commandp 'auto-org-md-export)
             (funcall-interactively
              #'auto-org-md-export))))"##,
-        true,
         expect!["OK (nil (nil nil nil))"],
     )
 }
 
-#[test]
-fn export_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn export_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_org_md_export_skips_fundamental_mode_without_touching_exporter(),
         auto_org_md_export_skips_text_and_markdown_modes(),
         auto_org_md_export_invokes_markdown_exporter_once_in_org_mode(),
@@ -244,6 +233,5 @@ fn export_public_surface_batch() {
         auto_org_md_export_preserves_current_buffer_context_for_exporter(),
         auto_org_md_export_uses_runtime_derived_mode_predicate(),
         auto_org_md_export_is_noninteractive_but_callable_via_funcall_interactively(),
-    ];
-    assert_auto_org_md_batch(&cases);
+    ]
 }

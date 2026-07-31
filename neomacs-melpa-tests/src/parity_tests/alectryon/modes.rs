@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alectryon_batch};
+use super::ParityBatchCase;
 
 fn alectryon_code_mode_activation_installs_real_buffer_local_editing_and_save_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_code_mode_activation_installs_real_buffer_local_editing_and_save_state",
         r##"(with-temp-buffer
   (coq-mode)
@@ -20,7 +20,6 @@ fn alectryon_code_mode_activation_installs_real_buffer_local_editing_and_save_st
    (lookup-key (current-local-map) (kbd "C-c C-S-a"))
    (local-variable-p 'font-lock-syntactic-face-function)
    (not (null alectryon--prog-font-lock-keywords))))"##,
-        true,
         expect![
             "OK (coq-mode t t nil coq-mode coq-mode nil t t (alectryon--save) (alectryon--flyspell-hook t) (modification-hooks wrap-prefix display) 1 1 t t)"
         ],
@@ -29,7 +28,7 @@ fn alectryon_code_mode_activation_installs_real_buffer_local_editing_and_save_st
 
 fn alectryon_markup_activation_uses_text_keymap_and_records_original_mode_without_code_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_markup_activation_uses_text_keymap_and_records_original_mode_without_code_state",
         r##"(with-temp-buffer
   (let ((alectryon--winding-down t))
@@ -46,14 +45,13 @@ fn alectryon_markup_activation_uses_text_keymap_and_records_original_mode_withou
    (lookup-key (current-local-map) [remap newline])
    visual-line-mode
    alectryon--prog-font-lock-keywords))"##,
-        true,
         expect!["OK (rst-mode t nil t rst-mode (alectryon--save) nil rst-adjust 1 nil nil)"],
     )
 }
 
 fn alectryon_disabling_in_original_code_mode_cleans_hooks_maps_and_font_lock_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_disabling_in_original_code_mode_cleans_hooks_maps_and_font_lock_state",
         r##"(with-temp-buffer
   (coq-mode)
@@ -71,7 +69,6 @@ fn alectryon_disabling_in_original_code_mode_cleans_hooks_maps_and_font_lock_sta
           (memq #'alectryon--flyspell-hook flyspell-mode-hook)
           (lookup-key (current-local-map) (kbd "C-c C-="))
           (local-variable-p 'font-lock-syntactic-face-function))))"##,
-        true,
         expect![
             "OK ((t t nil (alectryon--save) (alectryon--flyspell-hook t)) coq-mode nil nil nil nil nil nil 1 nil)"
         ],
@@ -79,7 +76,7 @@ fn alectryon_disabling_in_original_code_mode_cleans_hooks_maps_and_font_lock_sta
 }
 
 fn alectryon_auto_enable_hooks_respect_winding_down_and_cover_only_code_modes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_auto_enable_hooks_respect_winding_down_and_cover_only_code_modes",
         r##"(list
  (with-temp-buffer
@@ -98,7 +95,6 @@ fn alectryon_auto_enable_hooks_respect_winding_down_and_cover_only_code_modes() 
  (with-temp-buffer
    (rst-mode)
    (list major-mode alectryon-mode alectryon--original-mode)))"##,
-        true,
         expect![
             "OK ((coq-mode t coq-mode) (lean4-mode t lean4-mode) (dafny-mode t dafny-mode) (coq-mode nil nil) (rst-mode nil nil))"
         ],
@@ -106,7 +102,7 @@ fn alectryon_auto_enable_hooks_respect_winding_down_and_cover_only_code_modes() 
 }
 
 fn alectryon_failed_disable_still_runs_cleanup_through_unwind_protect() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_failed_disable_still_runs_cleanup_through_unwind_protect",
         r##"(with-temp-buffer
   (let ((alectryon--winding-down t))
@@ -126,13 +122,12 @@ fn alectryon_failed_disable_still_runs_cleanup_through_unwind_protect() -> Parit
             (memq #'alectryon--save write-contents-functions)
             (memq #'alectryon--flyspell-hook flyspell-mode-hook)
             alectryon--text-mode alectryon--prog-mode))))"##,
-        true,
         expect![[r#"OK ((error "deterministic conversion failure") nil nil nil nil nil)"#]],
     )
 }
 
 fn alectryon_flyspell_integration_is_buffer_local_idempotent_and_reversible() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_flyspell_integration_is_buffer_local_idempotent_and_reversible",
         r##"(with-temp-buffer
   (let ((alectryon--winding-down t))
@@ -145,20 +140,17 @@ fn alectryon_flyspell_integration_is_buffer_local_idempotent_and_reversible() ->
     (alectryon--flyspell-unhook)
     (list enabled flyspell-prog-text-faces
           (local-variable-p 'flyspell-prog-text-faces))))"##,
-        true,
         expect!["OK ((alectryon-comment font-lock-string-face) (font-lock-string-face) t)"],
     )
 }
 
-#[test]
-fn modes_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn modes_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         alectryon_code_mode_activation_installs_real_buffer_local_editing_and_save_state(),
         alectryon_markup_activation_uses_text_keymap_and_records_original_mode_without_code_state(),
         alectryon_disabling_in_original_code_mode_cleans_hooks_maps_and_font_lock_state(),
         alectryon_auto_enable_hooks_respect_winding_down_and_cover_only_code_modes(),
         alectryon_failed_disable_still_runs_cleanup_through_unwind_protect(),
         alectryon_flyspell_integration_is_buffer_local_idempotent_and_reversible(),
-    ];
-    assert_alectryon_batch(&cases);
+    ]
 }

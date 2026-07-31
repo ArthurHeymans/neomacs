@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asdf_vm_batch};
+use super::ParityBatchCase;
 
 fn asdf_vm_process_defaults_use_buffer_file_parent_then_default_directory() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_process_defaults_use_buffer_file_parent_then_default_directory",
         r##"(let ((asdf-vm-process-executable
                     "/fixture/asdf")
@@ -18,7 +18,6 @@ fn asdf_vm_process_defaults_use_buffer_file_parent_then_default_directory() -> P
                   (asdf-vm--make-process-defaults))
                 (with-temp-buffer
                   (asdf-vm--make-process-defaults))))"##,
-        true,
         expect![[
             r#"OK ((:executable "/fixture/asdf" :executable-arguments #1=("--color" "never") :directory "/project/src/") (:executable "/fixture/asdf" :executable-arguments #1# :directory "/fallback/work/"))"#
         ]],
@@ -26,7 +25,7 @@ fn asdf_vm_process_defaults_use_buffer_file_parent_then_default_directory() -> P
 }
 
 fn asdf_vm_call_args_merge_supported_overrides_and_ignore_dispatch_only_keys() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_call_args_merge_supported_overrides_and_ignore_dispatch_only_keys",
         r##"(let ((asdf-vm-process-executable
                     "/default/asdf")
@@ -48,7 +47,6 @@ fn asdf_vm_call_args_merge_supported_overrides_and_ignore_dispatch_only_keys() -
                   :success-codes (0 7)
                   :unknown "ignored")
                 "*selected-buffer*"))"##,
-        true,
         expect![[
             r#"OK (:executable "/custom/asdf" :executable-arguments ("--custom") :directory "/custom/work/" :buffer-name "*ignored-input*" :name "explicit" :name-prefix "prefix" :command (plugin add) :command-arguments ("ruby" "url"))"#
         ]],
@@ -56,7 +54,7 @@ fn asdf_vm_call_args_merge_supported_overrides_and_ignore_dispatch_only_keys() -
 }
 
 fn asdf_vm_process_name_formatting_covers_explicit_nested_and_empty_commands() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_process_name_formatting_covers_explicit_nested_and_empty_commands",
         r##"(mapcar
                (lambda (arguments)
@@ -68,14 +66,13 @@ fn asdf_vm_process_name_formatting_covers_explicit_nested_and_empty_commands() -
                  (nil "asdf" (plugin add))
                  (nil "asdf" nil)
                  ("" "asdf" current)))"##,
-        true,
         expect![[r#"OK ("explicit" "asdf[current]" "asdf[(plugin add)]" "asdf" "")"#]],
     )
 }
 
 fn asdf_vm_make_process_constructs_exact_async_process_plist_and_working_directory()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_make_process_constructs_exact_async_process_plist_and_working_directory",
         r##"(let ((asdf-vm-process-stderr-buffer-name
                     "*fixture-stderr*")
@@ -104,7 +101,6 @@ fn asdf_vm_make_process_constructs_exact_async_process_plist_and_working_directo
                    :buffer-name "*fixture-output*"
                    :name-prefix "manager")
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (:process (((:name "manager[(plugin add)]" :buffer (:buffer "*fixture-output*") :sentinel asdf-vm-process--sentinel :command ("/fixture/asdf" "--global" "資料" "plugin" "add" "ruby" "https://example/ruby.git") :stderr "*fixture-stderr*") "/work/project/" "*fixture-output*")))"#
         ]],
@@ -113,7 +109,7 @@ fn asdf_vm_make_process_constructs_exact_async_process_plist_and_working_directo
 
 fn asdf_vm_call_runs_deterministic_external_executable_with_exact_order_directory_and_output()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_call_runs_deterministic_external_executable_with_exact_order_directory_and_output",
         r##"(let* ((directory
                      (file-name-as-directory
@@ -139,7 +135,6 @@ fn asdf_vm_call_runs_deterministic_external_executable_with_exact_order_director
                   "https://example/ruby repo.git")
                 :directory directory
                 :output t))"##,
-        true,
         expect![[
             r#"OK "PWD=<[ORACLE-SANDBOX]/process-real/work>\nARG=<--global>\nARG=<資料 λ>\nARG=<plugin>\nARG=<add>\nARG=<ruby>\nARG=<https://example/ruby repo.git>\n""#
         ]],
@@ -148,7 +143,7 @@ fn asdf_vm_call_runs_deterministic_external_executable_with_exact_order_director
 
 fn asdf_vm_sync_call_returns_nil_without_output_and_ignores_external_exit_status() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_sync_call_returns_nil_without_output_and_ignores_external_exit_status",
         r##"(let ((executable
                     (asdf-vm-test-make-executable
@@ -165,13 +160,12 @@ fn asdf_vm_sync_call_returns_nil_without_output_and_ignores_external_exit_status
                  :executable executable
                  :command 'version
                  :output nil)))"##,
-        true,
         expect!["OK (nil nil)"],
     )
 }
 
 fn asdf_vm_call_dispatch_uses_presence_of_blocking_or_output_even_when_nil() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_call_dispatch_uses_presence_of_blocking_or_output_even_when_nil",
         r##"(let (calls)
                (cl-letf
@@ -203,7 +197,6 @@ fn asdf_vm_call_dispatch_uses_presence_of_blocking_or_output_even_when_nil() -> 
                    :blocking nil
                    :output nil)
                   (nreverse calls))))"##,
-        true,
         expect![
             "OK (:async :sync :sync :sync ((:async :command one) (:sync :command two :blocking nil) (:sync :command three :output nil) (:sync :command four :blocking nil :output nil)))"
         ],
@@ -211,7 +204,7 @@ fn asdf_vm_call_dispatch_uses_presence_of_blocking_or_output_even_when_nil() -> 
 }
 
 fn asdf_vm_async_call_starts_immediately_or_enqueues_complete_call_args_fifo() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_async_call_starts_immediately_or_enqueues_complete_call_args_fifo",
         r##"(let ((asdf-vm-process-executable
                     "/fixture/asdf")
@@ -258,7 +251,6 @@ fn asdf_vm_async_call_starts_immediately_or_enqueues_complete_call_args_fifo() -
                       second
                       asdf-vm-process--call-queue
                       (nreverse calls))))))"##,
-        true,
         expect![[
             r#"OK (:started #1=((:command old) (:executable "/fixture/asdf" :executable-arguments #2=("--base") :directory "/work/custom/" :buffer-name "*asdf-vm*" :command (plugin update) :command-arguments ("--all"))) #1# ((:running "*asdf-vm*" nil) (:make :executable "/fixture/asdf" :executable-arguments #2# :directory "/work/default/" :buffer-name "*asdf-vm*" :command current :command-arguments ("ruby")) (:running "*asdf-vm*" t)))"#
         ]],
@@ -267,7 +259,7 @@ fn asdf_vm_async_call_starts_immediately_or_enqueues_complete_call_args_fifo() -
 
 fn asdf_vm_buffer_process_running_p_handles_missing_buffer_process_and_statuses() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_buffer_process_running_p_handles_missing_buffer_process_and_statuses",
         r##"(let (status)
                (cl-letf
@@ -309,14 +301,13 @@ fn asdf_vm_buffer_process_running_p_handles_missing_buffer_process_and_statuses(
                       (asdf-vm-process--buffer-process-running-p
                        "present")))
                    '(run stop exit signal none)))))"##,
-        true,
         expect!["OK (nil ((run t) (stop nil) (exit nil) (signal nil) (none nil)))"],
     )
 }
 
 fn asdf_vm_process_sentinel_preserves_idle_states_signals_errors_and_drains_one_queue_item()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_process_sentinel_preserves_idle_states_signals_errors_and_drains_one_queue_item",
         r##"(let ((asdf-vm-process--call-queue
                     '((:command first
@@ -354,16 +345,14 @@ fn asdf_vm_process_sentinel_preserves_idle_states_signals_errors_and_drains_one_
                     results
                     asdf-vm-process--call-queue
                     (nreverse calls)))))"##,
-        true,
         expect![[
             r#"OK (((run (:ok nil)) (stop (:ok nil)) (signal (:error asdf-vm-sentinel-nonsense-process-status (signal "fixture event"))) (open (:error asdf-vm-sentinel-nonsense-process-status (open "fixture event"))) (nil (:error asdf-vm-sentinel-missing-process (nil "fixture event"))) (mystery (:error asdf-vm-sentinel-unknown-status (mystery "fixture event"))) (exit (:ok :started)) (exit (:ok :started))) nil ((:call :command first :command-arguments ("one")) (:call :command second)))"#
         ]],
     )
 }
 
-#[test]
-fn process_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn process_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asdf_vm_process_defaults_use_buffer_file_parent_then_default_directory(),
         asdf_vm_call_args_merge_supported_overrides_and_ignore_dispatch_only_keys(),
         asdf_vm_process_name_formatting_covers_explicit_nested_and_empty_commands(),
@@ -374,6 +363,5 @@ fn process_public_surface_batch() {
         asdf_vm_async_call_starts_immediately_or_enqueues_complete_call_args_fifo(),
         asdf_vm_buffer_process_running_p_handles_missing_buffer_process_and_statuses(),
         asdf_vm_process_sentinel_preserves_idle_states_signals_errors_and_drains_one_queue_item(),
-    ];
-    assert_asdf_vm_batch(&cases);
+    ]
 }

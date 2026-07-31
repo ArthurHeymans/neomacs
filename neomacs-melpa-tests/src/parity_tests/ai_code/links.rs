@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ai_code_batch};
+use super::ParityBatchCase;
 
 fn session_link_normalization_handles_terminal_wrapping_urls_and_spaces() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_link_normalization_handles_terminal_wrapping_urls_and_spaces",
         r##"
 (progn
@@ -23,7 +23,6 @@ fn session_link_normalization_handles_terminal_wrapping_urls_and_spaces() -> Par
    (ai-code-session-link--normalize-url-link-text
     "https://example.com/app-   \n  page=true")))
 "##,
-        true,
         expect![[
             r#"OK (("src/Foo.java" "/workspace/My Image.png" "/workspace/Foo.java" "/workspace/Foo.java" "/workspace/image-wrapped.png" "./screens/My Image.png" nil) "/workspace/My Image.png" "https://example.com/app-page=true")"#
         ]],
@@ -31,7 +30,7 @@ fn session_link_normalization_handles_terminal_wrapping_urls_and_spaces() -> Par
 }
 
 fn session_link_parser_covers_editor_compiler_and_github_location_syntaxes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_link_parser_covers_editor_compiler_and_github_location_syntaxes",
         r##"
 (progn
@@ -48,7 +47,6 @@ fn session_link_parser_covers_editor_compiler_and_github_location_syntaxes() -> 
      "./README.md"
      "PaymentService")))
 "##,
-        true,
         expect![[
             r#"OK ((:url "https://example.com/review/42") (:file "src/lib.rs" :line-start 42 :column-start 7) (:file "src/lib.rs" :line-start 42) (:file "src/lib.rs:L42-L60") (:file "src/lib.rs" :line-start 42) (:file "src/lib.rs" :line-start 42 :column-start 7) (:file "src/lib.rs" :line-start 42) (:file "./README.md") nil)"#
         ]],
@@ -56,7 +54,7 @@ fn session_link_parser_covers_editor_compiler_and_github_location_syntaxes() -> 
 }
 
 fn session_linkification_marks_real_project_files_locations_and_urls() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_linkification_marks_real_project_files_locations_and_urls",
         r##"
 (progn
@@ -92,7 +90,6 @@ fn session_linkification_marks_real_project_files_locations_and_urls() -> Parity
               (nreverse result))))
       (delete-directory root t))))
 "##,
-        true,
         expect![[
             r#"OK (("src/payment.rs" "src/payment.rs" link highlight) ("src/payment.rs:42:7" "src/payment.rs:42:7" link highlight) ("https://example.com/pull/77" "https://example.com/pull/77" link highlight))"#
         ]],
@@ -100,7 +97,7 @@ fn session_linkification_marks_real_project_files_locations_and_urls() -> Parity
 }
 
 fn session_linkification_reconstructs_wrapped_urls_without_claiming_prose() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_linkification_reconstructs_wrapped_urls_without_claiming_prose",
         r##"
 (progn
@@ -128,7 +125,6 @@ fn session_linkification_reconstructs_wrapped_urls_without_claiming_prose() -> P
          result))
       (nreverse result))))
 "##,
-        true,
         expect![[
             r#"OK (("https://example.com/repo/project-int" "https://example.com/repo/project-interface.el") ("erface.el" "https://example.com/repo/project-interface.el") ("https://example.com/repo/pkg" "https://example.com/repo/pkg") ("-interface.el" "-interface.el"))"#
         ]],
@@ -136,7 +132,7 @@ fn session_linkification_reconstructs_wrapped_urls_without_claiming_prose() -> P
 }
 
 fn session_symbol_filters_are_language_aware_near_file_references() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_symbol_filters_are_language_aware_near_file_references",
         r##"
 (progn
@@ -161,7 +157,6 @@ fn session_symbol_filters_are_language_aware_near_file_references() -> ParityBat
                 (cdr case)))))
      cases)))
 "##,
-        true,
         expect![[
             r#"OK ((emacs-lisp-mode ("ai-code-session-register" t) ("make-ai-code-session" t) ("42" nil) ("*scratch*" nil)) (python-mode ("retry_payment" t) ("PaymentService" t) ("simple" nil) ("UPPER_CASE" nil)) (java-mode ("PaymentService" t) ("retryPayment" nil) ("Simple" nil) ("ALLCAPS" nil)))"#
         ]],
@@ -169,7 +164,7 @@ fn session_symbol_filters_are_language_aware_near_file_references() -> ParityBat
 }
 
 fn session_image_safety_enforces_extension_locality_and_size_budget() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_image_safety_enforces_extension_locality_and_size_budget",
         r##"
 (progn
@@ -192,20 +187,17 @@ fn session_image_safety_enforces_extension_locality_and_size_budget() -> ParityB
            (car (ai-code-session-link--image-preview-file-signature small))))
       (delete-directory root t))))
 "##,
-        true,
         expect![[r#"OK (("png" "ppm" "svg" "tif" "tiff" "webp" "xbm" "xpm") t nil nil 3)"#]],
     )
 }
 
-#[test]
-fn links_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn links_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         session_link_normalization_handles_terminal_wrapping_urls_and_spaces(),
         session_link_parser_covers_editor_compiler_and_github_location_syntaxes(),
         session_linkification_marks_real_project_files_locations_and_urls(),
         session_linkification_reconstructs_wrapped_urls_without_claiming_prose(),
         session_symbol_filters_are_language_aware_near_file_references(),
         session_image_safety_enforces_extension_locality_and_size_budget(),
-    ];
-    assert_ai_code_batch(&cases);
+    ]
 }

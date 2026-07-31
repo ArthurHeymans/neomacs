@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_affe_batch};
+use super::ParityBatchCase;
 
 fn affe_async_setup_launches_daemon_connects_and_sends_start_then_initial_search() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_async_setup_launches_daemon_connects_and_sends_start_then_initial_search",
         r##"(let (launches connection-name
                     connection-callback writes
@@ -69,7 +69,6 @@ fn affe_async_setup_launches_daemon_connects_and_sends_start_then_initial_search
                      connection-callback)
                     (nreverse overlay-ranges)
                     (nreverse writes)))))"##,
-        true,
         expect![[
             r#"OK ((handled setup) (setup) ((t nil nil nil "-Q" "--daemon=affe-fixture" t "-l" "affe-backend.el")) "affe-fixture" t ((7 8)) ((backend-client "(start \"restricted\" \"rg\" \"--files\")\n") (backend-client "(search 20)\n")))"#
         ]],
@@ -78,7 +77,7 @@ fn affe_async_setup_launches_daemon_connects_and_sends_start_then_initial_search
 
 fn affe_async_string_actions_compile_filter_deduplicate_and_send_only_changed_regexps()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_async_string_actions_compile_filter_deduplicate_and_send_only_changed_regexps",
         r##"(let ((affe-count 7)
                     compiler-calls
@@ -123,7 +122,6 @@ fn affe_async_string_actions_compile_filter_deduplicate_and_send_only_changed_re
                     (nreverse compiler-calls)
                     (nreverse downstream)
                     (nreverse writes)))))"##,
-        true,
         expect![[
             r#"OK ((downstream "alpha") (downstream "same") (downstream "invalid") (downstream "empty") (downstream refresh) (("alpha" emacs ignore-case) ("same" emacs ignore-case) ("invalid" emacs ignore-case) ("empty" emacs ignore-case)) ("alpha" "same" "invalid" "empty" refresh) ((nil "(search 7 \"a\")\n")))"#
         ]],
@@ -132,7 +130,7 @@ fn affe_async_string_actions_compile_filter_deduplicate_and_send_only_changed_re
 
 fn affe_async_callback_routes_protocol_messages_highlights_matches_and_formats_indicators()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_async_callback_routes_protocol_messages_highlights_matches_and_formats_indicators",
         r##"(let (callback displays events writes)
                (cl-letf
@@ -199,7 +197,6 @@ fn affe_async_callback_routes_protocol_messages_highlights_matches_and_formats_i
                         (get-buffer " *affe*")
                       (buffer-string))
                     (nreverse writes)))))"##,
-        true,
         expect![[
             r#"OK (((display " (total=0+):") (display " (total=999+):") (display " (total=999+):") (display " (total=1.2K):") (display " (total=1.2M+):") (display " (total=1.2M+):")) ((sink setup) (sink ("plain")) (sink "body") (highlight "body") (sink ("prebodysuffix")) (sink flush)) "backend-log\n" ("(start nil \"producer\")\n" "(search 20)\n" "(search 20 \"body\")\n"))"#
         ]],
@@ -207,7 +204,7 @@ fn affe_async_callback_routes_protocol_messages_highlights_matches_and_formats_i
 }
 
 fn affe_async_destroy_sends_exit_deletes_indicator_and_preserves_sink_return() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_async_destroy_sends_exit_deletes_indicator_and_preserves_sink_return",
         r##"(let (callback deleted writes actions)
                (cl-letf
@@ -246,7 +243,6 @@ fn affe_async_destroy_sends_exit_deletes_indicator_and_preserves_sink_return() -
                     (nreverse actions)
                     (nreverse writes)
                     (nreverse deleted)))))"##,
-        true,
         expect![[
             r#"OK ((sink-result destroy) t (setup destroy) ((backend-client "(start nil \"producer\")\n") (backend-client "(search 20)\n") (backend-client "exit\n")) (indicator))"#
         ]],
@@ -254,7 +250,7 @@ fn affe_async_destroy_sends_exit_deletes_indicator_and_preserves_sink_return() -
 }
 
 fn affe_async_reports_missing_backend_before_constructing_action_runner() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_async_reports_missing_backend_before_constructing_action_runner",
         r##"(cl-letf
                (((symbol-function 'locate-library)
@@ -267,19 +263,16 @@ fn affe_async_reports_missing_backend_before_constructing_action_runner() -> Par
                   (list 'signal
                         (car error-data)
                         (cdr error-data)))))"##,
-        true,
         expect![[r#"OK (signal error ("Could not locate the library ‘affe-backend.el’"))"#]],
     )
 }
 
-#[test]
-fn async_frontend_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn async_frontend_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         affe_async_setup_launches_daemon_connects_and_sends_start_then_initial_search(),
         affe_async_string_actions_compile_filter_deduplicate_and_send_only_changed_regexps(),
         affe_async_callback_routes_protocol_messages_highlights_matches_and_formats_indicators(),
         affe_async_destroy_sends_exit_deletes_indicator_and_preserves_sink_return(),
         affe_async_reports_missing_backend_before_constructing_action_runner(),
-    ];
-    assert_affe_batch(&cases);
+    ]
 }

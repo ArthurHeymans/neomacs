@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_highlight_symbol_batch};
+use super::ParityBatchCase;
 
 fn auto_highlight_symbol_whole_buffer_highlight_builds_current_other_and_definition_overlays()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_whole_buffer_highlight_builds_current_other_and_definition_overlays",
         r##"(save-window-excursion
                            (with-temp-buffer
@@ -31,7 +31,6 @@ fn auto_highlight_symbol_whole_buffer_highlight_builds_current_other_and_definit
                               ahs-start-point
                               (length ahs-current-overlay)
                               (length ahs-overlay-list))))"##,
-        true,
         expect![[
             r#"OK ((#("alpha" 0 5 (face font-lock-function-name-face)) 8 13) t ((8 13 current ahs-plugin-whole-buffer-face 1000 t t) (8 13 others ahs-definition-face nil t t) (15 20 others ahs-face nil t t) (31 36 others ahs-face nil t t) (48 53 others ahs-face nil t t) (54 59 others ahs-face nil t t)) 8 1 5)"#
         ]],
@@ -40,7 +39,7 @@ fn auto_highlight_symbol_whole_buffer_highlight_builds_current_other_and_definit
 
 fn auto_highlight_symbol_unfocused_window_uses_unfocused_faces_but_same_match_ranges()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_unfocused_window_uses_unfocused_faces_but_same_match_ranges",
         r##"(save-window-excursion
                            (with-temp-buffer
@@ -60,7 +59,6 @@ fn auto_highlight_symbol_unfocused_window_uses_unfocused_faces_but_same_match_ra
                               1
                               6)
                              (auto-highlight-symbol-test-overlays)))"##,
-        true,
         expect![
             "OK ((1 6 current ahs-plugin-whole-buffer-face 1000 t t) (1 6 others ahs-face-unfocused nil t t) (12 17 others ahs-face-unfocused nil t t))"
         ],
@@ -69,7 +67,7 @@ fn auto_highlight_symbol_unfocused_window_uses_unfocused_faces_but_same_match_ra
 
 fn auto_highlight_symbol_search_and_light_up_preserve_definition_face_classification()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_search_and_light_up_preserve_definition_face_classification",
         r##"(save-window-excursion
                            (with-temp-buffer
@@ -113,7 +111,6 @@ fn auto_highlight_symbol_search_and_light_up_preserve_definition_face_classifica
                                (list
                                 work
                                 (auto-highlight-symbol-test-overlays)))))"##,
-        true,
         expect![
             "OK (((1 6 font-lock-variable-name-face nil) (7 12 nil nil) (13 18 font-lock-comment-face nil) (19 24 nil nil)) ((1 6 others ahs-definition-face nil t t) (7 12 others ahs-face nil t t) (19 24 others ahs-face nil t t)))"
         ],
@@ -122,7 +119,7 @@ fn auto_highlight_symbol_search_and_light_up_preserve_definition_face_classifica
 
 fn auto_highlight_symbol_unhighlight_keeps_same_symbol_for_allowed_or_matching_commands()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_unhighlight_keeps_same_symbol_for_allowed_or_matching_commands",
         r##"(save-window-excursion
                            (with-temp-buffer
@@ -164,7 +161,6 @@ fn auto_highlight_symbol_unhighlight_keeps_same_symbol_for_allowed_or_matching_c
                               '((ahs-forward . 2)
                                 (fixture-command . 2)
                                 (fixture-command . 14)))))"##,
-        true,
         expect![
             "OK (((ahs-forward . 2) 3 3) ((fixture-command . 2) 3 3) ((fixture-command . 14) 3 0))"
         ],
@@ -173,7 +169,7 @@ fn auto_highlight_symbol_unhighlight_keeps_same_symbol_for_allowed_or_matching_c
 
 fn auto_highlight_symbol_remove_overlay_force_and_window_scope_preserve_other_window_entries()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_remove_overlay_force_and_window_scope_preserve_other_window_entries",
         r##"(save-window-excursion
                            (with-temp-buffer
@@ -216,14 +212,13 @@ fn auto_highlight_symbol_remove_overlay_force_and_window_scope_preserve_other_wi
                                   t))
                                 (overlay-start
                                  foreign-overlay)))))"##,
-        true,
         expect!["OK ((7) nil 7 nil nil)"],
     )
 }
 
 fn auto_highlight_symbol_statistics_count_before_after_displayed_and_hidden_matches()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_statistics_count_before_after_displayed_and_hidden_matches",
         r##"(save-window-excursion
                            (with-temp-buffer
@@ -255,7 +250,6 @@ fn auto_highlight_symbol_statistics_count_before_after_displayed_and_hidden_matc
                                 (ahs-stat-string)
                                 (ahs-stat-alert-p
                                  (ahs-stat))))))"##,
-        true,
         expect![[
             r#"OK ((#("whole buffer" 0 12 (face ahs-plugin-whole-buffer-face)) 5 2 2 4 1) #("Current plugin `whole buffer' matched 5  displayed 4  hidden 1  before 2  after 2." 16 28 (face ahs-plugin-whole-buffer-face)) nil)"#
         ]],
@@ -264,7 +258,7 @@ fn auto_highlight_symbol_statistics_count_before_after_displayed_and_hidden_matc
 
 fn auto_highlight_symbol_fontify_coalesces_unfontified_search_regions_at_boundaries()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_fontify_coalesces_unfontified_search_regions_at_boundaries",
         r##"(let ((ahs-search-work
                                 '((1 3 nil nil)
@@ -282,14 +276,13 @@ fn auto_highlight_symbol_fontify_coalesces_unfontified_search_regions_at_boundar
                                     calls))))
                              (ahs-fontify)
                              (nreverse calls)))"##,
-        true,
         expect!["OK ((1 7) (13 19))"],
     )
 }
 
 fn auto_highlight_symbol_current_overlay_has_exact_edit_hooks_priority_help_and_evaporation()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_current_overlay_has_exact_edit_hooks_priority_help_and_evaporation",
         r##"(save-window-excursion
                            (with-temp-buffer
@@ -325,7 +318,6 @@ fn auto_highlight_symbol_current_overlay_has_exact_edit_hooks_priority_help_and_
                                   modification-hooks
                                   insert-in-front-hooks
                                   insert-behind-hooks)))))"##,
-        true,
         expect![[
             r#"OK ((ahs-symbol current) (face ahs-plugin-whole-buffer-face) (priority 4321) (evaporate t) (help-echo (or (ignore-errors (ahs-stat-string)) "")) (modification-hooks (ahs-modification-hook)) (insert-in-front-hooks (ahs-modification-hook)) (insert-behind-hooks (ahs-modification-hook)))"#
         ]],
@@ -334,7 +326,7 @@ fn auto_highlight_symbol_current_overlay_has_exact_edit_hooks_priority_help_and_
 
 fn auto_highlight_symbol_two_windows_keep_separate_current_overlays_and_window_map_entries()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_highlight_symbol_two_windows_keep_separate_current_overlays_and_window_map_entries",
         r##"(save-window-excursion
                            (let ((buffer
@@ -375,16 +367,15 @@ fn auto_highlight_symbol_two_windows_keep_separate_current_overlays_and_window_m
                                        (list first second))
                                       (auto-highlight-symbol-test-overlays))))
                                (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK (2 4 (("alpha" 1 6) (#("alpha" 0 5 (fontified t)) 7 12)) ((1 6 current ahs-plugin-whole-buffer-face 1000 t nil) (1 6 others ahs-face-unfocused nil t t) (1 6 others ahs-face-unfocused nil t nil) (7 12 current ahs-plugin-whole-buffer-face 1000 t t) (7 12 others ahs-face-unfocused nil t t) (7 12 others ahs-face-unfocused nil t nil)))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn highlighting_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn highlighting_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_highlight_symbol_whole_buffer_highlight_builds_current_other_and_definition_overlays(),
         auto_highlight_symbol_unfocused_window_uses_unfocused_faces_but_same_match_ranges(),
         auto_highlight_symbol_search_and_light_up_preserve_definition_face_classification(),
@@ -394,6 +385,5 @@ fn highlighting_public_surface_batch() {
         auto_highlight_symbol_fontify_coalesces_unfontified_search_regions_at_boundaries(),
         auto_highlight_symbol_current_overlay_has_exact_edit_hooks_priority_help_and_evaporation(),
         auto_highlight_symbol_two_windows_keep_separate_current_overlays_and_window_map_entries(),
-    ];
-    assert_auto_highlight_symbol_batch(&cases);
+    ]
 }

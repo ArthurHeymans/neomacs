@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ALL_EXT_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -22,8 +21,8 @@ const ALL_EXT_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 /// on this host - the helm and anything occur bridges need helm, and
 /// `mc/edit-lines-in-all' needs multiple-cursors, neither of which is installed
 /// - so what is covered here is the part a user gets from installing the pair:
-/// collection, write-back, the single-piece guard, and the `next-error'
-/// integration all-ext contributes.
+///   collection, write-back, the single-piece guard, and the `next-error'
+///   integration all-ext contributes.
 const ALL_EXT_TEST_PRELUDE: &str = r##"(require 'cl-lib)
 
 (defconst ae-test-notes
@@ -118,16 +117,21 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_all_ext_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = all_ext_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("all-ext parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_all_ext_parity` cases (2a).
 pub(crate) fn assert_all_ext_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(all_ext_oracle(), &name, "all_ext_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn all_ext_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_all_ext_batch(&cases);
+}
+
+// END generated package batch tests

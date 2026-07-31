@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{CachedMelpaOracle, GENERAL_MELPA_PIN};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -30,24 +29,27 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_general_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = general_oracle()
-        .run_value(&name, form)
-        .unwrap_or_else(|error| panic!("General parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_general_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = general_oracle()
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| panic!("General signal parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_general_parity` cases (2a).
 pub(crate) fn assert_general_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(general_oracle(), &name, "general_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn general_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        bindings::bindings_public_surface_batch_cases(),
+        configuration::configuration_public_surface_batch_cases(),
+        definers::definers_public_surface_batch_cases(),
+        dispatch::dispatch_public_surface_batch_cases(),
+        integrations::integrations_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_general_batch(&cases);
+}
+
+// END generated package batch tests

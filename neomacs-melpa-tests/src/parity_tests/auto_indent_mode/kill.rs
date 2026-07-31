@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_indent_mode_batch};
+use super::ParityBatchCase;
 
 fn auto_indent_mode_ports_upstream_blank_line_kill_ert_as_real_editing_case() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_indent_mode_ports_upstream_blank_line_kill_ert_as_real_editing_case",
         r##"(with-temp-buffer
          (insert "HISTSIZE=1000\n\nHISTFILESIZE=2000")
@@ -18,13 +18,13 @@ fn auto_indent_mode_ports_upstream_blank_line_kill_ert_as_real_editing_case() ->
             (point)
             (looking-at "HISTFILESIZE=2000")
             (current-kill 0 t))))"##,
-        true,
         expect![[r#"OK ("HISTSIZE=1000\nHISTFILESIZE=2000" 15 t "\n")"#]],
     )
+    .fresh_process()
 }
 
 fn auto_indent_mode_kill_line_at_eol_nil_joins_and_normalizes_whitespace() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_indent_mode_kill_line_at_eol_nil_joins_and_normalizes_whitespace",
         r##"(with-temp-buffer
          (emacs-lisp-mode)
@@ -42,13 +42,12 @@ fn auto_indent_mode_kill_line_at_eol_nil_joins_and_normalizes_whitespace() -> Pa
             (buffer-string)
             (point)
             (car kill-ring))))"##,
-        true,
         expect![[r#"OK ("(alpha)\n(beta)" 15 "")"#]],
     )
 }
 
 fn auto_indent_mode_kill_line_whole_line_and_blanks_have_distinct_extent() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_indent_mode_kill_line_whole_line_and_blanks_have_distinct_extent",
         r##"(mapcar
          (lambda (style)
@@ -66,7 +65,6 @@ fn auto_indent_mode_kill_line_whole_line_and_blanks_have_distinct_extent() -> Pa
                      (point)
                      kill-ring))))
          '(whole-line blanks))"##,
-        true,
         expect![[
             r#"OK ((whole-line "alpha\n\n\nbeta\ngamma" 19 ("")) (blanks "alpha\n\n\nbeta\ngamma" 19 ("")))"#
         ]],
@@ -74,7 +72,7 @@ fn auto_indent_mode_kill_line_whole_line_and_blanks_have_distinct_extent() -> Pa
 }
 
 fn auto_indent_mode_kill_line_active_region_delegates_to_region_kill() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_indent_mode_kill_line_active_region_delegates_to_region_kill",
         r##"(auto-indent-test-error
          (lambda ()
@@ -93,7 +91,6 @@ fn auto_indent_mode_kill_line_active_region_delegates_to_region_kill() -> Parity
                 (point)
                 mark-active
                 kill-ring)))))"##,
-        true,
         expect![[
             r#"OK (:signal invalid-function (#[(&optional beg end &optional yank-handler) ((if (not t) #1=(if (called-interactively-p 'any) (kill-region beg end) (kill-region beg end yank-handler)) #1# (auto-indent-deindent-last-kill))) nil nil "Kill region advice and function.  Allows the region to delete the beginning white-space if desired." (list (point) (mark))]))"#
         ]],
@@ -101,7 +98,7 @@ fn auto_indent_mode_kill_line_active_region_delegates_to_region_kill() -> Parity
 }
 
 fn auto_indent_mode_kill_region_function_deindents_multiline_kill_ring_entry() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_indent_mode_kill_region_function_deindents_multiline_kill_ring_entry",
         r##"(auto-indent-test-error
          (lambda ()
@@ -119,7 +116,6 @@ fn auto_indent_mode_kill_region_function_deindents_multiline_kill_ring_entry() -
                 (buffer-string)
                 kill-ring
                 (current-kill 0 t))))))"##,
-        true,
         expect![[
             r#"OK (:signal invalid-function (#[(&optional beg end &optional yank-handler) ((if (not t) #1=(if (called-interactively-p 'any) (kill-region beg end) (kill-region beg end yank-handler)) #1# (auto-indent-deindent-last-kill))) nil nil "Kill region advice and function.  Allows the region to delete the beginning white-space if desired." (list (point) (mark))]))"#
         ]],
@@ -128,7 +124,7 @@ fn auto_indent_mode_kill_region_function_deindents_multiline_kill_ring_entry() -
 
 fn auto_indent_mode_kill_ring_save_copies_without_deleting_and_normalizes_indent() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_indent_mode_kill_ring_save_copies_without_deleting_and_normalizes_indent",
         r##"(auto-indent-test-error
          (lambda ()
@@ -143,13 +139,12 @@ fn auto_indent_mode_kill_ring_save_copies_without_deleting_and_normalizes_indent
                 (buffer-string)
                 kill-ring
                 (current-kill 0 t))))))"##,
-        true,
         expect!["OK (:signal void-variable (yank-handler))"],
     )
 }
 
 fn auto_indent_mode_deindent_last_kill_updates_only_latest_entry() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_indent_mode_deindent_last_kill_updates_only_latest_entry",
         r##"(let ((kill-ring
                                 '("  alpha\n    beta\n gamma"
@@ -159,13 +154,13 @@ fn auto_indent_mode_deindent_last_kill_updates_only_latest_entry() -> ParityBatc
           kill-ring
           (current-kill 0 t)
           (current-kill 1 t)))"##,
-        true,
         expect![[r#"OK (("alpha\nbeta\ngamma" "older") "alpha\nbeta\ngamma" "older")"#]],
     )
+    .fresh_process()
 }
 
 fn auto_indent_mode_command_classifiers_cover_symbols_and_live_bindings() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_indent_mode_command_classifiers_cover_symbols_and_live_bindings",
         r##"(mapcar
          (lambda (command)
@@ -188,7 +183,6 @@ fn auto_indent_mode_command_classifiers_cover_symbols_and_live_bindings() -> Par
            kill-ring-save
            self-insert-command
            nil))"##,
-        true,
         expect![
             "OK ((delete-backward-char (delete-backward-char backward-delete-char backward-delete-char-untabify nil) nil nil nil nil) (backward-delete-char (backward-delete-char backward-delete-char-untabify nil) nil nil nil nil) (delete-char nil (delete-char delete-forward-char delete-char) nil nil nil) (kill-line nil nil (kill-line kill-line kill-line) nil nil) (kill-region nil nil nil (kill-region nil) (kill-region nil)) (kill-ring-save nil nil nil nil nil) (self-insert-command nil nil nil nil nil) (nil (nil) nil nil (nil) (nil)))"
         ],
@@ -197,7 +191,7 @@ fn auto_indent_mode_command_classifiers_cover_symbols_and_live_bindings() -> Par
 
 fn auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands",
         r##"(mapcar
          (lambda (case)
@@ -214,7 +208,6 @@ fn auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands()
            (emacs-lisp-mode kill-line auto-indent-delete-char)
            (emacs-lisp-mode kill-line delete-char)
            (emacs-lisp-mode 42 nil)))"##,
-        true,
         expect![
             "OK (((text-mode kill-line nil) (text-mode)) ((emacs-lisp-mode auto-indent-kill-line nil) 0) ((emacs-lisp-mode kill-line auto-indent-delete-char) 0) ((emacs-lisp-mode kill-line delete-char) nil) ((emacs-lisp-mode 42 nil) t))"
         ],
@@ -222,7 +215,7 @@ fn auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands()
 }
 
 fn auto_indent_mode_invalid_kill_line_style_signals_exact_configuration_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_indent_mode_invalid_kill_line_style_signals_exact_configuration_error",
         r##"(with-temp-buffer
          (insert "alpha\nbeta")
@@ -233,14 +226,12 @@ fn auto_indent_mode_invalid_kill_line_style_signals_exact_configuration_error() 
            (auto-indent-test-error
             (lambda ()
               (auto-indent-kill-line 1)))))"##,
-        true,
         expect!["OK (:value nil)"],
     )
 }
 
-#[test]
-fn kill_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn kill_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_indent_mode_ports_upstream_blank_line_kill_ert_as_real_editing_case(),
         auto_indent_mode_kill_line_at_eol_nil_joins_and_normalizes_whitespace(),
         auto_indent_mode_kill_line_whole_line_and_blanks_have_distinct_extent(),
@@ -251,6 +242,5 @@ fn kill_public_surface_batch() {
         auto_indent_mode_command_classifiers_cover_symbols_and_live_bindings(),
         auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands(),
         auto_indent_mode_invalid_kill_line_style_signals_exact_configuration_error(),
-    ];
-    assert_auto_indent_mode_batch(&cases);
+    ]
 }

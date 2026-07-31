@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_archive_phar_batch};
+use super::ParityBatchCase;
 
 fn archive_phar_opens_a_release_and_extracts_the_selected_source_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "archive_phar_opens_a_release_and_extracts_the_selected_source_file",
         r##"(let* ((release-dir
                (expand-file-name "release/" temporary-file-directory))
@@ -57,7 +57,6 @@ fn archive_phar_opens_a_release_and_extracts_the_selected_source_file() -> Parit
              (kill-buffer member-buffer))
            (when (buffer-live-p archive-buffer)
              (kill-buffer archive-buffer))))"##,
-        true,
         expect![[
             r##"OK ((archive-mode "Phar-Archive" t "M Si       Date&time         Filename\n- --  --------------------  ----------------\n  52  14-Nov-2023 22:13:20  bin/console\n  86  14-Nov-2023 22:14:20  src/Main.php\n- --  --------------------  ----------------\n 138                         2 files\n") ("Main.php (application.phar)" "application.phar:src/Main.php" "<?php\nfinal class Main { public static function run(): string { return \"ready\"; } }\n" nil nil))"##
         ]],
@@ -66,7 +65,7 @@ fn archive_phar_opens_a_release_and_extracts_the_selected_source_file() -> Parit
 
 fn archive_phar_reverts_an_updated_release_and_opens_its_new_documentation_member()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "archive_phar_reverts_an_updated_release_and_opens_its_new_documentation_member",
         r##"(let* ((release-dir
                (expand-file-name "release/" temporary-file-directory))
@@ -123,7 +122,6 @@ fn archive_phar_reverts_an_updated_release_and_opens_its_new_documentation_membe
              (kill-buffer member-buffer))
            (when (buffer-live-p archive-buffer)
              (kill-buffer archive-buffer))))"##,
-        true,
         expect![[
             r##"OK ("M Si       Date&time         Filename\n- --  --------------------  ----------------\n  52  14-Nov-2023 22:13:20  bin/console\n  86  14-Nov-2023 22:14:20  src/Main.php\n  46  14-Nov-2023 22:15:20  docs/release notes.txt\n- --  --------------------  ----------------\n 184                         3 files\n" ("release notes.txt (application.phar)" "application.phar:docs/release notes.txt" "Version 2\n- safer migrations\n- faster startup\n" nil))"##
         ]],
@@ -131,7 +129,7 @@ fn archive_phar_reverts_an_updated_release_and_opens_its_new_documentation_membe
 }
 
 fn archive_phar_keeps_the_listing_open_when_a_member_cannot_be_read() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "archive_phar_keeps_the_listing_open_when_a_member_cannot_be_read",
         r##"(let* ((release-dir
                (expand-file-name "release/" temporary-file-directory))
@@ -181,19 +179,16 @@ fn archive_phar_keeps_the_listing_open_when_a_member_cannot_be_read() -> ParityB
                     (point-min) (point-max))))))
            (when (buffer-live-p archive-buffer)
              (kill-buffer archive-buffer))))"##,
-        true,
         expect![[
             r##"OK (t nil "damaged.phar\11src/missing.php" (archive-mode t nil "M Si       Date&time         Filename\n- --  --------------------  ----------------\n  25  14-Nov-2023 22:13:20  src/Present.php\n  31  14-Nov-2023 22:14:20  src/missing.php\n- --  --------------------  ----------------\n  56                         2 files\n"))"##
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         archive_phar_opens_a_release_and_extracts_the_selected_source_file(),
         archive_phar_reverts_an_updated_release_and_opens_its_new_documentation_member(),
         archive_phar_keeps_the_listing_open_when_a_member_cannot_be_read(),
-    ];
-    assert_archive_phar_batch(&cases);
+    ]
 }

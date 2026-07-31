@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_evil_batch};
+use super::ParityBatchCase;
 
 fn evil_define_key_creates_and_reuses_state_auxiliary_keymaps() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_define_key_creates_and_reuses_state_auxiliary_keymaps",
         r##"(progn
                (defvar neomacs-evil-aux-map)
@@ -21,13 +21,12 @@ fn evil_define_key_creates_and_reuses_state_auxiliary_keymaps() -> ParityBatchCa
                   (eq aux
                       (evil-get-auxiliary-keymap
                        neomacs-evil-aux-map 'normal)))))"##,
-        true,
         expect!["OK (t forward-char backward-char t)"],
     )
 }
 
 fn evil_define_key_supports_global_local_and_multiple_state_targets() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_define_key_supports_global_local_and_multiple_state_targets",
         r##"(with-temp-buffer
                (let ((evil-normal-state-map
@@ -50,13 +49,12 @@ fn evil_define_key_supports_global_local_and_multiple_state_targets() -> ParityB
                   (lookup-key (current-local-map) "p")
                   (lookup-key evil-normal-state-map "x")
                   (lookup-key evil-insert-state-map "x"))))"##,
-        true,
         expect!["OK (forward-char backward-char next-line previous-line ignore ignore)"],
     )
 }
 
 fn evil_define_key_star_updates_existing_maps_without_auxiliary_indirection() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_define_key_star_updates_existing_maps_without_auxiliary_indirection",
         r##"(let ((map (make-sparse-keymap)))
                (evil-define-key* 'normal map
@@ -66,7 +64,6 @@ fn evil_define_key_star_updates_existing_maps_without_auxiliary_indirection() ->
                 (lookup-key map [normal-state ?a])
                 (lookup-key map [normal-state ?b])
                 (evil-get-auxiliary-keymap map 'normal)))"##,
-        true,
         expect![[
             r#"OK (forward-char backward-char (keymap "Auxiliary keymap for Normal state" (98 . backward-char) (97 . forward-char)))"#
         ]],
@@ -74,7 +71,7 @@ fn evil_define_key_star_updates_existing_maps_without_auxiliary_indirection() ->
 }
 
 fn evil_overriding_and_intercept_maps_record_requested_state_and_precedence() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_overriding_and_intercept_maps_record_requested_state_and_precedence",
         r##"(let ((override (make-sparse-keymap))
                     (intercept (make-sparse-keymap))
@@ -95,13 +92,12 @@ fn evil_overriding_and_intercept_maps_record_requested_state_and_precedence() ->
                     (caar evil-overriding-maps))
                 (eq intercept
                     (caar evil-intercept-maps))))"##,
-        true,
         expect!["OK (nil nil nil nil nil nil)"],
     )
 }
 
 fn evil_define_minor_mode_key_builds_state_specific_mode_bindings() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_define_minor_mode_key_builds_state_specific_mode_bindings",
         r##"(progn
                (defvar neomacs-evil-minor-mode nil)
@@ -122,13 +118,12 @@ fn evil_define_minor_mode_key_builds_state_specific_mode_bindings() -> ParityBat
                   (lookup-key aux "b")
                   (assq 'neomacs-evil-minor-mode
                         evil-minor-mode-keymaps-alist))))"##,
-        true,
         expect!["OK (nil nil nil nil)"],
     )
 }
 
 fn evil_keymap_for_mode_resolves_direct_parent_and_missing_mode_maps() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_keymap_for_mode_resolves_direct_parent_and_missing_mode_maps",
         r##"(progn
                (defvar neomacs-evil-parent-mode-map
@@ -145,20 +140,17 @@ fn evil_keymap_for_mode_resolves_direct_parent_and_missing_mode_maps() -> Parity
                 (evil-keymap-for-mode 'neomacs-evil-missing-mode)
                 (evil-keymap-for-mode
                  'neomacs-evil-child-mode t)))"##,
-        true,
         expect!["OK (nil nil nil nil)"],
     )
 }
 
-#[test]
-fn keymaps_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn keymaps_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         evil_define_key_creates_and_reuses_state_auxiliary_keymaps(),
         evil_define_key_supports_global_local_and_multiple_state_targets(),
         evil_define_key_star_updates_existing_maps_without_auxiliary_indirection(),
         evil_overriding_and_intercept_maps_record_requested_state_and_precedence(),
         evil_define_minor_mode_key_builds_state_specific_mode_bindings(),
         evil_keymap_for_mode_resolves_direct_parent_and_missing_mode_maps(),
-    ];
-    assert_evil_batch(&cases);
+    ]
 }

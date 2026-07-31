@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alabaster_themes_batch};
+use super::ParityBatchCase;
 
 fn load_helper_disables_competing_theme_runs_hook_and_enables_exact_target() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "load_helper_disables_competing_theme_runs_hook_and_enables_exact_target",
         r##"
 (progn
@@ -41,7 +41,6 @@ fn load_helper_disables_competing_theme_runs_hook_and_enables_exact_target() -> 
       (mapc #'disable-theme custom-enabled-themes)
       (makunbound 'alabaster-themes-test-events))))
 "##,
-        true,
         expect![[
             r#"OK (alabaster-themes-dark (alabaster-themes-dark) nil ((alabaster-themes-dark)) "unspecified-fg" "unspecified-bg")"#
         ]],
@@ -50,7 +49,7 @@ fn load_helper_disables_competing_theme_runs_hook_and_enables_exact_target() -> 
 
 fn switching_through_all_variants_updates_enabled_theme_and_resolved_core_palette()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "switching_through_all_variants_updates_enabled_theme_and_resolved_core_palette",
         r##"
 (progn
@@ -93,7 +92,6 @@ fn switching_through_all_variants_updates_enabled_theme_and_resolved_core_palett
       (mapc #'disable-theme custom-enabled-themes)
       (makunbound 'alabaster-themes-test-events))))
 "##,
-        true,
         expect![[
             r#"OK (((alabaster-themes-light alabaster-themes-light (alabaster-themes-light) "unspecified-fg" "unspecified-bg" "unspecified-fg" "unspecified-bg" "unspecified-fg" "unspecified-bg") (alabaster-themes-light-bg alabaster-themes-light-bg (alabaster-themes-light-bg) "unspecified-fg" "unspecified-bg" "unspecified-fg" "unspecified-bg" "unspecified-fg" "unspecified-bg") (alabaster-themes-light-mono alabaster-themes-light-mono (alabaster-themes-light-mono) "unspecified-fg" "unspecified-bg" "unspecified-fg" "unspecified-bg" "unspecified-fg" "unspecified-bg") (alabaster-themes-dark alabaster-themes-dark (alabaster-themes-dark) "unspecified-fg" "unspecified-bg" "unspecified-fg" "unspecified-bg" "unspecified-fg" "unspecified-bg") (alabaster-themes-dark-mono alabaster-themes-dark-mono (alabaster-themes-dark-mono) "unspecified-fg" "unspecified-bg" "unspecified-fg" "unspecified-bg" "unspecified-fg" "unspecified-bg")) (alabaster-themes-light alabaster-themes-light-bg alabaster-themes-light-mono alabaster-themes-dark alabaster-themes-dark-mono))"#
         ]],
@@ -101,7 +99,7 @@ fn switching_through_all_variants_updates_enabled_theme_and_resolved_core_palett
 }
 
 fn repeated_load_is_idempotent_for_registry_enabled_state_and_face_specs() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "repeated_load_is_idempotent_for_registry_enabled_state_and_face_specs",
         r##"
 (progn
@@ -141,7 +139,6 @@ fn repeated_load_is_idempotent_for_registry_enabled_state_and_face_specs() -> Pa
       (mapc #'disable-theme custom-enabled-themes)
       (makunbound 'alabaster-themes-test-hook-count))))
 "##,
-        true,
         expect![[
             r#"OK ((((alabaster-themes-light) 501 "2fb6e2032be43146001b10a3ecda9d71ea8e8317bbac6e5da7fa6c33b118c063") ((alabaster-themes-light) 501 "2fb6e2032be43146001b10a3ecda9d71ea8e8317bbac6e5da7fa6c33b118c063") ((alabaster-themes-light) 501 "2fb6e2032be43146001b10a3ecda9d71ea8e8317bbac6e5da7fa6c33b118c063")) 3)"#
         ]],
@@ -150,7 +147,7 @@ fn repeated_load_is_idempotent_for_registry_enabled_state_and_face_specs() -> Pa
 
 fn enable_disable_reenable_cycle_restores_and_reapplies_theme_without_rereading_file()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "enable_disable_reenable_cycle_restores_and_reapplies_theme_without_rereading_file",
         r##"
 (progn
@@ -184,7 +181,6 @@ fn enable_disable_reenable_cycle_restores_and_reapplies_theme_without_rereading_
                 'alabaster-themes-light)))))
       (mapc #'disable-theme custom-enabled-themes))))
 "##,
-        true,
         expect![[
             r#"OK (((alabaster-themes-light) (alabaster-themes-light) "unspecified-fg" "unspecified-bg" "unspecified-fg") (nil nil "unspecified-fg" "unspecified-bg" "unspecified-fg") ((alabaster-themes-light) (alabaster-themes-light) "unspecified-fg" "unspecified-bg" "unspecified-fg") (alabaster-themes-light user changed))"#
         ]],
@@ -193,7 +189,7 @@ fn enable_disable_reenable_cycle_restores_and_reapplies_theme_without_rereading_
 
 fn reloading_after_palette_override_changes_faces_and_reset_restores_original_specs()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "reloading_after_palette_override_changes_faces_and_reset_restores_original_specs",
         r##"
 (progn
@@ -233,7 +229,6 @@ fn reloading_after_palette_override_changes_faces_and_reset_restores_original_sp
            original overridden (funcall capture)
            (equal original (funcall capture))))))))
 "##,
-        true,
         expect![[
             r##"OK (((default ((((class color) (min-colors 256)) :background "#F7F7F7" :foreground "#000000"))) (font-lock-string-face ((((class color) (min-colors 256)) :foreground "#448C27"))) (font-lock-function-name-face ((((class color) (min-colors 256)) :foreground "#325CC0"))) (font-lock-comment-face ((((class color) (min-colors 256)) :foreground "#AA3731")))) ((default ((((class color) (min-colors 256)) :background "#F7F7F7" :foreground "#000000"))) (font-lock-string-face ((((class color) (min-colors 256)) :foreground "#00aa00"))) (font-lock-function-name-face ((((class color) (min-colors 256)) :foreground "#1234ff"))) (font-lock-comment-face ((((class color) (min-colors 256)) :foreground "#ee1111")))) ((default ((((class color) (min-colors 256)) :background "#F7F7F7" :foreground "#000000"))) (font-lock-string-face ((((class color) (min-colors 256)) :foreground "#448C27"))) (font-lock-function-name-face ((((class color) (min-colors 256)) :foreground "#325CC0"))) (font-lock-comment-face ((((class color) (min-colors 256)) :foreground "#AA3731")))) t)"##
         ]],
@@ -242,7 +237,7 @@ fn reloading_after_palette_override_changes_faces_and_reset_restores_original_sp
 
 fn invalid_theme_failure_happens_after_existing_themes_are_deliberately_disabled() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "invalid_theme_failure_happens_after_existing_themes_are_deliberately_disabled",
         r##"
 (progn
@@ -266,7 +261,6 @@ fn invalid_theme_failure_happens_after_existing_themes_are_deliberately_disabled
      (custom-theme-enabled-p
       'alabaster-themes-light))))
 "##,
-        true,
         expect![[
             r#"OK ((alabaster-themes-light) (error "Unable to find theme file for ‘alabaster-themes-does-not-exist’") nil nil)"#
         ]],
@@ -274,7 +268,7 @@ fn invalid_theme_failure_happens_after_existing_themes_are_deliberately_disabled
 }
 
 fn direct_select_ignores_variant_and_delegates_to_full_load_hook_workflow() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "direct_select_ignores_variant_and_delegates_to_full_load_hook_workflow",
         r##"
 (progn
@@ -297,7 +291,6 @@ fn direct_select_ignores_variant_and_delegates_to_full_load_hook_workflow() -> P
       (mapc #'disable-theme custom-enabled-themes)
       (makunbound 'alabaster-themes-test-events))))
 "##,
-        true,
         expect![
             "OK (alabaster-themes-dark-mono (alabaster-themes-dark-mono) ((alabaster-themes-dark-mono)))"
         ],
@@ -305,7 +298,7 @@ fn direct_select_ignores_variant_and_delegates_to_full_load_hook_workflow() -> P
 }
 
 fn selection_prompt_exercises_all_light_dark_and_interactive_subset_paths() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "selection_prompt_exercises_all_light_dark_and_interactive_subset_paths",
         r##"
 (let (events)
@@ -336,7 +329,6 @@ fn selection_prompt_exercises_all_light_dark_and_interactive_subset_paths() -> P
      (alabaster-themes--select-prompt "Choose: " t)
      (nreverse events))))
 "##,
-        true,
         expect![[
             r#"OK (alabaster-themes-light alabaster-themes-light alabaster-themes-dark alabaster-themes-dark (("All: " ("alabaster-themes-light" "alabaster-themes-light-bg" "alabaster-themes-light-mono" "alabaster-themes-dark" "alabaster-themes-dark-mono") t nil alabaster-themes--select-theme-history nil nil) ("Light: " ("alabaster-themes-light" "alabaster-themes-light-bg" "alabaster-themes-light-mono") t nil alabaster-themes--select-theme-history nil nil) ("Dark: " ("alabaster-themes-dark" "alabaster-themes-dark-mono") t nil alabaster-themes--select-theme-history nil nil) (choice "Variant" ((100 "dark" "Load a dark theme") (108 "light" "Load a light theme")) "Limit to the dark or light subset of the Alabaster themes collection.") ("Choose: " ("alabaster-themes-dark" "alabaster-themes-dark-mono") t nil alabaster-themes--select-theme-history nil nil)))"#
         ]],
@@ -345,7 +337,7 @@ fn selection_prompt_exercises_all_light_dark_and_interactive_subset_paths() -> P
 
 fn real_palette_preview_buffer_initializes_tabulated_mode_and_reuses_named_buffer()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "real_palette_preview_buffer_initializes_tabulated_mode_and_reuses_named_buffer",
         r##"
 (progn
@@ -383,16 +375,14 @@ fn real_palette_preview_buffer_initializes_tabulated_mode_and_reuses_named_buffe
         (when (buffer-live-p shown)
           (kill-buffer shown))))))
 "##,
-        true,
         expect![[
             r#"OK ((:buffer nil) (:buffer nil) t "*alabaster-themes-light-list-all*" (alabaster-themes-preview-mode "Alabaster palette" (("Mapping?" 10 t) ("Symbol name" 30 t) ("As foreground" 30 t) ("As background" 0 t)) 108 11232 "           bg-main                        #F7F7F7                        #F7F7F7                       \n           fg-m"))"#
         ]],
     )
 }
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn lifecycle_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         load_helper_disables_competing_theme_runs_hook_and_enables_exact_target(),
         switching_through_all_variants_updates_enabled_theme_and_resolved_core_palette(),
         repeated_load_is_idempotent_for_registry_enabled_state_and_face_specs(),
@@ -402,6 +392,5 @@ fn lifecycle_public_surface_batch() {
         direct_select_ignores_variant_and_delegates_to_full_load_hook_workflow(),
         selection_prompt_exercises_all_light_dark_and_interactive_subset_paths(),
         real_palette_preview_buffer_initializes_tabulated_mode_and_reuses_named_buffer(),
-    ];
-    assert_alabaster_themes_batch(&cases);
+    ]
 }

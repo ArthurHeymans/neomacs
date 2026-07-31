@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_projectile_batch};
+use super::ParityBatchCase;
 
 fn projectile_nested_extensions_and_associations_match_upstream_contract() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_nested_extensions_and_associations_match_upstream_contract",
         r##"(let ((projectile-other-file-alist
                     '(("cpp" "h" "hpp" "ipp")
@@ -23,13 +23,12 @@ fn projectile_nested_extensions_and_associations_match_upstream_contract() -> Pa
                  "archive.tar.gz")
                 (projectile-associated-file-name-extensions
                  "foo.unknown")))"##,
-        true,
         expect![[r#"OK ("el" "tar.gz" "" "" "foo" "bar" ".emacs" ("h" "hpp" "ipp") ("zip") nil)"#]],
     )
 }
 
 fn projectile_related_file_function_merging_flattens_without_mutation() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_related_file_function_merging_flattens_without_mutation",
         r##"(let* ((shared '("first-test.el"))
                     (first
@@ -44,7 +43,6 @@ fn projectile_related_file_function_merging_flattens_without_mutation() -> Parit
                       (list first second)))
                     (result (funcall merged "src.el")))
                (list result shared))"##,
-        true,
         expect![[
             r#"OK ((:test ("first-test.el" "second-test.el") :doc ("README") :impl ("impl.el")) ("first-test.el"))"#
         ]],
@@ -52,7 +50,7 @@ fn projectile_related_file_function_merging_flattens_without_mutation() -> Parit
 }
 
 fn projectile_related_file_generators_transform_groups_extensions_and_tests() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_related_file_generators_transform_groups_extensions_and_tests",
         r##"(let* ((groups
                     (projectile-related-files-fn-groups
@@ -102,7 +100,6 @@ fn projectile_related_file_generators_transform_groups_extensions_and_tests() ->
                           "other_spec.rb"))
                 (mapcar suffix-impl-predicate
                         '("user.rb" "app/user.rb" "user_spec.rb"))))"##,
-        true,
         expect![[
             r#"OK ((:peer ("a.el" "c.el")) nil (t t nil nil) (t t nil) (t t nil) (t t nil) (t t nil))"#
         ]],
@@ -110,7 +107,7 @@ fn projectile_related_file_generators_transform_groups_extensions_and_tests() ->
 }
 
 fn projectile_candidate_grouping_prefers_shared_parent_segments() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_candidate_grouping_prefers_shared_parent_segments",
         r##"(list
               (projectile-dirname-matching-count
@@ -122,13 +119,12 @@ fn projectile_candidate_grouping_prefers_shared_parent_segments() -> ParityBatch
                '("src/foo/impl.el" "other/x.el" "src/bar.el"))
               (projectile-group-file-candidates
                "src/foo/test.el" nil))"##,
-        true,
         expect![[r#"OK (2 0 ((2 "src/foo/impl.el") (0 "other/x.el" "src/bar.el")) nil)"#]],
     )
 }
 
 fn projectile_name_inflection_and_test_name_transforms_cover_boundaries() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "projectile_name_inflection_and_test_name_transforms_cover_boundaries",
         r##"(let ((projectile-project-types
                     '((demo marker-files ("Demo")
@@ -148,21 +144,18 @@ fn projectile_name_inflection_and_test_name_transforms_cover_boundaries() -> Par
                    (projectile-complementary-dir
                     "src/domain/user/" "src/" "test/")
                    default-directory))))"##,
-        true,
         expect![[
             r#"OK ("category" "bus" "categories" "boxes" "test_user.rb" "user_spec.rb" "test/domain/user/")"#
         ]],
     )
 }
 
-#[test]
-fn relations_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn relations_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         projectile_nested_extensions_and_associations_match_upstream_contract(),
         projectile_related_file_function_merging_flattens_without_mutation(),
         projectile_related_file_generators_transform_groups_extensions_and_tests(),
         projectile_candidate_grouping_prefers_shared_parent_segments(),
         projectile_name_inflection_and_test_name_transforms_cover_boundaries(),
-    ];
-    assert_projectile_batch(&cases);
+    ]
 }

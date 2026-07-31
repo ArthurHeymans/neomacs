@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ARCH_PACKER_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -27,6 +26,18 @@ const ARCH_PACKER_TEST_PRELUDE: &str = r####"
   (with-temp-buffer
     (insert-file-contents-literally file)
     (buffer-string)))
+
+(defun neomacs-arch-packer-test-trace-through (file command)
+  "Return FILE through COMMAND's complete trace line.
+The package asynchronously refreshes its menu after an action; exclude that
+follow-up query from the action snapshot regardless of sentinel timing."
+  (let* ((text (neomacs-arch-packer-test-file-string file))
+         (end (string-match
+               (concat (regexp-quote command) "\n")
+               text)))
+    (unless end
+      (error "arch-packer trace lacks command: %s" command))
+    (substring text 0 (match-end 0))))
 
 (defun neomacs-arch-packer-test-write-executable (file content)
   (make-directory (file-name-directory file) t)
@@ -246,16 +257,21 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_arch_packer_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = arch_packer_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("arch-packer parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_arch_packer_parity` cases (2a).
 pub(crate) fn assert_arch_packer_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(arch_packer_oracle(), &name, "arch_packer_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn arch_packer_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_arch_packer_batch(&cases);
+}
+
+// END generated package batch tests

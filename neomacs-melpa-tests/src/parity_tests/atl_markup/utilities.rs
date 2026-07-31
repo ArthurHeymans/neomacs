@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atl_markup_batch};
+use super::ParityBatchCase;
 
 fn atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_call()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_call",
         r##"(let ((message-log-max
                 77)
@@ -27,14 +27,13 @@ fn atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_
            observed
            inhibit-message
            message-log-max))"##,
-        true,
         expect!["OK ((:result 16) ((3 5 8) t nil) nil 77)"],
     )
 }
 
 fn atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_status()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_status",
         r##"(let* ((messages-buffer
                 (get-buffer-create
@@ -77,14 +76,13 @@ fn atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_st
                nil
                t)
               t))))"##,
-        true,
         expect!["OK (:completed t nil t)"],
     )
 }
 
 fn atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwind()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwind",
         r##"(let ((message-log-max
                 12)
@@ -106,13 +104,12 @@ fn atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwin
            inside
            message-log-max
            inhibit-message))"##,
-        true,
         expect![[r#"OK ((:error error ("mute failure 42")) (nil t) 12 nil)"#]],
     )
 }
 
 fn atl_markup_mute_apply_supports_symbols_zero_arguments_and_non_local_exit() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_markup_mute_apply_supports_symbols_zero_arguments_and_non_local_exit",
         r##"(let ((message-log-max
                 9)
@@ -143,18 +140,15 @@ fn atl_markup_mute_apply_supports_symbols_zero_arguments_and_non_local_exit() ->
            inside-throw
            message-log-max
            inhibit-message))"##,
-        true,
         expect![[r#"OK (nil "markup-value" [:escaped 17] (17 nil t) 9 nil)"#]],
     )
 }
 
-#[test]
-fn utilities_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn utilities_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_call(),
         atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_status(),
         atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwind(),
         atl_markup_mute_apply_supports_symbols_zero_arguments_and_non_local_exit(),
-    ];
-    assert_atl_markup_batch(&cases);
+    ]
 }

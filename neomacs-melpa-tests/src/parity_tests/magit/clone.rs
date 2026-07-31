@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_magit_batch};
+use super::ParityBatchCase;
 
 fn magit_clone_name_expansion_supports_service_aliases_and_host_formats() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_clone_name_expansion_supports_service_aliases_and_host_formats",
         r##"(progn
                (require 'magit-clone)
@@ -21,7 +21,6 @@ fn magit_clone_name_expansion_supports_service_aliases_and_host_formats() -> Par
                   (magit-clone--name-to-url "ex:a/b")
                   (magit-clone--name-to-url "example:x/y")
                   (magit-clone--name-to-url "ex:c"))))"##,
-        true,
         expect![[
             r#"OK ("git@github.com:a/b.git" "git@github.com:c/d.git" "cow@git.example.com:~a/b" "cow@git.example.com:~x/y" "cow@git.example.com:~foouser/c")"#
         ]],
@@ -29,7 +28,7 @@ fn magit_clone_name_expansion_supports_service_aliases_and_host_formats() -> Par
 }
 
 fn magit_clone_name_expansion_supports_one_global_format() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_clone_name_expansion_supports_one_global_format",
         r##"(progn
                (require 'magit-clone)
@@ -43,7 +42,6 @@ fn magit_clone_name_expansion_supports_one_global_format() -> ParityBatchCase {
                   #'magit-clone--name-to-url
                   '("gh:a/b" "gl:a/b"
                     "github:c/d" "gitlab:c/d"))))"##,
-        true,
         expect![[
             r#"OK ("bird@github.com:a/b.git" "bird@gitlab.com:a/b.git" "bird@github.com:c/d.git" "bird@gitlab.com:c/d.git")"#
         ]],
@@ -51,25 +49,22 @@ fn magit_clone_name_expansion_supports_one_global_format() -> ParityBatchCase {
 }
 
 fn magit_clone_rejects_a_non_string_format() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "magit_clone_rejects_a_non_string_format",
         r##"(progn
                (require 'magit-clone)
                (let ((magit-clone-url-format 3))
                  (magit-clone--name-to-url "gh:a/b")))"##,
-        false,
         expect![[
             r#"ERR (user-error "Bogus ‘magit-clone-url-format’ (bad type or missing default)")"#
         ]],
     )
 }
 
-#[test]
-fn clone_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn clone_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         magit_clone_name_expansion_supports_service_aliases_and_host_formats(),
         magit_clone_name_expansion_supports_one_global_format(),
         magit_clone_rejects_a_non_string_format(),
-    ];
-    assert_magit_batch(&cases);
+    ]
 }

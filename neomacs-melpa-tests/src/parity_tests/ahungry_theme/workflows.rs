@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ahungry_theme_batch};
+use super::ParityBatchCase;
 
 /// The install route the package's own summary line documents -- "Make sure to
 /// (load-theme 'ahungry)" -- rather than the `enable-theme' the other two files
@@ -19,10 +19,9 @@ use super::{ParityBatchCase, assert_ahungry_theme_batch};
 /// inert.  `boundp' is reported separately from the value so that "unbound"
 /// and "bound to nil" cannot be confused -- without that the assertion would
 /// read the same either way.
-
 fn the_documented_load_theme_route_registers_the_faces_and_a_global_red_variable() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_documented_load_theme_route_registers_the_faces_and_a_global_red_variable",
         r##"(let* ((directory (file-name-directory (getenv "NEOMACS_PACKAGE_SOURCE")))
        (observed nil))
@@ -55,7 +54,6 @@ fn the_documented_load_theme_route_registers_the_faces_and_a_global_red_variable
                        :red (and (boundp 'red) (symbol-value 'red))))
            observed)))
   (nreverse observed))"##,
-        true,
         expect![[
             r##"OK ((:before (:on-load-path t :enabled nil :red-bound nil)) (:after-load-theme (:enabled t :is-a-theme t :faces-set 214 :spec-count 216 :red-bound nil :red nil :default-foreground "#ffffff")) (:after-disable (:enabled nil :still-a-theme t :red-bound nil :red nil)))"##
         ]],
@@ -64,7 +62,7 @@ fn the_documented_load_theme_route_registers_the_faces_and_a_global_red_variable
 
 fn the_transparent_background_is_a_load_time_display_graphic_p_gate_on_one_face() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_transparent_background_is_a_load_time_display_graphic_p_gate_on_one_face",
         r##"(let ((observed nil))
   (push (list :gate (list :display-graphic-p (display-graphic-p)
@@ -89,16 +87,16 @@ fn the_transparent_background_is_a_load_time_display_graphic_p_gate_on_one_face(
         observed)
   (disable-theme 'ahungry)
   (nreverse observed))"##,
-        true,
         expect![[
             r##"OK ((:gate (:display-graphic-p nil :mainbg-would-be nil)) (:terminal-branch (:stored-default-spec ((t (:foreground "#ffffff" :background nil :family "Terminus" :foundry "xos4" :slant normal :weight normal :height 130 :width normal))) :faces-with-no-background (erc-timestamp-face erc-prompt-face italic bold default))) (:terminal-branch-resolved (:default-background unspecified :default-foreground "#ffffff")))"##
         ]],
     )
+    .fresh_process()
 }
 
 fn setting_the_font_settings_variable_only_takes_effect_when_the_theme_is_reloaded()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "setting_the_font_settings_variable_only_takes_effect_when_the_theme_is_reloaded",
         r##"(let ((source (getenv "NEOMACS_PACKAGE_SOURCE"))
       (original ahungry-theme-font-settings)
@@ -144,7 +142,6 @@ fn setting_the_font_settings_variable_only_takes_effect_when_the_theme_is_reload
     (load source nil t t)
     (when (memq 'ahungry custom-enabled-themes) (disable-theme 'ahungry)))
   (nreverse observed))"##,
-        true,
         expect![[
             r##"OK ((:shipped-default (:value (:family "Terminus" :foundry "xos4" :slant normal :weight normal :height 130 :width normal) :docstring-claims-height "100")) (:with-the-shipped-font (:family "default" :foundry "default" :height 130)) (:set-to-nil-and-re-enabled (:family "default" :height 130)) (:set-to-nil-and-reloaded (:stored-default-spec ((t (:foreground "#ffffff" :background nil))) :family "default" :height 1)))"##
         ]],
@@ -153,7 +150,7 @@ fn setting_the_font_settings_variable_only_takes_effect_when_the_theme_is_reload
 
 fn the_duplicate_link_spec_leaves_the_later_colour_dead_and_hackernews_link_mismatched()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_duplicate_link_spec_leaves_the_later_colour_dead_and_hackernews_link_mismatched",
         r##"(let ((observed nil))
   ;; The theme styles `hackernews-link' for users who have hackernews.el; it is
@@ -198,7 +195,6 @@ fn the_duplicate_link_spec_leaves_the_later_colour_dead_and_hackernews_link_mism
             observed)))
   (disable-theme 'ahungry)
   (nreverse observed))"##,
-        true,
         expect![[
             r##"OK ((:registered (:link-spec-count 2 :every-link-spec (((t (:foreground "#af0"))) ((t (:underline t :foreground "#33ff99")))) :hackernews-link-spec ((t (:foreground "#af0"))))) (:in-force (:link ((:foreground . "#33ff99") (:weight . normal) (:slant . normal) (:underline . t)) :hackernews-link ((:foreground . "#af0") (:weight . normal) (:slant . normal)) :they-match nil)) (:rendered (:link-foreground "#33ff99" :hackernews-foreground "#af0")))"##
         ]],
@@ -206,7 +202,7 @@ fn the_duplicate_link_spec_leaves_the_later_colour_dead_and_hackernews_link_mism
 }
 
 fn enabling_the_theme_drops_stock_attributes_from_faces_it_does_not_restate() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "enabling_the_theme_drops_stock_attributes_from_faces_it_does_not_restate",
         r##"(let ((observed nil))
   (ahungry-test-with-theme-off
@@ -230,21 +226,19 @@ fn enabling_the_theme_drops_stock_attributes_from_faces_it_does_not_restate() ->
        (push (list :losses losses) observed)
        (push (list :restored-on-disable (equal before restored)) observed))))
   (nreverse observed))"##,
-        true,
         expect![[
             r#"OK ((:sizes (:faces-the-theme-sets 214 :already-existing 28 :losing-at-least-one-attribute 14)) (:losses ((link (:inherit) ((((class color) (min-colors 88) (background light)) :foreground "RoyalBlue3" :underline t) (((class color) (background light)) :foreground "blue" :underline t) (((class color) (min-colors 88) (background dark)) :foreground "cyan1" :underline t) (((class color) (background dark)) :foreground "cyan" :underline t) (t :inherit underline))) (button (:inherit) ((t :inherit link))) (isearch (:inverse-video) ((((class color) (min-colors 88) (background light)) (:background "magenta3" :foreground "lightskyblue1")) (((class color) (min-colors 88) (background dark)) (:background "palevioletred2" :foreground "brown4")) (((class color) (min-colors 16)) (:background "magenta4" :foreground "cyan1")) (((class color) (min-colors 8)) (:background "magenta4" :foreground "cyan1")) (t (:inverse-video t)))) (font-lock-function-name-face (:inverse-video) ((((class color) (min-colors 88) (background light)) :foreground "Blue1") (((class color) (min-colors 88) (background dark)) :foreground "LightSkyBlue") (((class color) (min-colors 16) (background light)) :foreground "Blue") (((class color) (min-colors 16) (background dark)) :foreground "LightSkyBlue") (((class color) (min-colors 8)) :foreground "blue" :weight bold) (t :inverse-video t :weight bold))) (font-lock-warning-face (:inverse-video :inherit) ((t :inherit error))) (font-lock-type-face (:underline) ((((class grayscale) (background light)) :foreground "Gray90" :weight bold) (((class grayscale) (background dark)) :foreground "DimGray" :weight bold) (((class color) (min-colors 88) (background light)) :foreground "ForestGreen") (((class color) (min-colors 88) (background dark)) :foreground "PaleGreen") (((class color) (min-colors 16) (background light)) :foreground "ForestGreen") (((class color) (min-colors 16) (background dark)) :foreground "PaleGreen") (((class color) (min-colors 8)) :foreground "green") (t :weight bold :underline t))) (font-lock-doc-face (:inherit) ((t :inherit font-lock-string-face))) (font-lock-constant-face (:underline) ((((class grayscale) (background light)) :foreground "LightGray" :weight bold :underline t) (((class grayscale) (background dark)) :foreground "Gray50" :weight bold :underline t) (((class color) (min-colors 88) (background light)) :foreground "dark cyan") (((class color) (min-colors 88) (background dark)) :foreground "Aquamarine") (((class color) (min-colors 16) (background light)) :foreground "CadetBlue") (((class color) (min-colors 16) (background dark)) :foreground "Aquamarine") (((class color) (min-colors 8)) :foreground "magenta") (t :weight bold :underline t))) (match (:inverse-video) ((((class color) (min-colors 88) (background light)) :background "khaki1") (((class color) (min-colors 88) (background dark)) :background "RoyalBlue3") (((class color) (min-colors 8) (background light)) :background "yellow" :foreground "black") (((class color) (min-colors 8) (background dark)) :background "blue" :foreground "white") (((type tty) (class mono)) :inverse-video t) (t :background "gray"))) (region (:inverse-video) ((((class color) (min-colors 88) (background dark)) :background "blue3" :extend t) (((class color) (min-colors 88) (background light)) :background "lightgoldenrod2" :extend t) (((class color) (min-colors 16) (background dark)) :background "blue3" :extend t) (((class color) (min-colors 16) (background light)) :background "lightgoldenrod2" :extend t) (((class color) (min-colors 8)) :background "blue" :foreground "white" :extend t) (((type tty) (class mono)) :inverse-video t) (t :background "gray" :extend t))) (mode-line-inactive (:inverse-video :inherit) ((default :inherit mode-line) (((class color grayscale) (min-colors 88) (background light)) :weight light :box (:line-width -1 :color "grey75" :style nil) :foreground "grey20" :background "grey90") (((class color grayscale) (min-colors 88) (background dark)) :weight light :box (:line-width -1 :color "grey40" :style nil) :foreground "grey80" :background "grey30"))) (mode-line (:inverse-video) ((((class color grayscale) (min-colors 88) (background light)) :box (:line-width -1 :style released-button) :background "grey75" :foreground "black") (((class color grayscale) (min-colors 88) (background dark)) :box (:line-width -1 :style released-button) :background "grey20" :foreground "white") (t :inverse-video t))) (error (:inverse-video) ((default :weight bold) (((class color) (min-colors 88) (background light)) :foreground "Red1") (((class color) (min-colors 88) (background dark)) :foreground "Pink") (((class color) (min-colors 16) (background light)) :foreground "Red1") (((class color) (min-colors 16) (background dark)) :foreground "Pink") (((class color) (min-colors 8)) :foreground "red") (t :inverse-video t))) (highlight (:inverse-video) ((((class color) (min-colors 88) (background light)) :background "darkseagreen2") (((class color) (min-colors 88) (background dark)) :background "darkolivegreen") (((class color) (min-colors 16) (background light)) :background "darkseagreen2") (((class color) (min-colors 16) (background dark)) :background "darkolivegreen") (((class color) (min-colors 8)) :background "green" :foreground "black") (t :inverse-video t))))) (:restored-on-disable t))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         the_documented_load_theme_route_registers_the_faces_and_a_global_red_variable(),
         the_transparent_background_is_a_load_time_display_graphic_p_gate_on_one_face(),
         setting_the_font_settings_variable_only_takes_effect_when_the_theme_is_reloaded(),
         the_duplicate_link_spec_leaves_the_later_colour_dead_and_hackernews_link_mismatched(),
         enabling_the_theme_drops_stock_attributes_from_faces_it_does_not_restate(),
-    ];
-    assert_ahungry_theme_batch(&cases);
+    ]
 }

@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_distel_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_distel_candidate_expression_forwards_prefix_and_current_buffer_exactly()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_candidate_expression_forwards_prefix_and_current_buffer_exactly",
         r##"(with-temp-buffer
           (rename-buffer
@@ -32,7 +32,6 @@ fn auto_complete_distel_candidate_expression_forwards_prefix_and_current_buffer_
                  (assq 'candidates
                        auto-complete-distel)))
                calls))))"##,
-        true,
         expect![[
             r#"OK (("lists:map" "lists:mapfoldl") ("lists:ma" t " *distel-candidate-buffer*" "lists:ma"))"#
         ]],
@@ -41,7 +40,7 @@ fn auto_complete_distel_candidate_expression_forwards_prefix_and_current_buffer_
 
 fn distel_completion_bridge_routes_module_and_function_queries_and_prefixes_results()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "distel_completion_bridge_routes_module_and_function_queries_and_prefixes_results",
         r##"(let (events)
           (cl-letf
@@ -89,7 +88,6 @@ fn distel_completion_bridge_routes_module_and_function_queries_and_prefixes_resu
                "lists:ma"
                ":ma"
                "lists:map:extra"))))"##,
-        true,
         expect![[
             r#"OK (("li" ("lists" "lib" "lists") ((:module "li") (:sleep 0.1))) ("lists:ma" ("lists:map" "lists:mapfoldl") ((:function "lists" "ma") (:sleep 0.1))) (":ma" (":map" ":mapfoldl") ((:function "" "ma") (:sleep 0.1))) ("lists:map:extra" ("lists:map" "lists:mapfoldl") ((:function "lists" "map:extra") (:sleep 0.1))))"#
         ]],
@@ -98,7 +96,7 @@ fn distel_completion_bridge_routes_module_and_function_queries_and_prefixes_resu
 
 fn distel_completion_bridge_preserves_candidate_order_duplicates_and_text_properties()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "distel_completion_bridge_preserves_candidate_order_duplicates_and_text_properties",
         r##"(let* ((first
                                  (propertize
@@ -138,7 +136,6 @@ fn distel_completion_bridge_preserves_candidate_order_duplicates_and_text_proper
                    (eq candidate second)))
                 result)
                (list first second first)))))"##,
-        true,
         expect![[
             r#"OK ((#("lists:map" 6 9 (arity 2)) #("lists:mapfoldl" 6 14 (arity 3)) #("lists:map" 6 9 (arity 2))) ((2 nil nil) (3 nil nil) (2 nil nil)) (#("map" 0 3 (arity 2)) #("mapfoldl" 0 8 (arity 3)) #("map" 0 3 (arity 2))))"#
         ]],
@@ -146,7 +143,7 @@ fn distel_completion_bridge_preserves_candidate_order_duplicates_and_text_proper
 }
 
 fn distel_completion_bridge_uses_the_latest_async_cache_after_each_wait() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "distel_completion_bridge_uses_the_latest_async_cache_after_each_wait",
         r##"(let ((distel-completion-try-erl-complete-cache
                                '("stale"))
@@ -171,14 +168,13 @@ fn distel_completion_bridge_uses_the_latest_async_cache_after_each_wait() -> Par
               (current-buffer))
              distel-completion-try-erl-complete-cache
              pending)))"##,
-        true,
         expect![[r#"OK (("lists" "lib") #1=("lists" "lib") #1#)"#]],
     )
 }
 
 fn auto_complete_distel_document_entry_delegates_the_selected_erlang_candidate() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_document_entry_delegates_the_selected_erlang_candidate",
         r##"(let (calls)
           (cl-letf
@@ -201,7 +197,6 @@ fn auto_complete_distel_document_entry_delegates_the_selected_erlang_candidate()
                 document
                 "maps:find")
                (nreverse calls)))))"##,
-        true,
         expect![[
             r#"OK ("lists:map/2 maps a function over a list" "maps:find/2 maps a function over a list" ("lists:map" "maps:find"))"#
         ]],
@@ -210,7 +205,7 @@ fn auto_complete_distel_document_entry_delegates_the_selected_erlang_candidate()
 
 fn auto_complete_distel_real_source_resolution_produces_candidates_with_symbol_and_document_metadata()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_real_source_resolution_produces_candidates_with_symbol_and_document_metadata",
         r##"(with-temp-buffer
           (insert "lists:ma")
@@ -249,7 +244,6 @@ fn auto_complete_distel_real_source_resolution_produces_candidates_with_symbol_a
                       candidate
                       'document)))
                   candidates))))))"##,
-        true,
         expect![[
             r#"OK ((auto-complete-distel-get-start 1 (((prefix . auto-complete-distel-get-start) (candidates distel-completion-complete ac-prefix (current-buffer)) (document . distel-completion-get-doc-string) (requires . 0) (symbol . "m")))) "lists:ma" (("lists:map" "m" distel-completion-get-doc-string) ("lists:mapfoldl" "m" distel-completion-get-doc-string)))"#
         ]],
@@ -258,7 +252,7 @@ fn auto_complete_distel_real_source_resolution_produces_candidates_with_symbol_a
 
 fn auto_complete_distel_source_resolution_rejects_punctuation_and_accepts_configured_suffixes()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_source_resolution_rejects_punctuation_and_accepts_configured_suffixes",
         r##"(mapcar
           (lambda (fixture)
@@ -285,16 +279,14 @@ fn auto_complete_distel_source_resolution_rejects_punctuation_and_accepts_config
             ("module2" . "a-zA-Z:_-")
             ("module2" . "a-zA-Z0-9:_-")
             ("app.module:run" . "a-zA-Z:_.-")))"##,
-        true,
         expect![[
             r#"OK ((("." . "a-zA-Z:_-") nil nil) (("lists:ma" . "a-zA-Z:_-") (auto-complete-distel-get-start 1 (#1=((prefix . auto-complete-distel-get-start) (candidates distel-completion-complete ac-prefix (current-buffer)) (document . distel-completion-get-doc-string) (requires . 0) (symbol . "m")))) "lists:ma") (("module2" . "a-zA-Z:_-") nil nil) (("module2" . "a-zA-Z0-9:_-") (auto-complete-distel-get-start 1 (#1#)) "module2") (("app.module:run" . "a-zA-Z:_.-") (auto-complete-distel-get-start 1 (#1#)) "app.module:run"))"#
         ]],
     )
 }
 
-#[test]
-fn candidates_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn candidates_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_distel_candidate_expression_forwards_prefix_and_current_buffer_exactly(),
         distel_completion_bridge_routes_module_and_function_queries_and_prefixes_results(),
         distel_completion_bridge_preserves_candidate_order_duplicates_and_text_properties(),
@@ -302,6 +294,5 @@ fn candidates_public_surface_batch() {
         auto_complete_distel_document_entry_delegates_the_selected_erlang_candidate(),
         auto_complete_distel_real_source_resolution_produces_candidates_with_symbol_and_document_metadata(),
         auto_complete_distel_source_resolution_rejects_punctuation_and_accepts_configured_suffixes(),
-    ];
-    assert_auto_complete_distel_batch(&cases);
+    ]
 }

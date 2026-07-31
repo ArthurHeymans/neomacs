@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_async_byte_compile_batch};
+use super::ParityBatchCase;
 
 fn auto_async_byte_compile_mode_numeric_toggle_and_return_contract_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_async_byte_compile_mode_numeric_toggle_and_return_contract_match",
         r##"(with-temp-buffer
           (list
@@ -18,14 +18,13 @@ fn auto_async_byte_compile_mode_numeric_toggle_and_return_contract_match() -> Pa
            auto-async-byte-compile-mode
            (auto-async-byte-compile-mode 'toggle)
            auto-async-byte-compile-mode))"##,
-        true,
         expect!["OK (nil t t nil nil t t nil nil t t)"],
     )
 }
 
 fn auto_async_byte_compile_mode_installs_and_removes_one_buffer_local_save_hook() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_async_byte_compile_mode_installs_and_removes_one_buffer_local_save_hook",
         r##"(with-temp-buffer
           (let ((global-before
@@ -54,13 +53,12 @@ fn auto_async_byte_compile_mode_installs_and_removes_one_buffer_local_save_hook(
               global-before
               (default-value
                'after-save-hook)))))"##,
-        true,
         expect!["OK (nil t t (auto-async-byte-compile t) t 1 nil nil nil t)"],
     )
 }
 
 fn auto_async_byte_compile_mode_isolated_across_real_buffers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_async_byte_compile_mode_isolated_across_real_buffers",
         r##"(let ((first
                                 (generate-new-buffer
@@ -95,13 +93,12 @@ fn auto_async_byte_compile_mode_isolated_across_real_buffers() -> ParityBatchCas
                      after-save-hook)))))
             (kill-buffer first)
             (kill-buffer second)))"##,
-        true,
         expect!["OK ((t (auto-async-byte-compile t)) (nil nil) nil (nil nil))"],
     )
 }
 
 fn auto_async_byte_compile_enable_helper_forces_mode_on_idempotently() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_async_byte_compile_enable_helper_forces_mode_on_idempotently",
         r##"(with-temp-buffer
           (list
@@ -116,14 +113,13 @@ fn auto_async_byte_compile_enable_helper_forces_mode_on_idempotently() -> Parity
                 function
                 #'auto-async-byte-compile))
              after-save-hook))))"##,
-        true,
         expect!["OK (t t t t 1)"],
     )
 }
 
 fn auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exact_suffix_boundary()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exact_suffix_boundary",
         r##"(let (calls)
           (cl-letf
@@ -150,7 +146,6 @@ fn auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exac
                 "/workspace/.el"
                 "/workspace/notel"))
              (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (((nil nil) ("init.el" (:compiled "init.el")) ("/workspace/module.el" (:compiled "/workspace/module.el")) ("/workspace/MODULE.EL" (:compiled "/workspace/MODULE.EL")) ("/workspace/module.el.gpg" nil) ("/workspace/module.el~" nil) ("/workspace/.el" (:compiled "/workspace/.el")) ("/workspace/notel" nil)) ("init.el" "/workspace/module.el" "/workspace/MODULE.EL" "/workspace/.el"))"#
         ]],
@@ -159,7 +154,7 @@ fn auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exac
 
 fn auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagates_bad_regexps()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagates_bad_regexps",
         r##"(let (calls)
           (cl-letf
@@ -185,7 +180,6 @@ fn auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagat
                 ("/project/src/main.el" "")
                 ("/project/src/main.el" "[broken")))
              (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (((("/project/src/main.el" nil) (:ok :started)) (("/project/generated/out.el" "/generated/") (:ok nil)) (("/project/src/generated-name.el" "generated") (:ok nil)) (("/project/src/main.el" "") (:ok nil)) (("/project/src/main.el" "[broken") (:error invalid-regexp ("Unmatched [ or [^")))) ("/project/src/main.el"))"#
         ]],
@@ -193,7 +187,7 @@ fn auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagat
 }
 
 fn auto_async_byte_compile_real_save_runs_mode_hook_with_saved_file_contents() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_async_byte_compile_real_save_runs_mode_hook_with_saved_file_contents",
         r##"(let* ((root
                                  (getenv
@@ -243,15 +237,15 @@ fn auto_async_byte_compile_real_save_runs_mode_hook_with_saved_file_contents() -
             (when
                 (file-exists-p file)
               (delete-file file))))"##,
-        true,
         expect![[
             r#"OK ((("[ORACLE-SANDBOX]/save-lifecycle.el" "(setq aabc-save-fixture :saved)\n" nil t "(setq aabc-save-fixture :saved)\n")) nil t "(setq aabc-save-fixture :saved)\n")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_async_byte_compile_real_save_without_mode_never_starts_compilation() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_async_byte_compile_real_save_without_mode_never_starts_compilation",
         r##"(let* ((root
                                  (getenv
@@ -290,14 +284,12 @@ fn auto_async_byte_compile_real_save_without_mode_never_starts_compilation() -> 
             (when
                 (file-exists-p file)
               (delete-file file))))"##,
-        true,
         expect![[r#"OK (nil nil nil "(setq aabc-no-mode :saved)\n")"#]],
     )
 }
 
-#[test]
-fn mode_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn mode_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_async_byte_compile_mode_numeric_toggle_and_return_contract_match(),
         auto_async_byte_compile_mode_installs_and_removes_one_buffer_local_save_hook(),
         auto_async_byte_compile_mode_isolated_across_real_buffers(),
@@ -306,6 +298,5 @@ fn mode_public_surface_batch() {
         auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagates_bad_regexps(),
         auto_async_byte_compile_real_save_runs_mode_hook_with_saved_file_contents(),
         auto_async_byte_compile_real_save_without_mode_never_starts_compilation(),
-    ];
-    assert_auto_async_byte_compile_batch(&cases);
+    ]
 }

@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_affe_backend_batch};
+use super::ParityBatchCase;
 
 fn affe_backend_send_log_flush_status_and_refresh_emit_exact_protocol_records() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_backend_send_log_flush_status_and_refresh_emit_exact_protocol_records",
         r##"(let* ((affe-backend--client 'client)
                      (affe-backend--search-found 0)
@@ -53,7 +53,6 @@ fn affe_backend_send_log_flush_status_and_refresh_emit_exact_protocol_records() 
                  (list
                   affe-backend--search-limit
                   (nreverse writes))))"##,
-        true,
         expect![[
             r#"OK (2 ((client "(direct \"line\\nbreak\")\n") (client "(log \"value=α/3\\n\")\n") (client "flush\n") (client "(producer 42 nil)\n") (client "(producer 42 t)\n") (client "(search nil)\n") (client "(search t)\n") (client "(search t)\n") (client "(search t)\n")))"#
         ]],
@@ -62,7 +61,7 @@ fn affe_backend_send_log_flush_status_and_refresh_emit_exact_protocol_records() 
 
 fn affe_backend_server_filter_buffers_search_request_then_rotates_queue_and_matches()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_backend_server_filter_buffers_search_request_then_rotates_queue_and_matches",
         r##"(let* ((affe-backend--client-rest "")
                      (affe-backend--client 'old-client)
@@ -114,7 +113,6 @@ fn affe_backend_server_filter_buffers_search_request_then_rotates_queue_and_matc
                      affe-backend--producer-head)
                     (nreverse timers)
                     (nreverse writes)))))"##,
-        true,
         expect![[
             r#"OK ("(search 2 \"alpha\")" "" 0 2 ("alpha") ("Alpha" "Beta" "alphabet") nil ((0.5 nil affe-backend--flush)) ((old-client "(search t)\n") (old-client "(search t)\n") (old-client "flush\n") (old-client "(match nil \"Alpha\" nil)\n") (old-client "(search t)\n") (old-client "(match nil \"alphabet\" nil)\n") (old-client "(search nil)\n")))"#
         ]],
@@ -123,7 +121,7 @@ fn affe_backend_server_filter_buffers_search_request_then_rotates_queue_and_matc
 
 fn affe_backend_server_filter_start_sets_client_timers_restriction_and_producer_process()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_backend_server_filter_start_sets_client_timers_restriction_and_producer_process",
         r##"(let* ((affe-backend--client-rest "")
                      (affe-backend--client nil)
@@ -163,7 +161,6 @@ fn affe_backend_server_filter_start_sets_client_timers_restriction_and_producer_
                   (plist-get process-arguments
                              :sentinel)
                   (nreverse writes))))"##,
-        true,
         expect![[
             r#"OK (new-client "capture" ((0.5 0.5 affe-backend--producer-refresh) (0.1 0.1 affe-backend--search-refresh)) "rg" ("rg" "--files") pipe affe-backend--producer-filter affe-backend--producer-sentinel ((new-client "(log \"Starting (\\\"rg\\\" \\\"--files\\\")\\n\")\n")))"#
         ]],
@@ -172,7 +169,7 @@ fn affe_backend_server_filter_start_sets_client_timers_restriction_and_producer_
 
 fn affe_backend_server_filter_exit_kills_backend_and_continues_complete_records_only()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_backend_server_filter_exit_kills_backend_and_continues_complete_records_only",
         r##"(let ((affe-backend--client-rest "")
                     (affe-backend--search-limit 0)
@@ -192,13 +189,12 @@ fn affe_backend_server_filter_exit_kills_backend_and_continues_complete_records_
                     fragment
                     affe-backend--client-rest
                     (nreverse exits)))))"##,
-        true,
         expect![[r#"OK ("ex" "" (nil))"#]],
     )
 }
 
 fn affe_backend_setup_assigns_utf8_coding_and_server_filter() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_backend_setup_assigns_utf8_coding_and_server_filter",
         r##"(let ((server-process 'server)
                     calls)
@@ -218,21 +214,18 @@ fn affe_backend_setup_assigns_utf8_coding_and_server_filter() -> ParityBatchCase
                  (list
                   (affe-backend--setup)
                   (nreverse calls))))"##,
-        true,
         expect![
             "OK (#1=((filter server affe-backend--server-filter)) ((coding server utf-8 utf-8) . #1#))"
         ],
     )
 }
 
-#[test]
-fn backend_protocol_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn backend_protocol_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         affe_backend_send_log_flush_status_and_refresh_emit_exact_protocol_records(),
         affe_backend_server_filter_buffers_search_request_then_rotates_queue_and_matches(),
         affe_backend_server_filter_start_sets_client_timers_restriction_and_producer_process(),
         affe_backend_server_filter_exit_kills_backend_and_continues_complete_records_only(),
         affe_backend_setup_assigns_utf8_coding_and_server_filter(),
-    ];
-    assert_affe_backend_batch(&cases);
+    ]
 }

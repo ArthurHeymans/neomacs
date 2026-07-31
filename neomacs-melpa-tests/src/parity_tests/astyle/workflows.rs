@@ -28,7 +28,7 @@
 
 use expect_test::expect;
 
-use super::assert_astyle_parity;
+use super::ParityBatchCase;
 
 const SETUP: &str = r##"        (progn
           (setq astyle-test-input "#include <stdio.h>\nint main(){\nint *p=NULL;\nint  x = 1+2;\nif(x>0){\nprintf(\"%d\\n\",x);\n}\n\n\nreturn 0;\n}\n")
@@ -114,8 +114,7 @@ const SETUP: &str = r##"        (progn
 /// `if(x>0)` into `if (x > 0)`, `--break-blocks` inserts the blank line before
 /// `if`, and `--delete-empty-lines` collapses the two blank lines before
 /// `return` into one.
-#[test]
-fn google_and_allman_produce_different_text_from_the_same_buffer() {
+fn google_and_allman_produce_different_text_from_the_same_buffer() -> ParityBatchCase {
     let elisp_form = format!(
         r##"(progn
           {SETUP}
@@ -154,7 +153,12 @@ fn google_and_allman_produce_different_text_from_the_same_buffer() {
         r##"OK (:google "#include <stdio.h>\nint main() {\n    int* p = NULL;\n    int  x = 1 + 2;\n\n    if (x > 0) {\n        printf(\"%d\\n\", x);\n    }\n\n    return 0;\n}\n" :allman "#include <stdio.h>\nint main()\n{\n  int* p = NULL;\n  int  x = 1 + 2;\n\n  if (x > 0)\n  {\n    printf(\"%d\\n\", x);\n  }\n\n  return 0;\n}\n" :differ t :both-changed-the-input (t t) :misses "")"##
     ]];
 
-    assert_astyle_parity(&elisp_form, expect);
+    ParityBatchCase::value(
+        "google_and_allman_produce_different_text_from_the_same_buffer",
+        elisp_form,
+        expect,
+    )
+    .fresh_process()
 }
 
 /// A project `.astylerc` replaces every default flag, and the output shows it.
@@ -171,8 +175,7 @@ fn google_and_allman_produce_different_text_from_the_same_buffer() {
 ///
 /// Each of those is a flag *absent* from the command line being visible in the
 /// text, which is the half an argv assertion structurally cannot reach.
-#[test]
-fn a_project_rc_file_drops_the_default_flags_and_the_output_proves_it() {
+fn a_project_rc_file_drops_the_default_flags_and_the_output_proves_it() -> ParityBatchCase {
     let elisp_form = format!(
         r##"(progn
           {SETUP}
@@ -208,5 +211,17 @@ fn a_project_rc_file_drops_the_default_flags_and_the_output_proves_it() {
         r##"OK (:arguments ("--options=[ORACLE-SANDBOX]/rc/.astylerc") :formatted "#include <stdio.h>\nint main()\n{\n        int *p = NULL;\n        int  x = 1 + 2;\n        if(x > 0) {\n                printf(\"%d\\n\", x);\n        }\n\n\n        return 0;\n}\n" :pointer-spacing-kept t :blank-lines-kept t :misses "")"##
     ]];
 
-    assert_astyle_parity(&elisp_form, expect);
+    ParityBatchCase::value(
+        "a_project_rc_file_drops_the_default_flags_and_the_output_proves_it",
+        elisp_form,
+        expect,
+    )
+    .fresh_process()
+}
+
+pub(super) fn workflows_practical_formatting_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
+        google_and_allman_produce_different_text_from_the_same_buffer(),
+        a_project_rc_file_drops_the_default_flags_and_the_output_proves_it(),
+    ]
 }

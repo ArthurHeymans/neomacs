@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_apiwrap_batch};
+use super::ParityBatchCase;
 
 // These cases sit beside `practical.rs`, which already drives generated
 // clients end to end.  They cover what that file does not: the documentation
@@ -8,9 +8,8 @@ use super::{ParityBatchCase, assert_apiwrap_batch};
 // what the package's own documentation promises.
 
 /// one, which is what a reader of `C-h f` or `apropos-api-endpoint` sees.
-
 fn the_documented_resource_and_the_internal_one_are_kept_apart() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_documented_resource_and_the_internal_one_are_kept_apart",
         r##"
 (progn
@@ -28,7 +27,6 @@ fn the_documented_resource_and_the_internal_one_are_kept_apart() -> ParityBatchC
                                           (get 'mf-get-repos-owner-repo-issues 'apiwrap))
           :docstring (apiwrap-test-doc 'mf-get-repos-owner-repo-issues))))
 "##,
-        true,
         expect![[
             r#"OK (:requested-resource "/repos/octocat/Hallo%20Welt/issues" :advertised-endpoint "/repos/:owner/:repo/issues" :docstring "List issues for a repository.\n\nDATA is a data structure to be sent with this request.  If it’s\nnot required, it can simply be omitted.\n\nPARAMS is a plist of parameters appended to the method call.\n\n--------------------\n\nThis generated function wraps the MyForge API endpoint\n\n    GET /repos/:owner/:repo/issues\n\nwhich is documented at\n\n    URL ‘issues/#list-issues-for-a-repository’")"#
         ]],
@@ -36,7 +34,7 @@ fn the_documented_resource_and_the_internal_one_are_kept_apart() -> ParityBatchC
 }
 
 fn the_generated_docstring_never_documents_the_object_parameter() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_generated_docstring_never_documents_the_object_parameter",
         r##"
 (progn
@@ -52,7 +50,6 @@ fn the_generated_docstring_never_documents_the_object_parameter() -> ParityBatch
         :mentions-list-keyed-doc
         (and (string-match-p "keyed by the list" (apiwrap-test-doc 'kp-get-a-name)) t)))
 "##,
-        true,
         expect![[
             r#"OK (:docstring "Symbol key.\n\nDATA is a data structure to be sent with this request.  If it’s\nnot required, it can simply be omitted.\n\nPARAMS is a plist of parameters appended to the method call.\n\n--------------------\n\nThis generated function wraps the KeyProbe API endpoint\n\n    GET /a/:name\n\nwhich is documented at\n\n    URL ‘link/a’" :mentions-symbol-keyed-doc nil :mentions-list-keyed-doc nil)"#
         ]],
@@ -60,7 +57,7 @@ fn the_generated_docstring_never_documents_the_object_parameter() -> ParityBatch
 }
 
 fn configuring_a_condition_case_needs_bytecomp_before_the_hooks_work() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "configuring_a_condition_case_needs_bytecomp_before_the_hooks_work",
         r##"
 (list
@@ -90,19 +87,16 @@ fn configuring_a_condition_case_needs_bytecomp_before_the_hooks_work() -> Parity
            :around-ran apiwrap-test-around-log
            :calls (apiwrap-test-log)))))
 "##,
-        true,
         expect![[
             r#"OK (:without-bytecomp (:error void-function (byte-compile-warn)) :with-bytecomp (:wrapped (:wrapped (:status 200 :body ((echo . "/b/Hallo%20Welt")))) :handled (:handled wrong-type-argument stringp) :around-ran (:around-ran :around-ran) :calls ((:method get :resource "/b/Hallo%20Welt" :params nil :data nil) (:method get :resource "/c/Hallo%20Welt" :params nil :data nil))))"#
         ]],
     )
 }
 
-#[test]
-fn documentation_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn documentation_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         the_documented_resource_and_the_internal_one_are_kept_apart(),
         the_generated_docstring_never_documents_the_object_parameter(),
         configuring_a_condition_case_needs_bytecomp_before_the_hooks_work(),
-    ];
-    assert_apiwrap_batch(&cases);
+    ]
 }

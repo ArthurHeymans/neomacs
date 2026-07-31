@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_zero_x_zero_batch};
+use super::ParityBatchCase;
 
 fn zero_x_zero_public_defaults_match_the_pinned_release() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_public_defaults_match_the_pinned_release",
         r##"(list
                0x0-default-server
@@ -21,7 +21,6 @@ fn zero_x_zero_public_defaults_match_the_pinned_release() -> ParityBatchCase {
                      (plist-get server :max-age)
                      (plist-get server :max-size))))
                 0x0-servers))"##,
-        true,
         expect![[
             r#"OK (0x0 if-installed ((0x0 "https" "0x0.st" "~/Desktop" 0x0--make-0x0-curl-args 30 365 536870912) (ttm "https" "ttm.sh" "~/Desktop" 0x0--make-0x0-curl-args 30 365 268435456) (envs "https" "envs.sh" "~/Desktop" 0x0--make-0x0-curl-args 30 365 536870912)))"#
         ]],
@@ -29,7 +28,7 @@ fn zero_x_zero_public_defaults_match_the_pinned_release() -> ParityBatchCase {
 }
 
 fn zero_x_zero_choose_server_uses_default_without_a_prefix() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_choose_server_uses_default_without_a_prefix",
         r##"(let ((0x0-servers
                       '((alpha :host "a")
@@ -41,13 +40,12 @@ fn zero_x_zero_choose_server_uses_default_without_a_prefix() -> ParityBatchCase 
                             (error
                              "must not prompt without prefix"))))
                  (0x0--choose-server)))"##,
-        true,
         expect![[r#"OK (:host "b")"#]],
     )
 }
 
 fn zero_x_zero_choose_server_prompts_strictly_with_a_prefix() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_choose_server_prompts_strictly_with_a_prefix",
         r##"(let ((0x0-servers
                       '((alpha :host "a")
@@ -62,13 +60,12 @@ fn zero_x_zero_choose_server_prompts_strictly_with_a_prefix() -> ParityBatchCase
                  (list
                   (0x0--choose-server)
                   (nreverse calls))))"##,
-        true,
         expect![[r#"OK ((:host "b") (("Server: " (alpha beta) nil t nil nil alpha)))"#]],
     )
 }
 
 fn zero_x_zero_timeout_formula_covers_full_empty_half_and_invalid_servers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_timeout_formula_covers_full_empty_half_and_invalid_servers",
         r##"(let ((server
                       (list
@@ -88,13 +85,12 @@ fn zero_x_zero_timeout_formula_covers_full_empty_half_and_invalid_servers() -> P
                    :max-size 10)
                  1)
                 (0x0--calculate-timeout nil 1)))"##,
-        true,
         expect!["OK (30.0 365 71.875 nil nil)"],
     )
 }
 
 fn zero_x_zero_server_accessors_and_custom_curl_builder_preserve_values() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_server_accessors_and_custom_curl_builder_preserve_values",
         r##"(let* ((builder
                        (lambda (server file bounded)
@@ -114,13 +110,12 @@ fn zero_x_zero_server_accessors_and_custom_curl_builder_preserve_values() -> Par
                  builder)
                 (0x0--make-curl-args
                  server "file.txt" 'bounded)))"##,
-        true,
         expect![[r#"OK ("/pick/here" t ("example.test" "file.txt" bounded))"#]],
     )
 }
 
 fn zero_x_zero_pick_file_uses_dired_at_point_or_the_server_directory() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_pick_file_uses_dired_at_point_or_the_server_directory",
         r##"(let ((server
                       '(:default-dir "/server/default"))
@@ -148,7 +143,6 @@ fn zero_x_zero_pick_file_uses_dired_at_point_or_the_server_directory() -> Parity
                       dired-result
                       (0x0--pick-file server)
                       (nreverse calls))))))"##,
-        true,
         expect![[
             r#"OK ("/dired/file" "/prompt/file" (dired (read-file-name "Pick a file to share: " "/server/default")))"#
         ]],
@@ -156,7 +150,7 @@ fn zero_x_zero_pick_file_uses_dired_at_point_or_the_server_directory() -> Parity
 }
 
 fn zero_x_zero_bounds_default_to_buffer_limits_and_preserve_explicit_points() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_bounds_default_to_buffer_limits_and_preserve_explicit_points",
         r##"(with-temp-buffer
                (insert "abcdef")
@@ -167,14 +161,12 @@ fn zero_x_zero_bounds_default_to_buffer_limits_and_preserve_explicit_points() ->
                  (0x0--make-bounds))
                 (0x0--bounds-size
                  '(:start 8 :end 3))))"##,
-        true,
         expect!["OK ((:start 1 :end 7) (:start 2 :end 5) 6 -5)"],
     )
 }
 
-#[test]
-fn configuration_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn configuration_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         zero_x_zero_public_defaults_match_the_pinned_release(),
         zero_x_zero_choose_server_uses_default_without_a_prefix(),
         zero_x_zero_choose_server_prompts_strictly_with_a_prefix(),
@@ -182,6 +174,5 @@ fn configuration_public_surface_batch() {
         zero_x_zero_server_accessors_and_custom_curl_builder_preserve_values(),
         zero_x_zero_pick_file_uses_dired_at_point_or_the_server_directory(),
         zero_x_zero_bounds_default_to_buffer_limits_and_preserve_explicit_points(),
-    ];
-    assert_zero_x_zero_batch(&cases);
+    ]
 }

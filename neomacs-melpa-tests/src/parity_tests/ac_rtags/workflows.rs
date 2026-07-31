@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_rtags_batch};
+use super::ParityBatchCase;
 
 /// The workflow the back end exists for: open a C++ translation unit, type a
 /// member access, and complete it against the rtags index.  The recorded
@@ -12,9 +12,8 @@ use super::{ParityBatchCase, assert_ac_rtags_batch};
 /// their common part inline; picking the second one runs `ac-rtags-action',
 /// which parses the rtags signature and drops the user inside a freshly
 /// inserted parameter list.
-
 fn completes_a_member_function_and_expands_its_parameter_list() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "completes_a_member_function_and_expands_its_parameter_list",
         r##"
         (progn
@@ -74,7 +73,6 @@ fn completes_a_member_function_and_expands_its_parameter_list() -> ParityBatchCa
                                        (point-min) (point-max))))
            :recorded (ac-rtags-test-recorded)))
     "##,
-        true,
         expect![[
             r##"OK (:typed (:line "    widget.ins" :point 72 :modified t :ac-sources (ac-source-rtags) :invocations 0) :offered (:line "    widget.insert" :point 75 :ac-point 69 :ac-prefix "insert" :candidates (("insert" "CXXMethod" "void insert(int idx, char ch)" "void insert(int idx, char ch)") ("insertAll" "CXXMethod" "void insertAll(const std::string &text, int idx)" "void insertAll(const std::string &text, int idx)")) :first-properties (action ac-rtags-action symbol "r" document ac-rtags-document ac-rtags-full "void insert(int idx, char ch)" ac-rtags-type "CXXMethod") :menu-live t :menu ("insert" "insertAll") :invocations 1) :completed (:line "    widget.insertAll(const std::string &text, int idx)" :point 79 :menu-live nil :last-completion ("insertAll" "CXXMethod" "void insertAll(const std::string &text, int idx)" 69) :buffer "#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.insertAll(const std::string &text, int idx)\n    return 0;\n}\n") :recorded (("01-request" . "argv:\n  --current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp\n  --unsaved-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp:<TEMPFILE>\n  -z\n  -t128\n  --code-complete-at\n  [ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:\n  --synchronous-completions\n  --elisp\ncwd: [ORACLE-SANDBOX]/cpp/src\nstdin: \nunsaved-file([ORACLE-SANDBOX]/cpp/src/widget.cpp):\n#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.ins\n    return 0;\n}\n")))"##
         ]],
@@ -82,7 +80,7 @@ fn completes_a_member_function_and_expands_its_parameter_list() -> ParityBatchCa
 }
 
 fn appends_the_scope_operator_for_a_namespace_but_not_for_a_field() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "appends_the_scope_operator_for_a_namespace_but_not_for_a_field",
         r##"
         (progn
@@ -131,15 +129,15 @@ fn appends_the_scope_operator_for_a_namespace_but_not_for_a_field() -> ParityBat
            :invocations (ac-rtags-test-invocations)
            :recorded (ac-rtags-test-recorded-argv)))
     "##,
-        true,
         expect![[
             r##"OK (:field (:line "    widget.label" :point 74 :last-completion ("label" "FieldDecl" "std::string label" 69)) :namespace (:line "    ui::" :point 83 :last-completion ("ui" "Namespace" "namespace ui" 79)) :buffer "#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.label\n    ui::\n    return 0;\n}\n" :invocations 2 :recorded (("01-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp") ("02-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "--unsaved-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp:<TEMPFILE>" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:6:6:" "--synchronous-completions" "--elisp")))"##
         ]],
     )
+    .fresh_process()
 }
 
 fn keeps_the_bare_name_when_parameter_expansion_is_disabled() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "keeps_the_bare_name_when_parameter_expansion_is_disabled",
         r##"
         (progn
@@ -188,15 +186,15 @@ fn keeps_the_bare_name_when_parameter_expansion_is_disabled() -> ParityBatchCase
            :buffer (buffer-substring-no-properties (point-min) (point-max))
            :recorded (ac-rtags-test-recorded-argv)))
     "##,
-        true,
         expect![[
             r##"OK (:option nil :method (:line "    widget.insert" :point 75 :last-completion ("insert" "CXXMethod" "void insert(int idx, char ch)" 69)) :namespace (:line "    ui::" :point 84) :buffer "#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.insert\n    ui::\n    return 0;\n}\n" :recorded (("01-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp") ("02-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "--unsaved-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp:<TEMPFILE>" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:6:6:" "--synchronous-completions" "--elisp")))"##
         ]],
     )
+    .fresh_process()
 }
 
 fn offers_nothing_when_rc_is_unindexed_silent_or_unparsable() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "offers_nothing_when_rc_is_unindexed_silent_or_unparsable",
         r##"
         (progn
@@ -225,15 +223,15 @@ fn offers_nothing_when_rc_is_unindexed_silent_or_unparsable() -> ParityBatchCase
                 :buffer (buffer-substring-no-properties (point-min) (point-max))
                 :recorded (ac-rtags-test-recorded-argv)))
     "##,
-        true,
         expect![[
             r##"OK (:not-indexed (:error completed :line "    widget.ins" :point 72 :candidates nil :not-indexed t :not-connected nil :invocations 1) :silent (:error completed :line "    widget.ins" :point 72 :candidates nil :not-indexed nil :not-connected nil :invocations 2) :unparsable (:error completed :line "    widget.ins" :point 72 :candidates nil :not-indexed nil :not-connected nil :invocations 3) :messages ("RTags: [ORACLE-SANDBOX]/cpp/src/widget.cpp is not indexed" "****** Got Completion Error ******") :buffer "#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.ins\n    return 0;\n}\n" :recorded (("01-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp") ("02-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp") ("03-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp")))"##
         ]],
     )
+    .fresh_process()
 }
 
 fn signals_when_rdm_is_down_or_rc_is_not_installed() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "signals_when_rdm_is_down_or_rc_is_not_installed",
         r##"
         (progn
@@ -265,21 +263,19 @@ fn signals_when_rdm_is_down_or_rc_is_not_installed() -> ParityBatchCase {
                 :buffer (buffer-substring-no-properties (point-min) (point-max))
                 :recorded (ac-rtags-test-recorded-argv)))
     "##,
-        true,
         expect![[
             r##"OK (:rdm-down (:error (error "RTags: Can’t seem to connect to server. Is rdm running?") :line "    widget.ins" :point 72 :candidates nil :not-indexed nil :not-connected t :invocations 1) :rc-missing (:error (error "RTags: Can’t find rc") :line "    widget.ins" :point 72 :candidates nil :not-indexed nil :not-connected t :invocations 1) :recovered (:error completed :line "    widget.insert(int idx, char ch)" :point 76 :candidates nil :not-indexed nil :not-connected nil :invocations 2) :line "    widget.insert(int idx, char ch)" :buffer "#include \"widget.h\"\n\nint main() {\n    ui::Widget widget;\n    widget.insert(int idx, char ch)\n    return 0;\n}\n" :recorded (("01-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp") ("02-request" "--current-file=[ORACLE-SANDBOX]/cpp/src/widget.cpp" "-z" "-t128" "--code-complete-at" "[ORACLE-SANDBOX]/cpp/src/widget.cpp:5:15:" "--synchronous-completions" "--elisp")))"##
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         completes_a_member_function_and_expands_its_parameter_list(),
         appends_the_scope_operator_for_a_namespace_but_not_for_a_field(),
         keeps_the_bare_name_when_parameter_expansion_is_disabled(),
         offers_nothing_when_rc_is_unindexed_silent_or_unparsable(),
         signals_when_rdm_is_down_or_rc_is_not_installed(),
-    ];
-    assert_ac_rtags_batch(&cases);
+    ]
 }

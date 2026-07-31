@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_zero_b_layout_batch};
+use super::ParityBatchCase;
 
 fn zero_b_layout_save_replaces_the_current_entry_and_preserves_others() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_save_replaces_the_current_entry_and_preserves_others",
         r##"(let ((0blayout-alist
                       '((other . old-other)
@@ -27,7 +27,6 @@ fn zero_b_layout_save_replaces_the_current_entry_and_preserves_others() -> Parit
                     result
                     0blayout-alist
                     (nreverse messages)))))"##,
-        true,
         expect![[
             r#"OK ("Saved the currently active layout: work" ((work . new-work) (other . old-other)) ("Saved the currently active layout: work"))"#
         ]],
@@ -35,7 +34,7 @@ fn zero_b_layout_save_replaces_the_current_entry_and_preserves_others() -> Parit
 }
 
 fn zero_b_layout_save_records_a_real_window_configuration() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_save_records_a_real_window_configuration",
         r##"(let ((0blayout-alist nil))
                (set-frame-parameter nil '0blayout-current "real")
@@ -47,13 +46,12 @@ fn zero_b_layout_save_records_a_real_window_configuration() -> ParityBatchCase {
                 (equal
                  (cdr (assq 'real 0blayout-alist))
                  (current-window-configuration))))"##,
-        true,
         expect!["OK ((real) t nil)"],
     )
 }
 
 fn zero_b_layout_new_runs_save_reset_and_rename_in_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_new_runs_save_reset_and_rename_in_order",
         r##"(let (events)
                (cl-letf (((symbol-function '0blayout-save)
@@ -75,7 +73,6 @@ fn zero_b_layout_new_runs_save_reset_and_rename_in_order() -> ParityBatchCase {
                             name)))
                  (let ((result (0blayout-new "focus")))
                    (list result (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK ("focus" (save delete-other-windows (switch-to-buffer "*scratch*") (set-current-name "focus")))"#
         ]],
@@ -83,7 +80,7 @@ fn zero_b_layout_new_runs_save_reset_and_rename_in_order() -> ParityBatchCase {
 }
 
 fn zero_b_layout_new_saves_the_old_layout_and_resets_real_windows() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_new_saves_the_old_layout_and_resets_real_windows",
         r##"(let ((0blayout-alist nil)
                      (left (generate-new-buffer " *0blayout-left*"))
@@ -108,13 +105,12 @@ fn zero_b_layout_new_saves_the_old_layout_and_resets_real_windows() -> ParityBat
                    (kill-buffer left))
                  (when (buffer-live-p right)
                    (kill-buffer right))))"##,
-        true,
         expect![[r#"OK (t "*scratch*" "after" (before) t)"#]],
     )
 }
 
 fn zero_b_layout_switch_saves_then_restores_a_known_layout() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_switch_saves_then_restores_a_known_layout",
         r##"(let ((0blayout-alist
                       '((target . target-configuration)))
@@ -148,7 +144,6 @@ fn zero_b_layout_switch_saves_then_restores_a_known_layout() -> ParityBatchCase 
                               text))))
                  (let ((result (0blayout-switch "target")))
                    (list result (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK ("Switch to layout: 'target'" (save (set-window-configuration target-configuration) (set-current-name "target") (message "Switch to layout: 'target'")))"#
         ]],
@@ -156,7 +151,7 @@ fn zero_b_layout_switch_saves_then_restores_a_known_layout() -> ParityBatchCase 
 }
 
 fn zero_b_layout_switch_saves_before_reporting_an_unknown_layout() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_switch_saves_before_reporting_an_unknown_layout",
         r##"(let ((0blayout-alist nil)
                      events)
@@ -173,7 +168,6 @@ fn zero_b_layout_switch_saves_before_reporting_an_unknown_layout() -> ParityBatc
                               text))))
                  (let ((result (0blayout-switch "missing")))
                    (list result (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK ("No layout with name: 'missing' is defined" (save (message "No layout with name: 'missing' is defined")))"#
         ]],
@@ -181,7 +175,7 @@ fn zero_b_layout_switch_saves_before_reporting_an_unknown_layout() -> ParityBatc
 }
 
 fn zero_b_layout_switch_restores_a_real_saved_window_configuration() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_switch_restores_a_real_saved_window_configuration",
         r##"(let ((0blayout-alist nil)
                      (source
@@ -208,13 +202,12 @@ fn zero_b_layout_switch_restores_a_real_saved_window_configuration() -> ParityBa
                    (kill-buffer source))
                  (when (buffer-live-p target)
                    (kill-buffer target))))"##,
-        true,
         expect![[r#"OK (" *0blayout-target*" "target" (source target))"#]],
     )
 }
 
 fn zero_b_layout_kill_removes_current_and_selects_the_first_survivor() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_kill_removes_current_and_selects_the_first_survivor",
         r##"(let ((0blayout-alist
                       '((current . current-configuration)
@@ -253,7 +246,6 @@ fn zero_b_layout_kill_removes_current_and_selects_the_first_survivor() -> Parity
                     result
                     0blayout-alist
                     (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK ("next" ((next . next-configuration) (later . later-configuration)) ((message "Killing layout: 'current'") (set-window-configuration next-configuration) (set-current-name "next")))"#
         ]],
@@ -261,7 +253,7 @@ fn zero_b_layout_kill_removes_current_and_selects_the_first_survivor() -> Parity
 }
 
 fn zero_b_layout_kill_recreates_the_default_when_none_survive() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_b_layout_kill_recreates_the_default_when_none_survive",
         r##"(let ((0blayout-alist
                       '((only . only-configuration)))
@@ -297,7 +289,6 @@ fn zero_b_layout_kill_recreates_the_default_when_none_survive() -> ParityBatchCa
                     result
                     0blayout-alist
                     (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK ("fallback" nil ((message "Killing layout: 'only'") (set-current-name "fallback") (new "fallback")))"#
         ]],
@@ -305,20 +296,18 @@ fn zero_b_layout_kill_recreates_the_default_when_none_survive() -> ParityBatchCa
 }
 
 fn zero_b_layout_switch_requires_a_string_layout_name() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "zero_b_layout_switch_requires_a_string_layout_name",
         r##"(let ((0blayout-alist nil))
                (cl-letf (((symbol-function '0blayout-save)
                           #'ignore))
                  (0blayout-switch 'target)))"##,
-        false,
         expect![r#"ERR (wrong-type-argument stringp target)"#],
     )
 }
 
-#[test]
-fn layouts_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn layouts_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         zero_b_layout_save_replaces_the_current_entry_and_preserves_others(),
         zero_b_layout_save_records_a_real_window_configuration(),
         zero_b_layout_new_runs_save_reset_and_rename_in_order(),
@@ -329,6 +318,5 @@ fn layouts_public_surface_batch() {
         zero_b_layout_kill_removes_current_and_selects_the_first_survivor(),
         zero_b_layout_kill_recreates_the_default_when_none_survive(),
         zero_b_layout_switch_requires_a_string_layout_name(),
-    ];
-    assert_zero_b_layout_batch(&cases);
+    ]
 }

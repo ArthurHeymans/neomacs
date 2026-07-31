@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_at_batch};
+use super::ParityBatchCase;
 
 fn at_soft_get_returns_configured_fallback_while_explicit_default_still_wins() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "at_soft_get_returns_configured_fallback_while_explicit_default_still_wins",
         r##"(let ((first
                     (@extend @soft-get))
@@ -17,26 +17,24 @@ fn at_soft_get_returns_configured_fallback_while_explicit_default_still_wins() -
                 (@ second :missing
                    :default 'explicit)
                 (@ second :default-get)))"##,
-        true,
         expect!["OK (nil soft explicit soft)"],
     )
 }
 
 fn at_immutable_rejects_assignment_with_exact_property_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "at_immutable_rejects_assignment_with_exact_property_error",
         r##"(let ((object
                     (@extend @immutable)))
                (setf
                 (@ object :blocked)
                 10))"##,
-        false,
         expect![[r#"ERR (error "Object is immutable, cannot set :blocked")"#]],
     )
 }
 
 fn at_immutable_disabled_setter_returns_nil_without_assigning() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "at_immutable_disabled_setter_returns_nil_without_assigning",
         r##"(let ((object
                     (@extend
@@ -50,13 +48,12 @@ fn at_immutable_disabled_setter_returns_nil_without_assigning() -> ParityBatchCa
                    :default 'absent)
                 (@ object
                    :immutable-error)))"##,
-        true,
         expect!["OK (nil absent nil)"],
     )
 }
 
 fn at_watchable_notifies_in_order_assigns_after_callbacks_and_unwatches() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "at_watchable_notifies_in_order_assigns_after_callbacks_and_unwatches",
         r##"(let (events)
                (let* ((first
@@ -111,20 +108,17 @@ fn at_watchable_notifies_in_order_assigns_after_callbacks_and_unwatches() -> Par
                   (length
                    (@ object :watchers))
                   (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (1 2 1 ((first :foo 1 absent) (second :foo 1 absent) (first :watchers 1 2) (second :watchers 1 2) (first :bar 2 absent)))"#
         ]],
     )
 }
 
-#[test]
-fn mixins_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn mixins_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         at_soft_get_returns_configured_fallback_while_explicit_default_still_wins(),
         at_immutable_rejects_assignment_with_exact_property_error(),
         at_immutable_disabled_setter_returns_nil_without_assigning(),
         at_watchable_notifies_in_order_assigns_after_callbacks_and_unwatches(),
-    ];
-    assert_at_batch(&cases);
+    ]
 }

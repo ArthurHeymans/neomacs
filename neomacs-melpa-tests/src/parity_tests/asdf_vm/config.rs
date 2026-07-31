@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asdf_vm_batch};
+use super::ParityBatchCase;
 
 fn asdf_vm_config_scalar_decoders_and_encoders_cover_boolean_integer_string_and_key_shapes()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_config_scalar_decoders_and_encoders_cover_boolean_integer_string_and_key_shapes",
         r##"(list
                (mapcar
@@ -34,7 +34,6 @@ fn asdf_vm_config_scalar_decoders_and_encoders_cover_boolean_integer_string_and_
                (mapcar
                 #'asdf-vm-config--file-encode-value
                 '(t nil 0 42 "auto" "資料 λ")))"##,
-        true,
         expect![[
             r#"OK ((:legacy-version-file :use-release-candidates :資料-field) (t nil 0 42 "-1" "auto" "資料 λ") ((:concurrency 8) (:legacy-version-file t) (:custom-value "資料 λ")) ("legacy_version_file" "use_release_candidates" "資料_field") ("yes" "no" "0" "42" "auto" "資料 λ"))"#
         ]],
@@ -42,7 +41,7 @@ fn asdf_vm_config_scalar_decoders_and_encoders_cover_boolean_integer_string_and_
 }
 
 fn asdf_vm_config_decode_maps_real_asdfrc_text_into_typed_object_slots() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_config_decode_maps_real_asdfrc_text_into_typed_object_slots",
         r##"(let* ((text
                      (concat
@@ -69,7 +68,6 @@ fn asdf_vm_config_decode_maps_real_asdfrc_text_into_typed_object_slots() -> Pari
                    plugin-repository-last-check-duration
                    disable-plugin-short-name-repository
                    concurrency))))"##,
-        true,
         expect![[
             r#"OK (asdf-vm-config--file ((legacy-version-file t) (use-release-candidates nil) (always-keep-download t) (plugin-repository-last-check-duration 125) (disable-plugin-short-name-repository nil) (concurrency "auto")))"#
         ]],
@@ -78,7 +76,7 @@ fn asdf_vm_config_decode_maps_real_asdfrc_text_into_typed_object_slots() -> Pari
 
 fn asdf_vm_config_decode_exposes_inline_comment_whitespace_unknown_and_malformed_line_behavior()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_config_decode_exposes_inline_comment_whitespace_unknown_and_malformed_line_behavior",
         r##"(mapcar
                (lambda (text)
@@ -111,7 +109,6 @@ fn asdf_vm_config_decode_exposes_inline_comment_whitespace_unknown_and_malformed
                  "legacy_version_file = yes\n\nconcurrency = 4\n"
                  "unknown_field = value\n"
                  "whitespace only follows\n   \n"))"##,
-        true,
         expect![[
             r##"OK ((:error invalid-slot-type (asdf-vm-config--file legacy-version-file boolean "yes ; retained comment")) (:ok (t "auto")) (:error invalid-slot-type (asdf-vm-config--file concurrency string 4)) (:error invalid-slot-name :unknown-field) (:error wrong-type-argument (number-or-marker-p nil)))"##
         ]],
@@ -119,7 +116,7 @@ fn asdf_vm_config_decode_exposes_inline_comment_whitespace_unknown_and_malformed
 }
 
 fn asdf_vm_config_encode_emits_every_supported_field_in_class_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_config_encode_emits_every_supported_field_in_class_order",
         r##"(let ((object
                     (make-instance
@@ -133,7 +130,6 @@ fn asdf_vm_config_encode_emits_every_supported_field_in_class_order() -> ParityB
                (list
                 asdf-vm-config--valid-file-fields
                 (asdf-vm-ui--encode object)))"##,
-        true,
         expect![[
             r#"OK ((always-keep-download concurrency disable-plugin-short-name-repository legacy-version-file plugin-repository-last-check-duration use-release-candidates) "legacy_version_file = yes\nuse_release_candidates = no\nalways_keep_download = yes\nplugin_repository_last_check_duration = 17\ndisable_plugin_short_name_repository = yes\nconcurrency = 6")"#
         ]],
@@ -141,7 +137,7 @@ fn asdf_vm_config_encode_emits_every_supported_field_in_class_order() -> ParityB
 }
 
 fn asdf_vm_ui_reads_mutates_and_writes_real_config_file_round_trip() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_ui_reads_mutates_and_writes_real_config_file_round_trip",
         r##"(let* ((input
                      (asdf-vm-test-path
@@ -173,7 +169,6 @@ fn asdf_vm_ui_reads_mutates_and_writes_real_config_file_round_trip() -> ParityBa
                   (file-exists-p output)
                   (asdf-vm-test-read-file
                    output))))"##,
-        true,
         expect![[
             r#"OK ("[ORACLE-SANDBOX]/config/input.asdfrc" nil t "legacy_version_file = yes\nuse_release_candidates = no\nalways_keep_download = yes\nplugin_repository_last_check_duration = 60\ndisable_plugin_short_name_repository = no\nconcurrency = 12\n")"#
         ]],
@@ -181,7 +176,7 @@ fn asdf_vm_ui_reads_mutates_and_writes_real_config_file_round_trip() -> ParityBa
 }
 
 fn asdf_vm_config_edit_reads_existing_or_constructs_missing_backing_object() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_config_edit_reads_existing_or_constructs_missing_backing_object",
         r##"(let* ((existing
                      (asdf-vm-test-path
@@ -213,7 +208,6 @@ fn asdf_vm_config_edit_reads_existing_or_constructs_missing_backing_object() -> 
                   (asdf-vm-config-edit
                    missing)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (:customized :customized ((asdf-vm-config--file "[ORACLE-SANDBOX]/config-edit/existing" "auto") (asdf-vm-config--file "[ORACLE-SANDBOX]/config-edit/missing" "auto")))"#
         ]],
@@ -222,7 +216,7 @@ fn asdf_vm_config_edit_reads_existing_or_constructs_missing_backing_object() -> 
 
 fn asdf_vm_config_state_injection_and_rollback_restore_present_and_absent_environment_values()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_config_state_injection_and_rollback_restore_present_and_absent_environment_values",
         r##"(let ((asdf-vm-config-file
                     "/new/config")
@@ -266,16 +260,14 @@ fn asdf_vm_config_state_injection_and_rollback_restore_present_and_absent_enviro
                        "ASDF_DIR"
                        "ASDF_DATA_DIR"
                        "ASDF_CONCURRENCY"))))))"##,
-        true,
         expect![[
             r#"OK (((asdf-vm-config-file "ASDF_CONFIG_FILE" "/old/config") (asdf-vm-tool-versions-filename "ASDF_TOOL_VERSIONS_FILENAME" nil) (asdf-vm-dir "ASDF_DIR" "/old/core") (asdf-vm-data-dir "ASDF_DATA_DIR" nil) (asdf-vm-concurrency "ASDF_CONCURRENCY" "auto")) ("/new/config" ".versions-new" "/new/core" "/new/data" "9") ("/old/config" nil "/old/core" nil "auto"))"#
         ]],
     )
 }
 
-#[test]
-fn config_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn config_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asdf_vm_config_scalar_decoders_and_encoders_cover_boolean_integer_string_and_key_shapes(),
         asdf_vm_config_decode_maps_real_asdfrc_text_into_typed_object_slots(),
         asdf_vm_config_decode_exposes_inline_comment_whitespace_unknown_and_malformed_line_behavior(
@@ -284,6 +276,5 @@ fn config_public_surface_batch() {
         asdf_vm_ui_reads_mutates_and_writes_real_config_file_round_trip(),
         asdf_vm_config_edit_reads_existing_or_constructs_missing_backing_object(),
         asdf_vm_config_state_injection_and_rollback_restore_present_and_absent_environment_values(),
-    ];
-    assert_asdf_vm_batch(&cases);
+    ]
 }

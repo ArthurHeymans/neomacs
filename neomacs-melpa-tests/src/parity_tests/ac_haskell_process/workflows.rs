@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_haskell_process_batch};
+use super::ParityBatchCase;
 
 /// What auto-complete asks the source before it asks for anything else.  The
 /// four cells of `ac-source-haskell-process' are the whole contract, and the
@@ -14,9 +14,8 @@ use super::{ParityBatchCase, assert_ac_haskell_process_batch};
 /// `ac-haskell-process-candidates' does nothing without a session.  So the
 /// source is offered to the user in exactly the state where it has nothing to
 /// offer, which is the behaviour a completion front end has to tolerate.
-
 fn the_source_is_offered_in_haskell_buffers_and_stays_empty_without_a_session() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_source_is_offered_in_haskell_buffers_and_stays_empty_without_a_session",
         r##"(let ((buffer (ac-haskell-test-open)))
   (list
@@ -38,7 +37,6 @@ fn the_source_is_offered_in_haskell_buffers_and_stays_empty_without_a_session() 
      (haskell-interactive-mode)
      (list :repl-buffer (copy-sequence (ac-haskell-process-available-p))
            :candidates (let ((ac-prefix "ma")) (ac-haskell-process-candidates))))))"##,
-        true,
         expect![[
             r#"OK ((:cells (available candidates document symbol) :available ac-haskell-process-available-p :candidates ac-haskell-process-candidates :document ac-haskell-process-doc :symbol "h") (:ordinary-buffer nil) (:haskell-mode-buffer (haskell-mode haskell-interactive-mode) :session nil :candidates nil :candidates-for-import nil) (:repl-buffer (haskell-interactive-mode) :candidates nil))"#
         ]],
@@ -46,7 +44,7 @@ fn the_source_is_offered_in_haskell_buffers_and_stays_empty_without_a_session() 
 }
 
 fn setting_up_adds_the_source_to_this_buffer_and_leaves_the_default_alone() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "setting_up_adds_the_source_to_this_buffer_and_leaves_the_default_alone",
         r##"(let ((global-before (copy-sequence (default-value 'ac-sources)))
       (buffer (ac-haskell-test-open)))
@@ -71,7 +69,6 @@ fn setting_up_adds_the_source_to_this_buffer_and_leaves_the_default_alone() -> P
                   :global-after (copy-sequence (default-value 'ac-sources))
                   :global-untouched (equal global-before
                                            (default-value 'ac-sources)))))))))"##,
-        true,
         expect![
             "OK (:local-before nil :after-one-call (:local t :sources (ac-source-haskell-process ac-source-words-in-same-mode-buffers)) :after-two-calls (ac-source-haskell-process ac-source-words-in-same-mode-buffers) :idempotent t :with-auto-complete-mode (:local t :sources (ac-source-haskell-process ac-source-words-in-same-mode-buffers)) :global-before (ac-source-words-in-same-mode-buffers) :global-after (ac-source-words-in-same-mode-buffers) :global-untouched t)"
         ],
@@ -79,7 +76,7 @@ fn setting_up_adds_the_source_to_this_buffer_and_leaves_the_default_alone() -> P
 }
 
 fn documentation_is_fetched_from_hoogle_with_the_symbol_quoted_for_the_shell() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "documentation_is_fetched_from_hoogle_with_the_symbol_quoted_for_the_shell",
         r##"(let ((log (ac-haskell-test-install-hoogle
             "Prelude map :: (a -> b) -> [a] -> [b]\n\nmap f xs applies f to each element of xs.\n")))
@@ -92,7 +89,6 @@ fn documentation_is_fetched_from_hoogle_with_the_symbol_quoted_for_the_shell() -
           :plain plain
           :dangerous-symbol-returned (equal plain dangerous)
           :without-hoogle missing)))"##,
-        true,
         expect![[
             r#"OK (:arguments ("--info" "map" "--info" "Data.List.(++)$;rm -rf") :plain "Prelude map :: (a -> b) -> [a] -> [b]\n\nmap f xs applies f to each element of xs.\n" :dangerous-symbol-returned t :without-hoogle (:found nil :doc nil))"#
         ]],
@@ -100,7 +96,7 @@ fn documentation_is_fetched_from_hoogle_with_the_symbol_quoted_for_the_shell() -
 }
 
 fn the_documentation_popup_anchors_on_the_symbol_and_is_silent_without_hoogle() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_documentation_popup_anchors_on_the_symbol_and_is_silent_without_hoogle",
         r##"(let ((buffer (ac-haskell-test-open)))
   (ac-haskell-test-in buffer
@@ -129,20 +125,17 @@ fn the_documentation_popup_anchors_on_the_symbol_and_is_silent_without_hoogle() 
                 (list :returned t
                       :point-unmoved (equal (car before) (point))
                       :buffer-unchanged (equal (cadr before) (buffer-string)))))))))"##,
-        true,
         expect![[
             r#"OK ((:at "main = putStrLn (map id \"hello\")" :point 66 :symbol "putStrLn" :in-string nil :start 59) (:at "main = putStrLn (map id \"hello\")" :point 81 :symbol "hello" :in-string t :start nil) (:at-end-of-buffer nil :start nil) (:returned t :point-unmoved t :buffer-unchanged t))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         the_source_is_offered_in_haskell_buffers_and_stays_empty_without_a_session(),
         setting_up_adds_the_source_to_this_buffer_and_leaves_the_default_alone(),
         documentation_is_fetched_from_hoogle_with_the_symbol_quoted_for_the_shell(),
         the_documentation_popup_anchors_on_the_symbol_and_is_silent_without_hoogle(),
-    ];
-    assert_ac_haskell_process_batch(&cases);
+    ]
 }

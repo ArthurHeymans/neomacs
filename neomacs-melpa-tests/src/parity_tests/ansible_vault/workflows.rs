@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ansible_vault_batch};
+use super::ParityBatchCase;
 
 fn enabling_vault_mode_edits_and_saves_a_real_encrypted_group_vars_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "enabling_vault_mode_edits_and_saves_a_real_encrypted_group_vars_file",
         r##"
 (let* ((fixture (neomacs-ansible-vault-fixture))
@@ -77,7 +77,6 @@ fn enabling_vault_mode_edits_and_saves_a_real_encrypted_group_vars_file() -> Par
       (set-buffer-modified-p nil)
       (kill-buffer buffer))))
 "##,
-        true,
         expect![[
             r#"OK ((text-mode "api_token: initial-secret\nrelease_channel: stable\n" nil t t t "1.1" "AES256" "[ORACLE-SANDBOX]/infrastructure/credentials/team.pass") "api_token: initial-secret\nrelease_channel: canary\n" nil t 0 "$ANSIBLE_VAULT;1.1;AES256\nENC:api_token: initial-secret\nENC:release_channel: canary\n" "decrypt|team-secret||\nencrypt|team-secret||\ndecrypt|team-secret||\n")"#
         ]],
@@ -86,7 +85,7 @@ fn enabling_vault_mode_edits_and_saves_a_real_encrypted_group_vars_file() -> Par
 
 fn a_production_vault_id_selects_its_password_and_survives_the_edit_save_cycle() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_production_vault_id_selects_its_password_and_survives_the_edit_save_cycle",
         r##"
 (let* ((fixture (neomacs-ansible-vault-fixture))
@@ -153,16 +152,16 @@ fn a_production_vault_id_selects_its_password_and_survives_the_edit_save_cycle()
       (set-buffer-modified-p nil)
       (kill-buffer buffer))))
 "##,
-        true,
         expect![[
             r#"OK ((text-mode "deployment_ring: blue\napproval_required: true\n" "1.2" "AES256" "prod" "prod" "credentials/team.pass") "deployment_ring: green\napproval_required: true\n" nil "$ANSIBLE_VAULT;1.2;AES256;prod\nENC:deployment_ring: green\nENC:approval_required: true\n" "decrypt|team-secret|prod@[ORACLE-SANDBOX]/infrastructure/credentials/team.pass|\nencrypt|team-secret|prod@[ORACLE-SANDBOX]/infrastructure/credentials/team.pass|prod\ndecrypt|team-secret|prod@[ORACLE-SANDBOX]/infrastructure/credentials/team.pass|\n")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn encrypting_and_decrypting_one_yaml_secret_preserves_the_surrounding_playbook() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "encrypting_and_decrypting_one_yaml_secret_preserves_the_surrounding_playbook",
         r##"
 (let* ((fixture (neomacs-ansible-vault-fixture))
@@ -218,16 +217,16 @@ fn encrypting_and_decrypting_one_yaml_secret_preserves_the_surrounding_playbook(
            (neomacs-ansible-vault-read-file
             vault-log)))))))
 "##,
-        true,
         expect![[
             r#"OK ("api:\n  endpoint: https://api.example.test\n  token: !vault |\n          $ANSIBLE_VAULT;1.1;AES256\n          ENC:checkout-secret\n\n  timeout: 30\ndeploy:\n  strategy: rolling\n" "api:\n  endpoint: https://api.example.test\n  token: checkout-secret\n\n  timeout: 30\ndeploy:\n  strategy: rolling\n" nil 3 "encrypt_string|team-secret||\ndecrypt|team-secret||\n")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn entering_the_correct_password_recovers_the_same_buffer_after_an_actionable_error()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "entering_the_correct_password_recovers_the_same_buffer_after_an_actionable_error",
         r##"
 (let* ((fixture (neomacs-ansible-vault-fixture))
@@ -314,20 +313,18 @@ fn entering_the_correct_password_recovers_the_same_buffer_after_an_actionable_er
       (when (buffer-live-p error-buffer)
         (kill-buffer error-buffer)))))
 "##,
-        true,
         expect![[
             r#"OK ((("$ANSIBLE_VAULT;1.1;AES256\nENC:api_token: initial-secret\nENC:release_channel: stable" "credentials/wrong.pass") (t "$ [ORACLE-SANDBOX]/bin/ansible-vault decrypt --output=- --vault-password-file=\"[ORACLE-SANDBOX]/infrastructure/credentials/wrong.pass\"\nERROR! Decryption failed: invalid vault password\n\n")) "api_token: initial-secret\nrelease_channel: stable\n" t 256 "team-secret" "decrypt|wrong-secret||\ndecrypt|team-secret||\n")"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         enabling_vault_mode_edits_and_saves_a_real_encrypted_group_vars_file(),
         a_production_vault_id_selects_its_password_and_survives_the_edit_save_cycle(),
         encrypting_and_decrypting_one_yaml_secret_preserves_the_surrounding_playbook(),
         entering_the_correct_password_recovers_the_same_buffer_after_an_actionable_error(),
-    ];
-    assert_ansible_vault_batch(&cases);
+    ]
 }

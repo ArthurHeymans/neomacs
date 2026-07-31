@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_affe_autoload_batch};
+use super::ParityBatchCase;
 
 fn affe_generated_autoloads_register_both_commands_without_loading_package() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_generated_autoloads_register_both_commands_without_loading_package",
         r##"(list
                (featurep 'affe)
@@ -29,16 +29,12 @@ fn affe_generated_autoloads_register_both_commands_without_loading_package() -> 
                     'custom-autoload)
                (get 'affe-regexp-compiler
                     'custom-autoload))"##,
-        true,
         expect![[
             r#"OK (nil ((affe-grep t "affe" "Fuzzy grep in DIR with optional INITIAL input.\n\n(fn &optional DIR INITIAL)" nil) (affe-find t "affe" "Fuzzy find in DIR with optional INITIAL input.\n\n(fn &optional DIR INITIAL)" nil)) nil nil nil nil)"#
         ]],
     )
 }
 
-#[test]
-fn autoloads_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![affe_generated_autoloads_register_both_commands_without_loading_package()];
-    assert_affe_autoload_batch(&cases);
+pub(super) fn autoloads_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![affe_generated_autoloads_register_both_commands_without_loading_package()]
 }

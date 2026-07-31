@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_with_editor_batch};
+use super::ParityBatchCase;
 
 fn with_editor_sleeping_filter_opens_relative_file_at_line_and_column() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "with_editor_sleeping_filter_opens_relative_file_at_line_and_column",
         r##"(let* ((root (make-temp-file
                            "with-editor-protocol-" t))
@@ -40,13 +40,12 @@ fn with_editor_sleeping_filter_opens_relative_file_at_line_and_column() -> Parit
                      (set-buffer-modified-p nil)
                      (kill-buffer buffer)))
                  (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (t t "4312" 2 4 "zero\none abc\ntwo\n")"#]],
     )
 }
 
 fn with_editor_sleeping_filter_supports_absolute_file_without_position() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "with_editor_sleeping_filter_supports_absolute_file_without_position",
         r##"(let* ((file (make-temp-file
                            "with-editor-absolute-"
@@ -78,30 +77,26 @@ fn with_editor_sleeping_filter_supports_absolute_file_without_position() -> Pari
                      (set-buffer-modified-p nil)
                      (kill-buffer buffer)))
                  (delete-file file)))"##,
-        true,
         expect![[r#"OK (t t "99" 1 "payload")"#]],
     )
 }
 
 fn with_editor_sleeping_filter_returns_non_protocol_output_unchanged() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "with_editor_sleeping_filter_returns_non_protocol_output_unchanged",
         r##"(list
                (with-editor-sleeping-editor-filter
                 nil "ordinary output\n")
                (with-editor-output-filter
                 "partial ordinary output"))"##,
-        true,
         expect![[r#"OK ("ordinary output\n" "partial ordinary output")"#]],
     )
 }
 
-#[test]
-fn protocol_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn protocol_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         with_editor_sleeping_filter_opens_relative_file_at_line_and_column(),
         with_editor_sleeping_filter_supports_absolute_file_without_position(),
         with_editor_sleeping_filter_returns_non_protocol_output_unchanged(),
-    ];
-    assert_with_editor_batch(&cases);
+    ]
 }

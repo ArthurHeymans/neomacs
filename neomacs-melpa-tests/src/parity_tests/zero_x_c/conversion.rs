@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_zero_x_c_batch};
+use super::ParityBatchCase;
 
 fn zero_x_c_public_defaults_match_the_pinned_release() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_public_defaults_match_the_pinned_release",
         r##"(list
                0xc-strict
@@ -17,13 +17,12 @@ fn zero_x_c_public_defaults_match_the_pinned_release() -> ParityBatchCase {
                 (null
                  (custom-variable-p
                   '0xc-max-base))))"##,
-        true,
         expect![[r#"OK (nil " _,." t t 16 10 ".." t)"#]],
     )
 }
 
 fn zero_x_c_number_to_string_handles_zero_and_multiple_output_bases() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_number_to_string_handles_zero_and_multiple_output_bases",
         r##"(let ((0xc-max-base 16))
                (list
@@ -32,13 +31,12 @@ fn zero_x_c_number_to_string_handles_zero_and_multiple_output_bases() -> ParityB
                 (0xc-number-to-string 255 8)
                 (0xc-number-to-string 255 10)
                 (0xc-number-to-string 255 16)))"##,
-        true,
         expect![[r#"OK ("" "11111111" "377" "255" "FF")"#]],
     )
 }
 
 fn zero_x_c_character_conversion_preserves_boundary_quirks() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_character_conversion_preserves_boundary_quirks",
         r##"(let ((0xc-max-base 16))
                (list
@@ -48,13 +46,12 @@ fn zero_x_c_character_conversion_preserves_boundary_quirks() -> ParityBatchCase 
                  '(0 9 10 15))
                 (0xc--char-to-string 2 2)
                 (0xc--char-to-string 15 16)))"##,
-        true,
         expect![[r#"OK (("0" "9" "A" "F") "2" "F")"#]],
     )
 }
 
 fn zero_x_c_character_conversion_reports_maximum_and_ascii_limits() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_character_conversion_reports_maximum_and_ascii_limits",
         r##"(let ((0xc-max-base 16))
                (mapcar
@@ -68,7 +65,6 @@ fn zero_x_c_character_conversion_reports_maximum_and_ascii_limits() -> ParityBat
                 '((0xc--char-to-string 1 17)
                   (0xc--char-to-string 18 16)
                   (0xc--char-to-string 36))))"##,
-        true,
         expect![[
             r#"OK ((error ("That base is larger than the maximum allowed base: 16")) (error ("That character cannot fit in this base")) (error ("That character is too large to represent in ascii")))"#
         ]],
@@ -77,7 +73,7 @@ fn zero_x_c_character_conversion_reports_maximum_and_ascii_limits() -> ParityBat
 
 fn zero_x_c_string_to_number_handles_hints_padding_extensions_and_explicit_base() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_string_to_number_handles_hints_padding_extensions_and_explicit_base",
         r##"(let ((0xc-max-base 36)
                      (0xc-clamp-ten t)
@@ -93,34 +89,31 @@ fn zero_x_c_string_to_number_handles_hints_padding_extensions_and_explicit_base(
                  "101" 2)
                 (0xc-string-to-number
                  "zz" 36)))"##,
-        true,
         expect!["OK (255 10 2700 160 5 1295)"],
     )
 }
 
 fn zero_x_c_padding_is_validated_before_it_is_stripped_from_base_inference() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "zero_x_c_padding_is_validated_before_it_is_stripped_from_base_inference",
         r##"(let ((0xc-max-base 36)
                      (0xc-padding " _,."))
                (0xc-string-to-number
                 "1_000_000"))"##,
-        false,
         expect![[r#"ERR (error "Number exceeds maximum allowed base: 36")"#]],
     )
 }
 
 fn zero_x_c_string_to_number_rejects_non_numbers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "zero_x_c_string_to_number_rejects_non_numbers",
         r##"(0xc-string-to-number "12$34")"##,
-        false,
         expect![[r#"ERR (error "Not a number")"#]],
     )
 }
 
 fn zero_x_c_digit_and_reverse_helpers_cover_all_ascii_digits() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_digit_and_reverse_helpers_cover_all_ascii_digits",
         r##"(let ((0xc-max-base 36))
                (list
@@ -137,7 +130,6 @@ fn zero_x_c_digit_and_reverse_helpers_cover_all_ascii_digits() -> ParityBatchCas
                 (0xc--reverse-string
                  "racecar")
                 (0xc--reverse-string "")))"##,
-        true,
         expect![[
             r#"OK ((0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35) "ff01x0" "racecar" "")"#
         ]],
@@ -145,21 +137,19 @@ fn zero_x_c_digit_and_reverse_helpers_cover_all_ascii_digits() -> ParityBatchCas
 }
 
 fn zero_x_c_recursive_numeric_helper_uses_reversed_input_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_recursive_numeric_helper_uses_reversed_input_order",
         r##"(list
                (0xc--string-to-number "" 10)
                (0xc--string-to-number "321" 10)
                (0xc--string-to-number "FF" 16)
                (0xc--string-to-number "101" 2))"##,
-        true,
         expect!["OK (0 123 255 5)"],
     )
 }
 
-#[test]
-fn conversion_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn conversion_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         zero_x_c_public_defaults_match_the_pinned_release(),
         zero_x_c_number_to_string_handles_zero_and_multiple_output_bases(),
         zero_x_c_character_conversion_preserves_boundary_quirks(),
@@ -169,6 +159,5 @@ fn conversion_public_surface_batch() {
         zero_x_c_string_to_number_rejects_non_numbers(),
         zero_x_c_digit_and_reverse_helpers_cover_all_ascii_digits(),
         zero_x_c_recursive_numeric_helper_uses_reversed_input_order(),
-    ];
-    assert_zero_x_c_batch(&cases);
+    ]
 }

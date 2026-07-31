@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_annotation_batch};
+use super::ParityBatchCase;
 
 fn agda_compiler_batch_renders_semantic_tokens_diagnostics_help_and_definition_links()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agda_compiler_batch_renders_semantic_tokens_diagnostics_help_and_definition_links",
         r##"
 (with-temp-buffer
@@ -114,7 +114,6 @@ fn agda_compiler_batch_renders_semantic_tokens_diagnostics_help_and_definition_l
          before-changes
          after-changes)))))
 "##,
-        true,
         expect![[
             r#"OK ((("module" (font-lock-keyword-face) t "Agda module declaration" nil highlight) ("Checkout" (font-lock-type-face) t "Mouse-2: jump to the definition" #1=("Library/Payments.agda" . 73) highlight) ("data" (font-lock-keyword-face) t "Datatype declaration" nil highlight) ("Card" (font-lock-type-face) t "Card type" nil highlight) ("valid" (font-lock-constant-face) t "Card constructor" nil highlight) ("charge" (font-lock-function-name-face) t "Mouse-2: jump to the definition" #1# highlight) ("Card" (font-lock-type-face) t "Expected argument type" nil highlight) ("charge" (font-lock-function-name-face) t "Mouse-2: jump to the definition" #1# highlight) ("authorize" (warning font-lock-function-name-face) t "Authorization may fail for an expired card." nil highlight)) "module Checkout where\n\ndata Card : Set where\n  valid : Card\n\ncharge : Card → Nat\ncharge card = authorize card\n" nil nil 0 0)"#
         ]],
@@ -123,7 +122,7 @@ fn agda_compiler_batch_renders_semantic_tokens_diagnostics_help_and_definition_l
 
 fn incremental_agda_reload_replaces_stale_tokens_but_preserves_a_non_token_review_note()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "incremental_agda_reload_replaces_stale_tokens_but_preserves_a_non_token_review_note",
         r##"
 (with-temp-buffer
@@ -247,7 +246,6 @@ fn incremental_agda_reload_replaces_stale_tokens_but_preserves_a_non_token_revie
                before-changes
                after-changes))))))))
 "##,
-        true,
         expect![[
             r#"OK ((("module" (font-lock-doc-face font-lock-keyword-face) t "Keep the public parser module small.") (" " #1=(font-lock-doc-face) nil "Keep the public parser module small.") ("Parse" (font-lock-doc-face font-lock-function-name-face font-lock-type-face) t "Keep the public parser module small.") ("r where" #1# nil "Keep the public parser module small.") ("parse" (font-lock-function-name-face) t nil) ("unsafeParse" (font-lock-warning-face) t "Unsafe parser implementation")) (("module" (font-lock-keyword-face) t nil) (" " #1# nil "Keep the public parser module small.") ("Parse" (font-lock-function-name-face font-lock-type-face) t nil) (" where" #1# nil "Keep the public parser module small.") ("parse" (font-lock-function-name-face) t nil) ("safeParse" (font-lock-function-name-face) t "Total parser implementation")) "module Parser where\n\nparse : String → Result\nparse input = safeParse input\n" t t t 0 0)"#
         ]],
@@ -256,7 +254,7 @@ fn incremental_agda_reload_replaces_stale_tokens_but_preserves_a_non_token_revie
 
 fn following_an_agda_definition_link_and_going_back_round_trips_real_project_files()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "following_an_agda_definition_link_and_going_back_round_trips_real_project_files",
         r##"
 (let* ((root
@@ -348,19 +346,16 @@ fn following_an_agda_definition_link_and_going_back_round_trips_real_project_fil
                  (point-min) (point-max))))))))))
   result)
 "##,
-        true,
         expect![[
             r#"OK ((t "Library.agda" 3 0 "double : Nat → Nat" (("Main.agda" . 50))) t "Main.agda" 5 9 "answer = double 21" nil nil "module Main where\n\nopen import Library\n\nanswer = double 21\n")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         agda_compiler_batch_renders_semantic_tokens_diagnostics_help_and_definition_links(),
         incremental_agda_reload_replaces_stale_tokens_but_preserves_a_non_token_review_note(),
         following_an_agda_definition_link_and_going_back_round_trips_real_project_files(),
-    ];
-    assert_annotation_batch(&cases);
+    ]
 }

@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_use_package_batch};
+use super::ParityBatchCase;
 
 fn use_package_bind_registers_global_and_map_bindings_through_bind_key() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "use_package_bind_registers_global_and_map_bindings_through_bind_key",
         r##"(progn
                (defvar neomacs-use-package-bind-map
@@ -24,7 +24,6 @@ fn use_package_bind_registers_global_and_map_bindings_through_bind_key() -> Pari
                    (symbol-function
                     'neomacs-use-package-map-command))
                   personal-keybindings)))"##,
-        true,
         expect![[
             r#"OK (neomacs-use-package-global-command neomacs-use-package-map-command t t ((("x" . neomacs-use-package-bind-map) neomacs-use-package-map-command nil) (("C-c u") neomacs-use-package-global-command nil)))"#
         ]],
@@ -33,7 +32,7 @@ fn use_package_bind_registers_global_and_map_bindings_through_bind_key() -> Pari
 
 fn use_package_bind_keymap_loads_a_real_library_and_then_dispatches_its_prefix() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "use_package_bind_keymap_loads_a_real_library_and_then_dispatches_its_prefix",
         r##"(let* ((root
                     (make-temp-file "use-package-keymap-" t))
@@ -71,13 +70,12 @@ fn use_package_bind_keymap_loads_a_real_library_and_then_dispatches_its_prefix()
                          neomacs-use-package-prefix-map "x")
                         (key-binding (kbd "C-c k x")))))
                  (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (nil t forward-char forward-char)"#]],
     )
 }
 
 fn use_package_custom_sets_the_value_and_exact_customization_metadata() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "use_package_custom_sets_the_value_and_exact_customization_metadata",
         r##"(progn
                (defcustom neomacs-use-package-custom-variable
@@ -102,13 +100,12 @@ fn use_package_custom_sets_the_value_and_exact_customization_metadata() -> Parit
                 (get
                  'neomacs-use-package-custom-variable
                  'custom-requests)))"##,
-        true,
         expect![[r#"OK (#1=(one two) ('#1#) nil nil nil)"#]],
     )
 }
 
 fn use_package_custom_face_records_exact_face_spec_and_modified_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "use_package_custom_face_records_exact_face_spec_and_modified_state",
         r##"(progn
                (defface neomacs-use-package-face
@@ -127,14 +124,13 @@ fn use_package_custom_face_records_exact_face_spec_and_modified_state() -> Parit
                  'neomacs-use-package-face :foreground nil t)
                 (face-attribute
                  'neomacs-use-package-face :weight nil t)))"##,
-        true,
         expect![[r#"OK (t nil "blue" bold)"#]],
     )
 }
 
 fn use_package_ensure_calls_the_selected_install_boundary_with_normalized_arguments()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "use_package_ensure_calls_the_selected_install_boundary_with_normalized_arguments",
         r##"(let (calls)
                (cl-letf
@@ -155,7 +151,6 @@ fn use_package_ensure_calls_the_selected_install_boundary_with_normalized_argume
                        (dependency-b :pin "gnu")
                        :no-require t)))
                  (nreverse calls)))"##,
-        true,
         expect![[
             r#"OK ((neomacs-use-package-ensure-target (dependency-a (dependency-b . "gnu")) nil nil))"#
         ]],
@@ -164,7 +159,7 @@ fn use_package_ensure_calls_the_selected_install_boundary_with_normalized_argume
 
 fn use_package_load_path_expands_static_and_computed_paths_below_user_emacs_directory()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "use_package_load_path_expands_static_and_computed_paths_below_user_emacs_directory",
         r##"(let* ((user-emacs-directory
                     (file-name-as-directory
@@ -191,20 +186,17 @@ fn use_package_load_path_expands_static_and_computed_paths_below_user_emacs_dire
                  (delete-directory
                   user-emacs-directory t)
                  (setq load-path original-load-path)))"##,
-        true,
         expect![[r#"OK ("two" "one")"#]],
     )
 }
 
-#[test]
-fn integrations_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn integrations_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         use_package_bind_registers_global_and_map_bindings_through_bind_key(),
         use_package_bind_keymap_loads_a_real_library_and_then_dispatches_its_prefix(),
         use_package_custom_sets_the_value_and_exact_customization_metadata(),
         use_package_custom_face_records_exact_face_spec_and_modified_state(),
         use_package_ensure_calls_the_selected_install_boundary_with_normalized_arguments(),
         use_package_load_path_expands_static_and_computed_paths_below_user_emacs_directory(),
-    ];
-    assert_use_package_batch(&cases);
+    ]
 }

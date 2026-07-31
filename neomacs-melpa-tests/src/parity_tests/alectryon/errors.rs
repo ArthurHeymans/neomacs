@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alectryon_batch};
+use super::ParityBatchCase;
 
 fn alectryon_unknown_mode_and_configuration_failures_have_precise_actionable_messages()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_unknown_mode_and_configuration_failures_have_precise_actionable_messages",
         r##"(mapcar
  (lambda (thunk)
@@ -25,7 +25,6 @@ fn alectryon_unknown_mode_and_configuration_failures_have_precise_actionable_mes
   (lambda () (with-temp-buffer
           (setq-local alectryon-prog-mode 'haskell-mode)
           (alectryon--config-code+markup)))))"##,
-        true,
         expect![[
             r#"OK ((error "Unrecognized Alectryon programming mode: haskell-mode") (error "Unrecognized Alectryon markup mode: org-mode") (error "Unrecognized mode: fundamental-mode (expecting one of (rst-mode markdown-mode typst-ts-mode coq-mode lean4-mode dafny-mode))") (error "Unrecognized mode: fundamental-mode (expecting one of (rst-mode markdown-mode typst-ts-mode coq-mode lean4-mode dafny-mode))") (error "Unrecognized Alectryon programming mode: haskell-mode"))"#
         ]],
@@ -33,7 +32,7 @@ fn alectryon_unknown_mode_and_configuration_failures_have_precise_actionable_mes
 }
 
 fn alectryon_read_mode_rejects_uninstalled_choices_and_empty_supported_sets() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_read_mode_rejects_uninstalled_choices_and_empty_supported_sets",
         r##"(let ((original-prog alectryon-prog-modes)
       (original-text alectryon-text-modes))
@@ -52,7 +51,6 @@ fn alectryon_read_mode_rejects_uninstalled_choices_and_empty_supported_sets() ->
            (error (list (car err) (error-message-string err))))))
     (setq alectryon-prog-modes original-prog
           alectryon-text-modes original-text)))"##,
-        true,
         expect![[
             r#"OK ((user-error "Not installed: missing-mode") (error "No supported text mode found"))"#
         ]],
@@ -61,7 +59,7 @@ fn alectryon_read_mode_rejects_uninstalled_choices_and_empty_supported_sets() ->
 
 fn alectryon_atomic_rolls_back_failed_complex_edits_and_groups_successful_edits_for_undo()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_atomic_rolls_back_failed_complex_edits_and_groups_successful_edits_for_undo",
         r##"(list
  (with-temp-buffer
@@ -90,7 +88,6 @@ fn alectryon_atomic_rolls_back_failed_complex_edits_and_groups_successful_edits_
          (undo-records (copy-tree buffer-undo-list)))
      (undo)
      (list after (buffer-string) undo-records))))"##,
-        true,
         expect![[
             r#"OK (((error "conversion exploded") "stable" 7 nil) ("BASE-one-two" "base" (nil (1 . 5) ("base" . 1) (5 . 13))))"#
         ]],
@@ -99,7 +96,7 @@ fn alectryon_atomic_rolls_back_failed_complex_edits_and_groups_successful_edits_
 
 fn alectryon_mode_recording_does_not_poison_buffers_in_unsupported_major_modes() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "alectryon_mode_recording_does_not_poison_buffers_in_unsupported_major_modes",
         r##"(with-temp-buffer
   (fundamental-mode)
@@ -115,20 +112,17 @@ fn alectryon_mode_recording_does_not_poison_buffers_in_unsupported_major_modes()
           alectryon--original-mode
           alectryon-prog-mode alectryon-text-mode
           (memq #'alectryon--save write-contents-functions))))"##,
-        true,
         expect![[
             r#"OK ((error "Unrecognized mode: fundamental-mode (expecting one of (rst-mode markdown-mode typst-ts-mode coq-mode lean4-mode dafny-mode))") fundamental-mode t nil coq-mode nil nil)"#
         ]],
     )
 }
 
-#[test]
-fn errors_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn errors_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         alectryon_unknown_mode_and_configuration_failures_have_precise_actionable_messages(),
         alectryon_read_mode_rejects_uninstalled_choices_and_empty_supported_sets(),
         alectryon_atomic_rolls_back_failed_complex_edits_and_groups_successful_edits_for_undo(),
         alectryon_mode_recording_does_not_poison_buffers_in_unsupported_major_modes(),
-    ];
-    assert_alectryon_batch(&cases);
+    ]
 }

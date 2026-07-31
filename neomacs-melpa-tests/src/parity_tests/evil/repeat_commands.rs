@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_evil_batch};
+use super::ParityBatchCase;
 
 fn evil_normalize_repeat_info_concatenates_adjacent_key_arrays_around_symbols() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_normalize_repeat_info_concatenates_adjacent_key_arrays_around_symbols",
         r##"(mapcar
                #'evil-normalize-repeat-info
@@ -16,7 +16,6 @@ fn evil_normalize_repeat_info_concatenates_adjacent_key_arrays_around_symbols() 
                  ("abc" [XX YY] "def" END)
                  ("abc" [XX YY] MID "def")
                  (BEG "abc" [XX YY] MID "def" END)))"##,
-        true,
         expect![
             "OK (([97 98 99]) ([77 45 102]) (SYM) ([97 98 99 XX YY 100 101 102]) (BEG MID END) (BEG [97 98 99 XX YY 100 101 102]) ([97 98 99 XX YY 100 101 102] END) ([97 98 99 XX YY] MID [100 101 102]) (BEG [97 98 99 XX YY] MID [100 101 102] END))"
         ],
@@ -24,7 +23,7 @@ fn evil_normalize_repeat_info_concatenates_adjacent_key_arrays_around_symbols() 
 }
 
 fn evil_dot_repeat_replays_replace_delete_insert_and_change_commands() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_dot_repeat_replays_replace_delete_insert_and_change_commands",
         r##"(mapcar
                (lambda (case)
@@ -43,15 +42,15 @@ fn evil_dot_repeat_replays_replace_delete_insert_and_change_commands() -> Parity
                  ("dw" . "w .")
                  ("i X ESC" . "w .")
                  ("cw X ESC" . "w .")))"##,
-        true,
         expect![[
             r#"OK (("rXw." 5 nil) ("rXw.dww." 9 nil) ("rXw.dww.iXw." 13 nil) ("rXw.dww.iXw.cwXw." 18 nil))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn evil_keypress_parser_handles_counts_operators_zero_and_incomplete_input() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_keypress_parser_handles_counts_operators_zero_and_incomplete_input",
         r##"(with-temp-buffer
                (evil-local-mode 1)
@@ -64,7 +63,6 @@ fn evil_keypress_parser_handles_counts_operators_zero_and_incomplete_input() -> 
                 (evil-keypress-parser '(?0))
                 (let ((unread-command-events '(?d)))
                   (evil-keypress-parser '(?2)))))"##,
-        true,
         expect![
             "OK ((evil-delete nil) (evil-delete 2) (evil-delete 202) (evil-rot13 404) (evil-beginning-of-line nil) (evil-delete 2))"
         ],
@@ -72,7 +70,7 @@ fn evil_keypress_parser_handles_counts_operators_zero_and_incomplete_input() -> 
 }
 
 fn evil_command_properties_add_replace_remove_and_declare_behavior_flags() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_command_properties_add_replace_remove_and_declare_behavior_flags",
         r##"(progn
                (defun neomacs-evil-property-command ()
@@ -109,7 +107,6 @@ fn evil_command_properties_add_replace_remove_and_declare_behavior_flags() -> Pa
                       (evil-has-command-property-p
                        'neomacs-evil-property-command
                        :keep-visual))))))"##,
-        true,
         expect![
             "OK (#1=(:type exclusive :repeat t :keep-visual t) #1# #2=(:repeat motion . #3=(:keep-visual t)) #2# fallback #3#)"
         ],
@@ -117,7 +114,7 @@ fn evil_command_properties_add_replace_remove_and_declare_behavior_flags() -> Pa
 }
 
 fn evil_markers_store_local_positions_advance_flags_and_raw_marker_objects() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_markers_store_local_positions_advance_flags_and_raw_marker_objects",
         r##"(with-temp-buffer
                (insert "alpha\nbeta\ngamma")
@@ -137,23 +134,21 @@ fn evil_markers_store_local_positions_advance_flags_and_raw_marker_objects() -> 
                     (marker-insertion-type raw-b)
                     (evil-get-marker ?z)
                     (mapcar #'car evil-markers-alist)))))"##,
-        true,
         expect!["OK (3 8 t nil t t nil (98 97))"],
     )
 }
 
 fn evil_set_marker_rejects_a_read_only_special_marker() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "evil_set_marker_rejects_a_read_only_special_marker",
         r##"(with-temp-buffer
                (evil-set-marker ?<))"##,
-        false,
         expect!["ERR (wrong-type-argument markerp nil)"],
     )
 }
 
 fn evil_yank_helpers_attach_character_line_and_rectangle_handlers_exactly() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "evil_yank_helpers_attach_character_line_and_rectangle_handlers_exactly",
         r##"(with-temp-buffer
                (insert "alpha\nbravo\ncharlie\n")
@@ -178,16 +173,14 @@ fn evil_yank_helpers_attach_character_line_and_rectangle_handlers_exactly() -> P
                       (car kill-ring)
                       (get-text-property
                        0 'yank-handler (car kill-ring)))))))"##,
-        true,
         expect![[
             r#"OK (("alpha" nil) (#("alpha\n" 0 6 (yank-handler (evil-yank-line-handler nil t))) (evil-yank-line-handler nil t)) #("al\nbr" 0 5 (yank-handler (evil-yank-block-handler ("al" "br") t evil-delete-yanked-rectangle))) (evil-yank-block-handler ("al" "br") t evil-delete-yanked-rectangle))"#
         ]],
     )
 }
 
-#[test]
-fn repeat_commands_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn repeat_commands_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         evil_normalize_repeat_info_concatenates_adjacent_key_arrays_around_symbols(),
         evil_dot_repeat_replays_replace_delete_insert_and_change_commands(),
         evil_keypress_parser_handles_counts_operators_zero_and_incomplete_input(),
@@ -195,6 +188,5 @@ fn repeat_commands_public_surface_batch() {
         evil_markers_store_local_positions_advance_flags_and_raw_marker_objects(),
         evil_set_marker_rejects_a_read_only_special_marker(),
         evil_yank_helpers_attach_character_line_and_rectangle_handlers_exactly(),
-    ];
-    assert_evil_batch(&cases);
+    ]
 }

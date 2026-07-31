@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alt_codes_batch};
+use super::ParityBatchCase;
 
 /// The package's whole purpose: hold Meta, type a Windows alt code on the
 /// keypad, and get the character.  Four codes cover the ranges a user reaches
@@ -10,9 +10,8 @@ use super::{ParityBatchCase, assert_alt_codes_batch};
 /// because the shipped table spells it "spc": alt-32 inserts those three
 /// letters rather than a space, which is the data's own quirk and not a
 /// rendering artefact.
-
 fn typing_an_alt_code_on_the_keypad_inserts_the_character_it_names() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "typing_an_alt_code_on_the_keypad_inserts_the_character_it_names",
         r##"(alt-codes-test-with-buffer
  (let ((max-lisp-eval-depth 12800))
@@ -23,7 +22,6 @@ fn typing_an_alt_code_on_the_keypad_inserts_the_character_it_names() -> ParityBa
          :spelled-space (alt-codes-test-enter "32")
          :empty-entry (alt-codes-test-enter "189")
          :hook (alt-codes-test-hook))))"##,
-        true,
         expect![[
             r#"OK (:ascii ("A" "") :latin1 ("ß" "") :windows-1252 ("€" "") :accented ("Á" "") :spelled-space ("spc" "") :empty-entry ("" "") :hook (t t t))"#
         ]],
@@ -31,7 +29,7 @@ fn typing_an_alt_code_on_the_keypad_inserts_the_character_it_names() -> ParityBa
 }
 
 fn the_first_lookup_of_a_session_fails_at_the_default_eval_depth() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_first_lookup_of_a_session_fails_at_the_default_eval_depth",
         r##"(alt-codes-test-with-buffer
  (let ((mark (alt-codes-test-message-mark)))
@@ -52,7 +50,6 @@ fn the_first_lookup_of_a_session_fails_at_the_default_eval_depth() -> ParityBatc
              :raising-the-limit-works
              (let ((max-lisp-eval-depth 12800))
                (alt-codes--get-symbol "65")))))))"##,
-        true,
         expect![[
             r#"OK (:depth 1600 :table-entries 383 :announced ("[Alt Code]: 6" "[Alt Code]: 65") :pending "65" :after-commit ("" "65" (nil t t)) :hook-error ("Error in pre-command-hook (alt-codes--pre-command-hook): (excessive-lisp-nesting 1601)") :typing-still-works "z" :raising-the-limit-works "A")"#
         ]],
@@ -60,7 +57,7 @@ fn the_first_lookup_of_a_session_fails_at_the_default_eval_depth() -> ParityBatc
 }
 
 fn the_keypad_digits_also_build_a_numeric_prefix_argument() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_keypad_digits_also_build_a_numeric_prefix_argument",
         r##"(alt-codes-test-with-buffer
  (setq prefix-arg nil current-prefix-arg nil)
@@ -74,7 +71,6 @@ fn the_keypad_digits_also_build_a_numeric_prefix_argument() -> ParityBatchCase {
        (let ((max-lisp-eval-depth 12800))
          (execute-kbd-macro (vconcat [?x]))
          (copy-sequence (buffer-string)))))"##,
-        true,
         expect![[
             r#"OK (:pending "12" :prefix 12 :keypad-translation [54] :meta-digit-command digit-argument :keypad-command nil :commit-runs-that-many-times "x")"#
         ]],
@@ -82,7 +78,7 @@ fn the_keypad_digits_also_build_a_numeric_prefix_argument() -> ParityBatchCase {
 }
 
 fn only_a_symbol_event_commits_the_pending_code() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "only_a_symbol_event_commits_the_pending_code",
         r##"(alt-codes-test-with-buffer
  (let ((max-lisp-eval-depth 12800))
@@ -96,13 +92,12 @@ fn only_a_symbol_event_commits_the_pending_code() -> ParityBatchCase {
              :after-a-letter after-letter
              :after-a-symbol (list (copy-sequence (buffer-string))
                                    (copy-sequence alt-codes--code)))))))"##,
-        true,
         expect![[r#"OK (:pending "65" :after-a-letter ("x" "65") :after-a-symbol ("xA" ""))"#]],
     )
 }
 
 fn an_invalid_code_inserts_nothing_and_still_clears_the_pending_digits() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_invalid_code_inserts_nothing_and_still_clears_the_pending_digits",
         r##"(alt-codes-test-with-buffer
  (let ((max-lisp-eval-depth 12800))
@@ -116,13 +111,12 @@ fn an_invalid_code_inserts_nothing_and_still_clears_the_pending_digits() -> Pari
                 (prog1 (list (copy-sequence (buffer-string))
                              (copy-sequence alt-codes--code))
                   (setq buffer-read-only nil))))))"##,
-        true,
         expect![[r#"OK (:invalid ("" "") :next-code-is-unaffected ("A" "") :read-only ("" ""))"#]],
     )
 }
 
 fn the_mode_installs_and_removes_its_hook_and_leaves_plain_typing_alone() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_mode_installs_and_removes_its_hook_and_leaves_plain_typing_alone",
         r##"(list
  :lifecycle
@@ -156,22 +150,19 @@ fn the_mode_installs_and_removes_its_hook_and_leaves_plain_typing_alone() -> Par
      (global-alt-codes-mode -1)
      (list :armed armed
            :after (with-temp-buffer (text-mode) (alt-codes-test-hook))))))"##,
-        true,
         expect![[
             r#"OK (:lifecycle (:on (t t t) :off (nil t nil) :hook-value (eldoc-pre-command-refresh-echo-area t)) :mode-off (:digits "65" :keypad "" :hook nil) :globalized (:armed (t t t) :after (nil t nil)))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         typing_an_alt_code_on_the_keypad_inserts_the_character_it_names(),
         the_first_lookup_of_a_session_fails_at_the_default_eval_depth(),
         the_keypad_digits_also_build_a_numeric_prefix_argument(),
         only_a_symbol_event_commits_the_pending_code(),
         an_invalid_code_inserts_nothing_and_still_clears_the_pending_digits(),
         the_mode_installs_and_removes_its_hook_and_leaves_plain_typing_alone(),
-    ];
-    assert_alt_codes_batch(&cases);
+    ]
 }

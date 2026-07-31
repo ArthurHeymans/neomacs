@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_zero_x_zero_batch};
+use super::ParityBatchCase;
 
 fn zero_x_zero_upload_file_expands_path_and_forwards_exact_size() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_upload_file_expands_path_and_forwards_exact_size",
         r##"(let* ((root
                         (getenv
@@ -49,7 +49,6 @@ fn zero_x_zero_upload_file_expands_path_and_forwards_exact_size() -> ParityBatch
                       (0x0-upload-file server file)
                       (nreverse events)))
                  (delete-file file)))"##,
-        true,
         expect![[
             r#"OK (uploaded ((send #1=(:host "example.test") "payload.txt" nil) (handle #1# 7 response)))"#
         ]],
@@ -57,7 +56,7 @@ fn zero_x_zero_upload_file_expands_path_and_forwards_exact_size() -> ParityBatch
 }
 
 fn zero_x_zero_upload_text_forwards_full_buffer_and_active_region_bounds() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_upload_text_forwards_full_buffer_and_active_region_bounds",
         r##"(let ((server
                       '(:host "example.test"))
@@ -110,7 +109,6 @@ fn zero_x_zero_upload_text_forwards_full_buffer_and_active_region_bounds() -> Pa
                       full
                       region
                       (nreverse events))))))"##,
-        true,
         expect![[
             r#"OK (uploaded uploaded ((send "upload.txt" (:start 1 :end 7)) (handle 6 response) (send "upload.txt" (:start 2 :end 5)) (handle 3 response)))"#
         ]],
@@ -118,7 +116,7 @@ fn zero_x_zero_upload_text_forwards_full_buffer_and_active_region_bounds() -> Pa
 }
 
 fn zero_x_zero_upload_kill_ring_copies_content_into_an_isolated_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_upload_kill_ring_copies_content_into_an_isolated_buffer",
         r##"(let ((server
                       '(:host "example.test"))
@@ -151,7 +149,6 @@ fn zero_x_zero_upload_kill_ring_copies_content_into_an_isolated_buffer() -> Pari
                  (list
                   (0x0-upload-kill-ring server)
                   (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (uploaded ((send " *temp*" (:start 1 :end 14) "copied λ text") (handle 13 response)))"#
         ]],
@@ -159,7 +156,7 @@ fn zero_x_zero_upload_kill_ring_copies_content_into_an_isolated_buffer() -> Pari
 }
 
 fn zero_x_zero_shorten_uri_builds_curl_request_and_skips_timeout_estimate() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_shorten_uri_builds_curl_request_and_skips_timeout_estimate",
         r##"(let ((server
                       '(:scheme "https"
@@ -191,7 +188,6 @@ fn zero_x_zero_shorten_uri_builds_curl_request_and_skips_timeout_estimate() -> P
                    server
                    "https://long.example/path?q=1")
                   (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (shortened ((curl ("-s" "-S" "-F" "shorten=https://long.example/path?q=1" "https://example.test") nil) (handle (:scheme "https" :host "example.test") nil response)))"#
         ]],
@@ -199,20 +195,19 @@ fn zero_x_zero_shorten_uri_builds_curl_request_and_skips_timeout_estimate() -> P
 }
 
 fn zero_x_zero_shorten_uri_rejects_url_fallback() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "zero_x_zero_shorten_uri_rejects_url_fallback",
         r##"(let ((0x0-use-curl nil))
                (0x0-shorten-uri
                 '(:scheme "https"
                   :host "example.test")
                 "https://long.example"))"##,
-        false,
         expect![[r#"ERR (error "Unsupported currenlty without using curl")"#]],
     )
 }
 
 fn zero_x_zero_popup_upload_forwards_content_then_kills_the_popup() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_popup_upload_forwards_content_then_kills_the_popup",
         r##"(let ((server
                       '(:host "example.test"))
@@ -251,7 +246,6 @@ fn zero_x_zero_popup_upload_forwards_content_then_kills_the_popup() -> ParityBat
                 result
                 (nreverse events)
                 (buffer-live-p popup)))"##,
-        true,
         expect![[
             r#"OK (t ((send "popup-upload.txt" (:start 1 :end 11) "popup body") (handle 10 response)) nil)"#
         ]],
@@ -259,7 +253,7 @@ fn zero_x_zero_popup_upload_forwards_content_then_kills_the_popup() -> ParityBat
 }
 
 fn zero_x_zero_popup_creates_local_upload_binding_and_displays_instructions() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_popup_creates_local_upload_binding_and_displays_instructions",
         r##"(let (shown message-text popup)
                (cl-letf (((symbol-function 'pop-to-buffer)
@@ -291,13 +285,12 @@ fn zero_x_zero_popup_creates_local_upload_binding_and_displays_instructions() ->
                         message-text))
                    (when (buffer-live-p popup)
                      (kill-buffer popup)))))"##,
-        true,
         expect![[r#"OK ("*upload*" (t t) "Press C-c C-c to upload.")"#]],
     )
 }
 
 fn zero_x_zero_dwim_dispatches_region_kill_dired_file_guess_and_fallback() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_zero_dwim_dispatches_region_kill_dired_file_guess_and_fallback",
         r##"(let ((server
                       '(:host "example.test"))
@@ -382,16 +375,14 @@ fn zero_x_zero_dwim_dispatches_region_kill_dired_file_guess_and_fallback() -> Pa
                     rejected-file-result
                     fallback-result
                     (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK (text kill-ring file file nil text (text kill-ring (file "/dired/file") (prompt "Is publicly sharing this file, /guessed/file, what you intended?") (file "/guessed/file") (prompt "Is publicly sharing this file, /guessed/file, what you intended?") text))"#
         ]],
     )
 }
 
-#[test]
-fn commands_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn commands_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         zero_x_zero_upload_file_expands_path_and_forwards_exact_size(),
         zero_x_zero_upload_text_forwards_full_buffer_and_active_region_bounds(),
         zero_x_zero_upload_kill_ring_copies_content_into_an_isolated_buffer(),
@@ -400,6 +391,5 @@ fn commands_public_surface_batch() {
         zero_x_zero_popup_upload_forwards_content_then_kills_the_popup(),
         zero_x_zero_popup_creates_local_upload_binding_and_displays_instructions(),
         zero_x_zero_dwim_dispatches_region_kill_dired_file_guess_and_fallback(),
-    ];
-    assert_zero_x_zero_batch(&cases);
+    ]
 }

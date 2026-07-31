@@ -1,14 +1,13 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_abgaben_batch};
+use super::ParityBatchCase;
 
 /// The documented main workflow: a student mails a zipped submission, the
 /// grader triggers the mu4e attachment action, answers the group and week
 /// prompts, and abgaben files the attachment below `abgaben-root-folder`,
 /// unpacks it with `unzip` and links it from the org outline.
-
 fn capture_submission_files_unpacks_and_links_a_zipped_submission() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "capture_submission_files_unpacks_and_links_a_zipped_submission",
         r##"(let* ((abgaben-root-folder
         (expand-file-name "Abgaben SS25/" abgaben-test-root))
@@ -66,7 +65,6 @@ fn capture_submission_files_unpacks_and_links_a_zipped_submission() -> ParityBat
     (when (buffer-live-p buffer)
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK (((completing-read 8 "Which group? " ("gruppe-di" "gruppe-do") t nil "gruppe-do" "gruppe-di") (completing-read 8 "Which week? " ("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "13" "14") t nil "01" "03") (get-attach 2 "Übung 03 – Lösung.zip") (save-attachment "Übung 03 – Lösung.zip" "Abgaben SS25/gruppe-di/03/Übung 03 – Lösung.zip")) ("unzip Übung 03 – Lösung.zip -d Übung 03 – Lösung") ("gruppe-di" "03") ("abgaben.org" org-mode 6 "" nil) ("gruppe-di/03/Übung 03 – Lösung.zip" "gruppe-di/03/Übung 03 – Lösung/Lösung.pdf" "gruppe-di/03/Übung 03 – Lösung/loesung.tex") "unpacked Lösung.pdf\n" "* Kurs Notizen\nNicht anfassen.\n* Abgaben\n** gruppe-di\n*** 03\n**** [[file:[ORACLE-SANDBOX]/Abgaben SS25/gruppe-di/03/Übung 03 – Lösung][Übung 03 – Lösung.zip]] Email: [[mu4e:msgid:CAF-42@uni.example][Übung 03 – Lösung]]\n**** [[file:alt.pdf][alt.pdf]] Email: [[mu4e:msgid:alt@uni.example][Alte Abgabe]]\n** gruppe-do\n")"#
         ]],
@@ -74,7 +72,7 @@ fn capture_submission_files_unpacks_and_links_a_zipped_submission() -> ParityBat
 }
 
 fn capture_submission_creates_the_missing_week_and_unpacks_a_real_tarball() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "capture_submission_creates_the_missing_week_and_unpacks_a_real_tarball",
         r##"(let* ((abgaben-root-folder
         (expand-file-name "Abgaben SS25/" abgaben-test-root))
@@ -121,16 +119,16 @@ fn capture_submission_creates_the_missing_week_and_unpacks_a_real_tarball() -> P
     (when (buffer-live-p buffer)
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK (((completing-read 8 "Which group? " ("gruppe-di" "gruppe-do") t nil "gruppe-di" "gruppe-do") (completing-read 8 "Which week? " ("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "13" "14") t nil "02" "07") (get-attach 1 "Aufgabe 07.tar.gz") (save-attachment "Aufgabe 07.tar.gz" "Abgaben SS25/gruppe-do/07/Aufgabe 07.tar.gz")) ("gruppe-do" "07") ("gruppe-do/07/Aufgabe 07.tar.gz" "gruppe-do/07/Aufgabe 07/bericht.tex" "gruppe-do/07/Aufgabe 07/daten/messung.csv") "zeit,wert\n1,42\n" "\\section{Lösung}\n" "* Abgaben\n** gruppe-do\n*** 07\n**** [[file:[ORACLE-SANDBOX]/Abgaben SS25/gruppe-do/07/Aufgabe 07][Aufgabe 07.tar.gz]] Email: [[mu4e:msgid:<none>][<none>]]\n*** 02\n**** [[file:frueher][frueher.tar.gz]] Email: [[mu4e:msgid:x@y][Frueher]]\nKommentar zur zweiten Woche.\n")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn capture_submission_without_the_group_heading_signals_search_failed_after_saving()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "capture_submission_without_the_group_heading_signals_search_failed_after_saving",
         r##"(let* ((abgaben-root-folder
         (expand-file-name "Abgaben SS25/" abgaben-test-root))
@@ -176,15 +174,15 @@ fn capture_submission_without_the_group_heading_signals_search_failed_after_savi
       (when (buffer-live-p buffer)
         (with-current-buffer buffer (set-buffer-modified-p nil))
         (kill-buffer buffer)))))"##,
-        true,
         expect![[
             r#"OK ((search-failed ("** gruppe-do")) ((completing-read 8 "Which group? " ("gruppe-di" "gruppe-do") t nil "gruppe-di" "gruppe-do") (completing-read 8 "Which week? " ("01" "02" "03" "04" "05" "06" "07" "08" "09" "10" "11" "12" "13" "14") t nil "05" "05") (get-attach 1 "loesung.pdf") (save-attachment "loesung.pdf" "Abgaben SS25/gruppe-do/05/loesung.pdf")) ("gruppe-do" "05") ("abgaben.org" org-mode nil 1) ("gruppe-do/05/loesung.pdf") "%PDF-1.7 nachgereicht\n" "* Abgaben\n** gruppe-di\n*** 05\n")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn export_pdf_annot_to_org_sorts_annotations_filters_links_and_totals_points() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "export_pdf_annot_to_org_sorts_annotations_filters_links_and_totals_points",
         r##"(let* ((abgaben-points-re "Aufgabe [0-9.]*: ?\\([0-9.]*\\)/\\([0-9.]*\\)")
        (abgaben-points-heading "Deine Punkte")
@@ -239,16 +237,16 @@ fn export_pdf_annot_to_org_sorts_annotations_filters_links_and_totals_points() -
     (when (buffer-live-p buffer)
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK (((getannots nil "Abgaben SS25/gruppe-di/03/Aufgabe 03 [final] Lösung.pdf")) (31 4 t) "* Abgaben\n** gruppe-di\n*** 03\n**** [[file:[ORACLE-SANDBOX]/Abgaben SS25/gruppe-di/03/Aufgabe 03 \\[final\\] Lösung.pdf][Lösung]] Email: [[mu4e:msgid:ada@uni.example][Aufgabe 3]]\n***** Deine Punkte\nAufgabe 1: 2.5/3\nAufgabe 2: 0.5/2\nAufgabe 3: 3/3\nGesamt: 6.0/8 \n***** annot-1-0\nAufgabe 1: 2.5/3 Randfall fehlt\n***** annot-2-0\nNotation!\n***** annot-2-1\nAufgabe 2: 0.5/2 Beweis unvollständig\n***** annot-3-0\nAufgabe 3: 3/3 – sauber gelöst\n\n**** [[file:andere.pdf][Andere]] Email: [[mu4e:msgid:bob@uni.example][Aufgabe 3]]\n")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn export_pdf_annot_to_org_uses_the_shipped_defaults_for_an_unscored_submission() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "export_pdf_annot_to_org_uses_the_shipped_defaults_for_an_unscored_submission",
         r##"(let* ((pdf-file
         (expand-file-name "Abgaben SS25/gruppe-do/11/Nachreichung.pdf"
@@ -291,15 +289,15 @@ fn export_pdf_annot_to_org_uses_the_shipped_defaults_for_an_unscored_submission(
     (when (buffer-live-p buffer)
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK (((getannots nil "Abgaben SS25/gruppe-do/11/Nachreichung.pdf")) ("your points" "overall" "assignment [0-9.]*: ?\\([0-9.]*\\)/\\([0-9.]*\\)" (link)) (31 nil) "* Abgaben\n** gruppe-do\n*** 11\n**** [[file:[ORACLE-SANDBOX]/Abgaben SS25/gruppe-do/11/Nachreichung.pdf][Nachreichung.pdf]] Email: [[mu4e:msgid:cleo@uni.example][Nachreichung]]\n***** your points\noverall: 0/0 \n***** annot-1-0\n***** annot-1-1\nBitte Notation prüfen (siehe Aufgabe 2)\n")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn prepare_reply_yanks_the_mml_reply_and_opens_the_original_message() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "prepare_reply_yanks_the_mml_reply_and_opens_the_original_message",
         r##"(let* ((pdf-file
         (expand-file-name "Abgaben SS25/gruppe-di/03/Aufgabe 03 [final] Lösung.pdf"
@@ -337,22 +335,20 @@ fn prepare_reply_yanks_the_mml_reply_and_opens_the_original_message() -> ParityB
     (when (buffer-live-p buffer)
       (with-current-buffer buffer (set-buffer-modified-p nil))
       (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK (((open-mail "msgid:ada@uni.example")) (31 31 nil) ("***** Deine Punkte\nAufgabe 1: 2.5/3\nGesamt: 2.5/3 \n***** annot-1-0\nAufgabe 1: 2.5/3 Randfall fehlt\n<#part type=\"application/pdf\" filename=\"[ORACLE-SANDBOX]/Abgaben SS25/gruppe-di/03/Aufgabe 03 [final] Lösung.pdf\" disposition=attachment><#/part>" "**** [[file:[ORACLE-SANDBOX]/Abgaben SS25/gruppe-di/03/Aufgabe 03 \\[final\\] Lösung.pdf][Lösung]] Email: [[mu4e:msgid:ada@uni.example][Aufgabe 3]]\n" "**** [[file:[ORACLE-SANDBOX]/Abgaben SS25/gruppe-di/03/Aufgabe 03 \\[final\\] Lösung.pdf][Lösung]] Email: [[mu4e:msgid:ada@uni.example][Aufgabe 3]]\n***** Deine Punkte\nAufgabe 1: 2.5/3\nGesamt: 2.5/3 \n***** annot-1-0\nAufgabe 1: 2.5/3 Randfall fehlt\n") "* Abgaben\n** gruppe-di\n*** 03\n**** [[file:[ORACLE-SANDBOX]/Abgaben SS25/gruppe-di/03/Aufgabe 03 \\[final\\] Lösung.pdf][Lösung]] Email: [[mu4e:msgid:ada@uni.example][Aufgabe 3]]\n***** Deine Punkte\nAufgabe 1: 2.5/3\nGesamt: 2.5/3 \n***** annot-1-0\nAufgabe 1: 2.5/3 Randfall fehlt\n**** [[file:andere.pdf][Andere]] Email: [[mu4e:msgid:bob@uni.example][Aufgabe 3]]\n")"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         capture_submission_files_unpacks_and_links_a_zipped_submission(),
         capture_submission_creates_the_missing_week_and_unpacks_a_real_tarball(),
         capture_submission_without_the_group_heading_signals_search_failed_after_saving(),
         export_pdf_annot_to_org_sorts_annotations_filters_links_and_totals_points(),
         export_pdf_annot_to_org_uses_the_shipped_defaults_for_an_unscored_submission(),
         prepare_reply_yanks_the_mml_reply_and_opens_the_original_message(),
-    ];
-    assert_abgaben_batch(&cases);
+    ]
 }

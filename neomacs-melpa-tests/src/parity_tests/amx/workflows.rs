@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_amx_batch};
+use super::ParityBatchCase;
 
 /// Turning on `amx-mode' is the whole installation: it initializes the ranking
 /// cache from the (empty) save file, remaps `execute-extended-command' so `M-x'
@@ -9,9 +9,8 @@ use super::{ParityBatchCase, assert_amx_batch};
 /// commands are ordered by the two remaining rules -- shortest name first, ties
 /// alphabetically.  Turning the mode off gives `M-x' back and removes the
 /// auto-save hook.
-
 fn enabling_amx_mode_takes_over_m_x_and_ranks_the_commands_it_finds() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "enabling_amx_mode_takes_over_m_x_and_ranks_the_commands_it_finds",
         r##"(unwind-protect
     (progn
@@ -41,7 +40,6 @@ fn enabling_amx_mode_takes_over_m_x_and_ranks_the_commands_it_finds() -> ParityB
                                 :auto-save (and (memq 'amx-save-to-file auto-save-hook) t)
                                 :still-initialized amx-initialized)))))
   (amx-test-cleanup))"##,
-        true,
         expect![
             "OK (:before (:m-x execute-extended-command :remap 1 :initialized nil :auto-save nil) :enabled (:m-x amx :remap amx :initialized t :auto-save t :kill-emacs t :order ((amx-probe-open) (amx-probe-quit) (amx-probe-zoom) (amx-probe-close) (amx-probe-refresh)) :data nil :history nil :save-file-written no-save-file) :disabled (:m-x execute-extended-command :remap nil :auto-save nil :still-initialized t))"
         ],
@@ -49,7 +47,7 @@ fn enabling_amx_mode_takes_over_m_x_and_ranks_the_commands_it_finds() -> ParityB
 }
 
 fn a_session_of_command_invocations_reorders_the_ranked_list() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_session_of_command_invocations_reorders_the_ranked_list",
         r##"(unwind-protect
     (progn
@@ -74,7 +72,6 @@ fn a_session_of_command_invocations_reorders_the_ranked_list() -> ParityBatchCas
                                       :data (copy-tree amx-data)
                                       :history (copy-sequence amx-history))))))
   (amx-test-cleanup))"##,
-        true,
         expect![[
             r#"OK (:initial ((amx-probe-open) (amx-probe-quit) (amx-probe-zoom) (amx-probe-close) (amx-probe-refresh)) :ranked (:order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom) :subset (amx-probe-open amx-probe-zoom amx-probe-quit amx-probe-refresh) :default "amx-probe-open") :after-more-use (:order ((amx-probe-open . 3) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 3)) :history (amx-probe-open amx-probe-close amx-probe-zoom)))"#
         ]],
@@ -82,7 +79,7 @@ fn a_session_of_command_invocations_reorders_the_ranked_list() -> ParityBatchCas
 }
 
 fn the_save_file_round_trips_the_ranking_into_a_fresh_session() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_save_file_round_trips_the_ranking_into_a_fresh_session",
         r##"(unwind-protect
     (progn
@@ -113,7 +110,6 @@ fn the_save_file_round_trips_the_ranking_into_a_fresh_session() -> ParityBatchCa
                                   :history (copy-sequence amx-history)
                                   :initialized amx-initialized))))))
   (amx-test-cleanup))"##,
-        true,
         expect![[
             r#"OK (:refused (:init-file-user nil :file no-save-file :warnings ("Warning (amx): Not saving amx state from \"emacs -Q\".")) :saved (:file "\n;; ----- amx-history -----\n(\n amx-probe-open\n amx-probe-close\n amx-probe-zoom\n)\n\n;; ----- amx-data -----\n(\n (amx-probe-zoom . 3)\n (amx-probe-close . 2)\n (amx-probe-open . 1)\n)\n" :order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom)) :forgotten (:cache nil :data nil :history nil) :restored (:order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom) :initialized t))"#
         ]],
@@ -121,7 +117,7 @@ fn the_save_file_round_trips_the_ranking_into_a_fresh_session() -> ParityBatchCa
 }
 
 fn ignored_commands_are_hidden_from_completion_and_can_be_unignored() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ignored_commands_are_hidden_from_completion_and_can_be_unignored",
         r##"(unwind-protect
     (progn
@@ -154,7 +150,6 @@ fn ignored_commands_are_hidden_from_completion_and_can_be_unignored() -> ParityB
                                  :property (get 'amx-probe-open 'amx-ignored)
                                  :default (amx-get-default amx-cache))))))
   (amx-test-cleanup))"##,
-        true,
         expect![[
             r#"OK (:defaults (:matchers ("\\`self-insert-command\\'" "\\`self-insert-and-exit\\'" "\\`ad-Orig-" "\\`menu-bar" "\\`kill-emacs\\'" amx-command-marked-ignored-p amx-command-obsolete-p amx-command-mouse-interactive-p) :ignored ((self-insert-command . t) (menu-bar-open . t) (kill-emacs . t) (amx-probe-mouse . t) (amx-probe-open) (amx-probe-helper)) :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 1) (amx-probe-quit) (amx-probe-refresh)) :default "amx-probe-open") :ignored (:ignored-p t :property t :marked-p t :still-in-cache t :default "amx-probe-close") :unignored (:ignored-p nil :property nil :default "amx-probe-open"))"#
         ]],
@@ -163,7 +158,7 @@ fn ignored_commands_are_hidden_from_completion_and_can_be_unignored() -> ParityB
 
 fn commands_defined_during_the_session_are_detected_and_folded_into_the_ranking() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "commands_defined_during_the_session_are_detected_and_folded_into_the_ranking",
         r##"(unwind-protect
     (progn
@@ -194,21 +189,18 @@ fn commands_defined_during_the_session_are_detected_and_folded_into_the_ranking(
                           :data (copy-tree amx-data)
                           :history (copy-sequence amx-history))))))))
   (amx-test-cleanup))"##,
-        true,
         expect![
             "OK (:steady (:detected-again nil :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 2) (amx-probe-quit) (amx-probe-refresh))) :detection (:detected t :delta 1 :in-cache nil) :without-counting nil :after-counting (:newcomer t :latecomer t :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 2) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 2) (amx-probe-close . 1) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom)))"
         ],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         enabling_amx_mode_takes_over_m_x_and_ranks_the_commands_it_finds(),
         a_session_of_command_invocations_reorders_the_ranked_list(),
         the_save_file_round_trips_the_ranking_into_a_fresh_session(),
         ignored_commands_are_hidden_from_completion_and_can_be_unignored(),
         commands_defined_during_the_session_are_detected_and_folded_into_the_ranking(),
-    ];
-    assert_amx_batch(&cases);
+    ]
 }

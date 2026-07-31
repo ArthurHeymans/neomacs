@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ai_code_batch};
+use super::ParityBatchCase;
 
 fn package_loads_exact_version_and_complete_core_feature_graph() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "package_loads_exact_version_and_complete_core_feature_graph",
         r##"
 (list
@@ -20,13 +20,12 @@ fn package_loads_exact_version_and_complete_core_feature_graph() -> ParityBatchC
  (ai-code-current-backend-label)
  (commandp 'ai-code-menu))
 "##,
-        true,
         expect![[r#"OK (nil (t t t t t t t t t t t t t t t t t t t t) 19 "Claude Code" t)"#]],
     )
 }
 
 fn backend_registry_exposes_complete_actionable_contracts() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "backend_registry_exposes_complete_actionable_contracts",
         r##"
 (mapcar
@@ -44,7 +43,6 @@ fn backend_registry_exposes_complete_actionable_contracts() -> ParityBatchCase {
            (plist-get spec :agent-file))))
  ai-code-backends)
 "##,
-        true,
         expect![[
             r#"OK ((claude-code "Claude Code" ai-code-claude-code ai-code-claude-code ai-code-claude-code-switch-to-buffer ai-code-claude-code-send-command ai-code-claude-code-resume "claude" "CLAUDE.md") (gemini "Gemini CLI" ai-code-gemini-cli ai-code-gemini-cli ai-code-gemini-cli-switch-to-buffer ai-code-gemini-cli-send-command ai-code-gemini-cli-resume "gemini" "GEMINI.md") (antigravity "Antigravity CLI" ai-code-antigravity-cli ai-code-antigravity-cli ai-code-antigravity-cli-switch-to-buffer ai-code-antigravity-cli-send-command ai-code-antigravity-cli-resume "agy" "AGENTS.md") (github-copilot-cli "GitHub Copilot CLI" ai-code-github-copilot-cli ai-code-github-copilot-cli ai-code-github-copilot-cli-switch-to-buffer ai-code-github-copilot-cli-send-command ai-code-github-copilot-cli-resume "copilot" nil) (codex "OpenAI Codex CLI" ai-code-codex-cli ai-code-codex-cli ai-code-codex-cli-switch-to-buffer ai-code-codex-cli-send-command ai-code-codex-cli-resume "codex" "AGENTS.md") (pi "Pi" ai-code-pi ai-code-pi-start ai-code-pi-switch-to-buffer ai-code-pi-send-command ai-code-pi-resume "pi" "AGENTS.md") (open-interpreter "Open Interpreter CLI" ai-code-open-interpreter-cli ai-code-open-interpreter-cli ai-code-open-interpreter-cli-switch-to-buffer ai-code-open-interpreter-cli-send-command ai-code-open-interpreter-cli-resume "interpreter" "AGENTS.md") (opencode "Opencode" ai-code-opencode ai-code-opencode ai-code-opencode-switch-to-buffer ai-code-opencode-send-command ai-code-opencode-resume "opencode" nil) (kilo "Kilo" ai-code-kilo ai-code-kilo ai-code-kilo-switch-to-buffer ai-code-kilo-send-command ai-code-kilo-resume "kilo" nil) (grok "Grok CLI" ai-code-grok-cli ai-code-grok-cli ai-code-grok-cli-switch-to-buffer ai-code-grok-cli-send-command ai-code-grok-cli-resume "grok" nil) (cursor "Cursor CLI" ai-code-cursor-cli ai-code-cursor-cli ai-code-cursor-cli-switch-to-buffer ai-code-cursor-cli-send-command ai-code-cursor-cli-resume "cursor-agent" nil) (kiro "Kiro CLI" ai-code-kiro-cli ai-code-kiro-cli ai-code-kiro-cli-switch-to-buffer ai-code-kiro-cli-send-command ai-code-kiro-cli-resume "kiro-cli" nil) (codebuddy "CodeBuddy Code" ai-code-codebuddy-cli ai-code-codebuddy-cli ai-code-codebuddy-cli-switch-to-buffer ai-code-codebuddy-cli-send-command ai-code-codebuddy-cli-resume "codebuddy" nil) (aider "Aider CLI" ai-code-aider-cli ai-code-aider-cli ai-code-aider-cli-switch-to-buffer ai-code-aider-cli-send-command nil "aider" nil) (eca "ECA (Editor Code Assistant)" ai-code-eca ai-code-eca-start ai-code-eca-switch ai-code-eca-send ai-code-eca-resume nil "AGENTS.md") (agent-shell "agent-shell" ai-code-agent-shell ai-code-agent-shell ai-code-agent-shell-switch-to-buffer ai-code-agent-shell-send-command ai-code-agent-shell-resume "agent-shell" nil) (gptel-agent "GPTel Agent" ai-code-gptel-agent ai-code-gptel-agent ai-code-gptel-agent-switch-to-buffer ai-code-gptel-agent-send-command nil nil nil) (claude-code-ide "claude-code-ide.el" claude-code-ide claude-code-ide--start-if-no-session claude-code-ide-switch-to-buffer claude-code-ide-send-prompt claude-code-ide-resume "claude" "CLAUDE.md") (claude-code-el "claude-code.el" claude-code claude-code claude-code-switch-to-buffer ai-code-claude-code-el-send-command claude-code-resume "claude" "CLAUDE.md"))"#
         ]],
@@ -52,7 +50,7 @@ fn backend_registry_exposes_complete_actionable_contracts() -> ParityBatchCase {
 }
 
 fn repository_backend_affinity_is_normalized_isolated_and_replaceable() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "repository_backend_affinity_is_normalized_isolated_and_replaceable",
         r##"
 (let* ((root (make-temp-file "ai-code-affinity-" t))
@@ -76,13 +74,12 @@ fn repository_backend_affinity_is_normalized_isolated_and_replaceable() -> Parit
           ))
     (delete-directory root t)))
 "##,
-        true,
         expect![[r#"OK (t t gemini gemini "Gemini CLI")"#]],
     )
 }
 
 fn selecting_backend_rebinds_all_dispatch_points_and_cli_identity() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "selecting_backend_rebinds_all_dispatch_points_and_cli_identity",
         r##"
 (let ((ai-code-selected-backend 'claude-code)
@@ -111,7 +108,6 @@ fn selecting_backend_rebinds_all_dispatch_points_and_cli_identity() -> ParityBat
                 (ai-code-set-backend 'missing-backend)
               (user-error (error-message-string err)))))))
 "##,
-        true,
         expect![[
             r#"OK ((codex "codex" t t t t) (aider "aider" t t t t) "Unknown backend: missing-backend")"#
         ]],
@@ -119,7 +115,7 @@ fn selecting_backend_rebinds_all_dispatch_points_and_cli_identity() -> ParityBat
 }
 
 fn terminal_output_cleanup_preserves_content_and_rejects_control_noise() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "terminal_output_cleanup_preserves_content_and_rejects_control_noise",
         r##"
 (let ((enter (concat "\e[?1049h" "dashboard"))
@@ -133,13 +129,12 @@ fn terminal_output_cleanup_preserves_content_and_rejects_control_noise() -> Pari
            (list "" "\r\n" "\e[2K\r" "\e[31m\e[0m" "assistant: fixed it\n"
                  "\e[?25lprogress 42%\e[?25h"))))
 "##,
-        true,
         expect![[r#"OK ("dashboard" "done" "beforeafter" (nil nil nil nil 0 0))"#]],
     )
 }
 
 fn safe_terminal_paste_routes_single_and_multiline_input_correctly() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "safe_terminal_paste_routes_single_and_multiline_input_correctly",
         r##"
 (let (events)
@@ -156,22 +151,19 @@ fn safe_terminal_paste_routes_single_and_multiline_input_correctly() -> ParityBa
           "unsafe\npaste" t send paste (lambda () nil) "demo")
        (user-error (error-message-string err))))))
 "##,
-        true,
         expect![[
             r#"OK (((send "status") (paste "line one\nline two")) "This demo session cannot paste multiline input without submitting")"#
         ]],
     )
 }
 
-#[test]
-fn core_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn core_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         package_loads_exact_version_and_complete_core_feature_graph(),
         backend_registry_exposes_complete_actionable_contracts(),
         repository_backend_affinity_is_normalized_isolated_and_replaceable(),
         selecting_backend_rebinds_all_dispatch_points_and_cli_identity(),
         terminal_output_cleanup_preserves_content_and_rejects_control_noise(),
         safe_terminal_paste_routes_single_and_multiline_input_correctly(),
-    ];
-    assert_ai_code_batch(&cases);
+    ]
 }

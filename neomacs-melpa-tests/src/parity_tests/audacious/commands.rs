@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_audacious_batch};
+use super::ParityBatchCase;
 
 fn audacious_run_and_confirmed_kill_issue_exact_process_contracts() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audacious_run_and_confirmed_kill_issue_exact_process_contracts",
         r##"(mapcar
          (lambda (answer)
@@ -26,7 +26,6 @@ fn audacious_run_and_confirmed_kill_issue_exact_process_contracts() -> ParityBat
                 (nreverse prompts)
                 (nreverse calls)))))
          '(nil t))"##,
-        true,
         expect![[
             r#"OK ((nil (:process-return "audacious") nil ("Quit Audacious ?") (("audacious" nil 0 nil "-H" "2>/dev/null"))) (t (:process-return "audacious") (:process-return "/fixture/bin/audtool") ("Quit Audacious ?") (("audacious" nil 0 nil "-H" "2>/dev/null") ("/fixture/bin/audtool" nil 0 nil "--shutdown"))))"#
         ]],
@@ -35,7 +34,7 @@ fn audacious_run_and_confirmed_kill_issue_exact_process_contracts() -> ParityBat
 
 fn audacious_manual_volume_forwards_practical_and_edge_values_without_validation() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audacious_manual_volume_forwards_practical_and_edge_values_without_validation",
         r##"(let (calls)
          (cl-letf
@@ -52,7 +51,6 @@ fn audacious_manual_volume_forwards_practical_and_edge_values_without_validation
                ""
                :symbolic))
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((6 6 6 6 6) (("/fixture/bin/audtool" nil nil nil "--set-volume" "+25%") ("/fixture/bin/audtool" nil nil nil "--set-volume" "-0%") ("/fixture/bin/audtool" nil nil nil "--set-volume" "100") ("/fixture/bin/audtool" nil nil nil "--set-volume" "") ("/fixture/bin/audtool" nil nil nil "--set-volume" :symbolic)))"#
         ]],
@@ -60,7 +58,7 @@ fn audacious_manual_volume_forwards_practical_and_edge_values_without_validation
 }
 
 fn audacious_volume_shortcuts_set_exact_delta_then_report_trimmed_live_volume() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audacious_volume_shortcuts_set_exact_delta_then_report_trimmed_live_volume",
         r##"(let (events)
          (cl-letf
@@ -91,7 +89,6 @@ fn audacious_volume_shortcuts_set_exact_delta_then_report_trimmed_live_volume() 
             (audacious-volume-up)
             (audacious-volume-down)
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK ("73%" "73%" ((:call "/fixture/bin/audtool" nil nil nil "--set-volume" "+10%") (:shell "audtool --get-volume") (:message "73%") (:call "/fixture/bin/audtool" nil nil nil "--set-volume" "-10%") (:shell "audtool --get-volume") (:message "73%")))"#
         ]],
@@ -99,7 +96,7 @@ fn audacious_volume_shortcuts_set_exact_delta_then_report_trimmed_live_volume() 
 }
 
 fn audacious_pause_status_and_stop_preserve_command_query_and_message_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audacious_pause_status_and_stop_preserve_command_query_and_message_order",
         r##"(let (events)
          (cl-letf
@@ -131,7 +128,6 @@ fn audacious_pause_status_and_stop_preserve_command_query_and_message_order() ->
             (audacious-status)
             (audacious-stop)
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK ("paused" "paused" :called ((:call "/fixture/bin/audtool" nil nil nil "--playback-pause") (:shell "audtool --playback-status") (:message "paused") (:shell "audtool --playback-status") (:message "paused") (:call "/fixture/bin/audtool" nil nil nil "--playback-stop")))"#
         ]],
@@ -139,7 +135,7 @@ fn audacious_pause_status_and_stop_preserve_command_query_and_message_order() ->
 }
 
 fn audacious_random_toggle_reports_next_state_before_toggling_for_off_and_on() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audacious_random_toggle_reports_next_state_before_toggling_for_off_and_on",
         r##"(let ((statuses
                 '("shuffle off\n"
@@ -168,7 +164,6 @@ fn audacious_random_toggle_reports_next_state_before_toggling_for_off_and_on() -
             (audacious-random-toggle)
             (audacious-random-toggle)
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (:toggled :toggled ((:shell "audtool --playlist-shuffle-status") (:message "Random: ON") (:call "/fixture/bin/audtool" nil nil nil "--playlist-shuffle-toggle") (:shell "audtool --playlist-shuffle-status") (:message "Random: OFF") (:call "/fixture/bin/audtool" nil nil nil "--playlist-shuffle-toggle")))"#
         ]],
@@ -176,7 +171,7 @@ fn audacious_random_toggle_reports_next_state_before_toggling_for_off_and_on() -
 }
 
 fn audacious_repeat_toggle_uses_substring_status_semantics_and_exact_command() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audacious_repeat_toggle_uses_substring_status_semantics_and_exact_command",
         r##"(let ((statuses
                 '("not-official\n"
@@ -200,7 +195,6 @@ fn audacious_repeat_toggle_uses_substring_status_semantics_and_exact_command() -
             (audacious-repeat-toggle)
             (audacious-repeat-toggle)
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (0 0 0 ("Repeat: ON" ("/fixture/bin/audtool" nil nil nil "--playlist-repeat-toggle") "Repeat: OFF" ("/fixture/bin/audtool" nil nil nil "--playlist-repeat-toggle") "Repeat: ON" ("/fixture/bin/audtool" nil nil nil "--playlist-repeat-toggle")))"#
         ]],
@@ -208,7 +202,7 @@ fn audacious_repeat_toggle_uses_substring_status_semantics_and_exact_command() -
 }
 
 fn audacious_seek_commands_forward_offsets_and_refresh_only_shortcuts() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audacious_seek_commands_forward_offsets_and_refresh_only_shortcuts",
         r##"(let (events)
          (cl-letf
@@ -228,7 +222,6 @@ fn audacious_seek_commands_forward_offsets_and_refresh_only_shortcuts() -> Parit
             (audacious-song-seek-backward)
             (audacious-song-seek-forward)
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (:seeked :refreshed :refreshed ((:call "/fixture/bin/audtool" nil nil nil "--playback-seek-relative" "+3.75") (:call "/fixture/bin/audtool" nil nil nil "--playback-seek-relative" "-10") :refresh (:call "/fixture/bin/audtool" nil nil nil "--playback-seek-relative" "+10") :refresh))"#
         ]],
@@ -236,7 +229,7 @@ fn audacious_seek_commands_forward_offsets_and_refresh_only_shortcuts() -> Parit
 }
 
 fn audacious_song_navigation_advances_or_reverses_then_waits_and_refreshes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audacious_song_navigation_advances_or_reverses_then_waits_and_refreshes",
         r##"(let (events)
          (cl-letf
@@ -261,7 +254,6 @@ fn audacious_song_navigation_advances_or_reverses_then_waits_and_refreshes() -> 
             (audacious-song-next)
             (audacious-song-prev)
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (:refreshed :refreshed ((:call "/fixture/bin/audtool" nil nil nil "--playlist-advance") (:sleep 0 20) :refresh (:call "/fixture/bin/audtool" nil nil nil "--playlist-reverse") (:sleep 0 20) :refresh))"#
         ]],
@@ -270,7 +262,7 @@ fn audacious_song_navigation_advances_or_reverses_then_waits_and_refreshes() -> 
 
 fn audacious_play_starts_daemon_only_for_exact_empty_status_then_plays_and_refreshes()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "audacious_play_starts_daemon_only_for_exact_empty_status_then_plays_and_refreshes",
         r##"(mapcar
          (lambda (status)
@@ -310,16 +302,14 @@ fn audacious_play_starts_daemon_only_for_exact_empty_status_then_plays_and_refre
          '(""
            "stopped\n"
            " \n"))"##,
-        true,
         expect![[
             r#"OK (("" :refreshed ((:shell "audtool --playback-status") :run (:call "/fixture/bin/audtool" nil nil nil "--playback-play") (:sleep 0 20) :refresh)) ("stopped\n" :refreshed ((:shell "audtool --playback-status") (:call "/fixture/bin/audtool" nil nil nil "--playback-play") (:sleep 0 20) :refresh)) (" \n" :refreshed ((:shell "audtool --playback-status") (:call "/fixture/bin/audtool" nil nil nil "--playback-play") (:sleep 0 20) :refresh)))"#
         ]],
     )
 }
 
-#[test]
-fn commands_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn commands_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         audacious_run_and_confirmed_kill_issue_exact_process_contracts(),
         audacious_manual_volume_forwards_practical_and_edge_values_without_validation(),
         audacious_volume_shortcuts_set_exact_delta_then_report_trimmed_live_volume(),
@@ -329,6 +319,5 @@ fn commands_public_surface_batch() {
         audacious_seek_commands_forward_offsets_and_refresh_only_shortcuts(),
         audacious_song_navigation_advances_or_reverses_then_waits_and_refreshes(),
         audacious_play_starts_daemon_only_for_exact_empty_status_then_plays_and_refreshes(),
-    ];
-    assert_audacious_batch(&cases);
+    ]
 }

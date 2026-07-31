@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auth_source_xoauth2_batch};
+use super::ParityBatchCase;
 
 fn auth_source_xoauth2_enable_registers_source_and_smtp_mechanism() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_enable_registers_source_and_smtp_mechanism",
         r##"(let ((auth-sources
                 '("~/.authinfo"))
@@ -18,13 +18,12 @@ fn auth_source_xoauth2_enable_registers_source_and_smtp_mechanism() -> ParityBat
             #'auth-source-xoauth2-backend-parse
             'auth-source-backend-parse)
            t)))"##,
-        true,
         expect![[r#"OK ((xoauth2 "~/.authinfo") (xoauth2 plain login cram-md5) t)"#]],
     )
 }
 
 fn auth_source_xoauth2_nnimap_advice_sends_exact_sasl_initial_response() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_nnimap_advice_sends_exact_sasl_initial_response",
         r##"(let (calls)
          (setq nnimap-authenticator
@@ -49,7 +48,6 @@ fn auth_source_xoauth2_nnimap_advice_sends_exact_sasl_initial_response() -> Pari
              "alice@example"
              "access-token")
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (:authenticated ((:capability "AUTH=XOAUTH2") (:capability "SASL-IR") (:command "AUTHENTICATE XOAUTH2 dXNlcj1hbGljZUBleGFtcGxlAWF1dGg9QmVhcmVyIGFjY2Vzcy10b2tlbgEB")))"#
         ]],
@@ -58,7 +56,7 @@ fn auth_source_xoauth2_nnimap_advice_sends_exact_sasl_initial_response() -> Pari
 
 fn auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition",
         r##"(let (calls)
          (setq nnimap-authenticator
@@ -103,7 +101,6 @@ fn auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition()
                     'xoauth2-only)
               (nnimap-login "no-sasl-ir" "password"))
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((:fallback "plain-user" "plain-password") (:fallback "no-xoauth2" "password") (:fallback "no-sasl-ir" "password") ((:fallback "plain-user" "plain-password") (:fallback "no-xoauth2" "password") (:fallback "no-sasl-ir" "password")))"#
         ]],
@@ -111,7 +108,7 @@ fn auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition()
 }
 
 fn auth_source_xoauth2_smtp_helper_sends_exact_command_and_code() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_smtp_helper_sends_exact_command_and_code",
         r##"(let (calls)
          (cl-letf
@@ -125,7 +122,6 @@ fn auth_source_xoauth2_smtp_helper_sends_exact_command_and_code() -> ParityBatch
              "alice@example"
              "access-token")
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (:accepted ((fixture-process "AUTH XOAUTH2 dXNlcj1hbGljZUBleGFtcGxlAWF1dGg9QmVhcmVyIGFjY2Vzcy10b2tlbgEB" 235)))"#
         ]],
@@ -133,7 +129,7 @@ fn auth_source_xoauth2_smtp_helper_sends_exact_command_and_code() -> ParityBatch
 }
 
 fn auth_source_xoauth2_enable_installs_smtp_generic_method() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_enable_installs_smtp_generic_method",
         r##"(let (calls)
          (cl-letf
@@ -150,14 +146,13 @@ fn auth_source_xoauth2_enable_installs_smtp_generic_method() -> ParityBatchCase 
              "alice"
              "token")
             (nreverse calls))))"##,
-        true,
         expect![[r#"OK (:xoauth2-authenticated ((fixture-process "alice" "token")))"#]],
     )
 }
 
 fn auth_source_xoauth2_repeated_enable_deduplicates_lists_and_preserves_one_fallback_call()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_repeated_enable_deduplicates_lists_and_preserves_one_fallback_call",
         r##"(let ((auth-sources nil)
                (smtpmail-auth-supported nil)
@@ -181,20 +176,17 @@ fn auth_source_xoauth2_repeated_enable_deduplicates_lists_and_preserves_one_fall
             auth-sources
             smtpmail-auth-supported
             (nreverse calls))))"##,
-        true,
         expect![[r#"OK (:fallback (xoauth2) (xoauth2) ((:fallback "alice" "password")))"#]],
     )
 }
 
-#[test]
-fn enable_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn enable_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auth_source_xoauth2_enable_registers_source_and_smtp_mechanism(),
         auth_source_xoauth2_nnimap_advice_sends_exact_sasl_initial_response(),
         auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition(),
         auth_source_xoauth2_smtp_helper_sends_exact_command_and_code(),
         auth_source_xoauth2_enable_installs_smtp_generic_method(),
         auth_source_xoauth2_repeated_enable_deduplicates_lists_and_preserves_one_fallback_call(),
-    ];
-    assert_auth_source_xoauth2_batch(&cases);
+    ]
 }

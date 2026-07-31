@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ANJU_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -71,22 +70,6 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed anju parity test").into()
 }
 
-fn assert_anju_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = anju_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("anju parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_anju_parity(elisp_form: &str, expected: Expect) {
-    assert_anju_source_parity("anju.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_anju_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_anju_source_parity("anju-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_anju_autoload_parity` cases (2a).
 pub(crate) fn assert_anju_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -103,3 +86,33 @@ pub(crate) fn assert_anju_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(anju_oracle("anju.el"), &name, "anju_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn anju_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_anju_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_anju_autoload_batch(&cases);
+}
+
+#[test]
+fn anju_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        context_menu::context_menu_public_surface_batch_cases(),
+        initialization::initialization_public_surface_batch_cases(),
+        mode_line::mode_line_public_surface_batch_cases(),
+        registry::registry_anju_batch_cases(),
+        style_text::style_text_public_surface_batch_cases(),
+        utils::utils_public_surface_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_anju_batch(&cases);
+}
+
+// END generated package batch tests

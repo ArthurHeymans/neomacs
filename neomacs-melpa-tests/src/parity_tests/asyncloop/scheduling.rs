@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asyncloop_batch};
+use super::ParityBatchCase;
 
 fn asyncloop_schedule_replaces_prior_timer_and_only_latest_activation_runs() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_schedule_replaces_prior_timer_and_only_latest_activation_runs",
         r##"(let ((loop
                 (asyncloop-create))
@@ -38,7 +38,6 @@ fn asyncloop_schedule_replaces_prior_timer_and_only_latest_activation_runs() -> 
                 (asyncloop-test-drain)
                 (asyncloop-scheduled loop)
                 logged)))))"##,
-        true,
         expect![[
             r#"OK ((:asyncloop-test-timer 1) (:asyncloop-test-timer 2) t (1) ((:ran :at 2 :id 2 :repeat nil :function asyncloop-eat) (:skipped :at 5 :id 1)) nil ("Scheduled loop found cleared, doing nothing"))"#
         ]],
@@ -46,7 +45,7 @@ fn asyncloop_schedule_replaces_prior_timer_and_only_latest_activation_runs() -> 
 }
 
 fn asyncloop_chomp_executes_real_stateful_pipeline_in_exact_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_chomp_executes_real_stateful_pipeline_in_exact_order",
         r##"(let* ((state
                  '(:value 2))
@@ -102,14 +101,13 @@ fn asyncloop_chomp_executes_real_stateful_pipeline_in_exact_order() -> ParityBat
             (nreverse events)
             (asyncloop-remainder loop)
             asyncloop-recursion-ctr)))"##,
-        true,
         expect!["OK (t (:value 10 :saved t) ((:multiply 6) (:add 10) (:save 10)) nil 2)"],
     )
 }
 
 fn asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes",
         r##"(let (events)
          (cl-labels
@@ -147,14 +145,13 @@ fn asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes()
                 (nreverse events)
                 (asyncloop-remainder protected)
                 (asyncloop-remainder immediate))))))"##,
-        true,
         expect!["OK (t nil (:protected :immediate) nil nil)"],
     )
 }
 
 fn asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_second()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_second",
         r##"(let (events loop pending-input)
          (asyncloop-test-reset)
@@ -212,7 +209,6 @@ fn asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_s
                 (asyncloop-remainder loop)
                 (asyncloop-scheduled loop)
                 asyncloop-test-now)))))"##,
-        true,
         expect![
             "OK ((:asyncloop-test-timer 1) (nil 1 t 0 ((1 1 asyncloop-eat))) ((:ran :at 1 :id 1 :repeat nil :function asyncloop-eat)) (:worker-completed) nil nil 1)"
         ],
@@ -220,7 +216,7 @@ fn asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_s
 }
 
 fn asyncloop_chomp_repeat_marker_supports_bounded_real_queue_consumption() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_chomp_repeat_marker_supports_bounded_real_queue_consumption",
         r##"(let ((pending
                 '("alpha" "beta" "gamma" "delta"))
@@ -264,13 +260,12 @@ fn asyncloop_chomp_repeat_marker_supports_bounded_real_queue_consumption() -> Pa
             (nreverse processed)
             (asyncloop-remainder loop)
             asyncloop-recursion-ctr)))"##,
-        true,
         expect![[r#"OK (t nil ("ALPHA" "BETA" "GAMMA" "DELTA" "summary:4") nil 4)"#]],
     )
 }
 
 fn asyncloop_chomp_defers_remaining_work_one_second_when_input_is_pending() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_chomp_defers_remaining_work_one_second_when_input_is_pending",
         r##"(let (events)
          (asyncloop-test-reset)
@@ -311,7 +306,6 @@ fn asyncloop_chomp_defers_remaining_work_one_second_when_input_is_pending() -> P
                       :timer-handle
                       (asyncloop-test-event-timer event)))
                    asyncloop-test-timer-queue)))))))"##,
-        true,
         expect![
             "OK (t (:first) 1 t ((1 1 nil asyncloop-eat :timer-handle (:asyncloop-test-timer 1))))"
         ],
@@ -319,7 +313,7 @@ fn asyncloop_chomp_defers_remaining_work_one_second_when_input_is_pending() -> P
 }
 
 fn asyncloop_chomp_prunes_deep_call_stack_after_one_hundred_workers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_chomp_prunes_deep_call_stack_after_one_hundred_workers",
         r##"(let (executed)
          (asyncloop-test-reset)
@@ -357,13 +351,12 @@ fn asyncloop_chomp_prunes_deep_call_stack_after_one_hundred_workers() -> ParityB
                   (length executed)
                   (asyncloop-remainder loop)
                   asyncloop-recursion-ctr))))))"##,
-        true,
         expect!["OK (t 100 1 2 205 nil 4)"],
     )
 }
 
 fn asyncloop_eat_rejects_ghost_activation_without_mutating_queued_work() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_eat_rejects_ghost_activation_without_mutating_queued_work",
         r##"(let* ((worker
                  (lambda (_loop)
@@ -393,7 +386,6 @@ fn asyncloop_eat_rejects_ghost_activation_without_mutating_queued_work() -> Pari
               (asyncloop-remainder loop))
              worker)
             logged)))"##,
-        true,
         expect![[
             r#"OK (#1=("Unscheduled timer activation. Hands off the wheel, ghost!") nil nil t #1#)"#
         ]],
@@ -401,7 +393,7 @@ fn asyncloop_eat_rejects_ghost_activation_without_mutating_queued_work() -> Pari
 }
 
 fn asyncloop_eat_handles_scheduled_loop_cleared_before_timer_fires() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_eat_handles_scheduled_loop_cleared_before_timer_fires",
         r##"(let ((loop
                 (asyncloop-create
@@ -428,14 +420,12 @@ fn asyncloop_eat_handles_scheduled_loop_cleared_before_timer_fires() -> ParityBa
             (asyncloop-scheduled loop)
             (asyncloop-remainder loop)
             logged)))"##,
-        true,
         expect![[r#"OK (#1=("Scheduled loop found cleared, doing nothing") nil nil nil #1#)"#]],
     )
 }
 
-#[test]
-fn scheduling_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn scheduling_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asyncloop_schedule_replaces_prior_timer_and_only_latest_activation_runs(),
         asyncloop_chomp_executes_real_stateful_pipeline_in_exact_order(),
         asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes(),
@@ -445,6 +435,5 @@ fn scheduling_public_surface_batch() {
         asyncloop_chomp_prunes_deep_call_stack_after_one_hundred_workers(),
         asyncloop_eat_rejects_ghost_activation_without_mutating_queued_work(),
         asyncloop_eat_handles_scheduled_loop_cleared_before_timer_fires(),
-    ];
-    assert_asyncloop_batch(&cases);
+    ]
 }

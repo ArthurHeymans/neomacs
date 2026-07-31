@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asdf_vm_batch};
+use super::ParityBatchCase;
 
 fn asdf_vm_installer_prefix_default_uses_user_directory_or_no_littering_adapter() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_prefix_default_uses_user_directory_or_no_littering_adapter",
         r##"(let ((user-emacs-directory
                     "/home/test/.emacs.d/")
@@ -31,14 +31,13 @@ fn asdf_vm_installer_prefix_default_uses_user_directory_or_no_littering_adapter(
                          name))))
                   (asdf-vm-installer-prefix-default))
                 calls))"##,
-        true,
         expect![[r#"OK ("/home/test/.emacs.d/asdf" "/state/asdf" ("asdf"))"#]],
     )
 }
 
 fn asdf_vm_installer_system_and_architecture_detection_cover_overrides_platforms_and_errors()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_system_and_architecture_detection_cover_overrides_platforms_and_errors",
         r##"(let (asdf-vm-installer-system
                     asdf-vm-installer-architecture)
@@ -67,7 +66,6 @@ fn asdf_vm_installer_system_and_architecture_detection_cover_overrides_platforms
                   (list
                    (asdf-vm-installer--guess-system)
                    (asdf-vm-installer--guess-architecture)))))"##,
-        true,
         expect![[
             r#"OK ((("x86_64-pc-linux-gnu" (:ok "linux") (:ok "amd64")) ("aarch64-apple-darwin" (:ok "darwin") (:ok "arm64")) ("arm64-unknown-linux" (:ok "linux") (:ok "arm64")) ("i386-pc-linux" (:ok "linux") (:ok "386")) ("riscv64-unknown-freebsd" (:error asdf-vm-installer-unsupported-system ("riscv64-unknown-freebsd")) (:error asdf-vm-installer-unsupported-system ("riscv64-unknown-freebsd")))) ("fixture-os" "fixture-cpu"))"#
         ]],
@@ -76,7 +74,7 @@ fn asdf_vm_installer_system_and_architecture_detection_cover_overrides_platforms
 
 fn asdf_vm_installer_version_filter_enforces_minimum_and_rejects_invalid_versions()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_version_filter_enforces_minimum_and_rejects_invalid_versions",
         r##"(mapcar
                (lambda (version)
@@ -93,7 +91,6 @@ fn asdf_vm_installer_version_filter_enforces_minimum_and_rejects_invalid_version
                  "not-a-version"
                  ""
                  "資料"))"##,
-        true,
         expect![[
             r#"OK (("0.15.9" nil) ("0.16.0" t) ("0.16.0-rc1" nil) ("0.16.1" t) ("1.0.0" t) ("v0.17.0" nil) ("not-a-version" nil) ("" nil) ("資料" nil))"#
         ]],
@@ -102,7 +99,7 @@ fn asdf_vm_installer_version_filter_enforces_minimum_and_rejects_invalid_version
 
 fn asdf_vm_installer_remote_versions_parse_filter_order_and_memoize_git_output() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_remote_versions_parse_filter_order_and_memoize_git_output",
         r##"(let* ((log
                      (asdf-vm-test-path
@@ -142,7 +139,6 @@ fn asdf_vm_installer_remote_versions_parse_filter_order_and_memoize_git_output()
                   asdf-vm-installer--remote-version-list
                   (asdf-vm-test-read-file
                    log))))"##,
-        true,
         expect![[
             r#"OK (#1=("0.16.0" "0.16.2" "1.0.0") #1# #1# "ARG=<--fixture-global>\nARG=<ls-remote>\nARG=<--sort=v:refname>\nARG=<https://example/asdf.git>\nARG=<refs/tags/v*>\n")"#
         ]],
@@ -151,7 +147,7 @@ fn asdf_vm_installer_remote_versions_parse_filter_order_and_memoize_git_output()
 
 fn asdf_vm_installer_list_all_internal_refetches_and_filters_each_real_git_invocation()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_list_all_internal_refetches_and_filters_each_real_git_invocation",
         r##"(let* ((log
                      (asdf-vm-test-path
@@ -183,7 +179,6 @@ fn asdf_vm_installer_list_all_internal_refetches_and_filters_each_real_git_invoc
                 (asdf-vm-installer-list-all-internal)
                 (asdf-vm-test-read-file
                  log)))"##,
-        true,
         expect![[
             r#"OK (("0.16.0" "0.17.1-rc1" "2.0.0") ("0.16.0" "0.17.1-rc1" "2.0.0") "ARG=<--fixture-global>\nARG=<ls-remote>\nARG=<--sort=v:refname>\nARG=<https://example/asdf.git>\nARG=<refs/tags/v*>\nARG=<--fixture-global>\nARG=<ls-remote>\nARG=<--sort=v:refname>\nARG=<https://example/asdf.git>\nARG=<refs/tags/v*>\n")"#
         ]],
@@ -191,7 +186,7 @@ fn asdf_vm_installer_list_all_internal_refetches_and_filters_each_real_git_invoc
 }
 
 fn asdf_vm_installer_package_names_and_urls_cover_supported_platform_matrix() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_package_names_and_urls_cover_supported_platform_matrix",
         r##"(let ((asdf-vm-installer-github-url
                     "https://downloads.example/asdf"))
@@ -221,7 +216,6 @@ fn asdf_vm_installer_package_names_and_urls_cover_supported_platform_matrix() ->
                   ("1.0.0-rc1"
                    "linux"
                    "386"))))"##,
-        true,
         expect![[
             r#"OK ((("0.16.0" "linux" "amd64") "asdf-v0.16.0-linux-amd64.tar.gz" "https://downloads.example/asdf/releases/download/v0.16.0/asdf-v0.16.0-linux-amd64.tar.gz") (("0.17.2" "darwin" "arm64") "asdf-v0.17.2-darwin-arm64.tar.gz" "https://downloads.example/asdf/releases/download/v0.17.2/asdf-v0.17.2-darwin-arm64.tar.gz") (("1.0.0-rc1" "linux" "386") "asdf-v1.0.0-rc1-linux-386.tar.gz" "https://downloads.example/asdf/releases/download/v1.0.0-rc1/asdf-v1.0.0-rc1-linux-386.tar.gz"))"#
         ]],
@@ -230,7 +224,7 @@ fn asdf_vm_installer_package_names_and_urls_cover_supported_platform_matrix() ->
 
 fn asdf_vm_installer_checksum_validation_reads_real_checksum_files_and_cli_output()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_checksum_validation_reads_real_checksum_files_and_cli_output",
         r##"(let* ((package
                      (asdf-vm-test-path
@@ -259,14 +253,13 @@ fn asdf_vm_installer_checksum_validation_reads_real_checksum_files_and_cli_outpu
                  package)
                 (asdf-vm-installer--valid-checksum-p
                  package mismatch)))"##,
-        true,
         expect!["OK (t nil)"],
     )
 }
 
 fn asdf_vm_installer_download_builds_release_urls_writes_both_files_and_validates_checksum()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_download_builds_release_urls_writes_both_files_and_validates_checksum",
         r##"(let* ((asdf-vm-installer-src-dir
                      (asdf-vm-test-path
@@ -326,7 +319,6 @@ fn asdf_vm_installer_download_builds_release_urls_writes_both_files_and_validate
                     ".*")
                    #'string<)
                   (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ("[asdf-vm] version 0.16.2 downloaded" ("[ORACLE-SANDBOX]/download/src/0.16.2/asdf-v0.16.2-linux-amd64.tar.gz" "[ORACLE-SANDBOX]/download/src/0.16.2/asdf-v0.16.2-linux-amd64.tar.gz.md5") ((:copy "https://downloads.example/asdf/releases/download/v0.16.2/asdf-v0.16.2-linux-amd64.tar.gz" "[ORACLE-SANDBOX]/download/src/0.16.2/asdf-v0.16.2-linux-amd64.tar.gz" t) (:copy "https://downloads.example/asdf/releases/download/v0.16.2/asdf-v0.16.2-linux-amd64.tar.gz.md5" "[ORACLE-SANDBOX]/download/src/0.16.2/asdf-v0.16.2-linux-amd64.tar.gz.md5" t) (:checksum "[ORACLE-SANDBOX]/download/src/0.16.2/asdf-v0.16.2-linux-amd64.tar.gz" "[ORACLE-SANDBOX]/download/src/0.16.2/asdf-v0.16.2-linux-amd64.tar.gz.md5" "archive" "checksum")))"#
         ]],
@@ -335,7 +327,7 @@ fn asdf_vm_installer_download_builds_release_urls_writes_both_files_and_validate
 
 fn asdf_vm_installer_download_checksum_mismatch_deletes_payload_and_checksum_then_signals()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_download_checksum_mismatch_deletes_payload_and_checksum_then_signals",
         r##"(let* ((asdf-vm-installer-src-dir
                      (asdf-vm-test-path
@@ -371,7 +363,6 @@ fn asdf_vm_installer_download_checksum_mismatch_deletes_payload_and_checksum_the
                         path
                         (file-exists-p path)))
                      (nreverse copied))))))"##,
-        true,
         expect![[
             r#"OK ((:error asdf-vm-installer-checksum-mismatch nil) (("[ORACLE-SANDBOX]/download-mismatch/src/0.16.2/asdf-v0.16.2-linux-amd64.tar.gz" nil) ("[ORACLE-SANDBOX]/download-mismatch/src/0.16.2/asdf-v0.16.2-linux-amd64.tar.gz.md5" nil)))"#
         ]],
@@ -380,7 +371,7 @@ fn asdf_vm_installer_download_checksum_mismatch_deletes_payload_and_checksum_the
 
 fn asdf_vm_installer_install_downloads_missing_archive_extracts_and_cleanup_hook_removes_downloads()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_install_downloads_missing_archive_extracts_and_cleanup_hook_removes_downloads",
         r##"(let* ((asdf-vm-installer-src-dir
                      (asdf-vm-test-path
@@ -467,7 +458,6 @@ fn asdf_vm_installer_install_downloads_missing_archive_extracts_and_cleanup_hook
                     (asdf-vm-test-read-file
                      tar-log)
                     (nreverse calls)))))"##,
-        true,
         expect![[
             r#"OK ("[asdf-vm] version 0.16.2 installed" (t t 1) nil nil "ARG=<--fixture-global>\nARG=<--extract>\nARG=<--file=[ORACLE-SANDBOX]/install/src/0.16.2/asdf-v0.16.2-linux-amd64.tar.gz>\nARG=<--directory=[ORACLE-SANDBOX]/install/src/0.16.2>\n" ((:download "0.16.2" 1)))"#
         ]],
@@ -476,7 +466,7 @@ fn asdf_vm_installer_install_downloads_missing_archive_extracts_and_cleanup_hook
 
 fn asdf_vm_installer_list_filters_real_directories_and_activate_replaces_symlink() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_list_filters_real_directories_and_activate_replaces_symlink",
         r##"(let* ((asdf-vm-installer-src-dir
                      (asdf-vm-test-path
@@ -532,7 +522,6 @@ fn asdf_vm_installer_list_filters_real_directories_and_activate_replaces_symlink
                      (expand-file-name
                       "asdf"
                       asdf-vm-installer-bin-dir))))))"##,
-        true,
         expect![[
             r#"OK (("0.16.0" "0.17.2") "[ORACLE-SANDBOX]/installed/src/0.16.0/asdf" "[ORACLE-SANDBOX]/installed/src/0.17.2/asdf")"#
         ]],
@@ -541,7 +530,7 @@ fn asdf_vm_installer_list_filters_real_directories_and_activate_replaces_symlink
 
 fn asdf_vm_installer_list_internal_filters_version_names_without_assuming_entry_kind()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_list_internal_filters_version_names_without_assuming_entry_kind",
         r##"(let ((asdf-vm-installer-src-dir
                     (asdf-vm-test-path
@@ -569,14 +558,13 @@ fn asdf_vm_installer_list_internal_filters_version_names_without_assuming_entry_
                  "1.0.0"
                  asdf-vm-installer-src-dir))
                (asdf-vm-installer-list-internal))"##,
-        true,
         expect![[r#"OK ("0.16.0" "0.17.2" "1.0.0")"#]],
     )
 }
 
 fn asdf_vm_installer_orchestrates_missing_and_existing_versions_then_selects_binary()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asdf_vm_installer_orchestrates_missing_and_existing_versions_then_selects_binary",
         r##"(let ((asdf-vm-installer-bin-dir
                     "/fixture/bin")
@@ -623,16 +611,14 @@ fn asdf_vm_installer_orchestrates_missing_and_existing_versions_then_selects_bin
                       second
                       asdf-vm-process-executable
                       (nreverse calls))))))"##,
-        true,
         expect![[
             r#"OK ("/fixture/bin/asdf" "/fixture/bin/asdf" "/fixture/bin/asdf" "/fixture/bin/asdf" ((:installed-p "0.16.2" nil) (:install "0.16.2" t 4) (:activate "0.16.2" 4) (:installed-p "0.16.2" t) (:activate "0.16.2" 1)))"#
         ]],
     )
 }
 
-#[test]
-fn installer_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn installer_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asdf_vm_installer_prefix_default_uses_user_directory_or_no_littering_adapter(),
         asdf_vm_installer_system_and_architecture_detection_cover_overrides_platforms_and_errors(),
         asdf_vm_installer_version_filter_enforces_minimum_and_rejects_invalid_versions(),
@@ -646,6 +632,5 @@ fn installer_public_surface_batch() {
         asdf_vm_installer_list_filters_real_directories_and_activate_replaces_symlink(),
         asdf_vm_installer_list_internal_filters_version_names_without_assuming_entry_kind(),
         asdf_vm_installer_orchestrates_missing_and_existing_versions_then_selects_binary(),
-    ];
-    assert_asdf_vm_batch(&cases);
+    ]
 }

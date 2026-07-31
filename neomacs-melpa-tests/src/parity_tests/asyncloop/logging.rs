@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asyncloop_batch};
+use super::ParityBatchCase;
 
 fn asyncloop_log_formats_and_returns_text_even_without_a_log_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_log_formats_and_returns_text_even_without_a_log_buffer",
         r##"(let ((loop
                 (asyncloop-create)))
@@ -19,7 +19,6 @@ fn asyncloop_log_formats_and_returns_text_even_without_a_log_buffer() -> ParityB
              (asyncloop-log loop
                "%d"
                "wrong")))))"##,
-        true,
         expect![[
             r#"OK ("Processed 3 records: (:status ok)" nil (:signal error ("Format specifier doesn’t match argument type")))"#
         ]],
@@ -27,7 +26,7 @@ fn asyncloop_log_formats_and_returns_text_even_without_a_log_buffer() -> ParityB
 }
 
 fn asyncloop_log_appends_timestamped_multiline_workflow_messages_in_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_log_appends_timestamped_multiline_workflow_messages_in_order",
         r##"(let* ((buffer
                  (generate-new-buffer
@@ -50,7 +49,6 @@ fn asyncloop_log_appends_timestamped_multiline_workflow_messages_in_order() -> P
                       (current-buffer))
                   (asyncloop-test-log-text buffer))))
            (kill-buffer buffer)))"##,
-        true,
         expect![[
             r#"OK ("Indexed 12 files" "Saved manifest\nwith detail" t "<TIME>: Indexed 12 files\n<TIME>: Saved manifest\nwith detail\n")"#
         ]],
@@ -58,7 +56,7 @@ fn asyncloop_log_appends_timestamped_multiline_workflow_messages_in_order() -> P
 }
 
 fn asyncloop_log_mode_initializes_practical_buffer_and_quit_key_contract() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_log_mode_initializes_practical_buffer_and_quit_key_contract",
         r##"(with-temp-buffer
          (asyncloop-log-mode)
@@ -79,14 +77,13 @@ fn asyncloop_log_mode_initializes_practical_buffer_and_quit_key_contract() -> Pa
            'asyncloop-keyboard-quit)
           (derived-mode-p
            'special-mode)))"##,
-        true,
         expect![[r#"OK (asyncloop-log-mode "Asyncloop-Log" t nil t t t special-mode)"#]],
     )
 }
 
 fn asyncloop_log_mode_runs_hook_and_activates_generated_syntax_and_abbrev_tables() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_log_mode_runs_hook_and_activates_generated_syntax_and_abbrev_tables",
         r##"(let ((asyncloop-log-mode-abbrev-table
                 (make-abbrev-table))
@@ -129,13 +126,12 @@ fn asyncloop_log_mode_runs_hook_and_activates_generated_syntax_and_abbrev_tables
               (eq
                (current-local-map)
                asyncloop-log-mode-map)))))"##,
-        true,
         expect![[r#"OK ("asyncloop" ((asyncloop-log-mode "Asyncloop-Log" nil t)) t t 119 t)"#]],
     )
 }
 
 fn asyncloop_keyboard_quit_cancels_only_the_loop_owned_by_current_log_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_keyboard_quit_cancels_only_the_loop_owned_by_current_log_buffer",
         r##"(let* ((buffer-a
                  (generate-new-buffer
@@ -186,7 +182,6 @@ fn asyncloop_keyboard_quit_cancels_only_the_loop_owned_by_current_log_buffer() -
                   (asyncloop-test-log-text buffer-b))))
            (kill-buffer buffer-a)
            (kill-buffer buffer-b)))"##,
-        true,
         expect![[
             r#"OK (nil (nil nil nil nil) ((b) t t t) "<TIME>: Loop reset due to quit in buffer  *asyncloop-quit-a*\n" "")"#
         ]],
@@ -194,7 +189,7 @@ fn asyncloop_keyboard_quit_cancels_only_the_loop_owned_by_current_log_buffer() -
 }
 
 fn asyncloop_clock_funcall_logs_result_and_preserves_callback_side_effects() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_clock_funcall_logs_result_and_preserves_callback_side_effects",
         r##"(let* ((buffer
                  (generate-new-buffer
@@ -223,7 +218,6 @@ fn asyncloop_clock_funcall_logs_result_and_preserves_callback_side_effects() -> 
                  "Took <ELAPSED>s"
                  (asyncloop-test-log-text buffer))))
            (kill-buffer buffer)))"##,
-        true,
         expect![[
             r#"OK ("Took <ELAPSED>s: lambda: (:indexed 4 :skipped 1)" (t) "<TIME>: Took <ELAPSED>s: lambda: (:indexed 4 :skipped 1)\n")"#
         ]],
@@ -231,7 +225,7 @@ fn asyncloop_clock_funcall_logs_result_and_preserves_callback_side_effects() -> 
 }
 
 fn asyncloop_clock_funcall_logs_and_resignals_exact_worker_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asyncloop_clock_funcall_logs_and_resignals_exact_worker_error",
         r##"(let* ((loop
                  (asyncloop-create))
@@ -255,16 +249,14 @@ fn asyncloop_clock_funcall_logs_and_resignals_exact_worker_error() -> ParityBatc
                    'file-error
                    '("Cannot index" "/missing"))))))
             logged)))"##,
-        true,
         expect![[
             r#"OK ((:signal file-error ("Cannot index" "/missing")) ("During lambda: (file-error \"Cannot index\" \"/missing\")"))"#
         ]],
     )
 }
 
-#[test]
-fn logging_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn logging_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asyncloop_log_formats_and_returns_text_even_without_a_log_buffer(),
         asyncloop_log_appends_timestamped_multiline_workflow_messages_in_order(),
         asyncloop_log_mode_initializes_practical_buffer_and_quit_key_contract(),
@@ -272,6 +264,5 @@ fn logging_public_surface_batch() {
         asyncloop_keyboard_quit_cancels_only_the_loop_owned_by_current_log_buffer(),
         asyncloop_clock_funcall_logs_result_and_preserves_callback_side_effects(),
         asyncloop_clock_funcall_logs_and_resignals_exact_worker_error(),
-    ];
-    assert_asyncloop_batch(&cases);
+    ]
 }

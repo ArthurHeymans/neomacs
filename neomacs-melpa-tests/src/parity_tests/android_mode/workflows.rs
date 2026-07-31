@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_android_mode_batch};
+use super::ParityBatchCase;
 
 fn opening_a_file_in_a_gradle_project_turns_the_mode_on_and_binds_its_prefix() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "opening_a_file_in_a_gradle_project_turns_the_mode_on_and_binds_its_prefix",
         r##"
         ;; android-mode puts itself on `find-file-hook', so opening any file
@@ -33,7 +33,6 @@ fn opening_a_file_in_a_gradle_project_turns_the_mode_on_and_binds_its_prefix() -
                            (list :mode android-mode :root (android-root)))
                        (kill-buffer other)))))
     "##,
-        true,
         expect![[
             r#"OK (:root "[SANDBOX]/workspace/inventory/" :builder gradle :root-file "gradlew" :mode-on t :lighter " Android" :bindings (("C" android-build-clean) ("a" android-start-app) ("c" android-build-debug) ("d" android-start-ddms) ("e" android-start-emulator) ("i" android-build-install) ("l" android-logcat) ("r" android-build-reinstall) ("t" android-build-test) ("u" android-build-uninstall)) :outside (:mode nil :root nil))"#
         ]],
@@ -41,7 +40,7 @@ fn opening_a_file_in_a_gradle_project_turns_the_mode_on_and_binds_its_prefix() -
 }
 
 fn building_runs_the_projects_own_gradle_wrapper_from_the_project_root() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "building_runs_the_projects_own_gradle_wrapper_from_the_project_root",
         r##"
         ;; `C-c a c' builds a debug APK.  For the gradle builder that means
@@ -86,7 +85,6 @@ fn building_runs_the_projects_own_gradle_wrapper_from_the_project_root() -> Pari
                                            (not (get-buffer-process "*compilation*")))))
             (amd-test-commands))))
     "##,
-        true,
         expect![[
             r#"OK (:debug (:mode compilation-mode :directory "[SANDBOX]/workspace/inventory/" :text "-*- mode: compilation; default-directory: \"[SANDBOX]/workspace/inventory/\" -*-\nCompilation started at <TIME>\n\n./gradlew assembleDebug\n> Task :app:assembleDebug\nBUILD SUCCESSFUL in 1s\n1 actionable task: 1 executed\n\nCompilation finished at <TIME>\n") :clean ("gradlew assembleDebug" "gradlew clean") :install-and-uninstall ("gradlew assembleDebug" "gradlew clean" "gradlew installDebug" "gradlew uninstallDebug"))"#
         ]],
@@ -94,7 +92,7 @@ fn building_runs_the_projects_own_gradle_wrapper_from_the_project_root() -> Pari
 }
 
 fn switching_the_builder_changes_both_the_root_file_and_the_command() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "switching_the_builder_changes_both_the_root_file_and_the_command",
         r##"
         ;; `android-mode-builder' selects two things at once: which file marks
@@ -134,7 +132,6 @@ fn switching_the_builder_changes_both_the_root_file_and_the_command() -> ParityB
             (when (buffer-live-p buffer) (kill-buffer buffer))
             (amd-test-teardown)))
     "##,
-        true,
         expect![[
             r#"OK (:gradle-root-gone nil :ant (:root "[SANDBOX]/workspace/inventory/" :root-file "AndroidManifest.xml" :command "ant -e") :maven (:root "[SANDBOX]/workspace/inventory/" :command "mvn") :ant-test "ant -e test" :reinstall-unsupported (:signal error :data ("gradle builder does not support reinstall")))"#
         ]],
@@ -142,7 +139,7 @@ fn switching_the_builder_changes_both_the_root_file_and_the_command() -> ParityB
 }
 
 fn the_sdk_is_found_through_local_properties_then_the_environment() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_sdk_is_found_through_local_properties_then_the_environment",
         r##"
         ;; Every SDK tool is located relative to one directory, and android-mode
@@ -181,7 +178,6 @@ fn the_sdk_is_found_through_local_properties_then_the_environment() -> ParityBat
                        :missing (condition-case error (android-tool-path "ddms")
                                   (error (list :signal (car error) :data (cdr error)))))))
     "##,
-        true,
         expect![[
             r#"OK (:from-environment "[SANDBOX]/android-sdk" :from-local-properties (:sdk "[SANDBOX]/android-sdk-2" :adb "[SANDBOX]/android-sdk-2/platform-tools/adb") :ignores-a_missing_directory "[SANDBOX]/android-sdk" :falls-back-to-the-customization "[SANDBOX]/android-sdk" :without-any (:signal error :data ("No SDK directory found")) :tools (:found "[SANDBOX]/android-sdk/platform-tools/adb" :emulator "[SANDBOX]/android-sdk/emulator/emulator" :missing (:signal error :data ("Can’t find SDK tool: ddms"))))"#
         ]],
@@ -189,7 +185,7 @@ fn the_sdk_is_found_through_local_properties_then_the_environment() -> ParityBat
 }
 
 fn logcat_renders_each_level_with_its_face_and_links_only_frames_that_exist() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "logcat_renders_each_level_with_its_face_and_links_only_frames_that_exist",
         r##"
         ;; `C-c a l' starts `adb logcat' and renders it: the level letter and
@@ -237,15 +233,15 @@ fn logcat_renders_each_level_with_its_face_and_links_only_frames_that_exist() ->
                                      (line-beginning-position) (line-end-position))))
               :commands (amd-test-commands)))))
     "##,
-        true,
         expect![[
             r#"OK (:read-only t :tab-stops (2 30) :android-mode t :local-map-is-logcat t :text "I ActivityManager(742)\11      Displayed com.warehouse.inventory/.MainActivity: +312ms\nD InventorySync(742)\11      syncing 3 widgets\nW InventorySync(742)\11      bucket cache is stale\nE AndroidRuntime(742)\11      FATAL EXCEPTION: main\nE AndroidRuntime(742)\11      java.lang.IllegalStateException: no report yet\nE AndroidRuntime(742)\11      \11at com.warehouse.inventory.ReportActivity.render(ReportActivity.java:7)\nE AndroidRuntime(742)\11      \11at com.warehouse.missing.Absent.gone(Absent.java:42)\nV InventorySync(742)\11      done\nthis line has no level prefix\n" :faces ((android-mode-info-face "I ") (font-lock-function-name-face "ActivityManager") (font-lock-constant-face "(742)\11      ") (android-mode-info-face "Displayed com.warehouse.inventory/.MainActivity: +312ms") (nil "\n") (android-mode-debug-face "D ") (font-lock-function-name-face "InventorySync") (font-lock-constant-face "(742)\11      ") (android-mode-debug-face "syncing 3 widgets") (nil "\n") (android-mode-warning-face "W ") (font-lock-function-name-face "InventorySync") (font-lock-constant-face "(742)\11      ") (android-mode-warning-face "bucket cache is stale") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "FATAL EXCEPTION: main") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "java.lang.IllegalStateException: no report yet") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "\11at com.warehouse.inventory.ReportActivity.render(ReportActivity.java:7)") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "\11at com.warehouse.missing.Absent.gone(Absent.java:42)") (nil "\n") (android-mode-verbose-face "V ") (font-lock-function-name-face "InventorySync") (font-lock-constant-face "(742)\11      ") (android-mode-verbose-face "done") (nil "\n") (font-lock-warning-face "this line has no level prefix") (nil "\n")) :links (("com/warehouse/inventory/ReportActivity.java" 7 t)) :opened (:file "ReportActivity.java" :line 7 :text "        throw new IllegalStateException(\"no report yet\");") :commands ("adb logcat"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn filtering_logcat_announces_the_change_and_hides_later_lines() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "filtering_logcat_announces_the_change_and_hides_later_lines",
         r##"
         ;; In the logcat buffer `f' sets a regexp filter, `c' clears it and `C'
@@ -289,7 +285,6 @@ fn filtering_logcat_announces_the_change_and_hides_later_lines() -> ParityBatchC
               (progn (android-logcat-erase-buffer)
                      (list :size (buffer-size) :read-only buffer-read-only))))))
     "##,
-        true,
         expect![[
             r#"OK (:filter-set (:variable "InventorySync" :banner "\n\n*** Filter is changed to 'InventorySync' ***\n\n") :later-lines "I InventorySync(742)\11      kept by the filter\n" :cleared (:variable "" :tail "\n\n*** Filter is cleared ***\n\nI Other(742)\11\11      back again\n") :erased (:size 0 :read-only t))"#
         ]],
@@ -297,7 +292,7 @@ fn filtering_logcat_announces_the_change_and_hides_later_lines() -> ParityBatchC
 }
 
 fn starting_an_activity_reads_the_manifest_and_asks_adb_to_launch_it() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "starting_an_activity_reads_the_manifest_and_asks_adb_to_launch_it",
         r##"
         ;; `C-c a a' launches the activity of the buffer you are in when that
@@ -343,15 +338,15 @@ fn starting_an_activity_reads_the_manifest_and_asks_adb_to_launch_it() -> Parity
                  (condition-case error (progn (android-start-app) :reported-success)
                    (error (list :signal (car error) :data (cdr error)))))))
     "##,
-        true,
         expect![[
             r#"OK (:package "com.warehouse.inventory" :class-of-this-buffer "com.warehouse.inventory.MainActivity" :main-activities ("com.warehouse.inventory.MainActivity" "com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :launcher-activities ("com.warehouse.inventory.MainActivity" "com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :default-activities ("com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :activities-declaring-default 1 :from-this-buffer (:commands ("adb shell am start -n com.warehouse.inventory/com.warehouse.inventory.MainActivity") :messages ("Starting activity: com.warehouse.inventory.MainActivity")) :from-a-non-activity-buffer "adb shell am start -n com.warehouse.inventory/com.warehouse.inventory.ReportActivity" :with-no-device-attached :reported-success)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn the_emulator_starts_once_and_reports_when_it_is_already_running() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_emulator_starts_once_and_reports_when_it_is_already_running",
         r##"
         ;; `C-c a e' boots the configured AVD, and android-mode keeps one
@@ -385,16 +380,14 @@ fn the_emulator_starts_once_and_reports_when_it_is_already_running() -> ParityBa
           (condition-case error (progn (android-start-ddms) :no-signal)
             (error (list :signal (car error) :data (cdr error))))))
     "##,
-        true,
         expect![[
             r#"OK (:avds ("Pixel_6_API_34" "Nexus_5X_API_29") :targets ("android-34" "Google Inc.:Google APIs:34") :started (:command "emulator -avd Pixel_6_API_34" :exclusive ("*android-emulator-Pixel_6_API_34*") :process-live t) :asked-again (:launches 1 :exclusive ("*android-emulator-Pixel_6_API_34*") :messages ("emulator Pixel_6_API_34 already running")) :ddms-is-not-installed (:signal error :data ("Can’t find SDK tool: ddms")))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         opening_a_file_in_a_gradle_project_turns_the_mode_on_and_binds_its_prefix(),
         building_runs_the_projects_own_gradle_wrapper_from_the_project_root(),
         switching_the_builder_changes_both_the_root_file_and_the_command(),
@@ -403,6 +396,5 @@ fn workflows_public_surface_batch() {
         filtering_logcat_announces_the_change_and_hides_later_lines(),
         starting_an_activity_reads_the_manifest_and_asks_adb_to_launch_it(),
         the_emulator_starts_once_and_reports_when_it_is_already_running(),
-    ];
-    assert_android_mode_batch(&cases);
+    ]
 }

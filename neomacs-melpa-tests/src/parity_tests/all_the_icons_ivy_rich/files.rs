@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_all_the_icons_ivy_rich_batch};
+use super::ParityBatchCase;
 
 fn real_local_file_reports_exact_size_time_modes_and_per_character_privilege_faces()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "real_local_file_reports_exact_size_time_modes_and_per_character_privilege_faces",
         r##"(let* ((root
                      (expand-file-name
@@ -41,7 +41,6 @@ fn real_local_file_reports_exact_size_time_modes_and_per_character_privilege_fac
                           (1- (length modes)))))))
                  (when (file-exists-p root)
                    (delete-directory root t))))"##,
-        true,
         expect![[
             r#"OK ("10" "Jan 02 12:34" "" "-rwxr-xr--" (all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-write all-the-icons-ivy-rich-file-priv-exec all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-exec all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no))"#
         ]],
@@ -49,7 +48,7 @@ fn real_local_file_reports_exact_size_time_modes_and_per_character_privilege_fac
 }
 
 fn missing_and_remote_files_short_circuit_every_metadata_lookup_without_io() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "missing_and_remote_files_short_circuit_every_metadata_lookup_without_io",
         r##"(let ((missing
                     (expand-file-name
@@ -69,13 +68,12 @@ fn missing_and_remote_files_short_circuit_every_metadata_lookup_without_io() -> 
                      path)))
                  (list missing remote))
                 (file-exists-p missing)))"##,
-        true,
         expect![[r#"OK (((nil "" "" "" "") ("/ssh:neomacs-parity.invalid:" "" "" "" "")) nil)"#]],
     )
 }
 
 fn counsel_file_candidate_resolves_a_real_symlink_and_preserves_ivy_faces() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "counsel_file_candidate_resolves_a_real_symlink_and_preserves_ivy_faces",
         r##"(let* ((root
                      (file-name-as-directory
@@ -114,7 +112,6 @@ fn counsel_file_candidate_resolves_a_real_symlink_and_preserves_ivy_faces() -> P
                           "link.el")))))
                  (when (file-exists-p root)
                    (delete-directory root t))))"##,
-        true,
         expect![[
             r#"OK ("link.el -> target.el" nil all-the-icons-ivy-rich-doc-face "9" "lrwxrwxrwx")"#
         ]],
@@ -122,7 +119,7 @@ fn counsel_file_candidate_resolves_a_real_symlink_and_preserves_ivy_faces() -> P
 }
 
 fn project_root_respects_disabled_remote_and_builtin_project_boundaries() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "project_root_respects_disabled_remote_and_builtin_project_boundaries",
         r##"(let* ((root
                      (file-name-as-directory
@@ -149,7 +146,6 @@ fn project_root_respects_disabled_remote_and_builtin_project_boundaries() -> Par
                         (all-the-icons-ivy-rich--project-root))))
                  (when (file-exists-p root)
                    (delete-directory root t))))"##,
-        true,
         expect![[
             r#"OK ("all-the-icons-ivy-rich-project/" nil "/ssh:neomacs-parity.invalid:/workspace/")"#
         ]],
@@ -157,7 +153,7 @@ fn project_root_respects_disabled_remote_and_builtin_project_boundaries() -> Par
 }
 
 fn project_columns_read_real_candidate_metadata_from_the_detected_root() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "project_columns_read_real_candidate_metadata_from_the_detected_root",
         r##"(let* ((root
                      (file-name-as-directory
@@ -195,14 +191,13 @@ fn project_columns_read_real_candidate_metadata_from_the_detected_root() -> Pari
                        "lib/main.rs")))
                  (when (file-exists-p root)
                    (delete-directory root t))))"##,
-        true,
         expect![[r#"OK (#("lib/" 0 4 (face ivy-subdir)) "lib/main.rs" "-rw-r-----" "13" "")"#]],
     )
 }
 
 fn project_transformer_distinguishes_directory_unvisited_and_visited_real_files() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "project_transformer_distinguishes_directory_unvisited_and_visited_real_files",
         r##"(let* ((root
                      (file-name-as-directory
@@ -261,13 +256,12 @@ fn project_transformer_distinguishes_directory_unvisited_and_visited_real_files(
                    (kill-buffer buffer))
                  (when (file-exists-p root)
                    (delete-directory root t))))"##,
-        true,
         expect![[r#"OK (("src/" ivy-subdir) ("src/core.el" ivy-virtual) ("src/core.el" nil) t)"#]],
     )
 }
 
 fn file_mode_cache_reuses_one_propertized_mode_string_across_matching_files() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "file_mode_cache_reuses_one_propertized_mode_string_across_matching_files",
         r##"(let* ((root
                      (expand-file-name
@@ -310,16 +304,14 @@ fn file_mode_cache_reuses_one_propertized_mode_string_across_matching_files() ->
                           (1- (length first)))))))
                  (when (file-exists-p root)
                    (delete-directory root t))))"##,
-        true,
         expect![[
             r#"OK ("-rw-------" t t 1 (all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-write all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no))"#
         ]],
     )
 }
 
-#[test]
-fn files_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn files_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         real_local_file_reports_exact_size_time_modes_and_per_character_privilege_faces(),
         missing_and_remote_files_short_circuit_every_metadata_lookup_without_io(),
         counsel_file_candidate_resolves_a_real_symlink_and_preserves_ivy_faces(),
@@ -327,6 +319,5 @@ fn files_public_surface_batch() {
         project_columns_read_real_candidate_metadata_from_the_detected_root(),
         project_transformer_distinguishes_directory_unvisited_and_visited_real_files(),
         file_mode_cache_reuses_one_propertized_mode_string_across_matching_files(),
-    ];
-    assert_all_the_icons_ivy_rich_batch(&cases);
+    ]
 }

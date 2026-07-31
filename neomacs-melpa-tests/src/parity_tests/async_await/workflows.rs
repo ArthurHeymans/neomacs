@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_async_await_batch};
+use super::ParityBatchCase;
 
 fn delayed_promises_resume_sequential_work_in_exact_source_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "delayed_promises_resume_sequential_work_in_exact_source_order",
         r##"(let (events)
           (async-defun parity-sequential-delays ()
@@ -21,14 +21,13 @@ fn delayed_promises_resume_sequential_work_in_exact_source_order() -> ParityBatc
             (nreverse events))
           (async-await-test-settle
            (parity-sequential-delays)))"##,
-        true,
         expect!["OK (fulfilled (:fullfilled (:first :second :third)))"],
     )
 }
 
 fn concurrent_invocations_complete_by_delay_without_cross_contaminating_results() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "concurrent_invocations_complete_by_delay_without_cross_contaminating_results",
         r##"(let (completion-order)
           (async-defun parity-concurrent-task
@@ -57,7 +56,6 @@ fn concurrent_invocations_complete_by_delay_without_cross_contaminating_results(
              outcomes
              (nreverse
               completion-order))))"##,
-        true,
         expect![
             "OK (((fulfilled (:fullfilled (:slow 10))) (fulfilled (:fullfilled (:fast 20))) (fulfilled (:fullfilled (:middle 30)))) (:fast :middle :slow))"
         ],
@@ -65,7 +63,7 @@ fn concurrent_invocations_complete_by_delay_without_cross_contaminating_results(
 }
 
 fn async_function_awaits_real_subprocess_stdout_and_preserves_newlines() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_function_awaits_real_subprocess_stdout_and_preserves_newlines",
         r##"(progn
           (async-defun parity-process-output ()
@@ -82,7 +80,6 @@ fn async_function_awaits_real_subprocess_stdout_and_preserves_newlines() -> Pari
                (length output))))
           (async-await-test-settle
            (parity-process-output)))"##,
-        true,
         expect![[
             r#"OK (fulfilled (:fullfilled ("alpha\nbeta gamma\n" ("alpha" "beta gamma") 17)))"#
         ]],
@@ -90,7 +87,7 @@ fn async_function_awaits_real_subprocess_stdout_and_preserves_newlines() -> Pari
 }
 
 fn async_function_sends_real_multiline_input_to_subprocess_and_uses_result() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_function_sends_real_multiline_input_to_subprocess_and_uses_result",
         r##"(progn
           (async-defun parity-process-input (input)
@@ -108,7 +105,6 @@ fn async_function_sends_real_multiline_input_to_subprocess_and_uses_result() -> 
           (async-await-test-settle
            (parity-process-input
             "one two\nthree\n")))"##,
-        true,
         expect![[
             r#"OK (fulfilled (:fullfilled (("ONE TWO\nTHREE\n" "") "ONE TWO\nTHREE\n" "")))"#
         ]],
@@ -116,7 +112,7 @@ fn async_function_sends_real_multiline_input_to_subprocess_and_uses_result() -> 
 }
 
 fn failed_real_subprocess_is_caught_and_normalized_inside_async_function() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "failed_real_subprocess_is_caught_and_normalized_inside_async_function",
         r##"(progn
           (async-defun parity-process-failure ()
@@ -141,13 +137,12 @@ fn failed_real_subprocess_is_caught_and_normalized_inside_async_function() -> Pa
                       "code 7" event)))))))))
           (async-await-test-settle
            (parity-process-failure)))"##,
-        true,
         expect!["OK (fulfilled (:fullfilled (:caught error t t)))"],
     )
 }
 
 fn delayed_filesystem_producer_is_awaited_before_exact_consumer_transform() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "delayed_filesystem_producer_is_awaited_before_exact_consumer_transform",
         r##"(let ((path
                  (async-await-test-path
@@ -200,14 +195,13 @@ fn delayed_filesystem_producer_is_awaited_before_exact_consumer_transform() -> P
              (file-exists-p path)
              (file-attribute-size
               (file-attributes path)))))"##,
-        true,
         expect![[r#"OK ((fulfilled (:fullfilled (("bob" 8) ("carol" 5) ("alice" 3)))) t 22)"#]],
     )
 }
 
 fn awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties",
         r##"(let ((buffer
                  (generate-new-buffer
@@ -236,7 +230,6 @@ fn awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties()
                 (async-await-test-settle
                  (parity-buffer-edit)))
             (kill-buffer buffer)))"##,
-        true,
         expect![[
             r#"OK (fulfilled (:fullfilled (#("start -> finished" 9 17 (category parity face bold)) bold parity t)))"#
         ]],
@@ -244,7 +237,7 @@ fn awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties()
 }
 
 fn promise_all_composes_multiple_async_functions_and_preserves_input_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "promise_all_composes_multiple_async_functions_and_preserves_input_order",
         r##"(progn
           (async-defun parity-map-one
@@ -265,13 +258,12 @@ fn promise_all_composes_multiple_async_functions_and_preserves_input_order() -> 
                (parity-map-one 4 0.02)))))
           (async-await-test-settle
            (parity-map-all)))"##,
-        true,
         expect!["OK (fulfilled (:fullfilled [(2 4) (3 9) (4 16)]))"],
     )
 }
 
 fn async_lambda_forms_a_real_parse_filter_aggregate_pipeline() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_lambda_forms_a_real_parse_filter_aggregate_pipeline",
         r##"(let* ((parse
                   (async-lambda (line)
@@ -313,14 +305,13 @@ fn async_lambda_forms_a_real_parse_filter_aggregate_pipeline() -> ParityBatchCas
               "beta:8"
               "gamma:5"
               "delta:2"))))"##,
-        true,
         expect![[r#"OK (fulfilled (:fullfilled ((("beta" 8) ("gamma" 5)) 13)))"#]],
     )
 }
 
 fn zero_await_and_empty_iteration_remain_pending_while_nonempty_iteration_resumes()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_await_and_empty_iteration_remain_pending_while_nonempty_iteration_resumes",
         r##"(progn
           (async-defun parity-zero-await
@@ -342,13 +333,12 @@ fn zero_await_and_empty_iteration_remain_pending_while_nonempty_iteration_resume
            (async-await-test-settle
             (parity-empty-loop
              '(1 2 3)))))"##,
-        true,
         expect!["OK ((rejected #1=(:timeouted)) (rejected #1#) (fulfilled (:fullfilled (1 2 3))))"],
     )
 }
 
 fn two_stateful_async_workers_keep_independent_lexical_accumulators() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_stateful_async_workers_keep_independent_lexical_accumulators",
         r##"(cl-labels
           ((make-worker
@@ -381,16 +371,14 @@ fn two_stateful_async_workers_keep_independent_lexical_accumulators() -> ParityB
               (funcall left '(3)))
              (async-await-test-settle
               (funcall right '(5 5))))))"##,
-        true,
         expect![
             "OK ((fulfilled (:fullfilled ((:left 1) (:left 3)))) (fulfilled (:fullfilled ((:right 10)))) (fulfilled (:fullfilled ((:left 6)))) (fulfilled (:fullfilled ((:right 15) (:right 20)))))"
         ],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         delayed_promises_resume_sequential_work_in_exact_source_order(),
         concurrent_invocations_complete_by_delay_without_cross_contaminating_results(),
         async_function_awaits_real_subprocess_stdout_and_preserves_newlines(),
@@ -402,6 +390,5 @@ fn workflows_public_surface_batch() {
         async_lambda_forms_a_real_parse_filter_aggregate_pipeline(),
         zero_await_and_empty_iteration_remain_pending_while_nonempty_iteration_resumes(),
         two_stateful_async_workers_keep_independent_lexical_accumulators(),
-    ];
-    assert_async_await_batch(&cases);
+    ]
 }

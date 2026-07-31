@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_apel_source_batch};
+use super::ParityBatchCase;
 
 fn apel_routes_incoming_mail_and_persists_a_safe_delivery_index() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apel_routes_incoming_mail_and_persists_a_safe_delivery_index",
         r####"
 (progn
@@ -107,7 +107,6 @@ fn apel_routes_incoming_mail_and_persists_a_safe_delivery_index() -> ParityBatch
     (neomacs-apel-test-cleanup root))
     result))
 "####,
-        true,
         expect![[
             r#"OK (:deliveries ((101 "pager" "Production_database") (102 "review" "Quarterly_report_draft") (103 "cold-storage" "2024_invoices") (104 "pager" "API_latency_production") (105 "quarantine" "Unclassified_follow-up")) :counts (("cold-storage" . 1) ("pager" . 2) ("quarantine" . 1) ("review" . 1)) :index "101\11pager\11Production_database\n102\11review\11Quarterly_report_draft\n103\11cold-storage\0112024_invoices\n104\11pager\11API_latency_production\n105\11quarantine\11Unclassified_follow-up\n")"#
         ]],
@@ -115,7 +114,7 @@ fn apel_routes_incoming_mail_and_persists_a_safe_delivery_index() -> ParityBatch
 }
 
 fn apel_selects_loads_and_runs_the_latest_installed_legacy_extension() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apel_selects_loads_and_runs_the_latest_installed_legacy_extension",
         r####"
 (let* ((root
@@ -243,7 +242,6 @@ fn apel_selects_loads_and_runs_the_latest_installed_legacy_extension() -> Parity
     (neomacs-apel-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:selected "legacy-dashboard-2.0" :load-path ("lisp" "legacy-dashboard-2.0" "share") :module "legacy-dashboard.el" :config ("dashboard.conf" "endpoint=https://dashboard.example.test\nretries=3\n") :executable "dashboard-render" :render "dashboard/2.0:101,102,103" :process (0 "rendered:101 102 103\n"))"#
         ]],
@@ -251,7 +249,7 @@ fn apel_selects_loads_and_runs_the_latest_installed_legacy_extension() -> Parity
 }
 
 fn apel_registers_a_legacy_client_suite_and_builds_its_user_agent() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apel_registers_a_legacy_client_suite_and_builds_its_user_agent",
         r####"
 (let ((product-obarray (make-vector 13 0))
@@ -309,7 +307,6 @@ fn apel_registers_a_legacy_client_suite_and_builds_its_user_agent() -> ParityBat
      :checks (nreverse checks)
      :unsupported unsupported)))
 "####,
-        true,
         expect![[
             r#"OK (:user-agent "LegacyMail/5.1 (Cedar) LegacyReader/3.7 (Spruce) LegacySMTP/2.4 (Relay)" :family ("LegacyReader" "LegacySMTP") :features ((legacy-mail "LegacyMail") (legacy-smtp "LegacySMTP") (legacy-reader "LegacyReader")) :minimums (t nil) :checks ((2 4) (1 9)) :unsupported (error "LegacySMTP 1.9 is unsupported"))"#
         ]],
@@ -317,7 +314,7 @@ fn apel_registers_a_legacy_client_suite_and_builds_its_user_agent() -> ParityBat
 }
 
 fn apel_archives_multilingual_attachments_with_safe_names_and_wire_encodings() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apel_archives_multilingual_attachments_with_safe_names_and_wire_encodings",
         r####"
 (progn
@@ -398,7 +395,6 @@ fn apel_archives_multilingual_attachments_with_safe_names_and_wire_encodings() -
     (neomacs-apel-test-cleanup root))
     result))
 "####,
-        true,
         expect![[
             r#"OK (:records (("Q3 / plan?.txt" "Q3_plan_.txt" us-ascii (80 108 97 105 110 32 65 83 67 73 73 32 112 108 97 110) "Plain ASCII plan") ("Résumé: final.txt" "Résumé_final.txt" iso-8859-1 (82 233 115 117 109 233 32 118 97 108 105 100 233) #("Résumé validé" 0 13 (charset iso-8859-1))) ("設計 / notes.txt" "設計_notes.txt" iso-2022-jp (27 36 66 70 124 75 92 56 108 36 78 64 95 55 87) #("日本語の設計" 0 6 (charset japanese-jisx0208)))) :manifest-bytes (81 51 95 112 108 97 110 95 46 116 120 116 9 117 115 45 97 115 99 105 105 9 80 108 97 105 110 32 65 83 67 73 73 32 112 108 97 110 13 10 82 195 169 115 117 109 195 169 95 102 105 110 97 108 46 116 120 116 9 105 115 111 45 56 56 53 57 45 49 9 82 195 169 115 117 109 195 169 32 118 97 108 105 100 195 169 13 10 232 168 173 232 168 136 95 110 111 116 101 115 46 116 120 116 9 105 115 111 45 50 48 50 50 45 106 112 9 230 151 165 230 156 172 232 170 158 227 129 174 232 168 173 232 168 136 13 10))"#
         ]],
@@ -406,7 +402,7 @@ fn apel_archives_multilingual_attachments_with_safe_names_and_wire_encodings() -
 }
 
 fn apel_decodes_edits_and_reencodes_a_richtext_incident_message() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apel_decodes_edits_and_reencodes_a_richtext_incident_message",
         r####"
 (with-temp-buffer
@@ -464,7 +460,6 @@ fn apel_decodes_edits_and_reencodes_a_richtext_incident_message() -> ParityBatch
      :properties properties
      :encoded encoded)))
 "####,
-        true,
         expect![[
             r#"OK (:decoded "Incident 42\nDatabase recovered\ninternal ticket SEC-9Operator saw <healthy> status" :properties (("Incident 42" (bold) nil nil) ("Database recovered" (excerpt) nil nil) ("internal ticket SEC-9" nil t nil) ("Operator saw" nil nil nil)) :encoded "Content-Type: text/richtext\nText-Width: 72\n\n<bold>Incident 42</bold><nl>\n<excerpt>Database recovered</excerpt><nl>\n<comment>internal ticket SEC-9</comment>Operator saw <lt>healthy> status<nl>\nResolved by <italic>on-call</italic>")"#
         ]],
@@ -472,7 +467,7 @@ fn apel_decodes_edits_and_reencodes_a_richtext_incident_message() -> ParityBatch
 }
 
 fn apel_byte_compiles_a_portable_plugin_with_a_broken_host_api_fallback() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apel_byte_compiles_a_portable_plugin_with_a_broken_host_api_fallback",
         r####"
 (let* ((root
@@ -559,7 +554,6 @@ fn apel_byte_compiles_a_portable_plugin_with_a_broken_host_api_fallback() -> Par
     (neomacs-apel-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:compiled "legacy-plugin.elc" :source-exists nil :fallback-render "fallback:OPS@EXAMPLE.TEST:urgent | database" :native-normalized "native:ops@example.test" :host-render "host:native:ops@example.test:urgent | database")"#
         ]],
@@ -567,7 +561,7 @@ fn apel_byte_compiles_a_portable_plugin_with_a_broken_host_api_fallback() -> Par
 }
 
 fn apel_transcodes_a_binary_device_packet_through_a_portable_ccl_codec() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "apel_transcodes_a_binary_device_packet_through_a_portable_ccl_codec",
         r####"
 (let* ((root
@@ -627,58 +621,36 @@ fn apel_transcodes_a_binary_device_packet_through_a_portable_ccl_codec() -> Pari
     (neomacs-apel-test-cleanup root))
   result)
 "####,
-        true,
         expect![[
             r#"OK (:input (0 1 65 127 128 255) :wire (0 1 65 127 128 255) :disk (0 1 65 127 128 255) :decoded (0 1 65 127 128 255) :roundtrip t)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_calist_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![apel_routes_incoming_mail_and_persists_a_safe_delivery_index()];
-    assert_apel_source_batch("calist.el", &cases);
+pub(super) fn workflows_calist_batch_cases() -> Vec<ParityBatchCase> {
+    vec![apel_routes_incoming_mail_and_persists_a_safe_delivery_index()]
 }
 
-#[test]
-fn workflows_path_util_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![apel_selects_loads_and_runs_the_latest_installed_legacy_extension()];
-    assert_apel_source_batch("path-util.el", &cases);
+pub(super) fn workflows_path_util_batch_cases() -> Vec<ParityBatchCase> {
+    vec![apel_selects_loads_and_runs_the_latest_installed_legacy_extension()]
 }
 
-#[test]
-fn workflows_product_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![apel_registers_a_legacy_client_suite_and_builds_its_user_agent()];
-    assert_apel_source_batch("product.el", &cases);
+pub(super) fn workflows_product_batch_cases() -> Vec<ParityBatchCase> {
+    vec![apel_registers_a_legacy_client_suite_and_builds_its_user_agent()]
 }
 
-#[test]
-fn workflows_mcharset_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![apel_archives_multilingual_attachments_with_safe_names_and_wire_encodings()];
-    assert_apel_source_batch("mcharset.el", &cases);
+pub(super) fn workflows_mcharset_batch_cases() -> Vec<ParityBatchCase> {
+    vec![apel_archives_multilingual_attachments_with_safe_names_and_wire_encodings()]
 }
 
-#[test]
-fn workflows_richtext_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![apel_decodes_edits_and_reencodes_a_richtext_incident_message()];
-    assert_apel_source_batch("richtext.el", &cases);
+pub(super) fn workflows_richtext_batch_cases() -> Vec<ParityBatchCase> {
+    vec![apel_decodes_edits_and_reencodes_a_richtext_incident_message()]
 }
 
-#[test]
-fn workflows_pym_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![apel_byte_compiles_a_portable_plugin_with_a_broken_host_api_fallback()];
-    assert_apel_source_batch("pym.el", &cases);
+pub(super) fn workflows_pym_batch_cases() -> Vec<ParityBatchCase> {
+    vec![apel_byte_compiles_a_portable_plugin_with_a_broken_host_api_fallback()]
 }
 
-#[test]
-fn workflows_pccl_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![apel_transcodes_a_binary_device_packet_through_a_portable_ccl_codec()];
-    assert_apel_source_batch("pccl.el", &cases);
+pub(super) fn workflows_pccl_batch_cases() -> Vec<ParityBatchCase> {
+    vec![apel_transcodes_a_binary_device_packet_through_a_portable_ccl_codec()]
 }

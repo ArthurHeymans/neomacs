@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_with_editor_batch};
+use super::ParityBatchCase;
 
 fn with_editor_macro_scopes_editor_to_sleeping_fallback_and_restores_environment() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "with_editor_macro_scopes_editor_to_sleeping_fallback_and_restores_environment",
         r##"(let ((process-environment
                     (cons "EDITOR=original"
@@ -20,7 +20,6 @@ fn with_editor_macro_scopes_editor_to_sleeping_fallback_and_restores_environment
                        (getenv "EDITOR")
                        (getenv "ALTERNATE_EDITOR")
                        with-editor--envvar)))"##,
-        true,
         expect![[
             r#"OK (("sh -c 'printf \"\\nWITH-EDITOR: $$ OPEN $0\\037$1\\037 IN $(pwd)\\n\"; sleep 604800 & sleep=$!; trap \"kill $sleep; exit 0\" USR1; trap \"kill $sleep; exit 1\" USR2; wait $sleep'" nil "EDITOR") "original" nil nil)"#
         ]],
@@ -29,7 +28,7 @@ fn with_editor_macro_scopes_editor_to_sleeping_fallback_and_restores_environment
 
 fn with_editor_literal_and_dynamic_macros_set_only_requested_environment_variable()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "with_editor_literal_and_dynamic_macros_set_only_requested_environment_variable",
         r##"(let ((process-environment
                     (copy-sequence process-environment))
@@ -50,7 +49,6 @@ fn with_editor_literal_and_dynamic_macros_set_only_requested_environment_variabl
                 (list (getenv "EDITOR")
                       (getenv "GIT_EDITOR")
                       (getenv "HG_EDITOR"))))"##,
-        true,
         expect![[
             r#"OK (("outer-editor" "sh -c 'printf \"\\nWITH-EDITOR: $$ OPEN $0\\037$1\\037 IN $(pwd)\\n\"; sleep 604800 & sleep=$!; trap \"kill $sleep; exit 0\" USR1; trap \"kill $sleep; exit 1\" USR2; wait $sleep'" "GIT_EDITOR") ("outer-editor" "sh -c 'printf \"\\nWITH-EDITOR: $$ OPEN $0\\037$1\\037 IN $(pwd)\\n\"; sleep 604800 & sleep=$!; trap \"kill $sleep; exit 0\" USR1; trap \"kill $sleep; exit 1\" USR2; wait $sleep'" "HG_EDITOR") ("outer-editor" "outer-git" "outer-hg"))"#
         ]],
@@ -58,7 +56,7 @@ fn with_editor_literal_and_dynamic_macros_set_only_requested_environment_variabl
 }
 
 fn with_editor_server_window_uses_first_matching_rule_then_fallback() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "with_editor_server_window_uses_first_matching_rule_then_fallback",
         r##"(let ((with-editor-server-window-alist
                     '(("\\.git/" . git-window)
@@ -71,29 +69,25 @@ fn with_editor_server_window_uses_first_matching_rule_then_fallback() -> ParityB
                    (setq buffer-file-name "/repo/notes.txt")
                    (list first
                          (with-editor-server-window)))))"##,
-        true,
         expect![[r#"OK (git-window fallback-window)"#]],
     )
 }
 
 fn with_editor_export_editor_rejects_unsupported_major_mode() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "with_editor_export_editor_rejects_unsupported_major_mode",
         r##"(with-temp-buffer
                (fundamental-mode)
                (with-editor-export-editor "EDITOR"))"##,
-        false,
         expect![[r#"ERR (error "Cannot export environment variables in this buffer")"#]],
     )
 }
 
-#[test]
-fn environment_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn environment_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         with_editor_macro_scopes_editor_to_sleeping_fallback_and_restores_environment(),
         with_editor_literal_and_dynamic_macros_set_only_requested_environment_variable(),
         with_editor_server_window_uses_first_matching_rule_then_fallback(),
         with_editor_export_editor_rejects_unsupported_major_mode(),
-    ];
-    assert_with_editor_batch(&cases);
+    ]
 }

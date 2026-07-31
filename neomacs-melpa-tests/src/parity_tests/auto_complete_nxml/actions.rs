@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_nxml_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_nxml_expand_tag_adds_attribute_space_for_open_element() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_expand_tag_adds_attribute_space_for_open_element",
         r##"(with-temp-buffer
          (insert "<table")
@@ -18,13 +18,12 @@ fn auto_complete_nxml_expand_tag_adds_attribute_space_for_open_element() -> Pari
            (let ((rng-open-elements '(root)))
              (auto-complete-nxml-expand-tag)
              (list (buffer-string) (point)))))"##,
-        true,
         expect![[r#"OK ("<table " 8)"#]],
     )
 }
 
 fn auto_complete_nxml_expand_tag_handles_extra_strings_and_invalid_names() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_expand_tag_handles_extra_strings_and_invalid_names",
         r##"(cl-letf (((symbol-function 'rng-qname-p)
                                     (lambda (_name) nil)))
@@ -37,13 +36,12 @@ fn auto_complete_nxml_expand_tag_handles_extra_strings_and_invalid_names() -> Pa
               (buffer-string)))
           '(("<!--" "<!--" "<![CDATA[")
             ("<unknown" "<!--" "<![CDATA["))))"##,
-        true,
         expect![[r#"OK ("<!--" "<unknown")"#]],
     )
 }
 
 fn auto_complete_nxml_expand_tag_respects_closed_schema_match_and_root_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_expand_tag_respects_closed_schema_match_and_root_state",
         r##"(cl-letf (((symbol-function 'rng-qname-p)
                                     (lambda (_name) t))
@@ -63,13 +61,12 @@ fn auto_complete_nxml_expand_tag_respects_closed_schema_match_and_root_state() -
           '(((parent) . t)
             ((parent) . nil)
             (nil . t))))"##,
-        true,
         expect![[r#"OK ((((parent) . t) "<root") (((parent)) "<root ") ((nil . t) "<root "))"#]],
     )
 }
 
 fn auto_complete_nxml_expand_xmlns_emits_all_nondefault_prefixed_namespaces() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_expand_xmlns_emits_all_nondefault_prefixed_namespaces",
         r##"(with-temp-buffer
          (insert "<root xmlns=\"urn:default")
@@ -91,7 +88,6 @@ fn auto_complete_nxml_expand_xmlns_emits_all_nondefault_prefixed_namespaces() ->
                                       ("urn:unused" . "")))))))
              (auto-complete-nxml-expand-other-xmlns)
              (list (buffer-string) (point)))))"##,
-        true,
         expect![[
             r#"OK ("<root xmlns=\"urn:default\" xmlns:m=\"urn:math\" xmlns:svg=\"urn:svg\"" 65)"#
         ]],
@@ -99,7 +95,7 @@ fn auto_complete_nxml_expand_xmlns_emits_all_nondefault_prefixed_namespaces() ->
 }
 
 fn auto_complete_nxml_get_prefix_walks_schema_location_rules_in_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_get_prefix_walks_schema_location_rules_in_order",
         r##"(let ((rng-schema-locating-files
                                 '("first.xml" "second.xml" "third.xml")))
@@ -121,13 +117,12 @@ fn auto_complete_nxml_get_prefix_walks_schema_location_rules_in_order() -> Parit
             (auto-complete-nxml-get-prefix "urn:target")
             (auto-complete-nxml-get-prefix "urn:other")
             (auto-complete-nxml-get-prefix "urn:missing"))))"##,
-        true,
         expect![[r#"OK ("t" "o" nil)"#]],
     )
 }
 
 fn auto_complete_nxml_tag_source_action_expands_and_closes_end_tags() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_tag_source_action_expands_and_closes_end_tags",
         r##"(cl-letf (((symbol-function 'auto-complete-nxml-expand-tag)
                                     (lambda () (insert " "))))
@@ -138,14 +133,13 @@ fn auto_complete_nxml_tag_source_action_expands_and_closes_end_tags() -> ParityB
               (funcall (cdr (assq 'action ac-source-nxml-tag)))
               (list text (buffer-string) (point))))
           '("</item" "</item>" "<item")))"##,
-        true,
         expect![[r#"OK (("</item" "</item " 8) ("</item>" "</item> " 9) ("<item" "<item " 7))"#]],
     )
 }
 
 fn auto_complete_nxml_attribute_source_action_builds_quotes_and_positions_point() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_attribute_source_action_builds_quotes_and_positions_point",
         r##"(let ((auto-complete-nxml-automatic-p nil))
          (mapcar
@@ -155,7 +149,6 @@ fn auto_complete_nxml_attribute_source_action_builds_quotes_and_positions_point(
               (funcall (cdr (assq 'action ac-source-nxml-attr)))
               (list text (buffer-string) (point) (char-after))))
           '("<node class" "<node class\"tail")))"##,
-        true,
         expect![[
             r#"OK (("<node class" "<node class=\"\"" 14 34) ("<node class\"tail" "<node class\"tail=\"\"" 19 34))"#
         ]],
@@ -163,7 +156,7 @@ fn auto_complete_nxml_attribute_source_action_builds_quotes_and_positions_point(
 }
 
 fn auto_complete_nxml_css_source_actions_chain_property_and_value_editing() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_css_source_actions_chain_property_and_value_editing",
         r##"(let ((auto-complete-nxml-automatic-p nil))
          (with-temp-buffer
@@ -172,13 +165,12 @@ fn auto_complete_nxml_css_source_actions_chain_property_and_value_editing() -> P
            (insert "red")
            (funcall (cdr (assq 'action ac-source-nxml-css-property)))
            (list (buffer-string) (point))))"##,
-        true,
         expect![[r#"OK ("<p style=\"color: red;" 22)"#]],
     )
 }
 
 fn auto_complete_nxml_tag_value_action_inserts_only_missing_matching_end_tag() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_tag_value_action_inserts_only_missing_matching_end_tag",
         r##"(mapcar
          (lambda (text)
@@ -190,7 +182,6 @@ fn auto_complete_nxml_tag_value_action_inserts_only_missing_matching_end_tag() -
            "<item>choice</item>"
            "<item class=\"x\">choice"
            "plain choice"))"##,
-        true,
         expect![[
             r#"OK (("<item>choice" "<item>choice</item>" 20) ("<item>choice</item>" "<item>choice</item><//item>" 28) ("<item class=\"x\">choice" "<item class=\"x\">choice</item>" 30) ("plain choice" "plain choice" 13))"#
         ]],
@@ -198,7 +189,7 @@ fn auto_complete_nxml_tag_value_action_inserts_only_missing_matching_end_tag() -
 }
 
 fn auto_complete_nxml_insert_command_and_toggle_drive_real_command_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_insert_command_and_toggle_drive_real_command_state",
         r##"(let ((auto-complete-nxml-automatic-p t)
              events)
@@ -221,16 +212,14 @@ fn auto_complete_nxml_insert_command_and_toggle_drive_real_command_state() -> Pa
                 disabled-message
                 (current-message)
                 (nreverse events))))))"##,
-        true,
         expect![[
             r#"OK ("xxxxx" t nil nil ((:insert 3) (:complete :triggered trigger-key) (:insert 2)))"#
         ]],
     )
 }
 
-#[test]
-fn actions_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn actions_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_nxml_expand_tag_adds_attribute_space_for_open_element(),
         auto_complete_nxml_expand_tag_handles_extra_strings_and_invalid_names(),
         auto_complete_nxml_expand_tag_respects_closed_schema_match_and_root_state(),
@@ -241,6 +230,5 @@ fn actions_public_surface_batch() {
         auto_complete_nxml_css_source_actions_chain_property_and_value_editing(),
         auto_complete_nxml_tag_value_action_inserts_only_missing_matching_end_tag(),
         auto_complete_nxml_insert_command_and_toggle_drive_real_command_state(),
-    ];
-    assert_auto_complete_nxml_batch(&cases);
+    ]
 }

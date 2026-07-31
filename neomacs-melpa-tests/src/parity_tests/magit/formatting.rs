@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_magit_batch};
+use super::ParityBatchCase;
 
 fn magit_ellipsis_respects_display_capability_and_customization() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_ellipsis_respects_display_capability_and_customization",
         r##"(list
               (cl-letf (((symbol-function 'char-displayable-p)
@@ -26,13 +26,12 @@ fn magit_ellipsis_respects_display_capability_and_customization() -> ParityBatch
                             (lambda (_) nil)))
                    (list (magit--ellipsis 'margin)
                          (magit--ellipsis))))))"##,
-        true,
         expect![[r#"OK (("…" "…") (">" "...") (("·" ".") ("!" ">")))"#]],
     )
 }
 
 fn magit_text_face_composition_preserves_existing_properties_and_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_text_face_composition_preserves_existing_properties_and_order",
         r##"(let ((text
                     (concat
@@ -51,13 +50,12 @@ fn magit_text_face_composition_preserves_existing_properties_and_order() -> Pari
                 (get-text-property 4 'font-lock-face text)
                 (get-text-property 2 'face text)
                 (substring-no-properties text)))"##,
-        true,
         expect![[r#"OK ((bold highlight) (bold italic underline) (underline) nil "abcdef")"#]],
     )
 }
 
 fn magit_face_helpers_apply_and_query_complete_string_properties() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_face_helpers_apply_and_query_complete_string_properties",
         r##"(let ((bold
                     (magit--propertize-face "abc" 'bold))
@@ -71,29 +69,25 @@ fn magit_face_helpers_apply_and_query_complete_string_properties() -> ParityBatc
                 (magit-face-property-all 'bold bold)
                 (magit-face-property-all 'bold mixed)
                 (substring-no-properties bold)))"##,
-        true,
         expect![[r#"OK (bold bold t nil "abc")"#]],
     )
 }
 
 fn magit_malformed_ellipsis_customization_signals_user_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "magit_malformed_ellipsis_customization_signals_user_error",
         r##"(let ((magit-ellipsis
                     '((margin (?· . "!")))))
                (magit--ellipsis))"##,
-        false,
         expect![[r#"ERR (user-error "Variable magit-ellipsis is invalid")"#]],
     )
 }
 
-#[test]
-fn formatting_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn formatting_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         magit_ellipsis_respects_display_capability_and_customization(),
         magit_text_face_composition_preserves_existing_properties_and_order(),
         magit_face_helpers_apply_and_query_complete_string_properties(),
         magit_malformed_ellipsis_customization_signals_user_error(),
-    ];
-    assert_magit_batch(&cases);
+    ]
 }

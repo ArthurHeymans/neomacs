@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ede_arduino_batch};
+use super::ParityBatchCase;
 
 fn library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_directory()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_directory",
         r##"(let* ((root
                           (make-temp-file
@@ -63,7 +63,6 @@ fn library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_dir
                         (kill-buffer
                          (get-file-buffer sketch)))
                       (delete-directory root t)))"##,
-        true,
         expect![[
             r#"OK (#("Wire" 0 4 (fontified nil)) #("Servo" 0 5 (fontified nil)) #("Servo/utility" 0 5 (fontified nil)))"#
         ]],
@@ -72,7 +71,7 @@ fn library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_dir
 
 fn buffer_local_library_override_preserves_declared_order_without_scanning_source()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "buffer_local_library_override_preserves_declared_order_without_scanning_source",
         r##"(let* ((root
                           (make-temp-file
@@ -105,14 +104,13 @@ fn buffer_local_library_override_preserves_declared_order_without_scanning_sourc
                                 (ede-arduino-guess-libs)
                               (kill-buffer buffer))))
                       (delete-directory root t)))"##,
-        true,
         expect![[r#"OK ("Servo" "SD" "Ethernet")"#]],
     )
 }
 
 fn makefile_generation_supplies_complete_real_project_board_and_library_contract() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "makefile_generation_supplies_complete_real_project_board_and_library_contract",
         r##"(let* ((root
                           (make-temp-file
@@ -212,7 +210,6 @@ fn makefile_generation_supplies_complete_real_project_board_and_library_contract
                           (expand-file-name
                            "Makefile" root))))
                       (delete-directory root t)))"##,
-        true,
         expect![[
             r##"OK ("# generated makefile\n" (:sync :setup (:insert "arduino:ede-empty" "TARGET" "BuildDemo" "ARDUINO_LIBS" "Servo Ethernet/utility" "MCU" "atmega328p" "F_CPU" "16000000L" "PORT" "/dev/ttyACM0" "AVRDUDE_ARD_BAUDRATE" "57600" "AVRDUDE_ARD_PROGRAMMER" "arduino" "ARDUINO_MK" "/opt/arduino/Arduino.mk" "ARDUINO_HOME" "/opt/arduino")) nil)"##
         ]],
@@ -221,7 +218,7 @@ fn makefile_generation_supplies_complete_real_project_board_and_library_contract
 
 fn makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero",
         r##"(let* ((project
                           (make-instance
@@ -263,7 +260,6 @@ fn makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero(
                              (cadr error-data))))
                          outcomes)))
                     (nreverse outcomes))"##,
-        true,
         expect![[
             r#"OK ((error "Makefile doesn’t support .ino files until Arduino 1.0") (error "Makefile doesn’t support .pde files after Arduino 1.0"))"#
         ]],
@@ -272,7 +268,7 @@ fn makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero(
 
 fn makefile_generation_refuses_to_replace_unmanaged_content_when_user_declines() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "makefile_generation_refuses_to_replace_unmanaged_content_when_user_declines",
         r##"(let* ((root
                           (make-temp-file
@@ -323,19 +319,16 @@ fn makefile_generation_refuses_to_replace_unmanaged_content_when_user_declines()
                         (kill-buffer
                          (get-file-buffer sketch)))
                       (delete-directory root t)))"##,
-        false,
         expect![[r#"ERR (error "Not replacing Makefile")"#]],
     )
 }
 
-#[test]
-fn ede_makefile_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn ede_makefile_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_directory(),
         buffer_local_library_override_preserves_declared_order_without_scanning_source(),
         makefile_generation_supplies_complete_real_project_board_and_library_contract(),
         makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero(),
         makefile_generation_refuses_to_replace_unmanaged_content_when_user_declines(),
-    ];
-    assert_ede_arduino_batch(&cases);
+    ]
 }

@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ace_popup_menu_batch};
+use super::ParityBatchCase;
 
 /// Turning the mode on is the whole installation step the README describes, and
 /// it has to be a *global* switch that replaces `x-popup-menu' exactly once.
@@ -8,9 +8,8 @@ use super::{ParityBatchCase, assert_ace_popup_menu_batch};
 /// accident, look at the mode from another buffer, toggle off, call
 /// `x-popup-menu' while off (the real function runs and renders nothing),
 /// toggle back on, and finally disable.
-
 fn enabling_the_global_mode_advises_x_popup_menu_exactly_once_until_disabled() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "enabling_the_global_mode_advises_x_popup_menu_exactly_once_until_disabled",
         r##"(progn
   (apm-test-setup)
@@ -34,7 +33,6 @@ fn enabling_the_global_mode_advises_x_popup_menu_exactly_once_until_disabled() -
     (push (cons :disabled (apm-test-mode-state)) observed)
     (setq observed (nreverse observed))
     observed))"##,
-        true,
         expect![
             "OK ((:initial :advised nil :advice-count 0 :mode nil :global-value nil :buffer-local nil) (:enabled :advised t :advice-count 1 :mode t :global-value t :buffer-local nil) (:enabled-twice :advised t :advice-count 1 :mode t :global-value t :buffer-local nil) (:other-buffer :advised t :advice-count 1 :mode t :global-value t :buffer-local nil) (:toggled-off :advised nil :advice-count 0 :mode nil :global-value nil :buffer-local nil) (:unadvised-call nil 0) (:toggled-on :advised t :advice-count 1 :mode t :global-value t :buffer-local nil) (:disabled :advised nil :advice-count 0 :mode nil :global-value nil :buffer-local nil))"
         ],
@@ -42,7 +40,7 @@ fn enabling_the_global_mode_advises_x_popup_menu_exactly_once_until_disabled() -
 }
 
 fn every_avy_label_returns_the_value_of_the_menu_item_it_marks() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "every_avy_label_returns_the_value_of_the_menu_item_it_marks",
         r##"(progn
   (apm-test-setup)
@@ -59,7 +57,6 @@ fn every_avy_label_returns_the_value_of_the_menu_item_it_marks() -> ParityBatchC
           :menu-buffer-left (and (get-buffer "*ace-popup-menu*") t)
           :windows (length (window-list))
           :current (buffer-name))))"##,
-        true,
         expect![[
             r#"OK (:selections (("a" rename-symbol nil) ("s" rename-file nil) ("d" extract-function nil) ("f" extract-variable nil) ("g" inline-variable nil)) :renderings 5 :rendering (:buffer "*ace-popup-menu*" :text "Refactor\n\nRename symbol\nRename file\n\nExtract function\nExtract variable\nInline variable" :runs (("Refactor" . avy-menu-title) ("\n\nRename symbol\nRename file\n\nExtract function\nExtract variable\nInline variable")) :cursor nil :window-buffer "*ace-popup-menu*") :menu-buffer-left nil :windows 1 :current "*apm-work*")"#
         ]],
@@ -67,7 +64,7 @@ fn every_avy_label_returns_the_value_of_the_menu_item_it_marks() -> ParityBatchC
 }
 
 fn showing_pane_headers_changes_the_rendering_but_not_the_labels() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "showing_pane_headers_changes_the_rendering_but_not_the_labels",
         r##"(progn
   (apm-test-setup)
@@ -85,7 +82,6 @@ fn showing_pane_headers_changes_the_rendering_but_not_the_labels() -> ParityBatc
     (setq observed (nreverse observed))
     (list :selections observed
           :renderings (apm-test-renderings))))"##,
-        true,
         expect![[
             r#"OK (:selections ((:without-headers nil extract-function) (:with-headers t extract-function)) :renderings ((:buffer "*ace-popup-menu*" :text "Refactor\n\nRename symbol\nRename file\n\nExtract function\nExtract variable\nInline variable" :runs (("Refactor" . avy-menu-title) ("\n\nRename symbol\nRename file\n\nExtract function\nExtract variable\nInline variable")) :cursor nil :window-buffer "*ace-popup-menu*") (:buffer "*ace-popup-menu*" :text "Refactor\n\nRename\n\nRename symbol\nRename file\n\nExtract\n\nExtract function\nExtract variable\nInline variable" :runs (("Refactor" . avy-menu-title) ("\n\n") ("Rename" . avy-menu-pane-header) ("\n\nRename symbol\nRename file\n\n") ("Extract" . avy-menu-pane-header) ("\n\nExtract function\nExtract variable\nInline variable")) :cursor nil :window-buffer "*ace-popup-menu*")))"#
         ]],
@@ -93,7 +89,7 @@ fn showing_pane_headers_changes_the_rendering_but_not_the_labels() -> ParityBatc
 }
 
 fn a_command_bound_to_a_key_pops_up_the_menu_and_restores_the_work_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_command_bound_to_a_key_pops_up_the_menu_and_restores_the_work_buffer",
         r##"(progn
   (apm-test-setup)
@@ -106,15 +102,15 @@ fn a_command_bound_to_a_key_pops_up_the_menu_and_restores_the_work_buffer() -> P
         :windows (length (window-list))
         :menu-buffer-left (and (get-buffer "*ace-popup-menu*") t)
         :renderings (apm-test-renderings)))"##,
-        true,
         expect![[
             r#"OK (:result extract-function :current "*apm-work*" :text "Editing buffer, untouched by the menu.\n" :point 1 :windows 1 :menu-buffer-left nil :renderings ((:buffer "*ace-popup-menu*" :text "Refactor\n\nRename symbol\nRename file\n\nExtract function\nExtract variable\nInline variable" :runs (("Refactor" . avy-menu-title) ("\n\nRename symbol\nRename file\n\nExtract function\nExtract variable\nInline variable")) :cursor nil :window-buffer "*ace-popup-menu*")))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn the_documented_fallback_shapes_hand_the_call_to_the_original_function() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_documented_fallback_shapes_hand_the_call_to_the_original_function",
         r##"(progn
   (apm-test-setup)
@@ -131,7 +127,6 @@ fn the_documented_fallback_shapes_hand_the_call_to_the_original_function() -> Pa
               :avy-path avy-path
               :orig-calls (apm-test-orig-calls)
               :renderings (length (apm-test-renderings)))))))"##,
-        true,
         expect![[
             r#"OK (:nil-position value-from-orig-fun :keymap-menu value-from-orig-fun :keymap-list value-from-orig-fun :avy-path rename-file :orig-calls ((:orig nil ("Refactor" ("Rename" ("Rename symbol" . rename-symbol) ("Rename file" . rename-file)) ("Extract" ("Extract function" . extract-function) ("Extract variable" . extract-variable) ("Inline variable" . inline-variable)))) (:orig t #1=(keymap (item menu-item "Item" ignore) "Keymap menu")) (:orig t (#1# #1#))) :renderings 1)"#
         ]],
@@ -139,7 +134,7 @@ fn the_documented_fallback_shapes_hand_the_call_to_the_original_function() -> Pa
 }
 
 fn cancelling_the_menu_returns_nil_and_leaves_no_window_or_buffer_behind() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "cancelling_the_menu_returns_nil_and_leaves_no_window_or_buffer_behind",
         r##"(progn
   (apm-test-setup)
@@ -160,22 +155,19 @@ fn cancelling_the_menu_returns_nil_and_leaves_no_window_or_buffer_behind() -> Pa
           :windows (length (window-list))
           :current (buffer-name)
           :text (buffer-substring-no-properties (point-min) (point-max)))))"##,
-        true,
         expect![[
             r#"OK (:aborts (("C-g" nil nil) ("ESC" nil nil)) :renderings 2 :menu-buffer-left nil :windows 1 :current "*apm-work*" :text "Editing buffer, untouched by the menu.\n")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         enabling_the_global_mode_advises_x_popup_menu_exactly_once_until_disabled(),
         every_avy_label_returns_the_value_of_the_menu_item_it_marks(),
         showing_pane_headers_changes_the_rendering_but_not_the_labels(),
         a_command_bound_to_a_key_pops_up_the_menu_and_restores_the_work_buffer(),
         the_documented_fallback_shapes_hand_the_call_to_the_original_function(),
         cancelling_the_menu_returns_nil_and_leaves_no_window_or_buffer_behind(),
-    ];
-    assert_ace_popup_menu_batch(&cases);
+    ]
 }

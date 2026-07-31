@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_anaconda_mode_batch};
+use super::ParityBatchCase;
 
 fn starting_the_server_builds_the_documented_command_line_and_binds_its_port() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "starting_the_server_builds_the_documented_command_line_and_binds_its_port",
         r##"
         ;; A user opens a Python file and anaconda-mode brings its server up.
@@ -50,7 +50,6 @@ fn starting_the_server_builds_the_documented_command_line_and_binds_its_port() -
             (when (buffer-live-p buffer) (kill-buffer buffer))
             (ana-test-teardown)))
     "##,
-        true,
         expect![[
             r#"OK (:installation-directory-missing-before nil :started (:callback t :running t :bound t) :port-is-the-one-announced t :host "127.0.0.1" :localhost-address "127.0.0.1" :server-version "0.1.17" :server-directory "[ORACLE-SANDBOX]/anaconda-install/0.1.17" :installation-directory-created t :launches (("[PACKAGE]/anaconda-mode.py" "[ORACLE-SANDBOX]/anaconda-install/0.1.17" "127.0.0.1" "" "cwd [ORACLE-SANDBOX]/anaconda-install")) :command-args ("[PACKAGE]/anaconda-mode.py" "[ORACLE-SANDBOX]/anaconda-install/0.1.17" "127.0.0.1" "") :process-name "anaconda-mode" :process-status run :query-on-exit nil :process-properties (:interpreter t :virtualenv nil :remote-p nil) :announcement "anaconda_mode port PORT\n" :needs-restart nil :second-start (:callback t :running t :bound t) :launches-after-second-start 1 :stopped (:process nil :running nil))"#
         ]],
@@ -58,7 +57,7 @@ fn starting_the_server_builds_the_documented_command_line_and_binds_its_port() -
 }
 
 fn moving_the_server_to_another_address_and_virtualenv_restarts_it() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "moving_the_server_to_another_address_and_virtualenv_restarts_it",
         r##"
         ;; A user works on a box where 127.0.0.1 is taken, sets
@@ -101,15 +100,15 @@ fn moving_the_server_to_another_address_and_virtualenv_restarts_it() -> ParityBa
             (when (buffer-live-p buffer) (kill-buffer buffer))
             (ana-test-teardown)))
     "##,
-        true,
         expect![[
             r#"OK (:address "127.0.0.2" :host "127.0.0.2" :bound-locally (127 0 0 2) :first-jump (:line 29 :column 4 :text "def total_price(widgets):") :activating-a-virtualenv (:needs-restart t :command-args ("[PACKAGE]/anaconda-mode.py" "[ORACLE-SANDBOX]/anaconda-install/0.1.17" "127.0.0.2" "[ORACLE-SANDBOX]/venv")) :second-jump (:line 4 :column 6 :text "class Widget:") :restarted (:same-process nil :old-process-live nil :virtualenv "[ORACLE-SANDBOX]/venv") :launches (("[PACKAGE]/anaconda-mode.py" "[ORACLE-SANDBOX]/anaconda-install/0.1.17" "127.0.0.2" "" "cwd [ORACLE-SANDBOX]/anaconda-install") ("[PACKAGE]/anaconda-mode.py" "[ORACLE-SANDBOX]/anaconda-install/0.1.17" "127.0.0.2" "[ORACLE-SANDBOX]/venv" "cwd [ORACLE-SANDBOX]/anaconda-install")) :requests (("infer" 37 12) ("infer" 36 8)))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn completing_an_attribute_posts_the_whole_buffer_and_inserts_the_candidate() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "completing_an_attribute_posts_the_whole_buffer_and_inserts_the_candidate",
         r##"
         ;; The user types `first.dup' and presses C-M-i.  The package must POST
@@ -152,7 +151,6 @@ fn completing_an_attribute_posts_the_whole_buffer_and_inserts_the_candidate() ->
           :requests (ana-test-server-requests)
           :buffer (buffer-substring-no-properties (point-min) (point-max))))
     "##,
-        true,
         expect![[
             r#"OK (:unique (:here (:line 38 :column 21 :text "print(first.duplicate)") :modified t :completions-offered nil) :ambiguous (:here (:line 36 :column 15 :text "print(first.dis)") :completions "Type M-x minibuffer-choose-completion on a completion to select it.\nType M-x minibuffer-next-completion or M-x minibuffer-previous-completion to move point between completions.\n\n2 possible completions:\ndiscounted <function>\ndisplay_name <function>") :discarded-after-the-user-types-on (:released 1 :waited nil :point 1 :completions-offered nil :line-36 (:line 36 :column 0 :text "print(first.dis)")) :first-request-body "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"complete\",\"params\":{\"source\":\"\\\"\\\"\\\"Warehouse inventory helpers for the anaconda-mode parity fixture.\\\"\\\"\\\"\\n\\n\\nclass Widget:\\n    \\\"\\\"\\\"A catalogue item with a name and a price.\\\"\\\"\\\"\\n\\n    def __init__(self, name, price):\\n        self.name = name\\n        self.price = price\\n\\n    def discounted(self, percent):\\n        \\\"\\\"\\\"Return the price with PERCENT taken off.\\\"\\\"\\\"\\n        return self.price * (100 - percent) / 100\\n\\n    def display_name(self):\\n        \\\"\\\"\\\"Return the name shown to a customer.\\\"\\\"\\\"\\n        return self.name.upper()\\n\\n    def duplicate(self):\\n        \\\"\\\"\\\"Return an independent copy of this widget.\\\"\\\"\\\"\\n        return Widget(self.name, self.price)\\n\\n\\ndef build_catalogue(names, price):\\n    \\\"\\\"\\\"Create one Widget per entry of NAMES, each costing PRICE.\\\"\\\"\\\"\\n    return [Widget(name, price) for name in names]\\n\\n\\ndef total_price(widgets):\\n    \\\"\\\"\\\"Sum the price of every widget in WIDGETS.\\\"\\\"\\\"\\n    return sum(widget.price for widget in widgets)\\n\\n\\ncatalogue = build_catalogue([\\\"bolt\\\", \\\"nut\\\", \\\"washer\\\"], 12)\\nfirst = catalogue[0]\\nprint(first.dis)\\nprint(total_price(catalogue))\\nprint(first.dup)\\nsample = Widget(\\\"bolt\\\", 12)\\n\",\"line\":38,\"column\":15,\"path\":\"[ORACLE-SANDBOX]/project/inventory.py\"}}" :requests ((:body nil :request-line "POST / HTTP/1.1" :jsonrpc "2.0" :id 1 :method "complete" :line 38 :column 15 :path "[ORACLE-SANDBOX]/project/inventory.py" :source (:length 1073)) (:body nil :request-line "POST / HTTP/1.1" :jsonrpc "2.0" :id 1 :method "complete" :line 36 :column 15 :path "[ORACLE-SANDBOX]/project/inventory.py" :source (:length 1079)) (:body nil :request-line "POST / HTTP/1.1" :jsonrpc "2.0" :id 1 :method "complete" :line 36 :column 15 :path "[ORACLE-SANDBOX]/project/inventory.py" :source (:length 1079))) :buffer "\"\"\"Warehouse inventory helpers for the anaconda-mode parity fixture.\"\"\"\n\n\nclass Widget:\n    \"\"\"A catalogue item with a name and a price.\"\"\"\n\n    def __init__(self, name, price):\n        self.name = name\n        self.price = price\n\n    def discounted(self, percent):\n        \"\"\"Return the price with PERCENT taken off.\"\"\"\n        return self.price * (100 - percent) / 100\n\n    def display_name(self):\n        \"\"\"Return the name shown to a customer.\"\"\"\n        return self.name.upper()\n\n    def duplicate(self):\n        \"\"\"Return an independent copy of this widget.\"\"\"\n        return Widget(self.name, self.price)\n\n\ndef build_catalogue(names, price):\n    \"\"\"Create one Widget per entry of NAMES, each costing PRICE.\"\"\"\n    return [Widget(name, price) for name in names]\n\n\ndef total_price(widgets):\n    \"\"\"Sum the price of every widget in WIDGETS.\"\"\"\n    return sum(widget.price for widget in widgets)\n\n\ncatalogue = build_catalogue([\"bolt\", \"nut\", \"washer\"], 12)\nfirst = catalogue[0]\nprint(first.dis)\nprint(total_price(catalogue))\nprint(first.duplicate)\nsample = Widget(\"bolt\", 12)\n")"#
         ]],
@@ -160,7 +158,7 @@ fn completing_an_attribute_posts_the_whole_buffer_and_inserts_the_candidate() ->
 }
 
 fn navigating_to_a_definition_an_assignment_and_every_reference() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "navigating_to_a_definition_an_assignment_and_every_reference",
         r##"
         ;; With point on `first', M-. infers its type and jumps to the class,
@@ -192,7 +190,6 @@ fn navigating_to_a_definition_an_assignment_and_every_reference() -> ParityBatch
                                              (point-min) (point-max))))))
           :requests (ana-test-request-methods)))
     "##,
-        true,
         expect![[
             r#"OK (:start (36 8) :symbol "first" :definition (:here (:line 4 :column 6 :text "class Widget:") :buffer "inventory.py" :window-buffer "inventory.py") :back (:line 36 :column 8 :text "print(first.dis)") :assignment (:line 35 :column 0 :text "first = catalogue[0]") :references (:mode xref--xref-buffer-mode :window t :text "[SANDBOX]/project/inventory.py\n35:first = catalogue[0]\n36:print(first.dis)\n38:print(first.dup)\n") :requests (("infer" 36 8) ("goto" 36 8) ("get_references" 36 8)))"#
         ]],
@@ -200,7 +197,7 @@ fn navigating_to_a_definition_an_assignment_and_every_reference() -> ParityBatch
 }
 
 fn the_synchronous_xref_backend_answers_or_reports_that_it_timed_out() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_synchronous_xref_backend_answers_or_reports_that_it_timed_out",
         r##"
         ;; anaconda-mode also registers an xref backend, and that path is
@@ -224,7 +221,6 @@ fn the_synchronous_xref_backend_answers_or_reports_that_it_timed_out() -> Parity
           :point-after (ana-test-here)
           :requests (ana-test-request-methods)))
     "##,
-        true,
         expect![[
             r#"OK (:backend (:hook (anaconda-mode-xref-backend t) :selected anaconda :timeout 2) :answered (:line 29 :column 4 :text "def total_price(widgets):") :timed-out (:signal error :data ("infer request timed out")) :point-after (:line 36 :column 8 :text "print(first.dis)") :requests (("infer" 37 12) ("infer" 36 8)))"#
         ]],
@@ -232,7 +228,7 @@ fn the_synchronous_xref_backend_answers_or_reports_that_it_timed_out() -> Parity
 }
 
 fn reading_documentation_renders_the_anaconda_buffer_or_says_there_is_none() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "reading_documentation_renders_the_anaconda_buffer_or_says_there_is_none",
         r##"
         ;; M-? on `Widget' pops up *Anaconda* with the module name in bold, the
@@ -264,15 +260,15 @@ fn reading_documentation_renders_the_anaconda_buffer_or_says_there_is_none() -> 
                        :messages (ana-test-messages "^No documentation available$")))
           :requests (ana-test-request-methods)))
     "##,
-        true,
         expect![[
             r#"OK (:documented (:mode fundamental-mode :view-mode t :read-only t :point 1 :window t :text "inventory\nWidget(name, price)\n\nA catalogue item with a name and a price.\n\n" :faces ((bold "inventory") (nil "\nWidget(name, price)\n\nA catalogue item with a name and a price.\n\n"))) :selected-after "*Anaconda*" :undocumented (:buffer nil :messages ("No documentation available")) :requests (("show_doc" 39 11) ("show_doc" 37 29)))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn eldoc_highlights_the_argument_under_point_and_trims_to_one_line_on_request() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "eldoc_highlights_the_argument_under_point_and_trims_to_one_line_on_request",
         r##"
         ;; With `anaconda-eldoc-mode' on, asking for documentation inside
@@ -326,15 +322,15 @@ fn eldoc_highlights_the_argument_under_point_and_trims_to_one_line_on_request() 
                     :text (substring-no-properties captured)))
             :requests (ana-test-request-methods))))
     "##,
-        true,
         expect![[
             r#"OK (:registered (:buffer-local (anaconda-mode-eldoc-function python-eldoc-function t) :global (eldoc-show-help-at-pt) :eldoc-mode t) :second-argument (:text "Widget(name, price)" :faces ((font-lock-function-name-face "Widget") (nil "(name, ") (eldoc-highlight-function-argument "price") (nil ")"))) :first-argument (:text "Widget(name, price)" :faces ((font-lock-function-name-face "Widget") (nil "(") (eldoc-highlight-function-argument "name") (nil ", price)"))) :echo-area-message nil :single-line (:frame-width 80 :length 80 :text "print(*values: object, sep: Optional[str]=..., end: Optional[str]=..., file: Opt") :multi-line (:length 127 :text "print(*values: object, sep: Optional[str]=..., end: Optional[str]=..., file: Optional[SupportsWrite[str]]=..., flush: bool=...)") :requests (("eldoc" 39 24) ("eldoc" 39 17) ("eldoc" 36 15) ("eldoc" 36 15)))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn a_malformed_body_a_server_error_and_a_closed_listener_each_reach_the_user() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_malformed_body_a_server_error_and_a_closed_listener_each_reach_the_user",
         r##"
         ;; Three ways the transport can go wrong once the server is up.  A body
@@ -383,16 +379,16 @@ fn a_malformed_body_a_server_error_and_a_closed_listener_each_reach_the_user() -
                      "^\\(Cannot read anaconda-mode server response\\|Server error.*\\)$")
           :requests (ana-test-request-methods)))
     "##,
-        true,
         expect![[
             r##"OK (:malformed (:here (:line 36 :column 8 :text "print(first.dis)") :response (:point 1 :text "# status: nil\n# point: 109\nHTTP/1.1 200 OK\nServer: BaseHTTP/0.6 Python/3.13.12\nDate: Mon, 28 Jul 2026 00:00:00 GMT\nContent-Length: 41\n\n<html>anaconda is not running here</html>")) :server-error (:here (:line 36 :column 8 :text "print(first.dis)") :response-buffer nil) :listener-closed (:here (:line 36 :column 8 :text "print(first.dis)") :server-still-running t :requests 2 :response "# status: (:error (error connection-failed deleted\n :host 127.0.0.1 :service PORT) :error (error connection-failed failed with code 111\n :host 127.0.0.1 :service PORT))\n# point: 1\n") :messages ("Cannot read anaconda-mode server response" "Server error: AttributeError(\"'NoneType' object has no attribute 'start_pos'\") - see *anaconda-mode* for more information.") :requests (("infer" 36 8) ("infer" 36 8)))"##
         ]],
     )
+    .fresh_process()
 }
 
 fn a_python_that_cannot_start_the_server_leaves_its_traceback_and_answers_nothing()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_python_that_cannot_start_the_server_leaves_its_traceback_and_answers_nothing",
         r##"
         ;; The common first-run failure: the interpreter is there but cannot
@@ -454,16 +450,15 @@ fn a_python_that_cannot_start_the_server_leaves_its_traceback_and_answers_nothin
             (when (buffer-live-p buffer) (kill-buffer buffer))
             (ana-test-teardown)))
     "##,
-        true,
         expect![[
             r#"OK (:rpc-disabled (:here (:line 36 :column 8 :text "print(first.dis)") :process nil :launches 0 :requests 0) :without-jedi (:here (:line 36 :column 8 :text "print(first.dis)") :bound nil :port nil :status exit :exit 1 :requests 0 :process-buffer (:text "Collecting jedi==0.19.2\nERROR: No matching distribution found for jedi==0.19.2\nTraceback (most recent call last):\n  File \"anaconda-mode.py\", line 113, in <module>\n    import jedi\nModuleNotFoundError: No module named 'jedi'\n" :faces ((nil "Collecting jedi==0.19.2\n") ((:foreground "red3") "ERROR: No matching distribution found for jedi==0.19.2") (nil "\nTraceback (most recent call last):\n  File \"anaconda-mode.py\", line 113, in <module>\n    import jedi\nModuleNotFoundError: No module named 'jedi'\n")))) :missing-interpreter (:here (:line 36 :column 8 :text "print(first.dis)") :bound nil :status exit :exit 127) :launches (("[PACKAGE]/anaconda-mode.py" "[ORACLE-SANDBOX]/anaconda-install/0.1.17" "127.0.0.1" "" "cwd [ORACLE-SANDBOX]/anaconda-install")))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         starting_the_server_builds_the_documented_command_line_and_binds_its_port(),
         moving_the_server_to_another_address_and_virtualenv_restarts_it(),
         completing_an_attribute_posts_the_whole_buffer_and_inserts_the_candidate(),
@@ -473,6 +468,5 @@ fn workflows_public_surface_batch() {
         eldoc_highlights_the_argument_under_point_and_trims_to_one_line_on_request(),
         a_malformed_body_a_server_error_and_a_closed_listener_each_reach_the_user(),
         a_python_that_cannot_start_the_server_leaves_its_traceback_and_answers_nothing(),
-    ];
-    assert_anaconda_mode_batch(&cases);
+    ]
 }

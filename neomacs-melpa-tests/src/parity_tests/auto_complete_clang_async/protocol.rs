@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_clang_async_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_clang_async_source_protocol_widens_and_uses_unibyte_length_for_unicode()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_async_source_protocol_widens_and_uses_unibyte_length_for_unicode",
         r##"(with-temp-buffer
                            (insert
@@ -32,7 +32,6 @@ fn auto_complete_clang_async_source_protocol_widens_and_uses_unibyte_length_for_
                                 (point-min)
                                 (point-max)
                                 (nreverse chunks)))))"##,
-        true,
         expect![[
             r#"OK (8 22 ((fixture-process "source_length:29\n" 17 17) (fixture-process "prefix\nint naïve = 1;\nsuffix" 29 28) (fixture-process "\n\n" 2 2)))"#
         ]],
@@ -41,7 +40,7 @@ fn auto_complete_clang_async_source_protocol_widens_and_uses_unibyte_length_for_
 
 fn auto_complete_clang_async_reparse_protocol_sends_source_and_command_only_to_running_process()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_async_reparse_protocol_sends_source_and_command_only_to_running_process",
         r##"(mapcar
                            (lambda (status)
@@ -67,7 +66,6 @@ fn auto_complete_clang_async_reparse_protocol_sends_source_and_command_only_to_r
                              stop
                              exit
                              signal))"##,
-        true,
         expect![[
             r#"OK ((run #1=("REPARSE\n\n") ("SOURCEFILE\n" "source_length:11\n" "int value;\n" "\n\n" . #1#)) (stop nil nil) (exit nil nil) (signal nil nil))"#
         ]],
@@ -76,7 +74,7 @@ fn auto_complete_clang_async_reparse_protocol_sends_source_and_command_only_to_r
 
 fn auto_complete_clang_async_completion_protocol_sends_position_prefix_adjustment_and_full_source()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_async_completion_protocol_sends_position_prefix_adjustment_and_full_source",
         r##"(with-temp-buffer
                            (insert
@@ -101,7 +99,6 @@ fn auto_complete_clang_async_completion_protocol_sends_position_prefix_adjustmen
                                 (point)
                                 ac-prefix
                                 (nreverse chunks)))))"##,
-        true,
         expect![[
             r#"OK (29 "mem" ("COMPLETION\n" "row:2\ncolumn:13\n" "source_length:31\n" "int main() {\n  object.member\n}\n" "\n\n"))"#
         ]],
@@ -110,7 +107,7 @@ fn auto_complete_clang_async_completion_protocol_sends_position_prefix_adjustmen
 
 fn auto_complete_clang_async_syntaxcheck_protocol_sends_command_then_exact_full_source()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_async_syntaxcheck_protocol_sends_command_then_exact_full_source",
         r##"(with-temp-buffer
                            (insert
@@ -124,14 +121,13 @@ fn auto_complete_clang_async_syntaxcheck_protocol_sends_command_then_exact_full_
                                (ac-clang-send-syntaxcheck-request
                                 'fixture-process)
                                (nreverse chunks))))"##,
-        true,
         expect![[r#"OK ("SYNTAXCHECK\n" "source_length:15\n" "int broken = ;\n" "\n\n")"#]],
     )
 }
 
 fn auto_complete_clang_async_cmdline_protocol_serializes_real_built_arguments_in_order()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_async_cmdline_protocol_serializes_real_built_arguments_in_order",
         r##"(with-temp-buffer
                            (c++-mode)
@@ -154,7 +150,6 @@ fn auto_complete_clang_async_cmdline_protocol_serializes_real_built_arguments_in
                                (list
                                 (ac-clang-build-complete-args)
                                 (nreverse chunks)))))"##,
-        true,
         expect![[
             r#"OK (("-cc1" "-fsyntax-only" "-x" "c++" "-Iinclude" "-DVALUE=two words" "-Iinclude" "-include-pch" "[ORACLE-TMPDIR]/headers/prefix.pch") ((fixture-process . "CMDLINEARGS\n") (fixture-process . "num_args:9\n") (fixture-process . "-cc1 ") (fixture-process . "-fsyntax-only ") (fixture-process . "-x ") (fixture-process . "c++ ") (fixture-process . "-Iinclude ") (fixture-process . "-DVALUE=two words ") (fixture-process . "-Iinclude ") (fixture-process . "-include-pch ") (fixture-process . "[ORACLE-TMPDIR]/headers/prefix.pch ") (fixture-process . "\n")))"#
         ]],
@@ -163,7 +158,7 @@ fn auto_complete_clang_async_cmdline_protocol_serializes_real_built_arguments_in
 
 fn auto_complete_clang_async_update_cmdline_accepts_lists_and_reports_non_lists_without_sending()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_async_update_cmdline_accepts_lists_and_reports_non_lists_without_sending",
         r##"(mapcar
                            (lambda (value)
@@ -198,7 +193,6 @@ fn auto_complete_clang_async_update_cmdline_accepts_lists_and_reports_non_lists_
                              ("-Wall")
                              "-Wall"
                              42))"##,
-        true,
         expect![[
             r#"OK ((nil #1=("\n") ("CMDLINEARGS\n" "num_args:4\n" "-cc1 " "-fsyntax-only " "-x " "c++ " . #1#) nil) (("-Wall") #2=("\n") ("CMDLINEARGS\n" "num_args:5\n" "-cc1 " "-fsyntax-only " "-x " "c++ " "-Wall " . #2#) nil) ("-Wall" #3=("`ac-clang-cflags' should be a list of strings") nil #3#) (42 #4=("`ac-clang-cflags' should be a list of strings") nil #4#))"#
         ]],
@@ -206,7 +200,7 @@ fn auto_complete_clang_async_update_cmdline_accepts_lists_and_reports_non_lists_
 }
 
 fn auto_complete_clang_async_shutdown_protocol_sends_only_for_running_process() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_async_shutdown_protocol_sends_only_for_running_process",
         r##"(mapcar
                            (lambda (status)
@@ -231,7 +225,6 @@ fn auto_complete_clang_async_shutdown_protocol_sends_only_for_running_process() 
                              stop
                              exit
                              signal))"##,
-        true,
         expect![[
             r#"OK ((run #1=((fixture-process "SHUTDOWN\n")) #1#) (stop nil nil) (exit nil nil) (signal nil nil))"#
         ]],
@@ -240,7 +233,7 @@ fn auto_complete_clang_async_shutdown_protocol_sends_only_for_running_process() 
 
 fn auto_complete_clang_async_append_output_advances_real_process_marker_without_moving_user_point()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_async_append_output_advances_real_process_marker_without_moving_user_point",
         r##"(let* ((pair
                                  (acclang-test-start-cat
@@ -271,14 +264,13 @@ fn auto_complete_clang_async_append_output_advances_real_process_marker_without_
                              (acclang-test-finish-process
                               process
                               buffer)))"##,
-        true,
         expect![[r#"OK (1 14 14 "before|OUTPUTafter")"#]],
     )
 }
 
 fn auto_complete_clang_async_parse_completion_results_reads_real_process_buffer_with_saved_prefix()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_async_parse_completion_results_reads_real_process_buffer_with_saved_prefix",
         r##"(let* ((pair
                                  (acclang-test-start-cat
@@ -303,14 +295,12 @@ fn auto_complete_clang_async_parse_completion_results_reads_real_process_buffer_
                              (acclang-test-finish-process
                               process
                               buffer)))"##,
-        true,
         expect![[r#"OK (("observe" "[#void#]observe()" nil) ("object" "[#Type#]object" nil))"#]],
     )
 }
 
-#[test]
-fn protocol_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn protocol_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_clang_async_source_protocol_widens_and_uses_unibyte_length_for_unicode(),
         auto_complete_clang_async_reparse_protocol_sends_source_and_command_only_to_running_process(),
         auto_complete_clang_async_completion_protocol_sends_position_prefix_adjustment_and_full_source(),
@@ -320,6 +310,5 @@ fn protocol_public_surface_batch() {
         auto_complete_clang_async_shutdown_protocol_sends_only_for_running_process(),
         auto_complete_clang_async_append_output_advances_real_process_marker_without_moving_user_point(),
         auto_complete_clang_async_parse_completion_results_reads_real_process_buffer_with_saved_prefix(),
-    ];
-    assert_auto_complete_clang_async_batch(&cases);
+    ]
 }

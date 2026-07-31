@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asciidoc_mode_batch};
+use super::ParityBatchCase;
 
 fn construct_dense_document_applies_exact_semantic_faces_and_interaction_properties()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "construct_dense_document_applies_exact_semantic_faces_and_interaction_properties",
         r##"(with-temp-buffer
   (insert
@@ -99,7 +99,6 @@ fn construct_dense_document_applies_exact_semantic_faces_and_interaction_propert
         ("cell-specifier" "a| cell" 0)
         ("block-macro" "toc::" 0)
         ("comment" "// final comment" 0))))))"##,
-        true,
         expect![[
             r#"OK "((\"document-title\" 1 asciidoc-document-title-face nil nil nil nil nil) (\"attribute-key\" 23 asciidoc-metadata-key-face nil nil nil nil nil) (\"attribute-value\" 31 asciidoc-metadata-value-face nil nil nil nil nil) (\"section-title\" 45 asciidoc-title-1-face nil nil nil nil nil) (\"bold\" 70 bold nil nil nil nil nil) (\"italic\" 78 italic nil nil nil nil nil) (\"code\" 88 asciidoc-code-face nil nil nil nil nil) (\"highlight\" 96 asciidoc-highlight-face nil nil nil nil nil) (\"superscript\" 110 asciidoc-superscript-face (raise 0.4) nil nil nil nil) (\"subscript\" 120 asciidoc-subscript-face (raise -0.25) nil nil nil nil) (\"role\" 129 font-lock-preprocessor-face nil nil nil nil nil) (\"role-text\" 140 asciidoc-underline-face nil nil nil nil nil) (\"quote-marker\" 157 asciidoc-markup-face nil nil nil nil nil) (\"quote-text\" 159 nil nil nil nil nil nil) (\"url\" 179 asciidoc-url-face nil t asciidoc-link-mouse-face t nil) (\"link-label\" 199 asciidoc-link-face nil t asciidoc-link-mouse-face t nil) (\"xref\" 212 asciidoc-cross-reference-face nil t asciidoc-link-mouse-face t nil) (\"footnote-marker\" 226 asciidoc-footnote-marker-face nil nil nil nil nil) (\"footnote-body\" 236 asciidoc-footnote-text-face nil nil nil nil nil) (\"anchor\" 250 asciidoc-anchor-face nil nil nil nil nil) (\"description-term\" 259 font-lock-keyword-face nil nil nil nil nil) (\"description-marker\" 262 asciidoc-markup-face nil nil nil nil nil) (\"list-marker\" 292 asciidoc-markup-face nil nil nil nil nil) (\"checkbox\" 294 font-lock-constant-face nil nil nil nil nil) (\"admonition-label\" 308 (asciidoc-admonition-note-label-face . #1=(asciidoc-admonition-note-face)) nil nil nil nil t) (\"admonition-body\" 314 #1# nil nil nil nil t) (\"admonition-continuation\" 339 (asciidoc-admonition-note-face) nil nil nil nil t) (\"source-attribute\" 373 font-lock-preprocessor-face nil nil nil nil nil) (\"listing-fence\" 392 asciidoc-markup-face nil nil nil nil nil) (\"native-keyword\" 398 font-lock-keyword-face nil nil nil nil nil) (\"table-fence\" 431 asciidoc-markup-face nil nil nil nil nil) (\"cell-specifier\" 436 font-lock-preprocessor-face nil nil nil nil nil) (\"block-macro\" 450 font-lock-function-call-face nil nil nil nil nil) (\"comment\" 458 font-lock-comment-face nil nil nil nil nil))""#
         ]],
@@ -107,7 +106,7 @@ fn construct_dense_document_applies_exact_semantic_faces_and_interaction_propert
 }
 
 fn fontification_is_idempotent_across_flush_and_reparse_for_a_mixed_document() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "fontification_is_idempotent_across_flush_and_reparse_for_a_mixed_document",
         r##"(with-temp-buffer
   (insert
@@ -177,14 +176,13 @@ fn fontification_is_idempotent_across_flush_and_reparse_for_a_mixed_document() -
           (delete-dups
            (delq nil
                  (mapcar #'cadr after)))))))))"##,
-        true,
         expect!["OK (t t t t 16)"],
     )
 }
 
 fn source_language_extraction_and_mode_resolution_cover_options_aliases_and_fallbacks()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "source_language_extraction_and_mode_resolution_cover_options_aliases_and_fallbacks",
         r##"(list
  (mapcar
@@ -227,7 +225,6 @@ fn source_language_extraction_and_mode_resolution_cover_options_aliases_and_fall
            . lisp-interaction-mode))))
    (asciidoc--code-block-lang-mode
     "mapped")))"##,
-        true,
         expect![[
             r#"OK ((("source,ruby" . "ruby") (",js" . "js") ("source%nowrap,python" . "python") (" source , emacs-lisp " . "emacs-lisp") ("source,lang,linenums" . "lang") ("source,language=rust") ("NOTE") ("quote,ruby") ("source") ("")) (("direct" . emacs-lisp-mode) ("DIRECT" . emacs-lisp-mode) ("candidates" . emacs-lisp-mode) ("emacs-lisp" . emacs-lisp-mode) ("json") ("missing")) lisp-interaction-mode)"#
         ]],
@@ -236,7 +233,7 @@ fn source_language_extraction_and_mode_resolution_cover_options_aliases_and_fall
 
 fn native_source_fontification_honors_enablement_size_language_and_recursion_guards()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "native_source_fontification_honors_enablement_size_language_and_recursion_guards",
         r##"(cl-labels
     ((inspect
@@ -276,7 +273,6 @@ fn native_source_fontification_honors_enablement_size_language_and_recursion_gua
    (inspect
     t "[source,asciidoc]"
     "== Nested" "Nested")))"##,
-        true,
         expect![[
             r#"OK ((font-lock-keyword-face #("= Source Matrix\n\n[source,emacs-lisp]\n----\n(defun demo () nil)\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 17 37 (face font-lock-preprocessor-face) 37 41 (face asciidoc-markup-face) 42 43 (face nil) 43 48 (face font-lock-keyword-face) 48 49 (face nil) 49 53 (face font-lock-function-name-face) 53 62 (face nil) 62 66 (face asciidoc-markup-face))) (asciidoc-code-face #("= Source Matrix\n\n[source,emacs-lisp]\n----\n(defun demo () nil)\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 17 37 (face font-lock-preprocessor-face) 37 41 (face asciidoc-markup-face) 42 62 (face asciidoc-code-face) 62 66 (face asciidoc-markup-face))) (asciidoc-code-face #("= Source Matrix\n\n[source,emacs-lisp]\n----\n(defun demo () nil)\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 17 37 (face font-lock-preprocessor-face) 37 41 (face asciidoc-markup-face) 42 62 (face asciidoc-code-face) 62 66 (face asciidoc-markup-face))) (asciidoc-code-face #("= Source Matrix\n\n[source,nosuchlang]\n----\nplain body\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 17 37 (face font-lock-preprocessor-face) 37 41 (face asciidoc-markup-face) 42 53 (face asciidoc-code-face) 53 57 (face asciidoc-markup-face))) (asciidoc-code-face #("= Source Matrix\n\n\n----\n(defun demo () nil)\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 18 22 (face asciidoc-markup-face) 23 43 (face asciidoc-code-face) 43 47 (face asciidoc-markup-face))) (asciidoc-code-face #("= Source Matrix\n\n[source,asciidoc]\n----\n== Nested\n----\n" 0 1 (face asciidoc-document-title-face) 2 16 (face asciidoc-document-title-face) 17 35 (face font-lock-preprocessor-face) 35 39 (face asciidoc-markup-face) 40 50 (face asciidoc-code-face) 50 54 (face asciidoc-markup-face))))"#
         ]],
@@ -285,7 +281,7 @@ fn native_source_fontification_honors_enablement_size_language_and_recursion_gua
 
 fn editing_an_admonition_clears_multiline_background_and_preserves_inline_faces() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "editing_an_admonition_clears_multiline_background_and_preserves_inline_faces",
         r##"(with-temp-buffer
   (insert
@@ -326,7 +322,6 @@ fn editing_an_admonition_clears_multiline_background_and_preserves_inline_faces(
         (faces-at "Continue")
         (faces-at "Plain"))
        (buffer-string)))))"##,
-        true,
         expect![[
             r#"OK ((((asciidoc-admonition-note-label-face asciidoc-admonition-note-face) t) ((asciidoc-admonition-note-face asciidoc-code-face) t) ((asciidoc-admonition-note-face) t) (nil nil)) ((nil nil) (asciidoc-code-face nil) (nil nil) (nil nil)) #("= Editing\n\nTEXT: inspect `code` first.\nContinue on this line.\n\nPlain paragraph.\n" 0 1 (face asciidoc-document-title-face) 2 10 (face asciidoc-document-title-face) 25 31 (face asciidoc-code-face)))"#
         ]],
@@ -335,7 +330,7 @@ fn editing_an_admonition_clears_multiline_background_and_preserves_inline_faces(
 
 fn inline_parser_ranges_exclude_block_markers_and_macro_attribute_urls_stay_plain()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "inline_parser_ranges_exclude_block_markers_and_macro_attribute_urls_stay_plain",
         r##"(with-temp-buffer
   (insert
@@ -387,7 +382,6 @@ fn inline_parser_ranges_exclude_block_markers_and_macro_attribute_urls_stay_plai
               font-lock-extra-managed-props))
       '(display keymap mouse-face
         follow-link help-echo)))))"##,
-        true,
         expect![[
             r#"OK ("document" "inline" nil nil ((20 . 39) (45 . 63) (69 . 121) (121 . 152)) nil nil nil ((display . #1=(keymap . #2=(mouse-face . #3=(follow-link . #4=(help-echo))))) #1# #2# #3# #4#))"#
         ]],
@@ -396,7 +390,7 @@ fn inline_parser_ranges_exclude_block_markers_and_macro_attribute_urls_stay_plai
 
 fn large_construct_dense_handbook_fontifies_stably_with_both_parsers_and_native_code()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "large_construct_dense_handbook_fontifies_stably_with_both_parsers_and_native_code",
         r##"(with-temp-buffer
   (insert
@@ -494,16 +488,14 @@ fn large_construct_dense_handbook_fontifies_stably_with_both_parsers_and_native_
          (secure-hash
           'sha256
           (prin1-to-string after)))))))"##,
-        true,
         expect![[
             r#"OK (10318 532 510 t nil nil 24 24 48 "ba24d017bc1dee85e8946dd358bc978598b44a647739b133a3135dad5686a6d8")"#
         ]],
     )
 }
 
-#[test]
-fn font_lock_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn font_lock_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         construct_dense_document_applies_exact_semantic_faces_and_interaction_properties(),
         fontification_is_idempotent_across_flush_and_reparse_for_a_mixed_document(),
         source_language_extraction_and_mode_resolution_cover_options_aliases_and_fallbacks(),
@@ -511,6 +503,5 @@ fn font_lock_public_surface_batch() {
         editing_an_admonition_clears_multiline_background_and_preserves_inline_faces(),
         inline_parser_ranges_exclude_block_markers_and_macro_attribute_urls_stay_plain(),
         large_construct_dense_handbook_fontifies_stably_with_both_parsers_and_native_code(),
-    ];
-    assert_asciidoc_mode_batch(&cases);
+    ]
 }

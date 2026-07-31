@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_dictionary_batch};
+use super::ParityBatchCase;
 
 fn auto_dictionary_idle_timer_drives_real_detection_and_dictionary_switch() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dictionary_idle_timer_drives_real_detection_and_dictionary_switch",
         r##"(with-temp-buffer
          (let ((scheduled nil)
@@ -47,14 +47,13 @@ fn auto_dictionary_idle_timer_drives_real_detection_and_dictionary_switch() -> P
               adict-lighter
               (numberp adict-last-check)
               adict-timer))))"##,
-        true,
         expect![[r#"OK (t (0.25 t adict-guess-dictionary-maybe) ("en") "en" " en" t idle-timer)"#]],
     )
 }
 
 fn auto_dictionary_automatic_switch_updates_localized_text_without_cancelling_timer()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dictionary_automatic_switch_updates_localized_text_without_cancelling_timer",
         r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en")
@@ -93,7 +92,6 @@ fn auto_dictionary_automatic_switch_updates_localized_text_without_cancelling_ti
                 adict-lighter
                 (length
                  adict-conditional-overlay-list))))))"##,
-        true,
         expect![[
             r#"OK ("de" "de" "Alice schreibt\n\nzunächst zwei deutsche Wörter sind dafür und nicht englisch" ("de") nil periodic " de" 1)"#
         ]],
@@ -102,7 +100,7 @@ fn auto_dictionary_automatic_switch_updates_localized_text_without_cancelling_ti
 
 fn auto_dictionary_guess_same_effective_dictionary_updates_tick_without_hook_or_ispell_call()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dictionary_guess_same_effective_dictionary_updates_tick_without_hook_or_ispell_call",
         r##"(with-temp-buffer
          (insert
@@ -133,13 +131,12 @@ fn auto_dictionary_guess_same_effective_dictionary_updates_tick_without_hook_or_
                 hooks
                 ispell-local-dictionary
                 ispell-dictionary)))))"##,
-        true,
         expect![[r#"OK ("en" t 0 0 "en" "de")"#]],
     )
 }
 
 fn auto_dictionary_idle_abort_preserves_dictionary_last_check_and_hooks() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dictionary_idle_abort_preserves_dictionary_last_check_and_hooks",
         r##"(with-temp-buffer
          (insert
@@ -168,14 +165,13 @@ fn auto_dictionary_idle_abort_preserves_dictionary_last_check_and_hooks() -> Par
               adict-last-check
               changes
               hooks))))"##,
-        true,
         expect![[r#"OK (nil "en" :never 0 0)"#]],
     )
 }
 
 fn auto_dictionary_threshold_callback_waits_then_switches_after_practical_edit() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dictionary_threshold_callback_waits_then_switches_after_practical_edit",
         r##"(with-temp-buffer
          (let ((ispell-local-dictionary "en")
@@ -208,13 +204,12 @@ fn auto_dictionary_threshold_callback_waits_then_switches_after_practical_edit()
                 (nreverse changes)
                 ispell-local-dictionary
                 (numberp adict-last-check))))))"##,
-        true,
         expect![[r#"OK (nil ("fr") "fr" t)"#]],
     )
 }
 
 fn auto_dictionary_program_mode_predicate_scores_only_comment_words() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dictionary_program_mode_predicate_scores_only_comment_words",
         r##"(with-temp-buffer
          (emacs-lisp-mode)
@@ -231,14 +226,13 @@ fn auto_dictionary_program_mode_predicate_scores_only_comment_words() -> ParityB
              (adict-evaluate-buffer)
              nil)
             (adict-guess-buffer-language))))"##,
-        true,
         expect![[r#"OK ((3 7 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0) "en")"#]],
     )
 }
 
 fn auto_dictionary_custom_region_mapping_returns_and_activates_configured_dictionary_name()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dictionary_custom_region_mapping_returns_and_activates_configured_dictionary_name",
         r##"(with-temp-buffer
          (insert
@@ -268,14 +262,13 @@ fn auto_dictionary_custom_region_mapping_returns_and_activates_configured_dictio
               (nreverse changes)
               ispell-local-dictionary
               adict-lighter))))"##,
-        true,
         expect![[r#"OK ("en" "en_GB" "en_GB" ("en_GB") "en_GB" " en")"#]],
     )
 }
 
 fn auto_dictionary_repeated_real_document_rewrites_switch_english_french_esperanto()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dictionary_repeated_real_document_rewrites_switch_english_french_esperanto",
         r##"(with-temp-buffer
          (let ((ispell-local-dictionary "de")
@@ -308,13 +301,12 @@ fn auto_dictionary_repeated_real_document_rewrites_switch_english_french_esperan
                     (nreverse changes)
                     ispell-local-dictionary
                     adict-lighter)))))))"##,
-        true,
         expect![[r#"OK ("en" "fr" "eo" ("en" "fr" "eo") "eo" " eo")"#]],
     )
 }
 
 fn auto_dictionary_killing_enabled_buffer_cancels_exact_scheduled_timer_once() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dictionary_killing_enabled_buffer_cancels_exact_scheduled_timer_once",
         r##"(let ((buffer
                 (generate-new-buffer
@@ -335,14 +327,13 @@ fn auto_dictionary_killing_enabled_buffer_cancels_exact_scheduled_timer_once() -
            (list
             (buffer-live-p buffer)
             (nreverse cancelled))))"##,
-        true,
         expect!["OK (nil (scheduled-timer))"],
     )
 }
 
 fn auto_dictionary_conditional_foreign_signature_does_not_overpower_authored_language()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_dictionary_conditional_foreign_signature_does_not_overpower_authored_language",
         r##"(with-temp-buffer
          (let ((ispell-local-dictionary "de"))
@@ -361,16 +352,14 @@ fn auto_dictionary_conditional_foreign_signature_does_not_overpower_authored_lan
             (adict-guess-buffer-language)
             (length
              adict-conditional-overlay-list))))"##,
-        true,
         expect![[
             r#"OK ("bonjour vous allez revoir cette nouvelle française\n\nhello dear friend you are welcome and we have news" (3 7 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0) "en" 1)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_dictionary_idle_timer_drives_real_detection_and_dictionary_switch(),
         auto_dictionary_automatic_switch_updates_localized_text_without_cancelling_timer(),
         auto_dictionary_guess_same_effective_dictionary_updates_tick_without_hook_or_ispell_call(),
@@ -381,6 +370,5 @@ fn workflows_public_surface_batch() {
         auto_dictionary_repeated_real_document_rewrites_switch_english_french_esperanto(),
         auto_dictionary_killing_enabled_buffer_cancels_exact_scheduled_timer_once(),
         auto_dictionary_conditional_foreign_signature_does_not_overpower_authored_language(),
-    ];
-    assert_auto_dictionary_batch(&cases);
+    ]
 }

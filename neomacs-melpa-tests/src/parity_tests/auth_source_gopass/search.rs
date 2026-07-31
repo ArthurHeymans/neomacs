@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auth_source_gopass_batch};
+use super::ParityBatchCase;
 
 fn auth_source_gopass_search_trims_a_real_single_line_secret() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_search_trims_a_real_single_line_secret",
         r##"(let (events)
          (cl-letf
@@ -21,15 +21,15 @@ fn auth_source_gopass_search_trims_a_real_single_line_secret() -> ParityBatchCas
              :user "alice@example"
              :port 587)
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (((:user "alice@example" :secret "correct horse battery staple")) ((:find "gopass") (:shell "gopass show -o accounts/smtp.example/alice\\@example")))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auth_source_gopass_search_preserves_internal_newlines_and_unicode() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_search_preserves_internal_newlines_and_unicode",
         r##"(cl-letf
          (((symbol-function 'executable-find)
@@ -41,13 +41,13 @@ fn auth_source_gopass_search_preserves_internal_newlines_and_unicode() -> Parity
          (auth-source-gopass-search
           :host "notes.example"
           :user "λ-user"))"##,
-        true,
         expect![[r#"OK ((:user "λ-user" :secret "first line\n第二行\nthird line"))"#]],
     )
+    .fresh_process()
 }
 
 fn auth_source_gopass_search_returns_an_empty_secret_for_whitespace_output() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_search_returns_an_empty_secret_for_whitespace_output",
         r##"(cl-letf
          (((symbol-function 'executable-find)
@@ -59,13 +59,13 @@ fn auth_source_gopass_search_returns_an_empty_secret_for_whitespace_output() -> 
          (auth-source-gopass-search
           :host "empty.example"
           :user "empty-user"))"##,
-        true,
         expect![[r#"OK ((:user "empty-user" :secret ""))"#]],
     )
+    .fresh_process()
 }
 
 fn auth_source_gopass_search_result_uses_requested_user_verbatim() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_search_result_uses_requested_user_verbatim",
         r##"(let ((auth-source-gopass-construct-query-path
                 (lambda (&rest _arguments)
@@ -83,7 +83,6 @@ fn auth_source_gopass_search_result_uses_requested_user_verbatim() -> ParityBatc
                :host "host"
                :user user))
             '("alice" nil user-symbol 17))))"##,
-        true,
         expect![[
             r#"OK (((:user "alice" :secret "secret")) ((:user nil :secret "secret")) ((:user user-symbol :secret "secret")) ((:user 17 :secret "secret")))"#
         ]],
@@ -91,7 +90,7 @@ fn auth_source_gopass_search_result_uses_requested_user_verbatim() -> ParityBatc
 }
 
 fn auth_source_gopass_search_ignores_unconsumed_auth_source_keys() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_search_ignores_unconsumed_auth_source_keys",
         r##"(let (captured)
          (let ((auth-source-gopass-construct-query-path
@@ -117,7 +116,6 @@ fn auth_source_gopass_search_ignores_unconsumed_auth_source_keys() -> ParityBatc
                :create t
                :delete :ignored)
               captured))))"##,
-        true,
         expect![[
             r#"OK (((:user "alice" :secret "secret")) (:backend :type "host" "alice" "submission"))"#
         ]],
@@ -125,7 +123,7 @@ fn auth_source_gopass_search_ignores_unconsumed_auth_source_keys() -> ParityBatc
 }
 
 fn auth_source_gopass_search_checks_the_configured_executable() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_search_checks_the_configured_executable",
         r##"(let ((auth-source-gopass-executable
                 "gopass-company")
@@ -144,15 +142,15 @@ fn auth_source_gopass_search_checks_the_configured_executable() -> ParityBatchCa
              :host "mail"
              :user "alice")
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (((:user "alice" :secret "secret")) ((:find "gopass-company") (:shell "gopass-company show -o accounts/mail/alice")))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auth_source_gopass_missing_executable_warns_and_skips_the_shell() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_missing_executable_warns_and_skips_the_shell",
         r##"(let ((auth-source-gopass-executable
                 "missing-gopass")
@@ -180,7 +178,6 @@ fn auth_source_gopass_missing_executable_warns_and_skips_the_shell() -> ParityBa
              :host "mail"
              :user "alice")
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (:warned ((:find "missing-gopass") (:warn "`auth-source-gopass': Could not find executable '%s' to query gopass" ("missing-gopass"))))"#
         ]],
@@ -188,7 +185,7 @@ fn auth_source_gopass_missing_executable_warns_and_skips_the_shell() -> ParityBa
 }
 
 fn auth_source_gopass_search_does_not_cache_repeated_credentials() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_search_does_not_cache_repeated_credentials",
         r##"(let ((answers '("first\n" "second\n" "third\n"))
                calls)
@@ -207,15 +204,15 @@ fn auth_source_gopass_search_does_not_cache_repeated_credentials() -> ParityBatc
             (auth-source-gopass-search :host "mail" :user "alice")
             (auth-source-gopass-search :host "mail" :user "alice")
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK (((:user "alice" :secret "first")) ((:user "alice" :secret "second")) ((:user "alice" :secret "third")) ((:find "gopass") (:shell "gopass show -o accounts/mail/alice" "first\n") (:find "gopass") (:shell "gopass show -o accounts/mail/alice" "second\n") (:find "gopass") (:shell "gopass show -o accounts/mail/alice" "third\n")))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auth_source_gopass_search_propagates_constructor_and_shell_signals() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_gopass_search_propagates_constructor_and_shell_signals",
         r##"(list
          (let ((auth-source-gopass-construct-query-path
@@ -240,14 +237,13 @@ fn auth_source_gopass_search_propagates_constructor_and_shell_signals() -> Parit
               (auth-source-gopass-search
                :host "mail"
                :user "alice")))))"##,
-        true,
         expect![[r#"OK ((:error error ("bad path")) (:error error ("process failed")))"#]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn search_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn search_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auth_source_gopass_search_trims_a_real_single_line_secret(),
         auth_source_gopass_search_preserves_internal_newlines_and_unicode(),
         auth_source_gopass_search_returns_an_empty_secret_for_whitespace_output(),
@@ -257,6 +253,5 @@ fn search_public_surface_batch() {
         auth_source_gopass_missing_executable_warns_and_skips_the_shell(),
         auth_source_gopass_search_does_not_cache_repeated_credentials(),
         auth_source_gopass_search_propagates_constructor_and_shell_signals(),
-    ];
-    assert_auth_source_gopass_batch(&cases);
+    ]
 }

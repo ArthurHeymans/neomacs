@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asilea_batch};
+use super::ParityBatchCase;
 
 fn asilea_one_step_run_reports_initial_candidate_finishes_and_does_not_call_accept_callback()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_one_step_run_reports_initial_candidate_finishes_and_does_not_call_accept_callback",
         r##"(let ((asilea-max-steps 1)
                (asilea-concurrent-jobs 1)
@@ -49,7 +49,6 @@ fn asilea_one_step_run_reports_initial_candidate_finishes_and_does_not_call_acce
                   (nreverse callbacks)
                   (length asilea-test-pending))))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK (nil 1 ((:start 1 "measure" (0 0) ("-O0") "finished\n" "42.5\n") (:sentinel 1) (:complete 1 "finished\n")) ((:report ("-O0") 42.5) (:finished)) 0)"#
         ]],
@@ -58,7 +57,7 @@ fn asilea_one_step_run_reports_initial_candidate_finishes_and_does_not_call_acce
 
 fn asilea_multi_step_run_uses_accepted_state_for_neighbors_and_accepts_only_better_scores()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_multi_step_run_uses_accepted_state_for_neighbors_and_accepts_only_better_scores",
         r##"(let ((asilea-max-steps 4)
                (asilea-concurrent-jobs 1)
@@ -123,7 +122,6 @@ fn asilea_multi_step_run_uses_accepted_state_for_neighbors_and_accepts_only_bett
                   (nreverse random-calls)
                   draws)))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK (((:start 1 "measure" (0 0) ("-O0") "finished\n" "10") (:sentinel 1) (:complete 1 "finished\n") (:start 2 "measure" (1 0) ("-O3") "finished\n" "8") (:sentinel 2) (:complete 2 "finished\n") (:start 3 "measure" (1 1) ("-O3" "-g") "finished\n" "9") (:sentinel 3) (:complete 3 "finished\n") (:start 4 "measure" (0 0) ("-O0") "finished\n" "7") (:sentinel 4) (:complete 4 "finished\n")) ((:report ("-O0") 10) (:report #1=("-O3") 8) (:accepted #1# 8) (:report ("-O3" "-g") 9) (:report #2=("-O0") 7) (:accepted #2# 7) (:finished)) ((8 10 50.0 t) (9 8 25.0 t) (7 8 12.5 t)) (2 2 2 2 2 2 2 2) nil)"#
         ]],
@@ -131,7 +129,7 @@ fn asilea_multi_step_run_uses_accepted_state_for_neighbors_and_accepts_only_bett
 }
 
 fn asilea_nonzero_process_status_skips_parse_and_report_but_consumes_step() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_nonzero_process_status_skips_parse_and_report_but_consumes_step",
         r##"(let ((asilea-max-steps 3)
                (asilea-concurrent-jobs 1)
@@ -172,7 +170,6 @@ fn asilea_nonzero_process_status_skips_parse_and_report_but_consumes_step() -> P
                   (nreverse parse-calls)
                   (nreverse callbacks))))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK (((:start 1 "measure" (0) ("x") "exited abnormally with code 2\n" "999") (:sentinel 1) (:complete 1 "exited abnormally with code 2\n") (:start 2 "measure" (0) ("x") "killed\n" "888") (:sentinel 2) (:complete 2 "killed\n") (:start 3 "measure" (0) ("x") "finished\n" "7") (:sentinel 3) (:complete 3 "finished\n")) ("7") ((("x") 7) :finished))"#
         ]],
@@ -180,7 +177,7 @@ fn asilea_nonzero_process_status_skips_parse_and_report_but_consumes_step() -> P
 }
 
 fn asilea_nil_and_false_energy_parses_skip_candidates_while_zero_is_valid() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_nil_and_false_energy_parses_skip_candidates_while_zero_is_valid",
         r##"(let ((asilea-max-steps 4)
                (asilea-concurrent-jobs 1)
@@ -220,7 +217,6 @@ fn asilea_nil_and_false_energy_parses_skip_candidates_while_zero_is_valid() -> P
                   (asilea-test-drain)
                   (nreverse reports))))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK (((:start 1 "measure" (0) ("x") "finished\n" "skip") (:sentinel 1) (:complete 1 "finished\n") (:start 2 "measure" (0) ("x") "finished\n" "false") (:sentinel 2) (:complete 2 "finished\n") (:start 3 "measure" (0) ("x") "finished\n" "zero") (:sentinel 3) (:complete 3 "finished\n") (:start 4 "measure" (0) ("x") "finished\n" "five") (:sentinel 4) (:complete 4 "finished\n")) ((("x") 0) (("x") 5)))"#
         ]],
@@ -228,7 +224,7 @@ fn asilea_nil_and_false_energy_parses_skip_candidates_while_zero_is_valid() -> P
 }
 
 fn asilea_callback_errors_are_demoted_and_annealing_continues_to_completion() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_callback_errors_are_demoted_and_annealing_continues_to_completion",
         r##"(let ((asilea-max-steps 4)
                (asilea-concurrent-jobs 1)
@@ -298,7 +294,6 @@ fn asilea_callback_errors_are_demoted_and_annealing_continues_to_completion() ->
                   finished
                   (nreverse messages))))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK (((:start 1 "measure" (0) ("x") "finished\n" "parse-error") (:sentinel 1) (:complete 1 "finished\n") (:start 2 "measure" (0) ("x") "finished\n" "10") (:sentinel 2) (:complete 2 "finished\n") (:start 3 "measure" (0) ("x") "finished\n" "8") (:sentinel 3) (:complete 3 "finished\n") (:start 4 "measure" (0) ("x") "finished\n" "7") (:sentinel 4) (:complete 4 "finished\n")) 4 3 0 t ("Error in `asilea-parse-energy-function': (error \"bad parse\")" "Error in `asilea-report-candidate-function': (error \"bad report\")" "Error in `asilea-acceptance-function': (error \"bad acceptance\")" "Error in `asilea-acceptance-function': (error \"bad acceptance\")"))"#
         ]],
@@ -307,7 +302,7 @@ fn asilea_callback_errors_are_demoted_and_annealing_continues_to_completion() ->
 
 fn asilea_accepted_solution_callback_error_is_demoted_after_state_and_energy_update()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_accepted_solution_callback_error_is_demoted_after_state_and_energy_update",
         r##"(let ((asilea-max-steps 3)
                (asilea-concurrent-jobs 1)
@@ -367,7 +362,6 @@ fn asilea_accepted_solution_callback_error_is_demoted_after_state_and_energy_upd
                   (nreverse messages)
                   draws)))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK (((:start 1 "measure" (0) ("old") "finished\n" "10") (:sentinel 1) (:complete 1 "finished\n") (:start 2 "measure" (1) ("new") "finished\n" "8") (:sentinel 2) (:complete 2 "finished\n") (:start 3 "measure" (0) ("old") "finished\n" "9") (:sentinel 3) (:complete 3 "finished\n")) ((8 10 1.99) (9 8 1.98005)) ((("new") 8)) ("Error in `asilea-solution-accepted-function': (error \"accepted callback failed for 8\")") nil)"#
         ]],
@@ -375,7 +369,7 @@ fn asilea_accepted_solution_callback_error_is_demoted_after_state_and_energy_upd
 }
 
 fn asilea_finished_callback_error_is_demoted_without_escaping_last_sentinel() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_finished_callback_error_is_demoted_without_escaping_last_sentinel",
         r##"(let ((asilea-max-steps 1)
                (asilea-concurrent-jobs 1)
@@ -424,7 +418,6 @@ fn asilea_finished_callback_error_is_demoted_without_escaping_last_sentinel() ->
                   finished-calls
                   (nreverse messages))))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK ((:ok ((:start 1 "measure" (0) ("x") "finished\n" "1") (:sentinel 1) (:complete 1 "finished\n"))) nil ("Error in `asilea-finished-function': (wrong-type-argument number-or-marker-p nil)"))"#
         ]],
@@ -433,7 +426,7 @@ fn asilea_finished_callback_error_is_demoted_without_escaping_last_sentinel() ->
 
 fn asilea_concurrent_jobs_have_independent_states_and_call_finished_once_after_last_job()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_concurrent_jobs_have_independent_states_and_call_finished_once_after_last_job",
         r##"(let ((asilea-max-steps 2)
                (asilea-concurrent-jobs 3)
@@ -488,7 +481,6 @@ fn asilea_concurrent_jobs_have_independent_states_and_call_finished_once_after_l
                   draws
                   (length asilea-test-pending))))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK (((:start 1 "measure" (0) ("a") "finished\n" "30") (:start 2 "measure" (1) ("b") "finished\n" "20") (:start 3 "measure" (2) ("c") "finished\n" "10") (:start 4 "measure" (1) ("b") "finished\n" "25") (:start 5 "measure" (0) ("a") "finished\n" "15") (:start 6 "measure" (2) ("c") "finished\n" "5")) ((("a") 30) (("b") 20) (("c") 10) (("b") 25) (("a") 15) (("c") 5)) nil nil 0)"#
         ]],
@@ -497,7 +489,7 @@ fn asilea_concurrent_jobs_have_independent_states_and_call_finished_once_after_l
 
 fn asilea_temperature_terminated_run_cools_until_final_temperature_inclusively() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_temperature_terminated_run_cools_until_final_temperature_inclusively",
         r##"(let ((asilea-max-steps nil)
                (asilea-concurrent-jobs 1)
@@ -545,7 +537,6 @@ fn asilea_temperature_terminated_run_cools_until_final_temperature_inclusively()
                   finished
                   asilea-test-process-specs)))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK (((:start 1 "measure" (0) ("x") "finished\n" "10") (:sentinel 1) (:complete 1 "finished\n") (:start 2 "measure" (0) ("x") "finished\n" "9") (:sentinel 2) (:complete 2 "finished\n") (:start 3 "measure" (0) ("x") "finished\n" "8") (:sentinel 3) (:complete 3 "finished\n")) (10 9 8) ((9 10 2.0) (8 9 1.0)) nil (("finished\n" "unexpected")))"#
         ]],
@@ -554,7 +545,7 @@ fn asilea_temperature_terminated_run_cools_until_final_temperature_inclusively()
 
 fn asilea_run_captures_configuration_callbacks_randomness_and_starting_directory() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_run_captures_configuration_callbacks_randomness_and_starting_directory",
         r##"(let ((asilea-max-steps 2)
                (asilea-concurrent-jobs 1)
@@ -614,7 +605,6 @@ fn asilea_run_captures_configuration_callbacks_randomness_and_starting_directory
                 (nreverse captured)
                 (nreverse start-directories)))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK (((:start 1 "measure" (0) ("x") "finished\n" "one") (:sentinel 1) (:complete 1 "finished\n") (:start 2 "measure" (0) ("x") "finished\n" "two") (:sentinel 2) (:complete 2 "finished\n")) nil ("[ORACLE-SANDBOX]/" "[ORACLE-SANDBOX]/"))"#
         ]],
@@ -623,7 +613,7 @@ fn asilea_run_captures_configuration_callbacks_randomness_and_starting_directory
 
 fn asilea_synchronous_run_drives_pending_processes_until_wrapped_finished_callback()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_synchronous_run_drives_pending_processes_until_wrapped_finished_callback",
         r##"(let ((asilea-max-steps 3)
                (asilea-concurrent-jobs 1)
@@ -663,7 +653,6 @@ fn asilea_synchronous_run_drives_pending_processes_until_wrapped_finished_callba
                   (nreverse accept-calls)
                   (nreverse asilea-test-events))))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK (nil nil 0 (nil nil nil) ((:start 1 "measure" (0) ("x") "finished\n" "3") (:sentinel 1) (:complete 1 "finished\n") (:start 2 "measure" (0) ("x") "finished\n" "2") (:sentinel 2) (:complete 2 "finished\n") (:start 3 "measure" (0) ("x") "finished\n" "1") (:sentinel 3) (:complete 3 "finished\n")))"#
         ]],
@@ -672,7 +661,7 @@ fn asilea_synchronous_run_drives_pending_processes_until_wrapped_finished_callba
 
 fn asilea_sentinel_internal_error_finishes_job_then_resignals_original_condition() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asilea_sentinel_internal_error_finishes_job_then_resignals_original_condition",
         r##"(let ((asilea-max-steps 2)
                (asilea-concurrent-jobs 1)
@@ -713,16 +702,14 @@ fn asilea_sentinel_internal_error_finishes_job_then_resignals_original_condition
                   (length asilea-test-pending)
                   (nreverse asilea-test-events))))
            (asilea-test-cleanup)))"##,
-        true,
         expect![[
             r#"OK ((:ok t) nil 1 ((:start 1 "measure" (0) ("x") "finished\n" "10") (:sentinel 1) (:complete 1 "finished\n") (:start 2 "measure" (0) ("x") "finished\n" "0") (:sentinel 2)))"#
         ]],
     )
 }
 
-#[test]
-fn engine_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn engine_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asilea_one_step_run_reports_initial_candidate_finishes_and_does_not_call_accept_callback(),
         asilea_multi_step_run_uses_accepted_state_for_neighbors_and_accepts_only_better_scores(),
         asilea_nonzero_process_status_skips_parse_and_report_but_consumes_step(),
@@ -735,6 +722,5 @@ fn engine_public_surface_batch() {
         asilea_run_captures_configuration_callbacks_randomness_and_starting_directory(),
         asilea_synchronous_run_drives_pending_processes_until_wrapped_finished_callback(),
         asilea_sentinel_internal_error_finishes_job_then_resignals_original_condition(),
-    ];
-    assert_asilea_batch(&cases);
+    ]
 }

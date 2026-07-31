@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{APPLESCRIPT_MODE_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -51,14 +50,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_applescript_mode_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = applescript_mode_oracle()
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("applescript-mode parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_applescript_mode_parity` cases (2a).
 pub(crate) fn assert_applescript_mode_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -69,3 +60,16 @@ pub(crate) fn assert_applescript_mode_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn applescript_mode_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_applescript_mode_batch(&cases);
+}
+
+// END generated package batch tests

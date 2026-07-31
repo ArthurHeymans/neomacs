@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_zero_x_c_batch};
+use super::ParityBatchCase;
 
 fn zero_x_c_number_recognition_honors_strict_padding_and_extension_rules() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_number_recognition_honors_strict_padding_and_extension_rules",
         r##"(list
                (let ((0xc-strict nil))
@@ -24,13 +24,12 @@ fn zero_x_c_number_recognition_honors_strict_padding_and_extension_rules() -> Pa
                     "1_000"
                     "0xff"
                     "101.."))))"##,
-        true,
         expect!["OK ((t t t t t nil nil nil) (t nil t t))"],
     )
 }
 
 fn zero_x_c_strip_base_hint_covers_named_numeric_and_short_prefixes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_strip_base_hint_covers_named_numeric_and_short_prefixes",
         r##"(mapcar
                #'0xc--strip-base-hint
@@ -45,13 +44,12 @@ fn zero_x_c_strip_base_hint_covers_named_numeric_and_short_prefixes() -> ParityB
                  "0:"
                  "ffffff"
                  "1234567890:1"))"##,
-        true,
         expect![[r#"OK ("0" "1234567890" "10ff" "10ff" "246810" "246810" "" "" "" "ffffff" "1")"#]],
     )
 }
 
 fn zero_x_c_base_prefix_and_output_prefix_cover_builtin_and_numeric_bases() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_base_prefix_and_output_prefix_cover_builtin_and_numeric_bases",
         r##"(list
                (mapcar
@@ -72,7 +70,6 @@ fn zero_x_c_base_prefix_and_output_prefix_cover_builtin_and_numeric_bases() -> P
                (mapcar
                 #'0xc--prefix-for-base
                 '(2 3 8 10 16 7 36)))"##,
-        true,
         expect![[
             r#"OK ((2 2 3 8 8 10 10 16 16 22 nil nil nil) ("0b" "0t" "0o" "0d" "0x" "7:" "36:"))"#
         ]],
@@ -80,7 +77,7 @@ fn zero_x_c_base_prefix_and_output_prefix_cover_builtin_and_numeric_bases() -> P
 }
 
 fn zero_x_c_infer_base_reproduces_every_upstream_clamp_profile() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_infer_base_reproduces_every_upstream_clamp_profile",
         r##"(let ((0xc-max-base 36)
                      (inputs
@@ -117,7 +114,6 @@ fn zero_x_c_infer_base_reproduces_every_upstream_clamp_profile() -> ParityBatchC
                   (t)
                   (nil . t)
                   (t . t))))"##,
-        true,
         expect![[
             r#"OK ((16 15 11 8 3 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 15 11 10 10 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 16 16 16 16 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 16 16 10 10 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7))"#
         ]],
@@ -125,7 +121,7 @@ fn zero_x_c_infer_base_reproduces_every_upstream_clamp_profile() -> ParityBatchC
 }
 
 fn zero_x_c_infer_base_reports_invalid_prefix_digit_and_maximum_cases() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_infer_base_reports_invalid_prefix_digit_and_maximum_cases",
         r##"(mapcar
                (lambda (case)
@@ -145,7 +141,6 @@ fn zero_x_c_infer_base_reports_invalid_prefix_digit_and_maximum_cases() -> Parit
                  (16 . "2:102")
                  (10 . "0x0101")
                  (10 . "ziltoid")))"##,
-        true,
         expect![[
             r#"OK ((error ("Number exceeds maximum allowed base: 16")) (error ("Not a number")) (error ("Not a number")) (error ("Not a number")) (error ("Number has a digit of a higher base than its prefix")) (error ("Number exceeds maximum allowed base: 10")) (error ("Number exceeds maximum allowed base: 10")))"#
         ]],
@@ -153,7 +148,7 @@ fn zero_x_c_infer_base_reports_invalid_prefix_digit_and_maximum_cases() -> Parit
 }
 
 fn zero_x_c_padding_removal_obeys_the_custom_character_set() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_padding_removal_obeys_the_custom_character_set",
         r##"(list
                (let ((0xc-padding " _.,"))
@@ -167,24 +162,22 @@ fn zero_x_c_padding_removal_obeys_the_custom_character_set() -> ParityBatchCase 
                (let ((0xc-padding "0"))
                  (0xc--strip-padding
                   "0b001010110100")))"##,
-        true,
         expect![[r#"OK (("123" "1" "100000:0123456789" "0xabff" "17:303030") "b11111")"#]],
     )
 }
 
 fn zero_x_c_highest_base_tracks_empty_numeric_and_alphabetic_digits() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_highest_base_tracks_empty_numeric_and_alphabetic_digits",
         r##"(mapcar
                #'0xc--highest-base
                '("" "0" "101" "75" "0a0a" "abcde" "Z"))"##,
-        true,
         expect!["OK (0 1 2 8 11 15 36)"],
     )
 }
 
 fn zero_x_c_extension_expands_to_power_of_two_widths() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_extension_expands_to_power_of_two_widths",
         r##"(mapcar
                #'0xc--extend-number
@@ -197,7 +190,6 @@ fn zero_x_c_extension_expands_to_power_of_two_widths() -> ParityBatchCase {
                  "..111"
                  "01..100"
                  "..."))"##,
-        true,
         expect![[
             r#"OK ("12345" "10100000" "1010" "ffffffff" "1.2.3.4.5.666666" "WHEEEEEEEEEEEEEE" "1111" "01111100" ".")"#
         ]],
@@ -205,7 +197,7 @@ fn zero_x_c_extension_expands_to_power_of_two_widths() -> ParityBatchCase {
 }
 
 fn zero_x_c_extension_rejects_multiple_tokens_and_mismatched_neighbors() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_extension_rejects_multiple_tokens_and_mismatched_neighbors",
         r##"(mapcar
                (lambda (number)
@@ -218,7 +210,6 @@ fn zero_x_c_extension_rejects_multiple_tokens_and_mismatched_neighbors() -> Pari
                      (cdr err)))))
                '("..00.."
                  "12345..6789"))"##,
-        true,
         expect![[
             r#"OK ((error ("Only one extension token may be used")) (error ("The digit before and after the extension token must be the same")))"#
         ]],
@@ -226,30 +217,27 @@ fn zero_x_c_extension_rejects_multiple_tokens_and_mismatched_neighbors() -> Pari
 }
 
 fn zero_x_c_next_power_of_two_returns_the_smallest_power_at_least_as_large() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "zero_x_c_next_power_of_two_returns_the_smallest_power_at_least_as_large",
         r##"(mapcar
                #'0xc--next-power-of-2
                '(1 2 3 4 5 7 8 9 15 16))"##,
-        true,
         expect!["OK (1 2 4 4 8 8 8 16 16 16)"],
     )
 }
 
 fn zero_x_c_string_to_number_rejects_a_prefix_above_the_maximum() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "zero_x_c_string_to_number_rejects_a_prefix_above_the_maximum",
         r##"(let ((0xc-max-base 10))
                (0xc-string-to-number
                 "16:ff"))"##,
-        false,
         expect![[r#"ERR (error "Number exceeds maximum allowed base: 10")"#]],
     )
 }
 
-#[test]
-fn inference_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn inference_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         zero_x_c_number_recognition_honors_strict_padding_and_extension_rules(),
         zero_x_c_strip_base_hint_covers_named_numeric_and_short_prefixes(),
         zero_x_c_base_prefix_and_output_prefix_cover_builtin_and_numeric_bases(),
@@ -261,6 +249,5 @@ fn inference_public_surface_batch() {
         zero_x_c_extension_rejects_multiple_tokens_and_mismatched_neighbors(),
         zero_x_c_next_power_of_two_returns_the_smallest_power_at_least_as_large(),
         zero_x_c_string_to_number_rejects_a_prefix_above_the_maximum(),
-    ];
-    assert_zero_x_c_batch(&cases);
+    ]
 }

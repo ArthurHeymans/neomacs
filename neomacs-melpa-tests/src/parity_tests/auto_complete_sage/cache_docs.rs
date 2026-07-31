@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_sage_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_sage_cache_clear_commands_mutate_only_the_live_process_buffer() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_sage_cache_clear_commands_mutate_only_the_live_process_buffer",
         r##"(let ((process-buffer
                                 (generate-new-buffer
@@ -49,7 +49,6 @@ fn auto_complete_sage_cache_clear_commands_mutate_only_the_live_process_buffer()
                                      (ac-sage--doc-clear-cache)))))
                              (kill-buffer process-buffer)
                              (kill-buffer other-buffer)))"##,
-        true,
         expect![[
             r#"OK ((nil nil) ((("keep" . "other command")) (("keep.method" . "other method"))) (nil nil))"#
         ]],
@@ -58,7 +57,7 @@ fn auto_complete_sage_cache_clear_commands_mutate_only_the_live_process_buffer()
 
 fn auto_complete_sage_cache_macro_distinguishes_hits_misses_length_and_top_level_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_sage_cache_macro_distinguishes_hits_misses_length_and_top_level_state",
         r##"(let ((process-buffer
                                 (generate-new-buffer
@@ -122,7 +121,6 @@ fn auto_complete_sage_cache_macro_distinguishes_hits_misses_length_and_top_level
                                         (nreverse calls)
                                         ac-sage--repl-methods-cached)))))
                              (kill-buffer process-buffer)))"##,
-        true,
         expect![[
             r#"OK (("cached doc" "doc:new.name:new" "doc:new.name:new" "doc:abcd:nil") nil (("new.name" "new") ("abcd" nil)) (("abcd" . "doc:abcd:nil") ("new.name" . "doc:new.name:new") ("cached.name" . "cached doc")))"#
         ]],
@@ -131,7 +129,7 @@ fn auto_complete_sage_cache_macro_distinguishes_hits_misses_length_and_top_level
 
 fn auto_complete_sage_command_documentation_obeys_quick_help_and_short_name_policy()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_sage_command_documentation_obeys_quick_help_and_short_name_policy",
         r##"(let ((process-buffer
                                 (generate-new-buffer
@@ -168,7 +166,6 @@ fn auto_complete_sage_command_documentation_obeys_quick_help_and_short_name_poli
                                         (nreverse calls)
                                         ac-sage--sage-commands-doc-cached)))))
                              (kill-buffer process-buffer)))"##,
-        true,
         expect![[
             r#"OK ("DOC:plot" "DOC:factor" "DOC:factor" (("plot" nil) ("factor" nil)) (("factor" . "DOC:factor") ("plot" . "DOC:plot")))"#
         ]],
@@ -177,7 +174,7 @@ fn auto_complete_sage_command_documentation_obeys_quick_help_and_short_name_poli
 
 fn auto_complete_sage_repl_base_name_and_name_cover_variables_other_interfaces_and_sage_commands()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_sage_repl_base_name_and_name_cover_variables_other_interfaces_and_sage_commands",
         r##"(mapcar
                            (lambda (fixture)
@@ -199,7 +196,6 @@ fn auto_complete_sage_repl_base_name_and_name_cover_variables_other_interfaces_a
                              ((interface . "magma")
                               (var-base-name . "group")
                               (types . ("attributes")))))"##,
-        true,
         expect![[
             r#"OK ((((interface . "sage") (var-base-name . "matrix") (types "attributes")) ("matrix" . "matrix.rank")) (((interface . "gap") (var-base-name) (types "interface")) ("gap" . "gap.rank")) (((interface . "sage") (var-base-name) (types "interface")) (nil . "rank")) (((interface . "magma") (var-base-name . "group") (types "attributes")) ("group" . "group.rank")))"#
         ]],
@@ -208,7 +204,7 @@ fn auto_complete_sage_repl_base_name_and_name_cover_variables_other_interfaces_a
 
 fn auto_complete_sage_method_documentation_qualifies_names_and_uses_process_buffer_cache()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_sage_method_documentation_qualifies_names_and_uses_process_buffer_cache",
         r##"(let ((process-buffer
                                 (generate-new-buffer
@@ -248,7 +244,6 @@ fn auto_complete_sage_method_documentation_qualifies_names_and_uses_process_buff
                                       (nreverse calls)
                                       ac-sage--repl-methods-cached))))
                              (kill-buffer process-buffer)))"##,
-        true,
         expect![[
             r#"OK ("matrix=>matrix.rank" "matrix=>matrix.rank" (("matrix.rank" "matrix")) (("matrix.rank" . "matrix=>matrix.rank")))"#
         ]],
@@ -257,7 +252,7 @@ fn auto_complete_sage_method_documentation_qualifies_names_and_uses_process_buff
 
 fn auto_complete_sage_document_transport_builds_exact_python_command_and_trims_output()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_sage_document_transport_builds_exact_python_command_and_trims_output",
         r##"(let ((process-buffer
                                 (generate-new-buffer
@@ -299,7 +294,6 @@ fn auto_complete_sage_document_transport_builds_exact_python_command_and_trims_o
                                        nil)
                                       (nreverse commands)))))
                              (kill-buffer process-buffer)))"##,
-        true,
         expect![[
             r#"OK ("Rank documentation" nil ("sage_mod.print_short_doc_and_def('matrix.rank', base_name='matrix')" "sage_mod.print_short_doc_and_def('factor')"))"#
         ]],
@@ -308,7 +302,7 @@ fn auto_complete_sage_document_transport_builds_exact_python_command_and_trims_o
 
 fn auto_complete_sage_document_transport_short_circuits_each_unfinished_protocol_phase()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_sage_document_transport_short_circuits_each_unfinished_protocol_phase",
         r##"(let ((process-buffer
                                 (generate-new-buffer
@@ -358,14 +352,13 @@ fn auto_complete_sage_document_transport_short_circuits_each_unfinished_protocol
                                         results)
                                        (nreverse results)))))
                              (kill-buffer process-buffer)))"##,
-        true,
         expect!["OK ((nil (:output)) (nil (:output :redirect)))"],
     )
 }
 
 fn auto_complete_sage_nil_document_results_are_recorded_but_retried_on_the_next_lookup()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_sage_nil_document_results_are_recorded_but_retried_on_the_next_lookup",
         r##"(let ((process-buffer
                                 (generate-new-buffer
@@ -396,14 +389,12 @@ fn auto_complete_sage_nil_document_results_are_recorded_but_retried_on_the_next_
                                       (nreverse calls)
                                       ac-sage--sage-commands-doc-cached))))
                              (kill-buffer process-buffer)))"##,
-        true,
         expect![[r#"OK (nil nil (("factor" nil) ("factor" nil)) (("factor") ("factor")))"#]],
     )
 }
 
-#[test]
-fn cache_docs_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn cache_docs_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_sage_cache_clear_commands_mutate_only_the_live_process_buffer(),
         auto_complete_sage_cache_macro_distinguishes_hits_misses_length_and_top_level_state(),
         auto_complete_sage_command_documentation_obeys_quick_help_and_short_name_policy(),
@@ -412,6 +403,5 @@ fn cache_docs_public_surface_batch() {
         auto_complete_sage_document_transport_builds_exact_python_command_and_trims_output(),
         auto_complete_sage_document_transport_short_circuits_each_unfinished_protocol_phase(),
         auto_complete_sage_nil_document_results_are_recorded_but_retried_on_the_next_lookup(),
-    ];
-    assert_auto_complete_sage_batch(&cases);
+    ]
 }

@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_accent_batch};
+use super::ParityBatchCase;
 
 fn accent_menu_accents_the_character_before_point_through_the_real_popup() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "accent_menu_accents_the_character_before_point_through_the_real_popup",
         r##"(accent-test-with-live-buffer
  (insert "Le cafe est pret")
@@ -19,13 +19,12 @@ fn accent_menu_accents_the_character_before_point_through_the_real_popup() -> Pa
          (buffer-size)
          accent-position
          (buffer-modified-p))))"##,
-        true,
         expect![[r#"OK ("Le café est pret" "Le café est prët" 16 16 before t)"#]],
     )
 }
 
 fn accent_position_after_replaces_the_character_under_the_cursor() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "accent_position_after_replaces_the_character_under_the_cursor",
         r##"(accent-test-with-live-buffer
  (insert "Le cafe pres")
@@ -37,13 +36,12 @@ fn accent_position_after_replaces_the_character_under_the_cursor() -> ParityBatc
        (char-after)
        (char-before)
        (buffer-size)))"##,
-        true,
         expect![[r#"OK ("Le cafe prês" 12 115 234 12)"#]],
     )
 }
 
 fn accent_custom_characters_are_appended_and_reachable_from_the_popup() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "accent_custom_characters_are_appended_and_reachable_from_the_popup",
         r##"(accent-test-with-live-buffer
  (insert "Xin chao ban a")
@@ -59,7 +57,6 @@ fn accent_custom_characters_are_appended_and_reachable_from_the_popup() -> Parit
            (assoc 'z merged)
            (assoc 'e merged)
            (assoc 'a accent-diacritics)))))"##,
-        true,
         expect![[
             r#"OK ("Xin chao ban ằ" 15 22 (a (à á â ä æ ã å ā ằ ắ)) (z (ž ź ż ẑ)) (e (è é ê ë ē ė ę)) (a (à á â ä æ ã å ā)))"#
         ]],
@@ -67,7 +64,7 @@ fn accent_custom_characters_are_appended_and_reachable_from_the_popup() -> Parit
 }
 
 fn accent_menu_reports_an_unaccentable_character_and_leaves_the_buffer_alone() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "accent_menu_reports_an_unaccentable_character_and_leaves_the_buffer_alone",
         r##"(accent-test-with-live-buffer
  (insert "Bonjour!")
@@ -87,7 +84,6 @@ fn accent_menu_reports_an_unaccentable_character_and_leaves_the_buffer_alone() -
              (buffer-string)
              (point)
              (buffer-modified-p))))))"##,
-        true,
         expect![[
             r#"OK ("Bonjour!" 9 ("Bonjour!" 9 "No accented characters available") (signal wrong-type-argument (characterp nil)) "Bonjour!" 1 t)"#
         ]],
@@ -95,7 +91,7 @@ fn accent_menu_reports_an_unaccentable_character_and_leaves_the_buffer_alone() -
 }
 
 fn accent_popup_can_be_cancelled_without_touching_the_word() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "accent_popup_can_be_cancelled_without_touching_the_word",
         r##"(accent-test-with-live-buffer
  (insert "cafe")
@@ -106,13 +102,12 @@ fn accent_popup_can_be_cancelled_without_touching_the_word() -> ParityBatchCase 
               'completed)
           (quit 'quit))))
    (list (buffer-string) (point) outcome (buffer-modified-p))))"##,
-        true,
         expect![[r#"OK ("cafe" 5 quit t)"#]],
     )
 }
 
 fn accent_company_backend_answers_the_documented_command_protocol() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "accent_company_backend_answers_the_documented_command_protocol",
         r##"(accent-test-with-live-buffer
  (insert "cafe")
@@ -131,7 +126,6 @@ fn accent_company_backend_answers_the_documented_command_protocol() -> ParityBat
                (accent-company 'candidates))
          (buffer-string)
          (point))))"##,
-        true,
         expect![[
             r#"OK (("e" ("è" "é" "ê" "ë" "ē" "ė" "ę")) ("e" ("fè" "fé" "fê" "fë" "fē" "fė" "fę")) (nil nil) "cafe!" 6)"#
         ]],
@@ -139,7 +133,7 @@ fn accent_company_backend_answers_the_documented_command_protocol() -> ParityBat
 }
 
 fn accent_corfu_offers_the_diacritics_through_completion_at_point() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "accent_corfu_offers_the_diacritics_through_completion_at_point",
         r##"(accent-test-with-live-buffer
  (insert "cafe")
@@ -155,16 +149,14 @@ fn accent_corfu_offers_the_diacritics_through_completion_at_point() -> ParityBat
            (length completion-at-point-functions)
            (funcall capf)
            completions))))"##,
-        true,
         expect![[
             r#"OK ("caf" 4 t 1 (4 4 ("è" "é" "ê" "ë" "ē" "ė" "ę") :exclusive no) "Type M-RET on a completion to select it.\nType M-<down> or M-<up> to move point between completions.\n\n7 possible completions:\nè \11é \11ê\në \11ē \11ė\nę")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         accent_menu_accents_the_character_before_point_through_the_real_popup(),
         accent_position_after_replaces_the_character_under_the_cursor(),
         accent_custom_characters_are_appended_and_reachable_from_the_popup(),
@@ -172,6 +164,5 @@ fn workflows_public_surface_batch() {
         accent_popup_can_be_cancelled_without_touching_the_word(),
         accent_company_backend_answers_the_documented_command_protocol(),
         accent_corfu_offers_the_diacritics_through_completion_at_point(),
-    ];
-    assert_accent_batch(&cases);
+    ]
 }

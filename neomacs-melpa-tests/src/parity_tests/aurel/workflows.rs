@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aurel_batch};
+use super::ParityBatchCase;
 
 fn aurel_download_clones_missing_repository_and_returns_destination() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_download_clones_missing_repository_and_returns_destination",
         r##"(let (events)
          (cl-letf
@@ -41,7 +41,6 @@ fn aurel_download_clones_missing_repository_and_returns_destination() -> ParityB
              "https://aur.example/demo.git"
              "/fixture/downloads/")
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK ("/fixture/downloads/demo" ((:message "Cloning https://aur.example/demo.git") (:exists "/fixture/downloads/demo") (:call "/fixture/downloads/" "git" nil (:buffer "*aurel debug*") nil "clone" "https://aur.example/demo.git")))"#
         ]],
@@ -49,7 +48,7 @@ fn aurel_download_clones_missing_repository_and_returns_destination() -> ParityB
 }
 
 fn aurel_download_existing_repository_skips_clone_and_reports_destination() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_download_existing_repository_skips_clone_and_reports_destination",
         r##"(let (events)
          (cl-letf
@@ -83,7 +82,6 @@ fn aurel_download_existing_repository_skips_clone_and_reports_destination() -> P
              "ssh://aur.example/existing.git"
              "/fixture/downloads")
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK ("/fixture/downloads/existing" ((:message "Cloning ssh://aur.example/existing.git") (:exists "/fixture/downloads/existing") (:message "Package directory already exists: /fixture/downloads/existing")))"#
         ]],
@@ -91,7 +89,7 @@ fn aurel_download_existing_repository_skips_clone_and_reports_destination() -> P
 }
 
 fn aurel_download_adapters_open_dired_pkgbuild_and_eshell_destinations() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_download_adapters_open_dired_pkgbuild_and_eshell_destinations",
         r##"(let (events)
          (cl-letf
@@ -145,7 +143,6 @@ fn aurel_download_adapters_open_dired_pkgbuild_and_eshell_destinations() -> Pari
              "fixture:demo"
              "/three")
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (:dired :file :cd ((:download "fixture:demo" "/one") (:dired "/one/demo") (:download "fixture:demo" "/two/") (:exists "/two/demo/PKGBUILD") (:find-file "/two/demo/PKGBUILD") (:download "fixture:demo" "/three") :eshell (:cd "/three/demo")))"#
         ]],
@@ -153,7 +150,7 @@ fn aurel_download_adapters_open_dired_pkgbuild_and_eshell_destinations() -> Pari
 }
 
 fn aurel_pkgbuild_adapter_reports_exact_missing_file_after_download() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_pkgbuild_adapter_reports_exact_missing_file_after_download",
         r##"(let (events)
          (cl-letf
@@ -183,7 +180,6 @@ fn aurel_pkgbuild_adapter_reports_exact_missing_file_after_download() -> ParityB
                 "fixture:demo"
                 "/fixture")))
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK ((:error error ("File ‘/fixture/demo/PKGBUILD’ does not exist")) ((:download "fixture:demo" "/fixture") (:exists "/fixture/demo/PKGBUILD")))"#
         ]],
@@ -191,7 +187,7 @@ fn aurel_pkgbuild_adapter_reports_exact_missing_file_after_download() -> ParityB
 }
 
 fn aurel_download_directory_reader_prompts_only_with_prefix() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_download_directory_reader_prompts_only_with_prefix",
         r##"(let ((aurel-download-directory
                 "/configured/")
@@ -212,13 +208,12 @@ fn aurel_download_directory_reader_prompts_only_with_prefix() -> ParityBatchCase
                    '(4)))
               (aurel-read-download-directory))
             (nreverse calls))))"##,
-        true,
         expect![[r#"OK ("/configured/" "/chosen/" (("Destination: " "/configured/")))"#]],
     )
 }
 
 fn aurel_list_download_handles_single_cancelled_and_confirmed_multi_selection() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_list_download_handles_single_cancelled_and_confirmed_multi_selection",
         r##"(let ((entries
                 '((1
@@ -306,7 +301,6 @@ fn aurel_list_download_handles_single_cancelled_and_confirmed_multi_selection() 
                      t))
                 (aurel-list-download-package))
               (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK (:single nil ((:multi "fixture:two") (:multi "fixture:three")) ((:single "fixture:one" "/fixture/out/") (:confirm "Download 2 marked packages? ") (:multi "fixture:two" "/fixture/out/") (:multi "fixture:three" "/fixture/out/")))"#
         ]],
@@ -314,7 +308,7 @@ fn aurel_list_download_handles_single_cancelled_and_confirmed_multi_selection() 
 }
 
 fn aurel_user_action_honors_confirmation_then_posts_cookie_token() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_user_action_honors_confirmation_then_posts_cookie_token",
         r##"(let ((answers
                 '(nil t))
@@ -358,7 +352,6 @@ fn aurel_user_action_honors_confirmation_then_posts_cookie_token() -> ParityBatc
              'subscribe
              "demo-base")
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (nil t ((:confirm "Vote for `demo-base' package?") (:confirm "Enable notifications for `demo-base' package?") (:login) (:post "https://aur.archlinux.org/pkgbase/demo-base/notify" (("token" . "TOKEN-42") ("do_Notify" . "")) nil)))"#
         ]],
@@ -366,7 +359,7 @@ fn aurel_user_action_honors_confirmation_then_posts_cookie_token() -> ParityBatc
 }
 
 fn aurel_login_maybe_prefers_cookie_then_auth_secret_then_forced_prompts() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_login_maybe_prefers_cookie_then_auth_secret_then_forced_prompts",
         r##"(let ((cookie-cases
                 '(:cookie nil nil))
@@ -420,15 +413,15 @@ fn aurel_login_maybe_prefers_cookie_then_auth_secret_then_forced_prompts() -> Pa
              :force
              :forced-noerror)
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (t :logged-in :logged-in ((:auth :host "aur.archlinux.org") (:login "auth-user" "auth-secret" t :noerror) (:auth :host "aur.archlinux.org") (:read-user "AUR user name: " "") (:read-password "Password: ") (:login "prompt-user" "prompt-secret" t :forced-noerror)))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn aurel_user_package_info_fetches_html_and_adds_nested_account_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_user_package_info_fetches_html_and_adds_nested_account_state",
         r##"(let (events)
          (cl-letf
@@ -462,7 +455,6 @@ fn aurel_user_package_info_fetches_html_and_adds_nested_account_state() -> Parit
               (aurel-add-aur-user-package-info
                info)
               (nreverse events)))))"##,
-        true,
         expect![[
             r#"OK (((voted . t) (subscribed)) ((user-info (voted . t) (subscribed)) (name . "demo") (id . 42)) ((:login nil t) (:retrieve "fixture:demo") (:login nil t) (:retrieve "https://aur.archlinux.org/packages/demo")))"#
         ]],
@@ -470,7 +462,7 @@ fn aurel_user_package_info_fetches_html_and_adds_nested_account_state() -> Parit
 }
 
 fn aurel_info_user_action_reverts_only_after_success_without_norevert() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_info_user_action_reverts_only_after_success_without_norevert",
         r##"(let ((results
                 '(nil t t))
@@ -505,7 +497,6 @@ fn aurel_info_user_action_reverts_only_after_success_without_norevert() -> Parit
              "demo"
              :norevert)
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (nil :reverted nil ((:action vote "demo") (:action subscribe "demo") (:revert nil t) (:action unsubscribe "demo")))"#
         ]],
@@ -513,7 +504,7 @@ fn aurel_info_user_action_reverts_only_after_success_without_norevert() -> Parit
 }
 
 fn aurel_debug_writes_only_enabled_levels_with_deterministic_timestamp() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aurel_debug_writes_only_enabled_levels_with_deterministic_timestamp",
         r##"(let ((aurel-debug-buffer
                 "*aurel-test-debug*")
@@ -545,16 +536,14 @@ fn aurel_debug_writes_only_enabled_levels_with_deterministic_timestamp() -> Pari
             (with-current-buffer
                 aurel-debug-buffer
               (buffer-string)))))"##,
-        true,
         expect![[
             r#"OK (nil nil nil "12:34:56.789 received 2 packages\n12:34:56.789 url=fixture\n")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         aurel_download_clones_missing_repository_and_returns_destination(),
         aurel_download_existing_repository_skips_clone_and_reports_destination(),
         aurel_download_adapters_open_dired_pkgbuild_and_eshell_destinations(),
@@ -566,6 +555,5 @@ fn workflows_public_surface_batch() {
         aurel_user_package_info_fetches_html_and_adds_nested_account_state(),
         aurel_info_user_action_reverts_only_after_success_without_norevert(),
         aurel_debug_writes_only_enabled_levels_with_deterministic_timestamp(),
-    ];
-    assert_aurel_batch(&cases);
+    ]
 }

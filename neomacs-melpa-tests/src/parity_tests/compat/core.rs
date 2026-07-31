@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_compat_batch};
+use super::ParityBatchCase;
 
 fn compat_error_api_reports_hierarchy_slots_and_fresh_condition_objects() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "compat_error_api_reports_hierarchy_slots_and_fresh_condition_objects",
         r##"(let ((plain
                     (condition-case error
@@ -45,13 +45,12 @@ fn compat_error_api_reports_hierarchy_slots_and_fresh_condition_objects() -> Par
                     (condition-case error
                         (car 5)
                       (error error)))))"##,
-        true,
         expect![[r#"OK ((t t nil) (t t nil) (t t nil) "boom" listp 5 t nil)"#]],
     )
 }
 
 fn compat_ignore_error_accepts_single_type_and_type_list() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "compat_ignore_error_accepts_single_type_and_type_list",
         r##"(list
                (ignore-error end-of-file
@@ -62,23 +61,21 @@ fn compat_ignore_error_accepts_single_type_and_type_list() -> ParityBatchCase {
                  (car 3))
                (ignore-error end-of-file
                  (+ 20 22)))"##,
-        true,
         expect![[r#"OK (nil nil nil 42)"#]],
     )
 }
 
 fn compat_ignore_error_propagates_unlisted_condition() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "compat_ignore_error_propagates_unlisted_condition",
         r##"(ignore-error end-of-file
                (car 3))"##,
-        false,
         expect![[r#"ERR (wrong-type-argument listp 3)"#]],
     )
 }
 
 fn compat_numeric_predicates_cover_fixnums_floats_markers_and_type_errors() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "compat_numeric_predicates_cover_fixnums_floats_markers_and_type_errors",
         r##"(with-temp-buffer
                (insert "abc")
@@ -92,7 +89,6 @@ fn compat_numeric_predicates_cover_fixnums_floats_markers_and_type_errors() -> P
                           (list 1 1.5 0 0.0 -1 -1.5 marker))
                   (mapcar #'minusp
                           (list -1 -1.5 0 0.0 1 1.5 marker)))))"##,
-        true,
         expect![[
             r#"OK ((t t t nil nil nil) (t t t nil nil nil) (t t nil nil nil nil t) (t t nil nil nil nil nil))"#
         ]],
@@ -100,16 +96,15 @@ fn compat_numeric_predicates_cover_fixnums_floats_markers_and_type_errors() -> P
 }
 
 fn compat_oddp_rejects_float() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "compat_oddp_rejects_float",
         "(oddp 1.0)",
-        false,
         expect![[r#"ERR (wrong-type-argument integer-or-marker-p 1.0)"#]],
     )
 }
 
 fn compat_string_pad_and_replace_preserve_unicode_and_replacement_literals() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "compat_string_pad_and_replace_preserve_unicode_and_replacement_literals",
         r##"(list
                (string-pad "λ" 4 ?.)
@@ -118,13 +113,12 @@ fn compat_string_pad_and_replace_preserve_unicode_and_replacement_literals() -> 
                (string-replace "." "\\&" "a.b.c")
                (string-lines "a\nb\n" t)
                (string-lines "a\nb\n" nil))"##,
-        true,
         expect![[r#"OK ("λ..." "abcdef" "bXXc" "a\\&b\\&c" ("a" "b") ("a" "b"))"#]],
     )
 }
 
 fn compat_seconds_to_string_handles_negative_readable_and_precision_modes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "compat_seconds_to_string_handles_negative_readable_and_precision_modes",
         r##"(list
                (compat-call seconds-to-string -1 'readable)
@@ -140,16 +134,14 @@ fn compat_seconds_to_string_handles_negative_readable_and_precision_modes() -> P
                (compat-call
                 seconds-to-string
                 999999 'readable 'abbrev 4))"##,
-        true,
         expect![[
             r#"OK ("-1 second" "17 minutes" "17m" "16.65m" "1 week 5 days" "1w 5d" "1.6534w")"#
         ]],
     )
 }
 
-#[test]
-fn core_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn core_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         compat_error_api_reports_hierarchy_slots_and_fresh_condition_objects(),
         compat_ignore_error_accepts_single_type_and_type_list(),
         compat_ignore_error_propagates_unlisted_condition(),
@@ -157,6 +149,5 @@ fn core_public_surface_batch() {
         compat_oddp_rejects_float(),
         compat_string_pad_and_replace_preserve_unicode_and_replacement_literals(),
         compat_seconds_to_string_handles_negative_readable_and_precision_modes(),
-    ];
-    assert_compat_batch(&cases);
+    ]
 }

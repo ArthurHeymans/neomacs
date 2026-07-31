@@ -1,13 +1,9 @@
-use super::{
-    ParityBatchCase, assert_async_melpa_autoload_batch, assert_async_melpa_batch,
-    assert_async_melpa_bytecomp_batch, assert_async_melpa_dired_batch,
-    assert_async_melpa_package_batch, assert_async_melpa_smtpmail_batch,
-};
-use expect_test::{Expect, expect};
+use super::ParityBatchCase;
+use expect_test::expect;
 
 fn current_melpa_archive_metadata_and_five_library_identities_match_the_exact_pin()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "current_melpa_archive_metadata_and_five_library_identities_match_the_exact_pin",
         r##"
 (let* ((description
@@ -45,7 +41,6 @@ fn current_melpa_archive_metadata_and_five_library_identities_match_the_exact_pi
       "dired-async.el"
       "smtpmail-async.el"))))
 "##,
-        true,
         expect![[
             r#"OK ("20260318.1803" ((emacs "24.4")) (("async.el" 24514 t) ("async-bytecomp.el" 10815 nil) ("async-package.el" 6055 nil) ("dired-async.el" 21840 nil) ("smtpmail-async.el" 2486 nil)))"#
         ]],
@@ -53,7 +48,7 @@ fn current_melpa_archive_metadata_and_five_library_identities_match_the_exact_pi
 }
 
 fn core_registry_matches_every_declared_callable_and_kind() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "core_registry_matches_every_declared_callable_and_kind",
         r##"
 (mapcar
@@ -90,7 +85,6 @@ fn core_registry_matches_every_declared_callable_and_kind() -> ParityBatchCase {
    async--fold-left
    async-let))
 "##,
-        true,
         expect![
             "OK ((async--purecopy function (object)) (async-inject-variables function #1=(include-regexp &optional predicate exclude-regexp noprops)) (async-inject-environment function #1#) (async-handle-result function (func result buf)) (async-when-done function (proc &optional _change)) (async-read-from-client function (proc string &optional prompt-for-pwd)) (async--receive-sexp function (&optional stream)) (async--insert-sexp function (sexp)) (async--transmit-sexp function (process sexp)) (async-batch-invoke function nil) (async-ready function (future)) (async-wait function (future)) (async-get function (future)) (async-message-p function (value)) (async-send function (process-or-key &rest args)) (async-receive function nil) (async-start-process function (name program finish-func &rest program-args)) (async--emacs-program-args function (&optional sexp)) (async-start function (start-func &optional finish-func)) (async-sandbox macro (func)) (async--fold-left function (fn forms bindings)) (async-let macro (bindings &rest forms)))"
         ],
@@ -98,7 +92,7 @@ fn core_registry_matches_every_declared_callable_and_kind() -> ParityBatchCase {
 }
 
 fn bytecomp_registry_matches_every_declared_callable_and_mode() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "bytecomp_registry_matches_every_declared_callable_and_mode",
         r##"
 (list
@@ -123,7 +117,6 @@ fn bytecomp_registry_matches_every_declared_callable_and_mode() -> ParityBatchCa
     async-bytecomp-package-mode
     async-byte-compile-file)))
 "##,
-        true,
         expect![
             "OK (t ((async-bytecomp--file-to-comp-buffer-1 function (log-file &optional postproc)) (async-bytecomp--file-to-comp-buffer function (file-or-dir &optional quiet type log-file)) (async-bytecomp--comp-buffer-to-file macro nil) (async-byte-recompile-directory function (directory &optional quiet)) (async-bytecomp--get-package-deps function (pkgs)) (async--package-compile function (orig-fun pkg-desc &rest args)) (async-bytecomp-package-mode command (&optional arg)) (async-byte-compile-file command (file))))"
         ],
@@ -131,7 +124,7 @@ fn bytecomp_registry_matches_every_declared_callable_and_mode() -> ParityBatchCa
 }
 
 fn dired_registry_matches_every_declared_callable_macro_and_mode() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "dired_registry_matches_every_declared_callable_macro_and_mode",
         r##"
 (list
@@ -168,7 +161,6 @@ fn dired_registry_matches_every_declared_callable_macro_and_mode() -> ParityBatc
     dired-async-do-hardlink
     dired-async-do-rename)))
 "##,
-        true,
         expect![
             "OK (t ((dired-async--modeline-mode command (&optional arg)) (dired-async-mode-line-message function (text face &rest args)) (dired-async-processes function (&optional propname)) (dired-async-kill-process command nil) (dired-async-after-file-create function (total operation failures skipped)) (dired-async-maybe-kill-ftp function nil) (dired-async--directory-p function (attributes)) (dired-async--same-device-p function (f1 f2)) (dired-async--small-file-p function (file &optional attrs)) (dired-async--skip-async-p function (file-creator file name-constructor &optional attrs)) (dired-async--smart-create-files function (old-func file-creator operation fn-list name-constructor &optional marker-char)) (dired-async--abort-if-file-too-large function (size op-type filename)) (dired-async-create-files function (file-creator operation fn-list name-constructor &optional _marker-char)) (dired-async-wdired-do-renames function (old-fn &rest args)) (dired-async-mode command (&optional arg)) (dired-async--with-async-create-files macro (&rest body)) (dired-async-do-copy command (&optional arg)) (dired-async-do-symlink command (&optional arg)) (dired-async-do-hardlink command (&optional arg)) (dired-async-do-rename command (&optional arg))))"
         ],
@@ -176,7 +168,7 @@ fn dired_registry_matches_every_declared_callable_macro_and_mode() -> ParityBatc
 }
 
 fn package_and_smtpmail_registries_match_their_complete_surfaces() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "package_and_smtpmail_registries_match_their_complete_surfaces",
         r##"
 (list
@@ -194,7 +186,6 @@ fn package_and_smtpmail_registries_match_their_complete_surfaces() -> ParityBatc
  (get 'async-package-message
       'face-defface-spec))
 "##,
-        true,
         expect![[
             r#"OK (t ((async-package--modeline-mode t (&optional arg)) (async-package-do-action nil (action packages error-file))) nil ((t (:foreground "yellow"))))"#
         ]],
@@ -202,7 +193,7 @@ fn package_and_smtpmail_registries_match_their_complete_surfaces() -> ParityBatc
 }
 
 fn smtpmail_registry_matches_hook_group_and_send_command() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "smtpmail_registry_matches_hook_group_and_send_command",
         r##"
 (list
@@ -217,13 +208,12 @@ fn smtpmail_registry_matches_hook_group_and_send_command() -> ParityBatchCase {
   (help-function-arglist
    'async-smtpmail-send-it t)))
 "##,
-        true,
         expect![[r#"OK (t t nil "Send e-mail with smtpmail.el asynchronously" (t nil))"#]],
     )
 }
 
 fn generated_autoloads_publish_current_core_bytecomp_and_dired_entry_points() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "generated_autoloads_publish_current_core_bytecomp_and_dired_entry_points",
         r##"
 (list
@@ -250,52 +240,35 @@ fn generated_autoloads_publish_current_core_bytecomp_and_dired_entry_points() ->
  (featurep 'async-autoloads)
  (featurep 'async))
 "##,
-        true,
         expect![[
             r#"OK (((async-start-process t "async" nil nil) (async-start t "async" nil nil) (async-byte-recompile-directory t "async-bytecomp" nil nil) (async-bytecomp-package-mode t "async-bytecomp" t nil) (async-byte-compile-file t "async-bytecomp" t nil) (dired-async-mode t "dired-async" t nil) (dired-async-do-copy t "dired-async" t nil) (dired-async-do-symlink t "dired-async" t nil) (dired-async-do-hardlink t "dired-async" t nil) (dired-async-do-rename t "dired-async" t nil)) t nil)"#
         ]],
     )
 }
 
-#[test]
-fn registry_async_melpa_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn registry_async_melpa_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         current_melpa_archive_metadata_and_five_library_identities_match_the_exact_pin(),
         core_registry_matches_every_declared_callable_and_kind(),
-    ];
-    assert_async_melpa_batch(&cases);
+    ]
 }
 
-#[test]
-fn registry_async_melpa_bytecomp_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![bytecomp_registry_matches_every_declared_callable_and_mode()];
-    assert_async_melpa_bytecomp_batch(&cases);
+pub(super) fn registry_async_melpa_bytecomp_batch_cases() -> Vec<ParityBatchCase> {
+    vec![bytecomp_registry_matches_every_declared_callable_and_mode()]
 }
 
-#[test]
-fn registry_async_melpa_dired_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![dired_registry_matches_every_declared_callable_macro_and_mode()];
-    assert_async_melpa_dired_batch(&cases);
+pub(super) fn registry_async_melpa_dired_batch_cases() -> Vec<ParityBatchCase> {
+    vec![dired_registry_matches_every_declared_callable_macro_and_mode()]
 }
 
-#[test]
-fn registry_async_melpa_package_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![package_and_smtpmail_registries_match_their_complete_surfaces()];
-    assert_async_melpa_package_batch(&cases);
+pub(super) fn registry_async_melpa_package_batch_cases() -> Vec<ParityBatchCase> {
+    vec![package_and_smtpmail_registries_match_their_complete_surfaces()]
 }
 
-#[test]
-fn registry_async_melpa_smtpmail_batch() {
-    let cases: Vec<ParityBatchCase> = vec![smtpmail_registry_matches_hook_group_and_send_command()];
-    assert_async_melpa_smtpmail_batch(&cases);
+pub(super) fn registry_async_melpa_smtpmail_batch_cases() -> Vec<ParityBatchCase> {
+    vec![smtpmail_registry_matches_hook_group_and_send_command()]
 }
 
-#[test]
-fn registry_async_melpa_autoload_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![generated_autoloads_publish_current_core_bytecomp_and_dired_entry_points()];
-    assert_async_melpa_autoload_batch(&cases);
+pub(super) fn registry_async_melpa_autoload_batch_cases() -> Vec<ParityBatchCase> {
+    vec![generated_autoloads_publish_current_core_bytecomp_and_dired_entry_points()]
 }

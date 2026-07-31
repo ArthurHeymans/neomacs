@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_magit_section_batch};
+use super::ParityBatchCase;
 
 fn magit_section_lineage_and_match_conditions_cover_exact_and_recursive_forms() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_section_lineage_and_match_conditions_cover_exact_and_recursive_forms",
         r##"(with-temp-buffer
                (magit-section-mode)
@@ -32,13 +32,12 @@ fn magit_section_lineage_and_match_conditions_cover_exact_and_recursive_forms() 
                      [item group root] item)
                     (magit-section-value-if
                      [item root] item)))))"##,
-        true,
         expect![[r#"OK ((item group root) (t t nil t t t nil) 42 nil)"#]],
     )
 }
 
 fn magit_section_case_and_match_assoc_choose_first_matching_clause() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_section_case_and_match_assoc_choose_first_matching_clause",
         r##"(with-temp-buffer
                (magit-section-mode)
@@ -68,13 +67,12 @@ fn magit_section_case_and_match_assoc_choose_first_matching_clause() -> ParityBa
                      item
                      '((missing . no)
                        ([* group] . recursive)))))))"##,
-        true,
         expect![[r#"OK ((matched 42) exact recursive)"#]],
     )
 }
 
 fn magit_section_cancel_removes_partial_section_without_corrupting_siblings() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_section_cancel_removes_partial_section_without_corrupting_siblings",
         r##"(with-temp-buffer
                (magit-section-mode)
@@ -95,17 +93,14 @@ fn magit_section_cancel_removes_partial_section_without_corrupting_siblings() ->
                           (oref magit-root-section children))
                   (magit-get-section
                    '((item . canceled) (root))))))"##,
-        true,
         expect![[r#"OK ("Root\nKept\nAlso kept\n" (kept also-kept) nil)"#]],
     )
 }
 
-#[test]
-fn matching_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn matching_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         magit_section_lineage_and_match_conditions_cover_exact_and_recursive_forms(),
         magit_section_case_and_match_assoc_choose_first_matching_clause(),
         magit_section_cancel_removes_partial_section_without_corrupting_siblings(),
-    ];
-    assert_magit_section_batch(&cases);
+    ]
 }

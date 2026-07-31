@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alarm_clock_batch};
+use super::ParityBatchCase;
 
 /// The whole point of the package in one call: `M-x alarm-clock-set', a
 /// relative time and a message.  A timer is scheduled two minutes out, the
@@ -10,9 +10,8 @@ use super::{ParityBatchCase, assert_alarm_clock_batch};
 /// asserted as a delta in tenths of a second from a timestamp taken
 /// immediately before the call; the rendered clock reading is compared against
 /// the alarm's own time rather than against a literal.
-
 fn setting_an_alarm_schedules_its_timer_and_lists_it() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "setting_an_alarm_schedules_its_timer_and_lists_it",
         r##"(progn
   (alarm-clock-test-setup)
@@ -23,7 +22,6 @@ fn setting_an_alarm_schedules_its_timer_and_lists_it() -> ParityBatchCase {
           :cache (alarm-clock-test-cache)
           :cache-records-the-alarms (alarm-clock-test-cache-matches-alarms)
           :files (alarm-clock-test-files))))"##,
-        true,
         expect![[
             r#"OK (:scheduled ("Stand up" 120 t 2) :lines ((:time-matches-the-alarm t :remaining-hour-minute "00:01" :message "Stand up" :property-message "Stand up" :property-only-on-first-character t)) :header ("Time                 Remaining      Message" alarm-clock-mode t) :cache ";; Auto-generated file; don't edit\n((:time \"<ISO>\" :message \"Stand up\"))\n" :cache-records-the-alarms (("Stand up" . t)) :files ("." ".." "alarm-clock.cache"))"#
         ]],
@@ -31,7 +29,7 @@ fn setting_an_alarm_schedules_its_timer_and_lists_it() -> ParityBatchCase {
 }
 
 fn the_documented_time_specifications_all_schedule_the_delay_they_name() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_documented_time_specifications_all_schedule_the_delay_they_name",
         r##"(progn
   (alarm-clock-test-setup)
@@ -46,15 +44,15 @@ fn the_documented_time_specifications_all_schedule_the_delay_they_name() -> Pari
                         (alarm-clock-set "not a time at all" "never")
                       (error error))
           :alarms-after-rejection (length alarm-clock--alist))))"##,
-        true,
         expect![[
             r#"OK (:scheduled (("forty five seconds" 45 t 2) ("three minutes" 180 t 1) ("ninety minutes" 5400 t 1) ("half a minute" 30 t 1)) :rejected (error "Invalid time specification") :alarms-after-rejection 4)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn the_listing_is_sorted_and_carries_each_alarm_as_a_text_property() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_listing_is_sorted_and_carries_each_alarm_as_a_text_property",
         r##"(progn
   (alarm-clock-test-setup)
@@ -69,15 +67,15 @@ fn the_listing_is_sorted_and_carries_each_alarm_as_a_text_property() -> ParityBa
           :scheduled scheduled
           :state (alarm-clock-test-state)
           :displayed (buffer-name (window-buffer (selected-window))))))"##,
-        true,
         expect![[
             r#"OK (:lines ((:time-matches-the-alarm t :remaining-hour-minute "00:09" :message "first" :property-message "first" :property-only-on-first-character t) (:time-matches-the-alarm t :remaining-hour-minute "00:59" :message "middle" :property-message "middle" :property-only-on-first-character t) (:time-matches-the-alarm t :remaining-hour-minute "01:59" :message "last" :property-message "last" :property-only-on-first-character t)) :header ("Time                 Remaining      Message" alarm-clock-mode t) :scheduled (("last" 7200 t 2) ("first" 600 t 1) ("middle" 3600 t 1)) :state (("last" t) ("middle" t) ("first" t)) :displayed "*alarm clock*")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn saving_writes_the_alarms_and_restoring_brings_them_back_as_timers() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "saving_writes_the_alarms_and_restoring_brings_them_back_as_timers",
         r##"(progn
   (alarm-clock-test-setup)
@@ -102,15 +100,15 @@ fn saving_writes_the_alarms_and_restoring_brings_them_back_as_timers() -> Parity
               :restored (alarm-clock-test-alarms restore-start 'minutes)
               :new-timers (length (alarm-clock-test-new-timers baseline))
               :lines (alarm-clock-test-lines))))))"##,
-        true,
         expect![[
             r#"OK (:scheduled (("water the plants" 3600 t 2) ("call the bank" 7200 t 1)) :saved (:cache ";; Auto-generated file; don't edit\n((:time \"<ISO>\" :message \"call the bank\")\n (:time \"<ISO>\" :message \"water the plants\"))\n" :cache-records-the-alarms (("call the bank" . t) ("water the plants" . t)) :cache-minutes (("call the bank" . 120) ("water the plants" . 60)) :files ("." ".." "alarm-clock.cache" "alarm-clock.cache~")) :files-after-second-save ("." ".." "alarm-clock.cache" "alarm-clock.cache~") :emptied nil :restored (("call the bank" 120 t) ("water the plants" 60 t)) :new-timers 2 :lines ((:time-matches-the-alarm t :remaining-hour-minute "00:59" :message "water the plants" :property-message "water the plants" :property-only-on-first-character t) (:time-matches-the-alarm t :remaining-hour-minute "01:59" :message "call the bank" :property-message "call the bank" :property-only-on-first-character t)))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn killing_an_alarm_cancels_its_timer_and_rewrites_the_saved_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "killing_an_alarm_cancels_its_timer_and_rewrites_the_saved_file",
         r##"(progn
   (alarm-clock-test-setup)
@@ -135,15 +133,15 @@ fn killing_an_alarm_cancels_its_timer_and_rewrites_the_saved_file() -> ParityBat
               :on-an-empty-line
               (progn (goto-char (point-max))
                      (condition-case error (alarm-clock-kill) (error error))))))))"##,
-        true,
         expect![[
             r#"OK (:scheduled (("doomed" 3600 t 2) ("survivor" 7200 t 1)) :before (:state (("survivor" t) ("doomed" t)) :scheduled t :cache-records-the-alarms (("survivor" . t) ("doomed" . t))) :after-state (("survivor" t)) :killed-timer-still-scheduled nil :lines ((:time-matches-the-alarm t :remaining-hour-minute "01:59" :message "survivor" :property-message "survivor" :property-only-on-first-character t)) :cache ";; Auto-generated file; don't edit\n((:time \"<ISO>\" :message \"survivor\"))\n" :cache-records-the-alarms (("survivor" . t)) :on-an-empty-line (user-error "No alarm clock on the current line"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn a_firing_alarm_reports_itself_in_the_echo_area_when_no_notifier_exists() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_firing_alarm_reports_itself_in_the_echo_area_when_no_notifier_exists",
         r##"(progn
   (alarm-clock-test-setup)
@@ -163,15 +161,15 @@ fn a_firing_alarm_reports_itself_in_the_echo_area_when_no_notifier_exists() -> P
             :stopped alarm-clock--stopped
             :scheduled scheduled
             :state (alarm-clock-test-state)))))"##,
-        true,
         expect![[
             r#"OK (:notifiers (("notify-send") ("terminal-notifier") ("mpg123") ("afplay")) :alert-available nil :sound-file-exists t :messages ("[Alarm Clock] - Tea is ready") :processes-started 0 :timer-still-scheduled nil :new-timers-from-firing 1 :stopped nil :scheduled ("Tea is ready" 10 t 2) :state (("Tea is ready" nil)))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn expired_and_malformed_saved_alarms_are_handled_when_restoring() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "expired_and_malformed_saved_alarms_are_handled_when_restoring",
         r##"(progn
   (alarm-clock-test-setup)
@@ -194,16 +192,14 @@ fn expired_and_malformed_saved_alarms_are_handled_when_restoring() -> ParityBatc
                 :empty-file empty
                 :malformed (condition-case error (alarm-clock-restore) (error error))
                 :alarms-after-malformed (length alarm-clock--alist)))))))"##,
-        true,
         expect![[
             r#"OK (:expired (:alarms (("still pending" 60 t)) :new-timers 2 :lines ((:time-matches-the-alarm t :remaining-hour-minute "00:59" :message "still pending" :property-message "still pending" :property-only-on-first-character t)) :file-still-has-both (("already rang" . -60) ("still pending" . 60))) :missing-file 0 :empty-file 0 :malformed (wrong-type-argument fixnump nil) :alarms-after-malformed 0)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         setting_an_alarm_schedules_its_timer_and_lists_it(),
         the_documented_time_specifications_all_schedule_the_delay_they_name(),
         the_listing_is_sorted_and_carries_each_alarm_as_a_text_property(),
@@ -211,6 +207,5 @@ fn workflows_public_surface_batch() {
         killing_an_alarm_cancels_its_timer_and_rewrites_the_saved_file(),
         a_firing_alarm_reports_itself_in_the_echo_area_when_no_notifier_exists(),
         expired_and_malformed_saved_alarms_are_handled_when_restoring(),
-    ];
-    assert_alarm_clock_batch(&cases);
+    ]
 }

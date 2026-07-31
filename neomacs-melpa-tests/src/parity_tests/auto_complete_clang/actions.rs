@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_clang_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_clang_action_builds_template_candidate_and_starts_template_completion()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_action_builds_template_candidate_and_starts_template_completion",
         r##"(with-temp-buffer
          (insert "foo")
@@ -40,14 +40,13 @@ fn auto_complete_clang_action_builds_template_candidate_and_starts_template_comp
                ac-template-candidates)
               starts
               (nreverse messages)))))"##,
-        true,
         expect![[r#"OK (4 (("(int value)" "" "(<#int value#>)")) 1 ("int foo(int value)"))"#]],
     )
 }
 
 fn auto_complete_clang_action_preserves_multiple_overloads_as_distinct_template_choices()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_action_preserves_multiple_overloads_as_distinct_template_choices",
         r##"(with-temp-buffer
          (insert "draw")
@@ -84,7 +83,6 @@ fn auto_complete_clang_action_preserves_multiple_overloads_as_distinct_template_
                ac-template-candidates)
               starts
               messages))))"##,
-        true,
         expect![[
             r#"OK ((("(int x)" "" "(<#int x#>)") ("(double x, double y)" "" "(<#double x#>, <#double y#>)") ("()" "" "()")) 1 nil)"#
         ]],
@@ -93,7 +91,7 @@ fn auto_complete_clang_action_preserves_multiple_overloads_as_distinct_template_
 
 fn auto_complete_clang_action_expands_optional_argument_variant_and_variadic_variant()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_action_expands_optional_argument_variant_and_variadic_variant",
         r##"(with-temp-buffer
          (insert "log")
@@ -120,7 +118,6 @@ fn auto_complete_clang_action_expands_optional_argument_variant_and_variadic_var
                #'ac-clang-test-candidate-state
                ac-template-candidates)
               starts))))"##,
-        true,
         expect![[
             r#"OK ((("(const char *fmt, {#int level#}, ...)" "" "(<#const char *fmt#>, {#int level#}, ...)") ("(const char *fmt, , ...)" "" "(<#const char *fmt#>, , ...)") ("(const char *fmt, )" "" "(<#const char *fmt#>, )")) 1)"#
         ]],
@@ -128,7 +125,7 @@ fn auto_complete_clang_action_expands_optional_argument_variant_and_variadic_var
 }
 
 fn auto_complete_clang_action_extracts_function_pointer_return_signature() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_action_extracts_function_pointer_return_signature",
         r##"(with-temp-buffer
          (insert "callback")
@@ -155,7 +152,6 @@ fn auto_complete_clang_action_extracts_function_pointer_return_signature() -> Pa
                #'ac-clang-test-candidate-state
                ac-template-candidates)
               starts))))"##,
-        true,
         expect![[
             r#"OK ((("(double, const char *, ...)" "int " "") ("(double, const char *)" "int " "")) 1)"#
         ]],
@@ -164,7 +160,7 @@ fn auto_complete_clang_action_extracts_function_pointer_return_signature() -> Pa
 
 fn auto_complete_clang_action_without_callable_signature_only_displays_clean_help()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_action_without_callable_signature_only_displays_clean_help",
         r##"(with-temp-buffer
          (insert "constant")
@@ -198,13 +194,12 @@ fn auto_complete_clang_action_without_callable_signature_only_displays_clean_hel
               ac-template-candidates
               starts
               (nreverse messages)))))"##,
-        true,
         expect![[r#"OK (("stale") 0 ("const int constant   ;    second detail"))"#]],
     )
 }
 
 fn auto_complete_clang_action_deduplicates_identical_overload_templates() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_action_deduplicates_identical_overload_templates",
         r##"(with-temp-buffer
          (insert "same")
@@ -229,14 +224,13 @@ fn auto_complete_clang_action_deduplicates_identical_overload_templates() -> Par
              (mapcar
               #'ac-clang-test-candidate-state
               ac-template-candidates))))"##,
-        true,
         expect![[r#"OK (("(int x)" "" "(<#int x#>)") ("(double x)" "" "(<#double x#>)"))"#]],
     )
 }
 
 fn auto_complete_clang_action_single_template_flattens_multiline_message_after_start()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_action_single_template_flattens_multiline_message_after_start",
         r##"(with-temp-buffer
          (insert "only")
@@ -269,7 +263,6 @@ fn auto_complete_clang_action_single_template_flattens_multiline_message_after_s
               (mapcar
                #'ac-clang-test-candidate-state
                ac-template-candidates)))))"##,
-        true,
         expect![[
             r#"OK ((complete (message "int only(int x)   ;    additional note")) (("(int x)" "" "(<#int x#>)")))"#
         ]],
@@ -278,7 +271,7 @@ fn auto_complete_clang_action_single_template_flattens_multiline_message_after_s
 
 fn auto_complete_clang_action_signals_for_missing_or_unpropertized_completion_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_clang_action_signals_for_missing_or_unpropertized_completion_state",
         r##"(list
          (let ((ac-last-completion nil))
@@ -292,16 +285,14 @@ fn auto_complete_clang_action_signals_for_missing_or_unpropertized_completion_st
                    nil)))
              (ac-clang-test-error
               #'ac-clang-action))))"##,
-        true,
         expect![
             "OK ((:signal args-out-of-range (0 0)) (:signal wrong-type-argument (stringp nil)))"
         ],
     )
 }
 
-#[test]
-fn actions_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn actions_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_clang_action_builds_template_candidate_and_starts_template_completion(),
         auto_complete_clang_action_preserves_multiple_overloads_as_distinct_template_choices(),
         auto_complete_clang_action_expands_optional_argument_variant_and_variadic_variant(),
@@ -310,6 +301,5 @@ fn actions_public_surface_batch() {
         auto_complete_clang_action_deduplicates_identical_overload_templates(),
         auto_complete_clang_action_single_template_flattens_multiline_message_after_start(),
         auto_complete_clang_action_signals_for_missing_or_unpropertized_completion_state(),
-    ];
-    assert_auto_complete_clang_batch(&cases);
+    ]
 }

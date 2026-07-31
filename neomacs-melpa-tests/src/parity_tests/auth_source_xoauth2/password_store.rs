@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auth_source_xoauth2_batch};
+use super::ParityBatchCase;
 
 fn auth_source_xoauth2_pass_find_match_prefers_three_argument_api() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_pass_find_match_prefers_three_argument_api",
         r##"(let (calls)
          (cl-letf
@@ -15,13 +15,12 @@ fn auth_source_xoauth2_pass_find_match_prefers_three_argument_api() -> ParityBat
             (auth-source-xoauth2-pass--find-match
              "host" "user" 993)
             (nreverse calls))))"##,
-        true,
         expect![[r#"OK (((secret . "entry")) (("host" "user" 993)))"#]],
     )
 }
 
 fn auth_source_xoauth2_pass_find_match_falls_back_to_two_argument_api() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_pass_find_match_falls_back_to_two_argument_api",
         r##"(let (calls)
          (cl-letf
@@ -33,13 +32,12 @@ fn auth_source_xoauth2_pass_find_match_falls_back_to_two_argument_api() -> Parit
             (auth-source-xoauth2-pass--find-match
              "host" "user" 993)
             (nreverse calls))))"##,
-        true,
         expect![[r#"OK (((secret . "legacy-entry")) (("host" "user")))"#]],
     )
 }
 
 fn auth_source_xoauth2_pass_get_supports_entry_name_and_parsed_alist() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_pass_get_supports_entry_name_and_parsed_alist",
         r##"(let (calls)
          (cl-letf
@@ -56,7 +54,6 @@ fn auth_source_xoauth2_pass_get_supports_entry_name_and_parsed_alist() -> Parity
              '(("xoauth2_client_secret" . "parsed-secret")
                ("other" . "value")))
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ("accounts/mail/alice:xoauth2_client_id" "parsed-secret" (("xoauth2_client_id" "accounts/mail/alice")))"#
         ]],
@@ -64,7 +61,7 @@ fn auth_source_xoauth2_pass_get_supports_entry_name_and_parsed_alist() -> Parity
 }
 
 fn auth_source_xoauth2_pass_get_reports_missing_and_unsupported_entries() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_pass_get_reports_missing_and_unsupported_entries",
         r##"(let (messages)
          (cl-letf
@@ -85,7 +82,6 @@ fn auth_source_xoauth2_pass_get_reports_missing_and_unsupported_entries() -> Par
              "missing"
              42)
             (nreverse messages))))"##,
-        true,
         expect![[
             r#"OK (nil nil ("Missing XOAuth2 entry value for 'missing'" "Missing XOAuth2 entry value for 'missing'"))"#
         ]],
@@ -93,7 +89,7 @@ fn auth_source_xoauth2_pass_get_reports_missing_and_unsupported_entries() -> Par
 }
 
 fn auth_source_xoauth2_pass_creds_builds_complete_provider_plist() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_pass_creds_builds_complete_provider_plist",
         r##"(let (calls)
          (cl-letf
@@ -113,7 +109,6 @@ fn auth_source_xoauth2_pass_creds_builds_complete_provider_plist() -> ParityBatc
             (auth-source-xoauth2-pass-creds
              "host" "user" 443)
             (nreverse calls))))"##,
-        true,
         expect![[
             r#"OK ((:token-url "https://token.example" :client-id "client" :client-secret "secret" :refresh-token "refresh") ((:find "host" "user" 443) (:get "xoauth2_token_url" #1=(("xoauth2_token_url" . "https://token.example") ("xoauth2_client_id" . "client") ("xoauth2_client_secret" . "secret") ("xoauth2_refresh_token" . "refresh"))) (:get "xoauth2_client_id" #1#) (:get "xoauth2_client_secret" #1#) (:get "xoauth2_refresh_token" #1#)))"#
         ]],
@@ -121,7 +116,7 @@ fn auth_source_xoauth2_pass_creds_builds_complete_provider_plist() -> ParityBatc
 }
 
 fn auth_source_xoauth2_pass_creds_stops_at_first_missing_value() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_pass_creds_stops_at_first_missing_value",
         r##"(let (calls)
          (cl-letf
@@ -142,13 +137,12 @@ fn auth_source_xoauth2_pass_creds_stops_at_first_missing_value() -> ParityBatchC
             (auth-source-xoauth2-pass-creds
              "host" "user" 443)
             (nreverse calls))))"##,
-        true,
         expect![[r#"OK (nil ("xoauth2_token_url" "xoauth2_client_id" "xoauth2_client_secret"))"#]],
     )
 }
 
 fn auth_source_xoauth2_pass_creds_returns_nil_without_matching_entry() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auth_source_xoauth2_pass_creds_returns_nil_without_matching_entry",
         r##"(let (gets)
          (cl-letf
@@ -163,14 +157,12 @@ fn auth_source_xoauth2_pass_creds_returns_nil_without_matching_entry() -> Parity
             (auth-source-xoauth2-pass-creds
              "host" "user" 443)
             gets)))"##,
-        true,
         expect!["OK (nil nil)"],
     )
 }
 
-#[test]
-fn password_store_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn password_store_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auth_source_xoauth2_pass_find_match_prefers_three_argument_api(),
         auth_source_xoauth2_pass_find_match_falls_back_to_two_argument_api(),
         auth_source_xoauth2_pass_get_supports_entry_name_and_parsed_alist(),
@@ -178,6 +170,5 @@ fn password_store_public_surface_batch() {
         auth_source_xoauth2_pass_creds_builds_complete_provider_plist(),
         auth_source_xoauth2_pass_creds_stops_at_first_missing_value(),
         auth_source_xoauth2_pass_creds_returns_nil_without_matching_entry(),
-    ];
-    assert_auth_source_xoauth2_batch(&cases);
+    ]
 }

@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{AQI_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -59,20 +58,21 @@ fn current_test_name() -> String {
     thread.name().unwrap_or("unnamed aqi parity test").into()
 }
 
-fn assert_aqi_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = aqi_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("aqi parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_aqi_parity(elisp_form: &str, expected: Expect) {
-    assert_aqi_source_parity("aqi.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_aqi_parity` cases (2a).
 pub(crate) fn assert_aqi_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(aqi_oracle("aqi.el"), &name, "aqi_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn aqi_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_aqi_batch(&cases);
+}
+
+// END generated package batch tests

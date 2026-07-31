@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atl_long_lines_batch};
+use super::ParityBatchCase;
 
 fn atl_long_lines_end_column_measures_ascii_empty_and_trailing_space_lines() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_end_column_measures_ascii_empty_and_trailing_space_lines",
         r##"(with-temp-buffer
          (insert
@@ -20,13 +20,12 @@ fn atl_long_lines_end_column_measures_ascii_empty_and_trailing_space_lines() -> 
               columns)
              (forward-line 1))
            (nreverse columns)))"##,
-        true,
         expect!["OK (0 5 14)"],
     )
 }
 
 fn atl_long_lines_end_column_honors_buffer_local_tab_width_and_tab_stops() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_end_column_honors_buffer_local_tab_width_and_tab_stops",
         r##"(mapcar
          (lambda (width)
@@ -42,14 +41,13 @@ fn atl_long_lines_end_column_honors_buffer_local_tab_width_and_tab_stops() -> Pa
               width
               (atl-long-lines--end-line-column))))
          '(2 4 8 16))"##,
-        true,
         expect!["OK ((2 4) (4 8) (8 16) (16 32))"],
     )
 }
 
 fn atl_long_lines_end_column_counts_wide_combining_and_multilingual_characters() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_end_column_counts_wide_combining_and_multilingual_characters",
         r##"(mapcar
          (lambda (text)
@@ -66,13 +64,12 @@ fn atl_long_lines_end_column_counts_wide_combining_and_multilingual_characters()
            "é"
            "🙂x"
            "日本語 abc"))"##,
-        true,
         expect![[r#"OK (("雪λ" 2 3 3) ("é" 2 1 1) ("🙂x" 2 3 3) ("日本語 abc" 7 10 10))"#]],
     )
 }
 
 fn atl_long_lines_end_column_uses_the_current_logical_line_not_buffer_maximum() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_end_column_uses_the_current_logical_line_not_buffer_maximum",
         r##"(with-temp-buffer
          (insert
@@ -89,13 +86,12 @@ fn atl_long_lines_end_column_uses_the_current_logical_line_not_buffer_maximum() 
              (line-number-at-pos)
              (atl-long-lines--end-line-column)))
           '(2 0 1)))"##,
-        true,
         expect!["OK ((2 3 8) (0 1 5) (1 2 40))"],
     )
 }
 
 fn atl_long_lines_end_column_respects_narrowing_at_a_partial_line_boundary() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_end_column_respects_narrowing_at_a_partial_line_boundary",
         r##"(with-temp-buffer
          (insert
@@ -115,14 +111,13 @@ fn atl_long_lines_end_column_respects_narrowing_at_a_partial_line_boundary() -> 
             (point-max)
             (line-end-position)
             (atl-long-lines--end-line-column))))"##,
-        true,
         expect![[r#"OK ("ABCDEFGHIJ" 8 18 18 10)"#]],
     )
 }
 
 fn atl_long_lines_end_column_preserves_point_mark_current_buffer_and_match_data() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_end_column_preserves_point_mark_current_buffer_and_match_data",
         r##"(let ((original
                 (current-buffer)))
@@ -155,13 +150,12 @@ fn atl_long_lines_end_column_preserves_point_mark_current_buffer_and_match_data(
                (eq
                 original
                 (current-buffer)))))))"##,
-        true,
         expect!["OK (16 t t t t)"],
     )
 }
 
 fn atl_long_lines_end_column_tracks_live_edits_to_the_same_line() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atl_long_lines_end_column_tracks_live_edits_to_the_same_line",
         r##"(with-temp-buffer
          (insert "abc")
@@ -181,14 +175,12 @@ fn atl_long_lines_end_column_tracks_live_edits_to_the_same_line() -> ParityBatch
               extended
               (buffer-string)
               (atl-long-lines--end-line-column)))))"##,
-        true,
         expect![[r#"OK (3 9 "a\11Z" 9)"#]],
     )
 }
 
-#[test]
-fn columns_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn columns_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         atl_long_lines_end_column_measures_ascii_empty_and_trailing_space_lines(),
         atl_long_lines_end_column_honors_buffer_local_tab_width_and_tab_stops(),
         atl_long_lines_end_column_counts_wide_combining_and_multilingual_characters(),
@@ -196,6 +188,5 @@ fn columns_public_surface_batch() {
         atl_long_lines_end_column_respects_narrowing_at_a_partial_line_boundary(),
         atl_long_lines_end_column_preserves_point_mark_current_buffer_and_match_data(),
         atl_long_lines_end_column_tracks_live_edits_to_the_same_line(),
-    ];
-    assert_atl_long_lines_batch(&cases);
+    ]
 }

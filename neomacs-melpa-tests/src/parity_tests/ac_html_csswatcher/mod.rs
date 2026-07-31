@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{AC_HTML_CSSWATCHER_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -34,7 +33,7 @@ const AC_HTML_CSSWATCHER_TEST_TIMEOUT: Duration = Duration::from_secs(240);
 /// sentinel.  A workflow that reads the variable without waiting sees whatever
 /// was there before, and an *earlier* call's sentinel firing late overwrites it
 /// - which is how the first probe of this package produced a stale reading that
-/// looked like a package bug.
+///   looked like a package bug.
 const AC_HTML_CSSWATCHER_TEST_PRELUDE: &str = r##"(require 'cl-lib)
 
 (defun ac-html-csswatcher-test-site ()
@@ -127,14 +126,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_ac_html_csswatcher_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = ac_html_csswatcher_oracle()
-        .run_value(&name, form)
-        .unwrap_or_else(|error| panic!("ac-html-csswatcher parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_ac_html_csswatcher_parity` cases (2a).
 pub(crate) fn assert_ac_html_csswatcher_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -145,3 +136,16 @@ pub(crate) fn assert_ac_html_csswatcher_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn ac_html_csswatcher_package_batch() {
+    let cases: Vec<ParityBatchCase> = [workflows::workflows_public_surface_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_ac_html_csswatcher_batch(&cases);
+}
+
+// END generated package batch tests

@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_org_md_batch};
+use super::ParityBatchCase;
 
 fn auto_org_md_practical_save_hook_exports_org_buffer_once() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_practical_save_hook_exports_org_buffer_once",
         r##"(let* ((root
                                  (auto-org-md-test-root
@@ -43,7 +43,6 @@ fn auto_org_md_practical_save_hook_exports_org_buffer_once() -> ParityBatchCase 
                     (auto-org-md-test-read-file
                      org-file))))
              (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK ((("notes.org" #("* Initial\nBody\n" 0 10 (fontified nil) 10 15 (fontified nil)) nil)) nil (auto-org-md-export t) "* Initial\nBody\n")"#
         ]],
@@ -51,7 +50,7 @@ fn auto_org_md_practical_save_hook_exports_org_buffer_once() -> ParityBatchCase 
 }
 
 fn auto_org_md_save_hook_in_non_org_buffer_is_a_noop() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_save_hook_in_non_org_buffer_is_a_noop",
         r##"(let* ((root
                                  (auto-org-md-test-root
@@ -82,13 +81,12 @@ fn auto_org_md_save_hook_in_non_org_buffer_is_a_noop() -> ParityBatchCase {
                     (auto-org-md-test-read-file
                      text-file))))
              (kill-buffer buffer))))"##,
-        true,
         expect![[r#"OK (nil nil "Initial\nBody\n")"#]],
     )
 }
 
 fn auto_org_md_disabling_mode_stops_future_save_exports() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_disabling_mode_stops_future_save_exports",
         r##"(let* ((root
                                  (auto-org-md-test-root
@@ -124,7 +122,6 @@ fn auto_org_md_disabling_mode_stops_future_save_exports() -> ParityBatchCase {
                     (auto-org-md-test-read-file
                      org-file))))
              (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK ((#("* Initial\nFirst\n" 0 10 (fontified nil) 10 16 (fontified nil))) nil "* Initial\nFirst\nSecond\n")"#
         ]],
@@ -132,7 +129,7 @@ fn auto_org_md_disabling_mode_stops_future_save_exports() -> ParityBatchCase {
 }
 
 fn auto_org_md_real_export_writes_simple_markdown_document() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_real_export_writes_simple_markdown_document",
         r##"(let* ((root
                                  (auto-org-md-test-root
@@ -165,7 +162,6 @@ fn auto_org_md_real_export_writes_simple_markdown_document() -> ParityBatchCase 
                    md-file)
                   (buffer-modified-p)))
              (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK ("guide.md" t "\n# Table of Contents\n\n1.  [Overview](#overview)\n    1.  [Tasks](#tasks)\n\n\n\n<a id=\"overview\"></a>\n\n# Overview\n\nPlain body with **bold** and *italic* text.\n\n\n<a id=\"tasks\"></a>\n\n## Tasks\n\n-   [X] Export the document\n-   [ ] Review the result\n\n" nil)"#
         ]],
@@ -173,7 +169,7 @@ fn auto_org_md_real_export_writes_simple_markdown_document() -> ParityBatchCase 
 }
 
 fn auto_org_md_real_export_handles_links_source_blocks_and_tables() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_real_export_handles_links_source_blocks_and_tables",
         r##"(let* ((root
                                  (auto-org-md-test-root
@@ -204,7 +200,6 @@ fn auto_org_md_real_export_handles_links_source_blocks_and_tables() -> ParityBat
                   (auto-org-md-test-read-file
                    md-file)))
              (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK (t "\n\n# Release\n\nSee [the specification](https://example.invalid/spec).\n\n<table border=\"2\" cellspacing=\"0\" cellpadding=\"6\" rules=\"groups\" frame=\"hsides\">\n\n\n<colgroup>\n<col  class=\"org-left\" />\n\n<col  class=\"org-left\" />\n</colgroup>\n<thead>\n<tr>\n<th scope=\"col\" class=\"org-left\">Item</th>\n<th scope=\"col\" class=\"org-left\">State</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td class=\"org-left\">API</td>\n<td class=\"org-left\">ready</td>\n</tr>\n</tbody>\n</table>\n\n    (message \"ready\")\n\n")"#
         ]],
@@ -212,7 +207,7 @@ fn auto_org_md_real_export_handles_links_source_blocks_and_tables() -> ParityBat
 }
 
 fn auto_org_md_real_save_replaces_markdown_with_latest_org_content() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_real_save_replaces_markdown_with_latest_org_content",
         r##"(let* ((root
                                  (auto-org-md-test-root
@@ -263,7 +258,6 @@ fn auto_org_md_real_save_replaces_markdown_with_latest_org_content() -> ParityBa
                        md-file)
                       (buffer-modified-p)))))
              (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK ("\n# Table of Contents\n\n1.  [Status](#status)\n    1.  [Detail](#detail)\n\n\n<a id=\"status\"></a>\n\n# Status\n\nVersion one.\n\n\n<a id=\"detail\"></a>\n\n## Detail\n\nFirst export.\n\n" "\n# Table of Contents\n\n1.  [Status](#status)\n\n\n<a id=\"status\"></a>\n\n# Status\n\nVersion two.\n\n-   stable\n-   published\n\n" nil)"#
         ]],
@@ -271,7 +265,7 @@ fn auto_org_md_real_save_replaces_markdown_with_latest_org_content() -> ParityBa
 }
 
 fn auto_org_md_two_local_hooks_export_independent_org_files() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_two_local_hooks_export_independent_org_files",
         r##"(let* ((root
                                  (auto-org-md-test-root
@@ -330,7 +324,6 @@ fn auto_org_md_two_local_hooks_export_independent_org_files() -> ParityBatchCase
                           after-save-hook))))
              (kill-buffer first-buffer)
              (kill-buffer second-buffer))))"##,
-        true,
         expect![[
             r#"OK ("\n# Table of Contents\n\n1.  [First](#first)\n\n\n<a id=\"first\"></a>\n\n# First\n\nAlpha.\nSaved.\n\n" "\n# Table of Contents\n\n1.  [Second](#second)\n\n\n<a id=\"second\"></a>\n\n# Second\n\nBeta.\nSaved.\n\n" (auto-org-md-export t) (auto-org-md-export t))"#
         ]],
@@ -338,7 +331,7 @@ fn auto_org_md_two_local_hooks_export_independent_org_files() -> ParityBatchCase
 }
 
 fn auto_org_md_export_follows_renamed_visited_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_export_follows_renamed_visited_file",
         r##"(let* ((root
                                  (auto-org-md-test-root
@@ -377,7 +370,6 @@ fn auto_org_md_export_follows_renamed_visited_file() -> ParityBatchCase {
                   (auto-org-md-test-read-file
                    final-md)))
              (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK (t t t "\n# Table of Contents\n\n1.  [Draft](#draft)\n\n\n<a id=\"draft\"></a>\n\n# Draft\n\nOriginal path.\n\n" "\n# Table of Contents\n\n1.  [Draft](#draft)\n\n\n<a id=\"draft\"></a>\n\n# Draft\n\nOriginal path.\nFinal path.\n\n")"#
         ]],
@@ -385,7 +377,7 @@ fn auto_org_md_export_follows_renamed_visited_file() -> ParityBatchCase {
 }
 
 fn auto_org_md_unsaved_org_buffer_surfaces_export_filename_contract() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_unsaved_org_buffer_surfaces_export_filename_contract",
         r##"(with-temp-buffer
          (org-mode)
@@ -396,7 +388,6 @@ fn auto_org_md_unsaved_org_buffer_surfaces_export_filename_contract() -> ParityB
            #'auto-org-md-export)
           (buffer-string)
           (buffer-modified-p)))"##,
-        true,
         expect![[
             r#"OK (nil (:signal end-of-file ("Error reading from stdin")) "* Unsaved\nNo visited file.\n" t)"#
         ]],
@@ -404,7 +395,7 @@ fn auto_org_md_unsaved_org_buffer_surfaces_export_filename_contract() -> ParityB
 }
 
 fn auto_org_md_after_save_export_error_preserves_saved_org_content() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_org_md_after_save_export_error_preserves_saved_org_content",
         r##"(let* ((root
                                  (auto-org-md-test-root
@@ -435,16 +426,14 @@ fn auto_org_md_after_save_export_error_preserves_saved_org_content() -> ParityBa
                     (auto-org-md-test-read-file
                      org-file))))
              (kill-buffer buffer))))"##,
-        true,
         expect![[
             r#"OK ((:signal error ("fixture export failed")) nil "* Before\nSaved before export failure.\n")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_org_md_practical_save_hook_exports_org_buffer_once(),
         auto_org_md_save_hook_in_non_org_buffer_is_a_noop(),
         auto_org_md_disabling_mode_stops_future_save_exports(),
@@ -455,6 +444,5 @@ fn workflows_public_surface_batch() {
         auto_org_md_export_follows_renamed_visited_file(),
         auto_org_md_unsaved_org_buffer_surfaces_export_filename_contract(),
         auto_org_md_after_save_export_error_preserves_saved_org_content(),
-    ];
-    assert_auto_org_md_batch(&cases);
+    ]
 }

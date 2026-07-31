@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_abl_mode_batch};
+use super::ParityBatchCase;
 
 /// A developer opens a test module of a git-controlled Python project and turns
 /// abl-mode on.  The mode has to find the project base from `pyproject.toml',
@@ -8,9 +8,8 @@ use super::{ParityBatchCase, assert_abl_mode_batch};
 /// virtualenv name, keep all of that buffer local, and install its key map; a
 /// file that belongs to no Python project must be refused with the documented
 /// message and leave the mode off.
-
 fn enabling_abl_mode_derives_project_shell_and_virtualenv_names_from_git() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "enabling_abl_mode_derives_project_shell_and_virtualenv_names_from_git",
         r##"(let* ((base (abl-test-project))
        (file (expand-file-name "tests/ünïcode_tests.py" base))
@@ -41,7 +40,6 @@ fn enabling_abl_mode_derives_project_shell_and_virtualenv_names_from_git() -> Pa
                 :messages (abl-test-messages-since mark))
           observed))
   (nreverse observed))"##,
-        true,
         expect![[
             r#"OK ((:enabled t :lighter (abl-mode " abl-mode") :base "ünïcode-projekt/" :branch "feature/ünïcode-tests" :project "ünïcode-projekt" :shell "ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" :virtualenv "ünïcode-projekt_feature-ünïcode-tests" :buffer-local (t t t) :keys (abl-mode-run-test-at-point abl-mode-rerun-last-test abl-mode-format-file)) (:disabled nil :keys nil) (:outside nil :base "" :messages ("Could not find project base. Please make sure there is a setup.py or requirements.txt in a higher directory.")))"#
         ]],
@@ -49,7 +47,7 @@ fn enabling_abl_mode_derives_project_shell_and_virtualenv_names_from_git() -> Pa
 }
 
 fn running_the_test_at_point_sends_one_unittest_command_to_the_project_shell() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "running_the_test_at_point_sends_one_unittest_command_to_the_project_shell",
         r##"(let* ((base (abl-test-project))
        (file (expand-file-name "tests/ünïcode_tests.py" base)))
@@ -74,15 +72,15 @@ fn running_the_test_at_point_sends_one_unittest_command_to_the_project_shell() -
                         (list (line-number-at-pos) (current-column)))
           :current (buffer-name)
           :windows (length (window-list)))))"##,
-        true,
         expect![[
             r#"OK (:ready 1 :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name") :argv ("python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name") :directories ("ünïcode-projekt") :shell-text "cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name\nabl-ready\n" :shell-mode shell-mode :messages ("Running test(s) tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name on ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" "[ORACLE-SANDBOX]/ünïcode-projekt ") :code-point (7 24) :current "ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" :windows 1)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn rerunning_the_last_test_repeats_the_class_entity_regardless_of_point() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "rerunning_the_last_test_repeats_the_class_entity_regardless_of_point",
         r##"(let* ((base (abl-test-project))
        (file (expand-file-name "tests/ünïcode_tests.py" base))
@@ -114,15 +112,15 @@ fn rerunning_the_last_test_repeats_the_class_entity_regardless_of_point() -> Par
                 :messages (abl-test-messages-since mark))
           observed))
   (nreverse observed))"##,
-        true,
         expect![[
             r#"OK ((:nothing-run-yet ("You haven’t run any tests yet.") :argv nothing-recorded :shell-buffer nil) (:entity-at-point "tests/ünïcode_tests.py") (:ready 2 :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests" "cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests") :argv ("python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests" "python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests") :messages ("Running test(s) tests/ünïcode_tests.py::ÜnicodeTests on ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" "[ORACLE-SANDBOX]/ünïcode-projekt ")))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn a_project_abl_file_switches_the_runner_to_pytest_with_module_names() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_project_abl_file_switches_the_runner_to_pytest_with_module_names",
         r##"(let* ((base (abl-test-project
               (concat "abl-mode-test-command \"pytest -q %s\"\n"
@@ -149,15 +147,15 @@ fn a_project_abl_file_switches_the_runner_to_pytest_with_module_names() -> Parit
           :argv (abl-test-commands)
           :directories (abl-test-directories)
           :messages (abl-test-messages-since mark))))"##,
-        true,
         expect![[
             r#"OK (:ready 1 :options ("pytest -q %s" nil nil t nil) :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && pytest -q tests.api layer.service_tests::test_service_root") :argv ("pytest|-q|tests.api|layer.service_tests::test_service_root") :directories ("ünïcode-projekt") :messages ("Running test(s) tests.api layer.service_tests::test_service_root on ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" "[ORACLE-SANDBOX]/ünïcode-projekt "))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn an_existing_virtualenv_is_activated_before_the_test_command_runs() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_existing_virtualenv_is_activated_before_the_test_command_runs",
         r##"(let* ((base (abl-test-project))
        (file (expand-file-name "tests/ünïcode_tests.py" base))
@@ -177,15 +175,15 @@ fn an_existing_virtualenv_is_activated_before_the_test_command_runs() -> ParityB
           :sent (abl-test-shell-inputs)
           :argv (abl-test-commands)
           :directories (abl-test-directories))))"##,
-        true,
         expect![[
             r#"OK (:ready 1 :virtualenv "home/.virtualenvs/ünïcode-projekt_feature-ünïcode-tests" :name "ünïcode-projekt_feature-ünïcode-tests" :activate "workon %s" :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && workon ünïcode-projekt_feature-ünïcode-tests && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests::test_rejects_empty_input") :argv ("workon|ünïcode-projekt_feature-ünïcode-tests" "python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests::test_rejects_empty_input") :directories ("ünïcode-projekt" "ünïcode-projekt"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn formatting_the_current_file_and_then_the_whole_project_reuses_one_shell() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "formatting_the_current_file_and_then_the_whole_project_reuses_one_shell",
         r##"(let* ((base (abl-test-project))
        (file (expand-file-name "tests/api layer/service_tests.py" base)))
@@ -204,15 +202,15 @@ fn formatting_the_current_file_and_then_the_whole_project_reuses_one_shell() -> 
           :argv (abl-test-commands)
           :directories (abl-test-directories)
           :modified (with-current-buffer code (buffer-modified-p)))))"##,
-        true,
         expect![[
             r#"OK (:ready 2 :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && black [ORACLE-SANDBOX]/ünïcode-projekt/tests/api layer/service_tests.py && isort --profile black [ORACLE-SANDBOX]/ünïcode-projekt/tests/api layer/service_tests.py" "cd [ORACLE-SANDBOX]/ünïcode-projekt/ && black . && isort --profile black .") :argv ("black|[ORACLE-SANDBOX]/ünïcode-projekt/tests/api|layer/service_tests.py" "isort|--profile|black|[ORACLE-SANDBOX]/ünïcode-projekt/tests/api|layer/service_tests.py" "black|." "isort|--profile|black|.") :directories ("ünïcode-projekt" "ünïcode-projekt" "ünïcode-projekt" "ünïcode-projekt") :modified nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn running_a_test_outside_any_test_entity_signals_and_starts_no_shell() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "running_a_test_outside_any_test_entity_signals_and_starts_no_shell",
         r##"(let* ((base (abl-test-project))
        (file (expand-file-name "conftest.py" base)))
@@ -232,16 +230,15 @@ fn running_a_test_outside_any_test_entity_signals_and_starts_no_shell() -> Parit
           :argv (abl-test-commands)
           :shell-buffer (and (get-buffer shell) t)
           :messages (abl-test-messages-since mark))))"##,
-        true,
         expect![[
             r#"OK (:signal (error "You do not appear to be in a recognized test entity") :point (4 8) :current "conftest.py" :argv nothing-recorded :shell-buffer nil :messages nil)"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         enabling_abl_mode_derives_project_shell_and_virtualenv_names_from_git(),
         running_the_test_at_point_sends_one_unittest_command_to_the_project_shell(),
         rerunning_the_last_test_repeats_the_class_entity_regardless_of_point(),
@@ -249,6 +246,5 @@ fn workflows_public_surface_batch() {
         an_existing_virtualenv_is_activated_before_the_test_command_runs(),
         formatting_the_current_file_and_then_the_whole_project_reuses_one_shell(),
         running_a_test_outside_any_test_entity_signals_and_starts_no_shell(),
-    ];
-    assert_abl_mode_batch(&cases);
+    ]
 }

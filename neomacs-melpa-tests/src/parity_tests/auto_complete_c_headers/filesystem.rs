@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_c_headers_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_c_headers_directory_listing_excludes_dot_entries_and_caches_visible_names()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_directory_listing_excludes_dot_entries_and_caches_visible_names",
         r##"(let* ((root
                  (expand-file-name
@@ -36,13 +36,12 @@ fn auto_complete_c_headers_directory_listing_excludes_dot_entries_and_caches_vis
                     (cdr entry)))
                  achead:include-cache)))
            (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (#1=("alpha.h" "nested" "zeta.hpp") (("achead-listing" . #1#)))"#]],
     )
 }
 
 fn auto_complete_c_headers_nonempty_cache_is_reused_after_filesystem_changes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_nonempty_cache_is_reused_after_filesystem_changes",
         r##"(let* ((root
                  (expand-file-name
@@ -72,13 +71,12 @@ fn auto_complete_c_headers_nonempty_cache_is_reused_after_filesystem_changes() -
                   (length
                    achead:include-cache))))
            (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (#1=("first.h") #1# ("second.h") 1)"#]],
     )
 }
 
 fn auto_complete_c_headers_cache_keys_distinguish_exact_directory_spellings() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_cache_keys_distinguish_exact_directory_spellings",
         r##"(let* ((root
                  (expand-file-name
@@ -106,14 +104,13 @@ fn auto_complete_c_headers_cache_keys_distinguish_exact_directory_spellings() ->
                     (cdr entry)))
                  achead:include-cache)))
            (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (#2=("api.hh") #1=("api.hh") ((t #1#) (nil #2#)))"#]],
     )
 }
 
 fn auto_complete_c_headers_missing_directory_error_is_suppressed_and_not_cached() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_missing_directory_error_is_suppressed_and_not_cached",
         r##"(let* ((root
                  (expand-file-name
@@ -137,14 +134,13 @@ fn auto_complete_c_headers_missing_directory_error_is_suppressed_and_not_cached(
                 (length
                  achead:include-cache))
              (delete-directory root t))))"##,
-        true,
         expect![[r#"OK (nil nil ("later.h") 1)"#]],
     )
 }
 
 fn auto_complete_c_headers_empty_directory_nil_result_is_relisted_and_duplicate_cached()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_empty_directory_nil_result_is_relisted_and_duplicate_cached",
         r##"(let ((achead:include-cache nil)
                (calls 0))
@@ -161,14 +157,13 @@ fn auto_complete_c_headers_empty_directory_nil_result_is_relisted_and_duplicate_
              "/virtual/empty")
             calls
             achead:include-cache)))"##,
-        true,
         expect![[r#"OK (nil nil 2 (("/virtual/empty") ("/virtual/empty")))"#]],
     )
 }
 
 fn auto_complete_c_headers_false_cached_value_also_forces_refresh_and_prepends_new_entry()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_false_cached_value_also_forces_refresh_and_prepends_new_entry",
         r##"(let ((achead:include-cache
                 '(("/virtual" . nil)
@@ -185,13 +180,12 @@ fn auto_complete_c_headers_false_cached_value_also_forces_refresh_and_prepends_n
              "/virtual")
             calls
             achead:include-cache)))"##,
-        true,
         expect![[r#"OK (#1=("fresh.h") 1 (("/virtual" . #1#) ("/virtual") ("/other" "old.h")))"#]],
     )
 }
 
 fn auto_complete_c_headers_cached_names_are_shared_objects_not_copied() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_cached_names_are_shared_objects_not_copied",
         r##"(let* ((root
                  (expand-file-name
@@ -220,14 +214,13 @@ fn auto_complete_c_headers_cached_names_are_shared_objects_not_copied() -> Parit
                    root
                    achead:include-cache))))
            (delete-directory root t)))"##,
-        true,
         expect![[r#"OK (t #1=("mutated.h" "two.h") #1#)"#]],
     )
 }
 
 fn auto_complete_c_headers_cache_can_be_preseeded_to_avoid_any_filesystem_probe() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_c_headers_cache_can_be_preseeded_to_avoid_any_filesystem_probe",
         r##"(let ((achead:include-cache
                 '(("/sdk/include"
@@ -245,14 +238,12 @@ fn auto_complete_c_headers_cache_can_be_preseeded_to_avoid_any_filesystem_probe(
              "/sdk/include")
             calls
             achead:include-cache)))"##,
-        true,
         expect![[r#"OK (#1=("vector" "api.h") 0 (("/sdk/include" . #1#)))"#]],
     )
 }
 
-#[test]
-fn filesystem_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn filesystem_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_c_headers_directory_listing_excludes_dot_entries_and_caches_visible_names(),
         auto_complete_c_headers_nonempty_cache_is_reused_after_filesystem_changes(),
         auto_complete_c_headers_cache_keys_distinguish_exact_directory_spellings(),
@@ -261,6 +252,5 @@ fn filesystem_public_surface_batch() {
         auto_complete_c_headers_false_cached_value_also_forces_refresh_and_prepends_new_entry(),
         auto_complete_c_headers_cached_names_are_shared_objects_not_copied(),
         auto_complete_c_headers_cache_can_be_preseeded_to_avoid_any_filesystem_probe(),
-    ];
-    assert_auto_complete_c_headers_batch(&cases);
+    ]
 }

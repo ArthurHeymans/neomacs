@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_agent_recall_batch};
+use super::ParityBatchCase;
 
 fn agent_recall_browses_opens_navigates_and_cleans_a_real_transcript() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agent_recall_browses_opens_navigates_and_cleans_a_real_transcript",
         r####"(let* ((root
                                  (expand-file-name
@@ -131,16 +131,12 @@ fn agent_recall_browses_opens_navigates_and_cleans_a_real_transcript() -> Parity
                              (delete-directory
                               root
                               t)))"####,
-        true,
         expect![[
             r#"OK ("[interaction-project] 2026-07-12-08-15-00" ("2026-07-12-08-15-00.md" t t "33333333-3333-3333-3333-333333333333" "  r Resume (33333333)  c Clean  b Browse  C-j/C-k Navigate  q Quit") (8 17 8) ("2026-07-12-08-15-00-clean.md" t "**Started:** 2026-07-12 08:15:00\n**Agent:** Claude Code\n**Working Directory:** [ORACLE-SANDBOX]/interaction/interaction-project\n**Session:** 33333333-3333-3333-3333-333333333333\n\n---\n\n## ## User Message\n> Diagnose the parser state leak.\n\n## Agent Response\nThe lookahead token survives recovery.\n\n## User Message\n> Apply the smallest safe correction.\n\n## Agent Response\nReset lookahead after the recovery branch.\n"))"#
         ]],
     )
 }
 
-#[test]
-fn interaction_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![agent_recall_browses_opens_navigates_and_cleans_a_real_transcript()];
-    assert_agent_recall_batch(&cases);
+pub(super) fn interaction_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![agent_recall_browses_opens_navigates_and_cleans_a_real_transcript()]
 }

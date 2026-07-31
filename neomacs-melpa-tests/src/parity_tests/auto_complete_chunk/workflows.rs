@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_chunk_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_chunk_real_menu_navigates_and_completes_a_python_attribute() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_real_menu_navigates_and_completes_a_python_attribute",
         r##"(save-window-excursion
                           (with-temp-buffer
@@ -61,16 +61,16 @@ fn auto_complete_chunk_real_menu_navigates_and_completes_a_python_attribute() ->
                                          ac-completing
                                          ac-prefix))))
                                 (auto-complete-mode -1)))))"##,
-        true,
         expect![[
             r#"OK (("resolved = os.path.a" "os.path.a" (("os.path.abspath" "c") ("os.path.altsep" "c")) t "os.path.abspath") "os.path.altsep" "os.path.altsep" "resolved = os.path.altsep" nil nil nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_chunk_real_menu_incrementally_recomputes_after_attribute_typing() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_real_menu_incrementally_recomputes_after_attribute_typing",
         r##"(save-window-excursion
                           (with-temp-buffer
@@ -134,15 +134,15 @@ fn auto_complete_chunk_real_menu_incrementally_recomputes_after_attribute_typing
                                            ac-menu
                                            ac-completing)))))
                                 (auto-complete-mode -1)))))"##,
-        true,
         expect![[
             r#"OK (("request.h" ("request.headers.accept" "request.headers.authorization" "request.host")) ("request.he" ("request.headers.accept" "request.headers.authorization")) ("request.headers.a" ("request.headers.accept" "request.headers.authorization")) "request.headers.accept" nil nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_chunk_real_command_completes_from_its_declared_source_only() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_real_command_completes_from_its_declared_source_only",
         r##"(save-window-excursion
                           (with-temp-buffer
@@ -181,15 +181,15 @@ fn auto_complete_chunk_real_command_completes_from_its_declared_source_only() ->
                                             :anonymous))
                                         ac-sources))))
                                 (auto-complete-mode -1)))))"##,
-        true,
         expect![[
             r#"OK (t "database.connection.c" ("database.connection.close" "database.connection.commit") "database.connection.close" (ac-source-filename))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_chunk_dictionary_swap_drives_a_real_completion_session() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_dictionary_swap_drives_a_real_completion_session",
         r##"(save-window-excursion
                           (with-temp-buffer
@@ -239,16 +239,16 @@ fn auto_complete_chunk_dictionary_swap_drives_a_real_completion_session() -> Par
                                        ac-menu
                                        ac-completing)))
                                 (auto-complete-mode -1)))))"##,
-        true,
         expect![[
             r#"OK (((ac-source-dictionary-chunk ac-source-filename) "service.cache.c" (("service.cache.clear" "c") ("service.cache.close" "c"))) "service.cache.close" nil nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_chunk_two_live_buffers_keep_independent_dictionaries_and_completion_results()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_two_live_buffers_keep_independent_dictionaries_and_completion_results",
         r##"(save-window-excursion
                           (let ((first
@@ -306,16 +306,16 @@ fn auto_complete_chunk_two_live_buffers_keep_independent_dictionaries_and_comple
                                      "api.users.fetch"))))
                               (kill-buffer first)
                               (kill-buffer second))))"##,
-        true,
         expect![[
             r#"OK ((" *chunk-session-first*" "api.users.f" ("api.users.fetch" "api.users.find") ("api.users.fetch" "api.users.find" "api.groups.fetch") "api.users.fetch") (" *chunk-session-second*" "api.orders.f" ("api.orders.fetch" "api.orders.fulfill") ("api.orders.fetch" "api.orders.fulfill" "api.users.fetch") "api.orders.fetch"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn auto_complete_chunk_real_completion_respects_active_major_mode_punctuation_syntax()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_real_completion_respects_active_major_mode_punctuation_syntax",
         r##"(save-window-excursion
                           (mapcar
@@ -355,22 +355,20 @@ fn auto_complete_chunk_real_completion_respects_active_major_mode_punctuation_sy
                            '(fundamental-mode
                              emacs-lisp-mode
                              python-mode)))"##,
-        true,
         expect![[
             r#"OK ((fundamental-mode nil nil nil "namespace..a") (emacs-lisp-mode t nil nil "namespace..alpha") (python-mode nil nil nil "namespace..a"))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_chunk_real_menu_navigates_and_completes_a_python_attribute(),
         auto_complete_chunk_real_menu_incrementally_recomputes_after_attribute_typing(),
         auto_complete_chunk_real_command_completes_from_its_declared_source_only(),
         auto_complete_chunk_dictionary_swap_drives_a_real_completion_session(),
         auto_complete_chunk_two_live_buffers_keep_independent_dictionaries_and_completion_results(),
         auto_complete_chunk_real_completion_respects_active_major_mode_punctuation_syntax(),
-    ];
-    assert_auto_complete_chunk_batch(&cases);
+    ]
 }

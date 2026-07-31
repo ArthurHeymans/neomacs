@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_distel_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_distel_default_prefix_matrix_covers_erlang_modules_functions_and_boundaries()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_default_prefix_matrix_covers_erlang_modules_functions_and_boundaries",
         r##"(mapcar
           (lambda (text)
@@ -34,7 +34,6 @@ fn auto_complete_distel_default_prefix_matrix_covers_erlang_modules_functions_an
             "result = lists:ma"
             "lists.ma"
             "å"))"##,
-        true,
         expect![[
             r#"OK (("" 1 nil nil) ("." 2 nil nil) ("l" 2 1 "l") ("lists" 6 1 "lists") ("lists:ma" 9 1 "lists:ma") ("my-module:run" 14 1 "my-module:run") ("MY_VAR" 7 1 "MY_VAR") ("module2" 8 nil nil) ("2module" 8 2 "module") ("lists:map()" 12 nil nil) ("result = lists:ma" 18 10 "lists:ma") ("lists.ma" 9 7 "ma") ("å" 2 nil nil))"#
         ]],
@@ -43,7 +42,7 @@ fn auto_complete_distel_default_prefix_matrix_covers_erlang_modules_functions_an
 
 fn auto_complete_distel_prefix_respects_each_cursor_position_inside_real_erlang_code()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_prefix_respects_each_cursor_position_inside_real_erlang_code",
         r##"(with-temp-buffer
           (insert
@@ -63,7 +62,6 @@ fn auto_complete_distel_prefix_respects_each_cursor_position_inside_real_erlang_
                   start
                   (point))))))
            '(1 2 7 8 9 13 14 15 17 18 19 20 23 27 33)))"##,
-        true,
         expect![[
             r#"OK ((1 nil nil nil) (2 82 1 "R") (7 116 1 "Result") (8 32 nil nil) (9 61 nil nil) (13 115 10 "lis") (14 116 10 "list") (15 115 10 "lists") (17 109 10 "lists:m") (18 97 10 "lists:ma") (19 112 10 "lists:map") (20 40 nil nil) (23 110 20 "Fun") (27 116 25 "It") (33 46 nil nil))"#
         ]],
@@ -72,7 +70,7 @@ fn auto_complete_distel_prefix_respects_each_cursor_position_inside_real_erlang_
 
 fn auto_complete_distel_custom_valid_syntax_controls_digits_dots_slashes_and_unicode()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_custom_valid_syntax_controls_digits_dots_slashes_and_unicode",
         r##"(mapcar
           (lambda (syntax)
@@ -99,7 +97,6 @@ fn auto_complete_distel_custom_valid_syntax_controls_digits_dots_slashes_and_uni
           '("a-zA-Z:_-"
             "a-zA-Z0-9:_.-"
             "^ \t\n"))"##,
-        true,
         expect![[
             r#"OK ((("module2" nil nil) ("app.module:fun_2" nil nil) ("path/to:run" 6 "to:run") ("módulo:función" 14 "n")) (("module2" 1 "module2") ("app.module:fun_2" 1 "app.module:fun_2") ("path/to:run" 6 "to:run") ("módulo:función" 14 "n")) (("module2" 1 "module2") ("app.module:fun_2" 1 "app.module:fun_2") ("path/to:run" 1 "path/to:run") ("módulo:función" 1 "módulo:función")))"#
         ]],
@@ -107,7 +104,7 @@ fn auto_complete_distel_custom_valid_syntax_controls_digits_dots_slashes_and_uni
 }
 
 fn auto_complete_distel_prefix_uses_the_narrowed_buffer_boundary_as_its_start() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_prefix_uses_the_narrowed_buffer_boundary_as_its_start",
         r##"(with-temp-buffer
           (insert
@@ -136,13 +133,12 @@ fn auto_complete_distel_prefix_uses_the_narrowed_buffer_boundary_as_its_start() 
                (buffer-substring-no-properties
                 prefix
                 (point))))))"##,
-        true,
         expect![[r#"OK (15 24 15 "lists:map")"#]],
     )
 }
 
 fn auto_complete_distel_prefix_preserves_point_mark_and_existing_match_data() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_prefix_preserves_point_mark_and_existing_match_data",
         r##"(with-temp-buffer
           (insert
@@ -168,14 +164,13 @@ fn auto_complete_distel_prefix_preserves_point_mark_and_existing_match_data() ->
              (point)
              (mark)
              (match-data))))"##,
-        true,
         expect![[r#"OK ((17 3 (0 8 0 4 4 8)) 8 "lists:map" 17 3 (0 8 0 4 4 8))"#]],
     )
 }
 
 fn auto_complete_distel_prefix_follows_dynamic_option_changes_without_reloading_source()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_prefix_follows_dynamic_option_changes_without_reloading_source",
         r##"(with-temp-buffer
           (insert "app.module_2:run")
@@ -197,7 +192,6 @@ fn auto_complete_distel_prefix_follows_dynamic_option_changes_without_reloading_
              "a-zA-Z0-9:_.-"
              "a-z"
              "")))"##,
-        true,
         expect![[
             r#"OK (("a-zA-Z:_-" 13 ":run") ("a-zA-Z0-9:_.-" 1 "app.module_2:run") ("a-z" 14 "run") ("" nil nil))"#
         ]],
@@ -205,7 +199,7 @@ fn auto_complete_distel_prefix_follows_dynamic_option_changes_without_reloading_
 }
 
 fn auto_complete_distel_invalid_valid_syntax_values_signal_exactly() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_distel_invalid_valid_syntax_values_signal_exactly",
         r##"(mapcar
           (lambda (syntax)
@@ -219,16 +213,14 @@ fn auto_complete_distel_invalid_valid_syntax_values_signal_exactly() -> ParityBa
                   (lambda ()
                     (auto-complete-distel-get-start)))))))
           '(nil 42 valid-syntax-symbol ("a-z")))"##,
-        true,
         expect![[
             r#"OK ((nil (:signal wrong-type-argument (stringp nil))) (42 (:signal wrong-type-argument (stringp 42))) (valid-syntax-symbol (:signal wrong-type-argument (stringp valid-syntax-symbol))) (#1=("a-z") (:signal wrong-type-argument (stringp #1#))))"#
         ]],
     )
 }
 
-#[test]
-fn prefixes_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn prefixes_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_distel_default_prefix_matrix_covers_erlang_modules_functions_and_boundaries(),
         auto_complete_distel_prefix_respects_each_cursor_position_inside_real_erlang_code(),
         auto_complete_distel_custom_valid_syntax_controls_digits_dots_slashes_and_unicode(),
@@ -236,6 +228,5 @@ fn prefixes_public_surface_batch() {
         auto_complete_distel_prefix_preserves_point_mark_and_existing_match_data(),
         auto_complete_distel_prefix_follows_dynamic_option_changes_without_reloading_source(),
         auto_complete_distel_invalid_valid_syntax_values_signal_exactly(),
-    ];
-    assert_auto_complete_distel_batch(&cases);
+    ]
 }

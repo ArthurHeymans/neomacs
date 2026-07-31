@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{CachedMelpaOracle, MAGIT_SECTION_MELPA_PIN};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -28,26 +27,25 @@ fn current_test_name() -> String {
         .into()
 }
 
-pub(crate) fn assert_magit_section_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = magit_section_oracle()
-        .run_value(&name, form)
-        .unwrap_or_else(|error| panic!("magit-section parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_magit_section_signal_parity(form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = magit_section_oracle()
-        .run_signal(&name, form)
-        .unwrap_or_else(|error| {
-            panic!("magit-section signal parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
 /// Multi-probe batch for `assert_magit_section_parity` cases (2a).
 pub(crate) fn assert_magit_section_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(magit_section_oracle(), &name, "magit_section_parity", cases);
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn magit_section_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        hierarchy::hierarchy_public_surface_batch_cases(),
+        matching::matching_public_surface_batch_cases(),
+        visibility::visibility_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_magit_section_batch(&cases);
+}
+
+// END generated package batch tests

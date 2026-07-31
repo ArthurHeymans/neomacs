@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_rst_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_rst_real_rst_mode_hook_installs_completion_environment() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_real_rst_mode_hook_installs_completion_environment",
         r##"(let
                              ((ac-modes '(text-mode))
@@ -29,7 +29,6 @@ fn auto_complete_rst_real_rst_mode_hook_installs_completion_environment() -> Par
                                 (key-binding (kbd "SPC"))
                                 (auto-complete-rst-directives-candidates)
                                 (auto-complete-rst-roles-candidates)))))"##,
-        true,
         expect![[
             r####"OK (rst-mode (rst-mode text-mode) (ac-source-rst-options ac-source-rst-roles ac-source-rst-directives ac-source-words-in-same-mode-buffers) auto-complete-rst-complete-colon auto-complete-rst-complete-space ("note::" "code-block::" "image::" "py:function::") ("ref:" "doc:" "py:class:" "emphasis:"))"####
         ]],
@@ -38,7 +37,7 @@ fn auto_complete_rst_real_rst_mode_hook_installs_completion_environment() -> Par
 
 fn auto_complete_rst_practical_directive_completion_selects_generated_code_block() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_practical_directive_completion_selects_generated_code_block",
         r##"(let
                              ((auto-complete-rst-directive-options-map
@@ -86,7 +85,6 @@ fn auto_complete_rst_practical_directive_completion_selects_generated_code_block
                                 selected
                                 (buffer-string)
                                 (point)))))"##,
-        true,
         expect![[
             r####"OK ("code-bl" ("note::" "code-block::" "image::" "py:function::") ("code-block::") "Example\n=======\n\nThe implementation follows.\n\n.. code-block::" 62)"####
         ]],
@@ -94,7 +92,7 @@ fn auto_complete_rst_practical_directive_completion_selects_generated_code_block
 }
 
 fn auto_complete_rst_practical_role_completion_inserts_target_delimiters() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_practical_role_completion_inserts_target_delimiters",
         r##"(let
                              ((auto-complete-rst-directive-options-map
@@ -141,7 +139,6 @@ fn auto_complete_rst_practical_role_completion_inserts_target_delimiters() -> Pa
                                 (buffer-string)
                                 (point)
                                 (char-after)))))"##,
-        true,
         expect![[
             r####"OK ("py:cla" "py:class:" "See :py:class:`collections.OrderedDict`" 39 96)"####
         ]],
@@ -149,7 +146,7 @@ fn auto_complete_rst_practical_role_completion_inserts_target_delimiters() -> Pa
 }
 
 fn auto_complete_rst_practical_option_completion_uses_enclosing_directive_map() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_practical_option_completion_uses_enclosing_directive_map",
         r##"(let
                              ((auto-complete-rst-directive-options-map
@@ -188,7 +185,6 @@ fn auto_complete_rst_practical_option_completion_uses_enclosing_directive_map() 
                                 selected
                                 (buffer-string)
                                 (point)))))"##,
-        true,
         expect![[
             r####"OK ("image" ("alt:" "height:" "width:") "height:" "Architecture\n============\n\n.. image:: diagram.svg\n    :height: 320px" 69)"####
         ]],
@@ -197,7 +193,7 @@ fn auto_complete_rst_practical_option_completion_uses_enclosing_directive_map() 
 
 fn auto_complete_rst_bound_keys_drive_real_editing_commands_and_source_routing() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_bound_keys_drive_real_editing_commands_and_source_routing",
         r##"(let
                              ((auto-complete-rst-other-sources
@@ -226,7 +222,6 @@ fn auto_complete_rst_bound_keys_drive_real_editing_commands_and_source_routing()
                                 (nreverse calls)
                                 ac-sources
                                 (point)))))"##,
-        true,
         expect![[
             r####"OK (".. note:\n    :" ((ac-source-rst-directives) #1=(ac-source-rst-directives ac-source-rst-options ac-source-rst-roles) #1#) (ac-source-rst-options ac-source-rst-roles ac-source-rst-directives ac-source-filename) 15)"####
         ]],
@@ -234,7 +229,7 @@ fn auto_complete_rst_bound_keys_drive_real_editing_commands_and_source_routing()
 }
 
 fn auto_complete_rst_buffer_local_setup_does_not_leak_sources_or_keys() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_rst_buffer_local_setup_does_not_leak_sources_or_keys",
         r##"(let
                              ((auto-complete-rst-other-sources
@@ -260,22 +255,19 @@ fn auto_complete_rst_buffer_local_setup_does_not_leak_sources_or_keys() -> Parit
                               (key-binding (kbd "SPC"))
                               (local-variable-p
                                'ac-sources))))"##,
-        true,
         expect![[
             r####"OK (((ac-source-rst-options ac-source-rst-roles ac-source-rst-directives ac-source-filename) auto-complete-rst-complete-colon auto-complete-rst-complete-space t) (ac-source-words-in-same-mode-buffers) self-insert-command self-insert-command nil)"####
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_rst_real_rst_mode_hook_installs_completion_environment(),
         auto_complete_rst_practical_directive_completion_selects_generated_code_block(),
         auto_complete_rst_practical_role_completion_inserts_target_delimiters(),
         auto_complete_rst_practical_option_completion_uses_enclosing_directive_map(),
         auto_complete_rst_bound_keys_drive_real_editing_commands_and_source_routing(),
         auto_complete_rst_buffer_local_setup_does_not_leak_sources_or_keys(),
-    ];
-    assert_auto_complete_rst_batch(&cases);
+    ]
 }

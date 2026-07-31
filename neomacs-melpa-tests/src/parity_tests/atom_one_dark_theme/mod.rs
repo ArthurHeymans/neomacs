@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ATOM_ONE_DARK_THEME_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -109,28 +108,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_atom_one_dark_theme_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = atom_one_dark_theme_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("atom-one-dark-theme parity case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_atom_one_dark_theme_parity(elisp_form: &str, expected: Expect) {
-    assert_atom_one_dark_theme_source_parity("atom-one-dark-theme.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_atom_one_dark_theme_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_atom_one_dark_theme_source_parity(
-        "atom-one-dark-theme-autoloads.el",
-        elisp_form,
-        expected,
-    );
-}
-
 /// Multi-probe batch for `assert_atom_one_dark_theme_autoload_parity` cases (2a).
 pub(crate) fn assert_atom_one_dark_theme_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -152,3 +129,34 @@ pub(crate) fn assert_atom_one_dark_theme_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn atom_one_dark_theme_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> =
+        [registry::registry_atom_one_dark_theme_autoload_batch_cases()]
+            .into_iter()
+            .flatten()
+            .collect();
+    assert_atom_one_dark_theme_autoload_batch(&cases);
+}
+
+#[test]
+fn atom_one_dark_theme_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        faces::faces_public_surface_batch_cases(),
+        lifecycle::lifecycle_public_surface_batch_cases(),
+        palette::palette_public_surface_batch_cases(),
+        practical::practical_public_surface_batch_cases(),
+        registry::registry_atom_one_dark_theme_batch_cases(),
+        remapping::remapping_public_surface_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_atom_one_dark_theme_batch(&cases);
+}
+
+// END generated package batch tests

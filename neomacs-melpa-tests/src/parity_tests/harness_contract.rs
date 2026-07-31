@@ -5,11 +5,12 @@ use std::time::Duration;
 
 use crate::source_lock::SHALLOW_GIT_FETCH_ARGS;
 use crate::{
-    EmacsRuntime, ErtScenario, MelpaSandbox, PackageScenario, PackageSource, ScenarioPhase,
-    SourceBuild, locked_melpa_install_plan, locked_melpa_source, locked_melpa_sources,
-    run_elisp_oracle, run_ert_scenario, run_oracle_scenario, run_scenario, workspace_root,
+    EmacsRuntime, ErtScenario, MelpaSandbox, OracleBatchFailure, PackageScenario, PackageSource,
+    ScenarioPhase, SourceBuild, locked_melpa_install_plan, locked_melpa_source,
+    locked_melpa_sources, run_elisp_oracle, run_elisp_oracle_batch, run_ert_scenario,
+    run_oracle_scenario, run_scenario, workspace_root,
 };
-use neomacs_test_oracle::EvalOutcome;
+use neomacs_test_oracle::{BatchProbe, EvalOutcome};
 
 #[test]
 fn sandbox_keeps_process_state_under_workspace_tmp() {
@@ -208,11 +209,9 @@ fn oracle_scenario_compares_matching_lisp_signals() {
         &runtime_script,
         r##"#!/bin/sh
 printf 'NEOMACS-MELPA-INSTALLED:simple-single\t1.3\n'
-case "$*" in
-  *NEOMACS-MELPA-OUTCOME*)
-    printf '%s\n' 'NEOMACS-MELPA-OUTCOME:ERR (wrong-type-argument numberp "x")'
-    ;;
-esac
+if grep -q 'NEOMACS-MELPA-OUTCOME' "$NEOMACS_MELPA_ORACLE_FORM_FILE"; then
+  printf '%s\n' 'NEOMACS-MELPA-OUTCOME:ERR (wrong-type-argument numberp "x")'
+fi
 "##,
     )
     .expect("write signal runtime");
@@ -283,14 +282,11 @@ fn direct_elisp_oracle_runs_one_form_without_a_package_install() {
     fs::write(
         &runtime_script,
         r##"#!/bin/sh
-case "$*" in
-  *dash-sentinel*)
-    printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK (:dash direct)'
-    ;;
-  *)
-    exit 9
-    ;;
-esac
+if grep -q 'dash-sentinel' "$NEOMACS_MELPA_ORACLE_FORM_FILE"; then
+  printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK (:dash direct)'
+else
+  exit 9
+fi
 "##,
     )
     .expect("write direct runtime");
@@ -304,6 +300,236 @@ esac
     assert_eq!(
         report.neomacs,
         EvalOutcome::Value("(:dash direct)".to_string())
+    );
+    assert_eq!(report.neomacs, report.gnu_emacs);
+}
+
+#[cfg(unix)]
+#[test]
+fn batch_timeout_names_the_probe_that_started_but_did_not_finish() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = MelpaSandbox::new("batch-timeout-contract").expect("create fixture sandbox");
+    let runtime_script = fixture.root().join("hanging-emacs");
+    fs::write(
+        &runtime_script,
+        r##"#!/bin/sh
+printf '%s\n' 'NEOMACS-MELPA-BEGIN:hanging-case' >&2
+exec sleep 30
+"##,
+    )
+    .expect("write hanging runtime");
+    fs::set_permissions(&runtime_script, fs::Permissions::from_mode(0o755))
+        .expect("make hanging runtime executable");
+
+    let runtime = EmacsRuntime::new("fake", runtime_script).with_timeout(Duration::from_millis(50));
+    let error = run_elisp_oracle_batch(
+        &runtime,
+        &runtime,
+        "timeout-batch",
+        "",
+        &[BatchProbe {
+            id: "hanging-case",
+            probe: "(sleep-for 30)",
+        }],
+    )
+    .expect_err("a timed-out batch must fail");
+
+    assert!(error.contains("hanging-case"), "unexpected error: {error}");
+    assert!(error.contains("active case"), "unexpected error: {error}");
+}
+
+#[cfg(unix)]
+#[test]
+fn batch_timeout_reports_a_malformed_partial_protocol() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture =
+        MelpaSandbox::new("batch-timeout-malformed-contract").expect("create fixture sandbox");
+    let runtime_script = fixture.root().join("malformed-hanging-emacs");
+    fs::write(
+        &runtime_script,
+        r##"#!/bin/sh
+printf '%s\n' 'NEOMACS-MELPA-BEGIN:bad id' >&2
+exec sleep 30
+"##,
+    )
+    .expect("write malformed hanging runtime");
+    fs::set_permissions(&runtime_script, fs::Permissions::from_mode(0o755))
+        .expect("make malformed hanging runtime executable");
+
+    let runtime = EmacsRuntime::new("fake", runtime_script).with_timeout(Duration::from_millis(50));
+    let error = run_elisp_oracle_batch(
+        &runtime,
+        &runtime,
+        "malformed-timeout-batch",
+        "",
+        &[BatchProbe {
+            id: "expected-case",
+            probe: "(sleep-for 30)",
+        }],
+    )
+    .expect_err("a malformed timed-out batch must fail");
+
+    assert!(
+        error.contains("invalid partial batch protocol"),
+        "unexpected error: {error}"
+    );
+    assert!(error.contains("bad id"), "unexpected error: {error}");
+}
+
+#[cfg(unix)]
+#[test]
+fn batch_report_keeps_every_case_after_differential_mismatches() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = MelpaSandbox::new("batch-report-contract").expect("create fixture sandbox");
+    let gnu_script = fixture.root().join("gnu-emacs");
+    let neomacs_script = fixture.root().join("neomacs");
+    fs::write(
+        &gnu_script,
+        r##"#!/bin/sh
+printf '%s\n' 'NEOMACS-MELPA-BEGIN:first' 'NEOMACS-MELPA-OUTCOME:first:OK 1' 'NEOMACS-MELPA-COMPLETE:first' 'NEOMACS-MELPA-BEGIN:second' 'NEOMACS-MELPA-OUTCOME:second:ERR (user-error "gnu")' 'NEOMACS-MELPA-COMPLETE:second' >&2
+"##,
+    )
+    .expect("write GNU runtime");
+    fs::write(
+        &neomacs_script,
+        r##"#!/bin/sh
+printf '%s\n' 'NEOMACS-MELPA-BEGIN:first' 'NEOMACS-MELPA-OUTCOME:first:OK 2' 'NEOMACS-MELPA-COMPLETE:first' 'NEOMACS-MELPA-BEGIN:second' 'NEOMACS-MELPA-OUTCOME:second:OK 3' 'NEOMACS-MELPA-COMPLETE:second' >&2
+"##,
+    )
+    .expect("write Neomacs runtime");
+    for script in [&gnu_script, &neomacs_script] {
+        fs::set_permissions(script, fs::Permissions::from_mode(0o755))
+            .expect("make runtime executable");
+    }
+
+    let report = run_elisp_oracle_batch(
+        &EmacsRuntime::new("Neomacs", neomacs_script),
+        &EmacsRuntime::new("GNU Emacs", gnu_script),
+        "differential-batch",
+        "",
+        &[
+            BatchProbe {
+                id: "first",
+                probe: "1",
+            },
+            BatchProbe {
+                id: "second",
+                probe: "2",
+            },
+        ],
+    )
+    .expect("differential mismatches are report data, not infrastructure errors");
+
+    assert_eq!(report.cases.len(), 2);
+    assert_eq!(report.failures.len(), 2);
+    assert!(matches!(
+        &report.failures[0],
+        OracleBatchFailure::OutcomeMismatch { id, .. } if id == "first"
+    ));
+    assert!(matches!(
+        &report.failures[1],
+        OracleBatchFailure::OutcomeMismatch { id, .. } if id == "second"
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn batch_forms_larger_than_the_process_argument_limit_are_loaded_from_workspace_scratch() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let fixture = MelpaSandbox::new("large-batch-form-contract").expect("create fixture sandbox");
+    let runtime_script = fixture.root().join("file-loading-emacs");
+    fs::write(
+        &runtime_script,
+        r##"#!/bin/sh
+form=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --eval)
+      shift
+      [ "${#1}" -lt 256 ] || exit 8
+      ;;
+    --load|-l)
+      shift
+      form=$1
+      ;;
+  esac
+  shift
+done
+[ -f "$form" ] || exit 9
+[ -f "$NEOMACS_MELPA_ORACLE_FORM_FILE" ] || exit 10
+[ "$(wc -c < "$NEOMACS_MELPA_ORACLE_FORM_FILE")" -gt 131072 ] || exit 11
+grep -q '^(defun neomacs--melpa-oracle-transported-form ()' "$form" || exit 11
+printf '%s\n' 'NEOMACS-MELPA-BEGIN:large-form' 'NEOMACS-MELPA-OUTCOME:large-form:OK t' 'NEOMACS-MELPA-COMPLETE:large-form' >&2
+"##,
+    )
+    .expect("write file-loading runtime");
+    fs::set_permissions(&runtime_script, fs::Permissions::from_mode(0o755))
+        .expect("make file-loading runtime executable");
+
+    let runtime = EmacsRuntime::new("fake", runtime_script);
+    let oversized_setup = format!("{}\nnil", " ".repeat(140_000));
+    let report = run_elisp_oracle_batch(
+        &runtime,
+        &runtime,
+        "large-form-batch",
+        &oversized_setup,
+        &[BatchProbe {
+            id: "large-form",
+            probe: "t",
+        }],
+    )
+    .expect("a large batch form is transported through a sandbox file");
+
+    assert!(report.failures.is_empty());
+    assert_eq!(report.cases.len(), 1);
+    assert_eq!(report.cases[0].gnu_emacs, EvalOutcome::Value("t".into()));
+    assert_eq!(report.cases[0].neomacs, EvalOutcome::Value("t".into()));
+}
+
+#[test]
+fn transported_setup_defines_generalized_variables_before_probe_macroexpansion() {
+    let runtime = EmacsRuntime::gnu_emacs();
+    let report = run_elisp_oracle(
+        &runtime,
+        &runtime,
+        "transport-macroexpansion-contract",
+        r##"(let ((source
+                    (expand-file-name
+                     "transport-record.el"
+                     (getenv "NEOMACS_TEST_SANDBOX_ROOT"))))
+              (with-temp-file source
+                (insert
+                 "(require 'cl-lib)\n(cl-defstruct neomacs-transport-record value)\n"))
+              (load source nil nil t))"##,
+        r##"(let ((record (make-neomacs-transport-record :value 1)))
+              (setf (neomacs-transport-record-value record) 2)
+              (neomacs-transport-record-value record))"##,
+    )
+    .expect("transported setup runs before the probe is macroexpanded");
+
+    assert_eq!(report.gnu_emacs, EvalOutcome::Value("2".into()));
+    assert_eq!(report.neomacs, EvalOutcome::Value("2".into()));
+}
+
+#[test]
+fn transported_form_runs_after_the_loader_buffer_is_gone() {
+    let runtime = EmacsRuntime::gnu_emacs();
+    let report = run_elisp_oracle(
+        &runtime,
+        &runtime,
+        "transport-current-buffer-contract",
+        "",
+        r##"(list (buffer-name) (with-temp-buffer (buffer-name)))"##,
+    )
+    .expect("transport preserves the current-buffer semantics of --eval");
+
+    assert_eq!(
+        report.gnu_emacs,
+        EvalOutcome::Value(r##"("*scratch*" " *temp*")"##.into())
     );
     assert_eq!(report.neomacs, report.gnu_emacs);
 }

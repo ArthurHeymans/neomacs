@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_affe_batch};
+use super::ParityBatchCase;
 
 fn affe_send_serializes_symbols_lists_unicode_and_embedded_newlines() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_send_serializes_symbols_lists_unicode_and_embedded_newlines",
         r##"(let (calls)
                (cl-letf
@@ -18,14 +18,13 @@ fn affe_send_serializes_symbols_lists_unicode_and_embedded_newlines() -> ParityB
                               '(search 20 "α" "a\nb"))
                   (affe--send 'client 'exit)
                   (nreverse calls))))"##,
-        true,
         expect![[r#"OK (sent sent ((client "(search 20 \"α\" \"a\\nb\")\n") (client "exit\n")))"#]],
     )
 }
 
 fn affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process",
         r##"(let (arguments callbacks)
                (cl-letf
@@ -61,7 +60,6 @@ fn affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_pro
                        (plist-get arguments
                                   :service))
                       (nreverse callbacks))))))"##,
-        true,
         expect![[
             r#"OK (network-client "affe-socket" t utf-8 local "affe-socket" (("one two" "three") ("four" "five") ("tail")))"#
         ]],
@@ -69,7 +67,7 @@ fn affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_pro
 }
 
 fn affe_connect_keeps_independent_fragment_state_per_connection() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "affe_connect_keeps_independent_fragment_state_per_connection",
         r##"(let (processes first second)
                (cl-letf
@@ -106,17 +104,14 @@ fn affe_connect_keeps_independent_fragment_state_per_connection() -> ParityBatch
                      (list
                       (nreverse first)
                       (nreverse second))))))"##,
-        true,
         expect![[r#"OK ((("a")) (("b") ("c")))"#]],
     )
 }
 
-#[test]
-fn transport_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn transport_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         affe_send_serializes_symbols_lists_unicode_and_embedded_newlines(),
         affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process(),
         affe_connect_keeps_independent_fragment_state_per_connection(),
-    ];
-    assert_affe_batch(&cases);
+    ]
 }

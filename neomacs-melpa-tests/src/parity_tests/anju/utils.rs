@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_anju_batch};
+use super::ParityBatchCase;
 
 fn anju_middle_truncate_handles_short_long_multiline_unicode_and_invalid_extents() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anju_middle_truncate_handles_short_long_multiline_unicode_and_invalid_extents",
         r##"(mapcar
          (lambda (arguments)
@@ -18,7 +18,6 @@ fn anju_middle_truncate_handles_short_long_multiline_unicode_and_invalid_extents
            ("                                  \nbody\n" "Select")
            ("한글과 emoji 🧭 make this label deliberately long" "Go" 24 8)
            ("invalid" "Open" 12 5)))"##,
-        true,
         expect![[
             r#"OK ("Open “short phrase”" "Open “abcdefghijkl…yz0123456789”" "Open “abcdefg…3456789”" "Select “first line…last line”" "Select “␣…␤”" "Go “한글과 emoj…ely long”" "ERROR: extent (5) and max (12) should conform to extent <= (max/2) - 2")"#
         ]],
@@ -26,7 +25,7 @@ fn anju_middle_truncate_handles_short_long_multiline_unicode_and_invalid_extents
 }
 
 fn anju_menu_label_uses_the_real_active_region_and_strips_properties() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anju_menu_label_uses_the_real_active_region_and_strips_properties",
         r##"(with-temp-buffer
          (insert
@@ -41,7 +40,6 @@ fn anju_menu_label_uses_the_real_active_region_and_strips_properties() -> Parity
           (anju-menu-label "Occur" 22 8)
           (text-properties-at 1)
           (text-properties-at 9)))"##,
-        true,
         expect![[
             r#"OK (#("alpha beta gamma delta epsilon " 0 31 (face bold)) "Occur “alpha be…epsilon ”" #1=(face bold) #1#)"#
         ]],
@@ -49,7 +47,7 @@ fn anju_menu_label_uses_the_real_active_region_and_strips_properties() -> Parity
 }
 
 fn anju_filename_extraction_preserves_real_world_names() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anju_filename_extraction_preserves_real_world_names",
         r##"(mapcar
          #'anju-filename-from-path
@@ -60,7 +58,6 @@ fn anju_filename_extraction_preserves_real_world_names() -> ParityBatchCase {
            "/workspace/no-extension"
            "relative/path/report.final.md"
            "/한글/문서.txt"))"##,
-        true,
         expect![[
             r#"OK ("lib.rs" "archive.tar.gz" ".gitignore" "trailing." "no-extension" "report.final.md" "문서.txt")"#
         ]],
@@ -68,7 +65,7 @@ fn anju_filename_extraction_preserves_real_world_names() -> ParityBatchCase {
 }
 
 fn anju_buffer_filters_classify_a_real_mixed_editor_session() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anju_buffer_filters_classify_a_real_mixed_editor_session",
         r##"(let* ((root
                   (file-name-as-directory
@@ -110,7 +107,6 @@ fn anju_buffer_filters_classify_a_real_mixed_editor_session() -> ParityBatchCase
                 (names (anju-buffer-list-xref-filter buffers))
                 (names (anju-filter-buffers-in-directory buffers root))))
            (anju-test-kill-buffers buffers)))"##,
-        true,
         expect![[
             r#"OK (("notes.org" "README.md" "outside.txt") ("notes.org") ("*info*") ("*Help*") ("*eshell*") ("*shell*") ("*compilation*") ("*grep*") ("*xref*") ("notes.org" "README.md" "*Help*" "*info*" "*eshell*" "*shell*" "*compilation*" "*grep*" "*xref*" "merge~variant~"))"#
         ]],
@@ -119,7 +115,7 @@ fn anju_buffer_filters_classify_a_real_mixed_editor_session() -> ParityBatchCase
 
 fn anju_configured_buffer_filter_pipeline_preserves_order_duplicates_and_limits() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anju_configured_buffer_filter_pipeline_preserves_order_duplicates_and_limits",
         r##"(let* ((root
                   (file-name-as-directory
@@ -148,7 +144,6 @@ fn anju_configured_buffer_filter_pipeline_preserves_order_duplicates_and_limits(
                  (anju-process-buffer-list-filter-functions buffers))
                 (nreverse messages)))
            (anju-test-kill-buffers buffers)))"##,
-        true,
         expect![[
             r#"OK (("alpha.txt" "beta.txt" "*Help*" "alpha.txt") ("WARNING: anju-test-missing-filter is undefined."))"#
         ]],
@@ -156,14 +151,13 @@ fn anju_configured_buffer_filter_pipeline_preserves_order_duplicates_and_limits(
 }
 
 fn anju_transform_fill_center_and_rectangle_menu_contracts_are_exact() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anju_transform_fill_center_and_rectangle_menu_contracts_are_exact",
         r##"(list
          (anju-test-menu-entries anju-transform-text-menu)
          (anju-test-menu-entries anju-center-text-menu)
          (anju-test-menu-entries anju-fill-text-menu)
          (anju-test-menu-entries anju-rectangle-menu))"##,
-        true,
         expect![[
             r#"OK (((Make\ Upper\ Case "Make Upper Case" upcase-region :enable nil :visible nil :style nil :selected nil :help "Convert selected region to upper case") (Make\ Lower\ Case "Make Lower Case" downcase-region :enable nil :visible nil :style nil :selected nil :help "Convert selected region to lower case") (Capitalize "Capitalize" capitalize-region :enable nil :visible nil :style nil :selected nil :help "Convert the selected region to capitalized form")) ((Line "Line" center-line :enable nil :visible nil :style nil :selected nil :help "Center the line point is on, within the width specified by ‘fill-column’") (Region "Region" center-region :enable (use-region-p) :visible nil :style nil :selected nil :help "Center each nonblank line starting in the region") (Paragraph "Paragraph" center-paragraph :enable nil :visible nil :style nil :selected nil :help "Center each nonblank line in the paragraph at or after point")) ((Paragraph "Paragraph" fill-paragraph :enable nil :visible nil :style nil :selected nil :help "Fill paragraph at or after point") (Region "Region" fill-region :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill each of the paragraphs in the region") (Region\ as\ paragraph "Region as paragraph" fill-region-as-paragraph :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill the region as if it were a single paragraph") (Individual\ paragraphs "Individual paragraphs" fill-individual-paragraphs :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill paragraphs of uniform indentation within the region") (Non-uniform\ paragraphs "Non-uniform paragraphs" fill-nonuniform-paragraphs :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill paragraphs within the region, allowing varying indentation within each")) ((Cut "Cut" kill-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Delete the region-rectangle and save it as the last killed one") (Copy "Copy" copy-rectangle-as-kill :enable (anju-rectangle-selected-p) :visible nil :style nil :selected nil :help "Copy the region-rectangle and save it as the last killed one") (Paste "Paste" yank-rectangle :enable (and (not buffer-read-only) (boundp 'killed-rectangle) killed-rectangle) :visible nil :style nil :selected nil :help "Yank the last killed rectangle with upper left corner at point") (Delete "Delete" delete-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Delete rectangle") (Replace… "Replace…" string-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Replace rectangle contents with STRING on each line") (Insert… "Insert…" string-insert-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Insert STRING on each line of region-rectangle, shifting text right") (Number "Number" rectangle-number-lines :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Insert numbers in front of the region-rectangle") (Clear "Clear" clear-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Blank out the region-rectangle") (Blank "Blank" open-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Blank out the region-rectangle, shifting text right") (Delete\ leading\ spaces "Delete leading spaces" delete-whitespace-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Delete all whitespace following a specified column in each line")))"#
         ]],
@@ -171,7 +165,7 @@ fn anju_transform_fill_center_and_rectangle_menu_contracts_are_exact() -> Parity
 }
 
 fn anju_unsets_every_legacy_mouse_binding_without_touching_mouse_two_yank() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anju_unsets_every_legacy_mouse_binding_without_touching_mouse_two_yank",
         r##"(let ((mode-line-buffer-identification-keymap
                 (copy-keymap mode-line-buffer-identification-keymap))
@@ -217,13 +211,12 @@ fn anju_unsets_every_legacy_mouse_binding_without_touching_mouse_two_yank() -> P
            mode-line-buffer-identification-keymap
            (kbd "<mode-line> <mouse-3>"))
           (key-binding (kbd "<mouse-2>"))))"##,
-        true,
         expect!["OK ((nil nil nil nil nil nil nil nil nil) nil nil mouse-yank-primary)"],
     )
 }
 
 fn anju_new_frame_command_prefixes_and_dispatches_interactively() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "anju_new_frame_command_prefixes_and_dispatches_interactively",
         r##"(let (events)
          (cl-letf (((symbol-function 'other-frame-prefix)
@@ -238,14 +231,12 @@ fn anju_new_frame_command_prefixes_and_dispatches_interactively() -> ParityBatch
            (list
             (anju-utils--command-in-new-frame #'info)
             (nreverse events))))"##,
-        true,
         expect!["OK (called (other-frame-prefix (call-interactively info nil nil)))"],
     )
 }
 
-#[test]
-fn utils_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn utils_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         anju_middle_truncate_handles_short_long_multiline_unicode_and_invalid_extents(),
         anju_menu_label_uses_the_real_active_region_and_strips_properties(),
         anju_filename_extraction_preserves_real_world_names(),
@@ -254,6 +245,5 @@ fn utils_public_surface_batch() {
         anju_transform_fill_center_and_rectangle_menu_contracts_are_exact(),
         anju_unsets_every_legacy_mouse_binding_without_touching_mouse_two_yank(),
         anju_new_frame_command_prefixes_and_dispatches_interactively(),
-    ];
-    assert_anju_batch(&cases);
+    ]
 }

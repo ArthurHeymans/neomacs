@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atomic_chrome_batch};
+use super::ParityBatchCase;
 
 fn atomic_chrome_on_message_decodes_atomic_register_payload_into_exact_create_call()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atomic_chrome_on_message_decodes_atomic_register_payload_into_exact_create_call",
         r##"(let ((atomic-chrome-server-ghost-text
                 :ghost-server)
@@ -42,7 +42,6 @@ fn atomic_chrome_on_message_decodes_atomic_register_payload_into_exact_create_ca
               (atomic-chrome-test-frame
                payload))
              (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (:created ((create atomic-socket "https://example.test/edit" "Résumé 😀" "first\nsecond λ")))"#
         ]],
@@ -51,7 +50,7 @@ fn atomic_chrome_on_message_decodes_atomic_register_payload_into_exact_create_ca
 
 fn atomic_chrome_on_message_applies_atomic_updates_only_when_bidirectional_edit_is_enabled()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atomic_chrome_on_message_applies_atomic_updates_only_when_bidirectional_edit_is_enabled",
         r##"(let ((atomic-chrome-server-ghost-text
                 :ghost-server)
@@ -108,7 +107,6 @@ fn atomic_chrome_on_message_applies_atomic_updates_only_when_bidirectional_edit_
                 "{\"type\":\"cursorMoved\",\"payload\":{\"text\":\"ignored\"}}")))
              events)
             (nreverse events)))"##,
-        true,
         expect![[
             r#"OK ((update atomic-socket "from browser") (:enabled :updated) (:disabled nil) (:unknown nil))"#
         ]],
@@ -117,7 +115,7 @@ fn atomic_chrome_on_message_applies_atomic_updates_only_when_bidirectional_edit_
 
 fn atomic_chrome_on_message_ghost_text_creates_first_buffer_then_updates_existing_buffer()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atomic_chrome_on_message_ghost_text_creates_first_buffer_then_updates_existing_buffer",
         r##"(let ((atomic-chrome-server-ghost-text
                 :ghost-server)
@@ -181,7 +179,6 @@ fn atomic_chrome_on_message_ghost_text_creates_first_buffer_then_updates_existin
                  (nreverse events)))
             (atomic-chrome-test-kill-buffer
              existing-buffer)))"##,
-        true,
         expect![[
             r#"OK (:created :updated ((lookup ghost-socket nil) (create ghost-socket "ghost.example" "Ghost field" "initial") (lookup ghost-socket t) (update ghost-socket "replacement")))"#
         ]],
@@ -190,7 +187,7 @@ fn atomic_chrome_on_message_ghost_text_creates_first_buffer_then_updates_existin
 
 fn atomic_chrome_on_message_records_malformed_missing_and_wrong_type_json_failures()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atomic_chrome_on_message_records_malformed_missing_and_wrong_type_json_failures",
         r##"(let ((atomic-chrome-server-ghost-text
                 :ghost-server)
@@ -223,7 +220,6 @@ fn atomic_chrome_on_message_records_malformed_missing_and_wrong_type_json_failur
                "{\"type\":17}"
                "{\"type\":\"register\"}"
                "{\"type\":\"updateText\",\"payload\":null}"))))"##,
-        true,
         expect![[
             r#"OK (("{" (:error end-of-buffer nil)) ("null" (:ok nil)) ("{}" (:ok nil)) ("{\"type\":17}" (:error wrong-type-argument (stringp 17))) ("{\"type\":\"register\"}" (:ok :created)) ("{\"type\":\"updateText\",\"payload\":null}" (:ok :updated)))"#
         ]],
@@ -232,7 +228,7 @@ fn atomic_chrome_on_message_records_malformed_missing_and_wrong_type_json_failur
 
 fn atomic_chrome_on_message_utf8_round_trip_preserves_multibyte_payload_content() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atomic_chrome_on_message_utf8_round_trip_preserves_multibyte_payload_content",
         r##"(let ((atomic-chrome-server-ghost-text
                 :ghost-server)
@@ -264,14 +260,13 @@ fn atomic_chrome_on_message_utf8_round_trip_preserves_multibyte_payload_content(
               (atomic-chrome-test-frame
                payload))
              observed)))"##,
-        true,
         expect![[r#"OK (:created ("https://例.example/λ" "日本語 😀" "café\nκαλημέρα" t t t))"#]],
     )
 }
 
 fn atomic_chrome_on_close_delegates_only_for_associated_buffer_and_propagates_close_error()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atomic_chrome_on_close_delegates_only_for_associated_buffer_and_propagates_close_error",
         r##"(let ((buffer
                 (generate-new-buffer
@@ -313,22 +308,19 @@ fn atomic_chrome_on_close_delegates_only_for_associated_buffer_and_propagates_cl
                    (nreverse events))))
             (atomic-chrome-test-kill-buffer
              buffer)))"##,
-        true,
         expect![[
             r#"OK (nil (:error error ("close callback failed")) ((lookup :missing nil) (lookup :present t) (close " *atomic-on-close*")))"#
         ]],
     )
 }
 
-#[test]
-fn protocol_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn protocol_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         atomic_chrome_on_message_decodes_atomic_register_payload_into_exact_create_call(),
         atomic_chrome_on_message_applies_atomic_updates_only_when_bidirectional_edit_is_enabled(),
         atomic_chrome_on_message_ghost_text_creates_first_buffer_then_updates_existing_buffer(),
         atomic_chrome_on_message_records_malformed_missing_and_wrong_type_json_failures(),
         atomic_chrome_on_message_utf8_round_trip_preserves_multibyte_payload_content(),
         atomic_chrome_on_close_delegates_only_for_associated_buffer_and_propagates_close_error(),
-    ];
-    assert_atomic_chrome_batch(&cases);
+    ]
 }

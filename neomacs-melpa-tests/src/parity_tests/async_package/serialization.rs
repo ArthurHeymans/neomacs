@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_async_batch};
+use super::ParityBatchCase;
 
 fn async_public_defaults_and_environment_alias_match_the_pinned_release() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_public_defaults_and_environment_alias_match_the_pinned_release",
         r##"(list
                async-prompt-for-password
@@ -16,13 +16,12 @@ fn async_public_defaults_and_environment_alias_match_the_pinned_release() -> Par
                    #'async--purecopy)
                (eq (indirect-function 'async-inject-environment)
                    (indirect-function 'async-inject-variables)))"##,
-        true,
         expect![[r#"OK (t nil nil t nil "-Q" t t)"#]],
     )
 }
 
 fn async_purecopy_strips_nested_string_properties_without_mutating_the_input() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_purecopy_strips_nested_string_properties_without_mutating_the_input",
         r##"(let* ((top (propertize "top" 'face 'bold))
                     (nested (propertize "nested" 'help-echo "tip"))
@@ -51,7 +50,6 @@ fn async_purecopy_strips_nested_string_properties_without_mutating_the_input() -
                  (text-properties-at 0 key)
                  (text-properties-at 0 value))
                 (eq (nth 4 copy) (nth 4 original))))"##,
-        true,
         expect![[
             r#"OK (("top" (inside "nested") ("key" . "value") 17 [vector]) (nil nil nil nil) ((face bold) (help-echo "tip") (category key) (category value)) t)"#
         ]],
@@ -59,7 +57,7 @@ fn async_purecopy_strips_nested_string_properties_without_mutating_the_input() -
 }
 
 fn async_inject_variables_honors_include_predicate_exclusion_and_noprops() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_inject_variables_honors_include_predicate_exclusion_and_noprops",
         r##"(progn
                (defvar neomacs-async-alpha nil)
@@ -101,13 +99,12 @@ fn async_inject_variables_honors_include_predicate_exclusion_and_noprops() -> Pa
                   (boundp 'neomacs-async-rejected)
                   (boundp
                    'neomacs-async-syntax-table))))"##,
-        true,
         expect![[r#"OK ("alpha" nil (one (two . three)) nil nil nil)"#]],
     )
 }
 
 fn async_message_packet_recognition_preserves_the_plist_marker_value() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_message_packet_recognition_preserves_the_plist_marker_value",
         r##"(mapcar
                #'async-message-p
@@ -120,13 +117,12 @@ fn async_message_packet_recognition_preserves_the_plist_marker_value() -> Parity
                  (:payload 1 :async-message marker)
                  ((:async-message t))
                  (:async-message 0 :payload "value")))"##,
-        true,
         expect![[r#"OK (nil nil nil nil nil t marker nil 0)"#]],
     )
 }
 
 fn async_wire_encoding_round_trips_unicode_vectors_and_dotted_pairs() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_wire_encoding_round_trips_unicode_vectors_and_dotted_pairs",
         r##"(let ((value
                      '("λ雪"
@@ -141,13 +137,12 @@ fn async_wire_encoding_round_trips_unicode_vectors_and_dotted_pairs() -> ParityB
                     (string-prefix-p "\"" wire)
                     (string-suffix-p "\"\n" wire)
                     (async--receive-sexp wire)))))"##,
-        true,
         expect![[r#"OK (t t ("λ雪" [alpha 17 "β"] (left . right) (:nested (1 2 3))))"#]],
     )
 }
 
 fn async_wire_encoding_preserves_shared_and_circular_structure() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_wire_encoding_preserves_shared_and_circular_structure",
         r##"(let* ((shared (list 'shared))
                     (cycle (list 'cycle))
@@ -168,13 +163,12 @@ fn async_wire_encoding_preserves_shared_and_circular_structure() -> ParityBatchC
                     (eq decoded-cycle
                         (cdr decoded-cycle))
                     (car decoded-cycle)))))"##,
-        true,
         expect![[r#"OK (t t t cycle)"#]],
     )
 }
 
 fn async_handle_result_without_callback_stores_the_future_value_in_its_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_handle_result_without_callback_stores_the_future_value_in_its_buffer",
         r##"(let ((buffer
                      (generate-new-buffer
@@ -193,13 +187,12 @@ fn async_handle_result_without_callback_stores_the_future_value_in_its_buffer() 
                         (buffer-live-p buffer))))
                  (when (buffer-live-p buffer)
                    (kill-buffer buffer))))"##,
-        true,
         expect![[r#"OK (t (:answer 42) t)"#]],
     )
 }
 
 fn async_handle_result_callback_receives_value_and_disposes_of_the_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_handle_result_callback_receives_value_and_disposes_of_the_buffer",
         r##"(let ((buffer
                      (generate-new-buffer
@@ -215,13 +208,12 @@ fn async_handle_result_callback_receives_value_and_disposes_of_the_buffer() -> P
                   buffer))
                (list received
                      (buffer-live-p buffer)))"##,
-        true,
         expect![[r#"OK (((:done t) t) nil)"#]],
     )
 }
 
 fn async_handle_result_resignals_the_exact_child_error_and_cleans_up() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "async_handle_result_resignals_the_exact_child_error_and_cleans_up",
         r##"(let ((buffer
                      (generate-new-buffer
@@ -233,13 +225,12 @@ fn async_handle_result_resignals_the_exact_child_error_and_cleans_up() -> Parity
                   (wrong-type-argument
                    integerp not-an-integer))
                 buffer))"##,
-        false,
         expect![[r#"ERR (wrong-type-argument integerp not-an-integer)"#]],
     )
 }
 
 fn async_child_program_arguments_preserve_quiet_init_batch_and_payload_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_child_program_arguments_preserve_quiet_init_batch_and_payload_order",
         r##"(let* ((async-quiet-switch "-q")
                     (async-child-init
@@ -263,7 +254,6 @@ fn async_child_program_arguments_preserve_quiet_init_batch_and_payload_order() -
                 (nth 6 args)
                 (nth 7 args)
                 (async--receive-sexp payload)))"##,
-        true,
         expect![[
             r#"OK ("-q" "-l" "async.el" "-l" t "-batch" "-f" "async-batch-invoke" (lambda nil (list "λ" 42)))"#
         ]],
@@ -271,7 +261,7 @@ fn async_child_program_arguments_preserve_quiet_init_batch_and_payload_order() -
 }
 
 fn async_sandbox_and_async_let_expand_to_the_upstream_callback_shape() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_sandbox_and_async_let_expand_to_the_upstream_callback_shape",
         r##"(list
                (macroexpand
@@ -282,16 +272,14 @@ fn async_sandbox_and_async_let_expand_to_the_upstream_callback_shape() -> Parity
                      ((x (+ 1 2))
                       (y (lambda () (+ x 4))))
                    (list x y))))"##,
-        true,
         expect![[
             r#"OK ((async-get (async-start (lambda nil 42))) (async-start (lambda nil (+ 1 2)) (lambda (x) (async-start (lambda nil (+ x 4)) (lambda (y) (progn (list x y)))))))"#
         ]],
     )
 }
 
-#[test]
-fn serialization_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn serialization_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         async_public_defaults_and_environment_alias_match_the_pinned_release(),
         async_purecopy_strips_nested_string_properties_without_mutating_the_input(),
         async_inject_variables_honors_include_predicate_exclusion_and_noprops(),
@@ -303,6 +291,5 @@ fn serialization_public_surface_batch() {
         async_handle_result_resignals_the_exact_child_error_and_cleans_up(),
         async_child_program_arguments_preserve_quiet_init_batch_and_payload_order(),
         async_sandbox_and_async_let_expand_to_the_upstream_callback_shape(),
-    ];
-    assert_async_batch(&cases);
+    ]
 }

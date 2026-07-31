@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ahungry_theme_batch};
+use super::ParityBatchCase;
 
 fn code_palette_overlays_an_existing_editor_theme_and_restores_every_visible_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "code_palette_overlays_an_existing_editor_theme_and_restores_every_visible_state",
         r##"(let ((baseline-theme 'neomacs-ahungry-baseline))
   (deftheme neomacs-ahungry-baseline
@@ -120,16 +120,12 @@ fn code_palette_overlays_an_existing_editor_theme_and_restores_every_visible_sta
              (list 'ahungry baseline-theme))
           (when (memq theme custom-enabled-themes)
             (disable-theme theme)))))))"##,
-        true,
         expect![[
             r##"OK (((neomacs-ahungry-baseline) ("#202020" "#d0d0d0" 110) ("#405060" "#ffffff") ("#303030" "#eeeeee" (:line-width 2 :color "#505050")) (("Release pipeline" font-lock-comment-face "#202020" "#d0d0d0" bold italic) ("defconst" font-lock-keyword-face "#202020" "#d0d0d0" bold normal) ("release-channel" font-lock-variable-name-face "#202020" "#d0d0d0" bold italic) ("\"stable\"" font-lock-string-face "#202020" "#d0d0d0" normal italic) ("defun" font-lock-keyword-face "#202020" "#d0d0d0" bold normal) ("ship-release" font-lock-function-name-face "#202020" "#d0d0d0" bold normal) ("Publish CANDIDATE" font-lock-doc-face "#202020" "#d0d0d0" normal italic) ("when" font-lock-keyword-face "#202020" "#d0d0d0" bold normal) ("\"ready: %s\"" font-lock-string-face "#202020" "#d0d0d0" normal italic))) ((ahungry neomacs-ahungry-baseline) (unspecified "#ffffff" 130) ("#444444" "#ffffff") ("#77ff00" "#0022aa" (:line-width 1 :color nil :style released-button)) (("Release pipeline" font-lock-comment-face unspecified "#888a85" normal italic) ("defconst" font-lock-keyword-face unspecified "#3cff00" bold normal) ("release-channel" font-lock-variable-name-face unspecified "#0066ff" bold normal) ("\"stable\"" font-lock-string-face unspecified "#ff0077" normal normal) ("defun" font-lock-keyword-face unspecified "#3cff00" bold normal) ("ship-release" font-lock-function-name-face unspecified "#ffee00" bold normal) ("Publish CANDIDATE" font-lock-doc-face unspecified "#777700" bold italic) ("when" font-lock-keyword-face unspecified "#3cff00" bold normal) ("\"ready: %s\"" font-lock-string-face unspecified "#ff0077" normal normal))) ((neomacs-ahungry-baseline) ("#202020" "#d0d0d0" 110) ("#405060" "#ffffff") ("#303030" "#eeeeee" (:line-width 2 :color "#505050")) (("Release pipeline" font-lock-comment-face "#202020" "#d0d0d0" bold italic) ("defconst" font-lock-keyword-face "#202020" "#d0d0d0" bold normal) ("release-channel" font-lock-variable-name-face "#202020" "#d0d0d0" bold italic) ("\"stable\"" font-lock-string-face "#202020" "#d0d0d0" normal italic) ("defun" font-lock-keyword-face "#202020" "#d0d0d0" bold normal) ("ship-release" font-lock-function-name-face "#202020" "#d0d0d0" bold normal) ("Publish CANDIDATE" font-lock-doc-face "#202020" "#d0d0d0" normal italic) ("when" font-lock-keyword-face "#202020" "#d0d0d0" bold normal) ("\"ready: %s\"" font-lock-string-face "#202020" "#d0d0d0" normal italic))) (nil ("unspecified-bg" "unspecified-fg" 1) ("unspecified-bg" "unspecified-fg") ("unspecified-bg" "unspecified-fg" nil) (("Release pipeline" font-lock-comment-face "unspecified-bg" "unspecified-fg" bold italic) ("defconst" font-lock-keyword-face "unspecified-bg" "unspecified-fg" bold normal) ("release-channel" font-lock-variable-name-face "unspecified-bg" "unspecified-fg" bold italic) ("\"stable\"" font-lock-string-face "unspecified-bg" "unspecified-fg" normal italic) ("defun" font-lock-keyword-face "unspecified-bg" "unspecified-fg" bold normal) ("ship-release" font-lock-function-name-face "unspecified-bg" "unspecified-fg" bold normal) ("Publish CANDIDATE" font-lock-doc-face "unspecified-bg" "unspecified-fg" normal italic) ("when" font-lock-keyword-face "unspecified-bg" "unspecified-fg" bold normal) ("\"ready: %s\"" font-lock-string-face "unspecified-bg" "unspecified-fg" normal italic))) t)"##
         ]],
     )
 }
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![code_palette_overlays_an_existing_editor_theme_and_restores_every_visible_state()];
-    assert_ahungry_theme_batch(&cases);
+pub(super) fn lifecycle_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![code_palette_overlays_an_existing_editor_theme_and_restores_every_visible_state()]
 }

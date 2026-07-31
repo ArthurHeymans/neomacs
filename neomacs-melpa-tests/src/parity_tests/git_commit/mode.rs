@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_git_commit_batch};
+use super::ParityBatchCase;
 
 fn git_commit_mode_toggles_keymap_state_and_remains_permanent_local() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "git_commit_mode_toggles_keymap_state_and_remains_permanent_local",
         r##"(with-temp-buffer
                (let ((initial-major-mode major-mode))
@@ -17,13 +17,12 @@ fn git_commit_mode_toggles_keymap_state_and_remains_permanent_local() -> ParityB
                          (eq major-mode initial-major-mode))))
                    (git-commit-mode -1)
                    (list enabled git-commit-mode))))"##,
-        true,
         expect![[r#"OK ((t git-commit-insert-trailer git-commit-prev-message t t) nil)"#]],
     )
 }
 
 fn git_commit_setup_changelog_support_sets_buffer_local_fill_contract() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "git_commit_setup_changelog_support_sets_buffer_local_fill_contract",
         r##"(with-temp-buffer
                (let ((global-fill-paragraph-function
@@ -38,13 +37,12 @@ fn git_commit_setup_changelog_support_sets_buffer_local_fill_contract() -> Parit
                   (equal
                    (default-value 'fill-paragraph-function)
                    global-fill-paragraph-function))))"##,
-        true,
         expect![[r#"OK (t t 9 t t)"#]],
     )
 }
 
 fn git_commit_auto_fill_skips_summary_but_wraps_body_lines() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "git_commit_auto_fill_skips_summary_but_wraps_body_lines",
         r##"(with-temp-buffer
                (text-mode)
@@ -59,7 +57,6 @@ fn git_commit_auto_fill_skips_summary_but_wraps_body_lines() -> ParityBatchCase 
                 auto-fill-function
                 (buffer-string)
                 (local-variable-p 'auto-fill-function)))"##,
-        true,
         expect![[
             r#"OK (git-commit--auto-fill-except-summary "summary words stay together\n\nbody words\nshould wrap\nhere" t)"#
         ]],
@@ -67,7 +64,7 @@ fn git_commit_auto_fill_skips_summary_but_wraps_body_lines() -> ParityBatchCase 
 }
 
 fn git_commit_collapse_diff_installs_a_toggle_button_and_invisible_overlay() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "git_commit_collapse_diff_installs_a_toggle_button_and_invisible_overlay",
         r##"(with-temp-buffer
                (setq-local comment-start "#")
@@ -98,13 +95,12 @@ fn git_commit_collapse_diff_installs_a_toggle_button_and_invisible_overlay() -> 
                   buffer-invisibility-spec
                   (and overlay
                        (overlay-get overlay 'invisible)))))"##,
-        true,
         expect![[r#"OK ((t ((git-commit-diff t)) git-commit-diff) t git-commit-diff)"#]],
     )
 }
 
 fn git_commit_setup_font_lock_configures_comment_syntax_and_exact_faces() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "git_commit_setup_font_lock_configures_comment_syntax_and_exact_faces",
         r##"(let* ((root (make-temp-file "git-commit-font-" t))
                     (default-directory (file-name-as-directory root)))
@@ -142,21 +138,18 @@ fn git_commit_setup_font_lock_configures_comment_syntax_and_exact_faces() -> Par
                           (get-text-property (match-beginning 0)
                                              'face)))))
                  (delete-directory root t)))"##,
-        true,
         expect![[
             r##"OK ("#" "^#+[ \11]*" t t git-commit-summary git-commit-overlong-summary git-commit-nonempty-second-line git-commit-trailer-token)"##
         ]],
     )
 }
 
-#[test]
-fn mode_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn mode_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         git_commit_mode_toggles_keymap_state_and_remains_permanent_local(),
         git_commit_setup_changelog_support_sets_buffer_local_fill_contract(),
         git_commit_auto_fill_skips_summary_but_wraps_body_lines(),
         git_commit_collapse_diff_installs_a_toggle_button_and_invisible_overlay(),
         git_commit_setup_font_lock_configures_comment_syntax_and_exact_faces(),
-    ];
-    assert_git_commit_batch(&cases);
+    ]
 }

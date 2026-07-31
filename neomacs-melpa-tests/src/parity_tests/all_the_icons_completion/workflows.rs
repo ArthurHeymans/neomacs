@@ -1,15 +1,14 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_all_the_icons_completion_batch};
+use super::ParityBatchCase;
 
 /// Installation is the whole mode: switching it on advises
 /// `completion-metadata-get', so a table that offers no affixation function of
 /// its own suddenly has one, and switching it off takes the advice away and the
 /// table is back to offering nothing.  The mode is global, and it does not
 /// disturb the other metadata properties a completion UI reads.
-
 fn enabling_the_mode_installs_the_affixation_advice_and_disabling_removes_it() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "enabling_the_mode_installs_the_affixation_advice_and_disabling_removes_it",
         r##"(unwind-protect
     (let ((table (aic-test-table '("src/" "notes.org") '((category . file)))))
@@ -31,7 +30,6 @@ fn enabling_the_mode_installs_the_affixation_advice_and_disabling_removes_it() -
                                 :affixations (aic-test-affixations table '("src/"))
                                 :metadata (aic-test-metadata-passthrough table))))))
   (aic-test-cleanup))"##,
-        true,
         expect![[
             r#"OK (:before (:advised nil :mode nil :affixations no-affixation-function :metadata (:category file :cycle-sort nil :annotation nil)) :enabled (:advised t :mode t :global nil :affixations (("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "")) :metadata (:category file :cycle-sort nil :annotation nil)) :disabled (:advised nil :mode nil :affixations no-affixation-function :metadata (:category file :cycle-sort nil :annotation nil)))"#
         ]],
@@ -39,7 +37,7 @@ fn enabling_the_mode_installs_the_affixation_advice_and_disabling_removes_it() -
 }
 
 fn file_candidates_get_a_directory_a_file_or_the_fallback_icon() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "file_candidates_get_a_directory_a_file_or_the_fallback_icon",
         r##"(unwind-protect
     (progn
@@ -51,7 +49,6 @@ fn file_candidates_get_a_directory_a_file_or_the_fallback_icon() -> ParityBatchC
                             candidates)
               :directory-face-defined (and (facep 'all-the-icons-completion-dir-face) t))))
   (aic-test-cleanup))"##,
-        true,
         expect![[
             r#"OK (:category file :affixations (("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "") ("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("Makefile" (59001 32) ("file-icons" all-the-icons-dorange) "") ("unknown.zzz" (61462 32) ("FontAwesome" all-the-icons-dsilver) "")) :directory-face-defined t)"#
         ]],
@@ -59,7 +56,7 @@ fn file_candidates_get_a_directory_a_file_or_the_fallback_icon() -> ParityBatchC
 }
 
 fn project_file_and_buffer_categories_use_their_own_icon_lookups() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "project_file_and_buffer_categories_use_their_own_icon_lookups",
         r##"(unwind-protect
     (progn
@@ -84,7 +81,6 @@ fn project_file_and_buffer_categories_use_their_own_icon_lookups() -> ParityBatc
           (kill-buffer elisp)
           (kill-buffer plain))))
   (aic-test-cleanup))"##,
-        true,
         expect![[
             r#"OK (:file (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "")) :project-file (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "")) :buffer-modes (emacs-lisp-mode fundamental-mode) :buffer (("aic-probe-code.el" (59686 32) ("file-icons" all-the-icons-purple) "") ("aic-probe-notes" (59686 32) ("file-icons" all-the-icons-dsilver) "")))"#
         ]],
@@ -92,7 +88,7 @@ fn project_file_and_buffer_categories_use_their_own_icon_lookups() -> ParityBatc
 }
 
 fn an_existing_affixation_or_annotation_function_is_kept_and_prefixed() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "an_existing_affixation_or_annotation_function_is_kept_and_prefixed",
         r##"(unwind-protect
     (progn
@@ -124,7 +120,6 @@ fn an_existing_affixation_or_annotation_function_is_kept_and_prefixed() -> Parit
                                       (lambda (cand) (concat "  " cand)))))
           candidates))))
   (aic-test-cleanup))"##,
-        true,
         expect![[
             r#"OK (:own-affixation (("notes.org" (59671 32 62 32) ("file-icons" all-the-icons-lgreen) " [file]") ("script.py" (59688 32 62 32) ("all-the-icons" all-the-icons-dblue) " [file]")) :own-annotation (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "  (NOTES.ORG)") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "  (SCRIPT.PY)")) :annotation-without-category (("notes.org" nil nil "  notes.org") ("script.py" nil nil "  script.py")))"#
         ]],
@@ -132,7 +127,7 @@ fn an_existing_affixation_or_annotation_function_is_kept_and_prefixed() -> Parit
 }
 
 fn multi_category_and_bookmark_candidates_resolve_their_own_category() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "multi_category_and_bookmark_candidates_resolve_their_own_category",
         r##"(unwind-protect
     (progn
@@ -158,7 +153,6 @@ fn multi_category_and_bookmark_candidates_resolve_their_own_category() -> Parity
                                bookmarks)))
           (kill-buffer scratch))))
   (aic-test-cleanup))"##,
-        true,
         expect![[
             r#"OK (:multi-category (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("aic-probe-scratch" (59686 32) ("file-icons" all-the-icons-dsilver) "")) :bookmark-names ("a-place" "project-code") :bookmark (("project-code" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("a-place" (61563 32) ("github-octicons" all-the-icons-completion-dir-face) "")))"#
         ]],
@@ -166,7 +160,7 @@ fn multi_category_and_bookmark_candidates_resolve_their_own_category() -> Parity
 }
 
 fn unknown_categories_are_empty_and_completion_itself_is_never_changed() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "unknown_categories_are_empty_and_completion_itself_is_never_changed",
         r##"(unwind-protect
     (let* ((candidates '("src/" "script.py" "scratch.txt"))
@@ -191,22 +185,19 @@ fn unknown_categories_are_empty_and_completion_itself_is_never_changed() -> Pari
                       (equal (plist-get off :all) (plist-get on :all))
                       (equal (plist-get off :test) (plist-get on :test)))))))
   (aic-test-cleanup))"##,
-        true,
         expect![[
             r#"OK (:off (:try "scr" :all ("src/" "script.py" "scratch.txt") :test t :unknown no-affixation-function :bare no-affixation-function) :on (:try "scr" :all ("src/" "script.py" "scratch.txt") :test t :unknown (("src/" nil nil "") ("script.py" nil nil "") ("scratch.txt" nil nil "")) :bare no-affixation-function) :completion-unchanged (t t t))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         enabling_the_mode_installs_the_affixation_advice_and_disabling_removes_it(),
         file_candidates_get_a_directory_a_file_or_the_fallback_icon(),
         project_file_and_buffer_categories_use_their_own_icon_lookups(),
         an_existing_affixation_or_annotation_function_is_kept_and_prefixed(),
         multi_category_and_bookmark_candidates_resolve_their_own_category(),
         unknown_categories_are_empty_and_completion_itself_is_never_changed(),
-    ];
-    assert_all_the_icons_completion_batch(&cases);
+    ]
 }

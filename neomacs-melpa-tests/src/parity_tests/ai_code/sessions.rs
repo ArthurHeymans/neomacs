@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ai_code_batch};
+use super::ParityBatchCase;
 
 fn session_registration_updates_existing_work_and_merges_metadata() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_registration_updates_existing_work_and_merges_metadata",
         r##"
 (let ((ai-code-session--sessions (make-hash-table :test 'equal))
@@ -30,7 +30,6 @@ fn session_registration_updates_existing_work_and_merges_metadata() -> ParityBat
          (eq second (ai-code-session-get "S1"))))
     (kill-buffer buffer)))
 "##,
-        true,
         expect![[
             r#"OK (t "S1" "gemini" t "issue.org" (:branch "main" :dirty-count 3 :status "running") t t)"#
         ]],
@@ -38,7 +37,7 @@ fn session_registration_updates_existing_work_and_merges_metadata() -> ParityBat
 }
 
 fn session_registry_orders_activity_and_unregistration_accepts_both_keys() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_registry_orders_activity_and_unregistration_accepts_both_keys",
         r##"
 (let ((ai-code-session--sessions (make-hash-table :test 'equal))
@@ -66,13 +65,12 @@ fn session_registry_orders_activity_and_unregistration_accepts_both_keys() -> Pa
     (kill-buffer a)
     (kill-buffer b)))
 "##,
-        true,
         expect![[r#"OK ((("S2" "gemini" nil) ("S1" "codex" nil)) ("S1") nil)"#]],
     )
 }
 
 fn session_refresh_prunes_dead_buffers_and_preserves_live_runtime_metadata() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_refresh_prunes_dead_buffers_and_preserves_live_runtime_metadata",
         r##"
 (let ((ai-code-session--sessions (make-hash-table :test 'equal))
@@ -101,13 +99,12 @@ fn session_refresh_prunes_dead_buffers_and_preserves_live_runtime_metadata() -> 
     (when (buffer-live-p live) (kill-buffer live))
     (when (buffer-live-p dead) (kill-buffer dead))))
 "##,
-        true,
         expect![[r#"OK (("S1") (:branch "feature/one" :dirty-count 4 :status "stopped") nil)"#]],
     )
 }
 
 fn session_buffer_names_roundtrip_project_and_instance_identity() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_buffer_names_roundtrip_project_and_instance_identity",
         r##"
 (let* ((root (make-temp-file "ai-code-session-name-" t))
@@ -140,13 +137,12 @@ fn session_buffer_names_roundtrip_project_and_instance_identity() -> ParityBatch
        (cdr (ai-code-backends-infra--session-key root instance)))
     (delete-directory root t)))
 "##,
-        true,
         expect![[r#"OK (t t t ((t nil) (t "feature-oauth")) "feature-oauth" "feature-oauth")"#]],
     )
 }
 
 fn session_dashboard_entry_formats_repository_task_backend_and_dirty_state() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "session_dashboard_entry_formats_repository_task_backend_and_dirty_state",
         r##"
 (let* ((buffer (generate-new-buffer "*ai-code-dashboard-entry*"))
@@ -163,21 +159,18 @@ fn session_dashboard_entry_formats_repository_task_backend_and_dirty_state() -> 
               (ai-code-session-dashboard--backend-label 'open-interpreter)))
     (kill-buffer buffer)))
 "##,
-        true,
         expect![[
             r#"OK ("S42" ("S42" "payment-service" "fix-race.org" "Github Copilot Cli" "feature/atomic-ledger" "running" "7") "Open Interpreter")"#
         ]],
     )
 }
 
-#[test]
-fn sessions_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn sessions_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         session_registration_updates_existing_work_and_merges_metadata(),
         session_registry_orders_activity_and_unregistration_accepts_both_keys(),
         session_refresh_prunes_dead_buffers_and_preserves_live_runtime_metadata(),
         session_buffer_names_roundtrip_project_and_instance_identity(),
         session_dashboard_entry_formats_repository_task_backend_and_dirty_state(),
-    ];
-    assert_ai_code_batch(&cases);
+    ]
 }

@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_nxml_batch};
+use super::ParityBatchCase;
 
 fn auto_complete_nxml_real_nxml_mode_setup_installs_completion_environment() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_real_nxml_mode_setup_installs_completion_environment",
         r##"(with-temp-buffer
          (insert "<?xml version=\"1.0\"?><root><child/></root>")
@@ -16,7 +16,6 @@ fn auto_complete_nxml_real_nxml_mode_setup_installs_completion_environment() -> 
           (memq 'auto-complete-nxml-ac-start-with-insert
                 ac-trigger-commands)
           (key-binding (kbd "SPC"))))"##,
-        true,
         expect![
             "OK (nxml-mode t (ac-source-nxml-tag ac-source-nxml-attr ac-source-nxml-attr-value ac-source-nxml-css ac-source-nxml-css-property ac-source-nxml-tag-value-by-nxml ac-source-nxml-tag-value-by-myself) (nxml-mode emacs-lisp-mode lisp-mode lisp-interaction-mode slime-repl-mode nim-mode c-mode cc-mode c++-mode objc-mode swift-mode go-mode java-mode malabar-mode clojure-mode clojurescript-mode scala-mode scheme-mode ocaml-mode tuareg-mode coq-mode haskell-mode agda-mode agda2-mode perl-mode cperl-mode python-mode ruby-mode lua-mode tcl-mode ecmascript-mode javascript-mode js-mode js-jsx-mode js2-mode js2-jsx-mode coffee-mode php-mode css-mode scss-mode less-css-mode elixir-mode makefile-mode sh-mode fortran-mode f90-mode ada-mode xml-mode sgml-mode web-mode ts-mode sclang-mode verilog-mode qml-mode apples-mode) (auto-complete-nxml-ac-start-with-insert self-insert-command) auto-complete-nxml-ac-start-with-insert)"
         ],
@@ -25,7 +24,7 @@ fn auto_complete_nxml_real_nxml_mode_setup_installs_completion_environment() -> 
 
 fn auto_complete_nxml_practical_content_completion_reuses_words_from_open_document()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_practical_content_completion_reuses_words_from_open_document",
         r##"(let ((auto-complete-nxml-tag-value-words-hash
                                 (make-hash-table :test 'equal))
@@ -49,7 +48,6 @@ fn auto_complete_nxml_practical_content_completion_reuses_words_from_open_docume
               candidates
               (member "Neomacs" candidates)
               (member "Native" candidates)))))"##,
-        true,
         expect![[
             r#"OK (content "title" ("runtime" "Emacs" . #2=("Native" "Editor" . #1=("Neomacs" ""))) #1# #2#)"#
         ]],
@@ -58,7 +56,7 @@ fn auto_complete_nxml_practical_content_completion_reuses_words_from_open_docume
 
 fn auto_complete_nxml_practical_attribute_completion_reuses_matching_attribute_values()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_practical_attribute_completion_reuses_matching_attribute_values",
         r##"(let ((auto-complete-nxml-attr-words-hash-hash
                                 (make-hash-table :test 'equal))
@@ -83,7 +81,6 @@ fn auto_complete_nxml_practical_attribute_completion_reuses_matching_attribute_v
                 candidates
                 (member "primary" candidates)
                 (member "secondary" candidates))))))"##,
-        true,
         expect![[
             r#"OK (attrvalue "class" ("compact" . #2=("secondary" "wide" . #1=("primary"))) #1# #2#)"#
         ]],
@@ -91,7 +88,7 @@ fn auto_complete_nxml_practical_attribute_completion_reuses_matching_attribute_v
 }
 
 fn auto_complete_nxml_document_capture_and_popup_render_end_to_end() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_document_capture_and_popup_render_end_to_end",
         r##"(progn
          (auto-complete-nxml-start-make-doc4ac-in-nxml)
@@ -109,7 +106,6 @@ fn auto_complete_nxml_document_capture_and_popup_render_end_to_end() -> ParityBa
              (gethash "section"
                       auto-complete-nxml-element-document-hash))
             (auto-complete-nxml-get-document-tag "section"))))"##,
-        true,
         expect![[
             r#"OK ((:name "section" :ns "" :comment "Structural element." :note "Groups related content.") "'section' is ELEMENT in ''.\n\nComment: \nStructural element.\n\nNote: \nGroups related content.\n")"#
         ]],
@@ -117,7 +113,7 @@ fn auto_complete_nxml_document_capture_and_popup_render_end_to_end() -> ParityBa
 }
 
 fn auto_complete_nxml_source_actions_build_a_complete_attribute_and_element() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_source_actions_build_a_complete_attribute_and_element",
         r##"(let ((auto-complete-nxml-automatic-p nil))
          (cl-letf (((symbol-function 'auto-complete-nxml-expand-tag)
@@ -134,13 +130,12 @@ fn auto_complete_nxml_source_actions_build_a_complete_attribute_and_element() ->
               (cdr
                (assq 'action ac-source-nxml-tag-value-by-nxml)))
              (list (buffer-string) (point)))))"##,
-        true,
         expect![[r#"OK ("<article class=\"featured\">Body</article>" 41)"#]],
     )
 }
 
 fn auto_complete_nxml_popup_help_routes_context_document_to_popup_backend() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_popup_help_routes_context_document_to_popup_backend",
         r##"(let ((auto-complete-nxml-element-document-hash
                                 (make-hash-table :test 'equal))
@@ -166,13 +161,12 @@ fn auto_complete_nxml_popup_help_routes_context_document_to_popup_backend() -> P
              (list
               auto-complete-nxml-buffer-current-tag
               (nreverse calls)))))"##,
-        true,
         expect![[r#"OK ("<" ("'<' is ELEMENT in ''.\n\nNot documented.\n"))"#]],
     )
 }
 
 fn auto_complete_nxml_project_initialization_indexes_deterministic_xml_files() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_project_initialization_indexes_deterministic_xml_files",
         r##"(let* ((root
                                  (expand-file-name
@@ -216,7 +210,6 @@ fn auto_complete_nxml_project_initialization_indexes_deterministic_xml_files() -
                    #'string<))))
            (when (file-exists-p root)
              (delete-directory root t))))"##,
-        true,
         expect![[
             r#"OK (("Beta" "text" "Alpha") (("class" "secondary" "primary")) ("first.xml" "second.xml"))"#
         ]],
@@ -225,7 +218,7 @@ fn auto_complete_nxml_project_initialization_indexes_deterministic_xml_files() -
 
 fn auto_complete_nxml_namespace_completion_and_document_lookup_share_prefix_mapping()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_nxml_namespace_completion_and_document_lookup_share_prefix_mapping",
         r##"(let ((auto-complete-nxml-element-document-hash
                                 (make-hash-table :test 'equal)))
@@ -254,16 +247,14 @@ fn auto_complete_nxml_namespace_completion_and_document_lookup_share_prefix_mapp
              (list
               (buffer-string)
               (auto-complete-nxml-get-document-tag "m:sum")))))"##,
-        true,
         expect![[
             r#"OK ("<html xmlns=\"urn:html\"\n      xmlns:m=\"urn:math\"" "'sum' is ELEMENT in 'urn:math'.\n\nComment: \nSummation.\n\nNote: \nMathML.\n")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_nxml_real_nxml_mode_setup_installs_completion_environment(),
         auto_complete_nxml_practical_content_completion_reuses_words_from_open_document(),
         auto_complete_nxml_practical_attribute_completion_reuses_matching_attribute_values(),
@@ -272,6 +263,5 @@ fn workflows_public_surface_batch() {
         auto_complete_nxml_popup_help_routes_context_document_to_popup_backend(),
         auto_complete_nxml_project_initialization_indexes_deterministic_xml_files(),
         auto_complete_nxml_namespace_completion_and_document_lookup_share_prefix_mapping(),
-    ];
-    assert_auto_complete_nxml_batch(&cases);
+    ]
 }

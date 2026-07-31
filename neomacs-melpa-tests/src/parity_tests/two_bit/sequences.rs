@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_two_bit_batch};
+use super::ParityBatchCase;
 
 fn two_bit_sequence_loading_preserves_offsets_blocks_and_masking_policy() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_sequence_loading_preserves_offsets_blocks_and_masking_policy",
         r##"(let ((file
                     (expand-file-name
@@ -70,13 +70,12 @@ fn two_bit_sequence_loading_preserves_offsets_blocks_and_masking_policy() -> Par
                           masked-data)))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-        true,
         expect!["OK ((\"alpha\" 12 67 1 (2) (3) nil t) (\"alpha\" 12 67 1 (6) (4) t))"],
     )
 }
 
 fn two_bit_bases_decode_full_and_partial_ranges_across_byte_boundaries() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_bases_decode_full_and_partial_ranges_across_byte_boundaries",
         r##"(let ((file
                     (expand-file-name
@@ -103,13 +102,12 @@ fn two_bit_bases_decode_full_and_partial_ranges_across_byte_boundaries() -> Pari
                         (2bit-bases beta 7 8))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-        true,
         expect![[r#"OK ("TCNNNCAGTCAG" "CNNNCAGTCA" "CAGT" "GGGGAAAA" "GAA" "A")"#]],
     )
 }
 
 fn two_bit_bases_apply_mask_blocks_only_when_requested_at_open_time() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_bases_apply_mask_blocks_only_when_requested_at_open_time",
         r##"(let ((file
                     (expand-file-name
@@ -133,13 +131,12 @@ fn two_bit_bases_apply_mask_blocks_only_when_requested_at_open_time() -> ParityB
                         (2bit-bases masked 5 11))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-        true,
         expect![[r#"OK ("TCNNNCAGTCAG" "TCNNNCagtcAG" "CagtcA")"#]],
     )
 }
 
 fn two_bit_sequence_rejects_an_unknown_name_with_exact_signal_data() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "two_bit_sequence_rejects_an_unknown_name_with_exact_signal_data",
         r##"(let ((file
                     (expand-file-name
@@ -153,61 +150,56 @@ fn two_bit_sequence_rejects_an_unknown_name_with_exact_signal_data() -> ParityBa
                       file "gamma"))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-        false,
         expect![[r#"ERR (error "Unknown sequence \"gamma\"")"#]],
     )
 }
 
 fn two_bit_bases_reject_equal_or_reversed_bounds() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "two_bit_bases_reject_equal_or_reversed_bounds",
         r##"(let ((sequence
                     (make-2bit-sequence
                      :dna-size 12)))
                (2bit-bases sequence 5 5))"##,
-        false,
         expect![[r#"ERR (error "Start location is greater or equal to the end location")"#]],
     )
 }
 
 fn two_bit_bases_reject_a_negative_start() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "two_bit_bases_reject_a_negative_start",
         r##"(let ((sequence
                     (make-2bit-sequence
                      :dna-size 12)))
                (2bit-bases sequence -1 2))"##,
-        false,
         expect![[r#"ERR (error "Start location is less than 0")"#]],
     )
 }
 
 fn two_bit_bases_reject_a_start_at_the_sequence_end() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "two_bit_bases_reject_a_start_at_the_sequence_end",
         r##"(let ((sequence
                     (make-2bit-sequence
                      :dna-size 12)))
                (2bit-bases sequence 12 13))"##,
-        false,
         expect![[r#"ERR (error "Start location is beyond the end of the sequence")"#]],
     )
 }
 
 fn two_bit_bases_reject_an_end_beyond_the_sequence() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::signal(
         "two_bit_bases_reject_an_end_beyond_the_sequence",
         r##"(let ((sequence
                     (make-2bit-sequence
                      :dna-size 12)))
                (2bit-bases sequence 11 13))"##,
-        false,
         expect![[r#"ERR (error "End location is beyond the end of the sequence")"#]],
     )
 }
 
 fn two_bit_with_file_and_sequence_macros_bind_fresh_readers_for_the_body() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_with_file_and_sequence_macros_bind_fresh_readers_for_the_body",
         r##"(let ((file
                     (expand-file-name
@@ -238,13 +230,12 @@ fn two_bit_with_file_and_sequence_macros_bind_fresh_readers_for_the_body() -> Pa
                           sequence 0 8)))))
                  (when (file-exists-p file)
                    (delete-file file))))"##,
-        true,
         expect![[r#"OK ((t t 2) (t "beta" 8 "GGGGAAAA"))"#]],
     )
 }
 
 fn two_bit_macroexpansions_evaluate_file_and_sequence_forms_once() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "two_bit_macroexpansions_evaluate_file_and_sequence_forms_once",
         r##"(list
               (macroexpand-1
@@ -265,16 +256,14 @@ fn two_bit_macroexpansions_evaluate_file_and_sequence_forms_once() -> ParityBatc
                        path))
                   (2bit-sequence-dna-size
                    sequence))))"##,
-        true,
         expect![[
             r#"OK ((let ((data (2bit-open (progn (push 'file events) path) t))) (2bit-sequence-count data)) (let ((sequence (2bit-sequence (2bit-open (progn (push 'file events) path)) (progn (push 'name events) "alpha")))) (2bit-sequence-dna-size sequence)))"#
         ]],
     )
 }
 
-#[test]
-fn sequences_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn sequences_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         two_bit_sequence_loading_preserves_offsets_blocks_and_masking_policy(),
         two_bit_bases_decode_full_and_partial_ranges_across_byte_boundaries(),
         two_bit_bases_apply_mask_blocks_only_when_requested_at_open_time(),
@@ -285,6 +274,5 @@ fn sequences_public_surface_batch() {
         two_bit_bases_reject_an_end_beyond_the_sequence(),
         two_bit_with_file_and_sequence_macros_bind_fresh_readers_for_the_body(),
         two_bit_macroexpansions_evaluate_file_and_sequence_forms_once(),
-    ];
-    assert_two_bit_batch(&cases);
+    ]
 }

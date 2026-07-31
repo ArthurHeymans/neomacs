@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_async_await_batch};
+use super::ParityBatchCase;
 
 fn rejected_await_is_caught_by_condition_case_and_execution_continues() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "rejected_await_is_caught_by_condition_case_and_execution_continues",
         r##"(let (events)
           (async-defun parity-catch-rejection ()
@@ -20,7 +20,6 @@ fn rejected_await_is_caught_by_condition_case_and_execution_continues() -> Parit
                   (nreverse events)))
           (async-await-test-settle
            (parity-catch-rejection)))"##,
-        true,
         expect![
             "OK (fulfilled (:fullfilled (:done ((:caught (error remote-failure)) :continued))))"
         ],
@@ -28,7 +27,7 @@ fn rejected_await_is_caught_by_condition_case_and_execution_continues() -> Parit
 }
 
 fn uncaught_rejected_await_rejects_the_async_functions_promise_exactly() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "uncaught_rejected_await_rejects_the_async_functions_promise_exactly",
         r##"(progn
           (async-defun parity-uncaught-rejection ()
@@ -38,13 +37,12 @@ fn uncaught_rejected_await_rejects_the_async_functions_promise_exactly() -> Pari
             :unreachable)
           (async-await-test-settle
            (parity-uncaught-rejection)))"##,
-        true,
         expect!["OK (rejected (:rejected (error remote-failure)))"],
     )
 }
 
 fn synchronous_body_error_before_first_await_becomes_promise_rejection() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "synchronous_body_error_before_first_await_becomes_promise_rejection",
         r##"(progn
           (async-defun parity-error-before ()
@@ -56,13 +54,12 @@ fn synchronous_body_error_before_first_await_becomes_promise_rejection() -> Pari
              (promise-class-p returned)
              (async-await-test-settle
               returned))))"##,
-        true,
         expect![[r#"OK (t (rejected (:rejected (error "before-await"))))"#]],
     )
 }
 
 fn synchronous_body_error_after_successful_await_becomes_promise_rejection() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "synchronous_body_error_after_successful_await_becomes_promise_rejection",
         r##"(progn
           (async-defun parity-error-after ()
@@ -72,13 +69,12 @@ fn synchronous_body_error_after_successful_await_becomes_promise_rejection() -> 
               (error "after-await" value)))
           (async-await-test-settle
            (parity-error-after)))"##,
-        true,
         expect![[r#"OK (rejected (:rejected (error "after-await")))"#]],
     )
 }
 
 fn unwind_protect_cleanup_runs_when_awaited_promise_rejects() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "unwind_protect_cleanup_runs_when_awaited_promise_rejects",
         r##"(let (events)
           (async-defun parity-cleanup ()
@@ -95,13 +91,12 @@ fn unwind_protect_cleanup_runs_when_awaited_promise_rejects() -> ParityBatchCase
             (list
              outcome
              (nreverse events))))"##,
-        true,
         expect!["OK ((rejected (:rejected (void-function nil))) (:body :cleanup))"],
     )
 }
 
 fn nested_condition_cases_distinguish_await_rejection_from_local_errors() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "nested_condition_cases_distinguish_await_rejection_from_local_errors",
         r##"(progn
           (async-defun parity-nested-errors (selector)
@@ -136,7 +131,6 @@ fn nested_condition_cases_distinguish_await_rejection_from_local_errors() -> Par
                (parity-nested-errors
                 selector))))
            '(:ok :local :reject)))"##,
-        true,
         expect![[
             r#"OK ((:ok (fulfilled (:fullfilled (:value :ok)))) (:local (fulfilled (:fullfilled (:value (:local (wrong-type-argument integerp "bad")))))) (:reject (fulfilled (:fullfilled (:outer (error (network 503)))))))"#
         ]],
@@ -144,7 +138,7 @@ fn nested_condition_cases_distinguish_await_rejection_from_local_errors() -> Par
 }
 
 fn check_return_value_preserves_all_non_marker_values_by_identity() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "check_return_value_preserves_all_non_marker_values_by_identity",
         r##"(let* ((cons-value
                   (list :ordinary 1 2))
@@ -182,7 +176,6 @@ fn check_return_value_preserves_all_non_marker_values_by_identity() -> ParityBat
            (eq fake-error
                (async-await--check-return-value
                 fake-error)))))"##,
-        true,
         expect![[
             r#"OK ((nil 0 "text" :keyword (:ordinary 1 2) [alpha beta]) (t :iterator :reason) t t t)"#
         ]],
@@ -190,7 +183,7 @@ fn check_return_value_preserves_all_non_marker_values_by_identity() -> ParityBat
 }
 
 fn check_return_value_closes_the_iterator_before_signaling_injected_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "check_return_value_closes_the_iterator_before_signaling_injected_error",
         r##"(let* ((cleaned nil)
                  (iterator
@@ -221,13 +214,12 @@ fn check_return_value_closes_the_iterator_before_signaling_injected_error() -> P
              signal-data
              cleaned
              after)))"##,
-        true,
         expect!["OK (:ready (error (remote 409)) t (iter-end-of-sequence nil))"],
     )
 }
 
 fn iter_throw_injects_marker_iterator_and_reason_into_suspended_generator() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "iter_throw_injects_marker_iterator_and_reason_into_suspended_generator",
         r##"(let (iterator)
           (setq iterator
@@ -258,13 +250,12 @@ fn iter_throw_injects_marker_iterator_and_reason_into_suspended_generator() -> P
             (list
              first
              injected-result)))"##,
-        true,
         expect!["OK (:ready (iter-end-of-sequence (t t (remote timeout))))"],
     )
 }
 
 fn caught_rejection_can_rethrow_a_new_error_with_context() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "caught_rejection_can_rethrow_a_new_error_with_context",
         r##"(progn
           (async-defun parity-rethrow ()
@@ -280,7 +271,6 @@ fn caught_rejection_can_rethrow_a_new_error_with_context() -> ParityBatchCase {
                  reason)))))
           (async-await-test-settle
            (parity-rethrow)))"##,
-        true,
         expect![[
             r#"OK (rejected (:rejected (user-error "wrapped" (error (service unavailable)))))"#
         ]],
@@ -288,7 +278,7 @@ fn caught_rejection_can_rethrow_a_new_error_with_context() -> ParityBatchCase {
 }
 
 fn rejection_reasons_keep_symbol_string_number_and_list_shapes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "rejection_reasons_keep_symbol_string_number_and_list_shapes",
         r##"(progn
           (async-defun parity-reason-shape (reason)
@@ -312,16 +302,14 @@ fn rejection_reasons_keep_symbol_string_number_and_list_shapes() -> ParityBatchC
             "string"
             404
             '(nested reason))))"##,
-        true,
         expect![[
             r#"OK ((:symbol (fulfilled (:fullfilled (error (:symbol))))) ("string" (fulfilled (:fullfilled (error ("string"))))) (404 (fulfilled (:fullfilled (error (404))))) (#1=(nested reason) (fulfilled (:fullfilled (error (#1#))))))"#
         ]],
     )
 }
 
-#[test]
-fn errors_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn errors_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         rejected_await_is_caught_by_condition_case_and_execution_continues(),
         uncaught_rejected_await_rejects_the_async_functions_promise_exactly(),
         synchronous_body_error_before_first_await_becomes_promise_rejection(),
@@ -333,6 +321,5 @@ fn errors_public_surface_batch() {
         iter_throw_injects_marker_iterator_and_reason_into_suspended_generator(),
         caught_rejection_can_rethrow_a_new_error_with_context(),
         rejection_reasons_keep_symbol_string_number_and_list_shapes(),
-    ];
-    assert_async_await_batch(&cases);
+    ]
 }

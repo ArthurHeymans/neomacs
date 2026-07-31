@@ -1,11 +1,9 @@
 use expect_test::expect;
 
-use super::{
-    ParityBatchCase, assert_auto_complete_chunk_autoload_batch, assert_auto_complete_chunk_batch,
-};
+use super::ParityBatchCase;
 
 fn auto_complete_chunk_exact_descriptor_and_archive_payload_bytes_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_exact_descriptor_and_archive_payload_bytes_match",
         r##"(let* ((descriptor
                                  (cadr
@@ -41,7 +39,6 @@ fn auto_complete_chunk_exact_descriptor_and_archive_payload_bytes_match() -> Par
                                      (current-buffer))))))
                              '("auto-complete-chunk-pkg.el"
                                "auto-complete-chunk.el"))))"##,
-        true,
         expect![[
             r#"OK (auto-complete-chunk "20140225.946" "Auto-completion for dot.separated.words." ((auto-complete (1 4))) nil ((:revdesc . "a9aa77ffb84a") (:commit . "a9aa77ffb84a1037984a7ce4dda25074272f13fe") (:url . "https://github.com/tkf/auto-complete-chunk")) (("auto-complete-chunk-pkg.el" 309 "b32c5927e058f368121f2f301555d5042436f26eb7cebef8d351c9e149519d19") ("auto-complete-chunk.el" 3732 "f8b3b7e01a171677690a05314304618f6a55da5a54c98333019ea6e1397dae22")))"#
         ]],
@@ -49,7 +46,7 @@ fn auto_complete_chunk_exact_descriptor_and_archive_payload_bytes_match() -> Par
 }
 
 fn auto_complete_chunk_complete_public_and_internal_symbol_inventory_matches() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_complete_public_and_internal_symbol_inventory_matches",
         r##"(let (symbols)
                            (mapatoms
@@ -91,7 +88,6 @@ fn auto_complete_chunk_complete_public_and_internal_symbol_inventory_matches() -
                                 (car left))
                                (symbol-name
                                 (car right))))))"##,
-        true,
         expect![[
             r#"OK ((ac-chunk-beginning t nil nil nil nil "auto-complete-chunk.el") (ac-chunk-candidates-from-list t nil nil nil nil "auto-complete-chunk.el") (ac-chunk-list t t nil nil t "auto-complete-chunk.el") (ac-chunk-list-candidates t nil nil nil nil "auto-complete-chunk.el") (ac-chunk-regex nil t nil nil nil "auto-complete-chunk.el"))"#
         ]],
@@ -100,7 +96,7 @@ fn auto_complete_chunk_complete_public_and_internal_symbol_inventory_matches() -
 
 fn auto_complete_chunk_all_callable_signatures_docs_interactivity_and_origins_match()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_all_callable_signatures_docs_interactivity_and_origins_match",
         r##"(mapcar
                            (lambda (symbol)
@@ -132,7 +128,6 @@ fn auto_complete_chunk_all_callable_signatures_docs_interactivity_and_origins_ma
                              ac-use-dictionary-chunk
                              ac-complete-chunk-list
                              ac-complete-dictionary-chunk))"##,
-        true,
         expect![[
             r#"OK ((ac-chunk-beginning nil nil nil "Return the position where the chunk begins." "auto-complete-chunk.el") (ac-chunk-candidates-from-list (chunk-list) nil nil "Return matched candidates in CHUNK-LIST." "auto-complete-chunk.el") (ac-chunk-list nil nil nil "Util function to access the variable `ac-chunk-list'." "auto-complete-chunk.el") (ac-chunk-list-candidates nil nil nil "Create candidates from a buffer local variable `ac-chunk-list'." "auto-complete-chunk.el") (ac-dictionary-chunk-candidates nil nil nil "Create candidates from dictionary (variable `ac-buffer-dictionary')." "auto-complete-chunk.el") (ac-use-dictionary-chunk nil nil nil "Swap `ac-source-dictionary' with `ac-source-dictionary-chunk'." "auto-complete-chunk.el") (ac-complete-chunk-list nil t t nil "auto-complete-chunk.el") (ac-complete-dictionary-chunk nil t t nil "auto-complete-chunk.el"))"#
         ]],
@@ -141,7 +136,7 @@ fn auto_complete_chunk_all_callable_signatures_docs_interactivity_and_origins_ma
 
 fn auto_complete_chunk_variable_defaults_docs_locality_and_definition_origins_match()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_variable_defaults_docs_locality_and_definition_origins_match",
         r##"(mapcar
                            (lambda (symbol)
@@ -164,7 +159,6 @@ fn auto_complete_chunk_variable_defaults_docs_locality_and_definition_origins_ma
                              ac-chunk-list
                              ac-source-chunk-list
                              ac-source-dictionary-chunk))"##,
-        true,
         expect![[
             r#"OK ((ac-chunk-regex "\\(\\s-\\|\\s(\\|\\s)\\|^\\)\\(?:\\(?:\\w\\|\\s_\\)+\\s.\\)*\\(?:\\w\\|\\s_\\)+\\s.?\\=" nil "A regexp that matches to a \"chunk\" containing words and dots." "auto-complete-chunk.el") (ac-chunk-list nil t "Dictionary used from `ac-source-chunk-list'.  List of strings." "auto-complete-chunk.el") (ac-source-chunk-list ((candidates . ac-chunk-list-candidates) (prefix . ac-chunk-beginning) (symbol . "c")) nil nil "") (ac-source-dictionary-chunk ((candidates . ac-dictionary-chunk-candidates) (prefix . ac-chunk-beginning) (symbol . "c")) nil nil ""))"#
         ]],
@@ -172,7 +166,7 @@ fn auto_complete_chunk_variable_defaults_docs_locality_and_definition_origins_ma
 }
 
 fn auto_complete_chunk_exact_source_definitions_and_commands_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_exact_source_definitions_and_commands_match",
         r##"(list
                            ac-source-chunk-list
@@ -193,7 +187,6 @@ fn auto_complete_chunk_exact_source_definitions_and_commands_match() -> ParityBa
                            (featurep
                             'auto-complete)
                            (featurep 'popup))"##,
-        true,
         expect![[
             r#"OK (((candidates . ac-chunk-list-candidates) (prefix . ac-chunk-beginning) (symbol . "c")) ((candidates . ac-dictionary-chunk-candidates) (prefix . ac-chunk-beginning) (symbol . "c")) ((ac-complete-chunk-list t (interactive nil) nil) (ac-complete-dictionary-chunk t (interactive nil) nil)) t t t)"#
         ]],
@@ -201,7 +194,7 @@ fn auto_complete_chunk_exact_source_definitions_and_commands_match() -> ParityBa
 }
 
 fn auto_complete_chunk_source_load_history_records_complete_definition_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_source_load_history_records_complete_definition_order",
         r##"(let* ((history
                                  (seq-find
@@ -230,7 +223,6 @@ fn auto_complete_chunk_source_load_history_records_complete_definition_order() -
                              'auto-complete-chunk)
                             (featurep
                              'auto-complete)))"##,
-        true,
         expect![[
             r#"OK ("auto-complete-chunk.el" ((require . cl) (require . auto-complete) (defun . ac-chunk-beginning) (defun . ac-chunk-candidates-from-list) (defun . ac-chunk-list) (defun . ac-chunk-list-candidates) (defun . ac-complete-chunk-list) (defun . ac-dictionary-chunk-candidates) (defun . ac-complete-dictionary-chunk) (defun . ac-use-dictionary-chunk) (provide . auto-complete-chunk)) t t)"#
         ]],
@@ -239,7 +231,7 @@ fn auto_complete_chunk_source_load_history_records_complete_definition_order() -
 
 fn auto_complete_chunk_exact_auto_complete_and_popup_dependency_versions_are_loaded()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_exact_auto_complete_and_popup_dependency_versions_are_loaded",
         r##"(mapcar
                            (lambda (package)
@@ -262,7 +254,6 @@ fn auto_complete_chunk_exact_auto_complete_and_popup_dependency_versions_are_loa
                            '(auto-complete-chunk
                              auto-complete
                              popup))"##,
-        true,
         expect![[
             r#"OK ((auto-complete-chunk "20140225.946" ((auto-complete (1 4))) t "auto-complete-chunk.el") (auto-complete "20251231.1622" ((emacs (25 1)) (popup (0 5 8))) t "auto-complete.el") (popup "20251231.1622" ((emacs (24 3))) t "popup.el"))"#
         ]],
@@ -270,7 +261,7 @@ fn auto_complete_chunk_exact_auto_complete_and_popup_dependency_versions_are_loa
 }
 
 fn auto_complete_chunk_generated_autoload_contains_only_feature_contract() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_complete_chunk_generated_autoload_contains_only_feature_contract",
         r##"(let* ((history
                                  (seq-find
@@ -300,14 +291,12 @@ fn auto_complete_chunk_generated_autoload_contains_only_feature_contract() -> Pa
                             (boundp
                              'ac-chunk-regex)
                             events))"##,
-        true,
         expect!["OK (t nil nil nil ((provide . auto-complete-chunk-autoloads)))"],
     )
 }
 
-#[test]
-fn registry_auto_complete_chunk_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn registry_auto_complete_chunk_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_complete_chunk_exact_descriptor_and_archive_payload_bytes_match(),
         auto_complete_chunk_complete_public_and_internal_symbol_inventory_matches(),
         auto_complete_chunk_all_callable_signatures_docs_interactivity_and_origins_match(),
@@ -315,13 +304,9 @@ fn registry_auto_complete_chunk_batch() {
         auto_complete_chunk_exact_source_definitions_and_commands_match(),
         auto_complete_chunk_source_load_history_records_complete_definition_order(),
         auto_complete_chunk_exact_auto_complete_and_popup_dependency_versions_are_loaded(),
-    ];
-    assert_auto_complete_chunk_batch(&cases);
+    ]
 }
 
-#[test]
-fn registry_auto_complete_chunk_autoload_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![auto_complete_chunk_generated_autoload_contains_only_feature_contract()];
-    assert_auto_complete_chunk_autoload_batch(&cases);
+pub(super) fn registry_auto_complete_chunk_autoload_batch_cases() -> Vec<ParityBatchCase> {
+    vec![auto_complete_chunk_generated_autoload_contains_only_feature_contract()]
 }

@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_async_http_queue_batch};
+use super::ParityBatchCase;
 
 fn async_http_queue_fetch_json_success_uses_exact_url_contract_cancels_timer_and_kills_buffer()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_fetch_json_success_uses_exact_url_contract_cancels_timer_and_kills_buffer",
         r##"(let* ((state
                 (async-http-queue-test-state
@@ -84,7 +84,6 @@ fn async_http_queue_fetch_json_success_uses_exact_url_contract_cancels_timer_and
                (nreverse canceled)
                (async-http-queue-test-timer-summary
                 (list timeout-event))))))"##,
-        true,
         expect![[
             r#"OK (t ("https://api.test/json" nil t nil) (42 "hello" (t :false)) nil nil ((t 17)) ((1 17 nil t)))"#
         ]],
@@ -92,7 +91,7 @@ fn async_http_queue_fetch_json_success_uses_exact_url_contract_cancels_timer_and
 }
 
 fn async_http_queue_fetch_raw_and_custom_parser_receive_exact_body_start() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_fetch_raw_and_custom_parser_receive_exact_body_start",
         r##"(let (observations)
           (dolist
@@ -169,7 +168,6 @@ fn async_http_queue_fetch_raw_and_custom_parser_receive_exact_body_start() -> Pa
                   (buffer-live-p buffer))
                  observations))))
           (nreverse observations))"##,
-        true,
         expect![[
             r#"OK (("raw" "λ raw\nsecond line" nil nil) ("custom" (:point 76 :prefix "alpha" :parts ("alpha" "beta" "gamma")) nil nil))"#
         ]],
@@ -177,7 +175,7 @@ fn async_http_queue_fetch_raw_and_custom_parser_receive_exact_body_start() -> Pa
 }
 
 fn async_http_queue_http_status_boundary_matrix_routes_success_and_failure() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_http_status_boundary_matrix_routes_success_and_failure",
         r##"(let (observations)
           (dolist (status '(199 200 204 299 300 404 500))
@@ -239,7 +237,6 @@ fn async_http_queue_http_status_boundary_matrix_routes_success_and_failure() -> 
                   (buffer-live-p buffer))
                  observations))))
           (nreverse observations))"##,
-        true,
         expect![[
             r#"OK ((199 nil 1 ("HTTP 199 error fetching URL: https://api.test/status/199") nil) (200 "body-200" nil nil nil) (204 "body-204" nil nil nil) (299 "body-299" nil nil nil) (300 nil 1 ("HTTP 300 error fetching URL: https://api.test/status/300") nil) (404 nil 1 ("HTTP 404 error fetching URL: https://api.test/status/404") nil) (500 nil 1 ("HTTP 500 error fetching URL: https://api.test/status/500") nil))"#
         ]],
@@ -247,7 +244,7 @@ fn async_http_queue_http_status_boundary_matrix_routes_success_and_failure() -> 
 }
 
 fn async_http_queue_transport_error_takes_precedence_over_valid_http_body() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_transport_error_takes_precedence_over_valid_http_body",
         r##"(let* ((state
                 (async-http-queue-test-state
@@ -305,7 +302,6 @@ fn async_http_queue_transport_error_takes_precedence_over_valid_http_body() -> P
              failures
              (nreverse messages)
              (buffer-live-p buffer))))"##,
-        true,
         expect![[
             r#"OK (nil 1 ("Error fetching URL https://api.test/transport: Download failed: (error connection-refused)") nil)"#
         ]],
@@ -314,7 +310,7 @@ fn async_http_queue_transport_error_takes_precedence_over_valid_http_body() -> P
 
 fn async_http_queue_invalid_http_response_matrix_reports_error_and_cleans_buffers()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_invalid_http_response_matrix_reports_error_and_cleans_buffers",
         r##"(let (observations)
           (dolist
@@ -376,7 +372,6 @@ fn async_http_queue_invalid_http_response_matrix_reports_error_and_cleans_buffer
                   (buffer-live-p buffer))
                  observations))))
           (nreverse observations))"##,
-        true,
         expect![[
             r#"OK (("garbage" nil 1 ("Invalid HTTP response for URL: https://api.test/invalid") nil) ("HTTP/2 200 OK\15\n\15\nbody" nil 1 ("Invalid HTTP response for URL: https://api.test/invalid") nil) ("http/1.1 200 OK\15\n\15\nbody" "body" nil nil nil) ("HTTP/1.1 20 OK\15\n\15\nbody" nil 1 ("Invalid HTTP response for URL: https://api.test/invalid") nil) ("HTTP/1.1 200OK\15\n\15\nbody" "body" nil nil nil))"#
         ]],
@@ -384,7 +379,7 @@ fn async_http_queue_invalid_http_response_matrix_reports_error_and_cleans_buffer
 }
 
 fn async_http_queue_parser_error_and_nil_result_both_route_to_error_callback() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_parser_error_and_nil_result_both_route_to_error_callback",
         r##"(let (observations)
           (dolist (mode '(signal nil-result))
@@ -451,7 +446,6 @@ fn async_http_queue_parser_error_and_nil_result_both_route_to_error_callback() -
                   (buffer-live-p buffer))
                  observations))))
           (nreverse observations))"##,
-        true,
         expect![[
             r#"OK ((signal nil 1 ("Error fetching URL https://api.test/signal: parser exploded at 77") nil) (nil-result nil 1 nil nil))"#
         ]],
@@ -459,7 +453,7 @@ fn async_http_queue_parser_error_and_nil_result_both_route_to_error_callback() -
 }
 
 fn async_http_queue_response_callback_is_guarded_against_duplicate_delivery() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_response_callback_is_guarded_against_duplicate_delivery",
         r##"(let* ((state
                 (async-http-queue-test-state
@@ -520,13 +514,12 @@ fn async_http_queue_response_callback_is_guarded_against_duplicate_delivery() ->
              (nreverse cancellations)
              (buffer-live-p buffer)
              (aref timer 6))))"##,
-        true,
         expect![[r#"OK (("first") nil (t t) nil t)"#]],
     )
 }
 
 fn async_http_queue_timeout_kills_live_request_and_suppresses_late_response() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_timeout_kills_live_request_and_suppresses_late_response",
         r##"(let* ((state
                 (async-http-queue-test-state
@@ -607,7 +600,6 @@ fn async_http_queue_timeout_kills_live_request_and_suppresses_late_response() ->
                (process-status request-process)
                (buffer-live-p buffer)
                (aref timeout-event 6)))))"##,
-        true,
         expect![[
             r#"OK ((t (open listen connect stop) t) nil 1 ("Timeout fetching URL https://api.test/slow (3 seconds)") nil closed nil t)"#
         ]],
@@ -616,7 +608,7 @@ fn async_http_queue_timeout_kills_live_request_and_suppresses_late_response() ->
 
 fn async_http_queue_timeout_handles_nil_retrieval_buffer_without_process_cleanup() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_timeout_handles_nil_retrieval_buffer_without_process_cleanup",
         r##"(let* ((state
                 (async-http-queue-test-state
@@ -656,14 +648,13 @@ fn async_http_queue_timeout_handles_nil_retrieval_buffer_without_process_cleanup
              process-lookups
              (aref timer 2)
              (aref timer 6))))"##,
-        true,
         expect!["OK (1 nil 2 nil)"],
     )
 }
 
 fn async_http_queue_url_retrieve_signal_propagates_before_timeout_is_registered() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_url_retrieve_signal_propagates_before_timeout_is_registered",
         r##"(let* ((state
                 (async-http-queue-test-state
@@ -695,14 +686,13 @@ fn async_http_queue_url_retrieve_signal_propagates_before_timeout_is_registered(
                    (push :error callbacks)))))
              timers
              callbacks)))"##,
-        true,
         expect![[r#"OK ((:error error ("resolver unavailable")) nil nil)"#]],
     )
 }
 
 fn async_http_queue_success_callback_signal_propagates_after_response_buffer_cleanup()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_success_callback_signal_propagates_after_response_buffer_cleanup",
         r##"(let* ((state
                 (async-http-queue-test-state
@@ -748,14 +738,13 @@ fn async_http_queue_success_callback_signal_propagates_after_response_buffer_cle
                outcome
                failures
                (buffer-live-p buffer)))))"##,
-        true,
         expect![[r#"OK ((:error error ("consumer exploded")) nil nil)"#]],
     )
 }
 
 fn async_http_queue_error_callback_signal_propagates_after_response_buffer_cleanup()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_error_callback_signal_propagates_after_response_buffer_cleanup",
         r##"(let* ((state
                 (async-http-queue-test-state
@@ -803,13 +792,12 @@ fn async_http_queue_error_callback_signal_propagates_after_response_buffer_clean
                outcome
                successes
                (buffer-live-p buffer)))))"##,
-        true,
         expect![[r#"OK ((:error error ("failure consumer exploded")) nil nil)"#]],
     )
 }
 
 fn async_http_queue_non_numeric_timeout_breaks_timeout_message_before_cleanup() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "async_http_queue_non_numeric_timeout_breaks_timeout_message_before_cleanup",
         r##"(let* ((state
                 (async-http-queue-test-state
@@ -855,16 +843,14 @@ fn async_http_queue_non_numeric_timeout_breaks_timeout_message_before_cleanup() 
                    (aref timer 2)))
               (async-http-queue-test-kill-buffer
                buffer))))"##,
-        true,
         expect![[
             r#"OK ((:error error ("Format specifier doesn’t match argument type")) nil t "soon")"#
         ]],
     )
 }
 
-#[test]
-fn responses_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn responses_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         async_http_queue_fetch_json_success_uses_exact_url_contract_cancels_timer_and_kills_buffer(
         ),
         async_http_queue_fetch_raw_and_custom_parser_receive_exact_body_start(),
@@ -879,6 +865,5 @@ fn responses_public_surface_batch() {
         async_http_queue_success_callback_signal_propagates_after_response_buffer_cleanup(),
         async_http_queue_error_callback_signal_propagates_after_response_buffer_cleanup(),
         async_http_queue_non_numeric_timeout_breaks_timeout_message_before_cleanup(),
-    ];
-    assert_async_http_queue_batch(&cases);
+    ]
 }

@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_magit_batch};
+use super::ParityBatchCase;
 
 fn magit_status_sections_track_unicode_spaced_and_plain_files_across_states() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_status_sections_track_unicode_spaced_and_plain_files_across_states",
         r##"(let* ((root (make-temp-file "magit-status-files-" t))
                     (default-directory (file-name-as-directory root))
@@ -73,13 +73,12 @@ fn magit_status_sections_track_unicode_spaced_and_plain_files_across_states() ->
                  (when (buffer-live-p status-buffer)
                    (kill-buffer status-buffer))
                  (delete-directory root t)))"##,
-        true,
         expect![[r#"OK ((t t t) (t t t) (t t t))"#]],
     )
 }
 
 fn magit_status_section_visibility_commands_preserve_exact_visible_text() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "magit_status_section_visibility_commands_preserve_exact_visible_text",
         r##"(let* ((root (make-temp-file "magit-status-text-" t))
                     (default-directory (file-name-as-directory root))
@@ -132,18 +131,15 @@ fn magit_status_section_visibility_commands_preserve_exact_visible_text() -> Par
                  (when (buffer-live-p status-buffer)
                    (kill-buffer status-buffer))
                  (delete-directory root t)))"##,
-        true,
         expect![[
             r#"OK ("Head:     master dummy\n\nRecent commits" "Head:     master dummy\n\nRecent commits\n<HASH> master dummy" "Head:     master dummy\n\nRecent commits")"#
         ]],
     )
 }
 
-#[test]
-fn status_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn status_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         magit_status_sections_track_unicode_spaced_and_plain_files_across_states(),
         magit_status_section_visibility_commands_preserve_exact_visible_text(),
-    ];
-    assert_magit_batch(&cases);
+    ]
 }

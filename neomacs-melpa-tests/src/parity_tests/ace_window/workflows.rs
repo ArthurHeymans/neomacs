@@ -1,13 +1,12 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ace_window_batch};
+use super::ParityBatchCase;
 
 /// The package's headline story: label every window, press a digit, land
 /// there.  Pins the label-to-window mapping itself and the whole frame after
 /// each jump, and that jumping never touches any buffer's text.
-
 fn jumping_between_labelled_windows_in_a_three_window_session() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "jumping_between_labelled_windows_in_a_three_window_session",
         r####"
 (unwind-protect
@@ -41,7 +40,6 @@ fn jumping_between_labelled_windows_in_a_three_window_session() -> ParityBatchCa
                       (reverse aw-test-buffers)))))
   (aw-test-cleanup))
 "####,
-        true,
         expect![[
             r#"OK (:start (:layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil)) :labels ((:key "1" :edges (0 1 40 13) :buffer "ledger.el") (:key "2" :edges (0 13 40 25) :buffer "*build-log*") (:key "3" :edges (40 1 80 25) :buffer "notes.org")) :keys ("1" "2" "3" "4" "5" "6" "7" "8" "9") :scope global) :after-2 (:selected "*build-log*" :current-buffer "*build-log*" :layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected nil) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected t) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil))) :after-3 (:selected "notes.org" :layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected nil) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected t))) :after-1 (:selected "ledger.el" :layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil))) :window-count 3 :buffers-unmodified (("ledger.el" nil) ("*build-log*" nil) ("notes.org" nil)))"#
         ]],
@@ -49,7 +47,7 @@ fn jumping_between_labelled_windows_in_a_three_window_session() -> ParityBatchCa
 }
 
 fn one_and_two_window_layouts_switch_without_asking_for_a_label() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "one_and_two_window_layouts_switch_without_asking_for_a_label",
         r####"
 (unwind-protect
@@ -83,7 +81,6 @@ fn one_and_two_window_layouts_switch_without_asking_for_a_label() -> ParityBatch
               :dispatch-always aw-dispatch-always)))
   (aw-test-cleanup))
 "####,
-        true,
         expect![[
             r#"OK (:one-window (:windows 1 :selected "ledger.el" :text "X(defun settle (invoice)\n  (message \"settled %s\" invoice))\n" :labels ((:key "1" :edges (0 1 80 25) :buffer "ledger.el"))) :two-windows (:windows 2 :selected "notes.org" :text "Y* Release\n** TODO cut the branch\n" :labels ((:key "1" :edges (0 1 40 25) :buffer "ledger.el") (:key "2" :edges (40 1 80 25) :buffer "notes.org")) :layout ((:edges (0 1 40 25) :buffer "ledger.el" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 2 :selected t))) :dispatch-when-more-than 2 :dispatch-always nil)"#
         ]],
@@ -91,7 +88,7 @@ fn one_and_two_window_layouts_switch_without_asking_for_a_label() -> ParityBatch
 }
 
 fn swapping_two_windows_and_flipping_back_to_the_previous_one() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "swapping_two_windows_and_flipping_back_to_the_previous_one",
         r####"
 (unwind-protect
@@ -120,7 +117,6 @@ fn swapping_two_windows_and_flipping_back_to_the_previous_one() -> ParityBatchCa
               :windows (length (window-list nil 'no-minibuffer)))))
   (aw-test-cleanup))
 "####,
-        true,
         expect![[
             r#"OK (:start (:layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil)) :labels ((:key "1" :edges (0 1 40 13) :buffer "ledger.el") (:key "2" :edges (0 13 40 25) :buffer "*build-log*") (:key "3" :edges (40 1 80 25) :buffer "notes.org")) :swap-invert nil :dispatch (("x" aw-delete-window "Delete Window") ("m" aw-swap-window "Swap Windows") ("M" aw-move-window "Move Window") ("c" aw-copy-window "Copy Window") ("j" aw-switch-buffer-in-window "Select Buffer") ("n" aw-flip-window nil) ("u" aw-switch-buffer-other-window "Switch Buffer Other Window") ("e" aw-execute-command-other-window "Execute Command Other Window") ("F" aw-split-window-fair "Split Fair Window") ("v" aw-split-window-vert "Split Vert Window") ("b" aw-split-window-horz "Split Horz Window") ("o" delete-other-windows "Delete Other Windows") ("T" aw-transpose-frame "Transpose Frame") ("?" aw-show-dispatch-help nil))) :after-swap (:selected "ledger.el" :layout ((:edges (0 1 40 13) :buffer "notes.org" :point 1 :selected nil) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "ledger.el" :point 1 :selected t)) :mode-line-tag nil) :after-flip (:selected "ledger.el" :layout ((:edges (0 1 40 13) :buffer "notes.org" :point 1 :selected nil) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "ledger.el" :point 1 :selected t))) :windows 3)"#
         ]],
@@ -128,7 +124,7 @@ fn swapping_two_windows_and_flipping_back_to_the_previous_one() -> ParityBatchCa
 }
 
 fn deleting_a_window_and_maximizing_another_through_dispatch() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "deleting_a_window_and_maximizing_another_through_dispatch",
         r####"
 (unwind-protect
@@ -163,7 +159,6 @@ fn deleting_a_window_and_maximizing_another_through_dispatch() -> ParityBatchCas
                       (reverse aw-test-buffers)))))
   (aw-test-cleanup))
 "####,
-        true,
         expect![[
             r#"OK (:start ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil)) :after-delete-other-windows (:windows 1 :selected "notes.org" :layout ((:edges (0 1 80 25) :buffer "notes.org" :point 1 :selected t)) :labels ((:key "1" :edges (0 1 80 25) :buffer "notes.org"))) :rebuilt ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil)) :after-delete (:windows 2 :selected "ledger.el" :layout ((:edges (0 1 40 25) :buffer "ledger.el" :point 1 :selected t) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil)) :labels ((:key "1" :edges (0 1 40 25) :buffer "ledger.el") (:key "2" :edges (40 1 80 25) :buffer "notes.org"))) :buffers-still-live (("ledger.el" t) ("*build-log*" t) ("notes.org" t)) :buffers-unmodified (("ledger.el" nil) ("*build-log*" nil) ("notes.org" nil)))"#
         ]],
@@ -171,7 +166,7 @@ fn deleting_a_window_and_maximizing_another_through_dispatch() -> ParityBatchCas
 }
 
 fn splitting_a_chosen_window_vertically_horizontally_and_fairly() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "splitting_a_chosen_window_vertically_horizontally_and_fairly",
         r####"
 (unwind-protect
@@ -200,7 +195,6 @@ fn splitting_a_chosen_window_vertically_horizontally_and_fairly() -> ParityBatch
               :after-split-fair fair)))
   (aw-test-cleanup))
 "####,
-        true,
         expect![[
             r#"OK (:start ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil)) :after-split-vert (:windows 4 :selected "notes.org" :layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected nil) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 13) :buffer "notes.org" :point 1 :selected t) (:edges (40 13 80 25) :buffer "notes.org" :point 1 :selected nil))) :after-split-horz (:windows 5 :selected "ledger.el" :layout ((:edges (0 1 20 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (20 1 40 13) :buffer "ledger.el" :point 1 :selected nil) (:edges (40 1 80 13) :buffer "notes.org" :point 1 :selected nil) (:edges (40 13 80 25) :buffer "notes.org" :point 1 :selected nil))) :after-split-fair (:windows 4 :selected "notes.org" :layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected nil) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 13) :buffer "notes.org" :point 1 :selected t) (:edges (40 13 80 25) :buffer "notes.org" :point 1 :selected nil)) :aspect-ratio 2))"#
         ]],
@@ -208,7 +202,7 @@ fn splitting_a_chosen_window_vertically_horizontally_and_fairly() -> ParityBatch
 }
 
 fn ignoring_the_current_window_or_a_named_buffer_reshuffles_the_labels() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ignoring_the_current_window_or_a_named_buffer_reshuffles_the_labels",
         r####"
 (unwind-protect
@@ -251,7 +245,6 @@ fn ignoring_the_current_window_or_a_named_buffer_reshuffles_the_labels() -> Pari
               :with-ignore-off ignore-off)))
   (aw-test-cleanup))
 "####,
-        true,
         expect![[
             r#"OK (:start (:layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 13) :buffer "notes.org" :point 1 :selected nil) (:edges (40 13 80 25) :buffer "notes.org" :point 1 :selected nil)) :labels ((:key "1" :edges (0 1 40 13) :buffer "ledger.el") (:key "2" :edges (0 13 40 25) :buffer "*build-log*") (:key "3" :edges (40 1 80 13) :buffer "notes.org") (:key "4" :edges (40 13 80 25) :buffer "notes.org")) :ignore-on t :ignore-current nil :ignored-buffers ("*Calc Trail*" " *LV*")) :with-ignore-current (:labels ((:key "1" :edges (0 13 40 25) :buffer "*build-log*") (:key "2" :edges (40 1 80 13) :buffer "notes.org") (:key "3" :edges (40 13 80 25) :buffer "notes.org")) :selected "*build-log*" :layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected nil) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected t) (:edges (40 1 80 13) :buffer "notes.org" :point 1 :selected nil) (:edges (40 13 80 25) :buffer "notes.org" :point 1 :selected nil))) :with-ignored-buffer (:labels ((:key "1" :edges (0 1 40 13) :buffer "ledger.el") (:key "2" :edges (40 1 80 13) :buffer "notes.org") (:key "3" :edges (40 13 80 25) :buffer "notes.org")) :selected "notes.org" :layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected nil) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 13) :buffer "notes.org" :point 1 :selected t) (:edges (40 13 80 25) :buffer "notes.org" :point 1 :selected nil))) :with-ignore-off (:labels ((:key "1" :edges (0 1 40 13) :buffer "ledger.el") (:key "2" :edges (0 13 40 25) :buffer "*build-log*") (:key "3" :edges (40 1 80 13) :buffer "notes.org") (:key "4" :edges (40 13 80 25) :buffer "notes.org"))))"#
         ]],
@@ -259,7 +252,7 @@ fn ignoring_the_current_window_or_a_named_buffer_reshuffles_the_labels() -> Pari
 }
 
 fn quitting_or_pressing_an_unused_label_leaves_the_layout_untouched() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "quitting_or_pressing_an_unused_label_leaves_the_layout_untouched",
         r####"
 (unwind-protect
@@ -300,7 +293,6 @@ fn quitting_or_pressing_an_unused_label_leaves_the_layout_untouched() -> ParityB
                                       aw-test-buffers)))))))
   (aw-test-cleanup))
 "####,
-        true,
         expect![[
             r#"OK (:start ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil)) :after-quit (:windows 3 :selected "ledger.el" :layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil)) :ace-window-mode nil :aw-action nil) :after-invalid-label (:windows 3 :selected "ledger.el" :layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected t) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected nil))) :after-valid-label (:selected "notes.org" :layout ((:edges (0 1 40 13) :buffer "ledger.el" :point 1 :selected nil) (:edges (0 13 40 25) :buffer "*build-log*" :point 1 :selected nil) (:edges (40 1 80 25) :buffer "notes.org" :point 1 :selected t))) :layout-survived-both (t t) :no-leftover-overlays 0)"#
         ]],
@@ -308,7 +300,7 @@ fn quitting_or_pressing_an_unused_label_leaves_the_layout_untouched() -> ParityB
 }
 
 fn display_mode_puts_each_windows_label_in_its_mode_line() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "display_mode_puts_each_windows_label_in_its_mode_line",
         r####"
 (unwind-protect
@@ -361,16 +353,14 @@ fn display_mode_puts_each_windows_label_in_its_mode_line() -> ParityBatchCase {
                 :overlay-flag aw-display-mode-overlay))))
   (aw-test-cleanup))
 "####,
-        true,
         expect![[
             r#"OK (:before (:enabled nil :paths ((:buffer "ledger.el" :edges (0 1 40 13) :path nil :face nil) (:buffer "*build-log*" :edges (0 13 40 25) :path nil :face nil) (:buffer "notes.org" :edges (40 1 80 25) :path nil :face nil)) :mode-line-head "%e") :enabled (:enabled t :paths ((:buffer "ledger.el" :edges (0 1 40 13) :path "1" :face aw-mode-line-face) (:buffer "*build-log*" :edges (0 13 40 25) :path "2" :face aw-mode-line-face) (:buffer "notes.org" :edges (40 1 80 25) :path "3" :face aw-mode-line-face)) :mode-line-head (ace-window-display-mode (:eval (window-parameter (selected-window) 'ace-window-path))) :update-hooked t) :after-split (:windows 4 :paths ((:buffer "ledger.el" :edges (0 1 40 13) :path "1" :face aw-mode-line-face) (:buffer "*build-log*" :edges (0 13 40 25) :path "2" :face aw-mode-line-face) (:buffer "notes.org" :edges (40 1 80 13) :path "3" :face aw-mode-line-face) (:buffer "notes.org" :edges (40 13 80 25) :path nil :face nil)) :selected-after-4 "notes.org" :selected-edges (40 13 80 25)) :disabled (:enabled nil :mode-line-head "%e" :update-hooked nil) :overlay-flag t)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         jumping_between_labelled_windows_in_a_three_window_session(),
         one_and_two_window_layouts_switch_without_asking_for_a_label(),
         swapping_two_windows_and_flipping_back_to_the_previous_one(),
@@ -379,6 +369,5 @@ fn workflows_public_surface_batch() {
         ignoring_the_current_window_or_a_named_buffer_reshuffles_the_labels(),
         quitting_or_pressing_an_unused_label_leaves_the_layout_untouched(),
         display_mode_puts_each_windows_label_in_its_mode_line(),
-    ];
-    assert_ace_window_batch(&cases);
+    ]
 }

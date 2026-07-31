@@ -1,67 +1,77 @@
 //! Shared multi-probe batch assertion helper for package parity suites.
 
-use crate::{CachedMelpaOracle, OracleBatchCase};
-use expect_test::Expect;
+use std::borrow::Cow;
 
-/// One named probe: Elisp form + whether it must succeed + expect-test snapshot.
+use crate::{CachedMelpaOracle, OracleBatchCase, OracleBatchCaseReport, OracleBatchReport};
+use expect_test::Expect;
+use neomacs_test_oracle::ExpectedOutcome;
+
+/// One named probe: Elisp form, required outcome kind, and expect-test snapshot.
 ///
 /// Prefer building these from small case constructors (`fn opens_…() -> Self`)
 /// so a package batch test stays a short list of names rather than a wall of
 /// inline raw strings.
 pub(crate) struct ParityBatchCase {
     pub id: &'static str,
-    pub probe: &'static str,
-    pub expect_value: bool,
+    pub probe: Cow<'static, str>,
+    pub expected_outcome: ExpectedOutcome,
     pub expected: Expect,
+    execution: CaseExecution,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CaseExecution {
+    SharedProcess,
+    FreshProcess,
+    SetupOutcome,
 }
 
 impl ParityBatchCase {
-    pub(crate) fn new(
+    pub(crate) fn value(
         id: &'static str,
-        probe: &'static str,
-        expect_value: bool,
+        probe: impl Into<Cow<'static, str>>,
         expected: Expect,
     ) -> Self {
         Self {
             id,
-            probe,
-            expect_value,
+            probe: probe.into(),
+            expected_outcome: ExpectedOutcome::Value,
             expected,
+            execution: CaseExecution::SharedProcess,
         }
     }
-}
 
-/// Run many named probes in one dual-editor process pair and check expect-test
-/// snapshots. `expect_value` is true for OK outcomes and false for ERR signals.
-pub(crate) fn assert_oracle_batch(
-    oracle: CachedMelpaOracle,
-    batch_name: &str,
-    package_label: &str,
-    cases: &[(&str, &str, bool, Expect)],
-) {
-    let batch: Vec<OracleBatchCase<'_>> = cases
-        .iter()
-        .map(|(id, probe, expect_value, _)| OracleBatchCase {
+    pub(crate) fn signal(
+        id: &'static str,
+        probe: impl Into<Cow<'static, str>>,
+        expected: Expect,
+    ) -> Self {
+        Self {
             id,
-            probe,
-            expect_value: *expect_value,
-        })
-        .collect();
-    let reports = oracle
-        .run_batch(batch_name, &batch)
-        .unwrap_or_else(|error| {
-            panic!("{package_label} batch `{batch_name}` failed:\n{error}");
-        });
-    assert_eq!(
-        reports.len(),
-        cases.len(),
-        "{package_label} batch `{batch_name}` returned {} reports for {} cases",
-        reports.len(),
-        cases.len()
-    );
-    for (report, (id, _, _, expected)) in reports.iter().zip(cases.iter()) {
-        assert_eq!(report.id, *id, "{package_label} batch case order mismatch");
-        expected.assert_eq(&report.gnu_emacs.to_string());
+            probe: probe.into(),
+            expected_outcome: ExpectedOutcome::Signal,
+            expected,
+            execution: CaseExecution::SharedProcess,
+        }
+    }
+
+    /// Run this case in its own GNU Emacs and Neomacs process pair.
+    ///
+    /// Use this only when the package cannot reliably restore global editor
+    /// state after the probe. Other cases in the same suite remain batched.
+    pub(crate) fn fresh_process(mut self) -> Self {
+        self.execution = CaseExecution::FreshProcess;
+        self
+    }
+
+    /// Catch an outcome raised by package setup rather than by the probe.
+    ///
+    /// Shared batches run package setup before their per-probe catchers. This
+    /// mode uses the single-case wrapper so a deliberately expected setup
+    /// signal remains observable without misclassifying it as state leakage.
+    pub(crate) fn setup_outcome(mut self) -> Self {
+        self.execution = CaseExecution::SetupOutcome;
+        self
     }
 }
 
@@ -73,31 +83,220 @@ pub(crate) fn assert_oracle_batch_cases(
     package_label: &str,
     cases: &[ParityBatchCase],
 ) {
-    let batch: Vec<OracleBatchCase<'_>> = cases
+    let mut oracle_errors = if isolation_audit_enabled() {
+        audit_batch_isolation(&oracle, batch_name, cases)
+    } else {
+        Vec::new()
+    };
+    let shared_cases = cases
+        .iter()
+        .filter(|case| case.execution == CaseExecution::SharedProcess)
+        .collect::<Vec<_>>();
+    let mut observed = Vec::with_capacity(cases.len());
+
+    if !shared_cases.is_empty() {
+        let batch = shared_cases
+            .iter()
+            .map(|case| OracleBatchCase {
+                id: case.id,
+                probe: case.probe.as_ref(),
+                expected_outcome: case.expected_outcome,
+            })
+            .collect::<Vec<_>>();
+        match oracle.run_batch(batch_name, &batch) {
+            Ok(report) => {
+                let OracleBatchReport {
+                    cases: reports,
+                    failures,
+                } = report;
+                assert_eq!(
+                    reports.len(),
+                    shared_cases.len(),
+                    "{package_label} batch `{batch_name}` returned {} reports for {} cases",
+                    reports.len(),
+                    shared_cases.len()
+                );
+                for (observed_case, case) in reports.into_iter().zip(shared_cases) {
+                    assert_eq!(
+                        observed_case.id, case.id,
+                        "{package_label} batch case order mismatch"
+                    );
+                    let batch_failures = failures_for_case(&failures, case.id);
+                    observed.push((case, observed_case, batch_failures));
+                }
+            }
+            Err(error) => oracle_errors.push(format!("shared batch failed:\n{error}")),
+        }
+    }
+
+    for case in cases
+        .iter()
+        .filter(|case| case.execution != CaseExecution::SharedProcess)
+    {
+        let result = run_isolated_case(&oracle, case);
+        match result {
+            Ok(report) => {
+                let OracleBatchReport {
+                    cases: reports,
+                    failures,
+                } = report;
+                let case_failures = failures_for_case(&failures, case.id);
+                let observed_case = reports
+                    .into_iter()
+                    .next()
+                    .expect("a one-case batch returns one report");
+                observed.push((case, observed_case, case_failures));
+            }
+            Err(error) => oracle_errors.push(format!("case `{}` failed:\n{error}", case.id)),
+        }
+    }
+
+    let mut snapshot_mismatches = Vec::new();
+    for (case, report, case_failures) in observed {
+        oracle_errors.extend(case_failures);
+        for (editor, actual) in [
+            ("GNU Emacs", report.gnu_emacs.to_string()),
+            ("Neomacs", report.neomacs.to_string()),
+        ] {
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                case.expected.assert_eq(&actual);
+            }))
+            .is_err()
+            {
+                snapshot_mismatches.push(format!("{} ({editor})", case.id));
+            }
+        }
+    }
+
+    if !oracle_errors.is_empty() || !snapshot_mismatches.is_empty() {
+        let mut details = oracle_errors;
+        if !snapshot_mismatches.is_empty() {
+            details.push(format!(
+                "snapshot mismatches: {}",
+                snapshot_mismatches.join(", ")
+            ));
+        }
+        panic!(
+            "{package_label} batch `{batch_name}` failed:\n{}",
+            details.join("\n")
+        );
+    }
+}
+
+fn failures_for_case(failures: &[crate::OracleBatchFailure], id: &str) -> Vec<String> {
+    failures
+        .iter()
+        .filter(|failure| failure.id() == id)
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn run_isolated_case(
+    oracle: &CachedMelpaOracle,
+    case: &ParityBatchCase,
+) -> Result<OracleBatchReport, String> {
+    oracle.run_case(case.id, case.probe.as_ref(), case.expected_outcome)
+}
+
+fn audit_batch_isolation(
+    oracle: &CachedMelpaOracle,
+    batch_name: &str,
+    cases: &[ParityBatchCase],
+) -> Vec<String> {
+    let audit_cases = isolation_audit_cases(cases);
+    if audit_cases.is_empty() {
+        return Vec::new();
+    }
+    let batch = audit_cases
         .iter()
         .map(|case| OracleBatchCase {
             id: case.id,
-            probe: case.probe,
-            expect_value: case.expect_value,
+            probe: case.probe.as_ref(),
+            expected_outcome: case.expected_outcome,
         })
-        .collect();
-    let reports = oracle
-        .run_batch(batch_name, &batch)
-        .unwrap_or_else(|error| {
-            panic!("{package_label} batch `{batch_name}` failed:\n{error}");
-        });
-    assert_eq!(
-        reports.len(),
-        cases.len(),
-        "{package_label} batch `{batch_name}` returned {} reports for {} cases",
-        reports.len(),
-        cases.len()
-    );
-    for (report, case) in reports.iter().zip(cases.iter()) {
+        .collect::<Vec<_>>();
+    let batched = match oracle.run_batch(&format!("{batch_name}-isolation-audit"), &batch) {
+        Ok(report) => report.cases,
+        Err(error) => return vec![format!("isolation audit batch failed:\n{error}")],
+    };
+
+    let mut errors = Vec::new();
+    for (case, batched_case) in audit_cases.into_iter().zip(batched) {
+        match run_isolated_case(oracle, case) {
+            Ok(isolated) => {
+                let isolated_case = isolated
+                    .cases
+                    .into_iter()
+                    .next()
+                    .expect("a one-case isolation audit returns one report");
+                if !same_outcomes(&batched_case, &isolated_case) {
+                    errors.push(format!(
+                        "case `{}` is not batch-safe:\n  batched GNU Emacs: {}\n  isolated GNU Emacs: {}\n  batched Neomacs: {}\n  isolated Neomacs: {}",
+                        case.id,
+                        batched_case.gnu_emacs,
+                        isolated_case.gnu_emacs,
+                        batched_case.neomacs,
+                        isolated_case.neomacs,
+                    ));
+                }
+            }
+            Err(error) => errors.push(format!(
+                "case `{}` failed its isolation audit:\n{error}",
+                case.id
+            )),
+        }
+    }
+    errors
+}
+
+fn isolation_audit_cases(cases: &[ParityBatchCase]) -> Vec<&ParityBatchCase> {
+    cases
+        .iter()
+        .filter(|case| case.execution != CaseExecution::SetupOutcome)
+        .collect()
+}
+
+fn same_outcomes(left: &OracleBatchCaseReport, right: &OracleBatchCaseReport) -> bool {
+    left.gnu_emacs == right.gnu_emacs && left.neomacs == right.neomacs
+}
+
+fn isolation_audit_enabled() -> bool {
+    std::env::var_os("NEOMACS_MELPA_AUDIT_BATCH_ISOLATION").is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use expect_test::expect;
+
+    use super::{ParityBatchCase, isolation_audit_cases};
+
+    #[test]
+    fn batch_cases_accept_forms_built_at_runtime() {
+        let form = format!("(+ {} {})", 20, 22);
+        let case = ParityBatchCase::value("dynamic-form", form, expect!["OK 42"]);
+
+        assert_eq!(case.probe.as_ref(), "(+ 20 22)");
+    }
+
+    #[test]
+    fn isolation_audit_includes_batchable_quarantines_but_not_setup_outcomes() {
+        let cases = [
+            ParityBatchCase::value("shared", "1", expect!["OK 1"]),
+            ParityBatchCase::value("fresh", "2", expect!["OK 2"]).fresh_process(),
+            ParityBatchCase::signal(
+                "setup-signal",
+                "3",
+                expect![[r#"ERR (void-function dependency)"#]],
+            )
+            .setup_outcome(),
+        ];
+
         assert_eq!(
-            report.id, case.id,
-            "{package_label} batch case order mismatch"
+            isolation_audit_cases(&cases)
+                .into_iter()
+                .map(|case| case.id)
+                .collect::<Vec<_>>(),
+            ["shared", "fresh"]
         );
-        case.expected.assert_eq(&report.gnu_emacs.to_string());
     }
 }

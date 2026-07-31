@@ -1,21 +1,19 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ag_batch};
+use super::ParityBatchCase;
 
 /// The plain search: `M-x ag` over a real tree.  Pins the exact argument vector
 /// the silver searcher was given, the results buffer's generated name and mode,
 /// and the fully rendered buffer -- ag.el's filter has turned the colour escapes
 /// into `File:` headers and stripped the rest, and the echoed command line shows
 /// how the arguments were shell-quoted.
-
 fn a_plain_search_builds_the_argv_and_renders_grouped_results() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_plain_search_builds_the_argv_and_renders_grouped_results",
         r##"(ag-test-with-project
  (ag "Grüße" ag-test-project)
  (ag-test-wait-for-search)
  (list :calls (ag-test-calls) :rendered (ag-test-rendered)))"##,
-        true,
         expect![[
             r#"OK (:calls (("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".")) :rendered (:name "*ag search text:Grüße dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --literal --group --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- Gr\\ü\\ße .\nFile: src/greeting.el\n1:4:;; Grüße an alle\n2:24:(defun greet () \"Grüße\")\n\nFile: docs/design notes.md\n3:9:We say Grüße in the greeting module.\n\nFile: README.md\n1:1:Grüße everyone.\n\n<STATUS>\n"))"#
         ]],
@@ -23,7 +21,7 @@ fn a_plain_search_builds_the_argv_and_renders_grouped_results() -> ParityBatchCa
 }
 
 fn visiting_each_match_lands_on_the_exact_file_line_and_column() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "visiting_each_match_lands_on_the_exact_file_line_and_column",
         r##"(ag-test-with-project
  (ag "Grüße" ag-test-project)
@@ -46,7 +44,6 @@ fn visiting_each_match_lands_on_the_exact_file_line_and_column() -> ParityBatchC
          :results-mode (with-current-buffer results major-mode)
          :next-error-fn (with-current-buffer results next-error-function)
          :error-alist (with-current-buffer results compilation-error-regexp-alist))))"##,
-        true,
         expect![[
             r#"OK (:hops (("src/greeting.el" 1 3 ";; Grüße an alle") ("src/greeting.el" 2 23 "(defun greet () \"Grüße\")") ("docs/design notes.md" 3 8 "We say Grüße in the greeting module.") ("README.md" 1 0 "Grüße everyone.")) :results-mode ag-mode :next-error-fn ag/next-error-function :error-alist (compilation-ag-nogroup compilation-ag-group))"#
         ]],
@@ -54,7 +51,7 @@ fn visiting_each_match_lands_on_the_exact_file_line_and_column() -> ParityBatchC
 }
 
 fn each_search_command_produces_its_own_argv_and_buffer_name() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "each_search_command_produces_its_own_argv_and_buffer_name",
         r##"(ag-test-with-project
  (ag-regexp "Gr[uü][ßs]" ag-test-project)
@@ -74,15 +71,15 @@ fn each_search_command_produces_its_own_argv_and_buffer_name() -> ParityBatchCas
                                                  (buffer-name b)))
                                           (buffer-list)))
                         #'string<))))"##,
-        true,
         expect![[
             r#"OK (:calls (("--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Gr[uü][ßs]" ".") ("--elisp" "--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".") ("--file-search-regex" "\\.md$" "--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".") ("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".")) :project-root "[ORACLE-SANDBOX]/project/" :buffers ("*ag search regexp:Gr[uü][ßs] dir:[ORACLE-SANDBOX]/project/*" "*ag search text:Grüße dir:[ORACLE-SANDBOX]/project/*"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn customizations_change_both_the_argv_and_the_rendering() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "customizations_change_both_the_argv_and_the_rendering",
         r##"(ag-test-with-project
  (let ((ag-group-matches nil)
@@ -99,15 +96,15 @@ fn customizations_change_both_the_argv_and_the_rendering() -> ParityBatchCase {
                           (buffer-substring-no-properties
                            (line-beginning-position) (line-end-position)))))))
      (list :calls (ag-test-calls) :rendered rendered :match-face faces))))"##,
-        true,
         expect![[
             r#"OK (:calls (("--ignore" "vendor" "--ignore" "node_modules" "--context=2" "--literal" "--nogroup" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".")) :rendered (:name "*ag search text:Grüße dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --ignore vendor --ignore node_modules --context\\=2 --literal --nogroup --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- Gr\\ü\\ße .\nsrc/greeting.el\n1:4:;; Grüße an alle\n2:24:(defun greet () \"Grüße\")\n\ndocs/design notes.md\n3:9:We say Grüße in the greeting module.\n\nREADME.md\n1:1:Grüße everyone.\n\n<STATUS>\n") :match-face (ag-match-face "1:4:;; Grüße an alle"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn a_search_with_no_matches_and_a_failing_search_are_both_rendered() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_search_with_no_matches_and_a_failing_search_are_both_rendered",
         r##"(ag-test-with-project
  (let ((none (progn (ag "NOTHING" ag-test-project)
@@ -119,21 +116,19 @@ fn a_search_with_no_matches_and_a_failing_search_are_both_rendered() -> ParityBa
    (ag "EXPLODE" ag-test-project)
    (ag-test-wait-for-search)
    (list :none none :failed (ag-test-rendered) :calls (ag-test-calls))))"##,
-        true,
         expect![[
             r#"OK (:none (:name "*ag search text:NOTHING dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --literal --group --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- NOTHING .\n\n<STATUS>\n") :failed (:name "*ag search text:EXPLODE dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --literal --group --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- EXPLODE .\nag: unknown option\n\n<STATUS>\n") :calls (("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "NOTHING" ".") ("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "EXPLODE" ".")))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         a_plain_search_builds_the_argv_and_renders_grouped_results(),
         visiting_each_match_lands_on_the_exact_file_line_and_column(),
         each_search_command_produces_its_own_argv_and_buffer_name(),
         customizations_change_both_the_argv_and_the_rendering(),
         a_search_with_no_matches_and_a_failing_search_are_both_rendered(),
-    ];
-    assert_ag_batch(&cases);
+    ]
 }

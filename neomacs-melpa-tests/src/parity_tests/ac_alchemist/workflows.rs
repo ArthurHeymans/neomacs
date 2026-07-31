@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_alchemist_batch};
+use super::ParityBatchCase;
 
 /// The user opens a module of a real Mix project, runs `M-x ac-alchemist-setup`
 /// and lets auto-complete fire once.  Visiting the file already puts
@@ -11,10 +11,9 @@ use super::{ParityBatchCase, assert_ac_alchemist_batch};
 /// `COMP` request built from the dotted expression before point.  The answer is
 /// still in flight during that pass, which is why the source legitimately
 /// produces no candidates yet.
-
 fn ac_alchemist_setup_starts_the_project_server_and_sends_the_first_completion_request()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_alchemist_setup_starts_the_project_server_and_sends_the_first_completion_request",
         r##"(ac-alchemist-test-session
     '(("COMP" "String.to_"
@@ -43,7 +42,6 @@ fn ac_alchemist_setup_starts_the_project_server_and_sends_the_first_completion_r
             :buffer-unchanged (buffer-modified-p)
             :point (point)
             :elixir-log (ac-alchemist-test-elixir-log)))))"##,
-        true,
         expect![[
             r#"OK (:major-mode elixir-mode :auto-complete-mode t :ac-sources (ac-source-alchemist ac-source-words-in-same-mode-buffers) :source ((init . ac-alchemist--complete-request) (prefix . ac-alchemist--prefix) (candidates . ac-alchemist--candidates) (document . ac-alchemist--show-document) (requires . -1)) :project-root "[ORACLE-SANDBOX]/blogpost/" :server-name "[ORACLE-SANDBOX]/blogpost/" :server-live-after-visit t :started t :ac-point 112 :ac-prefix "to_" :server-hint "String.to_" :candidates-before-answer nil :answers 1 :server-status run :candidate-cache ("to_integer/2" "to_integer/1" "to_float/1" "to_existing_atom/1" "to_charlist/1" "to_atom/1" "String.to_") :output-cache nil :buffer-unchanged nil :point 115 :elixir-log ("ARGV <alchemist>/alchemist-server/run.exs dev" "REQ COMP { \"String.to_\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP"))"#
         ]],
@@ -51,7 +49,7 @@ fn ac_alchemist_setup_starts_the_project_server_and_sends_the_first_completion_r
 }
 
 fn ac_alchemist_completes_a_dotted_call_with_arity_annotated_candidates() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_alchemist_completes_a_dotted_call_with_arity_annotated_candidates",
         r##"(ac-alchemist-test-session
     '(("COMP" "String.to_"
@@ -81,15 +79,15 @@ fn ac_alchemist_completes_a_dotted_call_with_arity_annotated_candidates() -> Par
             :modified (buffer-modified-p)
             :answers (ac-alchemist-test-await 2)
             :elixir-log (ac-alchemist-test-elixir-log)))))"##,
-        true,
         expect![[
             r#"OK (:candidates (("to_atom" "/1") ("to_float" "/1") ("to_integer" "/2") ("to_charlist" "/1") ("to_existing_atom" "/1")) :first-properties (document ac-alchemist--show-document symbol "/1") :selected "to_atom" :after-two-next "to_integer" :completed "to_integer" :menu-live nil :buffer "defmodule Blogpost.Slug do\n  def build(title) do\n    String.to_integer\n  end\nend\n" :point 71 :modified t :answers 2 :elixir-log ("ARGV <alchemist>/alchemist-server/run.exs dev" "REQ COMP { \"String.to_\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP" "REQ COMP { \"String.to_\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn ac_alchemist_documents_the_selected_function_from_the_alchemist_server() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_alchemist_documents_the_selected_function_from_the_alchemist_server",
         r##"(ac-alchemist-test-session
     '(("COMP" "String.to_"
@@ -115,15 +113,15 @@ fn ac_alchemist_documents_the_selected_function_from_the_alchemist_server() -> P
               :document-variable ac-alchemist--document
               :answers (ac-alchemist-test-await 3)
               :elixir-log (ac-alchemist-test-elixir-log))))))"##,
-        true,
         expect![[
             r#"OK (:selected "to_integer" :arity "/2" :document-function ac-alchemist--show-document :documentation "                        def to_integer(string, base)\nReturns an integer whose text representation is `string` in base `base`.\n`string` must be the representation of an integer with 2 ≤ base ≤ 36 —\notherwise an ArgumentError is raised.\n## Examples\n    iex> String.to_integer(\"3FF\", 16)\n    1023" :document-variable "                        def to_integer(string, base)\nReturns an integer whose text representation is `string` in base `base`.\n`string` must be the representation of an integer with 2 ≤ base ≤ 36 —\notherwise an ArgumentError is raised.\n## Examples\n    iex> String.to_integer(\"3FF\", 16)\n    1023" :answers 3 :elixir-log ("ARGV <alchemist>/alchemist-server/run.exs dev" "REQ COMP { \"String.to_\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP" "REQ COMP { \"String.to_\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP" "REQ DOCL { \"String.to_integer/2\", [ context: Elixir, imports: [Blogpost.Slug], aliases: [] ] }" "ANS DOCL"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn ac_alchemist_completes_a_bare_module_name_and_documents_the_module() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_alchemist_completes_a_bare_module_name_and_documents_the_module",
         r##"(ac-alchemist-test-session
     '(("COMP" "Str" "Str\nStream\nString\nStringIO")
@@ -154,16 +152,16 @@ fn ac_alchemist_completes_a_bare_module_name_and_documents_the_module() -> Parit
             :point (point)
             :answers (ac-alchemist-test-await 3)
             :elixir-log (ac-alchemist-test-elixir-log)))))"##,
-        true,
         expect![[
             r#"OK (:ac-point 54 :ac-prefix "Str" :server-hint "Str" :candidate-cache ("StringIO" "String" "Stream" "Str") :candidates (("Str" "  ") ("String" "  ") ("Stream" "  ") ("StringIO" "  ")) :selected "Str" :after-next "String" :documentation "                                 String\nStrings in Elixir are UTF-8 encoded binaries — «héllo» is 5 characters long." :completed "String" :buffer "defmodule Blogpost.Slug do\n  def build(title) do\n    String\n  end\nend\n" :point 60 :answers 3 :elixir-log ("ARGV <alchemist>/alchemist-server/run.exs dev" "REQ COMP { \"Str\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP" "REQ COMP { \"Str\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP" "REQ DOCL { \"String\", [ context: Elixir, imports: [Blogpost.Slug], aliases: [] ] }" "ANS DOCL"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn ac_alchemist_reports_no_candidates_for_an_unknown_module_and_leaves_the_buffer_alone()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_alchemist_reports_no_candidates_for_an_unknown_module_and_leaves_the_buffer_alone",
         r##"(ac-alchemist-test-session nil
   (let ((buffer (ac-alchemist-test-visit
@@ -187,16 +185,16 @@ fn ac_alchemist_reports_no_candidates_for_an_unknown_module_and_leaves_the_buffe
             :modified (buffer-modified-p)
             :answers (ac-alchemist-test-await 2)
             :elixir-log (ac-alchemist-test-elixir-log)))))"##,
-        true,
         expect![[
             r#"OK (:server-hint "Strng.to_a" :candidate-cache nil :output-cache nil :candidates nil :restarted t :ac-candidates nil :selected nil :completed nil :buffer "defmodule Blogpost.Slug do\n  def build(title) do\n    Strng.to_a\n  end\nend\n" :point 64 :modified nil :answers 2 :elixir-log ("ARGV <alchemist>/alchemist-server/run.exs dev" "REQ COMP { \"Strng.to_a\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP" "REQ COMP { \"Strng.to_a\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn ac_alchemist_shares_one_project_server_between_two_buffers_of_the_same_project()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_alchemist_shares_one_project_server_between_two_buffers_of_the_same_project",
         r##"(ac-alchemist-test-session
     '(("COMP" "String.re"
@@ -238,22 +236,20 @@ fn ac_alchemist_shares_one_project_server_between_two_buffers_of_the_same_projec
               :server-status (process-status (alchemist-server-process))
               :answers (ac-alchemist-test-await 6)
               :elixir-log (ac-alchemist-test-elixir-log))))))"##,
-        true,
         expect![[
             r#"OK (:slug ("slug.ex" (ac-source-alchemist . #1=(ac-source-words-in-same-mode-buffers)) ("reverse" "replace" "replace_suffix" "replace_prefix" "replace_leading" "replace_trailing") "reverse" "def reverse(string)\nReturns a string where the graphemes of `string` are in reverse order." "reverse" "defmodule Blogpost.Slug do\n  def build(title) do\n    String.reverse\n  end\nend\n" 68) :post ("post.ex" (ac-source-alchemist . #1#) ("max" "map" "max_by" "map_every") "max" "def max(enumerable)\nReturns the maximal element according to Erlang's term ordering." "max" "defmodule Blogpost.Post do\n  def titles(posts) do\n    Enum.max\n  end\nend\n" 63) :server-count 1 :server-name "[ORACLE-SANDBOX]/blogpost/" :server-status run :answers 6 :elixir-log ("ARGV <alchemist>/alchemist-server/run.exs dev" "REQ COMP { \"String.re\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP" "REQ COMP { \"String.re\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP" "REQ DOCL { \"String.reverse/1\", [ context: Elixir, imports: [Blogpost.Slug], aliases: [] ] }" "ANS DOCL" "REQ COMP { \"Enum.ma\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP" "REQ COMP { \"Enum.ma\", [ context: [], imports: [], aliases: [] ] }" "ANS COMP" "REQ DOCL { \"Enum.max/1\", [ context: Elixir, imports: [Blogpost.Post], aliases: [] ] }" "ANS DOCL"))"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         ac_alchemist_setup_starts_the_project_server_and_sends_the_first_completion_request(),
         ac_alchemist_completes_a_dotted_call_with_arity_annotated_candidates(),
         ac_alchemist_documents_the_selected_function_from_the_alchemist_server(),
         ac_alchemist_completes_a_bare_module_name_and_documents_the_module(),
         ac_alchemist_reports_no_candidates_for_an_unknown_module_and_leaves_the_buffer_alone(),
         ac_alchemist_shares_one_project_server_between_two_buffers_of_the_same_project(),
-    ];
-    assert_ac_alchemist_batch(&cases);
+    ]
 }

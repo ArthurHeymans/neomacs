@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aas_batch};
+use super::ParityBatchCase;
 
 fn aas_expands_configured_snippets_while_the_user_types_prose() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aas_expands_configured_snippets_while_the_user_types_prose",
         r##"(aas-test-with-live-buffer
  (text-mode)
@@ -26,7 +26,6 @@ fn aas_expands_configured_snippets_while_the_user_types_prose() -> ParityBatchCa
   (local-variable-p 'post-self-insert-hook)
   (hash-table-count aas-keymaps)
   (keymapp (gethash 'aas-workflow-mode aas-keymaps))))"##,
-        true,
         expect![[
             r#"OK ("the set is ∞ and α = ½\n#+latex_header: amsmath" 47 2 t (aas-workflow-mode) t t 1 t)"#
         ]],
@@ -34,7 +33,7 @@ fn aas_expands_configured_snippets_while_the_user_types_prose() -> ParityBatchCa
 }
 
 fn aas_conditions_gate_expansion_and_a_nil_condition_clears_the_previous_one() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aas_conditions_gate_expansion_and_a_nil_condition_clears_the_previous_one",
         r##"(aas-test-with-live-buffer
  (text-mode)
@@ -50,13 +49,12 @@ fn aas_conditions_gate_expansion_and_a_nil_condition_clears_the_previous_one() -
   (buffer-string)
   (point)
   (line-number-at-pos)))"##,
-        true,
         expect![[r##"OK ("#+latex_header: x\npad #+lh ∞" 29 2)"##]],
     )
 }
 
 fn aas_function_expansions_see_the_transient_variables_and_run_both_hooks() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aas_function_expansions_see_the_transient_variables_and_run_both_hooks",
         r##"(aas-test-with-live-buffer
  (text-mode)
@@ -86,7 +84,6 @@ fn aas_function_expansions_see_the_transient_variables_and_run_both_hooks() -> P
     aas-transient-snippet-key
     aas-transient-snippet-expansion
     aas-transient-snippet-condition-result)))"##,
-        true,
         expect![[
             r#"OK ("bye\n-- Signed, " 16 ((cond 5 t) (pre "sig" 5) (expand "sig" checked t) (post "sig" 16)) nil nil nil)"#
         ]],
@@ -94,7 +91,7 @@ fn aas_function_expansions_see_the_transient_variables_and_run_both_hooks() -> P
 }
 
 fn aas_walks_multi_key_prefixes_and_leaves_dead_ends_and_split_keys_alone() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aas_walks_multi_key_prefixes_and_leaves_dead_ends_and_split_keys_alone",
         r##"(aas-test-with-live-buffer
  (text-mode)
@@ -120,13 +117,12 @@ fn aas_walks_multi_key_prefixes_and_leaves_dead_ends_and_split_keys_alone() -> P
            (buffer-string)
            (point)
            aas-global-condition-hook))))"##,
-        true,
         expect![[r#"OK ("α \\alpha \\beta ;z" ";;" ";;a" 2 (aas--key-is-fully-typed?))"#]],
     )
 }
 
 fn aas_activation_lifecycle_decides_which_snippets_are_live_in_the_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aas_activation_lifecycle_decides_which_snippets_are_live_in_the_buffer",
         r##"(aas-test-with-live-buffer
  (aas-set-snippets 'text-mode "tm" "TEXT ")
@@ -163,7 +159,6 @@ fn aas_activation_lifecycle_decides_which_snippets_are_live_in_the_buffer() -> P
                aas-mode
                (aas--modes-to-activate 'text-mode)
                (and (memq #'aas-post-self-insert-hook post-self-insert-hook) t)))))))"##,
-        true,
         expect![[
             r#"OK ("TEXT pmxm" "TEXT EXTRA " (aas-extra-mode text-mode) "tmEXTRA " "xm" "xm" (aas-extra-mode) nil (text-mode) nil)"#
         ]],
@@ -171,7 +166,7 @@ fn aas_activation_lifecycle_decides_which_snippets_are_live_in_the_buffer() -> P
 }
 
 fn aas_rejects_invalid_snippet_definitions_with_exact_errors() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aas_rejects_invalid_snippet_definitions_with_exact_errors",
         r##"(let (observed)
   (dolist (probe
@@ -198,22 +193,19 @@ fn aas_rejects_invalid_snippet_definitions_with_exact_errors() -> ParityBatchCas
         (gethash 'aas-invalid-mode aas-keymaps)
         (and (gethash 'aas-clash-mode aas-keymaps) t)
         (gethash 'aas-never-defined-mode aas-keymaps)))"##,
-        true,
         expect![[
             r#"OK (((number-expansion signal error ("Expansion must be either a string, function, tempel/yas form, or nil")) (symbol-condition signal error ("Condition must be either nil or a function")) (unknown-keyword signal error ("Unknown keyword: :nope")) (prefix-clash signal error ("Key sequence ; a b starts with non-prefix key ; a")) (unknown-keymap value nil)) nil t nil)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         aas_expands_configured_snippets_while_the_user_types_prose(),
         aas_conditions_gate_expansion_and_a_nil_condition_clears_the_previous_one(),
         aas_function_expansions_see_the_transient_variables_and_run_both_hooks(),
         aas_walks_multi_key_prefixes_and_leaves_dead_ends_and_split_keys_alone(),
         aas_activation_lifecycle_decides_which_snippets_are_live_in_the_buffer(),
         aas_rejects_invalid_snippet_definitions_with_exact_errors(),
-    ];
-    assert_aas_batch(&cases);
+    ]
 }

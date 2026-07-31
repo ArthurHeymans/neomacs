@@ -1,21 +1,20 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_agda_editor_tactics_batch};
+use super::ParityBatchCase;
 
 fn agda_editor_tactics_rendering_handles_empty_parameterless_records() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agda_editor_tactics_rendering_handles_empty_parameterless_records",
         r##"(mapcar
          #'agda-editor-tactics-as-Σ-nested
          '((:name "Empty" :level "" :body nil)
            (:name "Higher" :level "(lsuc ℓ)" :body nil)))"##,
-        true,
         expect![[r#"OK ("Empty′ : Set \nEmpty′ = ⊤" "Higher′ : Set (lsuc ℓ)\nHigher′ = ⊤")"#]],
     )
 }
 
 fn agda_editor_tactics_rendering_builds_nested_fields_and_local_lets() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agda_editor_tactics_rendering_builds_nested_fields_and_local_lets",
         r##"(agda-editor-tactics-as-Σ-nested
          '(:name "Monoid"
@@ -27,7 +26,6 @@ fn agda_editor_tactics_rendering_builds_nested_fields_and_local_lets() -> Parity
             (:local "left-id : ∀ x → ε ∙ x ≡ x")
             (:local "left-id = proof")
             (:field "right-id : ∀ x → x ∙ ε ≡ x"))))"##,
-        true,
         expect![[
             r#"OK "Monoid′ : Set ℓ\nMonoid′ = Σ Carrier ∶ Set ℓ • Σ ε ∶ Carrier • Σ _∙_ ∶ Carrier → Carrier → Carrier • let left-id : ∀ x → ε ∙ x ≡ x ; left-id = proof in Σ right-id ∶ ∀ x → x ∙ ε ≡ x • ⊤""#
         ]],
@@ -36,7 +34,7 @@ fn agda_editor_tactics_rendering_builds_nested_fields_and_local_lets() -> Parity
 
 fn agda_editor_tactics_rendering_turns_parameters_into_binders_and_lambda_arguments()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agda_editor_tactics_rendering_turns_parameters_into_binders_and_lambda_arguments",
         r##"(agda-editor-tactics-as-Σ-nested
          '(:name "Dependent"
@@ -47,7 +45,6 @@ fn agda_editor_tactics_rendering_turns_parameters_into_binders_and_lambda_argume
             (:param "x : A")
             (:field "value : B x")
             (:field "proof : value ≡ value"))))"##,
-        true,
         expect![[
             r#"OK "Dependent′ : (A : Set a) (B : A → Set b) (x : A) → Set (a ⊔ b)\nDependent′ = λ A B x → Σ value ∶ B x • Σ proof ∶ value ≡ value • ⊤""#
         ]],
@@ -55,7 +52,7 @@ fn agda_editor_tactics_rendering_turns_parameters_into_binders_and_lambda_argume
 }
 
 fn agda_editor_tactics_rendering_respects_custom_sigma_naming() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agda_editor_tactics_rendering_respects_custom_sigma_naming",
         r##"(let ((agda-editor-tactics-format-Σ-naming "%s-as-nested-Σ"))
          (list
@@ -66,7 +63,6 @@ fn agda_editor_tactics_rendering_respects_custom_sigma_naming() -> ParityBatchCa
              :body
              ((:param "A : Set")
               (:field "item : A"))))))"##,
-        true,
         expect![[
             r#"OK ("%s-as-nested-Σ" "Configured-as-nested-Σ : (A : Set) → Set \nConfigured-as-nested-Σ = λ A → Σ item ∶ A • ⊤")"#
         ]],
@@ -74,7 +70,7 @@ fn agda_editor_tactics_rendering_respects_custom_sigma_naming() -> ParityBatchCa
 }
 
 fn agda_editor_tactics_rendering_normalizes_whitespace_and_let_sequences() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agda_editor_tactics_rendering_normalizes_whitespace_and_let_sequences",
         r##"(agda-editor-tactics-as-Σ-nested
          '(:name "Spacing"
@@ -86,7 +82,6 @@ fn agda_editor_tactics_rendering_normalizes_whitespace_and_let_sequences() -> Pa
             (:field "value  :   chosen")
             (:local "proof : value ≡ value")
             (:local "proof = refl"))))"##,
-        true,
         expect![[
             r#"OK "Spacing′ : Set \nSpacing′ = let Alias : Set ; Alias = Set ; chosen = Alias in Σ value ∶ chosen • let proof : value ≡ value ; proof = refl in ⊤""#
         ]],
@@ -94,7 +89,7 @@ fn agda_editor_tactics_rendering_normalizes_whitespace_and_let_sequences() -> Pa
 }
 
 fn agda_editor_tactics_rendering_replaces_colons_only_for_fields() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agda_editor_tactics_rendering_replaces_colons_only_for_fields",
         r##"(agda-editor-tactics-as-Σ-nested
          '(:name "Colons"
@@ -104,7 +99,6 @@ fn agda_editor_tactics_rendering_replaces_colons_only_for_fields() -> ParityBatc
             (:field "mapping : A :→ B")
             (:local "qualified = Module.value : Alias")
             (:field "proof : mapping x ≡ y"))))"##,
-        true,
         expect![[
             r#"OK "Colons′ : Set \nColons′ = let Alias : Set in Σ mapping ∶ A ∶→ B • let qualified = Module.value : Alias in Σ proof ∶ mapping x ≡ y • ⊤""#
         ]],
@@ -112,7 +106,7 @@ fn agda_editor_tactics_rendering_replaces_colons_only_for_fields() -> ParityBatc
 }
 
 fn agda_editor_tactics_rendering_preserves_parameter_order_and_dependencies() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "agda_editor_tactics_rendering_preserves_parameter_order_and_dependencies",
         r##"(let ((record
           '(:name "Category"
@@ -127,16 +121,14 @@ fn agda_editor_tactics_rendering_preserves_parameter_order_and_dependencies() ->
          (list
           (agda-editor-tactics-as-Σ-nested record)
           (plist-get record :body)))"##,
-        true,
         expect![[
             r#"OK ("Category′ : (o : Level) (h : Level) → Set (lsuc (o ⊔ h))\nCategory′ = λ o h → Σ Obj ∶ Set o • Σ Hom ∶ Obj → Obj → Set h • Σ id ∶ ∀ {A} → Hom A A • Σ _∘_ ∶ ∀ {A B C} → Hom B C → Hom A B → Hom A C • ⊤" ((:param "o : Level") (:param "h : Level") (:field "Obj : Set o") (:field "Hom : Obj → Obj → Set h") (:field "id : ∀ {A} → Hom A A") (:field "_∘_ : ∀ {A B C} → Hom B C → Hom A B → Hom A C")))"#
         ]],
     )
 }
 
-#[test]
-fn rendering_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn rendering_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         agda_editor_tactics_rendering_handles_empty_parameterless_records(),
         agda_editor_tactics_rendering_builds_nested_fields_and_local_lets(),
         agda_editor_tactics_rendering_turns_parameters_into_binders_and_lambda_arguments(),
@@ -144,6 +136,5 @@ fn rendering_public_surface_batch() {
         agda_editor_tactics_rendering_normalizes_whitespace_and_let_sequences(),
         agda_editor_tactics_rendering_replaces_colons_only_for_fields(),
         agda_editor_tactics_rendering_preserves_parameter_order_and_dependencies(),
-    ];
-    assert_agda_editor_tactics_batch(&cases);
+    ]
 }

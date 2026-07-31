@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use crate::{ALECTRYON_MELPA_PIN, CachedMelpaOracle};
-use expect_test::Expect;
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -60,22 +59,6 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_alectryon_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = alectryon_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("Alectryon parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_alectryon_parity(elisp_form: &str, expected: Expect) {
-    assert_alectryon_source_parity("alectryon.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_alectryon_autoload_parity(elisp_form: &str, expected: Expect) {
-    assert_alectryon_source_parity("alectryon-autoloads.el", elisp_form, expected);
-}
-
 /// Multi-probe batch for `assert_alectryon_autoload_parity` cases (2a).
 pub(crate) fn assert_alectryon_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -97,3 +80,33 @@ pub(crate) fn assert_alectryon_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn alectryon_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_alectryon_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_alectryon_autoload_batch(&cases);
+}
+
+#[test]
+fn alectryon_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        configuration::configuration_public_surface_batch_cases(),
+        editing::editing_public_surface_batch_cases(),
+        errors::errors_public_surface_batch_cases(),
+        flycheck::flycheck_public_surface_batch_cases(),
+        modes::modes_public_surface_batch_cases(),
+        process::process_public_surface_batch_cases(),
+        registry::registry_alectryon_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_alectryon_batch(&cases);
+}
+
+// END generated package batch tests

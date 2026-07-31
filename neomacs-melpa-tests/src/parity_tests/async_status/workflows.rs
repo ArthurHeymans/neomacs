@@ -1,8 +1,8 @@
-use super::{ParityBatchCase, assert_async_status_batch};
+use super::ParityBatchCase;
 use expect_test::expect;
 
 fn complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up",
         r##"(let ((id (async-status-req-id "compile"))
       (watch-sequence 0)
@@ -69,7 +69,6 @@ fn complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up() -> P
            (async-status--get-absolute-path-by-id id))
         (async-status-clean-up id))
       (setq async-status--shown-items nil))))"##,
-        true,
         expect![[
             r#"OK ((1 "Compile project" "0.5" "0.5") 0 nil ((:watch-add :normalized (change) async-status--update-items) :show :refresh :show (:watch-remove 1) :refresh (:hide nil)))"#
         ]],
@@ -77,7 +76,7 @@ fn complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up() -> P
 }
 
 fn multiple_jobs_support_interleaved_progress_and_independent_completion() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "multiple_jobs_support_interleaved_progress_and_independent_completion",
         r##"(let ((first (async-status-req-id "compile"))
       (second (async-status-req-id "tests"))
@@ -129,13 +128,12 @@ fn multiple_jobs_support_interleaved_progress_and_independent_completion() -> Pa
     (setq async-status--shown-items nil)
     (async-status-clean-up first)
     (async-status-clean-up second)))"##,
-        true,
         expect![[r#"OK ((("Tests" "0.8") ("Compile" "0.2")) (("Compile" "1.0")) (2))"#]],
     )
 }
 
 fn thresholded_child_updates_publish_only_meaningful_progress_steps() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "thresholded_child_updates_publish_only_meaningful_progress_steps",
         r##"(let ((id (async-status-req-id "stream")))
   (unwind-protect
@@ -151,7 +149,6 @@ fn thresholded_child_updates_publish_only_meaningful_progress_steps() -> ParityB
                trace))))
         (nreverse trace))
     (async-status-clean-up id)))"##,
-        true,
         expect![[
             r#"OK ((0.0 nil "0") (0.005 nil "0") (0.011 t "0.011") (0.015 nil "0.011") (0.021 t "0.021") (0.022 nil "0.021") (0.5 t "0.5") (0.999 t "0.999") (1.0 nil "0.999"))"#
         ]],
@@ -159,7 +156,7 @@ fn thresholded_child_updates_publish_only_meaningful_progress_steps() -> ParityB
 }
 
 fn actual_subprocess_can_publish_progress_through_the_message_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "actual_subprocess_can_publish_progress_through_the_message_file",
         r##"(let ((id (async-status-req-id "subprocess"))
       process)
@@ -197,14 +194,13 @@ fn actual_subprocess_can_publish_progress_through_the_message_file() -> ParityBa
       (delete-process process))
     (setq async-status--shown-items nil)
     (async-status-clean-up id)))"##,
-        true,
         expect!["OK (0 \"0.75\" \"0.75\")"],
     )
 }
 
 fn actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end",
         r##"(let* ((id (async-status-req-id "async-child"))
        (path (async-status--get-absolute-path-by-id id))
@@ -278,13 +274,12 @@ fn actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end
     (setq async-status--shown-items nil)
     (when (buffer-live-p buffer)
       (kill-buffer buffer))))"##,
-        true,
         expect!["OK ((:child \"0.75\") \"0.75\" \"0.75\" t nil exit t)"],
     )
 }
 
 fn duplicate_registrations_are_removed_one_watch_at_a_time_by_id() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "duplicate_registrations_are_removed_one_watch_at_a_time_by_id",
         r##"(let ((id (async-status-req-id "duplicate"))
       (next-watch 0)
@@ -324,13 +319,12 @@ fn duplicate_registrations_are_removed_one_watch_at_a_time_by_id() -> ParityBatc
              (nreverse removed)))))
     (setq async-status--shown-items nil)
     (async-status-clean-up id)))"##,
-        true,
         expect![[r#"OK ((("Second" 2) ("First" 1)) (("First" 1)) nil (2 1))"#]],
     )
 }
 
 fn cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted",
         r##"(let ((id (async-status-req-id "cleanup-order"))
       calls)
@@ -353,13 +347,12 @@ fn cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted() ->
        file-after-cleanup
        async-status--shown-items
        (nreverse calls)))))"##,
-        true,
         expect!["OK (nil nil ((:removed :watch) :refresh))"],
     )
 }
 
 fn workflow_cleanup_can_restore_all_resources_after_a_midstream_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "workflow_cleanup_can_restore_all_resources_after_a_midstream_error",
         r##"(let ((id (async-status-req-id "failure"))
       removed
@@ -392,14 +385,12 @@ fn workflow_cleanup_can_restore_all_resources_after_a_midstream_error() -> Parit
      (file-exists-p
       (async-status--get-absolute-path-by-id id))
      removed)))"##,
-        true,
         expect!["OK (:error error t nil nil (:watch))"],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up(),
         multiple_jobs_support_interleaved_progress_and_independent_completion(),
         thresholded_child_updates_publish_only_meaningful_progress_steps(),
@@ -408,6 +399,5 @@ fn workflows_public_surface_batch() {
         duplicate_registrations_are_removed_one_watch_at_a_time_by_id(),
         cleanup_order_allows_removing_ui_state_after_the_message_file_is_deleted(),
         workflow_cleanup_can_restore_all_resources_after_a_midstream_error(),
-    ];
-    assert_async_status_batch(&cases);
+    ]
 }

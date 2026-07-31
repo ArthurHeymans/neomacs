@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ast_grep_batch};
+use super::ParityBatchCase;
 
 /// Searching a real project through the documented `ast-grep-search' command.
 ///
@@ -33,9 +33,8 @@ use super::{ParityBatchCase, assert_ast_grep_batch};
 /// gap: `ast-grep--parse-stream-line' records only the start of each match
 /// even though the JSON carries `range.end'.  The rewrite workflow, which uses
 /// the other parser, shows the end positions populated from the same field.
-
 fn searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates",
         r##"(let* ((project (ast-grep-test-project))
        (records (ast-grep-test-install project))
@@ -48,7 +47,6 @@ fn searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates() -
           :matches (mapcar #'ast-grep-test-match-summary candidates)
           :calls (ast-grep-test-calls-made)
           :unrecorded (ast-grep-test-unrecorded))))"##,
-        true,
         expect![[
             r#"OK (:records 3 :count 4 :matches (("[ORACLE-SANDBOX]/proj/src/other.js" 0 0 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 0 23 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 1 0 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 3 2 nil nil "console.log" nil)) :calls ("run|--pattern=console.log|--json=stream|<project>/|") :unrecorded nil)"#
         ]],
@@ -56,7 +54,7 @@ fn searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates() -
 }
 
 fn rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match",
         r##"(let* ((project (ast-grep-test-project))
        (records (ast-grep-test-install project))
@@ -72,15 +70,15 @@ fn rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match() -> 
                   matches)
           :calls (ast-grep-test-calls-made)
           :unrecorded (ast-grep-test-unrecorded))))"##,
-        true,
         expect![[
             r#"OK (:count 4 :matches (("app.js" 0 23 0 34 "console.log" "logger.info") ("app.js" 1 0 1 11 "console.log" "logger.info") ("app.js" 3 2 3 13 "console.log" "logger.info") ("other.js" 0 0 0 11 "console.log" "logger.info")) :calls ("run|--pattern=console.log|--rewrite=logger.info|--json=stream|<project>/|") :unrecorded nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn the_outline_feature_calls_a_subcommand_ast_grep_does_not_have() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_outline_feature_calls_a_subcommand_ast_grep_does_not_have",
         r##"(let* ((project (ast-grep-test-project))
        (records (ast-grep-test-install project))
@@ -91,19 +89,17 @@ fn the_outline_feature_calls_a_subcommand_ast_grep_does_not_have() -> ParityBatc
                   (lambda () (ast-grep--run-outline file)))
         :calls (ast-grep-test-calls-made)
         :unrecorded (ast-grep-test-unrecorded)))"##,
-        true,
         expect![[
             r#"OK (:command ("ast-grep" "outline" "--json=stream" "[ORACLE-SANDBOX]/proj/src/app.js") :outcome (:error error ("The ast-grep failed with exit code 2: error: unrecognized subcommand 'outline'\n\nUsage: ast-grep [OPTIONS] <COMMAND>\n\nFor more information, try '--help'.")) :calls ("outline|--json=stream|<project>/src/app.js|") :unrecorded nil)"#
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates(),
         rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match(),
         the_outline_feature_calls_a_subcommand_ast_grep_does_not_have(),
-    ];
-    assert_ast_grep_batch(&cases);
+    ]
 }

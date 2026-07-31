@@ -1,8 +1,8 @@
-use super::{ParityBatchCase, assert_astyle_batch};
-use expect_test::{Expect, expect};
+use super::ParityBatchCase;
+use expect_test::expect;
 
 fn format_args_use_style_c_mode_offset_and_complete_default_option_set() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "format_args_use_style_c_mode_offset_and_complete_default_option_set",
         r##"
 (with-temp-buffer
@@ -26,7 +26,6 @@ fn format_args_use_style_c_mode_offset_and_complete_default_option_set() -> Pari
      (astyle--format-args))
     astyle-default-args)))
 "##,
-        true,
         expect![[
             r#"OK (("--style=linux" "--indent=spaces=3" . #1=("--pad-oper" "--pad-header" "--break-blocks" "--delete-empty-lines" "--align-pointer=type" "--align-reference=name")) #1# t)"#
         ]],
@@ -34,7 +33,7 @@ fn format_args_use_style_c_mode_offset_and_complete_default_option_set() -> Pari
 }
 
 fn format_args_prefer_explicit_indent_and_custom_arguments_in_declared_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "format_args_prefer_explicit_indent_and_custom_arguments_in_declared_order",
         r##"
 (with-temp-buffer
@@ -55,7 +54,6 @@ fn format_args_prefer_explicit_indent_and_custom_arguments_in_declared_order() -
   (make-directory default-directory t)
   (astyle--format-args))
 "##,
-        true,
         expect![[
             r#"OK ("--style=allman" "--indent=spaces=8" "--suffix=none" "--convert-tabs" "--max-code-length=88")"#
         ]],
@@ -63,7 +61,7 @@ fn format_args_prefer_explicit_indent_and_custom_arguments_in_declared_order() -
 }
 
 fn format_args_are_recomputed_from_buffer_local_settings_for_each_buffer() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "format_args_are_recomputed_from_buffer_local_settings_for_each_buffer",
         r##"
 (let ((first
@@ -116,15 +114,15 @@ fn format_args_are_recomputed_from_buffer_local_settings_for_each_buffer() -> Pa
     (kill-buffer first)
     (kill-buffer second)))
 "##,
-        true,
         expect![[
             r#"OK (("--style=google" "--indent=spaces=4" "--first") ("--style=java" "--indent=spaces=6" "--second" "--third"))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn project_configuration_file_overrides_style_indent_and_custom_arguments() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "project_configuration_file_overrides_style_indent_and_custom_arguments",
         r##"
 (let* ((project
@@ -161,7 +159,6 @@ fn project_configuration_file_overrides_style_indent_and_custom_arguments() -> P
      (file-truename
       configuration))))
 "##,
-        true,
         expect![[
             r#"OK (("--options=[ORACLE-SANDBOX]/arguments/project/.astylerc") nil "[ORACLE-SANDBOX]/arguments/project/.astylerc")"#
         ]],
@@ -169,7 +166,7 @@ fn project_configuration_file_overrides_style_indent_and_custom_arguments() -> P
 }
 
 fn nearest_configuration_and_custom_rc_name_win_in_nested_projects() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "nearest_configuration_and_custom_rc_name_win_in_nested_projects",
         r##"
 (let* ((root
@@ -211,7 +208,6 @@ fn nearest_configuration_and_custom_rc_name_win_in_nested_projects() -> ParityBa
      (file-truename
       root-config))))
 "##,
-        true,
         expect![[
             r#"OK (("--options=[ORACLE-SANDBOX]/arguments/nearest/module/style.conf") "[ORACLE-SANDBOX]/arguments/nearest/module/style.conf" "[ORACLE-SANDBOX]/arguments/nearest/style.conf")"#
         ]],
@@ -219,7 +215,7 @@ fn nearest_configuration_and_custom_rc_name_win_in_nested_projects() -> ParityBa
 }
 
 fn unsaved_buffer_uses_default_arguments_when_no_configuration_is_addressable() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "unsaved_buffer_uses_default_arguments_when_no_configuration_is_addressable",
         r##"
 (with-temp-buffer
@@ -244,13 +240,12 @@ fn unsaved_buffer_uses_default_arguments_when_no_configuration_is_addressable() 
       (car condition)
       (cadr condition)))))
 "##,
-        true,
         expect!["OK (:signal wrong-type-argument stringp)"],
     )
 }
 
 fn missing_indent_sources_report_the_exact_conversion_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "missing_indent_sources_report_the_exact_conversion_error",
         r##"
 (with-temp-buffer
@@ -274,14 +269,12 @@ fn missing_indent_sources_report_the_exact_conversion_error() -> ParityBatchCase
       (car condition)
       (cdr condition)))))
 "##,
-        true,
         expect!["OK (:signal wrong-type-argument (numberp nil))"],
     )
 }
 
-#[test]
-fn arguments_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn arguments_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         format_args_use_style_c_mode_offset_and_complete_default_option_set(),
         format_args_prefer_explicit_indent_and_custom_arguments_in_declared_order(),
         format_args_are_recomputed_from_buffer_local_settings_for_each_buffer(),
@@ -289,6 +282,5 @@ fn arguments_public_surface_batch() {
         nearest_configuration_and_custom_rc_name_win_in_nested_projects(),
         unsaved_buffer_uses_default_arguments_when_no_configuration_is_addressable(),
         missing_indent_sources_report_the_exact_conversion_error(),
-    ];
-    assert_astyle_batch(&cases);
+    ]
 }

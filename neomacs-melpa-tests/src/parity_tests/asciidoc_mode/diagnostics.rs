@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asciidoc_mode_batch};
+use super::ParityBatchCase;
 
 fn flymake_output_parser_maps_all_severities_lines_and_messages_to_exact_regions() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "flymake_output_parser_maps_all_severities_lines_and_messages_to_exact_regions",
         r##"(with-temp-buffer
   (insert
@@ -34,7 +34,6 @@ fn flymake_output_parser_maps_all_severities_lines_and_messages_to_exact_regions
          (flymake-diagnostic-beg diagnostic)
          (flymake-diagnostic-end diagnostic))))
      diagnostics)))"##,
-        true,
         expect![[
             r#"OK ((:warning 12 48 "invalid reference" "second line has an invalid reference") (:error 49 81 "missing include" "third line has a missing include") (:note 82 109 "old syntax" "fourth line uses old syntax") (:warning 82 109 "outside buffer" "fourth line uses old syntax"))"#
         ]],
@@ -43,7 +42,7 @@ fn flymake_output_parser_maps_all_severities_lines_and_messages_to_exact_regions
 
 fn fatal_asciidoctor_failure_becomes_one_buffer_error_only_when_no_line_diagnostic_exists()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "fatal_asciidoctor_failure_becomes_one_buffer_error_only_when_no_line_diagnostic_exists",
         r##"(with-temp-buffer
   (insert "= Document\n\nbody\n")
@@ -74,7 +73,6 @@ fn fatal_asciidoctor_failure_becomes_one_buffer_error_only_when_no_line_diagnost
       "asciidoctor: FAILED: ignored on success\n"
       0)
      (summaries "all good\n" 0))))"##,
-        true,
         expect![[
             r#"OK (((:error 1 11 "asciidoctor: FAILED: missing converter for backend")) ((:warning 12 13 "warning wins")) nil nil)"#
         ]],
@@ -83,7 +81,7 @@ fn fatal_asciidoctor_failure_becomes_one_buffer_error_only_when_no_line_diagnost
 
 fn public_flymake_backend_runs_unsaved_buffer_through_a_deterministic_real_process()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "public_flymake_backend_runs_unsaved_buffer_through_a_deterministic_real_process",
         r##"(with-temp-buffer
   (insert
@@ -134,7 +132,6 @@ fn public_flymake_backend_runs_unsaved_buffer_through_a_deterministic_real_proce
      (and asciidoc--flymake-proc
           (process-status
            asciidoc--flymake-proc)))))"##,
-        true,
         expect![[
             r#"OK (t ("/bin/sh" "-c" "cat >/dev/null; printf 'asciidoctor: ERROR: <stdin>: line 3: deterministic include\\nasciidoctor: DEPRECATED: <stdin>: Line 4: deterministic syntax\\n' >&2; exit 1" "asciidoc-mode-test" "-B" "[ORACLE-SANDBOX]/" "-o" "/dev/null" "-") nil ((:error 21 44 "deterministic include") (:note 45 55 "deterministic syntax")) exit)"#
         ]],
@@ -143,7 +140,7 @@ fn public_flymake_backend_runs_unsaved_buffer_through_a_deterministic_real_proce
 
 fn public_flymake_backend_rejects_missing_executable_before_mutating_process_state()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "public_flymake_backend_rejects_missing_executable_before_mutating_process_state",
         r##"(with-temp-buffer
   (insert "= Missing Tool\n")
@@ -164,20 +161,17 @@ fn public_flymake_backend_rejects_missing_executable_before_mutating_process_sta
         reports
         (memq #'asciidoc-flymake
               flymake-diagnostic-functions))))))"##,
-        true,
         expect![[
             r#"OK (error ("Cannot find the Asciidoctor executable \"asciidoc-mode-no-such-executable\"") nil nil (asciidoc-flymake t))"#
         ]],
     )
 }
 
-#[test]
-fn diagnostics_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn diagnostics_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         flymake_output_parser_maps_all_severities_lines_and_messages_to_exact_regions(),
         fatal_asciidoctor_failure_becomes_one_buffer_error_only_when_no_line_diagnostic_exists(),
         public_flymake_backend_runs_unsaved_buffer_through_a_deterministic_real_process(),
         public_flymake_backend_rejects_missing_executable_before_mutating_process_state(),
-    ];
-    assert_asciidoc_mode_batch(&cases);
+    ]
 }

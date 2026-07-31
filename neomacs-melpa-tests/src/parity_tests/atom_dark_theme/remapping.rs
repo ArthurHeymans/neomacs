@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atom_dark_theme_batch};
+use super::ParityBatchCase;
 
 fn atom_dark_theme_mode_branch_matrix_calls_face_remapping_with_exact_face_and_recipe()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_dark_theme_mode_branch_matrix_calls_face_remapping_with_exact_face_and_recipe",
         r##"(let (observations)
          (dolist
@@ -37,16 +37,16 @@ fn atom_dark_theme_mode_branch_matrix_calls_face_remapping_with_exact_face_and_r
                  (nreverse calls))
                 observations))))
          (nreverse observations))"##,
-        true,
         expect![[
             r##"OK ((conf-mode (:cookie font-lock-variable-name-face #1=(#2=(:inherit (font-lock-keyword-face)))) ((font-lock-variable-name-face . #1#))) (conf-javaprop-mode (:cookie font-lock-variable-name-face #3=(#2#)) ((font-lock-variable-name-face . #3#))) (html-mode (:cookie font-lock-variable-name-face #4=(#2#)) ((font-lock-variable-name-face . #4#))) (yaml-mode (:cookie font-lock-variable-name-face #5=(#2#)) ((font-lock-variable-name-face . #5#))) (java-mode (:cookie font-lock-variable-name-face #6=((:inherit (js2-function-param)))) ((font-lock-variable-name-face . #6#))) (markdown-mode (:cookie default #7=((:foreground "#999"))) ((default . #7#))) (javascript-mode (:cookie font-lock-doc-face #8=(#9=(:inherit (font-lock-comment-face)))) ((font-lock-doc-face . #8#))) (js2-mode (:cookie font-lock-doc-face #10=(#9#)) ((font-lock-doc-face . #10#))) (text-mode nil nil) (fundamental-mode nil nil))"##
         ]],
     )
+    .fresh_process()
 }
 
 fn atom_dark_theme_actual_buffer_local_remapping_alists_match_for_every_supported_mode()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_dark_theme_actual_buffer_local_remapping_alists_match_for_every_supported_mode",
         r##"(mapcar
          (lambda (mode)
@@ -70,16 +70,16 @@ fn atom_dark_theme_actual_buffer_local_remapping_alists_match_for_every_supporte
            js2-mode
            text-mode
            fundamental-mode))"##,
-        true,
         expect![[
             r##"OK ((conf-mode (font-lock-variable-name-face . #1=(:inherit (font-lock-keyword-face))) ((font-lock-variable-name-face #1# font-lock-variable-name-face)) t) (conf-javaprop-mode (font-lock-variable-name-face . #1#) ((font-lock-variable-name-face #1# font-lock-variable-name-face)) t) (html-mode (font-lock-variable-name-face . #1#) ((font-lock-variable-name-face #1# font-lock-variable-name-face)) t) (yaml-mode (font-lock-variable-name-face . #1#) ((font-lock-variable-name-face #1# font-lock-variable-name-face)) t) (java-mode (font-lock-variable-name-face . #2=(:inherit (js2-function-param))) ((font-lock-variable-name-face #2# font-lock-variable-name-face)) t) (markdown-mode (default . #3=(:foreground "#999")) ((default #3# default)) t) (javascript-mode (font-lock-doc-face . #4=(:inherit (font-lock-comment-face))) ((font-lock-doc-face #4# font-lock-doc-face)) t) (js2-mode (font-lock-doc-face . #4#) ((font-lock-doc-face #4# font-lock-doc-face)) t) (text-mode nil nil nil) (fundamental-mode nil nil nil))"##
         ]],
     )
+    .fresh_process()
 }
 
 fn atom_dark_theme_force_switch_accepts_only_exact_t_and_leaves_other_truthy_values_inert()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_dark_theme_force_switch_accepts_only_exact_t_and_leaves_other_truthy_values_inert",
         r##"(mapcar
          (lambda (value)
@@ -94,7 +94,6 @@ fn atom_dark_theme_force_switch_accepts_only_exact_t_and_leaves_other_truthy_val
                 (local-variable-p
                  'face-remapping-alist)))))
          '(t nil 1 enabled "t" (t)))"##,
-        true,
         expect![[
             r#"OK ((t (font-lock-variable-name-face . #1=(:inherit (font-lock-keyword-face))) ((font-lock-variable-name-face #1# font-lock-variable-name-face)) t) (nil nil nil nil) (1 nil nil nil) (enabled nil nil nil) ("t" nil nil nil) ((t) nil nil nil))"#
         ]],
@@ -103,7 +102,7 @@ fn atom_dark_theme_force_switch_accepts_only_exact_t_and_leaves_other_truthy_val
 
 fn atom_dark_theme_command_interactive_contract_returns_cookie_and_mutates_only_current_buffer()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_dark_theme_command_interactive_contract_returns_cookie_and_mutates_only_current_buffer",
         r##"(let ((outside face-remapping-alist)
                inside)
@@ -124,16 +123,16 @@ fn atom_dark_theme_command_interactive_contract_returns_cookie_and_mutates_only_
           inside
           face-remapping-alist
           (equal outside face-remapping-alist)))"##,
-        true,
         expect![[
             r##"OK ((t (interactive nil) (default . #1=(:foreground "#999")) ((default #1# default)) t) nil t)"##
         ]],
     )
+    .fresh_process()
 }
 
 fn atom_dark_theme_registered_hook_runs_once_and_applies_a_real_html_mode_transition()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_dark_theme_registered_hook_runs_once_and_applies_a_real_html_mode_transition",
         r##"(let ((hook-count 0))
          (dolist
@@ -177,16 +176,16 @@ fn atom_dark_theme_registered_hook_runs_once_and_applies_a_real_html_mode_transi
             (buffer-substring-no-properties
              (point-min)
              (point-max)))))"##,
-        true,
         expect![[
             r#"OK (1 html-mode ((font-lock-variable-name-face (:inherit (font-lock-keyword-face)) font-lock-variable-name-face)) t nil (("div" font-lock-function-name-face) ("class" font-lock-variable-name-face) ("\"card\"" font-lock-string-face) ("data-kind" font-lock-variable-name-face) ("\"primary\"" font-lock-string-face) ("Hello" nil)) "<div class=\"card\" data-kind=\"primary\">Hello</div>")"#
         ]],
     )
+    .fresh_process()
 }
 
 fn atom_dark_theme_major_mode_changes_clear_stale_remaps_and_hook_applies_new_mode_recipe()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_dark_theme_major_mode_changes_clear_stale_remaps_and_hook_applies_new_mode_recipe",
         r##"(with-temp-buffer
          (setq major-mode 'html-mode)
@@ -207,16 +206,16 @@ fn atom_dark_theme_major_mode_changes_clear_stale_remaps_and_hook_applies_new_mo
               face-remapping-alist
               (local-variable-p
                'face-remapping-alist)))))"##,
-        true,
         expect![[
             r##"OK (((font-lock-variable-name-face (:inherit (font-lock-keyword-face)) font-lock-variable-name-face)) ((default (:foreground "#999") default)) nil nil)"##
         ]],
     )
+    .fresh_process()
 }
 
 fn atom_dark_theme_repeated_remapping_calls_coalesce_and_cookie_removal_matches_gnu()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_dark_theme_repeated_remapping_calls_coalesce_and_cookie_removal_matches_gnu",
         r##"(with-temp-buffer
          (setq major-mode 'java-mode)
@@ -245,16 +244,16 @@ fn atom_dark_theme_repeated_remapping_calls_coalesce_and_cookie_removal_matches_
                after-both)))
             after-first-removal
             face-remapping-alist)))"##,
-        true,
         expect![
             "OK ((font-lock-variable-name-face . #1=(:inherit (js2-function-param))) (font-lock-variable-name-face . #1#) t ((font-lock-variable-name-face (:inherit (js2-function-param)) (:inherit (js2-function-param)) font-lock-variable-name-face)) 3 nil nil)"
         ],
     )
+    .fresh_process()
 }
 
 fn atom_dark_theme_manual_hook_execution_obeys_dynamic_force_disable_and_reenable()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_dark_theme_manual_hook_execution_obeys_dynamic_force_disable_and_reenable",
         r##"(with-temp-buffer
          (setq major-mode 'javascript-mode)
@@ -272,7 +271,6 @@ fn atom_dark_theme_manual_hook_execution_obeys_dynamic_force_disable_and_reenabl
             face-remapping-alist
             (local-variable-p
              'face-remapping-alist))))"##,
-        true,
         expect![
             "OK ((nil nil) ((font-lock-doc-face (:inherit (font-lock-comment-face)) font-lock-doc-face)) t)"
         ],
@@ -281,7 +279,7 @@ fn atom_dark_theme_manual_hook_execution_obeys_dynamic_force_disable_and_reenabl
 
 fn atom_dark_theme_remapping_errors_propagate_without_falling_through_to_other_mode_branches()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_dark_theme_remapping_errors_propagate_without_falling_through_to_other_mode_branches",
         r##"(mapcar
          (lambda (mode)
@@ -309,16 +307,16 @@ fn atom_dark_theme_remapping_errors_propagate_without_falling_through_to_other_m
            markdown-mode
            js2-mode
            text-mode))"##,
-        true,
         expect![[
             r##"OK ((html-mode (:signal error ("fixture remap failure for font-lock-variable-name-face")) ((font-lock-variable-name-face (:inherit (font-lock-keyword-face))))) (java-mode (:signal error ("fixture remap failure for font-lock-variable-name-face")) ((font-lock-variable-name-face (:inherit (js2-function-param))))) (markdown-mode (:signal error ("fixture remap failure for default")) ((default (:foreground "#999")))) (js2-mode (:signal error ("fixture remap failure for font-lock-doc-face")) ((font-lock-doc-face (:inherit (font-lock-comment-face))))) (text-mode (:ok nil) nil))"##
         ]],
     )
+    .fresh_process()
 }
 
 fn atom_dark_theme_unsupported_modes_and_disabled_force_return_nil_without_local_side_effects()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atom_dark_theme_unsupported_modes_and_disabled_force_return_nil_without_local_side_effects",
         r##"(list
          (with-temp-buffer
@@ -340,14 +338,12 @@ fn atom_dark_theme_unsupported_modes_and_disabled_force_return_nil_without_local
              'face-remapping-alist)
             (local-variable-p
              'atom-dark-theme-force-faces-for-mode))))"##,
-        true,
         expect!["OK ((nil nil nil) (nil nil nil t))"],
     )
 }
 
-#[test]
-fn remapping_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn remapping_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         atom_dark_theme_mode_branch_matrix_calls_face_remapping_with_exact_face_and_recipe(),
         atom_dark_theme_actual_buffer_local_remapping_alists_match_for_every_supported_mode(),
         atom_dark_theme_force_switch_accepts_only_exact_t_and_leaves_other_truthy_values_inert(),
@@ -360,6 +356,5 @@ fn remapping_public_surface_batch() {
         atom_dark_theme_remapping_errors_propagate_without_falling_through_to_other_mode_branches(),
         atom_dark_theme_unsupported_modes_and_disabled_force_return_nil_without_local_side_effects(
         ),
-    ];
-    assert_atom_dark_theme_batch(&cases);
+    ]
 }

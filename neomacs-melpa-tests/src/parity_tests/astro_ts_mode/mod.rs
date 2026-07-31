@@ -8,7 +8,7 @@ use crate::{
     ASTRO_TS_MODE_MELPA_PIN, CachedMelpaOracle, EmacsRuntime, elisp_string,
     prepare_cached_tree_sitter_grammar, prepare_cached_tree_sitter_grammar_from_subdirectory,
 };
-use expect_test::{Expect, expect};
+use expect_test::expect;
 
 mod activation;
 mod editing;
@@ -69,40 +69,20 @@ fn current_test_name() -> String {
         .into()
 }
 
-fn assert_astro_ts_mode_source_parity(source_file: &str, elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = astro_ts_mode_oracle(source_file)
-        .run_value(&name, elisp_form)
-        .unwrap_or_else(|error| panic!("astro-ts-mode parity case `{name}` failed:\n{error}"));
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-pub(crate) fn assert_astro_ts_mode_parity(elisp_form: &str, expected: Expect) {
-    assert_astro_ts_mode_source_parity("astro-ts-mode.el", elisp_form, expected);
-}
-
-pub(crate) fn assert_astro_ts_mode_autoload_signal_parity(elisp_form: &str, expected: Expect) {
-    let name = current_test_name();
-    let report = astro_ts_mode_oracle("astro-ts-mode-autoloads.el")
-        .run_signal(&name, elisp_form)
-        .unwrap_or_else(|error| {
-            panic!("astro-ts-mode autoload signal case `{name}` failed:\n{error}")
-        });
-    expected.assert_eq(&report.gnu_emacs.to_string());
-}
-
-#[test]
-fn astro_ts_mode_harness_contract_reports_all_three_pinned_grammars_and_package() {
-    let elisp_form = r##"(list
+fn astro_ts_mode_harness_contract_reports_all_three_pinned_grammars_and_package() -> ParityBatchCase
+{
+    ParityBatchCase::value(
+        "astro_ts_mode_harness_contract_reports_all_three_pinned_grammars_and_package",
+        r##"(list
           (featurep 'astro-ts-mode)
           (package-installed-p 'astro-ts-mode '(20260417 101))
           (mapcar #'treesit-language-available-p '(astro css tsx))
           (file-name-nondirectory (locate-library "astro-ts-mode"))
           (package-version-join
            (package-desc-version
-            (cadr (assq 'astro-ts-mode package-alist)))))"##;
-    let expect = expect![[r#"OK (t t (t t t) "astro-ts-mode.el" "20260417.101")"#]];
-    assert_astro_ts_mode_parity(elisp_form, expect);
+            (cadr (assq 'astro-ts-mode package-alist)))))"##,
+        expect![[r#"OK (t t (t t t) "astro-ts-mode.el" "20260417.101")"#]],
+    )
 }
 
 /// Multi-probe batch for `assert_astro_ts_mode_autoload_signal_parity` cases (2a).
@@ -126,3 +106,32 @@ pub(crate) fn assert_astro_ts_mode_batch(cases: &[ParityBatchCase]) {
         cases,
     );
 }
+
+// BEGIN generated package batch tests
+
+#[test]
+fn astro_ts_mode_autoload_package_batch() {
+    let cases: Vec<ParityBatchCase> = [registry::registry_astro_ts_mode_autoload_batch_cases()]
+        .into_iter()
+        .flatten()
+        .collect();
+    assert_astro_ts_mode_autoload_batch(&cases);
+}
+
+#[test]
+fn astro_ts_mode_package_batch() {
+    let cases: Vec<ParityBatchCase> = [
+        vec![astro_ts_mode_harness_contract_reports_all_three_pinned_grammars_and_package()],
+        activation::activation_public_surface_batch_cases(),
+        editing::editing_public_surface_batch_cases(),
+        prefix::prefix_public_surface_batch_cases(),
+        registry::registry_astro_ts_mode_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert_astro_ts_mode_batch(&cases);
+}
+
+// END generated package batch tests

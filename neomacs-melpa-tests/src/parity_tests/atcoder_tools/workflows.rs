@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_atcoder_tools_batch};
+use super::ParityBatchCase;
 
 fn atcoder_tools_cpp_contest_workflow_preserves_samples_builds_tests_and_opens_problem()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_cpp_contest_workflow_preserves_samples_builds_tests_and_opens_problem",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -101,16 +101,16 @@ fn atcoder_tools_cpp_contest_workflow_preserves_samples_builds_tests_and_opens_p
                  (file-readable-p metadata)
                  (atcoder-tools-test-tree
                   root))))))"##,
-        true,
         expect![[
             r#"OK (nil :opened ("g++ -std=gnu++1y -O2 -o [ROOT]/past-sample/A/main [ROOT]/past-sample/A/main.cpp && atcoder-tools test -e [ROOT]/past-sample/A/main -d [ROOT]/past-sample/A" t nil ("4 2 9\n" "8\n" "4 2 7\n" "7\n" "4 2 8\n" "8\n")) ("https://atcoder.jp/contests/past-sample/tasks/abc133_a" nil) nil t (("past-sample/A/in_1.txt" 6 "33399bbffd66ec9083771f5224dd9a9afe55e67aabab47a8a43f400ad7e23d0a") ("past-sample/A/in_2.txt" 6 "a7c79c0176b7dd39f239fdd06be7e3c17f49cd8798f5457ce592c21207fd5131") ("past-sample/A/in_3.txt" 6 "278406cab0cff99b76045838f9f70ac099cf439cc1551c6fcebbf228615f9da8") ("past-sample/A/main.cpp" 135 "a4ed3f14e1580c6d2b6d0b37b6993e69bbfb446b88cf4e974e6e84e425750e20") ("past-sample/A/metadata.json" 227 "f074a51c0133a6949b75e21453e81bb3d70bbcd98c11eba1d4216695ea3b1ddb") ("past-sample/A/out_1.txt" 2 "aa67a169b0bba217aa0aa88a65346920c84c42447c36ba5f7ea65f422c1fe5d8") ("past-sample/A/out_2.txt" 2 "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58") ("past-sample/A/out_3.txt" 2 "aa67a169b0bba217aa0aa88a65346920c84c42447c36ba5f7ea65f422c1fe5d8")))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn atcoder_tools_rust_contest_workflow_records_file_local_toggle_safety_and_preserves_fixture()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_rust_contest_workflow_records_file_local_toggle_safety_and_preserves_fixture",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -177,7 +177,6 @@ fn atcoder_tools_rust_contest_workflow_records_file_local_toggle_safety_and_pres
                 #'car
                 (atcoder-tools-test-tree
                  root))))))"##,
-        true,
         expect![[
             r#"OK (t nil nil :opened ("rustup run --install 1.15.1 rustc -Oo [ROOT]/abc133/A/main [ROOT]/abc133/A/main.rs && env RUST_BACKTRACE=1 atcoder-tools test -e [ROOT]/abc133/A/main -d [ROOT]/abc133/A") ("https://atcoder.jp/contests/abc133/tasks/abc133_a") nil t ("abc133/A/in_1.txt" "abc133/A/in_2.txt" "abc133/A/main.rs" "abc133/A/metadata.json" "abc133/A/out_1.txt" "abc133/A/out_2.txt"))"#
         ]],
@@ -186,7 +185,7 @@ fn atcoder_tools_rust_contest_workflow_records_file_local_toggle_safety_and_pres
 
 fn atcoder_tools_multiple_problem_buffers_keep_paths_commands_and_urls_isolated() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_multiple_problem_buffers_keep_paths_commands_and_urls_isolated",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -267,7 +266,6 @@ fn atcoder_tools_multiple_problem_buffers_keep_paths_commands_and_urls_isolated(
             #'car
             (atcoder-tools-test-tree
              root))))"##,
-        true,
         expect![[
             r#"OK (((A nil :opened nil t) (B nil :opened nil t)) ("gcc -x c -std=gnu11 -o [ROOT]/abc400/A/main -lm -O2 [ROOT]/abc400/A/main.c && atcoder-tools test -e [ROOT]/abc400/A/main -d [ROOT]/abc400/A" "rustc -Oo [ROOT]/abc400/B/main [ROOT]/abc400/B/main.rs && env RUST_BACKTRACE=1 atcoder-tools test -e [ROOT]/abc400/B/main -d [ROOT]/abc400/B") ("https://atcoder.jp/contests/abc400/tasks/abc400_a" "https://atcoder.jp/contests/abc400/tasks/abc400_b") ("abc400/A/main.c" "abc400/A/metadata.json" "abc400/B/main.rs" "abc400/B/metadata.json"))"#
         ]],
@@ -276,7 +274,7 @@ fn atcoder_tools_multiple_problem_buffers_keep_paths_commands_and_urls_isolated(
 
 fn atcoder_tools_buffer_local_compiler_choices_drive_independent_compilation_commands()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_buffer_local_compiler_choices_drive_independent_compilation_commands",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -327,7 +325,6 @@ fn atcoder_tools_buffer_local_compiler_choices_drive_independent_compilation_com
            (file-exists-p
             (file-name-sans-extension
              clang-source))))"##,
-        true,
         expect![[
             r#"OK (("gcc -x c -std=gnu11 -o [ROOT]/gcc/A/main -lm -O2 [ROOT]/gcc/A/main.c && atcoder-tools test -e [ROOT]/gcc/A/main -d [ROOT]/gcc/A" "clang -x c -lm -O2 -o [ROOT]/clang/A/main [ROOT]/clang/A/main.c && atcoder-tools test -e [ROOT]/clang/A/main -d [ROOT]/clang/A") gcc nil nil)"#
         ]],
@@ -336,7 +333,7 @@ fn atcoder_tools_buffer_local_compiler_choices_drive_independent_compilation_com
 
 fn atcoder_tools_multi_extension_source_uses_only_final_extension_for_executable() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_multi_extension_source_uses_only_final_extension_for_executable",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -376,7 +373,6 @@ fn atcoder_tools_multi_extension_source_uses_only_final_extension_for_executable
              (file-exists-p other-file)
              (atcoder-tools-test-read-file
               other-file))))"##,
-        true,
         expect![[
             r#"OK (nil "gcc -x c -std=gnu11 -o [ROOT]/weird/A/solution.test -lm -O2 [ROOT]/weird/A/solution.test.c && atcoder-tools test -e [ROOT]/weird/A/solution.test -d [ROOT]/weird/A" nil t "must remain")"#
         ]],
@@ -385,7 +381,7 @@ fn atcoder_tools_multi_extension_source_uses_only_final_extension_for_executable
 
 fn atcoder_tools_public_test_unsaved_buffer_preserves_exact_failure_before_compile()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_public_test_unsaved_buffer_preserves_exact_failure_before_compile",
         r##"(let (compile-calls)
           (cl-letf
@@ -402,14 +398,13 @@ fn atcoder_tools_public_test_unsaved_buffer_preserves_exact_failure_before_compi
                 (lambda ()
                   (atcoder-tools-test)))
                compile-calls))))"##,
-        true,
         expect!["OK ((:error wrong-type-argument (stringp nil)) nil)"],
     )
 }
 
 fn atcoder_tools_failure_in_one_problem_does_not_mutate_global_config_or_other_fixture()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "atcoder_tools_failure_in_one_problem_does_not_mutate_global_config_or_other_fixture",
         r##"(let* ((root
                 (atcoder-tools-test-root))
@@ -471,16 +466,14 @@ fn atcoder_tools_failure_in_one_problem_does_not_mutate_global_config_or_other_f
                 good-executable)
                (atcoder-tools-test-tree
                 root)))))"##,
-        true,
         expect![[
             r#"OK ((:error error ("bad compiler")) ("clang -x c -lm -O2 -o [ROOT]/bad/A/main [ROOT]/bad/A/main.c && atcoder-tools test -e [ROOT]/bad/A/main -d [ROOT]/bad/A" "rustc -Oo [ROOT]/good/B/main [ROOT]/good/B/main.rs && env RUST_BACKTRACE=1 atcoder-tools test -e [ROOT]/good/B/main -d [ROOT]/good/B") gcc t t nil (("bad/A/main" 14 "f95ee36aeda8fb7c0e8f676d8de87c5c80b0f1bc0c47db400448f65db5ffa557") ("bad/A/main.c" 3 "2f05d4b689d270cafb02285f35f44866f7dc8a2d368a3f9d1124373eeab31fb1") ("good/B/main.rs" 4 "770e607624d689265ca6c44884d0807d9b054d23c473c106c72be9de08b7376c")))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         atcoder_tools_cpp_contest_workflow_preserves_samples_builds_tests_and_opens_problem(),
         atcoder_tools_rust_contest_workflow_records_file_local_toggle_safety_and_preserves_fixture(
         ),
@@ -489,6 +482,5 @@ fn workflows_public_surface_batch() {
         atcoder_tools_multi_extension_source_uses_only_final_extension_for_executable(),
         atcoder_tools_public_test_unsaved_buffer_preserves_exact_failure_before_compile(),
         atcoder_tools_failure_in_one_problem_does_not_mutate_global_config_or_other_fixture(),
-    ];
-    assert_atcoder_tools_batch(&cases);
+    ]
 }

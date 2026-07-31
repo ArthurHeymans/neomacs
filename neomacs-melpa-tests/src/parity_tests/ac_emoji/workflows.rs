@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_emoji_batch};
+use super::ParityBatchCase;
 
 fn ac_emoji_completes_a_shortcode_while_writing_a_commit_message() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_emoji_completes_a_shortcode_while_writing_a_commit_message",
         r##"(ac-emoji-test-in-buffer
  (ac-emoji-setup)
@@ -20,7 +20,6 @@ fn ac_emoji_completes_a_shortcode_while_writing_a_commit_message() -> ParityBatc
            (buffer-string)
            (point)
            ac-sources))))"##,
-        true,
         expect![[
             r#"OK ((":rocket:") ":rocke" (":tada:") "Ship the release :rocket: and celebrate :tada:" 47 (ac-source-emoji))"#
         ]],
@@ -28,7 +27,7 @@ fn ac_emoji_completes_a_shortcode_while_writing_a_commit_message() -> ParityBatc
 }
 
 fn ac_emoji_prefix_only_triggers_after_a_colon_followed_by_text() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_emoji_prefix_only_triggers_after_a_colon_followed_by_text",
         r##"(ac-emoji-test-in-buffer
  (ac-emoji-setup)
@@ -41,7 +40,6 @@ fn ac_emoji_prefix_only_triggers_after_a_colon_followed_by_text() -> ParityBatch
    (list (nreverse observed)
          (cdr (assq 'prefix ac-source-emoji))
          (cdr (assq 'candidates ac-source-emoji)))))"##,
-        true,
         expect![[
             r#"OK ((("plain word" nil 0 nil) ("half :" nil 0 nil) ("emoji :sm" ":sm" 12 ":smile:") ("mid:word" ":word" 0 nil) (":smile" ":smile" 4 ":smile:")) ":\\S-+" ac-emoji--candidates)"#
         ]],
@@ -49,7 +47,7 @@ fn ac_emoji_prefix_only_triggers_after_a_colon_followed_by_text() -> ParityBatch
 }
 
 fn ac_emoji_candidates_carry_the_description_and_the_emoji_character() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_emoji_candidates_carry_the_description_and_the_emoji_character",
         r##"(list
  (length ac-emoji--candidates)
@@ -59,7 +57,6 @@ fn ac_emoji_candidates_carry_the_description_and_the_emoji_character() -> Parity
  (seq-take (mapcar #'substring-no-properties ac-emoji--candidates) 5)
  (car ac-emoji--data)
  (car (last ac-emoji--data)))"##,
-        true,
         expect![[
             r#"OK (845 845 ((":rocket:" "rocket" "🚀") (":tada:" "party popper" "🎉") (":+1:" "thumbs up sign" "👍") (":jp:" "regional indicator symbol letter j + regional indicator symbol letter p" "🇯") (":heart:" "heavy black heart" "❤")) nil (":smile:" ":smiley:" ":grinning:" ":blush:" ":relaxed:") (:key ":smile:" :codepoint "😄" :description "smiling face with open mouth and smiling eyes") (:key ":small_blue_diamond:" :codepoint "🔹" :description "small blue diamond"))"#
         ]],
@@ -67,7 +64,7 @@ fn ac_emoji_candidates_carry_the_description_and_the_emoji_character() -> Parity
 }
 
 fn ac_emoji_setup_is_buffer_local_and_repeatable() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_emoji_setup_is_buffer_local_and_repeatable",
         r##"(let ((global-before (default-value 'ac-sources)))
   (ac-emoji-test-in-buffer
@@ -82,7 +79,6 @@ fn ac_emoji_setup_is_buffer_local_and_repeatable() -> ParityBatchCase {
              (default-value 'ac-sources)
              (equal global-before (default-value 'ac-sources))
              (commandp 'ac-emoji-setup))))))"##,
-        true,
         expect![
             "OK (#1=(ac-source-words-in-same-mode-buffers) (#1# nil) ((ac-source-emoji . #1#) t) #1# t t)"
         ],
@@ -90,7 +86,7 @@ fn ac_emoji_setup_is_buffer_local_and_repeatable() -> ParityBatchCase {
 }
 
 fn ac_emoji_narrows_the_candidate_list_as_more_of_the_name_is_typed() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_emoji_narrows_the_candidate_list_as_more_of_the_name_is_typed",
         r##"(ac-emoji-test-in-buffer
  (ac-emoji-setup)
@@ -105,7 +101,6 @@ fn ac_emoji_narrows_the_candidate_list_as_more_of_the_name_is_typed() -> ParityB
    (ac-emoji-test-candidates)
    (ac-complete)
    (list (nreverse observed) (buffer-string) (point))))"##,
-        true,
         expect![[
             r#"OK (((":sm" 12 (":smile:" ":smirk:" ":smiley:" ":smoking:")) (":smi" 7 (":smile:" ":smirk:" ":smiley:" ":smile_cat:")) (":smil" 5 (":smile:" ":smiley:" ":smile_cat:" ":smiley_cat:")) (":smile" 4 (":smile:" ":smiley:" ":smile_cat:" ":smiley_cat:"))) "Progress :smile:" 17)"#
         ]],
@@ -113,7 +108,7 @@ fn ac_emoji_narrows_the_candidate_list_as_more_of_the_name_is_typed() -> ParityB
 }
 
 fn ac_emoji_leaves_unknown_shortcodes_and_unicode_prose_untouched() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "ac_emoji_leaves_unknown_shortcodes_and_unicode_prose_untouched",
         r##"(ac-emoji-test-in-buffer
  (ac-emoji-setup)
@@ -130,22 +125,19 @@ fn ac_emoji_leaves_unknown_shortcodes_and_unicode_prose_untouched() -> ParityBat
            (buffer-string)
            (point)
            (buffer-size)))))"##,
-        true,
         expect![[
             r#"OK (nil "Résumé für die Prüfung :zzzzznotanemoji\n\n\n\n\n\n\n\n\n\n\n" (":100:") "已经完成 :100:" 11 10)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         ac_emoji_completes_a_shortcode_while_writing_a_commit_message(),
         ac_emoji_prefix_only_triggers_after_a_colon_followed_by_text(),
         ac_emoji_candidates_carry_the_description_and_the_emoji_character(),
         ac_emoji_setup_is_buffer_local_and_repeatable(),
         ac_emoji_narrows_the_candidate_list_as_more_of_the_name_is_typed(),
         ac_emoji_leaves_unknown_shortcodes_and_unicode_prose_untouched(),
-    ];
-    assert_ac_emoji_batch(&cases);
+    ]
 }

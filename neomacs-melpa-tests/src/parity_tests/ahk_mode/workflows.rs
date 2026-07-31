@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ahk_mode_batch};
+use super::ParityBatchCase;
 
 fn opening_an_ahk_script_selects_the_mode_and_sets_up_its_syntax() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "opening_an_ahk_script_selects_the_mode_and_sets_up_its_syntax",
         r##"
         ;; Opening a `.ahk' file is all a user does: the autoload puts the
@@ -38,7 +38,6 @@ fn opening_an_ahk_script_selects_the_mode_and_sets_up_its_syntax() -> ParityBatc
                  :indentation-default ahk-indentation))
             (when (buffer-live-p buffer) (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:mode ahk-mode :derived-from prog-mode :mode-name "AHK" :selected-by-extension ahk-mode :word-constituents ((35 "w") (95 "w") (64 "w") (92 "w") (97 "w")) :comment-syntax ((59 "<") (47 ".") (42 ".") (10 ">")) :escape-character (96 "\\") :comment-variables (";" "" ";+ *" "/*" "*/") :indent-functions (ahk-indent-line ahk-indent-region) :completion-hook (ahk-completion-at-point t) :bindings (("C-c C-c" ahk-comment-dwim) ("C-c C-b" ahk-comment-block-dwim) ("C-c M-i" ahk-indent-message) ("C-c C-k" ahk-run-script) ("C-c C-?" ahk-lookup-web) ("C-c C-r" ahk-lookup-chm)) :indentation-default 8)"#
         ]],
@@ -46,7 +45,7 @@ fn opening_an_ahk_script_selects_the_mode_and_sets_up_its_syntax() -> ParityBatc
 }
 
 fn a_realistic_script_is_highlighted_by_kind() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_realistic_script_is_highlighted_by_kind",
         r##"
         ;; The whole point of the mode is telling the parts of a script apart on
@@ -78,7 +77,6 @@ fn a_realistic_script_is_highlighted_by_kind() -> ParityBatchCase {
                  :warnings-found (ahk-test-tokens-with-face 'font-lock-warning-face)))
             (when (buffer-live-p buffer) (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r##"OK (:comment ((font-lock-comment-delimiter-face "; ") (font-lock-comment-face "Inventory helper hotkeys")) :directive ((font-lock-preprocessor-face "#SingleInstance") (nil " force")) :builtin-variable ((font-lock-keyword-face "SetWorkingDir") (nil " ") (font-lock-variable-name-face "%A_ScriptDir%")) :function-definition ((font-lock-function-name-face "CountWidgets") (nil "(name") (font-lock-builtin-face ",") (nil " price) {")) :command-with-interpolation ((nil "    ") (font-lock-keyword-face "MsgBox") (font-lock-builtin-face ",") (nil " Counting ") (font-lock-variable-name-face "%name%")) :hotkey ((font-lock-constant-face "^!w") (nil "::")) :return-is-a-warning ((nil "    ") (font-lock-warning-face "return") (nil " WidgetCount")) :hotstring ((nil "::btw::by the way")) :label ((font-lock-doc-face "ReportLabel") (nil ":")) :string-with-concatenation ((nil "    ") (font-lock-keyword-face "MsgBox") (font-lock-builtin-face ",") (nil " % ") (font-lock-string-face "\"Total: \"") (nil " ") (font-lock-builtin-face ".") (nil " WidgetCount")) :block-comment ((font-lock-comment-face "   A block comment describing")) :directives-found ("#NoEnv" "#SingleInstance") :warnings-found ("return"))"##
         ]],
@@ -86,7 +84,7 @@ fn a_realistic_script_is_highlighted_by_kind() -> ParityBatchCase {
 }
 
 fn indenting_a_script_follows_its_blocks_and_honours_the_width() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "indenting_a_script_follows_its_blocks_and_honours_the_width",
         r##"
         ;; A user reindents a script they have pasted in flat.  ahk-mode has to
@@ -133,7 +131,6 @@ return WidgetCount
               (with-current-buffer buffer (set-buffer-modified-p nil))
               (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:default-width 8 :indented-at-default "\11CountWidgets(name, price) {\n\11\11MsgBox, Counting %name%\n\11\11if (price > 10) {\n\11\11\11WidgetCount += 1\n\11\11} else {\n\11\11\11WidgetCount := 0\n\11\11}\n\11\11return WidgetCount\n}\n" :indented-at-four "    CountWidgets(name, price) {\n\11MsgBox, Counting %name%\n\11if (price > 10) {\n\11    WidgetCount += 1\n\11} else {\n\11    WidgetCount := 0\n\11}\n\11return WidgetCount\n}\n" :reindenting_is_stable "\11    CountWidgets(name, price) {\n\11\11    MsgBox, Counting %name%\n\11\11    if (price > 10) {\n\11\11\11    WidgetCount += 1\n\11\11    } else {\n\11\11\11    WidgetCount := 0\n\11\11    }\n\11return WidgetCount\n}\n" :reported-indentation ("28"))"#
         ]],
@@ -141,7 +138,7 @@ return WidgetCount
 }
 
 fn commenting_offers_both_line_and_block_notation() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "commenting_offers_both_line_and_block_notation",
         r##"
         ;; AutoHotkey has two comment forms and ahk-mode binds one command to
@@ -189,7 +186,6 @@ MsgBox, third
               (with-current-buffer buffer (set-buffer-modified-p nil))
               (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:line-comment "MsgBox, first\11\11\11;\nMsgBox, second\nMsgBox, third\n" :line-uncomment "MsgBox, first\11\11\11;\nMsgBox, second\nMsgBox, third\n" :block-comment-region "/*\n * MsgBox, first\11\11\11;\n * MsgBox, second\n */\nMsgBox, third\n" :region-comment-with-line-notation "; MsgBox, first\n; MsgBox, second\nMsgBox, third\n")"#
         ]],
@@ -197,7 +193,7 @@ MsgBox, third
 }
 
 fn completion_offers_keywords_and_annotates_them_by_kind() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "completion_offers_keywords_and_annotates_them_by_kind",
         r##"
         ;; The mode puts its own function on `completion-at-point-functions',
@@ -229,7 +225,6 @@ fn completion_offers_keywords_and_annotates_them_by_kind() -> ParityBatchCase {
               (with-current-buffer buffer (set-buffer-modified-p nil))
               (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:after-win (:prefix "Win" :exclusive no :candidates ("WinActivate" "WinActivateBottom" "WinActive" "WinClose" "WinExist" "WinGet" "WinGetActiveStats" "WinGetActiveTitle" "WinGetClass" "WinGetPos" "WinGetText" "WinGetTitle" "WinHide" "WinKill" "WinMaximize" "WinMenuSelectItem" "WinMinimize" "WinMinimizeAll" "WinMinimizeAllUndo" "WinMove" "WinRestore" "WinSet" "WinSetTitle" "WinShow" "WinWait" "WinWaitActive" "WinWaitClose" "WinWaitNotActive") :annotations (("WinActivate" "c") ("WinActivateBottom" "c") ("WinActive" "f") ("WinClose" "c") ("WinExist" "f") ("WinGet" "c") ("WinGetActiveStats" "c") ("WinGetActiveTitle" "c") ("WinGetClass" "c") ("WinGetPos" "c") ("WinGetText" "c") ("WinGetTitle" "c") ("WinHide" "c") ("WinKill" "c") ("WinMaximize" "c") ("WinMenuSelectItem" "c") ("WinMinimize" "c") ("WinMinimizeAll" "c") ("WinMinimizeAllUndo" "c") ("WinMove" "c") ("WinRestore" "c") ("WinSet" "c") ("WinSetTitle" "c") ("WinShow" "c") ("WinWait" "c") ("WinWaitActive" "c") ("WinWaitClose" "c") ("WinWaitNotActive" "c"))) :after-a-variable-prefix (:prefix "A_Scr" :exclusive no :candidates ("A_ScreenDPI" "A_ScreenHeight" "A_ScreenWidth" "A_ScriptDir" "A_ScriptFullPath" "A_ScriptHwnd" "A_ScriptName") :annotations (("A_ScreenDPI" "v") ("A_ScreenHeight" "v") ("A_ScreenWidth" "v") ("A_ScriptDir" "v") ("A_ScriptFullPath" "v") ("A_ScriptHwnd" "v") ("A_ScriptName" "v"))) :case-insensitive (:prefix "msgb" :exclusive no :candidates nil :annotations nil) :no-match (:prefix "zzzznotakeyword" :exclusive no :candidates nil :annotations nil))"#
         ]],
@@ -237,7 +232,7 @@ fn completion_offers_keywords_and_annotates_them_by_kind() -> ParityBatchCase {
 }
 
 fn imenu_indexes_functions_labels_hotkeys_and_hotstrings() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "imenu_indexes_functions_labels_hotkeys_and_hotstrings",
         r##"
         ;; `M-x imenu' is how a user navigates an AutoHotkey script, and the
@@ -273,7 +268,6 @@ fn imenu_indexes_functions_labels_hotkeys_and_hotstrings() -> ParityBatchCase {
                          (let ((imenu-use-markers nil)) (imenu--make-index-alist t)))))
             (when (buffer-live-p buffer) (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:generic-expression (("Functions" "^[ \11]*\\([^ ]+\\)(.*)[\n]{" 1) ("Labels" "^[ \11]*\\([^:;]+\\):\n" 1) ("Keybindings" "^[ \11]*\\([^;: \11\15\n\13\f].*?\\)::" 1) ("Hotstrings" "^[ \11]*\\(:.*?:.*?::\\)" 1) ("Comments" "^;imenu \\(.+\\)" 1)) :sorted-by-position t :index (("*Rescan*" -99) ("Comments" ("End of script" 631)) ("Hotstrings" ("::btw::" 490)) ("Keybindings" ("^!w" 328)) ("Labels" ("ReportLabel" 509)) ("Functions" ("FormatWidget" 284))))"#
         ]],
@@ -281,7 +275,7 @@ fn imenu_indexes_functions_labels_hotkeys_and_hotstrings() -> ParityBatchCase {
 }
 
 fn running_a_script_and_opening_local_help_are_windows_only() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "running_a_script_and_opening_local_help_are_windows_only",
         r##"
         ;; Three commands leave the editor.  `ahk-lookup-web' is portable: it
@@ -324,16 +318,14 @@ fn running_a_script_and_opening_local_help_are_windows_only() -> ParityBatchCase
                                  (ahk-test-messages "^ahk-mode version .*$"))))
             (when (buffer-live-p buffer) (kill-buffer buffer))))
     "##,
-        true,
         expect![[
             r#"OK (:web-lookup (#("http://ahkscript.org/docs/commands/MsgBox.htm" 35 41 (face font-lock-keyword-face))) :chm-lookup :no-signal :chm-message ("Help file could not be found, set ahk-path variable.") :run-script (:signal void-function :data (w32-shell-execute)) :w32-available nil :version ("ahk-mode version 1.5.6"))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         opening_an_ahk_script_selects_the_mode_and_sets_up_its_syntax(),
         a_realistic_script_is_highlighted_by_kind(),
         indenting_a_script_follows_its_blocks_and_honours_the_width(),
@@ -341,6 +333,5 @@ fn workflows_public_surface_batch() {
         completion_offers_keywords_and_annotates_them_by_kind(),
         imenu_indexes_functions_labels_hotkeys_and_hotstrings(),
         running_a_script_and_opening_local_help_are_windows_only(),
-    ];
-    assert_ahk_mode_batch(&cases);
+    ]
 }

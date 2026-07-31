@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_general_batch};
+use super::ParityBatchCase;
 
 fn general_use_package_keyword_accepts_primary_positional_and_repeated_forms() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "general_use_package_keyword_accepts_primary_positional_and_repeated_forms",
         r##"(progn
                (require 'use-package)
@@ -37,13 +37,12 @@ fn general_use_package_keyword_accepts_primary_positional_and_repeated_forms() -
                 (lookup-key
                  neomacs-general-use-package-map
                  (kbd "c"))))"##,
-        true,
         expect![[r#"OK (forward-char backward-char next-line)"#]],
     )
 }
 
 fn general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists",
         r##"(progn
                (require 'use-package)
@@ -75,7 +74,6 @@ fn general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists() -> 
                (list
                 neomacs-general-hook-a
                 neomacs-general-hook-b))"##,
-        true,
         expect![[
             r#"OK ((neomacs-general-fake-mode forward-char backward-char) (neomacs-general-fake-mode))"#
         ]],
@@ -83,7 +81,7 @@ fn general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists() -> 
 }
 
 fn general_gfhook_keyword_infers_hook_names_and_preserves_append_order() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "general_gfhook_keyword_infers_hook_names_and_preserves_append_order",
         r##"(progn
                (require 'use-package)
@@ -113,19 +111,16 @@ fn general_gfhook_keyword_infers_hook_names_and_preserves_append_order() -> Pari
                (list
                 neomacs-general-fake-mode-hook
                 neomacs-general-other-hook))"##,
-        true,
         expect![[
             r#"OK ((backward-char forward-char next-line) (beginning-of-line previous-line))"#
         ]],
     )
 }
 
-#[test]
-fn integrations_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn integrations_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         general_use_package_keyword_accepts_primary_positional_and_repeated_forms(),
         general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists(),
         general_gfhook_keyword_infers_hook_names_and_preserves_append_order(),
-    ];
-    assert_general_batch(&cases);
+    ]
 }

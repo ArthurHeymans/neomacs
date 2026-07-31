@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_asx_batch};
+use super::ParityBatchCase;
 
 fn asx_user_agent_selection_passes_complete_configured_pool_to_random_selector() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asx_user_agent_selection_passes_complete_configured_pool_to_random_selector",
         r##"(let ((asx--user-agents
                 '("Agent A"
@@ -22,7 +22,6 @@ fn asx_user_agent_selection_passes_complete_configured_pool_to_random_selector()
             (asx--get-user-agent)
             observed
             asx--user-agents)))"##,
-        true,
         expect![[
             r#"OK ("Agent B" ("Agent A" "Agent B" "Agent C") ("Agent A" "Agent B" "Agent C"))"#
         ]],
@@ -30,7 +29,7 @@ fn asx_user_agent_selection_passes_complete_configured_pool_to_random_selector()
 }
 
 fn asx_request_configures_user_agent_parses_html_and_forwards_success_dom() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asx_request_configures_user_agent_parses_html_and_forwards_success_dom",
         r##"(let ((asx--user-agents
                 '("Fixture Agent"))
@@ -82,7 +81,6 @@ fn asx_request_configures_user_agent_parses_html_and_forwards_success_dom() -> P
                (push data callback-values)))
             request-observation
             callback-values)))"##,
-        true,
         expect![[
             r#"OK (:request-return ("https://search.invalid/query" ("-A Fixture Agent") t t #1=(html nil (body nil (h1 nil "Result") (p nil "Body")))) (#1#))"#
         ]],
@@ -91,7 +89,7 @@ fn asx_request_configures_user_agent_parses_html_and_forwards_success_dom() -> P
 
 fn asx_request_custom_error_callback_receives_original_url_and_suppresses_signal() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asx_request_custom_error_callback_receives_original_url_and_suppresses_signal",
         r##"(let ((asx--user-agents
                 '("Fixture Agent"))
@@ -126,7 +124,6 @@ fn asx_request_custom_error_callback_receives_original_url_and_suppresses_signal
                  url)
                 events)))
             (nreverse events))))"##,
-        true,
         expect![[
             r#"OK (:handled ((:requested "https://search.invalid/fail" ("-A Fixture Agent")) (:fallback "https://search.invalid/fail")))"#
         ]],
@@ -134,7 +131,7 @@ fn asx_request_custom_error_callback_receives_original_url_and_suppresses_signal
 }
 
 fn asx_request_default_error_handler_signals_stringified_request_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asx_request_default_error_handler_signals_stringified_request_error",
         r##"(let ((asx--user-agents
                 '("Fixture Agent")))
@@ -157,14 +154,13 @@ fn asx_request_default_error_handler_signals_stringified_request_error() -> Pari
             (list
              (car error)
              (cdr error))))))"##,
-        true,
         expect![[r#"OK (error ("(error network exploded)"))"#]],
     )
 }
 
 fn asx_request_post_announces_title_and_dispatches_url_insert_and_retry_callbacks()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asx_request_post_announces_title_and_dispatches_url_insert_and_retry_callbacks",
         r##"(let (messages requests)
          (cl-letf
@@ -195,7 +191,6 @@ fn asx_request_post_announces_title_and_dispatches_url_insert_and_retry_callback
                "https://stackoverflow.com/questions/7/useful"))
             (nreverse messages)
             (nreverse requests))))"##,
-        true,
         expect![[
             r#"OK (:queued ("Loading: A useful answer") (("https://stackoverflow.com/questions/7/useful" asx--insert-post-dom asx--remove-and-next)))"#
         ]],
@@ -204,7 +199,7 @@ fn asx_request_post_announces_title_and_dispatches_url_insert_and_retry_callback
 
 fn asx_request_parser_handles_entities_nested_elements_and_malformed_html_practically()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "asx_request_parser_handles_entities_nested_elements_and_malformed_html_practically",
         r##"(let ((asx--user-agents
                 '("Fixture Agent"))
@@ -240,20 +235,17 @@ fn asx_request_parser_handles_entities_nested_elements_and_malformed_html_practi
              (dom-by-tag
               parsed
               'strong)))))"##,
-        true,
         expect![[r#"OK ("A & B  bold second" ("A & B  bold second" "second") 1)"#]],
     )
 }
 
-#[test]
-fn request_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn request_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         asx_user_agent_selection_passes_complete_configured_pool_to_random_selector(),
         asx_request_configures_user_agent_parses_html_and_forwards_success_dom(),
         asx_request_custom_error_callback_receives_original_url_and_suppresses_signal(),
         asx_request_default_error_handler_signals_stringified_request_error(),
         asx_request_post_announces_title_and_dispatches_url_insert_and_retry_callbacks(),
         asx_request_parser_handles_entities_nested_elements_and_malformed_html_practically(),
-    ];
-    assert_asx_batch(&cases);
+    ]
 }

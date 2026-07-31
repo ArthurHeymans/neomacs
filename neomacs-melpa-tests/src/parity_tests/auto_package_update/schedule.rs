@@ -1,10 +1,10 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_package_update_batch};
+use super::ParityBatchCase;
 
 fn auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files()
 -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files",
         r##"(let*
                              ((root
@@ -44,14 +44,13 @@ fn auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable
                               (file-attribute-size
                                (file-attributes file))
                               (file-exists-p missing))))"##,
-        true,
         expect![[r#"OK (("old\n" nil) "new-value" 9 nil)"#]],
     )
 }
 
 fn auto_package_update_current_day_round_trips_through_configured_sandbox_file() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_current_day_round_trips_through_configured_sandbox_file",
         r##"(let*
                              ((root
@@ -78,14 +77,13 @@ fn auto_package_update_current_day_round_trips_through_configured_sandbox_file()
                                  auto-package-update-last-update-day-path)
                                 (file-exists-p
                                  auto-package-update-last-update-day-path)))))"##,
-        true,
         expect![[r#"OK (nil 24680 "24680" t)"#]],
     )
 }
 
 fn auto_package_update_daily_timer_uses_exact_period_callback_and_return_value() -> ParityBatchCase
 {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "auto_package_update_daily_timer_uses_exact_period_callback_and_return_value",
         r##"(let (calls)
                            (cl-letf
@@ -106,17 +104,14 @@ fn auto_package_update_daily_timer_uses_exact_period_callback_and_return_value()
                               (auto-package-update-at-time
                                "03:15")
                               (nreverse calls))))"##,
-        true,
         expect![[r#"OK (fixture-timer (("03:15" 86400 auto-package-update-maybe nil)))"#]],
     )
 }
 
-#[test]
-fn schedule_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn schedule_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files(),
         auto_package_update_current_day_round_trips_through_configured_sandbox_file(),
         auto_package_update_daily_timer_uses_exact_period_callback_and_return_value(),
-    ];
-    assert_auto_package_update_batch(&cases);
+    ]
 }

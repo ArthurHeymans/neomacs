@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_alert_toast_batch};
+use super::ParityBatchCase;
 
 /// One notification, end to end: `(alert "..." :style 'toast ...)' and the whole
 /// of what reached the notifier's standard input.
@@ -17,9 +17,8 @@ use super::{ParityBatchCase, assert_alert_toast_batch};
 /// template with four holes - the XML, the priority, the expiry and the fixed
 /// Emacs tag and group - and reading it as one string is what shows the XML
 /// arriving single-quoted inside `LoadXml' where PowerShell will parse it.
-
 fn sending_a_toast_writes_the_whole_powershell_script_to_the_notifier() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "sending_a_toast_writes_the_whole_powershell_script_to_the_notifier",
         r##"(progn
   (alert-toast-test-truncate)
@@ -34,7 +33,6 @@ fn sending_a_toast_writes_the_whole_powershell_script_to_the_notifier() -> Parit
           :process-live (and (process-live-p alert-toast--psprocess) t)
           :process-name (process-name alert-toast--psprocess)
           :style (assq 'toast alert-styles))))"##,
-        true,
         expect![[
             r#"OK (:first-notification "[one-shot] [console]::InputEncoding.BodyName\n[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null\n[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml, ContentType=WindowsRuntime] > $null\n$Xml = New-Object Windows.Data.Xml.Dom.XmlDocument\n    $Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">Emacs</text> <text id=\"2\">Build finished</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual></toast>')\n\n    $Toast = [Windows.UI.Notifications.ToastNotification]::new($Xml)\n    $Toast.Tag = \"Emacs\"\n    $Toast.Group = \"Emacs\"\n    $Toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::Default\n    $Toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds(5.000000)\n\n    $Notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier(\"Emacs\")\n    $Notifier.Show($Toast);\n" :second-notification "$Xml = New-Object Windows.Data.Xml.Dom.XmlDocument\n    $Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">Emacs</text> <text id=\"2\">Tests passed</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual></toast>')\n\n    $Toast = [Windows.UI.Notifications.ToastNotification]::new($Xml)\n    $Toast.Tag = \"Emacs\"\n    $Toast.Group = \"Emacs\"\n    $Toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::Default\n    $Toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds(5.000000)\n\n    $Notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier(\"Emacs\")\n    $Notifier.Show($Toast);\n" :process-live t :process-name "powershell-toast" :style (toast :title "Windows 10 toast notification" :notifier alert-toast-notify))"#
         ]],
@@ -42,7 +40,7 @@ fn sending_a_toast_writes_the_whole_powershell_script_to_the_notifier() -> Parit
 }
 
 fn the_severity_picks_the_priority_and_persistence_picks_the_expiry() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_severity_picks_the_priority_and_persistence_picks_the_expiry",
         r##"(list
   :priorities
@@ -68,7 +66,6 @@ fn the_severity_picks_the_priority_and_persistence_picks_the_expiry() -> ParityB
          (alert-toast-test-notify "Body" :title "T" :persistent t
                                   :never-persist t :icon alert-toast-test-icon)
          "AddSeconds")))"##,
-        true,
         expect![[
             r#"OK (:priorities ((urgent "$Toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::High") (high "$Toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::High") (moderate "$Toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::Default") (normal "$Toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::Default") (low "$Toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::Default") (trivial "$Toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::Default") (nosuchseverity "$Toast.Priority = [Windows.UI.Notifications.ToastNotificationPriority]::Default")) :fade-time 5 :expiry (:plain ("$Toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds(5.000000)") :persistent ("$Toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds(604800.000000)") :persistent-but-never-persist ("$Toast.ExpirationTime = [DateTimeOffset]::Now.AddSeconds(5.000000)")))"#
         ]],
@@ -76,7 +73,7 @@ fn the_severity_picks_the_priority_and_persistence_picks_the_expiry() -> ParityB
 }
 
 fn the_audio_options_choose_a_sound_and_a_looping_one_makes_the_toast_long() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_audio_options_choose_a_sound_and_a_looping_one_makes_the_toast_long",
         r##"(cl-flet ((audio-of
              (data)
@@ -96,7 +93,6 @@ fn the_audio_options_choose_a_sound_and_a_looping_one_makes_the_toast_long() -> 
                             :looping (sort (mapcar #'car
                                                    alert-toast--looping-sounds)
                                            #'string<))))"##,
-        true,
         expect![[
             r#"OK (:no-audio (:toast "$Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">T</text> <text id=\"2\">Body</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual></toast>')") :named-sound (:toast "$Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">T</text> <text id=\"2\">Body</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual> <audio src=\"ms-winsoundevent:Notification.Mail\" silent=\"false\" loop=\"false\"></audio></toast>')") :looping-sound (:toast "$Xml.LoadXml('<toast duration=\"long\"> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">T</text> <text id=\"2\">Body</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual> <audio src=\"ms-winsoundevent:Notification.Looping.Alarm3\" silent=\"false\" loop=\"true\"></audio></toast>')") :unknown-sound (:toast "$Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">T</text> <text id=\"2\">Body</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual> <audio src=\"ms-winsoundevent:Notification.Default\" silent=\"false\" loop=\"false\"></audio></toast>')") :silent (:toast "$Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">T</text> <text id=\"2\">Body</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual> <audio src=\"ms-winsoundevent:Notification.Default\" silent=\"true\" loop=\"false\"></audio></toast>')") :long-only (:toast "$Xml.LoadXml('<toast duration=\"long\"> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">T</text> <text id=\"2\">Body</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual></toast>')") :loop-without-a-looping-sound (:toast "$Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">T</text> <text id=\"2\">Body</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual> <audio src=\"ms-winsoundevent:Notification.IM\" silent=\"false\" loop=\"true\"></audio></toast>')") :sound-tables (:plain (default im mail reminder sms) :looping (alarm alarm10 alarm2 alarm3 alarm4 alarm5 alarm6 alarm7 alarm8 alarm9 call call10 call2 call3 call4 call5 call6 call7 call8 call9)))"#
         ]],
@@ -104,7 +100,7 @@ fn the_audio_options_choose_a_sound_and_a_looping_one_makes_the_toast_long() -> 
 }
 
 fn a_shoulder_tap_needs_both_halves_and_single_quotes_are_doubled() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "a_shoulder_tap_needs_both_halves_and_single_quotes_are_doubled",
         r##"(list
   :both-halves
@@ -150,15 +146,15 @@ fn a_shoulder_tap_needs_both_halves_and_single_quotes_are_doubled() -> ParityBat
                                  :icon alert-toast-test-icon)
         "^\\$Xml\\.LoadXml")
      (error (list :signalled (car error) (cadr error))))))"##,
-        true,
         expect![[
             r#"OK (:both-halves "[one-shot] [console]::InputEncoding.BodyName\n[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null\n[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml, ContentType=WindowsRuntime] > $null\n$Xml = New-Object Windows.Data.Xml.Dom.XmlDocument\n    $Xml.LoadXml('<toast hint-people=\"mailto:ada@example.com\"> <visual> <binding template=\"ToastGeneric\"> <text>T</text> <text>Body</text> <image src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\" hint-crop=\"circle\"></image></binding> <binding template=\"ToastGeneric\" experienceType=\"shoulderTap\"> <image src=\"C:\\taps\\wave.gif\"></image></binding></visual></toast>')\n\n    $Toast = [Windows.UI.Notifications.ToastNotification]::new($Xml)\n\n    $Notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Microsoft.People_8wekyb3d8bbwe!x4c7a3b7dy2188y46d4ya362y19ac5a5805e5x')\n    $Notifier.Show($Toast);\n" :person-only ("$Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">T</text> <text id=\"2\">Body</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual></toast>')" "$Notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier(\"Emacs\")") :payload-only ("$Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">T</text> <text id=\"2\">Body</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual></toast>')" "$Notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier(\"Emacs\")") :quoting (:replacements (("'" . "''")) :script ("$Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">Ada''s build</text> <text id=\"2\">it''s done''); Remove-Item -Recurse; (''</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual></toast>')")) :backslash (:in-body (:signalled error "Invalid use of ‘\\’ in replacement text") :in-body-doubled ("$Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">T</text> <text id=\"2\">Cleaned C:\\\\ tree</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual></toast>')") :in-title ("$Xml.LoadXml('<toast> <visual> <binding template=\"ToastImageAndText02\"> <text id=\"1\">Cleaned C:\\ tree</text> <text id=\"2\">Body</text> <image id=\"1\" src=\"/home/user/pictures/emacs.png\" placement=\"appLogoOverride\"></image></binding></visual></toast>')")))"#
         ]],
     )
+    .fresh_process()
 }
 
 fn the_platform_ladder_converts_icon_paths_for_wsl_and_for_cygwin() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "the_platform_ladder_converts_icon_paths_for_wsl_and_for_cygwin",
         r##"(list
   :detection
@@ -182,21 +178,18 @@ fn the_platform_ladder_converts_icon_paths_for_wsl_and_for_cygwin() -> ParityBat
   (equal alert-toast-default-icon
          (concat data-directory "images/icons/hicolor/128x128/apps/emacs.png"))
   :this-session-is-not-wsl alert-toast--wsl)"##,
-        true,
         expect![[
             r#"OK (:detection (("6.12.85-neomacs-parity") ("5.15.90.1-microsoft-standard-WSL2" . t) ("4.4.0-19041-Microsoft" . t) ("6.1.0-wsl-custom" . t)) :conversion (:plain "/home/user/pictures/emacs.png" :wsl "C:/from-wslpath/home/user/pictures/emacs.png" :cygwin "C:\\from-cygpath/home/user/pictures/emacs.png") :default-icon-is-built-from-data-directory t :this-session-is-not-wsl nil)"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         sending_a_toast_writes_the_whole_powershell_script_to_the_notifier(),
         the_severity_picks_the_priority_and_persistence_picks_the_expiry(),
         the_audio_options_choose_a_sound_and_a_looping_one_makes_the_toast_long(),
         a_shoulder_tap_needs_both_halves_and_single_quotes_are_doubled(),
         the_platform_ladder_converts_icon_paths_for_wsl_and_for_cygwin(),
-    ];
-    assert_alert_toast_batch(&cases);
+    ]
 }

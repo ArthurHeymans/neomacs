@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ac_html_bootstrap_batch};
+use super::ParityBatchCase;
 
 /// How a user turns the package on: `M-x ac-html-bootstrap+' in the HTML
 /// buffer they are editing.  It makes `web-completion-data-sources'
@@ -10,9 +10,8 @@ use super::{ParityBatchCase, assert_ac_html_bootstrap_batch};
 /// `company-web-bootstrap+' is the same command under the name company users
 /// are told to call.  The registered location resolves to a directory that
 /// really ships the data subdirectories a consumer reads.
-
 fn registers_itself_as_a_buffer_local_completion_source() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "registers_itself_as_a_buffer_local_completion_source",
         r##"
         (list
@@ -33,7 +32,6 @@ fn registers_itself_as_a_buffer_local_completion_source() -> ParityBatchCase {
            (list :resolved (achb-test-locations)
                  :buffer-local (local-variable-p 'web-completion-data-sources))))
     "##,
-        true,
         expect![[
             r#"OK (:before (("html" "web-completion-data-20160318.848/html-stuff" t)) :in-html-buffer (:returned (("Bootstrap" . ac-html-bootstrap-source-dir) ("html" . web-completion-data-html-source-dir)) :resolved (("Bootstrap" "ac-html-bootstrap-20160302.1701/html-stuff" t) ("html" "web-completion-data-20160318.848/html-stuff" t)) :buffer-local t :run-again (("Bootstrap" "ac-html-bootstrap-20160302.1701/html-stuff" t) ("html" "web-completion-data-20160318.848/html-stuff" t)) :company-alias t :ships ("html-attributes-complete" "html-attributes-list" "html-attributes-short-docs" "html-tag-short-docs") :tags 19) :other-buffer (:resolved (("html" "web-completion-data-20160318.848/html-stuff" t)) :buffer-local nil))"#
         ]],
@@ -41,7 +39,7 @@ fn registers_itself_as_a_buffer_local_completion_source() -> ParityBatchCase {
 }
 
 fn offers_bootstrap_button_classes_with_their_documentation() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "offers_bootstrap_button_classes_with_their_documentation",
         r##"
         (achb-test-in-document
@@ -52,7 +50,6 @@ fn offers_bootstrap_button_classes_with_their_documentation() -> ParityBatchCase
                       (line-beginning-position) (line-end-position))
                :offer (achb-test-offer "Bootstrap")))
     "##,
-        true,
         expect![[
             r#"OK (:point 231 :line "      <button class=\"btn btn-\" data-toggle=\"\">Save</button>" :offer (:context ("button" "class" "btn-") :offered 247 :matching 11 :candidates (("btn-block" . "Create block level buttons—those that span the full width of a parent") ("btn-danger") ("btn-default") ("btn-info") ("btn-lg" . "Button sizing") ("btn-link" . "Deemphasize a button by making it look like a link while maintaining button behavior") ("btn-primary") ("btn-sm" . "Button sizing") ("btn-success") ("btn-warning") ("btn-xs" . "Button sizing"))))"#
         ]],
@@ -60,7 +57,7 @@ fn offers_bootstrap_button_classes_with_their_documentation() -> ParityBatchCase
 }
 
 fn offers_a_different_class_set_for_each_tag() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "offers_a_different_class_set_for_each_tag",
         r##"
         (achb-test-in-document
@@ -83,7 +80,6 @@ fn offers_a_different_class_set_for_each_tag() -> ParityBatchCase {
                     (list (and (member "text-center" div) t)
                           (and (member "text-center" button) t)))))))
     "##,
-        true,
         expect![[
             r#"OK (:div (:context ("div" "class" "panel-") :offered 339 :matching 11 :candidates (("panel-body") ("panel-collapse" . "Be sure to add the class collapse to the collapsible element. If you'd like it to default open, add the additional class in.") ("panel-danger") ("panel-default") ("panel-footer" . "Wrap buttons or secondary text in .panel-footer.\\nNote that panel footers do not inherit colors and borders when using contextual variations as they are not meant to be in the foreground.") ("panel-group" . "<div class=\"panel-group\" id=\"accordion\" role=\"tablist\" aria-multiselectable=\"true\">\\n <div class=\"panel panel-default\">\\n   <div class=\"panel-heading\" role=\"tab\" id=\"headingOne\">") ("panel-heading" . "Container for heading and h1-h6 .panel-title") ("panel-info") ("panel-primary" . "Opposite to .panel-default") ("panel-success") ("panel-warning"))) :span (:context ("span" "class" "label-") :offered 269 :matching 6 :candidates (("label-danger") ("label-default") ("label-info") ("label-primary") ("label-success") ("label-warning"))) :td (:context ("td" "class" "dan") :offered 229 :matching 1 :candidates (("danger"))) :per-tag-isolation (:panel-body-is-a-div-class t :panel-body-offered-for-button nil :global-class-offered-for-both (t t)))"#
         ]],
@@ -91,7 +87,7 @@ fn offers_a_different_class_set_for_each_tag() -> ParityBatchCase {
 }
 
 fn offers_data_attribute_values_and_their_documentation() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "offers_data_attribute_values_and_their_documentation",
         r##"
         (achb-test-in-document
@@ -107,7 +103,6 @@ fn offers_data_attribute_values_and_their_documentation() -> ParityBatchCase {
                 :undocumented
                 (achb-test-attribute-doc "Bootstrap" "button" "data-toggle"))))
     "##,
-        true,
         expect![[
             r##"OK (:values (:context ("button" "data-toggle" "") :offered 7 :matching 7 :candidates (("button" . "Single toggle button\\nPre-toggled buttons need .active and aria-pressed=\"true\"\\n<button type=\"button\" class=\"btn btn-primary\" data-toggle=\"button\"\\n        aria-pressed=\"false\" autocomplete=\"off\">\\n  Single toggle\\n</button>") ("buttons" . "Togglable Checkbox or radio buttons.\\n<div class=\"btn-group\" data-toggle=\"buttons\">\\n  <label class=\"btn btn-primary active\">\\n    <input type=\"checkbox\" autocomplete=\"off\" checked> Checkbox 1 (pre-checked)\\n  </label>\\n  <label class=\"btn btn-primary\">\\n    <input type=\"checkbox\" autocomplete=\"off\"> Checkbox 2\\n  </label>\\n  <label class=\"btn btn-primary\">\\n    <input type=\"checkbox\" autocomplete=\"off\"> Checkbox 3\\n </label>\\n</div>") ("collapse") ("dropdown" . "<button id=\"dLabel\" type=\"button\" data-toggle=\"dropdown\" aria-haspopup=\"true\" role=\"button\" aria-expanded=\"false\">") ("modal" . "Activate a modal without writing JavaScript. Set data-toggle=\"modal\" on a controller element, like a button, along with a data-target=\"#foo\" or href=\"#foo\" to target a specific modal to toggle.\\n\\n<button type=\"button\" data-toggle=\"modal\" data-target=\"#myModal\">Launch modal</button>") ("popover" . "Popover.\\nFor performance reasons, the Tooltip and Popover data-apis are opt-in,\\nmeaning YOU MUST INITIALIZE THEM YOURSELF.\\n\\n$(function () {\\n  $('[data-toggle=\"popover\"]').popover({placement: 'bottom'})\\n})") ("tooltip" . "Tooltip.\\nFor performance reasons, the Tooltip and Popover data-apis are opt-in,\\nmeaning YOU MUST INITIALIZE THEM YOURSELF.\\n\\n$(function () {\\n  $('[data-toggle=\"tooltip\"]').tooltip({placement: 'bottom'})\\n})"))) :attributes ("data-dismiss" "data-loading-text" "data-slide" "data-target" "data-toggle" "data-animation" "data-container" "data-content" "data-delay" "data-html" "data-offset" "data-placement" "data-selector" "data-spy" "data-target" "data-template" "data-title" "data-trigger" "data-viewport") :attribute-docs (:own "Used to mark a carousel as animating starting at page load." :global-fallback "Appends the tooltip/popover to a specific element." :undocumented nil))"##
         ]],
@@ -115,7 +110,7 @@ fn offers_data_attribute_values_and_their_documentation() -> ParityBatchCase {
 }
 
 fn font_awesome_adds_icon_classes_for_i_and_nothing_else() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "font_awesome_adds_icon_classes_for_i_and_nothing_else",
         r##"
         (achb-test-in-document
@@ -143,21 +138,18 @@ fn font_awesome_adds_icon_classes_for_i_and_nothing_else() -> ParityBatchCase {
                 :div-classes (achb-test-values "Font Aws" "div" "class")
                 :button-classes (achb-test-values "Font Aws" "button" "class"))))
     "##,
-        true,
         expect![[
             r#"OK (:sources ("Font Aws" "Bootstrap" "html") :fa-alias t :font-awesome-at-point (:context ("i" "class" "fa-sp") :offered 616 :matching 5 :candidates (("fa-space-shuttle") ("fa-spin") ("fa-spinner") ("fa-spoon") ("fa-spotify"))) :bootstrap-at-point (:offered 425 :matching 0) :both-answer-for-i (:bootstrap 425 :font-awesome 616 :bootstrap-icons ("glyphicon" "glyphicon-adjust" "glyphicon-align-center")) :font-awesome-contributes-nothing-else (:ships ("html-attributes-complete") :tags nil :div-attributes nil :div-classes nil :button-classes nil))"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         registers_itself_as_a_buffer_local_completion_source(),
         offers_bootstrap_button_classes_with_their_documentation(),
         offers_a_different_class_set_for_each_tag(),
         offers_data_attribute_values_and_their_documentation(),
         font_awesome_adds_icon_classes_for_i_and_nothing_else(),
-    ];
-    assert_ac_html_bootstrap_batch(&cases);
+    ]
 }

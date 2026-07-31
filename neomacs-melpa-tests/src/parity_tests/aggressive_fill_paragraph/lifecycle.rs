@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aggressive_fill_paragraph_batch};
+use super::ParityBatchCase;
 
 fn aggressive_fill_paragraph_recommended_setup_keeps_live_buffers_independent() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "aggressive_fill_paragraph_recommended_setup_keeps_live_buffers_independent",
         r####"(let ((text-mode-hook
                                   nil)
@@ -110,16 +110,12 @@ fn aggressive_fill_paragraph_recommended_setup_keeps_live_buffers_independent() 
                                       nil))
                                    (kill-buffer
                                     buffer)))))"####,
-        true,
         expect![[
             r#"OK (((t "The release operator verifies\nrecovery state before promoting\nthe parser " 74) (t ";; The parser preserves every request\n;; while retrying a failed recovery\n;; transition " 89)) (nil "The release operator verifies\nrecovery state before promoting\nthe parser \n\nA disabled buffer leaves this second deliberately long paragraph completely unchanged " 162) (t ";; The parser preserves every request\n;; while retrying a failed recovery\n;; transition " 89))"#
         ]],
     )
 }
 
-#[test]
-fn lifecycle_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![aggressive_fill_paragraph_recommended_setup_keeps_live_buffers_independent()];
-    assert_aggressive_fill_paragraph_batch(&cases);
+pub(super) fn lifecycle_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![aggressive_fill_paragraph_recommended_setup_keeps_live_buffers_independent()]
 }

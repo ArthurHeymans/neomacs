@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_agent_shell_batch};
+use super::ParityBatchCase;
 
 fn user_edits_nested_bullets_multi_digit_steps_and_breaks_out_for_notes() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "user_edits_nested_bullets_multi_digit_steps_and_breaks_out_for_notes",
         r##"
 (with-temp-buffer
@@ -44,16 +44,12 @@ fn user_edits_nested_bullets_multi_digit_steps_and_breaks_out_for_notes() -> Par
    (agent-shell-list-edit--at-item)
    agent-shell-list-edit-mode))
 "##,
-        true,
         expect![[
             r#"OK ("- prepare release\n  - run cargo nextest\n  98. audit GNU Emacs\n  99. audit Neomacs\n  100. record every divergence\n  101. attach minimized reproductions\n\nNotes: failures remain actionable.\n- publish\n- tag candidate\n" 10 15 ((:type . bullet) (:indent . "") (:marker . "-") (:content . "tag candidate")) t)"#
         ]],
     )
 }
 
-#[test]
-fn list_edit_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> =
-        vec![user_edits_nested_bullets_multi_digit_steps_and_breaks_out_for_notes()];
-    assert_agent_shell_batch(&cases);
+pub(super) fn list_edit_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![user_edits_nested_bullets_multi_digit_steps_and_breaks_out_for_notes()]
 }

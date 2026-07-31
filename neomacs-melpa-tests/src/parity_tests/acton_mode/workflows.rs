@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_acton_mode_batch};
+use super::ParityBatchCase;
 
 /// Opening an Acton source file has to give the reader a buffer that is already
 /// set up for the language.  Six real file names pin which ones the package's
@@ -10,9 +10,8 @@ use super::{ParityBatchCase, assert_acton_mode_batch};
 /// its own line indenter, a tab width taken from `acton-indent-offset', spaces
 /// rather than tabs, its syntax table, and the colon hook that realigns
 /// `else'/`elif'/`except'/`finally'.
-
 fn visiting_an_acton_file_selects_the_mode_and_its_editing_defaults() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "visiting_an_acton_file_selects_the_mode_and_its_editing_defaults",
         r##"(progn
   (let ((observed nil))
@@ -34,7 +33,6 @@ fn visiting_an_acton_file_selects_the_mode_and_its_editing_defaults() -> ParityB
           :colon-hook (and (memq 'acton-handle-colon post-self-insert-hook) t)
           :syntax-table (eq (syntax-table) acton-mode-syntax-table)
           :paragraph (equal paragraph-start paragraph-separate))))"##,
-        true,
         expect![[
             r##"OK (:routing (("counter.act" acton-mode) ("counter.ACT" acton-mode) ("counter.act.bak" acton-mode) ("counter.acton" fundamental-mode) ("counter.py" python-mode) ("act" fundamental-mode)) :alist ("\\.act\\'" . acton-mode) :mode acton-mode :mode-name "Acton" :parent prog-mode :comment ("#" "#+\\s-*" 40 t) :indent (acton-indent-line 4 nil 4) :colon-hook t :syntax-table t :paragraph t)"##
         ]],
@@ -42,22 +40,22 @@ fn visiting_an_acton_file_selects_the_mode_and_its_editing_defaults() -> ParityB
 }
 
 fn syntax_highlighting_covers_declarations_effects_types_and_literals() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "syntax_highlighting_covers_declarations_effects_types_and_literals",
         r##"(progn
   (actn-test-visit "counter.act" actn-test-counter)
   (list :runs (actn-test-face-runs)
         :point (point)
         :modified (buffer-modified-p)))"##,
-        true,
         expect![[
             r##"OK (:runs (("# " . font-lock-comment-delimiter-face) ("a counter actor, from the Acton tutorial\n" . font-lock-comment-face) ("import" . font-lock-keyword-face) (" acton.rts\n\n") ("actor" . font-lock-keyword-face) (" ") ("Counter" . font-lock-type-face) ("(name: str):\n    ") ("var" . font-lock-keyword-face) (" count = ") ("0" . font-lock-constant-face) ("\n    limit: ") ("Int" . font-lock-type-face) (" = ") ("0x10" . font-lock-constant-face) ("\n\n    ") ("action" . font-lock-builtin-face) (" ") ("def" . font-lock-keyword-face) (" ") ("bump" . font-lock-function-name-face) ("(step: int) ") ("->" . font-lock-builtin-face) (" int:\n        count ") ("+" . font-lock-builtin-face) ("= step\n        ") ("if" . font-lock-keyword-face) (" count ") (">" . font-lock-builtin-face) (" limit:\n            print(") ("\"over \"" . font-lock-string-face) (", name)\n        ") ("return" . font-lock-keyword-face) (" count\n\n") ("class" . font-lock-keyword-face) (" ") ("Point" . font-lock-type-face) ("(object):\n    ") ("def" . font-lock-keyword-face) (" ") ("__init__" . font-lock-function-name-face) ("(self, x: float):\n        self.x = x\n\n") ("protocol" . font-lock-keyword-face) (" ") ("Drawable" . font-lock-type-face) (":\n    ") ("def" . font-lock-keyword-face) (" ") ("draw" . font-lock-function-name-face) ("(self) ") ("->" . font-lock-builtin-face) (" ") ("None" . font-lock-constant-face) (":\n        ") ("pass" . font-lock-keyword-face) ("\n")) :point 1 :modified nil)"##
         ]],
     )
+    .fresh_process()
 }
 
 fn reindenting_a_body_follows_colons_and_block_enders_without_fontification() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "reindenting_a_body_follows_colons_and_block_enders_without_fontification",
         r##"(progn
   (actn-test-visit "indent.act" actn-test-unindented)
@@ -70,7 +68,6 @@ fn reindenting_a_body_follows_colons_and_block_enders_without_fontification() ->
           :fontified (actn-test-text)
           :same (equal plain (actn-test-text))
           :tabs (and (string-match-p "\t" plain) t))))"##,
-        true,
         expect![[
             r##"OK (:plain "actor Counter():\nvar count = 0\ndef bump(step: int) -> int:\n    count += step\n    if count > 10:\n        print(\"over\")\n        return count\n    def other():\n        pass\n" :fontified "actor Counter():\nvar count = 0\ndef bump(step: int) -> int:\n    count += step\n    if count > 10:\n        print(\"over\")\n        return count\n    def other():\n        pass\n" :same t :tabs nil)"##
         ]],
@@ -78,7 +75,7 @@ fn reindenting_a_body_follows_colons_and_block_enders_without_fontification() ->
 }
 
 fn typing_else_realigns_the_line_with_its_if() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "typing_else_realigns_the_line_with_its_if",
         r##"(progn
   (actn-test-visit "colon.act"
@@ -91,7 +88,6 @@ fn typing_else_realigns_the_line_with_its_if() -> ParityBatchCase {
           :line (line-number-at-pos)
           :column (current-column)
           :modified (buffer-modified-p))))"##,
-        true,
         expect![[
             r##"OK (:before "def check(x: int) -> int:\n    if x > 0:\n        return x\n        " :after "def check(x: int) -> int:\n    if x > 0:\n        return x\n    else:" :line 4 :column 9 :modified t)"##
         ]],
@@ -99,7 +95,7 @@ fn typing_else_realigns_the_line_with_its_if() -> ParityBatchCase {
 }
 
 fn commenting_a_block_round_trips_through_the_modes_comment_syntax() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "commenting_a_block_round_trips_through_the_modes_comment_syntax",
         r##"(progn
   (actn-test-visit "comment.act" actn-test-counter)
@@ -119,7 +115,6 @@ fn commenting_a_block_round_trips_through_the_modes_comment_syntax() -> ParityBa
                           (font-lock-ensure)
                           (search-forward "counter actor")
                           (get-text-property (1- (point)) 'face)))))"##,
-        true,
         expect![[
             r##"OK (:commented-block ("# actor Counter(name: str):" "#     var count = 0" "#     limit: Int = 0x10") :restored t :comment-face font-lock-comment-face)"##
         ]],
@@ -127,7 +122,7 @@ fn commenting_a_block_round_trips_through_the_modes_comment_syntax() -> ParityBa
 }
 
 fn imenu_indexes_the_declarations_and_the_syntax_table_classifies_text() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "imenu_indexes_the_declarations_and_the_syntax_table_classifies_text",
         r##"(progn
   (actn-test-visit "counter.act" actn-test-counter)
@@ -141,22 +136,20 @@ fn imenu_indexes_the_declarations_and_the_syntax_table_classifies_text() -> Pari
         :in-code (save-excursion (goto-char (point-min))
                                  (search-forward "count += step")
                                  (list (nth 3 (syntax-ppss)) (nth 4 (syntax-ppss))))))"##,
-        true,
         expect![[
             r##"OK (:imenu (("Function" ("__init__" . 292) ("draw" . 365)) ("Protocol" ("Drawable" . 346)) ("Actor" ("Counter" . 62)) ("Class" ("Point" . 271))) :in-comment (t 1) :in-string 34 :in-code (nil nil))"##
         ]],
     )
+    .fresh_process()
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         visiting_an_acton_file_selects_the_mode_and_its_editing_defaults(),
         syntax_highlighting_covers_declarations_effects_types_and_literals(),
         reindenting_a_body_follows_colons_and_block_enders_without_fontification(),
         typing_else_realigns_the_line_with_its_if(),
         commenting_a_block_round_trips_through_the_modes_comment_syntax(),
         imenu_indexes_the_declarations_and_the_syntax_table_classifies_text(),
-    ];
-    assert_acton_mode_batch(&cases);
+    ]
 }

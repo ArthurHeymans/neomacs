@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_async_melpa_smtpmail_batch};
+use super::ParityBatchCase;
 
 fn current_smtpmail_registry_custom_group_and_hook_metadata_match_gnu_emacs() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "current_smtpmail_registry_custom_group_and_hook_metadata_match_gnu_emacs",
         r##"
 (list
@@ -15,7 +15,6 @@ fn current_smtpmail_registry_custom_group_and_hook_metadata_match_gnu_emacs() ->
   'variable-documentation)
  (help-function-arglist 'async-smtpmail-send-it t))
 "##,
-        true,
         expect![[
             r#"OK ("Send e-mail with smtpmail.el asynchronously" nil nil "Hook running in the child emacs in ‘async-smtpmail-send-it’.\nIt is called just before calling ‘smtpmail-send-it’." nil)"#
         ]],
@@ -23,7 +22,7 @@ fn current_smtpmail_registry_custom_group_and_hook_metadata_match_gnu_emacs() ->
 }
 
 fn current_smtpmail_send_captures_complete_message_environment_and_completion() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "current_smtpmail_send_captures_complete_message_environment_and_completion",
         r##"
 (with-temp-buffer
@@ -56,7 +55,6 @@ fn current_smtpmail_send_captures_complete_message_environment_and_completion() 
            (string-match-p "smtpmail-send-it" printed)
            (nreverse messages)))))))
 "##,
-        true,
         expect![[
             r#"OK (fixture-mail-process lambda 65 90 145 213 3501 9021 ("Delivering message to Alice <alice@example.test>, bob@example.test..." "Delivering message to Alice <alice@example.test>, bob@example.test...done"))"#
         ]],
@@ -64,7 +62,7 @@ fn current_smtpmail_send_captures_complete_message_environment_and_completion() 
 }
 
 fn current_smtpmail_child_recreates_unibyte_buffer_runs_hook_then_sends() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "current_smtpmail_child_recreates_unibyte_buffer_runs_hook_then_sends",
         r##"
 (with-temp-buffer
@@ -107,19 +105,16 @@ fn current_smtpmail_child_recreates_unibyte_buffer_runs_hook_then_sends() -> Par
            (functionp callback)
            (buffer-name)))))))
 "##,
-        true,
         expect![[
             r#"OK (:sent ((hook "From: sender@example.test\nTo: recipient@example.test\nSubject: fixture\n\nASCII wire payload\15\n" nil nil) (send "From: sender@example.test\nTo: recipient@example.test\nSubject: fixture\n\nASCII wire payload\15\n" nil nil)) t " *temp*")"#
         ]],
     )
 }
 
-#[test]
-fn smtpmail_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn smtpmail_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         current_smtpmail_registry_custom_group_and_hook_metadata_match_gnu_emacs(),
         current_smtpmail_send_captures_complete_message_environment_and_completion(),
         current_smtpmail_child_recreates_unibyte_buffer_runs_hook_then_sends(),
-    ];
-    assert_async_melpa_smtpmail_batch(&cases);
+    ]
 }

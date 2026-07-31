@@ -7,7 +7,7 @@ Transforms:
   ]);
 
 Into:
-  fn case_id() -> ParityBatchCase { ParityBatchCase::new(...) }
+  fn case_id() -> ParityBatchCase { ParityBatchCase::value(...) }
 
   #[test]
   fn workflows_public_surface_batch() {
@@ -306,11 +306,11 @@ def render_case_fn(fn_name: str, case: dict) -> str:
         exp_block += "\n".join(exp_lines[1:])
         exp_block += ","
 
+    constructor = "value" if case["expect_value"] else "signal"
     return f'''fn {fn_name}() -> ParityBatchCase {{
-    ParityBatchCase::new(
+    ParityBatchCase::{constructor}(
         "{case["id"]}",
 {probe_block}
-        {"true" if case["expect_value"] else "false"},
 {exp_block}
     )
 }}

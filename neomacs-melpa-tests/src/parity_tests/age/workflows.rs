@@ -1,9 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_age_batch};
+use super::ParityBatchCase;
 
 fn age_encrypts_and_decrypts_a_recipient_message_through_a_cli() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "age_encrypts_and_decrypts_a_recipient_message_through_a_cli",
         r##"(let* ((root
                                  (expand-file-name
@@ -99,13 +99,12 @@ fn age_encrypts_and_decrypts_a_recipient_message_through_a_cli() -> ParityBatchC
                                 "--decrypt.*-i "
                                 log)
                                t))))"##,
-        true,
         expect![[r#"OK ("age-encryption.org/v1\ndeploy-token-42\n" "deploy-token-42\n" t t)"#]],
     )
 }
 
 fn age_opens_edits_and_saves_an_encrypted_org_file_transparently() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "age_opens_edits_and_saves_an_encrypted_org_file_transparently",
         r##"(let* ((root
                                  (expand-file-name
@@ -228,7 +227,6 @@ fn age_opens_edits_and_saves_an_encrypted_org_file_transparently() -> ParityBatc
                                    (set-buffer-modified-p nil))
                                  (kill-buffer buffer))
                                (age-file-disable))))"##,
-        true,
         expect![[
             r#"OK ((org-mode "* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n" t nil) "age-encryption.org/v1\n* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n" "* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n")"#
         ]],
@@ -236,7 +234,7 @@ fn age_opens_edits_and_saves_an_encrypted_org_file_transparently() -> ParityBatc
 }
 
 fn age_supplies_credentials_from_an_encrypted_authinfo_file() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "age_supplies_credentials_from_an_encrypted_authinfo_file",
         r##"(let* ((root
                                  (expand-file-name
@@ -354,13 +352,12 @@ fn age_supplies_credentials_from_an_encrypted_authinfo_file() -> ParityBatchCase
                                         secret))))
                                (auth-source-forget-all-cached)
                                (age-file-disable))))"##,
-        true,
         expect![[r#"OK ("api.example.test" "alice" "443" "swordfish")"#]],
     )
 }
 
 fn age_reports_a_corrupt_cipher_as_a_user_visible_decryption_error() -> ParityBatchCase {
-    ParityBatchCase::new(
+    ParityBatchCase::value(
         "age_reports_a_corrupt_cipher_as_a_user_visible_decryption_error",
         r##"(let* ((root
                                  (expand-file-name
@@ -427,20 +424,17 @@ fn age_reports_a_corrupt_cipher_as_a_user_visible_decryption_error() -> ParityBa
                                  (car problem)
                                  (error-message-string
                                   problem))))))"##,
-        true,
         expect![[
             r#"OK (age-error "Age error: \"Age failed with error\", \"malformed payload\"")"#
         ]],
     )
 }
 
-#[test]
-fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
+pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
         age_encrypts_and_decrypts_a_recipient_message_through_a_cli(),
         age_opens_edits_and_saves_an_encrypted_org_file_transparently(),
         age_supplies_credentials_from_an_encrypted_authinfo_file(),
         age_reports_a_corrupt_cipher_as_a_user_visible_decryption_error(),
-    ];
-    assert_age_batch(&cases);
+    ]
 }
