@@ -2026,54 +2026,60 @@ pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
         return Ok(Value::NIL);
     }
 
-    let (position_car, position_cdr) = if position.is_cons() {
-        (position.cons_car(), position.cons_cdr())
-    } else {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("listp"), *position],
-        ));
-    };
-
-    if !position_car.is_list() {
-        if position_car.is_fixnum() {
+    // GNU `x_popup_menu_1` handles t before decoding list/event positions:
+    // it means "use the current mouse position".  The initial batch frame
+    // cannot display a menu, but GNU still validates the menu descriptor and
+    // then returns nil rather than rejecting the documented sentinel.
+    if *position != Value::T {
+        let (position_car, position_cdr) = if position.is_cons() {
+            (position.cons_car(), position.cons_cdr())
+        } else {
             return Err(signal(
                 LispCondition::WrongTypeArgument,
-                vec![Value::symbol("listp"), position_car],
+                vec![Value::symbol("listp"), *position],
             ));
-        }
-        if menu.is_nil() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("stringp"), Value::NIL],
-            ));
-        }
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("consp"), Value::T],
-        ));
-    }
-
-    if !position_cdr.is_list() {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("listp"), position_cdr],
-        ));
-    }
-
-    if !position_car.is_nil() {
-        let window_designator = match position_cdr.kind() {
-            ValueKind::Cons => {
-                let pair_car = position_cdr.cons_car();
-                let _pair_cdr = position_cdr.cons_cdr();
-                pair_car
-            }
-            _ => Value::NIL,
         };
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("windowp"), window_designator],
-        ));
+
+        if !position_car.is_list() {
+            if position_car.is_fixnum() {
+                return Err(signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("listp"), position_car],
+                ));
+            }
+            if menu.is_nil() {
+                return Err(signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("stringp"), Value::NIL],
+                ));
+            }
+            return Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("consp"), Value::T],
+            ));
+        }
+
+        if !position_cdr.is_list() {
+            return Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("listp"), position_cdr],
+            ));
+        }
+
+        if !position_car.is_nil() {
+            let window_designator = match position_cdr.kind() {
+                ValueKind::Cons => {
+                    let pair_car = position_cdr.cons_car();
+                    let _pair_cdr = position_cdr.cons_cdr();
+                    pair_car
+                }
+                _ => Value::NIL,
+            };
+            return Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("windowp"), window_designator],
+            ));
+        }
     }
 
     // This follows the menu descriptor shape expected by batch-mode oracle:

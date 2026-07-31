@@ -2310,6 +2310,17 @@ fn x_popup_dialog_and_menu_batch_semantics() {
 }
 
 #[test]
+fn x_popup_menu_accepts_current_mouse_position_sentinel_in_batch() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(r#"(x-popup-menu t '("Title" ("Pane" ("Item" . value))))"#)
+        .expect("documented current-mouse POSITION should be accepted");
+
+    assert!(result.is_nil());
+}
+
+#[test]
 fn x_clipboard_input_context_batch_semantics() {
     crate::test_utils::init_test_tracing();
     let term = terminal_handle_value();
