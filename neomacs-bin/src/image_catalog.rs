@@ -402,6 +402,7 @@ mod tests {
         ImageResolveRequest {
             source: ImageResolveSource::File(LispString::from_utf8(path)),
             size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
+            rotation: Default::default(),
             fg_color: 0,
             bg_color: 0,
             realization: Default::default(),

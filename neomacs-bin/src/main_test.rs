@@ -35,7 +35,7 @@ use neovm_core::emacs_core::eval::{
     PopupMenuEntry, PopupMenuRequest, VideoResolveRequest, VideoResolveSource,
     WebKitResolveRequest, WebKitResolveSource,
 };
-use neovm_core::emacs_core::image_catalog::{AxisSize, ImageSizeSpec};
+use neovm_core::emacs_core::image_catalog::{AxisSize, ImageRotation, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
     ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, ResolvedImageMetadata,
 };
@@ -119,8 +119,8 @@ fn layout_purpose_is_the_only_owner_of_pending_scroll_consumption() {
 fn test_image_catalog(
     cmd_tx: &crossbeam_channel::Sender<RenderCommand>,
     image_metadata: SharedImageMetadata,
-) -> AsyncImageCatalog {
-    AsyncImageCatalog::new(cmd_tx.clone(), None, image_metadata)
+) -> Arc<AsyncImageCatalog> {
+    Arc::new(AsyncImageCatalog::new(cmd_tx.clone(), None, image_metadata))
 }
 
 #[test]
@@ -984,13 +984,14 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
             image_path.to_str().expect("utf8 path"),
         )),
         size: ImageSizeSpec::new(AxisSize::AtMost(50), AxisSize::AtMost(50)),
+        rotation: ImageRotation::None,
         fg_color: 0,
         bg_color: 0,
         realization: Default::default(),
     };
 
     let started = Instant::now();
-    let lookup = ImageCatalog::lookup(&host.image_catalog, request.clone());
+    let lookup = host.image_catalog.lookup(request.clone());
 
     assert!(
         started.elapsed() < Duration::from_millis(100),
@@ -1009,7 +1010,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         other => panic!("expected ImageLoadFile, got {other:?}"),
     }
     assert_eq!(
-        ImageCatalog::lookup(&host.image_catalog, request.clone()),
+        host.image_catalog.lookup(request.clone()),
         ImageLookup::Pending(image.clone()),
         "duplicate lookup should reuse the same pending image"
     );
@@ -1030,7 +1031,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
     );
     cvar.notify_all();
 
-    let ImageLookup::Ready(image) = ImageCatalog::lookup(&host.image_catalog, request) else {
+    let ImageLookup::Ready(image) = host.image_catalog.lookup(request) else {
         panic!("decoded image lookup should be ready");
     };
     assert_eq!(image.metadata.width, 25);
@@ -1052,44 +1053,49 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
     cmd_tx
         .send(RenderCommand::Asset(AssetCommand::ImageFree { id: 1 }))
         .expect("fill command queue");
-    let host = PrimaryWindowDisplayHost {
-        cmd_tx: cmd_tx.clone(),
-        render_waker: None,
-        font_sizing: FontSizing::xft(),
-        primary_window_adopted: false,
-        primary_frame_id: None,
-        last_window_titles: Mutex::new(std::collections::HashMap::new()),
-        font_metrics: None,
-        primary_window_size: shared_primary_window_size(1600, 1800),
-        image_catalog: test_image_catalog(
-            &cmd_tx,
-            Arc::new((
-                Mutex::new(std::collections::HashMap::new()),
-                std::sync::Condvar::new(),
-            )),
-        ),
-        resolved_videos: Mutex::new(std::collections::HashMap::new()),
-        resolved_webkits: Mutex::new(std::collections::HashMap::new()),
-        resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
-        frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
-        last_frame_shader: Mutex::new(None),
-    };
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
         size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
+        rotation: ImageRotation::None,
         fg_color: 0,
         bg_color: 0,
         realization: Default::default(),
     };
     let (done_tx, done_rx) = crossbeam_channel::bounded(1);
+    let worker_cmd_tx = cmd_tx.clone();
     let worker = std::thread::spawn(move || {
-        let lookup = ImageCatalog::lookup(&host.image_catalog, request);
-        done_tx.send((host, lookup)).expect("publish lookup result");
+        let host = PrimaryWindowDisplayHost {
+            cmd_tx: worker_cmd_tx.clone(),
+            render_waker: None,
+            font_sizing: FontSizing::xft(),
+            primary_window_adopted: false,
+            primary_frame_id: None,
+            last_window_titles: Mutex::new(std::collections::HashMap::new()),
+            font_metrics: None,
+            primary_window_size: shared_primary_window_size(1600, 1800),
+            image_catalog: test_image_catalog(
+                &worker_cmd_tx,
+                Arc::new((
+                    Mutex::new(std::collections::HashMap::new()),
+                    std::sync::Condvar::new(),
+                )),
+            ),
+            resolved_videos: Mutex::new(std::collections::HashMap::new()),
+            resolved_webkits: Mutex::new(std::collections::HashMap::new()),
+            resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
+            frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
+            last_frame_shader: Mutex::new(None),
+        };
+        let lookup = host.image_catalog.lookup(request.clone());
+        let duplicate_lookup = host.image_catalog.lookup(request);
+        done_tx
+            .send((lookup, duplicate_lookup))
+            .expect("publish lookup results");
     });
 
     let first_result = done_rx.recv_timeout(Duration::from_millis(100));
     cmd_rx.try_recv().expect("drain backpressuring command");
-    let (host, lookup) = match first_result {
+    let (lookup, duplicate_lookup) = match first_result {
         Ok(result) => result,
         Err(error) => {
             let _result = done_rx
@@ -1104,24 +1110,12 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
     let ImageLookup::Pending(image) = lookup else {
         panic!("backpressured lookup should remain pending");
     };
+    assert_eq!(duplicate_lookup, ImageLookup::Pending(image.clone()));
     assert!(matches!(
         cmd_rx.recv_timeout(Duration::from_secs(1)),
         Ok(RenderCommand::Asset(AssetCommand::ImageLoadData { id, .. }))
             if id == image.placement().image_id()
     ));
-    assert_eq!(
-        ImageCatalog::lookup(
-            &host.image_catalog,
-            ImageResolveRequest {
-                source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
-                size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
-                fg_color: 0,
-                bg_color: 0,
-                realization: Default::default(),
-            }
-        ),
-        ImageLookup::Pending(image.clone())
-    );
     assert!(cmd_rx.try_recv().is_err(), "retry must not enqueue twice");
 }
 
@@ -1151,12 +1145,12 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
         size: ImageSizeSpec::new(AxisSize::AtMost(18), AxisSize::AtMost(18)),
+        rotation: ImageRotation::None,
         fg_color: 0,
         bg_color: 0,
         realization: Default::default(),
     };
-    let ImageLookup::Pending(expected) = ImageCatalog::lookup(&host.image_catalog, request.clone())
-    else {
+    let ImageLookup::Pending(expected) = host.image_catalog.lookup(request.clone()) else {
         panic!("new image should be pending");
     };
     cmd_rx.try_recv().expect("queued image command");
@@ -1175,7 +1169,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
     locked_rx.recv().expect("renderer metadata lock acquired");
 
     let started = Instant::now();
-    let lookup = ImageCatalog::lookup(&host.image_catalog, request);
+    let lookup = host.image_catalog.lookup(request);
     let elapsed = started.elapsed();
     drop(release_tx);
     locker.join().expect("metadata locker");
@@ -1214,13 +1208,14 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
     let request = ImageResolveRequest {
         source: ImageResolveSource::File(LispString::from_utf8("~/Pictures/Pik.png")),
         size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(24)),
+        rotation: ImageRotation::None,
         fg_color: 0,
         bg_color: 0,
         realization: Default::default(),
     };
 
     assert!(matches!(
-        ImageCatalog::lookup(&host.image_catalog, request),
+        host.image_catalog.lookup(request),
         ImageLookup::Pending(_)
     ));
 
@@ -1300,12 +1295,12 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0xde, 0xad]),
         size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(0)),
+        rotation: ImageRotation::None,
         fg_color: 0,
         bg_color: 0,
         realization: Default::default(),
     };
-    let ImageLookup::Pending(image) = ImageCatalog::lookup(&host.image_catalog, request.clone())
-    else {
+    let ImageLookup::Pending(image) = host.image_catalog.lookup(request.clone()) else {
         panic!("new image should be pending");
     };
     let (lock, cvar) = &*image_metadata;
@@ -1317,9 +1312,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
 
     for _ in 0..2 {
         let started = Instant::now();
-        let ImageLookup::Failed(failed) =
-            ImageCatalog::lookup(&host.image_catalog, request.clone())
-        else {
+        let ImageLookup::Failed(failed) = host.image_catalog.lookup(request.clone()) else {
             panic!("failed decode should be negative-cached");
         };
         assert_eq!(failed.placement(), image.placement());

@@ -397,38 +397,38 @@ fn parse_without_release_is_rejected() {
 #[test]
 fn parse_release_uses_release_bin_dir() {
     let options = parse_options(&["--release"]);
-    assert!(options.release);
+    assert_eq!(options.profile, BuildProfile::Release);
     assert_eq!(options.bin_dir, PathBuf::from("/repo/target/release"));
 }
 
 #[test]
 fn explicit_bin_dir_overrides_release_default() {
     let options = parse_options(&["--release", "--bin-dir", "out/neomacs-bin"]);
-    assert!(options.release);
+    assert_eq!(options.profile, BuildProfile::Release);
     assert_eq!(options.bin_dir, PathBuf::from("/repo/out/neomacs-bin"));
 }
 
 #[test]
 fn explicit_bin_dir_before_release_stays_in_effect() {
     let options = parse_options(&["--bin-dir", "out/neomacs-bin", "--release"]);
-    assert!(options.release);
+    assert_eq!(options.profile, BuildProfile::Release);
     assert_eq!(options.bin_dir, PathBuf::from("/repo/out/neomacs-bin"));
 }
 
 #[test]
 fn parse_aot_preload_defaults_off_and_flag_enables() {
-    assert!(!parse_options(&[]).aot_preload);
-    let options = parse_options(&["--aot-preload"]);
+    assert!(!parse_options(&["--release"]).aot_preload);
+    let options = parse_options(&["--release", "--aot-preload"]);
     assert!(options.aot_preload);
     // The flag is independent of the others (does not perturb defaults).
-    assert!(!options.release);
+    assert_eq!(options.profile, BuildProfile::Release);
     assert!(!options.dry_run);
     assert!(!options.skip_build);
 }
 
 #[test]
 fn parse_aot_preload_composes_with_dry_run() {
-    let options = parse_options(&["--aot-preload", "--dry-run"]);
+    let options = parse_options(&["--release", "--aot-preload", "--dry-run"]);
     assert!(options.aot_preload);
     assert!(options.dry_run);
 }
@@ -445,7 +445,8 @@ fn initial_cargo_build_passes_no_features_by_default_on_linux() {
             OsString::from("--verbose"),
             OsString::from("-p"),
             OsString::from("neomacs"),
-            OsString::from("--release"),
+            OsString::from("--profile"),
+            OsString::from("release"),
         ]
     );
 }
@@ -464,7 +465,8 @@ fn initial_cargo_build_passes_wpe_webkit_when_requested() {
             OsString::from("neomacs"),
             OsString::from("--features"),
             OsString::from("wpe-webkit"),
-            OsString::from("--release"),
+            OsString::from("--profile"),
+            OsString::from("release"),
         ]
     );
 }
@@ -481,7 +483,8 @@ fn initial_cargo_build_passes_no_features_on_non_linux() {
             OsString::from("--verbose"),
             OsString::from("-p"),
             OsString::from("neomacs"),
-            OsString::from("--release"),
+            OsString::from("--profile"),
+            OsString::from("release"),
         ]
     );
 }
@@ -1756,7 +1759,7 @@ fn generated_unidata_source_files_match_gnu_gen_clean_shape() {
         repo_root: repo.clone(),
         runtime_root: repo.clone(),
         bin_dir: repo.join("target/debug"),
-        release: false,
+        profile: BuildProfile::Debug,
         dry_run: false,
         native_comp: false,
         skip_build: false,
