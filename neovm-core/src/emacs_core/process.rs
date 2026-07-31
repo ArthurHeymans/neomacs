@@ -17,9 +17,9 @@
 //!
 //! **TLS**: `gnutls-boot` upgrades a network process through the Neomacs TLS
 //! facade. The `TcpStream` is moved into the backend-neutral
-//! `Process.tls_stream`. Read/write/send automatically use the TLS layer when
-//! present. Mozilla root certificates are used by the default rustls backend
-//! for verification.
+//! live-I/O owner. Read/write/send automatically use the TLS layer when present.
+//! Mozilla root certificates are used by the default rustls backend for
+//! verification.
 
 use crate::emacs_core::error::LispCondition;
 use num_enum::IntoPrimitive;
@@ -816,6 +816,68 @@ fn process_keyword_already_seen(seen: &mut Vec<ProcessKeyword>, keyword: Process
     }
 }
 
+/// Operating-system resources owned by a live process connection.
+///
+/// GNU keeps Lisp process identity/status alive after `remove_process`, but
+/// `deactivate_process` closes every descriptor immediately.  Keeping all
+/// native handles in one Rust owner gives Neomacs the same lifetime split:
+/// `Process` is durable Lisp-visible state, while replacing this bundle with
+/// `Default::default()` drops every live handle as one operation.
+#[derive(Default)]
+struct LiveProcessIo {
+    /// Pollable child-status wakeup source, where the platform exposes one.
+    child_status_source: Option<ChildStatusSource>,
+    /// The actual OS child process, if spawned (pipe mode).
+    child: Option<Child>,
+    /// OS-level stdout pipe for non-blocking reads (pipe mode).
+    child_stdout: Option<std::process::ChildStdout>,
+    /// OS-level stderr pipe for non-blocking reads (pipe mode).
+    child_stderr: Option<std::process::ChildStderr>,
+    /// PTY master handle for resize and I/O (PTY mode).
+    pty_master: Option<Box<dyn portable_pty::MasterPty + Send>>,
+    /// PTY child process handle (PTY mode).
+    pty_child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
+    /// PTY reader for non-blocking reads from the master side.
+    pty_reader: Option<Box<dyn IoRead + Send>>,
+    /// PTY writer for sending input to the master side.
+    pty_writer: Option<Box<dyn std::io::Write + Send>>,
+    network_socket: Option<NetworkSocket>,
+    pending_network_connect: Option<PendingNetworkConnect>,
+    /// TLS-wrapped stream for encrypted network connections.
+    tls_stream: Option<TlsStream>,
+}
+
+impl LiveProcessIo {
+    fn terminate_and_reap_children(&mut self) {
+        if let Some(child) = self.child.as_mut()
+            && !matches!(child.try_wait(), Ok(Some(_)))
+        {
+            if sys::send_signal_to_group(child.id() as i64, signal_kill_number()) != 0 {
+                let _ = child.kill();
+            }
+            let _ = child.wait();
+        }
+
+        if let Some(child) = self.pty_child.as_mut()
+            && !matches!(child.try_wait(), Ok(Some(_)))
+        {
+            let killed_group = child.process_id().is_some_and(|pid| {
+                sys::send_signal_to_group(pid as i64, signal_kill_number()) == 0
+            });
+            if !killed_group {
+                let _ = child.kill();
+            }
+            let _ = child.wait();
+        }
+    }
+}
+
+impl Drop for LiveProcessIo {
+    fn drop(&mut self) {
+        self.terminate_and_reap_children();
+    }
+}
+
 /// A tracked process record.
 pub struct Process {
     pub id: ProcessId,
@@ -891,11 +953,6 @@ pub struct Process {
     /// for network/serial/pipe connections that have no OS child, and stays
     /// independent of the internal `ProcessId` used to key the manager.
     pub os_pid: Option<u32>,
-    /// Pollable child-status wakeup source, where the platform exposes one.
-    pub child_status_source: Option<ChildStatusSource>,
-    /// The actual OS child process, if spawned (pipe mode).
-    #[allow(dead_code)]
-    pub child: Option<Child>,
     /// GNU `process-send-eof' replaces a pipe subprocess's write fd with the
     /// null device, so later `process-send-string' calls succeed and discard.
     pub child_stdin_eof_sink: bool,
@@ -905,18 +962,8 @@ pub struct Process {
     /// remain `run' until a later wait.  PTY subprocesses have their own
     /// same-wait status rule.
     pub eof_sent_to_process: bool,
-    /// OS-level stdout pipe for non-blocking reads (pipe mode).
-    pub child_stdout: Option<std::process::ChildStdout>,
-    /// OS-level stderr pipe for non-blocking reads (pipe mode).
-    pub child_stderr: Option<std::process::ChildStderr>,
-    /// PTY master handle for resize and I/O (PTY mode).
-    pub pty_master: Option<Box<dyn portable_pty::MasterPty + Send>>,
-    /// PTY child process handle (PTY mode).
-    pub pty_child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
-    /// PTY reader for non-blocking reads from the master side.
-    pub pty_reader: Option<Box<dyn IoRead + Send>>,
-    /// PTY writer for sending input to the master side.
-    pub pty_writer: Option<Box<dyn std::io::Write + Send>>,
+    /// Native resources exist only while this process has active I/O.
+    live_io: LiveProcessIo,
     /// Current peer address for datagram network processes, as Lisp.
     pub datagram_address: Value,
     /// Current peer address for datagram network processes, as a Rust socket address.
@@ -924,11 +971,6 @@ pub struct Process {
     /// Current peer address for Unix datagram network processes.
     #[cfg(unix)]
     pub datagram_unix_path: Option<PathBuf>,
-    pub network_socket: Option<NetworkSocket>,
-    pending_network_connect: Option<PendingNetworkConnect>,
-    /// TLS-wrapped stream for encrypted network connections.
-    /// When `Some`, reads/writes go through this instead of `socket`.
-    pub(crate) tls_stream: Option<TlsStream>,
     /// GNU-compatible GnuTLS initialization stage for this process.
     pub(crate) gnutls_initstage: GnutlsInitStage,
     /// Deferred parameters set by `gnutls-asynchronous-parameters`.
@@ -953,13 +995,26 @@ impl std::fmt::Debug for Process {
             .field("pending_terminal_status", &self.pending_terminal_status)
             .field("buffer", &self.buffer)
             .field("childp", &self.childp)
-            .field("pty_master", &self.pty_master.as_ref().map(|_| ".."))
-            .field("pty_child", &self.pty_child.is_some())
-            .field("pty_reader", &self.pty_reader.as_ref().map(|_| ".."))
-            .field("pty_writer", &self.pty_writer.as_ref().map(|_| ".."))
+            .field(
+                "pty_master",
+                &self.live_io.pty_master.as_ref().map(|_| ".."),
+            )
+            .field("pty_child", &self.live_io.pty_child.is_some())
+            .field(
+                "pty_reader",
+                &self.live_io.pty_reader.as_ref().map(|_| ".."),
+            )
+            .field(
+                "pty_writer",
+                &self.live_io.pty_writer.as_ref().map(|_| ".."),
+            )
             .field(
                 "network_socket",
-                &self.network_socket.as_ref().map(NetworkSocket::kind_name),
+                &self
+                    .live_io
+                    .network_socket
+                    .as_ref()
+                    .map(NetworkSocket::kind_name),
             )
             .finish_non_exhaustive()
     }
@@ -1110,7 +1165,7 @@ impl ProcessWaitBackend {
                                     ready_processes.push(id);
                                 }
                                 if event.writable
-                                    && (process.pending_network_connect.is_some()
+                                    && (process.live_io.pending_network_connect.is_some()
                                         || !process.write_queue.is_nil())
                                 {
                                     writable_processes.push(id);
@@ -1198,13 +1253,13 @@ fn process_name_runtime(name: Value) -> String {
 
 fn process_is_datagram_network(proc: &Process) -> bool {
     let is_datagram = matches!(
-        proc.network_socket.as_ref(),
+        proc.live_io.network_socket.as_ref(),
         Some(NetworkSocket::UdpSocket(_))
     );
     #[cfg(unix)]
     let is_datagram = is_datagram
         || matches!(
-            proc.network_socket.as_ref(),
+            proc.live_io.network_socket.as_ref(),
             Some(NetworkSocket::UnixDatagram(_))
         );
     is_datagram
@@ -2230,13 +2285,13 @@ enum ProcessOutputSource {
 }
 
 fn process_output_source(proc: &Process) -> Option<ProcessOutputSource> {
-    if proc.pty_reader.is_some() {
+    if proc.live_io.pty_reader.is_some() {
         Some(ProcessOutputSource::Pty)
-    } else if proc.child_stdout.is_some() {
+    } else if proc.live_io.child_stdout.is_some() {
         Some(ProcessOutputSource::ChildStdout)
-    } else if proc.child_stderr.is_some() {
+    } else if proc.live_io.child_stderr.is_some() {
         Some(ProcessOutputSource::ChildStderr)
-    } else if proc.tls_stream.is_some() || proc.network_socket.is_some() {
+    } else if proc.live_io.tls_stream.is_some() || proc.live_io.network_socket.is_some() {
         Some(ProcessOutputSource::Network)
     } else {
         None
@@ -2344,7 +2399,8 @@ fn process_has_readable_process_io(proc: &Process) -> bool {
 }
 
 fn process_defers_pty_status_after_explicit_coding(proc: &Process) -> bool {
-    proc.coding_explicitly_set && (proc.pty_child.is_some() || proc.pty_reader.is_some())
+    proc.coding_explicitly_set
+        && (proc.live_io.pty_child.is_some() || proc.live_io.pty_reader.is_some())
 }
 
 fn process_defers_status_poll_while_readable_pty(proc: &Process) -> bool {
@@ -2381,10 +2437,10 @@ fn process_should_defer_explicit_coding_status_after_output(
 
 fn process_is_harness_record_without_write_source(proc: &Process) -> bool {
     proc.os_pid.is_none()
-        && proc.child.is_none()
-        && proc.pty_writer.is_none()
-        && proc.tls_stream.is_none()
-        && proc.network_socket.is_none()
+        && proc.live_io.child.is_none()
+        && proc.live_io.pty_writer.is_none()
+        && proc.live_io.tls_stream.is_none()
+        && proc.live_io.network_socket.is_none()
 }
 
 impl super::eval::Context {
@@ -2455,7 +2511,7 @@ fn pending_network_connect_id(
     Ok(processes
         .get(id)
         .is_some_and(|proc| {
-            proc.kind == ProcessKind::Network && proc.pending_network_connect.is_some()
+            proc.kind == ProcessKind::Network && proc.live_io.pending_network_connect.is_some()
         })
         .then_some(id))
 }
@@ -2535,7 +2591,8 @@ fn pending_network_connect_has_ready_async_dns(pending: &PendingNetworkConnect) 
 }
 
 fn process_has_ready_async_dns(proc: &Process) -> bool {
-    proc.pending_network_connect
+    proc.live_io
+        .pending_network_connect
         .as_ref()
         .is_some_and(pending_network_connect_has_ready_async_dns)
 }
@@ -2726,7 +2783,7 @@ fn apply_network_socket_option_to_process(
     proc: &mut Process,
     spec: NetworkSocketOptionSpec,
 ) -> EvalResult {
-    if let Some(socket) = proc.network_socket.as_ref() {
+    if let Some(socket) = proc.live_io.network_socket.as_ref() {
         return match socket {
             NetworkSocket::TcpStream(stream) => {
                 apply_network_socket_option_to_socket(&SockRef::from(stream), spec)
@@ -2760,7 +2817,7 @@ fn apply_network_socket_option_to_process(
         };
     }
 
-    if let Some(tls) = proc.tls_stream.as_ref() {
+    if let Some(tls) = proc.live_io.tls_stream.as_ref() {
         return apply_network_socket_option_to_socket(&SockRef::from(tls.tcp_stream()), spec);
     }
 
@@ -3500,32 +3557,56 @@ impl ProcessManager {
             return;
         };
 
-        if let Some(stdout) = proc.child_stdout.as_ref() {
+        if let Some(stdout) = proc.live_io.child_stdout.as_ref() {
             Self::unregister_child_stdout_from_poller(poller, stdout);
         }
-        if let Some(stderr) = proc.child_stderr.as_ref() {
+        if let Some(stderr) = proc.live_io.child_stderr.as_ref() {
             Self::unregister_child_stderr_from_poller(poller, stderr);
         }
-        if let Some(stdin) = proc.child.as_ref().and_then(|child| child.stdin.as_ref()) {
+        if let Some(stdin) = proc
+            .live_io
+            .child
+            .as_ref()
+            .and_then(|child| child.stdin.as_ref())
+        {
             Self::unregister_child_stdin_writable_from_poller(poller, stdin);
         }
-        if let Some(status_source) = proc.child_status_source.as_ref() {
+        if let Some(status_source) = proc.live_io.child_status_source.as_ref() {
             status_source.unregister_from_poller(poller);
         }
-        if let Some(tls) = proc.tls_stream.as_ref() {
+        if let Some(tls) = proc.live_io.tls_stream.as_ref() {
             let _ = poller.delete(tls.tcp_stream());
         }
-        if let Some(socket) = proc.network_socket.as_ref() {
+        if let Some(socket) = proc.live_io.network_socket.as_ref() {
             socket.unregister_readable(poller);
         }
         #[cfg(unix)]
         if let Some(master) = proc
+            .live_io
             .pty_master
             .as_ref()
             .and_then(|master| master.as_raw_fd())
         {
             let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(master) };
             let _ = poller.delete(borrowed);
+        }
+    }
+
+    /// GNU `deactivate_process` translated into the Rust ownership model.
+    ///
+    /// Poll registrations borrow native descriptors, so unregister them
+    /// before dropping their single aggregate owner.  Durable Lisp identity,
+    /// status, callbacks, and captured output remain on `Process`.
+    fn deactivate_process_io(poller: Option<&polling::Poller>, proc: &mut Process) {
+        Self::unregister_process_poll_sources(poller, proc);
+        drop(std::mem::take(&mut proc.live_io));
+        proc.gnutls_initstage = GnutlsInitStage::Empty;
+        proc.gnutls_boot_parameters = Value::NIL;
+    }
+
+    fn deactivate_terminal_process_io(&mut self, id: ProcessId) {
+        if let Some(proc) = self.processes.get_mut(&id) {
+            Self::deactivate_process_io(self.wait_backend.poller(), proc);
         }
     }
 
@@ -3716,23 +3797,13 @@ impl ProcessManager {
             tty_stdout,
             tty_stderr,
             os_pid: None,
-            child_status_source: None,
-            child: None,
             child_stdin_eof_sink: false,
             eof_sent_to_process: false,
-            child_stdout: None,
-            child_stderr: None,
-            pty_master: None,
-            pty_child: None,
-            pty_reader: None,
-            pty_writer: None,
+            live_io: LiveProcessIo::default(),
             datagram_address: Value::NIL,
             datagram_socket_addr: None,
             #[cfg(unix)]
             datagram_unix_path: None,
-            network_socket: None,
-            pending_network_connect: None,
-            tls_stream: None,
             gnutls_initstage: GnutlsInitStage::Empty,
             gnutls_boot_parameters: Value::NIL,
             mark: super::marker::make_marker_value(None, None, false),
@@ -3800,7 +3871,7 @@ impl ProcessManager {
             .get_mut(&id)
             .ok_or_else(|| "Process not found".to_string())?;
 
-        if proc.child.is_some() || proc.pty_child.is_some() {
+        if proc.live_io.child.is_some() || proc.live_io.pty_child.is_some() {
             return Ok(()); // Already spawned
         }
 
@@ -3928,10 +3999,10 @@ impl ProcessManager {
         }
 
         if let Some(proc) = self.processes.get_mut(&id) {
-            proc.child_stdout = stdout;
+            proc.live_io.child_stdout = stdout;
             proc.os_pid = os_pid;
-            proc.child_status_source = child_status_source;
-            proc.child = Some(child);
+            proc.live_io.child_status_source = child_status_source;
+            proc.live_io.child = Some(child);
             proc.status = process_status_run_value();
             // Pipe-mode processes don't have a real TTY.
             proc.tty_name = Value::NIL;
@@ -3981,7 +4052,7 @@ impl ProcessManager {
                     Self::register_child_stderr_with_poller(poller, stderr, stderr_id);
                 }
                 if let Some(stderr_proc) = self.processes.get_mut(&stderr_id) {
-                    stderr_proc.child_stderr = stderr;
+                    stderr_proc.live_io.child_stderr = stderr;
                     stderr_proc.status = process_status_run_value();
                 }
             }
@@ -4129,8 +4200,8 @@ impl ProcessManager {
             }
             if let Some(proc) = self.processes.get_mut(&id) {
                 proc.os_pid = os_pid;
-                proc.child_status_source = child_status_source;
-                proc.child = Some(child);
+                proc.live_io.child_status_source = child_status_source;
+                proc.live_io.child = Some(child);
             }
             (Some(stderr_id), child_stderr)
         } else {
@@ -4167,8 +4238,8 @@ impl ProcessManager {
             }
             if let Some(proc) = self.processes.get_mut(&id) {
                 proc.os_pid = os_pid;
-                proc.child_status_source = child_status_source;
-                proc.pty_child = Some(pty_child);
+                proc.live_io.child_status_source = child_status_source;
+                proc.live_io.pty_child = Some(pty_child);
             }
             (None, None)
         };
@@ -4197,9 +4268,9 @@ impl ProcessManager {
         }
 
         if let Some(proc) = self.processes.get_mut(&id) {
-            proc.pty_master = Some(pty_pair.master);
-            proc.pty_reader = Some(pty_read);
-            proc.pty_writer = Some(Box::new(pty_write));
+            proc.live_io.pty_master = Some(pty_pair.master);
+            proc.live_io.pty_reader = Some(pty_read);
+            proc.live_io.pty_writer = Some(Box::new(pty_write));
             proc.status = process_status_run_value();
             proc.tty_name = tty_name;
             proc.tty_stdin = true;
@@ -4234,7 +4305,7 @@ impl ProcessManager {
 
     fn deactivate_child_status_source(&mut self, id: ProcessId) {
         if let Some(proc) = self.processes.get_mut(&id)
-            && let Some(status_source) = proc.child_status_source.take()
+            && let Some(status_source) = proc.live_io.child_status_source.take()
             && let Some(poller) = self.wait_backend.poller()
         {
             status_source.unregister_from_poller(poller);
@@ -4252,7 +4323,7 @@ impl ProcessManager {
         // the same nonblocking child-status query, and on Windows it maps to
         // the process handle wait path that GNU's w32 layer uses alongside pipe
         // reader events.
-        if let Some(ref mut pty_child) = proc.pty_child {
+        if let Some(ref mut pty_child) = proc.live_io.pty_child {
             match pty_child.try_wait() {
                 Ok(Some(status)) => {
                     // Preserve the real exit code and signal-death status, as GNU
@@ -4271,7 +4342,7 @@ impl ProcessManager {
         }
 
         // Pipe child path.
-        let child = proc.child.as_mut()?;
+        let child = proc.live_io.child.as_mut()?;
         match child.try_wait() {
             Ok(Some(status)) => Some(process_status_from_exit(&status)),
             Ok(None) => None, // Still running
@@ -4306,7 +4377,7 @@ impl ProcessManager {
             return ProcessOutputRead::NoSource;
         };
         let read_len = process_read_buffer_len(proc);
-        let Some(stdout) = proc.child_stdout.as_mut() else {
+        let Some(stdout) = proc.live_io.child_stdout.as_mut() else {
             return ProcessOutputRead::NoSource;
         };
 
@@ -4339,7 +4410,7 @@ impl ProcessManager {
             return ProcessOutputRead::NoSource;
         };
         let read_len = process_read_buffer_len(proc);
-        let Some(stderr) = proc.child_stderr.as_mut() else {
+        let Some(stderr) = proc.live_io.child_stderr.as_mut() else {
             return ProcessOutputRead::NoSource;
         };
 
@@ -4368,7 +4439,7 @@ impl ProcessManager {
             return ProcessOutputRead::NoSource;
         };
         let read_len = process_read_buffer_len(proc);
-        let Some(reader) = proc.pty_reader.as_mut() else {
+        let Some(reader) = proc.live_io.pty_reader.as_mut() else {
             return ProcessOutputRead::NoSource;
         };
 
@@ -4388,7 +4459,7 @@ impl ProcessManager {
         };
 
         let read_len = process_read_buffer_len(proc);
-        if let Some(ref mut tls) = proc.tls_stream {
+        if let Some(ref mut tls) = proc.live_io.tls_stream {
             let mut buf = vec![0u8; read_len];
             let full_read_len = buf.len();
             let result = tls.read_process_output(&mut buf);
@@ -4399,7 +4470,7 @@ impl ProcessManager {
             return read;
         }
 
-        if proc.network_socket.is_some() {
+        if proc.live_io.network_socket.is_some() {
             enum RawNetworkRead {
                 Stream(std::io::Result<usize>),
                 Udp(std::io::Result<(usize, SocketAddr)>),
@@ -4411,7 +4482,7 @@ impl ProcessManager {
             let mut buf = vec![0u8; read_len];
             let full_read_len = buf.len();
             let raw_read = {
-                let socket = proc.network_socket.as_mut().expect("checked above");
+                let socket = proc.live_io.network_socket.as_mut().expect("checked above");
                 match socket.read_stream_output(&mut buf) {
                     Some(result) => RawNetworkRead::Stream(result),
                     None => match socket {
@@ -4518,8 +4589,8 @@ impl ProcessManager {
     fn deactivate_network_process_io(&mut self, id: ProcessId) {
         if let Some(proc) = self.processes.get_mut(&id) {
             Self::unregister_process_poll_sources(self.wait_backend.poller(), proc);
-            proc.tls_stream = None;
-            proc.network_socket = None;
+            proc.live_io.tls_stream = None;
+            proc.live_io.network_socket = None;
             proc.gnutls_initstage = GnutlsInitStage::Empty;
         }
     }
@@ -4530,7 +4601,7 @@ impl ProcessManager {
     fn deactivate_stderr_pipe_process_io(&mut self, id: ProcessId) {
         if let Some(proc) = self.processes.get_mut(&id) {
             Self::unregister_process_poll_sources(self.wait_backend.poller(), proc);
-            proc.child_stderr = None;
+            proc.live_io.child_stderr = None;
         }
     }
 
@@ -4542,14 +4613,15 @@ impl ProcessManager {
             #[cfg(unix)]
             if let (Some(poller), Some(master)) = (
                 self.wait_backend.poller(),
-                proc.pty_master
+                proc.live_io
+                    .pty_master
                     .as_ref()
                     .and_then(|master| master.as_raw_fd()),
             ) {
                 let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(master) };
                 let _ = poller.delete(borrowed);
             }
-            proc.pty_reader = None;
+            proc.live_io.pty_reader = None;
         }
     }
 
@@ -4558,12 +4630,12 @@ impl ProcessManager {
         if let Some(proc) = self.processes.get_mut(&id) {
             Self::unregister_process_poll_sources(self.wait_backend.poller(), proc);
             kill_real_process_child(proc, signal_kill_number());
-            proc.tls_stream.take();
+            proc.live_io.tls_stream.take();
             proc.gnutls_initstage = GnutlsInitStage::Empty;
             proc.gnutls_boot_parameters = Value::NIL;
-            proc.network_socket.take();
+            proc.live_io.network_socket.take();
             proc.status = process_status_signal_value(signal_kill_number());
-            proc.child_status_source = None;
+            proc.live_io.child_status_source = None;
             true
         } else {
             false
@@ -4573,8 +4645,6 @@ impl ProcessManager {
     /// Delete a process entirely.
     pub fn delete_process(&mut self, id: ProcessId) -> bool {
         if let Some(mut proc) = self.processes.remove(&id) {
-            Self::unregister_process_poll_sources(self.wait_backend.poller(), &proc);
-            proc.child_status_source = None;
             if matches!(
                 proc.kind,
                 ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
@@ -4588,13 +4658,10 @@ impl ProcessManager {
                 kill_real_process_child(&mut proc, signal_kill_number());
                 proc.status = process_status_signal_value(signal_kill_number());
             }
+            wait_for_real_process_child_termination(&mut proc);
             proc.status_notify_pending = false;
             proc.pending_terminal_status = Value::NIL;
-
-            proc.tls_stream.take();
-            proc.gnutls_initstage = GnutlsInitStage::Empty;
-            proc.gnutls_boot_parameters = Value::NIL;
-            proc.network_socket.take();
+            Self::deactivate_process_io(self.wait_backend.poller(), &mut proc);
             self.deleted_processes.insert(id, proc);
             true
         } else {
@@ -4639,13 +4706,7 @@ impl ProcessManager {
     /// status (exit/signal) must be preserved for `process-status' on the value.
     pub fn reap_exited_process(&mut self, id: ProcessId) {
         if let Some(mut proc) = self.processes.remove(&id) {
-            Self::unregister_process_poll_sources(self.wait_backend.poller(), &proc);
-            // Release OS resources the (already dead) process held; keep the
-            // recorded status and identity intact.
-            proc.child = None;
-            proc.pty_child = None;
-            proc.child_stdout = None;
-            proc.child_stderr = None;
+            Self::deactivate_process_io(self.wait_backend.poller(), &mut proc);
             self.deleted_processes.insert(id, proc);
         }
     }
@@ -4703,7 +4764,7 @@ impl ProcessManager {
         #[cfg(unix)]
         {
             use std::os::unix::io::AsRawFd;
-            let stdout = proc.child_stdout.as_ref().ok_or_else(|| {
+            let stdout = proc.live_io.child_stdout.as_ref().ok_or_else(|| {
                 signal(
                     "error",
                     vec![Value::string("Pipe process has no stdout file descriptor")],
@@ -4748,23 +4809,23 @@ impl ProcessManager {
                 if p.status_notify_pending {
                     return true;
                 }
-                if p.pending_network_connect.is_some() {
+                if p.live_io.pending_network_connect.is_some() {
                     return true;
                 }
                 if !process_has_readable_process_io(p) {
                     return false;
                 }
-                if p.child.is_some() || p.pty_child.is_some() {
+                if p.live_io.child.is_some() || p.live_io.pty_child.is_some() {
                     return true;
                 }
-                if p.network_socket.is_some() || p.tls_stream.is_some() {
+                if p.live_io.network_socket.is_some() || p.live_io.tls_stream.is_some() {
                     return true;
                 }
                 // A stderr pipe-process (make-process :stderr) has no child of
                 // its own; its readable source is the child's stderr fd parked
                 // in `child_stderr`.  It must be serviced so its output is
                 // drained and it reaches a terminal state on EOF.
-                if p.child_stderr.is_some() {
+                if p.live_io.child_stderr.is_some() {
                     return true;
                 }
                 false
@@ -4889,9 +4950,9 @@ impl ProcessManager {
             return Ok(ProcessWriteAttempt::NoSource);
         };
 
-        let result = if let Some(ref mut pty_writer) = proc.pty_writer {
+        let result = if let Some(ref mut pty_writer) = proc.live_io.pty_writer {
             pty_writer.write(bytes)
-        } else if let Some(ref mut child) = proc.child {
+        } else if let Some(ref mut child) = proc.live_io.child {
             let Some(ref mut stdin) = child.stdin else {
                 if proc.child_stdin_eof_sink {
                     return Ok(ProcessWriteAttempt::Written(bytes.len()));
@@ -4905,9 +4966,9 @@ impl ProcessManager {
                 let _ = sys::set_fd_nonblocking(fd);
             }
             stdin.write(bytes)
-        } else if let Some(ref mut tls) = proc.tls_stream {
+        } else if let Some(ref mut tls) = proc.live_io.tls_stream {
             tls.write_process_input_once(bytes)
-        } else if let Some(socket) = proc.network_socket.as_mut() {
+        } else if let Some(socket) = proc.live_io.network_socket.as_mut() {
             let datagram_address = proc.datagram_socket_addr;
             #[cfg(unix)]
             let datagram_unix_path = proc.datagram_unix_path.clone();
@@ -4953,12 +5014,12 @@ impl ProcessManager {
     pub fn register_socket_fd(&self, id: ProcessId) -> Result<(), String> {
         let proc = self.processes.get(&id).ok_or("Process not found")?;
         if let Some(poller) = self.wait_backend.poller() {
-            if let Some(tls) = proc.tls_stream.as_ref() {
+            if let Some(tls) = proc.live_io.tls_stream.as_ref() {
                 Self::register_readable_source(poller, tls.tcp_stream(), id)?;
                 return Ok(());
             }
 
-            let socket = proc.network_socket.as_ref().ok_or("No socket")?;
+            let socket = proc.live_io.network_socket.as_ref().ok_or("No socket")?;
             socket.register_readable(poller, id)?;
         }
         Ok(())
@@ -4967,7 +5028,7 @@ impl ProcessManager {
     pub fn register_socket_writable_fd(&self, id: ProcessId) -> Result<(), String> {
         let proc = self.processes.get(&id).ok_or("Process not found")?;
         if let Some(poller) = self.wait_backend.poller() {
-            let socket = proc.network_socket.as_ref().ok_or("No socket")?;
+            let socket = proc.live_io.network_socket.as_ref().ok_or("No socket")?;
             socket.register_writable(poller, id)?;
         }
         Ok(())
@@ -4981,7 +5042,12 @@ impl ProcessManager {
             return;
         };
 
-        if let Some(stdin) = proc.child.as_ref().and_then(|child| child.stdin.as_ref()) {
+        if let Some(stdin) = proc
+            .live_io
+            .child
+            .as_ref()
+            .and_then(|child| child.stdin.as_ref())
+        {
             match interest {
                 ProcessWriteInterest::Readable => {
                     Self::unregister_child_stdin_writable_from_poller(poller, stdin);
@@ -4994,23 +5060,24 @@ impl ProcessManager {
         }
 
         let wants_write = matches!(interest, ProcessWriteInterest::ReadableAndWritable)
-            || proc.pending_network_connect.is_some();
+            || proc.live_io.pending_network_connect.is_some();
         let event = if wants_write {
             polling::Event::all(id as usize)
         } else {
             polling::Event::readable(id as usize)
         };
 
-        if let Some(tls) = proc.tls_stream.as_ref() {
+        if let Some(tls) = proc.live_io.tls_stream.as_ref() {
             let _ = Self::modify_poll_source(poller, tls.tcp_stream(), event);
             return;
         }
-        if let Some(socket) = proc.network_socket.as_ref() {
+        if let Some(socket) = proc.live_io.network_socket.as_ref() {
             let _ = socket.modify_interest(poller, id, event);
             return;
         }
         #[cfg(unix)]
         if let Some(master) = proc
+            .live_io
             .pty_master
             .as_ref()
             .and_then(|master| master.as_raw_fd())
@@ -5052,8 +5119,8 @@ impl ProcessManager {
         };
         let local_addr = started.stream.local_addr().ok();
         if let Some(proc) = self.processes.get_mut(&id) {
-            proc.network_socket = Some(NetworkSocket::TcpStream(started.stream));
-            proc.pending_network_connect = Some(PendingNetworkConnect::Tcp {
+            proc.live_io.network_socket = Some(NetworkSocket::TcpStream(started.stream));
+            proc.live_io.pending_network_connect = Some(PendingNetworkConnect::Tcp {
                 remaining_addrs: started.remaining_addrs,
                 socket_options: options.to_vec(),
             });
@@ -5071,10 +5138,11 @@ impl ProcessManager {
         let Some(proc) = self.processes.get(&id) else {
             return Ok(PendingNetworkConnectCompletion::None);
         };
-        if proc.pending_network_connect.is_none() {
+        if proc.live_io.pending_network_connect.is_none() {
             return Ok(PendingNetworkConnectCompletion::None);
         }
         if proc
+            .live_io
             .pending_network_connect
             .as_ref()
             .is_some_and(|pending| matches!(pending, PendingNetworkConnect::Dns(_)))
@@ -5082,6 +5150,7 @@ impl ProcessManager {
             return self.complete_pending_dns_network_connect(id);
         }
         let connect_error = proc
+            .live_io
             .network_socket
             .as_ref()
             .and_then(NetworkSocket::take_pending_connect_error)
@@ -5093,12 +5162,12 @@ impl ProcessManager {
             let pending = self
                 .processes
                 .get_mut(&id)
-                .and_then(|proc| proc.pending_network_connect.take());
+                .and_then(|proc| proc.live_io.pending_network_connect.take());
             let Some(pending) = pending else {
                 return Ok(PendingNetworkConnectCompletion::None);
             };
             if let Some(proc) = self.processes.get(&id)
-                && let Some(socket) = proc.network_socket.as_ref()
+                && let Some(socket) = proc.live_io.network_socket.as_ref()
                 && let Some(poller) = self.wait_backend.poller()
             {
                 socket.unregister_readable(poller);
@@ -5123,8 +5192,8 @@ impl ProcessManager {
                                 .unwrap_or(Value::NIL);
                             if let Some(proc) = self.processes.get_mut(&id) {
                                 proc.status = process_status_failed_value(code);
-                                proc.network_socket = None;
-                                proc.pending_network_connect = None;
+                                proc.live_io.network_socket = None;
+                                proc.live_io.pending_network_connect = None;
                             }
                             Ok(PendingNetworkConnectCompletion::Failed { sentinel, code })
                         }
@@ -5140,8 +5209,8 @@ impl ProcessManager {
                 .unwrap_or(Value::NIL);
             if let Some(proc) = self.processes.get_mut(&id) {
                 proc.status = process_status_failed_value(code);
-                proc.network_socket = None;
-                proc.pending_network_connect = None;
+                proc.live_io.network_socket = None;
+                proc.live_io.pending_network_connect = None;
             }
             return Ok(PendingNetworkConnectCompletion::Failed { sentinel, code });
         }
@@ -5152,13 +5221,13 @@ impl ProcessManager {
             .map(|proc| proc.sentinel)
             .unwrap_or(Value::NIL);
         if let Some(proc) = self.processes.get(&id)
-            && let Some(socket) = proc.network_socket.as_ref()
+            && let Some(socket) = proc.live_io.network_socket.as_ref()
             && let Some(poller) = self.wait_backend.poller()
         {
             socket.unregister_readable(poller);
         }
         if let Some(proc) = self.processes.get_mut(&id) {
-            proc.pending_network_connect = None;
+            proc.live_io.pending_network_connect = None;
             proc.status = process_status_run_value();
         }
         let tls_parameters = self
@@ -5189,7 +5258,8 @@ impl ProcessManager {
         let Some(proc) = self.processes.get(&id) else {
             return Ok(PendingNetworkConnectCompletion::None);
         };
-        let Some(PendingNetworkConnect::Dns(request)) = proc.pending_network_connect.as_ref()
+        let Some(PendingNetworkConnect::Dns(request)) =
+            proc.live_io.pending_network_connect.as_ref()
         else {
             return Ok(PendingNetworkConnectCompletion::None);
         };
@@ -5200,7 +5270,7 @@ impl ProcessManager {
         let pending = self
             .processes
             .get_mut(&id)
-            .and_then(|proc| proc.pending_network_connect.take());
+            .and_then(|proc| proc.live_io.pending_network_connect.take());
         let Some(PendingNetworkConnect::Dns(request)) = pending else {
             return Ok(PendingNetworkConnectCompletion::None);
         };
@@ -5209,7 +5279,8 @@ impl ProcessManager {
             Ok(result) => result,
             Err(mpsc::TryRecvError::Empty) => {
                 if let Some(proc) = self.processes.get_mut(&id) {
-                    proc.pending_network_connect = Some(PendingNetworkConnect::Dns(request));
+                    proc.live_io.pending_network_connect =
+                        Some(PendingNetworkConnect::Dns(request));
                 }
                 return Ok(PendingNetworkConnectCompletion::None);
             }
@@ -5230,8 +5301,8 @@ impl ProcessManager {
                             .unwrap_or(Value::NIL);
                         if let Some(proc) = self.processes.get_mut(&id) {
                             proc.status = process_status_failed_value(code);
-                            proc.network_socket = None;
-                            proc.pending_network_connect = None;
+                            proc.live_io.network_socket = None;
+                            proc.live_io.pending_network_connect = None;
                         }
                         Ok(PendingNetworkConnectCompletion::Failed { sentinel, code })
                     }
@@ -5243,8 +5314,8 @@ impl ProcessManager {
                     proc.status = process_status_failed_message_value(format!(
                         "Name lookup of {host} failed"
                     ));
-                    proc.network_socket = None;
-                    proc.pending_network_connect = None;
+                    proc.live_io.network_socket = None;
+                    proc.live_io.pending_network_connect = None;
                 }
                 Ok(PendingNetworkConnectCompletion::DnsFailed)
             }
@@ -5285,7 +5356,7 @@ impl ProcessManager {
                 let Some(server) = self.processes.get(&id) else {
                     return accepted;
                 };
-                match server.network_socket.as_ref() {
+                match server.live_io.network_socket.as_ref() {
                     Some(NetworkSocket::TcpListener(listener)) => match listener.accept() {
                         Ok((stream, remote_addr)) => Ok(Some(AcceptedSocket::Tcp {
                             local_addr: stream.local_addr().ok(),
@@ -5544,7 +5615,7 @@ impl ProcessManager {
                 ProcessKind::Network,
             );
             if let Some(client) = self.get_mut(client_id) {
-                client.network_socket = Some(socket);
+                client.live_io.network_socket = Some(socket);
                 client.status = process_status_run_value();
                 client.childp = contact;
                 client.filter = server_filter;
@@ -6216,7 +6287,9 @@ impl super::eval::Context {
                 .processes
                 .get(pid)
                 .map(|p| {
-                    p.kind == ProcessKind::Pipe && p.child_stderr.is_some() && p.child.is_none()
+                    p.kind == ProcessKind::Pipe
+                        && p.live_io.child_stderr.is_some()
+                        && p.live_io.child.is_none()
                 })
                 .unwrap_or(false);
 
@@ -6532,8 +6605,11 @@ impl super::eval::Context {
             .processes
             .get(pid)
             .is_some_and(|proc| process_status_is_terminal_for_notify(&proc.status));
-        if terminal && self.delete_exited_processes_enabled() {
-            self.processes.reap_exited_process(pid);
+        if terminal {
+            self.processes.deactivate_terminal_process_io(pid);
+            if self.delete_exited_processes_enabled() {
+                self.processes.reap_exited_process(pid);
+            }
         }
         Ok((saw_output, true))
     }
@@ -7478,7 +7554,7 @@ fn send_signal_to_process(proc: &Process, signal_num: i32) -> i32 {
 }
 
 fn process_has_subprocess_backing(proc: &Process) -> bool {
-    proc.os_pid.is_some() || proc.child.is_some() || proc.pty_child.is_some()
+    proc.os_pid.is_some() || proc.live_io.child.is_some() || proc.live_io.pty_child.is_some()
 }
 
 fn record_unbacked_real_process_signal(proc: &mut Process, signal_num: i32) -> bool {
@@ -7509,11 +7585,26 @@ fn kill_real_process_child(proc: &mut Process, signal_num: i32) {
     if record_unbacked_real_process_signal(proc, signal_num) {
         return;
     }
-    if let Some(child) = proc.child.as_mut() {
+    if let Some(child) = proc.live_io.child.as_mut() {
         let _ = child.kill();
     }
-    if let Some(pty_child) = proc.pty_child.as_mut() {
+    if let Some(pty_child) = proc.live_io.pty_child.as_mut() {
         let _ = pty_child.kill();
+    }
+}
+
+/// Reap a child that is already terminal or has just been killed explicitly.
+///
+/// Dropping either Rust child handle closes the handle but does not perform
+/// Unix `waitpid`, which leaves a zombie.  Call this only on the synchronous
+/// delete path; normal status polling has already reaped naturally exited
+/// children through `try_wait`.
+fn wait_for_real_process_child_termination(proc: &mut Process) {
+    if let Some(child) = proc.live_io.child.as_mut() {
+        let _ = child.wait();
+    }
+    if let Some(pty_child) = proc.live_io.pty_child.as_mut() {
+        let _ = pty_child.wait();
     }
 }
 
@@ -8644,7 +8735,7 @@ pub(crate) fn builtin_gnutls_bye(eval: &mut super::eval::Context, args: Vec<Valu
         .processes
         .get_mut(id)
         .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
-    let Some(tls_stream) = proc.tls_stream.as_mut() else {
+    let Some(tls_stream) = proc.live_io.tls_stream.as_mut() else {
         return Ok(Value::NIL);
     };
     match tls_stream.send_close_notify(args[1].is_nil()) {
@@ -8663,7 +8754,7 @@ pub(crate) fn builtin_gnutls_deinit(
         .processes
         .get_mut(id)
         .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
-    if proc.tls_stream.take().is_some() {
+    if proc.live_io.tls_stream.take().is_some() {
         proc.gnutls_initstage = GnutlsInitStage::Callbacks;
         proc.gnutls_boot_parameters = Value::NIL;
         Ok(Value::T)
@@ -8697,6 +8788,7 @@ pub(crate) fn builtin_gnutls_peer_status(
         .ok_or_else(|| signal("error", vec![Value::string("Process not found")]))?;
     if proc.gnutls_initstage == GnutlsInitStage::Ready {
         Ok(proc
+            .live_io
             .tls_stream
             .as_ref()
             .map(|tls| gnutls_peer_status_to_value(&tls.peer_status()))
@@ -8760,10 +8852,10 @@ fn upgrade_process_to_tls<B: TlsClientBackend>(
     }
 
     // Take the plain TCP stream; it will be owned by the TLS stream.
-    let tcp_stream = match proc.network_socket.take() {
+    let tcp_stream = match proc.live_io.network_socket.take() {
         Some(NetworkSocket::TcpStream(stream)) => stream,
         Some(other) => {
-            proc.network_socket = Some(other);
+            proc.live_io.network_socket = Some(other);
             return Err(signal(
                 "error",
                 vec![Value::string(format!(
@@ -8786,7 +8878,7 @@ fn upgrade_process_to_tls<B: TlsClientBackend>(
 
     // Store the TLS stream. The poller still watches the underlying fd
     // (which is the same fd that was registered for the plain socket).
-    proc.tls_stream = Some(tls_stream);
+    proc.live_io.tls_stream = Some(tls_stream);
     proc.gnutls_initstage = GnutlsInitStage::Ready;
     proc.gnutls_boot_parameters = Value::NIL;
 
@@ -9368,7 +9460,7 @@ fn connect_network_process_at_explicit_address(
                         proc.thread = current_thread_handle(&eval.threads);
                         proc.plist = plist_val;
                         proc.status = ProcessStatusSymbol::Open.value();
-                        proc.network_socket = Some(NetworkSocket::UdpSocket(socket));
+                        proc.live_io.network_socket = Some(NetworkSocket::UdpSocket(socket));
                         proc.datagram_socket_addr = datagram_socket_addr;
                         proc.datagram_address = datagram_address;
                         if !filter_val.is_nil() {
@@ -9429,7 +9521,7 @@ fn connect_network_process_at_explicit_address(
                 );
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
-                    proc.network_socket = Some(NetworkSocket::UdpSocket(socket));
+                    proc.live_io.network_socket = Some(NetworkSocket::UdpSocket(socket));
                     proc.datagram_socket_addr = Some(addr);
                     proc.datagram_address = socket_addr_to_lisp_value(addr);
                     proc.status = ProcessStatusSymbol::Open.value();
@@ -9521,7 +9613,7 @@ fn connect_network_process_at_explicit_address(
                     );
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.plist = plist_val;
-                    proc.network_socket = Some(NetworkSocket::TcpListener(listener));
+                    proc.live_io.network_socket = Some(NetworkSocket::TcpListener(listener));
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
                         proc.childp = process_contact_plist_put(
@@ -9606,11 +9698,13 @@ fn connect_network_process_at_explicit_address(
                     match start {
                         PendingNetworkConnectStart::Started(started) => {
                             let local_addr = started.stream.local_addr().ok();
-                            proc.network_socket = Some(NetworkSocket::TcpStream(started.stream));
-                            proc.pending_network_connect = Some(PendingNetworkConnect::Tcp {
-                                remaining_addrs: started.remaining_addrs,
-                                socket_options: socket_options.clone(),
-                            });
+                            proc.live_io.network_socket =
+                                Some(NetworkSocket::TcpStream(started.stream));
+                            proc.live_io.pending_network_connect =
+                                Some(PendingNetworkConnect::Tcp {
+                                    remaining_addrs: started.remaining_addrs,
+                                    socket_options: socket_options.clone(),
+                                });
                             ProcessManager::update_tcp_client_contact(
                                 proc,
                                 started.remote_addr,
@@ -9621,7 +9715,7 @@ fn connect_network_process_at_explicit_address(
                             proc.status = process_status_failed_value(code);
                         }
                     }
-                    if proc.pending_network_connect.is_some() {
+                    if proc.live_io.pending_network_connect.is_some() {
                         proc.gnutls_boot_parameters = tls_parameters_value;
                     }
                     apply_connection_process_flags(proc, noquery, stop);
@@ -9629,7 +9723,7 @@ fn connect_network_process_at_explicit_address(
                 if eval
                     .processes
                     .get(id)
-                    .is_some_and(|proc| proc.pending_network_connect.is_some())
+                    .is_some_and(|proc| proc.live_io.pending_network_connect.is_some())
                 {
                     eval.processes.register_socket_writable_fd(id).ok();
                 }
@@ -9663,7 +9757,7 @@ fn connect_network_process_at_explicit_address(
                 )?;
             }
             if let Some(proc) = eval.processes.get_mut(id) {
-                proc.network_socket = Some(NetworkSocket::TcpStream(stream));
+                proc.live_io.network_socket = Some(NetworkSocket::TcpStream(stream));
                 proc.status = process_status_run_value();
                 proc.childp = contact;
                 proc.plist = plist_val;
@@ -9767,7 +9861,7 @@ fn connect_network_process_at_explicit_address(
                         proc.thread = current_thread_handle(&eval.threads);
                         proc.plist = plist_val;
                         proc.status = ProcessStatusSymbol::Open.value();
-                        proc.network_socket = Some(NetworkSocket::UnixDatagram(socket));
+                        proc.live_io.network_socket = Some(NetworkSocket::UnixDatagram(socket));
                         proc.datagram_address = datagram_address;
                         proc.datagram_unix_path = datagram_unix_path;
                         if !filter_val.is_nil() {
@@ -9825,7 +9919,7 @@ fn connect_network_process_at_explicit_address(
                 );
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
-                    proc.network_socket = Some(NetworkSocket::UnixDatagram(socket));
+                    proc.live_io.network_socket = Some(NetworkSocket::UnixDatagram(socket));
                     proc.status = ProcessStatusSymbol::Open.value();
                     proc.childp = contact;
                     proc.plist = plist_val;
@@ -9900,7 +9994,8 @@ fn connect_network_process_at_explicit_address(
                         );
                         proc.thread = current_thread_handle(&eval.threads);
                         proc.plist = plist_val;
-                        proc.network_socket = Some(NetworkSocket::SeqpacketListener(listener));
+                        proc.live_io.network_socket =
+                            Some(NetworkSocket::SeqpacketListener(listener));
                         if !filter_val.is_nil() {
                             proc.filter = filter_val;
                             proc.childp = process_contact_plist_put(
@@ -9959,7 +10054,7 @@ fn connect_network_process_at_explicit_address(
                 );
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
-                    proc.network_socket = Some(NetworkSocket::SeqpacketStream(socket));
+                    proc.live_io.network_socket = Some(NetworkSocket::SeqpacketStream(socket));
                     proc.status = process_status_run_value();
                     proc.childp = contact;
                     proc.plist = plist_val;
@@ -10028,7 +10123,7 @@ fn connect_network_process_at_explicit_address(
                     );
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.plist = plist_val;
-                    proc.network_socket = Some(NetworkSocket::UnixListener(listener));
+                    proc.live_io.network_socket = Some(NetworkSocket::UnixListener(listener));
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
                         proc.childp = process_contact_plist_put(
@@ -10116,8 +10211,9 @@ fn connect_network_process_at_explicit_address(
                     }
                     match start {
                         Ok(stream) => {
-                            proc.network_socket = Some(NetworkSocket::UnixStream(stream));
-                            proc.pending_network_connect = Some(PendingNetworkConnect::Local);
+                            proc.live_io.network_socket = Some(NetworkSocket::UnixStream(stream));
+                            proc.live_io.pending_network_connect =
+                                Some(PendingNetworkConnect::Local);
                         }
                         Err(err) => {
                             proc.status = process_status_failed_value(io_error_status_code(&err));
@@ -10128,7 +10224,7 @@ fn connect_network_process_at_explicit_address(
                 if eval
                     .processes
                     .get(id)
-                    .is_some_and(|proc| proc.pending_network_connect.is_some())
+                    .is_some_and(|proc| proc.live_io.pending_network_connect.is_some())
                 {
                     eval.processes.register_socket_writable_fd(id).ok();
                 }
@@ -10145,7 +10241,7 @@ fn connect_network_process_at_explicit_address(
             );
             eval.processes.sync_process_mark(&mut eval.buffers, id)?;
             if let Some(proc) = eval.processes.get_mut(id) {
-                proc.network_socket = Some(NetworkSocket::UnixStream(stream));
+                proc.live_io.network_socket = Some(NetworkSocket::UnixStream(stream));
                 proc.status = process_status_run_value();
                 proc.childp = contact;
                 proc.plist = plist_val;
@@ -10261,7 +10357,7 @@ fn connect_datagram_network_process(
             proc.thread = current_thread_handle(&eval.threads);
             proc.plist = plist_val;
             proc.status = ProcessStatusSymbol::Open.value();
-            proc.network_socket = Some(NetworkSocket::UdpSocket(socket));
+            proc.live_io.network_socket = Some(NetworkSocket::UdpSocket(socket));
             proc.datagram_address = zero_datagram;
             proc.datagram_socket_addr = None;
             if !filter_val.is_nil() {
@@ -10317,7 +10413,7 @@ fn connect_datagram_network_process(
     );
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
     if let Some(proc) = eval.processes.get_mut(id) {
-        proc.network_socket = Some(NetworkSocket::UdpSocket(socket));
+        proc.live_io.network_socket = Some(NetworkSocket::UdpSocket(socket));
         proc.datagram_socket_addr = Some(remote_addr);
         proc.datagram_address = socket_addr_to_lisp_value(remote_addr);
         proc.status = ProcessStatusSymbol::Open.value();
@@ -10422,7 +10518,7 @@ fn listen_stream_network_process(
         );
         proc.thread = current_thread_handle(&eval.threads);
         proc.plist = plist_val;
-        proc.network_socket = Some(NetworkSocket::TcpListener(listener));
+        proc.live_io.network_socket = Some(NetworkSocket::TcpListener(listener));
         if !filter_val.is_nil() {
             proc.filter = filter_val;
             proc.childp = process_contact_plist_put(
@@ -10553,7 +10649,7 @@ fn connect_local_socket_process(
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.plist = plist_val;
                     proc.status = ProcessStatusSymbol::Open.value();
-                    proc.network_socket = Some(NetworkSocket::UnixDatagram(socket));
+                    proc.live_io.network_socket = Some(NetworkSocket::UnixDatagram(socket));
                     proc.datagram_address = datagram_address;
                     proc.datagram_unix_path = datagram_unix_path;
                     if !filter_val.is_nil() {
@@ -10614,7 +10710,7 @@ fn connect_local_socket_process(
             );
             eval.processes.sync_process_mark(&mut eval.buffers, id)?;
             if let Some(proc) = eval.processes.get_mut(id) {
-                proc.network_socket = Some(NetworkSocket::UnixDatagram(socket));
+                proc.live_io.network_socket = Some(NetworkSocket::UnixDatagram(socket));
                 proc.status = ProcessStatusSymbol::Open.value();
                 proc.childp = contact;
                 proc.plist = plist_val;
@@ -10690,7 +10786,7 @@ fn connect_local_socket_process(
                     );
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.plist = plist_val;
-                    proc.network_socket = Some(NetworkSocket::SeqpacketListener(listener));
+                    proc.live_io.network_socket = Some(NetworkSocket::SeqpacketListener(listener));
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
                         proc.childp = process_contact_plist_put(
@@ -10751,7 +10847,7 @@ fn connect_local_socket_process(
             );
             eval.processes.sync_process_mark(&mut eval.buffers, id)?;
             if let Some(proc) = eval.processes.get_mut(id) {
-                proc.network_socket = Some(NetworkSocket::SeqpacketStream(socket));
+                proc.live_io.network_socket = Some(NetworkSocket::SeqpacketStream(socket));
                 proc.status = process_status_run_value();
                 proc.childp = contact;
                 proc.plist = plist_val;
@@ -10825,7 +10921,7 @@ fn connect_local_socket_process(
                 );
                 proc.thread = current_thread_handle(&eval.threads);
                 proc.plist = plist_val;
-                proc.network_socket = Some(NetworkSocket::UnixListener(listener));
+                proc.live_io.network_socket = Some(NetworkSocket::UnixListener(listener));
                 if !filter_val.is_nil() {
                     proc.filter = filter_val;
                     proc.childp = process_contact_plist_put(
@@ -10928,8 +11024,8 @@ fn connect_local_socket_process(
                 }
                 match start {
                     Ok(stream) => {
-                        proc.network_socket = Some(NetworkSocket::UnixStream(stream));
-                        proc.pending_network_connect = Some(PendingNetworkConnect::Local);
+                        proc.live_io.network_socket = Some(NetworkSocket::UnixStream(stream));
+                        proc.live_io.pending_network_connect = Some(PendingNetworkConnect::Local);
                     }
                     Err(err) => {
                         proc.status = process_status_failed_value(io_error_status_code(&err));
@@ -10940,7 +11036,7 @@ fn connect_local_socket_process(
             if eval
                 .processes
                 .get(id)
-                .is_some_and(|proc| proc.pending_network_connect.is_some())
+                .is_some_and(|proc| proc.live_io.pending_network_connect.is_some())
             {
                 eval.processes.register_socket_writable_fd(id).ok();
             }
@@ -10957,7 +11053,7 @@ fn connect_local_socket_process(
         );
         eval.processes.sync_process_mark(&mut eval.buffers, id)?;
         if let Some(proc) = eval.processes.get_mut(id) {
-            proc.network_socket = Some(NetworkSocket::UnixStream(stream));
+            proc.live_io.network_socket = Some(NetworkSocket::UnixStream(stream));
             proc.status = process_status_run_value();
             proc.childp = contact;
             proc.plist = plist_val;
@@ -11319,8 +11415,9 @@ pub(crate) fn builtin_make_network_process(
                 match start {
                     PendingNetworkConnectStart::Started(started) => {
                         let local_addr = started.stream.local_addr().ok();
-                        proc.network_socket = Some(NetworkSocket::TcpStream(started.stream));
-                        proc.pending_network_connect = Some(PendingNetworkConnect::Tcp {
+                        proc.live_io.network_socket =
+                            Some(NetworkSocket::TcpStream(started.stream));
+                        proc.live_io.pending_network_connect = Some(PendingNetworkConnect::Tcp {
                             remaining_addrs: started.remaining_addrs,
                             socket_options: socket_options.clone(),
                         });
@@ -11335,15 +11432,16 @@ pub(crate) fn builtin_make_network_process(
                     }
                 }
             } else if let Some(pending_dns) = pending_dns {
-                proc.pending_network_connect = Some(PendingNetworkConnect::Dns(pending_dns));
+                proc.live_io.pending_network_connect =
+                    Some(PendingNetworkConnect::Dns(pending_dns));
             }
-            if proc.pending_network_connect.is_some() {
+            if proc.live_io.pending_network_connect.is_some() {
                 proc.gnutls_boot_parameters = tls_parameters_val;
             }
             apply_connection_process_flags(proc, noquery, stop);
         }
         if eval.processes.get(id).is_some_and(|proc| {
-            proc.network_socket.is_some() && proc.pending_network_connect.is_some()
+            proc.live_io.network_socket.is_some() && proc.live_io.pending_network_connect.is_some()
         }) {
             eval.processes.register_socket_writable_fd(id).ok();
         }
@@ -11377,7 +11475,7 @@ pub(crate) fn builtin_make_network_process(
         )?;
     }
     if let Some(proc) = eval.processes.get_mut(id) {
-        proc.network_socket = Some(NetworkSocket::TcpStream(stream));
+        proc.live_io.network_socket = Some(NetworkSocket::TcpStream(stream));
         proc.status = process_status_run_value();
         proc.childp = contact;
         proc.plist = plist_val;
@@ -13401,7 +13499,7 @@ pub(crate) fn builtin_set_process_datagram_address_impl(
             vec![Value::symbol("processp"), args[0]],
         ));
     };
-    match proc.network_socket.as_ref() {
+    match proc.live_io.network_socket.as_ref() {
         Some(NetworkSocket::UdpSocket(socket)) => {
             let Ok(NetworkAddressSpec::Inet(addr)) = parse_network_address_spec(&args[1]) else {
                 return Ok(Value::NIL);
@@ -13519,7 +13617,7 @@ pub(crate) fn builtin_set_process_window_size_impl(
     if !is_live {
         return Ok(Value::NIL);
     }
-    if let Some(ref pty_master) = proc.pty_master {
+    if let Some(ref pty_master) = proc.live_io.pty_master {
         let pty_size = portable_pty::PtySize {
             rows: height,
             cols: width,
@@ -13770,7 +13868,7 @@ pub(crate) fn builtin_process_send_eof(
             .ok();
         if let Some(id) = maybe_id
             && eval.processes.get(id).is_some_and(|proc| {
-                proc.kind == ProcessKind::Network && proc.pending_network_connect.is_some()
+                proc.kind == ProcessKind::Network && proc.live_io.pending_network_connect.is_some()
             })
         {
             eval.wait_while_network_process_connecting(id)?;
@@ -13782,21 +13880,21 @@ pub(crate) fn builtin_process_send_eof(
 fn send_eof_to_process(proc: &mut Process) -> EvalResult {
     proc.eof_sent_to_process = true;
 
-    if let Some(tls) = proc.tls_stream.as_mut() {
+    if let Some(tls) = proc.live_io.tls_stream.as_mut() {
         tls.send_close_notify(false)
             .map(|_| ())
             .map_err(|err| signal_process_io("Sending EOF to process", None, err))?;
         return Ok(Value::NIL);
     }
 
-    if let Some(socket) = proc.network_socket.as_ref() {
+    if let Some(socket) = proc.live_io.network_socket.as_ref() {
         if let Some(result) = socket.shutdown_write() {
             result.map_err(|err| signal_process_io("Sending EOF to process", None, err))?;
         }
         return Ok(Value::NIL);
     }
 
-    if let Some(ref mut child) = proc.child {
+    if let Some(ref mut child) = proc.live_io.child {
         drop(child.stdin.take());
         proc.child_stdin_eof_sink = true;
     }
@@ -13849,6 +13947,7 @@ pub(crate) fn builtin_process_running_child_p(
 #[cfg(unix)]
 fn process_tty_foreground_group(proc: &Process) -> Option<i32> {
     if let Some(gid) = proc
+        .live_io
         .pty_master
         .as_ref()
         .and_then(|master| master.as_raw_fd())

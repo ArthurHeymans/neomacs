@@ -1882,6 +1882,146 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
     assert_eq!(output.as_bytes(), b"x\n");
 }
 
+#[cfg(target_os = "linux")]
+fn open_ptmx_descriptor_count() -> usize {
+    std::fs::read_dir("/proc/self/fd")
+        .expect("read process descriptor table")
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            std::fs::read_link(entry.path())
+                .is_ok_and(|target| target == std::path::Path::new("/dev/ptmx"))
+        })
+        .count()
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn reaped_pty_process_releases_live_io_but_preserves_stale_status() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let mut ev = Context::new();
+    let baseline_ptmx = open_ptmx_descriptor_count();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let ((proc (make-process
+                            :name "reaped-pty-resource-owner"
+                            :command (list "{sh}" "-c" "exit 0")
+                            :connection-type 'pty)))
+                 (while (eq (process-status proc) 'run)
+                   (accept-process-output proc 0.1))
+                 (list (process-status proc)
+                       (get-process "reaped-pty-resource-owner")))"#
+        ),
+    );
+
+    assert_eq!(result, "OK (exit nil)");
+    assert_eq!(
+        open_ptmx_descriptor_count(),
+        baseline_ptmx,
+        "reaping must deactivate and release the process's live PTY I/O"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn terminal_pty_process_releases_live_io_when_exit_record_is_retained() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let mut ev = Context::new();
+    let baseline_ptmx = open_ptmx_descriptor_count();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let ((delete-exited-processes nil)
+                     (proc (make-process
+                            :name "retained-terminal-pty-resource-owner"
+                            :command (list "{sh}" "-c" "exit 0")
+                            :connection-type 'pty)))
+                 (while (eq (process-status proc) 'run)
+                   (accept-process-output proc 0.1))
+                 (list (process-status proc)
+                       (eq proc
+                           (get-process "retained-terminal-pty-resource-owner"))))"#
+        ),
+    );
+
+    assert_eq!(result, "OK (exit t)");
+    assert_eq!(
+        open_ptmx_descriptor_count(),
+        baseline_ptmx,
+        "terminal status must deactivate live PTY I/O even when the Lisp record is retained"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn deleted_pty_process_releases_live_io_and_reaps_child() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let mut processes = ProcessManager::new();
+    let baseline_ptmx = open_ptmx_descriptor_count();
+    let id = processes.create_process(
+        "deleted-pty-resource-owner".into(),
+        Value::NIL,
+        sh,
+        vec!["-c".into(), "sleep 300".into()],
+    );
+    processes.spawn_child(id, true).expect("spawn PTY process");
+    let os_pid = processes
+        .get(id)
+        .and_then(|process| process.os_pid)
+        .expect("spawned child pid");
+
+    assert!(processes.delete_process(id));
+    assert!(processes.get(id).is_none());
+    assert_eq!(
+        processes.process_status_any(id),
+        Some(&process_status_signal_value(signal_kill_number()))
+    );
+    assert_eq!(
+        open_ptmx_descriptor_count(),
+        baseline_ptmx,
+        "deleting must deactivate and release the process's live PTY I/O"
+    );
+    assert!(
+        !std::path::Path::new(&format!("/proc/{os_pid}")).exists(),
+        "delete-process must wait for the killed child instead of retaining a zombie"
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn dropping_process_manager_terminates_and_reaps_live_child() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let mut processes = ProcessManager::new();
+    let id = processes.create_process(
+        "dropped-process-manager-child".into(),
+        Value::NIL,
+        sh,
+        vec!["-c".into(), "sleep 300".into()],
+    );
+    processes.spawn_child(id, false).expect("spawn pipe child");
+    let os_pid = processes
+        .get(id)
+        .and_then(|process| process.os_pid)
+        .expect("spawned child pid");
+
+    drop(processes);
+
+    let child_survived = std::path::Path::new(&format!("/proc/{os_pid}")).exists();
+    if child_survived {
+        let _ = sys::send_signal_to_group(os_pid as i64, signal_kill_number());
+    }
+    assert!(
+        !child_survived,
+        "dropping the live-resource owner must terminate and reap its child"
+    );
+}
+
 #[test]
 fn process_list_test() {
     crate::test_utils::init_test_tracing();
@@ -6417,7 +6557,7 @@ fn make_network_process_nowait_hostname_dns_failure_is_async_like_gnu() {
         ProcessKeyword::Nowait.value(),
         Value::T,
     ]);
-    proc.pending_network_connect = Some(PendingNetworkConnect::Dns(PendingDnsRequest {
+    proc.live_io.pending_network_connect = Some(PendingNetworkConnect::Dns(PendingDnsRequest {
         host: "-bad.example".to_string(),
         receiver,
         ready: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
@@ -6598,7 +6738,7 @@ fn process_contact_no_block_returns_nil_for_pending_nowait_network_like_gnu() {
             Value::fixnum(9),
         ]),
     ]);
-    proc.pending_network_connect = Some(PendingNetworkConnect::Tcp {
+    proc.live_io.pending_network_connect = Some(PendingNetworkConnect::Tcp {
         remaining_addrs: Vec::new(),
         socket_options: Vec::new(),
     });
