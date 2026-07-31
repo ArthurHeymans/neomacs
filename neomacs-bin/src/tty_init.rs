@@ -44,6 +44,15 @@ pub fn detect_tty_type() -> Option<String> {
     std::env::var("TERM").ok().filter(|value| !value.is_empty())
 }
 
+/// Detect the update-planner capabilities for the connected terminal.
+/// An unreadable terminfo entry assumes a modern terminal (TermCaps'
+/// defaults), mirroring the attribute-capability fallback above.
+pub fn detect_term_caps() -> neomacs_display_protocol::tty_rif::TermCaps {
+    detect_tty_type()
+        .and_then(|term| super::terminal_capabilities::term_caps_for_term(&term))
+        .unwrap_or_default()
+}
+
 pub(crate) fn default_controlling_tty_name() -> &'static str {
     #[cfg(windows)]
     {

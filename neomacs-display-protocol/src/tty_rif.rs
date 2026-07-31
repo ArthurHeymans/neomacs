@@ -187,6 +187,15 @@ pub struct TtyRif {
     caps: TermCaps,
     /// Accounting for the most recent encoded frame.
     frame_stats: TtyFrameStats,
+    /// Semantic scroll seed for the next diff: the layout engine's own
+    /// verdict that rows shifted by this many lines (from
+    /// RowDamage::ReusedShifted; TTY char metrics are 1x1, so the pixel
+    /// dvpos IS the line delta). Only a SEED: detect_scroll verifies the
+    /// hinted delta cell-by-cell before trusting it and falls back to hash
+    /// voting, because the hint's coverage is narrower than the grid diff
+    /// (selected window only, forward scroll only, invalid under
+    /// overlapping child frames).
+    scroll_seed: Option<isize>,
     /// Force the next render to repaint every terminal cell.
     force_full_render: bool,
 }
@@ -210,6 +219,10 @@ fn terminal_cursor_cell(x: f32, y: f32, char_width: f32, char_height: f32) -> (u
 pub struct TermCaps {
     /// DECSTBM scroll regions + SU/SD region scrolls.
     pub scroll_region: bool,
+    /// Back-color-erase (terminfo `bce`): erase operations fill with the
+    /// current SGR background rather than the terminal default, which is
+    /// what makes erase-to-EOL usable under a non-default background.
+    pub back_color_erase: bool,
     /// DECSET 2026 synchronized-output bracketing.
     pub synchronized_output: bool,
 }
@@ -218,6 +231,7 @@ impl Default for TermCaps {
     fn default() -> Self {
         Self {
             scroll_region: true,
+            back_color_erase: true,
             synchronized_output: true,
         }
     }
@@ -256,6 +270,15 @@ enum TermOp {
     /// rewrite it — the terminal's cluster-width opinion may differ from the
     /// cell grid, so the range is wiped before new glyphs land.
     ClearThenWriteRun { row: u16, start: u16, end: u16 },
+    /// Erase from `from` to the physical end of `row` (ESC[K), filling with
+    /// `bg` via back-color-erase. Plannable only when every desired cell of
+    /// that tail is an erasable blank of that background — see
+    /// `erasable_blank` for what "erasable" excludes and why.
+    EraseToEol {
+        row: u16,
+        from: u16,
+        bg: Option<(u8, u8, u8)>,
+    },
 }
 
 /// Byte/op accounting for the most recent frame, folded during encoding.
@@ -263,6 +286,7 @@ enum TermOp {
 pub struct TtyFrameStats {
     pub scroll_ops: u32,
     pub write_runs: u32,
+    pub erase_ops: u32,
     pub cells_written: u32,
     pub bytes: u32,
 }
@@ -290,8 +314,16 @@ impl TtyRif {
             default_fg: None,
             caps: TermCaps::default(),
             frame_stats: TtyFrameStats::default(),
+            scroll_seed: None,
             force_full_render: true,
         }
+    }
+
+    /// Create a TtyRif for a terminal with known capabilities.
+    pub fn new_with_caps(width: usize, height: usize, caps: TermCaps) -> Self {
+        let mut rif = Self::new(width, height);
+        rif.caps = caps;
+        rif
     }
 
     /// Declare what the connected terminal can do. The planner consults this
@@ -487,6 +519,16 @@ impl TtyRif {
             let char_w = state.char_width.max(1.0);
             let char_h = state.char_height.max(1.0);
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
+                if let crate::glyph_matrix::RowDamage::ReusedShifted { dvpos } = glyph_row.damage
+                    && char_h == 1.0
+                {
+                    // dvpos is the uniform pixel shift (negative = content
+                    // moved up); at 1x1 TTY metrics it is the line delta.
+                    let delta = -(dvpos.get().round() as isize);
+                    if delta != 0 {
+                        self.scroll_seed = Some(delta);
+                    }
+                }
                 // Mirror FrameDisplayState::materialize(): buffer text rows are
                 // laid out relative to the GNU TEXT_AREA, while mode-line,
                 // header-line, tab-line, and minibuffer chrome remain
@@ -735,6 +777,11 @@ impl TtyRif {
         self.plan_frame()
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_scroll_seed_for_test(&mut self, seed: Option<isize>) {
+        self.scroll_seed = seed;
+    }
+
     /// Decide the frame's update operations and replay their effects on the
     /// screen model (`self.current`), so the per-row diff below each
     /// decision sees the post-op screen.
@@ -745,9 +792,10 @@ impl TtyRif {
         // the terminal (one region scroll) instead of retransmitting every
         // row - the issue-206 case where one scroll step redrew the whole
         // frame. See detect_scroll for the design.
+        let seed = self.scroll_seed.take();
         if self.caps.scroll_region
             && !self.force_full_render
-            && let Some(scroll) = detect_scroll(&self.current, &self.desired)
+            && let Some(scroll) = detect_scroll(&self.current, &self.desired, seed)
         {
             let n = scroll.delta.unsigned_abs();
             let dir = std::num::NonZeroU16::new(n as u16).map(|n| {
@@ -850,6 +898,52 @@ impl TtyRif {
                 continue;
             }
 
+            // Erase-to-EOL: when the desired row's physical tail is one
+            // uniform run of erasable blanks (see erasable_blank) and at
+            // least a few of them changed, one ESC[K replaces writing them
+            // all - the line-kill / popup-close / full-clear shape. The
+            // erase repaints the unchanged part of the tail with identical
+            // content, so correctness needs the WHOLE tail erasable, not
+            // just the changed part. Without back-color-erase the terminal
+            // fills with its default background, so a colored tail then
+            // stays on the write path.
+            const MIN_ERASE_CELLS: usize = 4;
+            let mut erase_from: Option<usize> = None;
+            let width = desired_row.len();
+            {
+                let mut split = width;
+                let mut tail_bg: Option<Option<(u8, u8, u8)>> = None;
+                for col in (first_changed..width).rev() {
+                    let cell = &desired_row[col];
+                    if !erasable_blank(cell) {
+                        break;
+                    }
+                    match tail_bg {
+                        None => tail_bg = Some(cell.attrs.bg),
+                        Some(bg) if bg != cell.attrs.bg => break,
+                        Some(_) => {}
+                    }
+                    split = col;
+                }
+                if let Some(bg) = tail_bg
+                    && split < width
+                    && split + MIN_ERASE_CELLS <= last_changed + 1
+                    && (bg.is_none() || self.caps.back_color_erase)
+                {
+                    erase_from = Some(split);
+                    last_changed = split.saturating_sub(1).max(first_changed);
+                    if split <= first_changed {
+                        // The whole changed range is the erase.
+                        ops.push(TermOp::EraseToEol {
+                            row: row as u16,
+                            from: split as u16,
+                            bg,
+                        });
+                        continue;
+                    }
+                }
+            }
+
             // Multi-span emission (issue 206): a row with two separate
             // change regions used to be rewritten from the first to the
             // last changed cell in one span, retransmitting the untouched
@@ -887,6 +981,14 @@ impl TtyRif {
                 } else {
                     col += 1;
                 }
+            }
+            if let Some(from) = erase_from {
+                let bg = desired_row[from].attrs.bg;
+                ops.push(TermOp::EraseToEol {
+                    row: row as u16,
+                    from: from as u16,
+                    bg,
+                });
             }
         }
 
@@ -931,6 +1033,20 @@ impl TtyRif {
                 }
                 TermOp::WriteRun { row, start, end } => {
                     self.encode_write_run(row, start, end, &mut last_attrs);
+                }
+                TermOp::EraseToEol { row, from, bg } => {
+                    self.frame_stats.erase_ops += 1;
+                    write_cursor_goto(&mut self.output, row + 1, from + 1);
+                    // Establish the BCE fill color: write_sgr resets then
+                    // sets bg explicitly, so the erase paints exactly the
+                    // tail's background.
+                    let attrs = CellAttrs {
+                        bg,
+                        ..CellAttrs::default()
+                    };
+                    write_sgr(&mut self.output, &attrs);
+                    last_attrs = Some(attrs);
+                    self.output.extend_from_slice(b"\x1b[K");
                 }
             }
         }
@@ -1209,7 +1325,11 @@ struct DetectedScroll {
 /// comparisons. (Neovim receives scroll deltas semantically from its core;
 /// a layout-provided hint can replace the inference here the same way
 /// later.)
-fn detect_scroll(current: &TtyGrid, desired: &TtyGrid) -> Option<DetectedScroll> {
+fn detect_scroll(
+    current: &TtyGrid,
+    desired: &TtyGrid,
+    seed: Option<isize>,
+) -> Option<DetectedScroll> {
     const MIN_RUN: usize = 4;
     let (w, h) = (desired.width, desired.height);
     if w != current.width || h != current.height || h < MIN_RUN + 1 {
@@ -1225,6 +1345,17 @@ fn detect_scroll(current: &TtyGrid, desired: &TtyGrid) -> Option<DetectedScroll>
     // Changed band: rows outside it already match in place.
     let top = (0..h).find(|&r| old_hash[r] != new_hash[r])?;
     let bottom = (0..h).rfind(|&r| old_hash[r] != new_hash[r])?;
+
+    // The layout engine's own scroll verdict, when present, names the delta
+    // outright: verify it with the same run machinery and skip the voting.
+    // A wrong or stale seed simply fails verification and costs nothing.
+    if let Some(delta) = seed
+        && delta != 0
+        && let Some(found) =
+            verify_delta(current, desired, &old_hash, &new_hash, top, bottom, delta)
+    {
+        return Some(found);
+    }
 
     // Vote for deltas using positions of equal hashes inside the band.
     let mut by_hash: rustc_hash::FxHashMap<u64, Vec<usize>> = rustc_hash::FxHashMap::default();
@@ -1245,10 +1376,26 @@ fn detect_scroll(current: &TtyGrid, desired: &TtyGrid) -> Option<DetectedScroll>
     if n < MIN_RUN || delta == 0 {
         return None;
     }
+    verify_delta(current, desired, &old_hash, &new_hash, top, bottom, delta)
+}
 
-    // Longest contiguous run where desired[i] == current[i + delta], with
-    // real cell equality (hashes only route). Composite rows are excluded:
-    // the conservative full-tail repaint path owns them.
+/// Verify a candidate scroll delta: find the longest contiguous run where
+/// desired row `i` equals current row `i + delta` with REAL cell equality
+/// (hashes only route; a collision can cost time, never correctness), and
+/// return the covering region when the run is long enough to pay for a
+/// region scroll. Composite rows are excluded: the conservative full-tail
+/// repaint path owns them.
+fn verify_delta(
+    current: &TtyGrid,
+    desired: &TtyGrid,
+    old_hash: &[u64],
+    new_hash: &[u64],
+    top: usize,
+    bottom: usize,
+    delta: isize,
+) -> Option<DetectedScroll> {
+    const MIN_RUN: usize = 4;
+    let (w, h) = (desired.width, desired.height);
     let row_eq = |i: usize| -> bool {
         let j = i as isize + delta;
         if j < 0 || j as usize >= h {
@@ -1290,6 +1437,24 @@ fn detect_scroll(current: &TtyGrid, desired: &TtyGrid) -> Option<DetectedScroll>
         return None;
     }
     Some(DetectedScroll { top, bottom, delta })
+}
+
+/// A desired cell that erase-to-EOL may paint instead of writing.
+///
+/// The erased cell a terminal produces is "space in the current background":
+/// foreground, bold and italic are invisible on a blank, so they may differ,
+/// but underline, strike-through and inverse all RENDER on a blank cell (an
+/// inverse blank is a solid foreground-colored block) and must refuse the
+/// erase; so must wide-char padding (it belongs to the wide base beside it)
+/// and grapheme extenders. The background must match the erase's BCE fill,
+/// which the caller guarantees by grouping the tail by one uniform bg.
+fn erasable_blank(cell: &TtyCell) -> bool {
+    cell.ch == ' '
+        && !cell.padding
+        && cell.extenders.is_none()
+        && cell.attrs.underline == 0
+        && !cell.attrs.strikethrough
+        && !cell.attrs.inverse
 }
 
 fn row_has_composite_cells(row: &[TtyCell]) -> bool {

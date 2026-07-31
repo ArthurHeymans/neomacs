@@ -2187,7 +2187,9 @@ fn scroll_plan_is_one_scroll_op_plus_exposed_row_runs() {
     );
     for op in &ops[1..] {
         match op {
-            TermOp::WriteRun { row, .. } | TermOp::ClearThenWriteRun { row, .. } => {
+            TermOp::WriteRun { row, .. }
+            | TermOp::ClearThenWriteRun { row, .. }
+            | TermOp::EraseToEol { row, .. } => {
                 assert_eq!(*row, 9, "only the exposed row may be rewritten: {ops:?}");
             }
             other => panic!("unexpected op after scroll: {other:?}"),
@@ -2200,6 +2202,7 @@ fn caps_without_scroll_region_never_plan_scroll_ops() {
     let mut rif = TtyRif::new(20, 10);
     rif.set_caps(TermCaps {
         scroll_region: false,
+        back_color_erase: false,
         synchronized_output: false,
     });
     for r in 0..10 {
@@ -2223,4 +2226,156 @@ fn caps_without_scroll_region_never_plan_scroll_ops() {
         text.contains("10"),
         "changed content must be drawn: {text:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Erase-to-EOL (issue #206 phase 4)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn line_kill_erases_to_eol_instead_of_writing_spaces() {
+    let mut rif = TtyRif::new(40, 4);
+    set_row(&mut rif, 1, "a-full-line-of-content-to-be-killed!");
+    let _ = render_output(&mut rif);
+    // Kill the line: desired becomes all blanks (grid default cells).
+    for col in 0..40 {
+        rif.desired.set(1, col, ' ', CellAttrs::default(), false);
+    }
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(text.contains("\x1b[K"), "line kill must use EL: {text:?}");
+    assert!(
+        !text.contains("        "),
+        "no long space runs when EL is available: {text:?}"
+    );
+    assert_eq!(rif.frame_stats().erase_ops, 1);
+
+    // Steady state: the model must agree with the erased terminal.
+    for col in 0..40 {
+        rif.desired.set(1, col, ' ', CellAttrs::default(), false);
+    }
+    let out = render_output(&mut rif);
+    assert_eq!(rif.frame_stats().write_runs, 0, "no-op after erase");
+    let _ = out;
+}
+
+#[test]
+fn inverse_blank_tail_refuses_erase() {
+    let mut rif = TtyRif::new(20, 4);
+    set_row(&mut rif, 1, "abcdefgh");
+    let _ = render_output(&mut rif);
+    let inverse_blank = CellAttrs {
+        inverse: true,
+        ..CellAttrs::default()
+    };
+    // A standout bar: inverse blanks render as a solid block; ESC[K would
+    // erase it to plain background.
+    for col in 0..20 {
+        rif.desired.set(1, col, ' ', inverse_blank, false);
+    }
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains("\x1b[K"),
+        "inverse blanks must be written, not erased: {text:?}"
+    );
+    assert_eq!(rif.frame_stats().erase_ops, 0);
+}
+
+#[test]
+fn colored_tail_without_bce_stays_on_the_write_path() {
+    let mut rif = TtyRif::new(20, 4);
+    rif.set_caps(TermCaps {
+        back_color_erase: false,
+        ..TermCaps::default()
+    });
+    set_row(&mut rif, 1, "abcdefghijkl");
+    let _ = render_output(&mut rif);
+    let colored_blank = CellAttrs {
+        bg: Some((40, 44, 52)),
+        ..CellAttrs::default()
+    };
+    for col in 0..20 {
+        rif.desired.set(1, col, ' ', colored_blank, false);
+    }
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains("\x1b[K"),
+        "no BCE means a colored tail cannot be erased: {text:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Efficiency regression guards (issue #206 evidence)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn one_line_scroll_costs_a_small_fraction_of_a_full_repaint() {
+    // The quantified issue-206 claim, pinned as a regression guard: a
+    // one-line scroll of a full 24x80 frame must emit far fewer bytes than
+    // repainting it.
+    let full_repaint_bytes = {
+        let mut rif = TtyRif::new(80, 24);
+        for r in 0..24 {
+            set_row(
+                &mut rif,
+                r,
+                &format!("{:-<79}{}", format!("content line {r} "), "|"),
+            );
+        }
+        let out = render_output(&mut rif);
+        out.len()
+    };
+
+    let mut rif = TtyRif::new(80, 24);
+    for r in 0..24 {
+        set_row(
+            &mut rif,
+            r,
+            &format!("{:-<79}{}", format!("content line {r} "), "|"),
+        );
+    }
+    let _ = render_output(&mut rif);
+    for r in 0..23 {
+        set_row(
+            &mut rif,
+            r,
+            &format!("{:-<79}{}", format!("content line {} ", r + 1), "|"),
+        );
+    }
+    set_row(&mut rif, 23, &format!("{:-<79}{}", "content line 24 ", "|"));
+    let scroll_bytes = render_output(&mut rif).len();
+
+    assert_eq!(rif.frame_stats().scroll_ops, 1);
+    assert!(
+        scroll_bytes * 5 < full_repaint_bytes,
+        "a one-line scroll ({scroll_bytes} bytes) must cost <20% of a full repaint ({full_repaint_bytes} bytes)"
+    );
+}
+
+#[test]
+fn lying_scroll_seed_falls_back_to_correct_inference() {
+    // The semantic seed is only a hint: a wrong delta must fail cell
+    // verification and the voting path must still find the true scroll.
+    let mut rif = TtyRif::new(20, 12);
+    for r in 0..12 {
+        set_row(&mut rif, r, &format!("seeded-line-{r:02}"));
+    }
+    let _ = render_output(&mut rif);
+    for r in 0..11 {
+        set_row(&mut rif, r, &format!("seeded-line-{:02}", r + 1));
+    }
+    set_row(&mut rif, 11, "seeded-line-12");
+    rif.set_scroll_seed_for_test(Some(-3)); // a lie: the real shift is +1
+    let ops = rif.plan_for_test();
+    match ops.first() {
+        Some(TermOp::ScrollRows { dir, .. }) => {
+            assert!(
+                matches!(dir, ScrollDir::Up(n) if n.get() == 1),
+                "voting must recover the true delta despite the lying seed: {ops:?}"
+            );
+        }
+        other => panic!("scroll expected despite lying seed: {other:?}"),
+    }
 }

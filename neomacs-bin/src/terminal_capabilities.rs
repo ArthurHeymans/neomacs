@@ -27,6 +27,7 @@ unsafe extern "C" {
     fn tgetent(buffer: *mut c_char, term: *const c_char) -> c_int;
     fn tgetstr(capability: *const c_char, area: *mut *mut c_char) -> *mut c_char;
     fn tgetnum(capability: *const c_char) -> c_int;
+    fn tgetflag(capability: *const c_char) -> c_int;
 }
 
 /// A source of terminal capabilities — terminfo in production, a table in tests.
@@ -37,6 +38,10 @@ pub(crate) trait TerminalCapabilityDatabase {
     /// A numeric capability (GNU `tgetnum`). `None`, like GNU's `-1`, when the
     /// entry lacks it.
     fn get_number(&mut self, cap: &str) -> Option<i32>;
+
+    /// A boolean capability (GNU `tgetflag`). Termcap two-letter names, e.g.
+    /// `ut` for back-color-erase (terminfo `bce`).
+    fn get_flag(&mut self, cap: &str) -> bool;
 }
 
 pub(crate) fn open_terminal_capability_database(
@@ -99,6 +104,37 @@ pub(crate) fn tty_attribute_capabilities_for_term(term: &str) -> Option<TtyAttri
     Some(resolve_tty_attribute_capabilities(database.as_mut()))
 }
 
+/// Resolve the update-planner capabilities ([`TermCaps`]) the same way GNU
+/// gates its terminal update: `term.c:4908` sets `scroll_region_ok` from the
+/// presence of `cs` (set_scroll_region) with absolute cursor motion, and
+/// `TF_bce` from the `ut` flag. Synchronized output (DECSET 2026) has no
+/// terminfo name; it is spec-safe to emit everywhere (an unknown DEC private
+/// mode is ignored), so it stays enabled unconditionally.
+pub(crate) fn resolve_term_caps(
+    database: &mut dyn TerminalCapabilityDatabase,
+) -> neomacs_display_protocol::tty_rif::TermCaps {
+    let has_string = |database: &mut dyn TerminalCapabilityDatabase, cap: &str| {
+        database
+            .get_string(cap)
+            .is_some_and(|value| !value.is_empty())
+    };
+    neomacs_display_protocol::tty_rif::TermCaps {
+        scroll_region: has_string(database, "cs") && has_string(database, "cm"),
+        back_color_erase: database.get_flag("ut"),
+        synchronized_output: true,
+    }
+}
+
+/// [`resolve_term_caps`] for the terminal named by `TERM`; `None` when the
+/// terminfo entry cannot be read (the caller then assumes a modern terminal,
+/// mirroring the attribute-capability fallback above).
+pub(crate) fn term_caps_for_term(
+    term: &str,
+) -> Option<neomacs_display_protocol::tty_rif::TermCaps> {
+    let mut database = open_terminal_capability_database(term)?;
+    Some(resolve_term_caps(database.as_mut()))
+}
+
 #[cfg(not(windows))]
 struct UnixTermcapDatabase {
     _termcap_buffer: Vec<c_char>,
@@ -141,6 +177,13 @@ impl TerminalCapabilityDatabase for UnixTermcapDatabase {
         let cap = CString::new(cap).ok()?;
         let value = unsafe { tgetnum(cap.as_ptr()) };
         (value != -1).then_some(value)
+    }
+
+    fn get_flag(&mut self, cap: &str) -> bool {
+        let Ok(cap) = CString::new(cap) else {
+            return false;
+        };
+        unsafe { tgetflag(cap.as_ptr()) != 0 }
     }
 }
 

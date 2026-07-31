@@ -360,7 +360,11 @@ pub fn install_tty_redisplay_callback_with_popup_redraw(
     provide_lisp_feature(evaluator, "tty-child-frames");
 
     let (cols, rows) = tty_init::query_terminal_size_cells().unwrap_or((80, 25));
-    let mut tty_rif = TtyRif::new(cols as usize, rows as usize);
+    let mut tty_rif = TtyRif::new_with_caps(
+        cols as usize,
+        rows as usize,
+        super::tty_init::detect_term_caps(),
+    );
     // TTY frames use 1x1 character cell metrics (GNU Emacs
     // frame.c:1184-1185). Drop the layout engine's cosmic-text
     // FontMetricsService so char_advance,
