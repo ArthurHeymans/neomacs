@@ -13115,6 +13115,43 @@ fn message_logs_to_visible_messages_buffer_name_like_gnu() {
 }
 
 #[test]
+fn message_progress_completion_replaces_previous_log_entry_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    builtin_message(&mut eval, vec![Value::string("Indexing project...")])
+        .expect("initial progress message should be logged");
+    builtin_message(&mut eval, vec![Value::string("Indexing project...done")])
+        .expect("completed progress message should be logged");
+
+    let messages_id = eval
+        .buffers
+        .find_buffer_by_name("*Messages*")
+        .expect("*Messages* buffer");
+    let messages = eval.buffers.get(messages_id).expect("*Messages* live");
+    assert_eq!(messages.buffer_string(), "Indexing project...done\n");
+}
+
+#[test]
+fn message_progress_update_scans_from_previous_line_start_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let long_progress = format!("Indexing project...{}", "working".repeat(32));
+
+    builtin_message(&mut eval, vec![Value::string(long_progress)])
+        .expect("long progress message should be logged");
+    builtin_message(&mut eval, vec![Value::string("Indexing project...done")])
+        .expect("progress update should be logged");
+
+    let messages_id = eval
+        .buffers
+        .find_buffer_by_name("*Messages*")
+        .expect("*Messages* buffer");
+    let messages = eval.buffers.get(messages_id).expect("*Messages* live");
+    assert_eq!(messages.buffer_string(), "Indexing project...done\n");
+}
+
+#[test]
 fn message_log_appends_after_full_messages_buffer_when_narrowed() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

@@ -40,18 +40,37 @@ fn parse_logged_message_line(line: &[u8]) -> (&[u8], i64) {
     (line, 1)
 }
 
+/// GNU `message_log_check_duplicate` treats a later message as a progress
+/// update when its first mismatch with the previous line occurs after `...`
+/// in their shared prefix.  The rule is intentionally asymmetric: a longer
+/// completion such as `"Indexing...done"` replaces `"Indexing..."`, while a
+/// shorter or unrelated message is appended.
+fn message_log_is_progress_update(previous: &[u8], next: &[u8]) -> bool {
+    let mut seen_dots = false;
+    for (index, &next_byte) in next.iter().enumerate() {
+        if index >= 3 && previous.get(index - 3..index) == Some(b"...") {
+            seen_dots = true;
+        }
+        if previous.get(index).copied() != Some(next_byte) {
+            return seen_dots;
+        }
+    }
+    false
+}
+
 /// GNU `message_dolog` coalescing: when MSG duplicates the last logged line of
 /// the messages buffer (a bare `MSG` or `MSG [K times]`), return the coalesced
-/// `MSG [N times]` text plus the byte position of that last line's start (so the
-/// caller can delete it before re-logging). Otherwise returns `(MSG,
-/// old_full_end)` for a plain append.
+/// `MSG [N times]`.  When MSG completes a shared `...` progress prefix, return
+/// MSG itself.  Either replacement includes the byte position of the previous
+/// line's start so the caller can delete it before re-logging.  Otherwise
+/// return `(MSG, old_full_end)` for a plain append.
 fn message_log_coalesce(
     ctx: &super::eval::Context,
     buf_id: crate::buffer::BufferId,
     msg: &crate::heap_types::LispString,
     old_full_end: crate::buffer::EmacsBytePos,
 ) -> (crate::heap_types::LispString, crate::buffer::EmacsBytePos) {
-    use crate::buffer::{EmacsBytePos, EmacsByteRange};
+    use crate::buffer::{EmacsByteLen, EmacsByteRange};
     let no_coalesce = (msg.clone(), old_full_end);
     let Some(buf) = ctx.buffers.get(buf_id) else {
         return no_coalesce;
@@ -60,36 +79,31 @@ fn message_log_coalesce(
     if old_full_end <= bob {
         return no_coalesce;
     }
-    // Read a tail window large enough to hold `MSG [K times]\n`.
     let msg_bytes = msg.as_bytes();
-    let window = msg_bytes.len() + 32;
-    let read_start = EmacsBytePos::new(old_full_end.get().saturating_sub(window).max(bob.get()));
-    let tail = buf.buffer_substring_bytes_range(EmacsByteRange::new(read_start, old_full_end));
-    // Each logged message ends with a newline; strip it and isolate the line.
-    let Some((&b'\n', without_nl)) = tail.split_last() else {
+    let final_newline = old_full_end.saturating_sub_len(EmacsByteLen::new(1));
+    if buf.buffer_substring_bytes_range(EmacsByteRange::new(final_newline, old_full_end)) != b"\n" {
         return no_coalesce;
     };
-    let (line, line_bol_offset) = match without_nl.iter().rposition(|&b| b == b'\n') {
-        Some(pos) => (&without_nl[pos + 1..], pos + 1),
-        // No earlier newline in the window: only trust it if we read from BOB.
-        None if read_start.get() == bob.get() => (without_nl, 0usize),
-        None => return no_coalesce,
-    };
-    let (base, count) = parse_logged_message_line(line);
-    if base != msg_bytes {
-        return no_coalesce;
+    let line_start = buf
+        .prev_newline_emacs_byte(final_newline, bob)
+        .map(|newline| newline.add_len(EmacsByteLen::new(1)))
+        .unwrap_or(bob);
+    let line = buf.buffer_substring_bytes_range(EmacsByteRange::new(line_start, final_newline));
+    let (base, count) = parse_logged_message_line(&line);
+    if base == msg_bytes {
+        let mut new_bytes = msg_bytes.to_vec();
+        new_bytes.extend_from_slice(format!(" [{} times]", count + 1).as_bytes());
+        let new_text = if msg.is_multibyte() {
+            crate::heap_types::LispString::from_emacs_bytes(new_bytes)
+        } else {
+            crate::heap_types::LispString::from_unibyte(new_bytes)
+        };
+        return (new_text, line_start);
     }
-    let mut new_bytes = msg_bytes.to_vec();
-    new_bytes.extend_from_slice(format!(" [{} times]", count + 1).as_bytes());
-    let new_text = if msg.is_multibyte() {
-        crate::heap_types::LispString::from_emacs_bytes(new_bytes)
-    } else {
-        crate::heap_types::LispString::from_unibyte(new_bytes)
-    };
-    (
-        new_text,
-        EmacsBytePos::new(read_start.get() + line_bol_offset),
-    )
+    if message_log_is_progress_update(&line, msg_bytes) {
+        return (msg.clone(), line_start);
+    }
+    no_coalesce
 }
 
 /// Log a message to the *Messages* buffer, matching GNU Emacs message_dolog
