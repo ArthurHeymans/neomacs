@@ -496,6 +496,62 @@ fn test_execute_kbd_macro_real_key_events_use_command_loop_dispatch() {
 }
 
 #[test]
+fn execute_kbd_macro_continues_in_recursive_minibuffer_command_loop() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let results = eval.eval_str_each(
+        r#"(progn
+             (setq kmacro-minibuffer-events nil
+                   kmacro-minibuffer-result 'unset)
+             (fset 'command-execute
+                   (lambda (command &optional _record _keys _special)
+                     (funcall command)))
+             (fset 'kmacro-capture-next
+                   (lambda ()
+                     (interactive)
+                     (setq kmacro-minibuffer-events
+                           (append kmacro-minibuffer-events '(next)))))
+             (fset 'kmacro-exit-minibuffer
+                   (lambda ()
+                     (interactive)
+                     (throw 'exit nil)))
+             (fset 'kmacro-open-minibuffer
+                   (lambda ()
+                     (interactive)
+                     ;; GNU lisp/net/dbus.el's synchronous polling temporarily
+                     ;; hides unread-command-events, reads an event, then
+                     ;; restores that event for the next command loop.
+                     (let ((event
+                            (let (unread-command-events)
+                              (read-event nil nil 0.001))))
+                       (if event
+                           (setq unread-command-events
+                                 (nconc unread-command-events (list event)))))
+                     (let ((event
+                            (let (unread-command-events)
+                              (read-event nil nil 0.001))))
+                       (if event
+                           (setq unread-command-events
+                                 (nconc unread-command-events (list event)))))
+                     (let ((map (make-sparse-keymap))
+                           (minibuffer-setup-hook nil))
+                       (define-key map "\C-n" 'kmacro-capture-next)
+                       (define-key map "\r" 'kmacro-exit-minibuffer)
+                       (setq kmacro-minibuffer-result
+                             (read-from-minibuffer "P: " nil map)))))
+             (let ((global (make-sparse-keymap)))
+               (use-global-map global)
+               (define-key global "\C-c:" 'kmacro-open-minibuffer)
+               (execute-kbd-macro "\C-c:\C-n\r")
+               (list kmacro-minibuffer-events
+                     kmacro-minibuffer-result)))"#,
+    );
+
+    assert_eq!(results.len(), 1);
+    assert_eq!(format_eval_result(&results[0]), r#"OK ((next) "")"#);
+}
+
+#[test]
 fn test_execute_kbd_macro_publishes_raw_event_before_menu_filter() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

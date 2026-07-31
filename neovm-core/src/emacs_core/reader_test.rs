@@ -2154,6 +2154,22 @@ fn input_pending_p_returns_t_with_unread_events() {
 }
 
 #[test]
+fn input_pending_p_returns_t_with_non_nil_requeued_input_method_events() {
+    crate::test_utils::init_test_tracing();
+
+    for queue in [
+        "unread-post-input-method-events",
+        "unread-input-method-events",
+    ] {
+        let mut ev = Context::new();
+        ev.obarray
+            .set_symbol_value(queue, Value::symbol("pending-input-method-event"));
+        let result = builtin_input_pending_p(&mut ev, vec![]).unwrap();
+        assert_eq!(result, Value::T, "{queue} must count as pending input");
+    }
+}
+
+#[test]
 fn input_pending_p_uses_dynamic_unread_command_events_binding() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

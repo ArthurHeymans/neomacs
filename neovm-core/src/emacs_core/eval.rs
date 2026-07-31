@@ -7294,15 +7294,18 @@ impl Context {
     }
 
     fn executing_kbd_macro_iteration_complete_for_command_loop(&self) -> bool {
-        matches!(
+        let macro_at_end = matches!(
             self.command_loop.keyboard.kboard.executing_kbd_macro.as_ref(),
             Some(events) if self.command_loop.keyboard.kboard.kbd_macro_index >= events.len()
-        ) && self
-            .command_loop
-            .keyboard
-            .kboard
-            .unread_selection_event
-            .is_none()
+        );
+        macro_at_end
+            && !self.has_pending_requeued_events()
+            && self
+                .command_loop
+                .keyboard
+                .kboard
+                .unread_selection_event
+                .is_none()
             && self.command_loop.keyboard.kboard.unread_events.is_empty()
     }
 
@@ -8890,6 +8893,25 @@ impl Context {
             ValueKind::Cons => Some(current.cons_car()),
             _ => None,
         }
+    }
+
+    /// Whether any Lisp-visible input-processing queue has an event to replay.
+    ///
+    /// Mirrors GNU `requeued_events_pending_p` (keyboard.c): ending a keyboard
+    /// macro must wait for ordinary command events and both input-method queues
+    /// that were populated while consuming that macro.
+    pub(crate) fn has_pending_requeued_events(&self) -> bool {
+        self.eval_symbol("unread-command-events")
+            .is_ok_and(|value| value.is_cons())
+            || [
+                "unread-post-input-method-events",
+                "unread-input-method-events",
+            ]
+            .into_iter()
+            .any(|symbol| {
+                self.eval_symbol(symbol)
+                    .is_ok_and(|value| value.is_truthy())
+            })
     }
 
     /// Prepend an event to the `unread-command-events` list so that the next

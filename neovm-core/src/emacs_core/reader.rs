@@ -2303,7 +2303,7 @@ fn read_key_sequence_vector_result(keys: &[Value]) -> Value {
 /// Return non-nil when unread input, staged host input, or `quit-flag` is pending.
 /// `CHECK-TIMERS` is accepted and fires due timers before checking.
 fn input_pending_now(ctx: &crate::emacs_core::eval::Context, filter_events: bool) -> bool {
-    if peek_unread_command_event_in_state(&ctx.obarray, &[]).is_some() {
+    if ctx.has_pending_requeued_events() {
         return true;
     }
 
@@ -2467,22 +2467,6 @@ pub(crate) fn builtin_set_input_interrupt_mode(
     expect_args("set-input-interrupt-mode", &args, 1)?;
     eval.set_input_mode_interrupt(args[0].is_truthy());
     Ok(Value::NIL)
-}
-
-fn peek_unread_command_event_in_state(
-    obarray: &Obarray,
-    dynamic: &[OrderedRuntimeBindingMap],
-) -> Option<Value> {
-    let name_id = intern("unread-command-events");
-    let unread = dynamic
-        .iter()
-        .rev()
-        .find_map(|frame| frame.get(&name_id).copied())
-        .or_else(|| obarray.symbol_value("unread-command-events").copied());
-    match unread {
-        Some(v) if v.is_cons() => Some(v.cons_car()),
-        _ => None,
-    }
 }
 
 pub(crate) fn builtin_read_char_in_runtime(
