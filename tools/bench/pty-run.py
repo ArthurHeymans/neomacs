@@ -16,15 +16,24 @@ Original docstring: run a TTY neomacs, wait for a sentinel FILE
 (not terminal output), report status. `script` proved flaky as a driver --
 the same fixture completed on one run and timed out on the next -- so this
 removes `script` from the equation to see whether it was the cause."""
-import os, pty, select, sys, time, signal
+import fcntl, os, pty, select, struct, sys, termios, time, signal
 argv = sys.argv[1:]
 sentinel = os.environ.get("SENTINEL", "")
 timeout = float(os.environ.get("PTY_TIMEOUT", "120"))
+rows = int(os.environ.get("PTY_ROWS", "40"))
+cols = int(os.environ.get("PTY_COLS", "120"))
 if sentinel and os.path.exists(sentinel):
     os.unlink(sentinel)
 pid, fd = pty.fork()
 if pid == 0:
+    os.environ.setdefault("TERM", "xterm-256color")
     os.execvp(argv[0], argv)
+# pty.fork() leaves the terminal at 0x0; a TTY app that sizes its frame from
+# the winsize then initializes a zero-area display and never gets going --
+# every run timed out, and before the sentinel rework this was the "script
+# is ~50% flaky" mystery. Give the child a real terminal size, like
+# script(1) does.
+fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 deadline = time.time() + timeout
 out = b""
 while time.time() < deadline:
