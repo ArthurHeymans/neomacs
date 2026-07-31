@@ -2327,7 +2327,7 @@ pub(crate) fn builtin_previous_single_property_change_in_state(
             let lim_int = expect_integer_or_marker_in_buffers(buffers, v)?;
             (Some(lim_int), Some(lim_int))
         }
-        _ => (None, None),
+        _ => (Some(buf.point_min_lisp_char_pos().as_i64()), None),
     };
 
     let ref_byte = emacs_byte_pos_of_preceding_char(buf, byte_pos);

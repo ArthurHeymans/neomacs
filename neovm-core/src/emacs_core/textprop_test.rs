@@ -1598,6 +1598,24 @@ fn previous_single_property_change_from_interval_end_boundary() {
     assert!(result.is_fixnum());
 }
 
+#[test]
+fn previous_single_property_change_does_not_escape_narrowing() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (insert "abcdefghijklmnopqrst")
+                 (put-text-property 5 7 'p t)
+                 (narrow-to-region 10 21)
+                 (goto-char (point-min))
+                 (previous-single-property-change (point) 'p))"#,
+        )
+        .expect("previous-single-property-change in a narrowed buffer");
+
+    assert_eq!(result, Value::NIL);
+}
+
 // -----------------------------------------------------------------------
 // text-property-any
 // -----------------------------------------------------------------------
