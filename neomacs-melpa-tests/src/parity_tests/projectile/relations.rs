@@ -46,8 +46,8 @@ fn projectile_related_file_function_merging_flattens_without_mutation() -> Parit
                (list result shared))"##,
         true,
         expect![[
-        r#"OK ((:test ("first-test.el" "second-test.el") :doc ("README") :impl ("impl.el")) ("first-test.el"))"#
-    ]],
+            r#"OK ((:test ("first-test.el" "second-test.el") :doc ("README") :impl ("impl.el")) ("first-test.el"))"#
+        ]],
     )
 }
 
@@ -104,8 +104,8 @@ fn projectile_related_file_generators_transform_groups_extensions_and_tests() ->
                         '("user.rb" "app/user.rb" "user_spec.rb"))))"##,
         true,
         expect![[
-        r#"OK ((:peer ("a.el" "c.el")) nil (t t nil nil) (t t nil) (t t nil) (t t nil) (t t nil))"#
-    ]],
+            r#"OK ((:peer ("a.el" "c.el")) nil (t t nil nil) (t t nil) (t t nil) (t t nil) (t t nil))"#
+        ]],
     )
 }
 
@@ -150,8 +150,8 @@ fn projectile_name_inflection_and_test_name_transforms_cover_boundaries() -> Par
                    default-directory))))"##,
         true,
         expect![[
-        r#"OK ("category" "bus" "categories" "boxes" "test_user.rb" "user_spec.rb" "test/domain/user/")"#
-    ]],
+            r#"OK ("category" "bus" "categories" "boxes" "test_user.rb" "user_spec.rb" "test/domain/user/")"#
+        ]],
     )
 }
 

@@ -20,8 +20,8 @@ fn auto_org_md_loads_exact_features_and_public_surface() -> ParityBatchCase {
             auto-org-md-mode)))"##,
         true,
         expect![
-        "OK (t t t ((auto-org-md-export t nil) (auto-org-md-on t nil) (auto-org-md-off t nil) (auto-org-md-mode t t)))"
-    ],
+            "OK (t t t ((auto-org-md-export t nil) (auto-org-md-on t nil) (auto-org-md-off t nil) (auto-org-md-mode t t)))"
+        ],
     )
 }
 
@@ -41,8 +41,8 @@ fn auto_org_md_public_arglists_and_interactive_contract_are_exact() -> ParityBat
            auto-org-md-mode))"##,
         true,
         expect![[
-        r#"OK ((auto-org-md-export nil nil nil) (auto-org-md-on nil nil "Turn on auto-org-md.") (auto-org-md-off nil nil "Turn off auto-org-md.") (auto-org-md-mode (&optional arg) (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) "cycle auto-org-md-mode between on/off\n\nThis is a minor mode.  If called interactively, toggle the ‘Auto-org-md\nmode’ mode.  If the prefix argument is positive, enable the mode, and if\nit is zero or negative, disable the mode.\n\nIf called from Lisp, toggle the mode if ARG is ‘toggle’.  Enable the\nmode if ARG is nil, omitted, or is a positive number.  Disable the mode\nif ARG is a negative number.\n\nTo check whether the minor mode is enabled in the current buffer,\nevaluate the variable ‘auto-org-md-mode’.\n\nThe mode’s hook is called both when the mode is enabled and when it is\ndisabled."))"#
-    ]],
+            r#"OK ((auto-org-md-export nil nil nil) (auto-org-md-on nil nil "Turn on auto-org-md.") (auto-org-md-off nil nil "Turn off auto-org-md.") (auto-org-md-mode (&optional arg) (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) "cycle auto-org-md-mode between on/off\n\nThis is a minor mode.  If called interactively, toggle the ‘Auto-org-md\nmode’ mode.  If the prefix argument is positive, enable the mode, and if\nit is zero or negative, disable the mode.\n\nIf called from Lisp, toggle the mode if ARG is ‘toggle’.  Enable the\nmode if ARG is nil, omitted, or is a positive number.  Disable the mode\nif ARG is a negative number.\n\nTo check whether the minor mode is enabled in the current buffer,\nevaluate the variable ‘auto-org-md-mode’.\n\nThe mode’s hook is called both when the mode is enabled and when it is\ndisabled."))"#
+        ]],
     )
 }
 
@@ -59,8 +59,8 @@ fn auto_org_md_minor_mode_variable_properties_are_exact() -> ParityBatchCase {
          (get 'auto-org-md-mode 'permanent-local))"##,
         true,
         expect![[
-        r#"OK (nil nil nil "Non-nil if Auto-org-md mode is enabled.\nUse the command `auto-org-md-mode' to change this variable." nil nil nil)"#
-    ]],
+            r#"OK (nil nil nil "Non-nil if Auto-org-md mode is enabled.\nUse the command `auto-org-md-mode' to change this variable." nil nil nil)"#
+        ]],
     )
 }
 
@@ -98,8 +98,8 @@ fn auto_org_md_package_descriptor_matches_pinned_archive() -> ParityBatchCase {
           (package-desc-extras descriptor)))"##,
         true,
         expect![[
-        r#"OK (auto-org-md "20180213.2343" "Export a markdown file automatically when you save an org-file." ((emacs (24 4))) nil "auto-org-md-20180213.2343" ((:maintainers ("jamcha" . "jamcha.aa@gmail.com")) (:authors ("jamcha" . "jamcha.aa@gmail.com")) (:keywords "org" "markdown") (:revdesc . "9318338bdb7f") (:commit . "9318338bdb7fe8bd698d88f3af89b2d6413efdd2") (:url . "https://github.com/jamcha-aa/auto-org-md")))"#
-    ]],
+            r#"OK (auto-org-md "20180213.2343" "Export a markdown file automatically when you save an org-file." ((emacs (24 4))) nil "auto-org-md-20180213.2343" ((:maintainers ("jamcha" . "jamcha.aa@gmail.com")) (:authors ("jamcha" . "jamcha.aa@gmail.com")) (:keywords "org" "markdown") (:revdesc . "9318338bdb7f") (:commit . "9318338bdb7fe8bd698d88f3af89b2d6413efdd2") (:url . "https://github.com/jamcha-aa/auto-org-md")))"#
+        ]],
     )
 }
 
@@ -145,8 +145,8 @@ fn auto_org_md_autoloads_expose_export_without_loading_runtime() -> ParityBatchC
          (symbol-function 'auto-org-md-export))"##,
         true,
         expect![
-        "OK (nil t nil nil #[nil ((if (derived-mode-p 'org-mode) (progn (org-md-export-to-markdown)))) nil])"
-    ],
+            "OK (nil t nil nil #[nil ((if (derived-mode-p 'org-mode) (progn (org-md-export-to-markdown)))) nil])"
+        ],
     )
 }
 
@@ -166,8 +166,8 @@ fn auto_org_md_autoloads_expose_minor_mode_metadata_without_loading_runtime() ->
          (get 'auto-org-md-mode 'variable-documentation))"##,
         true,
         expect![[
-        r#"OK (nil nil nil t t (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) (auto-org-md-mode "org-md") "Non-nil if Auto-org-md mode is enabled.\nUse the command `auto-org-md-mode' to change this variable.")"#
-    ]],
+            r#"OK (nil nil nil t t (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) (auto-org-md-mode "org-md") "Non-nil if Auto-org-md mode is enabled.\nUse the command `auto-org-md-mode' to change this variable.")"#
+        ]],
     )
 }
 

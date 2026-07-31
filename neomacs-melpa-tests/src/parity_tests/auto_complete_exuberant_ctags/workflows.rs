@@ -54,7 +54,8 @@ fn auto_complete_exuberant_ctags_source_init_builds_only_when_index_is_nil() -> 
     )
 }
 
-fn auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_matches() -> ParityBatchCase {
+fn auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_matches()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_matches",
         r##"(let* ((root
@@ -89,8 +90,8 @@ fn auto_complete_exuberant_ctags_real_project_build_and_candidate_workflow_match
                                    root))))))"##,
         true,
         expect![[
-        r#"OK (("reset_state f C" "render_model f C" "render_frame f C") ("render_model" "render_frame") "./")"#
-    ]],
+            r#"OK (("reset_state f C" "render_model f C" "render_frame f C") ("render_model" "render_frame") "./")"#
+        ]],
     )
 }
 
@@ -136,7 +137,8 @@ fn auto_complete_exuberant_ctags_after_save_hook_rebuilds_real_project_index() -
     )
 }
 
-fn auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory() -> ParityBatchCase {
+fn auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory",
         r##"(let* ((sandbox
@@ -175,7 +177,8 @@ fn auto_complete_exuberant_ctags_switching_projects_replaces_index_and_directory
     )
 }
 
-fn auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_characters() -> ParityBatchCase {
+fn auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_characters()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_characters",
         r##"(save-window-excursion
@@ -225,8 +228,8 @@ fn auto_complete_exuberant_ctags_real_auto_complete_source_requires_three_charac
                               '("x = re" "x = ren"))))"##,
         true,
         expect![[
-        r#"OK (("x = re" nil nil nil nil nil nil nil) ("x = ren" t ("ren") "ren" "ren" ("render" "rename") t t))"#
-    ]],
+            r#"OK (("x = re" nil nil nil nil nil nil nil) ("x = ren" t ("ren") "ren" "ren" ("render" "rename") t t))"#
+        ]],
     )
 }
 
@@ -292,8 +295,8 @@ fn auto_complete_exuberant_ctags_real_auto_complete_project_session_matches() ->
                                    (auto-complete-mode -1))))))"##,
         true,
         expect![[
-        r#"OK ((("reset_state f C" "render_model f C" "render_frame f C") "render" "render" ("render_model" "render_frame") t "render_model") "render_frame" "result = render_frame" nil nil "./")"#
-    ]],
+            r#"OK ((("reset_state f C" "render_model f C" "render_frame f C") "render" "render" ("render_model" "render_frame") t "render_model") "render_frame" "result = render_frame" nil nil "./")"#
+        ]],
     )
 }
 

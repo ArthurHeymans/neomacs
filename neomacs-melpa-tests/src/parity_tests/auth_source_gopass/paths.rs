@@ -15,8 +15,8 @@ fn auth_source_gopass_default_path_maps_real_account_coordinates() -> ParityBatc
            (ignored ignored "δοκιμή.example" "λ-user" "443")))"##,
         true,
         expect![[
-        r#"OK ("accounts/smtp.example.test/alice@example.test" "accounts/space host/Ada Lovelace" "accounts/δοκιμή.example/λ-user")"#
-    ]],
+            r#"OK ("accounts/smtp.example.test/alice@example.test" "accounts/space host/Ada Lovelace" "accounts/δοκιμή.example/λ-user")"#
+        ]],
     )
 }
 
@@ -41,8 +41,8 @@ fn auth_source_gopass_path_respects_custom_prefix_and_separator() -> ParityBatch
            ("accounts" " → " "主机" "用户")))"##,
         true,
         expect![[
-        r#"OK ("team/vault::mail.example::alice" "/host/user" "roothostuser" "accounts → 主机 → 用户")"#
-    ]],
+            r#"OK ("team/vault::mail.example::alice" "/host/user" "roothostuser" "accounts → 主机 → 用户")"#
+        ]],
     )
 }
 
@@ -62,8 +62,8 @@ fn auth_source_gopass_path_exposes_nil_and_non_string_component_contracts() -> P
            (nil nil "host" 42 nil)))"##,
         true,
         expect![[
-        r#"OK ((:ok "accounts//alice") (:ok "accounts/host/") (:error wrong-type-argument (sequencep host)) (:error wrong-type-argument (sequencep 42)))"#
-    ]],
+            r#"OK ((:ok "accounts//alice") (:ok "accounts/host/") (:error wrong-type-argument (sequencep host)) (:error wrong-type-argument (sequencep 42)))"#
+        ]],
     )
 }
 
@@ -83,8 +83,8 @@ fn auth_source_gopass_path_dynamic_configuration_does_not_leak() -> ParityBatchC
          auth-source-gopass-path-separator)"##,
         true,
         expect![[
-        r#"OK ("accounts/host/alice" "work.host.alice" "accounts/host/alice" "accounts" "/")"#
-    ]],
+            r#"OK ("accounts/host/alice" "work.host.alice" "accounts/host/alice" "accounts" "/")"#
+        ]],
     )
 }
 
@@ -120,8 +120,8 @@ fn auth_source_gopass_search_passes_every_coordinate_to_custom_constructor() -> 
               (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (((:user "alice" :secret "secret")) (fixture-backend gopass "smtp.example" "alice" 587) ((:find "gopass") (:shell "gopass show -o vault/item")))"#
-    ]],
+            r#"OK (((:user "alice" :secret "secret")) (fixture-backend gopass "smtp.example" "alice" 587) ((:find "gopass") (:shell "gopass show -o vault/item")))"#
+        ]],
     )
 }
 
@@ -149,8 +149,8 @@ fn auth_source_gopass_custom_constructor_output_is_shell_quoted_once() -> Parity
             (nreverse commands))))"##,
         true,
         expect![[
-        r#"OK (((:user "alice" :secret "p@ss word")) ("/fixture/bin/go pass show -o team\\ vault/alice\\'s\\ smtp\\;\\ echo\\ unsafe"))"#
-    ]],
+            r#"OK (((:user "alice" :secret "p@ss word")) ("/fixture/bin/go pass show -o team\\ vault/alice\\'s\\ smtp\\;\\ echo\\ unsafe"))"#
+        ]],
     )
 }
 

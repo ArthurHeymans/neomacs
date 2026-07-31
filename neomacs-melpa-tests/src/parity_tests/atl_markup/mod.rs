@@ -106,10 +106,6 @@ pub(crate) fn assert_atl_markup_autoload_parity(elisp_form: &str, expected: Expe
     assert_atl_markup_source_parity("atl-markup-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_atl_markup_autoload_parity` cases (2a).
 pub(crate) fn assert_atl_markup_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

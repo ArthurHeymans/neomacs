@@ -47,8 +47,8 @@ fn auth_source_gopass_enable_deduplicates_existing_source_in_any_position() -> P
            (gopass "~/.authinfo" gopass)))"##,
         true,
         expect![[
-        r#"OK (((gopass) (:forget :forget)) ((gopass) (:forget :forget)) (("~/.authinfo" gopass default) (:forget :forget)) ((gopass "~/.authinfo" gopass) (:forget :forget)))"#
-    ]],
+            r#"OK (((gopass) (:forget :forget)) ((gopass) (:forget :forget)) (("~/.authinfo" gopass default) (:forget :forget)) ((gopass "~/.authinfo" gopass) (:forget :forget)))"#
+        ]],
     )
 }
 
@@ -85,8 +85,8 @@ fn auth_source_gopass_real_auth_source_search_resolves_credential() -> ParityBat
               (nreverse commands)))))"##,
         true,
         expect![[
-        r#"OK (((:user "alice@example" :secret "integration-secret")) (("alice@example" "integration-secret")) ("gopass show -o accounts/smtp.example/alice\\@example"))"#
-    ]],
+            r#"OK (((:user "alice@example" :secret "integration-secret")) (("alice@example" "integration-secret")) ("gopass show -o accounts/smtp.example/alice\\@example"))"#
+        ]],
     )
 }
 
@@ -113,8 +113,8 @@ fn auth_source_gopass_real_password_lookup_returns_secret() -> ParityBatchCase {
             (nreverse commands))))"##,
         true,
         expect![[
-        r#"OK ("smtp-password" ("gopass show -o accounts/smtp.example/alice\\@example"))"#
-    ]],
+            r#"OK ("smtp-password" ("gopass show -o accounts/smtp.example/alice\\@example"))"#
+        ]],
     )
 }
 
@@ -146,8 +146,8 @@ fn auth_source_gopass_enable_then_search_models_application_startup() -> ParityB
               (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK ((gopass "~/.authinfo") ((:user "alice" :secret "startup-secret")) ((:find "gopass") (:shell "gopass show -o accounts/imap.example/alice")))"#
-    ]],
+            r#"OK ((gopass "~/.authinfo") ((:user "alice" :secret "startup-secret")) ((:find "gopass") (:shell "gopass show -o accounts/imap.example/alice")))"#
+        ]],
     )
 }
 
@@ -186,8 +186,8 @@ fn auth_source_gopass_application_can_customize_full_vault_layout() -> ParityBat
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("company-secret" ((:find "gopass-company") (:shell "gopass-company show -o teams/./gopass/alice\\@smtp.internal\\:465")))"#
-    ]],
+            r#"OK ("company-secret" ((:find "gopass-company") (:shell "gopass-company show -o teams/./gopass/alice\\@smtp.internal\\:465")))"#
+        ]],
     )
 }
 

@@ -48,8 +48,8 @@ fn magit_password_prompt_patterns_extract_hosts_without_protocol_noise() -> Pari
                 "not a credential prompt"))"##,
         true,
         expect![[
-        r#"OK (t t "example.com" "me@magit.vc" "ahihi@foo" "user@host" "volumio@192.168.0.211" t nil)"#
-    ]],
+            r#"OK (t t "example.com" "me@magit.vc" "ahihi@foo" "user@host" "volumio@192.168.0.211" t nil)"#
+        ]],
     )
 }
 

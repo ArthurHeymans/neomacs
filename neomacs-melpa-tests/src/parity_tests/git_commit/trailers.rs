@@ -21,8 +21,8 @@ fn git_commit_public_trailer_commands_insert_exact_labels_and_identity_format() 
                (buffer-string))"##,
         true,
         expect![[
-        r#"OK "Summary\n\nBody\n\nAcked-by: Ack <ack@example.test>\nModified-by: Mod <mod@example.test>\nReviewed-by: Rev <rev@example.test>\nSigned-off-by: Sign <sign@example.test>\nTested-by: Test <test@example.test>\nCc: Cc <cc@example.test>\nReported-by: Report <report@example.test>\nSuggested-by: Suggest <suggest@example.test>\nCo-authored-by: Author <author@example.test>\nCo-developed-by: Dev <dev@example.test>\n\n""#
-    ]],
+            r#"OK "Summary\n\nBody\n\nAcked-by: Ack <ack@example.test>\nModified-by: Mod <mod@example.test>\nReviewed-by: Rev <rev@example.test>\nSigned-off-by: Sign <sign@example.test>\nTested-by: Test <test@example.test>\nCc: Cc <cc@example.test>\nReported-by: Report <report@example.test>\nSuggested-by: Suggest <suggest@example.test>\nCo-authored-by: Author <author@example.test>\nCo-developed-by: Dev <dev@example.test>\n\n""#
+        ]],
     )
 }
 
@@ -47,12 +47,13 @@ fn git_commit_trailers_stay_above_comments_and_verbose_diff() -> ParityBatchCase
                  (buffer-string)))"##,
         true,
         expect![[
-        r##"OK ("Summary\n\nSigned-off-by: A <a@example.test>\n\n# status\n" "Summary\n\nBody\n\nSigned-off-by: A <a@example.test>\n\n# ---------------- >8 ----------------\ndiff --git a/a b/a\n" "\n\nSigned-off-by: A <a@example.test>\n\n# instructions\n")"##
-    ]],
+            r##"OK ("Summary\n\nSigned-off-by: A <a@example.test>\n\n# status\n" "Summary\n\nBody\n\nSigned-off-by: A <a@example.test>\n\n# ---------------- >8 ----------------\ndiff --git a/a b/a\n" "\n\nSigned-off-by: A <a@example.test>\n\n# instructions\n")"##
+        ]],
     )
 }
 
-fn git_commit_trailers_append_to_recognized_blocks_without_reordering_existing_lines() -> ParityBatchCase {
+fn git_commit_trailers_append_to_recognized_blocks_without_reordering_existing_lines()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "git_commit_trailers_append_to_recognized_blocks_without_reordering_existing_lines",
         r##"(let ((git-commit-trailers
@@ -69,12 +70,13 @@ fn git_commit_trailers_append_to_recognized_blocks_without_reordering_existing_l
                  (buffer-string)))"##,
         true,
         expect![[
-        r##"OK "Summary\n\nBody\n\nSigned-off-by: First <first@example.test>\nReviewed-by: Second <second@example.test>\nSigned-off-by: Third <third@example.test>\n\nCustom-field: untouched\n# status\n""##
-    ]],
+            r##"OK "Summary\n\nBody\n\nSigned-off-by: First <first@example.test>\nReviewed-by: Second <second@example.test>\nSigned-off-by: Third <third@example.test>\n\nCustom-field: untouched\n# status\n""##
+        ]],
     )
 }
 
-fn git_commit_get_ident_obeys_author_committer_email_and_user_fallback_precedence() -> ParityBatchCase {
+fn git_commit_get_ident_obeys_author_committer_email_and_user_fallback_precedence()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "git_commit_get_ident_obeys_author_committer_email_and_user_fallback_precedence",
         r##"(let ((process-environment
@@ -104,8 +106,8 @@ fn git_commit_get_ident_obeys_author_committer_email_and_user_fallback_precedenc
                       (git-commit-get-ident))))))"##,
         true,
         expect![[
-        r#"OK (("Fallback User" "prompt@example.test") ("Committer" "email@example.test") ("Author" "author@example.test"))"#
-    ]],
+            r#"OK (("Fallback User" "prompt@example.test") ("Committer" "email@example.test") ("Author" "author@example.test"))"#
+        ]],
     )
 }
 

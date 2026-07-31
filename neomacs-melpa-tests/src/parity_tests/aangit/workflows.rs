@@ -20,8 +20,8 @@ fn aangit_menu_scaffolds_a_new_angular_workspace_with_the_default_switches() -> 
    (length (window-list))))"##,
         true,
         expect![[
-        r#"OK (("ng new --defaults storefront --style=css --routing --standalone" "ng add --defaults --skip-confirmation @angular-eslint/schematics") "storefront" dired-mode "storefront/" ("angular.json" "src/app/app.component.ts" "src/main.ts") aangit-menu--generate-submenu 2)"#
-    ]],
+            r#"OK (("ng new --defaults storefront --style=css --routing --standalone" "ng add --defaults --skip-confirmation @angular-eslint/schematics") "storefront" dired-mode "storefront/" ("angular.json" "src/app/app.component.ts" "src/main.ts") aangit-menu--generate-submenu 2)"#
+        ]],
     )
 }
 
@@ -44,12 +44,13 @@ fn aangit_new_project_switches_and_style_option_reach_the_ng_command_line() -> P
    (aangit-test-active-prefix)))"##,
         true,
         expect![[
-        r#"OK (("ng new --defaults dashboard --skip-tests --style=scss --inline-template --inline-style --standalone" "ng add --defaults --skip-confirmation @angular-eslint/schematics") ("angular.json" "src/app/app.component.ts" "src/main.ts") aangit-menu--generate-submenu)"#
-    ]],
+            r#"OK (("ng new --defaults dashboard --skip-tests --style=scss --inline-template --inline-style --standalone" "ng add --defaults --skip-confirmation @angular-eslint/schematics") ("angular.json" "src/app/app.component.ts" "src/main.ts") aangit-menu--generate-submenu)"#
+        ]],
     )
 }
 
-fn aangit_generate_component_prompts_for_a_name_and_writes_it_into_the_workspace() -> ParityBatchCase {
+fn aangit_generate_component_prompts_for_a_name_and_writes_it_into_the_workspace() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "aangit_generate_component_prompts_for_a_name_and_writes_it_into_the_workspace",
         r##"(progn
@@ -67,8 +68,8 @@ fn aangit_generate_component_prompts_for_a_name_and_writes_it_into_the_workspace
    (aangit-test-active-prefix)))"##,
         true,
         expect![[
-        r#"OK (("ng generate component product-card --defaults --export --module=shared.module --standalone") ("app/product-card/product-card.component.ts") nil)"#
-    ]],
+            r#"OK (("ng generate component product-card --defaults --export --module=shared.module --standalone") ("app/product-card/product-card.component.ts") nil)"#
+        ]],
     )
 }
 
@@ -88,8 +89,8 @@ fn aangit_generate_service_and_module_submenus_issue_their_own_ng_commands() -> 
    (aangit-test-active-prefix)))"##,
         true,
         expect![[
-        r#"OK (("ng generate service auth" "ng generate module admin --defaults --routing --flat" "ng generate interface order") nil)"#
-    ]],
+            r#"OK (("ng generate service auth" "ng generate module admin --defaults --routing --flat" "ng generate interface order") nil)"#
+        ]],
     )
 }
 
@@ -111,8 +112,8 @@ fn aangit_adds_each_selected_schematic_and_installs_an_npm_package() -> ParityBa
    (aangit-test-active-prefix)))"##,
         true,
         expect![[
-        r#"OK (("ng add --defaults --skip-confirmation @ngrx/store" "ng add --defaults --skip-confirmation @angular/cdk/schematics" "ng add --defaults --skip-confirmation @angular/material" "npm install rxjs@7.8.1 @types/node") nil)"#
-    ]],
+            r#"OK (("ng add --defaults --skip-confirmation @ngrx/store" "ng add --defaults --skip-confirmation @angular/cdk/schematics" "ng add --defaults --skip-confirmation @angular/material" "npm install rxjs@7.8.1 @types/node") nil)"#
+        ]],
     )
 }
 
@@ -145,8 +146,8 @@ fn aangit_reports_missing_names_and_runs_no_command_line_tool_at_all() -> Parity
           (file-exists-p aangit-test-log))))"##,
         true,
         expect![[
-        r#"OK (((component "missing component name") (service "missing service name") (module "missing module name") (interface "missing interface name") (npm "missing package name") (schematic "missing schematic name")) no-command-ran nil)"#
-    ]],
+            r#"OK (((component "missing component name") (service "missing service name") (module "missing module name") (interface "missing interface name") (npm "missing package name") (schematic "missing schematic name")) no-command-ran nil)"#
+        ]],
     )
 }
 

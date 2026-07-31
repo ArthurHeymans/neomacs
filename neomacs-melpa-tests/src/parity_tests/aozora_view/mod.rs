@@ -92,10 +92,5 @@ pub(crate) fn assert_aozora_view_signal_parity(elisp_form: &str, expected: Expec
 /// Multi-probe batch for `assert_aozora_view_parity` cases (2a).
 pub(crate) fn assert_aozora_view_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        aozora_view_oracle(),
-        &name,
-        "aozora_view_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(aozora_view_oracle(), &name, "aozora_view_parity", cases);
 }

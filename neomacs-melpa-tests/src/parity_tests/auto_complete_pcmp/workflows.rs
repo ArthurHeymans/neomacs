@@ -46,8 +46,8 @@ fn auto_complete_pcmp_custom_command_prefix_preserves_full_source_candidates() -
           '("" "p" "pro" "s" "missing")))"##,
         true,
         expect![[
-        r#"OK (("" #1=("production" "preview" "staging" "sandbox") nil "deploy ") ("p" #1# nil "deploy p") ("pro" #1# sole "deploy pro") ("s" #1# nil "deploy s") ("missing" #1# nil "deploy missing"))"#
-    ]],
+            r#"OK (("" #1=("production" "preview" "staging" "sandbox") nil "deploy ") ("p" #1# nil "deploy p") ("pro" #1# sole "deploy pro") ("s" #1# nil "deploy s") ("missing" #1# nil "deploy missing"))"#
+        ]],
     )
 }
 
@@ -82,7 +82,8 @@ fn auto_complete_pcmp_candidate_selection_action_completes_command_lifecycle() -
     )
 }
 
-fn auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries() -> ParityBatchCase {
+fn auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries",
         r##"(let* ((root
@@ -124,7 +125,8 @@ fn auto_complete_pcmp_real_file_completion_reads_deterministic_workspace_entries
     )
 }
 
-fn auto_complete_pcmp_real_command_failure_is_contained_and_next_request_recovers() -> ParityBatchCase {
+fn auto_complete_pcmp_real_command_failure_is_contained_and_next_request_recovers()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_pcmp_real_command_failure_is_contained_and_next_request_recovers",
         r##"(progn
@@ -249,8 +251,8 @@ fn auto_complete_pcmp_self_insert_source_trigger_then_completion_pipeline() -> P
                 (nreverse events))))))"##,
         true,
         expect![[
-        r#"OK (:completion-started "tool--" ((:insert 2 "tool--") (:complete (:triggered trigger-key) "tool--")))"#
-    ]],
+            r#"OK (:completion-started "tool--" ((:insert 2 "tool--") (:complete (:triggered trigger-key) "tool--")))"#
+        ]],
     )
 }
 

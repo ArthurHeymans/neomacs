@@ -76,8 +76,8 @@ fn async_start_process_future_returns_the_exact_nonzero_exit_failure() -> Parity
                  (process-buffer process))))"##,
         true,
         expect![[
-        r#"OK ((error "Async process 'neomacs-async-failure' failed with exit code 7") exit 7 nil)"#
-    ]],
+            r#"OK ((error "Async process 'neomacs-async-failure' failed with exit code 7") exit 7 nil)"#
+        ]],
     )
 }
 

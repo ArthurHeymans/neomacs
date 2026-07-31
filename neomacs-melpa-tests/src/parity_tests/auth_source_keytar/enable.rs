@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auth_source_keytar_batch};
 
-fn auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials() -> ParityBatchCase {
+fn auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials",
         r##"(let ((auth-sources
@@ -23,12 +24,13 @@ fn auth_source_keytar_enable_adds_keytar_to_front_and_forgets_cached_credentials
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (:cache-cleared (keytar "~/.authinfo" "~/.netrc") ((keytar "~/.authinfo" "~/.netrc")))"#
-    ]],
+            r#"OK (:cache-cleared (keytar "~/.authinfo" "~/.netrc") ((keytar "~/.authinfo" "~/.netrc")))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cache_each_time() -> ParityBatchCase {
+fn auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cache_each_time()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cache_each_time",
         r##"(let ((auth-sources
@@ -50,12 +52,13 @@ fn auth_source_keytar_enable_is_idempotent_for_source_membership_but_clears_cach
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (1 2 3 (keytar "first-source") ((keytar "first-source") (keytar "first-source") (keytar "first-source")))"#
-    ]],
+            r#"OK (1 2 3 (keytar "first-source") ((keytar "first-source") (keytar "first-source") (keytar "first-source")))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources() -> ParityBatchCase {
+fn auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources",
         r##"(let ((auth-sources
@@ -79,7 +82,8 @@ fn auth_source_keytar_enable_preserves_existing_keytar_position_in_auth_sources(
     )
 }
 
-fn auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_entries() -> ParityBatchCase {
+fn auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_entries()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_entries",
         r##"(let ((auth-sources
@@ -100,7 +104,8 @@ fn auth_source_keytar_enable_distinguishes_symbolic_source_from_similarly_named_
     )
 }
 
-fn auth_source_keytar_enable_propagates_cache_clear_failure_after_registering_source() -> ParityBatchCase {
+fn auth_source_keytar_enable_propagates_cache_clear_failure_after_registering_source()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_enable_propagates_cache_clear_failure_after_registering_source",
         r##"(let ((auth-sources
@@ -143,12 +148,13 @@ fn auth_source_keytar_enable_returns_exact_cache_clear_result() -> ParityBatchCa
             (:cache "result")))"##,
         true,
         expect![[
-        r#"OK ((nil nil (keytar)) (t t (keytar)) (:cleared :cleared (keytar)) (17 17 (keytar)) ("done" "done" (keytar)) (#1=(:cache "result") #1# (keytar)))"#
-    ]],
+            r#"OK ((nil nil (keytar)) (t t (keytar)) (:cleared :cleared (keytar)) (17 17 (keytar)) ("done" "done" (keytar)) (#1=(:cache "result") #1# (keytar)))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutating_global_default() -> ParityBatchCase {
+fn auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutating_global_default()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutating_global_default",
         r##"(let ((global-before
@@ -179,12 +185,13 @@ fn auth_source_keytar_enable_respects_dynamic_auth_sources_binding_without_mutat
              'auth-sources))))"##,
         true,
         expect![[
-        r#"OK ((:cleared #1=(keytar "sandbox-authinfo") #1#) ("~/.authinfo" "~/.authinfo.gpg" "~/.netrc") t)"#
-    ]],
+            r#"OK ((:cleared #1=(keytar "sandbox-authinfo") #1#) ("~/.authinfo" "~/.authinfo.gpg" "~/.netrc") t)"#
+        ]],
     )
 }
 
-fn auth_source_keytar_enable_uses_structural_membership_for_preexisting_keytar_symbol() -> ParityBatchCase {
+fn auth_source_keytar_enable_uses_structural_membership_for_preexisting_keytar_symbol()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_enable_uses_structural_membership_for_preexisting_keytar_symbol",
         r##"(let ((auth-sources

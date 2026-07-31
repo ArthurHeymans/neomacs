@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_auto_indent_batch};
 
-fn auto_auto_indent_before_change_marks_only_enabled_buffer_and_accepts_hook_arguments() -> ParityBatchCase {
+fn auto_auto_indent_before_change_marks_only_enabled_buffer_and_accepts_hook_arguments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_before_change_marks_only_enabled_buffer_and_accepts_hook_arguments",
         r##"(mapcar
@@ -23,7 +24,8 @@ fn auto_auto_indent_before_change_marks_only_enabled_buffer_and_accepts_hook_arg
     )
 }
 
-fn auto_auto_indent_post_command_returns_early_when_disabled_or_cua_rectangle_active() -> ParityBatchCase {
+fn auto_auto_indent_post_command_returns_early_when_disabled_or_cua_rectangle_active()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_post_command_returns_early_when_disabled_or_cua_rectangle_active",
         r##"(mapcar
@@ -51,7 +53,8 @@ fn auto_auto_indent_post_command_returns_early_when_disabled_or_cua_rectangle_ac
     )
 }
 
-fn auto_auto_indent_post_command_immediately_indents_first_structural_and_regular_edits() -> ParityBatchCase {
+fn auto_auto_indent_post_command_immediately_indents_first_structural_and_regular_edits()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_post_command_immediately_indents_first_structural_and_regular_edits",
         r##"(mapcar
@@ -88,12 +91,13 @@ fn auto_auto_indent_post_command_immediately_indents_first_structural_and_regula
             (forward-word other 120)))"##,
         true,
         expect![
-        "OK (((self-insert-command other 120) nil t ((self-insert-command other 120))) ((self-insert-command self-insert-command 40) nil t ((self-insert-command self-insert-command 40))) ((forward-word other 120) nil t ((forward-word other 120))))"
-    ],
+            "OK (((self-insert-command other 120) nil t ((self-insert-command other 120))) ((self-insert-command self-insert-command 40) nil t ((self-insert-command self-insert-command 40))) ((forward-word other 120) nil t ((forward-word other 120))))"
+        ],
     )
 }
 
-fn auto_auto_indent_repeated_nonstructural_self_insert_cancels_and_reschedules_idle_timer() -> ParityBatchCase {
+fn auto_auto_indent_repeated_nonstructural_self_insert_cancels_and_reschedules_idle_timer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_repeated_nonstructural_self_insert_cancels_and_reschedules_idle_timer",
         r##"(with-temp-buffer
@@ -137,7 +141,8 @@ fn auto_auto_indent_repeated_nonstructural_self_insert_cancels_and_reschedules_i
     )
 }
 
-fn auto_auto_indent_post_command_command_matrix_freezes_immediate_delayed_and_skipped_paths() -> ParityBatchCase {
+fn auto_auto_indent_post_command_command_matrix_freezes_immediate_delayed_and_skipped_paths()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_post_command_command_matrix_freezes_immediate_delayed_and_skipped_paths",
         r##"(mapcar
@@ -178,12 +183,13 @@ fn auto_auto_indent_post_command_command_matrix_freezes_immediate_delayed_and_sk
             forward-word))"##,
         true,
         expect![
-        "OK ((self-insert-command (:indent) t nil) (delete-horizontal-space nil t nil) (quoted-insert nil t nil) (backward-paragraph nil t nil) (kill-region nil t nil) (save-buffer nil t nil) (undo nil t nil) (undo-tree-undo nil t nil) (undo-tree-redo nil t nil) (forward-word (:indent) t nil))"
-    ],
+            "OK ((self-insert-command (:indent) t nil) (delete-horizontal-space nil t nil) (quoted-insert nil t nil) (backward-paragraph nil t nil) (kill-region nil t nil) (save-buffer nil t nil) (undo nil t nil) (undo-tree-undo nil t nil) (undo-tree-redo nil t nil) (forward-word (:indent) t nil))"
+        ],
     )
 }
 
-fn auto_auto_indent_unmodified_buffer_skips_immediate_indent_but_can_schedule_delayed_work() -> ParityBatchCase {
+fn auto_auto_indent_unmodified_buffer_skips_immediate_indent_but_can_schedule_delayed_work()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_unmodified_buffer_skips_immediate_indent_but_can_schedule_delayed_work",
         r##"(with-temp-buffer
@@ -214,7 +220,8 @@ fn auto_auto_indent_unmodified_buffer_skips_immediate_indent_but_can_schedule_de
     )
 }
 
-fn auto_auto_indent_post_command_cursor_correction_depends_on_navigation_direction() -> ParityBatchCase {
+fn auto_auto_indent_post_command_cursor_correction_depends_on_navigation_direction()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_post_command_cursor_correction_depends_on_navigation_direction",
         r##"(mapcar
@@ -246,12 +253,13 @@ fn auto_auto_indent_post_command_cursor_correction_depends_on_navigation_directi
             other-command))"##,
         true,
         expect![
-        "OK ((backward-char nil 6 1 5) (left-char nil 6 1 5) (forward-char nil 11 2 4) (right-char nil 11 2 4) (previous-line nil 11 2 4) (next-line nil 11 2 4) (other-command nil 7 2 0))"
-    ],
+            "OK ((backward-char nil 6 1 5) (left-char nil 6 1 5) (forward-char nil 11 2 4) (right-char nil 11 2 4) (previous-line nil 11 2 4) (next-line nil 11 2 4) (other-command nil 7 2 0))"
+        ],
     )
 }
 
-fn auto_auto_indent_active_region_and_multiple_cursors_suppress_position_correction() -> ParityBatchCase {
+fn auto_auto_indent_active_region_and_multiple_cursors_suppress_position_correction()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_active_region_and_multiple_cursors_suppress_position_correction",
         r##"(mapcar
@@ -282,7 +290,8 @@ fn auto_auto_indent_active_region_and_multiple_cursors_suppress_position_correct
     )
 }
 
-fn auto_auto_indent_post_command_swallows_errors_unless_debug_handler_is_enabled() -> ParityBatchCase {
+fn auto_auto_indent_post_command_swallows_errors_unless_debug_handler_is_enabled() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_auto_indent_post_command_swallows_errors_unless_debug_handler_is_enabled",
         r##"(mapcar
@@ -315,12 +324,13 @@ fn auto_auto_indent_post_command_swallows_errors_unless_debug_handler_is_enabled
           '(nil t))"##,
         true,
         expect![[
-        r#"OK ((nil (:ok nil) t nil) (t (:ok :debugged) t ((nil (error "fixture indentation failed")))))"#
-    ]],
+            r#"OK ((nil (:ok nil) t nil) (t (:ok :debugged) t ((nil (error "fixture indentation failed")))))"#
+        ]],
     )
 }
 
-fn auto_auto_indent_real_insert_hook_and_post_command_reformat_practical_lisp_edit() -> ParityBatchCase {
+fn auto_auto_indent_real_insert_hook_and_post_command_reformat_practical_lisp_edit()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_real_insert_hook_and_post_command_reformat_practical_lisp_edit",
         r##"(with-temp-buffer

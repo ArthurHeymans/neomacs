@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auth_source_1password_batch};
 
-fn auth_source_1password_search_builds_exact_default_cli_command_and_trims_secret() -> ParityBatchCase {
+fn auth_source_1password_search_builds_exact_default_cli_command_and_trims_secret()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_1password_search_builds_exact_default_cli_command_and_trims_secret",
         r##"(let (find-calls commands)
@@ -27,12 +28,13 @@ fn auth_source_1password_search_builds_exact_default_cli_command_and_trims_secre
              (nreverse commands))))"##,
         true,
         expect![[
-        r#"OK (((:user "deploy" :secret "production-secret")) ("op") ("op read op://Personal/api.example.com/deploy"))"#
-    ]],
+            r#"OK (((:user "deploy" :secret "production-secret")) ("op") ("op read op://Personal/api.example.com/deploy"))"#
+        ]],
     )
 }
 
-fn auth_source_1password_search_shell_quotes_complex_secret_reference_as_one_argument() -> ParityBatchCase {
+fn auth_source_1password_search_shell_quotes_complex_secret_reference_as_one_argument()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_1password_search_shell_quotes_complex_secret_reference_as_one_argument",
         r##"(let (commands)
@@ -56,12 +58,13 @@ fn auth_source_1password_search_shell_quotes_complex_secret_reference_as_one_arg
                (nreverse commands)))))"##,
         true,
         expect![[
-        r#"OK (((:user "o'hara/$USER/$(id)" :secret "secret")) ("/opt/one password/bin/op read op://Team\\'s\\ Shared\\ Vault/host\\ name\\;printf\\ injected/o\\'hara/\\$USER/\\$\\(id\\)"))"#
-    ]],
+            r#"OK (((:user "o'hara/$USER/$(id)" :secret "secret")) ("/opt/one password/bin/op read op://Team\\'s\\ Shared\\ Vault/host\\ name\\;printf\\ injected/o\\'hara/\\$USER/\\$\\(id\\)"))"#
+        ]],
     )
 }
 
-fn auth_source_1password_search_trims_only_outer_whitespace_across_real_outputs() -> ParityBatchCase {
+fn auth_source_1password_search_trims_only_outer_whitespace_across_real_outputs() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_1password_search_trims_only_outer_whitespace_across_real_outputs",
         r##"(let ((outputs
@@ -88,8 +91,8 @@ fn auth_source_1password_search_trims_only_outer_whitespace_across_real_outputs(
            outputs))"##,
         true,
         expect![[
-        r#"OK (("secret" ((:user "user" :secret "secret"))) ("  secret  " ((:user "user" :secret "secret"))) ("\nsecret\n" ((:user "user" :secret "secret"))) ("\11 secret with internal  spaces \15\n" ((:user "user" :secret "secret with internal  spaces"))) ("line one\nline two\n" ((:user "user" :secret "line one\nline two"))) (" \n\11\15" ((:user "user" :secret ""))))"#
-    ]],
+            r#"OK (("secret" ((:user "user" :secret "secret"))) ("  secret  " ((:user "user" :secret "secret"))) ("\nsecret\n" ((:user "user" :secret "secret"))) ("\11 secret with internal  spaces \15\n" ((:user "user" :secret "secret with internal  spaces"))) ("line one\nline two\n" ((:user "user" :secret "line one\nline two"))) (" \n\11\15" ((:user "user" :secret ""))))"#
+        ]],
     )
 }
 
@@ -127,7 +130,8 @@ fn auth_source_1password_search_empty_cli_output_is_a_present_empty_secret() -> 
     )
 }
 
-fn auth_source_1password_search_calls_each_seam_once_in_strict_order_and_ignores_extra_keys() -> ParityBatchCase {
+fn auth_source_1password_search_calls_each_seam_once_in_strict_order_and_ignores_extra_keys()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_1password_search_calls_each_seam_once_in_strict_order_and_ignores_extra_keys",
         r##"(let (events)
@@ -173,12 +177,13 @@ fn auth_source_1password_search_calls_each_seam_once_in_strict_order_and_ignores
                (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (((:user "user" :secret "value")) ((:find "fixture-op") (:construct t password-store "host" "user" 8443) (:shell "fixture-op read op://reference")))"#
-    ]],
+            r#"OK (((:user "user" :secret "value")) ((:find "fixture-op") (:construct t password-store "host" "user" 8443) (:shell "fixture-op read op://reference")))"#
+        ]],
     )
 }
 
-fn auth_source_1password_search_missing_executable_warns_once_and_skips_all_secret_work() -> ParityBatchCase {
+fn auth_source_1password_search_missing_executable_warns_once_and_skips_all_secret_work()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_1password_search_missing_executable_warns_once_and_skips_all_secret_work",
         r##"(let (events warnings)
@@ -223,12 +228,13 @@ fn auth_source_1password_search_missing_executable_warns_once_and_skips_all_secr
                (nreverse warnings)))))"##,
         true,
         expect![[
-        r#"OK (:warning-recorded ((:find "missing-op")) (("`auth-source-1password': Could not find executable '%s' to query 1password" ("missing-op") "‘auth-source-1password’: Could not find executable ’missing-op’ to query 1password")))"#
-    ]],
+            r#"OK (:warning-recorded ((:find "missing-op")) (("`auth-source-1password': Could not find executable '%s' to query 1password" ("missing-op") "‘auth-source-1password’: Could not find executable ’missing-op’ to query 1password")))"#
+        ]],
     )
 }
 
-fn auth_source_1password_search_propagates_reference_constructor_failure_before_shell() -> ParityBatchCase {
+fn auth_source_1password_search_propagates_reference_constructor_failure_before_shell()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_1password_search_propagates_reference_constructor_failure_before_shell",
         r##"(let (events)
@@ -261,12 +267,13 @@ fn auth_source_1password_search_propagates_reference_constructor_failure_before_
                (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK ((:error error ("cannot construct fixture reference")) ((:find "op") (:construct nil nil "host" "user" nil)))"#
-    ]],
+            r#"OK ((:error error ("cannot construct fixture reference")) ((:find "op") (:construct nil nil "host" "user" nil)))"#
+        ]],
     )
 }
 
-fn auth_source_1password_search_propagates_executable_lookup_and_shell_failures() -> ParityBatchCase {
+fn auth_source_1password_search_propagates_executable_lookup_and_shell_failures() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_1password_search_propagates_executable_lookup_and_shell_failures",
         r##"(list
@@ -316,12 +323,13 @@ fn auth_source_1password_search_propagates_executable_lookup_and_shell_failures(
                (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (((:error error ("lookup failed")) ((:find "op"))) ((:error error ("CLI failed")) ((:find "op") (:shell "op read op://Personal/host/user"))))"#
-    ]],
+            r#"OK (((:error error ("lookup failed")) ((:find "op"))) ((:error error ("CLI failed")) ((:find "op") (:shell "op read op://Personal/host/user"))))"#
+        ]],
     )
 }
 
-fn auth_source_1password_search_uses_configured_executable_text_but_not_find_result_path() -> ParityBatchCase {
+fn auth_source_1password_search_uses_configured_executable_text_but_not_find_result_path()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_1password_search_uses_configured_executable_text_but_not_find_result_path",
         r##"(let (find-calls commands)
@@ -344,12 +352,13 @@ fn auth_source_1password_search_uses_configured_executable_text_but_not_find_res
                (nreverse commands)))))"##,
         true,
         expect![[
-        r#"OK (((:user "robot" :secret "secret")) ("custom-op --account work") ("custom-op --account work read op://Personal/service/robot"))"#
-    ]],
+            r#"OK (((:user "robot" :secret "secret")) ("custom-op --account work") ("custom-op --account work read op://Personal/service/robot"))"#
+        ]],
     )
 }
 
-fn auth_source_1password_real_fake_cli_receives_read_and_one_reference_argument() -> ParityBatchCase {
+fn auth_source_1password_real_fake_cli_receives_read_and_one_reference_argument() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_1password_real_fake_cli_receives_read_and_one_reference_argument",
         r##"(let* ((root
@@ -389,8 +398,8 @@ fn auth_source_1password_real_fake_cli_receives_read_and_one_reference_argument(
              (file-modes script))))"##,
         true,
         expect![[
-        r#"OK (((:user "release-bot" :secret "fixture-secret:line-one\nline-two")) "read\nop://Automation/ci.example/release-bot\n" 493)"#
-    ]],
+            r#"OK (((:user "release-bot" :secret "fixture-secret:line-one\nline-two")) "read\nop://Automation/ci.example/release-bot\n" 493)"#
+        ]],
     )
 }
 

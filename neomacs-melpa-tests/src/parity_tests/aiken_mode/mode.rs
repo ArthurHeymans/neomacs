@@ -19,8 +19,8 @@ fn package_loads_exact_release_and_complete_public_data_surface() -> ParityBatch
 "##,
         true,
         expect![[
-        r#"OK (t "20230920.1210" ("if" "else" "when" "is" "fn" "use" "let" "pub" "type" "opaque" "const" "todo" "error" "expect" "test" "trace" "fail" "validator" "and" "or") ("=" "->" ".." "|>" ">=" "<=" ">" "<" "!=" "==" "&&" "||" "!" "+" "-" "/" "*" "%" "?") 7 t prog-mode)"#
-    ]],
+            r#"OK (t "20230920.1210" ("if" "else" "when" "is" "fn" "use" "let" "pub" "type" "opaque" "const" "todo" "error" "expect" "test" "trace" "fail" "validator" "and" "or") ("=" "->" ".." "|>" ">=" "<=" ">" "<" "!=" "==" "&&" "||" "!" "+" "-" "/" "*" "%" "?") 7 t prog-mode)"#
+        ]],
     )
 }
 
@@ -44,8 +44,8 @@ fn auto_mode_selects_aiken_only_for_final_ak_extension() -> ParityBatchCase {
 "##,
         true,
         expect![[
-        r#"OK (("validator.ak" aiken-mode t) ("src/payment.ak" aiken-mode t) ("validator.aka" fundamental-mode t) ("validator.ak.bak" aiken-mode nil) ("AK" fundamental-mode t))"#
-    ]],
+            r#"OK (("validator.ak" aiken-mode t) ("src/payment.ak" aiken-mode t) ("validator.aka" fundamental-mode t) ("validator.ak.bak" aiken-mode nil) ("AK" fundamental-mode t))"#
+        ]],
     )
 }
 
@@ -70,8 +70,8 @@ fn entering_mode_configures_prog_editing_comments_words_and_font_lock() -> Parit
 "##,
         true,
         expect![[
-        r#"OK (aiken-mode "Aiken" prog-mode nil "// " "" "//+ *" t t (aiken-font-lock-keywords) 119 46 62 t t)"#
-    ]],
+            r#"OK (aiken-mode "Aiken" prog-mode nil "// " "" "//+ *" t t (aiken-font-lock-keywords) 119 46 62 t t)"#
+        ]],
     )
 }
 
@@ -156,8 +156,8 @@ fn unsupported_formatter_indenter_lsp_and_navigation_apis_remain_absent() -> Par
 "##,
         true,
         expect![[
-        r#"OK ((nil nil nil nil nil nil) indent-relative nil nil t 10 "{ first }" "workspace-defined build" nil)"#
-    ]],
+            r#"OK ((nil nil nil nil nil nil) indent-relative nil nil t 10 "{ first }" "workspace-defined build" nil)"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_rst_batch};
 
-fn auto_complete_rst_directive_parser_finds_directive_above_partial_single_option() -> ParityBatchCase {
+fn auto_complete_rst_directive_parser_finds_directive_above_partial_single_option()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_rst_directive_parser_finds_directive_above_partial_single_option",
         r##"(with-temp-buffer
@@ -105,7 +106,8 @@ fn auto_complete_rst_directive_parser_respects_explicit_search_bound() -> Parity
     )
 }
 
-fn auto_complete_rst_directive_parser_exposes_domain_and_hyphen_name_boundaries() -> ParityBatchCase {
+fn auto_complete_rst_directive_parser_exposes_domain_and_hyphen_name_boundaries() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_rst_directive_parser_exposes_domain_and_hyphen_name_boundaries",
         r##"(mapcar
@@ -127,12 +129,13 @@ fn auto_complete_rst_directive_parser_exposes_domain_and_hyphen_name_boundaries(
                              "δοκιμή"))"##,
         true,
         expect![[
-        r####"OK (("note" "note") ("code-block" "code-block") ("py:function" nil) ("custom_directive" "custom_directive") ("δοκιμή" "δοκιμή"))"####
-    ]],
+            r####"OK (("note" "note") ("code-block" "code-block") ("py:function" nil) ("custom_directive" "custom_directive") ("δοκιμή" "δοκιμή"))"####
+        ]],
     )
 }
 
-fn auto_complete_rst_option_parser_handles_indentation_and_partial_option_names() -> ParityBatchCase {
+fn auto_complete_rst_option_parser_handles_indentation_and_partial_option_names() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_rst_option_parser_handles_indentation_and_partial_option_names",
         r##"(mapcar
@@ -152,8 +155,8 @@ fn auto_complete_rst_option_parser_handles_indentation_and_partial_option_names(
                              "\t:target"))"##,
         true,
         expect![[
-        r####"OK (("     :" "image") ("     :alt" "image") ("     :height:" nil) ("     :width: 640" nil) ("\11:target" "image"))"####
-    ]],
+            r####"OK (("     :" "image") ("     :alt" "image") ("     :height:" nil) ("     :width: 640" nil) ("\11:target" "image"))"####
+        ]],
     )
 }
 
@@ -182,12 +185,13 @@ fn auto_complete_rst_goto_parser_reports_nil_and_exposes_search_side_effects() -
                              ""))"##,
         true,
         expect![[
-        r####"OK (("plain paragraph" nil 16 6 1) (".. note:: no option" nil 20 13 1) (":class" nil 7 7 1) ("   class" nil 9 1 1) ("" nil 1 1 1))"####
-    ]],
+            r####"OK (("plain paragraph" nil 16 6 1) (".. note:: no option" nil 20 13 1) (":class" nil 7 7 1) ("   class" nil 9 1 1) ("" nil 1 1 1))"####
+        ]],
     )
 }
 
-fn auto_complete_rst_directive_name_lookup_preserves_point_and_buffer_contents() -> ParityBatchCase {
+fn auto_complete_rst_directive_name_lookup_preserves_point_and_buffer_contents() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_rst_directive_name_lookup_preserves_point_and_buffer_contents",
         r##"(with-temp-buffer

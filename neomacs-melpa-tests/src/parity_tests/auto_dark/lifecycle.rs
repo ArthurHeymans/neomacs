@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_dark_autoload_batch, assert_auto_dark_batch};
 
-fn auto_dark_mode_enable_with_configured_method_checks_theme_then_registers_listener() -> ParityBatchCase {
+fn auto_dark_mode_enable_with_configured_method_checks_theme_then_registers_listener()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dark_mode_enable_with_configured_method_checks_theme_then_registers_listener",
         r##"(let ((auto-dark-mode nil)
@@ -45,7 +46,8 @@ fn auto_dark_mode_enable_with_configured_method_checks_theme_then_registers_list
     )
 }
 
-fn auto_dark_mode_enable_without_method_persists_detection_before_check_and_registration() -> ParityBatchCase {
+fn auto_dark_mode_enable_without_method_persists_detection_before_check_and_registration()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dark_mode_enable_without_method_persists_detection_before_check_and_registration",
         r##"(let ((auto-dark-mode nil)
@@ -87,7 +89,8 @@ fn auto_dark_mode_enable_without_method_persists_detection_before_check_and_regi
     )
 }
 
-fn auto_dark_mode_disable_only_unregisters_listener_and_preserves_theme_and_detection_state() -> ParityBatchCase {
+fn auto_dark_mode_disable_only_unregisters_listener_and_preserves_theme_and_detection_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dark_mode_disable_only_unregisters_listener_and_preserves_theme_and_detection_state",
         r##"(let ((auto-dark-mode t)
@@ -134,7 +137,8 @@ fn auto_dark_mode_disable_only_unregisters_listener_and_preserves_theme_and_dete
     )
 }
 
-fn auto_dark_global_mode_numeric_toggle_hook_and_repeated_enable_semantics_match() -> ParityBatchCase {
+fn auto_dark_global_mode_numeric_toggle_hook_and_repeated_enable_semantics_match() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dark_global_mode_numeric_toggle_hook_and_repeated_enable_semantics_match",
         r##"(let* ((auto-dark-mode nil)
@@ -176,12 +180,13 @@ fn auto_dark_global_mode_numeric_toggle_hook_and_repeated_enable_semantics_match
                (nreverse events)))))"##,
         true,
         expect![
-        "OK (t t t t nil nil t t nil nil (:check :register (:mode-hook t) :check :register (:mode-hook t) :unregister (:mode-hook nil) :check :register (:mode-hook t) :unregister (:mode-hook nil)))"
-    ],
+            "OK (t t t t nil nil t t nil nil (:check :register (:mode-hook t) :check :register (:mode-hook t) :unregister (:mode-hook nil) :check :register (:mode-hook t) :unregister (:mode-hook nil)))"
+        ],
     )
 }
 
-fn auto_dark_mode_enable_failure_leaves_mode_variable_on_and_skips_registration() -> ParityBatchCase {
+fn auto_dark_mode_enable_failure_leaves_mode_variable_on_and_skips_registration() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dark_mode_enable_failure_leaves_mode_variable_on_and_skips_registration",
         r##"(let ((auto-dark-mode nil)
@@ -211,7 +216,8 @@ fn auto_dark_mode_enable_failure_leaves_mode_variable_on_and_skips_registration(
     )
 }
 
-fn auto_dark_set_theme_hook_failure_occurs_after_state_frame_and_theme_changes() -> ParityBatchCase {
+fn auto_dark_set_theme_hook_failure_occurs_after_state_frame_and_theme_changes() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dark_set_theme_hook_failure_occurs_after_state_frame_and_theme_changes",
         r##"(let ((auto-dark-themes
@@ -248,12 +254,13 @@ fn auto_dark_set_theme_hook_failure_occurs_after_state_frame_and_theme_changes()
              (nreverse events))))"##,
         true,
         expect![
-        "OK ((:error void-variable (events)) dark ((:frames dark) (:themes (dark-theme))))"
-    ],
+            "OK ((:error void-variable (events)) dark ((:frames dark) (:themes (dark-theme))))"
+        ],
     )
 }
 
-fn auto_dark_autoload_customize_before_enable_runs_real_initial_light_theme_workflow() -> ParityBatchCase {
+fn auto_dark_autoload_customize_before_enable_runs_real_initial_light_theme_workflow()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dark_autoload_customize_before_enable_runs_real_initial_light_theme_workflow",
         r##"(let ((custom-safe-themes t)
@@ -307,8 +314,8 @@ fn auto_dark_autoload_customize_before_enable_runs_real_initial_light_theme_work
              '(tango-dark tango))))"##,
         true,
         expect![
-        "OK ((nil nil nil nil) (t t manual ((tango-dark) (tango)) (tango-dark) dark dark t) nil t)"
-    ],
+            "OK ((nil nil nil nil) (t t manual ((tango-dark) (tango)) (tango-dark) dark dark t) nil t)"
+        ],
     )
 }
 
@@ -327,8 +334,7 @@ fn lifecycle_auto_dark_batch() {
 
 #[test]
 fn lifecycle_auto_dark_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        auto_dark_autoload_customize_before_enable_runs_real_initial_light_theme_workflow(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![auto_dark_autoload_customize_before_enable_runs_real_initial_light_theme_workflow()];
     assert_auto_dark_autoload_batch(&cases);
 }

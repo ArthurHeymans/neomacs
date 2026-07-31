@@ -177,10 +177,5 @@ pub(crate) fn assert_amsreftex_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_amsreftex_parity` cases (2a).
 pub(crate) fn assert_amsreftex_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        amsreftex_oracle(),
-        &name,
-        "amsreftex_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(amsreftex_oracle(), &name, "amsreftex_parity", cases);
 }

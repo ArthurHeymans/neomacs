@@ -62,8 +62,8 @@ fn setup_starts_the_server_sends_discovered_imports_and_binds_the_dcd_keys() -> 
     (ac-dcd-test-cleanup)))"##,
         true,
         expect![[
-        r#"OK ((("-p" "9166")) (("describe")) ((("--tcp" "-I/usr/include/dmd/phobos" "-I/usr/include/dmd/druntime/import" "-I[ORACLE-SANDBOX]/my project/source" "-I[ORACLE-SANDBOX]/vendor/cerealed/source" "-I[ORACLE-SANDBOX]/vendor/cerealed/extra") . "module app;\nimport std.stdio;\nvoid main() {\n    writeln(\"hallo\");\n}\n")) (d-mode t (ac-source-dcd ac-source-words-in-same-mode-buffers) t t) (ac-dcd-show-ddoc-with-buffer ac-dcd-goto-definition ac-dcd-goto-def-pop-marker ac-dcd-search-symbol))"#
-    ]],
+            r#"OK ((("-p" "9166")) (("describe")) ((("--tcp" "-I/usr/include/dmd/phobos" "-I/usr/include/dmd/druntime/import" "-I[ORACLE-SANDBOX]/my project/source" "-I[ORACLE-SANDBOX]/vendor/cerealed/source" "-I[ORACLE-SANDBOX]/vendor/cerealed/extra") . "module app;\nimport std.stdio;\nvoid main() {\n    writeln(\"hallo\");\n}\n")) (d-mode t (ac-source-dcd ac-source-words-in-same-mode-buffers) t t) (ac-dcd-show-ddoc-with-buffer ac-dcd-goto-definition ac-dcd-goto-def-pop-marker ac-dcd-search-symbol))"#
+        ]],
     )
 }
 
@@ -109,12 +109,13 @@ fn completes_a_struct_member_through_auto_complete_and_inserts_the_choice() -> P
       (point)))))"##,
         true,
         expect![[
-        r#"OK (((("--tcp" "-c" "83" "-p" "9166") . "module app;\nimport std.stdio;\n\nvoid main() {\n    auto f = File(\"data.txt\");\n    f.\n}\n")) ("" 87 6) ("name" "isOpen" "byLine" "rawWrite") ("m" "m" "f\nf" "f") ("member variable name" "member variable name" "candidate kind undetected: f\nf" "function or method") "identifiers\nbyLine\11f\nbyLine\11f\nname\11m\nisOpen\11m\nPattern\11k\nrawWrite\11f\n" "module app;\nimport std.stdio;\n\nvoid main() {\n    auto f = File(\"data.txt\");\n    f.name\n}\n" 87)"#
-    ]],
+            r#"OK (((("--tcp" "-c" "83" "-p" "9166") . "module app;\nimport std.stdio;\n\nvoid main() {\n    auto f = File(\"data.txt\");\n    f.\n}\n")) ("" 87 6) ("name" "isOpen" "byLine" "rawWrite") ("m" "m" "f\nf" "f") ("member variable name" "member variable name" "candidate kind undetected: f\nf" "function or method") "identifiers\nbyLine\11f\nbyLine\11f\nname\11m\nisOpen\11m\nPattern\11k\nrawWrite\11f\n" "module app;\nimport std.stdio;\n\nvoid main() {\n    auto f = File(\"data.txt\");\n    f.name\n}\n" 87)"#
+        ]],
     )
 }
 
-fn queries_dcd_at_the_identifier_start_in_bytes_and_never_from_comments_or_strings() -> ParityBatchCase {
+fn queries_dcd_at_the_identifier_start_in_bytes_and_never_from_comments_or_strings()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "queries_dcd_at_the_identifier_start_in_bytes_and_never_from_comments_or_strings",
         r##"(let ((source (ac-dcd-test-source
@@ -158,8 +159,8 @@ fn queries_dcd_at_the_identifier_start_in_bytes_and_never_from_comments_or_strin
       (ac-dcd-test-client-calls)))))"##,
         true,
         expect![[
-        r#"OK ((112 122 "writ" ("writef" "writeln" "writefln")) (64 58 nil) (97 84 nil) ((("--tcp" "-c" "118" "-p" "9166") . "module app;\nimport std.stdio;\n\nvoid main() {\n    writeln(\"Grüße, Welt — 日本語\");\n    // TODO: write more\n    writ\n}\n")))"#
-    ]],
+            r#"OK ((112 122 "writ" ("writef" "writeln" "writefln")) (64 58 nil) (97 84 nil) ((("--tcp" "-c" "118" "-p" "9166") . "module app;\nimport std.stdio;\n\nvoid main() {\n    writeln(\"Grüße, Welt — 日本語\");\n    // TODO: write more\n    writ\n}\n")))"#
+        ]],
     )
 }
 
@@ -210,12 +211,13 @@ fn shows_the_ddoc_for_the_symbol_at_point_and_reports_undocumented_symbols() -> 
         (length (ac-dcd-test-client-calls)))))))"##,
         true,
         expect![[
-        r#"OK ((t nil (57 57) "module app;\nimport std.stdio;\n\nvoid main() {\n    writeln(\"hallo\");  // frisch getippt\n}\n" "Writes its arguments to stdout.\n\nParams:\n    args = die Grüße\n\nLiteral in D source: a\\nb\n" 1 ("*dcd-document*" "app.d") ((("--tcp" "-c" "57" "-p" "9166" "-d" "[ORACLE-SANDBOX]/my project/source/app.d") . ""))) (error ("No document for the symbol at point!")) 2)"#
-    ]],
+            r#"OK ((t nil (57 57) "module app;\nimport std.stdio;\n\nvoid main() {\n    writeln(\"hallo\");  // frisch getippt\n}\n" "Writes its arguments to stdout.\n\nParams:\n    args = die Grüße\n\nLiteral in D source: a\\nb\n" 1 ("*dcd-document*" "app.d") ((("--tcp" "-c" "57" "-p" "9166" "-d" "[ORACLE-SANDBOX]/my project/source/app.d") . ""))) (error ("No document for the symbol at point!")) 2)"#
+        ]],
     )
 }
 
-fn goto_definition_jumps_across_files_by_byte_offset_and_the_marker_ring_returns() -> ParityBatchCase {
+fn goto_definition_jumps_across_files_by_byte_offset_and_the_marker_ring_returns() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "goto_definition_jumps_across_files_by_byte_offset_and_the_marker_ring_returns",
         r##"(let* ((source (ac-dcd-test-source
@@ -289,8 +291,8 @@ fn goto_definition_jumps_across_files_by_byte_offset_and_the_marker_ring_returns
       (kill-buffer visited))))"##,
         true,
         expect![[
-        r#"OK (("stdio.d" "vendor/phobos/std/stdio.d" 69 "writeln" 1) ("app.d" 61 61 0) ("app.d" 104 "Not found" 0) ("app.d" 37 "gruessen" 1) ((("--tcp" "-c" "61" "-p" "9166" "-l" "[ORACLE-SANDBOX]/my project/source/app.d") . "") (("--tcp" "-c" "106" "-p" "9166" "-l" "[ORACLE-SANDBOX]/my project/source/app.d") . "") (("--tcp" "-c" "106" "-p" "9166" "-l" "[ORACLE-SANDBOX]/my project/source/app.d") . "")))"#
-    ]],
+            r#"OK (("stdio.d" "vendor/phobos/std/stdio.d" 69 "writeln" 1) ("app.d" 61 61 0) ("app.d" 104 "Not found" 0) ("app.d" 37 "gruessen" 1) ((("--tcp" "-c" "61" "-p" "9166" "-l" "[ORACLE-SANDBOX]/my project/source/app.d") . "") (("--tcp" "-c" "106" "-p" "9166" "-l" "[ORACLE-SANDBOX]/my project/source/app.d") . "") (("--tcp" "-c" "106" "-p" "9166" "-l" "[ORACLE-SANDBOX]/my project/source/app.d") . "")))"#
+        ]],
     )
 }
 
@@ -353,12 +355,13 @@ fn search_symbol_lists_matches_and_visits_a_single_match() -> ParityBatchCase {
       (kill-buffer visited))))"##,
         true,
         expect![[
-        r#"OK (("[ORACLE-SANDBOX]/vendor/phobos/std/stdio.d\11f\01168\n[ORACLE-SANDBOX]/vendor/phobos/std/file.d\11f\01122" (1 delete-window ac-dcd-visit-file-in-line) ("*dcd-search-symbol*" "app.d") ((("--tcp" "--search" "writeln") . ""))) "[ORACLE-SANDBOX]/vendor/phobos/std/stdio.d\11f\01168" ("app.d" "stdio.d") ("vendor/phobos/std/stdio.d" 68 " writeln(T...)(T args) { }" (lambda nil (interactive) (switch-to-buffer (get-buffer-create ac-dcd-search-symbol-buffer-name)))) 2)"#
-    ]],
+            r#"OK (("[ORACLE-SANDBOX]/vendor/phobos/std/stdio.d\11f\01168\n[ORACLE-SANDBOX]/vendor/phobos/std/file.d\11f\01122" (1 delete-window ac-dcd-visit-file-in-line) ("*dcd-search-symbol*" "app.d") ((("--tcp" "--search" "writeln") . ""))) "[ORACLE-SANDBOX]/vendor/phobos/std/stdio.d\11f\01168" ("app.d" "stdio.d") ("vendor/phobos/std/stdio.d" 68 " writeln(T...)(T args) { }" (lambda nil (interactive) (switch-to-buffer (get-buffer-create ac-dcd-search-symbol-buffer-name)))) 2)"#
+        ]],
     )
 }
 
-fn a_failing_or_missing_dcd_client_reports_through_the_error_buffer_and_echo_area() -> ParityBatchCase {
+fn a_failing_or_missing_dcd_client_reports_through_the_error_buffer_and_echo_area()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "a_failing_or_missing_dcd_client_reports_through_the_error_buffer_and_echo_area",
         r##"(let ((source (ac-dcd-test-source
@@ -401,8 +404,8 @@ fn a_failing_or_missing_dcd_client_reports_through_the_error_buffer_and_echo_are
         (length (ac-dcd-test-client-calls)))))))"##,
         true,
         expect![[
-        r#"OK ((nil current-time-string ("\"[ORACLE-SANDBOX]/bin/dcd-client --tcp -c 50 -p 9166\" failed." "Error type is: Could not connect to the server : Connection refused" "") 1 "dcd-client: Error: Could not connect to the server: Connection refused\n" ("*dcd-error*" "app.d") ((("--tcp" "-c" "50" "-p" "9166") . "module app;\nimport std.stdio;\n\nvoid main() {\n    writ\n}\n"))) nil "ac-dcd error: could not find dcd-client executable" 1)"#
-    ]],
+            r#"OK ((nil current-time-string ("\"[ORACLE-SANDBOX]/bin/dcd-client --tcp -c 50 -p 9166\" failed." "Error type is: Could not connect to the server : Connection refused" "") 1 "dcd-client: Error: Could not connect to the server: Connection refused\n" ("*dcd-error*" "app.d") ((("--tcp" "-c" "50" "-p" "9166") . "module app;\nimport std.stdio;\n\nvoid main() {\n    writ\n}\n"))) nil "ac-dcd error: could not find dcd-client executable" 1)"#
+        ]],
     )
 }
 

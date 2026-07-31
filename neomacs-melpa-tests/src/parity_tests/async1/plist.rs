@@ -45,7 +45,8 @@ fn async1_plist_get_ports_the_complete_upstream_value_and_default_matrix() -> Pa
     )
 }
 
-fn async1_plist_get_distinguishes_absent_keys_from_present_nil_and_keyword_values() -> ParityBatchCase {
+fn async1_plist_get_distinguishes_absent_keys_from_present_nil_and_keyword_values()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_plist_get_distinguishes_absent_keys_from_present_nil_and_keyword_values",
         r##"(list
@@ -74,7 +75,8 @@ fn async1_plist_get_distinguishes_absent_keys_from_present_nil_and_keyword_value
     )
 }
 
-fn async1_plist_get_unwraps_quoted_symbols_but_preserves_other_callable_values() -> ParityBatchCase {
+fn async1_plist_get_unwraps_quoted_symbols_but_preserves_other_callable_values() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_plist_get_unwraps_quoted_symbols_but_preserves_other_callable_values",
         r##"(let* ((closure
@@ -190,7 +192,8 @@ fn async1_plist_remove_nil_value_removes_every_nil_cell_from_the_copy() -> Parit
     )
 }
 
-fn async1_plist_remove_preserves_input_and_reuses_identity_only_when_key_is_absent() -> ParityBatchCase {
+fn async1_plist_remove_preserves_input_and_reuses_identity_only_when_key_is_absent()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_plist_remove_preserves_input_and_reuses_identity_only_when_key_is_absent",
         r##"(let* ((input
@@ -249,8 +252,8 @@ fn async1_plist_helpers_report_malformed_non_list_inputs_without_mutation() -> P
              :target))))"##,
         true,
         expect![
-        "OK ((:error wrong-type-argument (listp (:a 1 . tail))) (:error wrong-type-argument (listp (:a 1 . tail))) (:error wrong-type-argument (listp [:a 1])) (:error wrong-type-argument (listp [:target 1])))"
-    ],
+            "OK ((:error wrong-type-argument (listp (:a 1 . tail))) (:error wrong-type-argument (listp (:a 1 . tail))) (:error wrong-type-argument (listp [:a 1])) (:error wrong-type-argument (listp [:target 1])))"
+        ],
     )
 }
 

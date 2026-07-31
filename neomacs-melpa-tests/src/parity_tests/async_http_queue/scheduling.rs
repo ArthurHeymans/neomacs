@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_async_http_queue_batch};
 
-fn async_http_queue_process_resets_workers_and_schedules_exact_staggered_initial_batch() -> ParityBatchCase {
+fn async_http_queue_process_resets_workers_and_schedules_exact_staggered_initial_batch()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async_http_queue_process_resets_workers_and_schedules_exact_staggered_initial_batch",
         r##"(let* ((state
@@ -57,8 +58,8 @@ fn async_http_queue_process_resets_workers_and_schedules_exact_staggered_initial
               events))))"##,
         true,
         expect![
-        "OK (nil 0 ((1 0 nil t t) (2 50 nil t t) (3 100 nil t t) (4 150 nil t t) (5 200 nil t t)))"
-    ],
+            "OK (nil 0 ((1 0 nil t t) (2 50 nil t t) (3 100 nil t t) (4 150 nil t t) (5 200 nil t t)))"
+        ],
     )
 }
 
@@ -118,8 +119,8 @@ fn async_http_queue_process_rejects_non_integer_concurrency_during_scheduling() 
           '(nil 1.5 "2" two))"##,
         true,
         expect![[
-        r#"OK ((:error wrong-type-argument (number-or-marker-p nil)) (:ok nil) (:error wrong-type-argument (number-or-marker-p "2")) (:error wrong-type-argument (number-or-marker-p two)))"#
-    ]],
+            r#"OK ((:error wrong-type-argument (number-or-marker-p nil)) (:ok nil) (:error wrong-type-argument (number-or-marker-p "2")) (:error wrong-type-argument (number-or-marker-p two)))"#
+        ]],
     )
 }
 
@@ -169,12 +170,13 @@ fn async_http_queue_process_next_respects_capacity_and_terminal_queue() -> Parit
                 state)))))"##,
         true,
         expect![[
-        r#"OK (nil nil nil (("https://api.test/a" done nil) ("https://api.test/b" done nil)) 0)"#
-    ]],
+            r#"OK (nil nil nil (("https://api.test/a" done nil) ("https://api.test/b" done nil)) 0)"#
+        ]],
     )
 }
 
-fn async_http_queue_process_next_claims_first_pending_item_and_success_finishes_lifecycle() -> ParityBatchCase {
+fn async_http_queue_process_next_claims_first_pending_item_and_success_finishes_lifecycle()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async_http_queue_process_next_claims_first_pending_item_and_success_finishes_lifecycle",
         r##"(let* (success
@@ -252,12 +254,13 @@ fn async_http_queue_process_next_claims_first_pending_item_and_success_finishes_
                (nreverse messages)))))"##,
         true,
         expect![[
-        r#"OK (:request t t (:queue (("https://api.test/a" processing nil)) :active 1 :limit 1 :timeout 10 :parser nil :completion t :error nil) (:queue (("https://api.test/a" done #1=((id . 7) (name . "ready")))) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error nil) ((0.05 nil t t)) ((#1#)) ("Loaded 1 URLs"))"#
-    ]],
+            r#"OK (:request t t (:queue (("https://api.test/a" processing nil)) :active 1 :limit 1 :timeout 10 :parser nil :completion t :error nil) (:queue (("https://api.test/a" done #1=((id . 7) (name . "ready")))) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error nil) ((0.05 nil t t)) ((#1#)) ("Loaded 1 URLs"))"#
+        ]],
     )
 }
 
-fn async_http_queue_process_next_error_runs_per_url_callback_before_completion() -> ParityBatchCase {
+fn async_http_queue_process_next_error_runs_per_url_callback_before_completion() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async_http_queue_process_next_error_runs_per_url_callback_before_completion",
         r##"(let* (failure
@@ -314,8 +317,8 @@ fn async_http_queue_process_next_error_runs_per_url_callback_before_completion()
                 (nreverse timers))))))"##,
         true,
         expect![[
-        r#"OK ((:queue (("https://api.test/fail" processing nil)) :active 1 :limit 1 :timeout 10 :parser nil :completion t :error t) (:queue (("https://api.test/fail" error nil)) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error t) ((:error "https://api.test/fail") (:complete (nil))) ((0.05 t)))"#
-    ]],
+            r#"OK ((:queue (("https://api.test/fail" processing nil)) :active 1 :limit 1 :timeout 10 :parser nil :completion t :error t) (:queue (("https://api.test/fail" error nil)) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error t) ((:error "https://api.test/fail") (:complete (nil))) ((0.05 t)))"#
+        ]],
     )
 }
 
@@ -390,8 +393,8 @@ fn async_http_queue_refills_slots_as_workers_finish_without_exceeding_limit() ->
               state))))"##,
         true,
         expect![[
-        r#"OK (("https://api.test/1" "https://api.test/2" "https://api.test/3" "https://api.test/4") (2 1 1 1 0) 4 (:queue (("https://api.test/1" done :one) ("https://api.test/2" done :two) ("https://api.test/3" done :three) ("https://api.test/4" done :four)) :active 0 :limit 2 :timeout 10 :parser nil :completion nil :error nil))"#
-    ]],
+            r#"OK (("https://api.test/1" "https://api.test/2" "https://api.test/3" "https://api.test/4") (2 1 1 1 0) 4 (:queue (("https://api.test/1" done :one) ("https://api.test/2" done :two) ("https://api.test/3" done :three) ("https://api.test/4" done :four)) :active 0 :limit 2 :timeout 10 :parser nil :completion nil :error nil))"#
+        ]],
     )
 }
 
@@ -439,12 +442,13 @@ fn async_http_queue_duplicate_urls_collapse_into_one_fetch_and_shared_result() -
                completed))))"##,
         true,
         expect![[
-        r#"OK (nil ("https://api.test/same") (:queue (("https://api.test/same" processing nil) ("https://api.test/same" processing nil)) :active 1 :limit 2 :timeout 10 :parser nil :completion t :error nil) (:queue (("https://api.test/same" done :one-response) ("https://api.test/same" done :one-response)) :active 0 :limit 2 :timeout 10 :parser nil :completion t :error nil) (:one-response :one-response))"#
-    ]],
+            r#"OK (nil ("https://api.test/same") (:queue (("https://api.test/same" processing nil) ("https://api.test/same" processing nil)) :active 1 :limit 2 :timeout 10 :parser nil :completion t :error nil) (:queue (("https://api.test/same" done :one-response) ("https://api.test/same" done :one-response)) :active 0 :limit 2 :timeout 10 :parser nil :completion t :error nil) (:one-response :one-response))"#
+        ]],
     )
 }
 
-fn async_http_queue_completion_callback_signal_propagates_after_terminal_state_update() -> ParityBatchCase {
+fn async_http_queue_completion_callback_signal_propagates_after_terminal_state_update()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async_http_queue_completion_callback_signal_propagates_after_terminal_state_update",
         r##"(let* ((state
@@ -475,12 +479,13 @@ fn async_http_queue_completion_callback_signal_propagates_after_terminal_state_u
               state))))"##,
         true,
         expect![[
-        r#"OK ((:error error ("completion exploded")) (:queue (("https://api.test/a" done :payload)) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error nil))"#
-    ]],
+            r#"OK ((:error error ("completion exploded")) (:queue (("https://api.test/a" done :payload)) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error nil))"#
+        ]],
     )
 }
 
-fn async_http_queue_error_callback_signal_prevents_refill_and_completion_check() -> ParityBatchCase {
+fn async_http_queue_error_callback_signal_prevents_refill_and_completion_check() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async_http_queue_error_callback_signal_prevents_refill_and_completion_check",
         r##"(let* ((state
@@ -520,8 +525,8 @@ fn async_http_queue_error_callback_signal_prevents_refill_and_completion_check()
              completion-checks)))"##,
         true,
         expect![[
-        r#"OK ((:error error ("error callback exploded")) (:queue (("https://api.test/a" error nil) ("https://api.test/b" pending nil)) :active 0 :limit 1 :timeout 10 :parser nil :completion nil :error t) nil nil)"#
-    ]],
+            r#"OK ((:error error ("error callback exploded")) (:queue (("https://api.test/a" error nil) ("https://api.test/b" pending nil)) :active 0 :limit 1 :timeout 10 :parser nil :completion nil :error t) nil nil)"#
+        ]],
     )
 }
 

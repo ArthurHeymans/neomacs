@@ -68,8 +68,8 @@ fn alda_history_buffer_line_and_block_use_real_buffer_boundaries() -> ParityBatc
               (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (text region region ((text "piano:\n  c d e\n\nviolin:\n  f g a\n") (region 8 15 "  c d e") (region 1 16 "piano:\n  c d e\n")))"#
-    ]],
+            r#"OK (text region region ((text "piano:\n  c d e\n\nviolin:\n  f g a\n") (region 8 15 "  c d e") (region 1 16 "piano:\n  c d e\n")))"#
+        ]],
     )
 }
 
@@ -90,8 +90,8 @@ fn alda_history_accumulates_context_then_playback_emits_complete_marker_score() 
                    (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK ("\npiano:\n  o4 c d e\n\nf" (("play" "-F" "alda-mode-internal-marker" "--code" "\npiano:\n  o4 c d e\n\nf\n%alda-mode-internal-marker\n a b")))"#
-    ]],
+            r#"OK ("\npiano:\n  o4 c d e\n\nf" (("play" "-F" "alda-mode-internal-marker" "--code" "\npiano:\n  o4 c d e\n\nf\n%alda-mode-internal-marker\n a b")))"#
+        ]],
     )
 }
 

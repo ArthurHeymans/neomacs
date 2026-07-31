@@ -36,12 +36,13 @@ fn atom_one_dark_theme_mode_branch_matrix_calls_exact_faces_colors_and_order() -
          (nreverse observations))"##,
         true,
         expect![[
-        r##"OK ((js2-mode (:cookie font-lock-variable-name-face #1=(:foreground "#ABB2BF")) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face (:inherit (font-lock-comment-face))) (font-lock-variable-name-face . #1#))) (html-mode (:cookie font-lock-variable-name-face #2=(:foreground "#D19A66")) ((font-lock-function-name-face :foreground "#E06C75") (font-lock-variable-name-face . #2#))) (javascript-mode nil nil) (web-mode nil nil) (text-mode nil nil))"##
-    ]],
+            r##"OK ((js2-mode (:cookie font-lock-variable-name-face #1=(:foreground "#ABB2BF")) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face (:inherit (font-lock-comment-face))) (font-lock-variable-name-face . #1#))) (html-mode (:cookie font-lock-variable-name-face #2=(:foreground "#D19A66")) ((font-lock-function-name-face :foreground "#E06C75") (font-lock-variable-name-face . #2#))) (javascript-mode nil nil) (web-mode nil nil) (text-mode nil nil))"##
+        ]],
     )
 }
 
-fn atom_one_dark_theme_actual_buffer_local_remapping_alists_match_supported_modes() -> ParityBatchCase {
+fn atom_one_dark_theme_actual_buffer_local_remapping_alists_match_supported_modes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atom_one_dark_theme_actual_buffer_local_remapping_alists_match_supported_modes",
         r##"(mapcar
@@ -63,8 +64,8 @@ fn atom_one_dark_theme_actual_buffer_local_remapping_alists_match_supported_mode
            text-mode))"##,
         true,
         expect![[
-        r##"OK ((js2-mode (font-lock-variable-name-face . #1=(:foreground "#ABB2BF")) ((font-lock-variable-name-face #1# font-lock-variable-name-face) (font-lock-doc-face (:inherit (font-lock-comment-face)) font-lock-doc-face) (font-lock-constant-face (:foreground "#D19A66") font-lock-constant-face)) t) (html-mode (font-lock-variable-name-face . #2=(:foreground "#D19A66")) ((font-lock-variable-name-face #2# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) (javascript-mode nil nil nil) (web-mode nil nil nil) (text-mode nil nil nil))"##
-    ]],
+            r##"OK ((js2-mode (font-lock-variable-name-face . #1=(:foreground "#ABB2BF")) ((font-lock-variable-name-face #1# font-lock-variable-name-face) (font-lock-doc-face (:inherit (font-lock-comment-face)) font-lock-doc-face) (font-lock-constant-face (:foreground "#D19A66") font-lock-constant-face)) t) (html-mode (font-lock-variable-name-face . #2=(:foreground "#D19A66")) ((font-lock-variable-name-face #2# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) (javascript-mode nil nil nil) (web-mode nil nil nil) (text-mode nil nil nil))"##
+        ]],
     )
 }
 
@@ -86,12 +87,13 @@ fn atom_one_dark_theme_force_gate_accepts_every_truthy_value_but_rejects_nil() -
          '(t nil 0 enabled "yes" (enabled)))"##,
         true,
         expect![[
-        r##"OK ((t (font-lock-variable-name-face . #1=(:foreground "#D19A66")) ((font-lock-variable-name-face #1# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) (nil nil nil nil) (0 (font-lock-variable-name-face . #2=(:foreground "#D19A66")) ((font-lock-variable-name-face #2# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) (enabled (font-lock-variable-name-face . #3=(:foreground "#D19A66")) ((font-lock-variable-name-face #3# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) ("yes" (font-lock-variable-name-face . #4=(:foreground "#D19A66")) ((font-lock-variable-name-face #4# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) ((enabled) (font-lock-variable-name-face . #5=(:foreground "#D19A66")) ((font-lock-variable-name-face #5# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t))"##
-    ]],
+            r##"OK ((t (font-lock-variable-name-face . #1=(:foreground "#D19A66")) ((font-lock-variable-name-face #1# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) (nil nil nil nil) (0 (font-lock-variable-name-face . #2=(:foreground "#D19A66")) ((font-lock-variable-name-face #2# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) (enabled (font-lock-variable-name-face . #3=(:foreground "#D19A66")) ((font-lock-variable-name-face #3# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) ("yes" (font-lock-variable-name-face . #4=(:foreground "#D19A66")) ((font-lock-variable-name-face #4# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t) ((enabled) (font-lock-variable-name-face . #5=(:foreground "#D19A66")) ((font-lock-variable-name-face #5# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t))"##
+        ]],
     )
 }
 
-fn atom_one_dark_theme_interactive_call_bypasses_nil_force_gate_and_returns_last_cookie() -> ParityBatchCase {
+fn atom_one_dark_theme_interactive_call_bypasses_nil_force_gate_and_returns_last_cookie()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atom_one_dark_theme_interactive_call_bypasses_nil_force_gate_and_returns_last_cookie",
         r##"(with-temp-buffer
@@ -113,8 +115,8 @@ fn atom_one_dark_theme_interactive_call_bypasses_nil_force_gate_and_returns_last
            'face-remapping-alist)))"##,
         true,
         expect![[
-        r##"OK (t (interactive nil) nil nil (font-lock-variable-name-face . #1=(:foreground "#D19A66")) ((font-lock-variable-name-face #1# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t)"##
-    ]],
+            r##"OK (t (interactive nil) nil nil (font-lock-variable-name-face . #1=(:foreground "#D19A66")) ((font-lock-variable-name-face #1# font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) t)"##
+        ]],
     )
 }
 
@@ -160,12 +162,13 @@ fn atom_one_dark_theme_registered_hook_applies_real_html_font_lock_workflow() ->
              (point-max)))))"##,
         true,
         expect![[
-        r##"OK (1 html-mode ((font-lock-variable-name-face (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) (("section" font-lock-function-name-face) ("class" font-lock-variable-name-face) ("\"card\"" font-lock-string-face) ("data-kind" font-lock-variable-name-face) ("\"primary\"" font-lock-string-face) ("Hello" nil)) "<section class=\"card\" data-kind=\"primary\">Hello</section>")"##
-    ]],
+            r##"OK (1 html-mode ((font-lock-variable-name-face (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) (("section" font-lock-function-name-face) ("class" font-lock-variable-name-face) ("\"card\"" font-lock-string-face) ("data-kind" font-lock-variable-name-face) ("\"primary\"" font-lock-string-face) ("Hello" nil)) "<section class=\"card\" data-kind=\"primary\">Hello</section>")"##
+        ]],
     )
 }
 
-fn atom_one_dark_theme_js2_recipe_remaps_three_faces_with_exact_effective_values() -> ParityBatchCase {
+fn atom_one_dark_theme_js2_recipe_remaps_three_faces_with_exact_effective_values() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atom_one_dark_theme_js2_recipe_remaps_three_faces_with_exact_effective_values",
         r##"(with-temp-buffer
@@ -188,12 +191,13 @@ fn atom_one_dark_theme_js2_recipe_remaps_three_faces_with_exact_effective_values
                font-lock-variable-name-face)))))"##,
         true,
         expect![[
-        r##"OK ((font-lock-variable-name-face . #1=(:foreground "#ABB2BF")) ((font-lock-variable-name-face . #4=(#1# font-lock-variable-name-face)) (font-lock-doc-face . #3=((:inherit (font-lock-comment-face)) font-lock-doc-face)) (font-lock-constant-face . #2=((:foreground "#D19A66") font-lock-constant-face))) ((font-lock-constant-face #2#) (font-lock-doc-face #3#) (font-lock-variable-name-face #4#)))"##
-    ]],
+            r##"OK ((font-lock-variable-name-face . #1=(:foreground "#ABB2BF")) ((font-lock-variable-name-face . #4=(#1# font-lock-variable-name-face)) (font-lock-doc-face . #3=((:inherit (font-lock-comment-face)) font-lock-doc-face)) (font-lock-constant-face . #2=((:foreground "#D19A66") font-lock-constant-face))) ((font-lock-constant-face #2#) (font-lock-doc-face #3#) (font-lock-variable-name-face #4#)))"##
+        ]],
     )
 }
 
-fn atom_one_dark_theme_major_mode_changes_clear_old_remaps_and_apply_new_recipe() -> ParityBatchCase {
+fn atom_one_dark_theme_major_mode_changes_clear_old_remaps_and_apply_new_recipe() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atom_one_dark_theme_major_mode_changes_clear_old_remaps_and_apply_new_recipe",
         r##"(with-temp-buffer
@@ -222,12 +226,13 @@ fn atom_one_dark_theme_major_mode_changes_clear_old_remaps_and_apply_new_recipe(
                'face-remapping-alist)))))"##,
         true,
         expect![[
-        r##"OK (((font-lock-variable-name-face (:foreground "#ABB2BF") font-lock-variable-name-face) (font-lock-doc-face (:inherit (font-lock-comment-face)) font-lock-doc-face) (font-lock-constant-face (:foreground "#D19A66") font-lock-constant-face)) ((font-lock-variable-name-face (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) nil nil)"##
-    ]],
+            r##"OK (((font-lock-variable-name-face (:foreground "#ABB2BF") font-lock-variable-name-face) (font-lock-doc-face (:inherit (font-lock-comment-face)) font-lock-doc-face) (font-lock-constant-face (:foreground "#D19A66") font-lock-constant-face)) ((font-lock-variable-name-face (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") font-lock-function-name-face)) nil nil)"##
+        ]],
     )
 }
 
-fn atom_one_dark_theme_repeated_html_remaps_stack_then_cookie_removal_matches_gnu() -> ParityBatchCase {
+fn atom_one_dark_theme_repeated_html_remaps_stack_then_cookie_removal_matches_gnu()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atom_one_dark_theme_repeated_html_remaps_stack_then_cookie_removal_matches_gnu",
         r##"(with-temp-buffer
@@ -256,8 +261,8 @@ fn atom_one_dark_theme_repeated_html_remaps_stack_then_cookie_removal_matches_gn
             face-remapping-alist)))"##,
         true,
         expect![[
-        r##"OK ((font-lock-variable-name-face :foreground "#D19A66") (font-lock-variable-name-face :foreground "#D19A66") t ((font-lock-variable-name-face (:foreground "#D19A66") (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") (:foreground "#E06C75") font-lock-function-name-face)) ((font-lock-variable-name-face (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") (:foreground "#E06C75") font-lock-function-name-face)) ((font-lock-function-name-face (:foreground "#E06C75") (:foreground "#E06C75") font-lock-function-name-face)))"##
-    ]],
+            r##"OK ((font-lock-variable-name-face :foreground "#D19A66") (font-lock-variable-name-face :foreground "#D19A66") t ((font-lock-variable-name-face (:foreground "#D19A66") (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") (:foreground "#E06C75") font-lock-function-name-face)) ((font-lock-variable-name-face (:foreground "#D19A66") font-lock-variable-name-face) (font-lock-function-name-face (:foreground "#E06C75") (:foreground "#E06C75") font-lock-function-name-face)) ((font-lock-function-name-face (:foreground "#E06C75") (:foreground "#E06C75") font-lock-function-name-face)))"##
+        ]],
     )
 }
 
@@ -295,12 +300,13 @@ fn atom_one_dark_theme_remapping_error_propagation_stops_at_exact_failed_call() 
          '(1 2 3 4))"##,
         true,
         expect![[
-        r##"OK ((1 (:signal error ("fixture failure 1 font-lock-constant-face")) ((font-lock-constant-face :foreground "#D19A66"))) (2 (:signal error ("fixture failure 2 font-lock-doc-face")) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face #1=(:inherit (font-lock-comment-face))))) (3 (:signal error ("fixture failure 3 font-lock-variable-name-face")) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face #1#) (font-lock-variable-name-face :foreground "#ABB2BF"))) (4 (:ok (:cookie 3 font-lock-variable-name-face)) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face #1#) (font-lock-variable-name-face :foreground "#ABB2BF"))))"##
-    ]],
+            r##"OK ((1 (:signal error ("fixture failure 1 font-lock-constant-face")) ((font-lock-constant-face :foreground "#D19A66"))) (2 (:signal error ("fixture failure 2 font-lock-doc-face")) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face #1=(:inherit (font-lock-comment-face))))) (3 (:signal error ("fixture failure 3 font-lock-variable-name-face")) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face #1#) (font-lock-variable-name-face :foreground "#ABB2BF"))) (4 (:ok (:cookie 3 font-lock-variable-name-face)) ((font-lock-constant-face :foreground "#D19A66") (font-lock-doc-face #1#) (font-lock-variable-name-face :foreground "#ABB2BF"))))"##
+        ]],
     )
 }
 
-fn atom_one_dark_theme_unsupported_and_force_disabled_hook_runs_have_no_local_effect() -> ParityBatchCase {
+fn atom_one_dark_theme_unsupported_and_force_disabled_hook_runs_have_no_local_effect()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atom_one_dark_theme_unsupported_and_force_disabled_hook_runs_have_no_local_effect",
         r##"(list

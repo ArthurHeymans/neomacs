@@ -68,10 +68,5 @@ pub(crate) fn assert_aio_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_aio_parity` cases (2a).
 pub(crate) fn assert_aio_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        aio_oracle(),
-        &name,
-        "aio_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(aio_oracle(), &name, "aio_parity", cases);
 }

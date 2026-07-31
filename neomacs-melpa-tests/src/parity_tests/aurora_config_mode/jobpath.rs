@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_aurora_config_mode_batch};
 
-fn aurora_config_mode_last_job_path_default_and_automatic_buffer_local_contract_are_exact() -> ParityBatchCase {
+fn aurora_config_mode_last_job_path_default_and_automatic_buffer_local_contract_are_exact()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_last_job_path_default_and_automatic_buffer_local_contract_are_exact",
         r##"(list
@@ -34,12 +35,13 @@ fn aurora_config_mode_last_job_path_default_and_automatic_buffer_local_contract_
               'aurora-config-last-job-path))))"##,
         true,
         expect![[
-        r#"OK ("smf1/" t t ("smf1/" nil ("cluster/role/dev/job-a" t) "smf1/") ("smf1/" nil))"#
-    ]],
+            r#"OK ("smf1/" t t ("smf1/" nil ("cluster/role/dev/job-a" t) "smf1/") ("smf1/" nil))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_read_jobpath_passes_exact_prompt_default_updates_local_and_returns_input() -> ParityBatchCase {
+fn aurora_config_mode_read_jobpath_passes_exact_prompt_default_updates_local_and_returns_input()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_read_jobpath_passes_exact_prompt_default_updates_local_and_returns_input",
         r##"(with-temp-buffer
@@ -62,12 +64,13 @@ fn aurora_config_mode_read_jobpath_passes_exact_prompt_default_updates_local_and
                 'aurora-config-last-job-path)))))"##,
         true,
         expect![[
-        r#"OK ("cluster/role/prod/new" "cluster/role/prod/new" t (("Job path as 'cluster/role/env/job': " "cluster/role/prod/old")) "smf1/")"#
-    ]],
+            r#"OK ("cluster/role/prod/new" "cluster/role/prod/new" t (("Job path as 'cluster/role/env/job': " "cluster/role/prod/old")) "smf1/")"#
+        ]],
     )
 }
 
-fn aurora_config_mode_repeated_jobpath_reads_feed_each_answer_into_the_next_prompt() -> ParityBatchCase {
+fn aurora_config_mode_repeated_jobpath_reads_feed_each_answer_into_the_next_prompt()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_repeated_jobpath_reads_feed_each_answer_into_the_next_prompt",
         r##"(with-temp-buffer
@@ -95,12 +98,13 @@ fn aurora_config_mode_repeated_jobpath_reads_feed_each_answer_into_the_next_prom
              answers)))"##,
         true,
         expect![[
-        r#"OK (("west/role/dev/one" "east/role/stage/two" "prod/role/prod/three") (("Job path as 'cluster/role/env/job': " "smf1/") ("Job path as 'cluster/role/env/job': " "west/role/dev/one") ("Job path as 'cluster/role/env/job': " "east/role/stage/two")) "prod/role/prod/three" nil)"#
-    ]],
+            r#"OK (("west/role/dev/one" "east/role/stage/two" "prod/role/prod/three") (("Job path as 'cluster/role/env/job': " "smf1/") ("Job path as 'cluster/role/env/job': " "west/role/dev/one") ("Job path as 'cluster/role/env/job': " "east/role/stage/two")) "prod/role/prod/three" nil)"#
+        ]],
     )
 }
 
-fn aurora_config_mode_jobpath_read_accepts_empty_nil_and_non_string_stub_results_exactly() -> ParityBatchCase {
+fn aurora_config_mode_jobpath_read_accepts_empty_nil_and_non_string_stub_results_exactly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_jobpath_read_accepts_empty_nil_and_non_string_stub_results_exactly",
         r##"(mapcar
@@ -123,12 +127,13 @@ fn aurora_config_mode_jobpath_read_accepts_empty_nil_and_non_string_stub_results
             ("nested" "path")))"##,
         true,
         expect![[
-        r#"OK (("" "" "" t) (nil nil nil t) (0 0 0 t) (job-symbol job-symbol job-symbol t) (#1=("nested" "path") #1# #1# t))"#
-    ]],
+            r#"OK (("" "" "" t) (nil nil nil t) (0 0 0 t) (job-symbol job-symbol job-symbol t) (#1=("nested" "path") #1# #1# t))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_read_jobpath_error_propagates_without_overwriting_previous_buffer_value() -> ParityBatchCase {
+fn aurora_config_mode_read_jobpath_error_propagates_without_overwriting_previous_buffer_value()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_read_jobpath_error_propagates_without_overwriting_previous_buffer_value",
         r##"(with-temp-buffer
@@ -151,12 +156,13 @@ fn aurora_config_mode_read_jobpath_error_propagates_without_overwriting_previous
                (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK ((:error error ("fixture minibuffer failure")) "stable/path" t (("Job path as 'cluster/role/env/job': " "stable/path")))"#
-    ]],
+            r#"OK ((:error error ("fixture minibuffer failure")) "stable/path" t (("Job path as 'cluster/role/env/job': " "stable/path")))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_major_mode_reentry_discards_buffer_job_history_then_uses_global_default() -> ParityBatchCase {
+fn aurora_config_mode_major_mode_reentry_discards_buffer_job_history_then_uses_global_default()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_major_mode_reentry_discards_buffer_job_history_then_uses_global_default",
         r##"(with-temp-buffer
@@ -194,8 +200,8 @@ fn aurora_config_mode_major_mode_reentry_discards_buffer_job_history_then_uses_g
                  (nreverse calls))))))"##,
         true,
         expect![[
-        r#"OK (("buffer/remembered" t) ("global/default" nil) "buffer/new" "buffer/new" (("Job path as 'cluster/role/env/job': " "global/default")))"#
-    ]],
+            r#"OK (("buffer/remembered" t) ("global/default" nil) "buffer/new" "buffer/new" (("Job path as 'cluster/role/env/job': " "global/default")))"#
+        ]],
     )
 }
 
@@ -203,11 +209,14 @@ fn aurora_config_mode_major_mode_reentry_discards_buffer_job_history_then_uses_g
 fn jobpath_public_surface_batch() {
     let cases: Vec<ParityBatchCase> = vec![
         aurora_config_mode_last_job_path_default_and_automatic_buffer_local_contract_are_exact(),
-        aurora_config_mode_read_jobpath_passes_exact_prompt_default_updates_local_and_returns_input(),
+        aurora_config_mode_read_jobpath_passes_exact_prompt_default_updates_local_and_returns_input(
+        ),
         aurora_config_mode_repeated_jobpath_reads_feed_each_answer_into_the_next_prompt(),
         aurora_config_mode_jobpath_read_accepts_empty_nil_and_non_string_stub_results_exactly(),
-        aurora_config_mode_read_jobpath_error_propagates_without_overwriting_previous_buffer_value(),
-        aurora_config_mode_major_mode_reentry_discards_buffer_job_history_then_uses_global_default(),
+        aurora_config_mode_read_jobpath_error_propagates_without_overwriting_previous_buffer_value(
+        ),
+        aurora_config_mode_major_mode_reentry_discards_buffer_job_history_then_uses_global_default(
+        ),
     ];
     assert_aurora_config_mode_batch(&cases);
 }

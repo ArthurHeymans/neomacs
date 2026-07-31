@@ -23,8 +23,8 @@ fn asdf_vm_message_prefixes_format_and_forwards_arguments_exactly() -> ParityBat
                   (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (:displayed :displayed (("[asdf-vm] Installed %s %d" "ruby" 3) ("[asdf-vm] %s" "資料 λ")))"#
-    ]],
+            r#"OK (:displayed :displayed (("[asdf-vm] Installed %s %d" "ruby" 3) ("[asdf-vm] %s" "資料 λ")))"#
+        ]],
     )
 }
 
@@ -42,12 +42,13 @@ fn asdf_vm_parse_skip_list_line_handles_real_current_output_and_whitespace() -> 
                  "single"))"##,
         true,
         expect![[
-        r#"OK (("ruby" "3.3.1" "/work/.tool-versions") ("nodejs" "20.11.0" "/work/project/.tool-versions") ("python" "3.12.2" "Not installed. Run \"asdf install python 3.12.2\"") ("資料" "λ-version" "origin with spaces") nil ("" "leading" "value tail") ("single"))"#
-    ]],
+            r#"OK (("ruby" "3.3.1" "/work/.tool-versions") ("nodejs" "20.11.0" "/work/project/.tool-versions") ("python" "3.12.2" "Not installed. Run \"asdf install python 3.12.2\"") ("資料" "λ-version" "origin with spaces") nil ("" "leading" "value tail") ("single"))"#
+        ]],
     )
 }
 
-fn asdf_vm_parse_skip_list_line_obeys_token_count_boundaries_without_truncating_tail() -> ParityBatchCase {
+fn asdf_vm_parse_skip_list_line_obeys_token_count_boundaries_without_truncating_tail()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asdf_vm_parse_skip_list_line_obeys_token_count_boundaries_without_truncating_tail",
         r##"(mapcar
@@ -60,12 +61,13 @@ fn asdf_vm_parse_skip_list_line_obeys_token_count_boundaries_without_truncating_
                '(0 1 2 3 4 8))"##,
         true,
         expect![[
-        r#"OK ((0 ("alpha  beta   gamma delta")) (1 ("alpha  beta   gamma delta")) (2 ("alpha" "beta   gamma delta")) (3 ("alpha" "beta" "gamma delta")) (4 ("alpha" "beta" "gamma" "delta")) (8 ("alpha" "beta" "gamma" "delta")))"#
-    ]],
+            r#"OK ((0 ("alpha  beta   gamma delta")) (1 ("alpha  beta   gamma delta")) (2 ("alpha" "beta   gamma delta")) (3 ("alpha" "beta" "gamma delta")) (4 ("alpha" "beta" "gamma" "delta")) (8 ("alpha" "beta" "gamma" "delta")))"#
+        ]],
     )
 }
 
-fn asdf_vm_parse_skip_list_supports_custom_delimiters_and_preserves_unicode_payloads() -> ParityBatchCase {
+fn asdf_vm_parse_skip_list_supports_custom_delimiters_and_preserves_unicode_payloads()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asdf_vm_parse_skip_list_supports_custom_delimiters_and_preserves_unicode_payloads",
         r##"(let ((keep
@@ -86,12 +88,13 @@ fn asdf_vm_parse_skip_list_supports_custom_delimiters_and_preserves_unicode_payl
                  3 keep skip)))"##,
         true,
         expect![[
-        r#"OK (("ruby" "3.3.1" "stable") (("nodejs" "20.0" "lts") ("資料" "λ" "nightly")))"#
-    ]],
+            r#"OK (("ruby" "3.3.1" "stable") (("nodejs" "20.0" "lts") ("資料" "λ" "nightly")))"#
+        ]],
     )
 }
 
-fn asdf_vm_format_skip_list_aligns_real_tables_and_handles_single_column_and_unicode() -> ParityBatchCase {
+fn asdf_vm_format_skip_list_aligns_real_tables_and_handles_single_column_and_unicode()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asdf_vm_format_skip_list_aligns_real_tables_and_handles_single_column_and_unicode",
         r##"(list
@@ -114,8 +117,8 @@ fn asdf_vm_format_skip_list_aligns_real_tables_and_handles_single_column_and_uni
                    nil))))"##,
         true,
         expect![[
-        r#"OK ("ruby     3.3.1     /work/a\nnodejs   20.11.0   /work/long project\n資料       λ         origin" "ruby\nnodejs\n資料" "a        1\nlong-name2" (:ok ""))"#
-    ]],
+            r#"OK ("ruby     3.3.1     /work/a\nnodejs   20.11.0   /work/long project\n資料       λ         origin" "ruby\nnodejs\n資料" "a        1\nlong-name2" (:ok ""))"#
+        ]],
     )
 }
 

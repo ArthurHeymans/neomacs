@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_astute_batch};
 
-fn astute_mode_enable_installs_buffer_local_keywords_lighter_and_font_lock_state() -> ParityBatchCase {
+fn astute_mode_enable_installs_buffer_local_keywords_lighter_and_font_lock_state() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "astute_mode_enable_installs_buffer_local_keywords_lighter_and_font_lock_state",
         r##"(with-temp-buffer
@@ -35,12 +36,13 @@ fn astute_mode_enable_installs_buffer_local_keywords_lighter_and_font_lock_state
             (astute-test-display-map))))"##,
         true,
         expect![[
-        r#"OK ((nil nil nil) t t t 8 (astute-mode astute-lighter) t ((0 34 "“") (7 34 "”") (9 45 "–") (10 45 "–")))"#
-    ]],
+            r#"OK ((nil nil nil) t t t 8 (astute-mode astute-lighter) t ((0 34 "“") (7 34 "”") (9 45 "–") (10 45 "–")))"#
+        ]],
     )
 }
 
-fn astute_mode_disable_removes_typographic_displays_but_preserves_unrelated_display_properties() -> ParityBatchCase {
+fn astute_mode_disable_removes_typographic_displays_but_preserves_unrelated_display_properties()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "astute_mode_disable_removes_typographic_displays_but_preserves_unrelated_display_properties",
         r##"(with-temp-buffer
@@ -77,12 +79,13 @@ fn astute_mode_disable_removes_typographic_displays_but_preserves_unrelated_disp
             (buffer-modified-p))))"##,
         true,
         expect![[
-        r#"OK (((2 34 "“") (9 34 "”") (11 45 "–") (12 45 "–") (17 108 "★")) nil nil nil ((17 108 "★")) external "x \"quoted\" -- tail" nil)"#
-    ]],
+            r#"OK (((2 34 "“") (9 34 "”") (11 45 "–") (12 45 "–") (17 108 "★")) nil nil nil ((17 108 "★")) external "x \"quoted\" -- tail" nil)"#
+        ]],
     )
 }
 
-fn astute_mode_disable_exposes_exact_cleanup_behavior_for_display_at_buffer_start() -> ParityBatchCase {
+fn astute_mode_disable_exposes_exact_cleanup_behavior_for_display_at_buffer_start()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "astute_mode_disable_exposes_exact_cleanup_behavior_for_display_at_buffer_start",
         r##"(with-temp-buffer
@@ -106,12 +109,13 @@ fn astute_mode_disable_exposes_exact_cleanup_behavior_for_display_at_buffer_star
              'display))))"##,
         true,
         expect![[
-        r#"OK (((0 34 "“") (6 34 "”") (12 34 "“") (19 34 "”") (21 45 "–") (22 45 "–")) ((0 34 "“")) "“" nil)"#
-    ]],
+            r#"OK (((0 34 "“") (6 34 "”") (12 34 "“") (19 34 "”") (21 45 "–") (22 45 "–")) ((0 34 "“")) "“" nil)"#
+        ]],
     )
 }
 
-fn astute_mode_disable_widens_for_cleanup_then_restores_the_original_narrowing() -> ParityBatchCase {
+fn astute_mode_disable_widens_for_cleanup_then_restores_the_original_narrowing() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "astute_mode_disable_widens_for_cleanup_then_restores_the_original_narrowing",
         r##"(with-temp-buffer
@@ -145,12 +149,13 @@ fn astute_mode_disable_widens_for_cleanup_then_restores_the_original_narrowing()
                (point-max))))))"##,
         true,
         expect![[
-        r#"OK (((0 34 "“") (8 34 "”") (10 45 "–") (11 45 "–") (18 34 "“") (25 34 "”") (27 45 "—") (28 45 "—") (29 45 "—") (38 39 "‘") (46 39 "’") (48 45 "–") (49 45 "–")) (20 39) (20 39) ((0 34 "“")) "inside\" --- center\n")"#
-    ]],
+            r#"OK (((0 34 "“") (8 34 "”") (10 45 "–") (11 45 "–") (18 34 "“") (25 34 "”") (27 45 "—") (28 45 "—") (29 45 "—") (38 39 "‘") (46 39 "’") (48 45 "–") (49 45 "–")) (20 39) (20 39) ((0 34 "“")) "inside\" --- center\n")"#
+        ]],
     )
 }
 
-fn astute_mode_reenable_rebuilds_keywords_after_live_transform_configuration_change() -> ParityBatchCase {
+fn astute_mode_reenable_rebuilds_keywords_after_live_transform_configuration_change()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "astute_mode_reenable_rebuilds_keywords_after_live_transform_configuration_change",
         r##"(with-temp-buffer
@@ -187,12 +192,13 @@ fn astute_mode_reenable_rebuilds_keywords_after_live_transform_configuration_cha
             (astute-test-display-map))))"##,
         true,
         expect![[
-        r#"OK (8 ((0 39 "‘") (7 39 "’") (9 34 "“") (16 34 "”") (19 45 "–") (20 45 "–") (24 45 "—") (25 45 "—") (26 45 "—")) 1 nil nil ((0 39 "‘") (7 39 "’") (9 34 "“") (16 34 "”") (19 45 "–") (20 45 "–") (24 45 "—") (25 45 "—") (26 45 "—")))"#
-    ]],
+            r#"OK (8 ((0 39 "‘") (7 39 "’") (9 34 "“") (16 34 "”") (19 45 "–") (20 45 "–") (24 45 "—") (25 45 "—") (26 45 "—")) 1 nil nil ((0 39 "‘") (7 39 "’") (9 34 "“") (16 34 "”") (19 45 "–") (20 45 "–") (24 45 "—") (25 45 "—") (26 45 "—")))"#
+        ]],
     )
 }
 
-fn astute_mode_configuration_and_keyword_state_are_isolated_between_live_buffers() -> ParityBatchCase {
+fn astute_mode_configuration_and_keyword_state_are_isolated_between_live_buffers() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "astute_mode_configuration_and_keyword_state_are_isolated_between_live_buffers",
         r##"(let ((left
@@ -239,8 +245,8 @@ fn astute_mode_configuration_and_keyword_state_are_isolated_between_live_buffers
            (kill-buffer right)))"##,
         true,
         expect![[
-        r#"OK (((single-quote) 4 ((0 39 "‘") (5 39 "’"))) ((double-quote en-dash) 3 ((8 34 "“") (14 34 "”") (17 45 "–") (18 45 "–"))) (single-quote double-quote en-dash em-dash) nil)"#
-    ]],
+            r#"OK (((single-quote) 4 ((0 39 "‘") (5 39 "’"))) ((double-quote en-dash) 3 ((8 34 "“") (14 34 "”") (17 45 "–") (18 45 "–"))) (single-quote double-quote en-dash em-dash) nil)"#
+        ]],
     )
 }
 
@@ -276,12 +282,13 @@ fn astute_mode_command_toggles_interactively_and_reuses_the_declared_lighter() -
               astute--keywords))))"##,
         true,
         expect![[
-        r#"OK (t (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) (astute-mode astute-lighter) " “As”" (t 8) nil nil)"#
-    ]],
+            r#"OK (t (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) (astute-mode astute-lighter) " “As”" (t 8) nil nil)"#
+        ]],
     )
 }
 
-fn astute_custom_lighter_value_is_observed_through_minor_mode_alist_without_redefinition() -> ParityBatchCase {
+fn astute_custom_lighter_value_is_observed_through_minor_mode_alist_without_redefinition()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "astute_custom_lighter_value_is_observed_through_minor_mode_alist_without_redefinition",
         r##"(with-temp-buffer
@@ -305,7 +312,8 @@ fn astute_custom_lighter_value_is_observed_through_minor_mode_alist_without_rede
     )
 }
 
-fn astute_mode_disable_before_fontification_is_safe_and_clears_registered_keywords() -> ParityBatchCase {
+fn astute_mode_disable_before_fontification_is_safe_and_clears_registered_keywords()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "astute_mode_disable_before_fontification_is_safe_and_clears_registered_keywords",
         r##"(with-temp-buffer
@@ -367,7 +375,8 @@ fn astute_mode_hook_observes_completed_enable_and_disable_state_transitions() ->
 fn mode_public_surface_batch() {
     let cases: Vec<ParityBatchCase> = vec![
         astute_mode_enable_installs_buffer_local_keywords_lighter_and_font_lock_state(),
-        astute_mode_disable_removes_typographic_displays_but_preserves_unrelated_display_properties(),
+        astute_mode_disable_removes_typographic_displays_but_preserves_unrelated_display_properties(
+        ),
         astute_mode_disable_exposes_exact_cleanup_behavior_for_display_at_buffer_start(),
         astute_mode_disable_widens_for_cleanup_then_restores_the_original_narrowing(),
         astute_mode_reenable_rebuilds_keywords_after_live_transform_configuration_change(),

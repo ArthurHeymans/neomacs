@@ -75,12 +75,13 @@ fn auto_minor_mode_use_package_aliases_and_handlers_have_exact_contracts() -> Pa
                               use-package-handler/:magic-minor)))"##,
         true,
         expect![[
-        r#"OK ((use-package-normalize/:minor #1=(name keyword args) "Normalize arguments for keywords which add regexp/mode pairs to an alist." t "") (use-package-normalize/:magic-minor #1# "Normalize arguments for keywords which add regexp/mode pairs to an alist." t "") (use-package-handler/:minor (name _ arg rest state) nil t "") (use-package-handler/:magic-minor (name _ arg rest state) nil t ""))"#
-    ]],
+            r#"OK ((use-package-normalize/:minor #1=(name keyword args) "Normalize arguments for keywords which add regexp/mode pairs to an alist." t "") (use-package-normalize/:magic-minor #1# "Normalize arguments for keywords which add regexp/mode pairs to an alist." t "") (use-package-handler/:minor (name _ arg rest state) nil t "") (use-package-handler/:magic-minor (name _ arg rest state) nil t ""))"#
+        ]],
     )
 }
 
-fn auto_minor_mode_use_package_keywords_are_adjacent_before_commands_and_idempotent() -> ParityBatchCase {
+fn auto_minor_mode_use_package_keywords_are_adjacent_before_commands_and_idempotent()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_minor_mode_use_package_keywords_are_adjacent_before_commands_and_idempotent",
         r##"(progn
@@ -173,12 +174,13 @@ fn auto_minor_mode_use_package_handlers_delegate_to_the_correct_alists() -> Pari
                                 (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK ((:handled auto-minor-mode-alist) (:handled auto-minor-mode-magic-alist) ((demo auto-minor-mode-alist (("\\.demo\\'" . demo-mode)) (:commands demo-command) (:state enabled)) (demo auto-minor-mode-magic-alist (("\\`#!demo" . demo-mode)) (:commands demo-command) (:state enabled))))"#
-    ]],
+            r#"OK ((:handled auto-minor-mode-alist) (:handled auto-minor-mode-magic-alist) ((demo auto-minor-mode-alist (("\\.demo\\'" . demo-mode)) (:commands demo-command) (:state enabled)) (demo auto-minor-mode-magic-alist (("\\`#!demo" . demo-mode)) (:commands demo-command) (:state enabled))))"#
+        ]],
     )
 }
 
-fn auto_minor_mode_real_use_package_declaration_configures_and_runs_both_rule_kinds() -> ParityBatchCase {
+fn auto_minor_mode_real_use_package_declaration_configures_and_runs_both_rule_kinds()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_minor_mode_real_use_package_declaration_configures_and_runs_both_rule_kinds",
         r##"(progn
@@ -211,8 +213,8 @@ fn auto_minor_mode_real_use_package_declaration_configures_and_runs_both_rule_ki
                                 major-mode))))"##,
         true,
         expect![[
-        r#"OK ((("\\.alpha\\'" . auto-minor-mode-test-alpha-mode)) (("\\`#!alpha" . auto-minor-mode-test-alpha-mode)) t ((:alpha 1 t 25 fundamental-mode) (:alpha 1 t 1 fundamental-mode)) fundamental-mode)"#
-    ]],
+            r#"OK ((("\\.alpha\\'" . auto-minor-mode-test-alpha-mode)) (("\\`#!alpha" . auto-minor-mode-test-alpha-mode)) t ((:alpha 1 t 25 fundamental-mode) (:alpha 1 t 1 fundamental-mode)) fundamental-mode)"#
+        ]],
     )
 }
 

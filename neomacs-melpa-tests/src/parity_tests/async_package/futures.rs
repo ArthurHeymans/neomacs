@@ -66,8 +66,8 @@ fn async_start_callback_receives_messages_before_the_final_result() -> ParityBat
                    (process-buffer future)))))"##,
         true,
         expect![[
-        r#"OK (((:phase first :payload "����" :async-message t) (:phase second :payload (1 2 3) :async-message t) finished) nil nil)"#
-    ]],
+            r#"OK (((:phase first :payload "����" :async-message t) (:phase second :payload (1 2 3) :async-message t) finished) nil nil)"#
+        ]],
     )
 }
 

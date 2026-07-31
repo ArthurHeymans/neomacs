@@ -115,8 +115,8 @@ fn compiles_a_saved_weather_station_sketch_from_the_live_minor_mode_keymap() -> 
                         (kill-buffer (current-buffer)))))"##,
         true,
         expect![[
-        r#"OK (arduino-cli-compile "int samples = 0;\nvoid setup() { Serial.begin(115200); }\nvoid loop() {\n  samples++;\n  Serial.println(samples);\n}\n" (arduino-cli-compilation-mode "Compiled weather_station.ino: 928 bytes, 3% flash.") "CALL <board> <list> <--format> <json> CWD=<<TMP>/weather station>\nCALL <compile> <--fqbn> <arduino:avr:uno> <<TMP>/weather station/> <-t> <--warnings> <all> <--verbose> <--no-color> CWD=<<TMP>/weather station>\n")"#
-    ]],
+            r#"OK (arduino-cli-compile "int samples = 0;\nvoid setup() { Serial.begin(115200); }\nvoid loop() {\n  samples++;\n  Serial.println(samples);\n}\n" (arduino-cli-compilation-mode "Compiled weather_station.ino: 928 bytes, 3% flash.") "CALL <board> <list> <--format> <json> CWD=<<TMP>/weather station>\nCALL <compile> <--fqbn> <arduino:avr:uno> <<TMP>/weather station/> <-t> <--warnings> <all> <--verbose> <--no-color> CWD=<<TMP>/weather station>\n")"#
+        ]],
     )
 }
 
@@ -232,8 +232,8 @@ fn uploads_a_file_local_default_board_through_the_live_mode_menu() -> ParityBatc
                         (kill-buffer (current-buffer)))))"##,
         true,
         expect![[
-        r#"OK (arduino-cli-upload ("esp32:esp32:esp32c3" "/dev/ttyUSB9") "// -*- arduino-cli-default-fqbn: \"esp32:esp32:esp32c3\"; arduino-cli-default-port: \"/dev/ttyUSB9\"; -*-\nvoid setup() { pinMode(LED_BUILTIN, OUTPUT); }\nvoid loop() { digitalWrite(LED_BUILTIN, HIGH); }\n// Calibrated for the east greenhouse.\n" "Uploaded greenhouse_controller.ino to /dev/ttyUSB9." "CALL <board> <list> <--format> <json> CWD=<<TMP>/greenhouse-controller>\nCALL <upload> <--fqbn> <esp32:esp32:esp32c3> <--port> </dev/ttyUSB9> <<TMP>/greenhouse-controller/> <--quiet> CWD=<<TMP>/greenhouse-controller>\n")"#
-    ]],
+            r#"OK (arduino-cli-upload ("esp32:esp32:esp32c3" "/dev/ttyUSB9") "// -*- arduino-cli-default-fqbn: \"esp32:esp32:esp32c3\"; arduino-cli-default-port: \"/dev/ttyUSB9\"; -*-\nvoid setup() { pinMode(LED_BUILTIN, OUTPUT); }\nvoid loop() { digitalWrite(LED_BUILTIN, HIGH); }\n// Calibrated for the east greenhouse.\n" "Uploaded greenhouse_controller.ino to /dev/ttyUSB9." "CALL <board> <list> <--format> <json> CWD=<<TMP>/greenhouse-controller>\nCALL <upload> <--fqbn> <esp32:esp32:esp32c3> <--port> </dev/ttyUSB9> <<TMP>/greenhouse-controller/> <--quiet> CWD=<<TMP>/greenhouse-controller>\n")"#
+        ]],
     )
 }
 
@@ -350,8 +350,8 @@ fn selects_the_nonfirst_connected_board_then_uploads_through_real_completion() -
                         (kill-buffer (current-buffer)))))"##,
         true,
         expect![[
-        r#"OK (arduino-cli-upload ("Board ") "Uploaded air-quality firmware to the field Nano." "CALL <board> <list> <--format> <json> CWD=<<TMP>/portable-air-quality>\nCALL <upload> <--fqbn> <arduino:avr:nano> <--port> </dev/ttyUSB2> <<TMP>/portable-air-quality/> CWD=<<TMP>/portable-air-quality>\n")"#
-    ]],
+            r#"OK (arduino-cli-upload ("Board ") "Uploaded air-quality firmware to the field Nano." "CALL <board> <list> <--format> <json> CWD=<<TMP>/portable-air-quality>\nCALL <upload> <--fqbn> <arduino:avr:nano> <--port> </dev/ttyUSB2> <<TMP>/portable-air-quality/> CWD=<<TMP>/portable-air-quality>\n")"#
+        ]],
     )
 }
 
@@ -454,8 +454,8 @@ fn installs_a_selected_library_version_through_real_minibuffer_completion() -> P
                                 t t))))))))"##,
         true,
         expect![[
-        r#"OK (arduino-cli-lib-install ("Library ") "Installed ArduinoJson 7.3.0 for production firmware." "CALL <lib> <search> <--format> <json> CWD=<<TMP>/firmware-dependencies>\nCALL <lib> <update-index> CWD=<<TMP>/firmware-dependencies>\nCALL <lib> <install> <ArduinoJson@7.3.0> CWD=<<TMP>/firmware-dependencies>\n")"#
-    ]],
+            r#"OK (arduino-cli-lib-install ("Library ") "Installed ArduinoJson 7.3.0 for production firmware." "CALL <lib> <search> <--format> <json> CWD=<<TMP>/firmware-dependencies>\nCALL <lib> <update-index> CWD=<<TMP>/firmware-dependencies>\nCALL <lib> <install> <ArduinoJson@7.3.0> CWD=<<TMP>/firmware-dependencies>\n")"#
+        ]],
     )
 }
 
@@ -558,8 +558,8 @@ fn creates_edits_and_saves_a_new_sketch_through_the_live_minor_mode_keymap() -> 
                                 t t))))))))"##,
         true,
         expect![[
-        r#"OK (arduino-cli-new-sketch ("Sketch name: " "Sketch path: ") t "void setup() {\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  Serial.println(analogRead(A0));\n  delay(1000);\n}\n" "CALL <sketch> <new> <FieldLogger> CWD=<<TMP>/customer-sketches>\n")"#
-    ]],
+            r#"OK (arduino-cli-new-sketch ("Sketch name: " "Sketch path: ") t "void setup() {\n  Serial.begin(9600);\n}\n\nvoid loop() {\n  Serial.println(analogRead(A0));\n  delay(1000);\n}\n" "CALL <sketch> <new> <FieldLogger> CWD=<<TMP>/customer-sketches>\n")"#
+        ]],
     )
 }
 
@@ -665,8 +665,8 @@ fn opens_reads_and_stops_a_real_serial_monitor_process() -> ParityBatchCase {
                               t t)))))))"##,
         true,
         expect![[
-        r#"OK (t "temperature=22.4C humidity=51% sequence=17" nil "CALL <board> <list> <--format> <json> CWD=<<TMP>/telemetry-node>\nCALL <monitor> <--port> </dev/ttyUSB4> <--config> <baudrate=57600> CWD=<<TMP>/telemetry-node>\n")"#
-    ]],
+            r#"OK (t "temperature=22.4C humidity=51% sequence=17" nil "CALL <board> <list> <--format> <json> CWD=<<TMP>/telemetry-node>\nCALL <monitor> <--port> </dev/ttyUSB4> <--config> <baudrate=57600> CWD=<<TMP>/telemetry-node>\n")"#
+        ]],
     )
 }
 
@@ -863,8 +863,8 @@ fn compile_and_upload_stops_then_restarts_the_live_serial_monitor() -> ParityBat
                         (kill-buffer (current-buffer)))))"##,
         true,
         expect![[
-        r#"OK (arduino-cli-compile-and-upload t nil "Compiled and uploaded irrigation_controller.ino." (t t 2) nil nil "CALL <board> <list> <--format> <json> CWD=<<TMP>/irrigation-controller>\nCALL <monitor> <--port> </dev/ttyACM7> <--config> <baudrate=38400> CWD=<<TMP>/irrigation-controller>\nCALL <board> <list> <--format> <json> CWD=<<TMP>/irrigation-controller>\nCALL <compile> <--fqbn> <arduino:avr:mega> <--port> </dev/ttyACM7> <--upload> <<TMP>/irrigation-controller/> <--quiet> CWD=<<TMP>/irrigation-controller>\nCALL <board> <list> <--format> <json> CWD=<<TMP>/irrigation-controller>\nCALL <monitor> <--port> </dev/ttyACM7> <--config> <baudrate=115200> CWD=<<TMP>/irrigation-controller>\n")"#
-    ]],
+            r#"OK (arduino-cli-compile-and-upload t nil "Compiled and uploaded irrigation_controller.ino." (t t 2) nil nil "CALL <board> <list> <--format> <json> CWD=<<TMP>/irrigation-controller>\nCALL <monitor> <--port> </dev/ttyACM7> <--config> <baudrate=38400> CWD=<<TMP>/irrigation-controller>\nCALL <board> <list> <--format> <json> CWD=<<TMP>/irrigation-controller>\nCALL <compile> <--fqbn> <arduino:avr:mega> <--port> </dev/ttyACM7> <--upload> <<TMP>/irrigation-controller/> <--quiet> CWD=<<TMP>/irrigation-controller>\nCALL <board> <list> <--format> <json> CWD=<<TMP>/irrigation-controller>\nCALL <monitor> <--port> </dev/ttyACM7> <--config> <baudrate=115200> CWD=<<TMP>/irrigation-controller>\n")"#
+        ]],
     )
 }
 

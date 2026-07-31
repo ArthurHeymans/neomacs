@@ -39,12 +39,13 @@ fn auth_source_gopass_backend_parse_forwards_exact_gopass_entry() -> ParityBatch
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:parsed #1=(gopass #s(auth-source-backend gopass "." t t t nil ignore auth-source-gopass-search))) (#1#))"#
-    ]],
+            r#"OK ((:parsed #1=(gopass #s(auth-source-backend gopass "." t t t nil ignore auth-source-gopass-search))) (#1#))"#
+        ]],
     )
 }
 
-fn auth_source_gopass_backend_parse_rejects_other_entry_shapes_without_delegating() -> ParityBatchCase {
+fn auth_source_gopass_backend_parse_rejects_other_entry_shapes_without_delegating()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_gopass_backend_parse_rejects_other_entry_shapes_without_delegating",
         r##"(let (calls)
@@ -109,8 +110,8 @@ fn auth_source_gopass_backend_search_function_is_directly_usable() -> ParityBatc
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((:user "alice" :secret "backend-secret")) ("gopass show -o accounts/imap.example/alice"))"#
-    ]],
+            r#"OK (((:user "alice" :secret "backend-secret")) ("gopass show -o accounts/imap.example/alice"))"#
+        ]],
     )
 }
 

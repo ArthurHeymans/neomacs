@@ -257,10 +257,5 @@ pub(crate) fn assert_arch_packer_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_arch_packer_parity` cases (2a).
 pub(crate) fn assert_arch_packer_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        arch_packer_oracle(),
-        &name,
-        "arch_packer_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(arch_packer_oracle(), &name, "arch_packer_parity", cases);
 }

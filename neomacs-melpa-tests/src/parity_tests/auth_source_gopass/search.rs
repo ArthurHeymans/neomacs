@@ -23,8 +23,8 @@ fn auth_source_gopass_search_trims_a_real_single_line_secret() -> ParityBatchCas
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (((:user "alice@example" :secret "correct horse battery staple")) ((:find "gopass") (:shell "gopass show -o accounts/smtp.example/alice\\@example")))"#
-    ]],
+            r#"OK (((:user "alice@example" :secret "correct horse battery staple")) ((:find "gopass") (:shell "gopass show -o accounts/smtp.example/alice\\@example")))"#
+        ]],
     )
 }
 
@@ -85,8 +85,8 @@ fn auth_source_gopass_search_result_uses_requested_user_verbatim() -> ParityBatc
             '("alice" nil user-symbol 17))))"##,
         true,
         expect![[
-        r#"OK (((:user "alice" :secret "secret")) ((:user nil :secret "secret")) ((:user user-symbol :secret "secret")) ((:user 17 :secret "secret")))"#
-    ]],
+            r#"OK (((:user "alice" :secret "secret")) ((:user nil :secret "secret")) ((:user user-symbol :secret "secret")) ((:user 17 :secret "secret")))"#
+        ]],
     )
 }
 
@@ -119,8 +119,8 @@ fn auth_source_gopass_search_ignores_unconsumed_auth_source_keys() -> ParityBatc
               captured))))"##,
         true,
         expect![[
-        r#"OK (((:user "alice" :secret "secret")) (:backend :type "host" "alice" "submission"))"#
-    ]],
+            r#"OK (((:user "alice" :secret "secret")) (:backend :type "host" "alice" "submission"))"#
+        ]],
     )
 }
 
@@ -146,8 +146,8 @@ fn auth_source_gopass_search_checks_the_configured_executable() -> ParityBatchCa
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((:user "alice" :secret "secret")) ((:find "gopass-company") (:shell "gopass-company show -o accounts/mail/alice")))"#
-    ]],
+            r#"OK (((:user "alice" :secret "secret")) ((:find "gopass-company") (:shell "gopass-company show -o accounts/mail/alice")))"#
+        ]],
     )
 }
 
@@ -182,8 +182,8 @@ fn auth_source_gopass_missing_executable_warns_and_skips_the_shell() -> ParityBa
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:warned ((:find "missing-gopass") (:warn "`auth-source-gopass': Could not find executable '%s' to query gopass" ("missing-gopass"))))"#
-    ]],
+            r#"OK (:warned ((:find "missing-gopass") (:warn "`auth-source-gopass': Could not find executable '%s' to query gopass" ("missing-gopass"))))"#
+        ]],
     )
 }
 
@@ -209,8 +209,8 @@ fn auth_source_gopass_search_does_not_cache_repeated_credentials() -> ParityBatc
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((:user "alice" :secret "first")) ((:user "alice" :secret "second")) ((:user "alice" :secret "third")) ((:find "gopass") (:shell "gopass show -o accounts/mail/alice" "first\n") (:find "gopass") (:shell "gopass show -o accounts/mail/alice" "second\n") (:find "gopass") (:shell "gopass show -o accounts/mail/alice" "third\n")))"#
-    ]],
+            r#"OK (((:user "alice" :secret "first")) ((:user "alice" :secret "second")) ((:user "alice" :secret "third")) ((:find "gopass") (:shell "gopass show -o accounts/mail/alice" "first\n") (:find "gopass") (:shell "gopass show -o accounts/mail/alice" "second\n") (:find "gopass") (:shell "gopass show -o accounts/mail/alice" "third\n")))"#
+        ]],
     )
 }
 

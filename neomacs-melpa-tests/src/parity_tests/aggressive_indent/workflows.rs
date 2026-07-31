@@ -31,8 +31,8 @@ fn typing_a_wrapper_form_reindents_the_lines_it_encloses_once_it_is_balanced() -
            :after-closing (agi-test-state)))))"##,
         true,
         expect![[
-        r#"OK (:typed "(defun handler (request)\n  (when request\n    (message \"start\")\n  (process request))\n" :while-unbalanced (:text "(defun handler (request)\n  (when request\n    (message \"start\")\n  (process request))\n" :point 46 :line 3 :column 4 :mode t :electric t) :after-closing (:text "(defun handler (request)\n  (when request\n    (message \"start\")\n    (process request)))\n" :point 87 :line 4 :column 23 :mode t :electric t))"#
-    ]],
+            r#"OK (:typed "(defun handler (request)\n  (when request\n    (message \"start\")\n  (process request))\n" :while-unbalanced (:text "(defun handler (request)\n  (when request\n    (message \"start\")\n  (process request))\n" :point 46 :line 3 :column 4 :mode t :electric t) :after-closing (:text "(defun handler (request)\n  (when request\n    (message \"start\")\n    (process request)))\n" :point 87 :line 4 :column 23 :mode t :electric t))"#
+        ]],
     )
 }
 
@@ -50,8 +50,8 @@ fn deleting_the_enclosing_form_dedents_the_lines_it_contained() -> ParityBatchCa
          :after-idle (agi-test-state))))"##,
         true,
         expect![[
-        r#"OK (:after-killing (:text "(defun handler (request)\n    (message \"start\")\n    (process request)))\n" :point 26 :line 2 :column 0 :mode t :electric t) :after-idle (:text "(defun handler (request)\n  (message \"start\")\n  (process request)))\n" :point 26 :line 2 :column 0 :mode t :electric t))"#
-    ]],
+            r#"OK (:after-killing (:text "(defun handler (request)\n    (message \"start\")\n    (process request)))\n" :point 26 :line 2 :column 0 :mode t :electric t) :after-idle (:text "(defun handler (request)\n  (message \"start\")\n  (process request)))\n" :point 26 :line 2 :column 0 :mode t :electric t))"#
+        ]],
     )
 }
 
@@ -76,12 +76,13 @@ fn opening_a_block_in_a_c_buffer_reindents_the_statements_it_swallows() -> Parit
            :after-closing (agi-test-state)))))"##,
         true,
         expect![[
-        r#"OK (:typed "int handler(int ready) {\n  if (ready) {\n    log(\"start\");\n  process(ready);\n}\n" :after-opening (:text "int handler(int ready) {\n  if (ready) {\n    log(\"start\");\n    process(ready);\n}\n" :point 45 :line 3 :column 4 :mode t :electric t) :after-closing (:text "int handler(int ready) {\n  if (ready) {\n    log(\"start\");\n    process(ready);\n  }\n}\n" :point 82 :line 5 :column 3 :mode t :electric t))"#
-    ]],
+            r#"OK (:typed "int handler(int ready) {\n  if (ready) {\n    log(\"start\");\n  process(ready);\n}\n" :after-opening (:text "int handler(int ready) {\n  if (ready) {\n    log(\"start\");\n    process(ready);\n}\n" :point 45 :line 3 :column 4 :mode t :electric t) :after-closing (:text "int handler(int ready) {\n  if (ready) {\n    log(\"start\");\n    process(ready);\n  }\n}\n" :point 82 :line 5 :column 3 :mode t :electric t))"#
+        ]],
     )
 }
 
-fn backspace_on_the_leading_indentation_joins_the_line_instead_of_deleting_a_space() -> ParityBatchCase {
+fn backspace_on_the_leading_indentation_joins_the_line_instead_of_deleting_a_space()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "backspace_on_the_leading_indentation_joins_the_line_instead_of_deleting_a_space",
         r##"(list
@@ -107,8 +108,8 @@ fn backspace_on_the_leading_indentation_joins_the_line_instead_of_deleting_a_spa
       (list :binding binding :deleted deleted :after-idle (agi-test-text))))))"##,
         true,
         expect![[
-        r#"OK (:after-indentation (:binding delete-indentation :joined "(defun f () (message \"x\"))\n" :after-idle "(defun f () (message \"x\"))\n") :at-beginning-of-line (:binding nil :deleted "(defun f ()  (message \"x\"))\n" :after-idle "(defun f ()  (message \"x\"))\n"))"#
-    ]],
+            r#"OK (:after-indentation (:binding delete-indentation :joined "(defun f () (message \"x\"))\n" :after-idle "(defun f () (message \"x\"))\n") :at-beginning-of-line (:binding nil :deleted "(defun f ()  (message \"x\"))\n" :after-idle "(defun f ()  (message \"x\"))\n"))"#
+        ]],
     )
 }
 
@@ -160,8 +161,8 @@ fn the_dont_indent_if_and_protected_commands_policies_keep_it_quiet() -> ParityB
           :text (agi-test-text)))))"##,
         true,
         expect![[
-        r#"OK (:dont-indent-if "(defun handler (request)\n    (message \"start\")\n    (process request)))\n" :without-that-guard "(defun handler (request)\n  (message \"start\")\n  (process request)))\n" :protected-after-undo (:last-command undo :protected (undo undo-tree-undo undo-tree-redo undo-tree-visualize undo-tree-visualize-undo undo-tree-visualize-redo whitespace-cleanup) :text "(defun handler (request)\n\n    (message \"start\")\n    (process request)))\n") :unprotected-after-undo (:last-command undo :protected nil :text "(defun handler (request)\n\n  (message \"start\")\n  (process request)))\n"))"#
-    ]],
+            r#"OK (:dont-indent-if "(defun handler (request)\n    (message \"start\")\n    (process request)))\n" :without-that-guard "(defun handler (request)\n  (message \"start\")\n  (process request)))\n" :protected-after-undo (:last-command undo :protected (undo undo-tree-undo undo-tree-redo undo-tree-visualize undo-tree-visualize-undo undo-tree-visualize-redo whitespace-cleanup) :text "(defun handler (request)\n\n    (message \"start\")\n    (process request)))\n") :unprotected-after-undo (:last-command undo :protected nil :text "(defun handler (request)\n\n  (message \"start\")\n  (process request)))\n"))"#
+        ]],
     )
 }
 
@@ -183,8 +184,8 @@ fn one_undo_takes_back_both_the_edit_and_the_reindentation() -> ParityBatchCase 
          :point (point))))"##,
         true,
         expect![[
-        r#"OK (:original "(defun handler (request)\n  (when request\n    (message \"start\")\n    (process request)))\n" :after-edit "(defun handler (request)\n  (message \"start\")\n  (process request)))\n" :after-one-undo "(defun handler (request)\n\n    (message \"start\")\n    (process request)))\n" :point 26)"#
-    ]],
+            r#"OK (:original "(defun handler (request)\n  (when request\n    (message \"start\")\n    (process request)))\n" :after-edit "(defun handler (request)\n  (message \"start\")\n  (process request)))\n" :after-one-undo "(defun handler (request)\n\n    (message \"start\")\n    (process request)))\n" :point 26)"#
+        ]],
     )
 }
 
@@ -224,8 +225,8 @@ fn the_global_mode_skips_excluded_modes_while_the_local_command_does_not() -> Pa
                       t))))))"##,
         true,
         expect![
-        "OK (:excluded (elm-mode haskell-mode inf-ruby-mode makefile-mode makefile-gmake-mode python-mode sql-interactive-mode text-mode yaml-mode) :under-global ((emacs-lisp-mode t t) (c-mode t t) (text-mode nil nil) (fundamental-mode nil nil)) :global-off (nil nil) :local-in-excluded-mode (t t))"
-    ],
+            "OK (:excluded (elm-mode haskell-mode inf-ruby-mode makefile-mode makefile-gmake-mode python-mode sql-interactive-mode text-mode yaml-mode) :under-global ((emacs-lisp-mode t t) (c-mode t t) (text-mode nil nil) (fundamental-mode nil nil)) :global-off (nil nil) :local-in-excluded-mode (t t))"
+        ],
     )
 }
 
@@ -249,8 +250,8 @@ fn saving_the_buffer_indents_what_was_typed_before_writing_it_to_disk() -> Parit
                       t)))))"##,
         true,
         expect![[
-        r#"OK (:before-save "(defun f (x)\n(when x\n(message \"hi\")))\n" :after-save "(defun f (x)\n  (when x\n    (message \"hi\")))\n" :on-disk "(defun f (x)\n  (when x\n    (message \"hi\")))\n" :modified nil :hook t)"#
-    ]],
+            r#"OK (:before-save "(defun f (x)\n(when x\n(message \"hi\")))\n" :after-save "(defun f (x)\n  (when x\n    (message \"hi\")))\n" :on-disk "(defun f (x)\n  (when x\n    (message \"hi\")))\n" :modified nil :hook t)"#
+        ]],
     )
 }
 

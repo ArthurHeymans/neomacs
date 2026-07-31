@@ -52,12 +52,6 @@ pub(crate) fn assert_affe_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_affe_source_parity("affe-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
-
-
 /// Multi-probe batch for `assert_affe_autoload_parity` cases (2a).
 pub(crate) fn assert_affe_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -83,10 +77,5 @@ pub(crate) fn assert_affe_backend_batch(cases: &[ParityBatchCase]) {
 /// Multi-probe batch for `assert_affe_parity` cases (2a).
 pub(crate) fn assert_affe_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        affe_oracle("affe.el"),
-        &name,
-        "affe_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(affe_oracle("affe.el"), &name, "affe_parity", cases);
 }

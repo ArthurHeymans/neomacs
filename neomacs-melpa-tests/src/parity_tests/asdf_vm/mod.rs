@@ -251,8 +251,6 @@ pub(crate) fn assert_asdf_vm_autoload_parity(elisp_form: &str, expected: Expect)
     assert_asdf_vm_source_parity("asdf-vm-autoloads.el", elisp_form, expected);
 }
 
-
-
 /// Multi-probe batch for `assert_asdf_vm_autoload_parity` cases (2a).
 pub(crate) fn assert_asdf_vm_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -267,10 +265,5 @@ pub(crate) fn assert_asdf_vm_autoload_batch(cases: &[ParityBatchCase]) {
 /// Multi-probe batch for `assert_asdf_vm_parity` cases (2a).
 pub(crate) fn assert_asdf_vm_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        asdf_vm_oracle("asdf-vm.el"),
-        &name,
-        "asdf_vm_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(asdf_vm_oracle("asdf-vm.el"), &name, "asdf_vm_parity", cases);
 }

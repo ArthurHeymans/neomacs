@@ -173,8 +173,6 @@ pub(crate) fn assert_atcoder_tools_autoload_parity(elisp_form: &str, expected: E
     assert_atcoder_tools_source_parity("atcoder-tools-autoloads.el", elisp_form, expected);
 }
 
-
-
 /// Multi-probe batch for `assert_atcoder_tools_autoload_parity` cases (2a).
 pub(crate) fn assert_atcoder_tools_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

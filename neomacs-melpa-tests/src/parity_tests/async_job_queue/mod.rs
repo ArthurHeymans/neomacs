@@ -141,10 +141,6 @@ pub(crate) fn assert_async_job_queue_autoload_parity(elisp_form: &str, expected:
     assert_async_job_queue_source_parity("async-job-queue-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_async_job_queue_autoload_parity` cases (2a).
 pub(crate) fn assert_async_job_queue_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

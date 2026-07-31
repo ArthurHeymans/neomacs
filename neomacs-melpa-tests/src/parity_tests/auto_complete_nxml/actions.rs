@@ -93,8 +93,8 @@ fn auto_complete_nxml_expand_xmlns_emits_all_nondefault_prefixed_namespaces() ->
              (list (buffer-string) (point)))))"##,
         true,
         expect![[
-        r#"OK ("<root xmlns=\"urn:default\" xmlns:m=\"urn:math\" xmlns:svg=\"urn:svg\"" 65)"#
-    ]],
+            r#"OK ("<root xmlns=\"urn:default\" xmlns:m=\"urn:math\" xmlns:svg=\"urn:svg\"" 65)"#
+        ]],
     )
 }
 
@@ -143,7 +143,8 @@ fn auto_complete_nxml_tag_source_action_expands_and_closes_end_tags() -> ParityB
     )
 }
 
-fn auto_complete_nxml_attribute_source_action_builds_quotes_and_positions_point() -> ParityBatchCase {
+fn auto_complete_nxml_attribute_source_action_builds_quotes_and_positions_point() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_nxml_attribute_source_action_builds_quotes_and_positions_point",
         r##"(let ((auto-complete-nxml-automatic-p nil))
@@ -156,8 +157,8 @@ fn auto_complete_nxml_attribute_source_action_builds_quotes_and_positions_point(
           '("<node class" "<node class\"tail")))"##,
         true,
         expect![[
-        r#"OK (("<node class" "<node class=\"\"" 14 34) ("<node class\"tail" "<node class\"tail=\"\"" 19 34))"#
-    ]],
+            r#"OK (("<node class" "<node class=\"\"" 14 34) ("<node class\"tail" "<node class\"tail=\"\"" 19 34))"#
+        ]],
     )
 }
 
@@ -191,8 +192,8 @@ fn auto_complete_nxml_tag_value_action_inserts_only_missing_matching_end_tag() -
            "plain choice"))"##,
         true,
         expect![[
-        r#"OK (("<item>choice" "<item>choice</item>" 20) ("<item>choice</item>" "<item>choice</item><//item>" 28) ("<item class=\"x\">choice" "<item class=\"x\">choice</item>" 30) ("plain choice" "plain choice" 13))"#
-    ]],
+            r#"OK (("<item>choice" "<item>choice</item>" 20) ("<item>choice</item>" "<item>choice</item><//item>" 28) ("<item class=\"x\">choice" "<item class=\"x\">choice</item>" 30) ("plain choice" "plain choice" 13))"#
+        ]],
     )
 }
 
@@ -222,8 +223,8 @@ fn auto_complete_nxml_insert_command_and_toggle_drive_real_command_state() -> Pa
                 (nreverse events))))))"##,
         true,
         expect![[
-        r#"OK ("xxxxx" t nil nil ((:insert 3) (:complete :triggered trigger-key) (:insert 2)))"#
-    ]],
+            r#"OK ("xxxxx" t nil nil ((:insert 3) (:complete :triggered trigger-key) (:insert 2)))"#
+        ]],
     )
 }
 

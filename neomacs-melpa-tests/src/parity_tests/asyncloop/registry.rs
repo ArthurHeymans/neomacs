@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asyncloop_autoload_batch, assert_asyncloop_batch};
 
-fn asyncloop_exact_package_descriptor_origin_dependency_and_feature_contract_match() -> ParityBatchCase {
+fn asyncloop_exact_package_descriptor_origin_dependency_and_feature_contract_match()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asyncloop_exact_package_descriptor_origin_dependency_and_feature_contract_match",
         r##"(let ((descriptor
@@ -24,8 +25,8 @@ fn asyncloop_exact_package_descriptor_origin_dependency_and_feature_contract_mat
            (locate-library "asyncloop"))))"##,
         true,
         expect![[
-        r#"OK (asyncloop "20240818.1247" "Non-blocking series of functions." nil ((emacs (28))) ((:maintainers ("Martin Edström" . "meedstrom91@gmail.com")) (:authors ("Martin Edström" . "meedstrom91@gmail.com")) (:keywords "tools") (:revdesc . "7d60950d1600") (:commit . "7d60950d160098a879293e049b9863bc955f8666") (:url . "https://github.com/meedstrom/asyncloop")) t t "asyncloop.el")"#
-    ]],
+            r#"OK (asyncloop "20240818.1247" "Non-blocking series of functions." nil ((emacs (28))) ((:maintainers ("Martin Edström" . "meedstrom91@gmail.com")) (:authors ("Martin Edström" . "meedstrom91@gmail.com")) (:keywords "tools") (:revdesc . "7d60950d1600") (:commit . "7d60950d160098a879293e049b9863bc955f8666") (:url . "https://github.com/meedstrom/asyncloop")) t t "asyncloop.el")"#
+        ]],
     )
 }
 
@@ -69,8 +70,8 @@ fn asyncloop_installed_payload_inventory_hashes_only_immutable_archive_files() -
            #'string<)))"##,
         true,
         expect![[
-        r#"OK (("asyncloop-autoloads.el" :generated t) ("asyncloop-pkg.el" :archive 427 "2d745c8d92c4866edfb2b682d8340faf89530b0087444e72461c0e99adb2491f") ("asyncloop.el" :archive 19037 "1f0e73ae87c39d1d286d8fb5c6e9619276d555b2248070d7597dfed3bd855069") ("asyncloop.elc" :generated t))"#
-    ]],
+            r#"OK (("asyncloop-autoloads.el" :generated t) ("asyncloop-pkg.el" :archive 427 "2d745c8d92c4866edfb2b682d8340faf89530b0087444e72461c0e99adb2491f") ("asyncloop.el" :archive 19037 "1f0e73ae87c39d1d286d8fb5c6e9619276d555b2248070d7597dfed3bd855069") ("asyncloop.elc" :generated t))"#
+        ]],
     )
 }
 
@@ -118,8 +119,8 @@ fn asyncloop_complete_callable_command_arglist_and_source_surface_matches() -> P
                    (symbol-name right))))))"##,
         true,
         expect![[
-        r#"OK ((asyncloop-cancel nil nil "(loop &optional quietly)" "asyncloop.el") (asyncloop-chomp nil nil "(loop)" "asyncloop.el") (asyncloop-clock-funcall nil nil "(loop fn)" "asyncloop.el") (asyncloop-create nil nil "(&rest --cl-rest--)" "asyncloop.el") (asyncloop-eat nil nil "(loop)" "asyncloop.el") (asyncloop-immediate-break-on-user-activity nil nil "(x)" "asyncloop.el") (asyncloop-just-launched nil nil "(x)" "asyncloop.el") (asyncloop-keyboard-quit t (interactive nil) "nil" "asyncloop.el") (asyncloop-log nil nil "(loop &rest args)" "asyncloop.el") (asyncloop-log-buffer nil nil "(x)" "asyncloop.el") (asyncloop-log-mode t (interactive nil) "nil" "asyncloop.el") (asyncloop-notify-simultaneity nil nil "(this-loop)" "asyncloop.el") (asyncloop-p nil nil "(x)" "asyncloop.el") (asyncloop-pause nil nil "(loop)" "asyncloop.el") (asyncloop-paused nil nil "(x)" "asyncloop.el") (asyncloop-remainder nil nil "(x)" "asyncloop.el") (asyncloop-reset-all t (interactive nil) "nil" "asyncloop.el") (asyncloop-resume nil nil "(loop)" "asyncloop.el") (asyncloop-run nil nil "(funs &rest --cl-rest--)" "asyncloop.el") (asyncloop-schedule nil nil "(loop &optional secs)" "asyncloop.el") (asyncloop-scheduled nil nil "(x)" "asyncloop.el") (asyncloop-starttime nil nil "(x)" "asyncloop.el") (asyncloop-timer nil nil "(x)" "asyncloop.el") (asyncloop-with-slots nil nil "(spec-list object &rest body)" "asyncloop.el"))"#
-    ]],
+            r#"OK ((asyncloop-cancel nil nil "(loop &optional quietly)" "asyncloop.el") (asyncloop-chomp nil nil "(loop)" "asyncloop.el") (asyncloop-clock-funcall nil nil "(loop fn)" "asyncloop.el") (asyncloop-create nil nil "(&rest --cl-rest--)" "asyncloop.el") (asyncloop-eat nil nil "(loop)" "asyncloop.el") (asyncloop-immediate-break-on-user-activity nil nil "(x)" "asyncloop.el") (asyncloop-just-launched nil nil "(x)" "asyncloop.el") (asyncloop-keyboard-quit t (interactive nil) "nil" "asyncloop.el") (asyncloop-log nil nil "(loop &rest args)" "asyncloop.el") (asyncloop-log-buffer nil nil "(x)" "asyncloop.el") (asyncloop-log-mode t (interactive nil) "nil" "asyncloop.el") (asyncloop-notify-simultaneity nil nil "(this-loop)" "asyncloop.el") (asyncloop-p nil nil "(x)" "asyncloop.el") (asyncloop-pause nil nil "(loop)" "asyncloop.el") (asyncloop-paused nil nil "(x)" "asyncloop.el") (asyncloop-remainder nil nil "(x)" "asyncloop.el") (asyncloop-reset-all t (interactive nil) "nil" "asyncloop.el") (asyncloop-resume nil nil "(loop)" "asyncloop.el") (asyncloop-run nil nil "(funs &rest --cl-rest--)" "asyncloop.el") (asyncloop-schedule nil nil "(loop &optional secs)" "asyncloop.el") (asyncloop-scheduled nil nil "(x)" "asyncloop.el") (asyncloop-starttime nil nil "(x)" "asyncloop.el") (asyncloop-timer nil nil "(x)" "asyncloop.el") (asyncloop-with-slots nil nil "(spec-list object &rest body)" "asyncloop.el"))"#
+        ]],
     )
 }
 
@@ -169,8 +170,8 @@ fn asyncloop_complete_declared_variable_defaults_and_source_surface_matches() ->
                    (symbol-name right))))))"##,
         true,
         expect![[
-        r#"OK ((asyncloop-log-mode-abbrev-table :other t nil nil "asyncloop.el") (asyncloop-log-mode-hook nil t nil nil "asyncloop.el") (asyncloop-log-mode-map :keymap t nil nil "asyncloop.el") (asyncloop-log-mode-syntax-table :other t nil nil "asyncloop.el") (asyncloop-objects nil t nil nil "asyncloop.el") (asyncloop-recursion-ctr 0 t nil nil "asyncloop.el"))"#
-    ]],
+            r#"OK ((asyncloop-log-mode-abbrev-table :other t nil nil "asyncloop.el") (asyncloop-log-mode-hook nil t nil nil "asyncloop.el") (asyncloop-log-mode-map :keymap t nil nil "asyncloop.el") (asyncloop-log-mode-syntax-table :other t nil nil "asyncloop.el") (asyncloop-objects nil t nil nil "asyncloop.el") (asyncloop-recursion-ctr 0 t nil nil "asyncloop.el"))"#
+        ]],
     )
 }
 
@@ -223,8 +224,8 @@ fn asyncloop_struct_constructor_predicate_accessors_and_mutable_slots_match() ->
              (asyncloop-remainder :not-a-loop)))))"##,
         true,
         expect![
-        "OK ((t (1 2 3 4) nil t t t (alpha beta) t t) (:new-start nil (gamma) nil nil) nil (:signal wrong-type-argument (asyncloop :not-a-loop)))"
-    ],
+            "OK ((t (1 2 3 4) nil t t t (alpha beta) t t) (:new-start nil (gamma) nil nil) nil (:signal wrong-type-argument (asyncloop :not-a-loop)))"
+        ],
     )
 }
 
@@ -254,8 +255,8 @@ fn asyncloop_autoload_surface_exposes_only_the_documented_run_entrypoint() -> Pa
             asyncloop-log)))"##,
         true,
         expect![[
-        r#"OK (nil ((asyncloop-run t t "asyncloop.el") (asyncloop-create nil nil nil) (asyncloop-cancel nil nil nil) (asyncloop-pause nil nil nil) (asyncloop-resume nil nil nil) (asyncloop-log nil nil nil)))"#
-    ]],
+            r#"OK (nil ((asyncloop-run t t "asyncloop.el") (asyncloop-create nil nil nil) (asyncloop-cancel nil nil nil) (asyncloop-pause nil nil nil) (asyncloop-resume nil nil nil) (asyncloop-log nil nil nil)))"#
+        ]],
     )
 }
 
@@ -273,8 +274,7 @@ fn registry_asyncloop_batch() {
 
 #[test]
 fn registry_asyncloop_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        asyncloop_autoload_surface_exposes_only_the_documented_run_entrypoint(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![asyncloop_autoload_surface_exposes_only_the_documented_run_entrypoint()];
     assert_asyncloop_autoload_batch(&cases);
 }

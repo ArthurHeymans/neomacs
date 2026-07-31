@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atl_markup_batch};
 
-fn atl_markup_direct_enable_disable_are_buffer_local_idempotent_and_preserve_global_hook() -> ParityBatchCase {
+fn atl_markup_direct_enable_disable_are_buffer_local_idempotent_and_preserve_global_hook()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_direct_enable_disable_are_buffer_local_idempotent_and_preserve_global_hook",
         r##"(let ((original-default
@@ -74,12 +75,13 @@ fn atl_markup_direct_enable_disable_are_buffer_local_idempotent_and_preserve_glo
              original-default)))"##,
         true,
         expect![
-        "OK (((:initial nil (atl-markup-test-global-observer) (atl-markup-test-global-observer)) (:enabled t (atl-markup--post-command-hook t) t) (:enabled-again (atl-markup--post-command-hook t) 1) (:disabled nil (atl-markup-test-global-observer) nil)) (atl-markup-test-global-observer))"
-    ],
+            "OK (((:initial nil (atl-markup-test-global-observer) (atl-markup-test-global-observer)) (:enabled t (atl-markup--post-command-hook t) t) (:enabled-again (atl-markup--post-command-hook t) 1) (:disabled nil (atl-markup-test-global-observer) nil)) (atl-markup-test-global-observer))"
+        ],
     )
 }
 
-fn atl_markup_minor_mode_argument_sequence_runs_mode_hook_and_updates_local_hook_exactly() -> ParityBatchCase {
+fn atl_markup_minor_mode_argument_sequence_runs_mode_hook_and_updates_local_hook_exactly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_minor_mode_argument_sequence_runs_mode_hook_and_updates_local_hook_exactly",
         r##"(with-temp-buffer
@@ -121,12 +123,13 @@ fn atl_markup_minor_mode_argument_sequence_runs_mode_hook_and_updates_local_hook
                 'post-command-hook)))))"##,
         true,
         expect![
-        "OK (((1 t t t (atl-markup--post-command-hook)) (1 t t t (atl-markup--post-command-hook)) (-1 nil nil nil nil) (nil t t t (atl-markup--post-command-hook)) (nil t t t (atl-markup--post-command-hook)) (0 nil nil nil nil) (2 t t t (atl-markup--post-command-hook))) ((mode-hook t) (mode-hook t) (mode-hook nil) (mode-hook t) (mode-hook t) (mode-hook nil) (mode-hook t)) t t)"
-    ],
+            "OK (((1 t t t (atl-markup--post-command-hook)) (1 t t t (atl-markup--post-command-hook)) (-1 nil nil nil nil) (nil t t t (atl-markup--post-command-hook)) (nil t t t (atl-markup--post-command-hook)) (0 nil nil nil nil) (2 t t t (atl-markup--post-command-hook))) ((mode-hook t) (mode-hook t) (mode-hook nil) (mode-hook t) (mode-hook t) (mode-hook nil) (mode-hook t)) t t)"
+        ],
     )
 }
 
-fn atl_markup_minor_mode_and_post_command_hook_are_isolated_across_live_buffers() -> ParityBatchCase {
+fn atl_markup_minor_mode_and_post_command_hook_are_isolated_across_live_buffers() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atl_markup_minor_mode_and_post_command_hook_are_isolated_across_live_buffers",
         r##"(let ((first
@@ -178,12 +181,13 @@ fn atl_markup_minor_mode_and_post_command_hook_are_isolated_across_live_buffers(
             (kill-buffer second)))"##,
         true,
         expect![
-        "OK (((t (atl-markup--post-command-hook)) (nil nil)) (nil nil) (t (atl-markup--post-command-hook)) nil)"
-    ],
+            "OK (((t (atl-markup--post-command-hook)) (nil nil)) (nil nil) (t (atl-markup--post-command-hook)) nil)"
+        ],
     )
 }
 
-fn atl_markup_buffer_local_custom_values_drive_independent_guard_and_timer_behavior() -> ParityBatchCase {
+fn atl_markup_buffer_local_custom_values_drive_independent_guard_and_timer_behavior()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_buffer_local_custom_values_drive_independent_guard_and_timer_behavior",
         r##"(let ((first
@@ -250,12 +254,13 @@ fn atl_markup_buffer_local_custom_values_drive_independent_guard_and_timer_behav
             (kill-buffer second)))"##,
         true,
         expect![[
-        r#"OK ((nil :scheduled "x" 0.25) (-1 :scheduled "z" 4.5) ((0.25 nil atl-markup--web-truncate-lines-by-face) (toggle -1) (4.5 nil atl-markup--web-truncate-lines-by-face)) ("[ \11\15\n]" 0.1))"#
-    ]],
+            r#"OK ((nil :scheduled "x" 0.25) (-1 :scheduled "z" 4.5) ((0.25 nil atl-markup--web-truncate-lines-by-face) (toggle -1) (4.5 nil atl-markup--web-truncate-lines-by-face)) ("[ \11\15\n]" 0.1))"#
+        ]],
     )
 }
 
-fn atl_markup_enabled_mode_drives_deterministic_navigation_workflow_through_queued_callbacks() -> ParityBatchCase {
+fn atl_markup_enabled_mode_drives_deterministic_navigation_workflow_through_queued_callbacks()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_enabled_mode_drives_deterministic_navigation_workflow_through_queued_callbacks",
         r##"(with-temp-buffer
@@ -325,12 +330,13 @@ fn atl_markup_enabled_mode_drives_deterministic_navigation_workflow_through_queu
                  truncate-lines)))))"##,
         true,
         expect![[
-        r#"OK ((("class" t 12 (:timer 0.1 nil atl-markup--web-truncate-lines-by-face nil)) ("Hello" nil 31 (:timer 0.1 nil atl-markup--web-truncate-lines-by-face nil)) ("</ma" t 46 (:timer 0.1 nil atl-markup--web-truncate-lines-by-face nil))) 3 3 nil nil t)"#
-    ]],
+            r#"OK ((("class" t 12 (:timer 0.1 nil atl-markup--web-truncate-lines-by-face nil)) ("Hello" nil 31 (:timer 0.1 nil atl-markup--web-truncate-lines-by-face nil)) ("</ma" t 46 (:timer 0.1 nil atl-markup--web-truncate-lines-by-face nil))) 3 3 nil nil t)"#
+        ]],
     )
 }
 
-fn atl_markup_enable_prepends_package_hook_and_disable_restores_existing_hook_order() -> ParityBatchCase {
+fn atl_markup_enable_prepends_package_hook_and_disable_restores_existing_hook_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_enable_prepends_package_hook_and_disable_restores_existing_hook_order",
         r##"(with-temp-buffer
@@ -398,12 +404,13 @@ fn atl_markup_enable_prepends_package_hook_and_disable_restores_existing_hook_or
                         post-command-hook)))))))))"##,
         true,
         expect![
-        "OK ((existing-first existing-second) (package existing-first existing-second) ((package 0.1 nil atl-markup--web-truncate-lines-by-face) existing-first existing-second) (existing-first existing-second))"
-    ],
+            "OK ((existing-first existing-second) (package existing-first existing-second) ((package 0.1 nil atl-markup--web-truncate-lines-by-face) existing-first existing-second) (existing-first existing-second))"
+        ],
     )
 }
 
-fn atl_markup_disabling_mode_leaves_existing_timer_and_truncation_state_untouched() -> ParityBatchCase {
+fn atl_markup_disabling_mode_leaves_existing_timer_and_truncation_state_untouched()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_disabling_mode_leaves_existing_timer_and_truncation_state_untouched",
         r##"(with-temp-buffer
@@ -438,8 +445,8 @@ fn atl_markup_disabling_mode_leaves_existing_timer_and_truncation_state_untouche
                  cancellations)))))"##,
         true,
         expect![
-        "OK ((t t :pending-idle-timer (atl-markup--post-command-hook)) (nil t :pending-idle-timer nil) nil)"
-    ],
+            "OK ((t t :pending-idle-timer (atl-markup--post-command-hook)) (nil t :pending-idle-timer nil) nil)"
+        ],
     )
 }
 

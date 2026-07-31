@@ -38,8 +38,8 @@ fn a_real_agent_handshake_streams_updates_and_completes_the_prompt() -> ParityBa
            :received (acp-test-agent-received)))))"##,
         true,
         expect![[
-        r#"OK (:init ((protocolVersion . 1) (agentCapabilities (loadSession . t) (promptCapabilities (embeddedContext . t))) (authMethods . [((id . "api-key") (name . "API key"))])) :session ((sessionId . "sess-42") (modes (currentModeId . "ask") (availableModes . [((id . "ask") (name . "Ask")) ((id . "code") (name . "Code"))]))) :prompt ((stopReason . "end_turn")) :updates (((jsonrpc . "2.0") (method . "session/update") (params (sessionId . "sess-42") (update (sessionUpdate . "agent_message_chunk") (content (type . "text") (text . "Grüße! "))))) ((jsonrpc . "2.0") (method . "session/update") (params (sessionId . "sess-42") (update (sessionUpdate . "agent_message_chunk") (content (type . "text") (text . "Fertig.")))))) :received ("{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"neomacs-parity\",\"version\":\"1.0\"},\"protocolVersion\":1,\"clientCapabilities\":{\"fs\":{\"readTextFile\":false,\"writeTextFile\":false}}}}" "{\"jsonrpc\":\"2.0\",\"method\":\"session/new\",\"id\":2,\"params\":{\"cwd\":\"/work/project\",\"mcpServers\":[]}}" "{\"jsonrpc\":\"2.0\",\"method\":\"session/prompt\",\"id\":3,\"params\":{\"sessionId\":\"sess-42\",\"prompt\":[{\"type\":\"text\",\"text\":\"Sag Grüße\"}]}}"))"#
-    ]],
+            r#"OK (:init ((protocolVersion . 1) (agentCapabilities (loadSession . t) (promptCapabilities (embeddedContext . t))) (authMethods . [((id . "api-key") (name . "API key"))])) :session ((sessionId . "sess-42") (modes (currentModeId . "ask") (availableModes . [((id . "ask") (name . "Ask")) ((id . "code") (name . "Code"))]))) :prompt ((stopReason . "end_turn")) :updates (((jsonrpc . "2.0") (method . "session/update") (params (sessionId . "sess-42") (update (sessionUpdate . "agent_message_chunk") (content (type . "text") (text . "Grüße! "))))) ((jsonrpc . "2.0") (method . "session/update") (params (sessionId . "sess-42") (update (sessionUpdate . "agent_message_chunk") (content (type . "text") (text . "Fertig.")))))) :received ("{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":1,\"params\":{\"clientInfo\":{\"name\":\"neomacs-parity\",\"version\":\"1.0\"},\"protocolVersion\":1,\"clientCapabilities\":{\"fs\":{\"readTextFile\":false,\"writeTextFile\":false}}}}" "{\"jsonrpc\":\"2.0\",\"method\":\"session/new\",\"id\":2,\"params\":{\"cwd\":\"/work/project\",\"mcpServers\":[]}}" "{\"jsonrpc\":\"2.0\",\"method\":\"session/prompt\",\"id\":3,\"params\":{\"sessionId\":\"sess-42\",\"prompt\":[{\"type\":\"text\",\"text\":\"Sag Grüße\"}]}}"))"#
+        ]],
     )
 }
 
@@ -70,8 +70,8 @@ fn the_agent_asks_the_client_for_permission_and_gets_an_answer() -> ParityBatchC
            :received (acp-test-agent-received)))))"##,
         true,
         expect![[
-        r#"OK (:prompt ((stopReason . "end_turn") (granted . "allow")) :requests (((jsonrpc . "2.0") (id . 9001) (method . "session/request_permission") (params (sessionId . "sess-42") (toolCall (toolCallId . "call-1") (title . "Write README.md")) (options . [((optionId . "allow") (name . "Allow") (kind . "allow_once")) ((optionId . "reject") (name . "Reject") (kind . "reject_once"))])))) :received ("{\"jsonrpc\":\"2.0\",\"method\":\"session/prompt\",\"id\":1,\"params\":{\"sessionId\":\"sess-42\",\"prompt\":[{\"type\":\"text\",\"text\":\"PERMISSION please write\"}]}}" "{\"jsonrpc\":\"2.0\",\"id\":9001,\"result\":{\"outcome\":{\"outcome\":\"selected\",\"optionId\":\"allow\"}}}"))"#
-    ]],
+            r#"OK (:prompt ((stopReason . "end_turn") (granted . "allow")) :requests (((jsonrpc . "2.0") (id . 9001) (method . "session/request_permission") (params (sessionId . "sess-42") (toolCall (toolCallId . "call-1") (title . "Write README.md")) (options . [((optionId . "allow") (name . "Allow") (kind . "allow_once")) ((optionId . "reject") (name . "Reject") (kind . "reject_once"))])))) :received ("{\"jsonrpc\":\"2.0\",\"method\":\"session/prompt\",\"id\":1,\"params\":{\"sessionId\":\"sess-42\",\"prompt\":[{\"type\":\"text\",\"text\":\"PERMISSION please write\"}]}}" "{\"jsonrpc\":\"2.0\",\"id\":9001,\"result\":{\"outcome\":{\"outcome\":\"selected\",\"optionId\":\"allow\"}}}"))"#
+        ]],
     )
 }
 
@@ -101,8 +101,8 @@ fn a_json_rpc_error_reaches_the_failure_callback_and_signals_when_sync() -> Pari
            :pending (map-elt client :pending-requests)))))"##,
         true,
         expect![[
-        r#"OK (:failures (((code . -32601) (message . "Method not found") (data (method . "session/prompt")))) :sync-error (error "ACP request failed: ((code . -32601) (message . Method not found) (data (method . session/prompt)))") :pending nil)"#
-    ]],
+            r#"OK (:failures (((code . -32601) (message . "Method not found") (data (method . "session/prompt")))) :sync-error (error "ACP request failed: ((code . -32601) (message . Method not found) (data (method . session/prompt)))") :pending nil)"#
+        ]],
     )
 }
 
@@ -130,8 +130,8 @@ fn agent_stderr_becomes_a_parsed_api_error_or_a_generic_internal_error() -> Pari
      (list :parsed parsed :generic (reverse agent-errors)))))"##,
         true,
         expect![[
-        r#"OK (:parsed (((type . "rate_limit_error") (message . "Quota exceeded"))) :generic (((code . -32603) (message . "agent: could not reach api.example.test\n"))))"#
-    ]],
+            r#"OK (:parsed (((type . "rate_limit_error") (message . "Quota exceeded"))) :generic (((code . -32603) (message . "agent: could not reach api.example.test\n"))))"#
+        ]],
     )
 }
 
@@ -152,8 +152,8 @@ fn an_agent_that_dies_mid_request_fails_every_pending_request() -> ParityBatchCa
          :live (and (process-live-p (map-elt client :process)) t))))"##,
         true,
         expect![[
-        r#"OK (:failures (((code . -32603) (message . "Agent process ended before completing request: exited abnormally with code 3"))) :pending nil :live nil)"#
-    ]],
+            r#"OK (:failures (((code . -32603) (message . "Agent process ended before completing request: exited abnormally with code 3"))) :pending nil :live nil)"#
+        ]],
     )
 }
 
@@ -186,8 +186,8 @@ fn logging_renders_the_whole_session_in_the_traffic_buffer() -> ParityBatchCase 
                                  t))))"##,
         true,
         expect![[
-        r#"OK (:traffic ("TIME → request      initialize" "TIME ← response     result" "TIME → request      session/prompt" "TIME ← notification session/update" "TIME ← notification session/update" "TIME ← response     result") :buffers ("*acp-([ORACLE-SANDBOX]/bin/acp-test-agent)-1 log*" "*acp-([ORACLE-SANDBOX]/bin/acp-test-agent)-1 traffic*") :read-only (nil t) :logs-has-outgoing t)"#
-    ]],
+            r#"OK (:traffic ("TIME → request      initialize" "TIME ← response     result" "TIME → request      session/prompt" "TIME ← notification session/update" "TIME ← notification session/update" "TIME ← response     result") :buffers ("*acp-([ORACLE-SANDBOX]/bin/acp-test-agent)-1 log*" "*acp-([ORACLE-SANDBOX]/bin/acp-test-agent)-1 traffic*") :read-only (nil t) :logs-has-outgoing t)"#
+        ]],
     )
 }
 
@@ -232,8 +232,8 @@ fn callbacks_run_in_the_context_buffer_and_shutdown_releases_everything() -> Par
     (kill-buffer context)))"##,
         true,
         expect![[
-        r#"OK (:callback-buffers ("*acp-context*" "*acp-context*") :received ("{\"jsonrpc\":\"2.0\",\"method\":\"session/prompt\",\"id\":1,\"params\":{\"sessionId\":\"sess-42\",\"prompt\":[{\"type\":\"text\",\"text\":\"Hallo\"}]}}" "{\"jsonrpc\":\"2.0\",\"method\":\"session/cancel\",\"params\":{\"sessionId\":\"sess-42\",\"reason\":\"user_cancelled\"}}") :before (t t t) :after (nil nil nil) :message "Client already shut down")"#
-    ]],
+            r#"OK (:callback-buffers ("*acp-context*" "*acp-context*") :received ("{\"jsonrpc\":\"2.0\",\"method\":\"session/prompt\",\"id\":1,\"params\":{\"sessionId\":\"sess-42\",\"prompt\":[{\"type\":\"text\",\"text\":\"Hallo\"}]}}" "{\"jsonrpc\":\"2.0\",\"method\":\"session/cancel\",\"params\":{\"sessionId\":\"sess-42\",\"reason\":\"user_cancelled\"}}") :before (t t t) :after (nil nil nil) :message "Client already shut down")"#
+        ]],
     )
 }
 

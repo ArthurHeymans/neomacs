@@ -35,8 +35,8 @@ fn jumping_to_a_flagged_word_moves_point_and_leaves_the_text_untouched() -> Pari
     (nreverse observed)))"##,
         true,
         expect![[
-        r#"OK ((:point 74 :word "occured" :mark 1) (:point 19 :word "recieve" :mark 74) (:text "The commitee will recieve the report.\nWe must seperate the two lists.\nIt occured twice, and it is definately wrong.\n" :overlays ((19 26 "recieve" flyspell-incorrect) (47 55 "seperate" flyspell-incorrect) (74 81 "occured" flyspell-incorrect) (99 109 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :queries ("The" "commitee" "will" "recieve" "the" "report" "We" "must" "seperate" "the" "two" "lists" "It" "occured" "twice" "and" "it" "is" "definately" "wrong" "The" "occured" "The" "occured" "recieve")))"#
-    ]],
+            r#"OK ((:point 74 :word "occured" :mark 1) (:point 19 :word "recieve" :mark 74) (:text "The commitee will recieve the report.\nWe must seperate the two lists.\nIt occured twice, and it is definately wrong.\n" :overlays ((19 26 "recieve" flyspell-incorrect) (47 55 "seperate" flyspell-incorrect) (74 81 "occured" flyspell-incorrect) (99 109 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :queries ("The" "commitee" "will" "recieve" "the" "report" "We" "must" "seperate" "the" "two" "lists" "It" "occured" "twice" "and" "it" "is" "definately" "wrong" "The" "occured" "The" "occured" "recieve")))"#
+        ]],
     )
 }
 
@@ -64,8 +64,8 @@ fn correcting_a_jumped_to_word_replaces_it_and_returns_point_where_it_was() -> P
           :messages (afly-test-messages-since mark))))"##,
         true,
         expect![[
-        r#"OK (:origin 117 :point 118 :mark 118 :text "The commitee will recieve the report.\nWe must seperate the two lists.\nIt occurred twice, and it is definately wrong.\n" :overlays ((19 26 "recieve" flyspell-incorrect) (47 55 "seperate" flyspell-incorrect) (100 110 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :current-word "occured" :queries ("occured" "occurred" "wrong") :messages ("[.]: correct word; [,]: save to personal dictionary [2 times]" "Corrections: occurred occurred occurs occupied occured occurred occurs occupied occured" "[.]: correct word; [,]: save to personal dictionary [2 times]"))"#
-    ]],
+            r#"OK (:origin 117 :point 118 :mark 118 :text "The commitee will recieve the report.\nWe must seperate the two lists.\nIt occurred twice, and it is definately wrong.\n" :overlays ((19 26 "recieve" flyspell-incorrect) (47 55 "seperate" flyspell-incorrect) (100 110 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :current-word "occured" :queries ("occured" "occurred" "wrong") :messages ("[.]: correct word; [,]: save to personal dictionary [2 times]" "Corrections: occurred occurred occurs occupied occured occurred occurs occupied occured" "[.]: correct word; [,]: save to personal dictionary [2 times]"))"#
+        ]],
     )
 }
 
@@ -91,8 +91,8 @@ fn declining_the_correction_with_control_g_restores_the_original_spelling() -> P
           :messages (afly-test-messages-since mark))))"##,
         true,
         expect![[
-        r#"OK (:point 1 :mark 1 :text "The commitee will recieve the report.\nWe must seperate the two lists.\nIt occured twice, and it is definately wrong.\n" :overlays ((47 55 "seperate" flyspell-incorrect) (74 81 "occured" flyspell-incorrect) (99 109 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :current-word "recieve" :queries ("receive" "The") :messages ("[.]: correct word; [,]: save to personal dictionary [2 times]" "Corrections: receive receive relieve reprieve recieve receive relieve reprieve recieve" "[.]: correct word; [,]: save to personal dictionary [2 times]"))"#
-    ]],
+            r#"OK (:point 1 :mark 1 :text "The commitee will recieve the report.\nWe must seperate the two lists.\nIt occured twice, and it is definately wrong.\n" :overlays ((47 55 "seperate" flyspell-incorrect) (74 81 "occured" flyspell-incorrect) (99 109 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :current-word "recieve" :queries ("receive" "The") :messages ("[.]: correct word; [,]: save to personal dictionary [2 times]" "Corrections: receive receive relieve reprieve recieve receive relieve reprieve recieve" "[.]: correct word; [,]: save to personal dictionary [2 times]"))"#
+        ]],
     )
 }
 
@@ -118,8 +118,8 @@ fn dwim_corrects_the_word_under_point_without_starting_an_avy_selection() -> Par
           :messages (afly-test-messages-since mark))))"##,
         true,
         expect![[
-        r#"OK (:origin (50 "seperate") :point 51 :mark nil :text "The commitee will recieve the report.\nWe must sepXarate the two lists.\nIt occured twice, and it is definately wrong.\n" :overlays ((19 26 "recieve" flyspell-incorrect) (75 82 "occured" flyspell-incorrect) (100 110 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :messages ("Corrections: separate separate desperate temperate seperate separate desperate temperate"))"#
-    ]],
+            r#"OK (:origin (50 "seperate") :point 51 :mark nil :text "The commitee will recieve the report.\nWe must sepXarate the two lists.\nIt occured twice, and it is definately wrong.\n" :overlays ((19 26 "recieve" flyspell-incorrect) (75 82 "occured" flyspell-incorrect) (100 110 "definately" flyspell-incorrect)) :box (nil nil ace-flyspell--background) :messages ("Corrections: separate separate desperate temperate seperate separate desperate temperate"))"#
+        ]],
     )
 }
 
@@ -151,8 +151,8 @@ fn saving_a_word_to_the_personal_dictionary_stops_flyspell_flagging_it() -> Pari
             :messages (afly-test-messages-since mark)))))"##,
         true,
         expect![[
-        r##"OK (:before ((5 11 "Umlaut" flyspell-incorrect) (25 32 "recieve" flyspell-incorrect)) :after ((25 32 "recieve" flyspell-incorrect)) :rechecked ((25 32 "recieve" flyspell-incorrect)) :point 41 :text "The Umlaut is fine.\nBut recieve is not.\n" :personal ("Umlaut") :session ("run|-a|-m|-B" "!" "-" "!" "-" "*Umlaut" "#" "saved") :messages ("[.]: correct word; [,]: save to personal dictionary [2 times]" "Personal dictionary saved." "[.]: correct word; [,]: save to personal dictionary"))"##
-    ]],
+            r##"OK (:before ((5 11 "Umlaut" flyspell-incorrect) (25 32 "recieve" flyspell-incorrect)) :after ((25 32 "recieve" flyspell-incorrect)) :rechecked ((25 32 "recieve" flyspell-incorrect)) :point 41 :text "The Umlaut is fine.\nBut recieve is not.\n" :personal ("Umlaut") :session ("run|-a|-m|-B" "!" "-" "!" "-" "*Umlaut" "#" "saved") :messages ("[.]: correct word; [,]: save to personal dictionary [2 times]" "Personal dictionary saved." "[.]: correct word; [,]: save to personal dictionary"))"##
+        ]],
     )
 }
 
@@ -177,8 +177,8 @@ fn a_correctly_spelled_buffer_offers_zero_candidates_and_changes_nothing() -> Pa
           :messages (afly-test-messages-since mark))))"##,
         true,
         expect![[
-        r#"OK (:point 5 :mark nil :text "All of these words are spelled correctly.\n" :overlays nil :box (nil nil ace-flyspell--background) :queries ("All" "of" "these" "words" "are" "spelled" "correctly" "of") :messages ("zero candidates"))"#
-    ]],
+            r#"OK (:point 5 :mark nil :text "All of these words are spelled correctly.\n" :overlays nil :box (nil nil ace-flyspell--background) :queries ("All" "of" "these" "words" "are" "spelled" "correctly" "of") :messages ("zero candidates"))"#
+        ]],
     )
 }
 

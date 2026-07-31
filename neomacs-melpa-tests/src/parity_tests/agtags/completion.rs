@@ -9,7 +9,8 @@ use super::{ParityBatchCase, assert_agtags_batch};
 /// trace is the witness: it holds one `-c parser_' line and one `-c parse'
 /// line, so a broken cache shows up as an extra invocation.
 
-fn agtags_completion_at_point_offers_global_tags_and_runs_global_once_per_prefix() -> ParityBatchCase {
+fn agtags_completion_at_point_offers_global_tags_and_runs_global_once_per_prefix() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "agtags_completion_at_point_offers_global_tags_and_runs_global_once_per_prefix",
         r####"
@@ -53,8 +54,8 @@ fn agtags_completion_at_point_offers_global_tags_and_runs_global_once_per_prefix
 "####,
         true,
         expect![[
-        r#"OK ("parser_" (("parser_init" "parser_reset") (" Gtags" " Gtags")) no ("[ORACLE-SANDBOX]/agtags-completion-workflow/$-c$parser_" "parser_init" "parser_reset") ("parser_init" "parser_reset") t ("parse_request" "parser_init" "parser_reset") ("[ORACLE-SANDBOX]/agtags-completion-workflow/$-c$parse" "parse_request" "parser_init" "parser_reset") nil "gtags cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-c> <parser_>\nglobal cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-c> <parse>\nglobal cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-c> <parser_f>\n")"#
-    ]],
+            r#"OK ("parser_" (("parser_init" "parser_reset") (" Gtags" " Gtags")) no ("[ORACLE-SANDBOX]/agtags-completion-workflow/$-c$parser_" "parser_init" "parser_reset") ("parser_init" "parser_reset") t ("parse_request" "parser_init" "parser_reset") ("[ORACLE-SANDBOX]/agtags-completion-workflow/$-c$parse" "parse_request" "parser_init" "parser_reset") nil "gtags cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-c> <parser_>\nglobal cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-c> <parse>\nglobal cwd=[ORACLE-SANDBOX]/agtags-completion-workflow <-c> <parser_f>\n")"#
+        ]],
     )
 }
 
@@ -101,8 +102,8 @@ fn agtags_open_file_follows_a_path_candidate_but_not_a_bare_base_name() -> Parit
 "####,
         true,
         expect![[
-        r##"OK ((("include/parser.h") "include/parser.h" t 100 "#pragma once\n\nint parser_init(int seed);\nint parser_reset(int state);\nint parse_request(int state);\n") (("main.c") "main.c" nil 0 "") ("Open file: " "Open file: ") "gtags cwd=[ORACLE-SANDBOX]/agtags-open-file-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-open-file-workflow <-c> <-P> <inc>\nglobal cwd=[ORACLE-SANDBOX]/agtags-open-file-workflow <-c> <-P> <main>\n")"##
-    ]],
+            r##"OK ((("include/parser.h") "include/parser.h" t 100 "#pragma once\n\nint parser_init(int seed);\nint parser_reset(int state);\nint parse_request(int state);\n") (("main.c") "main.c" nil 0 "") ("Open file: " "Open file: ") "gtags cwd=[ORACLE-SANDBOX]/agtags-open-file-workflow <-i>\nglobal cwd=[ORACLE-SANDBOX]/agtags-open-file-workflow <-c> <-P> <inc>\nglobal cwd=[ORACLE-SANDBOX]/agtags-open-file-workflow <-c> <-P> <main>\n")"##
+        ]],
     )
 }
 

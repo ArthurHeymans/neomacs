@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alchemist_batch};
 
-fn alchemist_mix_test_suite_file_line_stale_and_rerun_build_exact_practical_commands() -> ParityBatchCase {
+fn alchemist_mix_test_suite_file_line_stale_and_rerun_build_exact_practical_commands()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_mix_test_suite_file_line_stale_and_rerun_build_exact_practical_commands",
         r##"(let* ((sandbox
@@ -47,12 +48,13 @@ fn alchemist_mix_test_suite_file_line_stale_and_rerun_build_exact_practical_comm
                          (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (#2=("custom-mix" "espec" nil #1=("--exclude" "pending")) "" #3=("custom-mix" "espec" "[ORACLE-SANDBOX]/test/accounts/user_test.exs" #1#) "[ORACLE-SANDBOX]/test/accounts/user_test.exs" #4=("custom-mix" "espec" "[ORACLE-SANDBOX]/test/accounts/user_test.exs:2" #1#) "[ORACLE-SANDBOX]/test/accounts/user_test.exs:2" #5=("custom-mix" "espec" "--stale" #1#) "--stale" #6=("custom-mix" "espec" "--stale" #1#) "--stale" (#2# #3# #4# #5# #6#))"#
-    ]],
+            r#"OK (#2=("custom-mix" "espec" nil #1=("--exclude" "pending")) "" #3=("custom-mix" "espec" "[ORACLE-SANDBOX]/test/accounts/user_test.exs" #1#) "[ORACLE-SANDBOX]/test/accounts/user_test.exs" #4=("custom-mix" "espec" "[ORACLE-SANDBOX]/test/accounts/user_test.exs:2" #1#) "[ORACLE-SANDBOX]/test/accounts/user_test.exs:2" #5=("custom-mix" "espec" "--stale" #1#) "--stale" #6=("custom-mix" "espec" "--stale" #1#) "--stale" (#2# #3# #4# #5# #6#))"#
+        ]],
     )
 }
 
-fn alchemist_mix_execute_compile_run_environment_and_rerun_use_report_boundary_exactly() -> ParityBatchCase {
+fn alchemist_mix_execute_compile_run_environment_and_rerun_use_report_boundary_exactly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_mix_execute_compile_run_environment_and_rerun_use_report_boundary_exactly",
         r##"(let ((alchemist-mix-command "/tools/mix")
@@ -79,12 +81,13 @@ fn alchemist_mix_execute_compile_run_environment_and_rerun_use_report_boundary_e
                          (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (reported "MIX_ENV=test /tools/mix deps.get --only test" reported "MIX_ENV=test /tools/mix compile --warnings-as-errors" reported "MIX_ENV=prod /tools/mix run -e \"App.seed()\"" reported (("MIX_ENV=test /tools/mix deps.get --only test" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode) ("MIX_ENV=test /tools/mix compile --warnings-as-errors" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode) ("MIX_ENV=prod /tools/mix run -e \"App.seed()\"" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode) ("MIX_ENV=prod /tools/mix run -e \"App.seed()\"" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode)))"#
-    ]],
+            r#"OK (reported "MIX_ENV=test /tools/mix deps.get --only test" reported "MIX_ENV=test /tools/mix compile --warnings-as-errors" reported "MIX_ENV=prod /tools/mix run -e \"App.seed()\"" reported (("MIX_ENV=test /tools/mix deps.get --only test" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode) ("MIX_ENV=test /tools/mix compile --warnings-as-errors" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode) ("MIX_ENV=prod /tools/mix run -e \"App.seed()\"" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode) ("MIX_ENV=prod /tools/mix run -e \"App.seed()\"" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode)))"#
+        ]],
     )
 }
 
-fn alchemist_mix_task_filter_accumulates_server_chunks_prompts_and_runs_selected_task() -> ParityBatchCase {
+fn alchemist_mix_task_filter_accumulates_server_chunks_prompts_and_runs_selected_task()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_mix_task_filter_accumulates_server_chunks_prompts_and_runs_selected_task",
         r##"(let ((alchemist-mix-filter-output nil)
@@ -117,12 +120,13 @@ fn alchemist_mix_task_filter_accumulates_server_chunks_prompts_and_runs_selected
                          (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (nil ("compile\necto.migrate\n") executed nil ((select "mix: " ("compile" "ecto.migrate" "test")) (command "mix " "ecto.migrate ") (execute ("ecto.migrate --quiet") (4))))"#
-    ]],
+            r#"OK (nil ("compile\necto.migrate\n") executed nil ((select "mix: " ("compile" "ecto.migrate" "test")) (command "mix " "ecto.migrate ") (execute ("ecto.migrate --quiet") (4))))"#
+        ]],
     )
 }
 
-fn alchemist_compile_and_execute_real_files_validate_types_and_emit_exact_report_commands() -> ParityBatchCase {
+fn alchemist_compile_and_execute_real_files_validate_types_and_emit_exact_report_commands()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_compile_and_execute_real_files_validate_types_and_emit_exact_report_commands",
         r##"(let* ((sandbox
@@ -162,12 +166,13 @@ fn alchemist_compile_and_execute_real_files_validate_types_and_emit_exact_report
                          (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (reported reported reported reported reported "(error \"The given file is an Elixir Script\")" (("/tools/elixirc [ORACLE-SANDBOX]/lib/demo.ex" "alchemist-compile-report" "*alchemist elixirc*" alchemist-compile-mode) ("/tools/elixir [ORACLE-SANDBOX]/lib/demo.ex" "alchemist-execute-report" "*alchemist elixir*" alchemist-execute-mode) ("/tools/elixir [ORACLE-SANDBOX]/scripts/demo.exs" "alchemist-execute-report" "*alchemist elixir*" alchemist-execute-mode) ("/tools/elixirc --ignore-module-conflict lib/demo.ex" "alchemist-compile-report" "*alchemist elixirc*" alchemist-compile-mode) ("/tools/elixir -e IO.puts(:ok)" "alchemist-execute-report" "*alchemist elixir*" alchemist-execute-mode)))"#
-    ]],
+            r#"OK (reported reported reported reported reported "(error \"The given file is an Elixir Script\")" (("/tools/elixirc [ORACLE-SANDBOX]/lib/demo.ex" "alchemist-compile-report" "*alchemist elixirc*" alchemist-compile-mode) ("/tools/elixir [ORACLE-SANDBOX]/lib/demo.ex" "alchemist-execute-report" "*alchemist elixir*" alchemist-execute-mode) ("/tools/elixir [ORACLE-SANDBOX]/scripts/demo.exs" "alchemist-execute-report" "*alchemist elixir*" alchemist-execute-mode) ("/tools/elixirc --ignore-module-conflict lib/demo.ex" "alchemist-compile-report" "*alchemist elixirc*" alchemist-compile-mode) ("/tools/elixir -e IO.puts(:ok)" "alchemist-execute-report" "*alchemist elixir*" alchemist-execute-mode)))"#
+        ]],
     )
 }
 
-fn alchemist_test_mode_parses_navigates_cleans_and_renders_real_exunit_report_links() -> ParityBatchCase {
+fn alchemist_test_mode_parses_navigates_cleans_and_renders_real_exunit_report_links()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_test_mode_parses_navigates_cleans_and_renders_real_exunit_report_links",
         r##"(with-temp-buffer
@@ -209,12 +214,13 @@ fn alchemist_test_mode_parses_navigates_cleans_and_renders_real_exunit_report_li
                                 "Compiled lib/a.ex\n2 tests, 0 failures\n")))))))"##,
         true,
         expect![[
-        r#"OK ((("\"creates an account\"" :marker nil nil) (":deletes_account" :marker nil nil)) 56 134 2 6 "\n2 tests, 0 failures\n" "Compiled lib/a.ex\n2 tests, 0 failures\n")"#
-    ]],
+            r#"OK ((("\"creates an account\"" :marker nil nil) (":deletes_account" :marker nil nil)) 56 134 2 6 "\n2 tests, 0 failures\n" "Compiled lib/a.ex\n2 tests, 0 failures\n")"#
+        ]],
     )
 }
 
-fn alchemist_test_report_turns_failures_and_stacktraces_into_real_source_buttons() -> ParityBatchCase {
+fn alchemist_test_report_turns_failures_and_stacktraces_into_real_source_buttons() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "alchemist_test_report_turns_failures_and_stacktraces_into_real_source_buttons",
         r##"(with-temp-buffer
@@ -242,12 +248,13 @@ fn alchemist_test_report_turns_failures_and_stacktraces_into_real_source_buttons
                          (nreverse buttons))))"##,
         true,
         expect![[
-        r#"OK (#("  1) test creates an account\n     test/accounts_test.exs:14\n     test/accounts_test.exs:15: (test)\n" 34 59 (help-echo #1="visit the source location" action alchemist-test--open-file follow-link t file "test/accounts_test.exs:14" face alchemist-test--test-file-and-location-face category default-button button (t)) 65 90 (help-echo #1# action alchemist-test--open-file follow-link t file "test/accounts_test.exs:15" face alchemist-test--stacktrace-file-and-location-face category default-button button (t))) (("test/accounts_test.exs:14" "test/accounts_test.exs:14" alchemist-test--test-file-and-location-face t "visit the source location" alchemist-test--open-file) ("test/accounts_test.exs:15" "test/accounts_test.exs:15" alchemist-test--stacktrace-file-and-location-face t "visit the source location" alchemist-test--open-file)))"#
-    ]],
+            r#"OK (#("  1) test creates an account\n     test/accounts_test.exs:14\n     test/accounts_test.exs:15: (test)\n" 34 59 (help-echo #1="visit the source location" action alchemist-test--open-file follow-link t file "test/accounts_test.exs:14" face alchemist-test--test-file-and-location-face category default-button button (t)) 65 90 (help-echo #1# action alchemist-test--open-file follow-link t file "test/accounts_test.exs:15" face alchemist-test--stacktrace-file-and-location-face category default-button button (t))) (("test/accounts_test.exs:14" "test/accounts_test.exs:14" alchemist-test--test-file-and-location-face t "visit the source location" alchemist-test--open-file) ("test/accounts_test.exs:15" "test/accounts_test.exs:15" alchemist-test--stacktrace-file-and-location-face t "visit the source location" alchemist-test--open-file)))"#
+        ]],
     )
 }
 
-fn alchemist_test_execute_saves_buffers_flattens_options_and_registers_exit_renderer() -> ParityBatchCase {
+fn alchemist_test_execute_saves_buffers_flattens_options_and_registers_exit_renderer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_test_execute_saves_buffers_flattens_options_and_registers_exit_renderer",
         r##"(let ((alchemist-test-ask-about-save nil)
@@ -273,8 +280,8 @@ fn alchemist_test_execute_saves_buffers_flattens_options_and_registers_exit_rend
                          (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (reported ((message ("Testing...")) (save (t nil)) (report ("mix test /workspace/user_test.exs:14 --exclude pending" "alchemist-test-process" "*alchemist test report*" alchemist-test-report-mode alchemist-test--handle-exit))))"#
-    ]],
+            r#"OK (reported ((message ("Testing...")) (save (t nil)) (report ("mix test /workspace/user_test.exs:14 --exclude pending" "alchemist-test-process" "*alchemist test report*" alchemist-test-report-mode alchemist-test--handle-exit))))"#
+        ]],
     )
 }
 

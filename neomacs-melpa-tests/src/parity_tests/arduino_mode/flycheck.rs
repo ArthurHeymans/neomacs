@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_flycheck_arduino_batch};
 
-fn optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_definition() -> ParityBatchCase {
+fn optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_definition()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_definition",
         r##"(let* ((descriptor
@@ -29,8 +30,8 @@ fn optional_module_loads_real_pinned_flycheck_and_registers_complete_checker_def
                      flycheck-arduino-board))"##,
         true,
         expect![[
-        r#"OK (t t "20260728.931" ("arduino" "--verify" source) (arduino-mode) 2 (warning error) "Setup Flycheck Arduino.\nAdd ‘arduino’ to ‘flycheck-checkers’." nil)"#
-    ]],
+            r#"OK (t t "20260728.931" ("arduino" "--verify" source) (arduino-mode) 2 (warning error) "Setup Flycheck Arduino.\nAdd ‘arduino’ to ‘flycheck-checkers’." nil)"#
+        ]],
     )
 }
 
@@ -55,7 +56,8 @@ fn setup_adds_arduino_checker_once_and_keeps_existing_checker_order_stable() -> 
     )
 }
 
-fn realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_objects() -> ParityBatchCase {
+fn realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_objects()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_objects",
         r##"(let ((buffer
@@ -91,8 +93,8 @@ fn realistic_compiler_warning_and_fatal_error_parse_into_precise_flycheck_object
                       (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (("/workspace/Blink/Blink.ino" 12 7 warning "unused variable 'reading'" arduino t) ("/workspace/Blink/Blink.ino" 18 3 error "Servo.h: No such file or directory" arduino t))"#
-    ]],
+            r#"OK (("/workspace/Blink/Blink.ino" 12 7 warning "unused variable 'reading'" arduino t) ("/workspace/Blink/Blink.ino" 18 3 error "Servo.h: No such file or directory" arduino t))"#
+        ]],
     )
 }
 

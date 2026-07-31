@@ -148,10 +148,6 @@ pub(crate) fn assert_airline_themes_autoload_parity(elisp_form: &str, expected: 
     assert_airline_themes_source_parity("airline-themes-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_airline_themes_autoload_parity` cases (2a).
 pub(crate) fn assert_airline_themes_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alchemist_batch};
 
-fn running_the_test_suite_renders_real_mix_failures_as_buttons_over_the_source_locations() -> ParityBatchCase {
+fn running_the_test_suite_renders_real_mix_failures_as_buttons_over_the_source_locations()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "running_the_test_suite_renders_real_mix_failures_as_buttons_over_the_source_locations",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -44,8 +45,8 @@ fn running_the_test_suite_renders_real_mix_failures_as_buttons_over_the_source_l
     (when (buffer-live-p buffer) (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (:recordings-intact t :mode alchemist-test-report-mode :report "Compiling 1 file (.ex)\nRunning ExUnit with seed: 0, max_cases: 64\n\n...\n\n  1) test detects a wrong total (ParityProjectTest)\n     test/parity_project_test.exs:13\n     Assertion with == failed\n     code:  assert Enum.sum([1, 2, 3]) == 7\n     left:  6\n     right: 7\n     stacktrace:\n       test/parity_project_test.exs:14: (test)\n\n\n\n  2) test raises on bad input (ParityProjectTest)\n     test/parity_project_test.exs:17\n     ** (ArgumentError) deliberate failure for the parity fixture\n     code: ParityProject.explode()\n     stacktrace:\n       (parity_project 0.1.0) lib/parity_project.ex:20: ParityProject.explode/0\n       test/parity_project_test.exs:18: (test)\n\n\nFinished in 0.08 seconds (0.00s async, 0.08s sync)\n1 doctest, 4 tests, 2 failures\n" :buttons (("test/parity_project_test.exs:13" alchemist-test--test-file-and-location-face "test/parity_project_test.exs:13") ("test/parity_project_test.exs:14" alchemist-test--stacktrace-file-and-location-face "test/parity_project_test.exs:14") ("test/parity_project_test.exs:17" alchemist-test--test-file-and-location-face "test/parity_project_test.exs:17") ("test/parity_project_test.exs:18" alchemist-test--stacktrace-file-and-location-face "test/parity_project_test.exs:18")) :mode-name-face alchemist-test--failed-face :invocations "cwd=[PROJECT]\nargv: [test] [--seed] [0]\n")"#
-    ]],
+            r#"OK (:recordings-intact t :mode alchemist-test-report-mode :report "Compiling 1 file (.ex)\nRunning ExUnit with seed: 0, max_cases: 64\n\n...\n\n  1) test detects a wrong total (ParityProjectTest)\n     test/parity_project_test.exs:13\n     Assertion with == failed\n     code:  assert Enum.sum([1, 2, 3]) == 7\n     left:  6\n     right: 7\n     stacktrace:\n       test/parity_project_test.exs:14: (test)\n\n\n\n  2) test raises on bad input (ParityProjectTest)\n     test/parity_project_test.exs:17\n     ** (ArgumentError) deliberate failure for the parity fixture\n     code: ParityProject.explode()\n     stacktrace:\n       (parity_project 0.1.0) lib/parity_project.ex:20: ParityProject.explode/0\n       test/parity_project_test.exs:18: (test)\n\n\nFinished in 0.08 seconds (0.00s async, 0.08s sync)\n1 doctest, 4 tests, 2 failures\n" :buttons (("test/parity_project_test.exs:13" alchemist-test--test-file-and-location-face "test/parity_project_test.exs:13") ("test/parity_project_test.exs:14" alchemist-test--stacktrace-file-and-location-face "test/parity_project_test.exs:14") ("test/parity_project_test.exs:17" alchemist-test--test-file-and-location-face "test/parity_project_test.exs:17") ("test/parity_project_test.exs:18" alchemist-test--stacktrace-file-and-location-face "test/parity_project_test.exs:18")) :mode-name-face alchemist-test--failed-face :invocations "cwd=[PROJECT]\nargv: [test] [--seed] [0]\n")"#
+        ]],
     )
 }
 
@@ -105,12 +106,13 @@ fn pressing_a_rendered_failure_button_opens_the_test_file_at_that_line() -> Pari
       (when (and live (buffer-live-p live)) (kill-buffer live)))))"##,
         true,
         expect![[
-        r#"OK (:found t :label "test/parity_project_test.exs:14" :opened ("test/parity_project_test.exs" 14 "    assert Enum.sum([1, 2, 3]) == 7"))"#
-    ]],
+            r#"OK (:found t :label "test/parity_project_test.exs:14" :opened ("test/parity_project_test.exs" 14 "    assert Enum.sum([1, 2, 3]) == 7"))"#
+        ]],
     )
 }
 
-fn testing_at_point_and_testing_stale_build_different_commands_and_render_their_own_reports() -> ParityBatchCase {
+fn testing_at_point_and_testing_stale_build_different_commands_and_render_their_own_reports()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "testing_at_point_and_testing_stale_build_different_commands_and_render_their_own_reports",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -156,8 +158,8 @@ fn testing_at_point_and_testing_stale_build_different_commands_and_render_their_
     (when (buffer-live-p buffer) (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (:at-point-line 14 :at-point-report "Running ExUnit with seed: 0, max_cases: 64\nExcluding tags: [:test]\nIncluding tags: [location: {\"test/parity_project_test.exs\", 14}]\n\n\n\n  1) test detects a wrong total (ParityProjectTest)\n     test/parity_project_test.exs:13\n     Assertion with == failed\n     code:  assert Enum.sum([1, 2, 3]) == 7\n     left:  6\n     right: 7\n     stacktrace:\n       test/parity_project_test.exs:14: (test)\n\n\nFinished in 0.06 seconds (0.00s async, 0.06s sync)\n1 doctest, 4 tests, 1 failure, 4 excluded\n" :at-point-buttons (("test/parity_project_test.exs:13" alchemist-test--test-file-and-location-face "test/parity_project_test.exs:13") ("test/parity_project_test.exs:14" alchemist-test--stacktrace-file-and-location-face "test/parity_project_test.exs:14")) :stale-report "Running ExUnit with seed: 0, max_cases: 64\n\n...\n\n  1) test detects a wrong total (ParityProjectTest)\n     test/parity_project_test.exs:13\n     Assertion with == failed\n     code:  assert Enum.sum([1, 2, 3]) == 7\n     left:  6\n     right: 7\n     stacktrace:\n       test/parity_project_test.exs:14: (test)\n\n\n\n  2) test raises on bad input (ParityProjectTest)\n     test/parity_project_test.exs:17\n     ** (ArgumentError) deliberate failure for the parity fixture\n     code: ParityProject.explode()\n     stacktrace:\n       (parity_project 0.1.0) lib/parity_project.ex:20: ParityProject.explode/0\n       test/parity_project_test.exs:18: (test)\n\n\nFinished in 0.08 seconds (0.00s async, 0.08s sync)\n1 doctest, 4 tests, 2 failures\n" :stale-buttons (("test/parity_project_test.exs:13" alchemist-test--test-file-and-location-face "test/parity_project_test.exs:13") ("test/parity_project_test.exs:14" alchemist-test--stacktrace-file-and-location-face "test/parity_project_test.exs:14") ("test/parity_project_test.exs:17" alchemist-test--test-file-and-location-face "test/parity_project_test.exs:17") ("test/parity_project_test.exs:18" alchemist-test--stacktrace-file-and-location-face "test/parity_project_test.exs:18")) :last-run "test/--stale" :invocations "cwd=[PROJECT]\nargv: [test] [[PROJECT]test/parity_project_test.exs:14] [--seed] [0]\nelixir argv: [--version]\ncwd=[PROJECT]\nargv: [test] [--stale] [--seed] [0]\n")"#
-    ]],
+            r#"OK (:at-point-line 14 :at-point-report "Running ExUnit with seed: 0, max_cases: 64\nExcluding tags: [:test]\nIncluding tags: [location: {\"test/parity_project_test.exs\", 14}]\n\n\n\n  1) test detects a wrong total (ParityProjectTest)\n     test/parity_project_test.exs:13\n     Assertion with == failed\n     code:  assert Enum.sum([1, 2, 3]) == 7\n     left:  6\n     right: 7\n     stacktrace:\n       test/parity_project_test.exs:14: (test)\n\n\nFinished in 0.06 seconds (0.00s async, 0.06s sync)\n1 doctest, 4 tests, 1 failure, 4 excluded\n" :at-point-buttons (("test/parity_project_test.exs:13" alchemist-test--test-file-and-location-face "test/parity_project_test.exs:13") ("test/parity_project_test.exs:14" alchemist-test--stacktrace-file-and-location-face "test/parity_project_test.exs:14")) :stale-report "Running ExUnit with seed: 0, max_cases: 64\n\n...\n\n  1) test detects a wrong total (ParityProjectTest)\n     test/parity_project_test.exs:13\n     Assertion with == failed\n     code:  assert Enum.sum([1, 2, 3]) == 7\n     left:  6\n     right: 7\n     stacktrace:\n       test/parity_project_test.exs:14: (test)\n\n\n\n  2) test raises on bad input (ParityProjectTest)\n     test/parity_project_test.exs:17\n     ** (ArgumentError) deliberate failure for the parity fixture\n     code: ParityProject.explode()\n     stacktrace:\n       (parity_project 0.1.0) lib/parity_project.ex:20: ParityProject.explode/0\n       test/parity_project_test.exs:18: (test)\n\n\nFinished in 0.08 seconds (0.00s async, 0.08s sync)\n1 doctest, 4 tests, 2 failures\n" :stale-buttons (("test/parity_project_test.exs:13" alchemist-test--test-file-and-location-face "test/parity_project_test.exs:13") ("test/parity_project_test.exs:14" alchemist-test--stacktrace-file-and-location-face "test/parity_project_test.exs:14") ("test/parity_project_test.exs:17" alchemist-test--test-file-and-location-face "test/parity_project_test.exs:17") ("test/parity_project_test.exs:18" alchemist-test--stacktrace-file-and-location-face "test/parity_project_test.exs:18")) :last-run "test/--stale" :invocations "cwd=[PROJECT]\nargv: [test] [[PROJECT]test/parity_project_test.exs:14] [--seed] [0]\nelixir argv: [--version]\ncwd=[PROJECT]\nargv: [test] [--stale] [--seed] [0]\n")"#
+        ]],
     )
 }
 
@@ -195,8 +197,8 @@ fn a_green_suite_leaves_the_success_face_and_produces_no_buttons() -> ParityBatc
     (when (buffer-live-p buffer) (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (:report "Running ExUnit with seed: 0, max_cases: 64\n\n...\nFinished in 0.07 seconds (0.00s async, 0.07s sync)\n1 doctest, 2 tests, 0 failures\n" :buttons nil :mode-name-face alchemist-test--success-face :invocations "cwd=[PROJECT]\nargv: [test] [--seed] [0]\n")"#
-    ]],
+            r#"OK (:report "Running ExUnit with seed: 0, max_cases: 64\n\n...\nFinished in 0.07 seconds (0.00s async, 0.07s sync)\n1 doctest, 2 tests, 0 failures\n" :buttons nil :mode-name-face alchemist-test--success-face :invocations "cwd=[PROJECT]\nargv: [test] [--seed] [0]\n")"#
+        ]],
     )
 }
 
@@ -242,8 +244,8 @@ fn the_compilation_output_filter_no_longer_matches_what_modern_mix_prints() -> P
           :filter-off (run t))))"##,
         true,
         expect![[
-        r#"OK (:recordings-intact t :recorded-first-lines ("Compiling 1 file (.ex)" "Generated parity_project app") :filter-on (:compiling-line-survives t :generated-line-survives nil :first-line "Compiling 1 file (.ex)") :filter-off (:compiling-line-survives t :generated-line-survives t :first-line "Compiling 1 file (.ex)"))"#
-    ]],
+            r#"OK (:recordings-intact t :recorded-first-lines ("Compiling 1 file (.ex)" "Generated parity_project app") :filter-on (:compiling-line-survives t :generated-line-survives nil :first-line "Compiling 1 file (.ex)") :filter-off (:compiling-line-survives t :generated-line-survives t :first-line "Compiling 1 file (.ex)"))"#
+        ]],
     )
 }
 
@@ -284,8 +286,8 @@ fn alchemist_key_bindings_reach_their_commands_only_once_their_mode_is_on() -> P
     (when (buffer-live-p buffer) (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (:prefix "\3a" :direct-lookup (("C-c a x" 1) ("C-c a t" 1) ("C-c a r" 1)) :dispatched (("C-c a x" alchemist-mix) ("C-c a t" alchemist-mix-test) ("C-c a r" alchemist-mix-rerun-last-test) ("C-c a c b" alchemist-compile-this-buffer) ("C-c a e b" alchemist-execute-this-buffer)) :test-keys-before (("C-c , s" nil) ("C-c , a" nil) ("C-c , n" nil)) :test-keys-after (("C-c , s" alchemist-mix-test-at-point) ("C-c , a" alchemist-mix-test) ("C-c , n" alchemist-test-mode-jump-to-next-test)))"#
-    ]],
+            r#"OK (:prefix "\3a" :direct-lookup (("C-c a x" 1) ("C-c a t" 1) ("C-c a r" 1)) :dispatched (("C-c a x" alchemist-mix) ("C-c a t" alchemist-mix-test) ("C-c a r" alchemist-mix-rerun-last-test) ("C-c a c b" alchemist-compile-this-buffer) ("C-c a e b" alchemist-execute-this-buffer)) :test-keys-before (("C-c , s" nil) ("C-c , a" nil) ("C-c , n" nil)) :test-keys-after (("C-c , s" alchemist-mix-test-at-point) ("C-c , a" alchemist-mix-test) ("C-c , n" alchemist-test-mode-jump-to-next-test)))"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_clang_batch};
 
-fn auto_complete_clang_practical_unsaved_candidate_request_uses_prefix_start_and_full_buffer() -> ParityBatchCase {
+fn auto_complete_clang_practical_unsaved_candidate_request_uses_prefix_start_and_full_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_practical_unsaved_candidate_request_uses_prefix_start_and_full_buffer",
         r##"(with-temp-buffer
@@ -44,12 +45,13 @@ fn auto_complete_clang_practical_unsaved_candidate_request_uses_prefix_start_and
               (nreverse requests)))))"##,
         true,
         expect![[
-        r##"OK ((("vector" "class std::vector" nil)) (("vec" ("-cc1" "-fsyntax-only" "-x" "c++" "-Iproject/include" "-std=c++20" "-code-completion-at" "-:3:8" "-") "#include <vector>\nint main() {\n  std::vec\n}\n")))"##
-    ]],
+            r##"OK ((("vector" "class std::vector" nil)) (("vec" ("-cc1" "-fsyntax-only" "-x" "c++" "-Iproject/include" "-std=c++20" "-code-completion-at" "-:3:8" "-") "#include <vector>\nint main() {\n  std::vec\n}\n")))"##
+        ]],
     )
 }
 
-fn auto_complete_clang_parse_document_action_and_template_pipeline_preserves_overloads() -> ParityBatchCase {
+fn auto_complete_clang_parse_document_action_and_template_pipeline_preserves_overloads()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_parse_document_action_and_template_pipeline_preserves_overloads",
         r##"(with-temp-buffer
@@ -97,12 +99,13 @@ fn auto_complete_clang_parse_document_action_and_template_pipeline_preserves_ove
               messages))))"##,
         true,
         expect![[
-        r#"OK ((("emplace" "iterator emplace(<#const_iterator pos#>, <#value_type value#>)\niterator emplace(<#const_iterator pos#>, <#size_type count#>, <#value_type value#>)" nil)) "iterator emplace(const_iterator pos, value_type value)\niterator emplace(const_iterator pos, size_type count, value_type value)" (("(const_iterator pos, value_type value)" "" "(<#const_iterator pos#>, <#value_type value#>)") ("(const_iterator pos, size_type count, value_type value)" "" "(<#const_iterator pos#>, <#size_type count#>, <#value_type value#>)")) 192 1 nil)"#
-    ]],
+            r#"OK ((("emplace" "iterator emplace(<#const_iterator pos#>, <#value_type value#>)\niterator emplace(<#const_iterator pos#>, <#size_type count#>, <#value_type value#>)" nil)) "iterator emplace(const_iterator pos, value_type value)\niterator emplace(const_iterator pos, size_type count, value_type value)" (("(const_iterator pos, value_type value)" "" "(<#const_iterator pos#>, <#value_type value#>)") ("(const_iterator pos, size_type count, value_type value)" "" "(<#const_iterator pos#>, <#size_type count#>, <#value_type value#>)")) 192 1 nil)"#
+        ]],
     )
 }
 
-fn auto_complete_clang_generated_source_commands_invoke_auto_complete_with_exact_source() -> ParityBatchCase {
+fn auto_complete_clang_generated_source_commands_invoke_auto_complete_with_exact_source()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_generated_source_commands_invoke_auto_complete_with_exact_source",
         r##"(let ((calls nil))
@@ -157,12 +160,13 @@ fn auto_complete_clang_real_candidate_subprocess_runs_from_c_buffer() -> ParityB
            (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK (("finalize" "void finalize(<#int code#>)" nil) ("field" "int field" nil))"#
-    ]],
+            r#"OK (("finalize" "void finalize(<#int code#>)" nil) ("field" "int field" nil))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_failed_real_process_keeps_completion_and_deterministic_diagnostic() -> ParityBatchCase {
+fn auto_complete_clang_failed_real_process_keeps_completion_and_deterministic_diagnostic()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_failed_real_process_keeps_completion_and_deterministic_diagnostic",
         r##"(let* ((root
@@ -213,8 +217,8 @@ fn auto_complete_clang_failed_real_process_keeps_completion_and_deterministic_di
            (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK ((("retry" "int retry" nil)) "NOW\nclang failed with error 4:\n[ORACLE-SANDBOX]/ac-clang-failed-process/fake-clang -cc1 -\n\nwarning: recoverable parse issue" t nil)"#
-    ]],
+            r#"OK ((("retry" "int retry" nil)) "NOW\nclang failed with error 4:\n[ORACLE-SANDBOX]/ac-clang-failed-process/fake-clang -cc1 -\n\nwarning: recoverable parse issue" t nil)"#
+        ]],
     )
 }
 
@@ -267,7 +271,8 @@ fn auto_complete_clang_auto_save_candidate_writes_real_file_before_process() -> 
     )
 }
 
-fn auto_complete_clang_interactive_cflags_flow_changes_next_completion_arguments() -> ParityBatchCase {
+fn auto_complete_clang_interactive_cflags_flow_changes_next_completion_arguments() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_clang_interactive_cflags_flow_changes_next_completion_arguments",
         r##"(with-temp-buffer
@@ -297,8 +302,8 @@ fn auto_complete_clang_interactive_cflags_flow_changes_next_completion_arguments
               (nreverse requests)))))"##,
         true,
         expect![[
-        r#"OK (("-Ivendor" "-DFEATURE=1") ("feature") (("feat" ("-cc1" "-fsyntax-only" "-x" "c" "-Ivendor" "-DFEATURE=1" "-code-completion-at" "-:1:5" "-"))))"#
-    ]],
+            r#"OK (("-Ivendor" "-DFEATURE=1") ("feature") (("feat" ("-cc1" "-fsyntax-only" "-x" "c" "-Ivendor" "-DFEATURE=1" "-code-completion-at" "-:1:5" "-"))))"#
+        ]],
     )
 }
 

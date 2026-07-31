@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_auctex_batch};
 
-fn auto_complete_auctex_macro_action_expands_the_selected_macro_arguments_at_point() -> ParityBatchCase {
+fn auto_complete_auctex_macro_action_expands_the_selected_macro_arguments_at_point()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_macro_action_expands_the_selected_macro_arguments_at_point",
         r##"(with-temp-buffer
@@ -36,7 +37,8 @@ fn auto_complete_auctex_macro_action_expands_the_selected_macro_arguments_at_poi
     )
 }
 
-fn auto_complete_auctex_symbol_action_inside_math_replaces_typed_command_and_expands_arguments() -> ParityBatchCase {
+fn auto_complete_auctex_symbol_action_inside_math_replaces_typed_command_and_expands_arguments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_symbol_action_inside_math_replaces_typed_command_and_expands_arguments",
         r##"(with-temp-buffer
@@ -71,7 +73,8 @@ fn auto_complete_auctex_symbol_action_inside_math_replaces_typed_command_and_exp
     )
 }
 
-fn auto_complete_auctex_symbol_action_outside_math_wraps_command_and_leaves_point_before_closing_dollar() -> ParityBatchCase {
+fn auto_complete_auctex_symbol_action_outside_math_wraps_command_and_leaves_point_before_closing_dollar()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_symbol_action_outside_math_wraps_command_and_leaves_point_before_closing_dollar",
         r##"(with-temp-buffer
@@ -104,12 +107,13 @@ fn auto_complete_auctex_symbol_action_outside_math_wraps_command_and_leaves_poin
              (buffer-string))))"##,
         true,
         expect![[
-        r#"OK (:expanded ("" nil 20 "Euler wrote $\\alpha$") 20 36 "Euler wrote $\\alpha$")"#
-    ]],
+            r#"OK (:expanded ("" nil 20 "Euler wrote $\\alpha$") 20 36 "Euler wrote $\\alpha$")"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_environment_action_replaces_prefix_with_complete_nested_figure_snippet() -> ParityBatchCase {
+fn auto_complete_auctex_environment_action_replaces_prefix_with_complete_nested_figure_snippet()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_environment_action_replaces_prefix_with_complete_nested_figure_snippet",
         r##"(with-temp-buffer
@@ -138,12 +142,13 @@ fn auto_complete_auctex_environment_action_replaces_prefix_with_complete_nested_
              (buffer-string))))"##,
         true,
         expect![[
-        r#"OK (:expanded ("\\begin{figure}${[${htbp!}]}{${Filename}}\n$0\n\\end{figure}" nil 8 "Before\n") "Before\n")"#
-    ]],
+            r#"OK (:expanded ("\\begin{figure}${[${htbp!}]}{${Filename}}\n$0\n\\end{figure}" nil 8 "Before\n") "Before\n")"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_environment_action_honors_custom_candidate_prefix_and_tab_stops() -> ParityBatchCase {
+fn auto_complete_auctex_environment_action_honors_custom_candidate_prefix_and_tab_stops()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_environment_action_honors_custom_candidate_prefix_and_tab_stops",
         r##"(with-temp-buffer
@@ -173,12 +178,13 @@ fn auto_complete_auctex_environment_action_honors_custom_candidate_prefix_and_ta
              captured)))"##,
         true,
         expect![[
-        r#"OK (:expanded ("\\begin{itemize}${[${compact}]}{${Label}}\n$0\n\\end{itemize}" nil 1 ""))"#
-    ]],
+            r#"OK (:expanded ("\\begin{itemize}${[${compact}]}{${Label}}\n$0\n\\end{itemize}" nil 1 ""))"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_macro_action_drives_current_yasnippet_through_its_legacy_alias() -> ParityBatchCase {
+fn auto_complete_auctex_macro_action_drives_current_yasnippet_through_its_legacy_alias()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_macro_action_drives_current_yasnippet_through_its_legacy_alias",
         r##"(with-temp-buffer
@@ -203,7 +209,8 @@ fn auto_complete_auctex_macro_action_drives_current_yasnippet_through_its_legacy
     )
 }
 
-fn auto_complete_auctex_environment_action_builds_real_current_yasnippet_document_structure() -> ParityBatchCase {
+fn auto_complete_auctex_environment_action_builds_real_current_yasnippet_document_structure()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_environment_action_builds_real_current_yasnippet_document_structure",
         r##"(with-temp-buffer

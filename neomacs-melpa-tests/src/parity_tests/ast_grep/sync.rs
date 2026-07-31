@@ -53,12 +53,13 @@ fn ast_grep_sync_search_runs_prompt_stream_completion_and_real_file_jump() -> Pa
             (ast-grep-test-kill-file-buffer file)))"##,
         true,
         expect![[
-        r#"OK (((:read "ast-grep pattern: " nil ast-grep-history) (:run "console.log($A)" "/fixture/project/") (:complete "ast-grep [console.log($A)]: " nil t nil ast-grep-history ("[ORACLE-SANDBOX]/sync/src/app.js:2:2:console.log(value)") (metadata (affixation-function . ast-grep--affixation)))) t 2 2 "console.log" 1)"#
-    ]],
+            r#"OK (((:read "ast-grep pattern: " nil ast-grep-history) (:run "console.log($A)" "/fixture/project/") (:complete "ast-grep [console.log($A)]: " nil t nil ast-grep-history ("[ORACLE-SANDBOX]/sync/src/app.js:2:2:console.log(value)") (metadata (affixation-function . ast-grep--affixation)))) t 2 2 "console.log" 1)"#
+        ]],
     )
 }
 
-fn ast_grep_sync_search_no_matches_reports_pattern_and_never_prompts_for_selection() -> ParityBatchCase {
+fn ast_grep_sync_search_no_matches_reports_pattern_and_never_prompts_for_selection()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "ast_grep_sync_search_no_matches_reports_pattern_and_never_prompts_for_selection",
         r##"(let (messages completion-called)
@@ -114,8 +115,8 @@ fn ast_grep_sync_new_session_discards_stale_registry_before_user_selection() -> 
              (hash-table-count ast-grep--candidate-table))))"##,
         true,
         expect![[
-        r#"OK (("stale.rs" 9 9 nil nil nil nil) ("fresh.rs" 1 2 nil nil "fresh" nil) 1)"#
-    ]],
+            r#"OK (("stale.rs" 9 9 nil nil nil nil) ("fresh.rs" 1 2 nil nil "fresh" nil) 1)"#
+        ]],
     )
 }
 

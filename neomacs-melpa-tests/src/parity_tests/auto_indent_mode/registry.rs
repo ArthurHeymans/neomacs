@@ -1,6 +1,8 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_indent_mode_autoload_batch, assert_auto_indent_mode_batch};
+use super::{
+    ParityBatchCase, assert_auto_indent_mode_autoload_batch, assert_auto_indent_mode_batch,
+};
 
 fn auto_indent_mode_registers_feature_modes_and_public_commands() -> ParityBatchCase {
     ParityBatchCase::new(
@@ -28,8 +30,8 @@ fn auto_indent_mode_registers_feature_modes_and_public_commands() -> ParityBatch
             auto-indent-deactivate-advices)))"##,
         true,
         expect![
-        "OK (t ((auto-indent-mode t t) (auto-indent-global-mode t t) (auto-indent-mode-on t t) (auto-indent-eol-newline t t) (auto-indent-eol-char-newline t t) (auto-indent-whole-buffer t t) (auto-indent-delete-char t t) (auto-indent-delete-backward-char t t) (auto-indent-kill-line t t) (auto-indent-kill-region t t) (auto-indent-kill-ring-save t t) (auto-indent-cua-copy-region t t) (auto-indent-deactivate-advices t t)))"
-    ],
+            "OK (t ((auto-indent-mode t t) (auto-indent-global-mode t t) (auto-indent-mode-on t t) (auto-indent-eol-newline t t) (auto-indent-eol-char-newline t t) (auto-indent-whole-buffer t t) (auto-indent-delete-char t t) (auto-indent-delete-backward-char t t) (auto-indent-kill-line t t) (auto-indent-kill-region t t) (auto-indent-kill-ring-save t t) (auto-indent-cua-copy-region t t) (auto-indent-deactivate-advices t t)))"
+        ],
     )
 }
 
@@ -59,8 +61,8 @@ fn auto_indent_mode_core_custom_defaults_are_exact() -> ParityBatchCase {
            auto-indent-block-close))"##,
         true,
         expect![[
-        r#"OK ((auto-indent-home-is-beginning-of-indent t boolean nil) (auto-indent-current-pairs t boolean nil) (auto-indent-next-pair nil boolean nil) (auto-indent-next-pair-throttle 1 number nil) (auto-indent-indent-style moderate (choice (const 'aggressive :tag "Indent Aggressively") (const 'moderate :tag "Indent Aggressively outside of repository, and conservatively inside a repository.") (const 'conservative :tag "Indent Conservatively")) nil) (auto-indent-on-yank-or-paste t boolean nil) (auto-indent-mode-untabify-on-yank-or-paste t (choice (const :tag "Do not tabify or untabify" nil) (const :tag "Untabify region on paste" t) (const :tag "Tabify region on paste" tabify)) nil) (auto-indent-on-visit-file nil boolean nil) (auto-indent-on-save-file nil boolean nil) (auto-indent-untabify-on-save-file t (choice (const :tag "Do not tabify or untabify file" nil) (const :tag "Untabify file on visit" t) (const :tag "Tabify region on visit" tabify)) nil) (auto-indent-newline-function reindent-then-newline-and-indent (choice (const :tag "Reindent the current line, insert the newline then indent the current line." reindent-then-newline-and-indent) (const :tag "Insert newline then indent current line" 'newline-and-indent)) nil) (auto-indent-backward-delete-char-behavior all (choice (const untabify) (const hungry) (const all) (const nil)) nil) (auto-indent-engine nil (choice (const :tag "default" nil) (const :tag "Keymaps" keys)) nil) (auto-indent-assign-indent-level 2 integer nil) (auto-indent-block-close t boolean nil))"#
-    ]],
+            r#"OK ((auto-indent-home-is-beginning-of-indent t boolean nil) (auto-indent-current-pairs t boolean nil) (auto-indent-next-pair nil boolean nil) (auto-indent-next-pair-throttle 1 number nil) (auto-indent-indent-style moderate (choice (const 'aggressive :tag "Indent Aggressively") (const 'moderate :tag "Indent Aggressively outside of repository, and conservatively inside a repository.") (const 'conservative :tag "Indent Conservatively")) nil) (auto-indent-on-yank-or-paste t boolean nil) (auto-indent-mode-untabify-on-yank-or-paste t (choice (const :tag "Do not tabify or untabify" nil) (const :tag "Untabify region on paste" t) (const :tag "Tabify region on paste" tabify)) nil) (auto-indent-on-visit-file nil boolean nil) (auto-indent-on-save-file nil boolean nil) (auto-indent-untabify-on-save-file t (choice (const :tag "Do not tabify or untabify file" nil) (const :tag "Untabify file on visit" t) (const :tag "Tabify region on visit" tabify)) nil) (auto-indent-newline-function reindent-then-newline-and-indent (choice (const :tag "Reindent the current line, insert the newline then indent the current line." reindent-then-newline-and-indent) (const :tag "Insert newline then indent current line" 'newline-and-indent)) nil) (auto-indent-backward-delete-char-behavior all (choice (const untabify) (const hungry) (const all) (const nil)) nil) (auto-indent-engine nil (choice (const :tag "default" nil) (const :tag "Keymaps" keys)) nil) (auto-indent-assign-indent-level 2 integer nil) (auto-indent-block-close t boolean nil))"#
+        ]],
     )
 }
 
@@ -84,8 +86,8 @@ fn auto_indent_mode_editing_policy_defaults_are_exact() -> ParityBatchCase {
            auto-indent-multiple-indent-modes))"##,
         true,
         expect![[
-        r#"OK ((auto-indent-delete-line-char-add-extra-spaces t) (auto-indent-delete-line-char-add-extra-spaces-prog-mode-regs (("\\(\\s.\\|\\sw\\)" "\\(\\sw\\|\\s.\\)"))) (auto-indent-delete-line-char-remove-extra-spaces t) (auto-indent-delete-line-char-remove-last-space t) (auto-indent-delete-line-char-remove-last-space-prog-mode-regs (("\\(\\s.\\|\\s-\\)" "\\(\\s\"\\|\\sw\\)") ("\\s(" "\\(\\s(\\|\\s_\\|\\sw\\)") ("\\s)" "\\s)"))) (auto-indent-kill-remove-extra-spaces nil) (auto-indent-kill-line-at-eol nil) (auto-indent-kill-line-kill-region-when-active t) (auto-indent-use-text-boundaries t) (auto-indent-disabled-indent-functions (indent-relative indent-relative-maybe)) (auto-indent-disabled-modes-on-save (ahk-mode)) (auto-indent-multiple-indent-modes (python-mode coffee-mode haskell-mode haml-mode yaml-mode slim-mode scss-mode)))"#
-    ]],
+            r#"OK ((auto-indent-delete-line-char-add-extra-spaces t) (auto-indent-delete-line-char-add-extra-spaces-prog-mode-regs (("\\(\\s.\\|\\sw\\)" "\\(\\sw\\|\\s.\\)"))) (auto-indent-delete-line-char-remove-extra-spaces t) (auto-indent-delete-line-char-remove-last-space t) (auto-indent-delete-line-char-remove-last-space-prog-mode-regs (("\\(\\s.\\|\\s-\\)" "\\(\\s\"\\|\\sw\\)") ("\\s(" "\\(\\s(\\|\\s_\\|\\sw\\)") ("\\s)" "\\s)"))) (auto-indent-kill-remove-extra-spaces nil) (auto-indent-kill-line-at-eol nil) (auto-indent-kill-line-kill-region-when-active t) (auto-indent-use-text-boundaries t) (auto-indent-disabled-indent-functions (indent-relative indent-relative-maybe)) (auto-indent-disabled-modes-on-save (ahk-mode)) (auto-indent-multiple-indent-modes (python-mode coffee-mode haskell-mode haml-mode yaml-mode slim-mode scss-mode)))"#
+        ]],
     )
 }
 
@@ -105,7 +107,8 @@ fn auto_indent_mode_initial_keymap_and_saved_key_specs_are_consistent() -> Parit
     )
 }
 
-fn auto_indent_mode_all_legacy_advices_are_registered_and_initially_inactive_or_active() -> ParityBatchCase {
+fn auto_indent_mode_all_legacy_advices_are_registered_and_initially_inactive_or_active()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_indent_mode_all_legacy_advices_are_registered_and_initially_inactive_or_active",
         r##"(mapcar
@@ -121,8 +124,8 @@ fn auto_indent_mode_all_legacy_advices_are_registered_and_initially_inactive_or_
            move-beginning-of-line))"##,
         true,
         expect![
-        "OK ((delete-char t nil) (kill-line t nil) (kill-region t nil) (kill-ring-save t nil) (cua-copy-region t nil) (backward-delete-char-untabify t nil) (backward-delete-char t nil) (delete-backward-char t nil) (move-beginning-of-line t nil))"
-    ],
+            "OK ((delete-char t nil) (kill-line t nil) (kill-region t nil) (kill-ring-save t nil) (cua-copy-region t nil) (backward-delete-char-untabify t nil) (backward-delete-char t nil) (delete-backward-char t nil) (move-beginning-of-line t nil))"
+        ],
     )
 }
 
@@ -156,8 +159,8 @@ fn auto_indent_mode_global_hooks_are_installed_by_source_load() -> ParityBatchCa
              'beginning-of-visual-line)))))"##,
         true,
         expect![
-        "OK (((auto-indent-save-par-region-interval t t 1) (auto-indent-turn-on-org-indent t t 1) (auto-indent-minibuffer-hook t t 1) (auto-indent-disable-electric t t 1)) t)"
-    ],
+            "OK (((auto-indent-save-par-region-interval t t 1) (auto-indent-turn-on-org-indent t t 1) (auto-indent-minibuffer-hook t t 1) (auto-indent-disable-electric t t 1)) t)"
+        ],
     )
 }
 
@@ -206,12 +209,13 @@ fn auto_indent_mode_setup_map_rebuilds_exact_configured_bindings() -> ParityBatc
           auto-indent-eol-ret-semi-save))"##,
         true,
         expect![[
-        r#"OK (t auto-indent-eol-newline auto-indent-eol-char-newline "M-RET" "C-M-RET")"#
-    ]],
+            r#"OK (t auto-indent-eol-newline auto-indent-eol-char-newline "M-RET" "C-M-RET")"#
+        ]],
     )
 }
 
-fn auto_indent_mode_generated_autoloads_expose_commands_without_loading_runtime() -> ParityBatchCase {
+fn auto_indent_mode_generated_autoloads_expose_commands_without_loading_runtime() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_indent_mode_generated_autoloads_expose_commands_without_loading_runtime",
         r##"(list
@@ -232,8 +236,8 @@ fn auto_indent_mode_generated_autoloads_expose_commands_without_loading_runtime(
          (boundp 'auto-indent-current-pairs))"##,
         true,
         expect![[
-        r#"OK (nil ((auto-indent-eol-newline t t "auto-indent-mode") (auto-indent-eol-char-newline t t "auto-indent-mode") (auto-indent-mode t t "auto-indent-mode") (auto-indent-mode-on t t "auto-indent-mode") (auto-indent-global-mode t t "auto-indent-mode")) nil)"#
-    ]],
+            r#"OK (nil ((auto-indent-eol-newline t t "auto-indent-mode") (auto-indent-eol-char-newline t t "auto-indent-mode") (auto-indent-mode t t "auto-indent-mode") (auto-indent-mode-on t t "auto-indent-mode") (auto-indent-global-mode t t "auto-indent-mode")) nil)"#
+        ]],
     )
 }
 
@@ -254,8 +258,7 @@ fn registry_auto_indent_mode_batch() {
 
 #[test]
 fn registry_auto_indent_mode_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        auto_indent_mode_generated_autoloads_expose_commands_without_loading_runtime(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![auto_indent_mode_generated_autoloads_expose_commands_without_loading_runtime()];
     assert_auto_indent_mode_autoload_batch(&cases);
 }

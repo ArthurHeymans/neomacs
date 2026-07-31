@@ -49,8 +49,8 @@ fn opening_the_menu_refreshes_real_decks_models_and_fields_before_rendering() ->
       (kill-buffer menu-buffer))))"##,
         true,
         expect![[
-        r#"OK ((((action . "version") (version . 6)) ((action . "deckNames") (version . 6)) ((action . "modelNames") (version . 6)) ((action . "modelFieldNames") (version . 6) (params (modelName . "Basic"))) ((action . "modelFieldNames") (version . 6) (params (modelName . "Cloze")))) ("Computing" "Languages::Japanese") (("Cloze" "Text" "Extra") ("Basic" "Front" "Back")) anki-mode-menu-mode "Anki Mode\n---------------\n[n]: New card\n[a]: New card with current settings (deck: 'NULL', card type: 'NULL')\n[r]: Refresh decks list\n\n\n\nDecks\n---------------\n* Computing\n* Languages::Japanese\n")"#
-    ]],
+            r#"OK ((((action . "version") (version . 6)) ((action . "deckNames") (version . 6)) ((action . "modelNames") (version . 6)) ((action . "modelFieldNames") (version . 6) (params (modelName . "Basic"))) ((action . "modelFieldNames") (version . 6) (params (modelName . "Cloze")))) ("Computing" "Languages::Japanese") (("Cloze" "Text" "Extra") ("Basic" "Front" "Back")) anki-mode-menu-mode "Anki Mode\n---------------\n[n]: New card\n[a]: New card with current settings (deck: 'NULL', card type: 'NULL')\n[r]: Refresh decks list\n\n\n\nDecks\n---------------\n* Computing\n* Languages::Japanese\n")"#
+        ]],
     )
 }
 
@@ -129,8 +129,8 @@ fn authors_a_basic_card_with_math_and_sends_the_complete_ankiconnect_note() -> P
       (delete-file card-file))))"##,
         true,
         expect![[
-        r#"OK ("Computer Science" "Basic" "@Front\nWhat is the complexity of binary search over [$][/$]O(log n) items?\n\n@Back\nIt halves the remaining sorted search space after each comparison.\n\n" "@Front\nWhat is the complexity of binary search over [$][/$]O(log n) items?\n\n@Back\nIt halves the remaining sorted search space after each comparison.\n\n" (((action . "addNotes") (version . 6) (params (notes ((deckName . "Computer Science") (modelName . "Basic") (tags) (options (allowDuplicate . :json-false)) (fields (Front . "What is the complexity of binary search over [$][/$]O(log n) items?") (Back . "It halves the remaining sorted search space after each comparison."))))))) "Anki Mode\n---------------\n[n]: New card\n[a]: New card with current settings (deck: 'Computer Science', card type: 'Basic')\n[r]: Refresh decks list\n\n\n\nDecks\n---------------\n* Computer Science\n" ("Created card, got back [555001]"))"#
-    ]],
+            r#"OK ("Computer Science" "Basic" "@Front\nWhat is the complexity of binary search over [$][/$]O(log n) items?\n\n@Back\nIt halves the remaining sorted search space after each comparison.\n\n" "@Front\nWhat is the complexity of binary search over [$][/$]O(log n) items?\n\n@Back\nIt halves the remaining sorted search space after each comparison.\n\n" (((action . "addNotes") (version . 6) (params (notes ((deckName . "Computer Science") (modelName . "Basic") (tags) (options (allowDuplicate . :json-false)) (fields (Front . "What is the complexity of binary search over [$][/$]O(log n) items?") (Back . "It halves the remaining sorted search space after each comparison."))))))) "Anki Mode\n---------------\n[n]: New card\n[a]: New card with current settings (deck: 'Computer Science', card type: 'Basic')\n[r]: Refresh decks list\n\n\n\nDecks\n---------------\n* Computer Science\n" ("Created card, got back [555001]"))"#
+        ]],
     )
 }
 
@@ -182,8 +182,8 @@ fn creates_sequential_clozes_and_sends_the_edited_card_fields() -> ParityBatchCa
       (delete-file card-file))))"##,
         true,
         expect![[
-        r#"OK ("@Text\nThe {{c1::mitochondria}} produce {{c2::ATP}} during cellular respiration.\n\n@Extra\nReview the electron transport chain and chemiosmosis.\n\n" (((action . "addNotes") (version . 6) (params (notes ((deckName . "Biology") (modelName . "Cloze") (tags) (options (allowDuplicate . :json-false)) (fields (Text . "The {{c1::mitochondria}} produce {{c2::ATP}} during cellular respiration.") (Extra . "Review the electron transport chain and chemiosmosis."))))))))"#
-    ]],
+            r#"OK ("@Text\nThe {{c1::mitochondria}} produce {{c2::ATP}} during cellular respiration.\n\n@Extra\nReview the electron transport chain and chemiosmosis.\n\n" (((action . "addNotes") (version . 6) (params (notes ((deckName . "Biology") (modelName . "Cloze") (tags) (options (allowDuplicate . :json-false)) (fields (Text . "The {{c1::mitochondria}} produce {{c2::ATP}} during cellular respiration.") (Extra . "Review the electron transport chain and chemiosmosis."))))))))"#
+        ]],
     )
 }
 

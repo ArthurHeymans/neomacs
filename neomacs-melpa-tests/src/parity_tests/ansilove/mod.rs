@@ -113,10 +113,5 @@ pub(crate) fn assert_ansilove_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ansilove_parity` cases (2a).
 pub(crate) fn assert_ansilove_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ansilove_oracle(),
-        &name,
-        "ansilove_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ansilove_oracle(), &name, "ansilove_parity", cases);
 }

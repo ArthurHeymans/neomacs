@@ -20,8 +20,8 @@ fn auto_minor_mode_plain_filename_removes_backup_versions_and_remote_prefixes() 
                              "relative/file.el~"))"##,
         true,
         expect![[
-        r#"OK (("/workspace/report.txt" "/workspace/report.txt") ("/workspace/report.txt~" "/workspace/report.txt") ("/workspace/report.txt.~12~" "/workspace/report.txt") ("/ssh:user@example.test:/srv/app/main.rb" "/srv/app/main.rb") ("/ssh:user@example.test:/srv/app/main.rb~" "/srv/app/main.rb") ("/sudo:root@localhost:/etc/service.conf.~3~" "/etc/service.conf") ("relative/file.el~" "relative/file.el"))"#
-    ]],
+            r#"OK (("/workspace/report.txt" "/workspace/report.txt") ("/workspace/report.txt~" "/workspace/report.txt") ("/workspace/report.txt.~12~" "/workspace/report.txt") ("/ssh:user@example.test:/srv/app/main.rb" "/srv/app/main.rb") ("/ssh:user@example.test:/srv/app/main.rb~" "/srv/app/main.rb") ("/sudo:root@localhost:/etc/service.conf.~3~" "/etc/service.conf") ("relative/file.el~" "relative/file.el"))"#
+        ]],
     )
 }
 
@@ -49,8 +49,8 @@ fn auto_minor_mode_filename_rules_enable_every_matching_mode_in_order() -> Parit
                              auto-minor-mode-test-events)))"##,
         true,
         expect![
-        "OK (t t t ((:alpha 1 t 1 fundamental-mode) (:beta 1 t 1 fundamental-mode) (:gamma 1 t 1 fundamental-mode)))"
-    ],
+            "OK (t t t ((:alpha 1 t 1 fundamental-mode) (:beta 1 t 1 fundamental-mode) (:gamma 1 t 1 fundamental-mode)))"
+        ],
     )
 }
 
@@ -78,8 +78,8 @@ fn auto_minor_mode_filename_matching_is_always_case_folded() -> ParityBatchCase 
                              "/project/file.ammtestx"))"##,
         true,
         expect![[
-        r#"OK (("/project/file.ammtest" t ((:alpha 1 t 1 fundamental-mode))) ("/project/file.aMmTeSt" t ((:alpha 1 t 1 fundamental-mode))) ("/project/FILE.AMMTEST" t ((:alpha 1 t 1 fundamental-mode))) ("/project/file.ammtestx" nil nil))"#
-    ]],
+            r#"OK (("/project/file.ammtest" t ((:alpha 1 t 1 fundamental-mode))) ("/project/file.aMmTeSt" t ((:alpha 1 t 1 fundamental-mode))) ("/project/FILE.AMMTEST" t ((:alpha 1 t 1 fundamental-mode))) ("/project/file.ammtestx" nil nil))"#
+        ]],
     )
 }
 
@@ -106,8 +106,8 @@ fn auto_minor_mode_filename_regex_boundaries_reject_near_matches() -> ParityBatc
                              "/project/.env/local"))"##,
         true,
         expect![[
-        r#"OK (("/project/.env" t) ("/project/.env.local" t) ("/project/x.env" nil) ("/project/.environment" nil) ("/project/.env/local" nil))"#
-    ]],
+            r#"OK (("/project/.env" t) ("/project/.env.local" t) ("/project/x.env" nil) ("/project/.environment" nil) ("/project/.env/local" nil))"#
+        ]],
     )
 }
 
@@ -134,7 +134,8 @@ fn auto_minor_mode_filename_rules_require_a_visited_file() -> ParityBatchCase {
     )
 }
 
-fn auto_minor_mode_remote_backup_filename_drives_practical_rule_without_connection() -> ParityBatchCase {
+fn auto_minor_mode_remote_backup_filename_drives_practical_rule_without_connection()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_minor_mode_remote_backup_filename_drives_practical_rule_without_connection",
         r##"(with-temp-buffer
@@ -242,7 +243,8 @@ fn auto_minor_mode_keep_does_not_skip_unregistered_truthy_mode_variable() -> Par
     )
 }
 
-fn auto_minor_mode_direct_filename_runner_uses_ambient_case_fold_and_rejects_function_matcher() -> ParityBatchCase {
+fn auto_minor_mode_direct_filename_runner_uses_ambient_case_fold_and_rejects_function_matcher()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_minor_mode_direct_filename_runner_uses_ambient_case_fold_and_rejects_function_matcher",
         r##"(with-temp-buffer
@@ -273,8 +275,8 @@ fn auto_minor_mode_direct_filename_runner_uses_ambient_case_fold_and_rejects_fun
                                 nil)))))"##,
         true,
         expect![
-        "OK (((nil nil) (t t)) (:signal wrong-type-argument (stringp auto-minor-mode-test-filename-match)))"
-    ],
+            "OK (((nil nil) (t t)) (:signal wrong-type-argument (stringp auto-minor-mode-test-filename-match)))"
+        ],
     )
 }
 
@@ -290,7 +292,8 @@ fn filenames_public_surface_batch() {
         auto_minor_mode_duplicate_filename_rules_reactivate_the_same_mode(),
         auto_minor_mode_keep_skips_enabled_modes_but_enables_disabled_matches(),
         auto_minor_mode_keep_does_not_skip_unregistered_truthy_mode_variable(),
-        auto_minor_mode_direct_filename_runner_uses_ambient_case_fold_and_rejects_function_matcher(),
+        auto_minor_mode_direct_filename_runner_uses_ambient_case_fold_and_rejects_function_matcher(
+        ),
     ];
     assert_auto_minor_mode_batch(&cases);
 }

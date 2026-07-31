@@ -87,8 +87,6 @@ pub(crate) fn assert_auto_complete_pcmp_autoload_parity(elisp_form: &str, expect
     );
 }
 
-
-
 /// Multi-probe batch for `assert_auto_complete_pcmp_autoload_parity` cases (2a).
 pub(crate) fn assert_auto_complete_pcmp_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

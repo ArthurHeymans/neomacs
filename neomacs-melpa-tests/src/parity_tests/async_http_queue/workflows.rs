@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_async_http_queue_batch};
 
-fn async_http_queue_mixed_end_to_end_workflow_refills_slots_and_preserves_input_order() -> ParityBatchCase {
+fn async_http_queue_mixed_end_to_end_workflow_refills_slots_and_preserves_input_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async_http_queue_mixed_end_to_end_workflow_refills_slots_and_preserves_input_order",
         r##"(let* ((urls
@@ -178,8 +179,8 @@ fn async_http_queue_mixed_end_to_end_workflow_refills_slots_and_preserves_input_
                requests)))))"##,
         true,
         expect![[
-        r#"OK (("https://api.test/one" "https://api.test/two" "https://api.test/three") (1 2 1 2 0) (:queue (("https://api.test/one" error nil) ("https://api.test/two" done #s(hash-table test equal data ("id" 2 "name" "two"))) ("https://api.test/three" done #s(hash-table test equal data ("id" 3 "name" "three")))) :active 0 :limit 2 :timeout 10 :parser json-parse-buffer :completion t :error t) (nil (2 "two") (3 "three")) ("https://api.test/one") ("Fetching 3 URLs..." "HTTP 503 error fetching URL: https://api.test/one" "Loaded 2 URLs (1 failed)") 3 (nil nil nil))"#
-    ]],
+            r#"OK (("https://api.test/one" "https://api.test/two" "https://api.test/three") (1 2 1 2 0) (:queue (("https://api.test/one" error nil) ("https://api.test/two" done #s(hash-table test equal data ("id" 2 "name" "two"))) ("https://api.test/three" done #s(hash-table test equal data ("id" 3 "name" "three")))) :active 0 :limit 2 :timeout 10 :parser json-parse-buffer :completion t :error t) (nil (2 "two") (3 "three")) ("https://api.test/one") ("Fetching 3 URLs..." "HTTP 503 error fetching URL: https://api.test/one" "Loaded 2 URLs (1 failed)") 3 (nil nil nil))"#
+        ]],
     )
 }
 
@@ -287,12 +288,13 @@ fn async_http_queue_limit_one_starts_each_request_only_after_prior_completion() 
               state))))"##,
         true,
         expect![[
-        r#"OK (("https://api.test/a" "https://api.test/b" "https://api.test/c") ((1 1) (1 0) (2 0) (3 0)) ("https://api.test/a" "https://api.test/b" "https://api.test/c") (("https://api.test/a" done #s(hash-table test equal data ("url" "https://api.test/a"))) ("https://api.test/b" done #s(hash-table test equal data ("url" "https://api.test/b"))) ("https://api.test/c" done #s(hash-table test equal data ("url" "https://api.test/c")))))"#
-    ]],
+            r#"OK (("https://api.test/a" "https://api.test/b" "https://api.test/c") ((1 1) (1 0) (2 0) (3 0)) ("https://api.test/a" "https://api.test/b" "https://api.test/c") (("https://api.test/a" done #s(hash-table test equal data ("url" "https://api.test/a"))) ("https://api.test/b" done #s(hash-table test equal data ("url" "https://api.test/b"))) ("https://api.test/c" done #s(hash-table test equal data ("url" "https://api.test/c")))))"#
+        ]],
     )
 }
 
-fn async_http_queue_timeout_in_full_queue_releases_slot_and_allows_next_request() -> ParityBatchCase {
+fn async_http_queue_timeout_in_full_queue_releases_slot_and_allows_next_request() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async_http_queue_timeout_in_full_queue_releases_slot_and_allows_next_request",
         r##"(let* ((urls
@@ -429,8 +431,8 @@ fn async_http_queue_timeout_in_full_queue_releases_slot_and_allows_next_request(
                requests)))))"##,
         true,
         expect![[
-        r#"OK (("https://api.test/slow" "https://api.test/fast") (nil "fast-body") ("https://api.test/slow") (:queue (("https://api.test/slow" error nil) ("https://api.test/fast" done "fast-body")) :active 0 :limit 1 :timeout 4 :parser nil :completion t :error t) ("Fetching 2 URLs..." "Timeout fetching URL https://api.test/slow (4 seconds)" "Loaded 1 URLs (1 failed)") (nil nil))"#
-    ]],
+            r#"OK (("https://api.test/slow" "https://api.test/fast") (nil "fast-body") ("https://api.test/slow") (:queue (("https://api.test/slow" error nil) ("https://api.test/fast" done "fast-body")) :active 0 :limit 1 :timeout 4 :parser nil :completion t :error t) ("Fetching 2 URLs..." "Timeout fetching URL https://api.test/slow (4 seconds)" "Loaded 1 URLs (1 failed)") (nil nil))"#
+        ]],
     )
 }
 
@@ -527,8 +529,8 @@ fn async_http_queue_two_independent_queues_interleave_without_sharing_state() ->
              (eq (car states) (cadr states)))))"##,
         true,
         expect![[
-        r#"OK (("https://second.test/b" "https://first.test/a") ((:second ("https://second.test/b")) (:first ("https://first.test/a"))) ((:queue (("https://first.test/a" done "https://first.test/a")) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error nil) (:queue (("https://second.test/b" done "https://second.test/b")) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error nil)) nil)"#
-    ]],
+            r#"OK (("https://second.test/b" "https://first.test/a") ((:second ("https://second.test/b")) (:first ("https://first.test/a"))) ((:queue (("https://first.test/a" done "https://first.test/a")) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error nil) (:queue (("https://second.test/b" done "https://second.test/b")) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error nil)) nil)"#
+        ]],
     )
 }
 
@@ -628,8 +630,8 @@ fn async_http_queue_large_batch_reports_exact_progress_and_final_summary() -> Pa
              (length events))))"##,
         true,
         expect![[
-        r#"OK ((1 2 3 nil 5 6 7 8 nil 10 11 12) ("https://api.test/04" "https://api.test/09") ("Fetching 12 URLs..." "Loading URLs... 1/12 completed" "Loading URLs... 2/12 completed" "Loading URLs... 3/12 completed" "Loading URLs... 3/12 completed (1 failed)" "Loading URLs... 4/12 completed (1 failed)" "Loading URLs... 5/12 completed (1 failed)" "Loading URLs... 6/12 completed (1 failed)" "Loading URLs... 7/12 completed (1 failed)" "Loading URLs... 7/12 completed (2 failed)" "Loading URLs... 8/12 completed (2 failed)" "Loading URLs... 9/12 completed (2 failed)" "Loaded 10 URLs (2 failed)") (:queue (("https://api.test/01" done 1) ("https://api.test/02" done 2) ("https://api.test/03" done 3) ("https://api.test/04" error nil) ("https://api.test/05" done 5) ("https://api.test/06" done 6) ("https://api.test/07" done 7) ("https://api.test/08" done 8) ("https://api.test/09" error nil) ("https://api.test/10" done 10) ("https://api.test/11" done 11) ("https://api.test/12" done 12)) :active 0 :limit 3 :timeout 10 :parser nil :completion t :error t) 15)"#
-    ]],
+            r#"OK ((1 2 3 nil 5 6 7 8 nil 10 11 12) ("https://api.test/04" "https://api.test/09") ("Fetching 12 URLs..." "Loading URLs... 1/12 completed" "Loading URLs... 2/12 completed" "Loading URLs... 3/12 completed" "Loading URLs... 3/12 completed (1 failed)" "Loading URLs... 4/12 completed (1 failed)" "Loading URLs... 5/12 completed (1 failed)" "Loading URLs... 6/12 completed (1 failed)" "Loading URLs... 7/12 completed (1 failed)" "Loading URLs... 7/12 completed (2 failed)" "Loading URLs... 8/12 completed (2 failed)" "Loading URLs... 9/12 completed (2 failed)" "Loaded 10 URLs (2 failed)") (:queue (("https://api.test/01" done 1) ("https://api.test/02" done 2) ("https://api.test/03" done 3) ("https://api.test/04" error nil) ("https://api.test/05" done 5) ("https://api.test/06" done 6) ("https://api.test/07" done 7) ("https://api.test/08" done 8) ("https://api.test/09" error nil) ("https://api.test/10" done 10) ("https://api.test/11" done 11) ("https://api.test/12" done 12)) :active 0 :limit 3 :timeout 10 :parser nil :completion t :error t) 15)"#
+        ]],
     )
 }
 
@@ -715,8 +717,8 @@ fn async_http_queue_each_failure_is_terminal_and_never_retried() -> ParityBatchC
               state))))"##,
         true,
         expect![[
-        r#"OK (("https://api.test/rate-limited") ("https://api.test/rate-limited") (nil) (:queue (("https://api.test/rate-limited" error nil)) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error t))"#
-    ]],
+            r#"OK (("https://api.test/rate-limited") ("https://api.test/rate-limited") (nil) (:queue (("https://api.test/rate-limited" error nil)) :active 0 :limit 1 :timeout 10 :parser nil :completion t :error t))"#
+        ]],
     )
 }
 
@@ -793,8 +795,8 @@ fn async_http_queue_completion_callback_can_reentrantly_start_second_queue() -> 
              (length events))))"##,
         true,
         expect![[
-        r#"OK (("https://api.test/outer" "https://api.test/inner") ((:outer ("https://api.test/outer")) (:inner ("https://api.test/inner"))) 6)"#
-    ]],
+            r#"OK (("https://api.test/outer" "https://api.test/inner") ((:outer ("https://api.test/outer")) (:inner ("https://api.test/inner"))) 6)"#
+        ]],
     )
 }
 

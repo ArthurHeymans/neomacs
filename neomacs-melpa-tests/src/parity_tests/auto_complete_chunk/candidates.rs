@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_chunk_batch};
 
-fn auto_complete_chunk_ports_all_upstream_candidate_match_no_match_and_after_word_cases() -> ParityBatchCase {
+fn auto_complete_chunk_ports_all_upstream_candidate_match_no_match_and_after_word_cases()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_chunk_ports_all_upstream_candidate_match_no_match_and_after_word_cases",
         r##"(mapcar
@@ -23,12 +24,13 @@ fn auto_complete_chunk_ports_all_upstream_candidate_match_no_match_and_after_wor
                               ("a.x" "a.y" "b.x" "b.y"))))"##,
         true,
         expect![[
-        r#"OK (("a." ("a.x" "a.y" "b.x" "b.y") ("a.x" "a.y")) ("a.x" ("a.xx" "a.xy" "b.xx" "b.xy") ("a.xx" "a.xy")) ("c." ("a.x" "a.y" "b.x" "b.y") nil))"#
-    ]],
+            r#"OK (("a." ("a.x" "a.y" "b.x" "b.y") ("a.x" "a.y")) ("a.x" ("a.xx" "a.xy" "b.xx" "b.xy") ("a.xx" "a.xy")) ("c." ("a.x" "a.y" "b.x" "b.y") nil))"#
+        ]],
     )
 }
 
-fn auto_complete_chunk_candidates_preserve_input_order_duplicates_and_exact_prefix_matches() -> ParityBatchCase {
+fn auto_complete_chunk_candidates_preserve_input_order_duplicates_and_exact_prefix_matches()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_chunk_candidates_preserve_input_order_duplicates_and_exact_prefix_matches",
         r##"(with-temp-buffer
@@ -47,12 +49,13 @@ fn auto_complete_chunk_candidates_preserve_input_order_duplicates_and_exact_pref
                                dictionary))))"##,
         true,
         expect![[
-        r#"OK (("api.users.list" "api.user" "api.users.get" "other.api.user" "api.users.list" "api.User") ("api.users.list" "api.user" "api.users.get" "api.users.list"))"#
-    ]],
+            r#"OK (("api.users.list" "api.user" "api.users.get" "other.api.user" "api.users.list" "api.User") ("api.users.list" "api.user" "api.users.get" "api.users.list"))"#
+        ]],
     )
 }
 
-fn auto_complete_chunk_candidate_filtering_is_case_sensitive_across_mixed_case_prefixes() -> ParityBatchCase {
+fn auto_complete_chunk_candidate_filtering_is_case_sensitive_across_mixed_case_prefixes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_chunk_candidate_filtering_is_case_sensitive_across_mixed_case_prefixes",
         r##"(mapcar
@@ -72,12 +75,13 @@ fn auto_complete_chunk_candidate_filtering_is_case_sensitive_across_mixed_case_p
                              "PKG."))"##,
         true,
         expect![[
-        r#"OK (("Pkg." ("Pkg.Module" "Pkg.module")) ("pkg." ("pkg.Module" "pkg.module")) ("PKG." nil))"#
-    ]],
+            r#"OK (("Pkg." ("Pkg.Module" "Pkg.module")) ("pkg." ("pkg.Module" "pkg.module")) ("PKG." nil))"#
+        ]],
     )
 }
 
-fn auto_complete_chunk_candidates_use_only_text_before_point_during_incremental_editing() -> ParityBatchCase {
+fn auto_complete_chunk_candidates_use_only_text_before_point_during_incremental_editing()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_chunk_candidates_use_only_text_before_point_during_incremental_editing",
         r##"(with-temp-buffer
@@ -112,8 +116,8 @@ fn auto_complete_chunk_candidates_use_only_text_before_point_during_incremental_
                                 "service.client.r"))))"##,
         true,
         expect![[
-        r#"OK (("service." 9 1 "service." ("service.cache.clear" "service.client.close" "service.client.request" "service.client.retry")) ("service.c" 10 1 "service.c" ("service.cache.clear" "service.client.close" "service.client.request" "service.client.retry")) ("service.client." 16 1 "service.client." ("service.client.close" "service.client.request" "service.client.retry")) ("service.client.r" 17 1 "service.client.r" ("service.client.request" "service.client.retry")))"#
-    ]],
+            r#"OK (("service." 9 1 "service." ("service.cache.clear" "service.client.close" "service.client.request" "service.client.retry")) ("service.c" 10 1 "service.c" ("service.cache.clear" "service.client.close" "service.client.request" "service.client.retry")) ("service.client." 16 1 "service.client." ("service.client.close" "service.client.request" "service.client.retry")) ("service.client.r" 17 1 "service.client.r" ("service.client.request" "service.client.retry")))"#
+        ]],
     )
 }
 
@@ -138,7 +142,8 @@ fn auto_complete_chunk_no_boundary_short_circuits_invalid_candidate_elements() -
     )
 }
 
-fn auto_complete_chunk_valid_prefix_surfaces_exact_invalid_candidate_type_signals() -> ParityBatchCase {
+fn auto_complete_chunk_valid_prefix_surfaces_exact_invalid_candidate_type_signals()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_chunk_valid_prefix_surfaces_exact_invalid_candidate_type_signals",
         r##"(mapcar
@@ -159,12 +164,13 @@ fn auto_complete_chunk_valid_prefix_surfaces_exact_invalid_candidate_type_signal
                              nil))"##,
         true,
         expect![[
-        r#"OK (((42) (:signal wrong-type-argument (sequencep 42))) ((fixture-symbol) (:signal wrong-type-argument (sequencep fixture-symbol))) ((("a.x")) (:value nil)) (("a.x" 42) (:signal wrong-type-argument (sequencep 42))) (nil (:value nil)))"#
-    ]],
+            r#"OK (((42) (:signal wrong-type-argument (sequencep 42))) ((fixture-symbol) (:signal wrong-type-argument (sequencep fixture-symbol))) ((("a.x")) (:value nil)) (("a.x" 42) (:signal wrong-type-argument (sequencep 42))) (nil (:value nil)))"#
+        ]],
     )
 }
 
-fn auto_complete_chunk_candidate_objects_keep_text_properties_and_object_identity() -> ParityBatchCase {
+fn auto_complete_chunk_candidate_objects_keep_text_properties_and_object_identity()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_chunk_candidate_objects_keep_text_properties_and_object_identity",
         r##"(with-temp-buffer
@@ -204,12 +210,13 @@ fn auto_complete_chunk_candidate_objects_keep_text_properties_and_object_identit
                               dictionary)))"##,
         true,
         expect![[
-        r#"OK ((#("api.first" 0 9 (kind :method)) #("api.second" 0 10 (kind :field))) ((:method t) (:field t)) (#("api.first" 0 9 (kind :method)) "other" #("api.second" 0 10 (kind :field))))"#
-    ]],
+            r#"OK ((#("api.first" 0 9 (kind :method)) #("api.second" 0 10 (kind :field))) ((:method t) (:field t)) (#("api.first" 0 9 (kind :method)) "other" #("api.second" 0 10 (kind :field))))"#
+        ]],
     )
 }
 
-fn auto_complete_chunk_filter_does_not_mutate_dictionary_and_returns_fresh_result_spine() -> ParityBatchCase {
+fn auto_complete_chunk_filter_does_not_mutate_dictionary_and_returns_fresh_result_spine()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_chunk_filter_does_not_mutate_dictionary_and_returns_fresh_result_spine",
         r##"(with-temp-buffer
@@ -242,7 +249,8 @@ fn auto_complete_chunk_filter_does_not_mutate_dictionary_and_returns_fresh_resul
     )
 }
 
-fn auto_complete_chunk_dynamic_boundary_regex_drives_candidate_prefix_contract() -> ParityBatchCase {
+fn auto_complete_chunk_dynamic_boundary_regex_drives_candidate_prefix_contract() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_chunk_dynamic_boundary_regex_drives_candidate_prefix_contract",
         r##"(with-temp-buffer
@@ -274,8 +282,8 @@ fn auto_complete_chunk_dynamic_boundary_regex_drives_candidate_prefix_contract()
                                 point)))))"##,
         true,
         expect![[
-        r#"OK (("\\(\\s-\\|\\s(\\|\\s)\\|^\\)\\(?:\\(?:\\w\\|\\s_\\)+\\s.\\)*\\(?:\\w\\|\\s_\\)+\\s.?\\=" nil nil) ("\\(::\\)[[:word:]]+\\=" 9 ("member")) ("\\(^\\).+\\=" 1 ("prefix::member")))"#
-    ]],
+            r#"OK (("\\(\\s-\\|\\s(\\|\\s)\\|^\\)\\(?:\\(?:\\w\\|\\s_\\)+\\s.\\)*\\(?:\\w\\|\\s_\\)+\\s.?\\=" nil nil) ("\\(::\\)[[:word:]]+\\=" 9 ("member")) ("\\(^\\).+\\=" 1 ("prefix::member")))"#
+        ]],
     )
 }
 

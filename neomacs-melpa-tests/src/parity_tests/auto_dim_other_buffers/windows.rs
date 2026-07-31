@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_dim_other_buffers_batch};
 
-fn auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_showing_same_buffer() -> ParityBatchCase {
+fn auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_showing_same_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_showing_same_buffer",
         r##"(save-window-excursion
@@ -43,12 +44,13 @@ fn auto_dim_other_buffers_dim_buffer_sets_distinct_parameters_for_two_windows_sh
                 (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK ((((t " *adob-shared*" nil) (nil " *adob-shared*" t)) (t 1 (default) ((default (#1=(:filtered (:window adob--dim t) auto-dim-other-buffers)))))) ((t " *adob-shared*" nil) (nil " *adob-shared*" t)) (t 1 (default) ((default (#1#)))))"#
-    ]],
+            r#"OK ((((t " *adob-shared*" nil) (nil " *adob-shared*" t)) (t 1 (default) ((default (#1=(:filtered (:window adob--dim t) auto-dim-other-buffers)))))) ((t " *adob-shared*" nil) (nil " *adob-shared*" t)) (t 1 (default) ((default (#1#)))))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutating_window_parameters() -> ParityBatchCase {
+fn auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutating_window_parameters()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutating_window_parameters",
         r##"(save-window-excursion
@@ -94,12 +96,13 @@ fn auto_dim_other_buffers_never_dim_buffer_removes_existing_remaps_without_mutat
                 (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK (nil ((t " *adob-never-real*" :selected-before) (nil " *adob-never-real*" :other-before)) (nil 0 nil nil))"#
-    ]],
+            r#"OK (nil ((t " *adob-never-real*" :selected-before) (nil " *adob-never-real*" :other-before)) (nil 0 nil nil))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state() -> ParityBatchCase {
+fn auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state",
         r##"(save-window-excursion
@@ -158,12 +161,13 @@ fn auto_dim_other_buffers_update_switches_real_selected_window_and_buffer_state(
                 (kill-buffer second)))))"##,
         true,
         expect![[
-        r#"OK ((((t " *adob-update-first*" nil) (nil " *adob-update-second*" nil)) " *adob-update-first*" t) ((t " *adob-update-second*" nil) (nil " *adob-update-first*" t)) " *adob-update-second*" t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
-    ]],
+            r#"OK ((((t " *adob-update-first*" nil) (nil " *adob-update-second*" nil)) " *adob-update-first*" t) ((t " *adob-update-second*" nil) (nil " *adob-update-first*" t)) " *adob-update-second*" t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_buffer() -> ParityBatchCase {
+fn auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_buffer",
         r##"(save-window-excursion
@@ -210,12 +214,13 @@ fn auto_dim_other_buffers_update_moves_highlight_between_windows_showing_same_bu
                 (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK (((t " *adob-update-shared*" nil) (nil " *adob-update-shared*" nil)) ((t " *adob-update-shared*" nil) (nil " *adob-update-shared*" t)) t t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
-    ]],
+            r#"OK (((t " *adob-update-shared*" nil) (nil " *adob-update-shared*" nil)) ((t " *adob-update-shared*" nil) (nil " *adob-update-shared*" t)) t t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_remaps() -> ParityBatchCase {
+fn auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_remaps()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_remaps",
         r##"(save-window-excursion
@@ -264,12 +269,13 @@ fn auto_dim_other_buffers_rescan_real_windows_repairs_parameters_and_missing_rem
                 (kill-buffer second)))))"##,
         true,
         expect![[
-        r#"OK (((t " *adob-rescan-first*" nil) (nil " *adob-rescan-second*" t)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
-    ]],
+            r#"OK (((t " *adob-rescan-first*" nil) (nil " *adob-rescan-second*" t)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffers_to_distinct_paths() -> ParityBatchCase {
+fn auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffers_to_distinct_paths()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffers_to_distinct_paths",
         r##"(save-window-excursion
@@ -323,7 +329,8 @@ fn auto_dim_other_buffers_buffer_list_hook_routes_selected_and_nonselected_buffe
     )
 }
 
-fn auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_minibuffer_is_identified() -> ParityBatchCase {
+fn auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_minibuffer_is_identified()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_minibuffer_is_identified",
         r##"(let ((real-minibuffer
@@ -382,12 +389,13 @@ fn auto_dim_other_buffers_minibuffer_switch_option_controls_update_while_real_mi
              (nreverse events))))"##,
         true,
         expect![
-        "OK (t ((:disabled nil :previous-window) (:enabled nil :fixture-minibuffer-window)))"
-    ],
+            "OK (t ((:disabled nil :previous-window) (:enabled nil :fixture-minibuffer-window)))"
+        ],
     )
 }
 
-fn auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplied_live_buffer() -> ParityBatchCase {
+fn auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplied_live_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplied_live_buffer",
         r##"(let ((first
@@ -431,7 +439,8 @@ fn auto_dim_other_buffers_initialize_records_selected_pair_and_dims_each_supplie
     )
 }
 
-fn auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cookies_in_real_windows() -> ParityBatchCase {
+fn auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cookies_in_real_windows()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cookies_in_real_windows",
         r##"(save-window-excursion
@@ -477,8 +486,8 @@ fn auto_dim_other_buffers_base_and_indirect_buffers_keep_independent_remap_cooki
                 (kill-buffer base)))))"##,
         true,
         expect![[
-        r#"OK ((:buffer nil) ((t " *adob-base*" nil) (nil " *adob-indirect*" t)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
-    ]],
+            r#"OK ((:buffer nil) ((t " *adob-base*" nil) (nil " *adob-indirect*" t)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
+        ]],
     )
 }
 

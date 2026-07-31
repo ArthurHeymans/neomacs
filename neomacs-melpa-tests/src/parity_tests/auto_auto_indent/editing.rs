@@ -21,12 +21,13 @@ fn auto_auto_indent_newline_and_indent_creates_real_lisp_indentation_at_point() 
              (auto-auto-indent-test-buffer-state))))"##,
         true,
         expect![[
-        r#"OK (37 ("(let ((value 1))\n  (message \"first\")\n  (message \"second\"))" 40 3 2 nil nil t))"#
-    ]],
+            r#"OK (37 ("(let ((value 1))\n  (message \"first\")\n  (message \"second\"))" 40 3 2 nil nil t))"#
+        ]],
     )
 }
 
-fn auto_auto_indent_newline_between_matching_delimiters_creates_indented_blank_line() -> ParityBatchCase {
+fn auto_auto_indent_newline_between_matching_delimiters_creates_indented_blank_line()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_newline_between_matching_delimiters_creates_indented_blank_line",
         r##"(mapcar
@@ -45,12 +46,13 @@ fn auto_auto_indent_newline_between_matching_delimiters_creates_indented_blank_l
             "{}"))"##,
         true,
         expect![[
-        r#"OK (("()" nil ("(\n \n )" 4 2 1 nil nil t)) ("[]" nil ("[\n \n ]" 4 2 1 nil nil t)) ("{}" nil ("{\n\n}" 3 2 0 nil nil t)))"#
-    ]],
+            r#"OK (("()" nil ("(\n \n )" 4 2 1 nil nil t)) ("[]" nil ("[\n \n ]" 4 2 1 nil nil t)) ("{}" nil ("{\n\n}" 3 2 0 nil nil t)))"#
+        ]],
     )
 }
 
-fn auto_auto_indent_newline_replaces_active_region_then_indents_remaining_form() -> ParityBatchCase {
+fn auto_auto_indent_newline_replaces_active_region_then_indents_remaining_form() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_auto_indent_newline_replaces_active_region_then_indents_remaining_form",
         r##"(with-temp-buffer
@@ -74,7 +76,8 @@ fn auto_auto_indent_newline_replaces_active_region_then_indents_remaining_form()
     )
 }
 
-fn auto_auto_indent_nxml_and_web_newline_paths_reindent_new_and_previous_lines() -> ParityBatchCase {
+fn auto_auto_indent_nxml_and_web_newline_paths_reindent_new_and_previous_lines() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_auto_indent_nxml_and_web_newline_paths_reindent_new_and_previous_lines",
         r##"(mapcar
@@ -102,8 +105,8 @@ fn auto_auto_indent_nxml_and_web_newline_paths_reindent_new_and_previous_lines()
             web-mode))"##,
         true,
         expect![[
-        r#"OK ((fundamental-mode "alpha\n" 7 (2)) (nxml-mode "alpha\n" 7 (2 1)) (web-mode "alpha\n" 7 (2 1)))"#
-    ]],
+            r#"OK ((fundamental-mode "alpha\n" 7 (2)) (nxml-mode "alpha\n" 7 (2 1)) (web-mode "alpha\n" 7 (2 1)))"#
+        ]],
     )
 }
 
@@ -135,7 +138,8 @@ fn auto_auto_indent_open_line_indents_both_sides_without_moving_point() -> Parit
     )
 }
 
-fn auto_auto_indent_delete_char_handles_text_visible_eol_and_whitespace_joining() -> ParityBatchCase {
+fn auto_auto_indent_delete_char_handles_text_visible_eol_and_whitespace_joining() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_auto_indent_delete_char_handles_text_visible_eol_and_whitespace_joining",
         r##"(mapcar
@@ -158,8 +162,8 @@ fn auto_auto_indent_delete_char_handles_text_visible_eol_and_whitespace_joining(
             ("(one)\n(two)" 6)))"##,
         true,
         expect![[
-        r#"OK ((("abc" 2) nil "ac" 2 1) (("first\n  second" 6) nil "first second" 6 5) (("first   \n  second" 6) nil "first second" 6 5) (("(one)\n(two)" 6) nil "(one) (two)" 6 5))"#
-    ]],
+            r#"OK ((("abc" 2) nil "ac" 2 1) (("first\n  second" 6) nil "first second" 6 5) (("first   \n  second" 6) nil "first second" 6 5) (("(one)\n(two)" 6) nil "(one) (two)" 6 5))"#
+        ]],
     )
 }
 
@@ -202,12 +206,13 @@ fn auto_auto_indent_backspace_deletes_matching_pairs_as_one_edit() -> ParityBatc
             "''"))"##,
         true,
         expect![[
-        r#"OK (("()" nil "" 1) ("[]" nil "" 1) ("{}" nil "" 1) ("\"\"" nil "" 1) ("''" nil "" 1))"#
-    ]],
+            r#"OK (("()" nil "" 1) ("[]" nil "" 1) ("{}" nil "" 1) ("\"\"" nil "" 1) ("''" nil "" 1))"#
+        ]],
     )
 }
 
-fn auto_auto_indent_backspace_at_indentation_joins_with_previous_line_and_fixes_gap() -> ParityBatchCase {
+fn auto_auto_indent_backspace_at_indentation_joins_with_previous_line_and_fixes_gap()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_backspace_at_indentation_joins_with_previous_line_and_fixes_gap",
         r##"(mapcar
@@ -228,8 +233,8 @@ fn auto_auto_indent_backspace_at_indentation_joins_with_previous_line_and_fixes_
             "word\n  next"))"##,
         true,
         expect![[
-        r#"OK (("(message \"one\")\n  (message \"two\")" nil "(message \"one\") (message \"two\")" 17 16) ("(one)\n    (two)" nil "(one) (two)" 7 6) ("word\n  next" nil "word next" 6 5))"#
-    ]],
+            r#"OK (("(message \"one\")\n  (message \"two\")" nil "(message \"one\") (message \"two\")" 17 16) ("(one)\n    (two)" nil "(one) (two)" 7 6) ("word\n  next" nil "word next" 6 5))"#
+        ]],
     )
 }
 
@@ -275,12 +280,13 @@ fn auto_auto_indent_backspace_uses_region_paredit_and_plain_fallback_branches() 
                  (nreverse calls))))))"##,
         true,
         expect![[
-        r#"OK ((nil "-delete" 1) (nil "plai" 5) (:paredit "paredit" 8 (("paredit" 8))))"#
-    ]],
+            r#"OK ((nil "-delete" 1) (nil "plai" 5) (:paredit "paredit" 8 (("paredit" 8))))"#
+        ]],
     )
 }
 
-fn auto_auto_indent_indented_yank_formats_practical_multiline_lisp_and_sets_mark() -> ParityBatchCase {
+fn auto_auto_indent_indented_yank_formats_practical_multiline_lisp_and_sets_mark() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_auto_indent_indented_yank_formats_practical_multiline_lisp_and_sets_mark",
         r##"(with-temp-buffer
@@ -303,12 +309,13 @@ fn auto_auto_indent_indented_yank_formats_practical_multiline_lisp_and_sets_mark
                 (point))))))"##,
         true,
         expect![[
-        r#"OK (("(progn\n  (let ((value 3))\n    (message \"%s\" value))\n)" 54 4 1 8 nil t) "  (let ((value 3))\n    (message \"%s\" value))")"#
-    ]],
+            r#"OK (("(progn\n  (let ((value 3))\n    (message \"%s\" value))\n)" 54 4 1 8 nil t) "  (let ((value 3))\n    (message \"%s\" value))")"#
+        ]],
     )
 }
 
-fn auto_auto_indent_indented_yank_dont_indent_limit_and_region_replacement_contracts_match() -> ParityBatchCase {
+fn auto_auto_indent_indented_yank_dont_indent_limit_and_region_replacement_contracts_match()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_indented_yank_dont_indent_limit_and_region_replacement_contracts_match",
         r##"(mapcar
@@ -354,8 +361,8 @@ fn auto_auto_indent_indented_yank_dont_indent_limit_and_region_replacement_contr
             region))"##,
         true,
         expect![[
-        r#"OK ((normal "(progn\n(message \"pasted\")" 26 8 ((8 26))) (dont-indent "(progn\n(message \"pasted\")" 26 8 nil) (over-limit "(progn\n(message \"pasted\")" 26 8 nil) (region "before (message \"pasted\") after" 26 8 ((8 26))))"#
-    ]],
+            r#"OK ((normal "(progn\n(message \"pasted\")" 26 8 ((8 26))) (dont-indent "(progn\n(message \"pasted\")" 26 8 nil) (over-limit "(progn\n(message \"pasted\")" 26 8 nil) (region "before (message \"pasted\") after" 26 8 ((8 26))))"#
+        ]],
     )
 }
 
@@ -378,7 +385,8 @@ fn auto_auto_indent_indented_yank_comint_path_removes_trailing_prompt_gap() -> P
     )
 }
 
-fn auto_auto_indent_mouse_yank_inside_region_replaces_selection_and_honors_no_indent_variant() -> ParityBatchCase {
+fn auto_auto_indent_mouse_yank_inside_region_replaces_selection_and_honors_no_indent_variant()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_mouse_yank_inside_region_replaces_selection_and_honors_no_indent_variant",
         r##"(mapcar
@@ -418,8 +426,8 @@ fn auto_auto_indent_mouse_yank_inside_region_replaces_selection_and_honors_no_in
           '(nil t))"##,
         true,
         expect![[
-        r#"OK ((nil "before PASTE after" 13 8 (:fixture-event (8 13))) (t "before PASTE after" 13 8 (:fixture-event)))"#
-    ]],
+            r#"OK ((nil "before PASTE after" 13 8 (:fixture-event (8 13))) (t "before PASTE after" 13 8 (:fixture-event)))"#
+        ]],
     )
 }
 

@@ -132,10 +132,5 @@ pub(crate) fn assert_ace_jump_mode_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ace_jump_mode_parity` cases (2a).
 pub(crate) fn assert_ace_jump_mode_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ace_jump_mode_oracle(),
-        &name,
-        "ace_jump_mode_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ace_jump_mode_oracle(), &name, "ace_jump_mode_parity", cases);
 }

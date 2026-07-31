@@ -37,8 +37,8 @@ fn magit_section_builds_exact_parent_child_tree_and_ranges() -> ParityBatchCase 
                      (point-min) (point-max))))))"##,
         true,
         expect![[
-        r#"OK (((root "root" 1 6 38) (group "group" 6 12 38) (item 1 12 16 25) (item 2 25 29 38)) t t t "Root\nGroup\nOne\nbody one\nTwo\nbody two\n")"#
-    ]],
+            r#"OK (((root "root" 1 6 38) (group "group" 6 12 38) (item 1 12 16 25) (item 2 25 29 38)) t t t "Root\nGroup\nOne\nbody one\nTwo\nbody two\n")"#
+        ]],
     )
 }
 
@@ -69,8 +69,8 @@ fn magit_section_ident_lookup_and_equality_are_structural() -> ParityBatchCase {
                             (root . repository)))))))"##,
         true,
         expect![[
-        r#"OK (((commit . "abc123") (branch . "main") (root . repository)) t t nil nil)"#
-    ]],
+            r#"OK (((commit . "abc123") (branch . "main") (root . repository)) t t nil nil)"#
+        ]],
     )
 }
 
@@ -143,12 +143,13 @@ fn magit_section_siblings_parent_values_and_depth_first_mapping_are_exact() -> P
                     (nreverse order)))))"##,
         true,
         expect![[
-        r#"OK (repo (a) (c) (a c) ((item a) (leaf inside) (item b) (item c) (root repo)))"#
-    ]],
+            r#"OK (repo (a) (c) (a c) ((item a) (leaf inside) (item b) (item c) (root repo)))"#
+        ]],
     )
 }
 
-fn magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary() -> ParityBatchCase {
+fn magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary",
         r##"(with-temp-buffer
@@ -210,8 +211,8 @@ fn magit_section_text_property_runs_cover_root_headings_bodies_and_end_boundary(
                      (point-max) 'magit-section)))))"##,
         true,
         expect![[
-        r#"OK ("Root\nOne\nbody\nTwo\n" ((1 6 nil nil no-section) (6 15 item one one-object) (15 19 item two two-object)) nil t t nil)"#
-    ]],
+            r#"OK ("Root\nOne\nbody\nTwo\n" ((1 6 nil nil no-section) (6 15 item one one-object) (15 19 item two two-object)) nil t t nil)"#
+        ]],
     )
 }
 

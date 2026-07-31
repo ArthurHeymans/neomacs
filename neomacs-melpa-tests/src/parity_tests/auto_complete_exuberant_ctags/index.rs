@@ -61,7 +61,8 @@ fn auto_complete_exuberant_ctags_empty_database_clears_stale_index() -> ParityBa
     )
 }
 
-fn auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows() -> ParityBatchCase {
+fn auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows",
         r##"(let* ((root
@@ -83,7 +84,8 @@ fn auto_complete_exuberant_ctags_parser_filters_blank_header_and_malformed_rows(
     )
 }
 
-fn auto_complete_exuberant_ctags_parser_preserves_duplicates_and_reverse_file_order() -> ParityBatchCase {
+fn auto_complete_exuberant_ctags_parser_preserves_duplicates_and_reverse_file_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_exuberant_ctags_parser_preserves_duplicates_and_reverse_file_order",
         r##"(let* ((root

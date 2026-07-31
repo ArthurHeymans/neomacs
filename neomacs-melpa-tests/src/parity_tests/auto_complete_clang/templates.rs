@@ -67,7 +67,8 @@ fn auto_complete_clang_template_action_noops_when_start_point_is_nil() -> Parity
     )
 }
 
-fn auto_complete_clang_template_action_without_snippet_backend_keeps_text_and_messages() -> ParityBatchCase {
+fn auto_complete_clang_template_action_without_snippet_backend_keeps_text_and_messages()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_template_action_without_snippet_backend_keeps_text_and_messages",
         r##"(with-temp-buffer
@@ -100,12 +101,13 @@ fn auto_complete_clang_template_action_without_snippet_backend_keeps_text_and_me
               (nreverse messages)))))"##,
         true,
         expect![[
-        r#"OK (#1=("Dude! You are too out! Please install a yasnippet or a snippet script:)") "(int value)" #1#)"#
-    ]],
+            r#"OK (#1=("Dude! You are too out! Please install a yasnippet or a snippet script:)") "(int value)" #1#)"#
+        ]],
     )
 }
 
-fn auto_complete_clang_template_action_yasnippet_converts_required_optional_and_variadic_arguments() -> ParityBatchCase {
+fn auto_complete_clang_template_action_yasnippet_converts_required_optional_and_variadic_arguments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_template_action_yasnippet_converts_required_optional_and_variadic_arguments",
         r##"(with-temp-buffer
@@ -137,12 +139,13 @@ fn auto_complete_clang_template_action_yasnippet_converts_required_optional_and_
               (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (expanded "(int value, int level, ...)" (("(${int value}, int level}, ${...)" 1 28)))"#
-    ]],
+            r#"OK (expanded "(int value, int level, ...)" (("(${int value}, int level}, ${...)" 1 28)))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_template_action_yasnippet_falls_back_to_legacy_argument_order() -> ParityBatchCase {
+fn auto_complete_clang_template_action_yasnippet_falls_back_to_legacy_argument_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_template_action_yasnippet_falls_back_to_legacy_argument_order",
         r##"(with-temp-buffer
@@ -216,7 +219,8 @@ fn auto_complete_clang_template_action_snippet_backend_replaces_selected_text() 
     )
 }
 
-fn auto_complete_clang_function_pointer_template_builds_yasnippet_from_nested_arguments() -> ParityBatchCase {
+fn auto_complete_clang_function_pointer_template_builds_yasnippet_from_nested_arguments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_function_pointer_template_builds_yasnippet_from_nested_arguments",
         r##"(with-temp-buffer
@@ -248,12 +252,13 @@ fn auto_complete_clang_function_pointer_template_builds_yasnippet_from_nested_ar
               (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (expanded ((#("(${int}, ${std::pair<long, long>}, ${void (*)(char, double)})" 3 6 (raw-args "") 11 25 (raw-args "") 27 32 (raw-args "") 37 50 (raw-args "") 52 59 (raw-args "")) 1 53)))"#
-    ]],
+            r#"OK (expanded ((#("(${int}, ${std::pair<long, long>}, ${void (*)(char, double)})" 3 6 (raw-args "") 11 25 (raw-args "") 27 32 (raw-args "") 37 50 (raw-args "") 52 59 (raw-args "")) 1 53)))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_function_pointer_template_builds_snippet_backend_placeholders() -> ParityBatchCase {
+fn auto_complete_clang_function_pointer_template_builds_snippet_backend_placeholders()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_function_pointer_template_builds_snippet_backend_placeholders",
         r##"(with-temp-buffer
@@ -285,8 +290,8 @@ fn auto_complete_clang_function_pointer_template_builds_snippet_backend_placehol
               (nreverse insertions)))))"##,
         true,
         expect![[
-        r#"OK (inserted #("($${int}, $${const char *}, $${...})" 4 7 (raw-args "") 13 25 (raw-args "") 31 34 (raw-args "")) (#("($${int}, $${const char *}, $${...})" 4 7 (raw-args "") 13 25 (raw-args "") 31 34 (raw-args ""))))"#
-    ]],
+            r#"OK (inserted #("($${int}, $${const char *}, $${...})" 4 7 (raw-args "") 13 25 (raw-args "") 31 34 (raw-args "")) (#("($${int}, $${const char *}, $${...})" 4 7 (raw-args "") 13 25 (raw-args "") 31 34 (raw-args ""))))"#
+        ]],
     )
 }
 

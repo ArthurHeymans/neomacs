@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_dictionary_batch};
 
-fn auto_dictionary_mode_enable_disable_manages_lighter_timer_and_local_kill_hook() -> ParityBatchCase {
+fn auto_dictionary_mode_enable_disable_manages_lighter_timer_and_local_kill_hook() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dictionary_mode_enable_disable_manages_lighter_timer_and_local_kill_hook",
         r##"(with-temp-buffer
@@ -56,8 +57,8 @@ fn auto_dictionary_mode_enable_disable_manages_lighter_timer_and_local_kill_hook
                  (nreverse cancelled)))))))"##,
         true,
         expect![[
-        r#"OK ((t " en" test-timer (3 t adict-guess-dictionary-maybe " *temp*") t :never) (nil nil nil nil nil (test-timer)))"#
-    ]],
+            r#"OK ((t " en" test-timer (3 t adict-guess-dictionary-maybe " *temp*") t :never) (nil nil nil nil nil (test-timer)))"#
+        ]],
     )
 }
 
@@ -90,7 +91,8 @@ fn auto_dictionary_mode_with_nil_idle_time_enables_without_scheduling() -> Parit
     )
 }
 
-fn auto_dictionary_mode_reuses_existing_buffer_timer_without_duplicate_schedule() -> ParityBatchCase {
+fn auto_dictionary_mode_reuses_existing_buffer_timer_without_duplicate_schedule() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dictionary_mode_reuses_existing_buffer_timer_without_duplicate_schedule",
         r##"(with-temp-buffer
@@ -168,7 +170,8 @@ fn auto_dictionary_lighter_shortens_long_names_and_preserves_short_codes() -> Pa
     )
 }
 
-fn auto_dictionary_next_guess_tick_uses_never_sentinel_size_and_fractional_threshold() -> ParityBatchCase {
+fn auto_dictionary_next_guess_tick_uses_never_sentinel_size_and_fractional_threshold()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_next_guess_tick_uses_never_sentinel_size_and_fractional_threshold",
         r##"(list
@@ -192,7 +195,8 @@ fn auto_dictionary_next_guess_tick_uses_never_sentinel_size_and_fractional_thres
     )
 }
 
-fn auto_dictionary_timer_callback_requires_same_buffer_and_sufficient_modification() -> ParityBatchCase {
+fn auto_dictionary_timer_callback_requires_same_buffer_and_sufficient_modification()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_timer_callback_requires_same_buffer_and_sufficient_modification",
         r##"(let ((target
@@ -233,7 +237,8 @@ fn auto_dictionary_timer_callback_requires_same_buffer_and_sufficient_modificati
     )
 }
 
-fn auto_dictionary_valid_manual_change_calls_ispell_hook_lighter_and_cancels_timer() -> ParityBatchCase {
+fn auto_dictionary_valid_manual_change_calls_ispell_hook_lighter_and_cancels_timer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_valid_manual_change_calls_ispell_hook_lighter_and_cancels_timer",
         r##"(with-temp-buffer
@@ -312,7 +317,8 @@ fn auto_dictionary_invalid_manual_change_signals_before_side_effects() -> Parity
     )
 }
 
-fn auto_dictionary_nil_manual_change_delegates_interactively_then_updates_hook() -> ParityBatchCase {
+fn auto_dictionary_nil_manual_change_delegates_interactively_then_updates_hook() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dictionary_nil_manual_change_delegates_interactively_then_updates_hook",
         r##"(with-temp-buffer
@@ -345,7 +351,8 @@ fn auto_dictionary_nil_manual_change_delegates_interactively_then_updates_hook()
     )
 }
 
-fn auto_dictionary_manual_change_can_keep_automatic_timer_when_policy_disabled() -> ParityBatchCase {
+fn auto_dictionary_manual_change_can_keep_automatic_timer_when_policy_disabled() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dictionary_manual_change_can_keep_automatic_timer_when_policy_disabled",
         r##"(with-temp-buffer
@@ -378,7 +385,8 @@ fn auto_dictionary_manual_change_can_keep_automatic_timer_when_policy_disabled()
     )
 }
 
-fn auto_dictionary_guess_changes_only_different_dictionary_and_updates_last_check() -> ParityBatchCase {
+fn auto_dictionary_guess_changes_only_different_dictionary_and_updates_last_check()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_guess_changes_only_different_dictionary_and_updates_last_check",
         r##"(with-temp-buffer

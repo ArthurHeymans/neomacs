@@ -209,10 +209,5 @@ pub(crate) fn assert_advent_mode_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_advent_mode_parity` cases (2a).
 pub(crate) fn assert_advent_mode_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        advent_mode_oracle(),
-        &name,
-        "advent_mode_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(advent_mode_oracle(), &name, "advent_mode_parity", cases);
 }

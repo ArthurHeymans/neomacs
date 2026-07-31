@@ -21,12 +21,13 @@ fn general_public_defaults_match_the_pinned_release() -> ParityBatchCase {
                general-override-mode)"##,
         true,
         expect![[
-        r#"OK (t nil nil nil nil (insert replace emacs hybrid iedit-insert) global nil t t on-change t nil)"#
-    ]],
+            r#"OK (t nil nil nil nil (insert replace emacs hybrid iedit-insert) global nil t t on-change t nil)"#
+        ]],
     )
 }
 
-fn general_define_key_binds_supported_key_and_definition_shapes_and_records_them() -> ParityBatchCase {
+fn general_define_key_binds_supported_key_and_definition_shapes_and_records_them() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "general_define_key_binds_supported_key_and_definition_shapes_and_records_them",
         r##"(progn
@@ -68,8 +69,8 @@ fn general_define_key_binds_supported_key_and_definition_shapes_and_records_them
                   general-keybindings)))"##,
         true,
         expect![[
-        r#"OK (forward-char ignore backward-kill-line "\30b" t ((neomacs-general-shapes-map (nil ("\3a" forward-char nil) ([f8] ignore nil) ([remap kill-line] backward-kill-line nil) ("\3b" "\30b" nil) ("\3l" #[nil ('lambda-result) (t) nil nil nil] nil)))))"#
-    ]],
+            r#"OK (forward-char ignore backward-kill-line "\30b" t ((neomacs-general-shapes-map (nil ("\3a" forward-char nil) ([f8] ignore nil) ([remap kill-line] backward-kill-line nil) ("\3b" "\30b" nil) ("\3l" #[nil ('lambda-result) (t) nil nil nil] nil)))))"#
+        ]],
     )
 }
 
@@ -403,8 +404,8 @@ fn general_describe_keybindings_formats_recorded_bindings_into_an_org_table() ->
                       "*General Keybindings*")))))"##,
         true,
         expect![[
-        r#"OK "* Neomacs-General-Report-Map Keybindings\n|key|command|previous|\n|-+-|\n|=C-c a=|~forward-char~|~beginning-of-line~|\n|=C-c b=|~backward-char~|~nil~|\n\n* Local Keybindings\n""#
-    ]],
+            r#"OK "* Neomacs-General-Report-Map Keybindings\n|key|command|previous|\n|-+-|\n|=C-c a=|~forward-char~|~beginning-of-line~|\n|=C-c b=|~backward-char~|~nil~|\n\n* Local Keybindings\n""#
+        ]],
     )
 }
 

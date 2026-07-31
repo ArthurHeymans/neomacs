@@ -44,10 +44,5 @@ pub(crate) fn assert_at_signal_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_at_parity` cases (2a).
 pub(crate) fn assert_at_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        at_oracle(),
-        &name,
-        "at_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(at_oracle(), &name, "at_parity", cases);
 }

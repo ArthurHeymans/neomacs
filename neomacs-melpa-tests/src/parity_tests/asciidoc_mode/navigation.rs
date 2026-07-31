@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asciidoc_mode_batch};
 
-fn imenu_defun_sentence_and_outline_navigation_traverse_a_real_document_hierarchy() -> ParityBatchCase {
+fn imenu_defun_sentence_and_outline_navigation_traverse_a_real_document_hierarchy()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "imenu_defun_sentence_and_outline_navigation_traverse_a_real_document_hierarchy",
         r##"(with-temp-buffer
@@ -72,12 +73,13 @@ fn imenu_defun_sentence_and_outline_navigation_traverse_a_real_document_hierarch
        'asciidoc)))))"##,
         true,
         expect![[
-        r#"OK ((("Install\n" 49) ("Linux\n" 77) ("macOS\n" 102) ("Operate\n" 127)) ("== Install" "=== Linux" "=== macOS" "== Operate") ("== Install" "=== Linux" "=== macOS" "== Operate") ((48 "") (76 "")) "")"#
-    ]],
+            r#"OK ((("Install\n" 49) ("Linux\n" 77) ("macOS\n" 102) ("Operate\n" 127)) ("== Install" "=== Linux" "=== macOS" "== Operate") ("== Install" "=== Linux" "=== macOS" "== Operate") ((48 "") (76 "")) "")"#
+        ]],
     )
 }
 
-fn outline_subtree_move_reports_the_exact_editor_error_without_mutating_the_document() -> ParityBatchCase {
+fn outline_subtree_move_reports_the_exact_editor_error_without_mutating_the_document()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "outline_subtree_move_reports_the_exact_editor_error_without_mutating_the_document",
         r##"(with-temp-buffer
@@ -130,12 +132,13 @@ fn outline_subtree_move_reports_the_exact_editor_error_without_mutating_the_docu
         (buffer-string))))))"##,
         true,
         expect![[
-        r#"OK (down-error wrong-type-argument (number-or-marker-p nil) #("= Runbook\n\n== Prepare\n\nPreparation body.\n\n=== Verify\n\nVerification body.\n\n== Deploy\n\nDeployment body.\n" 0 1 (face asciidoc-document-title-face) 2 10 (face asciidoc-document-title-face) 11 22 (face asciidoc-title-1-face) 42 53 (face asciidoc-title-2-face) 74 84 (face asciidoc-title-1-face)) #("= Runbook\n\n== Prepare\n\nPreparation body.\n\n=== Verify\n\nVerification body.\n\n== Deploy\n\nDeployment body.\n" 0 1 (face asciidoc-document-title-face) 2 10 (face asciidoc-document-title-face) 11 22 (face asciidoc-title-1-face) 42 53 (face asciidoc-title-2-face) 74 84 (face asciidoc-title-1-face)))"#
-    ]],
+            r#"OK (down-error wrong-type-argument (number-or-marker-p nil) #("= Runbook\n\n== Prepare\n\nPreparation body.\n\n=== Verify\n\nVerification body.\n\n== Deploy\n\nDeployment body.\n" 0 1 (face asciidoc-document-title-face) 2 10 (face asciidoc-document-title-face) 11 22 (face asciidoc-title-1-face) 42 53 (face asciidoc-title-2-face) 74 84 (face asciidoc-title-1-face)) #("= Runbook\n\n== Prepare\n\nPreparation body.\n\n=== Verify\n\nVerification body.\n\n== Deploy\n\nDeployment body.\n" 0 1 (face asciidoc-document-title-face) 2 10 (face asciidoc-document-title-face) 11 22 (face asciidoc-title-1-face) 42 53 (face asciidoc-title-2-face) 74 84 (face asciidoc-title-1-face)))"#
+        ]],
     )
 }
 
-fn public_follow_command_jumps_to_anchors_and_routes_supported_urls_and_macros() -> ParityBatchCase {
+fn public_follow_command_jumps_to_anchors_and_routes_supported_urls_and_macros() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "public_follow_command_jumps_to_anchors_and_routes_supported_urls_and_macros",
         r##"(with-temp-buffer
@@ -216,8 +219,8 @@ fn public_follow_command_jumps_to_anchors_and_routes_supported_urls_and_macros()
            plain-error))))))"##,
         true,
         expect![[
-        r#"OK (((anchor 61 1 61 "[[target]] Explicit destination.") (section 76 35 76 "== Natural Section") opened opened opened) (("https://example.com/path.\nSee") ("https://docs.example.org") ("mailto:ada@example.org")) (user-error ("Nothing to follow at point")) (user-error ("No reference at point")))"#
-    ]],
+            r#"OK (((anchor 61 1 61 "[[target]] Explicit destination.") (section 76 35 76 "== Natural Section") opened opened opened) (("https://example.com/path.\nSee") ("https://docs.example.org") ("mailto:ada@example.org")) (user-error ("Nothing to follow at point")) (user-error ("No reference at point")))"#
+        ]],
     )
 }
 
@@ -288,12 +291,13 @@ fn xref_backend_identifies_defines_completes_and_lists_real_reference_usages() -
        'asciidoc "explicit")))))"##,
         true,
         expect![[
-        r#"OK (asciidoc "explicit" "explicit" "explicit" (1 31 "[[explicit]] Definition.") (1 11 "== Getting Started") (1 11 "== Getting Started") ("explicit" "_manual" "Manual" "_getting_started" "Getting Started") (("See <<explicit>>, xref:explicit[again], <<explicit,caption>>, and <<_getting_started>>." 61) ("See <<explicit>>, xref:explicit[again], <<explicit,caption>>, and <<_getting_started>>." 97) ("See <<explicit>>, xref:explicit[again], <<explicit,caption>>, and <<_getting_started>>." 75)))"#
-    ]],
+            r#"OK (asciidoc "explicit" "explicit" "explicit" (1 31 "[[explicit]] Definition.") (1 11 "== Getting Started") (1 11 "== Getting Started") ("explicit" "_manual" "Manual" "_getting_started" "Getting Started") (("See <<explicit>>, xref:explicit[again], <<explicit,caption>>, and <<_getting_started>>." 61) ("See <<explicit>>, xref:explicit[again], <<explicit,caption>>, and <<_getting_started>>." 97) ("See <<explicit>>, xref:explicit[again], <<explicit,caption>>, and <<_getting_started>>." 75)))"#
+        ]],
     )
 }
 
-fn section_and_anchor_algorithms_cover_defaults_custom_attributes_and_precedence() -> ParityBatchCase {
+fn section_and_anchor_algorithms_cover_defaults_custom_attributes_and_precedence() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "section_and_anchor_algorithms_cover_defaults_custom_attributes_and_precedence",
         r##"(list
@@ -336,12 +340,13 @@ fn section_and_anchor_algorithms_cover_defaults_custom_attributes_and_precedence
     (asciidoc--all-anchor-ids))))"##,
         true,
         expect![[
-        r#"OK (("_introduction_to_asciidoc" "_what_s_new" "_section_1_2" "_multiple_separators" "sect-already-clean") ("sect_" "" "fallback" ("sect_" . "-") "sect_hello-world" 43 76 43 92 76 ("_hello-world" "short" "sect_hello-world" "Hello World")))"#
-    ]],
+            r#"OK (("_introduction_to_asciidoc" "_what_s_new" "_section_1_2" "_multiple_separators" "sect-already-clean") ("sect_" "" "fallback" ("sect_" . "-") "sect_hello-world" 43 76 43 92 76 ("_hello-world" "short" "sect_hello-world" "Hello World")))"#
+        ]],
     )
 }
 
-fn generic_and_antora_cross_file_resolution_use_deterministic_real_project_layouts() -> ParityBatchCase {
+fn generic_and_antora_cross_file_resolution_use_deterministic_real_project_layouts()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "generic_and_antora_cross_file_resolution_use_deterministic_real_project_layouts",
         r##"(let* ((root
@@ -471,8 +476,8 @@ fn generic_and_antora_cross_file_resolution_use_deterministic_real_project_layou
     (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK (("generic/guide/target.adoc" 11 "[[anchor]] destination." "guide/target.adoc" nil) (("antora" "ROOT" "practical-docs") (("antora/modules/ROOT/pages/basics/install.adoc" 12) ("antora/modules/ROOT/pages/basics/install.adoc" 12) ("antora/modules/ROOT/pages/basics/install.adoc" 12)) nil ("" . "-")))"#
-    ]],
+            r#"OK (("generic/guide/target.adoc" 11 "[[anchor]] destination." "guide/target.adoc" nil) (("antora" "ROOT" "practical-docs") (("antora/modules/ROOT/pages/basics/install.adoc" 12) ("antora/modules/ROOT/pages/basics/install.adoc" 12) ("antora/modules/ROOT/pages/basics/install.adoc" 12)) nil ("" . "-")))"#
+        ]],
     )
 }
 

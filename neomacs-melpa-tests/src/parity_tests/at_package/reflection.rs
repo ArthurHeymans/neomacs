@@ -129,8 +129,8 @@ fn at_describe_interactive_form_filters_prototypes_and_function_properties() -> 
                 '@neomacs-describe-proto)))"##,
         true,
         expect![[
-        r#"OK (described (("Describe prototype: " t nil t "@") ("Describe property: " t nil t ":")))"#
-    ]],
+            r#"OK (described (("Describe prototype: " t nil t "@") ("Describe property: " t nil t ":")))"#
+        ]],
     )
 }
 

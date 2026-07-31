@@ -47,9 +47,11 @@ pub(crate) fn assert_oracle_batch(
             expect_value: *expect_value,
         })
         .collect();
-    let reports = oracle.run_batch(batch_name, &batch).unwrap_or_else(|error| {
-        panic!("{package_label} batch `{batch_name}` failed:\n{error}");
-    });
+    let reports = oracle
+        .run_batch(batch_name, &batch)
+        .unwrap_or_else(|error| {
+            panic!("{package_label} batch `{batch_name}` failed:\n{error}");
+        });
     assert_eq!(
         reports.len(),
         cases.len(),
@@ -79,9 +81,11 @@ pub(crate) fn assert_oracle_batch_cases(
             expect_value: case.expect_value,
         })
         .collect();
-    let reports = oracle.run_batch(batch_name, &batch).unwrap_or_else(|error| {
-        panic!("{package_label} batch `{batch_name}` failed:\n{error}");
-    });
+    let reports = oracle
+        .run_batch(batch_name, &batch)
+        .unwrap_or_else(|error| {
+            panic!("{package_label} batch `{batch_name}` failed:\n{error}");
+        });
     assert_eq!(
         reports.len(),
         cases.len(),
@@ -94,7 +98,6 @@ pub(crate) fn assert_oracle_batch_cases(
             report.id, case.id,
             "{package_label} batch case order mismatch"
         );
-        case.expected
-            .assert_eq(&report.gnu_emacs.to_string());
+        case.expected.assert_eq(&report.gnu_emacs.to_string());
     }
 }

@@ -37,10 +37,5 @@ pub(crate) fn assert_archive_rpm_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_archive_rpm_parity` cases (2a).
 pub(crate) fn assert_archive_rpm_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        archive_rpm_oracle(),
-        &name,
-        "archive_rpm_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(archive_rpm_oracle(), &name, "archive_rpm_parity", cases);
 }

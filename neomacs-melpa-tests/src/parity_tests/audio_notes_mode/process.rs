@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_audio_notes_mode_batch};
 
-fn audio_notes_mode_mplayer_prefix_parser_handles_numeric_raw_and_error_inputs() -> ParityBatchCase {
+fn audio_notes_mode_mplayer_prefix_parser_handles_numeric_raw_and_error_inputs() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "audio_notes_mode_mplayer_prefix_parser_handles_numeric_raw_and_error_inputs",
         r##"(let ((anm/default-seek-step 5))
@@ -30,8 +31,8 @@ fn audio_notes_mode_mplayer_prefix_parser_handles_numeric_raw_and_error_inputs()
                               "5")))"##,
         true,
         expect![[
-        r#"OK ((nil (:ok 5)) (0 (:ok 0)) (3 (:ok 3)) (-7 (:ok -7)) (2.5 (:ok 2.5)) ((1) (:ok 5.0)) ((4) (:ok 10.0)) ((16) (:ok 15.0)) ((-16) (:ok 15.0)) ((64) (:ok 20.0)) (nil (:ok 5)) ((0) (:ok -1.0e+INF)) (symbol (:ok nil)) ("5" (:ok nil)))"#
-    ]],
+            r#"OK ((nil (:ok 5)) (0 (:ok 0)) (3 (:ok 3)) (-7 (:ok -7)) (2.5 (:ok 2.5)) ((1) (:ok 5.0)) ((4) (:ok 10.0)) ((16) (:ok 15.0)) ((-16) (:ok 15.0)) ((64) (:ok 20.0)) (nil (:ok 5)) ((0) (:ok -1.0e+INF)) (symbol (:ok nil)) ("5" (:ok nil)))"#
+        ]],
     )
 }
 
@@ -51,8 +52,8 @@ fn audio_notes_mode_mplayer_prefix_parser_scales_with_custom_default_step() -> P
                           '(1 3 10 -2 0))"##,
         true,
         expect![
-        "OK ((1 1 7 1.0 2.0 3.0) (3 3 7 3.0 6.0 9.0) (10 10 7 10.0 20.0 30.0) (-2 -2 7 -2.0 -4.0 -6.0) (0 0 7 0.0 0.0 0.0))"
-    ],
+            "OK ((1 1 7 1.0 2.0 3.0) (3 3 7 3.0 6.0 9.0) (10 10 7 10.0 20.0 30.0) (-2 -2 7 -2.0 -4.0 -6.0) (0 0 7 0.0 0.0 0.0))"
+        ],
     )
 }
 
@@ -102,8 +103,8 @@ fn audio_notes_mode_mplayer_and_process_alive_predicate_matrix_matches() -> Pari
                               (nreverse status-calls))))"##,
         true,
         expect![[
-        r#"OK (((internal (:ok nil)) (nil (:ok nil)) (nil (:ok nil)) (("mplayer") (:ok t)) (("mplayer" "-quiet" file) (:ok t)) (("vlc" file) (:ok nil)) ((mplayer file) (:ok t)) (("MPLAYER" file) (:ok nil)) (("mplayer" . file) (:ok t))) ((nil nil) (running t) (stopped nil) (exited nil)) (running stopped exited))"#
-    ]],
+            r#"OK (((internal (:ok nil)) (nil (:ok nil)) (nil (:ok nil)) (("mplayer") (:ok t)) (("mplayer" "-quiet" file) (:ok t)) (("vlc" file) (:ok nil)) ((mplayer file) (:ok t)) (("MPLAYER" file) (:ok nil)) (("mplayer" . file) (:ok t))) ((nil nil) (running t) (stopped nil) (exited nil)) (running stopped exited))"#
+        ]],
     )
 }
 
@@ -170,8 +171,8 @@ fn audio_notes_mode_mplayer_send_routes_commands_and_exact_failure_messages() ->
                                       (nreverse events))))))))"##,
         true,
         expect![[
-        r#"OK (:sent "There's nothing playing!" "Not using mplayer!" ((:is-mplayer t) (:is-alive t) (:send fake-process "seek 15 0\n") (:is-mplayer t) (:is-alive nil) (:message "There's nothing playing!") (:is-mplayer nil) (:message "Not using mplayer!")))"#
-    ]],
+            r#"OK (:sent "There's nothing playing!" "Not using mplayer!" ((:is-mplayer t) (:is-alive t) (:send fake-process "seek 15 0\n") (:is-mplayer t) (:is-alive nil) (:message "There's nothing playing!") (:is-mplayer nil) (:message "Not using mplayer!")))"#
+        ]],
     )
 }
 
@@ -201,8 +202,8 @@ fn audio_notes_mode_seek_commands_translate_direct_and_raw_prefixes_exactly() ->
                                 (nreverse commands)))))"##,
         true,
         expect![[
-        r#"OK (("sent:seek 5 0" "sent:seek 3 0" "sent:seek -2 0" "sent:seek 10 0" "sent:seek -5 0" "sent:seek -3 0" "sent:seek 2 0" "sent:seek -15 0") ("seek 5 0" "seek 3 0" "seek -2 0" "seek 10 0" "seek -5 0" "seek -3 0" "seek 2 0" "seek -15 0"))"#
-    ]],
+            r#"OK (("sent:seek 5 0" "sent:seek 3 0" "sent:seek -2 0" "sent:seek 10 0" "sent:seek -5 0" "sent:seek -3 0" "sent:seek 2 0" "sent:seek -15 0") ("seek 5 0" "seek 3 0" "seek -2 0" "seek 10 0" "seek -5 0" "seek -3 0" "seek 2 0" "seek -15 0"))"#
+        ]],
     )
 }
 
@@ -279,8 +280,8 @@ fn audio_notes_mode_stop_kills_live_player_or_reports_exact_idle_message() -> Pa
                                     (nreverse events)))))))"##,
         true,
         expect![[
-        r#"OK (:killed "There's nothing playing!" ((:alive t) (:kill fake-player) (:alive nil) (:message "There's nothing playing!")))"#
-    ]],
+            r#"OK (:killed "There's nothing playing!" ((:alive t) (:kill fake-player) (:alive nil) (:message "There's nothing playing!")))"#
+        ]],
     )
 }
 
@@ -315,8 +316,8 @@ fn audio_notes_mode_bug_report_opens_exact_url_and_formats_version_message() -> 
                               (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("Your anm/version is: 1.1.1, and your emacs version is: 99.88-test.\nPlease include this in your report!" ((:browse "https://github.com/Bruce-Connor/audio-notes-mode/issues/new" nil) (:message "Your anm/version is: 1.1.1, and your emacs version is: 99.88-test.\nPlease include this in your report!")))"#
-    ]],
+            r#"OK ("Your anm/version is: 1.1.1, and your emacs version is: 99.88-test.\nPlease include this in your report!" ((:browse "https://github.com/Bruce-Connor/audio-notes-mode/issues/new" nil) (:message "Your anm/version is: 1.1.1, and your emacs version is: 99.88-test.\nPlease include this in your report!")))"#
+        ]],
     )
 }
 

@@ -14,8 +14,8 @@ fn affe_command_appends_paths_when_command_has_no_placeholder() -> ParityBatchCa
                               '("α" "β")))"##,
         true,
         expect![[
-        r#"OK (("rg" "--color=never" "--files" "src" "docs/space name") ("find" "-type" "f") ("printf" "%s\n" "α" "β"))"#
-    ]],
+            r#"OK (("rg" "--color=never" "--files" "src" "docs/space name") ("find" "-type" "f") ("printf" "%s\n" "α" "β"))"#
+        ]],
     )
 }
 
@@ -33,8 +33,8 @@ fn affe_command_expands_every_dot_placeholder_and_preserves_quoted_arguments() -
                 '("root")))"##,
         true,
         expect![[
-        r#"OK (("rg" "--glob" "space name" "one" "two words" "--and" "one" "two words") ("a" "b") ("tool" "--literal=./child" "root"))"#
-    ]],
+            r#"OK (("rg" "--glob" "space name" "one" "two words" "--and" "one" "two words") ("a" "b") ("tool" "--literal=./child" "root"))"#
+        ]],
     )
 }
 
@@ -54,8 +54,8 @@ fn affe_command_reports_split_errors_and_boundary_argument_types() -> ParityBatc
                  ("rg ." nil)))"##,
         true,
         expect![[
-        r#"OK ((signal end-of-file nil) (signal wrong-type-argument (stringp nil)) ("rg"))"#
-    ]],
+            r#"OK ((signal end-of-file nil) (signal wrong-type-argument (stringp nil)) ("rg"))"#
+        ]],
     )
 }
 

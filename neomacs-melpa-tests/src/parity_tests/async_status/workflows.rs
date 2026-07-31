@@ -71,8 +71,8 @@ fn complete_single_job_lifecycle_allocates_displays_updates_and_cleans_up() -> P
       (setq async-status--shown-items nil))))"##,
         true,
         expect![[
-        r#"OK ((1 "Compile project" "0.5" "0.5") 0 nil ((:watch-add :normalized (change) async-status--update-items) :show :refresh :show (:watch-remove 1) :refresh (:hide nil)))"#
-    ]],
+            r#"OK ((1 "Compile project" "0.5" "0.5") 0 nil ((:watch-add :normalized (change) async-status--update-items) :show :refresh :show (:watch-remove 1) :refresh (:hide nil)))"#
+        ]],
     )
 }
 
@@ -153,8 +153,8 @@ fn thresholded_child_updates_publish_only_meaningful_progress_steps() -> ParityB
     (async-status-clean-up id)))"##,
         true,
         expect![[
-        r#"OK ((0.0 nil "0") (0.005 nil "0") (0.011 t "0.011") (0.015 nil "0.011") (0.021 t "0.021") (0.022 nil "0.021") (0.5 t "0.5") (0.999 t "0.999") (1.0 nil "0.999"))"#
-    ]],
+            r#"OK ((0.0 nil "0") (0.005 nil "0") (0.011 t "0.011") (0.015 nil "0.011") (0.021 t "0.021") (0.022 nil "0.021") (0.5 t "0.5") (0.999 t "0.999") (1.0 nil "0.999"))"#
+        ]],
     )
 }
 
@@ -202,7 +202,8 @@ fn actual_subprocess_can_publish_progress_through_the_message_file() -> ParityBa
     )
 }
 
-fn actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end() -> ParityBatchCase {
+fn actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "actual_async_child_api_and_file_notification_drive_parent_progress_end_to_end",
         r##"(let* ((id (async-status-req-id "async-child"))

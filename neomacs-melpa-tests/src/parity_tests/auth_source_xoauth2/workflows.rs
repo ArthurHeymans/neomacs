@@ -41,8 +41,8 @@ fn auth_source_xoauth2_real_auth_source_search_returns_access_token() -> ParityB
               (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (((:host "smtp.example" :port 587 :user "alice@example" :secret "integration-token")) (("smtp.example" 587 "alice@example" "integration-token")) (("https://token.example" "client_id=client&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
-    ]],
+            r#"OK (((:host "smtp.example" :port 587 :user "alice@example" :secret "integration-token")) (("smtp.example" 587 "alice@example" "integration-token")) (("https://token.example" "client_id=client&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
+        ]],
     )
 }
 
@@ -77,8 +77,8 @@ fn auth_source_xoauth2_real_password_lookup_returns_access_token() -> ParityBatc
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ("password-token" (("https://smtp.example/token" "client_id=alice&client_secret=secret&refresh_token=refresh-submission&grant_type=refresh_token")))"#
-    ]],
+            r#"OK ("password-token" (("https://smtp.example/token" "client_id=alice&client_secret=secret&refresh_token=refresh-submission&grant_type=refresh_token")))"#
+        ]],
     )
 }
 
@@ -113,8 +113,8 @@ fn auth_source_xoauth2_enable_then_search_models_application_startup() -> Parity
               (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK ((xoauth2 "~/.authinfo") (:host "imap.example" :port 993 :user "alice" :secret "startup-token") (("url" "client_id=id&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
-    ]],
+            r#"OK ((xoauth2 "~/.authinfo") (:host "imap.example" :port 993 :user "alice" :secret "startup-token") (("url" "client_id=id&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
+        ]],
     )
 }
 
@@ -162,8 +162,8 @@ fn auth_source_xoauth2_file_provider_drives_full_token_workflow() -> ParityBatch
               (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK ("file-workflow-token" nil (("https://token.example" "client_id=client&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
-    ]],
+            r#"OK ("file-workflow-token" nil (("https://token.example" "client_id=client&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
+        ]],
     )
 }
 

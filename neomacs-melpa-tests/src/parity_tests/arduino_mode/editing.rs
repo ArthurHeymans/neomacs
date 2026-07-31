@@ -37,8 +37,8 @@ fn realistic_sketch_enters_arduino_mode_and_fontifies_language_semantics() -> Pa
                        (funcall face-at "digitalWrite"))))"##,
         true,
         expect![[
-        r#"OK (arduino-mode "arduino/*l" font-lock-type-face font-lock-type-face font-lock-type-face font-lock-keyword-face font-lock-constant-face font-lock-keyword-face font-lock-type-face font-lock-keyword-face)"#
-    ]],
+            r#"OK (arduino-mode "arduino/*l" font-lock-type-face font-lock-type-face font-lock-type-face font-lock-keyword-face font-lock-constant-face font-lock-keyword-face font-lock-type-face font-lock-keyword-face)"#
+        ]],
     )
 }
 
@@ -65,8 +65,8 @@ fn practical_sketch_indentation_comments_and_cc_mode_state_match() -> ParityBatc
                      (derived-mode-p 'c-mode)))"##,
         true,
         expect![[
-        r#"OK ("void setup(){\n\11pinMode(LED_BUILTIN,OUTPUT);\n\11if(digitalRead(2)==HIGH){\n\11\11digitalWrite(LED_BUILTIN,LOW);\n\11}\n}\n" 2 2 "/* " " */" t c-mode)"#
-    ]],
+            r#"OK ("void setup(){\n\11pinMode(LED_BUILTIN,OUTPUT);\n\11if(digitalRead(2)==HIGH){\n\11\11digitalWrite(LED_BUILTIN,LOW);\n\11}\n}\n" 2 2 "/* " " */" t c-mode)"#
+        ]],
     )
 }
 
@@ -104,12 +104,13 @@ fn syntax_table_parses_comments_strings_and_braces_like_real_arduino_code() -> P
                       (nreverse states)))"##,
         true,
         expect![[
-        r#"OK (("braces" nil t 1) ("value" 34 nil 2) ("block" nil t 1) ("Serial" nil nil 1) ("}" nil t 1))"#
-    ]],
+            r#"OK (("braces" nil t 1) ("value" 34 nil 2) ("block" nil t 1) ("Serial" nil nil 1) ("}" nil t 1))"#
+        ]],
     )
 }
 
-fn language_tables_cover_representative_types_constants_functions_and_primary_objects() -> ParityBatchCase {
+fn language_tables_cover_representative_types_constants_functions_and_primary_objects()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "language_tables_cover_representative_types_constants_functions_and_primary_objects",
         r##"(list
@@ -163,8 +164,8 @@ fn language_tables_cover_representative_types_constants_functions_and_primary_ob
                      '("Serial" "Keyboard" "Mouse" "Wire")))"##,
         true,
         expect![[
-        r#"OK ((("boolean" . t) ("unsigned long" . t) ("setup" . t) ("PROGMEM" . t) ("class")) (("HIGH" . t) ("INPUT_PULLUP" . t) ("LED_BUILTIN" . t) ("nullptr" . t)) (("digitalWrite" . t) ("pulseInLong" . t) ("isHexadecimalDigit" . t) ("releaseAll" . t) ("malloc")) (("Serial" . t) ("Keyboard" . t) ("Mouse" . t) ("Wire")))"#
-    ]],
+            r#"OK ((("boolean" . t) ("unsigned long" . t) ("setup" . t) ("PROGMEM" . t) ("class")) (("HIGH" . t) ("INPUT_PULLUP" . t) ("LED_BUILTIN" . t) ("nullptr" . t)) (("digitalWrite" . t) ("pulseInLong" . t) ("isHexadecimalDigit" . t) ("releaseAll" . t) ("malloc")) (("Serial" . t) ("Keyboard" . t) ("Mouse" . t) ("Wire")))"#
+        ]],
     )
 }
 
@@ -233,7 +234,8 @@ fn new_sketch_uses_expanded_arduino_home_as_the_visit_directory() -> ParityBatch
     )
 }
 
-fn include_path_generator_creates_real_default_content_then_visits_existing_file() -> ParityBatchCase {
+fn include_path_generator_creates_real_default_content_then_visits_existing_file() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "include_path_generator_creates_real_default_content_then_visits_existing_file",
         r##"(let* ((root
@@ -269,8 +271,8 @@ fn include_path_generator_creates_real_default_content_then_visits_existing_file
                       (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK (nil "-I/home/stardiviner/Arduino/libraries/" :editing ".clang_complete" t)"#
-    ]],
+            r#"OK (nil "-I/home/stardiviner/Arduino/libraries/" :editing ".clang_complete" t)"#
+        ]],
     )
 }
 

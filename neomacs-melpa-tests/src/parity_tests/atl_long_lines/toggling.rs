@@ -31,7 +31,8 @@ fn atl_long_lines_toggle_is_a_true_noop_when_minor_mode_is_disabled() -> ParityB
     )
 }
 
-fn atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above_width() -> ParityBatchCase {
+fn atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above_width()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above_width",
         r##"(mapcar
@@ -69,8 +70,8 @@ fn atl_long_lines_toggle_chooses_truncation_at_or_below_width_and_wrapping_above
            (0 1)))"##,
         true,
         expect![
-        "OK ((80 0 :toggled (1)) (80 79 :toggled (1)) (80 80 :toggled (1)) (80 81 :toggled (-1)) (1 1 :toggled (1)) (0 1 :toggled (-1)))"
-    ],
+            "OK ((80 0 :toggled (1)) (80 79 :toggled (1)) (80 80 :toggled (1)) (80 81 :toggled (-1)) (1 1 :toggled (1)) (0 1 :toggled (-1)))"
+        ],
     )
 }
 
@@ -150,7 +151,8 @@ fn atl_long_lines_toggle_reacts_to_the_line_at_point_in_a_mixed_document() -> Pa
     )
 }
 
-fn atl_long_lines_toggle_measures_and_toggles_exactly_once_per_enabled_invocation() -> ParityBatchCase {
+fn atl_long_lines_toggle_measures_and_toggles_exactly_once_per_enabled_invocation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_toggle_measures_and_toggles_exactly_once_per_enabled_invocation",
         r##"(with-temp-buffer
@@ -191,7 +193,8 @@ fn atl_long_lines_toggle_measures_and_toggles_exactly_once_per_enabled_invocatio
     )
 }
 
-fn atl_long_lines_mute_apply_returns_last_value_and_preserves_body_evaluation_order() -> ParityBatchCase {
+fn atl_long_lines_mute_apply_returns_last_value_and_preserves_body_evaluation_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_mute_apply_returns_last_value_and_preserves_body_evaluation_order",
         r##"(let (events)
@@ -207,7 +210,8 @@ fn atl_long_lines_mute_apply_returns_last_value_and_preserves_body_evaluation_or
     )
 }
 
-fn atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_message_policy() -> ParityBatchCase {
+fn atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_message_policy()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_message_policy",
         r##"(let ((message-log-max t)
@@ -241,7 +245,8 @@ fn atl_long_lines_mute_apply_establishes_quiet_bindings_and_restores_outer_messa
     )
 }
 
-fn atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicalization() -> ParityBatchCase {
+fn atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicalization()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicalization",
         r##"(let ((message-log-max 321)
@@ -265,7 +270,8 @@ fn atl_long_lines_mute_apply_error_path_preserves_defvar_bool_truthy_canonicaliz
     )
 }
 
-fn atl_long_lines_mute_apply_macro_declaration_and_expansion_keep_all_body_forms() -> ParityBatchCase {
+fn atl_long_lines_mute_apply_macro_declaration_and_expansion_keep_all_body_forms() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atl_long_lines_mute_apply_macro_declaration_and_expansion_keep_all_body_forms",
         r##"(let ((expansion

@@ -27,8 +27,8 @@ fn transient_define_prefix_builds_exact_layout_and_reuses_it() -> ParityBatchCas
                             'neomacs-test-menu)))))"##,
         true,
         expect![[
-        r#"OK ([2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-b :key "b") (transient-suffix :command neomacs-test-c :key "C") (transient-suffix :command neomacs-test-m :key "m"))])] t)"#
-    ]],
+            r#"OK ([2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-b :key "b") (transient-suffix :command neomacs-test-c :key "C") (transient-suffix :command neomacs-test-m :key "m"))])] t)"#
+        ]],
     )
 }
 
@@ -65,8 +65,8 @@ fn transient_groups_preserve_rows_columns_and_included_layouts() -> ParityBatchC
                 (transient--get-layout 'neomacs-test-menu)))"##,
         true,
         expect![[
-        r#"OK ([2 nil ([transient-row nil ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-b))])] [2 nil ([transient-columns nil ([transient-column nil ((transient-suffix :command neomacs-test-c))] [transient-column nil ((transient-suffix :command neomacs-test-d))])])] [2 nil ((transient-suffix :command neomacs-test-e) (transient-suffix :command neomacs-test-f))] [2 nil (neomacs-test-row neomacs-test-columns [transient-columns nil (neomacs-test-list)])])"#
-    ]],
+            r#"OK ([2 nil ([transient-row nil ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-b))])] [2 nil ([transient-columns nil ([transient-column nil ((transient-suffix :command neomacs-test-c))] [transient-column nil ((transient-suffix :command neomacs-test-d))])])] [2 nil ((transient-suffix :command neomacs-test-e) (transient-suffix :command neomacs-test-f))] [2 nil (neomacs-test-row neomacs-test-columns [transient-columns nil (neomacs-test-list)])])"#
+        ]],
     )
 }
 
@@ -96,8 +96,8 @@ fn transient_get_suffix_supports_positive_negative_key_and_nested_coordinates() 
                   'neomacs-test-menu [-1 -1 -1]))))"##,
         true,
         expect![[
-        r#"OK ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-c) (transient-suffix :command neomacs-test-b) (transient-suffix :command neomacs-test-d :description "nested") (transient-suffix :command neomacs-test-d :description "nested"))"#
-    ]],
+            r#"OK ((transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-c) (transient-suffix :command neomacs-test-b) (transient-suffix :command neomacs-test-d :description "nested") (transient-suffix :command neomacs-test-d :description "nested"))"#
+        ]],
     )
 }
 
@@ -132,8 +132,8 @@ fn transient_suffix_put_mutates_keys_in_place() -> ParityBatchCase {
                   (transient--get-layout 'neomacs-test-menu))))"##,
         true,
         expect![[
-        r#"OK (t [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a :key "A") (transient-suffix :command neomacs-test-b :key "B") (transient-suffix :command neomacs-test-c :key "C") (transient-suffix :command neomacs-test-d :key "D"))])])"#
-    ]],
+            r#"OK (t [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a :key "A") (transient-suffix :command neomacs-test-b :key "B") (transient-suffix :command neomacs-test-c :key "C") (transient-suffix :command neomacs-test-d :key "D"))])])"#
+        ]],
     )
 }
 
@@ -165,8 +165,8 @@ fn transient_insert_append_and_replace_apply_at_exact_locations() -> ParityBatch
                (transient--get-layout 'neomacs-test-menu))"##,
         true,
         expect![[
-        r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-z) (transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-y) (transient-suffix :command neomacs-test-x :description "replacement") (transient-suffix :command neomacs-test-c) (transient-suffix :command neomacs-test-b))])]"#
-    ]],
+            r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-z) (transient-suffix :command neomacs-test-a) (transient-suffix :command neomacs-test-y) (transient-suffix :command neomacs-test-x :description "replacement") (transient-suffix :command neomacs-test-c) (transient-suffix :command neomacs-test-b))])]"#
+        ]],
     )
 }
 
@@ -200,8 +200,8 @@ fn transient_remove_suffix_accepts_keys_commands_and_coordinates() -> ParityBatc
                (transient--get-layout 'neomacs-test-menu))"##,
         true,
         expect![[
-        r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-e) (transient-suffix :command neomacs-test-f))])]"#
-    ]],
+            r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-e) (transient-suffix :command neomacs-test-f))])]"#
+        ]],
     )
 }
 
@@ -235,8 +235,8 @@ fn transient_inline_group_expands_nested_includes_without_reordering() -> Parity
                (transient--get-layout 'neomacs-test-menu))"##,
         true,
         expect![[
-        r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a))] [transient-columns nil ([transient-column nil ((transient-suffix :command neomacs-test-b))] [transient-column nil ((transient-suffix :command neomacs-test-c))] [transient-column nil ((transient-suffix :command neomacs-test-d))])])]"#
-    ]],
+            r#"OK [2 nil ([transient-column nil ((transient-suffix :command neomacs-test-a))] [transient-columns nil ([transient-column nil ((transient-suffix :command neomacs-test-b))] [transient-column nil ((transient-suffix :command neomacs-test-c))] [transient-column nil ((transient-suffix :command neomacs-test-d))])])]"#
+        ]],
     )
 }
 

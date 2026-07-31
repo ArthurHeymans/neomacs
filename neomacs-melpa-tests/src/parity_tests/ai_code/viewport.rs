@@ -29,8 +29,8 @@ fn viewport_request_protocol_decodes_versioned_regular_and_staging_payloads() ->
 "##,
         true,
         expect![[
-        r#"OK ((:status-file "/status/one" :directory "/repo" :submit-p nil :staging-request-p nil :arguments ("+42:7" "src/lib.rs")) (:status-file "/status/two" :directory "/repo" :submit-p t :staging-request-p t :arguments ("--" "-literal-name.txt")))"#
-    ]],
+            r#"OK ((:status-file "/status/one" :directory "/repo" :submit-p nil :staging-request-p nil :arguments ("+42:7" "src/lib.rs")) (:status-file "/status/two" :directory "/repo" :submit-p t :staging-request-p t :arguments ("--" "-literal-name.txt")))"#
+        ]],
     )
 }
 
@@ -59,8 +59,8 @@ fn viewport_request_protocol_validates_malformed_intent_kind_and_field_count() -
 "##,
         true,
         expect![[
-        r#"OK ((error "Invalid AI Code editor submit intent") (error "Invalid AI Code editor request kind") (error "Malformed AI Code editor request"))"#
-    ]],
+            r#"OK ((error "Invalid AI Code editor submit intent") (error "Invalid AI Code editor request kind") (error "Malformed AI Code editor request"))"#
+        ]],
     )
 }
 
@@ -83,8 +83,8 @@ fn viewport_file_arguments_apply_positions_once_and_respect_double_dash() -> Par
 "##,
         true,
         expect![[
-        r#"OK (("api.el" 12 4) ("README.md" nil nil) ("model.el" 7 nil) ("+literal.el" nil nil) ("-draft.txt" nil nil))"#
-    ]],
+            r#"OK (("api.el" 12 4) ("README.md" nil nil) ("model.el" 7 nil) ("+literal.el" nil nil) ("-draft.txt" nil nil))"#
+        ]],
     )
 }
 
@@ -155,8 +155,8 @@ fn viewport_attachment_references_are_repo_relative_and_external_absolute() -> P
 "##,
         true,
         expect![[
-        r#"OK ("@notes/design.txt" t ("--output" "$ROOT//notes/design.txt" "--format=$ROOT//notes/design.txt"))"#
-    ]],
+            r#"OK ("@notes/design.txt" t ("--output" "$ROOT//notes/design.txt" "--format=$ROOT//notes/design.txt"))"#
+        ]],
     )
 }
 
@@ -192,8 +192,8 @@ fn viewport_attachment_serialization_spaces_adjacent_images_without_mutation() -
 "##,
         true,
         expect![[
-        r#"OK ("Compare @first.png with @second.png now" #("Compare@first.pngwith@second.pngnow" 7 17 (ai-code-editor-viewport-file #1="/repo/first.png" ai-code-editor-viewport-image first) 21 32 (ai-code-editor-viewport-file #2="/repo/second.png" ai-code-editor-viewport-image second)) #("Compare@first.pngwith@second.pngnow" 7 17 (ai-code-editor-viewport-file #1# ai-code-editor-viewport-image first) 21 32 (ai-code-editor-viewport-file #2# ai-code-editor-viewport-image second)))"#
-    ]],
+            r#"OK ("Compare @first.png with @second.png now" #("Compare@first.pngwith@second.pngnow" 7 17 (ai-code-editor-viewport-file #1="/repo/first.png" ai-code-editor-viewport-image first) 21 32 (ai-code-editor-viewport-file #2="/repo/second.png" ai-code-editor-viewport-image second)) #("Compare@first.pngwith@second.pngnow" 7 17 (ai-code-editor-viewport-file #1# ai-code-editor-viewport-image first) 21 32 (ai-code-editor-viewport-file #2# ai-code-editor-viewport-image second)))"#
+        ]],
     )
 }
 

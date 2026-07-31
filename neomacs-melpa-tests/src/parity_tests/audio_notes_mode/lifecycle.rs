@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_audio_notes_mode_batch};
 
-fn audio_notes_mode_org_mobile_advice_runs_only_when_hook_and_real_queue_are_both_present() -> ParityBatchCase {
+fn audio_notes_mode_org_mobile_advice_runs_only_when_hook_and_real_queue_are_both_present()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_org_mobile_advice_runs_only_when_hook_and_real_queue_are_both_present",
         r##"(let (events
@@ -54,12 +55,13 @@ fn audio_notes_mode_org_mobile_advice_runs_only_when_hook_and_real_queue_are_bot
                                     (nreverse events)))))))"##,
         true,
         expect![[
-        r#"OK (:pulled :pulled :pulled ((:base (:first)) (:list ("/notes/one.wav")) (:mode 1) (:base (:second)) (:base (:third)) (:list nil)))"#
-    ]],
+            r#"OK (:pulled :pulled :pulled ((:base (:first)) (:list ("/notes/one.wav")) (:mode 1) (:base (:second)) (:base (:third)) (:list nil)))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_org_mobile_advice_registration_name_kind_and_docstring_match() -> ParityBatchCase {
+fn audio_notes_mode_org_mobile_advice_registration_name_kind_and_docstring_match() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "audio_notes_mode_org_mobile_advice_registration_name_kind_and_docstring_match",
         r##"(let ((advice
@@ -93,8 +95,8 @@ fn audio_notes_mode_org_mobile_advice_registration_name_kind_and_docstring_match
                               'ad-advice-info))))"##,
         true,
         expect![[
-        r#"OK (anm/after-org-mobile-pull-advice nil t advice lambda nil "Check for audio notes after every org-pull." ((when (and anm/hook-into-org-pull (anm/list-files)) (audio-notes-mode 1))) nil t)"#
-    ]],
+            r#"OK (anm/after-org-mobile-pull-advice nil t advice lambda nil "Check for audio notes after every org-pull." ((when (and anm/hook-into-org-pull (anm/list-files)) (audio-notes-mode 1))) nil t)"#
+        ]],
     )
 }
 
@@ -120,12 +122,13 @@ fn audio_notes_mode_greeting_resolves_live_command_bindings_from_mode_map() -> P
                               remapped)))"##,
         true,
         expect![[
-        r#"OK (#("You’re in ‘audio-notes-mode’. This mode will deactivate after you go through your notes, to quit manually use M-x audio-notes-mode.\nM-x anm/play-next: DELETES this audio note and moves to the next one.\nM-x anm/play-current: Replays this audio note.\nTo disable this message, edit ‘anm/display-greeting’." 110 130 (font-lock-face help-key-binding face help-key-binding) 132 136 (font-lock-face help-key-binding face help-key-binding) 136 149 (font-lock-face help-key-binding face help-key-binding) 202 206 (font-lock-face help-key-binding face help-key-binding) 206 222 (font-lock-face help-key-binding face help-key-binding)) #("You’re in ‘audio-notes-mode’. This mode will deactivate after you go through your notes, to quit manually use M-x audio-notes-mode.\nM-x anm/play-next: DELETES this audio note and moves to the next one.\nM-x anm/play-current: Replays this audio note.\nTo disable this message, edit ‘anm/display-greeting’." 110 130 (font-lock-face help-key-binding face help-key-binding) 132 136 (font-lock-face help-key-binding face help-key-binding) 136 149 (font-lock-face help-key-binding face help-key-binding) 202 206 (font-lock-face help-key-binding face help-key-binding) 206 222 (font-lock-face help-key-binding face help-key-binding)))"#
-    ]],
+            r#"OK (#("You’re in ‘audio-notes-mode’. This mode will deactivate after you go through your notes, to quit manually use M-x audio-notes-mode.\nM-x anm/play-next: DELETES this audio note and moves to the next one.\nM-x anm/play-current: Replays this audio note.\nTo disable this message, edit ‘anm/display-greeting’." 110 130 (font-lock-face help-key-binding face help-key-binding) 132 136 (font-lock-face help-key-binding face help-key-binding) 136 149 (font-lock-face help-key-binding face help-key-binding) 202 206 (font-lock-face help-key-binding face help-key-binding) 206 222 (font-lock-face help-key-binding face help-key-binding)) #("You’re in ‘audio-notes-mode’. This mode will deactivate after you go through your notes, to quit manually use M-x audio-notes-mode.\nM-x anm/play-next: DELETES this audio note and moves to the next one.\nM-x anm/play-current: Replays this audio note.\nTo disable this message, edit ‘anm/display-greeting’." 110 130 (font-lock-face help-key-binding face help-key-binding) 132 136 (font-lock-face help-key-binding face help-key-binding) 136 149 (font-lock-face help-key-binding face help-key-binding) 202 206 (font-lock-face help-key-binding face help-key-binding) 206 222 (font-lock-face help-key-binding face help-key-binding)))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_activation_with_empty_queue_returns_to_disabled_state_and_reports_directory() -> ParityBatchCase {
+fn audio_notes_mode_activation_with_empty_queue_returns_to_disabled_state_and_reports_directory()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_activation_with_empty_queue_returns_to_disabled_state_and_reports_directory",
         r##"(let ((anm/notes-directory
@@ -163,12 +166,13 @@ fn audio_notes_mode_activation_with_empty_queue_returns_to_disabled_state_and_re
                                 (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (nil nil nil nil (:list (:message "[OAN]:No audio notes found in \"/fixed/empty-notes/\".")))"#
-    ]],
+            r#"OK (nil nil nil nil (:list (:message "[OAN]:No audio notes found in \"/fixed/empty-notes/\".")))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_nil_player_rolls_back_activation_before_signaling_configuration_error() -> ParityBatchCase {
+fn audio_notes_mode_nil_player_rolls_back_activation_before_signaling_configuration_error()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_nil_player_rolls_back_activation_before_signaling_configuration_error",
         r##"(let ((anm/notes-directory
@@ -204,12 +208,13 @@ fn audio_notes_mode_nil_player_rolls_back_activation_before_signaling_configurat
                               (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ((:signal error ("‘anm/player-command’ can’t be nil.")) nil nil ((:message "[OAN]:No audio notes found in \"/fixed/notes/\".")))"#
-    ]],
+            r#"OK ((:signal error ("‘anm/player-command’ can’t be nil.")) nil nil ((:message "[OAN]:No audio notes found in \"/fixed/notes/\".")))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_full_ui_lifecycle_visits_target_builds_player_layout_and_cleans_everything() -> ParityBatchCase {
+fn audio_notes_mode_full_ui_lifecycle_visits_target_builds_player_layout_and_cleans_everything()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_full_ui_lifecycle_visits_target_builds_player_layout_and_cleans_everything",
         r##"(let* ((notes-directory
@@ -441,12 +446,13 @@ fn audio_notes_mode_full_ui_lifecycle_visits_target_builds_player_layout_and_cle
                                (kill-buffer process-buffer))))"##,
         true,
         expect![[
-        r#"OK ((t t t t t t "*Audio notes player*" "01-first.wav") (nil nil nil nil nil nil) (:list-files (:save-layout :anm/before-anm-configuration) (:delete-other nil) (:find-file "[ORACLE-SANDBOX]/inbox.org" nil) :selected-window (:split-right) (:select directory-window nil) (:find-file "[ORACLE-SANDBOX]/full-lifecycle-notes/" nil) (:hl-line 1) (:revert) (:line-number 21 nil) (:split-below 2) (:select process-window nil) (:switch "*Audio notes player*" nil nil) (:select focus-window nil) (:play nil) (:restore-layout :anm/before-anm-configuration nil) (:bury " *audio-notes-goto*") (:buffer-window " *audio-notes-directory*" nil) (:buffer-window " *audio-notes-directory*" nil) (:delete-window directory-window) (:bury " *audio-notes-directory*")))"#
-    ]],
+            r#"OK ((t t t t t t "*Audio notes player*" "01-first.wav") (nil nil nil nil nil nil) (:list-files (:save-layout :anm/before-anm-configuration) (:delete-other nil) (:find-file "[ORACLE-SANDBOX]/inbox.org" nil) :selected-window (:split-right) (:select directory-window nil) (:find-file "[ORACLE-SANDBOX]/full-lifecycle-notes/" nil) (:hl-line 1) (:revert) (:line-number 21 nil) (:split-below 2) (:select process-window nil) (:switch "*Audio notes player*" nil nil) (:select focus-window nil) (:play nil) (:restore-layout :anm/before-anm-configuration nil) (:bury " *audio-notes-goto*") (:buffer-window " *audio-notes-directory*" nil) (:buffer-window " *audio-notes-directory*" nil) (:delete-window directory-window) (:bury " *audio-notes-directory*")))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_mplayer_activation_installs_seek_bindings_even_when_queue_is_empty() -> ParityBatchCase {
+fn audio_notes_mode_mplayer_activation_installs_seek_bindings_even_when_queue_is_empty()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_mplayer_activation_installs_seek_bindings_even_when_queue_is_empty",
         r##"(let ((anm/notes-directory
@@ -486,7 +492,8 @@ fn audio_notes_mode_mplayer_activation_installs_seek_bindings_even_when_queue_is
     )
 }
 
-fn audio_notes_mode_switching_away_from_mplayer_keeps_previously_installed_seek_bindings() -> ParityBatchCase {
+fn audio_notes_mode_switching_away_from_mplayer_keeps_previously_installed_seek_bindings()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_switching_away_from_mplayer_keeps_previously_installed_seek_bindings",
         r##"(let ((anm/notes-directory
@@ -533,8 +540,8 @@ fn audio_notes_mode_switching_away_from_mplayer_keeps_previously_installed_seek_
                                 audio-notes-mode))))"##,
         true,
         expect![
-        "OK ((anm/mplayer-seek-forward anm/mplayer-seek-backward) anm/mplayer-seek-forward anm/mplayer-seek-backward nil)"
-    ],
+            "OK ((anm/mplayer-seek-forward anm/mplayer-seek-backward) anm/mplayer-seek-forward anm/mplayer-seek-backward nil)"
+        ],
     )
 }
 

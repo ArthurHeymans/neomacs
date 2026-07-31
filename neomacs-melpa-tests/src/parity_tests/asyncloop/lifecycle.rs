@@ -64,8 +64,8 @@ fn asyncloop_pause_resume_and_cancel_form_a_complete_reusable_lifecycle() -> Par
                (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK ((nil t t #1=(stage-2 stage-3)) ((:paused t nil nil #1#) (:resumed nil t nil #1# (:asyncloop-test-timer 1)) (:cancelled nil nil nil nil)) (1) "<TIME>: Loop told to pause\n<TIME>: Loop told to resume\n<TIME>: Loop told to cancel\n")"#
-    ]],
+            r#"OK ((nil t t #1=(stage-2 stage-3)) ((:paused t nil nil #1#) (:resumed nil t nil #1# (:asyncloop-test-timer 1)) (:cancelled nil nil nil nil)) (1) "<TIME>: Loop told to pause\n<TIME>: Loop told to resume\n<TIME>: Loop told to cancel\n")"#
+        ]],
     )
 }
 
@@ -110,12 +110,13 @@ fn asyncloop_worker_can_pause_mid_series_then_resume_remaining_practical_work() 
                   (asyncloop-remainder loop)))))))"##,
         true,
         expect![
-        "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) ((:loaded) t nil 2) ((:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:loaded :transformed :saved) nil nil nil)"
-    ],
+            "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) ((:loaded) t nil 2) ((:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:loaded :transformed :saved) nil nil nil)"
+        ],
     )
 }
 
-fn asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects() -> ParityBatchCase {
+fn asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects",
         r##"(let (events loop)
@@ -149,8 +150,8 @@ fn asyncloop_worker_can_cancel_mid_series_and_prevent_all_followup_side_effects(
                #'<)))))"##,
         true,
         expect![
-        "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:validated) nil nil nil nil (1))"
-    ],
+            "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:validated) nil nil nil nil (1))"
+        ],
     )
 }
 
@@ -212,8 +213,8 @@ fn asyncloop_reset_all_cancels_every_registered_loop_and_clears_registry() -> Pa
            (kill-buffer buffer-b)))"##,
         true,
         expect![[
-        r#"OK (nil (11 22) (nil nil nil nil) (nil nil nil nil) "<TIME>: Loop told to cancel\n<TIME>: All asyncloops reset by command\n" "<TIME>: Loop told to cancel\n<TIME>: All asyncloops reset by command\n")"#
-    ]],
+            r#"OK (nil (11 22) (nil nil nil nil) (nil nil nil nil) "<TIME>: Loop told to cancel\n<TIME>: All asyncloops reset by command\n" "<TIME>: Loop told to cancel\n<TIME>: All asyncloops reset by command\n")"#
+        ]],
     )
 }
 
@@ -293,8 +294,8 @@ fn asyncloop_notify_simultaneity_informs_current_and_other_idle_loops() -> Parit
                  original-timer-idle-list)))"##,
         true,
         expect![[
-        r#"OK ((:other-timer) nil ((:this "Two or more asyncloops running, please wait...") (:active "Two or more asyncloops running, please wait...")))"#
-    ]],
+            r#"OK ((:other-timer) nil ((:this "Two or more asyncloops running, please wait...") (:active "Two or more asyncloops running, please wait...")))"#
+        ]],
     )
 }
 
@@ -370,8 +371,8 @@ fn asyncloop_resume_reports_invariant_when_called_on_just_launched_loop() -> Par
               messages))))"##,
         true,
         expect![[
-        r#"OK ("Please report bug: (asyncloop-just-launched loop) was t" nil t t (:asyncloop-test-timer 1) ("Please report bug: (asyncloop-just-launched loop) was t"))"#
-    ]],
+            r#"OK ("Please report bug: (asyncloop-just-launched loop) was t" nil t t (:asyncloop-test-timer 1) ("Please report bug: (asyncloop-just-launched loop) was t"))"#
+        ]],
     )
 }
 

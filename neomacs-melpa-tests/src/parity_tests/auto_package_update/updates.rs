@@ -67,8 +67,8 @@ fn auto_package_update_async_rejects_second_live_thread_without_force() -> Parit
                               (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:signal error ("auto-package-update thread is still running.")) existing-thread ((:live existing-thread)))"#
-    ]],
+            r#"OK ((:signal error ("auto-package-update thread is still running.")) existing-thread ((:live existing-thread)))"#
+        ]],
     )
 }
 
@@ -118,8 +118,8 @@ fn auto_package_update_async_force_signals_live_thread_clears_and_replaces_it() 
                               (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (replacement-thread replacement-thread ((:live existing-thread) (:signal existing-thread nil nil) (:make t "auto-package-update-now-async")))"#
-    ]],
+            r#"OK (replacement-thread replacement-thread ((:live existing-thread) (:signal existing-thread nil nil) (:make t "auto-package-update-now-async")))"#
+        ]],
     )
 }
 

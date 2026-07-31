@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asilea_batch};
 
-fn asilea_sanitize_configuration_covers_step_and_temperature_requirement_matrix() -> ParityBatchCase {
+fn asilea_sanitize_configuration_covers_step_and_temperature_requirement_matrix() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asilea_sanitize_configuration_covers_step_and_temperature_requirement_matrix",
         r##"(mapcar
@@ -32,8 +33,8 @@ fn asilea_sanitize_configuration_covers_step_and_temperature_requirement_matrix(
            ("steps" nil nil)))"##,
         true,
         expect![[
-        r#"OK (((nil nil nil) :error error ("At least one of ‘asilea-max-steps’ and ‘asilea-initial-temperature’ must be non-nil")) ((nil 10 nil) :error error ("At least one of ‘asilea-max-steps’ and ‘asilea-final-temperature’ must be non-nil")) ((nil nil 1) :error error ("At least one of ‘asilea-max-steps’ and ‘asilea-initial-temperature’ must be non-nil")) ((nil 10 1) :ok nil) ((1 nil nil) :ok nil) ((1 10 nil) :ok nil) ((0 nil nil) :ok nil) ((-1 nil nil) :ok nil) (("steps" nil nil) :ok nil))"#
-    ]],
+            r#"OK (((nil nil nil) :error error ("At least one of ‘asilea-max-steps’ and ‘asilea-initial-temperature’ must be non-nil")) ((nil 10 nil) :error error ("At least one of ‘asilea-max-steps’ and ‘asilea-final-temperature’ must be non-nil")) ((nil nil 1) :error error ("At least one of ‘asilea-max-steps’ and ‘asilea-initial-temperature’ must be non-nil")) ((nil 10 1) :ok nil) ((1 nil nil) :ok nil) ((1 10 nil) :ok nil) ((0 nil nil) :ok nil) ((-1 nil nil) :ok nil) (("steps" nil nil) :ok nil))"#
+        ]],
     )
 }
 
@@ -54,8 +55,8 @@ fn asilea_initial_temperature_honors_explicit_values_without_coercion() -> Parit
          '(1 1.0 0 -3 1/2 "hot" symbol (10)))"##,
         true,
         expect![[
-        r#"OK ((1 1 t) (1.0 1.0 t) (0 0 t) (-3 -3 t) (1/2 1/2 t) ("hot" "hot" t) (symbol symbol t) (#1=(10) #1# t))"#
-    ]],
+            r#"OK ((1 1 t) (1.0 1.0 t) (0 0 t) (-3 -3 t) (1/2 1/2 t) ("hot" "hot" t) (symbol symbol t) (#1=(10) #1# t))"#
+        ]],
     )
 }
 
@@ -98,12 +99,13 @@ fn asilea_automatic_initial_temperature_matches_cooling_schedule_boundaries() ->
            ("10" 0.005)))"##,
         true,
         expect![[
-        r#"OK (((1 0.005) :ok 2.0 1.99) ((10 0.005) :ok 2.0 1.9022202609315437) ((100 0.005) :ok 2.0 1.2115408729814559) ((1000 0.005) :ok 151.0 1.0047492554036268) ((5 0.5) :ok 32.0 1.0) ((2 0.9) :ok 101.0 1.0099999999999996) ((0 0.005) :ok 1.0 1.0) ((-1 0.005) :ok 1.0 1.0050251256281406) ((10 0.0) :ok 1.0 1.0) ((10 1.0) :ok 1.0e+INF -0.0e+NaN) ((nil 0.005) :error wrong-type-argument (numberp nil)) (("10" 0.005) :error wrong-type-argument (numberp "10")))"#
-    ]],
+            r#"OK (((1 0.005) :ok 2.0 1.99) ((10 0.005) :ok 2.0 1.9022202609315437) ((100 0.005) :ok 2.0 1.2115408729814559) ((1000 0.005) :ok 151.0 1.0047492554036268) ((5 0.5) :ok 32.0 1.0) ((2 0.9) :ok 101.0 1.0099999999999996) ((0 0.005) :ok 1.0 1.0) ((-1 0.005) :ok 1.0 1.0050251256281406) ((10 0.0) :ok 1.0 1.0) ((10 1.0) :ok 1.0e+INF -0.0e+NaN) ((nil 0.005) :error wrong-type-argument (numberp nil)) (("10" 0.005) :error wrong-type-argument (numberp "10")))"#
+        ]],
     )
 }
 
-fn asilea_sanitize_only_enforces_documented_temperature_presence_not_other_types() -> ParityBatchCase {
+fn asilea_sanitize_only_enforces_documented_temperature_presence_not_other_types() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asilea_sanitize_only_enforces_documented_temperature_presence_not_other_types",
         r##"(mapcar
@@ -132,8 +134,8 @@ fn asilea_sanitize_only_enforces_documented_temperature_presence_not_other_types
            (nil "hot" "cold" nil nil nil)))"##,
         true,
         expect![[
-        r#"OK (((1 nil nil 0 2.0 nil) :ok nil) ((1 nil nil -5 -1.0 missing) :ok nil) (("one" nil nil "jobs" "cool" 7) :ok nil) ((nil "hot" "cold" nil nil nil) :ok nil))"#
-    ]],
+            r#"OK (((1 nil nil 0 2.0 nil) :ok nil) ((1 nil nil -5 -1.0 missing) :ok nil) (("one" nil nil "jobs" "cool" 7) :ok nil) ((nil "hot" "cold" nil nil nil) :ok nil))"#
+        ]],
     )
 }
 

@@ -36,8 +36,8 @@ fn magit_section_hide_show_and_toggle_preserve_body_and_hidden_state() -> Parity
                                     (point-min) (point-max)))))))))"##,
         true,
         expect![[
-        r#"OK ((t t "Root\nOne\nbody\n") (nil nil "Root\nOne\nbody\n") (t t "Root\nOne\nbody\n"))"#
-    ]],
+            r#"OK ((t t "Root\nOne\nbody\n") (nil nil "Root\nOne\nbody\n") (t t "Root\nOne\nbody\n"))"#
+        ]],
     )
 }
 
@@ -119,8 +119,8 @@ fn magit_section_lazy_body_is_inserted_only_when_first_shown() -> ParityBatchCas
                                    (oref item washer))))))))"##,
         true,
         expect![[
-        r#"OK ((0 "Root\nLazy\n" t) (1 "Root\nLazy\ndeferred body\n" nil) (1 "Root\nLazy\ndeferred body\n" nil))"#
-    ]],
+            r#"OK ((0 "Root\nLazy\n" t) (1 "Root\nLazy\ndeferred body\n" nil) (1 "Root\nLazy\ndeferred body\n" nil))"#
+        ]],
     )
 }
 

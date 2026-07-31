@@ -16,12 +16,13 @@ fn aider_multiline_message_protocol_handles_plain_wrapped_and_partial_inputs() -
            "prefix {aider\nalready marked"))"##,
         true,
         expect![[
-        r#"OK ("single line" "" "{aider\nline one\nline two\naider}" "{aider\n\nleading\naider}" "{aider\ntrailing\n\naider}" "{aider\nalready wrapped\naider}" "prefix {aider\nalready marked")"#
-    ]],
+            r#"OK ("single line" "" "{aider\nline one\nline two\naider}" "{aider\n\nleading\naider}" "{aider\ntrailing\n\naider}" "{aider\nalready wrapped\naider}" "prefix {aider\nalready marked")"#
+        ]],
     )
 }
 
-fn aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input() -> ParityBatchCase {
+fn aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -44,8 +45,8 @@ fn aider_cli_history_parser_preserves_order_multiline_blocks_and_unclosed_input(
           (file-attribute-size (file-attributes history))))"##,
         true,
         expect![[
-        r#"OK (("first command" "{aider\nline one\nline two\naider}" "second command" "{aider\nunfinished") nil 112)"#
-    ]],
+            r#"OK (("first command" "{aider\nline one\nline two\naider}" "second command" "{aider\nunfinished") nil 112)"#
+        ]],
     )
 }
 
@@ -85,8 +86,8 @@ fn aider_buffer_names_cover_repo_branch_file_and_invalid_contexts() -> ParityBat
             (nreverse messages))))"##,
         true,
         expect![[
-        r#"OK ("*aider:/repo/project/*" "*aider:/repo/project/:feature/a*" "*aider:/repo/project/*" "*aider:/work/loose/*" (error "Aider: Not in a git repository and current buffer is not associated with a file") ("Aider: Could not determine git branch for '/repo/project/', or branch name is empty. Using default git repo buffer name."))"#
-    ]],
+            r#"OK ("*aider:/repo/project/*" "*aider:/repo/project/:feature/a*" "*aider:/repo/project/*" "*aider:/work/loose/*" (error "Aider: Not in a git repository and current buffer is not associated with a file") ("Aider: Could not determine git branch for '/repo/project/', or branch name is empty. Using default git repo buffer name."))"#
+        ]],
     )
 }
 
@@ -109,8 +110,8 @@ fn aider_prepare_args_adds_architect_guard_and_subtree_once() -> ParityBatchCase
             (nreverse messages))))"##,
         true,
         expect![[
-        r#"OK (("--model" "sonnet" "--no-auto-accept-architect" . #1=("--from-mode")) ("--model" "sonnet" "--no-auto-accept-architect" "--from-mode" "--subtree-only") ("--auto-accept-architect" "--subtree-only" . #1#) ("Adding --subtree-only argument as requested."))"#
-    ]],
+            r#"OK (("--model" "sonnet" "--no-auto-accept-architect" . #1=("--from-mode")) ("--model" "sonnet" "--no-auto-accept-architect" "--from-mode" "--subtree-only") ("--auto-accept-architect" "--subtree-only" . #1#) ("Adding --subtree-only argument as requested."))"#
+        ]],
     )
 }
 
@@ -132,8 +133,8 @@ fn aider_command_completion_reports_exact_bounds_candidates_and_exclusivity() ->
          '("/" "/co" "prefix /co" "  /rea" "/unknown" "/model suffix"))"##,
         true,
         expect![[
-        r#"OK ((1 2 ("/add" "/architect" "/ask" "/code" "/reset" "/undo" "/lint" "/read-only" "/drop" "/copy" "/copy-context" "/clear" "/commit" "/exit" "/quit" "/paste" "/help" "/chat-mode" "/diff" "/editor" "/git" "/load" "/ls" "/map" "/map-refresh" "/think-tokens" "/tokens" "/model" "/editor-model" "/weak-model" "/models" "/reasoning-effort" "/multiline-mode" "/report" "/run" "/save" "/settings" "/test" "/voice" "/web") :exclusive no) (1 4 ("/code" "/copy" "/copy-context" "/commit") :exclusive no) nil nil nil (1 7 ("/model" "/models") :exclusive no))"#
-    ]],
+            r#"OK ((1 2 ("/add" "/architect" "/ask" "/code" "/reset" "/undo" "/lint" "/read-only" "/drop" "/copy" "/copy-context" "/clear" "/commit" "/exit" "/quit" "/paste" "/help" "/chat-mode" "/diff" "/editor" "/git" "/load" "/ls" "/map" "/map-refresh" "/think-tokens" "/tokens" "/model" "/editor-model" "/weak-model" "/models" "/reasoning-effort" "/multiline-mode" "/report" "/run" "/save" "/settings" "/test" "/voice" "/web") :exclusive no) (1 4 ("/code" "/copy" "/copy-context" "/commit") :exclusive no) nil nil nil (1 7 ("/model" "/models") :exclusive no))"#
+        ]],
     )
 }
 
@@ -173,12 +174,13 @@ fn aider_comint_mode_installs_buffer_local_hooks_history_and_input_navigation() 
                            aider--original-input))))))))"##,
         true,
         expect![[
-        r#"OK ((aider-comint-mode aider-input-sender t (aider-core--command-completion comint-completion-at-point t) ("newest" "oldest")) "newest" "oldest" "newest" "draft" nil nil)"#
-    ]],
+            r#"OK ((aider-comint-mode aider-input-sender t (aider-core--command-completion comint-completion-at-point t) ("newest" "oldest")) "newest" "oldest" "newest" "draft" nil nil)"#
+        ]],
     )
 }
 
-fn aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffixes() -> ParityBatchCase {
+fn aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffixes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffixes",
         r##"(let ((buffer (generate-new-buffer " *aider-added-files*")))
@@ -200,8 +202,8 @@ fn aider_current_added_file_parser_reads_latest_prompt_block_and_read_only_suffi
            (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (("> old prompt" "src/main.py" "docs/guide.md" "tests/test_main.py") nil)"#
-    ]],
+            r#"OK (("> old prompt" "src/main.py" "docs/guide.md" "tests/test_main.py") nil)"#
+        ]],
     )
 }
 

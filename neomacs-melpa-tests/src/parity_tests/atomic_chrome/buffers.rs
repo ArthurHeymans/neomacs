@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atomic_chrome_batch};
 
-fn atomic_chrome_set_major_mode_selects_first_matching_url_rule_and_falls_back_exactly() -> ParityBatchCase {
+fn atomic_chrome_set_major_mode_selects_first_matching_url_rule_and_falls_back_exactly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_set_major_mode_selects_first_matching_url_rule_and_falls_back_exactly",
         r##"(let ((atomic-chrome-url-major-mode-alist
@@ -31,12 +32,13 @@ fn atomic_chrome_set_major_mode_selects_first_matching_url_rule_and_falls_back_e
              nil)))"##,
         true,
         expect![[
-        r#"OK (("https://github.com/repo/file.el" nil emacs-lisp-mode ("Elisp" (lexical-binding (:propertize "/l" help-echo "Using lexical-binding mode") (:propertize "/d" help-echo "Using old dynamic scoping mode\nmouse-1: Enable lexical-binding mode" face warning mouse-face mode-line-highlight local-map (keymap (mode-line keymap (mouse-1 . elisp-enable-lexical-binding))))))) ("https://github.com/issues" nil text-mode "Text") ("https://example.test/" nil fundamental-mode "Fundamental") ("https://unmatched.test/" nil special-mode "Special") ("" nil special-mode "Special") (nil nil special-mode "Special"))"#
-    ]],
+            r#"OK (("https://github.com/repo/file.el" nil emacs-lisp-mode ("Elisp" (lexical-binding (:propertize "/l" help-echo "Using lexical-binding mode") (:propertize "/d" help-echo "Using old dynamic scoping mode\nmouse-1: Enable lexical-binding mode" face warning mouse-face mode-line-highlight local-map (keymap (mode-line keymap (mouse-1 . elisp-enable-lexical-binding))))))) ("https://github.com/issues" nil text-mode "Text") ("https://example.test/" nil fundamental-mode "Fundamental") ("https://unmatched.test/" nil special-mode "Special") ("" nil special-mode "Special") (nil nil special-mode "Special"))"#
+        ]],
     )
 }
 
-fn atomic_chrome_set_major_mode_invokes_selected_function_once_and_propagates_invalid_rules() -> ParityBatchCase {
+fn atomic_chrome_set_major_mode_invokes_selected_function_once_and_propagates_invalid_rules()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_set_major_mode_invokes_selected_function_once_and_propagates_invalid_rules",
         r##"(let (events)
@@ -89,12 +91,13 @@ fn atomic_chrome_set_major_mode_invokes_selected_function_once_and_propagates_in
                (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK ((:selected-result selected-mode) (:fallback-result fallback-mode) (:error invalid-regexp ("Unmatched [ or [^")) ((selected " *temp*" fundamental-mode) (fallback " *temp*" fundamental-mode)))"#
-    ]],
+            r#"OK ((:selected-result selected-mode) (:fallback-result fallback-mode) (:error invalid-regexp ("Unmatched [ or [^")) ((selected " *temp*" fundamental-mode) (fallback " *temp*" fundamental-mode)))"#
+        ]],
     )
 }
 
-fn atomic_chrome_show_edit_buffer_full_and_split_styles_call_exact_window_operations() -> ParityBatchCase {
+fn atomic_chrome_show_edit_buffer_full_and_split_styles_call_exact_window_operations()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_show_edit_buffer_full_and_split_styles_call_exact_window_operations",
         r##"(let ((buffer
@@ -163,12 +166,13 @@ fn atomic_chrome_show_edit_buffer_full_and_split_styles_call_exact_window_operat
             (atomic-chrome-test-kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ((switch " *atomic-show*") (raise nil) (window-frame :selected-window) (focus :selected-frame) (:full-return nil) (pop " *atomic-show*") (raise nil) (window-frame :selected-window) (focus :selected-frame) (:split-return nil))"#
-    ]],
+            r#"OK ((switch " *atomic-show*") (raise nil) (window-frame :selected-window) (focus :selected-frame) (:full-return nil) (pop " *atomic-show*") (raise nil) (window-frame :selected-window) (focus :selected-frame) (:split-return nil))"#
+        ]],
     )
 }
 
-fn atomic_chrome_show_edit_buffer_frame_style_selects_platform_specific_frame_constructor() -> ParityBatchCase {
+fn atomic_chrome_show_edit_buffer_frame_style_selects_platform_specific_frame_constructor()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_show_edit_buffer_frame_style_selects_platform_specific_frame_constructor",
         r##"(let ((buffer
@@ -274,12 +278,13 @@ fn atomic_chrome_show_edit_buffer_frame_style_selects_platform_specific_frame_co
           (nreverse snapshots))"##,
         true,
         expect![[
-        r#"OK (((pgtk nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((x "wayland-1" ":8") :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((x ":7" ":8") :made-on-display ((make-on ":8" ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-on-display) (switch " *atomic-frame-show*") (raise :made-on-display) (window-frame :selected-window) (focus :active-frame))) ((ns nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((mac nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((w32 nil nil) :made-on-display ((make-on "w32" ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-on-display) (switch " *atomic-frame-show*") (raise :made-on-display) (window-frame :selected-window) (focus :active-frame))) ((nil nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))))"#
-    ]],
+            r#"OK (((pgtk nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((x "wayland-1" ":8") :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((x ":7" ":8") :made-on-display ((make-on ":8" ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-on-display) (switch " *atomic-frame-show*") (raise :made-on-display) (window-frame :selected-window) (focus :active-frame))) ((ns nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((mac nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))) ((w32 nil nil) :made-on-display ((make-on "w32" ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-on-display) (switch " *atomic-frame-show*") (raise :made-on-display) (window-frame :selected-window) (focus :active-frame))) ((nil nil nil) :made-frame ((make-frame ((name . "Atomic Chrome: Editor") (width . 101) (height . 37))) (select :made-frame) (switch " *atomic-frame-show*") (raise :made-frame) (window-frame :selected-window) (focus :active-frame))))"#
+        ]],
     )
 }
 
-fn atomic_chrome_create_buffer_assigns_unique_title_mode_text_frame_and_table_entry() -> ParityBatchCase {
+fn atomic_chrome_create_buffer_assigns_unique_title_mode_text_frame_and_table_entry()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_create_buffer_assigns_unique_title_mode_text_frame_and_table_entry",
         r##"(let ((atomic-chrome-buffer-table
@@ -352,12 +357,13 @@ fn atomic_chrome_create_buffer_assigns_unique_title_mode_text_frame_and_table_en
              buffers)))"##,
         true,
         expect![[
-        r#"OK ((("Editor" "(message \"one\")" emacs-lisp-mode nil nil nil t) ("Editor<2>" "plain text" text-mode nil nil nil t) ("No title" "" text-mode nil nil nil nil)) ((show "Editor" "Editor" nil) (show "Editor<2>" "Editor" nil) (show "No title" "" nil)) (("Editor" :socket-a :frame-Editor) ("Editor<2>" :socket-b :frame-Editor) ("No title" :socket-c :frame-empty)))"#
-    ]],
+            r#"OK ((("Editor" "(message \"one\")" emacs-lisp-mode nil nil nil t) ("Editor<2>" "plain text" text-mode nil nil nil t) ("No title" "" text-mode nil nil nil nil)) ((show "Editor" "Editor" nil) (show "Editor<2>" "Editor" nil) (show "No title" "" nil)) (("Editor" :socket-a :frame-Editor) ("Editor<2>" :socket-b :frame-Editor) ("No title" :socket-c :frame-empty)))"#
+        ]],
     )
 }
 
-fn atomic_chrome_update_buffer_replaces_contents_preserves_table_and_handles_missing_socket() -> ParityBatchCase {
+fn atomic_chrome_update_buffer_replaces_contents_preserves_table_and_handles_missing_socket()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_update_buffer_replaces_contents_preserves_table_and_handles_missing_socket",
         r##"(let ((buffer
@@ -394,12 +400,13 @@ fn atomic_chrome_update_buffer_replaces_contents_preserves_table_and_handles_mis
             (atomic-chrome-test-kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (nil ("new\ncontent" 12 t) nil "new\ncontent" ((" *atomic-update*" :socket nil)))"#
-    ]],
+            r#"OK (nil ("new\ncontent" 12 t) nil "new\ncontent" ((" *atomic-update*" :socket nil)))"#
+        ]],
     )
 }
 
-fn atomic_chrome_update_buffer_propagates_read_only_failure_without_mutating_old_text() -> ParityBatchCase {
+fn atomic_chrome_update_buffer_propagates_read_only_failure_without_mutating_old_text()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_update_buffer_propagates_read_only_failure_without_mutating_old_text",
         r##"(let ((buffer
@@ -434,12 +441,13 @@ fn atomic_chrome_update_buffer_propagates_read_only_failure_without_mutating_old
             (atomic-chrome-test-kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ((:error buffer-read-only ((:buffer nil))) ("locked" nil t) ((" *atomic-update-read-only*" :socket nil)))"#
-    ]],
+            r#"OK ((:error buffer-read-only ((:buffer nil))) ("locked" nil t) ((" *atomic-update-read-only*" :socket nil)))"#
+        ]],
     )
 }
 
-fn atomic_chrome_close_current_buffer_obeys_modified_confirmation_before_delegating() -> ParityBatchCase {
+fn atomic_chrome_close_current_buffer_obeys_modified_confirmation_before_delegating()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_close_current_buffer_obeys_modified_confirmation_before_delegating",
         r##"(let (events)
@@ -484,8 +492,8 @@ fn atomic_chrome_close_current_buffer_obeys_modified_confirmation_before_delegat
                   (nreverse events)))))))"##,
         true,
         expect![[
-        r#"OK (:closed nil (((close " *temp*") (prompt "Buffer has not been saved, close anyway? ")) :closed ((prompt "Buffer has not been saved, close anyway? ") (close " *temp*"))))"#
-    ]],
+            r#"OK (:closed nil (((close " *temp*") (prompt "Buffer has not been saved, close anyway? ")) :closed ((prompt "Buffer has not been saved, close anyway? ") (close " *temp*"))))"#
+        ]],
     )
 }
 

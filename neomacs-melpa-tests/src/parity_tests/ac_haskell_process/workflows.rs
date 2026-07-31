@@ -40,8 +40,8 @@ fn the_source_is_offered_in_haskell_buffers_and_stays_empty_without_a_session() 
            :candidates (let ((ac-prefix "ma")) (ac-haskell-process-candidates))))))"##,
         true,
         expect![[
-        r#"OK ((:cells (available candidates document symbol) :available ac-haskell-process-available-p :candidates ac-haskell-process-candidates :document ac-haskell-process-doc :symbol "h") (:ordinary-buffer nil) (:haskell-mode-buffer (haskell-mode haskell-interactive-mode) :session nil :candidates nil :candidates-for-import nil) (:repl-buffer (haskell-interactive-mode) :candidates nil))"#
-    ]],
+            r#"OK ((:cells (available candidates document symbol) :available ac-haskell-process-available-p :candidates ac-haskell-process-candidates :document ac-haskell-process-doc :symbol "h") (:ordinary-buffer nil) (:haskell-mode-buffer (haskell-mode haskell-interactive-mode) :session nil :candidates nil :candidates-for-import nil) (:repl-buffer (haskell-interactive-mode) :candidates nil))"#
+        ]],
     )
 }
 
@@ -73,8 +73,8 @@ fn setting_up_adds_the_source_to_this_buffer_and_leaves_the_default_alone() -> P
                                            (default-value 'ac-sources)))))))))"##,
         true,
         expect![
-        "OK (:local-before nil :after-one-call (:local t :sources (ac-source-haskell-process ac-source-words-in-same-mode-buffers)) :after-two-calls (ac-source-haskell-process ac-source-words-in-same-mode-buffers) :idempotent t :with-auto-complete-mode (:local t :sources (ac-source-haskell-process ac-source-words-in-same-mode-buffers)) :global-before (ac-source-words-in-same-mode-buffers) :global-after (ac-source-words-in-same-mode-buffers) :global-untouched t)"
-    ],
+            "OK (:local-before nil :after-one-call (:local t :sources (ac-source-haskell-process ac-source-words-in-same-mode-buffers)) :after-two-calls (ac-source-haskell-process ac-source-words-in-same-mode-buffers) :idempotent t :with-auto-complete-mode (:local t :sources (ac-source-haskell-process ac-source-words-in-same-mode-buffers)) :global-before (ac-source-words-in-same-mode-buffers) :global-after (ac-source-words-in-same-mode-buffers) :global-untouched t)"
+        ],
     )
 }
 
@@ -94,8 +94,8 @@ fn documentation_is_fetched_from_hoogle_with_the_symbol_quoted_for_the_shell() -
           :without-hoogle missing)))"##,
         true,
         expect![[
-        r#"OK (:arguments ("--info" "map" "--info" "Data.List.(++)$;rm -rf") :plain "Prelude map :: (a -> b) -> [a] -> [b]\n\nmap f xs applies f to each element of xs.\n" :dangerous-symbol-returned t :without-hoogle (:found nil :doc nil))"#
-    ]],
+            r#"OK (:arguments ("--info" "map" "--info" "Data.List.(++)$;rm -rf") :plain "Prelude map :: (a -> b) -> [a] -> [b]\n\nmap f xs applies f to each element of xs.\n" :dangerous-symbol-returned t :without-hoogle (:found nil :doc nil))"#
+        ]],
     )
 }
 
@@ -131,8 +131,8 @@ fn the_documentation_popup_anchors_on_the_symbol_and_is_silent_without_hoogle() 
                       :buffer-unchanged (equal (cadr before) (buffer-string)))))))))"##,
         true,
         expect![[
-        r#"OK ((:at "main = putStrLn (map id \"hello\")" :point 66 :symbol "putStrLn" :in-string nil :start 59) (:at "main = putStrLn (map id \"hello\")" :point 81 :symbol "hello" :in-string t :start nil) (:at-end-of-buffer nil :start nil) (:returned t :point-unmoved t :buffer-unchanged t))"#
-    ]],
+            r#"OK ((:at "main = putStrLn (map id \"hello\")" :point 66 :symbol "putStrLn" :in-string nil :start 59) (:at "main = putStrLn (map id \"hello\")" :point 81 :symbol "hello" :in-string t :start nil) (:at-end-of-buffer nil :start nil) (:returned t :point-unmoved t :buffer-unchanged t))"#
+        ]],
     )
 }
 

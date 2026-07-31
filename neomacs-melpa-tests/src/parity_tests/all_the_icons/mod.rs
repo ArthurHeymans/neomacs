@@ -89,10 +89,5 @@ pub(crate) fn assert_all_the_icons_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_all_the_icons_parity` cases (2a).
 pub(crate) fn assert_all_the_icons_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        all_the_icons_oracle(),
-        &name,
-        "all_the_icons_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(all_the_icons_oracle(), &name, "all_the_icons_parity", cases);
 }

@@ -194,10 +194,5 @@ pub(crate) fn assert_android_env_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_android_env_parity` cases (2a).
 pub(crate) fn assert_android_env_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        android_env_oracle(),
-        &name,
-        "android_env_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(android_env_oracle(), &name, "android_env_parity", cases);
 }

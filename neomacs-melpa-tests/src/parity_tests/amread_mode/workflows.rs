@@ -30,8 +30,8 @@ fn enabling_the_mode_installs_one_timer_and_walks_the_highlight_word_by_word() -
              :point (point))))))"##,
         true,
         expect![[
-        r#"OK (:prompts (("[amread] Select language: " "english")) :mode t :new-timer-count 1 :repeat-hundredths 33 :steps ((:start 1 :end 4 :text "Der" :face amread-highlight-face) (:start 5 :end 8 :text "Weg" :face amread-highlight-face) (:start 9 :end 12 :text "ist" :face amread-highlight-face) (:start 13 :end 16 :text "das" :face amread-highlight-face) (:start 17 :end 22 :text "Ziel." :face amread-highlight-face)) :point 23)"#
-    ]],
+            r#"OK (:prompts (("[amread] Select language: " "english")) :mode t :new-timer-count 1 :repeat-hundredths 33 :steps ((:start 1 :end 4 :text "Der" :face amread-highlight-face) (:start 5 :end 8 :text "Weg" :face amread-highlight-face) (:start 9 :end 12 :text "ist" :face amread-highlight-face) (:start 13 :end 16 :text "das" :face amread-highlight-face) (:start 17 :end 22 :text "Ziel." :face amread-highlight-face)) :point 23)"#
+        ]],
     )
 }
 
@@ -58,8 +58,8 @@ fn the_reading_speed_and_scroll_style_decide_the_timer_interval() -> ParityBatch
   (nreverse results))"##,
         true,
         expect![[
-        r#"OK ((:style word :speed 3.0 :count 1 :repeat-hundredths 33) (:style word :speed 1.5 :count 1 :repeat-hundredths 67) (:style line :speed nil :count 1 :repeat-hundredths 400))"#
-    ]],
+            r#"OK ((:style word :speed 3.0 :count 1 :repeat-hundredths 33) (:style word :speed 1.5 :count 1 :repeat-hundredths 67) (:style line :speed nil :count 1 :repeat-hundredths 400))"#
+        ]],
     )
 }
 
@@ -93,8 +93,8 @@ fn pausing_cancels_the_timer_and_resuming_restarts_from_the_saved_position() -> 
                                   :overlay (amr-test-overlay))))))))))"##,
         true,
         expect![[
-        r#"OK (:prompts (("[amread] Select language: " "english") ("amread-mode scroll style: " "word") ("[amread] Select language: " "english")) :running (:overlay (:start 5 :end 8 :text "Weg" :face amread-highlight-face) :timer-live t :position 8) :paused (:timer-live nil :overlay no-overlay :position 8 :scroll-style nil) :resumed (:timer-live t :overlay (:start 8 :end 8 :text "" :face amread-highlight-face)))"#
-    ]],
+            r#"OK (:prompts (("[amread] Select language: " "english") ("amread-mode scroll style: " "word") ("[amread] Select language: " "english")) :running (:overlay (:start 5 :end 8 :text "Weg" :face amread-highlight-face) :timer-live t :position 8) :paused (:timer-live nil :overlay no-overlay :position 8 :scroll-style nil) :resumed (:timer-live t :overlay (:start 8 :end 8 :text "" :face amread-highlight-face)))"#
+        ]],
     )
 }
 
@@ -122,8 +122,8 @@ fn reaching_the_end_of_the_buffer_turns_the_mode_off_by_itself() -> ParityBatchC
              :point-at-end (= (point) (point-max)))))))"##,
         true,
         expect![[
-        r#"OK (:fired 17 :mode-still-on nil :timer-var nil :position nil :overlay no-overlay :timer-still-scheduled nil :point-at-end t)"#
-    ]],
+            r#"OK (:fired 17 :mode-still-on nil :timer-var nil :position nil :overlay no-overlay :timer-still-scheduled nil :point-at-end t)"#
+        ]],
     )
 }
 
@@ -157,8 +157,8 @@ fn turning_the_mode_off_cancels_the_timer_and_deletes_the_overlay() -> ParityBat
                           :scroll-style amread-scroll-style)))))))"##,
         true,
         expect![[
-        r#"OK (:on (:timer-live t :overlay (:start 5 :end 8 :text "Weg" :face amread-highlight-face) :new-timers 1 :read-only t) :off (:mode nil :timer-var nil :overlay no-overlay :overlay-var-still-set t :overlay-buffer nil :leftover-timers 0 :read-only nil :scroll-style nil))"#
-    ]],
+            r#"OK (:on (:timer-live t :overlay (:start 5 :end 8 :text "Weg" :face amread-highlight-face) :new-timers 1 :read-only t) :off (:mode nil :timer-var nil :overlay no-overlay :overlay-var-still-set t :overlay-buffer nil :leftover-timers 0 :read-only nil :scroll-style nil))"#
+        ]],
     )
 }
 

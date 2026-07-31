@@ -30,8 +30,8 @@ fn auth_source_1password_backend_parser_accepts_only_the_exact_symbol() -> Parit
             1))"##,
         true,
         expect![[
-        r#"OK ((1password (t (t auth-source-backend password-store "." t t t nil ignore auth-source-1password-search))) ("1password" nil) (:1password nil) ((1password) nil) (password-store nil) (nil nil) (t nil) (1 nil))"#
-    ]],
+            r#"OK ((1password (t (t auth-source-backend password-store "." t t t nil ignore auth-source-1password-search))) ("1password" nil) (:1password nil) ((1password) nil) (password-store nil) (nil nil) (t nil) (1 nil))"#
+        ]],
     )
 }
 
@@ -69,7 +69,8 @@ fn auth_source_1password_parser_hook_is_idempotent_across_source_reloads() -> Pa
     )
 }
 
-fn auth_source_1password_enable_adds_only_when_absent_and_forgets_cache_each_call() -> ParityBatchCase {
+fn auth_source_1password_enable_adds_only_when_absent_and_forgets_cache_each_call()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_1password_enable_adds_only_when_absent_and_forgets_cache_each_call",
         r##"(let ((cases
@@ -107,12 +108,13 @@ fn auth_source_1password_enable_adds_only_when_absent_and_forgets_cache_each_cal
            cases))"##,
         true,
         expect![[
-        r#"OK ((("~/.authinfo" "secrets:session") :forgotten (1password "~/.authinfo" "secrets:session") :forgotten (1password "~/.authinfo" "secrets:session") ((1password "~/.authinfo" "secrets:session") (1password "~/.authinfo" "secrets:session"))) ((1password "~/.authinfo") :forgotten (1password "~/.authinfo") :forgotten (1password "~/.authinfo") ((1password "~/.authinfo") (1password "~/.authinfo"))) (("~/.authinfo" 1password "secrets:session") :forgotten ("~/.authinfo" 1password "secrets:session") :forgotten ("~/.authinfo" 1password "secrets:session") (("~/.authinfo" 1password "secrets:session") ("~/.authinfo" 1password "secrets:session"))) (("~/.authinfo" 1password 1password "secrets:session") :forgotten ("~/.authinfo" 1password 1password "secrets:session") :forgotten ("~/.authinfo" 1password 1password "secrets:session") (("~/.authinfo" 1password 1password "secrets:session") ("~/.authinfo" 1password 1password "secrets:session"))))"#
-    ]],
+            r#"OK ((("~/.authinfo" "secrets:session") :forgotten (1password "~/.authinfo" "secrets:session") :forgotten (1password "~/.authinfo" "secrets:session") ((1password "~/.authinfo" "secrets:session") (1password "~/.authinfo" "secrets:session"))) ((1password "~/.authinfo") :forgotten (1password "~/.authinfo") :forgotten (1password "~/.authinfo") ((1password "~/.authinfo") (1password "~/.authinfo"))) (("~/.authinfo" 1password "secrets:session") :forgotten ("~/.authinfo" 1password "secrets:session") :forgotten ("~/.authinfo" 1password "secrets:session") (("~/.authinfo" 1password "secrets:session") ("~/.authinfo" 1password "secrets:session"))) (("~/.authinfo" 1password 1password "secrets:session") :forgotten ("~/.authinfo" 1password 1password "secrets:session") :forgotten ("~/.authinfo" 1password 1password "secrets:session") (("~/.authinfo" 1password 1password "secrets:session") ("~/.authinfo" 1password 1password "secrets:session"))))"#
+        ]],
     )
 }
 
-fn auth_source_1password_real_backend_discovery_uses_registered_parser_and_slots() -> ParityBatchCase {
+fn auth_source_1password_real_backend_discovery_uses_registered_parser_and_slots() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_1password_real_backend_discovery_uses_registered_parser_and_slots",
         r##"(let ((auth-sources
@@ -134,12 +136,13 @@ fn auth_source_1password_real_backend_discovery_uses_registered_parser_and_slots
               #'auth-source-1password-search))))"##,
         true,
         expect![[
-        r#"OK (1 ((t auth-source-backend password-store "." t t t nil ignore auth-source-1password-search)) t t)"#
-    ]],
+            r#"OK (1 ((t auth-source-backend password-store "." t t t nil ignore auth-source-1password-search)) t t)"#
+        ]],
     )
 }
 
-fn auth_source_1password_real_auth_source_search_forwards_spec_and_returns_token() -> ParityBatchCase {
+fn auth_source_1password_real_auth_source_search_forwards_spec_and_returns_token() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_1password_real_auth_source_search_forwards_spec_and_returns_token",
         r##"(let ((auth-sources
@@ -171,8 +174,8 @@ fn auth_source_1password_real_auth_source_search_forwards_spec_and_returns_token
              (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (((:user "reader" :secret "integration-secret")) ((:find "op") (:shell "op read op://Personal/db.example/reader")))"#
-    ]],
+            r#"OK (((:user "reader" :secret "integration-secret")) ((:find "op") (:shell "op read op://Personal/db.example/reader")))"#
+        ]],
     )
 }
 
@@ -208,8 +211,8 @@ fn auth_source_1password_auth_source_type_requests_still_reach_custom_backend() 
              (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (((:user "reader" :secret "unexpected")) ((:user "reader" :secret "unexpected")) ((:find "op") (:shell "op read op://Personal/db.example/reader") (:find "op") (:shell "op read op://Personal/db.example/reader")))"#
-    ]],
+            r#"OK (((:user "reader" :secret "unexpected")) ((:user "reader" :secret "unexpected")) ((:find "op") (:shell "op read op://Personal/db.example/reader") (:find "op") (:shell "op read op://Personal/db.example/reader")))"#
+        ]],
     )
 }
 
@@ -242,12 +245,13 @@ fn auth_source_1password_pick_first_password_runs_complete_auth_source_flow() ->
              (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("first-picked-secret" ((:find "op") (:shell "op read op://Personal/mail.example/robot")))"#
-    ]],
+            r#"OK ("first-picked-secret" ((:find "op") (:shell "op read op://Personal/mail.example/robot")))"#
+        ]],
     )
 }
 
-fn auth_source_1password_auth_source_cache_reuses_token_until_enable_clears_it() -> ParityBatchCase {
+fn auth_source_1password_auth_source_cache_reuses_token_until_enable_clears_it() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_1password_auth_source_cache_reuses_token_until_enable_clears_it",
         r##"(let ((auth-sources
@@ -289,8 +293,8 @@ fn auth_source_1password_auth_source_cache_reuses_token_until_enable_clears_it()
                auth-sources))))"##,
         true,
         expect![[
-        r#"OK (#1=((:user "ci" :secret "first-secret")) #1# ((:user "ci" :secret "after-forget-secret")) ((:find "op") (:shell "op read op://Personal/cache.example/ci") (:find "op") (:shell "op read op://Personal/cache.example/ci")) nil (1password))"#
-    ]],
+            r#"OK (#1=((:user "ci" :secret "first-secret")) #1# ((:user "ci" :secret "after-forget-secret")) ((:find "op") (:shell "op read op://Personal/cache.example/ci") (:find "op") (:shell "op read op://Personal/cache.example/ci")) nil (1password))"#
+        ]],
     )
 }
 
@@ -334,8 +338,8 @@ fn auth_source_1password_legacy_advice_registration_path_parses_real_backend() -
              saved-parsers)))"##,
         true,
         expect![[
-        r#"OK (nil t t (t auth-source-backend password-store "." t t t nil ignore auth-source-1password-search))"#
-    ]],
+            r#"OK (nil t t (t auth-source-backend password-store "." t t t nil ignore auth-source-1password-search))"#
+        ]],
     )
 }
 

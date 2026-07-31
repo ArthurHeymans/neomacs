@@ -25,8 +25,8 @@ fn typing_an_alt_code_on_the_keypad_inserts_the_character_it_names() -> ParityBa
          :hook (alt-codes-test-hook))))"##,
         true,
         expect![[
-        r#"OK (:ascii ("A" "") :latin1 ("ß" "") :windows-1252 ("€" "") :accented ("Á" "") :spelled-space ("spc" "") :empty-entry ("" "") :hook (t t t))"#
-    ]],
+            r#"OK (:ascii ("A" "") :latin1 ("ß" "") :windows-1252 ("€" "") :accented ("Á" "") :spelled-space ("spc" "") :empty-entry ("" "") :hook (t t t))"#
+        ]],
     )
 }
 
@@ -54,8 +54,8 @@ fn the_first_lookup_of_a_session_fails_at_the_default_eval_depth() -> ParityBatc
                (alt-codes--get-symbol "65")))))))"##,
         true,
         expect![[
-        r#"OK (:depth 1600 :table-entries 383 :announced ("[Alt Code]: 6" "[Alt Code]: 65") :pending "65" :after-commit ("" "65" (nil t t)) :hook-error ("Error in pre-command-hook (alt-codes--pre-command-hook): (excessive-lisp-nesting 1601)") :typing-still-works "z" :raising-the-limit-works "A")"#
-    ]],
+            r#"OK (:depth 1600 :table-entries 383 :announced ("[Alt Code]: 6" "[Alt Code]: 65") :pending "65" :after-commit ("" "65" (nil t t)) :hook-error ("Error in pre-command-hook (alt-codes--pre-command-hook): (excessive-lisp-nesting 1601)") :typing-still-works "z" :raising-the-limit-works "A")"#
+        ]],
     )
 }
 
@@ -76,8 +76,8 @@ fn the_keypad_digits_also_build_a_numeric_prefix_argument() -> ParityBatchCase {
          (copy-sequence (buffer-string)))))"##,
         true,
         expect![[
-        r#"OK (:pending "12" :prefix 12 :keypad-translation [54] :meta-digit-command digit-argument :keypad-command nil :commit-runs-that-many-times "x")"#
-    ]],
+            r#"OK (:pending "12" :prefix 12 :keypad-translation [54] :meta-digit-command digit-argument :keypad-command nil :commit-runs-that-many-times "x")"#
+        ]],
     )
 }
 
@@ -158,8 +158,8 @@ fn the_mode_installs_and_removes_its_hook_and_leaves_plain_typing_alone() -> Par
            :after (with-temp-buffer (text-mode) (alt-codes-test-hook))))))"##,
         true,
         expect![[
-        r#"OK (:lifecycle (:on (t t t) :off (nil t nil) :hook-value (eldoc-pre-command-refresh-echo-area t)) :mode-off (:digits "65" :keypad "" :hook nil) :globalized (:armed (t t t) :after (nil t nil)))"#
-    ]],
+            r#"OK (:lifecycle (:on (t t t) :off (nil t nil) :hook-value (eldoc-pre-command-refresh-echo-area t)) :mode-off (:digits "65" :keypad "" :hook nil) :globalized (:armed (t t t) :after (nil t nil)))"#
+        ]],
     )
 }
 

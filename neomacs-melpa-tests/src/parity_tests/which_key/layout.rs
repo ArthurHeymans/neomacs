@@ -12,8 +12,8 @@ fn which_key_column_normalization_and_joining_preserve_row_and_column_order() ->
                 '(("A1" "A2") ("B1") ("C1" "C2" "C3"))))"##,
         true,
         expect![[
-        r#"OK ((("a" "b" "") ("c" "" "") ("" "" "") ("d" "e" "f")) "C1 B1 A1\nC2  A2\nC3  ")"#
-    ]],
+            r#"OK ((("a" "b" "") ("c" "" "") ("" "" "") ("d" "e" "f")) "C1 B1 A1\nC2  A2\nC3  ")"#
+        ]],
     )
 }
 
@@ -53,8 +53,8 @@ fn which_key_list_to_pages_reports_exact_page_strings_and_metadata() -> ParityBa
                 (which-key--pages-total-keys pages)))"##,
         true,
         expect![[
-        r#"OK (("a:alpha c:charlie\nb:beta  d:delta  " "e:echo") 2 (17 6) (4 1) (1 2) 2 5)"#
-    ]],
+            r#"OK (("a:alpha c:charlie\nb:beta  d:delta  " "e:echo") 2 (17 6) (4 1) (1 2) 2 5)"#
+        ]],
     )
 }
 
@@ -116,12 +116,13 @@ fn which_key_page_rotation_updates_every_parallel_page_field() -> ParityBatchCas
                   (which-key--pages-page-nums pages))))"##,
         true,
         expect![[
-        r#"OK ((("two" "three" "one") (20 30 10) (2 3 1) (2 3 1)) ("three" "one" "two") (30 10 20) (3 1 2) (3 1 2))"#
-    ]],
+            r#"OK ((("two" "three" "one") (20 30 10) (2 3 1) (2 3 1)) ("three" "one" "two") (30 10 20) (3 1 2) (3 1 2))"#
+        ]],
     )
 }
 
-fn which_key_formatting_replaces_groups_extracts_keys_and_truncates_descriptions() -> ParityBatchCase {
+fn which_key_formatting_replaces_groups_extracts_keys_and_truncates_descriptions() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "which_key_formatting_replaces_groups_extracts_keys_and_truncates_descriptions",
         r##"(let ((which-key-separator " : ")
@@ -149,8 +150,8 @@ fn which_key_formatting_replaces_groups_extracts_keys_and_truncates_descriptions
                     t)))))"##,
         true,
         expect![[
-        r#"OK ((("a" " : " "move-..") ("p" " : " "+proj..") ("x" " : " "+prefix")) (("C-c a" " : " "move-..")))"#
-    ]],
+            r#"OK ((("a" " : " "move-..") ("p" " : " "+proj..") ("x" " : " "+prefix")) (("C-c a" " : " "move-..")))"#
+        ]],
     )
 }
 
@@ -184,8 +185,8 @@ Second documentation line."
                    "neomacs-which-key-unknown-command"))))"##,
         true,
         expect![[
-        r#"OK ("command" "command First documentation line." "First documentation line." "missing")"#
-    ]],
+            r#"OK ("command" "command First documentation line." "First documentation line." "missing")"#
+        ]],
     )
 }
 

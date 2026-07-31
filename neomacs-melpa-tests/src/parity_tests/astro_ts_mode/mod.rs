@@ -105,8 +105,6 @@ fn astro_ts_mode_harness_contract_reports_all_three_pinned_grammars_and_package(
     assert_astro_ts_mode_parity(elisp_form, expect);
 }
 
-
-
 /// Multi-probe batch for `assert_astro_ts_mode_autoload_signal_parity` cases (2a).
 pub(crate) fn assert_astro_ts_mode_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

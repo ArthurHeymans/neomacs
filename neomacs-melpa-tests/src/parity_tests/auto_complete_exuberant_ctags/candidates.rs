@@ -107,8 +107,8 @@ fn auto_complete_exuberant_ctags_candidate_limit_is_count_with_off_by_one() -> P
                            '(0 1 2 3 10))"##,
         true,
         expect![[
-        r#"OK ((0 ("a1")) (1 ("a2" "a1")) (2 ("a3" "a2" "a1")) (3 ("a4" "a3" "a2" "a1")) (10 ("a4" "a3" "a2" "a1")))"#
-    ]],
+            r#"OK ((0 ("a1")) (1 ("a2" "a1")) (2 ("a3" "a2" "a1")) (3 ("a4" "a3" "a2" "a1")) (10 ("a4" "a3" "a2" "a1")))"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alan_mode_batch};
 
-fn alan_project_root_discovers_markers_in_documented_precedence_and_caches_the_result() -> ParityBatchCase {
+fn alan_project_root_discovers_markers_in_documented_precedence_and_caches_the_result()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alan_project_root_discovers_markers_in_documented_precedence_and_caches_the_result",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -68,7 +69,8 @@ fn alan_script_discovery_walks_up_to_the_first_real_executable_project_script() 
     )
 }
 
-fn alan_build_setup_constructs_real_compiler_pretty_printer_and_flycheck_boundaries() -> ParityBatchCase {
+fn alan_build_setup_constructs_real_compiler_pretty_printer_and_flycheck_boundaries()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alan_build_setup_constructs_real_compiler_pretty_printer_and_flycheck_boundaries",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -111,12 +113,13 @@ fn alan_build_setup_constructs_real_compiler_pretty_printer_and_flycheck_boundar
                                alan-pretty-printer))))"##,
         true,
         expect![[
-        r#"OK ("[ROOT]/project/dependencies/dev/internals/alan/tools/compiler-project" "[ROOT]/project/dependencies/dev/internals/alan/language" "[ROOT]/project/dependencies/dev/internals/alan/tools/compiler-project [ROOT]/project/dependencies/dev/internals/alan/language -C ../.. /dev/null " "[ROOT]/project/dependencies/dev/internals/alan/tools/pretty-printer [ROOT]/project/dependencies/dev/internals/alan/language  --allow-unresolved -C ../.. --file '[ROOT]/project/models/accounts/main.alan' -- 'models' 'accounts' 'main.alan'")"#
-    ]],
+            r#"OK ("[ROOT]/project/dependencies/dev/internals/alan/tools/compiler-project" "[ROOT]/project/dependencies/dev/internals/alan/language" "[ROOT]/project/dependencies/dev/internals/alan/tools/compiler-project [ROOT]/project/dependencies/dev/internals/alan/language -C ../.. /dev/null " "[ROOT]/project/dependencies/dev/internals/alan/tools/pretty-printer [ROOT]/project/dependencies/dev/internals/alan/language  --allow-unresolved -C ../.. --file '[ROOT]/project/models/accounts/main.alan' -- 'models' 'accounts' 'main.alan'")"#
+        ]],
     )
 }
 
-fn alan_relative_project_path_quotes_each_real_path_component_for_the_compiler() -> ParityBatchCase {
+fn alan_relative_project_path_quotes_each_real_path_component_for_the_compiler() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "alan_relative_project_path_quotes_each_real_path_component_for_the_compiler",
         r##"(let ((alan-compiler-project-root
@@ -131,7 +134,8 @@ fn alan_relative_project_path_quotes_each_real_path_component_for_the_compiler()
     )
 }
 
-fn alan_lsp_discovery_and_server_command_use_real_project_layout_and_capture_path() -> ParityBatchCase {
+fn alan_lsp_discovery_and_server_command_use_real_project_layout_and_capture_path()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alan_lsp_discovery_and_server_command_use_real_project_layout_and_capture_path",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -161,8 +165,8 @@ fn alan_lsp_discovery_and_server_command_use_real_project_layout_and_capture_pat
                           build 'alan-schema-mode))))"##,
         true,
         expect![[
-        r#"OK ("project/dependencies/dev/internals/alan/tools/alan" ("project/dependencies/dev/internals/alan/tools/alan" "--lsp" "--capture" "trace.log") ("[ORACLE-SANDBOX]/project/dependencies/dev/internals/alan/tools/alan" "--lsp" "--capture" "trace.log") "[ORACLE-SANDBOX]/project/dependencies/dev/internals/alan/tools/alan")"#
-    ]],
+            r#"OK ("project/dependencies/dev/internals/alan/tools/alan" ("project/dependencies/dev/internals/alan/tools/alan" "--lsp" "--capture" "trace.log") ("[ORACLE-SANDBOX]/project/dependencies/dev/internals/alan/tools/alan" "--lsp" "--capture" "trace.log") "[ORACLE-SANDBOX]/project/dependencies/dev/internals/alan/tools/alan")"#
+        ]],
     )
 }
 
@@ -198,8 +202,8 @@ fn alan_lsp_and_eglot_registration_emit_the_exact_client_protocol_contract() -> 
                            eglot-server-programs))))"##,
         true,
         expect![[
-        r#"OK (registered (("\\.alan$" . "alan")) alan-lsp--server-command (:new-connection (:stdio alan-lsp--server-command) :activation-fn alan-lsp-activate-alan-mode :server-id alan-ls) #1=((alan-mode . alan-eglot--server-command)) #1#)"#
-    ]],
+            r#"OK (registered (("\\.alan$" . "alan")) alan-lsp--server-command (:new-connection (:stdio alan-lsp--server-command) :activation-fn alan-lsp-activate-alan-mode :server-id alan-ls) #1=((alan-mode . alan-eglot--server-command)) #1#)"#
+        ]],
     )
 }
 

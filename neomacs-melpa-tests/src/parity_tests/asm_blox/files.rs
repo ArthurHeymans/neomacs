@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asm_blox_batch};
 
-fn asm_blox_saved_puzzle_ids_and_next_filename_ignore_unrelated_files_and_sort_numeric_ids() -> ParityBatchCase {
+fn asm_blox_saved_puzzle_ids_and_next_filename_ignore_unrelated_files_and_sort_numeric_ids()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asm_blox_saved_puzzle_ids_and_next_filename_ignore_unrelated_files_and_sort_numeric_ids",
         r##"(let* ((asm-blox-save-directory-name
@@ -39,7 +40,8 @@ fn asm_blox_saved_puzzle_ids_and_next_filename_ignore_unrelated_files_and_sort_n
     )
 }
 
-fn asm_blox_backup_workflow_writes_exact_buffer_contents_beside_the_active_solution() -> ParityBatchCase {
+fn asm_blox_backup_workflow_writes_exact_buffer_contents_beside_the_active_solution()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asm_blox_backup_workflow_writes_exact_buffer_contents_beside_the_active_solution",
         r##"(let* ((directory
@@ -151,12 +153,13 @@ fn asm_blox_puzzle_won_detection_matches_only_named_hidden_win_artifacts() -> Pa
           '("Identity" "Other" "Missing" "entity")))"##,
         true,
         expect![[
-        r#"OK (("Identity" ".Identity-1.asbx.win.txt") ("Other" ".Other-1.asbx.win.txt") ("Missing" nil) ("entity" ".Identity-1.asbx.win.txt"))"#
-    ]],
+            r#"OK (("Identity" ".Identity-1.asbx.win.txt") ("Other" ".Other-1.asbx.win.txt") ("Missing" nil) ("entity" ".Identity-1.asbx.win.txt"))"#
+        ]],
     )
 }
 
-fn asm_blox_rendered_board_roundtrips_all_twelve_code_cells_and_problem_identity() -> ParityBatchCase {
+fn asm_blox_rendered_board_roundtrips_all_twelve_code_cells_and_problem_identity() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asm_blox_rendered_board_roundtrips_all_twelve_code_cells_and_problem_identity",
         r##"(let* ((fixture-problem
@@ -212,8 +215,8 @@ fn asm_blox_rendered_board_roundtrips_all_twelve_code_cells_and_problem_identity
                          (- (length rendered) 47))))))"##,
         true,
         expect![[
-        r#"OK ("Round Trip" (((0 0) "(const 0)\n(send right)") ((0 1) "(const 1)\n(send right)") ((0 2) "(const 2)\n(send right)") ((0 3) "(const 3)\n(send right)") ((1 0) "(const 10)\n(send right)") ((1 1) "(const 11)\n(send right)") ((1 2) "(const 12)\n(send right)") ((1 3) "(const 13)\n(send right)") ((2 0) "(const 20)\n(send right)") ((2 1) "(const 21)\n(send right)") ((2 2) "(const 22)\n(send right)") ((2 3) "(const 23)\n(send right)")) 5803 "   \n\n\nRound Trip:\nRender and parse every cell.\n")"#
-    ]],
+            r#"OK ("Round Trip" (((0 0) "(const 0)\n(send right)") ((0 1) "(const 1)\n(send right)") ((0 2) "(const 2)\n(send right)") ((0 3) "(const 3)\n(send right)") ((1 0) "(const 10)\n(send right)") ((1 1) "(const 11)\n(send right)") ((1 2) "(const 12)\n(send right)") ((1 3) "(const 13)\n(send right)") ((2 0) "(const 20)\n(send right)") ((2 1) "(const 21)\n(send right)") ((2 2) "(const 22)\n(send right)") ((2 3) "(const 23)\n(send right)")) 5803 "   \n\n\nRound Trip:\nRender and parse every cell.\n")"#
+        ]],
     )
 }
 

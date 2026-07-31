@@ -174,10 +174,6 @@ pub(crate) fn assert_asx_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_asx_source_parity("asx-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_asx_autoload_parity` cases (2a).
 pub(crate) fn assert_asx_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -192,10 +188,5 @@ pub(crate) fn assert_asx_autoload_batch(cases: &[ParityBatchCase]) {
 /// Multi-probe batch for `assert_asx_parity` cases (2a).
 pub(crate) fn assert_asx_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        asx_oracle("asx.el"),
-        &name,
-        "asx_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(asx_oracle("asx.el"), &name, "asx_parity", cases);
 }

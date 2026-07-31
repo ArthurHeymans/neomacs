@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_async_backup_batch};
 
-fn async_backup_real_child_copies_content_with_exact_process_command_and_status() -> ParityBatchCase {
+fn async_backup_real_child_copies_content_with_exact_process_command_and_status() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async_backup_real_child_copies_content_with_exact_process_command_and_status",
         r##"(let* ((input
@@ -48,8 +49,8 @@ fn async_backup_real_child_copies_content_with_exact_process_command_and_status(
              (get-buffer "*async-backup*"))))"##,
         true,
         expect![[
-        r#"OK (t "async-backup" exit 0 ("emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//process-success/input.txt\" \"$ROOT//process-success/backups$ROOT//process-success/input-2026-07-27T13-30-00.txt\")") t 0 t "saved content\n")"#
-    ]],
+            r#"OK (t "async-backup" exit 0 ("emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//process-success/input.txt\" \"$ROOT//process-success/backups$ROOT//process-success/input-2026-07-27T13-30-00.txt\")") t 0 t "saved content\n")"#
+        ]],
     )
 }
 
@@ -98,8 +99,8 @@ fn async_backup_returns_before_gate_opens_and_child_finishes_later() -> ParityBa
              (get-buffer "*async-backup*"))))"##,
         true,
         expect![[
-        r#"OK (((run open listen connect stop) nil :editor-continued) exit 0 t "* asynchronous\n")"#
-    ]],
+            r#"OK (((run open listen connect stop) nil :editor-continued) exit 0 t "* asynchronous\n")"#
+        ]],
     )
 }
 
@@ -159,8 +160,8 @@ fn async_backup_multiple_calls_launch_concurrent_children_instead_of_queueing() 
              (get-buffer "*async-backup*"))))"##,
         true,
         expect![[
-        r#"OK ((("async-backup" "async-backup<1>" "async-backup<2>") (#1=(run open listen connect stop) #1# #1#) 3 (nil nil nil)) (0 0 0) ("content-one.txt\n" "content-two.txt\n" "content-three.txt\n"))"#
-    ]],
+            r#"OK ((("async-backup" "async-backup<1>" "async-backup<2>") (#1=(run open listen connect stop) #1# #1#) 3 (nil nil nil)) (0 0 0) ("content-one.txt\n" "content-two.txt\n" "content-three.txt\n"))"#
+        ]],
     )
 }
 
@@ -270,7 +271,8 @@ fn async_backup_missing_input_is_reported_by_child_without_creating_output() -> 
     )
 }
 
-fn async_backup_missing_emacs_executable_signals_after_creating_output_directory() -> ParityBatchCase {
+fn async_backup_missing_emacs_executable_signals_after_creating_output_directory() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async_backup_missing_emacs_executable_signals_after_creating_output_directory",
         r##"(let* ((input
@@ -298,8 +300,8 @@ fn async_backup_missing_emacs_executable_signals_after_creating_output_directory
              (get-buffer "*async-backup*"))))"##,
         true,
         expect![[
-        r#"OK ((:error file-missing ("Searching for program" "No such file or directory" "emacs")) t (:buffer "*async-backup*"))"#
-    ]],
+            r#"OK ((:error file-missing ("Searching for program" "No such file or directory" "emacs")) t (:buffer "*async-backup*"))"#
+        ]],
     )
 }
 
@@ -341,7 +343,8 @@ fn async_backup_child_stdout_and_stderr_share_persistent_process_buffer() -> Par
     )
 }
 
-fn async_backup_sequential_children_reuse_named_output_buffer_and_append_results() -> ParityBatchCase {
+fn async_backup_sequential_children_reuse_named_output_buffer_and_append_results() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async_backup_sequential_children_reuse_named_output_buffer_and_append_results",
         r##"(let* ((root

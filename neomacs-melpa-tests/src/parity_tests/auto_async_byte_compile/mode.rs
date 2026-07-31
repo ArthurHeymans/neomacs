@@ -23,7 +23,8 @@ fn auto_async_byte_compile_mode_numeric_toggle_and_return_contract_match() -> Pa
     )
 }
 
-fn auto_async_byte_compile_mode_installs_and_removes_one_buffer_local_save_hook() -> ParityBatchCase {
+fn auto_async_byte_compile_mode_installs_and_removes_one_buffer_local_save_hook() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_async_byte_compile_mode_installs_and_removes_one_buffer_local_save_hook",
         r##"(with-temp-buffer
@@ -120,7 +121,8 @@ fn auto_async_byte_compile_enable_helper_forces_mode_on_idempotently() -> Parity
     )
 }
 
-fn auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exact_suffix_boundary() -> ParityBatchCase {
+fn auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exact_suffix_boundary()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exact_suffix_boundary",
         r##"(let (calls)
@@ -150,12 +152,13 @@ fn auto_async_byte_compile_file_filter_matrix_uses_default_case_folding_and_exac
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((nil nil) ("init.el" (:compiled "init.el")) ("/workspace/module.el" (:compiled "/workspace/module.el")) ("/workspace/MODULE.EL" (:compiled "/workspace/MODULE.EL")) ("/workspace/module.el.gpg" nil) ("/workspace/module.el~" nil) ("/workspace/.el" (:compiled "/workspace/.el")) ("/workspace/notel" nil)) ("init.el" "/workspace/module.el" "/workspace/MODULE.EL" "/workspace/.el"))"#
-    ]],
+            r#"OK (((nil nil) ("init.el" (:compiled "init.el")) ("/workspace/module.el" (:compiled "/workspace/module.el")) ("/workspace/MODULE.EL" (:compiled "/workspace/MODULE.EL")) ("/workspace/module.el.gpg" nil) ("/workspace/module.el~" nil) ("/workspace/.el" (:compiled "/workspace/.el")) ("/workspace/notel" nil)) ("init.el" "/workspace/module.el" "/workspace/MODULE.EL" "/workspace/.el"))"#
+        ]],
     )
 }
 
-fn auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagates_bad_regexps() -> ParityBatchCase {
+fn auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagates_bad_regexps()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagates_bad_regexps",
         r##"(let (calls)
@@ -184,8 +187,8 @@ fn auto_async_byte_compile_exclusion_regexp_prevents_matching_files_and_propagat
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((("/project/src/main.el" nil) (:ok :started)) (("/project/generated/out.el" "/generated/") (:ok nil)) (("/project/src/generated-name.el" "generated") (:ok nil)) (("/project/src/main.el" "") (:ok nil)) (("/project/src/main.el" "[broken") (:error invalid-regexp ("Unmatched [ or [^")))) ("/project/src/main.el"))"#
-    ]],
+            r#"OK (((("/project/src/main.el" nil) (:ok :started)) (("/project/generated/out.el" "/generated/") (:ok nil)) (("/project/src/generated-name.el" "generated") (:ok nil)) (("/project/src/main.el" "") (:ok nil)) (("/project/src/main.el" "[broken") (:error invalid-regexp ("Unmatched [ or [^")))) ("/project/src/main.el"))"#
+        ]],
     )
 }
 
@@ -242,8 +245,8 @@ fn auto_async_byte_compile_real_save_runs_mode_hook_with_saved_file_contents() -
               (delete-file file))))"##,
         true,
         expect![[
-        r#"OK ((("[ORACLE-SANDBOX]/save-lifecycle.el" "(setq aabc-save-fixture :saved)\n" nil t "(setq aabc-save-fixture :saved)\n")) nil t "(setq aabc-save-fixture :saved)\n")"#
-    ]],
+            r#"OK ((("[ORACLE-SANDBOX]/save-lifecycle.el" "(setq aabc-save-fixture :saved)\n" nil t "(setq aabc-save-fixture :saved)\n")) nil t "(setq aabc-save-fixture :saved)\n")"#
+        ]],
     )
 }
 

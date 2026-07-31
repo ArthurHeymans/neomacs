@@ -1,8 +1,11 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aurora_config_mode_autoload_batch, assert_aurora_config_mode_batch};
+use super::{
+    ParityBatchCase, assert_aurora_config_mode_autoload_batch, assert_aurora_config_mode_batch,
+};
 
-fn aurora_config_mode_descriptor_and_installed_payload_match_exact_melpa_archive() -> ParityBatchCase {
+fn aurora_config_mode_descriptor_and_installed_payload_match_exact_melpa_archive() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "aurora_config_mode_descriptor_and_installed_payload_match_exact_melpa_archive",
         r##"(let* ((descriptor
@@ -42,12 +45,13 @@ fn aurora_config_mode_descriptor_and_installed_payload_match_exact_melpa_archive
             files)))"##,
         true,
         expect![[
-        r#"OK ((aurora-config-mode "20180216.2302" "Major mode for Apache Aurora configuration files." nil ((:maintainers ("Berk D. Demir" . "bdd@mindcast.org")) (:authors ("Berk D. Demir" . "bdd@mindcast.org")) (:keywords "languages" "configuration") (:revdesc . "8273ec7937a2") (:commit . "8273ec7937a21b469b9dbb6c11714255b890f410") (:url . "https://github.com/bdd/aurora-config.el"))) (("aurora-config-mode-pkg.el" 446 "969bb7486c9a10ca6210f6649555b8ae7ba8a4e7e1b382500b4f961ee7ae88bf") ("aurora-config-mode.el" 3705 "63e5a15768e7ef53e499508e166566c42c1fa867b86ea1733adc7b362bbb3492")))"#
-    ]],
+            r#"OK ((aurora-config-mode "20180216.2302" "Major mode for Apache Aurora configuration files." nil ((:maintainers ("Berk D. Demir" . "bdd@mindcast.org")) (:authors ("Berk D. Demir" . "bdd@mindcast.org")) (:keywords "languages" "configuration") (:revdesc . "8273ec7937a2") (:commit . "8273ec7937a21b469b9dbb6c11714255b890f410") (:url . "https://github.com/bdd/aurora-config.el"))) (("aurora-config-mode-pkg.el" 446 "969bb7486c9a10ca6210f6649555b8ae7ba8a4e7e1b382500b4f961ee7ae88bf") ("aurora-config-mode.el" 3705 "63e5a15768e7ef53e499508e166566c42c1fa867b86ea1733adc7b362bbb3492")))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_complete_prefixed_symbol_inventory_records_every_surface() -> ParityBatchCase {
+fn aurora_config_mode_complete_prefixed_symbol_inventory_records_every_surface() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "aurora_config_mode_complete_prefixed_symbol_inventory_records_every_surface",
         r##"(let (symbols)
@@ -92,12 +96,13 @@ fn aurora_config_mode_complete_prefixed_symbol_inventory_records_every_surface()
                (car right))))))"##,
         true,
         expect![
-        "OK ((aurora-config-aurora-struct-keywords nil t nil nil nil) (aurora-config-diff t nil nil nil (jobpath)) (aurora-config-font-lock-keywords nil t nil nil nil) (aurora-config-inspect t nil nil nil (jobpath)) (aurora-config-last-job-path nil t nil nil nil) (aurora-config-mode t nil nil nil nil) (aurora-config-mode-abbrev-table nil t nil nil nil) (aurora-config-mode-autoloads nil nil nil nil nil) (aurora-config-mode-hook nil t nil nil nil) (aurora-config-mode-map nil t nil nil nil) (aurora-config-mode-syntax-table nil t nil nil nil) (aurora-config-pystachio-struct-keywords nil t nil nil nil) (aurora-config-read-jobpath t nil nil nil nil) (aurora-config-run-aurora t nil nil nil (command jobpath)))"
-    ],
+            "OK ((aurora-config-aurora-struct-keywords nil t nil nil nil) (aurora-config-diff t nil nil nil (jobpath)) (aurora-config-font-lock-keywords nil t nil nil nil) (aurora-config-inspect t nil nil nil (jobpath)) (aurora-config-last-job-path nil t nil nil nil) (aurora-config-mode t nil nil nil nil) (aurora-config-mode-abbrev-table nil t nil nil nil) (aurora-config-mode-autoloads nil nil nil nil nil) (aurora-config-mode-hook nil t nil nil nil) (aurora-config-mode-map nil t nil nil nil) (aurora-config-mode-syntax-table nil t nil nil nil) (aurora-config-pystachio-struct-keywords nil t nil nil nil) (aurora-config-read-jobpath t nil nil nil nil) (aurora-config-run-aurora t nil nil nil (command jobpath)))"
+        ],
     )
 }
 
-fn aurora_config_mode_all_callable_metadata_interactive_forms_docs_and_sources_are_exact() -> ParityBatchCase {
+fn aurora_config_mode_all_callable_metadata_interactive_forms_docs_and_sources_are_exact()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_all_callable_metadata_interactive_forms_docs_and_sources_are_exact",
         r##"(mapcar
@@ -124,12 +129,13 @@ fn aurora_config_mode_all_callable_metadata_interactive_forms_docs_and_sources_a
             aurora-config-mode))"##,
         true,
         expect![[
-        r#"OK ((aurora-config-read-jobpath t nil nil nil "Read job path from minibuffer with history defaulting to buffer local last used." "aurora-config-mode.el") (aurora-config-run-aurora t nil nil (command jobpath) "Run `aurora COMMAND JOBPATH' with the config in current buffer." "aurora-config-mode.el") (aurora-config-inspect t t (interactive (list (aurora-config-read-jobpath))) (jobpath) "Run `aurora inspect JOBPATH' with the config in current buffer." "aurora-config-mode.el") (aurora-config-diff t t (interactive (list (aurora-config-read-jobpath))) (jobpath) "Run `aurora diff JOBPATH' with the config in current buffer." "aurora-config-mode.el") (aurora-config-mode t t (interactive nil) nil "Major mode for Aurora configuration files, derived from Python mode.\n\nIn addition to any hooks its parent mode `python-mode' might have run,\nthis mode runs the hook `aurora-config-mode-hook', as the final or\npenultimate step during initialization.\n\n\\{aurora-config-mode-map}" "aurora-config-mode.el"))"#
-    ]],
+            r#"OK ((aurora-config-read-jobpath t nil nil nil "Read job path from minibuffer with history defaulting to buffer local last used." "aurora-config-mode.el") (aurora-config-run-aurora t nil nil (command jobpath) "Run `aurora COMMAND JOBPATH' with the config in current buffer." "aurora-config-mode.el") (aurora-config-inspect t t (interactive (list (aurora-config-read-jobpath))) (jobpath) "Run `aurora inspect JOBPATH' with the config in current buffer." "aurora-config-mode.el") (aurora-config-diff t t (interactive (list (aurora-config-read-jobpath))) (jobpath) "Run `aurora diff JOBPATH' with the config in current buffer." "aurora-config-mode.el") (aurora-config-mode t t (interactive nil) nil "Major mode for Aurora configuration files, derived from Python mode.\n\nIn addition to any hooks its parent mode `python-mode' might have run,\nthis mode runs the hook `aurora-config-mode-hook', as the final or\npenultimate step during initialization.\n\n\\{aurora-config-mode-map}" "aurora-config-mode.el"))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_declared_constants_state_and_keymap_have_exact_contracts() -> ParityBatchCase {
+fn aurora_config_mode_declared_constants_state_and_keymap_have_exact_contracts() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "aurora_config_mode_declared_constants_state_and_keymap_have_exact_contracts",
         r##"(list
@@ -184,12 +190,13 @@ fn aurora_config_mode_declared_constants_state_and_keymap_have_exact_contracts()
              'defvar))))"##,
         true,
         expect![[
-        r#"OK (((aurora-config-aurora-struct-keywords t ("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") t ("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") t nil nil nil "aurora-config-mode.el") (aurora-config-pystachio-struct-keywords t ("Enum" "Integer" "List" "Map" "String" "Struct") t ("Enum" "Integer" "List" "Map" "String" "Struct") t nil nil nil "aurora-config-mode.el") (aurora-config-font-lock-keywords t (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) t (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) t nil nil nil "aurora-config-mode.el") (aurora-config-last-job-path t "smf1/" t "smf1/" t t nil nil "aurora-config-mode.el")) (t (keymap (100 . aurora-config-diff) (105 . aurora-config-inspect)) aurora-config-inspect aurora-config-diff nil "`aurora-config-mode' key map." "aurora-config-mode.el"))"#
-    ]],
+            r#"OK (((aurora-config-aurora-struct-keywords t ("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") t ("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") t nil nil nil "aurora-config-mode.el") (aurora-config-pystachio-struct-keywords t ("Enum" "Integer" "List" "Map" "String" "Struct") t ("Enum" "Integer" "List" "Map" "String" "Struct") t nil nil nil "aurora-config-mode.el") (aurora-config-font-lock-keywords t (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) t (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) t nil nil nil "aurora-config-mode.el") (aurora-config-last-job-path t "smf1/" t "smf1/" t t nil nil "aurora-config-mode.el")) (t (keymap (100 . aurora-config-diff) (105 . aurora-config-inspect)) aurora-config-inspect aurora-config-diff nil "`aurora-config-mode' key map." "aurora-config-mode.el"))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_source_reloads_preserve_defvars_reset_constants_and_deduplicate_file_rules() -> ParityBatchCase {
+fn aurora_config_mode_source_reloads_preserve_defvars_reset_constants_and_deduplicate_file_rules()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_source_reloads_preserve_defvars_reset_constants_and_deduplicate_file_rules",
         r##"(let ((source
@@ -240,12 +247,13 @@ fn aurora_config_mode_source_reloads_preserve_defvars_reset_constants_and_dedupl
               "\\.mesos\\'"))))"##,
         true,
         expect![[
-        r#"OK (("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") ("Enum" "Integer" "List" "Map" "String" "Struct") (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) "fixture/default" fixture-command (1 1))"#
-    ]],
+            r#"OK (("HealthCheckConfig" "Job" "Process" "JVMProcess" "Resources" "SequentialTask" "Service" "Task" "UpdateConfig") ("Enum" "Integer" "List" "Map" "String" "Struct") (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) "fixture/default" fixture-command (1 1))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_generated_autoloads_register_files_commands_prefixes_and_history() -> ParityBatchCase {
+fn aurora_config_mode_generated_autoloads_register_files_commands_prefixes_and_history()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_generated_autoloads_register_files_commands_prefixes_and_history",
         r##"(let* ((history
@@ -309,8 +317,8 @@ fn aurora_config_mode_generated_autoloads_register_files_commands_prefixes_and_h
               aurora-config-last-job-path))))"##,
         true,
         expect![[
-        r#"OK (t nil ((defun . aurora-config-inspect) (defun . aurora-config-diff) (defun . aurora-config-mode) (provide . aurora-config-mode-autoloads)) nil (("\\.mesos\\'" . aurora-config-mode) ("\\.aurora\\'" . aurora-config-mode)) ((aurora-config-inspect t "aurora-config-mode" nil t "[Arg list not available until function definition is loaded.]") (aurora-config-diff t "aurora-config-mode" nil t "[Arg list not available until function definition is loaded.]") (aurora-config-mode t "aurora-config-mode" nil t "[Arg list not available until function definition is loaded.]")) ((aurora-config-read-jobpath nil nil) (aurora-config-run-aurora nil nil) (aurora-config-last-job-path nil nil)))"#
-    ]],
+            r#"OK (t nil ((defun . aurora-config-inspect) (defun . aurora-config-diff) (defun . aurora-config-mode) (provide . aurora-config-mode-autoloads)) nil (("\\.mesos\\'" . aurora-config-mode) ("\\.aurora\\'" . aurora-config-mode)) ((aurora-config-inspect t "aurora-config-mode" nil t "[Arg list not available until function definition is loaded.]") (aurora-config-diff t "aurora-config-mode" nil t "[Arg list not available until function definition is loaded.]") (aurora-config-mode t "aurora-config-mode" nil t "[Arg list not available until function definition is loaded.]")) ((aurora-config-read-jobpath nil nil) (aurora-config-run-aurora nil nil) (aurora-config-last-job-path nil nil)))"#
+        ]],
     )
 }
 
@@ -328,8 +336,7 @@ fn registry_aurora_config_mode_batch() {
 
 #[test]
 fn registry_aurora_config_mode_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        aurora_config_mode_generated_autoloads_register_files_commands_prefixes_and_history(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![aurora_config_mode_generated_autoloads_register_files_commands_prefixes_and_history()];
     assert_aurora_config_mode_autoload_batch(&cases);
 }

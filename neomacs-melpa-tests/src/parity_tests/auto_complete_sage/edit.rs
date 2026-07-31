@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_sage_batch};
 
-fn auto_complete_sage_edit_generated_prefixes_use_cached_and_fresh_completion_states() -> ParityBatchCase {
+fn auto_complete_sage_edit_generated_prefixes_use_cached_and_fresh_completion_states()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_edit_generated_prefixes_use_cached_and_fresh_completion_states",
         r##"(with-temp-buffer
@@ -41,12 +42,13 @@ fn auto_complete_sage_edit_generated_prefixes_use_cached_and_fresh_completion_st
                                     ,(nth 1 states)))))))"##,
         true,
         expect![[
-        r#"OK ((ac-sage-edit--sage-commands-prefix 8 ((interface . "sage") (types "interface")) 0) (ac-sage-edit--modules-prefix 8 #1=((interface . "sage") (types "modules")) 1) (ac-sage-edit--vars-in-module-prefix 8 ((interface . "sage") (types "vars-in-module")) 1) (ac-sage-edit--sage-commands-prefix nil #1# 1))"#
-    ]],
+            r#"OK ((ac-sage-edit--sage-commands-prefix 8 ((interface . "sage") (types "interface")) 0) (ac-sage-edit--modules-prefix 8 #1=((interface . "sage") (types "modules")) 1) (ac-sage-edit--vars-in-module-prefix 8 ((interface . "sage") (types "vars-in-module")) 1) (ac-sage-edit--sage-commands-prefix nil #1# 1))"#
+        ]],
     )
 }
 
-fn auto_complete_sage_edit_source_initializers_select_process_buffer_once_and_forward_state() -> ParityBatchCase {
+fn auto_complete_sage_edit_source_initializers_select_process_buffer_once_and_forward_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_edit_source_initializers_select_process_buffer_once_and_forward_state",
         r##"(let ((ac-sage-edit:-state-cached
@@ -90,12 +92,13 @@ fn auto_complete_sage_edit_source_initializers_select_process_buffer_once_and_fo
                              (nreverse calls)))"##,
         true,
         expect![[
-        r#"OK ((:select nil nil) (:init t #1=((interface . "sage") (prefix . 1) (types "interface")) " *chosen-sage*") (:init nil #1# " *chosen-sage*"))"#
-    ]],
+            r#"OK ((:select nil nil) (:init t #1=((interface . "sage") (prefix . 1) (types "interface")) " *chosen-sage*") (:init nil #1# " *chosen-sage*"))"#
+        ]],
     )
 }
 
-fn auto_complete_sage_edit_candidates_gate_missing_dead_and_unfinished_process_buffers() -> ParityBatchCase {
+fn auto_complete_sage_edit_candidates_gate_missing_dead_and_unfinished_process_buffers()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_edit_candidates_gate_missing_dead_and_unfinished_process_buffers",
         r##"(let ((live-buffer
@@ -163,8 +166,8 @@ fn auto_complete_sage_edit_candidates_gate_missing_dead_and_unfinished_process_b
                                (kill-buffer live-buffer))))"##,
         true,
         expect![[
-        r#"OK (((nil nil) nil nil) ((nil nil) nil nil) ((nil t) nil (:redirect)) ((t nil) nil (:redirect :output)) ((t t) ("factor" "find_root") (:redirect :output (:candidate :state ((interface . "sage") (types "interface"))))))"#
-    ]],
+            r#"OK (((nil nil) nil nil) ((nil nil) nil nil) ((nil t) nil (:redirect)) ((t nil) nil (:redirect :output)) ((t t) ("factor" "find_root") (:redirect :output (:candidate :state ((interface . "sage") (types "interface"))))))"#
+        ]],
     )
 }
 
@@ -209,12 +212,13 @@ fn auto_complete_sage_edit_candidates_forward_exact_cached_state_on_success() ->
                              (kill-buffer process-buffer)))"##,
         true,
         expect![[
-        r#"OK (("matrix" "matrix_space" "matrix_modn_dense") ((:state ((interface . "sage") (prefix . 7) (module-name . "sage.matrix") (types "modules" "vars-in-module")))) t)"#
-    ]],
+            r#"OK (("matrix" "matrix_space" "matrix_modn_dense") ((:state ((interface . "sage") (prefix . 7) (module-name . "sage.matrix") (types "modules" "vars-in-module")))) t)"#
+        ]],
     )
 }
 
-fn auto_complete_sage_complete_on_dot_prefix_covers_words_whitespace_dots_and_bob() -> ParityBatchCase {
+fn auto_complete_sage_complete_on_dot_prefix_covers_words_whitespace_dots_and_bob()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_complete_on_dot_prefix_covers_words_whitespace_dots_and_bob",
         r##"(mapcar
@@ -241,12 +245,13 @@ fn auto_complete_sage_complete_on_dot_prefix_covers_words_whitespace_dots_and_bo
                              ("" t)))"##,
         true,
         expect![[
-        r#"OK ((("matrix.rank" nil) 12 (:value 8)) (("matrix." nil) 8 (:value nil)) (("matrix." t) 8 (:value 8)) (("matrix. " t) 9 (:value nil)) (("alpha beta" t) 11 (:value 7)) (("" nil) 1 (:value nil)) (("" t) 1 (:signal wrong-type-argument (number-or-marker-p nil))))"#
-    ]],
+            r#"OK ((("matrix.rank" nil) 12 (:value 8)) (("matrix." nil) 8 (:value nil)) (("matrix." t) 8 (:value 8)) (("matrix. " t) 9 (:value nil)) (("alpha beta" t) 11 (:value 7)) (("" nil) 1 (:value nil)) (("" t) 1 (:signal wrong-type-argument (number-or-marker-p nil))))"#
+        ]],
     )
 }
 
-fn auto_complete_sage_edit_add_sources_appends_exact_order_and_preserves_duplicates() -> ParityBatchCase {
+fn auto_complete_sage_edit_add_sources_appends_exact_order_and_preserves_duplicates()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_edit_add_sources_appends_exact_order_and_preserves_duplicates",
         r##"(let ((ac-sources
@@ -271,8 +276,8 @@ fn auto_complete_sage_edit_add_sources_appends_exact_order_and_preserves_duplica
                                  ac-source-sage-words-in-buffers)))))"##,
         true,
         expect![
-        "OK ((ac-source-filename ac-source-sage-modules . #1=(ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers)) (ac-source-filename ac-source-sage-modules ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers . #1#) ((ac-source-filename 1) (ac-source-sage-modules 3) (ac-source-sage-commands 2) (ac-source-sage-words-in-buffers 2)))"
-    ],
+            "OK ((ac-source-filename ac-source-sage-modules . #1=(ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers)) (ac-source-filename ac-source-sage-modules ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers . #1#) ((ac-source-filename 1) (ac-source-sage-modules 3) (ac-source-sage-commands 2) (ac-source-sage-words-in-buffers 2)))"
+        ],
     )
 }
 
@@ -344,12 +349,13 @@ fn auto_complete_sage_words_source_filters_real_buffers_by_sage_major_modes() ->
                                text-buffer))))"##,
         true,
         expect![[
-        r#"OK ((" *acsage-words-sage*" " *acsage-words-edit*" nil) ((" *acsage-words-sage*" sage-shell-mode sage-shell-mode) (" *acsage-words-edit*" sage-shell:sage-mode sage-shell:sage-mode) (" *acsage-words-text*" text-mode nil)))"#
-    ]],
+            r#"OK ((" *acsage-words-sage*" " *acsage-words-edit*" nil) ((" *acsage-words-sage*" sage-shell-mode sage-shell-mode) (" *acsage-words-edit*" sage-shell:sage-mode sage-shell:sage-mode) (" *acsage-words-text*" text-mode nil)))"#
+        ]],
     )
 }
 
-fn auto_complete_sage_real_edit_menu_completes_a_sage_command_through_target_source() -> ParityBatchCase {
+fn auto_complete_sage_real_edit_menu_completes_a_sage_command_through_target_source()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_real_edit_menu_completes_a_sage_command_through_target_source",
         r##"(let ((process-buffer
@@ -435,8 +441,8 @@ fn auto_complete_sage_real_edit_menu_completes_a_sage_command_through_target_sou
                              (kill-buffer process-buffer)))"##,
         true,
         expect![[
-        r#"OK (("fac" ("factor" "factorial" "factor_integer") t "factor") "result = factorial" ((:init nil #1=((interface . "sage") (prefix . 1) (types "interface"))) (:candidates :state #1#)) nil nil nil)"#
-    ]],
+            r#"OK (("fac" ("factor" "factorial" "factor_integer") t "factor") "result = factorial" ((:init nil #1=((interface . "sage") (prefix . 1) (types "interface"))) (:candidates :state #1#)) nil nil nil)"#
+        ]],
     )
 }
 

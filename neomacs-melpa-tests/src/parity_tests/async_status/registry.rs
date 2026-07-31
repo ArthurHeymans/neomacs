@@ -22,8 +22,8 @@ fn installed_descriptor_matches_the_exact_pin_commit_and_dependencies() -> Parit
    (package-desc-extras description)))"##,
         true,
         expect![[
-        r#"OK (async-status "20230821.204" "A package for indicator support." ((emacs "28.1") (svg-lib "0.2.7") (posframe "1.4.2")) ((:maintainers ("Jason Kim" . "sukbeom.kim@gmail.com")) (:authors ("Jason Kim" . "sukbeom.kim@gmail.com")) (:keywords "tools" "async") (:revdesc . "d2f5becc9850") (:commit . "d2f5becc9850c26aa71fb581f9fc389eac740f52") (:url . "https://github.com/seokbeomkim/async-status")))"#
-    ]],
+            r#"OK (async-status "20230821.204" "A package for indicator support." ((emacs "28.1") (svg-lib "0.2.7") (posframe "1.4.2")) ((:maintainers ("Jason Kim" . "sukbeom.kim@gmail.com")) (:authors ("Jason Kim" . "sukbeom.kim@gmail.com")) (:keywords "tools" "async") (:revdesc . "d2f5becc9850") (:commit . "d2f5becc9850c26aa71fb581f9fc389eac740f52") (:url . "https://github.com/seokbeomkim/async-status")))"#
+        ]],
     )
 }
 
@@ -46,8 +46,8 @@ fn packaged_source_has_the_verified_melpa_payload_content_hash() -> ParityBatchC
     (file-attributes source))))"##,
         true,
         expect![
-        "OK (\"async-status.el\" \"ec9fe3f25a13458e26d206f12e61590ab2598fb067f9775db1ce26bcbd40df9b\" 8659)"
-    ],
+            "OK (\"async-status.el\" \"ec9fe3f25a13458e26d206f12e61590ab2598fb067f9775db1ce26bcbd40df9b\" 8659)"
+        ],
     )
 }
 
@@ -81,8 +81,8 @@ fn complete_declared_function_surface_is_bound_after_loading() -> ParityBatchCas
    async-status-remove-item-from-bar))"##,
         true,
         expect![[
-        r#"OK ((async-status--get-absolute-path-by-id t t (id)) (async-status-req-id t t (name)) (async-status-clean-up t t (id)) (async-status--get-msg-val t t (id)) (async-status-safely-set-msg-val t t (id val &optional threshold)) (async-status-set-msg-val t t (id val)) (async-status-show t t nil) (async-status-hide t t (&optional force)) (async-status--print-truncated-string t t (str max-length)) (async-status--redraw-item t t (item)) (async-status--refresh-status-bar t t nil) (async-status--update-items t t (event)) (async-status--find-item-by-msgid t t (id)) (async-status--remove-item t t (item)) (async-status-add-item-to-bar t t (id &optional label)) (async-status-remove-item-from-bar t t (id)))"#
-    ]],
+            r#"OK ((async-status--get-absolute-path-by-id t t (id)) (async-status-req-id t t (name)) (async-status-clean-up t t (id)) (async-status--get-msg-val t t (id)) (async-status-safely-set-msg-val t t (id val &optional threshold)) (async-status-set-msg-val t t (id val)) (async-status-show t t nil) (async-status-hide t t (&optional force)) (async-status--print-truncated-string t t (str max-length)) (async-status--redraw-item t t (item)) (async-status--refresh-status-bar t t nil) (async-status--update-items t t (event)) (async-status--find-item-by-msgid t t (id)) (async-status--remove-item t t (item)) (async-status-add-item-to-bar t t (id &optional label)) (async-status-remove-item-from-bar t t (id)))"#
+        ]],
     )
 }
 
@@ -106,8 +106,8 @@ fn generated_item_struct_surface_is_complete_and_callable() -> ParityBatchCase {
    async-status--item-label))"##,
         true,
         expect![[
-        r#"OK ((async-status--item-p t (x)) (make-async-status--item t (&rest --cl-rest--)) (copy-async-status--item t (arg)) (async-status--item-msg-id t (x)) (async-status--item-fs-watcher-id t (x)) (async-status--item-file-path t (x)) (async-status--item-progress t (x)) (async-status--item-label t (x)))"#
-    ]],
+            r#"OK ((async-status--item-p t (x)) (make-async-status--item t (&rest --cl-rest--)) (copy-async-status--item t (arg)) (async-status--item-msg-id t (x)) (async-status--item-fs-watcher-id t (x)) (async-status--item-file-path t (x)) (async-status--item-progress t (x)) (async-status--item-label t (x)))"#
+        ]],
     )
 }
 
@@ -129,8 +129,8 @@ fn variables_custom_types_defaults_and_group_metadata_match() -> ParityBatchCase
  (get 'async-status 'custom-links))"##,
         true,
         expect![[
-        r#"OK ("async-status-" 462 150.0 20.0 nil integer float float nil ((async-status-indicator-width custom-variable) (async-status-progress-bar-width custom-variable) (async-status-progress-bar-height custom-variable)) "An indicator to display the status of Emacs processes." ((url-link "https://github.com/seokbeomKim/async-status")))"#
-    ]],
+            r#"OK ("async-status-" 462 150.0 20.0 nil integer float float nil ((async-status-indicator-width custom-variable) (async-status-progress-bar-width custom-variable) (async-status-progress-bar-height custom-variable)) "An indicator to display the status of Emacs processes." ((url-link "https://github.com/seokbeomKim/async-status")))"#
+        ]],
     )
 }
 
@@ -173,8 +173,8 @@ fn item_constructor_accessors_copy_and_mutation_have_value_semantics() -> Parity
     (async-status--item-label copy))))"##,
         true,
         expect![[
-        r#"OK (t t nil nil ("job-a" t "job-a" 0.25 "Compile") ("job-a" t "job-a" 0.75 "Link"))"#
-    ]],
+            r#"OK (t t nil nil ("job-a" t "job-a" 0.25 "Compile") ("job-a" t "job-a" 0.75 "Link"))"#
+        ]],
     )
 }
 
@@ -227,7 +227,8 @@ fn repeated_source_loads_preserve_customized_values_and_existing_defvar_state() 
     )
 }
 
-fn generated_autoload_file_registers_only_its_feature_without_eager_runtime_loading() -> ParityBatchCase {
+fn generated_autoload_file_registers_only_its_feature_without_eager_runtime_loading()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "generated_autoload_file_registers_only_its_feature_without_eager_runtime_loading",
         r##"(let ((history
@@ -243,8 +244,8 @@ fn generated_autoload_file_registers_only_its_feature_without_eager_runtime_load
    (cdr history)))"##,
         true,
         expect![[
-        r#"OK (t nil nil nil "async-status-autoloads.el" ((provide . async-status-autoloads)))"#
-    ]],
+            r#"OK (t nil nil nil "async-status-autoloads.el" ((provide . async-status-autoloads)))"#
+        ]],
     )
 }
 
@@ -265,8 +266,7 @@ fn registry_async_status_batch() {
 
 #[test]
 fn registry_async_status_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        generated_autoload_file_registers_only_its_feature_without_eager_runtime_loading(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![generated_autoload_file_registers_only_its_feature_without_eager_runtime_loading()];
     assert_async_status_autoload_batch(&cases);
 }

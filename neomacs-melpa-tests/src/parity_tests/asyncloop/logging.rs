@@ -21,8 +21,8 @@ fn asyncloop_log_formats_and_returns_text_even_without_a_log_buffer() -> ParityB
                "wrong")))))"##,
         true,
         expect![[
-        r#"OK ("Processed 3 records: (:status ok)" nil (:signal error ("Format specifier doesn’t match argument type")))"#
-    ]],
+            r#"OK ("Processed 3 records: (:status ok)" nil (:signal error ("Format specifier doesn’t match argument type")))"#
+        ]],
     )
 }
 
@@ -52,8 +52,8 @@ fn asyncloop_log_appends_timestamped_multiline_workflow_messages_in_order() -> P
            (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ("Indexed 12 files" "Saved manifest\nwith detail" t "<TIME>: Indexed 12 files\n<TIME>: Saved manifest\nwith detail\n")"#
-    ]],
+            r#"OK ("Indexed 12 files" "Saved manifest\nwith detail" t "<TIME>: Indexed 12 files\n<TIME>: Saved manifest\nwith detail\n")"#
+        ]],
     )
 }
 
@@ -84,7 +84,8 @@ fn asyncloop_log_mode_initializes_practical_buffer_and_quit_key_contract() -> Pa
     )
 }
 
-fn asyncloop_log_mode_runs_hook_and_activates_generated_syntax_and_abbrev_tables() -> ParityBatchCase {
+fn asyncloop_log_mode_runs_hook_and_activates_generated_syntax_and_abbrev_tables() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asyncloop_log_mode_runs_hook_and_activates_generated_syntax_and_abbrev_tables",
         r##"(let ((asyncloop-log-mode-abbrev-table
@@ -187,8 +188,8 @@ fn asyncloop_keyboard_quit_cancels_only_the_loop_owned_by_current_log_buffer() -
            (kill-buffer buffer-b)))"##,
         true,
         expect![[
-        r#"OK (nil (nil nil nil nil) ((b) t t t) "<TIME>: Loop reset due to quit in buffer  *asyncloop-quit-a*\n" "")"#
-    ]],
+            r#"OK (nil (nil nil nil nil) ((b) t t t) "<TIME>: Loop reset due to quit in buffer  *asyncloop-quit-a*\n" "")"#
+        ]],
     )
 }
 
@@ -224,8 +225,8 @@ fn asyncloop_clock_funcall_logs_result_and_preserves_callback_side_effects() -> 
            (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ("Took <ELAPSED>s: lambda: (:indexed 4 :skipped 1)" (t) "<TIME>: Took <ELAPSED>s: lambda: (:indexed 4 :skipped 1)\n")"#
-    ]],
+            r#"OK ("Took <ELAPSED>s: lambda: (:indexed 4 :skipped 1)" (t) "<TIME>: Took <ELAPSED>s: lambda: (:indexed 4 :skipped 1)\n")"#
+        ]],
     )
 }
 
@@ -256,8 +257,8 @@ fn asyncloop_clock_funcall_logs_and_resignals_exact_worker_error() -> ParityBatc
             logged)))"##,
         true,
         expect![[
-        r#"OK ((:signal file-error ("Cannot index" "/missing")) ("During lambda: (file-error \"Cannot index\" \"/missing\")"))"#
-    ]],
+            r#"OK ((:signal file-error ("Cannot index" "/missing")) ("During lambda: (file-error \"Cannot index\" \"/missing\")"))"#
+        ]],
     )
 }
 

@@ -134,8 +134,8 @@ fn magit_status_section_visibility_commands_preserve_exact_visible_text() -> Par
                  (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK ("Head:     master dummy\n\nRecent commits" "Head:     master dummy\n\nRecent commits\n<HASH> master dummy" "Head:     master dummy\n\nRecent commits")"#
-    ]],
+            r#"OK ("Head:     master dummy\n\nRecent commits" "Head:     master dummy\n\nRecent commits\n<HASH> master dummy" "Head:     master dummy\n\nRecent commits")"#
+        ]],
     )
 }
 

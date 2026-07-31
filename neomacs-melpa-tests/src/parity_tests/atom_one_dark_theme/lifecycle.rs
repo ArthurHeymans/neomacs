@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atom_one_dark_theme_batch};
 
-fn atom_one_dark_theme_enable_applies_faces_and_values_then_disable_restores_deterministic_base() -> ParityBatchCase {
+fn atom_one_dark_theme_enable_applies_faces_and_values_then_disable_restores_deterministic_base()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atom_one_dark_theme_enable_applies_faces_and_values_then_disable_restores_deterministic_base",
         r##"(let ((base 'atom-one-dark-parity-base)
@@ -99,8 +100,8 @@ fn atom_one_dark_theme_enable_applies_faces_and_values_then_disable_restores_det
             (equal before after))))"##,
         true,
         expect![[
-        r##"OK (((atom-one-dark-parity-base) "#eeeeee" "#101010" "#112233" bold "#223344" "#334455" "base-fci" #1=[[1 2 3]] #2=["b0" "b1"]) ((atom-one-dark atom-one-dark-parity-base) "#ABB2BF" "#282C34" "#C678DD" normal "#9DA5B4" "#21252B" "#3E4451" [[229 192 123] [97 175 239] [209 154 102] [224 108 117] [152 195 121] [198 120 221] [86 182 194]] ["#282C34" "#E06C75" "#98C379" "#E5C07B" "#61AFEF" "#C678DD" "#56B6C2" "#ABB2BF"]) ((atom-one-dark-parity-base) "#eeeeee" "#101010" "#112233" bold "#223344" "#334455" "base-fci" #1# #2#) t)"##
-    ]],
+            r##"OK (((atom-one-dark-parity-base) "#eeeeee" "#101010" "#112233" bold "#223344" "#334455" "base-fci" #1=[[1 2 3]] #2=["b0" "b1"]) ((atom-one-dark atom-one-dark-parity-base) "#ABB2BF" "#282C34" "#C678DD" normal "#9DA5B4" "#21252B" "#3E4451" [[229 192 123] [97 175 239] [209 154 102] [224 108 117] [152 195 121] [198 120 221] [86 182 194]] ["#282C34" "#E06C75" "#98C379" "#E5C07B" "#61AFEF" "#C678DD" "#56B6C2" "#ABB2BF"]) ((atom-one-dark-parity-base) "#eeeeee" "#101010" "#112233" bold "#223344" "#334455" "base-fci" #1# #2#) t)"##
+        ]],
     )
 }
 
@@ -154,8 +155,8 @@ fn atom_one_dark_theme_enable_disable_enable_is_stable_and_idempotent() -> Parit
             (equal first second))))"##,
         true,
         expect![[
-        r##"OK (((atom-one-dark) 1 "#ABB2BF" "#C678DD" "#3E4451") ((atom-one-dark) 1 "#ABB2BF" "#C678DD" "#3E4451") (nil nil) ((atom-one-dark) 1 "#ABB2BF" "#C678DD" "#3E4451") t t)"##
-    ]],
+            r##"OK (((atom-one-dark) 1 "#ABB2BF" "#C678DD" "#3E4451") ((atom-one-dark) 1 "#ABB2BF" "#C678DD" "#3E4451") (nil nil) ((atom-one-dark) 1 "#ABB2BF" "#C678DD" "#3E4451") t t)"##
+        ]],
     )
 }
 
@@ -210,12 +211,13 @@ fn atom_one_dark_theme_repeated_load_theme_does_not_grow_settings() -> ParityBat
                (equal first second)))"##,
         true,
         expect![[
-        r##"OK (463 ((atom-one-dark) 463 "#ABB2BF" "#3E4451") ((atom-one-dark) 463 "#ABB2BF" "#3E4451") t)"##
-    ]],
+            r##"OK (463 ((atom-one-dark) 463 "#ABB2BF" "#3E4451") ((atom-one-dark) 463 "#ABB2BF" "#3E4451") t)"##
+        ]],
     )
 }
 
-fn atom_one_dark_theme_optional_faces_defined_before_enable_receive_exact_values() -> ParityBatchCase {
+fn atom_one_dark_theme_optional_faces_defined_before_enable_receive_exact_values() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atom_one_dark_theme_optional_faces_defined_before_enable_receive_exact_values",
         r##"(let ((faces
@@ -260,8 +262,8 @@ fn atom_one_dark_theme_optional_faces_defined_before_enable_receive_exact_values
              (disable-theme 'atom-one-dark))))"##,
         true,
         expect![[
-        r##"OK ((company-tooltip (:foreground "#ABB2BF" "#ABB2BF") (:background "#121417" "#121417") (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (flycheck-error (:foreground unspecified unspecified) (:background unspecified unspecified) (:weight unspecified unspecified) (:underline #1=(:color "#FF6347" :style wave) #1#) (:inherit unspecified unspecified) (:box unspecified unspecified)) (helm-source-header (:foreground "#E5C07B" "#E5C07B") (:background "#282C34" "#282C34") (:weight bold bold) (:underline nil nil) (:inherit unspecified unspecified) (:box #2=(:line-width 6 :color "#282C34") #2#)) (ivy-current-match (:foreground unspecified unspecified) (:background "#3E4451" "#3E4451") (:weight normal normal) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (magit-section-heading (:foreground "#E5C07B" "#E5C07B") (:background unspecified unspecified) (:weight bold bold) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (notmuch-tag-unread (:foreground "#E06C75" "#E06C75") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (rainbow-delimiters-depth-6-face (:foreground "#E5C07B" "#E5C07B") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (web-mode-html-tag-face (:foreground "#E06C75" "#E06C75") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (tabbar-selected (:foreground "fixture-fg" "fixture-fg") (:background "fixture-bg" "fixture-bg") (:weight normal normal) (:underline nil nil) (:inherit unspecified unspecified) (:box unspecified unspecified)) (ruler-mode-current-column (:foreground "#528BFF" "#528BFF") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit ruler-mode-default ruler-mode-default) (:box unspecified unspecified)))"##
-    ]],
+            r##"OK ((company-tooltip (:foreground "#ABB2BF" "#ABB2BF") (:background "#121417" "#121417") (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (flycheck-error (:foreground unspecified unspecified) (:background unspecified unspecified) (:weight unspecified unspecified) (:underline #1=(:color "#FF6347" :style wave) #1#) (:inherit unspecified unspecified) (:box unspecified unspecified)) (helm-source-header (:foreground "#E5C07B" "#E5C07B") (:background "#282C34" "#282C34") (:weight bold bold) (:underline nil nil) (:inherit unspecified unspecified) (:box #2=(:line-width 6 :color "#282C34") #2#)) (ivy-current-match (:foreground unspecified unspecified) (:background "#3E4451" "#3E4451") (:weight normal normal) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (magit-section-heading (:foreground "#E5C07B" "#E5C07B") (:background unspecified unspecified) (:weight bold bold) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (notmuch-tag-unread (:foreground "#E06C75" "#E06C75") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (rainbow-delimiters-depth-6-face (:foreground "#E5C07B" "#E5C07B") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (web-mode-html-tag-face (:foreground "#E06C75" "#E06C75") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (tabbar-selected (:foreground "fixture-fg" "fixture-fg") (:background "fixture-bg" "fixture-bg") (:weight normal normal) (:underline nil nil) (:inherit unspecified unspecified) (:box unspecified unspecified)) (ruler-mode-current-column (:foreground "#528BFF" "#528BFF") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit ruler-mode-default ruler-mode-default) (:box unspecified unspecified)))"##
+        ]],
     )
 }
 
@@ -310,8 +312,8 @@ fn atom_one_dark_theme_enabled_specs_apply_to_optional_faces_defined_late() -> P
              (disable-theme 'atom-one-dark))))"##,
         true,
         expect![[
-        r##"OK ((company-tooltip-selection (:foreground "#ABB2BF" "#ABB2BF") (:background "#3E4451" "#3E4451") (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (flymake-warning (:foreground unspecified unspecified) (:background unspecified unspecified) (:weight unspecified unspecified) (:underline #1=(:color "#E2C08D" :style wave) #1#) (:inherit unspecified unspecified) (:box unspecified unspecified)) (helm-ff-directory (:foreground "#56B6C2" "#56B6C2") (:background "#282C34" "#282C34") (:weight bold bold) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (ivy-minibuffer-match-face-3 (:foreground "#98C379" "#98C379") (:background "#21252B" "#21252B") (:weight semi-bold semi-bold) (:underline unspecified unspecified) (:inherit ivy-minibuffer-match-face-2 ivy-minibuffer-match-face-2) (:box unspecified unspecified)) (magit-diff-hunk-heading (:foreground "#828997" "#828997") (:background "#3E4451" "#3E4451") (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (notmuch-search-date (:foreground "#C678DD" "#C678DD") (:background unspecified "#282C34") (:weight unspecified normal) (:underline unspecified nil) (:inherit default default) (:box unspecified nil)) (rainbow-delimiters-depth-11-face (:foreground "#C678DD" "#C678DD") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (web-mode-error-face (:foreground "#E06C75" "#E06C75") (:background "#21252B" "#21252B") (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (solaire-default-face (:foreground "late-fg" "late-fg") (:background "late-bg" "late-bg") (:weight normal normal) (:underline nil nil) (:inherit unspecified unspecified) (:box unspecified unspecified)) (undo-tree-visualizer-current-face (:foreground "#E06C75" "#E06C75") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)))"##
-    ]],
+            r##"OK ((company-tooltip-selection (:foreground "#ABB2BF" "#ABB2BF") (:background "#3E4451" "#3E4451") (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (flymake-warning (:foreground unspecified unspecified) (:background unspecified unspecified) (:weight unspecified unspecified) (:underline #1=(:color "#E2C08D" :style wave) #1#) (:inherit unspecified unspecified) (:box unspecified unspecified)) (helm-ff-directory (:foreground "#56B6C2" "#56B6C2") (:background "#282C34" "#282C34") (:weight bold bold) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (ivy-minibuffer-match-face-3 (:foreground "#98C379" "#98C379") (:background "#21252B" "#21252B") (:weight semi-bold semi-bold) (:underline unspecified unspecified) (:inherit ivy-minibuffer-match-face-2 ivy-minibuffer-match-face-2) (:box unspecified unspecified)) (magit-diff-hunk-heading (:foreground "#828997" "#828997") (:background "#3E4451" "#3E4451") (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (notmuch-search-date (:foreground "#C678DD" "#C678DD") (:background unspecified "#282C34") (:weight unspecified normal) (:underline unspecified nil) (:inherit default default) (:box unspecified nil)) (rainbow-delimiters-depth-11-face (:foreground "#C678DD" "#C678DD") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (web-mode-error-face (:foreground "#E06C75" "#E06C75") (:background "#21252B" "#21252B") (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)) (solaire-default-face (:foreground "late-fg" "late-fg") (:background "late-bg" "late-bg") (:weight normal normal) (:underline nil nil) (:inherit unspecified unspecified) (:box unspecified unspecified)) (undo-tree-visualizer-current-face (:foreground "#E06C75" "#E06C75") (:background unspecified unspecified) (:weight unspecified unspecified) (:underline unspecified unspecified) (:inherit unspecified unspecified) (:box unspecified unspecified)))"##
+        ]],
     )
 }
 
@@ -378,12 +380,13 @@ fn atom_one_dark_theme_stacks_over_base_theme_and_reveals_it_after_disable() -> 
          (list during after))"##,
         true,
         expect![[
-        r##"OK (((atom-one-dark atom-one-dark-parity-stack) "#ABB2BF" "#98C379" "#3E4451") ((atom-one-dark-parity-stack) "base-fg" "base-string" "base-rule"))"##
-    ]],
+            r##"OK (((atom-one-dark atom-one-dark-parity-stack) "#ABB2BF" "#98C379" "#3E4451") ((atom-one-dark-parity-stack) "base-fg" "base-string" "base-rule"))"##
+        ]],
     )
 }
 
-fn atom_one_dark_theme_duplicate_helm_grep_finish_resolves_later_source_setting() -> ParityBatchCase {
+fn atom_one_dark_theme_duplicate_helm_grep_finish_resolves_later_source_setting() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atom_one_dark_theme_duplicate_helm_grep_finish_resolves_later_source_setting",
         r##"(progn
@@ -409,8 +412,8 @@ fn atom_one_dark_theme_duplicate_helm_grep_finish_resolves_later_source_setting(
              (disable-theme 'atom-one-dark))))"##,
         true,
         expect![[
-        r##"OK ((((t (:foreground "#98C379"))) ((t (:foreground "#E06C75")))) ((:foreground "#98C379" "#98C379") (:background unspecified unspecified) (:inherit unspecified unspecified)))"##
-    ]],
+            r##"OK ((((t (:foreground "#98C379"))) ((t (:foreground "#E06C75")))) ((:foreground "#98C379" "#98C379") (:background unspecified unspecified) (:inherit unspecified unspecified)))"##
+        ]],
     )
 }
 
@@ -457,12 +460,13 @@ fn atom_one_dark_theme_nested_realgud_arrow_spec_enable_behavior_matches() -> Pa
                 'atom-one-dark)))))"##,
         true,
         expect![[
-        r##"OK ((:ok nil) (atom-one-dark) ((realgud-overlay-arrow1 (:foreground "#98C379" "#98C379") (:background unspecified unspecified) (:inherit unspecified unspecified)) (realgud-overlay-arrow2 (:foreground "fixture" "fixture") (:background unspecified unspecified) (:inherit unspecified unspecified)) (realgud-overlay-arrow3 (:foreground "#D19A66" "#D19A66") (:background unspecified unspecified) (:inherit unspecified unspecified))))"##
-    ]],
+            r##"OK ((:ok nil) (atom-one-dark) ((realgud-overlay-arrow1 (:foreground "#98C379" "#98C379") (:background unspecified unspecified) (:inherit unspecified unspecified)) (realgud-overlay-arrow2 (:foreground "fixture" "fixture") (:background unspecified unspecified) (:inherit unspecified unspecified)) (realgud-overlay-arrow3 (:foreground "#D19A66" "#D19A66") (:background unspecified unspecified) (:inherit unspecified unspecified))))"##
+        ]],
     )
 }
 
-fn atom_one_dark_theme_malformed_lifecycle_requests_preserve_registered_settings() -> ParityBatchCase {
+fn atom_one_dark_theme_malformed_lifecycle_requests_preserve_registered_settings() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atom_one_dark_theme_malformed_lifecycle_requests_preserve_registered_settings",
         r##"(let ((settings
@@ -495,8 +499,8 @@ fn atom_one_dark_theme_malformed_lifecycle_requests_preserve_registered_settings
           (length settings)))"##,
         true,
         expect![[
-        r#"OK ((:signal error ("Undefined Custom theme atom-one-dark-missing")) (:ok nil) (:signal error ("Unable to find theme file for ‘atom-one-dark-missing’")) (atom-one-dark user changed) nil t 463)"#
-    ]],
+            r#"OK ((:signal error ("Undefined Custom theme atom-one-dark-missing")) (:ok nil) (:signal error ("Unable to find theme file for ‘atom-one-dark-missing’")) (atom-one-dark user changed) nil t 463)"#
+        ]],
     )
 }
 

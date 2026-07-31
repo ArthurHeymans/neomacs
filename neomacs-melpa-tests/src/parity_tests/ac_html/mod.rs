@@ -125,10 +125,5 @@ pub(crate) fn assert_ac_html_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ac_html_parity` cases (2a).
 pub(crate) fn assert_ac_html_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ac_html_oracle(),
-        &name,
-        "ac_html_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ac_html_oracle(), &name, "ac_html_parity", cases);
 }

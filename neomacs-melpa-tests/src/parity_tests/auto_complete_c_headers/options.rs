@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_c_headers_batch};
 
-fn auto_complete_c_headers_default_directory_provider_returns_configured_value_by_identity() -> ParityBatchCase {
+fn auto_complete_c_headers_default_directory_provider_returns_configured_value_by_identity()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_default_directory_provider_returns_configured_value_by_identity",
         r##"(let ((achead:include-directories
@@ -22,7 +23,8 @@ fn auto_complete_c_headers_default_directory_provider_returns_configured_value_b
     )
 }
 
-fn auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidate_scan() -> ParityBatchCase {
+fn auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidate_scan()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidate_scan",
         r##"(let* ((calls 0)
@@ -43,7 +45,8 @@ fn auto_complete_c_headers_custom_directory_provider_is_called_once_per_candidat
     )
 }
 
-fn auto_complete_c_headers_extracts_include_options_in_order_with_empty_and_duplicate_values() -> ParityBatchCase {
+fn auto_complete_c_headers_extracts_include_options_in_order_with_empty_and_duplicate_values()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_extracts_include_options_in_order_with_empty_and_duplicate_values",
         r##"(achead:get-include-directories-from-options
@@ -78,7 +81,8 @@ fn auto_complete_c_headers_include_option_matching_is_strictly_case_sensitive() 
     )
 }
 
-fn auto_complete_c_headers_option_parser_signals_on_non_string_members_after_prior_matches() -> ParityBatchCase {
+fn auto_complete_c_headers_option_parser_signals_on_non_string_members_after_prior_matches()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_option_parser_signals_on_non_string_members_after_prior_matches",
         r##"(list
@@ -95,7 +99,8 @@ fn auto_complete_c_headers_option_parser_signals_on_non_string_members_after_pri
     )
 }
 
-fn auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffix_free_cpp_names() -> ParityBatchCase {
+fn auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffix_free_cpp_names()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffix_free_cpp_names",
         r##"(mapcar
@@ -119,12 +124,13 @@ fn auto_complete_c_headers_default_patterns_cover_supported_extensions_and_suffi
            "/sdk/space name"))"##,
         true,
         expect![[
-        r#"OK (("/sdk/vector" t) ("/sdk/unordered_map" t) ("/sdk/x86-vector" nil) ("/sdk/foo.h" t) ("/sdk/foo.hpp" t) ("/sdk/foo.hh" t) ("/sdk/foo.H" t) ("/sdk/foo.hxx" nil) ("/sdk/foo.h.in" nil) ("vector" nil) ("/sdk/vector2" nil) ("/sdk/.hidden.h" t) ("/sdk/space name" nil))"#
-    ]],
+            r#"OK (("/sdk/vector" t) ("/sdk/unordered_map" t) ("/sdk/x86-vector" nil) ("/sdk/foo.h" t) ("/sdk/foo.hpp" t) ("/sdk/foo.hh" t) ("/sdk/foo.H" t) ("/sdk/foo.hxx" nil) ("/sdk/foo.h.in" nil) ("vector" nil) ("/sdk/vector2" nil) ("/sdk/.hidden.h" t) ("/sdk/space name" nil))"#
+        ]],
     )
 }
 
-fn auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exact_semantics() -> ParityBatchCase {
+fn auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exact_semantics()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exact_semantics",
         r##"(list
@@ -150,7 +156,8 @@ fn auto_complete_c_headers_custom_pattern_order_nil_and_empty_patterns_have_exac
     )
 }
 
-fn auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragments() -> ParityBatchCase {
+fn auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragments",
         r##"(mapcar
@@ -176,8 +183,8 @@ fn auto_complete_c_headers_prefix_regexp_extracts_real_include_and_import_fragme
            "#include <nested/file.hpp>"))"##,
         true,
         expect![[
-        r##"OK (("#include <vector" "vector" 11 17) ("#include \"project/api" "project/api" 11 22) nil ("#include <ignored" "ignored" 13 20) nil ("#include <two" "two" 11 14) nil ("#include <nested/file.hpp" "nested/file.hpp" 11 26))"##
-    ]],
+            r##"OK (("#include <vector" "vector" 11 17) ("#include \"project/api" "project/api" 11 22) nil ("#include <ignored" "ignored" 13 20) nil ("#include <two" "two" 11 14) nil ("#include <nested/file.hpp" "nested/file.hpp" 11 26))"##
+        ]],
     )
 }
 

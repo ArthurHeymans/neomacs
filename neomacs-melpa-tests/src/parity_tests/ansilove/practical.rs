@@ -62,12 +62,13 @@ fn opening_and_converting_a_real_ansi_art_file_visits_the_exported_png() -> Pari
   result)"##,
         true,
         expect![[
-        r#"OK ((ansilove-mode "ansilove" t "gallery/release.ans" "\33[1;35mNEOMACS RELEASE\33[0m\n\33[36m████████\33[0m\n") (fundamental-mode "Fundamental" nil 1 68 "rendered/ansilove_<id>.png" png) t (137 80 78 71 13 10 26 10 0 0 0 13 73 72 68 82 0 0 0 1 0 0 0 1 8 4 0 0 0 181 28 12 2 0 0 0 11 73 68 65 84 120 218 99 100 248 15 0 1 5 1 1 39 24 227 102 0 0 0 0 73 69 78 68 174 66 96 130) "ansilove-fixture: converted 61 bytes\n" (ansilove-mode t nil "\33[1;35mNEOMACS RELEASE\33[0m\n\33[36m████████\33[0m\n"))"#
-    ]],
+            r#"OK ((ansilove-mode "ansilove" t "gallery/release.ans" "\33[1;35mNEOMACS RELEASE\33[0m\n\33[36m████████\33[0m\n") (fundamental-mode "Fundamental" nil 1 68 "rendered/ansilove_<id>.png" png) t (137 80 78 71 13 10 26 10 0 0 0 13 73 72 68 82 0 0 0 1 0 0 0 1 8 4 0 0 0 181 28 12 2 0 0 0 11 73 68 65 84 120 218 99 100 248 15 0 1 5 1 1 39 24 227 102 0 0 0 0 73 69 78 68 174 66 96 130) "ansilove-fixture: converted 61 bytes\n" (ansilove-mode t nil "\33[1;35mNEOMACS RELEASE\33[0m\n\33[36m████████\33[0m\n"))"#
+        ]],
     )
 }
 
-fn converting_an_unsaved_art_buffer_exports_png_and_removes_the_staged_text_file() -> ParityBatchCase {
+fn converting_an_unsaved_art_buffer_exports_png_and_removes_the_staged_text_file() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "converting_an_unsaved_art_buffer_exports_png_and_removes_the_staged_text_file",
         r##"(let* ((root
@@ -137,12 +138,13 @@ fn converting_an_unsaved_art_buffer_exports_png_and_removes_the_staged_text_file
   result)"##,
         true,
         expect![[
-        r#"OK ((" *ansilove-unsaved-art*" nil fundamental-mode 5 t "╔══════════════╗\n║ \33[1;32mBUILD READY\33[0m ║\n╚══════════════╝\n") (fundamental-mode 1 68 "rendered/ansilove_<id>.png") ("rendered/ansilove_<id>.png") (68 (137 80 78 71 13 10 26 10)) "ansilove-fixture: converted 129 bytes\n" nil)"#
-    ]],
+            r#"OK ((" *ansilove-unsaved-art*" nil fundamental-mode 5 t "╔══════════════╗\n║ \33[1;32mBUILD READY\33[0m ║\n╚══════════════╝\n") (fundamental-mode 1 68 "rendered/ansilove_<id>.png") ("rendered/ansilove_<id>.png") (68 (137 80 78 71 13 10 26 10)) "ansilove-fixture: converted 129 bytes\n" nil)"#
+        ]],
     )
 }
 
-fn editing_saving_and_reconverting_art_cleans_the_previous_export_before_viewing_the_new_one() -> ParityBatchCase {
+fn editing_saving_and_reconverting_art_cleans_the_previous_export_before_viewing_the_new_one()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "editing_saving_and_reconverting_art_cleans_the_previous_export_before_viewing_the_new_one",
         r##"(let* ((root
@@ -242,12 +244,13 @@ fn editing_saving_and_reconverting_art_cleans_the_previous_export_before_viewing
   result)"##,
         true,
         expect![[
-        r#"OK ((ansilove-mode t "\33[1;34mDEPLOYMENT DASHBOARD\33[0m\nstatus: waiting\n") (fundamental-mode nil nil) (fundamental-mode nil nil "\33[1;34mDEPLOYMENT DASHBOARD\33[0m\nstatus: waiting\ntarget: production\n") (ansilove-mode t nil "\33[1;34mDEPLOYMENT DASHBOARD\33[0m\nstatus: waiting\ntarget: production\n") ("rendered/ansilove_<id>.png" t) (nil "rendered/ansilove_<id>.png" t (68 (137 80 78 71 13 10 26 10))) ("rendered/ansilove_<id>.png") "ansilove-fixture: converted 67 bytes\nansilove-fixture: converted 67 bytes\n" "\33[1;34mDEPLOYMENT DASHBOARD\33[0m\nstatus: waiting\ntarget: production\n")"#
-    ]],
+            r#"OK ((ansilove-mode t "\33[1;34mDEPLOYMENT DASHBOARD\33[0m\nstatus: waiting\n") (fundamental-mode nil nil) (fundamental-mode nil nil "\33[1;34mDEPLOYMENT DASHBOARD\33[0m\nstatus: waiting\ntarget: production\n") (ansilove-mode t nil "\33[1;34mDEPLOYMENT DASHBOARD\33[0m\nstatus: waiting\ntarget: production\n") ("rendered/ansilove_<id>.png" t) (nil "rendered/ansilove_<id>.png" t (68 (137 80 78 71 13 10 26 10))) ("rendered/ansilove_<id>.png") "ansilove-fixture: converted 67 bytes\nansilove-fixture: converted 67 bytes\n" "\33[1;34mDEPLOYMENT DASHBOARD\33[0m\nstatus: waiting\ntarget: production\n")"#
+        ]],
     )
 }
 
-fn quick_example_downloads_local_art_once_then_reuses_it_for_a_second_real_conversion() -> ParityBatchCase {
+fn quick_example_downloads_local_art_once_then_reuses_it_for_a_second_real_conversion()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "quick_example_downloads_local_art_once_then_reuses_it_for_a_second_real_conversion",
         r##"(let* ((root
@@ -339,8 +342,8 @@ fn quick_example_downloads_local_art_once_then_reuses_it_for_a_second_real_conve
   result)"##,
         true,
         expect![[
-        r#"OK ((t (fundamental-mode 1 68 "session/ansilove_<id>.png")) (t (fundamental-mode 1 68 "session/ansilove_<id>.png")) (ansilove-mode t nil "\33[1;33mLOCAL EXAMPLE\33[0m\nframe: one\n") "\33[1;33mLOCAL EXAMPLE\33[0m\nframe: one\n" "\33[1;31mREMOTE CHANGED\33[0m\nframe: two\n" 2 ("session/ansilove_<id>.png" "session/ansilove_<id>.png") ((68 (137 80 78 71 13 10 26 10)) (68 (137 80 78 71 13 10 26 10))) "ansilove-fixture: converted 36 bytes\nansilove-fixture: converted 36 bytes\n")"#
-    ]],
+            r#"OK ((t (fundamental-mode 1 68 "session/ansilove_<id>.png")) (t (fundamental-mode 1 68 "session/ansilove_<id>.png")) (ansilove-mode t nil "\33[1;33mLOCAL EXAMPLE\33[0m\nframe: one\n") "\33[1;33mLOCAL EXAMPLE\33[0m\nframe: one\n" "\33[1;31mREMOTE CHANGED\33[0m\nframe: two\n" 2 ("session/ansilove_<id>.png" "session/ansilove_<id>.png") ((68 (137 80 78 71 13 10 26 10)) (68 (137 80 78 71 13 10 26 10))) "ansilove-fixture: converted 36 bytes\nansilove-fixture: converted 36 bytes\n")"#
+        ]],
     )
 }
 

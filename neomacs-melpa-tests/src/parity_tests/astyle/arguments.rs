@@ -28,8 +28,8 @@ fn format_args_use_style_c_mode_offset_and_complete_default_option_set() -> Pari
 "##,
         true,
         expect![[
-        r#"OK (("--style=linux" "--indent=spaces=3" . #1=("--pad-oper" "--pad-header" "--break-blocks" "--delete-empty-lines" "--align-pointer=type" "--align-reference=name")) #1# t)"#
-    ]],
+            r#"OK (("--style=linux" "--indent=spaces=3" . #1=("--pad-oper" "--pad-header" "--break-blocks" "--delete-empty-lines" "--align-pointer=type" "--align-reference=name")) #1# t)"#
+        ]],
     )
 }
 
@@ -57,8 +57,8 @@ fn format_args_prefer_explicit_indent_and_custom_arguments_in_declared_order() -
 "##,
         true,
         expect![[
-        r#"OK ("--style=allman" "--indent=spaces=8" "--suffix=none" "--convert-tabs" "--max-code-length=88")"#
-    ]],
+            r#"OK ("--style=allman" "--indent=spaces=8" "--suffix=none" "--convert-tabs" "--max-code-length=88")"#
+        ]],
     )
 }
 
@@ -118,8 +118,8 @@ fn format_args_are_recomputed_from_buffer_local_settings_for_each_buffer() -> Pa
 "##,
         true,
         expect![[
-        r#"OK (("--style=google" "--indent=spaces=4" "--first") ("--style=java" "--indent=spaces=6" "--second" "--third"))"#
-    ]],
+            r#"OK (("--style=google" "--indent=spaces=4" "--first") ("--style=java" "--indent=spaces=6" "--second" "--third"))"#
+        ]],
     )
 }
 
@@ -163,8 +163,8 @@ fn project_configuration_file_overrides_style_indent_and_custom_arguments() -> P
 "##,
         true,
         expect![[
-        r#"OK (("--options=[ORACLE-SANDBOX]/arguments/project/.astylerc") nil "[ORACLE-SANDBOX]/arguments/project/.astylerc")"#
-    ]],
+            r#"OK (("--options=[ORACLE-SANDBOX]/arguments/project/.astylerc") nil "[ORACLE-SANDBOX]/arguments/project/.astylerc")"#
+        ]],
     )
 }
 
@@ -213,8 +213,8 @@ fn nearest_configuration_and_custom_rc_name_win_in_nested_projects() -> ParityBa
 "##,
         true,
         expect![[
-        r#"OK (("--options=[ORACLE-SANDBOX]/arguments/nearest/module/style.conf") "[ORACLE-SANDBOX]/arguments/nearest/module/style.conf" "[ORACLE-SANDBOX]/arguments/nearest/style.conf")"#
-    ]],
+            r#"OK (("--options=[ORACLE-SANDBOX]/arguments/nearest/module/style.conf") "[ORACLE-SANDBOX]/arguments/nearest/module/style.conf" "[ORACLE-SANDBOX]/arguments/nearest/style.conf")"#
+        ]],
     )
 }
 

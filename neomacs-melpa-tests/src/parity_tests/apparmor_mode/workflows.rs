@@ -76,8 +76,8 @@ fn apparmor_mode_authors_indents_and_saves_a_real_nested_service_policy() -> Par
          result)"##,
         true,
         expect![[
-        r##"OK (:mode apparmor-mode :policy "# -*- mode: apparmor; -*-\nabi <abi/4.0>,\ninclude <tunables/global>\n\n@{a}=/srv/service\n\nprofile service /usr/bin/service flags=(enforce) {\n  capability dac_override,\n  network inet stream,\n  file Cx /usr/libexec/service-helper -> service-helper,\n  file mrix /usr/lib/@{multiarch}/service/plugins/**,\n  file r /dev/{,urandom,null},\n  dbus send\n      bus=session\n      path=/org/example/Service\n      interface=org.example.Service\n      member=Run\n      peer=(name=org.example.Client),\n  profile helper /usr/libexec/service-helper {\n    allow network,\n  }\n}\n" :disk "# -*- mode: apparmor; -*-\nabi <abi/4.0>,\ninclude <tunables/global>\n\n@{a}=/srv/service\n\nprofile service /usr/bin/service flags=(enforce) {\n  capability dac_override,\n  network inet stream,\n  file Cx /usr/libexec/service-helper -> service-helper,\n  file mrix /usr/lib/@{multiarch}/service/plugins/**,\n  file r /dev/{,urandom,null},\n  dbus send\n      bus=session\n      path=/org/example/Service\n      interface=org.example.Service\n      member=Run\n      peer=(name=org.example.Client),\n  profile helper /usr/libexec/service-helper {\n    allow network,\n  }\n}\n")"##
-    ]],
+            r##"OK (:mode apparmor-mode :policy "# -*- mode: apparmor; -*-\nabi <abi/4.0>,\ninclude <tunables/global>\n\n@{a}=/srv/service\n\nprofile service /usr/bin/service flags=(enforce) {\n  capability dac_override,\n  network inet stream,\n  file Cx /usr/libexec/service-helper -> service-helper,\n  file mrix /usr/lib/@{multiarch}/service/plugins/**,\n  file r /dev/{,urandom,null},\n  dbus send\n      bus=session\n      path=/org/example/Service\n      interface=org.example.Service\n      member=Run\n      peer=(name=org.example.Client),\n  profile helper /usr/libexec/service-helper {\n    allow network,\n  }\n}\n" :disk "# -*- mode: apparmor; -*-\nabi <abi/4.0>,\ninclude <tunables/global>\n\n@{a}=/srv/service\n\nprofile service /usr/bin/service flags=(enforce) {\n  capability dac_override,\n  network inet stream,\n  file Cx /usr/libexec/service-helper -> service-helper,\n  file mrix /usr/lib/@{multiarch}/service/plugins/**,\n  file r /dev/{,urandom,null},\n  dbus send\n      bus=session\n      path=/org/example/Service\n      interface=org.example.Service\n      member=Run\n      peer=(name=org.example.Client),\n  profile helper /usr/libexec/service-helper {\n    allow network,\n  }\n}\n")"##
+        ]],
     )
 }
 
@@ -197,8 +197,8 @@ fn apparmor_mode_refontifies_security_rules_after_practical_policy_edits() -> Pa
                       "**")))))))"##,
         true,
         expect![[
-        r#"OK (:comment-cycle (font-lock-comment-face font-lock-keyword-face) :edited-faces (("@{a}" font-lock-variable-name-face) ("profile-name" font-lock-function-name-face) ("edited-permission" font-lock-constant-face) ("embedded-hash" nil) ("inserted-wildcard" font-lock-regexp-grouping-construct)))"#
-    ]],
+            r#"OK (:comment-cycle (font-lock-comment-face font-lock-keyword-face) :edited-faces (("@{a}" font-lock-variable-name-face) ("profile-name" font-lock-function-name-face) ("edited-permission" font-lock-constant-face) ("embedded-hash" nil) ("inserted-wildcard" font-lock-regexp-grouping-construct)))"#
+        ]],
     )
 }
 
@@ -291,8 +291,8 @@ fn apparmor_mode_completes_keyword_but_leaves_nested_local_include_unresolved() 
            (apparmor-mode-test-cleanup root)))"##,
         true,
         expect![[
-        r#"OK (:keyword (t "capability" 11) :include (nil "include \"local/service-b" 25) :choices ("service" nil) :resolved ("local/service-base" "local/service-extra"))"#
-    ]],
+            r#"OK (:keyword (t "capability" 11) :include (nil "include \"local/service-b" 25) :choices ("service" nil) :resolved ("local/service-base" "local/service-extra"))"#
+        ]],
     )
 }
 
@@ -430,8 +430,8 @@ fn apparmor_mode_flymake_discards_a_slow_obsolete_result_after_a_rapid_edit() ->
          result)"##,
         true,
         expect![[
-        r#"OK (:diagnostics ((:type :error :text "latest diagnostic" :begin (3 2) :end (3 21))) :latest-input "profile service /usr/bin/service {\n  capability net_bind_service,\n  LATEST_BROKEN rule,\n}\n" :arguments "-Q\n-K\n/dev/stdin\n" :buffer "profile service /usr/bin/service {\n  capability net_bind_service,\n  LATEST_BROKEN rule,\n}\n" :disk "profile service /usr/bin/service {\n  capability net_bind_service,\n  LATEST_BROKEN rule,\n}\n" :modified nil)"#
-    ]],
+            r#"OK (:diagnostics ((:type :error :text "latest diagnostic" :begin (3 2) :end (3 21))) :latest-input "profile service /usr/bin/service {\n  capability net_bind_service,\n  LATEST_BROKEN rule,\n}\n" :arguments "-Q\n-K\n/dev/stdin\n" :buffer "profile service /usr/bin/service {\n  capability net_bind_service,\n  LATEST_BROKEN rule,\n}\n" :disk "profile service /usr/bin/service {\n  capability net_bind_service,\n  LATEST_BROKEN rule,\n}\n" :modified nil)"#
+        ]],
     )
 }
 
@@ -527,8 +527,8 @@ fn apparmor_mode_flymake_wraps_and_validates_a_real_abstraction_fragment() -> Pa
          result)"##,
         true,
         expect![[
-        r#"OK (:diagnostics ((:type :error :text "invalid abstraction rule" :begin (2 0) :end (2 24))) :parser-input "profile base { /etc/ssl/certs/** r,\nBROKEN abstraction rule,\n }" :arguments "-Q\n-K\n/dev/stdin\n" :source "/etc/ssl/certs/** r,\nBROKEN abstraction rule,\n")"#
-    ]],
+            r#"OK (:diagnostics ((:type :error :text "invalid abstraction rule" :begin (2 0) :end (2 24))) :parser-input "profile base { /etc/ssl/certs/** r,\nBROKEN abstraction rule,\n }" :arguments "-Q\n-K\n/dev/stdin\n" :source "/etc/ssl/certs/** r,\nBROKEN abstraction rule,\n")"#
+        ]],
     )
 }
 

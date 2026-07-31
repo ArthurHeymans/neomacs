@@ -13,7 +13,8 @@ use super::{ParityBatchCase, assert_alda_mode_batch};
 /// processes...\nPlaying...\n" arrives on *stderr*, which `start-process'
 /// merges into the buffer the user reads.
 
-fn playing_a_selected_phrase_sends_the_score_to_the_alda_binary_and_shows_its_output() -> ParityBatchCase {
+fn playing_a_selected_phrase_sends_the_score_to_the_alda_binary_and_shows_its_output()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "playing_a_selected_phrase_sends_the_score_to_the_alda_binary_and_shows_its_output",
         r##"(progn
@@ -31,12 +32,13 @@ fn playing_a_selected_phrase_sends_the_score_to_the_alda_binary_and_shows_its_ou
           :unrecorded (alda-test-unrecorded))))"##,
         true,
         expect![[
-        r#"OK (:mode alda-mode :discovered-binary "alda" :played ("play|-F||--code|piano: o4 c d e|") :output "Playing...\n\nProcess alda-playback finished\n" :unrecorded nil)"#
-    ]],
+            r#"OK (:mode alda-mode :discovered-binary "alda" :played ("play|-F||--code|piano: o4 c d e|") :output "Playing...\n\nProcess alda-playback finished\n" :unrecorded nil)"#
+        ]],
     )
 }
 
-fn appending_to_history_then_playing_seeks_past_the_accumulated_score_to_a_marker() -> ParityBatchCase {
+fn appending_to_history_then_playing_seeks_past_the_accumulated_score_to_a_marker()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "appending_to_history_then_playing_seeks_past_the_accumulated_score_to_a_marker",
         r##"(progn
@@ -53,12 +55,13 @@ fn appending_to_history_then_playing_seeks_past_the_accumulated_score_to_a_marke
             :unrecorded (alda-test-unrecorded)))))"##,
         true,
         expect![[
-        r#"OK (:history "\npiano:\n  o4 c d e\n" :calls ("play|-F|alda-mode-internal-marker|--code|~piano:~  o4 c d e~~%alda-mode-internal-marker~f g a|") :output "Playing...\n\nProcess alda-playback finished\n" :unrecorded nil)"#
-    ]],
+            r#"OK (:history "\npiano:\n  o4 c d e\n" :calls ("play|-F|alda-mode-internal-marker|--code|~piano:~  o4 c d e~~%alda-mode-internal-marker~f g a|") :output "Playing...\n\nProcess alda-playback finished\n" :unrecorded nil)"#
+        ]],
     )
 }
 
-fn playing_the_whole_file_then_stopping_uses_the_clis_real_file_and_stop_commands() -> ParityBatchCase {
+fn playing_the_whole_file_then_stopping_uses_the_clis_real_file_and_stop_commands()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "playing_the_whole_file_then_stopping_uses_the_clis_real_file_and_stop_commands",
         r##"(progn
@@ -74,8 +77,8 @@ fn playing_the_whole_file_then_stopping_uses_the_clis_real_file_and_stop_command
           :unrecorded (alda-test-unrecorded))))"##,
         true,
         expect![[
-        r#"OK (:calls ("score.alda|" "stop|") :output "Starting player processes...\nPlaying...\n\nProcess alda-playback finished\nStopping playback.\n\nProcess alda-playback finished\n" :unrecorded nil)"#
-    ]],
+            r#"OK (:calls ("score.alda|" "stop|") :output "Starting player processes...\nPlaying...\n\nProcess alda-playback finished\nStopping playback.\n\nProcess alda-playback finished\n" :unrecorded nil)"#
+        ]],
     )
 }
 
@@ -94,8 +97,8 @@ fn alda_down_invokes_a_subcommand_the_alda_cli_does_not_have() -> ParityBatchCas
           :unrecorded (alda-test-unrecorded))))"##,
         true,
         expect![[
-        r#"OK (:composed-command "alda down" :shell-exit 1 :calls ("down|") :banner-first-lines ("Usage:" "  alda [command]" "") :unrecorded nil)"#
-    ]],
+            r#"OK (:composed-command "alda down" :shell-exit 1 :calls ("down|") :banner-first-lines ("Usage:" "  alda [command]" "") :unrecorded nil)"#
+        ]],
     )
 }
 
@@ -134,8 +137,8 @@ fn the_binary_is_taken_from_the_option_then_exec_path_and_refused_when_absent() 
     (nreverse observed)))"##,
         true,
         expect![[
-        r#"OK ((:from-the-option (:location "/opt/alda/bin/alda" :repl "/opt/alda/bin/alda repl")) (:from-exec-path (:location "alda" :repl "alda repl")) (:with-no-binary-anywhere (:location nil :no-new-calls t :message "Alda was not found on your $PATH and alda-binary-location was nil.")) (:unrecorded nil))"#
-    ]],
+            r#"OK ((:from-the-option (:location "/opt/alda/bin/alda" :repl "/opt/alda/bin/alda repl")) (:from-exec-path (:location "alda" :repl "alda repl")) (:with-no-binary-anywhere (:location nil :no-new-calls t :message "Alda was not found on your $PATH and alda-binary-location was nil.")) (:unrecorded nil))"#
+        ]],
     )
 }
 

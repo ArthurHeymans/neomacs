@@ -41,8 +41,8 @@ fn achievements_mode_installs_and_removes_its_hook_and_idle_timer() -> ParityBat
              (and (memq #'achievements-save-achievements kill-emacs-hook) t))))))"##,
         true,
         expect![[
-        r#"OK ((nil nil nil #1=(achievements-mode " Achieve")) (t t t (0 3 0 0) t achievements-update-score ("No arrows")) (nil nil nil 0) #1# t)"#
-    ]],
+            r#"OK ((nil nil nil #1=(achievements-mode " Achieve")) (t t t (0 3 0 0) t achievements-update-score ("No arrows")) (nil nil nil 0) #1# t)"#
+        ]],
     )
 }
 
@@ -70,8 +70,8 @@ fn running_commands_unlocks_the_matching_achievements_and_logs_them() -> ParityB
            (car (split-string (ach-test-log) "\n"))))))"##,
         true,
         expect![[
-        r#"OK ((("Buffer, buffers, everywhere" "You've seen all the buffers that can be seen." :pending 5 nil nil) ("Log Auditor" "You learned new things by using `view-echo-area-messages'." :pending 5 nil nil) ("What did I just do?" "You answered a question by using `(command-history view-lossage)'." :pending 5 nil nil)) ("Buffer, buffers, everywhere" "You've seen all the buffers that can be seen." t 5 nil t) ("Log Auditor" "You learned new things by using `view-echo-area-messages'." t 5 nil t) ("What did I just do?" "You answered a question by using `(command-history view-lossage)'." :pending 5 nil nil) ("Top o' the morning" "You've used Emacs as a replacement for top." :pending 5 nil nil) 70 590.5 ("Achiever" "Buffer, buffers, everywhere" "Clean Desk" "Green Glowing faces" "Log Auditor" "Loyalist" "Modernist" "Package Neophyte" "Post Modernist" "Purest Vanilla" "Streamlined" "Tainted Love" "Traditionalist" "Tux's Friend" "Unlocker") ("ACHIEVEMENT UNLOCKED: You’ve earned the ‘Package Neophyte’ achievement!" "ACHIEVEMENT UNLOCKED: You’ve earned the ‘Clean Desk’ achievement!" "ACHIEVEMENT UNLOCKED: You’ve earned the ‘Buffer, buffers, everywhere’ achievement!") "You've earned the `Buffer, buffers, everywhere' achievement! [You've seen all the buffers that can be seen.]")"#
-    ]],
+            r#"OK ((("Buffer, buffers, everywhere" "You've seen all the buffers that can be seen." :pending 5 nil nil) ("Log Auditor" "You learned new things by using `view-echo-area-messages'." :pending 5 nil nil) ("What did I just do?" "You answered a question by using `(command-history view-lossage)'." :pending 5 nil nil)) ("Buffer, buffers, everywhere" "You've seen all the buffers that can be seen." t 5 nil t) ("Log Auditor" "You learned new things by using `view-echo-area-messages'." t 5 nil t) ("What did I just do?" "You answered a question by using `(command-history view-lossage)'." :pending 5 nil nil) ("Top o' the morning" "You've used Emacs as a replacement for top." :pending 5 nil nil) 70 590.5 ("Achiever" "Buffer, buffers, everywhere" "Clean Desk" "Green Glowing faces" "Log Auditor" "Loyalist" "Modernist" "Package Neophyte" "Post Modernist" "Purest Vanilla" "Streamlined" "Tainted Love" "Traditionalist" "Tux's Friend" "Unlocker") ("ACHIEVEMENT UNLOCKED: You’ve earned the ‘Package Neophyte’ achievement!" "ACHIEVEMENT UNLOCKED: You’ve earned the ‘Clean Desk’ achievement!" "ACHIEVEMENT UNLOCKED: You’ve earned the ‘Buffer, buffers, everywhere’ achievement!") "You've earned the `Buffer, buffers, everywhere' achievement! [You've seen all the buffers that can be seen.]")"#
+        ]],
     )
 }
 
@@ -107,8 +107,8 @@ fn an_achievement_needing_several_commands_stays_locked_until_all_have_run() -> 
            (car (last (ach-test-unlock-messages)))))))"##,
         true,
         expect![[
-        r#"OK ((("Free Software Zealot" "You've read the sales pitch." :pending 5 nil nil) ("Short Story" "You've written the equivalent of a short story." :pending 5 nil nil) ("Top o' the morning" "You've used Emacs as a replacement for top." :pending 5 nil nil) 60 ("Achiever" "Clean Desk" "Green Glowing faces" "Loyalist" "Modernist" "Package Neophyte" "Post Modernist" "Purest Vanilla" "Streamlined" "Tainted Love" "Traditionalist" "Tux's Friend" "Unlocker") "hello world") ("Free Software Zealot" "You've read the sales pitch." t 5 nil t) ("Short Story" "You've written the equivalent of a short story." :pending 5 nil nil) ("Top o' the morning" "You've used Emacs as a replacement for top." :pending 5 nil nil) 70 ("Free Software Zealot") "ACHIEVEMENT UNLOCKED: You’ve earned the ‘Free Software Zealot’ achievement!")"#
-    ]],
+            r#"OK ((("Free Software Zealot" "You've read the sales pitch." :pending 5 nil nil) ("Short Story" "You've written the equivalent of a short story." :pending 5 nil nil) ("Top o' the morning" "You've used Emacs as a replacement for top." :pending 5 nil nil) 60 ("Achiever" "Clean Desk" "Green Glowing faces" "Loyalist" "Modernist" "Package Neophyte" "Post Modernist" "Purest Vanilla" "Streamlined" "Tainted Love" "Traditionalist" "Tux's Friend" "Unlocker") "hello world") ("Free Software Zealot" "You've read the sales pitch." t 5 nil t) ("Short Story" "You've written the equivalent of a short story." :pending 5 nil nil) ("Top o' the morning" "You've used Emacs as a replacement for top." :pending 5 nil nil) 70 ("Free Software Zealot") "ACHIEVEMENT UNLOCKED: You’ve earned the ‘Free Software Zealot’ achievement!")"#
+        ]],
     )
 }
 
@@ -141,8 +141,8 @@ fn the_achievements_list_buffer_renders_rows_and_grows_when_refreshed() -> Parit
                  (and (memq #'achievements-update-score tabulated-list-revert-hook) t))))))"##,
         true,
         expect![[
-        r#"OK (("*Achievements*" achievements-list-mode 98 70 590.5 (("Achiever" . " ✓    5 Achiever                       You used the achievements package.") ("Buffer, buffers, everywhere" . " ✓    5 Buffer, buffers, everywhere    You've seen all the buffers that can be seen.") ("Top o' the morning" . "      5 Top o' the morning             ") ("Twenty Five" . "      5 Twenty Five                    ") ("Narrow minded"))) 116 75 680.5 (("Achiever" . " ✓    5 Achiever                       You used the achievements package.") ("Buffer, buffers, everywhere" . " ✓    5 Buffer, buffers, everywhere    You've seen all the buffers that can be seen.") ("Top o' the morning" . "      5 Top o' the morning             ") ("Twenty Five" . "      5 Twenty Five                    ") ("Narrow minded" . "      5 Narrow minded                  ")) (1 t))"#
-    ]],
+            r#"OK (("*Achievements*" achievements-list-mode 98 70 590.5 (("Achiever" . " ✓    5 Achiever                       You used the achievements package.") ("Buffer, buffers, everywhere" . " ✓    5 Buffer, buffers, everywhere    You've seen all the buffers that can be seen.") ("Top o' the morning" . "      5 Top o' the morning             ") ("Twenty Five" . "      5 Twenty Five                    ") ("Narrow minded"))) 116 75 680.5 (("Achiever" . " ✓    5 Achiever                       You used the achievements package.") ("Buffer, buffers, everywhere" . " ✓    5 Buffer, buffers, everywhere    You've seen all the buffers that can be seen.") ("Top o' the morning" . "      5 Top o' the morning             ") ("Twenty Five" . "      5 Twenty Five                    ") ("Narrow minded" . "      5 Narrow minded                  ")) (1 t))"#
+        ]],
     )
 }
 
@@ -182,8 +182,8 @@ fn achievements_are_saved_to_the_achievements_file_and_restored_from_it() -> Par
              achievements-list)))))"##,
         true,
         expect![[
-        r##"OK ("achievements.eld" nil 101 "(#" "#s(emacs-achievement \"Buffer, buffers, everywhere\" \"You've seen all the buffers that can be seen.\" t nil nil 5 0 nil)" "#s(emacs-achievement \"Top o' the morning\" \"You've used Emacs as a replacement for top.\" (lambda nil (and (achievements-command-was-run 'proced))) nil nil 5 0 nil)" 15 (101 ("Achiever" "Buffer, buffers, everywhere" "Clean Desk" "Green Glowing faces" "Log Auditor" "Loyalist" "Modernist" "Package Neophyte" "Post Modernist" "Purest Vanilla" "Streamlined" "Tainted Love" "Traditionalist" "Tux's Friend" "Unlocker")) t nil)"##
-    ]],
+            r##"OK ("achievements.eld" nil 101 "(#" "#s(emacs-achievement \"Buffer, buffers, everywhere\" \"You've seen all the buffers that can be seen.\" t nil nil 5 0 nil)" "#s(emacs-achievement \"Top o' the morning\" \"You've used Emacs as a replacement for top.\" (lambda nil (and (achievements-command-was-run 'proced))) nil nil 5 0 nil)" 15 (101 ("Achiever" "Buffer, buffers, everywhere" "Clean Desk" "Green Glowing faces" "Log Auditor" "Loyalist" "Modernist" "Package Neophyte" "Post Modernist" "Purest Vanilla" "Streamlined" "Tainted Love" "Traditionalist" "Tux's Friend" "Unlocker")) t nil)"##
+        ]],
     )
 }
 
@@ -212,8 +212,8 @@ fn display_when_earned_nil_unlocks_achievements_silently() -> ParityBatchCase {
            (ach-test-log)))))"##,
         true,
         expect![[
-        r#"OK ((("Buffer, buffers, everywhere" "You've seen all the buffers that can be seen." t 5 nil t) ("Log Auditor" "You learned new things by using `view-echo-area-messages'." t 5 nil t) 70 nil no-log-buffer) ("What did I just do?" "You answered a question by using `(command-history view-lossage)'." :pending 5 nil nil) ("Log Auditor" "You learned new things by using `view-echo-area-messages'." t 5 nil t) 75 ("ACHIEVEMENT UNLOCKED: You’ve earned the ‘Unlocker’ achievement!") "You've earned the `Unlocker' achievement! [You have earned over 50 points in Emacs achievements.  Not bad.]")"#
-    ]],
+            r#"OK ((("Buffer, buffers, everywhere" "You've seen all the buffers that can be seen." t 5 nil t) ("Log Auditor" "You learned new things by using `view-echo-area-messages'." t 5 nil t) 70 nil no-log-buffer) ("What did I just do?" "You answered a question by using `(command-history view-lossage)'." :pending 5 nil nil) ("Log Auditor" "You learned new things by using `view-echo-area-messages'." t 5 nil t) 75 ("ACHIEVEMENT UNLOCKED: You’ve earned the ‘Unlocker’ achievement!") "You've earned the `Unlocker' achievement! [You have earned over 50 points in Emacs achievements.  Not bad.]")"#
+        ]],
     )
 }
 
@@ -244,8 +244,8 @@ fn disabling_an_achievement_removes_it_from_the_list_for_good() -> ParityBatchCa
            (tabulated-list-get-id)))))"##,
         true,
         expect![[
-        r#"OK (("Top o' the morning" 98 undefined nil t t) ("Top o' the morning" "You've used Emacs as a replacement for top." nil 5 nil nil) 115 (("Top o' the morning") ("Achiever" . " ✓    5 Achiever                       You used the achievements package.")) 65 590.5 "Achiever")"#
-    ]],
+            r#"OK (("Top o' the morning" 98 undefined nil t t) ("Top o' the morning" "You've used Emacs as a replacement for top." nil 5 nil nil) 115 (("Top o' the morning") ("Achiever" . " ✓    5 Achiever                       You used the achievements package.")) 65 590.5 "Achiever")"#
+        ]],
     )
 }
 

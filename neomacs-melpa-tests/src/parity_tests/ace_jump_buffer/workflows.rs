@@ -34,8 +34,8 @@ fn ace_jump_buffer_lists_every_buffer_and_one_avy_key_switches_to_it() -> Parity
 "#,
         true,
         expect![[
-        r#"OK (("notes.org") bs-mode "    *scratch*      \n    *Messages*     \n  . notes.org      \n    project plan.md\n    server.py      \n    résumé.tex     " 1 "*buffer-selection*" 0 20 ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) ((1 1 2 #("a" 0 1 (face avy-lead-face)) "*buffer-selection*") (2 21 22 #("s" 0 1 (face avy-lead-face)) "*buffer-selection*") (3 41 42 #("d" 0 1 (face avy-lead-face)) "*buffer-selection*") (4 61 62 #("f" 0 1 (face avy-lead-face)) "*buffer-selection*") (5 81 82 #("g" 0 1 (face avy-lead-face)) "*buffer-selection*") (6 101 102 #("h" 0 1 (face avy-lead-face)) "*buffer-selection*")) "project plan.md" "project plan.md" ("project plan.md") 33 nil ("project plan.md" "notes.org" "*scratch*" "*Messages*" "server.py" "résumé.tex" "*buffer-selection*"))"#
-    ]],
+            r#"OK (("notes.org") bs-mode "    *scratch*      \n    *Messages*     \n  . notes.org      \n    project plan.md\n    server.py      \n    résumé.tex     " 1 "*buffer-selection*" 0 20 ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) ((1 1 2 #("a" 0 1 (face avy-lead-face)) "*buffer-selection*") (2 21 22 #("s" 0 1 (face avy-lead-face)) "*buffer-selection*") (3 41 42 #("d" 0 1 (face avy-lead-face)) "*buffer-selection*") (4 61 62 #("f" 0 1 (face avy-lead-face)) "*buffer-selection*") (5 81 82 #("g" 0 1 (face avy-lead-face)) "*buffer-selection*") (6 101 102 #("h" 0 1 (face avy-lead-face)) "*buffer-selection*")) "project plan.md" "project plan.md" ("project plan.md") 33 nil ("project plan.md" "notes.org" "*scratch*" "*Messages*" "server.py" "résumé.tex" "*buffer-selection*"))"#
+        ]],
     )
 }
 
@@ -65,8 +65,8 @@ fn ace_jump_buffer_other_window_opens_the_target_beside_the_original_buffer() ->
 "#,
         true,
         expect![[
-        r#"OK (("notes.org") "    *scratch*      \n    *Messages*     \n  . notes.org      \n    project plan.md\n    server.py      \n    résumé.tex     " ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) "résumé.tex" "résumé.tex" ("résumé.tex" "notes.org") 2 nil nil)"#
-    ]],
+            r#"OK (("notes.org") "    *scratch*      \n    *Messages*     \n  . notes.org      \n    project plan.md\n    server.py      \n    résumé.tex     " ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) "résumé.tex" "résumé.tex" ("résumé.tex" "notes.org") 2 nil nil)"#
+        ]],
     )
 }
 
@@ -96,8 +96,8 @@ fn ace_jump_buffer_in_one_window_collapses_a_split_onto_the_target_buffer() -> P
 "#,
         true,
         expect![[
-        r#"OK (("notes.org" "server.py") "    *scratch*      \n    *Messages*     \n  . notes.org      \n    project plan.md\n    server.py      \n    résumé.tex     " "*buffer-selection*" ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) "résumé.tex" "résumé.tex" ("résumé.tex") 1 nil)"#
-    ]],
+            r#"OK (("notes.org" "server.py") "    *scratch*      \n    *Messages*     \n  . notes.org      \n    project plan.md\n    server.py      \n    résumé.tex     " "*buffer-selection*" ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) "résumé.tex" "résumé.tex" ("résumé.tex") 1 nil)"#
+        ]],
     )
 }
 
@@ -149,8 +149,8 @@ fn make_ace_jump_buffer_function_builds_filtered_jump_commands() -> ParityBatchC
 "#,
         true,
         expect![[
-        r#"OK (("prose" nil nil nil ajb/filter-prose-buffers . #1=(nil)) ("nothing" nil nil nil ajb/filter-nothing-buffers . #1#) ("same-mode" nil nil nil ajb/filter-same-mode-buffers . #1#) (t t t) "  . notes.org      \n    project plan.md" ((1 . "a") (2 . "s")) ("project plan.md" text-mode) "  . project plan.md\n    notes.org      \n    résumé.tex     " ((1 . "a") (2 . "s") (3 . "d")) ("résumé.tex" text-mode) nil "résumé.tex" ("résumé.tex") "all")"#
-    ]],
+            r#"OK (("prose" nil nil nil ajb/filter-prose-buffers . #1=(nil)) ("nothing" nil nil nil ajb/filter-nothing-buffers . #1#) ("same-mode" nil nil nil ajb/filter-same-mode-buffers . #1#) (t t t) "  . notes.org      \n    project plan.md" ((1 . "a") (2 . "s")) ("project plan.md" text-mode) "  . project plan.md\n    notes.org      \n    résumé.tex     " ((1 . "a") (2 . "s") (3 . "d")) ("résumé.tex" text-mode) nil "résumé.tex" ("résumé.tex") "all")"#
+        ]],
     )
 }
 
@@ -182,8 +182,8 @@ fn ace_jump_buffer_abort_leaves_the_buffers_and_the_layout_untouched() -> Parity
 "#,
         true,
         expect![[
-        r#"OK (("*buffer-selection*" ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) "notes.org" "notes.org" ("notes.org") 39 nil) ("*buffer-selection*" ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) "notes.org" "notes.org" ("notes.org") 39 nil) ("*buffer-selection*" ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) "notes.org" "notes.org" ("notes.org") 39 nil) "notes.org" ("notes.org" "*scratch*" "*Messages*" "project plan.md" "server.py" "résumé.tex"))"#
-    ]],
+            r#"OK (("*buffer-selection*" ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) "notes.org" "notes.org" ("notes.org") 39 nil) ("*buffer-selection*" ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) "notes.org" "notes.org" ("notes.org") 39 nil) ("*buffer-selection*" ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) "notes.org" "notes.org" ("notes.org") 39 nil) "notes.org" ("notes.org" "*scratch*" "*Messages*" "project plan.md" "server.py" "résumé.tex"))"#
+        ]],
     )
 }
 
@@ -223,8 +223,8 @@ fn ace_jump_buffer_menu_drops_the_bs_header_and_honours_the_sort_option() -> Par
 "#,
         true,
         expect![[
-        r#"OK ((" MR Buffer              Size         Mode  File          \n -- ------              ----         ----  ----          \n    *scratch*              0                             \n *% *Messages*             0                             \n.*  notes.org             38                             \n *  project plan.md       32                             \n *  server.py             25                             \n *  résumé.tex            24                             " 2 11) "    *Messages*     \n    *scratch*      \n  . notes.org      \n    project plan.md\n    résumé.tex     \n    server.py      " 0 3 bs--sort-by-name ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) (("" 2 2 left " ") ("" 1 1 left bs--get-marked-string) ("" 1 1 left " ") ("Buffer" bs--get-name-length 10 left bs--get-name)) "résumé.tex" bs--sort-by-name)"#
-    ]],
+            r#"OK ((" MR Buffer              Size         Mode  File          \n -- ------              ----         ----  ----          \n    *scratch*              0                             \n *% *Messages*             0                             \n.*  notes.org             38                             \n *  project plan.md       32                             \n *  server.py             25                             \n *  résumé.tex            24                             " 2 11) "    *Messages*     \n    *scratch*      \n  . notes.org      \n    project plan.md\n    résumé.tex     \n    server.py      " 0 3 bs--sort-by-name ((1 . "a") (2 . "s") (3 . "d") (4 . "f") (5 . "g") (6 . "h")) (("" 2 2 left " ") ("" 1 1 left bs--get-marked-string) ("" 1 1 left " ") ("Buffer" bs--get-name-length 10 left bs--get-name)) "résumé.tex" bs--sort-by-name)"#
+        ]],
     )
 }
 
@@ -265,8 +265,8 @@ fn ace_jump_buffer_with_configuration_offers_every_registered_configuration() ->
 "#,
         true,
         expect![[
-        r#"OK ("Ace jump buffer with configuration: " ("prose" "same-mode" "all" "files" "files-and-scratch" "all-intern-last") t ajb/configuration-history "same-mode" "  . notes.org      \n    project plan.md" ((1 . "a") (2 . "s")) "project plan.md" "all" ("same-mode" "all"))"#
-    ]],
+            r#"OK ("Ace jump buffer with configuration: " ("prose" "same-mode" "all" "files" "files-and-scratch" "all-intern-last") t ajb/configuration-history "same-mode" "  . notes.org      \n    project plan.md" ((1 . "a") (2 . "s")) "project plan.md" "all" ("same-mode" "all"))"#
+        ]],
     )
 }
 

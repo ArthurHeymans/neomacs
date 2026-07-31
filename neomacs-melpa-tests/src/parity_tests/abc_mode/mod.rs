@@ -114,10 +114,5 @@ pub(crate) fn assert_abc_mode_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_abc_mode_parity` cases (2a).
 pub(crate) fn assert_abc_mode_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        abc_mode_oracle(),
-        &name,
-        "abc_mode_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(abc_mode_oracle(), &name, "abc_mode_parity", cases);
 }

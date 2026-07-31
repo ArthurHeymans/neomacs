@@ -48,8 +48,8 @@ fn logs_in_and_fetches_the_puzzle_input_for_the_day_at_point() -> ParityBatchCas
     "##,
         true,
         expect![[
-        r#"OK (:login (:cookie-before nil :message "AoC session cookie stored." :cookie-after t) :context (:year-day (2024 3) :lighter " AoC[Y2024/D3 ✓]") :fetched (:requests ((:url "https://adventofcode.com/2024/day/3/input" :method "GET" :extra-headers nil :data nil :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :tree ("year2024/" "year2024/day03/" "year2024/day03/input.txt") :input "xmul(2,4)%&mul[3,7]!@^do_not_mul(5,5)+\n" :window-buffer "input.txt" :messages ("[ORACLE-SANDBOX]/aoc/year2024/day03/input.txt saved.")) :second-fetch (:requests 1 :window-buffer "input.txt"))"#
-    ]],
+            r#"OK (:login (:cookie-before nil :message "AoC session cookie stored." :cookie-after t) :context (:year-day (2024 3) :lighter " AoC[Y2024/D3 ✓]") :fetched (:requests ((:url "https://adventofcode.com/2024/day/3/input" :method "GET" :extra-headers nil :data nil :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :tree ("year2024/" "year2024/day03/" "year2024/day03/input.txt") :input "xmul(2,4)%&mul[3,7]!@^do_not_mul(5,5)+\n" :window-buffer "input.txt" :messages ("[ORACLE-SANDBOX]/aoc/year2024/day03/input.txt saved.")) :second-fetch (:requests 1 :window-buffer "input.txt"))"#
+        ]],
     )
 }
 
@@ -91,8 +91,8 @@ fn submits_an_answer_and_shows_what_the_service_replied() -> ParityBatchCase {
     "##,
         true,
         expect![[
-        r#"OK (:correct (:returned-equals-shown t :shown (:text "<main><article><p>That's the right answer!  You are one gold star closer to finding the Chief Historian. [Continue to Part Two]</p></article></main>\n" :point 1)) :incorrect (:returned-equals-shown t :shown (:text "<main><article><p>That's not the right answer; your answer is too low.  Please wait one minute before trying again. [Return to Day 3]</p></article></main>\n" :point 1)) :too-soon (:returned-equals-shown t :shown (:text "<main><article><p>You gave an answer too recently; you have to wait after submitting an answer before trying again.  You have 44s left to wait. [Return to Day 3]</p></article></main>\n" :point 1)) :requests ((:url "https://adventofcode.com/2024/day/3/answer" :method "POST" :extra-headers #1=(("Content-Type" . "application/x-www-form-urlencoded")) :data "level=1&answer=161" :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n") (:url "https://adventofcode.com/2024/day/3/answer" :method "POST" :extra-headers #1# :data "level=2&answer=12" :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n") (:url "https://adventofcode.com/2024/day/3/answer" :method "POST" :extra-headers #1# :data "level=2&answer=999" :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :messages ("Submitted answer for 2024 day 3 (level 1)" "Submitted answer for 2024 day 3 (level 2) [2 times]"))"#
-    ]],
+            r#"OK (:correct (:returned-equals-shown t :shown (:text "<main><article><p>That's the right answer!  You are one gold star closer to finding the Chief Historian. [Continue to Part Two]</p></article></main>\n" :point 1)) :incorrect (:returned-equals-shown t :shown (:text "<main><article><p>That's not the right answer; your answer is too low.  Please wait one minute before trying again. [Return to Day 3]</p></article></main>\n" :point 1)) :too-soon (:returned-equals-shown t :shown (:text "<main><article><p>You gave an answer too recently; you have to wait after submitting an answer before trying again.  You have 44s left to wait. [Return to Day 3]</p></article></main>\n" :point 1)) :requests ((:url "https://adventofcode.com/2024/day/3/answer" :method "POST" :extra-headers #1=(("Content-Type" . "application/x-www-form-urlencoded")) :data "level=1&answer=161" :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n") (:url "https://adventofcode.com/2024/day/3/answer" :method "POST" :extra-headers #1# :data "level=2&answer=12" :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n") (:url "https://adventofcode.com/2024/day/3/answer" :method "POST" :extra-headers #1# :data "level=2&answer=999" :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :messages ("Submitted answer for 2024 day 3 (level 1)" "Submitted answer for 2024 day 3 (level 2) [2 times]"))"#
+        ]],
     )
 }
 
@@ -127,8 +127,8 @@ fn creates_a_day_directory_with_templates_and_downloads_the_input() -> ParityBat
     "##,
         true,
         expect![[
-        r##"OK (:created (:prompts ("Dir created.  Copy template files into it? " "Open the problem page in EWW? " "Download and open the input file? ") :result (:buffer "input.txt")) :tree ("notes.md" "template.py" "year2024/" "year2024/day05/" "year2024/day05/input.txt" "year2024/day05/notes.md" "year2024/day05/template.py") :copied (:template "import sys\n\ndef part1(lines):\n    return 0\n" :notes "# Notes\n") :input "1721\n979\n366\n299\n675\n1456\n" :requests ((:url "https://adventofcode.com/2024/day/5/input" :method "GET" :extra-headers nil :data nil :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :window-buffer "input.txt" :messages ("Created [ORACLE-SANDBOX]/aoc/year2024/day05" "[ORACLE-SANDBOX]/aoc/year2024/day05/input.txt saved."))"##
-    ]],
+            r##"OK (:created (:prompts ("Dir created.  Copy template files into it? " "Open the problem page in EWW? " "Download and open the input file? ") :result (:buffer "input.txt")) :tree ("notes.md" "template.py" "year2024/" "year2024/day05/" "year2024/day05/input.txt" "year2024/day05/notes.md" "year2024/day05/template.py") :copied (:template "import sys\n\ndef part1(lines):\n    return 0\n" :notes "# Notes\n") :input "1721\n979\n366\n299\n675\n1456\n" :requests ((:url "https://adventofcode.com/2024/day/5/input" :method "GET" :extra-headers nil :data nil :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :window-buffer "input.txt" :messages ("Created [ORACLE-SANDBOX]/aoc/year2024/day05" "[ORACLE-SANDBOX]/aoc/year2024/day05/input.txt saved."))"##
+        ]],
     )
 }
 
@@ -176,8 +176,8 @@ fn directory_format_customizations_drive_both_paths_and_inference() -> ParityBat
     "##,
         true,
         expect![[
-        r#"OK (:created (:prompts ("Open the problem page in EWW? " "Download and open the input file? ") :result nil) :tree-after-create ("aoc-2023/" "aoc-2023/puzzle-007/") :inference (:year-day (2023 7) :lighter " AoC[Y2023/D7 ✓]") :fetched (:requests ((:url "https://adventofcode.com/2023/day/7/input" :method "GET" :extra-headers nil :data nil :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :input "3   4\n4   3\n" :tree ("aoc-2023/" "aoc-2023/puzzle-007/" "aoc-2023/puzzle-007/puzzle-input.dat")) :opened (:window-buffer "puzzle-007" :major-mode dired-mode) :stock-names-no-longer-match nil)"#
-    ]],
+            r#"OK (:created (:prompts ("Open the problem page in EWW? " "Download and open the input file? ") :result nil) :tree-after-create ("aoc-2023/" "aoc-2023/puzzle-007/") :inference (:year-day (2023 7) :lighter " AoC[Y2023/D7 ✓]") :fetched (:requests ((:url "https://adventofcode.com/2023/day/7/input" :method "GET" :extra-headers nil :data nil :cookie-header "Cookie: session=53616c7465645f5fdeadbeefcafef00d0123456789abcdef\15\n")) :input "3   4\n4   3\n" :tree ("aoc-2023/" "aoc-2023/puzzle-007/" "aoc-2023/puzzle-007/puzzle-input.dat")) :opened (:window-buffer "puzzle-007" :major-mode dired-mode) :stock-names-no-longer-match nil)"#
+        ]],
     )
 }
 
@@ -216,8 +216,8 @@ fn refuses_to_reach_the_service_without_a_session_cookie() -> ParityBatchCase {
     "##,
         true,
         expect![[
-        r#"OK (:cookie-before nil :lighter " AoC[Y2024/D3 ✗]" :fetch-declined (:prompts ("AoC session cookie missing.  Set it now? ") :result (user-error "No AoC session cookie set; run M-x advent-login")) :submit-declined (:prompts ("AoC session cookie missing.  Set it now? ") :result (user-error "No AoC session cookie set; run M-x advent-login")) :requests nil :tree ("year2024/" "year2024/day03/") :after-login (:lighter " AoC[Y2024/D3 ✓]" :requests 1 :input "ok\n"))"#
-    ]],
+            r#"OK (:cookie-before nil :lighter " AoC[Y2024/D3 ✗]" :fetch-declined (:prompts ("AoC session cookie missing.  Set it now? ") :result (user-error "No AoC session cookie set; run M-x advent-login")) :submit-declined (:prompts ("AoC session cookie missing.  Set it now? ") :result (user-error "No AoC session cookie set; run M-x advent-login")) :requests nil :tree ("year2024/" "year2024/day03/") :after-login (:lighter " AoC[Y2024/D3 ✓]" :requests 1 :input "ok\n"))"#
+        ]],
     )
 }
 
@@ -256,8 +256,8 @@ fn reports_service_failures_and_writes_no_input_file() -> ParityBatchCase {
     "##,
         true,
         expect![[
-        r#"OK (:not-found (:error (error "HTTP 404: <html><head><title>404 Not Found</title></head><body>Not Found</body></html>") :tree ("year2024/" "year2024/day03/")) :empty-body (:error (error "Empty HTTP response body") :tree ("year2024/" "year2024/day03/")) :malformed (:error (error "Malformed HTTP response (no header/body separator)") :tree ("year2024/" "year2024/day03/")) :no-connection (:error (error "Failed to GET https://adventofcode.com/2024/day/3/input") :tree ("year2024/" "year2024/day03/")) :recovers (:input "7\n" :tree ("year2024/" "year2024/day03/" "year2024/day03/input.txt")) :requests ("https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input"))"#
-    ]],
+            r#"OK (:not-found (:error (error "HTTP 404: <html><head><title>404 Not Found</title></head><body>Not Found</body></html>") :tree ("year2024/" "year2024/day03/")) :empty-body (:error (error "Empty HTTP response body") :tree ("year2024/" "year2024/day03/")) :malformed (:error (error "Malformed HTTP response (no header/body separator)") :tree ("year2024/" "year2024/day03/")) :no-connection (:error (error "Failed to GET https://adventofcode.com/2024/day/3/input") :tree ("year2024/" "year2024/day03/")) :recovers (:input "7\n" :tree ("year2024/" "year2024/day03/" "year2024/day03/input.txt")) :requests ("https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input" "https://adventofcode.com/2024/day/3/input"))"#
+        ]],
     )
 }
 

@@ -46,8 +46,8 @@ fn visiting_an_adoc_file_sets_up_the_asciidoc_editing_environment() -> ParityBat
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (:mode (adoc-mode "adoc" t) :comments ("// " "" "^//[ \11]*" 0) :outline ("=\\{1,6\\}[ \11]+[^ \11\n]" t) :font-lock (adoc-font-lock-keywords (adoc-reserved adoc-attribute-list adoc-code-block adoc-flyspell-ignore) adoc-unfontify-region-function t) :hooks (t t t adoc-fill-paragraph adoc-imenu-create-nested-index "^<<<+$" t) :keys (("C-c C-n" . adoc-next-visible-heading) ("C-c C-p" . adoc-previous-visible-heading) ("C-c C-u" . adoc-up-heading) ("M-<left>" . adoc-promote) ("M-<right>" . adoc-demote) ("M-RET" . adoc-insert-list-item) ("TAB" . adoc-cycle) ("C-c C-t" . adoc-toggle-title-type) ("C-c C-s b" . adoc-insert-bold) ("M-." . adoc-follow-thing-at-point)) :auto-mode (("guide.adoc" . adoc-mode) ("guide.asciidoc" . adoc-mode) ("guide.txt" . text-mode) ("guide.adoc~")) :buffer (nil 1 527))"#
-    ]],
+            r#"OK (:mode (adoc-mode "adoc" t) :comments ("// " "" "^//[ \11]*" 0) :outline ("=\\{1,6\\}[ \11]+[^ \11\n]" t) :font-lock (adoc-font-lock-keywords (adoc-reserved adoc-attribute-list adoc-code-block adoc-flyspell-ignore) adoc-unfontify-region-function t) :hooks (t t t adoc-fill-paragraph adoc-imenu-create-nested-index "^<<<+$" t) :keys (("C-c C-n" . adoc-next-visible-heading) ("C-c C-p" . adoc-previous-visible-heading) ("C-c C-u" . adoc-up-heading) ("M-<left>" . adoc-promote) ("M-<right>" . adoc-demote) ("M-RET" . adoc-insert-list-item) ("TAB" . adoc-cycle) ("C-c C-t" . adoc-toggle-title-type) ("C-c C-s b" . adoc-insert-bold) ("M-." . adoc-follow-thing-at-point)) :auto-mode (("guide.adoc" . adoc-mode) ("guide.asciidoc" . adoc-mode) ("guide.txt" . text-mode) ("guide.adoc~")) :buffer (nil 1 527))"#
+        ]],
     )
 }
 
@@ -81,8 +81,8 @@ fn font_lock_marks_up_every_construct_of_a_realistic_document() -> ParityBatchCa
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (:header (("= Field Guide" . adoc-meta-hide-face) ("Field Guide" . adoc-title-0-face) (":toc:" . adoc-metadata-key-face) ("left" . adoc-metadata-value-face) (":sourcedir:" . adoc-metadata-key-face) ("./src" . adoc-metadata-value-face)) :titles (("== Getting Started" . adoc-meta-hide-face) ("Getting Started" . adoc-title-1-face) ("=== Configuration" . adoc-meta-hide-face) ("Configuration" . adoc-title-2-face) ("== Troubleshooting" . adoc-meta-hide-face) ("Troubleshooting" . adoc-title-1-face)) :inline (("*bold*" . adoc-meta-hide-face) ("*bold*" adoc-bold-face) ("_italic_" adoc-emphasis-face) ("`monospace`" adoc-typewriter-face adoc-verbatim-face) ("https://example.org/widgets" . adoc-url-face) ("widget catalogue" . adoc-reference-face) ("{sourcedir}" . adoc-replacement-face)) :blocks ((". Download" . adoc-list-face) ("* First bullet" . adoc-list-face) ("NOTE:" . adoc-complex-replacement-face) ("WARNING:" . adoc-complex-replacement-face) ("[source,ruby]" . adoc-meta-face) ("----" . adoc-meta-face) ("def widget" font-lock-keyword-face . #1=(adoc-native-code-face)) ("puts" font-lock-builtin-face . #1#)) :source-block (("def" font-lock-keyword-face . #2=(adoc-native-code-face)) (" " . #2#) ("widget" font-lock-function-name-face . #2#) ("(name)\n  " . #2#) ("puts" font-lock-builtin-face . #2#) (" " . #2#) ("\"building\"" font-lock-string-face . #2#) ("\n" . #2#) ("end" font-lock-keyword-face . #2#)))"#
-    ]],
+            r#"OK (:header (("= Field Guide" . adoc-meta-hide-face) ("Field Guide" . adoc-title-0-face) (":toc:" . adoc-metadata-key-face) ("left" . adoc-metadata-value-face) (":sourcedir:" . adoc-metadata-key-face) ("./src" . adoc-metadata-value-face)) :titles (("== Getting Started" . adoc-meta-hide-face) ("Getting Started" . adoc-title-1-face) ("=== Configuration" . adoc-meta-hide-face) ("Configuration" . adoc-title-2-face) ("== Troubleshooting" . adoc-meta-hide-face) ("Troubleshooting" . adoc-title-1-face)) :inline (("*bold*" . adoc-meta-hide-face) ("*bold*" adoc-bold-face) ("_italic_" adoc-emphasis-face) ("`monospace`" adoc-typewriter-face adoc-verbatim-face) ("https://example.org/widgets" . adoc-url-face) ("widget catalogue" . adoc-reference-face) ("{sourcedir}" . adoc-replacement-face)) :blocks ((". Download" . adoc-list-face) ("* First bullet" . adoc-list-face) ("NOTE:" . adoc-complex-replacement-face) ("WARNING:" . adoc-complex-replacement-face) ("[source,ruby]" . adoc-meta-face) ("----" . adoc-meta-face) ("def widget" font-lock-keyword-face . #1=(adoc-native-code-face)) ("puts" font-lock-builtin-face . #1#)) :source-block (("def" font-lock-keyword-face . #2=(adoc-native-code-face)) (" " . #2#) ("widget" font-lock-function-name-face . #2#) ("(name)\n  " . #2#) ("puts" font-lock-builtin-face . #2#) (" " . #2#) ("\"building\"" font-lock-string-face . #2#) ("\n" . #2#) ("end" font-lock-keyword-face . #2#)))"#
+        ]],
     )
 }
 
@@ -106,8 +106,8 @@ fn imenu_indexes_the_documents_headings_nested_and_flat() -> ParityBatchCase {
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (:default-function adoc-imenu-create-nested-index :nested (("Field Guide to Widgets" (nil . 1) ("Getting Started" (nil . 201) ("Configuration" . 400)) ("Troubleshooting" . 467))) :flat (("Field Guide to Widgets" . 1) ("Getting Started" . 201) ("Configuration" . 400) ("Troubleshooting" . 467)) :titles-at ("= Field Guide to Widgets" "== Getting Started" "=== Configuration" "== Troubleshooting"))"#
-    ]],
+            r#"OK (:default-function adoc-imenu-create-nested-index :nested (("Field Guide to Widgets" (nil . 1) ("Getting Started" (nil . 201) ("Configuration" . 400)) ("Troubleshooting" . 467))) :flat (("Field Guide to Widgets" . 1) ("Getting Started" . 201) ("Configuration" . 400) ("Troubleshooting" . 467)) :titles-at ("= Field Guide to Widgets" "== Getting Started" "=== Configuration" "== Troubleshooting"))"#
+        ]],
     )
 }
 
@@ -138,8 +138,8 @@ fn promote_demote_and_toggle_restructure_a_section_title() -> ParityBatchCase {
            (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (:before (:point 400 :column 0 :line-number 26 :line "=== Configuration") :promoted (:point 400 :column 0 :line-number 26 :line "==== Configuration ====") :demoted (:point 400 :column 0 :line-number 26 :line "== Configuration ==") :toggled "Configuration\n-------------" :imenu (("Field Guide to Widgets" . 1) ("Getting Started" . 201) ("Troubleshooting" . 477)) :modified t)"#
-    ]],
+            r#"OK (:before (:point 400 :column 0 :line-number 26 :line "=== Configuration") :promoted (:point 400 :column 0 :line-number 26 :line "==== Configuration ====") :demoted (:point 400 :column 0 :line-number 26 :line "== Configuration ==") :toggled "Configuration\n-------------" :imenu (("Field Guide to Widgets" . 1) ("Getting Started" . 201) ("Troubleshooting" . 477)) :modified t)"#
+        ]],
     )
 }
 
@@ -186,8 +186,8 @@ fn the_styling_keys_wrap_and_unwrap_asciidoc_emphasis() -> ParityBatchCase {
            (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (:bolded (:point 26 :column 14 :line-number 3 :line "A short *bold* intro with plain text.") :selection (t "bold") :unbolded (:point 24 :column 12 :line-number 3 :line "A short bold intro with plain text.") :italic (:point 48 :column 36 :line-number 3 :line "A short bold intro with _plain text_.") :monospace "A `short` bold intro with _plain text_." :faces (("`short`" adoc-typewriter-face adoc-verbatim-face) ("_plain text_" adoc-emphasis-face)) :text "= Styling\n\nA `short` bold intro with _plain text_.\n")"#
-    ]],
+            r#"OK (:bolded (:point 26 :column 14 :line-number 3 :line "A short *bold* intro with plain text.") :selection (t "bold") :unbolded (:point 24 :column 12 :line-number 3 :line "A short bold intro with plain text.") :italic (:point 48 :column 36 :line-number 3 :line "A short bold intro with _plain text_.") :monospace "A `short` bold intro with _plain text_." :faces (("`short`" adoc-typewriter-face adoc-verbatim-face) ("_plain text_" adoc-emphasis-face)) :text "= Styling\n\nA `short` bold intro with _plain text_.\n")"#
+        ]],
     )
 }
 
@@ -218,8 +218,8 @@ fn the_mode_handles_a_document_written_in_non_ascii_prose() -> ParityBatchCase {
            (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (:faces (("日本語ハンドブック" . adoc-title-0-face) ("Café Notes" . adoc-title-1-face) ("Ünicode Anhang" . adoc-title-2-face) ("*太字*" adoc-bold-face) ("_斜体_" adoc-emphasis-face) ("`等幅`" adoc-typewriter-face adoc-verbatim-face) ("TIP:" . adoc-complex-replacement-face) ("* 項目 1" . adoc-list-face) ("* Élément 2" . adoc-list-face) (":author:" . adoc-metadata-key-face) ("Renée" . adoc-metadata-value-face)) :index (("日本語ハンドブック" . 1) ("Café Notes — Grüße" . 35) ("Ünicode Anhang" . 181)) :size (336 337) :filled "Une phrase française assez longue pour\nêtre remplie sur plusieurs lignes par la\ncommande de remplissage standard d'Emacs\nsans problème.")"#
-    ]],
+            r#"OK (:faces (("日本語ハンドブック" . adoc-title-0-face) ("Café Notes" . adoc-title-1-face) ("Ünicode Anhang" . adoc-title-2-face) ("*太字*" adoc-bold-face) ("_斜体_" adoc-emphasis-face) ("`等幅`" adoc-typewriter-face adoc-verbatim-face) ("TIP:" . adoc-complex-replacement-face) ("* 項目 1" . adoc-list-face) ("* Élément 2" . adoc-list-face) (":author:" . adoc-metadata-key-face) ("Renée" . adoc-metadata-value-face)) :index (("日本語ハンドブック" . 1) ("Café Notes — Grüße" . 35) ("Ünicode Anhang" . 181)) :size (336 337) :filled "Une phrase française assez longue pour\nêtre remplie sur plusieurs lignes par la\ncommande de remplissage standard d'Emacs\nsans problème.")"#
+        ]],
     )
 }
 

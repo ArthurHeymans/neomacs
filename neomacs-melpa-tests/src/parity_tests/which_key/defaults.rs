@@ -42,8 +42,8 @@ fn which_key_public_defaults_match_the_pinned_release() -> ParityBatchCase {
                which-key-mode)"##,
         true,
         expect![[
-        r#"OK (1.0 nil 27 0 0 3 t " : " ".." "+" nil nil nil " *which-key*" echo side-window bottom 0 0.333 0.25 60 20 nil which-key-key-order t "<f5>" t nil nil t nil " WK" nil nil)"#
-    ]],
+            r#"OK (1.0 nil 27 0 0 3 t " : " ".." "+" nil nil nil " *which-key*" echo side-window bottom 0 0.333 0.25 60 20 nil which-key-key-order t "<f5>" t nil nil t nil " WK" nil nil)"#
+        ]],
     )
 }
 
@@ -83,8 +83,8 @@ fn which_key_setup_commands_apply_their_complete_configuration_profiles() -> Par
                                  echo-keystrokes))))))"##,
         true,
         expect![
-        "OK ((side-window right top 9) (side-window (right bottom) top 9) (side-window bottom echo 0.02) (minibuffer bottom left 0.02))"
-    ],
+            "OK ((side-window right top 9) (side-window (right bottom) top 9) (side-window bottom echo 0.02) (minibuffer bottom left 0.02))"
+        ],
     )
 }
 
@@ -177,8 +177,8 @@ fn which_key_mode_enable_and_disable_restore_state_and_hooks() -> ParityBatchCas
                      events)))))"##,
         true,
         expect![[
-        r#"OK ((t 0.25 which-key-C-h-dispatch #1=(which-key--lighter-restore) (which-key--hide-popup . #1#) (which-key--hide-popup-on-frame-size-change) ((start))) (nil 4 describe-prefix-bindings nil nil nil (stop (start))))"#
-    ]],
+            r#"OK ((t 0.25 which-key-C-h-dispatch #1=(which-key--lighter-restore) (which-key--hide-popup . #1#) (which-key--hide-popup-on-frame-size-change) ((start))) (nil 4 describe-prefix-bindings nil nil nil (stop (start))))"#
+        ]],
     )
 }
 

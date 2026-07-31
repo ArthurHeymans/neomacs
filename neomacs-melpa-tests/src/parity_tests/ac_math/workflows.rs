@@ -23,8 +23,8 @@ fn ac_math_completes_a_backslash_name_into_the_unicode_character() -> ParityBatc
            (cdr (assq 'action ac-source-math-unicode))))))"##,
         true,
         expect![[
-        r#"OK (("alpha α" "alpha 𝛼") "alpha" ("beta β" "beta 𝛽") "Let α be a root and β" 22 "u" ac-math-action-unicode)"#
-    ]],
+            r#"OK (("alpha α" "alpha 𝛼") "alpha" ("beta β" "beta 𝛽") "Let α be a root and β" 22 "u" ac-math-action-unicode)"#
+        ]],
     )
 }
 
@@ -48,8 +48,8 @@ fn ac_math_completes_latex_control_words_from_the_command_source() -> ParityBatc
            (cdr (assq 'prefix ac-source-latex-commands))))))"##,
         true,
         expect![[
-        r#"OK (("begin") ("section") "\\begin{document}\n\\section" 26 323 "c" ac-math-prefix)"#
-    ]],
+            r#"OK (("begin") ("section") "\\begin{document}\n\\section" 26 323 "c" ac-math-prefix)"#
+        ]],
     )
 }
 
@@ -95,8 +95,8 @@ fn ac_math_keeps_the_latex_command_when_completing_inside_a_math_environment() -
          (cdr (assq 'action ac-source-math-latex)))))"##,
         true,
         expect![[
-        r#"OK (t ("alpha α" "alpha 𝛼") "The set $\\alpha$ is open" 16 "l" ac-math-action-latex)"#
-    ]],
+            r#"OK (t ("alpha α" "alpha 𝛼") "The set $\\alpha$ is open" 16 "l" ac-math-action-latex)"#
+        ]],
     )
 }
 
@@ -138,8 +138,8 @@ fn ac_math_candidate_tables_pair_every_name_with_its_character() -> ParityBatchC
  ac-math--dummy)"##,
         true,
         expect![[
-        r#"OK (2824 2774 (("acute ́" . "acute") ("bar ̄" . "bar") ("breve ̆" . "breve") ("check ̌" . "check")) (("acute ́" . "́") ("bar ̄" . "̄") ("breve ̆" . "̆") ("check ̌" . "̌")) ("alpha α" . "alpha") ("alpha α" . "α") ("infty ∞" . "∞") nil ("address" "addtocounter" "addtolength" "addvspace") " ")"#
-    ]],
+            r#"OK (2824 2774 (("acute ́" . "acute") ("bar ̄" . "bar") ("breve ̆" . "breve") ("check ̌" . "check")) (("acute ́" . "́") ("bar ̄" . "̄") ("breve ̆" . "̆") ("check ̌" . "̌")) ("alpha α" . "alpha") ("alpha α" . "α") ("infty ∞" . "∞") nil ("address" "addtocounter" "addtolength" "addvspace") " ")"#
+        ]],
     )
 }
 
@@ -164,8 +164,8 @@ fn ac_math_offers_nothing_for_plain_prose_and_leaves_the_buffer_alone() -> Parit
            (point)))))"##,
         true,
         expect![[
-        r#"OK (nil nil "just prose here" nil "zzzznosuchsymbol" "\\zzzznosuchsymbol\n\n\n\n\n\n\n\n\n\n\n" 18)"#
-    ]],
+            r#"OK (nil nil "just prose here" nil "zzzznosuchsymbol" "\\zzzznosuchsymbol\n\n\n\n\n\n\n\n\n\n\n" 18)"#
+        ]],
     )
 }
 

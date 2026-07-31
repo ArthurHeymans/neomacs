@@ -35,7 +35,8 @@ fn asx_get_buffer_reuses_the_configured_live_buffer_and_honors_name_changes() ->
     )
 }
 
-fn asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writable() -> ParityBatchCase {
+fn asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writable()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writable",
         r##"(let ((asx-buffer-name "*asx-parity-prepare*")
@@ -72,12 +73,13 @@ fn asx_prepare_buffer_switches_when_needed_clears_old_content_and_makes_it_writa
              (kill-buffer target))))"##,
         true,
         expect![[
-        r##"OK ((:buffer nil) "#+STARTUP: overview indent\n" nil 28 ("*asx-parity-prepare*"))"##
-    ]],
+            r##"OK ((:buffer nil) "#+STARTUP: overview indent\n" nil 28 ("*asx-parity-prepare*"))"##
+        ]],
     )
 }
 
-fn asx_finalize_buffer_trims_trailing_space_enables_read_only_org_display_and_rewinds() -> ParityBatchCase {
+fn asx_finalize_buffer_trims_trailing_space_enables_read_only_org_display_and_rewinds()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_finalize_buffer_trims_trailing_space_enables_read_only_org_display_and_rewinds",
         r##"(with-temp-buffer
@@ -92,7 +94,8 @@ fn asx_finalize_buffer_trims_trailing_space_enables_read_only_org_display_and_re
     )
 }
 
-fn asx_insert_tags_preserves_order_duplicates_and_the_empty_tags_label_contract() -> ParityBatchCase {
+fn asx_insert_tags_preserves_order_duplicates_and_the_empty_tags_label_contract() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asx_insert_tags_preserves_order_duplicates_and_the_empty_tags_label_contract",
         r##"(list
@@ -140,12 +143,13 @@ fn asx_insert_question_renders_metadata_body_links_code_and_tags_together() -> P
             (point-max))))"##,
         true,
         expect![[
-        r##"OK "#+TITLE: How to map data?\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nUse [[https://www.gnu.org/software/emacs/][Emacs]] carefully.\n\nTags: emacs elisp ""##
-    ]],
+            r##"OK "#+TITLE: How to map data?\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nUse [[https://www.gnu.org/software/emacs/][Emacs]] carefully.\n\nTags: emacs elisp ""##
+        ]],
     )
 }
 
-fn asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_order() -> ParityBatchCase {
+fn asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_order",
         r##"(with-temp-buffer
@@ -180,8 +184,8 @@ fn asx_insert_answers_adds_visibility_only_to_the_first_answer_and_keeps_scores_
            (point-max))))"##,
         true,
         expect![[
-        r#"OK ("\n* Answer (10)\n:PROPERTIES:\n:VISIBILITY: all\n:END:\n\nFirst answer\n\n* Answer (3)\n\nSecond answer\n\n* Answer (-2)\n\nThird answer with inline-code\n" 1 3)"#
-    ]],
+            r#"OK ("\n* Answer (10)\n:PROPERTIES:\n:VISIBILITY: all\n:END:\n\nFirst answer\n\n* Answer (3)\n\nSecond answer\n\n* Answer (-2)\n\nThird answer with inline-code\n" 1 3)"#
+        ]],
     )
 }
 
@@ -271,12 +275,13 @@ fn asx_insert_post_runs_the_full_buffer_lifecycle_and_limits_answer_count() -> P
              (kill-buffer target))))"##,
         true,
         expect![[
-        r##"OK (("#+STARTUP: overview indent\n#+TITLE: A complete practical post\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nQuestion body with emphasis.\n\nTags: emacs elisp\n* Answer (7)\n:PROPERTIES:\n:VISIBILITY: all\n:END:\n\nFirst answer.\n" org-mode t t 1 t) 1 0)"##
-    ]],
+            r##"OK (("#+STARTUP: overview indent\n#+TITLE: A complete practical post\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nQuestion body with emphasis.\n\nTags: emacs elisp\n* Answer (7)\n:PROPERTIES:\n:VISIBILITY: all\n:END:\n\nFirst answer.\n" org-mode t t 1 t) 1 0)"##
+        ]],
     )
 }
 
-fn asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partial_buffer() -> ParityBatchCase {
+fn asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partial_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partial_buffer",
         r##"(let ((asx-buffer-name "*asx-parity-code-block-post*")
@@ -324,12 +329,13 @@ fn asx_full_normalized_code_block_workflow_reports_the_renderer_error_and_partia
              (kill-buffer target))))"##,
         true,
         expect![[
-        r##"OK ((:error wrong-type-argument (symbolp "(+ 1 2)")) "#+STARTUP: overview indent\n#+TITLE: How to  ?\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nQuestion body.\n\n#+BEGIN_EXAMPLE emacs\n" fundamental-mode nil nil 148)"##
-    ]],
+            r##"OK ((:error wrong-type-argument (symbolp "(+ 1 2)")) "#+STARTUP: overview indent\n#+TITLE: How to  ?\nhttps://stackoverflow.com/questions/101/first\n* Question (12)\n\nQuestion body.\n\n#+BEGIN_EXAMPLE emacs\n" fundamental-mode nil nil 148)"##
+        ]],
     )
 }
 
-fn asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration() -> ParityBatchCase {
+fn asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration",
         r##"(let (events)
@@ -377,8 +383,8 @@ fn asx_insert_post_dom_retries_unanswered_posts_or_inserts_them_by_configuration
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:retried :inserted :inserted ((:retry "https://example.invalid/questions/1") (:insert (:url "https://example.invalid/questions/1" :title "No answer" :answers nil)) (:insert (:url "https://example.invalid/questions/2" :title "Answered" :answers ((:score "1"))))))"#
-    ]],
+            r#"OK (:retried :inserted :inserted ((:retry "https://example.invalid/questions/1") (:insert (:url "https://example.invalid/questions/1" :title "No answer" :answers nil)) (:insert (:url "https://example.invalid/questions/2" :title "Answered" :answers ((:score "1"))))))"#
+        ]],
     )
 }
 

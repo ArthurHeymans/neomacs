@@ -61,8 +61,8 @@ fn accent_custom_characters_are_appended_and_reachable_from_the_popup() -> Parit
            (assoc 'a accent-diacritics)))))"##,
         true,
         expect![[
-        r#"OK ("Xin chao ban ằ" 15 22 (a (à á â ä æ ã å ā ằ ắ)) (z (ž ź ż ẑ)) (e (è é ê ë ē ė ę)) (a (à á â ä æ ã å ā)))"#
-    ]],
+            r#"OK ("Xin chao ban ằ" 15 22 (a (à á â ä æ ã å ā ằ ắ)) (z (ž ź ż ẑ)) (e (è é ê ë ē ė ę)) (a (à á â ä æ ã å ā)))"#
+        ]],
     )
 }
 
@@ -89,8 +89,8 @@ fn accent_menu_reports_an_unaccentable_character_and_leaves_the_buffer_alone() -
              (buffer-modified-p))))))"##,
         true,
         expect![[
-        r#"OK ("Bonjour!" 9 ("Bonjour!" 9 "No accented characters available") (signal wrong-type-argument (characterp nil)) "Bonjour!" 1 t)"#
-    ]],
+            r#"OK ("Bonjour!" 9 ("Bonjour!" 9 "No accented characters available") (signal wrong-type-argument (characterp nil)) "Bonjour!" 1 t)"#
+        ]],
     )
 }
 
@@ -133,8 +133,8 @@ fn accent_company_backend_answers_the_documented_command_protocol() -> ParityBat
          (point))))"##,
         true,
         expect![[
-        r#"OK (("e" ("è" "é" "ê" "ë" "ē" "ė" "ę")) ("e" ("fè" "fé" "fê" "fë" "fē" "fė" "fę")) (nil nil) "cafe!" 6)"#
-    ]],
+            r#"OK (("e" ("è" "é" "ê" "ë" "ē" "ė" "ę")) ("e" ("fè" "fé" "fê" "fë" "fē" "fė" "fę")) (nil nil) "cafe!" 6)"#
+        ]],
     )
 }
 
@@ -157,8 +157,8 @@ fn accent_corfu_offers_the_diacritics_through_completion_at_point() -> ParityBat
            completions))))"##,
         true,
         expect![[
-        r#"OK ("caf" 4 t 1 (4 4 ("è" "é" "ê" "ë" "ē" "ė" "ę") :exclusive no) "Type M-RET on a completion to select it.\nType M-<down> or M-<up> to move point between completions.\n\n7 possible completions:\nè \11é \11ê\në \11ē \11ė\nę")"#
-    ]],
+            r#"OK ("caf" 4 t 1 (4 4 ("è" "é" "ê" "ë" "ē" "ė" "ę") :exclusive no) "Type M-RET on a completion to select it.\nType M-<down> or M-<up> to move point between completions.\n\n7 possible completions:\nè \11é \11ê\në \11ē \11ė\nę")"#
+        ]],
     )
 }
 

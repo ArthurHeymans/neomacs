@@ -47,10 +47,5 @@ pub(crate) fn assert_zero_b_layout_signal_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_zero_b_layout_parity` cases (2a).
 pub(crate) fn assert_zero_b_layout_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        zero_b_layout_oracle(),
-        &name,
-        "zero_b_layout_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(zero_b_layout_oracle(), &name, "zero_b_layout_parity", cases);
 }

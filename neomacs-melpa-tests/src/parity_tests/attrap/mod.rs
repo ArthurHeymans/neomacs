@@ -176,10 +176,5 @@ pub(crate) fn assert_attrap_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_attrap_parity` cases (2a).
 pub(crate) fn assert_attrap_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        attrap_oracle(),
-        &name,
-        "attrap_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(attrap_oracle(), &name, "attrap_parity", cases);
 }

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_dim_other_buffers_batch};
 
-fn auto_dim_other_buffers_never_dim_hook_short_circuits_in_order_and_returns_hook_value() -> ParityBatchCase {
+fn auto_dim_other_buffers_never_dim_hook_short_circuits_in_order_and_returns_hook_value()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_never_dim_hook_short_circuits_in_order_and_returns_hook_value",
         r##"(let ((buffer
@@ -46,12 +47,13 @@ fn auto_dim_other_buffers_never_dim_hook_short_circuits_in_order_and_returns_hoo
               (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (:keep-lit ((:first " *adob-hook-target*") (:second " *adob-hook-target*")))"#
-    ]],
+            r#"OK (:keep-lit ((:first " *adob-hook-target*") (:second " *adob-hook-target*")))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_fringe_detection_covers_legacy_pair_and_full_pair_shapes() -> ParityBatchCase {
+fn auto_dim_other_buffers_fringe_detection_covers_legacy_pair_and_full_pair_shapes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_fringe_detection_covers_legacy_pair_and_full_pair_shapes",
         r##"(mapcar
@@ -73,12 +75,13 @@ fn auto_dim_other_buffers_fringe_detection_covers_legacy_pair_and_full_pair_shap
             ((fringe . (nil . mode-line-active)))))"##,
         true,
         expect![
-        "OK ((nil nil nil) (((default . auto-dim-other-buffers)) nil nil) (((fringe . auto-dim-other-buffers)) t t) (((fringe)) nil nil) (((fringe nil)) nil nil) (((fringe auto-dim-other-buffers)) t t) (((fringe nil . mode-line-active)) t t))"
-    ],
+            "OK ((nil nil nil) (((default . auto-dim-other-buffers)) nil nil) (((fringe . auto-dim-other-buffers)) t t) (((fringe)) nil nil) (((fringe nil)) nil nil) (((fringe auto-dim-other-buffers)) t t) (((fringe nil . mode-line-active)) t t))"
+        ],
     )
 }
 
-fn auto_dim_other_buffers_positive_frame_parameter_predicate_rejects_missing_non_numeric_and_zero() -> ParityBatchCase {
+fn auto_dim_other_buffers_positive_frame_parameter_predicate_rejects_missing_non_numeric_and_zero()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_positive_frame_parameter_predicate_rejects_missing_non_numeric_and_zero",
         r##"(mapcar
@@ -101,12 +104,13 @@ fn auto_dim_other_buffers_positive_frame_parameter_predicate_rejects_missing_non
              (right-fringe . nil))))"##,
         true,
         expect![[
-        r#"OK ((nil nil nil) (((left-fringe . 0)) nil nil) (((left-fringe . -1)) nil nil) (((left-fringe . 1)) t nil) (((left-fringe . 2.5) (right-fringe . 3)) t t) (((left-fringe . "4") (right-fringe)) nil nil))"#
-    ]],
+            r#"OK ((nil nil nil) (((left-fringe . 0)) nil nil) (((left-fringe . -1)) nil nil) (((left-fringe . 1)) t nil) (((left-fringe . 2.5) (right-fringe . 3)) t t) (((left-fringe . "4") (right-fringe)) nil nil))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_remap_entry_compiler_forwards_exact_filtered_window_specs() -> ParityBatchCase {
+fn auto_dim_other_buffers_remap_entry_compiler_forwards_exact_filtered_window_specs()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_remap_entry_compiler_forwards_exact_filtered_window_specs",
         r##"(let (calls)
@@ -137,12 +141,13 @@ fn auto_dim_other_buffers_remap_entry_compiler_forwards_exact_filtered_window_sp
             (nreverse calls)))"##,
         true,
         expect![
-        "OK ((default (:filtered (:window adob--dim nil) mode-line-active) (:filtered (:window adob--dim t) auto-dim-other-buffers)) (fringe (:filtered (:window adob--dim t) auto-dim-other-buffers)) (org-hide (:filtered (:window adob--dim nil) auto-dim-other-buffers-hide)))"
-    ],
+            "OK ((default (:filtered (:window adob--dim nil) mode-line-active) (:filtered (:window adob--dim t) auto-dim-other-buffers)) (fringe (:filtered (:window adob--dim t) auto-dim-other-buffers)) (org-hide (:filtered (:window adob--dim nil) auto-dim-other-buffers-hide)))"
+        ],
     )
 }
 
-fn auto_dim_other_buffers_real_face_remaps_add_remove_and_local_cookie_lifecycle_match() -> ParityBatchCase {
+fn auto_dim_other_buffers_real_face_remaps_add_remove_and_local_cookie_lifecycle_match()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_real_face_remaps_add_remove_and_local_cookie_lifecycle_match",
         r##"(with-temp-buffer
@@ -169,12 +174,13 @@ fn auto_dim_other_buffers_real_face_remaps_add_remove_and_local_cookie_lifecycle
                   (current-buffer)))))))"##,
         true,
         expect![
-        "OK ((2 (t 2 (default mode-line) ((mode-line ((:filtered (:window adob--dim nil) auto-dim-other-buffers))) (default nil)))) (nil 0 nil nil))"
-    ],
+            "OK ((2 (t 2 (default mode-line) ((mode-line ((:filtered (:window adob--dim nil) auto-dim-other-buffers))) (default nil)))) (nil 0 nil nil))"
+        ],
     )
 }
 
-fn auto_dim_other_buffers_remap_faces_transitions_between_dimmed_never_dim_and_dimmed_again() -> ParityBatchCase {
+fn auto_dim_other_buffers_remap_faces_transitions_between_dimmed_never_dim_and_dimmed_again()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_remap_faces_transitions_between_dimmed_never_dim_and_dimmed_again",
         r##"(let ((buffer
@@ -236,12 +242,13 @@ fn auto_dim_other_buffers_remap_faces_transitions_between_dimmed_never_dim_and_d
               (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) nil (nil 0 nil nil) t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (" *adob-transition*" " *adob-transition*" " *adob-transition*"))"#
-    ]],
+            r#"OK (t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) nil (nil 0 nil nil) t (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) (" *adob-transition*" " *adob-transition*" " *adob-transition*"))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_remap_cycle_rebuilds_every_owned_buffer_and_skips_newly_exempt_buffer() -> ParityBatchCase {
+fn auto_dim_other_buffers_remap_cycle_rebuilds_every_owned_buffer_and_skips_newly_exempt_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_remap_cycle_rebuilds_every_owned_buffer_and_skips_newly_exempt_buffer",
         r##"(let ((first
@@ -290,12 +297,13 @@ fn auto_dim_other_buffers_remap_cycle_rebuilds_every_owned_buffer_and_skips_newl
               (kill-buffer second))))"##,
         true,
         expect![
-        "OK (((t 1 (default) ((default nil))) (nil 0 nil nil)) (nil 0 nil nil) (nil 0 nil nil))"
-    ],
+            "OK (((t 1 (default) ((default nil))) (nil 0 nil nil)) (nil 0 nil nil) (nil 0 nil nil))"
+        ],
     )
 }
 
-fn auto_dim_other_buffers_force_window_update_calls_basic_refresh_then_optional_fringe_refresh() -> ParityBatchCase {
+fn auto_dim_other_buffers_force_window_update_calls_basic_refresh_then_optional_fringe_refresh()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_force_window_update_calls_basic_refresh_then_optional_fringe_refresh",
         r##"(let (events)
@@ -330,12 +338,13 @@ fn auto_dim_other_buffers_force_window_update_calls_basic_refresh_then_optional_
             (nreverse events)))"##,
         true,
         expect![[
-        r#"OK ((:force :plain-object) (:force :window-object) (:lookup (:window-object nil t)) (:fringes #2=(:window-a :window-b)) (:force (:buffer #1="*scratch*")) (:lookup ((:buffer #1#) nil t)) (:fringes #2#))"#
-    ]],
+            r#"OK ((:force :plain-object) (:force :window-object) (:lookup (:window-object nil t)) (:fringes #2=(:window-a :window-b)) (:force (:buffer #1="*scratch*")) (:lookup ((:buffer #1#) nil t)) (:fringes #2#))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_fringe_refresh_deduplicates_frames_and_toggles_only_positive_fringe_frames() -> ParityBatchCase {
+fn auto_dim_other_buffers_fringe_refresh_deduplicates_frames_and_toggles_only_positive_fringe_frames()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_fringe_refresh_deduplicates_frames_and_toggles_only_positive_fringe_frames",
         r##"(let (events)
@@ -391,12 +400,13 @@ fn auto_dim_other_buffers_fringe_refresh_deduplicates_frames_and_toggles_only_po
              (nreverse events))))"##,
         true,
         expect![
-        "OK (nil ((:read adob--hack :inverse-video :frame-a nil) (:write adob--hack :inverse-video t :frame-a) (:read adob--hack :inverse-video :frame-c nil) (:write adob--hack :inverse-video nil :frame-c)))"
-    ],
+            "OK (nil ((:read adob--hack :inverse-video :frame-a nil) (:write adob--hack :inverse-video t :frame-a) (:read adob--hack :inverse-video :frame-c nil) (:write adob--hack :inverse-video nil :frame-c)))"
+        ],
     )
 }
 
-fn auto_dim_other_buffers_kill_all_local_variables_advice_restores_real_remaps_and_kills_other_locals() -> ParityBatchCase {
+fn auto_dim_other_buffers_kill_all_local_variables_advice_restores_real_remaps_and_kills_other_locals()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_kill_all_local_variables_advice_restores_real_remaps_and_kills_other_locals",
         r##"(with-temp-buffer
@@ -422,8 +432,8 @@ fn auto_dim_other_buffers_kill_all_local_variables_advice_restores_real_remaps_a
                 (current-buffer))))))"##,
         true,
         expect![
-        "OK ((t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) nil nil (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"
-    ],
+            "OK ((t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))) nil nil (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"
+        ],
     )
 }
 

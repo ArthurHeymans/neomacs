@@ -63,10 +63,6 @@ pub(crate) fn assert_alabaster_themes_autoload_parity(elisp_form: &str, expected
     );
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_alabaster_themes_autoload_parity` cases (2a).
 pub(crate) fn assert_alabaster_themes_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

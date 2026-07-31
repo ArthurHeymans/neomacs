@@ -114,10 +114,6 @@ pub(crate) fn assert_unshimmed_ac_emmet_parity(elisp_form: &str, expected: Expec
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_ac_emmet_parity` cases (2a).
 pub(crate) fn assert_ac_emmet_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

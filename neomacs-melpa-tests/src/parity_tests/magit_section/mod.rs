@@ -49,10 +49,5 @@ pub(crate) fn assert_magit_section_signal_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_magit_section_parity` cases (2a).
 pub(crate) fn assert_magit_section_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        magit_section_oracle(),
-        &name,
-        "magit_section_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(magit_section_oracle(), &name, "magit_section_parity", cases);
 }

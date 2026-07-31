@@ -315,10 +315,5 @@ pub(crate) fn assert_ack_menu_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ack_menu_parity` cases (2a).
 pub(crate) fn assert_ack_menu_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ack_menu_oracle(),
-        &name,
-        "ack_menu_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ack_menu_oracle(), &name, "ack_menu_parity", cases);
 }

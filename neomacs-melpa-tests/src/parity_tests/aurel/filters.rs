@@ -73,8 +73,8 @@ fn aurel_contains_every_string_combines_selected_fields_literally() -> ParityBat
              "Editor"))))"##,
         true,
         expect![[
-        r#"OK ((t "Emacs Git") (t "Emacs Git") (t "Emacs Git") (t "Emacs Git") (t "Emacs Git") (nil nil))"#
-    ]],
+            r#"OK ((t "Emacs Git") (t "Emacs Git") (t "Emacs Git") (t "Emacs Git") (t "Emacs Git") (nil nil))"#
+        ]],
     )
 }
 
@@ -100,8 +100,8 @@ fn aurel_aur_url_filters_mutate_package_path_and_prepend_git_url() -> ParityBatc
               (cdr git-result))))"##,
         true,
         expect![[
-        r#"OK (#1=((name . "emacs-git") (pkg-url . "https://aur.archlinux.org/cgit/aur.git/snapshot/emacs-git.tar.gz") (id . 42)) ((git-url . "https://aur.archlinux.org/emacs-git.git") . #1#) t t)"#
-    ]],
+            r#"OK (#1=((name . "emacs-git") (pkg-url . "https://aur.archlinux.org/cgit/aur.git/snapshot/emacs-git.tar.gz") (id . 42)) ((git-url . "https://aur.archlinux.org/emacs-git.git") . #1#) t t)"#
+        ]],
     )
 }
 
@@ -123,8 +123,8 @@ fn aurel_pacman_none_filter_normalizes_strings_and_rejects_non_string_values() -
               '((installed-size . 0)))))))"##,
         true,
         expect![[
-        r#"OK (((installed-name . "demo") (depends-opt) (required . "none") (optional-for . "") (validated . "SHA-256")) (:error wrong-type-argument (stringp 0)))"#
-    ]],
+            r#"OK (((installed-name . "demo") (depends-opt) (required . "none") (optional-for . "") (validated . "SHA-256")) (:error wrong-type-argument (stringp 0)))"#
+        ]],
     )
 }
 
@@ -168,8 +168,8 @@ fn aurel_filtered_alist_keys_mutations_and_exposes_continuation_after_nil() -> P
               'id)))))"##,
         true,
         expect![[
-        r#"OK (((10 (processed . "ALPHA") (id . 10) (name . "alpha") (keep . t)) (30 (processed . "GAMMA") (id . 30) (name . "gamma") (keep . yes))) (:error wrong-type-argument (char-or-string-p nil)))"#
-    ]],
+            r#"OK (((10 (processed . "ALPHA") (id . 10) (name . "alpha") (keep . t)) (30 (processed . "GAMMA") (id . 30) (name . "gamma") (keep . yes))) (:error wrong-type-argument (char-or-string-p nil)))"#
+        ]],
     )
 }
 
@@ -209,8 +209,8 @@ fn aurel_receive_packages_joins_aur_and_pacman_records_by_name() -> ParityBatchC
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((10 (git-url . "https://aur.archlinux.org/alpha.git") (name . "alpha") (id . 10) (pkg-url . "https://aur.archlinux.org/alpha.tar.gz")) (20 (git-url . "https://aur.archlinux.org/beta.git") (name . "beta") (id . 20) (pkg-url . "https://aur.archlinux.org/beta.tar.gz") (installed-name . "beta") (installed-version . "2.0") (depends-opt))) ((:aur "fixture:aur") (:pacman "alpha" "beta")))"#
-    ]],
+            r#"OK (((10 (git-url . "https://aur.archlinux.org/alpha.git") (name . "alpha") (id . 10) (pkg-url . "https://aur.archlinux.org/alpha.tar.gz")) (20 (git-url . "https://aur.archlinux.org/beta.git") (name . "beta") (id . 20) (pkg-url . "https://aur.archlinux.org/beta.tar.gz") (installed-name . "beta") (installed-version . "2.0") (depends-opt))) ((:aur "fixture:aur") (:pacman "alpha" "beta")))"#
+        ]],
     )
 }
 
@@ -268,8 +268,8 @@ fn aurel_package_predicates_cover_maintenance_versions_and_regexps() -> ParityBa
              (installed-version)))))"##,
         true,
         expect![[
-        r#"OK (("emacs-git" t nil t nil t nil t t) ("tiny" nil t nil t nil t nil t) ("unknown" nil t nil t t nil nil t))"#
-    ]],
+            r#"OK (("emacs-git" t nil t nil t nil t t) ("tiny" nil t nil t nil t nil t) ("unknown" nil t nil t t nil nil t))"#
+        ]],
     )
 }
 
@@ -327,8 +327,8 @@ fn aurel_filter_commands_forward_predicates_prefixes_and_regexp_closures() -> Pa
               (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (:enabled :enabled :enabled :enabled :enabled :enabled :enabled :enabled :enabled ((aurel-package-unmaintained? nil nil) (aurel-package-maintained? (4) nil) (aurel-package-not-outdated? nil nil) (aurel-package-outdated? - nil) (aurel-package-different-versions? nil nil) (aurel-package-same-versions? 7 nil) (:closure nil nil) (:closure t 6) (aurel-package-not-outdated? :outer nil)))"#
-    ]],
+            r#"OK (:enabled :enabled :enabled :enabled :enabled :enabled :enabled :enabled :enabled ((aurel-package-unmaintained? nil nil) (aurel-package-maintained? (4) nil) (aurel-package-not-outdated? nil nil) (aurel-package-outdated? - nil) (aurel-package-different-versions? nil nil) (aurel-package-same-versions? 7 nil) (:closure nil nil) (:closure t 6) (aurel-package-not-outdated? :outer nil)))"#
+        ]],
     )
 }
 

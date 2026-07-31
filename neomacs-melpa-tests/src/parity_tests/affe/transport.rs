@@ -23,7 +23,8 @@ fn affe_send_serializes_symbols_lists_unicode_and_embedded_newlines() -> ParityB
     )
 }
 
-fn affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process() -> ParityBatchCase {
+fn affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_process",
         r##"(let (arguments callbacks)
@@ -62,8 +63,8 @@ fn affe_connect_frames_fragmented_lines_flushes_tail_and_builds_local_socket_pro
                       (nreverse callbacks))))))"##,
         true,
         expect![[
-        r#"OK (network-client "affe-socket" t utf-8 local "affe-socket" (("one two" "three") ("four" "five") ("tail")))"#
-    ]],
+            r#"OK (network-client "affe-socket" t utf-8 local "affe-socket" (("one two" "three") ("four" "five") ("tail")))"#
+        ]],
     )
 }
 

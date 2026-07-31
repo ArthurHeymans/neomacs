@@ -83,8 +83,8 @@ fn compat_sequence_predicates_cover_closures_function_values_and_boundaries() ->
                   #'minusp numbers))))"##,
         true,
         expect![[
-        r#"OK ((0 -1 -2 -3) (1 0 -1 -2 -3) (3 2 1) (3 2) t nil (0 -1 -2 -3) (-1 -2 -3))"#
-    ]],
+            r#"OK ((0 -1 -2 -3) (1 0 -1 -2 -3) (3 2 1) (3 2) t nil (0 -1 -2 -3) (-1 -2 -3))"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_dark_batch};
 
-fn auto_dark_start_timer_stops_previous_then_schedules_immediate_repeating_check() -> ParityBatchCase {
+fn auto_dark_start_timer_stops_previous_then_schedules_immediate_repeating_check() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dark_start_timer_stops_previous_then_schedules_immediate_repeating_check",
         r##"(let ((auto-dark--timer
@@ -32,8 +33,8 @@ fn auto_dark_start_timer_stops_previous_then_schedules_immediate_repeating_check
                (nreverse events)))))"##,
         true,
         expect![
-        "OK (new-timer new-timer ((:stop old-timer) (:run 0 17 auto-dark--check-and-set-dark-mode)))"
-    ],
+            "OK (new-timer new-timer ((:stop old-timer) (:run 0 17 auto-dark--check-and-set-dark-mode)))"
+        ],
     )
 }
 
@@ -69,8 +70,8 @@ fn auto_dark_stop_timer_cancels_only_timer_objects_and_preserves_stale_slot() ->
              (nreverse calls))))"##,
         true,
         expect![
-        "OK (((nil nil nil) (not-a-timer nil not-a-timer) (valid-timer (:cancelled valid-timer) valid-timer) (second-timer (:cancelled second-timer) second-timer)) (valid-timer second-timer))"
-    ],
+            "OK (((nil nil nil) (not-a-timer nil not-a-timer) (valid-timer (:cancelled valid-timer) valid-timer) (second-timer (:cancelled second-timer) second-timer)) (valid-timer second-timer))"
+        ],
     )
 }
 
@@ -104,7 +105,8 @@ fn auto_dark_real_timer_contains_exact_callback_repeat_and_cancel_lifecycle() ->
     )
 }
 
-fn auto_dark_register_dbus_listener_forwards_exact_signal_and_callback_mapping() -> ParityBatchCase {
+fn auto_dark_register_dbus_listener_forwards_exact_signal_and_callback_mapping() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dark_register_dbus_listener_forwards_exact_signal_and_callback_mapping",
         r##"(let (register-calls
@@ -164,12 +166,13 @@ fn auto_dark_register_dbus_listener_forwards_exact_signal_and_callback_mapping()
                  (1)))))))"##,
         true,
         expect![[
-        r#"OK (fixture-dbus-object fixture-dbus-object (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "SettingChanged") t ((("org.freedesktop.appearance" "color-scheme" (1)) (:theme dark) (dark)) (("org.freedesktop.appearance" "color-scheme" (0)) (:theme light) (light)) (("org.freedesktop.appearance" "color-scheme" (2)) (:theme light) (light)) (("org.freedesktop.appearance" "color-scheme" (3)) nil nil) (("other.path" "color-scheme" (1)) nil nil) (("org.freedesktop.appearance" "other-setting" (1)) nil nil)))"#
-    ]],
+            r#"OK (fixture-dbus-object fixture-dbus-object (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "SettingChanged") t ((("org.freedesktop.appearance" "color-scheme" (1)) (:theme dark) (dark)) (("org.freedesktop.appearance" "color-scheme" (0)) (:theme light) (light)) (("org.freedesktop.appearance" "color-scheme" (2)) (:theme light) (light)) (("org.freedesktop.appearance" "color-scheme" (3)) nil nil) (("other.path" "color-scheme" (1)) nil nil) (("org.freedesktop.appearance" "other-setting" (1)) nil nil)))"#
+        ]],
     )
 }
 
-fn auto_dark_unregister_dbus_listener_forwards_current_object_and_return_value() -> ParityBatchCase {
+fn auto_dark_unregister_dbus_listener_forwards_current_object_and_return_value() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dark_unregister_dbus_listener_forwards_current_object_and_return_value",
         r##"(let ((auto-dark--dbus-listener-object
@@ -244,12 +247,13 @@ fn auto_dark_register_change_listener_selects_ns_mac_dbus_then_timer_priority() 
                (nil nil nil)))))"##,
         true,
         expect![
-        "OK (((t t t) :hook-added ((:add-hook ns-system-appearance-change-functions auto-dark--set-theme))) ((nil t t) :hook-added ((:add-hook mac-effective-appearance-change-hook auto-dark--check-and-set-dark-mode))) ((nil nil t) :dbus-registered (:dbus)) ((nil nil nil) :timer-started (:timer)))"
-    ],
+            "OK (((t t t) :hook-added ((:add-hook ns-system-appearance-change-functions auto-dark--set-theme))) ((nil t t) :hook-added ((:add-hook mac-effective-appearance-change-hook auto-dark--check-and-set-dark-mode))) ((nil nil t) :dbus-registered (:dbus)) ((nil nil nil) :timer-started (:timer)))"
+        ],
     )
 }
 
-fn auto_dark_unregister_change_listener_selects_matching_ns_mac_dbus_then_timer_path() -> ParityBatchCase {
+fn auto_dark_unregister_change_listener_selects_matching_ns_mac_dbus_then_timer_path()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dark_unregister_change_listener_selects_matching_ns_mac_dbus_then_timer_path",
         r##"(let (events)
@@ -301,12 +305,13 @@ fn auto_dark_unregister_change_listener_selects_matching_ns_mac_dbus_then_timer_
                (nil nil nil)))))"##,
         true,
         expect![
-        "OK (((t t t) :hook-removed ((:remove-hook ns-system-appearance-change-functions auto-dark--set-theme))) ((nil t t) :hook-removed ((:remove-hook mac-effective-appearance-change-hook auto-dark--check-and-set-dark-mode))) ((nil nil t) :dbus-unregistered (:dbus)) ((nil nil nil) :timer-stopped (:timer)))"
-    ],
+            "OK (((t t t) :hook-removed ((:remove-hook ns-system-appearance-change-functions auto-dark--set-theme))) ((nil t t) :hook-removed ((:remove-hook mac-effective-appearance-change-hook auto-dark--check-and-set-dark-mode))) ((nil nil t) :dbus-unregistered (:dbus)) ((nil nil nil) :timer-stopped (:timer)))"
+        ],
     )
 }
 
-fn auto_dark_listener_feature_predicates_follow_binding_and_configured_method_exactly() -> ParityBatchCase {
+fn auto_dark_listener_feature_predicates_follow_binding_and_configured_method_exactly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dark_listener_feature_predicates_follow_binding_and_configured_method_exactly",
         r##"(list

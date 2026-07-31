@@ -50,10 +50,5 @@ pub(crate) fn assert_projectile_signal_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_projectile_parity` cases (2a).
 pub(crate) fn assert_projectile_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        projectile_oracle(),
-        &name,
-        "projectile_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(projectile_oracle(), &name, "projectile_parity", cases);
 }

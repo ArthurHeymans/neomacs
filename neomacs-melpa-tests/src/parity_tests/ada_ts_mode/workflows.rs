@@ -24,8 +24,8 @@ fn opening_an_ada_spec_activates_the_tree_sitter_mode_with_a_live_parser() -> Pa
        :defun-name-fn treesit-defun-name-function))"##,
         true,
         expect![[
-        r#"OK (:mode ada-ts-mode :routing ada-ts-mode :ready t :parsers (ada) :root "compilation" :children 2 :comment ("--" "") :indent (ada-ts-mode--indent-line ada-ts-mode--indent-region) :imenu ada-ts-imenu :defun-name-fn ada-ts-mode--defun-name)"#
-    ]],
+            r#"OK (:mode ada-ts-mode :routing ada-ts-mode :ready t :parsers (ada) :root "compilation" :children 2 :comment ("--" "") :indent (ada-ts-mode--indent-line ada-ts-mode--indent-region) :imenu ada-ts-imenu :defun-name-fn ada-ts-mode--defun-name)"#
+        ]],
     )
 }
 
@@ -48,8 +48,8 @@ fn font_lock_assigns_faces_by_feature_level_across_the_spec() -> ParityBatchCase
          :features treesit-font-lock-feature-list)))"##,
         true,
         expect![[
-        r#"OK (:level4 (("--  Inventory" 1 font-lock-comment-face) ("package" 45 font-lock-keyword-face) ("Max_Items" 75 (font-lock-constant-face font-lock-variable-name-face)) ("100" 107 font-lock-number-face) ("Item_Id" 121 font-lock-type-face) ("Name_Of" 159 (font-lock-function-name-face))) :level1 (("--  Inventory" 1 font-lock-comment-face) ("package" 45 nil) ("100" 107 nil)) :features ((comment definition) (keyword preprocessor string type) (attribute assignment constant control function number operator) (bracket delimiter error label)))"#
-    ]],
+            r#"OK (:level4 (("--  Inventory" 1 font-lock-comment-face) ("package" 45 font-lock-keyword-face) ("Max_Items" 75 (font-lock-constant-face font-lock-variable-name-face)) ("100" 107 font-lock-number-face) ("Item_Id" 121 font-lock-type-face) ("Name_Of" 159 (font-lock-function-name-face))) :level1 (("--  Inventory" 1 font-lock-comment-face) ("package" 45 nil) ("100" 107 nil)) :features ((comment definition) (keyword preprocessor string type) (attribute assignment constant control function number operator) (bracket delimiter error label)))"#
+        ]],
     )
 }
 
@@ -70,8 +70,8 @@ fn indenting_a_flattened_package_body_reproduces_the_original_layout() -> Parity
          :offset ada-ts-mode-indent-offset)))"##,
         true,
         expect![[
-        r#"OK (:flattened "package body Shop.Inventory is\n\nfunction Name_Of (Id : Item_Id) return String is\nbegin\nreturn \"Artikel\";\nend Name_Of;\n\nprocedure Restock (Id : Item_Id; Count : Natural) is\nRemaining : Natural := Count;\nbegin\nwhile Remaining > 0 loop\nRemaining := Remaining - 1;\nend loop;\nend Restock;\n\nend Shop.Inventory;\n" :indented "package body Shop.Inventory is\n\n   function Name_Of (Id : Item_Id) return String is\n   begin\n      return \"Artikel\";\n   end Name_Of;\n\n   procedure Restock (Id : Item_Id; Count : Natural) is\n      Remaining : Natural := Count;\n   begin\n      while Remaining > 0 loop\n         Remaining := Remaining - 1;\n      end loop;\n   end Restock;\n\nend Shop.Inventory;\n" :matches-original t :offset 3)"#
-    ]],
+            r#"OK (:flattened "package body Shop.Inventory is\n\nfunction Name_Of (Id : Item_Id) return String is\nbegin\nreturn \"Artikel\";\nend Name_Of;\n\nprocedure Restock (Id : Item_Id; Count : Natural) is\nRemaining : Natural := Count;\nbegin\nwhile Remaining > 0 loop\nRemaining := Remaining - 1;\nend loop;\nend Restock;\n\nend Shop.Inventory;\n" :indented "package body Shop.Inventory is\n\n   function Name_Of (Id : Item_Id) return String is\n   begin\n      return \"Artikel\";\n   end Name_Of;\n\n   procedure Restock (Id : Item_Id; Count : Natural) is\n      Remaining : Natural := Count;\n   begin\n      while Remaining > 0 loop\n         Remaining := Remaining - 1;\n      end loop;\n   end Restock;\n\nend Shop.Inventory;\n" :matches-original t :offset 3)"#
+        ]],
     )
 }
 
@@ -98,8 +98,8 @@ fn imenu_and_defun_navigation_follow_the_parse_tree() -> ParityBatchCase {
                                      (point) (line-end-position)))))))))"##,
         true,
         expect![[
-        r#"OK (:index (("Package" ("Shop.Inventory" . 1)) ("Subprogram" ("Shop.Inventory" ("Name_Of" . 36) ("Restock" . 138)))) :inside (116 "Name_Of") :start (33 "   function Name_Of (Id : Item_Id) return String is") :finish (134 "   end Name_Of;\n") :outer (1 "package body Shop.Inventory is"))"#
-    ]],
+            r#"OK (:index (("Package" ("Shop.Inventory" . 1)) ("Subprogram" ("Shop.Inventory" ("Name_Of" . 36) ("Restock" . 138)))) :inside (116 "Name_Of") :start (33 "   function Name_Of (Id : Item_Id) return String is") :finish (134 "   end Name_Of;\n") :outer (1 "package body Shop.Inventory is"))"#
+        ]],
     )
 }
 
@@ -116,8 +116,8 @@ fn the_comment_box_command_frames_the_subprogram_at_point() -> ParityBatchCase {
        :point (point)))"##,
         true,
         expect![[
-        r#"OK (:boxed "package body Shop.Inventory is\n\n   function Name_Of (Id : Item_Id) return String is\n   begin\n      return \"Artikel\";\n   end Name_Of;\n\n   -------------\n   -- Restock --\n   -------------\n\n   procedure Restock (Id : Item_Id; Count : Natural) is\n      Remaining : Natural := Count;\n   begin\n      while Remaining > 0 loop\n         Remaining := Remaining - 1;\n      end loop;\n   end Restock;\n\nend Shop.Inventory;\n" :point 207)"#
-    ]],
+            r#"OK (:boxed "package body Shop.Inventory is\n\n   function Name_Of (Id : Item_Id) return String is\n   begin\n      return \"Artikel\";\n   end Name_Of;\n\n   -------------\n   -- Restock --\n   -------------\n\n   procedure Restock (Id : Item_Id; Count : Natural) is\n      Remaining : Natural := Count;\n   begin\n      while Remaining > 0 loop\n         Remaining := Remaining - 1;\n      end loop;\n   end Restock;\n\nend Shop.Inventory;\n" :point 207)"#
+        ]],
     )
 }
 

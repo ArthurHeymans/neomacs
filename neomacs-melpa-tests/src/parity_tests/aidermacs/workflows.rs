@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_aidermacs_batch};
 
-fn a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_not_exist() -> ParityBatchCase {
+fn a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_not_exist()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_not_exist",
         r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -88,8 +89,8 @@ fn a_real_session_detects_each_edited_file_format_and_skips_the_one_that_does_no
         (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK (:ready t :mode aidermacs-comint-mode :announced 4 :detected (("src/real.el" "src/block.el" "src/diff.el")) :argv "argv: [--model] [standin] [--no-pretty] [--no-fancy-input]\n")"#
-    ]],
+            r#"OK (:ready t :mode aidermacs-comint-mode :announced 4 :detected (("src/real.el" "src/block.el" "src/diff.el")) :argv "argv: [--model] [standin] [--no-pretty] [--no-fancy-input]\n")"#
+        ]],
     )
 }
 
@@ -166,8 +167,8 @@ fn answering_an_aider_question_sends_the_analysis_request_back_automatically() -
         (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK (:ready t :awaiting-after-question t :awaiting-cleared t :received "/run ls -la\ny\nPlease analyze the command output above.\n")"#
-    ]],
+            r#"OK (:ready t :awaiting-after-question t :awaiting-cleared t :received "/run ls -la\ny\nPlease analyze the command output above.\n")"#
+        ]],
     )
 }
 
@@ -221,8 +222,8 @@ fn the_community_edition_only_flag_is_withheld_from_a_stock_aider() -> ParityBat
           :community-edition (session-args "aider-ce"))))"##,
         true,
         expect![[
-        r#"OK (:stock ("aider" ("--model" "m" "--no-auto-accept-architect") nil) :community-edition ("aider-ce" ("--model" "m" "--no-auto-accept-architect" "--linear-output") t))"#
-    ]],
+            r#"OK (:stock ("aider" ("--model" "m" "--no-auto-accept-architect") nil) :community-edition ("aider-ce" ("--model" "m" "--no-auto-accept-architect" "--linear-output") t))"#
+        ]],
     )
 }
 

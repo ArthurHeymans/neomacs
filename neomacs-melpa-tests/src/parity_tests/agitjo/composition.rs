@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_agitjo_batch};
 
-fn agitjo_composes_edits_and_cancels_a_real_template_backed_pull_request_draft() -> ParityBatchCase {
+fn agitjo_composes_edits_and_cancels_a_real_template_backed_pull_request_draft() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "agitjo_composes_edits_and_cancels_a_real_template_backed_pull_request_draft",
         r####"(let* ((root
@@ -212,15 +213,14 @@ fn agitjo_composes_edits_and_cancels_a_real_template_backed_pull_request_draft()
                              result)"####,
         true,
         expect![[
-        r#"OK ((agitjo-post-mode "AGitjo-Post" " C-c C-c to publish or C-c C-k to cancel." "Reset lookahead after recovery.\n\nPreserve request ordering across retries.\n\n-----\n\n## Summary\n\nExplain the user-visible effect.\n\n## Checklist\n\n- [ ] Tests pass\n" "feature/parser-recovery:refs/for/main/team/parser-session" ".git/agitjo/pullreq-draft" t) nil nil t "Reset lookahead after recovery.\n\nPreserve request ordering across retries.\n\n-----\n\n## Summary\n\nExplain the user-visible effect.\n\n## Checklist\n\n- [ ] Tests pass\n\n\n## Verification\n\n- [x] Differential parser tests\n- [x] Retry ordering preserved\n")"#
-    ]],
+            r#"OK ((agitjo-post-mode "AGitjo-Post" " C-c C-c to publish or C-c C-k to cancel." "Reset lookahead after recovery.\n\nPreserve request ordering across retries.\n\n-----\n\n## Summary\n\nExplain the user-visible effect.\n\n## Checklist\n\n- [ ] Tests pass\n" "feature/parser-recovery:refs/for/main/team/parser-session" ".git/agitjo/pullreq-draft" t) nil nil t "Reset lookahead after recovery.\n\nPreserve request ordering across retries.\n\n-----\n\n## Summary\n\nExplain the user-visible effect.\n\n## Checklist\n\n- [ ] Tests pass\n\n\n## Verification\n\n- [x] Differential parser tests\n- [x] Retry ordering preserved\n")"#
+        ]],
     )
 }
 
 #[test]
 fn composition_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        agitjo_composes_edits_and_cancels_a_real_template_backed_pull_request_draft(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![agitjo_composes_edits_and_cancels_a_real_template_backed_pull_request_draft()];
     assert_agitjo_batch(&cases);
 }

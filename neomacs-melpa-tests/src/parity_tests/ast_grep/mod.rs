@@ -258,14 +258,6 @@ pub(crate) fn assert_ast_grep_helm_parity(elisp_form: &str, expected: Expect) {
     assert_ast_grep_source_parity("ast-grep-helm.el", elisp_form, expected);
 }
 
-
-
-
-
-
-
-
-
 /// Multi-probe batch for `assert_ast_grep_parity` cases (2a).
 pub(crate) fn assert_ast_grep_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

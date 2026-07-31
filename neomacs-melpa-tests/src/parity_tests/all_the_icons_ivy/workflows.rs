@@ -21,8 +21,8 @@ fn setup_registers_the_documented_transformers_for_every_command() -> ParityBatc
         :spacer all-the-icons-spacer))"##,
         true,
         expect![[
-        r#"OK (:buffer-commands (ivy-switch-buffer ivy-switch-buffer-other-window counsel-projectile-switch-to-buffer) :file-commands (counsel-find-file counsel-file-jump counsel-recentf counsel-projectile counsel-projectile-find-file counsel-projectile-find-dir counsel-git) :registered-buffer ((ivy-switch-buffer . all-the-icons-ivy-buffer-transformer) (ivy-switch-buffer-other-window . all-the-icons-ivy-buffer-transformer) (counsel-projectile-switch-to-buffer . all-the-icons-ivy-buffer-transformer)) :registered-file ((counsel-find-file . all-the-icons-ivy-file-transformer) (counsel-file-jump . all-the-icons-ivy-file-transformer) (counsel-recentf . all-the-icons-ivy-file-transformer) (counsel-projectile . all-the-icons-ivy-file-transformer) (counsel-projectile-find-file . all-the-icons-ivy-file-transformer) (counsel-projectile-find-dir . all-the-icons-ivy-file-transformer) (counsel-git . all-the-icons-ivy-file-transformer)) :spacer "\11")"#
-    ]],
+            r#"OK (:buffer-commands (ivy-switch-buffer ivy-switch-buffer-other-window counsel-projectile-switch-to-buffer) :file-commands (counsel-find-file counsel-file-jump counsel-recentf counsel-projectile counsel-projectile-find-file counsel-projectile-find-dir counsel-git) :registered-buffer ((ivy-switch-buffer . all-the-icons-ivy-buffer-transformer) (ivy-switch-buffer-other-window . all-the-icons-ivy-buffer-transformer) (counsel-projectile-switch-to-buffer . all-the-icons-ivy-buffer-transformer)) :registered-file ((counsel-find-file . all-the-icons-ivy-file-transformer) (counsel-file-jump . all-the-icons-ivy-file-transformer) (counsel-recentf . all-the-icons-ivy-file-transformer) (counsel-projectile . all-the-icons-ivy-file-transformer) (counsel-projectile-find-file . all-the-icons-ivy-file-transformer) (counsel-projectile-find-dir . all-the-icons-ivy-file-transformer) (counsel-git . all-the-icons-ivy-file-transformer)) :spacer "\11")"#
+        ]],
     )
 }
 
@@ -39,8 +39,8 @@ fn the_buffer_transformer_prefixes_a_candidate_and_marks_modified_buffers() -> P
                        (all-the-icons-ivy-buffer-transformer "ativ-plain"))))"##,
         true,
         expect![[
-        r#"OK (:modified-file-buffer (:text "\11\11ativ-code.el" :length 14 :first-char 9 :prop-names-at-0 (display) :icon-one-char-string t :icon-prop-names (face font-lock-face display rear-nonsticky) :face-on-name ivy-modified-buffer) :plain-buffer (:text "\11\11ativ-plain" :length 12 :first-char 9 :prop-names-at-0 (display) :icon-one-char-string t :icon-prop-names (face font-lock-face display rear-nonsticky) :face-on-name nil))"#
-    ]],
+            r#"OK (:modified-file-buffer (:text "\11\11ativ-code.el" :length 14 :first-char 9 :prop-names-at-0 (display) :icon-one-char-string t :icon-prop-names (face font-lock-face display rear-nonsticky) :face-on-name ivy-modified-buffer) :plain-buffer (:text "\11\11ativ-plain" :length 12 :first-char 9 :prop-names-at-0 (display) :icon-one-char-string t :icon-prop-names (face font-lock-face display rear-nonsticky) :face-on-name nil))"#
+        ]],
     )
 }
 
@@ -56,8 +56,8 @@ fn a_candidate_that_names_no_buffer_falls_through_to_the_file_transformer() -> P
               (all-the-icons-ivy-file-transformer "gibt-es-nicht.py"))))"##,
         true,
         expect![[
-        r#"OK (:missing-buffer (:text "\11\11gibt-es-nicht.py" :length 18 :first-char 9 :prop-names-at-0 (display) :icon-one-char-string t :icon-prop-names (face font-lock-face display rear-nonsticky) :face-on-name nil) :same-as-file-transformer t)"#
-    ]],
+            r#"OK (:missing-buffer (:text "\11\11gibt-es-nicht.py" :length 18 :first-char 9 :prop-names-at-0 (display) :icon-one-char-string t :icon-prop-names (face font-lock-face display rear-nonsticky) :face-on-name nil) :same-as-file-transformer t)"#
+        ]],
     )
 }
 
@@ -77,8 +77,8 @@ fn the_file_transformer_gives_directories_the_packages_own_face() -> ParityBatch
         :dir-candidate (ativ-test-describe dir)))"##,
         true,
         expect![[
-        r#"OK (:dir-icon-inherits-dir-face t :file-icon-inherits-dir-face nil :dir-candidate (:text "\11\11src/" :length 6 :first-char 9 :prop-names-at-0 (display) :icon-one-char-string t :icon-prop-names (face font-lock-face display rear-nonsticky) :face-on-name nil))"#
-    ]],
+            r#"OK (:dir-icon-inherits-dir-face t :file-icon-inherits-dir-face nil :dir-candidate (:text "\11\11src/" :length 6 :first-char 9 :prop-names-at-0 (display) :icon-one-char-string t :icon-prop-names (face font-lock-face display rear-nonsticky) :face-on-name nil))"#
+        ]],
     )
 }
 
@@ -107,8 +107,8 @@ fn the_spacer_and_the_buffer_icon_fallback_are_customizable() -> ParityBatchCase
              (all-the-icons-ivy-buffer-transformer "ativ-unknown"))))))"##,
         true,
         expect![[
-        r#"OK (:mode-has-no-icon-of-its-own t :parent nil :fallback-changes-the-icon t :default-shape (:text "\11\11ativ-unknown" :length 14 :first-char 9 :prop-names-at-0 (display) :icon-one-char-string t :icon-prop-names (face font-lock-face display rear-nonsticky) :face-on-name nil) :custom-spacer "\11 | ativ-unknown")"#
-    ]],
+            r#"OK (:mode-has-no-icon-of-its-own t :parent nil :fallback-changes-the-icon t :default-shape (:text "\11\11ativ-unknown" :length 14 :first-char 9 :prop-names-at-0 (display) :icon-one-char-string t :icon-prop-names (face font-lock-face display rear-nonsticky) :face-on-name nil) :custom-spacer "\11 | ativ-unknown")"#
+        ]],
     )
 }
 

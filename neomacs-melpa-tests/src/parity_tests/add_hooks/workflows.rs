@@ -43,8 +43,8 @@ fn the_documented_example_puts_one_function_on_several_mode_hooks() -> ParityBat
                                        add-hooks-test-unheard-of-mode-hook)))))"##,
         true,
         expect![
-        "OK (:through-a-pair (:css (add-hooks-test-emmet-mode) :sgml (add-hooks-test-emmet-mode) :css-fires (emmet-mode) :sgml-fires (emmet-mode)) :through-the-alist (:css (add-hooks-test-emmet-mode) :sgml (add-hooks-test-emmet-mode)) :both-forms-agree t :suffix-implied css-mode-hook :suffix-kept add-hooks-test-plain-hook :mixed-spellings ((add-hooks-test-emmet-mode) (add-hooks-test-emmet-mode)) :undefined-hook-before nil :undefined-hook-added nil :undefined-hook-after (add-hooks-test-emmet-mode))"
-    ],
+            "OK (:through-a-pair (:css (add-hooks-test-emmet-mode) :sgml (add-hooks-test-emmet-mode) :css-fires (emmet-mode) :sgml-fires (emmet-mode)) :through-the-alist (:css (add-hooks-test-emmet-mode) :sgml (add-hooks-test-emmet-mode)) :both-forms-agree t :suffix-implied css-mode-hook :suffix-kept add-hooks-test-plain-hook :mixed-spellings ((add-hooks-test-emmet-mode) (add-hooks-test-emmet-mode)) :undefined-hook-before nil :undefined-hook-added nil :undefined-hook-after (add-hooks-test-emmet-mode))"
+        ],
     )
 }
 
@@ -79,8 +79,8 @@ fn one_pair_covers_every_hook_crossed_with_every_function() -> ParityBatchCase {
                                  (add-hooks-test-fire 'text-mode-hook))))))"##,
         true,
         expect![
-        "OK (:after-one-call (:css #1=(add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :sgml #2=(add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :text #3=(add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :css-fires (rainbow-mode emmet-mode)) :after-the-same-call-again (:css #1# :sgml #2# :text #3#) :unchanged t :the-very-same-list t :from-an-alist-of-two-pairs (:css (add-hooks-test-emmet-mode) :sgml (add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :text (add-hooks-test-rainbow-mode add-hooks-test-emmet-mode)) :and-they-fire ((emmet-mode) (rainbow-mode emmet-mode) (rainbow-mode emmet-mode)))"
-    ],
+            "OK (:after-one-call (:css #1=(add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :sgml #2=(add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :text #3=(add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :css-fires (rainbow-mode emmet-mode)) :after-the-same-call-again (:css #1# :sgml #2# :text #3#) :unchanged t :the-very-same-list t :from-an-alist-of-two-pairs (:css (add-hooks-test-emmet-mode) :sgml (add-hooks-test-rainbow-mode add-hooks-test-emmet-mode) :text (add-hooks-test-rainbow-mode add-hooks-test-emmet-mode)) :and-they-fire ((emmet-mode) (rainbow-mode emmet-mode) (rainbow-mode emmet-mode)))"
+        ],
     )
 }
 
@@ -116,8 +116,8 @@ fn a_lambda_counts_as_one_function_and_a_list_as_several() -> ParityBatchCase {
                              :nil (add-hooks-listify nil)))))))"##,
         true,
         expect![
-        "OK (:one-lambda (:entries 1 :fires (single)) :two-lambdas (:entries 2 :fires (second first)) :one-symbol (:entries 1 :fires (emmet-mode)) :nil-functions (:entries 0 :value nil) :listify (:lambda 1 :list-of-two 2 :symbol (add-hooks-test-emmet-mode) :nil nil))"
-    ],
+            "OK (:one-lambda (:entries 1 :fires (single)) :two-lambdas (:entries 2 :fires (second first)) :one-symbol (:entries 1 :fires (emmet-mode)) :nil-functions (:entries 0 :value nil) :listify (:lambda 1 :list-of-two 2 :symbol (add-hooks-test-emmet-mode) :nil nil))"
+        ],
     )
 }
 
@@ -150,8 +150,8 @@ fn a_string_hook_is_refused_at_once_and_a_list_of_non_functions_is_not() -> Pari
                               (error (list (car error) (cadr error))))))))"##,
         true,
         expect![
-        "OK (:string-hook (:signal (wrong-type-argument symbolp) :hook-untouched nil) :list-of-non-functions (:stored (beta alpha) :looks-normal t :signal-when-run (void-function beta)) :unevaluated-form (:stored (#1='oops add-hooks-test-fired setq) :signal-when-run (invalid-function #1#)))"
-    ],
+            "OK (:string-hook (:signal (wrong-type-argument symbolp) :hook-untouched nil) :list-of-non-functions (:stored (beta alpha) :looks-normal t :signal-when-run (void-function beta)) :unevaluated-form (:stored (#1='oops add-hooks-test-fired setq) :signal-when-run (invalid-function #1#)))"
+        ],
     )
 }
 

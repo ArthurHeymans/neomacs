@@ -94,8 +94,8 @@ fn compat_numeric_predicates_cover_fixnums_floats_markers_and_type_errors() -> P
                           (list -1 -1.5 0 0.0 1 1.5 marker)))))"##,
         true,
         expect![[
-        r#"OK ((t t t nil nil nil) (t t t nil nil nil) (t t nil nil nil nil t) (t t nil nil nil nil nil))"#
-    ]],
+            r#"OK ((t t t nil nil nil) (t t t nil nil nil) (t t nil nil nil nil t) (t t nil nil nil nil nil))"#
+        ]],
     )
 }
 
@@ -142,8 +142,8 @@ fn compat_seconds_to_string_handles_negative_readable_and_precision_modes() -> P
                 999999 'readable 'abbrev 4))"##,
         true,
         expect![[
-        r#"OK ("-1 second" "17 minutes" "17m" "16.65m" "1 week 5 days" "1w 5d" "1.6534w")"#
-    ]],
+            r#"OK ("-1 second" "17 minutes" "17m" "16.65m" "1 week 5 days" "1w 5d" "1.6534w")"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_clang_batch};
 
-fn auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonblank_input() -> ParityBatchCase {
+fn auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonblank_input()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonblank_input",
         r##"(let ((ac-clang-prefix-header
@@ -28,7 +29,8 @@ fn auto_complete_clang_prefix_header_setter_clears_whitespace_and_preserves_nonb
     )
 }
 
-fn auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_rules() -> ParityBatchCase {
+fn auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_rules()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_rules",
         r##"(let ((ac-clang-flags
@@ -50,7 +52,8 @@ fn auto_complete_clang_cflags_command_splits_interactive_input_using_emacs_word_
     )
 }
 
-fn auto_complete_clang_shell_cflags_command_passes_current_file_default_and_splits_output() -> ParityBatchCase {
+fn auto_complete_clang_shell_cflags_command_passes_current_file_default_and_splits_output()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_shell_cflags_command_passes_current_file_default_and_splits_output",
         r##"(let ((buffer-file-name
@@ -85,12 +88,13 @@ fn auto_complete_clang_shell_cflags_command_passes_current_file_default_and_spli
             (nreverse commands))))"##,
         true,
         expect![[
-        r#"OK (("-I/opt/demo" "-DDEMO=1" "-pthread") (("Shell command: " nil nil "src/main.cpp")) ("pkg-config --cflags demo"))"#
-    ]],
+            r#"OK (("-I/opt/demo" "-DDEMO=1" "-pthread") (("Shell command: " nil nil "src/main.cpp")) ("pkg-config --cflags demo"))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column() -> ParityBatchCase {
+fn auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column",
         r##"(with-temp-buffer
@@ -110,12 +114,13 @@ fn auto_complete_clang_build_location_tracks_stdin_or_saved_file_line_and_column
              '(1 5 7 15 24)))))"##,
         true,
         expect![[
-        r#"OK (("-:1:1" "-:2:1" "-:2:3" "-:2:11" "-:3:5") ("[ORACLE-SANDBOX]/source.cpp:1:1" "[ORACLE-SANDBOX]/source.cpp:2:1" "[ORACLE-SANDBOX]/source.cpp:2:3" "[ORACLE-SANDBOX]/source.cpp:2:11" "[ORACLE-SANDBOX]/source.cpp:3:5"))"#
-    ]],
+            r#"OK (("-:1:1" "-:2:1" "-:2:3" "-:2:11" "-:3:5") ("[ORACLE-SANDBOX]/source.cpp:1:1" "[ORACLE-SANDBOX]/source.cpp:2:1" "[ORACLE-SANDBOX]/source.cpp:2:3" "[ORACLE-SANDBOX]/source.cpp:2:11" "[ORACLE-SANDBOX]/source.cpp:3:5"))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback() -> ParityBatchCase {
+fn auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback",
         r##"(mapcar
@@ -140,12 +145,13 @@ fn auto_complete_clang_language_option_covers_c_cpp_objc_extensions_and_fallback
            (fundamental-mode nil)))"##,
         true,
         expect![[
-        r#"OK ((c-mode "/work/main.c" (:value "c")) (c++-mode "/work/main.cc" (:value "c++")) (objc-mode "/work/object.m" (:value "objective-c")) (objc-mode "/work/object.mm" (:value "objective-c++")) (objc-mode nil (:signal wrong-type-argument (stringp nil))) (rust-mode "/work/main.rs" (:value "c++")) (fundamental-mode nil (:value "c++")))"#
-    ]],
+            r#"OK ((c-mode "/work/main.c" (:value "c")) (c++-mode "/work/main.cc" (:value "c++")) (objc-mode "/work/object.m" (:value "objective-c")) (objc-mode "/work/object.mm" (:value "objective-c++")) (objc-mode nil (:signal wrong-type-argument (stringp nil))) (rust-mode "/work/main.rs" (:value "c++")) (fundamental-mode nil (:value "c++")))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_custom_language_option_has_priority_and_is_called_each_time() -> ParityBatchCase {
+fn auto_complete_clang_custom_language_option_has_priority_and_is_called_each_time()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_custom_language_option_has_priority_and_is_called_each_time",
         r##"(let* ((calls 0)
@@ -165,7 +171,8 @@ fn auto_complete_clang_custom_language_option_has_priority_and_is_called_each_ti
     )
 }
 
-fn auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_header_location_and_stdin() -> ParityBatchCase {
+fn auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_header_location_and_stdin()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_header_location_and_stdin",
         r##"(with-temp-buffer
@@ -186,12 +193,13 @@ fn auto_complete_clang_unsaved_complete_args_include_language_flags_prefix_heade
             (point))))"##,
         true,
         expect![[
-        r#"OK ("-cc1" "-fsyntax-only" "-x" "c++" "-Iinclude" "-DNAME=two words" "-include-pch" "[ORACLE-SANDBOX]/clang-args/precompiled.pch" "-code-completion-at" "-:2:6" "-")"#
-    ]],
+            r#"OK ("-cc1" "-fsyntax-only" "-x" "c++" "-Iinclude" "-DNAME=two words" "-include-pch" "[ORACLE-SANDBOX]/clang-args/precompiled.pch" "-code-completion-at" "-:2:6" "-")"#
+        ]],
     )
 }
 
-fn auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_location_and_input() -> ParityBatchCase {
+fn auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_location_and_input()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_location_and_input",
         r##"(with-temp-buffer
@@ -209,12 +217,13 @@ fn auto_complete_clang_saved_complete_args_omit_language_and_use_file_for_locati
             (- (point) 3))))"##,
         true,
         expect![[
-        r#"OK ("-cc1" "-fsyntax-only" "-Wall" "-code-completion-at" "[ORACLE-SANDBOX]/saved.c:2:1" "[ORACLE-SANDBOX]/saved.c")"#
-    ]],
+            r#"OK ("-cc1" "-fsyntax-only" "-Wall" "-code-completion-at" "[ORACLE-SANDBOX]/saved.c:2:1" "[ORACLE-SANDBOX]/saved.c")"#
+        ]],
     )
 }
 
-fn auto_complete_clang_document_cleanup_removes_placeholders_and_normalizes_optional_markers() -> ParityBatchCase {
+fn auto_complete_clang_document_cleanup_removes_placeholders_and_normalizes_optional_markers()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_document_cleanup_removes_placeholders_and_normalizes_optional_markers",
         r##"(mapcar
@@ -227,12 +236,13 @@ fn auto_complete_clang_document_cleanup_removes_placeholders_and_normalizes_opti
            "nested <#std::vector<int>#> [#tail#]"))"##,
         true,
         expect![[
-        r#"OK (nil "" "int fn(int x, const char *name)" "void log(int level , const char *fmt, ...)" "only " "nested std::vector<int> tail ")"#
-    ]],
+            r#"OK (nil "" "int fn(int x, const char *name)" "void log(int level , const char *fmt, ...)" "only " "nested std::vector<int> tail ")"#
+        ]],
     )
 }
 
-fn auto_complete_clang_document_reads_help_property_only_from_string_candidates() -> ParityBatchCase {
+fn auto_complete_clang_document_reads_help_property_only_from_string_candidates() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_clang_document_reads_help_property_only_from_string_candidates",
         r##"(let ((candidate
@@ -253,7 +263,8 @@ fn auto_complete_clang_document_reads_help_property_only_from_string_candidates(
     )
 }
 
-fn auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types() -> ParityBatchCase {
+fn auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types",
         r##"(list
@@ -278,8 +289,8 @@ fn auto_complete_clang_balance_counter_and_argument_splitter_handle_nested_types
             "single")))"##,
         true,
         expect![[
-        r#"OK ((("" t t) ("(x)" t t) ("(x" nil t) ("std::vector<int>" t t) ("map<string, vector<int>>" t t) ("fn(a, pair<int, int>)" t t)) (("int a" "char b") ("std::pair<int, int> value" "double scale") ("void (*callback)(int, char)" "int flags") ("map<string, vector<pair<int, int>>> data" "bool ok") ("") ("single")))"#
-    ]],
+            r#"OK ((("" t t) ("(x)" t t) ("(x" nil t) ("std::vector<int>" t t) ("map<string, vector<int>>" t t) ("fn(a, pair<int, int>)" t t)) (("int a" "char b") ("std::pair<int, int> value" "double scale") ("void (*callback)(int, char)" "int flags") ("map<string, vector<pair<int, int>>> data" "bool ok") ("") ("single")))"#
+        ]],
     )
 }
 

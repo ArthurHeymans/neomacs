@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_async1_batch};
 
-fn async1_sequential_step_invokes_a_custom_function_then_advances_the_exact_index() -> ParityBatchCase {
+fn async1_sequential_step_invokes_a_custom_function_then_advances_the_exact_index()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_sequential_step_invokes_a_custom_function_then_advances_the_exact_index",
         r##"(let (events)
@@ -29,7 +30,8 @@ fn async1_sequential_step_invokes_a_custom_function_then_advances_the_exact_inde
     )
 }
 
-fn async1_sequential_step_schedules_plist_work_and_advances_only_after_callback() -> ParityBatchCase {
+fn async1_sequential_step_schedules_plist_work_and_advances_only_after_callback() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_sequential_step_schedules_plist_work_and_advances_only_after_callback",
         r##"(let (events)
@@ -60,8 +62,8 @@ fn async1_sequential_step_schedules_plist_work_and_advances_only_after_callback(
                 async1-test-now)))))"##,
         true,
         expect![[
-        r#"OK ((:async1-test-timer 1) nil ((:at 2 :id 1 :repeat nil :function :closure :arguments ("input -> step"))) (("input -> step" 5)) 2)"#
-    ]],
+            r#"OK ((:async1-test-timer 1) nil ((:at 2 :id 1 :repeat nil :function :closure :arguments ("input -> step"))) (("input -> step" 5)) 2)"#
+        ]],
     )
 }
 
@@ -85,7 +87,8 @@ fn async1_parallel_step_empty_branch_set_passes_input_through_synchronously() ->
     )
 }
 
-fn async1_parallel_step_waits_for_every_callback_and_aggregates_completion_order() -> ParityBatchCase {
+fn async1_parallel_step_waits_for_every_callback_and_aggregates_completion_order() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_parallel_step_waits_for_every_callback_and_aggregates_completion_order",
         r##"(let (callbacks chain-events)
@@ -142,12 +145,13 @@ fn async1_parallel_step_waits_for_every_callback_and_aggregates_completion_order
                     (nreverse chain-events))))))))"##,
         true,
         expect![[
-        r#"OK (nil (a b c) ((:started c "seed") (:started b "seed") (:started a "seed")) ((:started c "seed") (:started b "seed") (:started a "seed")) ((:started a "seed") (:started b "seed") (:started c "seed") (:finished "{C, A, B}" 3)))"#
-    ]],
+            r#"OK (nil (a b c) ((:started c "seed") (:started b "seed") (:started a "seed")) ((:started c "seed") (:started b "seed") (:started a "seed")) ((:started a "seed") (:started b "seed") (:started c "seed") (:finished "{C, A, B}" 3)))"#
+        ]],
     )
 }
 
-fn async1_parallel_step_virtual_timers_make_completion_and_push_order_explicit() -> ParityBatchCase {
+fn async1_parallel_step_virtual_timers_make_completion_and_push_order_explicit() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_parallel_step_virtual_timers_make_completion_and_push_order_explicit",
         r##"(let (final-values)
@@ -179,8 +183,8 @@ fn async1_parallel_step_virtual_timers_make_completion_and_push_order_explicit()
               async1-test-now))))"##,
         true,
         expect![[
-        r#"OK (nil ((:at 1 :id 2 :repeat nil :function :closure :arguments ("seed -> fast")) (:at 2 :id 3 :repeat nil :function :closure :arguments ("seed -> middle")) (:at 3 :id 1 :repeat nil :function :closure :arguments ("seed -> slow"))) (("{seed -> slow, seed -> middle, seed -> fast}" 6)) 3)"#
-    ]],
+            r#"OK (nil ((:at 1 :id 2 :repeat nil :function :closure :arguments ("seed -> fast")) (:at 2 :id 3 :repeat nil :function :closure :arguments ("seed -> middle")) (:at 3 :id 1 :repeat nil :function :closure :arguments ("seed -> slow"))) (("{seed -> slow, seed -> middle, seed -> fast}" 6)) 3)"#
+        ]],
     )
 }
 
@@ -234,8 +238,8 @@ fn async1_parallel_step_accepts_custom_aggregator_at_beginning_middle_or_end() -
               aggregator)))))"##,
         true,
         expect![[
-        r#"OK ((((:at 1 :id 2 :repeat nil :function :closure :arguments ("base -> B")) (:at 2 :id 1 :repeat nil :function :closure :arguments ("base -> A"))) ("[base -> A | base -> B]" 1)) (((:at 1 :id 2 :repeat nil :function :closure :arguments ("base -> B")) (:at 2 :id 1 :repeat nil :function :closure :arguments ("base -> A"))) ("[base -> A | base -> B]" 1)) (((:at 1 :id 2 :repeat nil :function :closure :arguments ("base -> B")) (:at 2 :id 1 :repeat nil :function :closure :arguments ("base -> A"))) ("[base -> A | base -> B]" 1)))"#
-    ]],
+            r#"OK ((((:at 1 :id 2 :repeat nil :function :closure :arguments ("base -> B")) (:at 2 :id 1 :repeat nil :function :closure :arguments ("base -> A"))) ("[base -> A | base -> B]" 1)) (((:at 1 :id 2 :repeat nil :function :closure :arguments ("base -> B")) (:at 2 :id 1 :repeat nil :function :closure :arguments ("base -> A"))) ("[base -> A | base -> B]" 1)) (((:at 1 :id 2 :repeat nil :function :closure :arguments ("base -> B")) (:at 2 :id 1 :repeat nil :function :closure :arguments ("base -> A"))) ("[base -> A | base -> B]" 1)))"#
+        ]],
     )
 }
 
@@ -268,12 +272,13 @@ fn async1_start_runs_a_strict_sequential_pipeline_with_cumulative_due_times() ->
               async1-test-now))))"##,
         true,
         expect![[
-        r#"OK ((:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("seed -> one")) (:at 3 :id 2 :repeat nil :function :closure :arguments ("seed -> one -> two")) (:at 6 :id 3 :repeat nil :function :closure :arguments ("seed -> one -> two -> three"))) ("seed -> one -> two -> three") 6)"#
-    ]],
+            r#"OK ((:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("seed -> one")) (:at 3 :id 2 :repeat nil :function :closure :arguments ("seed -> one -> two")) (:at 6 :id 3 :repeat nil :function :closure :arguments ("seed -> one -> two -> three"))) ("seed -> one -> two -> three") 6)"#
+        ]],
     )
 }
 
-fn async1_start_runs_a_parallel_pipeline_and_uses_reverse_completion_aggregation() -> ParityBatchCase {
+fn async1_start_runs_a_parallel_pipeline_and_uses_reverse_completion_aggregation() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_start_runs_a_parallel_pipeline_and_uses_reverse_completion_aggregation",
         r##"(let (final-values)
@@ -302,8 +307,8 @@ fn async1_start_runs_a_parallel_pipeline_and_uses_reverse_completion_aggregation
               final-values))))"##,
         true,
         expect![[
-        r#"OK (nil ((:at 1 :id 2 :repeat nil :function :closure :arguments ("B")) (:at 2 :id 3 :repeat nil :function :closure :arguments ("C")) (:at 3 :id 1 :repeat nil :function :closure :arguments ("A"))) ("{A, C, B}"))"#
-    ]],
+            r#"OK (nil ((:at 1 :id 2 :repeat nil :function :closure :arguments ("B")) (:at 2 :id 3 :repeat nil :function :closure :arguments ("C")) (:at 3 :id 1 :repeat nil :function :closure :arguments ("A"))) ("{A, C, B}"))"#
+        ]],
     )
 }
 
@@ -343,8 +348,8 @@ fn async1_start_runs_the_readme_mixed_parallel_and_nested_sequential_workflow() 
               async1-test-now))))"##,
         true,
         expect![[
-        r#"OK ((:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("root")) (:at 2 :id 3 :repeat nil :function :closure :arguments ("root -> fast")) (:at 3 :id 2 :repeat nil :function :closure :arguments ("root -> sub-a")) (:at 4 :id 4 :repeat nil :function :closure :arguments ("root -> slow")) (:at 4 :id 5 :repeat nil :function :closure :arguments ("root -> sub-a -> sub-b")) (:at 5 :id 6 :repeat nil :function :closure :arguments ("{root -> sub-a -> sub-b, root -> slow, root -> fast} -> tail"))) ("{root -> sub-a -> sub-b, root -> slow, root -> fast} -> tail") 5)"#
-    ]],
+            r#"OK ((:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("root")) (:at 2 :id 3 :repeat nil :function :closure :arguments ("root -> fast")) (:at 3 :id 2 :repeat nil :function :closure :arguments ("root -> sub-a")) (:at 4 :id 4 :repeat nil :function :closure :arguments ("root -> slow")) (:at 4 :id 5 :repeat nil :function :closure :arguments ("root -> sub-a -> sub-b")) (:at 5 :id 6 :repeat nil :function :closure :arguments ("{root -> sub-a -> sub-b, root -> slow, root -> fast} -> tail"))) ("{root -> sub-a -> sub-b, root -> slow, root -> fast} -> tail") 5)"#
+        ]],
     )
 }
 
@@ -390,8 +395,8 @@ fn async1_start_composes_custom_async_functions_with_captured_external_data() ->
                 async1-test-now)))))"##,
         true,
         expect![[
-        r#"OK ((:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("seed -> built-in")) (:at 3 :id 2 :repeat nil :function :closure :arguments ("seed -> built-in -> context")) (:at 4 :id 3 :repeat nil :function :closure :arguments ("seed -> built-in -> context -> tail"))) ((:custom "seed -> built-in" "context")) ("seed -> built-in -> context -> tail") 4)"#
-    ]],
+            r#"OK ((:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("seed -> built-in")) (:at 3 :id 2 :repeat nil :function :closure :arguments ("seed -> built-in -> context")) (:at 4 :id 3 :repeat nil :function :closure :arguments ("seed -> built-in -> context -> tail"))) ((:custom "seed -> built-in" "context")) ("seed -> built-in -> context -> tail") 4)"#
+        ]],
     )
 }
 
@@ -430,12 +435,13 @@ fn async1_start_composes_mutable_lambda_factory_steps_in_declared_order() -> Par
                 async1-test-now)))))"##,
         true,
         expect![[
-        r#"OK ((:async1-test-timer 1) ((:at 3 :id 1 :repeat nil :function :closure :arguments ("start -> step-3")) (:at 4 :id 2 :repeat nil :function :closure :arguments ("start -> step-3 -> step-1")) (:at 6 :id 3 :repeat nil :function :closure :arguments ("start -> step-3 -> step-1 -> step-2")) (:at 6 :id 4 :repeat nil :function :closure :arguments ("start -> step-3 -> step-1 -> step-2 -> step-0"))) ("start -> step-3 -> step-1 -> step-2 -> step-0") 6)"#
-    ]],
+            r#"OK ((:async1-test-timer 1) ((:at 3 :id 1 :repeat nil :function :closure :arguments ("start -> step-3")) (:at 4 :id 2 :repeat nil :function :closure :arguments ("start -> step-3 -> step-1")) (:at 6 :id 3 :repeat nil :function :closure :arguments ("start -> step-3 -> step-1 -> step-2")) (:at 6 :id 4 :repeat nil :function :closure :arguments ("start -> step-3 -> step-1 -> step-2 -> step-0"))) ("start -> step-3 -> step-1 -> step-2 -> step-0") 6)"#
+        ]],
     )
 }
 
-fn async1_start_empty_sequence_calls_final_callback_synchronously_and_returns_its_value() -> ParityBatchCase {
+fn async1_start_empty_sequence_calls_final_callback_synchronously_and_returns_its_value()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_start_empty_sequence_calls_final_callback_synchronously_and_returns_its_value",
         r##"(let (events)
@@ -481,12 +487,13 @@ fn async1_start_without_final_callback_prints_the_exact_final_result_once() -> P
               printed))))"##,
         true,
         expect![[
-        r#"OK ((:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("first")) (:at 2 :id 2 :repeat nil :function :closure :arguments ("first -> second"))) ("Final result: first -> second"))"#
-    ]],
+            r#"OK ((:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("first")) (:at 2 :id 2 :repeat nil :function :closure :arguments ("first -> second"))) ("Final result: first -> second"))"#
+        ]],
     )
 }
 
-fn async1_start_large_parallel_fanout_preserves_every_result_and_completion_order() -> ParityBatchCase {
+fn async1_start_large_parallel_fanout_preserves_every_result_and_completion_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_start_large_parallel_fanout_preserves_every_result_and_completion_order",
         r##"(let (final-values)
@@ -523,8 +530,8 @@ fn async1_start_large_parallel_fanout_preserves_every_result_and_completion_orde
               async1-test-now))))"##,
         true,
         expect![[
-        r#"OK (nil ((:at 1 :id 4 :repeat nil :function :closure :arguments ("root -> branch-1")) (:at 2 :id 2 :repeat nil :function :closure :arguments ("root -> branch-2")) (:at 3 :id 6 :repeat nil :function :closure :arguments ("root -> branch-3")) (:at 4 :id 5 :repeat nil :function :closure :arguments ("root -> branch-4")) (:at 5 :id 3 :repeat nil :function :closure :arguments ("root -> branch-5")) (:at 6 :id 1 :repeat nil :function :closure :arguments ("root -> branch-6"))) ("{root -> branch-6, root -> branch-5, root -> branch-4, root -> branch-3, root -> branch-2, root -> branch-1}") 108 6)"#
-    ]],
+            r#"OK (nil ((:at 1 :id 4 :repeat nil :function :closure :arguments ("root -> branch-1")) (:at 2 :id 2 :repeat nil :function :closure :arguments ("root -> branch-2")) (:at 3 :id 6 :repeat nil :function :closure :arguments ("root -> branch-3")) (:at 4 :id 5 :repeat nil :function :closure :arguments ("root -> branch-4")) (:at 5 :id 3 :repeat nil :function :closure :arguments ("root -> branch-5")) (:at 6 :id 1 :repeat nil :function :closure :arguments ("root -> branch-6"))) ("{root -> branch-6, root -> branch-5, root -> branch-4, root -> branch-3, root -> branch-2, root -> branch-1}") 108 6)"#
+        ]],
     )
 }
 
@@ -564,8 +571,8 @@ fn async1_start_deep_tree_combines_two_nested_subchains_and_a_direct_branch() ->
               async1-test-now))))"##,
         true,
         expect![[
-        r#"OK (nil ((:at 1 :id 2 :repeat nil :function :closure :arguments ("root -> right-1")) (:at 2 :id 1 :repeat nil :function :closure :arguments ("root -> left-1")) (:at 2 :id 3 :repeat nil :function :closure :arguments ("root -> direct")) (:at 3 :id 5 :repeat nil :function :closure :arguments ("root -> left-1 -> left-2")) (:at 4 :id 4 :repeat nil :function :closure :arguments ("root -> right-1 -> right-2")) (:at 5 :id 6 :repeat nil :function :closure :arguments ("{root -> right-1 -> right-2, root -> left-1 -> left-2, root -> direct} -> joined"))) ("{root -> right-1 -> right-2, root -> left-1 -> left-2, root -> direct} -> joined") 5)"#
-    ]],
+            r#"OK (nil ((:at 1 :id 2 :repeat nil :function :closure :arguments ("root -> right-1")) (:at 2 :id 1 :repeat nil :function :closure :arguments ("root -> left-1")) (:at 2 :id 3 :repeat nil :function :closure :arguments ("root -> direct")) (:at 3 :id 5 :repeat nil :function :closure :arguments ("root -> left-1 -> left-2")) (:at 4 :id 4 :repeat nil :function :closure :arguments ("root -> right-1 -> right-2")) (:at 5 :id 6 :repeat nil :function :closure :arguments ("{root -> right-1 -> right-2, root -> left-1 -> left-2, root -> direct} -> joined"))) ("{root -> right-1 -> right-2, root -> left-1 -> left-2, root -> direct} -> joined") 5)"#
+        ]],
     )
 }
 
@@ -601,12 +608,13 @@ fn async1_start_returns_the_first_step_value_and_calls_final_callback_once() -> 
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:first-return ((:first "seed") (:second "after-first") (:final "after-second")))"#
-    ]],
+            r#"OK (:first-return ((:first "seed") (:second "after-first") (:final "after-second")))"#
+        ]],
     )
 }
 
-fn async1_start_reports_a_later_invalid_step_when_its_scheduled_predecessor_completes() -> ParityBatchCase {
+fn async1_start_reports_a_later_invalid_step_when_its_scheduled_predecessor_completes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_start_reports_a_later_invalid_step_when_its_scheduled_predecessor_completes",
         r##"(let (final-values)
@@ -633,12 +641,13 @@ fn async1_start_reports_a_later_invalid_step_when_its_scheduled_predecessor_comp
               final-values))))"##,
         true,
         expect![[
-        r#"OK ((:async1-test-timer 1) (:error error ("Unknown key :invalid-key in async function spec")) 1 nil nil)"#
-    ]],
+            r#"OK ((:async1-test-timer 1) (:error error ("Unknown key :invalid-key in async function spec")) 1 nil nil)"#
+        ]],
     )
 }
 
-fn async1_start_propagates_multiple_callback_invocations_through_the_remaining_pipeline() -> ParityBatchCase {
+fn async1_start_propagates_multiple_callback_invocations_through_the_remaining_pipeline()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_start_propagates_multiple_callback_invocations_through_the_remaining_pipeline",
         r##"(let (events final-values)
@@ -670,8 +679,8 @@ fn async1_start_propagates_multiple_callback_invocations_through_the_remaining_p
             (nreverse final-values))))"##,
         true,
         expect![[
-        r#"OK (:source-return ((:source "seed") (:downstream "first emission") (:downstream "second emission")) ("first emission -> done" "second emission -> done"))"#
-    ]],
+            r#"OK (:source-return ((:source "seed") (:downstream "first emission") (:downstream "second emission")) ("first emission -> done" "second emission -> done"))"#
+        ]],
     )
 }
 

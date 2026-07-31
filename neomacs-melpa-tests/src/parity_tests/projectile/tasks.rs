@@ -23,7 +23,8 @@ fn projectile_task_safety_rejects_executable_or_malformed_values() -> ParityBatc
     )
 }
 
-fn projectile_project_tasks_merge_configured_and_type_tasks_with_stable_precedence() -> ParityBatchCase {
+fn projectile_project_tasks_merge_configured_and_type_tasks_with_stable_precedence()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "projectile_project_tasks_merge_configured_and_type_tasks_with_stable_precedence",
         r##"(let ((projectile-project-types nil)
@@ -44,8 +45,8 @@ fn projectile_project_tasks_merge_configured_and_type_tasks_with_stable_preceden
                 (copy-tree (projectile-project-tasks 'generic))))"##,
         true,
         expect![[
-        r#"OK ((("lint" . "make custom-lint") ("docs" . "make docs") ("bench" . "make bench")) (("lint" . "make lint") ("bench" . "make bench")) (("lint" . "make custom-lint") ("docs" . "make docs")))"#
-    ]],
+            r#"OK ((("lint" . "make custom-lint") ("docs" . "make docs") ("bench" . "make bench")) (("lint" . "make lint") ("bench" . "make bench")) (("lint" . "make custom-lint") ("docs" . "make docs")))"#
+        ]],
     )
 }
 

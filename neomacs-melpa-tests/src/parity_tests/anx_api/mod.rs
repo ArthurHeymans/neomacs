@@ -37,10 +37,5 @@ pub(crate) fn assert_anx_api_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_anx_api_parity` cases (2a).
 pub(crate) fn assert_anx_api_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        anx_api_oracle(),
-        &name,
-        "anx_api_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(anx_api_oracle(), &name, "anx_api_parity", cases);
 }

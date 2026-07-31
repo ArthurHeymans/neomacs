@@ -35,8 +35,8 @@ fn a_failing_comparison_explains_itself_with_a_real_diff() -> ParityBatchCase {
 "##,
         true,
         expect![[
-        r#"OK (:passing (:name assess-probe-pass :passed t) :failing (:name assess-probe-fail :passed nil :error ert-test-failed :explanation "Strings:\nGrüße\nandere Zeile\n\nand\nGrüße\nzweite Zeile\n\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1,2 ****\n  Grüße\n! andere Zeile\n--- 1,2 ----\n  Grüße\n! zweite Zeile\n\n" :value nil) :explain-when-equal t :explain-short-strings "Strings:\na\nand\nb\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1 ****\n! a\n\\ No newline at end of file\n--- 1 ----\n! b\n\\ No newline at end of file\n\n")"#
-    ]],
+            r#"OK (:passing (:name assess-probe-pass :passed t) :failing (:name assess-probe-fail :passed nil :error ert-test-failed :explanation "Strings:\nGrüße\nandere Zeile\n\nand\nGrüße\nzweite Zeile\n\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1,2 ****\n  Grüße\n! andere Zeile\n--- 1,2 ----\n  Grüße\n! zweite Zeile\n\n" :value nil) :explain-when-equal t :explain-short-strings "Strings:\na\nand\nb\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1 ****\n! a\n\\ No newline at end of file\n--- 1 ----\n! b\n\\ No newline at end of file\n\n")"#
+        ]],
     )
 }
 
@@ -70,8 +70,8 @@ fn the_filesystem_macro_builds_the_described_tree_and_removes_it_afterwards() ->
 "##,
         true,
         expect![[
-        r#"OK (:inside (:directory-name-prefix t :tree ("leer.txt" "notiz mit leerzeichen.txt" "paket" "paket/a.txt" "paket/b.txt" "paket/c" "paket/c/d.txt" "unter" "unter/tief" "unter/tief/inhalt.txt" "unter/verzeichnis") :file-with-a-space "Grüße aus München\n" :nested-file "zweite Datei\n" :file-in-recursive-spec "b hat Inhalt\n" :empty-file "") :removed-afterwards t)"#
-    ]],
+            r#"OK (:inside (:directory-name-prefix t :tree ("leer.txt" "notiz mit leerzeichen.txt" "paket" "paket/a.txt" "paket/b.txt" "paket/c" "paket/c/d.txt" "unter" "unter/tief" "unter/tief/inhalt.txt" "unter/verzeichnis") :file-with-a-space "Grüße aus München\n" :nested-file "zweite Datei\n" :file-in-recursive-spec "b hat Inhalt\n" :empty-file "") :removed-afterwards t)"#
+        ]],
     )
 }
 
@@ -99,8 +99,8 @@ fn temp_buffers_carry_their_own_contents_and_die_even_when_the_body_signals() ->
 "##,
         true,
         expect![[
-        r#"OK (:contents ("erste" "zweite" " *assess-with-temp-buffers*") :restored-after-normal-exit t :signal (:error error ("boom")) :restored-after-signal t :as-temp-buffer ("Zeile eins\nZeile zwei\n" 23 " *temp*"))"#
-    ]],
+            r#"OK (:contents ("erste" "zweite" " *assess-with-temp-buffers*") :restored-after-normal-exit t :signal (:error error ("boom")) :restored-after-signal t :as-temp-buffer ("Zeile eins\nZeile zwei\n" 23 " *temp*"))"#
+        ]],
     )
 }
 
@@ -119,8 +119,8 @@ fn indentation_is_checked_against_the_mode_and_the_mismatch_shows_the_line() -> 
 "##,
         true,
         expect![[
-        r#"OK (:matches t :does-not-match nil :explanation "Strings:\n(defun greet (name)\n  (message \"Hallo\"))\n\nand\n(defun greet (name)\n(message \"Hallo\"))\n\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1,2 ****\n  (defun greet (name)\n!   (message \"Hallo\"))\n--- 1,2 ----\n  (defun greet (name)\n! (message \"Hallo\"))\n\n" :roundtrip-of-indented t :roundtrip-of-unindented nil)"#
-    ]],
+            r#"OK (:matches t :does-not-match nil :explanation "Strings:\n(defun greet (name)\n  (message \"Hallo\"))\n\nand\n(defun greet (name)\n(message \"Hallo\"))\n\nDiffer at:*** <FILE> <TIME>\n--- <FILE> <TIME>\n***************\n*** 1,2 ****\n  (defun greet (name)\n!   (message \"Hallo\"))\n--- 1,2 ----\n  (defun greet (name)\n! (message \"Hallo\"))\n\n" :roundtrip-of-indented t :roundtrip-of-unindented nil)"#
+        ]],
     )
 }
 
@@ -144,8 +144,8 @@ fn faces_are_checked_at_named_locations_and_a_mismatch_names_both_faces() -> Par
 "##,
         true,
         expect![[
-        r#"OK (:all-three-match t :wrong-face nil :explanation "Face does not match expected value\n\11Expected: font-lock-string-face\n\11Actual: font-lock-function-name-face\n\11Location: 8\n\11Line Context:   (message \"Hallo %s\" name))\n\n\11bol Position: 1\n")"#
-    ]],
+            r#"OK (:all-three-match t :wrong-face nil :explanation "Face does not match expected value\n\11Expected: font-lock-string-face\n\11Actual: font-lock-function-name-face\n\11Location: 8\n\11Line Context:   (message \"Hallo %s\" name))\n\n\11bol Position: 1\n")"#
+        ]],
     )
 }
 
@@ -177,8 +177,8 @@ fn a_related_file_is_edited_and_saved_without_touching_the_original() -> ParityB
 "##,
         true,
         expect![[
-        r#"OK (:keeps-the-extension t :keeps-the-base-name nil :lives-elsewhere t :buffer-contents "(defun greet (name)\n(message \"Hallo %s\" name))\n;; angehängt\n" :copy-on-disk "(defun greet (name)\n(message \"Hallo %s\" name))\n;; angehängt\n" :original-on-disk "(defun greet (name)\n(message \"Hallo %s\" name))\n" :no-buffer-left-behind t)"#
-    ]],
+            r#"OK (:keeps-the-extension t :keeps-the-base-name nil :lives-elsewhere t :buffer-contents "(defun greet (name)\n(message \"Hallo %s\" name))\n;; angehängt\n" :copy-on-disk "(defun greet (name)\n(message \"Hallo %s\" name))\n;; angehängt\n" :original-on-disk "(defun greet (name)\n(message \"Hallo %s\" name))\n" :no-buffer-left-behind t)"#
+        ]],
     )
 }
 

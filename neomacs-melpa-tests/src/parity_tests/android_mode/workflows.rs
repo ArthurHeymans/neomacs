@@ -35,8 +35,8 @@ fn opening_a_file_in_a_gradle_project_turns_the_mode_on_and_binds_its_prefix() -
     "##,
         true,
         expect![[
-        r#"OK (:root "[SANDBOX]/workspace/inventory/" :builder gradle :root-file "gradlew" :mode-on t :lighter " Android" :bindings (("C" android-build-clean) ("a" android-start-app) ("c" android-build-debug) ("d" android-start-ddms) ("e" android-start-emulator) ("i" android-build-install) ("l" android-logcat) ("r" android-build-reinstall) ("t" android-build-test) ("u" android-build-uninstall)) :outside (:mode nil :root nil))"#
-    ]],
+            r#"OK (:root "[SANDBOX]/workspace/inventory/" :builder gradle :root-file "gradlew" :mode-on t :lighter " Android" :bindings (("C" android-build-clean) ("a" android-start-app) ("c" android-build-debug) ("d" android-start-ddms) ("e" android-start-emulator) ("i" android-build-install) ("l" android-logcat) ("r" android-build-reinstall) ("t" android-build-test) ("u" android-build-uninstall)) :outside (:mode nil :root nil))"#
+        ]],
     )
 }
 
@@ -88,8 +88,8 @@ fn building_runs_the_projects_own_gradle_wrapper_from_the_project_root() -> Pari
     "##,
         true,
         expect![[
-        r#"OK (:debug (:mode compilation-mode :directory "[SANDBOX]/workspace/inventory/" :text "-*- mode: compilation; default-directory: \"[SANDBOX]/workspace/inventory/\" -*-\nCompilation started at <TIME>\n\n./gradlew assembleDebug\n> Task :app:assembleDebug\nBUILD SUCCESSFUL in 1s\n1 actionable task: 1 executed\n\nCompilation finished at <TIME>\n") :clean ("gradlew assembleDebug" "gradlew clean") :install-and-uninstall ("gradlew assembleDebug" "gradlew clean" "gradlew installDebug" "gradlew uninstallDebug"))"#
-    ]],
+            r#"OK (:debug (:mode compilation-mode :directory "[SANDBOX]/workspace/inventory/" :text "-*- mode: compilation; default-directory: \"[SANDBOX]/workspace/inventory/\" -*-\nCompilation started at <TIME>\n\n./gradlew assembleDebug\n> Task :app:assembleDebug\nBUILD SUCCESSFUL in 1s\n1 actionable task: 1 executed\n\nCompilation finished at <TIME>\n") :clean ("gradlew assembleDebug" "gradlew clean") :install-and-uninstall ("gradlew assembleDebug" "gradlew clean" "gradlew installDebug" "gradlew uninstallDebug"))"#
+        ]],
     )
 }
 
@@ -136,8 +136,8 @@ fn switching_the_builder_changes_both_the_root_file_and_the_command() -> ParityB
     "##,
         true,
         expect![[
-        r#"OK (:gradle-root-gone nil :ant (:root "[SANDBOX]/workspace/inventory/" :root-file "AndroidManifest.xml" :command "ant -e") :maven (:root "[SANDBOX]/workspace/inventory/" :command "mvn") :ant-test "ant -e test" :reinstall-unsupported (:signal error :data ("gradle builder does not support reinstall")))"#
-    ]],
+            r#"OK (:gradle-root-gone nil :ant (:root "[SANDBOX]/workspace/inventory/" :root-file "AndroidManifest.xml" :command "ant -e") :maven (:root "[SANDBOX]/workspace/inventory/" :command "mvn") :ant-test "ant -e test" :reinstall-unsupported (:signal error :data ("gradle builder does not support reinstall")))"#
+        ]],
     )
 }
 
@@ -183,8 +183,8 @@ fn the_sdk_is_found_through_local_properties_then_the_environment() -> ParityBat
     "##,
         true,
         expect![[
-        r#"OK (:from-environment "[SANDBOX]/android-sdk" :from-local-properties (:sdk "[SANDBOX]/android-sdk-2" :adb "[SANDBOX]/android-sdk-2/platform-tools/adb") :ignores-a_missing_directory "[SANDBOX]/android-sdk" :falls-back-to-the-customization "[SANDBOX]/android-sdk" :without-any (:signal error :data ("No SDK directory found")) :tools (:found "[SANDBOX]/android-sdk/platform-tools/adb" :emulator "[SANDBOX]/android-sdk/emulator/emulator" :missing (:signal error :data ("Can’t find SDK tool: ddms"))))"#
-    ]],
+            r#"OK (:from-environment "[SANDBOX]/android-sdk" :from-local-properties (:sdk "[SANDBOX]/android-sdk-2" :adb "[SANDBOX]/android-sdk-2/platform-tools/adb") :ignores-a_missing_directory "[SANDBOX]/android-sdk" :falls-back-to-the-customization "[SANDBOX]/android-sdk" :without-any (:signal error :data ("No SDK directory found")) :tools (:found "[SANDBOX]/android-sdk/platform-tools/adb" :emulator "[SANDBOX]/android-sdk/emulator/emulator" :missing (:signal error :data ("Can’t find SDK tool: ddms"))))"#
+        ]],
     )
 }
 
@@ -239,8 +239,8 @@ fn logcat_renders_each_level_with_its_face_and_links_only_frames_that_exist() ->
     "##,
         true,
         expect![[
-        r#"OK (:read-only t :tab-stops (2 30) :android-mode t :local-map-is-logcat t :text "I ActivityManager(742)\11      Displayed com.warehouse.inventory/.MainActivity: +312ms\nD InventorySync(742)\11      syncing 3 widgets\nW InventorySync(742)\11      bucket cache is stale\nE AndroidRuntime(742)\11      FATAL EXCEPTION: main\nE AndroidRuntime(742)\11      java.lang.IllegalStateException: no report yet\nE AndroidRuntime(742)\11      \11at com.warehouse.inventory.ReportActivity.render(ReportActivity.java:7)\nE AndroidRuntime(742)\11      \11at com.warehouse.missing.Absent.gone(Absent.java:42)\nV InventorySync(742)\11      done\nthis line has no level prefix\n" :faces ((android-mode-info-face "I ") (font-lock-function-name-face "ActivityManager") (font-lock-constant-face "(742)\11      ") (android-mode-info-face "Displayed com.warehouse.inventory/.MainActivity: +312ms") (nil "\n") (android-mode-debug-face "D ") (font-lock-function-name-face "InventorySync") (font-lock-constant-face "(742)\11      ") (android-mode-debug-face "syncing 3 widgets") (nil "\n") (android-mode-warning-face "W ") (font-lock-function-name-face "InventorySync") (font-lock-constant-face "(742)\11      ") (android-mode-warning-face "bucket cache is stale") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "FATAL EXCEPTION: main") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "java.lang.IllegalStateException: no report yet") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "\11at com.warehouse.inventory.ReportActivity.render(ReportActivity.java:7)") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "\11at com.warehouse.missing.Absent.gone(Absent.java:42)") (nil "\n") (android-mode-verbose-face "V ") (font-lock-function-name-face "InventorySync") (font-lock-constant-face "(742)\11      ") (android-mode-verbose-face "done") (nil "\n") (font-lock-warning-face "this line has no level prefix") (nil "\n")) :links (("com/warehouse/inventory/ReportActivity.java" 7 t)) :opened (:file "ReportActivity.java" :line 7 :text "        throw new IllegalStateException(\"no report yet\");") :commands ("adb logcat"))"#
-    ]],
+            r#"OK (:read-only t :tab-stops (2 30) :android-mode t :local-map-is-logcat t :text "I ActivityManager(742)\11      Displayed com.warehouse.inventory/.MainActivity: +312ms\nD InventorySync(742)\11      syncing 3 widgets\nW InventorySync(742)\11      bucket cache is stale\nE AndroidRuntime(742)\11      FATAL EXCEPTION: main\nE AndroidRuntime(742)\11      java.lang.IllegalStateException: no report yet\nE AndroidRuntime(742)\11      \11at com.warehouse.inventory.ReportActivity.render(ReportActivity.java:7)\nE AndroidRuntime(742)\11      \11at com.warehouse.missing.Absent.gone(Absent.java:42)\nV InventorySync(742)\11      done\nthis line has no level prefix\n" :faces ((android-mode-info-face "I ") (font-lock-function-name-face "ActivityManager") (font-lock-constant-face "(742)\11      ") (android-mode-info-face "Displayed com.warehouse.inventory/.MainActivity: +312ms") (nil "\n") (android-mode-debug-face "D ") (font-lock-function-name-face "InventorySync") (font-lock-constant-face "(742)\11      ") (android-mode-debug-face "syncing 3 widgets") (nil "\n") (android-mode-warning-face "W ") (font-lock-function-name-face "InventorySync") (font-lock-constant-face "(742)\11      ") (android-mode-warning-face "bucket cache is stale") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "FATAL EXCEPTION: main") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "java.lang.IllegalStateException: no report yet") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "\11at com.warehouse.inventory.ReportActivity.render(ReportActivity.java:7)") (nil "\n") (android-mode-error-face "E ") (font-lock-function-name-face "AndroidRuntime") (font-lock-constant-face "(742)\11      ") (android-mode-error-face "\11at com.warehouse.missing.Absent.gone(Absent.java:42)") (nil "\n") (android-mode-verbose-face "V ") (font-lock-function-name-face "InventorySync") (font-lock-constant-face "(742)\11      ") (android-mode-verbose-face "done") (nil "\n") (font-lock-warning-face "this line has no level prefix") (nil "\n")) :links (("com/warehouse/inventory/ReportActivity.java" 7 t)) :opened (:file "ReportActivity.java" :line 7 :text "        throw new IllegalStateException(\"no report yet\");") :commands ("adb logcat"))"#
+        ]],
     )
 }
 
@@ -291,8 +291,8 @@ fn filtering_logcat_announces_the_change_and_hides_later_lines() -> ParityBatchC
     "##,
         true,
         expect![[
-        r#"OK (:filter-set (:variable "InventorySync" :banner "\n\n*** Filter is changed to 'InventorySync' ***\n\n") :later-lines "I InventorySync(742)\11      kept by the filter\n" :cleared (:variable "" :tail "\n\n*** Filter is cleared ***\n\nI Other(742)\11\11      back again\n") :erased (:size 0 :read-only t))"#
-    ]],
+            r#"OK (:filter-set (:variable "InventorySync" :banner "\n\n*** Filter is changed to 'InventorySync' ***\n\n") :later-lines "I InventorySync(742)\11      kept by the filter\n" :cleared (:variable "" :tail "\n\n*** Filter is cleared ***\n\nI Other(742)\11\11      back again\n") :erased (:size 0 :read-only t))"#
+        ]],
     )
 }
 
@@ -345,8 +345,8 @@ fn starting_an_activity_reads_the_manifest_and_asks_adb_to_launch_it() -> Parity
     "##,
         true,
         expect![[
-        r#"OK (:package "com.warehouse.inventory" :class-of-this-buffer "com.warehouse.inventory.MainActivity" :main-activities ("com.warehouse.inventory.MainActivity" "com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :launcher-activities ("com.warehouse.inventory.MainActivity" "com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :default-activities ("com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :activities-declaring-default 1 :from-this-buffer (:commands ("adb shell am start -n com.warehouse.inventory/com.warehouse.inventory.MainActivity") :messages ("Starting activity: com.warehouse.inventory.MainActivity")) :from-a-non-activity-buffer "adb shell am start -n com.warehouse.inventory/com.warehouse.inventory.ReportActivity" :with-no-device-attached :reported-success)"#
-    ]],
+            r#"OK (:package "com.warehouse.inventory" :class-of-this-buffer "com.warehouse.inventory.MainActivity" :main-activities ("com.warehouse.inventory.MainActivity" "com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :launcher-activities ("com.warehouse.inventory.MainActivity" "com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :default-activities ("com.warehouse.inventory.ReportActivity" "com.warehouse.tools.ScannerActivity") :activities-declaring-default 1 :from-this-buffer (:commands ("adb shell am start -n com.warehouse.inventory/com.warehouse.inventory.MainActivity") :messages ("Starting activity: com.warehouse.inventory.MainActivity")) :from-a-non-activity-buffer "adb shell am start -n com.warehouse.inventory/com.warehouse.inventory.ReportActivity" :with-no-device-attached :reported-success)"#
+        ]],
     )
 }
 
@@ -387,8 +387,8 @@ fn the_emulator_starts_once_and_reports_when_it_is_already_running() -> ParityBa
     "##,
         true,
         expect![[
-        r#"OK (:avds ("Pixel_6_API_34" "Nexus_5X_API_29") :targets ("android-34" "Google Inc.:Google APIs:34") :started (:command "emulator -avd Pixel_6_API_34" :exclusive ("*android-emulator-Pixel_6_API_34*") :process-live t) :asked-again (:launches 1 :exclusive ("*android-emulator-Pixel_6_API_34*") :messages ("emulator Pixel_6_API_34 already running")) :ddms-is-not-installed (:signal error :data ("Can’t find SDK tool: ddms")))"#
-    ]],
+            r#"OK (:avds ("Pixel_6_API_34" "Nexus_5X_API_29") :targets ("android-34" "Google Inc.:Google APIs:34") :started (:command "emulator -avd Pixel_6_API_34" :exclusive ("*android-emulator-Pixel_6_API_34*") :process-live t) :asked-again (:launches 1 :exclusive ("*android-emulator-Pixel_6_API_34*") :messages ("emulator Pixel_6_API_34 already running")) :ddms-is-not-installed (:signal error :data ("Can’t find SDK tool: ddms")))"#
+        ]],
     )
 }
 

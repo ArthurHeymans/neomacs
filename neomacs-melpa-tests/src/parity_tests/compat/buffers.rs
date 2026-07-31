@@ -88,7 +88,8 @@ fn compat_with_buffer_unmodified_if_unchanged_tracks_net_and_real_edits() -> Par
     )
 }
 
-fn compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms() -> ParityBatchCase {
+fn compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "compat_buffer_match_and_match_buffers_cover_boolean_name_mode_and_logic_forms",
         r##"(let* ((first (generate-new-buffer

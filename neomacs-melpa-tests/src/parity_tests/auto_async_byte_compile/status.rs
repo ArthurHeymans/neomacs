@@ -30,12 +30,13 @@ fn auto_async_byte_compile_status_exit_and_warning_matrix_match() -> ParityBatch
             (127 "plain failure text")))"##,
         true,
         expect![[
-        r#"OK (((0 "") normal 1) ((0 "file.el:1:1:Warning: fixture") warning 21) ((1 "") error 1) ((1 "file.el:1:1:Warning: fixture") error 29) ((2 "") normal 1) ((2 "file.el:1:1:Warning: fixture") warning 21) ((127 "plain failure text") normal 1))"#
-    ]],
+            r#"OK (((0 "") normal 1) ((0 "file.el:1:1:Warning: fixture") warning 21) ((1 "") error 1) ((1 "file.el:1:1:Warning: fixture") error 29) ((2 "") normal 1) ((2 "file.el:1:1:Warning: fixture") warning 21) ((127 "plain failure text") normal 1))"#
+        ]],
     )
 }
 
-fn auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_unanchored() -> ParityBatchCase {
+fn auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_unanchored()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_unanchored",
         r##"(mapcar
@@ -61,12 +62,13 @@ fn auto_async_byte_compile_status_warning_scan_uses_default_case_folding_and_is_
             "before\n:Warning:\nafter"))"##,
         true,
         expect![[
-        r#"OK ((":Warning:" warning 10) ("prefix:Warning:suffix" warning 16) (":warning:" warning 10) (":WARNING:" warning 10) ("Warning:" normal 1) (":Warning" normal 1) (":\nWarning:" normal 1) ("before\n:Warning:\nafter" warning 17))"#
-    ]],
+            r#"OK ((":Warning:" warning 10) ("prefix:Warning:suffix" warning 16) (":warning:" warning 10) (":WARNING:" warning 10) ("Warning:" normal 1) (":Warning" normal 1) (":\nWarning:" normal 1) ("before\n:Warning:\nafter" warning 17))"#
+        ]],
     )
 }
 
-fn auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly() -> ParityBatchCase {
+fn auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly",
         r##"(let ((buffer
@@ -92,7 +94,8 @@ fn auto_async_byte_compile_status_resets_and_mutates_result_buffer_point_exactly
     )
 }
 
-fn auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exactly() -> ParityBatchCase {
+fn auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exactly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exactly",
         r##"(let ((buffer
@@ -149,12 +152,13 @@ fn auto_async_byte_compile_display_routes_normal_warning_and_error_statuses_exac
             (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ("compile one.el completed" "compile two.el completed with warnings." :displayed :displayed :displayed ((:message "compile one.el completed") (:message "compile two.el completed with warnings.") (:display " *aabc-display*" nil) (:display " *aabc-display*" nil) (:display " *aabc-display*" nil)))"#
-    ]],
+            r#"OK ("compile one.el completed" "compile two.el completed with warnings." :displayed :displayed :displayed ((:message "compile one.el completed") (:message "compile two.el completed with warnings.") (:display " *aabc-display*" nil) (:display " *aabc-display*" nil) (:display " *aabc-display*" nil)))"#
+        ]],
     )
 }
 
-fn auto_async_byte_compile_display_uses_configured_function_return_and_propagates_failure() -> ParityBatchCase {
+fn auto_async_byte_compile_display_uses_configured_function_return_and_propagates_failure()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_display_uses_configured_function_return_and_propagates_failure",
         r##"(let ((buffer
@@ -187,12 +191,13 @@ fn auto_async_byte_compile_display_uses_configured_function_return_and_propagate
             (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (:custom-return (" *aabc-custom-display*") (:error error ("fixture display failed")))"#
-    ]],
+            r#"OK (:custom-return (" *aabc-custom-display*") (:error error ("fixture display failed")))"#
+        ]],
     )
 }
 
-fn auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_display_before_hook() -> ParityBatchCase {
+fn auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_display_before_hook()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_display_before_hook",
         r##"(let (events)
@@ -249,12 +254,13 @@ fn auto_async_byte_compile_process_sentinel_observes_process_data_and_orders_dis
                (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (nil ((:exit fixture-process-object) (:status 7 " *auto-async-byte-compile*") (:name fixture-process-object) (:buffer fixture-process-object) (:display "fixture-process" fixture-buffer warning) (:hook nil)))"#
-    ]],
+            r#"OK (nil ((:exit fixture-process-object) (:status 7 " *auto-async-byte-compile*") (:name fixture-process-object) (:buffer fixture-process-object) (:display "fixture-process" fixture-buffer warning) (:hook nil)))"#
+        ]],
     )
 }
 
-fn auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure() -> ParityBatchCase {
+fn auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure",
         r##"(let (events)
@@ -292,7 +298,8 @@ fn auto_async_byte_compile_process_sentinel_stops_before_hook_on_display_failure
     )
 }
 
-fn auto_async_byte_compile_process_sentinel_propagates_hook_failure_after_display() -> ParityBatchCase {
+fn auto_async_byte_compile_process_sentinel_propagates_hook_failure_after_display()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_process_sentinel_propagates_hook_failure_after_display",
         r##"(let (events)

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_artbollocks_mode_batch};
 
-fn documented_text_mode_hook_reviews_a_selected_draft_with_the_bound_metric_commands() -> ParityBatchCase {
+fn documented_text_mode_hook_reviews_a_selected_draft_with_the_bound_metric_commands()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "documented_text_mode_hook_reviews_a_selected_draft_with_the_bound_metric_commands",
         r##"(let ((text-mode-hook nil))
@@ -52,8 +53,8 @@ fn documented_text_mode_hook_reviews_a_selected_draft_with_the_bound_metric_comm
                 (buffer-modified-p))))))"##,
         true,
         expect![
-        r#"OK (text-mode t (artbollocks-mode " AB") (("C-c [" artbollocks-word-count 8) ("C-c ]" artbollocks-sentence-count 2) ("C-c \\" artbollocks-readability-index "Readability index: 7.063749999999999") ("C-c /" artbollocks-reading-ease "Reading ease: 44.149") ("C-c =" artbollocks-grade-level "Grade level: 8.094999999999999")) (43 97) "The installation fills the room. Visitors move slowly." nil nil t)"#
-    ],
+            r#"OK (text-mode t (artbollocks-mode " AB") (("C-c [" artbollocks-word-count 8) ("C-c ]" artbollocks-sentence-count 2) ("C-c \\" artbollocks-readability-index "Readability index: 7.063749999999999") ("C-c /" artbollocks-reading-ease "Reading ease: 44.149") ("C-c =" artbollocks-grade-level "Grade level: 8.094999999999999")) (43 97) "The installation fills the room. Visitors move slowly." nil nil t)"#
+        ],
     )
 }
 
@@ -112,8 +113,8 @@ fn editing_lisp_prose_marks_real_writing_problems_but_not_matching_code() -> Par
             (buffer-modified-p))))"##,
         true,
         expect![[
-        r#"OK ((("the" artbollocks-lexical-illusions-face 73 76) ("narrative" artbollocks-face 77 86) ("was written" artbollocks-passive-voice-face 87 98) ("very" artbollocks-weasel-words-face 104 108) ("contextual" artbollocks-face 109 119) ("discourse" artbollocks-face 120 129) ("Many" artbollocks-weasel-words-face 181 185) ("works" artbollocks-face 186 191) ("fairly" artbollocks-weasel-words-face 212 218) ("normative" artbollocks-face 219 228) ("paradigm" artbollocks-face 229 237)) t "(defun review-installation (narrative very contextual discourse)\n  \"The the narrative was written in a very contextual discourse.\"\n  (list narrative very contextual discourse))\n;; Many works were completed by a fairly normative paradigm.\n" t)"#
-    ]],
+            r#"OK ((("the" artbollocks-lexical-illusions-face 73 76) ("narrative" artbollocks-face 77 86) ("was written" artbollocks-passive-voice-face 87 98) ("very" artbollocks-weasel-words-face 104 108) ("contextual" artbollocks-face 109 119) ("discourse" artbollocks-face 120 129) ("Many" artbollocks-weasel-words-face 181 185) ("works" artbollocks-face 186 191) ("fairly" artbollocks-weasel-words-face 212 218) ("normative" artbollocks-face 219 228) ("paradigm" artbollocks-face 229 237)) t "(defun review-installation (narrative very contextual discourse)\n  \"The the narrative was written in a very contextual discourse.\"\n  (list narrative very contextual discourse))\n;; Many works were completed by a fairly normative paradigm.\n" t)"#
+        ]],
     )
 }
 
@@ -181,8 +182,8 @@ fn a_team_customizes_its_editorial_policy_and_refontifies_the_open_review() -> P
               (buffer-modified-p)))))"##,
         true,
         expect![
-        r#"OK ((("Perhaps" artbollocks-weasel-words-face) ("was shipped" artbollocks-passive-voice-face) ("north star" artbollocks-face) ("sort of" artbollocks-weasel-words-face) ("synergy" artbollocks-face)) (("around" artbollocks-weasel-words-face) ("launch narrative" artbollocks-face)) ";; Perhaps the release was shipped around the north star.\n;; The team found sort of synergy in the launch narrative.\n" t t)"#
-    ],
+            r#"OK ((("Perhaps" artbollocks-weasel-words-face) ("was shipped" artbollocks-passive-voice-face) ("north star" artbollocks-face) ("sort of" artbollocks-weasel-words-face) ("synergy" artbollocks-face)) (("around" artbollocks-weasel-words-face) ("launch narrative" artbollocks-face)) ";; Perhaps the release was shipped around the north star.\n;; The team found sort of synergy in the launch narrative.\n" t t)"#
+        ],
     )
 }
 

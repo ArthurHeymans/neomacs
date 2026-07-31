@@ -1,6 +1,8 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_nxml_autoload_batch, assert_auto_complete_nxml_batch};
+use super::{
+    ParityBatchCase, assert_auto_complete_nxml_autoload_batch, assert_auto_complete_nxml_batch,
+};
 
 fn auto_complete_nxml_source_registers_feature_public_commands_and_alias() -> ParityBatchCase {
     ParityBatchCase::new(
@@ -23,8 +25,8 @@ fn auto_complete_nxml_source_registers_feature_public_commands_and_alias() -> Pa
            'auto-complete-nxml-ac-start-with-insert)))"##,
         true,
         expect![[
-        r#"OK (t ((auto-complete-nxml-ac-start-with-insert t t nil) (auto-complete-nxml-popup-help t t "Popup help about something at point.") (auto-complete-nxml-toggle-automatic t t "Switch value of ‘auto-complete-nxml-automatic-p’.")) t)"#
-    ]],
+            r#"OK (t ((auto-complete-nxml-ac-start-with-insert t t nil) (auto-complete-nxml-popup-help t t "Popup help about something at point.") (auto-complete-nxml-toggle-automatic t t "Switch value of ‘auto-complete-nxml-automatic-p’.")) t)"#
+        ]],
     )
 }
 
@@ -45,8 +47,8 @@ fn auto_complete_nxml_custom_variables_have_exact_defaults_types_and_group() -> 
            auto-complete-nxml-automatic-p))"##,
         true,
         expect![[
-        r#"OK ((auto-complete-nxml-popup-help-key nil (nil) string nil "Keystroke for popup help about something at point.") (auto-complete-nxml-toggle-automatic-key nil (nil) string nil "Keystroke for toggle on/off automatic completion.") (auto-complete-nxml-automatic-p t (t) boolean nil "Whether start completion automatically."))"#
-    ]],
+            r#"OK ((auto-complete-nxml-popup-help-key nil (nil) string nil "Keystroke for popup help about something at point.") (auto-complete-nxml-toggle-automatic-key nil (nil) string nil "Keystroke for toggle on/off automatic completion.") (auto-complete-nxml-automatic-p t (t) boolean nil "Whether start completion automatically."))"#
+        ]],
     )
 }
 
@@ -66,8 +68,8 @@ fn auto_complete_nxml_sources_expose_exact_auto_complete_contracts() -> ParityBa
            ac-source-nxml-tag-value-by-myself))"##,
         true,
         expect![[
-        r#"OK ((ac-source-nxml-tag ((candidates . :function) (prefix . "<\\([a-zA-Z0-9:-]*\\)") (symbol . "t") (document . :function) (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-attr ((candidates . :function) (prefix . "\\(?:<[a-zA-Z0-9:-]+\\|[^=]\"\\|[^=]'\\)\\s-+\\([a-zA-Z0-9-]*\\)") (symbol . "a") (document . :function) (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-attr-value ((candidates . :function) (prefix . "=\\(?:\"\\|'\\)\\s-*\\([^\"':; ]*\\)") (symbol . "v") (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-css ((candidates . :function) (prefix . "\\s-+style=\\(?:\"\\|'\\)\\([^\"']*\\)") (symbol . "c") (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-css-property ((candidates . :function) (prefix . :function) (symbol . "p") (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-tag-value-by-nxml ((candidates . :function) (prefix . ">\\s-*\\([^<]*\\)") (symbol . "w") (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-tag-value-by-myself ((candidates . :function) (symbol . "w") (cache) (limit . 500))))"#
-    ]],
+            r#"OK ((ac-source-nxml-tag ((candidates . :function) (prefix . "<\\([a-zA-Z0-9:-]*\\)") (symbol . "t") (document . :function) (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-attr ((candidates . :function) (prefix . "\\(?:<[a-zA-Z0-9:-]+\\|[^=]\"\\|[^=]'\\)\\s-+\\([a-zA-Z0-9-]*\\)") (symbol . "a") (document . :function) (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-attr-value ((candidates . :function) (prefix . "=\\(?:\"\\|'\\)\\s-*\\([^\"':; ]*\\)") (symbol . "v") (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-css ((candidates . :function) (prefix . "\\s-+style=\\(?:\"\\|'\\)\\([^\"']*\\)") (symbol . "c") (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-css-property ((candidates . :function) (prefix . :function) (symbol . "p") (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-tag-value-by-nxml ((candidates . :function) (prefix . ">\\s-*\\([^<]*\\)") (symbol . "w") (requires . 0) (cache) (limit . 500) (action . :function))) (ac-source-nxml-tag-value-by-myself ((candidates . :function) (symbol . "w") (cache) (limit . 500))))"#
+        ]],
     )
 }
 
@@ -98,8 +100,8 @@ fn auto_complete_nxml_source_prefixes_match_practical_editing_boundaries() -> Pa
            (ac-source-nxml-tag-value-by-nxml . "<status>dra")))"##,
         true,
         expect![[
-        r#"OK ((ac-source-nxml-tag "<math:su" "math:su") (ac-source-nxml-attr "<table data-ro" "data-ro") (ac-source-nxml-attr-value "<table role=\"but" "but") (ac-source-nxml-css "<p style=\"font-s" "font-s") (ac-source-nxml-tag-value-by-nxml "<status>dra" "dra"))"#
-    ]],
+            r#"OK ((ac-source-nxml-tag "<math:su" "math:su") (ac-source-nxml-attr "<table data-ro" "data-ro") (ac-source-nxml-attr-value "<table role=\"but" "but") (ac-source-nxml-css "<p style=\"font-s" "font-s") (ac-source-nxml-tag-value-by-nxml "<status>dra" "dra"))"#
+        ]],
     )
 }
 
@@ -129,7 +131,8 @@ fn auto_complete_nxml_load_history_records_definition_and_provide_contract() -> 
     )
 }
 
-fn auto_complete_nxml_advice_registry_preserves_active_and_disabled_advice_roles() -> ParityBatchCase {
+fn auto_complete_nxml_advice_registry_preserves_active_and_disabled_advice_roles() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_nxml_advice_registry_preserves_active_and_disabled_advice_roles",
         r##"(mapcar
@@ -156,8 +159,8 @@ fn auto_complete_nxml_advice_registry_preserves_active_and_disabled_advice_roles
             around auto-complete-nxml-ad-make-doc)))"##,
         true,
         expect![
-        "OK ((rng-set-document-type-and-validate make-doc4ac-in-nxml t t) (rng-c-parse-element auto-complete-nxml-ad-make-doc t nil) (rng-c-parse-attribute auto-complete-nxml-ad-make-doc t nil) (rng-c-parse-name-class auto-complete-nxml-ad-make-doc t nil) (forward-comment auto-complete-nxml-ad-make-doc t nil) (rng-c-parse-follow-annotations auto-complete-nxml-ad-make-doc t nil))"
-    ],
+            "OK ((rng-set-document-type-and-validate make-doc4ac-in-nxml t t) (rng-c-parse-element auto-complete-nxml-ad-make-doc t nil) (rng-c-parse-attribute auto-complete-nxml-ad-make-doc t nil) (rng-c-parse-name-class auto-complete-nxml-ad-make-doc t nil) (forward-comment auto-complete-nxml-ad-make-doc t nil) (rng-c-parse-follow-annotations auto-complete-nxml-ad-make-doc t nil))"
+        ],
     )
 }
 
@@ -188,12 +191,13 @@ fn auto_complete_nxml_setup_installs_local_keys_sources_and_trigger_contract() -
               (nreverse calls)))))"##,
         true,
         expect![
-        "OK ((ac-source-nxml-tag ac-source-nxml-attr ac-source-nxml-attr-value ac-source-nxml-css ac-source-nxml-css-property ac-source-nxml-tag-value-by-nxml ac-source-nxml-tag-value-by-myself) (nxml-mode fundamental-mode) (auto-complete-nxml-ac-start-with-insert self-insert-command) auto-complete-nxml-ac-start-with-insert auto-complete-nxml-popup-help auto-complete-nxml-toggle-automatic ((:mode t) init-project))"
-    ],
+            "OK ((ac-source-nxml-tag ac-source-nxml-attr ac-source-nxml-attr-value ac-source-nxml-css ac-source-nxml-css-property ac-source-nxml-tag-value-by-nxml ac-source-nxml-tag-value-by-myself) (nxml-mode fundamental-mode) (auto-complete-nxml-ac-start-with-insert self-insert-command) auto-complete-nxml-ac-start-with-insert auto-complete-nxml-popup-help auto-complete-nxml-toggle-automatic ((:mode t) init-project))"
+        ],
     )
 }
 
-fn auto_complete_nxml_generated_autoload_file_has_no_eager_runtime_side_effects() -> ParityBatchCase {
+fn auto_complete_nxml_generated_autoload_file_has_no_eager_runtime_side_effects() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_nxml_generated_autoload_file_has_no_eager_runtime_side_effects",
         r##"(list
@@ -228,8 +232,7 @@ fn registry_auto_complete_nxml_batch() {
 
 #[test]
 fn registry_auto_complete_nxml_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        auto_complete_nxml_generated_autoload_file_has_no_eager_runtime_side_effects(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![auto_complete_nxml_generated_autoload_file_has_no_eager_runtime_side_effects()];
     assert_auto_complete_nxml_autoload_batch(&cases);
 }

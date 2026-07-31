@@ -51,12 +51,13 @@ fn auth_source_xoauth2_nnimap_advice_sends_exact_sasl_initial_response() -> Pari
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (:authenticated ((:capability "AUTH=XOAUTH2") (:capability "SASL-IR") (:command "AUTHENTICATE XOAUTH2 dXNlcj1hbGljZUBleGFtcGxlAWF1dGg9QmVhcmVyIGFjY2Vzcy10b2tlbgEB")))"#
-    ]],
+            r#"OK (:authenticated ((:capability "AUTH=XOAUTH2") (:capability "SASL-IR") (:command "AUTHENTICATE XOAUTH2 dXNlcj1hbGljZUBleGFtcGxlAWF1dGg9QmVhcmVyIGFjY2Vzcy10b2tlbgEB")))"#
+        ]],
     )
 }
 
-fn auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition() -> ParityBatchCase {
+fn auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition",
         r##"(let (calls)
@@ -104,8 +105,8 @@ fn auth_source_xoauth2_nnimap_advice_falls_back_for_each_unsatisfied_condition()
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:fallback "plain-user" "plain-password") (:fallback "no-xoauth2" "password") (:fallback "no-sasl-ir" "password") ((:fallback "plain-user" "plain-password") (:fallback "no-xoauth2" "password") (:fallback "no-sasl-ir" "password")))"#
-    ]],
+            r#"OK ((:fallback "plain-user" "plain-password") (:fallback "no-xoauth2" "password") (:fallback "no-sasl-ir" "password") ((:fallback "plain-user" "plain-password") (:fallback "no-xoauth2" "password") (:fallback "no-sasl-ir" "password")))"#
+        ]],
     )
 }
 
@@ -126,8 +127,8 @@ fn auth_source_xoauth2_smtp_helper_sends_exact_command_and_code() -> ParityBatch
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (:accepted ((fixture-process "AUTH XOAUTH2 dXNlcj1hbGljZUBleGFtcGxlAWF1dGg9QmVhcmVyIGFjY2Vzcy10b2tlbgEB" 235)))"#
-    ]],
+            r#"OK (:accepted ((fixture-process "AUTH XOAUTH2 dXNlcj1hbGljZUBleGFtcGxlAWF1dGg9QmVhcmVyIGFjY2Vzcy10b2tlbgEB" 235)))"#
+        ]],
     )
 }
 
@@ -154,7 +155,8 @@ fn auth_source_xoauth2_enable_installs_smtp_generic_method() -> ParityBatchCase 
     )
 }
 
-fn auth_source_xoauth2_repeated_enable_deduplicates_lists_and_preserves_one_fallback_call() -> ParityBatchCase {
+fn auth_source_xoauth2_repeated_enable_deduplicates_lists_and_preserves_one_fallback_call()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_xoauth2_repeated_enable_deduplicates_lists_and_preserves_one_fallback_call",
         r##"(let ((auth-sources nil)

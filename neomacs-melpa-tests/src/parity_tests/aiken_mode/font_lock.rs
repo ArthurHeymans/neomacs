@@ -27,8 +27,8 @@ fn all_language_keywords_receive_keyword_face_in_real_source_context() -> Parity
 "##,
         true,
         expect![[
-        r#"OK (("if" font-lock-keyword-face) ("else" font-lock-keyword-face) ("when" font-lock-keyword-face) ("is" font-lock-keyword-face) ("fn" font-lock-keyword-face) ("use" font-lock-keyword-face) ("let" font-lock-keyword-face) ("pub" font-lock-keyword-face) ("type" font-lock-keyword-face) ("opaque" font-lock-keyword-face) ("const" font-lock-keyword-face) ("todo" font-lock-keyword-face) ("error" font-lock-keyword-face) ("expect" font-lock-keyword-face) ("test" font-lock-keyword-face) ("trace" font-lock-keyword-face) ("fail" font-lock-keyword-face) ("validator" font-lock-keyword-face) ("and" font-lock-keyword-face) ("or" font-lock-keyword-face))"#
-    ]],
+            r#"OK (("if" font-lock-keyword-face) ("else" font-lock-keyword-face) ("when" font-lock-keyword-face) ("is" font-lock-keyword-face) ("fn" font-lock-keyword-face) ("use" font-lock-keyword-face) ("let" font-lock-keyword-face) ("pub" font-lock-keyword-face) ("type" font-lock-keyword-face) ("opaque" font-lock-keyword-face) ("const" font-lock-keyword-face) ("todo" font-lock-keyword-face) ("error" font-lock-keyword-face) ("expect" font-lock-keyword-face) ("test" font-lock-keyword-face) ("trace" font-lock-keyword-face) ("fail" font-lock-keyword-face) ("validator" font-lock-keyword-face) ("and" font-lock-keyword-face) ("or" font-lock-keyword-face))"#
+        ]],
     )
 }
 
@@ -57,8 +57,8 @@ fn every_operator_uses_longest_token_matching_and_builtin_face() -> ParityBatchC
 "##,
         true,
         expect![[
-        r#"OK (("=" "=" font-lock-builtin-face font-lock-builtin-face) ("->" "->" font-lock-builtin-face font-lock-builtin-face) (".." ".." font-lock-builtin-face font-lock-builtin-face) ("|>" "|>" font-lock-builtin-face font-lock-builtin-face) (">=" ">=" font-lock-builtin-face font-lock-builtin-face) ("<=" "<=" font-lock-builtin-face font-lock-builtin-face) (">" ">" font-lock-builtin-face font-lock-builtin-face) ("<" "<" font-lock-builtin-face font-lock-builtin-face) ("!=" "!=" font-lock-builtin-face font-lock-builtin-face) ("==" "==" font-lock-builtin-face font-lock-builtin-face) ("&&" "&&" font-lock-builtin-face font-lock-builtin-face) ("||" "||" font-lock-builtin-face font-lock-builtin-face) ("!" "!" font-lock-builtin-face font-lock-builtin-face) ("+" "+" font-lock-builtin-face font-lock-builtin-face) ("-" "-" font-lock-builtin-face font-lock-builtin-face) ("/" "/" font-lock-builtin-face font-lock-builtin-face) ("*" "*" font-lock-builtin-face font-lock-builtin-face) ("%" "%" font-lock-builtin-face font-lock-builtin-face) ("?" "?" font-lock-builtin-face font-lock-builtin-face))"#
-    ]],
+            r#"OK (("=" "=" font-lock-builtin-face font-lock-builtin-face) ("->" "->" font-lock-builtin-face font-lock-builtin-face) (".." ".." font-lock-builtin-face font-lock-builtin-face) ("|>" "|>" font-lock-builtin-face font-lock-builtin-face) (">=" ">=" font-lock-builtin-face font-lock-builtin-face) ("<=" "<=" font-lock-builtin-face font-lock-builtin-face) (">" ">" font-lock-builtin-face font-lock-builtin-face) ("<" "<" font-lock-builtin-face font-lock-builtin-face) ("!=" "!=" font-lock-builtin-face font-lock-builtin-face) ("==" "==" font-lock-builtin-face font-lock-builtin-face) ("&&" "&&" font-lock-builtin-face font-lock-builtin-face) ("||" "||" font-lock-builtin-face font-lock-builtin-face) ("!" "!" font-lock-builtin-face font-lock-builtin-face) ("+" "+" font-lock-builtin-face font-lock-builtin-face) ("-" "-" font-lock-builtin-face font-lock-builtin-face) ("/" "/" font-lock-builtin-face font-lock-builtin-face) ("*" "*" font-lock-builtin-face font-lock-builtin-face) ("%" "%" font-lock-builtin-face font-lock-builtin-face) ("?" "?" font-lock-builtin-face font-lock-builtin-face))"#
+        ]],
     )
 }
 
@@ -88,8 +88,8 @@ fn settle_payment(tx: Transaction) -> Bool { True }\n")
 "##,
         true,
         expect![[
-        r#"OK (("pub" font-lock-keyword-face) ("const" font-lock-keyword-face) ("max_supply" font-lock-type-face) ("Int" font-lock-type-face) ("type" font-lock-keyword-face) ("Payment" font-lock-type-face) ("use" font-lock-keyword-face) ("cardano" font-lock-constant-face) ("Transaction" nil) ("fn" font-lock-keyword-face) ("settle_payment" font-lock-function-name-face) ("Bool" font-lock-type-face) ("True" font-lock-type-face))"#
-    ]],
+            r#"OK (("pub" font-lock-keyword-face) ("const" font-lock-keyword-face) ("max_supply" font-lock-type-face) ("Int" font-lock-type-face) ("type" font-lock-keyword-face) ("Payment" font-lock-type-face) ("use" font-lock-keyword-face) ("cardano" font-lock-constant-face) ("Transaction" nil) ("fn" font-lock-keyword-face) ("settle_payment" font-lock-function-name-face) ("Bool" font-lock-type-face) ("True" font-lock-type-face))"#
+        ]],
     )
 }
 
@@ -119,8 +119,8 @@ validator spend(datum: Option<Data>) { True }\n")
 "##,
         true,
         expect![[
-        r#"OK (("validator" t nil font-lock-comment-face) ("HiddenType" t nil font-lock-comment-face) ("validator" nil 34 font-lock-string-face) ("StringType" nil 34 font-lock-string-face) ("validator" nil nil font-lock-keyword-face) ("Option" nil nil font-lock-type-face))"#
-    ]],
+            r#"OK (("validator" t nil font-lock-comment-face) ("HiddenType" t nil font-lock-comment-face) ("validator" nil 34 font-lock-string-face) ("StringType" nil 34 font-lock-string-face) ("validator" nil nil font-lock-keyword-face) ("Option" nil nil font-lock-type-face))"#
+        ]],
     )
 }
 
@@ -160,8 +160,8 @@ fn incremental_editing_refontifies_new_keywords_types_and_operators() -> ParityB
 "##,
         true,
         expect![[
-        r#"OK ((nil font-lock-type-face font-lock-builtin-face font-lock-builtin-face) (font-lock-keyword-face font-lock-type-face font-lock-builtin-face nil) #("let result = old_value => NewType\n |> next" 0 3 (face font-lock-keyword-face) 11 12 (face font-lock-builtin-face) 23 24 (face font-lock-builtin-face) 24 25 (face font-lock-builtin-face) 26 33 (face font-lock-type-face) 35 37 (face font-lock-builtin-face)))"#
-    ]],
+            r#"OK ((nil font-lock-type-face font-lock-builtin-face font-lock-builtin-face) (font-lock-keyword-face font-lock-type-face font-lock-builtin-face nil) #("let result = old_value => NewType\n |> next" 0 3 (face font-lock-keyword-face) 11 12 (face font-lock-builtin-face) 23 24 (face font-lock-builtin-face) 24 25 (face font-lock-builtin-face) 26 33 (face font-lock-type-face) 35 37 (face font-lock-builtin-face)))"#
+        ]],
     )
 }
 
@@ -210,8 +210,8 @@ validator payment {\n\
 "##,
         true,
         expect![[
-        r#"OK (("use" font-lock-keyword-face) ("list" nil) ("pub" font-lock-keyword-face) ("type" font-lock-keyword-face) ("Datum" font-lock-type-face) ("Payment" font-lock-type-face) ("ByteArray" font-lock-type-face) ("Int" font-lock-type-face) ("validator" font-lock-keyword-face) ("Option" font-lock-type-face) ("Data" font-lock-type-face) ("OutputReference" font-lock-type-face) ("Transaction" font-lock-type-face) ("when" font-lock-keyword-face) ("is" font-lock-keyword-face) ("Some" font-lock-type-face) ("->" font-lock-builtin-face) (">=" font-lock-builtin-face) ("&&" font-lock-builtin-face) ("!=" font-lock-builtin-face) ("None" font-lock-type-face) ("fail" font-lock-keyword-face))"#
-    ]],
+            r#"OK (("use" font-lock-keyword-face) ("list" nil) ("pub" font-lock-keyword-face) ("type" font-lock-keyword-face) ("Datum" font-lock-type-face) ("Payment" font-lock-type-face) ("ByteArray" font-lock-type-face) ("Int" font-lock-type-face) ("validator" font-lock-keyword-face) ("Option" font-lock-type-face) ("Data" font-lock-type-face) ("OutputReference" font-lock-type-face) ("Transaction" font-lock-type-face) ("when" font-lock-keyword-face) ("is" font-lock-keyword-face) ("Some" font-lock-type-face) ("->" font-lock-builtin-face) (">=" font-lock-builtin-face) ("&&" font-lock-builtin-face) ("!=" font-lock-builtin-face) ("None" font-lock-type-face) ("fail" font-lock-keyword-face))"#
+        ]],
     )
 }
 

@@ -28,8 +28,8 @@ fn aas_expands_configured_snippets_while_the_user_types_prose() -> ParityBatchCa
   (keymapp (gethash 'aas-workflow-mode aas-keymaps))))"##,
         true,
         expect![[
-        r#"OK ("the set is ∞ and α = ½\n#+latex_header: amsmath" 47 2 t (aas-workflow-mode) t t 1 t)"#
-    ]],
+            r#"OK ("the set is ∞ and α = ½\n#+latex_header: amsmath" 47 2 t (aas-workflow-mode) t t 1 t)"#
+        ]],
     )
 }
 
@@ -88,8 +88,8 @@ fn aas_function_expansions_see_the_transient_variables_and_run_both_hooks() -> P
     aas-transient-snippet-condition-result)))"##,
         true,
         expect![[
-        r#"OK ("bye\n-- Signed, " 16 ((cond 5 t) (pre "sig" 5) (expand "sig" checked t) (post "sig" 16)) nil nil nil)"#
-    ]],
+            r#"OK ("bye\n-- Signed, " 16 ((cond 5 t) (pre "sig" 5) (expand "sig" checked t) (post "sig" 16)) nil nil nil)"#
+        ]],
     )
 }
 
@@ -165,8 +165,8 @@ fn aas_activation_lifecycle_decides_which_snippets_are_live_in_the_buffer() -> P
                (and (memq #'aas-post-self-insert-hook post-self-insert-hook) t)))))))"##,
         true,
         expect![[
-        r#"OK ("TEXT pmxm" "TEXT EXTRA " (aas-extra-mode text-mode) "tmEXTRA " "xm" "xm" (aas-extra-mode) nil (text-mode) nil)"#
-    ]],
+            r#"OK ("TEXT pmxm" "TEXT EXTRA " (aas-extra-mode text-mode) "tmEXTRA " "xm" "xm" (aas-extra-mode) nil (text-mode) nil)"#
+        ]],
     )
 }
 
@@ -200,8 +200,8 @@ fn aas_rejects_invalid_snippet_definitions_with_exact_errors() -> ParityBatchCas
         (gethash 'aas-never-defined-mode aas-keymaps)))"##,
         true,
         expect![[
-        r#"OK (((number-expansion signal error ("Expansion must be either a string, function, tempel/yas form, or nil")) (symbol-condition signal error ("Condition must be either nil or a function")) (unknown-keyword signal error ("Unknown keyword: :nope")) (prefix-clash signal error ("Key sequence ; a b starts with non-prefix key ; a")) (unknown-keymap value nil)) nil t nil)"#
-    ]],
+            r#"OK (((number-expansion signal error ("Expansion must be either a string, function, tempel/yas form, or nil")) (symbol-condition signal error ("Condition must be either nil or a function")) (unknown-keyword signal error ("Unknown keyword: :nope")) (prefix-clash signal error ("Key sequence ; a b starts with non-prefix key ; a")) (unknown-keymap value nil)) nil t nil)"#
+        ]],
     )
 }
 

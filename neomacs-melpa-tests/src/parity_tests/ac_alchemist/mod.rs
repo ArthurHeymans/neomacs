@@ -190,10 +190,5 @@ pub(crate) fn assert_ac_alchemist_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ac_alchemist_parity` cases (2a).
 pub(crate) fn assert_ac_alchemist_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ac_alchemist_oracle(),
-        &name,
-        "ac_alchemist_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ac_alchemist_oracle(), &name, "ac_alchemist_parity", cases);
 }

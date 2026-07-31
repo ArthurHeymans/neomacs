@@ -28,8 +28,8 @@ fn the_pinned_request_package_no_longer_ships_the_library_airplay_requires() -> 
 "##,
         true,
         expect![[
-        r#"OK (:declared-requirements ((request "20130110.2144") (simple-httpd "1.4.1") (deferred "0.3.1")) :on-the-load-path (("request" . t) ("simple-httpd" . t) ("deferred" . t) ("request-deferred")) :files-in-the-pinned-request ("request-autoloads.el" "request-pkg.el" "request.el") :requiring-it (file-missing "Cannot open load file" "No such file or directory" "request-deferred"))"#
-    ]],
+            r#"OK (:declared-requirements ((request "20130110.2144") (simple-httpd "1.4.1") (deferred "0.3.1")) :on-the-load-path (("request" . t) ("simple-httpd" . t) ("deferred" . t) ("request-deferred")) :files-in-the-pinned-request ("request-autoloads.el" "request-pkg.el" "request.el") :requiring-it (file-missing "Cannot open load file" "No such file or directory" "request-deferred"))"#
+        ]],
     )
 }
 
@@ -54,8 +54,8 @@ fn installing_the_package_gives_commands_that_exist_but_cannot_run() -> ParityBa
 "##,
         true,
         expect![
-        "OK (:defined-by-the-autoloads ((airplay/image:view :fboundp t :interactive nil :autoload t) (airplay:stop :fboundp t :interactive t :autoload t) (airplay/video:play :fboundp t :interactive nil :autoload t) (airplay/video:scrub :fboundp t :interactive nil :autoload t) (airplay/video:seek :fboundp t :interactive nil :autoload t) (airplay/video:info :fboundp t :interactive nil :autoload t) (airplay/video:pause :fboundp t :interactive t :autoload t) (airplay/video:resume :fboundp t :interactive t :autoload t)) :feature-present nil :offered-by-completion 3)"
-    ],
+            "OK (:defined-by-the-autoloads ((airplay/image:view :fboundp t :interactive nil :autoload t) (airplay:stop :fboundp t :interactive t :autoload t) (airplay/video:play :fboundp t :interactive nil :autoload t) (airplay/video:scrub :fboundp t :interactive nil :autoload t) (airplay/video:seek :fboundp t :interactive nil :autoload t) (airplay/video:info :fboundp t :interactive nil :autoload t) (airplay/video:pause :fboundp t :interactive t :autoload t) (airplay/video:resume :fboundp t :interactive t :autoload t)) :feature-present nil :offered-by-completion 3)"
+        ],
     )
 }
 
@@ -76,8 +76,8 @@ fn invoking_any_of_those_commands_fails_the_same_way() -> ParityBatchCase {
 "##,
         true,
         expect![[
-        r#"OK ((airplay/image:view file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay:stop file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:play file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:scrub file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:seek file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:info file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:pause file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:resume file-missing "Cannot open load file" "No such file or directory" "request-deferred"))"#
-    ]],
+            r#"OK ((airplay/image:view file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay:stop file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:play file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:scrub file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:seek file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:info file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:pause file-missing "Cannot open load file" "No such file or directory" "request-deferred") (airplay/video:resume file-missing "Cannot open load file" "No such file or directory" "request-deferred"))"#
+        ]],
     )
 }
 

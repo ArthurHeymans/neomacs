@@ -29,8 +29,8 @@ fn which_key_upstream_sort_orders_match_for_uppercase_and_lowercase_priority() -
                                 #'which-key-key-order-alpha)))))"##,
         true,
         expect![[
-        r#"OK (("SPC" "A" "B" "a" "b" "p" "C-a") ("SPC" "a" "b" "p" "A" "B" "C-a") ("SPC" "A" "a" "B" "b" "p" "C-a") ("SPC" "a" "A" "b" "B" "p" "C-a"))"#
-    ]],
+            r#"OK (("SPC" "A" "B" "a" "b" "p" "C-a") ("SPC" "a" "b" "p" "A" "B" "C-a") ("SPC" "A" "a" "B" "b" "p" "C-a") ("SPC" "a" "A" "b" "B" "p" "C-a"))"#
+        ]],
     )
 }
 
@@ -63,8 +63,8 @@ fn which_key_upstream_prefix_sort_orders_match_in_both_directions() -> ParityBat
                                 #'which-key-prefix-then-key-order-reverse)))))"##,
         true,
         expect![[
-        r#"OK (("SPC" "A" "B" "a" "b" "C-a" "p") ("SPC" "a" "b" "A" "B" "C-a" "p") ("p" "SPC" "A" "B" "a" "b" "C-a") ("p" "SPC" "a" "b" "A" "B" "C-a"))"#
-    ]],
+            r#"OK (("SPC" "A" "B" "a" "b" "C-a" "p") ("SPC" "a" "b" "A" "B" "C-a" "p") ("p" "SPC" "A" "B" "a" "b" "C-a") ("p" "SPC" "a" "b" "A" "B" "C-a"))"#
+        ]],
     )
 }
 
@@ -92,7 +92,8 @@ fn which_key_description_order_is_case_insensitive_and_stable_for_ties() -> Pari
     )
 }
 
-fn which_key_key_order_handles_empty_ranges_specials_function_keys_and_modifiers() -> ParityBatchCase {
+fn which_key_key_order_handles_empty_ranges_specials_function_keys_and_modifiers() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "which_key_key_order_handles_empty_ranges_specials_function_keys_and_modifiers",
         r##"(let ((keys '(("" . "empty")
@@ -116,8 +117,8 @@ fn which_key_key_order_handles_empty_ranges_specials_function_keys_and_modifiers
                                 #'which-key-key-order-alpha)))))"##,
         true,
         expect![[
-        r#"OK (("" "RET" "TAB" "A" "a" "z .. a" "<f2>" "<f12>" "C-a" "M-b" "long") ("" "RET" "TAB" "a" "A" "z .. a" "<f2>" "<f12>" "C-a" "M-b" "long"))"#
-    ]],
+            r#"OK (("" "RET" "TAB" "A" "a" "z .. a" "<f2>" "<f12>" "C-a" "M-b" "long") ("" "RET" "TAB" "a" "A" "z .. a" "<f2>" "<f12>" "C-a" "M-b" "long"))"#
+        ]],
     )
 }
 

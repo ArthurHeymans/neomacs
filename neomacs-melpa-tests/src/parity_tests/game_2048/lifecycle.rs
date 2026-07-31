@@ -56,8 +56,8 @@ fn game_2048_init_resets_state_and_inserts_two_deterministic_tiles() -> ParityBa
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("Good luck!" [2 2 0 0] [nil nil nil nil] 0 2 32 nil (123 456 0 0) (tiles print (message "Good luck!")))"#
-    ]],
+            r#"OK ("Good luck!" [2 2 0 0] [nil nil nil nil] 0 2 32 nil (123 456 0 0) (tiles print (message "Good luck!")))"#
+        ]],
     )
 }
 
@@ -147,8 +147,8 @@ fn game_2048_winning_continue_doubles_the_next_victory_target() -> ParityBatchCa
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (4096 4096 (print (prompt "Yay! You beat the game!  y to start again; n to continue.  Start again? ")))"#
-    ]],
+            r#"OK (4096 4096 (print (prompt "Yay! You beat the game!  y to start again; n to continue.  Start again? ")))"#
+        ]],
     )
 }
 
@@ -235,8 +235,8 @@ fn game_2048_loss_records_history_only_once_without_restart() -> ParityBatchCase
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (t ((history 50 128 (2 0 0 0) (1 0 0 0)) print (prompt "Aw, too bad.  You lost.  Want to play again? ") print (prompt "Aw, too bad.  You lost.  Want to play again? ")))"#
-    ]],
+            r#"OK (t ((history 50 128 (2 0 0 0) (1 0 0 0)) print (prompt "Aw, too bad.  You lost.  Want to play again? ") print (prompt "Aw, too bad.  You lost.  Want to play again? ")))"#
+        ]],
     )
 }
 
@@ -262,8 +262,8 @@ fn game_2048_board_renderer_outputs_grid_score_help_and_history() -> ParityBatch
                      text)))))"##,
         true,
         expect![[
-        r#"OK (1 "+-------+-------+\n|       |       |\n|    2  |       |\n|       |       |\n+-------+-------+\n\n         /==========\\\n         | Score: 4 |\n         \\==========/\n\nThe goal is to create a tile with value 2048.\nUse the arrow keys, p/n/b/f, or C-p/C-n/C-b/C-f\nto move the tiles around. Press r to move randomly.\n\nIf two tiles of the same value collide, the tiles\ncombine into a tile with twice the value.\n\n         /=============\\\n         | HIGH SCORES |\n         \\=============/\n\n   Score  Hi-Tile     Date     Duration\n" twentyfortyeight-face-2)"#
-    ]],
+            r#"OK (1 "+-------+-------+\n|       |       |\n|    2  |       |\n|       |       |\n+-------+-------+\n\n         /==========\\\n         | Score: 4 |\n         \\==========/\n\nThe goal is to create a tile with value 2048.\nUse the arrow keys, p/n/b/f, or C-p/C-n/C-b/C-f\nto move the tiles around. Press r to move randomly.\n\nIf two tiles of the same value collide, the tiles\ncombine into a tile with twice the value.\n\n         /=============\\\n         | HIGH SCORES |\n         \\=============/\n\n   Score  Hi-Tile     Date     Duration\n" twentyfortyeight-face-2)"#
+        ]],
     )
 }
 

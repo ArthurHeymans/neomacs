@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asciidoc_mode_batch};
 
-fn context_completion_returns_exact_bounds_candidates_and_exclusivity_for_real_inputs() -> ParityBatchCase {
+fn context_completion_returns_exact_bounds_candidates_and_exclusivity_for_real_inputs()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "context_completion_returns_exact_bounds_candidates_and_exclusivity_for_real_inputs",
         r##"(cl-labels
@@ -41,12 +42,13 @@ fn context_completion_returns_exact_bounds_candidates_and_exclusivity_for_real_i
    (probe "ordinary prose")))"##,
         true,
         expect![[
-        r#"OK ((38 40 "ex" no ("explicit")) (26 28 "ex" no ("explicit")) (27 29 "cu" no ("custom-attr")) (9 11 "ru" no ("ruby" "rust")) nil nil nil)"#
-    ]],
+            r#"OK ((38 40 "ex" no ("explicit")) (26 28 "ex" no ("explicit")) (27 29 "cu" no ("custom-attr")) (9 11 "ru" no ("ruby" "rust")) nil nil nil)"#
+        ]],
     )
 }
 
-fn include_completion_preserves_gnu_behavior_with_a_real_document_and_filesystem_entries() -> ParityBatchCase {
+fn include_completion_preserves_gnu_behavior_with_a_real_document_and_filesystem_entries()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "include_completion_preserves_gnu_behavior_with_a_real_document_and_filesystem_entries",
         r##"(let* ((root
@@ -99,7 +101,8 @@ fn include_completion_preserves_gnu_behavior_with_a_real_document_and_filesystem
     )
 }
 
-fn attribute_and_source_language_collections_merge_buffer_local_and_builtin_values_stably() -> ParityBatchCase {
+fn attribute_and_source_language_collections_merge_buffer_local_and_builtin_values_stably()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "attribute_and_source_language_collections_merge_buffer_local_and_builtin_values_stably",
         r##"(with-temp-buffer
@@ -137,12 +140,13 @@ fn attribute_and_source_language_collections_merge_buffer_local_and_builtin_valu
           "asciidoc"))))))"##,
         true,
         expect![[
-        r#"OK (("custom-one" "custom-two" "toc" "doctitle" "author" "authorinitials" "firstname" "lastname") 58 (("custom-one" "custom-one" . #1=("custom-two" . #2=("toc" . #3=("doctitle" "author" "authorinitials" "firstname" "lastname" "email" "revnumber" "revdate" "revremark" "version" "doctype" "backend" "sectnums" "sectanchors" "toclevels" "icons" "imagesdir" "source-highlighter" "experimental" "idprefix" "idseparator" "nofooter" "stem" "tabsize" "leveloffset" "sp" "nbsp" "zwsp" "wj" "apos" "quot" "lsquo" "rsquo" "ldquo" "rdquo" "deg" "plus" "brvbar" "vbar" "amp" "lt" "gt" "startsb" "endsb" "caret" "asterisk" "tilde" "backslash" "backtick" "two-colons" . #5=("two-semicolons" . #4=("cpp" "pp" "blank" "empty")))))) ("custom-two" . #1#) ("toc" . #2#) ("doctitle" . #3#) ("cpp" . #4#) ("two-semicolons" . #5#)) ("Practical" "ruby" "bash" "asciidoc" "c" "clojure" "cpp" "csharp" "css" "diff") 41 (("Practical" "Practical" . #6=("ruby" . #7=("bash" . #10=("asciidoc" "c" "clojure" "cpp" "csharp" "css" "diff" "dockerfile" "elixir" . #9=("emacs-lisp" "erlang" "go" "groovy" "haskell" "html" "java" "javascript" "json" "kotlin" "lisp" "lua" "make" "markdown" "ocaml" "perl" "php" "python" . #8=("rust" "scala" "scheme" "sh" "shell" "sql" "swift" "toml" "typescript" "xml" "yaml")))))) ("ruby" . #6#) ("bash" . #7#) ("rust" . #8#) ("emacs-lisp" . #9#) ("asciidoc" . #10#)))"#
-    ]],
+            r#"OK (("custom-one" "custom-two" "toc" "doctitle" "author" "authorinitials" "firstname" "lastname") 58 (("custom-one" "custom-one" . #1=("custom-two" . #2=("toc" . #3=("doctitle" "author" "authorinitials" "firstname" "lastname" "email" "revnumber" "revdate" "revremark" "version" "doctype" "backend" "sectnums" "sectanchors" "toclevels" "icons" "imagesdir" "source-highlighter" "experimental" "idprefix" "idseparator" "nofooter" "stem" "tabsize" "leveloffset" "sp" "nbsp" "zwsp" "wj" "apos" "quot" "lsquo" "rsquo" "ldquo" "rdquo" "deg" "plus" "brvbar" "vbar" "amp" "lt" "gt" "startsb" "endsb" "caret" "asterisk" "tilde" "backslash" "backtick" "two-colons" . #5=("two-semicolons" . #4=("cpp" "pp" "blank" "empty")))))) ("custom-two" . #1#) ("toc" . #2#) ("doctitle" . #3#) ("cpp" . #4#) ("two-semicolons" . #5#)) ("Practical" "ruby" "bash" "asciidoc" "c" "clojure" "cpp" "csharp" "css" "diff") 41 (("Practical" "Practical" . #6=("ruby" . #7=("bash" . #10=("asciidoc" "c" "clojure" "cpp" "csharp" "css" "diff" "dockerfile" "elixir" . #9=("emacs-lisp" "erlang" "go" "groovy" "haskell" "html" "java" "javascript" "json" "kotlin" "lisp" "lua" "make" "markdown" "ocaml" "perl" "php" "python" . #8=("rust" "scala" "scheme" "sh" "shell" "sql" "swift" "toml" "typescript" "xml" "yaml")))))) ("ruby" . #6#) ("bash" . #7#) ("rust" . #8#) ("emacs-lisp" . #9#) ("asciidoc" . #10#)))"#
+        ]],
     )
 }
 
-fn flyspell_predicate_checks_prose_but_skips_links_references_anchors_macros_and_code() -> ParityBatchCase {
+fn flyspell_predicate_checks_prose_but_skips_links_references_anchors_macros_and_code()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "flyspell_predicate_checks_prose_but_skips_links_references_anchors_macros_and_code",
         r##"(with-temp-buffer
@@ -168,8 +172,8 @@ fn flyspell_predicate_checks_prose_but_skips_links_references_anchors_macros_and
       "C-c"))))"##,
         true,
         expect![[
-        r#"OK "((\"proseword\" . t) (\"zzqqzz\") (\"some-section\") (\"anchor-id\") (\"somefn\") (\"C-c\"))""#
-    ]],
+            r#"OK "((\"proseword\" . t) (\"zzqqzz\") (\"some-section\") (\"anchor-id\") (\"somefn\") (\"C-c\"))""#
+        ]],
     )
 }
 

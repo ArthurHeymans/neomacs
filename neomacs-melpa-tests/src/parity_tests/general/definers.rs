@@ -219,8 +219,8 @@ fn general_public_definer_macros_expand_to_the_exact_primary_definer_calls() -> 
                    "c" #'next-line)))"##,
         true,
         expect![[
-        r#"OK ((general-define-key :keymaps 'neomacs-general-map "a" #'forward-char) (general-define-key :states '(normal visual) :keymaps 'neomacs-general-map "b" #'backward-char) (general-define-key :keymaps 'neomacs-general-map "c" #'next-line))"#
-    ]],
+            r#"OK ((general-define-key :keymaps 'neomacs-general-map "a" #'forward-char) (general-define-key :states '(normal visual) :keymaps 'neomacs-general-map "b" #'backward-char) (general-define-key :keymaps 'neomacs-general-map "c" #'next-line))"#
+        ]],
     )
 }
 
@@ -254,8 +254,8 @@ fn general_evil_setup_creates_the_documented_long_and_short_definer_macros() -> 
                   itomap otomap tomap)))"##,
         true,
         expect![[
-        r#"OK ((general-imap t t) (general-emap t t) (general-nmap t t) (general-vmap t t) (general-mmap t t) (general-omap t t) (general-rmap t t) (general-iemap t t) (general-nvmap t t) (general-itomap t t) (general-otomap t t) (general-tomap t t) (imap t t) (emap t t) (nmap t t) (vmap t t) (mmap t t) (omap t t) (rmap t t) (iemap t t) (nvmap t t) (itomap t t) (otomap t t) (tomap t t))"#
-    ]],
+            r#"OK ((general-imap t t) (general-emap t t) (general-nmap t t) (general-vmap t t) (general-mmap t t) (general-omap t t) (general-rmap t t) (general-iemap t t) (general-nvmap t t) (general-itomap t t) (general-otomap t t) (general-tomap t t) (imap t t) (emap t t) (nmap t t) (vmap t t) (mmap t t) (omap t t) (rmap t t) (iemap t t) (nvmap t t) (itomap t t) (otomap t t) (tomap t t))"#
+        ]],
     )
 }
 

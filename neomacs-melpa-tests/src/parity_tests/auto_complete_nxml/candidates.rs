@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_nxml_batch};
 
-fn auto_complete_nxml_project_ident_prefers_explicit_then_project_then_default() -> ParityBatchCase {
+fn auto_complete_nxml_project_ident_prefers_explicit_then_project_then_default() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_nxml_project_ident_prefers_explicit_then_project_then_default",
         r##"(let ((baseline
@@ -51,8 +52,8 @@ fn auto_complete_nxml_project_word_stores_are_isolated_by_project_and_kind() -> 
           (auto-complete-nxml-get-project-tag-value-words "missing")))"##,
         true,
         expect![[
-        r#"OK (("alpha" "shared") ("beta" "shared") (("class" "primary" "wide")) (("lang" "en" "fr")) nil)"#
-    ]],
+            r#"OK (("alpha" "shared") ("beta" "shared") (("class" "primary" "wide")) (("lang" "en" "fr")) nil)"#
+        ]],
     )
 }
 
@@ -77,8 +78,8 @@ fn auto_complete_nxml_tag_value_scan_collects_words_across_real_xml_content() ->
             (point))))"##,
         true,
         expect![[
-        r#"OK (("delta-2" "gamma" "beta" "alpha" "") "<root><title>alpha beta</title><p>beta, gamma!</p><code>skip delta-2</code><empty></empty></root>" 98)"#
-    ]],
+            r#"OK (("delta-2" "gamma" "beta" "alpha" "") "<root><title>alpha beta</title><p>beta, gamma!</p><code>skip delta-2</code><empty></empty></root>" 98)"#
+        ]],
     )
 }
 
@@ -102,12 +103,13 @@ fn auto_complete_nxml_tag_value_scan_merges_with_existing_project_words() -> Par
               (auto-complete-nxml-get-project-tag-value-words "fixture")))))"##,
         true,
         expect![[
-        r#"OK (("gamma" "beta" "" "existing" "alpha") ("gamma" "beta" "" "existing" "alpha"))"#
-    ]],
+            r#"OK (("gamma" "beta" "" "existing" "alpha") ("gamma" "beta" "" "existing" "alpha"))"#
+        ]],
     )
 }
 
-fn auto_complete_nxml_attribute_scan_groups_values_and_excludes_style_id_and_prefix() -> ParityBatchCase {
+fn auto_complete_nxml_attribute_scan_groups_values_and_excludes_style_id_and_prefix()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_nxml_attribute_scan_groups_values_and_excludes_style_id_and_prefix",
         r##"(let ((auto-complete-nxml-attr-words-hash-hash
@@ -127,7 +129,8 @@ fn auto_complete_nxml_attribute_scan_groups_values_and_excludes_style_id_and_pre
     )
 }
 
-fn auto_complete_nxml_myself_candidates_require_content_context_and_automatic_start() -> ParityBatchCase {
+fn auto_complete_nxml_myself_candidates_require_content_context_and_automatic_start()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_nxml_myself_candidates_require_content_context_and_automatic_start",
         r##"(let ((auto-complete-nxml-tag-value-words-hash
@@ -147,8 +150,8 @@ fn auto_complete_nxml_myself_candidates_require_content_context_and_automatic_st
             ("<root><a>alpha</a><b>ga" . nil))))"##,
         true,
         expect![[
-        r#"OK ((("<root><a>alpha beta</a><b>ga" . t) ("beta" "alpha")) (("<root attr=\"alpha" . t) nil) (("<root><a>alpha</a><b>ga") nil))"#
-    ]],
+            r#"OK ((("<root><a>alpha beta</a><b>ga" . t) ("beta" "alpha")) (("<root attr=\"alpha" . t) nil) (("<root><a>alpha</a><b>ga") nil))"#
+        ]],
     )
 }
 
@@ -176,12 +179,13 @@ fn auto_complete_nxml_css_candidates_switch_between_properties_and_values() -> P
               "outside"))))"##,
         true,
         expect![[
-        r#"OK (("<p style=\"fo" ("color" "font-size" "display")) ("<p style=\"color: re" ("red" "green" "blue")) ("<p class=\"fo" nil) ("outside" nil))"#
-    ]],
+            r#"OK (("<p style=\"fo" ("color" "font-size" "display")) ("<p style=\"color: re" ("red" "green" "blue")) ("<p class=\"fo" nil) ("outside" nil))"#
+        ]],
     )
 }
 
-fn auto_complete_nxml_rng_candidates_support_function_and_alist_tables_and_dedupe() -> ParityBatchCase {
+fn auto_complete_nxml_rng_candidates_support_function_and_alist_tables_and_dedupe()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_nxml_rng_candidates_support_function_and_alist_tables_and_dedupe",
         r##"(let ((auto-complete-nxml-automatic-p t)

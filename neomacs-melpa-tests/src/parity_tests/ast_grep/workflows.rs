@@ -50,8 +50,8 @@ fn searching_a_real_project_parses_ast_greps_own_json_stream_into_candidates() -
           :unrecorded (ast-grep-test-unrecorded))))"##,
         true,
         expect![[
-        r#"OK (:records 3 :count 4 :matches (("[ORACLE-SANDBOX]/proj/src/other.js" 0 0 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 0 23 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 1 0 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 3 2 nil nil "console.log" nil)) :calls ("run|--pattern=console.log|--json=stream|<project>/|") :unrecorded nil)"#
-    ]],
+            r#"OK (:records 3 :count 4 :matches (("[ORACLE-SANDBOX]/proj/src/other.js" 0 0 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 0 23 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 1 0 nil nil "console.log" nil) ("[ORACLE-SANDBOX]/proj/src/app.js" 3 2 nil nil "console.log" nil)) :calls ("run|--pattern=console.log|--json=stream|<project>/|") :unrecorded nil)"#
+        ]],
     )
 }
 
@@ -74,8 +74,8 @@ fn rewriting_asks_the_tool_for_replacements_and_pairs_them_with_each_match() -> 
           :unrecorded (ast-grep-test-unrecorded))))"##,
         true,
         expect![[
-        r#"OK (:count 4 :matches (("app.js" 0 23 0 34 "console.log" "logger.info") ("app.js" 1 0 1 11 "console.log" "logger.info") ("app.js" 3 2 3 13 "console.log" "logger.info") ("other.js" 0 0 0 11 "console.log" "logger.info")) :calls ("run|--pattern=console.log|--rewrite=logger.info|--json=stream|<project>/|") :unrecorded nil)"#
-    ]],
+            r#"OK (:count 4 :matches (("app.js" 0 23 0 34 "console.log" "logger.info") ("app.js" 1 0 1 11 "console.log" "logger.info") ("app.js" 3 2 3 13 "console.log" "logger.info") ("other.js" 0 0 0 11 "console.log" "logger.info")) :calls ("run|--pattern=console.log|--rewrite=logger.info|--json=stream|<project>/|") :unrecorded nil)"#
+        ]],
     )
 }
 
@@ -93,8 +93,8 @@ fn the_outline_feature_calls_a_subcommand_ast_grep_does_not_have() -> ParityBatc
         :unrecorded (ast-grep-test-unrecorded)))"##,
         true,
         expect![[
-        r#"OK (:command ("ast-grep" "outline" "--json=stream" "[ORACLE-SANDBOX]/proj/src/app.js") :outcome (:error error ("The ast-grep failed with exit code 2: error: unrecognized subcommand 'outline'\n\nUsage: ast-grep [OPTIONS] <COMMAND>\n\nFor more information, try '--help'.")) :calls ("outline|--json=stream|<project>/src/app.js|") :unrecorded nil)"#
-    ]],
+            r#"OK (:command ("ast-grep" "outline" "--json=stream" "[ORACLE-SANDBOX]/proj/src/app.js") :outcome (:error error ("The ast-grep failed with exit code 2: error: unrecognized subcommand 'outline'\n\nUsage: ast-grep [OPTIONS] <COMMAND>\n\nFor more information, try '--help'.")) :calls ("outline|--json=stream|<project>/src/app.js|") :unrecorded nil)"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auth_source_keytar_batch};
 
-fn auth_source_keytar_search_service_and_account_delegate_to_exact_keytar_lookup() -> ParityBatchCase {
+fn auth_source_keytar_search_service_and_account_delegate_to_exact_keytar_lookup() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_keytar_search_service_and_account_delegate_to_exact_keytar_lookup",
         r##"(let (calls)
@@ -23,7 +24,8 @@ fn auth_source_keytar_search_service_and_account_delegate_to_exact_keytar_lookup
     )
 }
 
-fn auth_source_keytar_search_host_and_user_translate_to_keytar_service_and_account() -> ParityBatchCase {
+fn auth_source_keytar_search_host_and_user_translate_to_keytar_service_and_account()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_search_host_and_user_translate_to_keytar_service_and_account",
         r##"(let (calls)
@@ -111,7 +113,8 @@ fn auth_source_keytar_search_host_only_uses_host_as_build_result_service() -> Pa
     )
 }
 
-fn auth_source_keytar_search_partial_query_matrix_exposes_exact_branch_selection() -> ParityBatchCase {
+fn auth_source_keytar_search_partial_query_matrix_exposes_exact_branch_selection() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_keytar_search_partial_query_matrix_exposes_exact_branch_selection",
         r##"(let (calls)
@@ -151,12 +154,13 @@ fn auth_source_keytar_search_partial_query_matrix_exposes_exact_branch_selection
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((((:service "service" :account nil :host "host" :user "user") (:ok :get-result)) ((:service nil :account "account" :host "host" :user "user") (:ok :get-result)) ((:service "service" :account nil) (:ok :build-result)) ((:account "account") (:error user-error ("Missing key ‘service‘ in search query"))) ((:user "user") (:error user-error ("Missing key ‘service‘ in search query"))) ((:host nil :user "user") (:error user-error ("Missing key ‘service‘ in search query"))) (nil (:error user-error ("Missing key ‘service‘ in search query")))) ((:get "host" "user") (:get "host" "user") (:build "service")))"#
-    ]],
+            r#"OK ((((:service "service" :account nil :host "host" :user "user") (:ok :get-result)) ((:service nil :account "account" :host "host" :user "user") (:ok :get-result)) ((:service "service" :account nil) (:ok :build-result)) ((:account "account") (:error user-error ("Missing key ‘service‘ in search query"))) ((:user "user") (:error user-error ("Missing key ‘service‘ in search query"))) ((:host nil :user "user") (:error user-error ("Missing key ‘service‘ in search query"))) (nil (:error user-error ("Missing key ‘service‘ in search query")))) ((:get "host" "user") (:get "host" "user") (:build "service")))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_search_forwards_truthy_non_string_identifiers_without_validation() -> ParityBatchCase {
+fn auth_source_keytar_search_forwards_truthy_non_string_identifiers_without_validation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_search_forwards_truthy_non_string_identifiers_without_validation",
         r##"(let (calls)
@@ -182,12 +186,13 @@ fn auth_source_keytar_search_forwards_truthy_non_string_identifiers_without_vali
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:raw-result :raw-result :raw-result :raw-result) ((service-symbol account-symbol) (17 0) ((nested service) (nested account)) ("" "")))"#
-    ]],
+            r#"OK ((:raw-result :raw-result :raw-result :raw-result) ((service-symbol account-symbol) (17 0) ((nested service) (nested account)) ("" "")))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_search_allows_unrelated_auth_source_keys_without_changing_lookup() -> ParityBatchCase {
+fn auth_source_keytar_search_allows_unrelated_auth_source_keys_without_changing_lookup()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_search_allows_unrelated_auth_source_keys_without_changing_lookup",
         r##"(let (calls)
@@ -214,7 +219,8 @@ fn auth_source_keytar_search_allows_unrelated_auth_source_keys_without_changing_
     )
 }
 
-fn auth_source_keytar_search_duplicate_keywords_follow_cl_keyword_binding_semantics() -> ParityBatchCase {
+fn auth_source_keytar_search_duplicate_keywords_follow_cl_keyword_binding_semantics()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_search_duplicate_keywords_follow_cl_keyword_binding_semantics",
         r##"(let (calls)
@@ -237,7 +243,8 @@ fn auth_source_keytar_search_duplicate_keywords_follow_cl_keyword_binding_semant
     )
 }
 
-fn auth_source_keytar_search_preserves_nil_empty_and_structured_provider_return_values() -> ParityBatchCase {
+fn auth_source_keytar_search_preserves_nil_empty_and_structured_provider_return_values()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_search_preserves_nil_empty_and_structured_provider_return_values",
         r##"(mapcar
@@ -259,12 +266,13 @@ fn auth_source_keytar_search_preserves_nil_empty_and_structured_provider_return_
             (:secret "nested")))"##,
         true,
         expect![[
-        r#"OK ((nil nil) ("" "") ("null" "null") (0 0) (provider-symbol provider-symbol) (#1=(:secret "nested") #1#))"#
-    ]],
+            r#"OK ((nil nil) ("" "") ("null" "null") (0 0) (provider-symbol provider-symbol) (#1=(:secret "nested") #1#))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_search_propagates_password_and_credential_provider_failures() -> ParityBatchCase {
+fn auth_source_keytar_search_propagates_password_and_credential_provider_failures()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_search_propagates_password_and_credential_provider_failures",
         r##"(list
@@ -290,12 +298,13 @@ fn auth_source_keytar_search_propagates_password_and_credential_provider_failure
                 :service "service")))))"##,
         true,
         expect![[
-        r#"OK ((:error user-error ("keychain unavailable")) (:error error ("credential listing failed")))"#
-    ]],
+            r#"OK ((:error user-error ("keychain unavailable")) (:error error ("credential listing failed")))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_search_arity_and_non_keyword_calls_signal_without_provider_side_effects() -> ParityBatchCase {
+fn auth_source_keytar_search_arity_and_non_keyword_calls_signal_without_provider_side_effects()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_search_arity_and_non_keyword_calls_signal_without_provider_side_effects",
         r##"(let (calls)
@@ -326,8 +335,8 @@ fn auth_source_keytar_search_arity_and_non_keyword_calls_signal_without_provider
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:error user-error ("Missing key ‘service‘ in search query")) (:error user-error ("Missing key ‘service‘ in search query")) (:error user-error ("Missing key ‘service‘ in search query")) nil)"#
-    ]],
+            r#"OK ((:error user-error ("Missing key ‘service‘ in search query")) (:error user-error ("Missing key ‘service‘ in search query")) (:error user-error ("Missing key ‘service‘ in search query")) nil)"#
+        ]],
     )
 }
 
@@ -345,7 +354,8 @@ fn search_public_surface_batch() {
         auth_source_keytar_search_duplicate_keywords_follow_cl_keyword_binding_semantics(),
         auth_source_keytar_search_preserves_nil_empty_and_structured_provider_return_values(),
         auth_source_keytar_search_propagates_password_and_credential_provider_failures(),
-        auth_source_keytar_search_arity_and_non_keyword_calls_signal_without_provider_side_effects(),
+        auth_source_keytar_search_arity_and_non_keyword_calls_signal_without_provider_side_effects(
+        ),
     ];
     assert_auth_source_keytar_batch(&cases);
 }

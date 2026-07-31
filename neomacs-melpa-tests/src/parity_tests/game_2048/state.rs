@@ -34,8 +34,8 @@ fn game_2048_public_defaults_and_mode_bindings_match_the_pinned_release() -> Par
                    "r"))))"##,
         true,
         expect![[
-        r#"OK (nil 4 4 (4 2 2 2 2 2 2 2 2 2) nil 2048 nil (0 2 4 8 16 32 64 128 256 512 1024 2048) nil nil nil 10 2048-mode "2048-mode" (2048-up 2048-up 2048-up 2048-down 2048-down 2048-down 2048-left 2048-left 2048-left 2048-right 2048-right 2048-right 2048-random-move))"#
-    ]],
+            r#"OK (nil 4 4 (4 2 2 2 2 2 2 2 2 2) nil 2048 nil (0 2 4 8 16 32 64 128 256 512 1024 2048) nil nil nil 10 2048-mode "2048-mode" (2048-up 2048-up 2048-up 2048-down 2048-down 2048-down 2048-left 2048-left 2048-left 2048-right 2048-right 2048-right 2048-random-move))"#
+        ]],
     )
 }
 
@@ -97,7 +97,8 @@ fn game_2048_combination_flags_use_the_same_flat_indexing() -> ParityBatchCase {
     )
 }
 
-fn game_2048_tile_symbols_printable_values_and_faces_cover_known_and_large_tiles() -> ParityBatchCase {
+fn game_2048_tile_symbols_printable_values_and_faces_cover_known_and_large_tiles() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "game_2048_tile_symbols_printable_values_and_faces_cover_known_and_large_tiles",
         r##"(list
@@ -118,8 +119,8 @@ fn game_2048_tile_symbols_printable_values_and_faces_cover_known_and_large_tiles
                 '(2 2048 4096)))"##,
         true,
         expect![[
-        r#"OK (("" "2" "2048" "4096") (2048-empty-0 2048-empty-2 2048-empty-4096) (2048-tile-0 2048-tile-2 2048-tile-4096) (twentyfortyeight-face-2 twentyfortyeight-face-2048 twentyfortyeight-face-4096) (twentyfortyeight-face-2 twentyfortyeight-face-2048 twentyfortyeight-face-2048))"#
-    ]],
+            r#"OK (("" "2" "2048" "4096") (2048-empty-0 2048-empty-2 2048-empty-4096) (2048-tile-0 2048-tile-2 2048-tile-4096) (twentyfortyeight-face-2 twentyfortyeight-face-2048 twentyfortyeight-face-4096) (twentyfortyeight-face-2 twentyfortyeight-face-2048 twentyfortyeight-face-2048))"#
+        ]],
     )
 }
 
@@ -146,8 +147,8 @@ fn game_2048_tile_initialization_sets_width_text_and_face_properties() -> Parity
                  '(0 2 4096))))"##,
         true,
         expect![[
-        r#"OK ((("       " "       " 7 7 nil) (#("       " 0 7 (font-lock-face twentyfortyeight-face-2)) #("    2  " 0 7 (font-lock-face twentyfortyeight-face-2)) 7 7 twentyfortyeight-face-2) (#("       " 0 7 (font-lock-face twentyfortyeight-face-2048)) #(" 4096  " 0 7 (font-lock-face twentyfortyeight-face-2048)) 7 7 twentyfortyeight-face-2048)))"#
-    ]],
+            r#"OK ((("       " "       " 7 7 nil) (#("       " 0 7 (font-lock-face twentyfortyeight-face-2)) #("    2  " 0 7 (font-lock-face twentyfortyeight-face-2)) 7 7 twentyfortyeight-face-2) (#("       " 0 7 (font-lock-face twentyfortyeight-face-2048)) #(" 4096  " 0 7 (font-lock-face twentyfortyeight-face-2048)) 7 7 twentyfortyeight-face-2048)))"#
+        ]],
     )
 }
 

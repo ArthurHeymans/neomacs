@@ -61,10 +61,5 @@ pub(crate) fn assert_apel_source_parity(source_file: &str, elisp_form: &str, exp
 /// Multi-probe batch loading one source file (2a).
 pub(crate) fn assert_apel_source_batch(source_file: &str, cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        apel_oracle(source_file),
-        &name,
-        "apel_source_batch",
-        cases,
-    );
+    assert_oracle_batch_cases(apel_oracle(source_file), &name, "apel_source_batch", cases);
 }

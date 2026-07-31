@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alectryon_batch};
 
-fn alectryon_code_mode_activation_installs_real_buffer_local_editing_and_save_state() -> ParityBatchCase {
+fn alectryon_code_mode_activation_installs_real_buffer_local_editing_and_save_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alectryon_code_mode_activation_installs_real_buffer_local_editing_and_save_state",
         r##"(with-temp-buffer
@@ -21,12 +22,13 @@ fn alectryon_code_mode_activation_installs_real_buffer_local_editing_and_save_st
    (not (null alectryon--prog-font-lock-keywords))))"##,
         true,
         expect![
-        "OK (coq-mode t t nil coq-mode coq-mode nil t t (alectryon--save) (alectryon--flyspell-hook t) (modification-hooks wrap-prefix display) 1 1 t t)"
-    ],
+            "OK (coq-mode t t nil coq-mode coq-mode nil t t (alectryon--save) (alectryon--flyspell-hook t) (modification-hooks wrap-prefix display) 1 1 t t)"
+        ],
     )
 }
 
-fn alectryon_markup_activation_uses_text_keymap_and_records_original_mode_without_code_state() -> ParityBatchCase {
+fn alectryon_markup_activation_uses_text_keymap_and_records_original_mode_without_code_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alectryon_markup_activation_uses_text_keymap_and_records_original_mode_without_code_state",
         r##"(with-temp-buffer
@@ -49,7 +51,8 @@ fn alectryon_markup_activation_uses_text_keymap_and_records_original_mode_withou
     )
 }
 
-fn alectryon_disabling_in_original_code_mode_cleans_hooks_maps_and_font_lock_state() -> ParityBatchCase {
+fn alectryon_disabling_in_original_code_mode_cleans_hooks_maps_and_font_lock_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alectryon_disabling_in_original_code_mode_cleans_hooks_maps_and_font_lock_state",
         r##"(with-temp-buffer
@@ -70,8 +73,8 @@ fn alectryon_disabling_in_original_code_mode_cleans_hooks_maps_and_font_lock_sta
           (local-variable-p 'font-lock-syntactic-face-function))))"##,
         true,
         expect![
-        "OK ((t t nil (alectryon--save) (alectryon--flyspell-hook t)) coq-mode nil nil nil nil nil nil 1 nil)"
-    ],
+            "OK ((t t nil (alectryon--save) (alectryon--flyspell-hook t)) coq-mode nil nil nil nil nil nil 1 nil)"
+        ],
     )
 }
 
@@ -97,8 +100,8 @@ fn alectryon_auto_enable_hooks_respect_winding_down_and_cover_only_code_modes() 
    (list major-mode alectryon-mode alectryon--original-mode)))"##,
         true,
         expect![
-        "OK ((coq-mode t coq-mode) (lean4-mode t lean4-mode) (dafny-mode t dafny-mode) (coq-mode nil nil) (rst-mode nil nil))"
-    ],
+            "OK ((coq-mode t coq-mode) (lean4-mode t lean4-mode) (dafny-mode t dafny-mode) (coq-mode nil nil) (rst-mode nil nil))"
+        ],
     )
 }
 

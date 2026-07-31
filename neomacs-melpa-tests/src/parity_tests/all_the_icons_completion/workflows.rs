@@ -33,8 +33,8 @@ fn enabling_the_mode_installs_the_affixation_advice_and_disabling_removes_it() -
   (aic-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:before (:advised nil :mode nil :affixations no-affixation-function :metadata (:category file :cycle-sort nil :annotation nil)) :enabled (:advised t :mode t :global nil :affixations (("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "")) :metadata (:category file :cycle-sort nil :annotation nil)) :disabled (:advised nil :mode nil :affixations no-affixation-function :metadata (:category file :cycle-sort nil :annotation nil)))"#
-    ]],
+            r#"OK (:before (:advised nil :mode nil :affixations no-affixation-function :metadata (:category file :cycle-sort nil :annotation nil)) :enabled (:advised t :mode t :global nil :affixations (("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "")) :metadata (:category file :cycle-sort nil :annotation nil)) :disabled (:advised nil :mode nil :affixations no-affixation-function :metadata (:category file :cycle-sort nil :annotation nil)))"#
+        ]],
     )
 }
 
@@ -53,8 +53,8 @@ fn file_candidates_get_a_directory_a_file_or_the_fallback_icon() -> ParityBatchC
   (aic-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:category file :affixations (("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "") ("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("Makefile" (59001 32) ("file-icons" all-the-icons-dorange) "") ("unknown.zzz" (61462 32) ("FontAwesome" all-the-icons-dsilver) "")) :directory-face-defined t)"#
-    ]],
+            r#"OK (:category file :affixations (("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "") ("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("Makefile" (59001 32) ("file-icons" all-the-icons-dorange) "") ("unknown.zzz" (61462 32) ("FontAwesome" all-the-icons-dsilver) "")) :directory-face-defined t)"#
+        ]],
     )
 }
 
@@ -86,8 +86,8 @@ fn project_file_and_buffer_categories_use_their_own_icon_lookups() -> ParityBatc
   (aic-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:file (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "")) :project-file (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "")) :buffer-modes (emacs-lisp-mode fundamental-mode) :buffer (("aic-probe-code.el" (59686 32) ("file-icons" all-the-icons-purple) "") ("aic-probe-notes" (59686 32) ("file-icons" all-the-icons-dsilver) "")))"#
-    ]],
+            r#"OK (:file (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "")) :project-file (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("src/" (61462 32) ("github-octicons" all-the-icons-completion-dir-face) "")) :buffer-modes (emacs-lisp-mode fundamental-mode) :buffer (("aic-probe-code.el" (59686 32) ("file-icons" all-the-icons-purple) "") ("aic-probe-notes" (59686 32) ("file-icons" all-the-icons-dsilver) "")))"#
+        ]],
     )
 }
 
@@ -126,8 +126,8 @@ fn an_existing_affixation_or_annotation_function_is_kept_and_prefixed() -> Parit
   (aic-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:own-affixation (("notes.org" (59671 32 62 32) ("file-icons" all-the-icons-lgreen) " [file]") ("script.py" (59688 32 62 32) ("all-the-icons" all-the-icons-dblue) " [file]")) :own-annotation (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "  (NOTES.ORG)") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "  (SCRIPT.PY)")) :annotation-without-category (("notes.org" nil nil "  notes.org") ("script.py" nil nil "  script.py")))"#
-    ]],
+            r#"OK (:own-affixation (("notes.org" (59671 32 62 32) ("file-icons" all-the-icons-lgreen) " [file]") ("script.py" (59688 32 62 32) ("all-the-icons" all-the-icons-dblue) " [file]")) :own-annotation (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "  (NOTES.ORG)") ("script.py" (59688 32) ("all-the-icons" all-the-icons-dblue) "  (SCRIPT.PY)")) :annotation-without-category (("notes.org" nil nil "  notes.org") ("script.py" nil nil "  script.py")))"#
+        ]],
     )
 }
 
@@ -160,8 +160,8 @@ fn multi_category_and_bookmark_candidates_resolve_their_own_category() -> Parity
   (aic-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:multi-category (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("aic-probe-scratch" (59686 32) ("file-icons" all-the-icons-dsilver) "")) :bookmark-names ("a-place" "project-code") :bookmark (("project-code" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("a-place" (61563 32) ("github-octicons" all-the-icons-completion-dir-face) "")))"#
-    ]],
+            r#"OK (:multi-category (("notes.org" (59671 32) ("file-icons" all-the-icons-lgreen) "") ("aic-probe-scratch" (59686 32) ("file-icons" all-the-icons-dsilver) "")) :bookmark-names ("a-place" "project-code") :bookmark (("project-code" (59688 32) ("all-the-icons" all-the-icons-dblue) "") ("a-place" (61563 32) ("github-octicons" all-the-icons-completion-dir-face) "")))"#
+        ]],
     )
 }
 
@@ -193,8 +193,8 @@ fn unknown_categories_are_empty_and_completion_itself_is_never_changed() -> Pari
   (aic-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:off (:try "scr" :all ("src/" "script.py" "scratch.txt") :test t :unknown no-affixation-function :bare no-affixation-function) :on (:try "scr" :all ("src/" "script.py" "scratch.txt") :test t :unknown (("src/" nil nil "") ("script.py" nil nil "") ("scratch.txt" nil nil "")) :bare no-affixation-function) :completion-unchanged (t t t))"#
-    ]],
+            r#"OK (:off (:try "scr" :all ("src/" "script.py" "scratch.txt") :test t :unknown no-affixation-function :bare no-affixation-function) :on (:try "scr" :all ("src/" "script.py" "scratch.txt") :test t :unknown (("src/" nil nil "") ("script.py" nil nil "") ("scratch.txt" nil nil "")) :bare no-affixation-function) :completion-unchanged (t t t))"#
+        ]],
     )
 }
 

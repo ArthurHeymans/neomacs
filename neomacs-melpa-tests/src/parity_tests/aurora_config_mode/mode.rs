@@ -34,12 +34,13 @@ fn aurora_config_mode_activation_has_exact_python_derived_buffer_contract() -> P
            (buffer-modified-p)))"##,
         true,
         expect![[
-        r##"OK ((aurora-config-mode "Aurora" python-mode "job = Job(name='demo')\n" nil nil t 6 aurora-config-inspect aurora-config-diff) prog-mode nil t t #<obarray n=1> "# " "#+\\s-*" python-indent-line-function t t nil)"##
-    ]],
+            r##"OK ((aurora-config-mode "Aurora" python-mode "job = Job(name='demo')\n" nil nil t 6 aurora-config-inspect aurora-config-diff) prog-mode nil t t #<obarray n=1> "# " "#+\\s-*" python-indent-line-function t t nil)"##
+        ]],
     )
 }
 
-fn aurora_config_mode_keymap_exposes_exact_prefix_commands_and_inherits_python_bindings() -> ParityBatchCase {
+fn aurora_config_mode_keymap_exposes_exact_prefix_commands_and_inherits_python_bindings()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_keymap_exposes_exact_prefix_commands_and_inherits_python_bindings",
         r##"(list
@@ -76,12 +77,13 @@ fn aurora_config_mode_keymap_exposes_exact_prefix_commands_and_inherits_python_b
                "TAB"))))"##,
         true,
         expect![[
-        r#"OK (t nil (("C-c a" (keymap (100 . aurora-config-diff) (105 . aurora-config-inspect))) ("C-c a i" aurora-config-inspect) ("C-c a d" aurora-config-diff) ("C-c a x" nil) ("C-c C-r" nil) ("C-c C-c" nil) ("M-." nil) ("TAB" nil)) (("C-c a i" aurora-config-inspect) ("C-c a d" aurora-config-diff) ("C-c a x" nil) ("TAB" indent-for-tab-command)))"#
-    ]],
+            r#"OK (t nil (("C-c a" (keymap (100 . aurora-config-diff) (105 . aurora-config-inspect))) ("C-c a i" aurora-config-inspect) ("C-c a d" aurora-config-diff) ("C-c a x" nil) ("C-c C-r" nil) ("C-c C-c" nil) ("M-." nil) ("TAB" nil)) (("C-c a i" aurora-config-inspect) ("C-c a d" aurora-config-diff) ("C-c a x" nil) ("TAB" indent-for-tab-command)))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_font_lock_defaults_append_exact_rules_without_mutating_python_global() -> ParityBatchCase {
+fn aurora_config_mode_font_lock_defaults_append_exact_rules_without_mutating_python_global()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_font_lock_defaults_append_exact_rules_without_mutating_python_global",
         r##"(let ((python-before
@@ -115,12 +117,13 @@ fn aurora_config_mode_font_lock_defaults_append_exact_rules_without_mutating_pyt
              (cdr font-lock-defaults))))"##,
         true,
         expect![[
-        r#"OK (4 4 t 6 t (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) t (nil nil nil nil (font-lock-syntactic-face-function . python-font-lock-syntactic-face-function)))"#
-    ]],
+            r#"OK (4 4 t 6 t (("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) t (nil nil nil nil (font-lock-syntactic-face-function . python-font-lock-syntactic-face-function)))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_repeated_activation_rebuilds_locals_without_duplicate_font_lock_rules() -> ParityBatchCase {
+fn aurora_config_mode_repeated_activation_rebuilds_locals_without_duplicate_font_lock_rules()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_repeated_activation_rebuilds_locals_without_duplicate_font_lock_rules",
         r##"(with-temp-buffer
@@ -160,12 +163,13 @@ fn aurora_config_mode_repeated_activation_rebuilds_locals_without_duplicate_font
                 'aurora-config-last-job-path)))))"##,
         true,
         expect![[
-        r#"OK (((:error wrong-type-argument (listp font-lock-type-face)) 6 (python-font-lock-keywords-level-1 python-font-lock-keywords-level-1 python-font-lock-keywords-level-2 python-font-lock-keywords-maximum-decoration ("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) nil) ((:error wrong-type-argument (listp font-lock-type-face)) 6 (python-font-lock-keywords-level-1 python-font-lock-keywords-level-1 python-font-lock-keywords-level-2 python-font-lock-keywords-maximum-decoration ("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) nil) t "smf1/" nil)"#
-    ]],
+            r#"OK (((:error wrong-type-argument (listp font-lock-type-face)) 6 (python-font-lock-keywords-level-1 python-font-lock-keywords-level-1 python-font-lock-keywords-level-2 python-font-lock-keywords-maximum-decoration ("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) nil) ((:error wrong-type-argument (listp font-lock-type-face)) 6 (python-font-lock-keywords-level-1 python-font-lock-keywords-level-1 python-font-lock-keywords-level-2 python-font-lock-keywords-maximum-decoration ("\\_<\\(HealthCheckConfig\\|J\\(?:VMProcess\\|ob\\)\\|Process\\|Resources\\|Se\\(?:quentialTask\\|rvice\\)\\|Task\\|UpdateConfig\\)\\_>" . font-lock-function-name-face) ("\\_<\\(Enum\\|Integer\\|List\\|Map\\|Str\\(?:ing\\|uct\\)\\)\\_>" . font-lock-type-face)) nil) t "smf1/" nil)"#
+        ]],
     )
 }
 
-fn aurora_config_mode_hook_runs_after_python_setup_and_can_observe_and_mutate_buffer_state() -> ParityBatchCase {
+fn aurora_config_mode_hook_runs_after_python_setup_and_can_observe_and_mutate_buffer_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_hook_runs_after_python_setup_and_can_observe_and_mutate_buffer_state",
         r##"(with-temp-buffer
@@ -207,12 +211,13 @@ fn aurora_config_mode_hook_runs_after_python_setup_and_can_observe_and_mutate_bu
              (aurora-config-test-buffer-state))))"##,
         true,
         expect![[
-        r#"OK (((:first aurora-config-mode "Aurora" python-mode 6 aurora-config-inspect) (:second "hook/first" t)) (aurora-config-mode "Aurora" python-mode "task = Task()\n# hook suffix\n" t "hook/first" t 6 aurora-config-inspect aurora-config-diff))"#
-    ]],
+            r#"OK (((:first aurora-config-mode "Aurora" python-mode 6 aurora-config-inspect) (:second "hook/first" t)) (aurora-config-mode "Aurora" python-mode "task = Task()\n# hook suffix\n" t "hook/first" t 6 aurora-config-inspect aurora-config-diff))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_auto_mode_rules_select_expected_files_and_reject_near_misses() -> ParityBatchCase {
+fn aurora_config_mode_auto_mode_rules_select_expected_files_and_reject_near_misses()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_auto_mode_rules_select_expected_files_and_reject_near_misses",
         r##"(mapcar
@@ -241,12 +246,13 @@ fn aurora_config_mode_auto_mode_rules_select_expected_files_and_reject_near_miss
             "mesos"))"##,
         true,
         expect![[
-        r#"OK (("service.aurora" aurora-config-mode "Aurora" aurora-config-mode) ("service.mesos" aurora-config-mode "Aurora" aurora-config-mode) ("SERVICE.AURORA" aurora-config-mode "Aurora" aurora-config-mode) ("SERVICE.MESOS" aurora-config-mode "Aurora" aurora-config-mode) ("service.aurora.bak" aurora-config-mode "Aurora" aurora-config-mode) (".aurora" aurora-config-mode "Aurora" aurora-config-mode) ("aurora" fundamental-mode "Fundamental" nil) ("service.py" python-mode "Python" nil) ("mesos" fundamental-mode "Fundamental" nil))"#
-    ]],
+            r#"OK (("service.aurora" aurora-config-mode "Aurora" aurora-config-mode) ("service.mesos" aurora-config-mode "Aurora" aurora-config-mode) ("SERVICE.AURORA" aurora-config-mode "Aurora" aurora-config-mode) ("SERVICE.MESOS" aurora-config-mode "Aurora" aurora-config-mode) ("service.aurora.bak" aurora-config-mode "Aurora" aurora-config-mode) (".aurora" aurora-config-mode "Aurora" aurora-config-mode) ("aurora" fundamental-mode "Fundamental" nil) ("service.py" python-mode "Python" nil) ("mesos" fundamental-mode "Fundamental" nil))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_real_python_indentation_produces_exact_nested_job_configuration() -> ParityBatchCase {
+fn aurora_config_mode_real_python_indentation_produces_exact_nested_job_configuration()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_real_python_indentation_produces_exact_nested_job_configuration",
         r##"(with-temp-buffer
@@ -277,12 +283,13 @@ fn aurora_config_mode_real_python_indentation_produces_exact_nested_job_configur
             '(0 1 2 3 4 5 6 7))))"##,
         true,
         expect![[
-        r#"OK ((:error wrong-type-argument (listp font-lock-type-face)) "def build(name):\nreturn Job(\n    name=name,\n    task=Task(\n        processes=[\n            Process(name='web'),\n            Service(name='sidecar')]))\n" nil (0 0 4 4 8 12 12 0))"#
-    ]],
+            r#"OK ((:error wrong-type-argument (listp font-lock-type-face)) "def build(name):\nreturn Job(\n    name=name,\n    task=Task(\n        processes=[\n            Process(name='web'),\n            Service(name='sidecar')]))\n" nil (0 0 4 4 8 12 12 0))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_python_comment_and_uncomment_workflow_preserves_code_exactly() -> ParityBatchCase {
+fn aurora_config_mode_python_comment_and_uncomment_workflow_preserves_code_exactly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_python_comment_and_uncomment_workflow_preserves_code_exactly",
         r##"(with-temp-buffer
@@ -316,12 +323,13 @@ fn aurora_config_mode_python_comment_and_uncomment_workflow_preserves_code_exact
               uncommented))))"##,
         true,
         expect![[
-        r##"OK ("# " "" "job = Job(\n    name='api',\n    task=Task())\n" "# job = Job(\n#     name='api',\n#     task=Task())\n" "job = Job(\n    name='api',\n    task=Task())\n" t)"##
-    ]],
+            r##"OK ("# " "" "job = Job(\n    name='api',\n    task=Task())\n" "# job = Job(\n#     name='api',\n#     task=Task())\n" "job = Job(\n    name='api',\n    task=Task())\n" t)"##
+        ]],
     )
 }
 
-fn aurora_config_mode_activation_kills_unrelated_locals_but_preserves_text_point_and_narrowing() -> ParityBatchCase {
+fn aurora_config_mode_activation_kills_unrelated_locals_but_preserves_text_point_and_narrowing()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_activation_kills_unrelated_locals_but_preserves_text_point_and_narrowing",
         r##"(with-temp-buffer
@@ -365,8 +373,8 @@ fn aurora_config_mode_activation_kills_unrelated_locals_but_preserves_text_point
               major-mode))))"##,
         true,
         expect![[
-        r#"OK ((8 20 20 "job = Job()\n" t) (8 20 20 "job = Job()\n" nil nil nil aurora-config-mode))"#
-    ]],
+            r#"OK ((8 20 20 "job = Job()\n" t) (8 20 20 "job = Job()\n" nil nil nil aurora-config-mode))"#
+        ]],
     )
 }
 
@@ -381,7 +389,8 @@ fn mode_public_surface_batch() {
         aurora_config_mode_auto_mode_rules_select_expected_files_and_reject_near_misses(),
         aurora_config_mode_real_python_indentation_produces_exact_nested_job_configuration(),
         aurora_config_mode_python_comment_and_uncomment_workflow_preserves_code_exactly(),
-        aurora_config_mode_activation_kills_unrelated_locals_but_preserves_text_point_and_narrowing(),
+        aurora_config_mode_activation_kills_unrelated_locals_but_preserves_text_point_and_narrowing(
+        ),
     ];
     assert_aurora_config_mode_batch(&cases);
 }

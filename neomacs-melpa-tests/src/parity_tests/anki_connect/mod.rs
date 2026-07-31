@@ -64,10 +64,6 @@ pub(crate) fn assert_anki_connect_missing_dependency_signal(elisp_form: &str, ex
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_anki_connect_parity` cases (2a).
 pub(crate) fn assert_anki_connect_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

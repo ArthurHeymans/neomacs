@@ -43,8 +43,8 @@ fn enabling_amx_mode_takes_over_m_x_and_ranks_the_commands_it_finds() -> ParityB
   (amx-test-cleanup))"##,
         true,
         expect![
-        "OK (:before (:m-x execute-extended-command :remap 1 :initialized nil :auto-save nil) :enabled (:m-x amx :remap amx :initialized t :auto-save t :kill-emacs t :order ((amx-probe-open) (amx-probe-quit) (amx-probe-zoom) (amx-probe-close) (amx-probe-refresh)) :data nil :history nil :save-file-written no-save-file) :disabled (:m-x execute-extended-command :remap nil :auto-save nil :still-initialized t))"
-    ],
+            "OK (:before (:m-x execute-extended-command :remap 1 :initialized nil :auto-save nil) :enabled (:m-x amx :remap amx :initialized t :auto-save t :kill-emacs t :order ((amx-probe-open) (amx-probe-quit) (amx-probe-zoom) (amx-probe-close) (amx-probe-refresh)) :data nil :history nil :save-file-written no-save-file) :disabled (:m-x execute-extended-command :remap nil :auto-save nil :still-initialized t))"
+        ],
     )
 }
 
@@ -76,8 +76,8 @@ fn a_session_of_command_invocations_reorders_the_ranked_list() -> ParityBatchCas
   (amx-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:initial ((amx-probe-open) (amx-probe-quit) (amx-probe-zoom) (amx-probe-close) (amx-probe-refresh)) :ranked (:order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom) :subset (amx-probe-open amx-probe-zoom amx-probe-quit amx-probe-refresh) :default "amx-probe-open") :after-more-use (:order ((amx-probe-open . 3) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 3)) :history (amx-probe-open amx-probe-close amx-probe-zoom)))"#
-    ]],
+            r#"OK (:initial ((amx-probe-open) (amx-probe-quit) (amx-probe-zoom) (amx-probe-close) (amx-probe-refresh)) :ranked (:order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom) :subset (amx-probe-open amx-probe-zoom amx-probe-quit amx-probe-refresh) :default "amx-probe-open") :after-more-use (:order ((amx-probe-open . 3) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 3)) :history (amx-probe-open amx-probe-close amx-probe-zoom)))"#
+        ]],
     )
 }
 
@@ -115,8 +115,8 @@ fn the_save_file_round_trips_the_ranking_into_a_fresh_session() -> ParityBatchCa
   (amx-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:refused (:init-file-user nil :file no-save-file :warnings ("Warning (amx): Not saving amx state from \"emacs -Q\".")) :saved (:file "\n;; ----- amx-history -----\n(\n amx-probe-open\n amx-probe-close\n amx-probe-zoom\n)\n\n;; ----- amx-data -----\n(\n (amx-probe-zoom . 3)\n (amx-probe-close . 2)\n (amx-probe-open . 1)\n)\n" :order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom)) :forgotten (:cache nil :data nil :history nil) :restored (:order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom) :initialized t))"#
-    ]],
+            r#"OK (:refused (:init-file-user nil :file no-save-file :warnings ("Warning (amx): Not saving amx state from \"emacs -Q\".")) :saved (:file "\n;; ----- amx-history -----\n(\n amx-probe-open\n amx-probe-close\n amx-probe-zoom\n)\n\n;; ----- amx-data -----\n(\n (amx-probe-zoom . 3)\n (amx-probe-close . 2)\n (amx-probe-open . 1)\n)\n" :order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom)) :forgotten (:cache nil :data nil :history nil) :restored (:order ((amx-probe-open . 1) (amx-probe-close . 2) (amx-probe-zoom . 3) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 3) (amx-probe-close . 2) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom) :initialized t))"#
+        ]],
     )
 }
 
@@ -156,12 +156,13 @@ fn ignored_commands_are_hidden_from_completion_and_can_be_unignored() -> ParityB
   (amx-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:defaults (:matchers ("\\`self-insert-command\\'" "\\`self-insert-and-exit\\'" "\\`ad-Orig-" "\\`menu-bar" "\\`kill-emacs\\'" amx-command-marked-ignored-p amx-command-obsolete-p amx-command-mouse-interactive-p) :ignored ((self-insert-command . t) (menu-bar-open . t) (kill-emacs . t) (amx-probe-mouse . t) (amx-probe-open) (amx-probe-helper)) :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 1) (amx-probe-quit) (amx-probe-refresh)) :default "amx-probe-open") :ignored (:ignored-p t :property t :marked-p t :still-in-cache t :default "amx-probe-close") :unignored (:ignored-p nil :property nil :default "amx-probe-open"))"#
-    ]],
+            r#"OK (:defaults (:matchers ("\\`self-insert-command\\'" "\\`self-insert-and-exit\\'" "\\`ad-Orig-" "\\`menu-bar" "\\`kill-emacs\\'" amx-command-marked-ignored-p amx-command-obsolete-p amx-command-mouse-interactive-p) :ignored ((self-insert-command . t) (menu-bar-open . t) (kill-emacs . t) (amx-probe-mouse . t) (amx-probe-open) (amx-probe-helper)) :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 1) (amx-probe-quit) (amx-probe-refresh)) :default "amx-probe-open") :ignored (:ignored-p t :property t :marked-p t :still-in-cache t :default "amx-probe-close") :unignored (:ignored-p nil :property nil :default "amx-probe-open"))"#
+        ]],
     )
 }
 
-fn commands_defined_during_the_session_are_detected_and_folded_into_the_ranking() -> ParityBatchCase {
+fn commands_defined_during_the_session_are_detected_and_folded_into_the_ranking() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "commands_defined_during_the_session_are_detected_and_folded_into_the_ranking",
         r##"(unwind-protect
@@ -195,8 +196,8 @@ fn commands_defined_during_the_session_are_detected_and_folded_into_the_ranking(
   (amx-test-cleanup))"##,
         true,
         expect![
-        "OK (:steady (:detected-again nil :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 2) (amx-probe-quit) (amx-probe-refresh))) :detection (:detected t :delta 1 :in-cache nil) :without-counting nil :after-counting (:newcomer t :latecomer t :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 2) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 2) (amx-probe-close . 1) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom)))"
-    ],
+            "OK (:steady (:detected-again nil :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 2) (amx-probe-quit) (amx-probe-refresh))) :detection (:detected t :delta 1 :in-cache nil) :without-counting nil :after-counting (:newcomer t :latecomer t :order ((amx-probe-open . 1) (amx-probe-close . 1) (amx-probe-zoom . 2) (amx-probe-quit) (amx-probe-refresh)) :data ((amx-probe-zoom . 2) (amx-probe-close . 1) (amx-probe-open . 1)) :history (amx-probe-open amx-probe-close amx-probe-zoom)))"
+        ],
     )
 }
 

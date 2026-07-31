@@ -47,10 +47,5 @@ pub(crate) fn assert_with_editor_signal_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_with_editor_parity` cases (2a).
 pub(crate) fn assert_with_editor_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        with_editor_oracle(),
-        &name,
-        "with_editor_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(with_editor_oracle(), &name, "with_editor_parity", cases);
 }

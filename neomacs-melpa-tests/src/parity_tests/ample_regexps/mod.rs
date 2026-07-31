@@ -98,10 +98,5 @@ pub(crate) fn assert_ample_regexps_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ample_regexps_parity` cases (2a).
 pub(crate) fn assert_ample_regexps_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ample_regexps_oracle(),
-        &name,
-        "ample_regexps_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ample_regexps_oracle(), &name, "ample_regexps_parity", cases);
 }

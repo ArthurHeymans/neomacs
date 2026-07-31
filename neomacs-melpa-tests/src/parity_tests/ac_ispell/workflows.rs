@@ -34,8 +34,8 @@ fn ac_ispell_completes_a_typed_prose_word_from_the_real_word_list() -> ParityBat
               :speller (ac-ispell-test-speller-log)))))))"##,
         true,
         expect![[
-        r#"OK (:installed (:sources #1=(ac-source-ispell ac-source-ispell-fuzzy) :auto-complete t :ispell ((candidates . ac-ispell--candidates) (requires . 3) (symbol . "s")) :fuzzy ((candidates . ac-ispell--fuzzy-candidates) (match lambda (prefix candidates) candidates) (requires . 3) (limit . 2) (symbol . "s") (candidate-face . ac-ispell-fuzzy-candidate-face))) :offered ((:prefix "recip" :prefix-start 19 :common "recip" :menu-live t :selected "recipe") (("recipe" "s" nil) ("recipient" "s" nil) ("reciprocal" "s" nil))) :moved (:prefix "recip" :prefix-start 19 :common "recip" :menu-live t :selected "recipient") :after (:text "Please send me the recipient" :point 28 :mode text-mode :auto-complete t :sources #1#) :lookups ("grep|-Ei|^recip.*$|[ORACLE-SANDBOX]/words.txt") :speller ("run|-a|-m|-B" "!" "-" "%" "^recip"))"#
-    ]],
+            r#"OK (:installed (:sources #1=(ac-source-ispell ac-source-ispell-fuzzy) :auto-complete t :ispell ((candidates . ac-ispell--candidates) (requires . 3) (symbol . "s")) :fuzzy ((candidates . ac-ispell--fuzzy-candidates) (match lambda (prefix candidates) candidates) (requires . 3) (limit . 2) (symbol . "s") (candidate-face . ac-ispell-fuzzy-candidate-face))) :offered ((:prefix "recip" :prefix-start 19 :common "recip" :menu-live t :selected "recipe") (("recipe" "s" nil) ("recipient" "s" nil) ("reciprocal" "s" nil))) :moved (:prefix "recip" :prefix-start 19 :common "recip" :menu-live t :selected "recipient") :after (:text "Please send me the recipient" :point 28 :mode text-mode :auto-complete t :sources #1#) :lookups ("grep|-Ei|^recip.*$|[ORACLE-SANDBOX]/words.txt") :speller ("run|-a|-m|-B" "!" "-" "%" "^recip"))"#
+        ]],
     )
 }
 
@@ -64,8 +64,8 @@ fn ac_ispell_matches_the_case_of_the_typed_stem_and_reuses_one_lookup() -> Parit
               :lookups (ac-ispell-test-lookups)))))))"##,
         true,
         expect![[
-        r#"OK (:capitalized ((:prefix "Recip" :prefix-start 0 :common "Recip" :menu-live t :selected "Recipe") (("Recipe" "s" nil) ("Recipient" "s" nil) ("Reciprocal" "s" nil))) :after-capitalized (:text "Recipe" :point 6 :mode text-mode :auto-complete t :sources #1=(ac-source-ispell ac-source-ispell-fuzzy)) :upcased ((:prefix "RECIP" :prefix-start 7 :common "RECIP" :menu-live t :selected "RECIPE") (("RECIPE" "s" nil) ("RECIPIENT" "s" nil) ("RECIPROCAL" "s" nil))) :after (:text "Recipe\nRECIPIENT" :point 16 :mode text-mode :auto-complete t :sources #1#) :lookups ("grep|-Ei|^recip.*$|[ORACLE-SANDBOX]/words.txt"))"#
-    ]],
+            r#"OK (:capitalized ((:prefix "Recip" :prefix-start 0 :common "Recip" :menu-live t :selected "Recipe") (("Recipe" "s" nil) ("Recipient" "s" nil) ("Reciprocal" "s" nil))) :after-capitalized (:text "Recipe" :point 6 :mode text-mode :auto-complete t :sources #1=(ac-source-ispell ac-source-ispell-fuzzy)) :upcased ((:prefix "RECIP" :prefix-start 7 :common "RECIP" :menu-live t :selected "RECIPE") (("RECIPE" "s" nil) ("RECIPIENT" "s" nil) ("RECIPROCAL" "s" nil))) :after (:text "Recipe\nRECIPIENT" :point 16 :mode text-mode :auto-complete t :sources #1#) :lookups ("grep|-Ei|^recip.*$|[ORACLE-SANDBOX]/words.txt"))"#
+        ]],
     )
 }
 
@@ -92,8 +92,8 @@ fn ac_ispell_answers_a_longer_stem_from_its_cache_and_researches_a_new_one() -> 
             :lookups (ac-ispell-test-lookups))))))"##,
         true,
         expect![[
-        r#"OK (:first ((:prefix "recip" :prefix-start 4 :common "recip" :menu-live t :selected "recipe") (("recipe" "s" nil) ("recipient" "s" nil) ("reciprocal" "s" nil))) :extended (:text "The recipient" :point 13 :mode text-mode :auto-complete t :sources (ac-source-ispell ac-source-ispell-fuzzy)) :other-stem ((:prefix "rece" :prefix-start 18 :common "rece" :menu-live t :selected "recess") (("recess" "s" nil) ("receive" "s" nil) ("receiver" "s" nil) ("reception" "s" nil))) :lookups ("grep|-Ei|^recip.*$|[ORACLE-SANDBOX]/words.txt" "grep|-Ei|^rece.*$|[ORACLE-SANDBOX]/words.txt"))"#
-    ]],
+            r#"OK (:first ((:prefix "recip" :prefix-start 4 :common "recip" :menu-live t :selected "recipe") (("recipe" "s" nil) ("recipient" "s" nil) ("reciprocal" "s" nil))) :extended (:text "The recipient" :point 13 :mode text-mode :auto-complete t :sources (ac-source-ispell ac-source-ispell-fuzzy)) :other-stem ((:prefix "rece" :prefix-start 18 :common "rece" :menu-live t :selected "recess") (("recess" "s" nil) ("receive" "s" nil) ("receiver" "s" nil) ("reception" "s" nil))) :lookups ("grep|-Ei|^recip.*$|[ORACLE-SANDBOX]/words.txt" "grep|-Ei|^rece.*$|[ORACLE-SANDBOX]/words.txt"))"#
+        ]],
     )
 }
 
@@ -136,12 +136,13 @@ fn ac_ispell_requires_gates_short_stems_and_a_customized_value_takes_effect() ->
            :lookups (ac-ispell-test-lookups)))))"##,
         true,
         expect![[
-        r#"OK (:default (:requires 3 :fuzzy-limit 2 :sources (ac-source-ispell ac-source-ispell-fuzzy) :short (nil (:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil) nil nothing-recorded) :long ((:prefix "rec" :prefix-start 3 :common "rec" :menu-live t :selected "recall") (("recall" "s" nil) ("recess" "s" nil) ("recipe" "s" nil) ("recite" "s" nil) ("reckon" "s" nil) ("receive" "s" nil) ("receiver" "s" nil) ("reception" "s" nil) ("recipient" "s" nil) ("recommend" "s" nil) ("reciprocal" "s" nil)))) :customized (:ispell ((candidates . ac-ispell--candidates) (requires . 5) (symbol . "s")) :fuzzy ((candidates . ac-ispell--fuzzy-candidates) (match lambda (prefix candidates) candidates) (requires . 5) (limit . 0) (symbol . "s") (candidate-face . ac-ispell-fuzzy-candidate-face)) :sources (ac-source-ispell) :short (nil nil) :long ((:prefix "recip" :prefix-start 3 :common "recip" :menu-live t :selected "recipe") (("recipe" "s" nil) ("recipient" "s" nil) ("reciprocal" "s" nil)))) :lookups ("grep|-Ei|^rec.*$|[ORACLE-SANDBOX]/words.txt"))"#
-    ]],
+            r#"OK (:default (:requires 3 :fuzzy-limit 2 :sources (ac-source-ispell ac-source-ispell-fuzzy) :short (nil (:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil) nil nothing-recorded) :long ((:prefix "rec" :prefix-start 3 :common "rec" :menu-live t :selected "recall") (("recall" "s" nil) ("recess" "s" nil) ("recipe" "s" nil) ("recite" "s" nil) ("reckon" "s" nil) ("receive" "s" nil) ("receiver" "s" nil) ("reception" "s" nil) ("recipient" "s" nil) ("recommend" "s" nil) ("reciprocal" "s" nil)))) :customized (:ispell ((candidates . ac-ispell--candidates) (requires . 5) (symbol . "s")) :fuzzy ((candidates . ac-ispell--fuzzy-candidates) (match lambda (prefix candidates) candidates) (requires . 5) (limit . 0) (symbol . "s") (candidate-face . ac-ispell-fuzzy-candidate-face)) :sources (ac-source-ispell) :short (nil nil) :long ((:prefix "recip" :prefix-start 3 :common "recip" :menu-live t :selected "recipe") (("recipe" "s" nil) ("recipient" "s" nil) ("reciprocal" "s" nil)))) :lookups ("grep|-Ei|^rec.*$|[ORACLE-SANDBOX]/words.txt"))"#
+        ]],
     )
 }
 
-fn ac_ispell_fuzzy_source_offers_limited_speller_near_misses_for_a_misspelling() -> ParityBatchCase {
+fn ac_ispell_fuzzy_source_offers_limited_speller_near_misses_for_a_misspelling() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "ac_ispell_fuzzy_source_offers_limited_speller_near_misses_for_a_misspelling",
         r##"(progn
@@ -159,8 +160,8 @@ fn ac_ispell_fuzzy_source_offers_limited_speller_near_misses_for_a_misspelling()
           :speller (ac-ispell-test-speller-log)))))"##,
         true,
         expect![[
-        r#"OK (:limit 2 :offered ((:prefix "recipiant" :prefix-start 5 :common nil :menu-live t :selected "recipient") (("recipient" "s" ac-ispell-fuzzy-candidate-face) ("recipients" "s" ac-ispell-fuzzy-candidate-face))) :after (:text "Dear recipient" :point 14 :mode text-mode :auto-complete t :sources (ac-source-ispell ac-source-ispell-fuzzy)) :lookups ("grep|-Ei|^recipiant.*$|[ORACLE-SANDBOX]/words.txt") :speller ("run|-a|-m|-B" "!" "-" "%" "^recipiant"))"#
-    ]],
+            r#"OK (:limit 2 :offered ((:prefix "recipiant" :prefix-start 5 :common nil :menu-live t :selected "recipient") (("recipient" "s" ac-ispell-fuzzy-candidate-face) ("recipients" "s" ac-ispell-fuzzy-candidate-face))) :after (:text "Dear recipient" :point 14 :mode text-mode :auto-complete t :sources (ac-source-ispell ac-source-ispell-fuzzy)) :lookups ("grep|-Ei|^recipiant.*$|[ORACLE-SANDBOX]/words.txt") :speller ("run|-a|-m|-B" "!" "-" "%" "^recipiant"))"#
+        ]],
     )
 }
 
@@ -187,8 +188,8 @@ fn ac_ispell_offers_nothing_for_a_non_word_stem_or_an_unknown_word() -> ParityBa
           :speller (ac-ispell-test-speller-log)))))"##,
         true,
         expect![[
-        r#"OK (:non-word (t nil (:text "encoding utf8" :point 13 :mode text-mode :auto-complete t :sources #1=(ac-source-ispell ac-source-ispell-fuzzy)) nothing-recorded ("run|-a|-m|-B" "!" "-" "%" "^utf8")) :unknown-word (t nil (:text "encoding utf8 and unmatchable" :point 29 :mode text-mode :auto-complete t :sources #1#)) :lookups ("grep|-Ei|^unmatchable.*$|[ORACLE-SANDBOX]/words.txt") :speller ("run|-a|-m|-B" "!" "-" "%" "^utf8" "!" "-" "%" "^unmatchable"))"#
-    ]],
+            r#"OK (:non-word (t nil (:text "encoding utf8" :point 13 :mode text-mode :auto-complete t :sources #1=(ac-source-ispell ac-source-ispell-fuzzy)) nothing-recorded ("run|-a|-m|-B" "!" "-" "%" "^utf8")) :unknown-word (t nil (:text "encoding utf8 and unmatchable" :point 29 :mode text-mode :auto-complete t :sources #1#)) :lookups ("grep|-Ei|^unmatchable.*$|[ORACLE-SANDBOX]/words.txt") :speller ("run|-a|-m|-B" "!" "-" "%" "^utf8" "!" "-" "%" "^unmatchable"))"#
+        ]],
     )
 }
 
@@ -208,8 +209,8 @@ fn ac_ispell_reports_a_missing_word_list_out_of_the_public_command() -> ParityBa
         :speller (ac-ispell-test-speller-log))))"##,
         true,
         expect![[
-        r#"OK (:outcome (error "ispell-lookup-words: Unreadable or missing plain word-list [ORACLE-SANDBOX]/dictionaries/words.txt") :menu nil :after (:text "The recip\n" :point 9 :mode text-mode :auto-complete t :sources (ac-source-ispell ac-source-ispell-fuzzy)) :dictionary "[ORACLE-SANDBOX]/dictionaries/words.txt" :lookups nothing-recorded :speller nothing-recorded)"#
-    ]],
+            r#"OK (:outcome (error "ispell-lookup-words: Unreadable or missing plain word-list [ORACLE-SANDBOX]/dictionaries/words.txt") :menu nil :after (:text "The recip\n" :point 9 :mode text-mode :auto-complete t :sources (ac-source-ispell ac-source-ispell-fuzzy)) :dictionary "[ORACLE-SANDBOX]/dictionaries/words.txt" :lookups nothing-recorded :speller nothing-recorded)"#
+        ]],
     )
 }
 

@@ -24,8 +24,8 @@ fn alda_font_lock_practical_score_assigns_faces_to_language_constructs() -> Pari
             "@start" "tempo" "# comment")))"##,
         true,
         expect![[
-        r##"OK (("piano" font-lock-type-face) ("V1" font-lock-function-name-face) ("o4" font-lock-constant-face) ("c+" font-lock-preprocessor-face) ("*3" font-lock-builtin-face) ("{" font-lock-builtin-face) ("[" font-lock-builtin-face) ("|" font-lock-comment-face) ("@start" font-lock-builtin-face) ("tempo" font-lock-variable-name-face) ("# comment" font-lock-comment-face))"##
-    ]],
+            r##"OK (("piano" font-lock-type-face) ("V1" font-lock-function-name-face) ("o4" font-lock-constant-face) ("c+" font-lock-preprocessor-face) ("*3" font-lock-builtin-face) ("{" font-lock-builtin-face) ("[" font-lock-builtin-face) ("|" font-lock-comment-face) ("@start" font-lock-builtin-face) ("tempo" font-lock-variable-name-face) ("# comment" font-lock-comment-face))"##
+        ]],
     )
 }
 
@@ -79,7 +79,8 @@ fn alda_indent_previous_level_skips_blank_lines_and_finds_prior_score_indent() -
     )
 }
 
-fn alda_indent_line_reindents_labels_notes_and_comments_preserving_point_semantics() -> ParityBatchCase {
+fn alda_indent_line_reindents_labels_notes_and_comments_preserving_point_semantics()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alda_indent_line_reindents_labels_notes_and_comments_preserving_point_semantics",
         r##"(with-temp-buffer

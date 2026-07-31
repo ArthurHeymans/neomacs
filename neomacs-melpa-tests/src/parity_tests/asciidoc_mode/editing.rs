@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asciidoc_mode_batch};
 
-fn heading_commands_edit_nested_document_structure_and_preserve_point_semantics() -> ParityBatchCase {
+fn heading_commands_edit_nested_document_structure_and_preserve_point_semantics() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "heading_commands_edit_nested_document_structure_and_preserve_point_semantics",
         r##"(with-temp-buffer
@@ -54,12 +55,13 @@ fn heading_commands_edit_nested_document_structure_and_preserve_point_semantics(
         ("Ordinary prose" . asciidoc-promote-heading))))))"##,
         true,
         expect![[
-        r#"OK (((asciidoc-demote-heading 28 29 "=== Architecture") (asciidoc-promote-heading 50 49 "== Parser Pipeline")) "= Document\n\n=== Architecture\n\n== Parser Pipeline\n\n====== Deep Limit\n\nOrdinary prose.\n" ((user-error ("Already at the topmost heading level") "= Document") (user-error ("Already at the deepest heading level") "====== Deep Limit") (user-error ("Point is not on a heading") "Ordinary prose.")))"#
-    ]],
+            r#"OK (((asciidoc-demote-heading 28 29 "=== Architecture") (asciidoc-promote-heading 50 49 "== Parser Pipeline")) "= Document\n\n=== Architecture\n\n== Parser Pipeline\n\n====== Deep Limit\n\nOrdinary prose.\n" ((user-error ("Already at the topmost heading level") "= Document") (user-error ("Already at the deepest heading level") "====== Deep Limit") (user-error ("Point is not on a heading") "Ordinary prose.")))"#
+        ]],
     )
 }
 
-fn comment_and_uncomment_region_round_trip_realistic_asciidoc_without_touching_urls() -> ParityBatchCase {
+fn comment_and_uncomment_region_round_trip_realistic_asciidoc_without_touching_urls()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "comment_and_uncomment_region_round_trip_realistic_asciidoc_without_touching_urls",
         r##"(with-temp-buffer
@@ -91,12 +93,13 @@ fn comment_and_uncomment_region_round_trip_realistic_asciidoc_without_touching_u
           (buffer-string)))))))"##,
         true,
         expect![[
-        r#"OK ("// " "^//+\\s-*" "= Operations\n\nVisit https://example.com/a/b for deployment details.\nRun the documented rollback when required.\n" "= Operations\n\n// Visit https://example.com/a/b for deployment details.\n// Run the documented rollback when required.\n" "= Operations\n\nVisit https://example.com/a/b for deployment details.\nRun the documented rollback when required.\n" t 14 20)"#
-    ]],
+            r#"OK ("// " "^//+\\s-*" "= Operations\n\nVisit https://example.com/a/b for deployment details.\nRun the documented rollback when required.\n" "= Operations\n\n// Visit https://example.com/a/b for deployment details.\n// Run the documented rollback when required.\n" "= Operations\n\nVisit https://example.com/a/b for deployment details.\nRun the documented rollback when required.\n" t 14 20)"#
+        ]],
     )
 }
 
-fn paragraph_filling_wraps_prose_around_a_url_without_inventing_comment_prefixes() -> ParityBatchCase {
+fn paragraph_filling_wraps_prose_around_a_url_without_inventing_comment_prefixes() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "paragraph_filling_wraps_prose_around_a_url_without_inventing_comment_prefixes",
         r##"(with-temp-buffer
@@ -125,12 +128,13 @@ fn paragraph_filling_wraps_prose_around_a_url_without_inventing_comment_prefixes
      (nth 4 (syntax-ppss)))))"##,
         true,
         expect![[
-        r#"OK ("Visit https://example.com/a/b for more\ndetails about the practical deployment\nprocess and its rollback procedure.\n\n// A genuine comment remains a comment.\n" 5 nil nil)"#
-    ]],
+            r#"OK ("Visit https://example.com/a/b for more\ndetails about the practical deployment\nprocess and its rollback procedure.\n\n// A genuine comment remains a comment.\n" 5 nil nil)"#
+        ]],
     )
 }
 
-fn inherited_text_indentation_normalizes_explicit_asciidoc_list_and_source_layout_exactly() -> ParityBatchCase {
+fn inherited_text_indentation_normalizes_explicit_asciidoc_list_and_source_layout_exactly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "inherited_text_indentation_normalizes_explicit_asciidoc_list_and_source_layout_exactly",
         r##"(with-temp-buffer
@@ -161,8 +165,8 @@ fn inherited_text_indentation_normalizes_explicit_asciidoc_list_and_source_layou
       '(0 1 2 4 5 6 7 8)))))"##,
         true,
         expect![[
-        r#"OK (indent-relative "* Parent item\n  continuation aligned by the author\n** Nested item\n\n[source,emacs-lisp]\n----\n(let ((value 1))\n  (+ value 2))\n----\n" "* Parent item\ncontinuation aligned by the author\n** Nested item\n\n[source,emacs-lisp]\n----\n(let ((value 1))\n(+ value 2))\n----\n" nil (0 0 0 0 0 0 0 0))"#
-    ]],
+            r#"OK (indent-relative "* Parent item\n  continuation aligned by the author\n** Nested item\n\n[source,emacs-lisp]\n----\n(let ((value 1))\n  (+ value 2))\n----\n" "* Parent item\ncontinuation aligned by the author\n** Nested item\n\n[source,emacs-lisp]\n----\n(let ((value 1))\n(+ value 2))\n----\n" nil (0 0 0 0 0 0 0 0))"#
+        ]],
     )
 }
 

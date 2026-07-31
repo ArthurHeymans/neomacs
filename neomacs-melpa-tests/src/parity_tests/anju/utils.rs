@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_anju_batch};
 
-fn anju_middle_truncate_handles_short_long_multiline_unicode_and_invalid_extents() -> ParityBatchCase {
+fn anju_middle_truncate_handles_short_long_multiline_unicode_and_invalid_extents() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "anju_middle_truncate_handles_short_long_multiline_unicode_and_invalid_extents",
         r##"(mapcar
@@ -19,8 +20,8 @@ fn anju_middle_truncate_handles_short_long_multiline_unicode_and_invalid_extents
            ("invalid" "Open" 12 5)))"##,
         true,
         expect![[
-        r#"OK ("Open “short phrase”" "Open “abcdefghijkl…yz0123456789”" "Open “abcdefg…3456789”" "Select “first line…last line”" "Select “␣…␤”" "Go “한글과 emoj…ely long”" "ERROR: extent (5) and max (12) should conform to extent <= (max/2) - 2")"#
-    ]],
+            r#"OK ("Open “short phrase”" "Open “abcdefghijkl…yz0123456789”" "Open “abcdefg…3456789”" "Select “first line…last line”" "Select “␣…␤”" "Go “한글과 emoj…ely long”" "ERROR: extent (5) and max (12) should conform to extent <= (max/2) - 2")"#
+        ]],
     )
 }
 
@@ -42,8 +43,8 @@ fn anju_menu_label_uses_the_real_active_region_and_strips_properties() -> Parity
           (text-properties-at 9)))"##,
         true,
         expect![[
-        r#"OK (#("alpha beta gamma delta epsilon " 0 31 (face bold)) "Occur “alpha be…epsilon ”" #1=(face bold) #1#)"#
-    ]],
+            r#"OK (#("alpha beta gamma delta epsilon " 0 31 (face bold)) "Occur “alpha be…epsilon ”" #1=(face bold) #1#)"#
+        ]],
     )
 }
 
@@ -61,8 +62,8 @@ fn anju_filename_extraction_preserves_real_world_names() -> ParityBatchCase {
            "/한글/문서.txt"))"##,
         true,
         expect![[
-        r#"OK ("lib.rs" "archive.tar.gz" ".gitignore" "trailing." "no-extension" "report.final.md" "문서.txt")"#
-    ]],
+            r#"OK ("lib.rs" "archive.tar.gz" ".gitignore" "trailing." "no-extension" "report.final.md" "문서.txt")"#
+        ]],
     )
 }
 
@@ -111,12 +112,13 @@ fn anju_buffer_filters_classify_a_real_mixed_editor_session() -> ParityBatchCase
            (anju-test-kill-buffers buffers)))"##,
         true,
         expect![[
-        r#"OK (("notes.org" "README.md" "outside.txt") ("notes.org") ("*info*") ("*Help*") ("*eshell*") ("*shell*") ("*compilation*") ("*grep*") ("*xref*") ("notes.org" "README.md" "*Help*" "*info*" "*eshell*" "*shell*" "*compilation*" "*grep*" "*xref*" "merge~variant~"))"#
-    ]],
+            r#"OK (("notes.org" "README.md" "outside.txt") ("notes.org") ("*info*") ("*Help*") ("*eshell*") ("*shell*") ("*compilation*") ("*grep*") ("*xref*") ("notes.org" "README.md" "*Help*" "*info*" "*eshell*" "*shell*" "*compilation*" "*grep*" "*xref*" "merge~variant~"))"#
+        ]],
     )
 }
 
-fn anju_configured_buffer_filter_pipeline_preserves_order_duplicates_and_limits() -> ParityBatchCase {
+fn anju_configured_buffer_filter_pipeline_preserves_order_duplicates_and_limits() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "anju_configured_buffer_filter_pipeline_preserves_order_duplicates_and_limits",
         r##"(let* ((root
@@ -148,8 +150,8 @@ fn anju_configured_buffer_filter_pipeline_preserves_order_duplicates_and_limits(
            (anju-test-kill-buffers buffers)))"##,
         true,
         expect![[
-        r#"OK (("alpha.txt" "beta.txt" "*Help*" "alpha.txt") ("WARNING: anju-test-missing-filter is undefined."))"#
-    ]],
+            r#"OK (("alpha.txt" "beta.txt" "*Help*" "alpha.txt") ("WARNING: anju-test-missing-filter is undefined."))"#
+        ]],
     )
 }
 
@@ -163,8 +165,8 @@ fn anju_transform_fill_center_and_rectangle_menu_contracts_are_exact() -> Parity
          (anju-test-menu-entries anju-rectangle-menu))"##,
         true,
         expect![[
-        r#"OK (((Make\ Upper\ Case "Make Upper Case" upcase-region :enable nil :visible nil :style nil :selected nil :help "Convert selected region to upper case") (Make\ Lower\ Case "Make Lower Case" downcase-region :enable nil :visible nil :style nil :selected nil :help "Convert selected region to lower case") (Capitalize "Capitalize" capitalize-region :enable nil :visible nil :style nil :selected nil :help "Convert the selected region to capitalized form")) ((Line "Line" center-line :enable nil :visible nil :style nil :selected nil :help "Center the line point is on, within the width specified by ‘fill-column’") (Region "Region" center-region :enable (use-region-p) :visible nil :style nil :selected nil :help "Center each nonblank line starting in the region") (Paragraph "Paragraph" center-paragraph :enable nil :visible nil :style nil :selected nil :help "Center each nonblank line in the paragraph at or after point")) ((Paragraph "Paragraph" fill-paragraph :enable nil :visible nil :style nil :selected nil :help "Fill paragraph at or after point") (Region "Region" fill-region :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill each of the paragraphs in the region") (Region\ as\ paragraph "Region as paragraph" fill-region-as-paragraph :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill the region as if it were a single paragraph") (Individual\ paragraphs "Individual paragraphs" fill-individual-paragraphs :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill paragraphs of uniform indentation within the region") (Non-uniform\ paragraphs "Non-uniform paragraphs" fill-nonuniform-paragraphs :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill paragraphs within the region, allowing varying indentation within each")) ((Cut "Cut" kill-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Delete the region-rectangle and save it as the last killed one") (Copy "Copy" copy-rectangle-as-kill :enable (anju-rectangle-selected-p) :visible nil :style nil :selected nil :help "Copy the region-rectangle and save it as the last killed one") (Paste "Paste" yank-rectangle :enable (and (not buffer-read-only) (boundp 'killed-rectangle) killed-rectangle) :visible nil :style nil :selected nil :help "Yank the last killed rectangle with upper left corner at point") (Delete "Delete" delete-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Delete rectangle") (Replace… "Replace…" string-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Replace rectangle contents with STRING on each line") (Insert… "Insert…" string-insert-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Insert STRING on each line of region-rectangle, shifting text right") (Number "Number" rectangle-number-lines :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Insert numbers in front of the region-rectangle") (Clear "Clear" clear-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Blank out the region-rectangle") (Blank "Blank" open-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Blank out the region-rectangle, shifting text right") (Delete\ leading\ spaces "Delete leading spaces" delete-whitespace-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Delete all whitespace following a specified column in each line")))"#
-    ]],
+            r#"OK (((Make\ Upper\ Case "Make Upper Case" upcase-region :enable nil :visible nil :style nil :selected nil :help "Convert selected region to upper case") (Make\ Lower\ Case "Make Lower Case" downcase-region :enable nil :visible nil :style nil :selected nil :help "Convert selected region to lower case") (Capitalize "Capitalize" capitalize-region :enable nil :visible nil :style nil :selected nil :help "Convert the selected region to capitalized form")) ((Line "Line" center-line :enable nil :visible nil :style nil :selected nil :help "Center the line point is on, within the width specified by ‘fill-column’") (Region "Region" center-region :enable (use-region-p) :visible nil :style nil :selected nil :help "Center each nonblank line starting in the region") (Paragraph "Paragraph" center-paragraph :enable nil :visible nil :style nil :selected nil :help "Center each nonblank line in the paragraph at or after point")) ((Paragraph "Paragraph" fill-paragraph :enable nil :visible nil :style nil :selected nil :help "Fill paragraph at or after point") (Region "Region" fill-region :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill each of the paragraphs in the region") (Region\ as\ paragraph "Region as paragraph" fill-region-as-paragraph :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill the region as if it were a single paragraph") (Individual\ paragraphs "Individual paragraphs" fill-individual-paragraphs :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill paragraphs of uniform indentation within the region") (Non-uniform\ paragraphs "Non-uniform paragraphs" fill-nonuniform-paragraphs :enable (use-region-p) :visible nil :style nil :selected nil :help "Fill paragraphs within the region, allowing varying indentation within each")) ((Cut "Cut" kill-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Delete the region-rectangle and save it as the last killed one") (Copy "Copy" copy-rectangle-as-kill :enable (anju-rectangle-selected-p) :visible nil :style nil :selected nil :help "Copy the region-rectangle and save it as the last killed one") (Paste "Paste" yank-rectangle :enable (and (not buffer-read-only) (boundp 'killed-rectangle) killed-rectangle) :visible nil :style nil :selected nil :help "Yank the last killed rectangle with upper left corner at point") (Delete "Delete" delete-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Delete rectangle") (Replace… "Replace…" string-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Replace rectangle contents with STRING on each line") (Insert… "Insert…" string-insert-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Insert STRING on each line of region-rectangle, shifting text right") (Number "Number" rectangle-number-lines :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Insert numbers in front of the region-rectangle") (Clear "Clear" clear-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Blank out the region-rectangle") (Blank "Blank" open-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Blank out the region-rectangle, shifting text right") (Delete\ leading\ spaces "Delete leading spaces" delete-whitespace-rectangle :enable (and (not buffer-read-only) (anju-rectangle-selected-p)) :visible nil :style nil :selected nil :help "Delete all whitespace following a specified column in each line")))"#
+        ]],
     )
 }
 

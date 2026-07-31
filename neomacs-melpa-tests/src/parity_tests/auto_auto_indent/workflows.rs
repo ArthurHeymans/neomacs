@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_auto_indent_batch};
 
-fn auto_auto_indent_practical_unformatted_lisp_insert_is_repaired_by_real_change_and_post_hooks() -> ParityBatchCase {
+fn auto_auto_indent_practical_unformatted_lisp_insert_is_repaired_by_real_change_and_post_hooks()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_practical_unformatted_lisp_insert_is_repaired_by_real_change_and_post_hooks",
         r##"(with-temp-buffer
@@ -30,12 +31,13 @@ fn auto_auto_indent_practical_unformatted_lisp_insert_is_repaired_by_real_change
              (current-column))))"##,
         true,
         expect![[
-        r#"OK (t t "(defun deploy-token (service)\n(let ((token (concat service \"-token\")))\n(when token\n  (message \"%s\" token))\ntoken))\n" 116 6 0)"#
-    ]],
+            r#"OK (t t "(defun deploy-token (service)\n(let ((token (concat service \"-token\")))\n(when token\n  (message \"%s\" token))\ntoken))\n" 116 6 0)"#
+        ]],
     )
 }
 
-fn auto_auto_indent_practical_paste_newline_and_backspace_workflow_preserves_structure_and_mark() -> ParityBatchCase {
+fn auto_auto_indent_practical_paste_newline_and_backspace_workflow_preserves_structure_and_mark()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_practical_paste_newline_and_backspace_workflow_preserves_structure_and_mark",
         r##"(with-temp-buffer
@@ -63,8 +65,8 @@ fn auto_auto_indent_practical_paste_newline_and_backspace_workflow_preserves_str
                (current-column)))))"##,
         true,
         expect![[
-        r#"OK (8 8 "(progn\n  (let ((user \"alice\"))\n    (message \"hello %s\" user))\n  )" 65 4 2)"#
-    ]],
+            r#"OK (8 8 "(progn\n  (let ((user \"alice\"))\n    (message \"hello %s\" user))\n  )" 65 4 2)"#
+        ]],
     )
 }
 
@@ -103,12 +105,13 @@ fn auto_auto_indent_readme_style_selective_predicate_preserves_heredoc_lines() -
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (" function demo() {\nEOD\n   payload\nEOD\n     return value;\n      }\n       " (1 3 5 6 7))"#
-    ]],
+            r#"OK (" function demo() {\nEOD\n   payload\nEOD\n     return value;\n      }\n       " (1 3 5 6 7))"#
+        ]],
     )
 }
 
-fn auto_auto_indent_two_real_editing_buffers_keep_modes_strategies_and_changes_independent() -> ParityBatchCase {
+fn auto_auto_indent_two_real_editing_buffers_keep_modes_strategies_and_changes_independent()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_two_real_editing_buffers_keep_modes_strategies_and_changes_independent",
         r##"(let ((lisp-buffer
@@ -156,12 +159,13 @@ fn auto_auto_indent_two_real_editing_buffers_keep_modes_strategies_and_changes_i
               (kill-buffer text-buffer))))"##,
         true,
         expect![[
-        r#"OK ((t aai-indent-defun t "(defun one ()\n  (message \"one\"))\n") (nil aai-indent-line-maybe nil "plain\n  text"))"#
-    ]],
+            r#"OK ((t aai-indent-defun t "(defun one ()\n  (message \"one\"))\n") (nil aai-indent-line-maybe nil "plain\n  text"))"#
+        ]],
     )
 }
 
-fn auto_auto_indent_typing_burst_schedules_then_structural_edit_indents_immediately() -> ParityBatchCase {
+fn auto_auto_indent_typing_burst_schedules_then_structural_edit_indents_immediately()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_typing_burst_schedules_then_structural_edit_indents_immediately",
         r##"(with-temp-buffer
@@ -212,12 +216,13 @@ fn auto_auto_indent_typing_burst_schedules_then_structural_edit_indents_immediat
                  aai--change-flag)))))"##,
         true,
         expect![[
-        r#"OK (:pending-timer :pending-timer t ((:scheduled 0.5 nil)) "(progn\n  x)(message \"typing\"))\n" t)"#
-    ]],
+            r#"OK (:pending-timer :pending-timer t ((:scheduled 0.5 nil)) "(progn\n  x)(message \"typing\"))\n" t)"#
+        ]],
     )
 }
 
-fn auto_auto_indent_limit_switches_same_large_function_between_window_and_defun_workflows() -> ParityBatchCase {
+fn auto_auto_indent_limit_switches_same_large_function_between_window_and_defun_workflows()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_auto_indent_limit_switches_same_large_function_between_window_and_defun_workflows",
         r##"(mapcar
@@ -242,8 +247,8 @@ fn auto_auto_indent_limit_switches_same_large_function_between_window_and_defun_
           '(2 20))"##,
         true,
         expect![[
-        r#"OK ((2 "(defun configured ()\n(let ((one 1))\n(when one\n  (message \"value\"))\none))\n" 22) (20 "(defun configured ()\n(let ((one 1))\n(when one\n  (message \"value\"))\none))\n" 22))"#
-    ]],
+            r#"OK ((2 "(defun configured ()\n(let ((one 1))\n(when one\n  (message \"value\"))\none))\n" 22) (20 "(defun configured ()\n(let ((one 1))\n(when one\n  (message \"value\"))\none))\n" 22))"#
+        ]],
     )
 }
 

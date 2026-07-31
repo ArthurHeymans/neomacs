@@ -30,12 +30,13 @@ fn a_complete_helm_session_jumps_to_a_labelled_line_and_runs_its_action() -> Par
     (define-key helm-map (kbd "C-'") nil)))"##,
         true,
         expect![[
-        r#"OK (:result "deployed charlie-cache" :actions ((deploy "charlie-cache")) :alive nil :action-type nil :default-action nil :helm-buffer "*helm ajhl*")"#
-    ]],
+            r#"OK (:result "deployed charlie-cache" :actions ((deploy "charlie-cache")) :alive nil :action-type nil :default-action nil :helm-buffer "*helm ajhl*")"#
+        ]],
     )
 }
 
-fn jumping_moves_the_helm_selection_to_the_labelled_candidate_and_runs_nothing() -> ParityBatchCase {
+fn jumping_moves_the_helm_selection_to_the_labelled_candidate_and_runs_nothing() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "jumping_moves_the_helm_selection_to_the_labelled_candidate_and_runs_nothing",
         r##"(progn
@@ -53,12 +54,13 @@ fn jumping_moves_the_helm_selection_to_the_labelled_candidate_and_runs_nothing()
              :default-action ace-jump-helm-line-default-action)))))"##,
         true,
         expect![[
-        r#"OK (:start (:selection "alpha-api" :point 16 :line 2 :selection-overlay (16 26) :alive t :actions nil) :jumped (:selection "echo-cdn" :point 62 :line 6 :selection-overlay (62 71) :alive t :actions nil) :second (:selection "bravo-worker" :point 26 :line 3 :selection-overlay (26 39) :alive t :actions nil) :text "Deploy targets\nalpha-api\nbravo-worker\ncharlie-cache\ndelta-db\necho-cdn\n" :labels nil :default-action nil)"#
-    ]],
+            r#"OK (:start (:selection "alpha-api" :point 16 :line 2 :selection-overlay (16 26) :alive t :actions nil) :jumped (:selection "echo-cdn" :point 62 :line 6 :selection-overlay (62 71) :alive t :actions nil) :second (:selection "bravo-worker" :point 26 :line 3 :selection-overlay (26 39) :alive t :actions nil) :text "Deploy targets\nalpha-api\nbravo-worker\ncharlie-cache\ndelta-db\necho-cdn\n" :labels nil :default-action nil)"#
+        ]],
     )
 }
 
-fn the_persistent_default_action_previews_the_jumped_candidate_without_exiting() -> ParityBatchCase {
+fn the_persistent_default_action_previews_the_jumped_candidate_without_exiting() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "the_persistent_default_action_previews_the_jumped_candidate_without_exiting",
         r##"(progn
@@ -76,8 +78,8 @@ fn the_persistent_default_action_previews_the_jumped_candidate_without_exiting()
       (list (ajhl-test-state) (ajhl-test-labels))))))"##,
         true,
         expect![[
-        r#"OK (:persistent ((:selection "bravo-worker" :point 26 :line 3 :selection-overlay (26 39) :alive t :actions ((persistent "bravo-worker"))) nil) :move-only ((:selection "bravo-worker" :point 26 :line 3 :selection-overlay (26 39) :alive t :actions nil) nil))"#
-    ]],
+            r#"OK (:persistent ((:selection "bravo-worker" :point 26 :line 3 :selection-overlay (26 39) :alive t :actions ((persistent "bravo-worker"))) nil) :move-only ((:selection "bravo-worker" :point 26 :line 3 :selection-overlay (26 39) :alive t :actions nil) nil))"#
+        ]],
     )
 }
 
@@ -103,12 +105,13 @@ fn a_dispatch_key_switches_the_action_for_one_jump_without_moving_the_target() -
       (ajhl-test-state)))))"##,
         true,
         expect![[
-        r#"OK (:switched-to-move-only (:selection "charlie-cache" :point 39 :line 4 :selection-overlay (39 53) :alive t :actions nil) :default-persistent (:selection "charlie-cache" :point 39 :line 4 :selection-overlay (39 53) :alive t :actions ((persistent "charlie-cache"))))"#
-    ]],
+            r#"OK (:switched-to-move-only (:selection "charlie-cache" :point 39 :line 4 :selection-overlay (39 53) :alive t :actions nil) :default-persistent (:selection "charlie-cache" :point 39 :line 4 :selection-overlay (39 53) :alive t :actions ((persistent "charlie-cache"))))"#
+        ]],
     )
 }
 
-fn autoshow_mode_previews_a_label_on_every_candidate_line_in_the_configured_style() -> ParityBatchCase {
+fn autoshow_mode_previews_a_label_on_every_candidate_line_in_the_configured_style()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "autoshow_mode_previews_a_label_on_every_candidate_line_in_the_configured_style",
         r##"(progn
@@ -152,8 +155,8 @@ fn autoshow_mode_previews_a_label_on_every_candidate_line_in_the_configured_styl
     (ace-jump-helm-line-autoshow-mode -1)))"##,
         true,
         expect![[
-        r#"OK (:hooks (t t t t) :at (((16 17 "a" avy-lead-face) (26 27 "s" avy-lead-face) (39 40 "d" avy-lead-face) (53 54 "f" avy-lead-face) (62 63 "g" avy-lead-face)) "Deploy targets\nalpha-api\nbravo-worker\ncharlie-cache\ndelta-db\necho-cdn\n" (:selection "alpha-api" :point 16 :line 2 :selection-overlay (16 26) :alive t :actions nil)) :pre ((16 17 "aa" avy-lead-face) (26 27 "sb" avy-lead-face) (39 40 "dc" avy-lead-face) (53 54 "fd" avy-lead-face) (62 63 "ge" avy-lead-face)) :linum ((t ace-jump-helm-line--linum) ((1 "") (16 "  a") (26 "  s") (39 "  d") (53 "  f") (62 "  g")) nil "Deploy targets\nalpha-api\nbravo-worker\ncharlie-cache\ndelta-db\necho-cdn\n") :off (nil nil nil (helm-revive-visible-mark helm-confirm-and-exit-hook) (helm-reset-yank-point)))"#
-    ]],
+            r#"OK (:hooks (t t t t) :at (((16 17 "a" avy-lead-face) (26 27 "s" avy-lead-face) (39 40 "d" avy-lead-face) (53 54 "f" avy-lead-face) (62 63 "g" avy-lead-face)) "Deploy targets\nalpha-api\nbravo-worker\ncharlie-cache\ndelta-db\necho-cdn\n" (:selection "alpha-api" :point 16 :line 2 :selection-overlay (16 26) :alive t :actions nil)) :pre ((16 17 "aa" avy-lead-face) (26 27 "sb" avy-lead-face) (39 40 "dc" avy-lead-face) (53 54 "fd" avy-lead-face) (62 63 "ge" avy-lead-face)) :linum ((t ace-jump-helm-line--linum) ((1 "") (16 "  a") (26 "  s") (39 "  d") (53 "  f") (62 "  g")) nil "Deploy targets\nalpha-api\nbravo-worker\ncharlie-cache\ndelta-db\necho-cdn\n") :off (nil nil nil (helm-revive-visible-mark helm-confirm-and-exit-hook) (helm-reset-yank-point)))"#
+        ]],
     )
 }
 
@@ -180,8 +183,8 @@ fn a_small_key_set_produces_multi_character_labels_that_need_every_key() -> Pari
       (ajhl-test-state)))))"##,
         true,
         expect![[
-        r#"OK (:labels ((16 18 "jj" avy-lead-face) (26 28 "jk" avy-lead-face) (39 41 "kj" avy-lead-face) (53 56 "kkj" avy-lead-face) (62 65 "kkk" avy-lead-face)) :two-key-jump (:selection "charlie-cache" :point 39 :line 4 :selection-overlay (39 53) :alive t :actions nil) :other-branch (:selection "bravo-worker" :point 26 :line 3 :selection-overlay (26 39) :alive t :actions nil))"#
-    ]],
+            r#"OK (:labels ((16 18 "jj" avy-lead-face) (26 28 "jk" avy-lead-face) (39 41 "kj" avy-lead-face) (53 56 "kkj" avy-lead-face) (62 65 "kkk" avy-lead-face)) :two-key-jump (:selection "charlie-cache" :point 39 :line 4 :selection-overlay (39 53) :alive t :actions nil) :other-branch (:selection "bravo-worker" :point 26 :line 3 :selection-overlay (26 39) :alive t :actions nil))"#
+        ]],
     )
 }
 
@@ -229,8 +232,8 @@ when the session's minibuffer is set up."
       (ace-jump-helm-line-idle-exec-remove 'ajhl-test-helm-command))))"##,
         true,
         expect![
-        "OK (:advised (t t) :hook-before nil :timers-before nil :call (1 (t) t) :hook-after nil :timers-after ((ace-jump-helm-line--do-if-empty nil nil t)) :idle-delay 0.25 :removed (nil nil nil))"
-    ],
+            "OK (:advised (t t) :hook-before nil :timers-before nil :call (1 (t) t) :hook-after nil :timers-after ((ace-jump-helm-line--do-if-empty nil nil t)) :idle-delay 0.25 :removed (nil nil nil))"
+        ],
     )
 }
 
@@ -254,8 +257,8 @@ fn an_aborted_jump_changes_nothing_and_no_session_is_a_plain_error() -> ParityBa
          helm-alive-p)))"##,
         true,
         expect![[
-        r#"OK (:aborted ((:selection "alpha-api" :point 16 :line 2 :selection-overlay (16 26) :alive t :actions nil) (:selection "alpha-api" :point 16 :line 2 :selection-overlay (16 26) :alive t :actions nil) nil "Deploy targets\nalpha-api\nbravo-worker\ncharlie-cache\ndelta-db\necho-cdn\n") :no-session ((error "No helm session is running") (error "No helm session is running") nil))"#
-    ]],
+            r#"OK (:aborted ((:selection "alpha-api" :point 16 :line 2 :selection-overlay (16 26) :alive t :actions nil) (:selection "alpha-api" :point 16 :line 2 :selection-overlay (16 26) :alive t :actions nil) nil "Deploy targets\nalpha-api\nbravo-worker\ncharlie-cache\ndelta-db\necho-cdn\n") :no-session ((error "No helm session is running") (error "No helm session is running") nil))"#
+        ]],
     )
 }
 

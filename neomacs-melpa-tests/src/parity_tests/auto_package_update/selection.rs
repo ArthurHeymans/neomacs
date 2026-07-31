@@ -35,15 +35,14 @@ fn auto_package_update_quelpa_filter_reads_cache_and_removes_each_cached_name() 
                                 (featurep 'quelpa)))))"##,
         true,
         expect![
-        "OK (#1=(alpha gamma) #1# (:read-cache) ((beta . first) (delta . second) (absent . third)) t)"
-    ],
+            "OK (#1=(alpha gamma) #1# (:read-cache) ((beta . first) (delta . second) (absent . third)) t)"
+        ],
     )
 }
 
 #[test]
 fn selection_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        auto_package_update_quelpa_filter_reads_cache_and_removes_each_cached_name(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![auto_package_update_quelpa_filter_reads_cache_and_removes_each_cached_name()];
     assert_auto_package_update_batch(&cases);
 }

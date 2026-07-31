@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_aidermacs_batch};
 
-fn aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_commands() -> ParityBatchCase {
+fn aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_commands()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_commands",
         r##"(let (calls)
@@ -35,8 +36,8 @@ fn aidermacs_backend_dispatch_preserves_environment_isolation_and_routes_command
                         (nreverse calls)))"##,
         true,
         expect![[
-        r#"OK ((comint "aider" ("--model" "x") "*a*") "scoped" (send-comint "*a*" "/ls") (redirect "*a*" "/models") (vterm "aider-ce" nil "*v*") (send-vterm "*v*" "/ask hi"))"#
-    ]],
+            r#"OK ((comint "aider" ("--model" "x") "*a*") "scoped" (send-comint "*a*" "/ls") (redirect "*a*" "/models") (vterm "aider-ce" nil "*v*") (send-vterm "*v*" "/ask hi"))"#
+        ]],
     )
 }
 
@@ -71,12 +72,13 @@ fn aidermacs_vterm_text_filter_and_theme_argument_builder_cover_color_modes() ->
                          (error (error-message-string err)))))"##,
         true,
         expect![[
-        r#"OK ("one\ntwo\n\nthree\nfour" ("--user-input-color" "\\#112233" "--tool-error-color" "\\#AABBCC" "--completion-menu-bg-color" "\\#010203") ("--dark-mode") ("--light-mode") "Invalid face or colour value: 42")"#
-    ]],
+            r#"OK ("one\ntwo\n\nthree\nfour" ("--user-input-color" "\\#112233" "--tool-error-color" "\\#AABBCC" "--completion-menu-bg-color" "\\#010203") ("--dark-mode") ("--light-mode") "Invalid face or colour value: 42")"#
+        ]],
     )
 }
 
-fn aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbacks() -> ParityBatchCase {
+fn aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbacks()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbacks",
         r##"(let ((auto-mode-alist
@@ -98,7 +100,8 @@ fn aidermacs_comint_major_mode_guessing_handles_fences_aliases_files_and_fallbac
     )
 }
 
-fn aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_callback() -> ParityBatchCase {
+fn aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_callback()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_callback",
         r##"(with-temp-buffer
@@ -134,8 +137,8 @@ fn aidermacs_comint_output_filter_accumulates_chunks_stores_history_and_runs_cal
                            aidermacs--current-callback))))"##,
         true,
         expect![[
-        r#"OK ((nil "Added ./src/main.el" nil) t "Added ./src/main.el to the chat.\nfixture> " "Added ./src/main.el to the chat.\nfixture> " nil ("Added ./src/main.el to the chat.\nfixture> ") nil)"#
-    ]],
+            r#"OK ((nil "Added ./src/main.el" nil) t "Added ./src/main.el to the chat.\nfixture> " "Added ./src/main.el to the chat.\nfixture> " nil ("Added ./src/main.el to the chat.\nfixture> ") nil)"#
+        ]],
     )
 }
 
@@ -204,8 +207,8 @@ fn aidermacs_real_comint_process_runs_a_multistep_fake_aider_session() -> Parity
                           (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ((t aidermacs-comint-mode (run open listen connect stop)) t "explain src/main.el" 28 (0 nil))"#
-    ]],
+            r#"OK ((t aidermacs-comint-mode (run open listen connect stop)) t "explain src/main.el" 28 (0 nil))"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_with_editor_batch};
 
-fn with_editor_macro_scopes_editor_to_sleeping_fallback_and_restores_environment() -> ParityBatchCase {
+fn with_editor_macro_scopes_editor_to_sleeping_fallback_and_restores_environment() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "with_editor_macro_scopes_editor_to_sleeping_fallback_and_restores_environment",
         r##"(let ((process-environment
@@ -21,12 +22,13 @@ fn with_editor_macro_scopes_editor_to_sleeping_fallback_and_restores_environment
                        with-editor--envvar)))"##,
         true,
         expect![[
-        r#"OK (("sh -c 'printf \"\\nWITH-EDITOR: $$ OPEN $0\\037$1\\037 IN $(pwd)\\n\"; sleep 604800 & sleep=$!; trap \"kill $sleep; exit 0\" USR1; trap \"kill $sleep; exit 1\" USR2; wait $sleep'" nil "EDITOR") "original" nil nil)"#
-    ]],
+            r#"OK (("sh -c 'printf \"\\nWITH-EDITOR: $$ OPEN $0\\037$1\\037 IN $(pwd)\\n\"; sleep 604800 & sleep=$!; trap \"kill $sleep; exit 0\" USR1; trap \"kill $sleep; exit 1\" USR2; wait $sleep'" nil "EDITOR") "original" nil nil)"#
+        ]],
     )
 }
 
-fn with_editor_literal_and_dynamic_macros_set_only_requested_environment_variable() -> ParityBatchCase {
+fn with_editor_literal_and_dynamic_macros_set_only_requested_environment_variable()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "with_editor_literal_and_dynamic_macros_set_only_requested_environment_variable",
         r##"(let ((process-environment
@@ -50,8 +52,8 @@ fn with_editor_literal_and_dynamic_macros_set_only_requested_environment_variabl
                       (getenv "HG_EDITOR"))))"##,
         true,
         expect![[
-        r#"OK (("outer-editor" "sh -c 'printf \"\\nWITH-EDITOR: $$ OPEN $0\\037$1\\037 IN $(pwd)\\n\"; sleep 604800 & sleep=$!; trap \"kill $sleep; exit 0\" USR1; trap \"kill $sleep; exit 1\" USR2; wait $sleep'" "GIT_EDITOR") ("outer-editor" "sh -c 'printf \"\\nWITH-EDITOR: $$ OPEN $0\\037$1\\037 IN $(pwd)\\n\"; sleep 604800 & sleep=$!; trap \"kill $sleep; exit 0\" USR1; trap \"kill $sleep; exit 1\" USR2; wait $sleep'" "HG_EDITOR") ("outer-editor" "outer-git" "outer-hg"))"#
-    ]],
+            r#"OK (("outer-editor" "sh -c 'printf \"\\nWITH-EDITOR: $$ OPEN $0\\037$1\\037 IN $(pwd)\\n\"; sleep 604800 & sleep=$!; trap \"kill $sleep; exit 0\" USR1; trap \"kill $sleep; exit 1\" USR2; wait $sleep'" "GIT_EDITOR") ("outer-editor" "sh -c 'printf \"\\nWITH-EDITOR: $$ OPEN $0\\037$1\\037 IN $(pwd)\\n\"; sleep 604800 & sleep=$!; trap \"kill $sleep; exit 0\" USR1; trap \"kill $sleep; exit 1\" USR2; wait $sleep'" "HG_EDITOR") ("outer-editor" "outer-git" "outer-hg"))"#
+        ]],
     )
 }
 

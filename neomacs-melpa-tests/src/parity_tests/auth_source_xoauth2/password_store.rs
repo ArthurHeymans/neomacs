@@ -58,8 +58,8 @@ fn auth_source_xoauth2_pass_get_supports_entry_name_and_parsed_alist() -> Parity
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ("accounts/mail/alice:xoauth2_client_id" "parsed-secret" (("xoauth2_client_id" "accounts/mail/alice")))"#
-    ]],
+            r#"OK ("accounts/mail/alice:xoauth2_client_id" "parsed-secret" (("xoauth2_client_id" "accounts/mail/alice")))"#
+        ]],
     )
 }
 
@@ -87,8 +87,8 @@ fn auth_source_xoauth2_pass_get_reports_missing_and_unsupported_entries() -> Par
             (nreverse messages))))"##,
         true,
         expect![[
-        r#"OK (nil nil ("Missing XOAuth2 entry value for 'missing'" "Missing XOAuth2 entry value for 'missing'"))"#
-    ]],
+            r#"OK (nil nil ("Missing XOAuth2 entry value for 'missing'" "Missing XOAuth2 entry value for 'missing'"))"#
+        ]],
     )
 }
 
@@ -115,8 +115,8 @@ fn auth_source_xoauth2_pass_creds_builds_complete_provider_plist() -> ParityBatc
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:token-url "https://token.example" :client-id "client" :client-secret "secret" :refresh-token "refresh") ((:find "host" "user" 443) (:get "xoauth2_token_url" #1=(("xoauth2_token_url" . "https://token.example") ("xoauth2_client_id" . "client") ("xoauth2_client_secret" . "secret") ("xoauth2_refresh_token" . "refresh"))) (:get "xoauth2_client_id" #1#) (:get "xoauth2_client_secret" #1#) (:get "xoauth2_refresh_token" #1#)))"#
-    ]],
+            r#"OK ((:token-url "https://token.example" :client-id "client" :client-secret "secret" :refresh-token "refresh") ((:find "host" "user" 443) (:get "xoauth2_token_url" #1=(("xoauth2_token_url" . "https://token.example") ("xoauth2_client_id" . "client") ("xoauth2_client_secret" . "secret") ("xoauth2_refresh_token" . "refresh"))) (:get "xoauth2_client_id" #1#) (:get "xoauth2_client_secret" #1#) (:get "xoauth2_refresh_token" #1#)))"#
+        ]],
     )
 }
 

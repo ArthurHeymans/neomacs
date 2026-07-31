@@ -94,10 +94,6 @@ pub(crate) fn assert_auto_async_byte_compile_autoload_parity(elisp_form: &str, e
     );
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_auto_async_byte_compile_autoload_parity` cases (2a).
 pub(crate) fn assert_auto_async_byte_compile_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

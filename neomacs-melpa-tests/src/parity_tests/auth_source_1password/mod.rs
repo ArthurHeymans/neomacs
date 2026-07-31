@@ -88,10 +88,6 @@ pub(crate) fn assert_auth_source_1password_autoload_parity(elisp_form: &str, exp
     );
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_auth_source_1password_autoload_parity` cases (2a).
 pub(crate) fn assert_auth_source_1password_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

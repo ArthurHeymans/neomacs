@@ -49,10 +49,5 @@ pub(crate) fn assert_which_key_signal_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_which_key_parity` cases (2a).
 pub(crate) fn assert_which_key_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        which_key_oracle(),
-        &name,
-        "which_key_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(which_key_oracle(), &name, "which_key_parity", cases);
 }

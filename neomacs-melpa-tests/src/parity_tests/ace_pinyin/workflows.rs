@@ -9,7 +9,8 @@ use super::{ParityBatchCase, assert_ace_pinyin_batch};
 /// exactly on its character.  Jumping pushes a mark at the departure point and
 /// never edits the text.
 
-fn ace_pinyin_jumps_to_every_chinese_character_whose_pinyin_starts_with_the_typed_letter() -> ParityBatchCase {
+fn ace_pinyin_jumps_to_every_chinese_character_whose_pinyin_starts_with_the_typed_letter()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "ace_pinyin_jumps_to_every_chinese_character_whose_pinyin_starts_with_the_typed_letter",
         r##"(progn
@@ -30,8 +31,8 @@ fn ace_pinyin_jumps_to_every_chinese_character_whose_pinyin_starts_with_the_type
           :modified (buffer-modified-p))))"##,
         true,
         expect![[
-        r#"OK (:binding avy-goto-char :remapped-to ace-pinyin-jump-char :candidates ((2 "京") (26 "交") (40 "J") (81 "界")) :key-a (2 "京" 1 1) :mark-after-a 1 :key-s (26 "交" 2 2) :key-d (40 "J" 2 16) :key-f (81 "界" 4 4) :text "北京大学 Peking University\n上海交通大学 Shanghai Jiao Tong\n中文输入法 Chinese input method\n你好，世界！Hello, world.\n《汉语大词典》 traditional 學習漢語。\n" :modified nil)"#
-    ]],
+            r#"OK (:binding avy-goto-char :remapped-to ace-pinyin-jump-char :candidates ((2 "京") (26 "交") (40 "J") (81 "界")) :key-a (2 "京" 1 1) :mark-after-a 1 :key-s (26 "交" 2 2) :key-d (40 "J" 2 16) :key-f (81 "界" 4 4) :text "北京大学 Peking University\n上海交通大学 Shanghai Jiao Tong\n中文输入法 Chinese input method\n你好，世界！Hello, world.\n《汉语大词典》 traditional 學習漢語。\n" :modified nil)"#
+        ]],
     )
 }
 
@@ -67,8 +68,8 @@ fn ace_pinyin_mode_decides_per_buffer_whether_chinese_characters_are_jumpable() 
      :modified (buffer-modified-p))))"##,
         true,
         expect![[
-        r#"OK (:before (:cell avy-original :mode nil :offer (:landing (40 "J" 2 16) :candidates ((40 "J")))) :after-turn-on (:cell ace-pinyin-jump-char :mode t :lighter (ace-pinyin-mode " AcePY") :offer (:landing (2 "京" 1 1) :candidates ((2 "京") (26 "交") (40 "J") (81 "界")))) :other-buffer (:cell ace-pinyin-jump-char :mode nil :offer (:landing (5 "J" 1 4) :candidates ((5 "J")))) :after-turn-off (:cell avy-original :mode nil :offer (:landing (40 "J" 2 16) :candidates ((40 "J")))) :modified nil)"#
-    ]],
+            r#"OK (:before (:cell avy-original :mode nil :offer (:landing (40 "J" 2 16) :candidates ((40 "J")))) :after-turn-on (:cell ace-pinyin-jump-char :mode t :lighter (ace-pinyin-mode " AcePY") :offer (:landing (2 "京" 1 1) :candidates ((2 "京") (26 "交") (40 "J") (81 "界")))) :other-buffer (:cell ace-pinyin-jump-char :mode nil :offer (:landing (5 "J" 1 4) :candidates ((5 "J")))) :after-turn-off (:cell avy-original :mode nil :offer (:landing (40 "J" 2 16) :candidates ((40 "J")))) :modified nil)"#
+        ]],
     )
 }
 
@@ -93,8 +94,8 @@ fn ace_pinyin_finds_traditional_characters_once_simplified_only_is_turned_off() 
         :modified (buffer-modified-p)))"##,
         true,
         expect![[
-        r#"OK (:simplified-x (:landing (4 "学" 1 3) :candidates ((4 "学") (29 "学"))) :simplified-h (:landing (25 "海" 2 1) :candidates ((25 "海") (32 "h") (36 "h") (57 "h") (73 "h") (78 "好") (83 "H") (98 "汉"))) :traditional (:x (:landing (117 "學" 5 20) :candidates ((117 "學") (118 "習"))) :h (:landing (25 "海" 2 1) :candidates ((25 "海") (32 "h") (36 "h") (57 "h") (73 "h") (78 "好") (83 "H") (119 "漢"))) :y (:landing (22 "y" 1 21) :candidates ((22 "y") (120 "語")))) :restored (:landing (4 "学" 1 3) :candidates ((4 "学") (29 "学"))) :modified nil)"#
-    ]],
+            r#"OK (:simplified-x (:landing (4 "学" 1 3) :candidates ((4 "学") (29 "学"))) :simplified-h (:landing (25 "海" 2 1) :candidates ((25 "海") (32 "h") (36 "h") (57 "h") (73 "h") (78 "好") (83 "H") (98 "汉"))) :traditional (:x (:landing (117 "學" 5 20) :candidates ((117 "學") (118 "習"))) :h (:landing (25 "海" 2 1) :candidates ((25 "海") (32 "h") (36 "h") (57 "h") (73 "h") (78 "好") (83 "H") (119 "漢"))) :y (:landing (22 "y" 1 21) :candidates ((22 "y") (120 "語")))) :restored (:landing (4 "学" 1 3) :candidates ((4 "学") (29 "学"))) :modified nil)"#
+        ]],
     )
 }
 
@@ -119,12 +120,13 @@ fn ace_pinyin_translates_ascii_punctuation_to_its_chinese_counterpart() -> Parit
         :modified (buffer-modified-p)))"##,
         true,
         expect![[
-        r#"OK (:period (:landing (95 "." 4 18) :candidates ((95 ".") (121 "。"))) :comma (:landing (79 "，" 4 2) :candidates ((79 "，") (88 ","))) :angle (:landing (97 "《" 5 0) :candidates ((97 "《"))) :disabled (:period (:landing (95 "." 4 18) :candidates ((95 "."))) :angle (:landing (1 "北" 1 0) :candidates nil)) :re-enabled (:landing (97 "《" 5 0) :candidates ((97 "《"))) :modified nil)"#
-    ]],
+            r#"OK (:period (:landing (95 "." 4 18) :candidates ((95 ".") (121 "。"))) :comma (:landing (79 "，" 4 2) :candidates ((79 "，") (88 ","))) :angle (:landing (97 "《" 5 0) :candidates ((97 "《"))) :disabled (:period (:landing (95 "." 4 18) :candidates ((95 "."))) :angle (:landing (1 "北" 1 0) :candidates nil)) :re-enabled (:landing (97 "《" 5 0) :candidates ((97 "《"))) :modified nil)"#
+        ]],
     )
 }
 
-fn ace_pinyin_reports_zero_candidates_and_keeps_point_when_no_character_matches() -> ParityBatchCase {
+fn ace_pinyin_reports_zero_candidates_and_keeps_point_when_no_character_matches() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "ace_pinyin_reports_zero_candidates_and_keeps_point_when_no_character_matches",
         r##"(progn
@@ -142,8 +144,8 @@ fn ace_pinyin_reports_zero_candidates_and_keeps_point_when_no_character_matches(
           :messages (apy-test-messages-since mark))))"##,
         true,
         expect![[
-        r#"OK (:origin (50 "中" 3 0) :offer (:landing (50 "中" 3 0) :candidates nil) :mark nil :text "北京大学 Peking University\n上海交通大学 Shanghai Jiao Tong\n中文输入法 Chinese input method\n你好，世界！Hello, world.\n《汉语大词典》 traditional 學習漢語。\n" :modified nil :messages ("zero candidates"))"#
-    ]],
+            r#"OK (:origin (50 "中" 3 0) :offer (:landing (50 "中" 3 0) :candidates nil) :mark nil :text "北京大学 Peking University\n上海交通大学 Shanghai Jiao Tong\n中文输入法 Chinese input method\n你好，世界！Hello, world.\n《汉语大词典》 traditional 學習漢語。\n" :modified nil :messages ("zero candidates"))"#
+        ]],
     )
 }
 
@@ -173,12 +175,13 @@ fn ace_pinyin_word_jumping_follows_treat_word_as_char() -> ParityBatchCase {
         :modified (buffer-modified-p)))"##,
         true,
         expect![[
-        r#"OK (:enabled (:variable t :cell ace-pinyin-goto-word-1 :word-j (:landing (2 "京" 1 1) :candidates ((2 "京") (26 "交") (40 "J") (81 "界"))) :word-h (:landing (25 "海" 2 1) :candidates ((25 "海") (78 "好") (83 "H") (98 "汉"))) :char-h (:landing (25 "海" 2 1) :candidates ((25 "海") (32 "h") (36 "h") (57 "h") (73 "h") (78 "好") (83 "H") (98 "汉")))) :disabled (:cell avy-original :char-cell ace-pinyin-jump-char :word-j (:landing (40 "J" 2 16) :candidates ((40 "J"))) :word-h (:landing (83 "H" 4 6) :candidates ((83 "H"))) :char-j (:landing (2 "京" 1 1) :candidates ((2 "京") (26 "交") (40 "J") (81 "界")))) :modified nil)"#
-    ]],
+            r#"OK (:enabled (:variable t :cell ace-pinyin-goto-word-1 :word-j (:landing (2 "京" 1 1) :candidates ((2 "京") (26 "交") (40 "J") (81 "界"))) :word-h (:landing (25 "海" 2 1) :candidates ((25 "海") (78 "好") (83 "H") (98 "汉"))) :char-h (:landing (25 "海" 2 1) :candidates ((25 "海") (32 "h") (36 "h") (57 "h") (73 "h") (78 "好") (83 "H") (98 "汉")))) :disabled (:cell avy-original :char-cell ace-pinyin-jump-char :word-j (:landing (40 "J" 2 16) :candidates ((40 "J"))) :word-h (:landing (83 "H" 4 6) :candidates ((83 "H"))) :char-j (:landing (2 "京" 1 1) :candidates ((2 "京") (26 "交") (40 "J") (81 "界")))) :modified nil)"#
+        ]],
     )
 }
 
-fn ace_pinyin_jumps_to_a_two_character_chinese_word_by_its_two_pinyin_initials() -> ParityBatchCase {
+fn ace_pinyin_jumps_to_a_two_character_chinese_word_by_its_two_pinyin_initials() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "ace_pinyin_jumps_to_a_two_character_chinese_word_by_its_two_pinyin_initials",
         r##"(progn
@@ -196,8 +199,8 @@ fn ace_pinyin_jumps_to_a_two_character_chinese_word_by_its_two_pinyin_initials()
         :modified (buffer-modified-p)))"##,
         true,
         expect![[
-        r#"OK (:cell ace-pinyin-jump-char-2 :bei-jing (:landing (1 "北" 1 0) :candidates ((1 "北"))) :shang-hai (:landing (24 "上" 2 0) :candidates ((24 "上") (31 "S"))) :shang-hai-second (31 "S" 2 7) :hello (:landing (83 "H" 4 6) :candidates ((83 "H"))) :no-match (:landing (1 "北" 1 0) :candidates nil) :text "北京大学 Peking University\n上海交通大学 Shanghai Jiao Tong\n中文输入法 Chinese input method\n你好，世界！Hello, world.\n《汉语大词典》 traditional 學習漢語。\n" :modified nil)"#
-    ]],
+            r#"OK (:cell ace-pinyin-jump-char-2 :bei-jing (:landing (1 "北" 1 0) :candidates ((1 "北"))) :shang-hai (:landing (24 "上" 2 0) :candidates ((24 "上") (31 "S"))) :shang-hai-second (31 "S" 2 7) :hello (:landing (83 "H" 4 6) :candidates ((83 "H"))) :no-match (:landing (1 "北" 1 0) :candidates nil) :text "北京大学 Peking University\n上海交通大学 Shanghai Jiao Tong\n中文输入法 Chinese input method\n你好，世界！Hello, world.\n《汉语大词典》 traditional 學習漢語。\n" :modified nil)"#
+        ]],
     )
 }
 
@@ -220,8 +223,8 @@ fn ace_pinyin_dwim_restricts_itself_to_chinese_when_given_a_prefix_argument() ->
         :modified (buffer-modified-p)))"##,
         true,
         expect![[
-        r#"OK (:without-prefix (:landing (2 "京" 1 1) :candidates ((2 "京") (26 "交") (40 "J") (81 "界"))) :with-prefix (:landing (2 "京" 1 1) :candidates ((2 "京") (26 "交") (81 "界"))) :with-prefix-third (81 "界" 4 4) :chinese-only-h (:landing (25 "海" 2 1) :candidates ((25 "海") (78 "好") (98 "汉"))) :text "北京大学 Peking University\n上海交通大学 Shanghai Jiao Tong\n中文输入法 Chinese input method\n你好，世界！Hello, world.\n《汉语大词典》 traditional 學習漢語。\n" :modified nil)"#
-    ]],
+            r#"OK (:without-prefix (:landing (2 "京" 1 1) :candidates ((2 "京") (26 "交") (40 "J") (81 "界"))) :with-prefix (:landing (2 "京" 1 1) :candidates ((2 "京") (26 "交") (81 "界"))) :with-prefix-third (81 "界" 4 4) :chinese-only-h (:landing (25 "海" 2 1) :candidates ((25 "海") (78 "好") (98 "汉"))) :text "北京大学 Peking University\n上海交通大学 Shanghai Jiao Tong\n中文输入法 Chinese input method\n你好，世界！Hello, world.\n《汉语大词典》 traditional 學習漢語。\n" :modified nil)"#
+        ]],
     )
 }
 

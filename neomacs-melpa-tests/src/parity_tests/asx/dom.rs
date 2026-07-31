@@ -18,12 +18,13 @@ fn asx_normalizes_a_realistic_question_page_into_the_complete_post_model() -> Pa
            (asx-test-post-dom))))"##,
         true,
         expect![[
-        r#"OK (:url "https://stackoverflow.com/questions/101/first" :title "How to  ?" :body ((div ((class . "post-text")) (p nil "Question " (strong nil "body") ".") (pre ((class . "lang-emacs-lisp")) "(+ 1 2)"))) :score "12" :answers ((:body ((div ((class . "post-text")) (p nil "First answer."))) :score "7") (:body ((div ((class . "post-text")) (p nil "Second " (a ((href . "https://example.com")) "answer") "."))) :score "-1")) :tags ("emacs" "elisp"))"#
-    ]],
+            r#"OK (:url "https://stackoverflow.com/questions/101/first" :title "How to  ?" :body ((div ((class . "post-text")) (p nil "Question " (strong nil "body") ".") (pre ((class . "lang-emacs-lisp")) "(+ 1 2)"))) :score "12" :answers ((:body ((div ((class . "post-text")) (p nil "First answer."))) :score "7") (:body ((div ((class . "post-text")) (p nil "Second " (a ((href . "https://example.com")) "answer") "."))) :score "-1")) :tags ("emacs" "elisp"))"#
+        ]],
     )
 }
 
-fn asx_normalization_uses_the_selected_post_url_and_preserves_empty_collections() -> ParityBatchCase {
+fn asx_normalization_uses_the_selected_post_url_and_preserves_empty_collections() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asx_normalization_uses_the_selected_post_url_and_preserves_empty_collections",
         r##"(let ((asx--posts
@@ -50,8 +51,8 @@ fn asx_normalization_uses_the_selected_post_url_and_preserves_empty_collections(
           (asx--normalize-post dom)))"##,
         true,
         expect![[
-        r#"OK (:url "https://example.invalid/questions/2" :title "Question without answers" :body ((div ((class . "post-text")) (p nil "Only a body."))) :score "0" :answers nil :tags nil)"#
-    ]],
+            r#"OK (:url "https://example.invalid/questions/2" :title "Question without answers" :body ((div ((class . "post-text")) (p nil "Only a body."))) :score "0" :answers nil :tags nil)"#
+        ]],
     )
 }
 
@@ -114,12 +115,13 @@ fn asx_extracts_answer_bodies_and_scores_from_each_answercell_parent() -> Parity
            answers)))"##,
         true,
         expect![[
-        r#"OK (2 ((:score "7" :body-text ("First answer.") :links nil) (:score "-1" :body-text ("Second  answer .") :links (("https://example.com" "answer")))))"#
-    ]],
+            r#"OK (2 ((:score "7" :body-text ("First answer.") :links nil) (:score "-1" :body-text ("Second  answer .") :links (("https://example.com" "answer")))))"#
+        ]],
     )
 }
 
-fn asx_language_detection_handles_stackexchange_classes_and_non_language_classes() -> ParityBatchCase {
+fn asx_language_detection_handles_stackexchange_classes_and_non_language_classes() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asx_language_detection_handles_stackexchange_classes_and_non_language_classes",
         r##"(mapcar
@@ -151,8 +153,8 @@ fn asx_language_detection_handles_stackexchange_classes_and_non_language_classes
            nil))"##,
         true,
         expect![[
-        r#"OK (("lang-emacs-lisp" "emacs" "emacs") ("prettyprint lang-python linenums" "python" "python") ("language-rust" nil nil) ("lang-c++ extra" "c" "c") ("lang-" nil nil) ("" nil nil) (nil (wrong-type-argument (stringp nil)) nil))"#
-    ]],
+            r#"OK (("lang-emacs-lisp" "emacs" "emacs") ("prettyprint lang-python linenums" "python" "python") ("language-rust" nil nil) ("lang-c++ extra" "c" "c") ("lang-" nil nil) ("" nil nil) (nil (wrong-type-argument (stringp nil)) nil))"#
+        ]],
     )
 }
 
@@ -176,12 +178,13 @@ fn asx_maps_text_links_to_org_links_but_keeps_image_links_as_dom() -> ParityBatc
          (asx--map-node nil))"##,
         true,
         expect![[
-        r#"OK ("[[https://example.com/a?x=1&y=2][Read  the answer]]" (a ((href . "https://example.com/full")) (img ((src . "https://example.com/image.png") (alt . "diagram")))) "literal text" 17 nil)"#
-    ]],
+            r#"OK ("[[https://example.com/a?x=1&y=2][Read  the answer]]" (a ((href . "https://example.com/full")) (img ((src . "https://example.com/image.png") (alt . "diagram")))) "literal text" 17 nil)"#
+        ]],
     )
 }
 
-fn asx_maps_pre_blocks_to_org_example_blocks_with_detected_or_fallback_language() -> ParityBatchCase {
+fn asx_maps_pre_blocks_to_org_example_blocks_with_detected_or_fallback_language() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asx_maps_pre_blocks_to_org_example_blocks_with_detected_or_fallback_language",
         r##"(mapcar
@@ -198,8 +201,8 @@ fn asx_maps_pre_blocks_to_org_example_blocks_with_detected_or_fallback_language(
             (code nil "print('nested')"))))"##,
         true,
         expect![[
-        r##"OK ((pre nil "#+BEGIN_EXAMPLE " "rust" "\n" ("fn main() {\n    println!(\"hi\");\n}") "\n" "#+END_EXAMPLE") (pre nil "#+BEGIN_EXAMPLE " "prog" "\n" ("(message \"plain\")") nil "#+END_EXAMPLE") (pre nil "#+BEGIN_EXAMPLE " "prog" "\n" ("unclassified") "\n" "#+END_EXAMPLE") (pre nil "#+BEGIN_EXAMPLE " "python" "\n" ((code nil "print('nested')")) "\n" "#+END_EXAMPLE"))"##
-    ]],
+            r##"OK ((pre nil "#+BEGIN_EXAMPLE " "rust" "\n" ("fn main() {\n    println!(\"hi\");\n}") "\n" "#+END_EXAMPLE") (pre nil "#+BEGIN_EXAMPLE " "prog" "\n" ("(message \"plain\")") nil "#+END_EXAMPLE") (pre nil "#+BEGIN_EXAMPLE " "prog" "\n" ("unclassified") "\n" "#+END_EXAMPLE") (pre nil "#+BEGIN_EXAMPLE " "python" "\n" ((code nil "print('nested')")) "\n" "#+END_EXAMPLE"))"##
+        ]],
     )
 }
 
@@ -227,8 +230,8 @@ fn asx_recursively_maps_a_practical_mixed_post_body_without_losing_structure() -
             "(mapcar #'1+ '(1 2 3))")))"##,
         true,
         expect![[
-        r##"OK (div ((class . "post-text")) (p nil "See " "[[https://www.gnu.org/software/emacs/][GNU Emacs]]" " and compare:") (ul nil (li nil "first") (li nil "second " (code nil "(+ 1 2)"))) (blockquote nil (p nil "quoted advice")) (pre nil "#+BEGIN_EXAMPLE " "emacs" "\n" ("(mapcar #'1+ '(1 2 3))") "\n" "#+END_EXAMPLE"))"##
-    ]],
+            r##"OK (div ((class . "post-text")) (p nil "See " "[[https://www.gnu.org/software/emacs/][GNU Emacs]]" " and compare:") (ul nil (li nil "first") (li nil "second " (code nil "(+ 1 2)"))) (blockquote nil (p nil "quoted advice")) (pre nil "#+BEGIN_EXAMPLE " "emacs" "\n" ("(mapcar #'1+ '(1 2 3))") "\n" "#+END_EXAMPLE"))"##
+        ]],
     )
 }
 

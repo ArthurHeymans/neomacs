@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asm_blox_batch};
 
-fn asm_blox_parser_handles_nested_commands_comments_numbers_symbols_chars_and_positions() -> ParityBatchCase {
+fn asm_blox_parser_handles_nested_commands_comments_numbers_symbols_chars_and_positions()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asm_blox_parser_handles_nested_commands_comments_numbers_symbols_chars_and_positions",
         r##"(mapcar
@@ -11,8 +12,8 @@ fn asm_blox_parser_handles_nested_commands_comments_numbers_symbols_chars_and_po
           "; calculate and route\n(const -999)\n(send right (add (const 12) (const ?A)))\n(const ?\\n)\n(const ?\\s)\n(const ?\\b)"))"##,
         true,
         expect![
-        "OK (((CONST -999) 23 35) ((SEND RIGHT ((ADD ((CONST 12) 53 63) ((CONST 65) 64 74)) 48 75)) 36 76) ((CONST 10) 77 88) ((CONST 32) 89 100) ((CONST 8) 101 112))"
-    ],
+            "OK (((CONST -999) 23 35) ((SEND RIGHT ((ADD ((CONST 12) 53 63) ((CONST 65) 64 74)) 48 75)) 36 76) ((CONST 10) 77 88) ((CONST 32) 89 100) ((CONST 8) 101 112))"
+        ],
     )
 }
 
@@ -35,12 +36,13 @@ fn asm_blox_parser_reports_precise_malformed_input_boundaries_and_messages() -> 
            "((const 1))"))"##,
         true,
         expect![[
-        r#"OK ((")" (error 1 "SYNTAX ERROR")) ("(const 1" (error 9 "SYNTAX ERROR")) ("(const 1000)" (error 12 "TOO HIGH NUMBER")) ("(const -1000)" (error 13 "TOO LOW NUMBER")) ("(const ? )" (error 9 "INVALID CHAR")) ("(const ?\\x)" (error 10 "BAD ESCAPE CODE")) ("(const 1 @)" (error 10 "unexpected character")) ("(const -)" (#s(asm-blox-code-node (CONST 0) 1 10))) ("((const 1))" (#s(asm-blox-code-node (#s(asm-blox-code-node (CONST 1) 2 11)) 1 12))))"#
-    ]],
+            r#"OK ((")" (error 1 "SYNTAX ERROR")) ("(const 1" (error 9 "SYNTAX ERROR")) ("(const 1000)" (error 12 "TOO HIGH NUMBER")) ("(const -1000)" (error 13 "TOO LOW NUMBER")) ("(const ? )" (error 9 "INVALID CHAR")) ("(const ?\\x)" (error 10 "BAD ESCAPE CODE")) ("(const 1 @)" (error 10 "unexpected character")) ("(const -)" (#s(asm-blox-code-node (CONST 0) 1 10))) ("((const 1))" (#s(asm-blox-code-node (#s(asm-blox-code-node (CONST 1) 2 11)) 1 12))))"#
+        ]],
     )
 }
 
-fn asm_blox_cell_parser_dispatches_empty_wat_yaml_and_sexp_cells_into_runtime_shapes() -> ParityBatchCase {
+fn asm_blox_cell_parser_dispatches_empty_wat_yaml_and_sexp_cells_into_runtime_shapes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asm_blox_cell_parser_dispatches_empty_wat_yaml_and_sexp_cells_into_runtime_shapes",
         r##"(let ((cases
@@ -68,12 +70,13 @@ fn asm_blox_cell_parser_dispatches_empty_wat_yaml_and_sexp_cells_into_runtime_sh
           cases))"##,
         true,
         expect![[
-        r#"OK (((:row 1 :col 2 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) nil nil nil nil) ((:row 1 :col 2 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) nil nil nil nil) ((:row 1 :col 2 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (((CONST 7) 1 10)) nil nil nil) ((:row 1 :col 2 :pc nil :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) nil asm-blox--yaml-step-stack asm-blox--yaml-message-stack ((inputPort . "left") (outputPort . "right") (size . 4))) ((:row 1 :col 2 :pc nil :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) nil asm-blox--yaml-step-stack asm-blox--yaml-message-stack ((size . 4) (outputPort . "right") (inputPort . "left"))))"#
-    ]],
+            r#"OK (((:row 1 :col 2 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) nil nil nil nil) ((:row 1 :col 2 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) nil nil nil nil) ((:row 1 :col 2 :pc 0 :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) (((CONST 7) 1 10)) nil nil nil) ((:row 1 :col 2 :pc nil :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) nil asm-blox--yaml-step-stack asm-blox--yaml-message-stack ((inputPort . "left") (outputPort . "right") (size . 4))) ((:row 1 :col 2 :pc nil :stack nil :ports (nil nil nil nil) :staging (nil nil nil nil) :state nil) nil asm-blox--yaml-step-stack asm-blox--yaml-message-stack ((size . 4) (outputPort . "right") (inputPort . "left"))))"#
+        ]],
     )
 }
 
-fn asm_blox_command_validator_accepts_real_programs_and_rejects_bad_arity_type_and_names() -> ParityBatchCase {
+fn asm_blox_command_validator_accepts_real_programs_and_rejects_bad_arity_type_and_names()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asm_blox_command_validator_accepts_real_programs_and_rejects_bad_arity_type_and_names",
         r##"(mapcar
@@ -98,12 +101,13 @@ fn asm_blox_command_validator_accepts_real_programs_and_rejects_bad_arity_type_a
            "()"))"##,
         true,
         expect![[
-        r#"OK (("(const 7)" nil) ("(send right (add (const 2) (const 3)))" nil) ("(get -1)" nil) ("(get left)" nil) ("(clr)" nil) ("(const)" (error 1 "not enough args")) ("(const left)" (error 1 "bad arg to 'CONST'")) ("(const 1 2)" (error 1 "too many args")) ("(send diagonal)" (error 1 "bad arg to 'SEND'")) ("(send right 8)" (error 1 "bad end expressions")) ("(unknown 1)" (error 1 "Command not found")) ("()" (error 1 "No command found")))"#
-    ]],
+            r#"OK (("(const 7)" nil) ("(send right (add (const 2) (const 3)))" nil) ("(get -1)" nil) ("(get left)" nil) ("(clr)" nil) ("(const)" (error 1 "not enough args")) ("(const left)" (error 1 "bad arg to 'CONST'")) ("(const 1 2)" (error 1 "too many args")) ("(send diagonal)" (error 1 "bad arg to 'SEND'")) ("(send right 8)" (error 1 "bad end expressions")) ("(unknown 1)" (error 1 "Command not found")) ("()" (error 1 "No command found")))"#
+        ]],
     )
 }
 
-fn asm_blox_problem_banned_commands_are_enforced_during_practical_cell_compilation() -> ParityBatchCase {
+fn asm_blox_problem_banned_commands_are_enforced_during_practical_cell_compilation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asm_blox_problem_banned_commands_are_enforced_during_practical_cell_compilation",
         r##"(let ((asm-blox--extra-gameboard-cells
@@ -126,12 +130,13 @@ fn asm_blox_problem_banned_commands_are_enforced_during_practical_cell_compilati
             "(rem (const 8) (const 3))")))"##,
         true,
         expect![[
-        r#"OK ((((CONST 2) 6 15) ((CONST 3) 16 25) ((ADD #s(asm-blox-code-node (CONST 2) 6 15) #s(asm-blox-code-node (CONST 3) 16 25)) 1 26)) (error 1 . #1=("Command banned")) (error 1 . #1#) (error 1 . #1#))"#
-    ]],
+            r#"OK ((((CONST 2) 6 15) ((CONST 3) 16 25) ((ADD #s(asm-blox-code-node (CONST 2) 6 15) #s(asm-blox-code-node (CONST 3) 16 25)) 1 26)) (error 1 . #1=("Command banned")) (error 1 . #1#) (error 1 . #1#))"#
+        ]],
     )
 }
 
-fn asm_blox_compiler_flattens_subexpressions_in_execution_order_and_preserves_source_spans() -> ParityBatchCase {
+fn asm_blox_compiler_flattens_subexpressions_in_execution_order_and_preserves_source_spans()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asm_blox_compiler_flattens_subexpressions_in_execution_order_and_preserves_source_spans",
         r##"(let* ((tree
@@ -144,12 +149,13 @@ fn asm_blox_compiler_flattens_subexpressions_in_execution_order_and_preserves_so
           assembly))"##,
         true,
         expect![
-        "OK (((CONST 12) 18 28) ((CONST 3) 34 43) ((CONST 4) 44 53) ((MUL #1=#s(asm-blox-code-node (CONST 3) 34 43) #2=#s(asm-blox-code-node (CONST 4) 44 53)) 29 54) ((ADD #3=#s(asm-blox-code-node (CONST 12) 18 28) #4=#s(asm-blox-code-node (MUL #1# #2#) 29 54)) 13 55) ((SEND RIGHT #s(asm-blox-code-node (ADD #3# #4#) 13 55)) 1 56))"
-    ],
+            "OK (((CONST 12) 18 28) ((CONST 3) 34 43) ((CONST 4) 44 53) ((MUL #1=#s(asm-blox-code-node (CONST 3) 34 43) #2=#s(asm-blox-code-node (CONST 4) 44 53)) 29 54) ((ADD #3=#s(asm-blox-code-node (CONST 12) 18 28) #4=#s(asm-blox-code-node (MUL #1# #2#) 29 54)) 13 55) ((SEND RIGHT #s(asm-blox-code-node (ADD #3# #4#) 13 55)) 1 56))"
+        ],
     )
 }
 
-fn asm_blox_compiler_resolves_nested_block_loop_and_branch_targets_deterministically() -> ParityBatchCase {
+fn asm_blox_compiler_resolves_nested_block_loop_and_branch_targets_deterministically()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asm_blox_compiler_resolves_nested_block_loop_and_branch_targets_deterministically",
         r##"(cl-letf
@@ -167,8 +173,8 @@ fn asm_blox_compiler_resolves_nested_block_loop_and_branch_targets_deterministic
             assembly)))"##,
         true,
         expect![
-        "OK (((CONST 3) 8 17) ((LABEL L_22_2) nil nil) ((DEC -1) 24 32) ((DUP) 33 38) ((JMP_IF 1) 39 48) ((JMP 7) 50 56) ((CONST 99) 57 67) ((LABEL L_11_1) nil nil))"
-    ],
+            "OK (((CONST 3) 8 17) ((LABEL L_22_2) nil nil) ((DEC -1) 24 32) ((DUP) 33 38) ((JMP_IF 1) 39 48) ((JMP 7) 50 56) ((CONST 99) 57 67) ((LABEL L_11_1) nil nil))"
+        ],
     )
 }
 
@@ -192,12 +198,13 @@ fn asm_blox_branch_compiler_rejects_out_of_scope_labels_at_nested_depths() -> Pa
               "(block (loop (br 1)))"))))"##,
         true,
         expect![[
-        r#"OK (("(br 0)" (error 1 . #1=("Label not found"))) ("(block (br 1))" (error 8 . #1#)) ("(loop (br_if 2))" (error 7 "Label not found")) ("(block (loop (br 1)))" (#s(asm-blox-code-node (LABEL L_4_2) nil nil) #s(asm-blox-code-node (JMP 2) 14 20) #s(asm-blox-code-node (LABEL L_3_1) nil nil))))"#
-    ]],
+            r#"OK (("(br 0)" (error 1 . #1=("Label not found"))) ("(block (br 1))" (error 8 . #1#)) ("(loop (br_if 2))" (error 7 "Label not found")) ("(block (loop (br 1)))" (#s(asm-blox-code-node (LABEL L_4_2) nil nil) #s(asm-blox-code-node (JMP 2) 14 20) #s(asm-blox-code-node (LABEL L_3_1) nil nil))))"#
+        ]],
     )
 }
 
-fn asm_blox_label_resolver_mutates_all_jump_kinds_and_leaves_other_instructions_intact() -> ParityBatchCase {
+fn asm_blox_label_resolver_mutates_all_jump_kinds_and_leaves_other_instructions_intact()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asm_blox_label_resolver_mutates_all_jump_kinds_and_leaves_other_instructions_intact",
         r##"(let* ((assembly
@@ -220,12 +227,13 @@ fn asm_blox_label_resolver_mutates_all_jump_kinds_and_leaves_other_instructions_
           assembly))"##,
         true,
         expect![
-        "OK (((LABEL alpha) 1 2) ((CONST 7) 1 2) ((JMP 4) 1 2) ((JMP_IF 0) 1 2) ((LABEL beta) 1 2) ((JMP_IF_NOT 4) 1 2) ((SEND RIGHT) 1 2))"
-    ],
+            "OK (((LABEL alpha) 1 2) ((CONST 7) 1 2) ((JMP 4) 1 2) ((JMP_IF 0) 1 2) ((LABEL beta) 1 2) ((JMP_IF_NOT 4) 1 2) ((SEND RIGHT) 1 2))"
+        ],
     )
 }
 
-fn asm_blox_flatten_and_port_predicates_cover_proper_improper_nil_string_and_symbol_inputs() -> ParityBatchCase {
+fn asm_blox_flatten_and_port_predicates_cover_proper_improper_nil_string_and_symbol_inputs()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asm_blox_flatten_and_port_predicates_cover_proper_improper_nil_string_and_symbol_inputs",
         r##"(list
@@ -247,8 +255,8 @@ fn asm_blox_flatten_and_port_predicates_cover_proper_improper_nil_string_and_sym
             nil 1)))"##,
         true,
         expect![[
-        r#"OK (((1 2 3 4) (a b c d) nil (1 2 3)) ((UP (UP . #1=(DOWN . #2=(LEFT . #3=(RIGHT))))) (DOWN #1#) (LEFT #2#) (RIGHT #3#) (up nil) (down nil) ("UP" (UP DOWN LEFT . #4=(RIGHT))) ("RIGHT" #4#) ("up" nil) ("diagonal" nil) (nil nil) (1 nil)))"#
-    ]],
+            r#"OK (((1 2 3 4) (a b c d) nil (1 2 3)) ((UP (UP . #1=(DOWN . #2=(LEFT . #3=(RIGHT))))) (DOWN #1#) (LEFT #2#) (RIGHT #3#) (up nil) (down nil) ("UP" (UP DOWN LEFT . #4=(RIGHT))) ("RIGHT" #4#) ("up" nil) ("diagonal" nil) (nil nil) (1 nil)))"#
+        ]],
     )
 }
 

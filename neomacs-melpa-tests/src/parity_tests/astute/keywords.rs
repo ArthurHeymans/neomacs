@@ -14,8 +14,8 @@ fn astute_default_keyword_builder_emits_all_eight_rules_in_precedence_order() ->
           astute-prefix-single-quote-exceptions))"##,
         true,
         expect![[
-        r#"OK (8 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))) ("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—")))) (single-quote double-quote en-dash em-dash) ("bout" "em" "n'" "cause" "round" "twas" "tis"))"#
-    ]],
+            r#"OK (8 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))) ("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—")))) (single-quote double-quote en-dash em-dash) ("bout" "em" "n'" "cause" "round" "twas" "tis"))"#
+        ]],
     )
 }
 
@@ -27,8 +27,8 @@ fn astute_single_quote_keyword_set_contains_open_inner_close_and_prefix_rules() 
          (astute-init-font-lock))"##,
         true,
         expect![[
-        r#"OK (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))))"#
-    ]],
+            r#"OK (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))))"#
+        ]],
     )
 }
 
@@ -49,8 +49,8 @@ fn astute_each_non_single_transform_selects_only_its_owned_typography_rules() ->
            (en-dash double-quote)))"##,
         true,
         expect![[
-        r#"OK (((double-quote) (("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))))) ((en-dash) (("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))))) ((em-dash) (("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((double-quote em-dash) (("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((en-dash double-quote) (("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))))))"#
-    ]],
+            r#"OK (((double-quote) (("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))))) ((en-dash) (("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))))) ((em-dash) (("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((double-quote em-dash) (("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((en-dash double-quote) (("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))))))"#
+        ]],
     )
 }
 
@@ -74,8 +74,8 @@ fn astute_empty_unknown_and_duplicate_transform_entries_have_set_semantics() -> 
            (en-dash double-quote single-quote em-dash)))"##,
         true,
         expect![[
-        r#"OK ((nil 0 nil) ((unknown) 0 nil) ((single-quote single-quote) 4 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))))) ((em-dash unknown em-dash) 1 (("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((em-dash single-quote double-quote en-dash) 8 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))) ("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((en-dash double-quote single-quote em-dash) 8 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))) ("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))))"#
-    ]],
+            r#"OK ((nil 0 nil) ((unknown) 0 nil) ((single-quote single-quote) 4 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))))) ((em-dash unknown em-dash) 1 (("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((em-dash single-quote double-quote en-dash) 8 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))) ("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))) ((en-dash double-quote single-quote em-dash) 8 (("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) ("[:alnum:]\\('\\)[:alnum:]" (1 '(face nil display "’"))) ("[[:alnum:][:punct:]]\\('\\)" (1 '(face nil display "’"))) ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Oo][Uu][Tt]\\|\\(?1:'\\)[Ee][Mm]\\|\\(?1:'\\)[Nn]'\\|\\(?1:'\\)[Cc][Aa][Uu][Ss][Ee]\\|\\(?1:'\\)[Rr][Oo][Uu][Nn][Dd]\\|\\(?1:'\\)[Tt][Ww][Aa][Ss]\\|\\(?1:'\\)[Tt][Ii][Ss]" (1 '(face nil display "’"))) ("\\(\"\\)[[:alnum:][:punct:]]" (1 '(face nil display "“"))) ("[[:alnum:][:punct:]]\\(\"\\)" (1 '(face nil display "”"))) ("[^-]\\(--\\)[^-]" (1 '(face nil display "–"))) ("[^-]\\(---\\)[^-]" (1 '(face nil display "—"))))))"#
+        ]],
     )
 }
 
@@ -103,12 +103,13 @@ fn astute_keyword_builder_uses_current_custom_exception_values_on_every_call() -
            (nth 0 second))))"##,
         true,
         expect![[
-        r#"OK ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Aa][Ll][Pp][Hh][Aa]" "\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Ee][Tt][Aa]\\|\\(?1:'\\)[Gg][Aa][Mm][Mm][Aa]" nil nil nil)"#
-    ]],
+            r#"OK ("\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Aa][Ll][Pp][Hh][Aa]" "\\(?1:'\\)[0-9][0-9]s?\\|\\(?1:'\\)[Bb][Ee][Tt][Aa]\\|\\(?1:'\\)[Gg][Aa][Mm][Mm][Aa]" nil nil nil)"#
+        ]],
     )
 }
 
-fn astute_keyword_builder_returns_fresh_mutable_lists_without_altering_custom_defaults() -> ParityBatchCase {
+fn astute_keyword_builder_returns_fresh_mutable_lists_without_altering_custom_defaults()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "astute_keyword_builder_returns_fresh_mutable_lists_without_altering_custom_defaults",
         r##"(let* ((default-transforms
@@ -140,8 +141,8 @@ fn astute_keyword_builder_returns_fresh_mutable_lists_without_altering_custom_de
             default-exceptions)))"##,
         true,
         expect![[
-        r#"OK (mutated ("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) nil t ("temporarily-mutated" "em" "n'" "cause" "round" "twas" "tis") ("bout" "em" "n'" "cause" "round" "twas" "tis"))"#
-    ]],
+            r#"OK (mutated ("\\('\\)[[:alnum:][:punct:]]" (1 '(face nil display "‘"))) nil t ("temporarily-mutated" "em" "n'" "cause" "round" "twas" "tis") ("bout" "em" "n'" "cause" "round" "twas" "tis"))"#
+        ]],
     )
 }
 

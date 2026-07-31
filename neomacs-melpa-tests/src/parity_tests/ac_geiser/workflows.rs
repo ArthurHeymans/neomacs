@@ -36,8 +36,8 @@ fn setup_puts_the_geiser_source_first_for_the_current_buffer_only() -> ParityBat
     (nreverse observed)))"##,
         true,
         expect![
-        "OK ((:default-sources #1=(ac-source-words-in-same-mode-buffers) :repl-mode-known nil :scheme-mode-known t) (:sources (ac-source-geiser . #1#) :buffer-local t :repl-mode-known t) (:other-sources #1#))"
-    ],
+            "OK ((:default-sources #1=(ac-source-words-in-same-mode-buffers) :repl-mode-known nil :scheme-mode-known t) (:sources (ac-source-geiser . #1#) :buffer-local t :repl-mode-known t) (:other-sources #1#))"
+        ],
     )
 }
 
@@ -66,8 +66,8 @@ fn completing_at_the_repl_asks_the_live_scheme_and_inserts_the_choice() -> Parit
                   :mode major-mode))))"##,
         true,
         expect![[
-        r#"OK (:prefix "ca" :candidates ("car" "case" "cadr" "call-with-values") :annotation "g" :properties (symbol "g" document ac-geiser-documentation) :requests ("(geiser:eval #f (geiser:completions \"ca\"))") :line "car" :column 21 :buffer "*Geiser Fake REPL*" :mode geiser-repl-mode)"#
-    ]],
+            r#"OK (:prefix "ca" :candidates ("car" "case" "cadr" "call-with-values") :annotation "g" :properties (symbol "g" document ac-geiser-documentation) :requests ("(geiser:eval #f (geiser:completions \"ca\"))") :line "car" :column 21 :buffer "*Geiser Fake REPL*" :mode geiser-repl-mode)"#
+        ]],
     )
 }
 
@@ -90,8 +90,8 @@ fn completing_in_a_scheme_buffer_merges_local_bindings_with_repl_symbols() -> Pa
           :requests (acg-test-requests))))"##,
         true,
         expect![[
-        r#"OK (:live t :prefix "ca" :from-geiser ("carriage" "cadence" "call-with-values" "car" "case" "cadr") :candidates ("car" "case" "cadr" "cadence" "cadence" "carriage" "carriage" "call-with-values") :requests ("(geiser:eval #f (geiser:completions \"ca\"))" "(geiser:eval #f (geiser:completions \"ca\"))"))"#
-    ]],
+            r#"OK (:live t :prefix "ca" :from-geiser ("carriage" "cadence" "call-with-values" "car" "case" "cadr") :candidates ("car" "case" "cadr" "cadence" "cadence" "carriage" "carriage" "call-with-values") :requests ("(geiser:eval #f (geiser:completions \"ca\"))" "(geiser:eval #f (geiser:completions \"ca\"))"))"#
+        ]],
     )
 }
 
@@ -110,8 +110,8 @@ fn each_candidate_documents_itself_from_the_running_scheme() -> ParityBatchCase 
         :requests (acg-test-requests)))"##,
         true,
         expect![[
-        r#"OK (:car #("(car pair)\n----\nReturn the contents of the car of PAIR." 1 4 (face geiser-font-lock-autodoc-identifier)) :case #("(case key clauses)\n----\nEvaluate the clause whose datum matches KEY." 1 5 (face geiser-font-lock-autodoc-identifier)) :cadr #("(cadr pair)\n----\n" 1 5 (face geiser-font-lock-autodoc-identifier)) :requests ("(geiser:eval #f (geiser:completions \"ca\"))" "(geiser:eval #f (geiser:symbol-documentation (quote car)))" "(geiser:eval #f (geiser:symbol-documentation (quote case)))" "(geiser:eval #f (geiser:symbol-documentation (quote cadr)))"))"#
-    ]],
+            r#"OK (:car #("(car pair)\n----\nReturn the contents of the car of PAIR." 1 4 (face geiser-font-lock-autodoc-identifier)) :case #("(case key clauses)\n----\nEvaluate the clause whose datum matches KEY." 1 5 (face geiser-font-lock-autodoc-identifier)) :cadr #("(cadr pair)\n----\n" 1 5 (face geiser-font-lock-autodoc-identifier)) :requests ("(geiser:eval #f (geiser:completions \"ca\"))" "(geiser:eval #f (geiser:symbol-documentation (quote car)))" "(geiser:eval #f (geiser:symbol-documentation (quote case)))" "(geiser:eval #f (geiser:symbol-documentation (quote cadr)))"))"#
+        ]],
     )
 }
 
@@ -131,8 +131,8 @@ fn a_prefix_the_scheme_does_not_know_produces_no_candidates() -> ParityBatchCase
         :requests (acg-test-requests)))"##,
         true,
         expect![[
-        r#"OK (:prefix "zzz" :from-geiser nil :candidates nil :line "zzz" :requests ("(geiser:eval #f (geiser:completions \"zzz\"))" "(geiser:eval #f (geiser:completions \"zzz\"))"))"#
-    ]],
+            r#"OK (:prefix "zzz" :from-geiser nil :candidates nil :line "zzz" :requests ("(geiser:eval #f (geiser:completions \"zzz\"))" "(geiser:eval #f (geiser:completions \"zzz\"))"))"#
+        ]],
     )
 }
 
@@ -154,8 +154,8 @@ fn without_a_running_repl_the_source_stays_silent_and_contacts_no_scheme() -> Pa
         :line (acg-test-line)))"##,
         true,
         expect![[
-        r#"OK (:live nil :from-geiser nil :prefix "ca" :candidates ("cabbage" "carriage") :sources (ac-source-geiser ac-source-words-in-same-mode-buffers) :requests no-request :line "ca")"#
-    ]],
+            r#"OK (:live nil :from-geiser nil :prefix "ca" :candidates ("cabbage" "carriage") :sources (ac-source-geiser ac-source-words-in-same-mode-buffers) :requests no-request :line "ca")"#
+        ]],
     )
 }
 

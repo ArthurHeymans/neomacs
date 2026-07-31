@@ -44,10 +44,5 @@ pub(crate) fn assert_async_signal_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_async_parity` cases (2a).
 pub(crate) fn assert_async_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        async_oracle(),
-        &name,
-        "async_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(async_oracle(), &name, "async_parity", cases);
 }

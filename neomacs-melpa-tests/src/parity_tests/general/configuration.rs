@@ -24,8 +24,8 @@ fn general_public_sorters_order_mixed_key_and_state_descriptors_exactly() -> Par
                  (copy-tree by-cadr))))"##,
         true,
         expect![[
-        r#"OK (((nil . 3) ([f2] . 2) ("alpha" . 4) (beta . 5) (z . 1)) ((three nil) (two [f2]) (four "alpha") (five beta) (one z)))"#
-    ]],
+            r#"OK (((nil . 3) ([f2] . 2) ("alpha" . 4) (beta . 5) (z . 1)) ((three nil) (two [f2]) (four "alpha") (five beta) (one z)))"#
+        ]],
     )
 }
 
@@ -54,8 +54,8 @@ fn general_setq_uses_custom_setters_for_defined_variables() -> ParityBatchCase {
                  'custom-set)))"##,
         true,
         expect![[
-        r#"OK (#1=(:set requested) #1# #[(symbol value) ((set-default symbol (list :set value))) (t)])"#
-    ]],
+            r#"OK (#1=(:set requested) #1# #[(symbol value) ((set-default symbol (list :set value))) (t)])"#
+        ]],
     )
 }
 
@@ -143,8 +143,8 @@ fn general_add_and_remove_hook_support_lists_order_append_and_local_values() -> 
                   neomacs-general-hook-b)))"##,
         true,
         expect![[
-        r#"OK (((backward-char forward-char next-line) (backward-char forward-char)) (t previous-line) nil nil)"#
-    ]],
+            r#"OK (((backward-char forward-char next-line) (backward-char forward-char)) (t previous-line) nil nil)"#
+        ]],
     )
 }
 
@@ -258,8 +258,8 @@ fn general_advice_helpers_apply_lists_and_aliases_then_remove_cleanly() -> Parit
                     'general-advice-remove)))))"##,
         true,
         expect![[
-        r#"OK ((a b) (before-two before-one body-a before-two before-one body-b) a (body-a) t t)"#
-    ]],
+            r#"OK ((a b) (before-two before-one body-a before-two before-one body-b) a (body-a) t t)"#
+        ]],
     )
 }
 

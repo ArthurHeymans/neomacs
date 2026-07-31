@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_read_only_batch};
 
-fn auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries() -> ParityBatchCase {
+fn auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries",
         r##"(let ((quoted-user-directory
@@ -53,8 +54,8 @@ fn auto_read_only_default_regexps_match_exact_extension_and_directory_boundaries
             "/workspace/vendor/pkg.el"))))"##,
         true,
         expect![[
-        r#"OK (("\\(?:\\.\\(?:\\(?:el\\|py\\)c\\)\\)\\'" "/share/.+/site-lisp/" "[USER-EMACS-DIRECTORY]/\\(?:el\\(?:-get\\|pa\\)\\)/" "/\\(?:\\.\\(?:bundle\\|cask\\)\\)/") (("/workspace/cache/module.elc" t) ("/workspace/cache/module.pyc" t) ("/workspace/cache/module.elc.gz" nil) ("/workspace/cache/MODULE.ELC" t) ("/opt/share/emacs/site-lisp/library.el" t) ("/opt/share/site-lisp/library.el" nil) ("[ORACLE-HOME]/.emacs.d/elpa/pkg/pkg.el" t) ("[ORACLE-HOME]/.emacs.d/el-get/pkg/pkg.el" t) ("[ORACLE-HOME]/.emacs.d/packages/pkg.el" nil) ("/workspace/.bundle/ruby/tool.rb" t) ("/workspace/.cask/29.1/elpa/pkg.el" t) ("/workspace/.casket/pkg.el" nil) ("/workspace/vendor/pkg.el" nil)))"#
-    ]],
+            r#"OK (("\\(?:\\.\\(?:\\(?:el\\|py\\)c\\)\\)\\'" "/share/.+/site-lisp/" "[USER-EMACS-DIRECTORY]/\\(?:el\\(?:-get\\|pa\\)\\)/" "/\\(?:\\.\\(?:bundle\\|cask\\)\\)/") (("/workspace/cache/module.elc" t) ("/workspace/cache/module.pyc" t) ("/workspace/cache/module.elc.gz" nil) ("/workspace/cache/MODULE.ELC" t) ("/opt/share/emacs/site-lisp/library.el" t) ("/opt/share/site-lisp/library.el" nil) ("[ORACLE-HOME]/.emacs.d/elpa/pkg/pkg.el" t) ("[ORACLE-HOME]/.emacs.d/el-get/pkg/pkg.el" t) ("[ORACLE-HOME]/.emacs.d/packages/pkg.el" nil) ("/workspace/.bundle/ruby/tool.rb" t) ("/workspace/.cask/29.1/elpa/pkg.el" t) ("/workspace/.casket/pkg.el" nil) ("/workspace/vendor/pkg.el" nil)))"#
+        ]],
     )
 }
 
@@ -83,8 +84,8 @@ fn auto_read_only_without_filename_or_without_match_is_a_strict_noop() -> Parity
            "/workspace/output.elc.gz"))"##,
         true,
         expect![[
-        r#"OK ((nil nil (" *temp*" nil "editable" 9 nil nil nil)) ("/workspace/src/main.el" nil (" *temp*" "/workspace/src/main.el" "editable" 9 nil nil nil)) ("/workspace/vendorish/main.el" nil (" *temp*" "/workspace/vendorish/main.el" "editable" 9 nil nil nil)) ("/workspace/output.elc.gz" nil (" *temp*" "/workspace/output.elc.gz" "editable" 9 nil nil nil)))"#
-    ]],
+            r#"OK ((nil nil (" *temp*" nil "editable" 9 nil nil nil)) ("/workspace/src/main.el" nil (" *temp*" "/workspace/src/main.el" "editable" 9 nil nil nil)) ("/workspace/vendorish/main.el" nil (" *temp*" "/workspace/vendorish/main.el" "editable" 9 nil nil nil)) ("/workspace/output.elc.gz" nil (" *temp*" "/workspace/output.elc.gz" "editable" 9 nil nil nil)))"#
+        ]],
     )
 }
 
@@ -113,8 +114,8 @@ fn auto_read_only_default_action_enters_real_view_mode_and_returns_its_value() -
             (buffer-string))))"##,
         true,
         expect![[
-        r#"OK (t (" *temp*" "/workspace/build/module.elc" "compiled payload" 17 t t nil) (buffer-read-only ((:buffer nil))) "compiled payload")"#
-    ]],
+            r#"OK (t (" *temp*" "/workspace/build/module.elc" "compiled payload" 17 t t nil) (buffer-read-only ((:buffer nil))) "compiled payload")"#
+        ]],
     )
 }
 
@@ -144,12 +145,13 @@ fn auto_read_only_custom_action_runs_once_in_original_buffer_with_exact_state() 
             (auto-read-only-test-buffer-state))))"##,
         true,
         expect![[
-        r#"OK (:protected ((" *auto-read-only-action*" "/workspace/vendor/library.el" "third-party source" 7 nil nil nil)) (" *auto-read-only-action*" "/workspace/vendor/library.el" "third-party source" 7 nil nil nil))"#
-    ]],
+            r#"OK (:protected ((" *auto-read-only-action*" "/workspace/vendor/library.el" "third-party source" 7 nil nil nil)) (" *auto-read-only-action*" "/workspace/vendor/library.el" "third-party source" 7 nil nil nil))"#
+        ]],
     )
 }
 
-fn auto_read_only_stops_at_first_match_and_never_evaluates_later_invalid_regexp() -> ParityBatchCase {
+fn auto_read_only_stops_at_first_match_and_never_evaluates_later_invalid_regexp() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_read_only_stops_at_first_match_and_never_evaluates_later_invalid_regexp",
         r##"(with-temp-buffer
@@ -225,8 +227,8 @@ fn auto_read_only_preserves_preexisting_match_data_for_match_and_miss_paths() ->
                  (nreverse outcomes))))"##,
         true,
         expect![[
-        r#"OK ((0 7 0 4 5 7) (("/workspace/vendor/pkg.el" nil (0 7 0 4 5 7) t) ("/workspace/src/pkg.el" nil (0 7 0 4 5 7) t)))"#
-    ]],
+            r#"OK ((0 7 0 4 5 7) (("/workspace/vendor/pkg.el" nil (0 7 0 4 5 7) t) ("/workspace/src/pkg.el" nil (0 7 0 4 5 7) t)))"#
+        ]],
     )
 }
 
@@ -255,12 +257,13 @@ fn auto_read_only_matcher_uses_one_filename_and_stops_calling_after_success() ->
               (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (:applied (("first" "/workspace/vendor/pkg.el") ("second" "/workspace/vendor/pkg.el")))"#
-    ]],
+            r#"OK (:applied (("first" "/workspace/vendor/pkg.el") ("second" "/workspace/vendor/pkg.el")))"#
+        ]],
     )
 }
 
-fn auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_use() -> ParityBatchCase {
+fn auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_use()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_use",
         r##"(let ((first
@@ -322,8 +325,8 @@ fn auto_read_only_buffer_local_patterns_and_actions_are_isolated_in_practical_us
              (kill-buffer second))))"##,
         true,
         expect![[
-        r#"OK (:first-result :second-result ((:first " *auto-read-only-first*") (:second " *auto-read-only-second*")) ("/vendor/") ("/generated/"))"#
-    ]],
+            r#"OK (:first-result :second-result ((:first " *auto-read-only-first*") (:second " *auto-read-only-second*")) ("/vendor/") ("/generated/"))"#
+        ]],
     )
 }
 
@@ -363,8 +366,8 @@ fn auto_read_only_custom_function_arity_and_errors_propagate_without_fallback() 
             (error "custom failure"))))"##,
         true,
         expect![[
-        r#"OK (((:error wrong-number-of-arguments 0) nil nil) ((:error error ("custom failure")) nil nil))"#
-    ]],
+            r#"OK (((:error wrong-number-of-arguments 0) nil nil) ((:error error ("custom failure")) nil nil))"#
+        ]],
     )
 }
 

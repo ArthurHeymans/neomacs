@@ -15,8 +15,8 @@ fn auto_complete_nxml_inside_tag_tracks_open_close_and_content_positions() -> Pa
           '("<roo" "attr=" "\">" "text" "<child" "/>" "tail" "</roo")))"##,
         true,
         expect![[
-        r#"OK (("<roo" 5 t) ("attr=" 12 t) ("\">" 20 nil) ("text" 24 nil) ("<child" 30 t) ("/>" 38 nil) ("tail" 42 nil) ("</roo" 47 t))"#
-    ]],
+            r#"OK (("<roo" 5 t) ("attr=" 12 t) ("\">" 20 nil) ("text" 24 nil) ("<child" 30 t) ("/>" 38 nil) ("tail" 42 nil) ("</roo" 47 t))"#
+        ]],
     )
 }
 
@@ -34,12 +34,13 @@ fn auto_complete_nxml_current_tag_uses_nearest_non_closing_start_tag() -> Parity
           '("<cat" "<book id" "<title>" "Neo" "</title>" "</book>" "<appendix")))"##,
         true,
         expect![[
-        r#"OK (("<cat" "catalog") ("<book id" "book") ("<title>" "title") ("Neo" "title") ("</title>" "title") ("</book>" "title") ("<appendix" "appendix"))"#
-    ]],
+            r#"OK (("<cat" "catalog") ("<book id" "book") ("<title>" "title") ("Neo" "title") ("</title>" "title") ("</book>" "title") ("<appendix" "appendix"))"#
+        ]],
     )
 }
 
-fn auto_complete_nxml_current_attribute_handles_quotes_hyphens_and_outside_text() -> ParityBatchCase {
+fn auto_complete_nxml_current_attribute_handles_quotes_hyphens_and_outside_text() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_nxml_current_attribute_handles_quotes_hyphens_and_outside_text",
         r##"(with-temp-buffer
@@ -53,8 +54,8 @@ fn auto_complete_nxml_current_attribute_handles_quotes_hyphens_and_outside_text(
           '("alpha" "beta" "gamma" "color" "red" ">body")))"##,
         true,
         expect![[
-        r#"OK (("alpha" "data-kind") ("beta" "data-kind") ("gamma" "single") ("color" "style") ("red" "style") (">body" ""))"#
-    ]],
+            r#"OK (("alpha" "data-kind") ("beta" "data-kind") ("gamma" "single") ("color" "style") ("red" "style") (">body" ""))"#
+        ]],
     )
 }
 
@@ -81,8 +82,8 @@ fn auto_complete_nxml_context_symbol_classifies_real_editing_positions() -> Pari
            ("plain text" . otherwise)))"##,
         true,
         expect![[
-        r#"OK ((tag tag "<" nil) (attr attr "table" " ") (attr-value attrvalue "table" "class") (css-property cssprop "table" "style") (css-value csspropvalue "table" "style") (content-start content "table" nil) (content content "table" nil) (otherwise otherwise "" nil))"#
-    ]],
+            r#"OK ((tag tag "<" nil) (attr attr "table" " ") (attr-value attrvalue "table" "class") (css-property cssprop "table" "style") (css-value csspropvalue "table" "style") (content-start content "table" nil) (content content "table" nil) (otherwise otherwise "" nil))"#
+        ]],
     )
 }
 
@@ -100,8 +101,8 @@ fn auto_complete_nxml_start_completion_respects_automatic_and_manual_trigger() -
            (t ac-trigger-key-command)))"##,
         true,
         expect![
-        "OK (((t self-insert-command) t) ((nil self-insert-command) nil) ((nil ac-trigger-key-command) t) ((t ac-trigger-key-command) t))"
-    ],
+            "OK (((t self-insert-command) t) ((nil self-insert-command) nil) ((nil ac-trigger-key-command) t) ((t ac-trigger-key-command) t))"
+        ],
     )
 }
 

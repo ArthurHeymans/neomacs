@@ -102,8 +102,8 @@ fn direct_set_serializes_representative_floating_point_values() -> ParityBatchCa
     (async-status-clean-up id)))"##,
         true,
         expect![[
-        r#"OK ((0.0 "0.0" 0.0) (0.125 "0.125" 0.125) (1.0 "1.0" 1.0) (-2.5 "-2.5" -2.5) (1250.75 "1250.75" 1250.75))"#
-    ]],
+            r#"OK ((0.0 "0.0" 0.0) (0.125 "0.125" 0.125) (1.0 "1.0" 1.0) (-2.5 "-2.5" -2.5) (1250.75 "1250.75" 1250.75))"#
+        ]],
     )
 }
 
@@ -122,8 +122,8 @@ fn safe_set_uses_a_strict_default_threshold_boundary() -> ParityBatchCase {
     (async-status-clean-up id)))"##,
         true,
         expect![[
-        r#"OK ((0.005 "0") (0.01 "0") (0.010001 "0.010001") (0.020001 "0.020001") (0.020002 "0.020001") (0.030002 "0.030002"))"#
-    ]],
+            r#"OK ((0.005 "0") (0.01 "0") (0.010001 "0.010001") (0.020001 "0.020001") (0.020002 "0.020001") (0.030002 "0.030002"))"#
+        ]],
     )
 }
 
@@ -177,8 +177,8 @@ fn safe_set_rejects_every_non_float_value_without_modifying_the_file() -> Parity
     (async-status-clean-up id)))"##,
         true,
         expect![
-        "OK (((:error error t) (:error error t) (:error error t) (:error error t) (:error error t) (:error error t) (:error error t)) \"0\")"
-    ],
+            "OK (((:error error t) (:error error t) (:error error t) (:error error t) (:error error t) (:error error t) (:error error t)) \"0\")"
+        ],
     )
 }
 

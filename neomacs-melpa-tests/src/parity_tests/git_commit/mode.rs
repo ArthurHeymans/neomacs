@@ -61,8 +61,8 @@ fn git_commit_auto_fill_skips_summary_but_wraps_body_lines() -> ParityBatchCase 
                 (local-variable-p 'auto-fill-function)))"##,
         true,
         expect![[
-        r#"OK (git-commit--auto-fill-except-summary "summary words stay together\n\nbody words\nshould wrap\nhere" t)"#
-    ]],
+            r#"OK (git-commit--auto-fill-except-summary "summary words stay together\n\nbody words\nshould wrap\nhere" t)"#
+        ]],
     )
 }
 
@@ -144,8 +144,8 @@ fn git_commit_setup_font_lock_configures_comment_syntax_and_exact_faces() -> Par
                  (delete-directory root t)))"##,
         true,
         expect![[
-        r##"OK ("#" "^#+[ \11]*" t t git-commit-summary git-commit-overlong-summary git-commit-nonempty-second-line git-commit-trailer-token)"##
-    ]],
+            r##"OK ("#" "^#+[ \11]*" t t git-commit-summary git-commit-overlong-summary git-commit-nonempty-second-line git-commit-trailer-token)"##
+        ]],
     )
 }
 

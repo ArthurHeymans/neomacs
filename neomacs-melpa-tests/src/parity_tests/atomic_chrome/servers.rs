@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atomic_chrome_batch};
 
-fn atomic_chrome_start_websocket_server_forwards_exact_local_callbacks_and_port() -> ParityBatchCase {
+fn atomic_chrome_start_websocket_server_forwards_exact_local_callbacks_and_port() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atomic_chrome_start_websocket_server_forwards_exact_local_callbacks_and_port",
         r##"(let (calls)
@@ -19,12 +20,13 @@ fn atomic_chrome_start_websocket_server_forwards_exact_local_callbacks_and_port(
              (nreverse calls))))"##,
         true,
         expect![
-        "OK (:server-handle :server-handle ((64292 :host local :on-message atomic-chrome-on-message :on-open nil :on-close atomic-chrome-on-close) (4001 :host local :on-message atomic-chrome-on-message :on-open nil :on-close atomic-chrome-on-close)))"
-    ],
+            "OK (:server-handle :server-handle ((64292 :host local :on-message atomic-chrome-on-message :on-open nil :on-close atomic-chrome-on-close) (4001 :host local :on-message atomic-chrome-on-message :on-open nil :on-close atomic-chrome-on-close)))"
+        ],
     )
 }
 
-fn atomic_chrome_start_httpd_forwards_custom_port_and_exact_network_process_contract() -> ParityBatchCase {
+fn atomic_chrome_start_httpd_forwards_custom_port_and_exact_network_process_contract()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_start_httpd_forwards_custom_port_and_exact_network_process_contract",
         r##"(let ((atomic-chrome-server-ghost-text-port
@@ -44,12 +46,13 @@ fn atomic_chrome_start_httpd_forwards_custom_port_and_exact_network_process_cont
               'atomic-chrome-start-httpd))))"##,
         true,
         expect![[
-        r#"OK (:httpd-process ((:name "atomic-chrome-httpd" :family ipv4 :host local :service 4777 :filter atomic-chrome-httpd-process-filter :filter-multibyte nil :server t :noquery t)) t (interactive nil))"#
-    ]],
+            r#"OK (:httpd-process ((:name "atomic-chrome-httpd" :family ipv4 :host local :service 4777 :filter atomic-chrome-httpd-process-filter :filter-multibyte nil :server t :noquery t)) t (interactive nil))"#
+        ]],
     )
 }
 
-fn atomic_chrome_start_server_obeys_extension_selection_existing_state_and_process_status() -> ParityBatchCase {
+fn atomic_chrome_start_server_obeys_extension_selection_existing_state_and_process_status()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_start_server_obeys_extension_selection_existing_state_and_process_status",
         r##"(let (snapshots)
@@ -120,12 +123,13 @@ fn atomic_chrome_start_server_obeys_extension_selection_existing_state_and_proce
           (nreverse snapshots))"##,
         true,
         expect![[
-        r#"OK ((:both :global-enabled :started-atomic ((websocket 64292) (status "atomic-chrome-httpd") (httpd) (global 1))) (:atomic-existing :global-enabled :existing-atomic ((status "atomic-chrome-httpd") (global 1))) (:ghost-running :global-enabled nil ((status "atomic-chrome-httpd") (global 1))) (:none :global-enabled nil ((status "atomic-chrome-httpd") (global 1))))"#
-    ]],
+            r#"OK ((:both :global-enabled :started-atomic ((websocket 64292) (status "atomic-chrome-httpd") (httpd) (global 1))) (:atomic-existing :global-enabled :existing-atomic ((status "atomic-chrome-httpd") (global 1))) (:ghost-running :global-enabled nil ((status "atomic-chrome-httpd") (global 1))) (:none :global-enabled nil ((status "atomic-chrome-httpd") (global 1))))"#
+        ]],
     )
 }
 
-fn atomic_chrome_start_server_swallows_failures_and_stops_at_exact_failed_stage() -> ParityBatchCase {
+fn atomic_chrome_start_server_swallows_failures_and_stops_at_exact_failed_stage() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atomic_chrome_start_server_swallows_failures_and_stops_at_exact_failed_stage",
         r##"(let (snapshots)
@@ -189,12 +193,13 @@ fn atomic_chrome_start_server_swallows_failures_and_stops_at_exact_failed_stage(
           (nreverse snapshots))"##,
         true,
         expect![[
-        r#"OK ((:websocket nil nil ((websocket 64292))) (:status nil :atomic-server ((websocket 64292) (status "atomic-chrome-httpd"))) (:httpd nil :atomic-server ((websocket 64292) (status "atomic-chrome-httpd") #1=(httpd))) (:global nil :atomic-server ((websocket 64292) (status "atomic-chrome-httpd") #1# (global 1))) (:none :enabled :atomic-server ((websocket 64292) (status "atomic-chrome-httpd") #1# (global 1))))"#
-    ]],
+            r#"OK ((:websocket nil nil ((websocket 64292))) (:status nil :atomic-server ((websocket 64292) (status "atomic-chrome-httpd"))) (:httpd nil :atomic-server ((websocket 64292) (status "atomic-chrome-httpd") #1=(httpd))) (:global nil :atomic-server ((websocket 64292) (status "atomic-chrome-httpd") #1# (global 1))) (:none :enabled :atomic-server ((websocket 64292) (status "atomic-chrome-httpd") #1# (global 1))))"#
+        ]],
     )
 }
 
-fn atomic_chrome_stop_server_closes_both_websockets_httpd_and_global_mode_in_order() -> ParityBatchCase {
+fn atomic_chrome_stop_server_closes_both_websockets_httpd_and_global_mode_in_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_stop_server_closes_both_websockets_httpd_and_global_mode_in_order",
         r##"(let ((atomic-chrome-server-atomic-chrome
@@ -236,12 +241,13 @@ fn atomic_chrome_stop_server_closes_both_websockets_httpd_and_global_mode_in_ord
              (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:disabled nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd") (delete "atomic-chrome-httpd") (global 0)))"#
-    ]],
+            r#"OK (:disabled nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd") (delete "atomic-chrome-httpd") (global 0)))"#
+        ]],
     )
 }
 
-fn atomic_chrome_stop_server_skips_absent_resources_but_always_disables_global_mode() -> ParityBatchCase {
+fn atomic_chrome_stop_server_skips_absent_resources_but_always_disables_global_mode()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_stop_server_skips_absent_resources_but_always_disables_global_mode",
         r##"(let ((atomic-chrome-server-atomic-chrome
@@ -282,7 +288,8 @@ fn atomic_chrome_stop_server_skips_absent_resources_but_always_disables_global_m
     )
 }
 
-fn atomic_chrome_stop_server_propagates_failures_with_exact_partial_cleanup_state() -> ParityBatchCase {
+fn atomic_chrome_stop_server_propagates_failures_with_exact_partial_cleanup_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_stop_server_propagates_failures_with_exact_partial_cleanup_state",
         r##"(let (snapshots)
@@ -357,8 +364,8 @@ fn atomic_chrome_stop_server_propagates_failures_with_exact_partial_cleanup_stat
           (nreverse snapshots))"##,
         true,
         expect![[
-        r#"OK ((:atomic-close (:error error ("close failed :atomic-server")) :atomic-server :ghost-server ((close :atomic-server))) (:ghost-close (:error error ("close failed :ghost-server")) nil :ghost-server ((close :atomic-server) (close :ghost-server))) (:status (:error error ("status failed")) nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd"))) (:delete (:error error ("delete failed")) nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd") (delete "atomic-chrome-httpd"))) (:global (:error error ("global failed")) nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd") (delete "atomic-chrome-httpd") (global 0))))"#
-    ]],
+            r#"OK ((:atomic-close (:error error ("close failed :atomic-server")) :atomic-server :ghost-server ((close :atomic-server))) (:ghost-close (:error error ("close failed :ghost-server")) nil :ghost-server ((close :atomic-server) (close :ghost-server))) (:status (:error error ("status failed")) nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd"))) (:delete (:error error ("delete failed")) nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd") (delete "atomic-chrome-httpd"))) (:global (:error error ("global failed")) nil nil ((close :atomic-server) (close :ghost-server) (status "atomic-chrome-httpd") (delete "atomic-chrome-httpd") (global 0))))"#
+        ]],
     )
 }
 

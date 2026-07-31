@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_clang_batch};
 
-fn auto_complete_clang_parse_output_filters_prefix_and_returns_reverse_clang_order_with_help() -> ParityBatchCase {
+fn auto_complete_clang_parse_output_filters_prefix_and_returns_reverse_clang_order_with_help()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_parse_output_filters_prefix_and_returns_reverse_clang_order_with_help",
         r##"(with-temp-buffer
@@ -18,12 +19,13 @@ fn auto_complete_clang_parse_output_filters_prefix_and_returns_reverse_clang_ord
            "alpha")))"##,
         true,
         expect![[
-        r#"OK (("alpha_value" "long alpha_value" nil) ("alphabet" "void alphabet(<#int n#>)" nil) ("alpha" "int alpha" nil))"#
-    ]],
+            r#"OK (("alpha_value" "long alpha_value" nil) ("alphabet" "void alphabet(<#int n#>)" nil) ("alpha" "int alpha" nil))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_parse_output_merges_adjacent_duplicate_overloads_into_one_candidate() -> ParityBatchCase {
+fn auto_complete_clang_parse_output_merges_adjacent_duplicate_overloads_into_one_candidate()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_parse_output_merges_adjacent_duplicate_overloads_into_one_candidate",
         r##"(with-temp-buffer
@@ -38,8 +40,8 @@ fn auto_complete_clang_parse_output_merges_adjacent_duplicate_overloads_into_one
            "dr")))"##,
         true,
         expect![[
-        r#"OK (("drop" "void drop()" nil) ("draw" "void draw(<#int x#>)\nvoid draw(<#double x#>)\nvoid draw(<#const char *x#>)" nil))"#
-    ]],
+            r#"OK (("drop" "void drop()" nil) ("draw" "void draw(<#int x#>)\nvoid draw(<#double x#>)\nvoid draw(<#const char *x#>)" nil))"#
+        ]],
     )
 }
 
@@ -57,12 +59,13 @@ fn auto_complete_clang_parse_output_nonadjacent_duplicates_remain_separate() -> 
            "")))"##,
         true,
         expect![[
-        r#"OK (("same" "int same(double)" nil) ("middle" "int middle" nil) ("same" "int same(int)" nil))"#
-    ]],
+            r#"OK (("same" "int same(double)" nil) ("middle" "int middle" nil) ("same" "int same(int)" nil))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_parse_output_excludes_pattern_pseudo_candidate_only_by_exact_name() -> ParityBatchCase {
+fn auto_complete_clang_parse_output_excludes_pattern_pseudo_candidate_only_by_exact_name()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_parse_output_excludes_pattern_pseudo_candidate_only_by_exact_name",
         r##"(with-temp-buffer
@@ -124,7 +127,8 @@ fn auto_complete_clang_parse_output_ignores_malformed_and_colonless_lines() -> P
     )
 }
 
-fn auto_complete_clang_handle_error_keeps_only_diagnostics_before_first_completion() -> ParityBatchCase {
+fn auto_complete_clang_handle_error_keeps_only_diagnostics_before_first_completion()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_handle_error_keeps_only_diagnostics_before_first_completion",
         r##"(let ((ac-clang-executable
@@ -162,12 +166,13 @@ fn auto_complete_clang_handle_error_keeps_only_diagnostics_before_first_completi
                 messages)))))"##,
         true,
         expect![[
-        r#"OK ("FIXED-TIME\nclang failed with error 2:\n/tool/clang -cc1 -DNAME=two words\n\nsource.cpp:3:4: error: expected expression\nnote: prior diagnostic" t 1 nil)"#
-    ]],
+            r#"OK ("FIXED-TIME\nclang failed with error 2:\n/tool/clang -cc1 -DNAME=two words\n\nsource.cpp:3:4: error: expected expression\nnote: prior diagnostic" t 1 nil)"#
+        ]],
     )
 }
 
-fn auto_complete_clang_handle_error_without_completion_messages_and_keeps_full_output() -> ParityBatchCase {
+fn auto_complete_clang_handle_error_without_completion_messages_and_keeps_full_output()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_handle_error_without_completion_messages_and_keeps_full_output",
         r##"(let ((ac-clang-executable "clang")
@@ -199,8 +204,8 @@ fn auto_complete_clang_handle_error_without_completion_messages_and_keeps_full_o
                 (nreverse messages))))))"##,
         true,
         expect![[
-        r#"OK ("FIXED-TIME\nclang failed with error 9:\nclang -cc1 -bad\n\nfatal error: input file missing\nsecond line\n" t ("clang failed with error 9:\nclang -cc1 -bad"))"#
-    ]],
+            r#"OK ("FIXED-TIME\nclang failed with error 9:\nclang -cc1 -bad\n\nfatal error: input file missing\nsecond line\n" t ("clang failed with error 9:\nclang -cc1 -bad"))"#
+        ]],
     )
 }
 

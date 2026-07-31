@@ -16,12 +16,13 @@ fn auto_complete_rst_sources_expose_exact_auto_complete_contracts() -> ParityBat
                              ac-source-rst-options))"##,
         true,
         expect![[
-        r####"OK ((ac-source-rst-directives ((candidates . auto-complete-rst-directives-candidates) (available fboundp 'auto-complete-rst-directives-candidates) (prefix . "[[:space:]]\\.\\. \\([[:alnum:]-:]*\\)") (symbol . "D") (requires . 0))) (ac-source-rst-roles ((candidates . auto-complete-rst-roles-candidates) (available fboundp 'auto-complete-rst-roles-candidates) (prefix . "[^[:alnum:]:]:\\([[:alnum:]-:]*\\)") (symbol . "R") (requires . 0) (action . :function))) (ac-source-rst-options ((candidates . :function) (prefix . "[[:space:]]\\{4,\\}:\\([^:]*\\)") (symbol . "O") (requires . 0))))"####
-    ]],
+            r####"OK ((ac-source-rst-directives ((candidates . auto-complete-rst-directives-candidates) (available fboundp 'auto-complete-rst-directives-candidates) (prefix . "[[:space:]]\\.\\. \\([[:alnum:]-:]*\\)") (symbol . "D") (requires . 0))) (ac-source-rst-roles ((candidates . auto-complete-rst-roles-candidates) (available fboundp 'auto-complete-rst-roles-candidates) (prefix . "[^[:alnum:]:]:\\([[:alnum:]-:]*\\)") (symbol . "R") (requires . 0) (action . :function))) (ac-source-rst-options ((candidates . :function) (prefix . "[[:space:]]\\{4,\\}:\\([^:]*\\)") (symbol . "O") (requires . 0))))"####
+        ]],
     )
 }
 
-fn auto_complete_rst_generated_candidate_availability_changes_after_source_eval() -> ParityBatchCase {
+fn auto_complete_rst_generated_candidate_availability_changes_after_source_eval() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_rst_generated_candidate_availability_changes_after_source_eval",
         r##"(let
@@ -60,12 +61,13 @@ fn auto_complete_rst_generated_candidate_availability_changes_after_source_eval(
                               (auto-complete-rst-roles-candidates))))"##,
         true,
         expect![[
-        r####"OK ((nil nil) (t t) ("note::" "code-block::" "image::" "py:function::") ("ref:" "doc:" "py:class:" "emphasis:"))"####
-    ]],
+            r####"OK ((nil nil) (t t) ("note::" "code-block::" "image::" "py:function::") ("ref:" "doc:" "py:class:" "emphasis:"))"####
+        ]],
     )
 }
 
-fn auto_complete_rst_source_prefixes_extract_real_partial_directive_role_and_option() -> ParityBatchCase {
+fn auto_complete_rst_source_prefixes_extract_real_partial_directive_role_and_option()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_rst_source_prefixes_extract_real_partial_directive_role_and_option",
         r##"(mapcar
@@ -95,8 +97,8 @@ fn auto_complete_rst_source_prefixes_extract_real_partial_directive_role_and_opt
                               . ".. image:: x.png\n    :hei")))"##,
         true,
         expect![[
-        r####"OK ((ac-source-rst-directives "Intro\n\n.. code-bl" "code-bl") (ac-source-rst-roles "See :py:cla" "py:cla") (ac-source-rst-options ".. image:: x.png\n    :hei" "hei"))"####
-    ]],
+            r####"OK ((ac-source-rst-directives "Intro\n\n.. code-bl" "code-bl") (ac-source-rst-roles "See :py:cla" "py:cla") (ac-source-rst-options ".. image:: x.png\n    :hei" "hei"))"####
+        ]],
     )
 }
 
@@ -133,12 +135,13 @@ fn auto_complete_rst_source_prefixes_reject_non_rst_and_boundary_lookalikes() ->
                               . "    :alt:value")))"##,
         true,
         expect![[
-        r####"OK ((ac-source-rst-directives ".. note" nil) (ac-source-rst-directives "prefix.. note" nil) (ac-source-rst-roles "scheme::ref" nil) (ac-source-rst-roles "word:ref" nil) (ac-source-rst-options "   :alt" nil) (ac-source-rst-options "    :alt:value" "alt"))"####
-    ]],
+            r####"OK ((ac-source-rst-directives ".. note" nil) (ac-source-rst-directives "prefix.. note" nil) (ac-source-rst-roles "scheme::ref" nil) (ac-source-rst-roles "word:ref" nil) (ac-source-rst-options "   :alt" nil) (ac-source-rst-options "    :alt:value" "alt"))"####
+        ]],
     )
 }
 
-fn auto_complete_rst_role_action_inserts_balanced_backquotes_with_point_inside() -> ParityBatchCase {
+fn auto_complete_rst_role_action_inserts_balanced_backquotes_with_point_inside() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_rst_role_action_inserts_balanced_backquotes_with_point_inside",
         r##"(mapcar
@@ -160,12 +163,13 @@ fn auto_complete_rst_role_action_inserts_balanced_backquotes_with_point_inside()
                              "Use :py:class:"))"##,
         true,
         expect![[
-        r####"OK ((":ref:``" 7 96 96) ("See :doc:``" 11 96 96) ("Use :py:class:``" 16 96 96))"####
-    ]],
+            r####"OK ((":ref:``" 7 96 96) ("See :doc:``" 11 96 96) ("Use :py:class:``" 16 96 96))"####
+        ]],
     )
 }
 
-fn auto_complete_rst_add_sources_preserves_order_customization_keys_and_idempotence() -> ParityBatchCase {
+fn auto_complete_rst_add_sources_preserves_order_customization_keys_and_idempotence()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_rst_add_sources_preserves_order_customization_keys_and_idempotence",
         r##"(let
@@ -193,8 +197,8 @@ fn auto_complete_rst_add_sources_preserves_order_customization_keys_and_idempote
                                  (current-local-map))))))"##,
         true,
         expect![[
-        r####"OK ((ac-source-rst-options ac-source-rst-roles ac-source-rst-directives . #1=(ac-source-filename ac-source-words-in-buffer)) (ac-source-rst-options ac-source-rst-roles ac-source-rst-directives . #1#) auto-complete-rst-complete-colon auto-complete-rst-complete-space t nil)"####
-    ]],
+            r####"OK ((ac-source-rst-options ac-source-rst-roles ac-source-rst-directives . #1=(ac-source-filename ac-source-words-in-buffer)) (ac-source-rst-options ac-source-rst-roles ac-source-rst-directives . #1#) auto-complete-rst-complete-colon auto-complete-rst-complete-space t nil)"####
+        ]],
     )
 }
 
@@ -214,8 +218,8 @@ fn auto_complete_rst_add_sources_uses_current_sources_when_override_is_nil() -> 
                              ac-sources))"##,
         true,
         expect![[
-        r####"OK (ac-source-rst-options ac-source-rst-roles ac-source-rst-directives ac-source-filename ac-source-abbrev)"####
-    ]],
+            r####"OK (ac-source-rst-options ac-source-rst-roles ac-source-rst-directives ac-source-filename ac-source-abbrev)"####
+        ]],
     )
 }
 
@@ -245,8 +249,8 @@ fn auto_complete_rst_completion_keys_insert_text_and_route_exact_source_sets() -
                            '(nil t))"##,
         true,
         expect![[
-        r####"OK ((nil ".. note :ref:" nil 14) (t ".. note :ref:" ((ac-source-rst-directives) (ac-source-rst-directives ac-source-rst-options ac-source-rst-roles)) 14))"####
-    ]],
+            r####"OK ((nil ".. note :ref:" nil 14) (t ".. note :ref:" ((ac-source-rst-directives) (ac-source-rst-directives ac-source-rst-options ac-source-rst-roles)) 14))"####
+        ]],
     )
 }
 

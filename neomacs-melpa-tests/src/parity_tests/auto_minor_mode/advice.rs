@@ -58,8 +58,8 @@ fn auto_minor_mode_real_set_auto_mode_selects_major_then_filename_minor_modes() 
                              auto-minor-mode-test-events)))"##,
         true,
         expect![
-        "OK (emacs-lisp-mode t t ((:alpha 1 t 19 emacs-lisp-mode) (:beta 1 t 19 emacs-lisp-mode)))"
-    ],
+            "OK (emacs-lisp-mode t t ((:alpha 1 t 19 emacs-lisp-mode) (:beta 1 t 19 emacs-lisp-mode)))"
+        ],
     )
 }
 
@@ -100,12 +100,13 @@ fn auto_minor_mode_real_set_auto_mode_reactivation_obeys_keep_flag() -> ParityBa
                                    auto-minor-mode-test-events))))))"##,
         true,
         expect![
-        "OK (1 2 2 3 ((:alpha 1 t 1 emacs-lisp-mode) (:alpha 1 t 1 emacs-lisp-mode) (:alpha 1 t 1 emacs-lisp-mode)))"
-    ],
+            "OK (1 2 2 3 ((:alpha 1 t 1 emacs-lisp-mode) (:alpha 1 t 1 emacs-lisp-mode) (:alpha 1 t 1 emacs-lisp-mode)))"
+        ],
     )
 }
 
-fn auto_minor_mode_same_mode_matching_filename_and_magic_runs_twice_unless_kept() -> ParityBatchCase {
+fn auto_minor_mode_same_mode_matching_filename_and_magic_runs_twice_unless_kept() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_minor_mode_same_mode_matching_filename_and_magic_runs_twice_unless_kept",
         r##"(with-temp-buffer
@@ -221,7 +222,8 @@ fn auto_minor_mode_advice_can_be_removed_and_restored_without_leaking_state() ->
     )
 }
 
-fn auto_minor_mode_reloading_source_keeps_single_advice_and_deferred_integration() -> ParityBatchCase {
+fn auto_minor_mode_reloading_source_keeps_single_advice_and_deferred_integration() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_minor_mode_reloading_source_keeps_single_advice_and_deferred_integration",
         r##"(let ((count-advice

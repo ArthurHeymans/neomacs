@@ -45,7 +45,8 @@ fn auto_complete_pcmp_action_appends_termination_for_shortest_completion() -> Pa
     )
 }
 
-fn auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status() -> ParityBatchCase {
+fn auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status",
         r##"(mapcar
@@ -67,8 +68,8 @@ fn auto_complete_pcmp_action_does_not_append_for_partial_none_or_unknown_status(
          '(partial none exact nil custom))"##,
         true,
         expect![[
-        r#"OK ((partial "tool candidate" 9 "ca") (none "tool candidate" 9 "ca") (exact "tool candidate" 9 "ca") (nil "tool candidate" 9 "ca") (custom "tool candidate" 9 "ca"))"#
-    ]],
+            r#"OK ((partial "tool candidate" 9 "ca") (none "tool candidate" 9 "ca") (exact "tool candidate" 9 "ca") (nil "tool candidate" 9 "ca") (custom "tool candidate" 9 "ca"))"#
+        ]],
     )
 }
 
@@ -95,12 +96,13 @@ fn auto_complete_pcmp_action_respects_existing_suffix_characters() -> ParityBatc
            ("word" . ordinary)))"##,
         true,
         expect![[
-        r#"OK ((("directory/" . slash) "directory/" 10) (("host:" . colon) "host:" 5) (("option=" . equals) "option=" 7) (("word" . ordinary) "word " 5))"#
-    ]],
+            r#"OK ((("directory/" . slash) "directory/" 10) (("host:" . colon) "host:" 5) (("option=" . equals) "option=" 7) (("word" . ordinary) "word " 5))"#
+        ]],
     )
 }
 
-fn auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point() -> ParityBatchCase {
+fn auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point",
         r##"(mapcar
@@ -125,8 +127,8 @@ fn auto_complete_pcmp_action_measures_inserted_span_from_saved_candidate_point()
            ("command/" sole 4 "mand")))"##,
         true,
         expect![[
-        r#"OK ((("abc" partial 1 "") 4 3 "") (("prefix-value" partial 8 "val") 13 5 "val") (("x" sole 2 "x") 3 1 "x") (("command/" sole 4 "mand") 9 5 "mand"))"#
-    ]],
+            r#"OK ((("abc" partial 1 "") 4 3 "") (("prefix-value" partial 8 "val") 13 5 "val") (("x" sole 2 "x") 3 1 "x") (("command/" sole 4 "mand") 9 5 "mand"))"#
+        ]],
     )
 }
 
@@ -176,8 +178,8 @@ fn auto_complete_pcmp_action_raw_flag_does_not_change_bookkeeping_contract() -> 
          '(nil t raw-marker))"##,
         true,
         expect![[
-        r#"OK ((nil "quoted value" 5 "va") (t "quoted value" 5 "va") (raw-marker "quoted value" 5 "va"))"#
-    ]],
+            r#"OK ((nil "quoted value" 5 "va") (t "quoted value" 5 "va") (raw-marker "quoted value" 5 "va"))"#
+        ]],
     )
 }
 
@@ -230,7 +232,8 @@ fn auto_complete_pcmp_self_insert_command_forwards_count_and_trigger_metadata() 
     )
 }
 
-fn auto_complete_pcmp_candidate_then_action_models_real_auto_complete_lifecycle() -> ParityBatchCase {
+fn auto_complete_pcmp_candidate_then_action_models_real_auto_complete_lifecycle() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_pcmp_candidate_then_action_models_real_auto_complete_lifecycle",
         r##"(with-temp-buffer

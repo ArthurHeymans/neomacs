@@ -28,8 +28,8 @@ fn auth_source_xoauth2_curl_transport_posts_exact_request_and_parses_json() -> P
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((access_token . "curl-token") (expires_in . 3600) (token_type . "Bearer")) (("curl" nil t nil ("--silent" "--request" "POST" "--data" "client_id=id&refresh_token=refresh" "--header" "Content-Type:application/x-www-form-urlencoded" "https://token.example/oauth"))))"#
-    ]],
+            r#"OK (((access_token . "curl-token") (expires_in . 3600) (token_type . "Bearer")) (("curl" nil t nil ("--silent" "--request" "POST" "--data" "client_id=id&refresh_token=refresh" "--header" "Content-Type:application/x-www-form-urlencoded" "https://token.example/oauth"))))"#
+        ]],
     )
 }
 
@@ -111,8 +111,8 @@ fn auth_source_xoauth2_url_transport_sets_request_bindings_and_kills_buffer() ->
                response-buffer)))))"##,
         true,
         expect![[
-        r#"OK (((access_token . "url-token") (expires_in . 1800)) ("https://token.example/oauth" "POST" "client_id=id" (("Content-Type" . "application/x-www-form-urlencoded"))) nil)"#
-    ]],
+            r#"OK (((access_token . "url-token") (expires_in . 1800)) ("https://token.example/oauth" "POST" "client_id=id" (("Content-Type" . "application/x-www-form-urlencoded"))) nil)"#
+        ]],
     )
 }
 
@@ -147,8 +147,8 @@ fn auth_source_xoauth2_url_transport_returns_nil_without_header_separator() -> P
                (kill-buffer response-buffer)))))"##,
         true,
         expect![[
-        r#"OK (nil t "HTTP/1.1 200 OK\nContent-Type: application/json\n{\"access_token\":\"hidden\"}")"#
-    ]],
+            r#"OK (nil t "HTTP/1.1 200 OK\nContent-Type: application/json\n{\"access_token\":\"hidden\"}")"#
+        ]],
     )
 }
 

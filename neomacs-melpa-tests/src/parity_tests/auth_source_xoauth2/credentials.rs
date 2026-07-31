@@ -64,8 +64,8 @@ fn auth_source_xoauth2_file_creds_uses_exact_hash_table_tuple() -> ParityBatchCa
            file "missing" "alice" 993)))"##,
         true,
         expect![[
-        r#"OK ((:token-url "one" :client-id "id-one" :client-secret "secret-one" :refresh-token "refresh-one") (:token-url "two" :client-id "id-two" :client-secret "secret-two" :refresh-token "refresh-two") nil nil)"#
-    ]],
+            r#"OK ((:token-url "one" :client-id "id-one" :client-secret "secret-one" :refresh-token "refresh-one") (:token-url "two" :client-id "id-two" :client-secret "secret-two" :refresh-token "refresh-two") nil nil)"#
+        ]],
     )
 }
 
@@ -84,8 +84,8 @@ fn auth_source_xoauth2_file_creds_requires_gpg_extension() -> ParityBatchCase {
            "/fixture/GPG"))"##,
         true,
         expect![[
-        r#"OK ((:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")) (:ok "GPG error: \"no usable configuration\", OpenPGP") (:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")) (:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")))"#
-    ]],
+            r#"OK ((:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")) (:ok "GPG error: \"no usable configuration\", OpenPGP") (:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")) (:error error ("The auth-source-xoauth2-creds file must be GPG encrypted")))"#
+        ]],
     )
 }
 
@@ -115,8 +115,8 @@ fn auth_source_xoauth2_file_creds_reports_read_and_eval_failures() -> ParityBatc
           (list invalid runtime-error missing)))"##,
         true,
         expect![[
-        r#"OK ((:ok "End of file during parsing: #<killed buffer>") (:ok "credential exploded") (:ok "Opening input file: No such file or directory, [ORACLE-SANDBOX]/missing.gpg"))"#
-    ]],
+            r#"OK ((:ok "End of file during parsing: #<killed buffer>") (:ok "credential exploded") (:ok "Opening input file: No such file or directory, [ORACLE-SANDBOX]/missing.gpg"))"#
+        ]],
     )
 }
 
@@ -138,8 +138,8 @@ fn auth_source_xoauth2_file_creds_evaluates_form_with_lexical_binding() -> Parit
           file "host" "user" "port"))"##,
         true,
         expect![[
-        r#"OK (:token-url "computed-url" :client-id "computed-id" :client-secret "secret" :refresh-token "refresh")"#
-    ]],
+            r#"OK (:token-url "computed-url" :client-id "computed-id" :client-secret "secret" :refresh-token "refresh")"#
+        ]],
     )
 }
 
@@ -174,8 +174,8 @@ fn auth_source_xoauth2_file_hash_lookup_emits_exact_debug_coordinates() -> Parit
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:token-url "url") (("Searching hash table for (%S %S %S)" ("host" "user" 443))))"#
-    ]],
+            r#"OK ((:token-url "url") (("Searching hash table for (%S %S %S)" ("host" "user" 443))))"#
+        ]],
     )
 }
 

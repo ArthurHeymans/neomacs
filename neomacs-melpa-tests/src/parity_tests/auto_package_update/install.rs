@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_package_update_batch};
 
-fn auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_directories() -> ParityBatchCase {
+fn auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_directories()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_package_update_old_version_cleanup_recursively_deletes_real_sandbox_directories",
         r##"(let*

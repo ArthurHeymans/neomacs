@@ -40,8 +40,8 @@ fn asyncloop_schedule_replaces_prior_timer_and_only_latest_activation_runs() -> 
                 logged)))))"##,
         true,
         expect![[
-        r#"OK ((:asyncloop-test-timer 1) (:asyncloop-test-timer 2) t (1) ((:ran :at 2 :id 2 :repeat nil :function asyncloop-eat) (:skipped :at 5 :id 1)) nil ("Scheduled loop found cleared, doing nothing"))"#
-    ]],
+            r#"OK ((:asyncloop-test-timer 1) (:asyncloop-test-timer 2) t (1) ((:ran :at 2 :id 2 :repeat nil :function asyncloop-eat) (:skipped :at 5 :id 1)) nil ("Scheduled loop found cleared, doing nothing"))"#
+        ]],
     )
 }
 
@@ -107,7 +107,8 @@ fn asyncloop_chomp_executes_real_stateful_pipeline_in_exact_order() -> ParityBat
     )
 }
 
-fn asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes() -> ParityBatchCase {
+fn asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes",
         r##"(let (events)
@@ -151,7 +152,8 @@ fn asyncloop_chomp_return_contract_distinguishes_immediate_and_protected_modes()
     )
 }
 
-fn asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_second() -> ParityBatchCase {
+fn asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_second()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_second",
         r##"(let (events loop pending-input)
@@ -212,8 +214,8 @@ fn asyncloop_immediate_mode_preserves_interrupted_stage_then_retries_after_one_s
                 asyncloop-test-now)))))"##,
         true,
         expect![
-        "OK ((:asyncloop-test-timer 1) (nil 1 t 0 ((1 1 asyncloop-eat))) ((:ran :at 1 :id 1 :repeat nil :function asyncloop-eat)) (:worker-completed) nil nil 1)"
-    ],
+            "OK ((:asyncloop-test-timer 1) (nil 1 t 0 ((1 1 asyncloop-eat))) ((:ran :at 1 :id 1 :repeat nil :function asyncloop-eat)) (:worker-completed) nil nil 1)"
+        ],
     )
 }
 
@@ -311,8 +313,8 @@ fn asyncloop_chomp_defers_remaining_work_one_second_when_input_is_pending() -> P
                    asyncloop-test-timer-queue)))))))"##,
         true,
         expect![
-        "OK (t (:first) 1 t ((1 1 nil asyncloop-eat :timer-handle (:asyncloop-test-timer 1))))"
-    ],
+            "OK (t (:first) 1 t ((1 1 nil asyncloop-eat :timer-handle (:asyncloop-test-timer 1))))"
+        ],
     )
 }
 
@@ -393,8 +395,8 @@ fn asyncloop_eat_rejects_ghost_activation_without_mutating_queued_work() -> Pari
             logged)))"##,
         true,
         expect![[
-        r#"OK (#1=("Unscheduled timer activation. Hands off the wheel, ghost!") nil nil t #1#)"#
-    ]],
+            r#"OK (#1=("Unscheduled timer activation. Hands off the wheel, ghost!") nil nil t #1#)"#
+        ]],
     )
 }
 

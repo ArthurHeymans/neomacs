@@ -26,8 +26,8 @@ fn turning_the_mode_on_puts_a_display_icon_before_every_filename() -> ParityBatc
          :text-unchanged (string= before-text (atid-test-text)))))"##,
         true,
         expect![[
-        r#"OK (:mode-on t :lighter " all-the-icons-dired-mode" :before-count 1 :before-lines (("." none) (".." none) (".hidden-config" none) ("README.md" none) ("notes.org" none) ("script.py" none) ("subdir" none)) :after-count 7 :after-lines (("." (string 4 "    " plain)) (".." (string 4 "    " plain)) (".hidden-config" (string 3 "  " icon-props)) ("README.md" (string 3 "  " icon-props)) ("notes.org" (string 3 "  " icon-props)) ("script.py" (string 3 "  " icon-props)) ("subdir" (string 3 "  " icon-props))) :text-unchanged t)"#
-    ]],
+            r#"OK (:mode-on t :lighter " all-the-icons-dired-mode" :before-count 1 :before-lines (("." none) (".." none) (".hidden-config" none) ("README.md" none) ("notes.org" none) ("script.py" none) ("subdir" none)) :after-count 7 :after-lines (("." (string 4 "    " plain)) (".." (string 4 "    " plain)) (".hidden-config" (string 3 "  " icon-props)) ("README.md" (string 3 "  " icon-props)) ("notes.org" (string 3 "  " icon-props)) ("script.py" (string 3 "  " icon-props)) ("subdir" (string 3 "  " icon-props))) :text-unchanged t)"#
+        ]],
     )
 }
 
@@ -46,8 +46,8 @@ fn reverting_the_listing_reapplies_every_icon() -> ParityBatchCase {
          :text-unchanged (string= before-text (atid-test-text)))))"##,
         true,
         expect![[
-        r#"OK (:after-revert (("." (string 4 "    " plain)) (".." (string 4 "    " plain)) (".hidden-config" (string 3 "  " icon-props)) ("README.md" (string 3 "  " icon-props)) ("notes.org" (string 3 "  " icon-props)) ("script.py" (string 3 "  " icon-props)) ("subdir" (string 3 "  " icon-props))) :count 7 :same-as-before t :text-unchanged t)"#
-    ]],
+            r#"OK (:after-revert (("." (string 4 "    " plain)) (".." (string 4 "    " plain)) (".hidden-config" (string 3 "  " icon-props)) ("README.md" (string 3 "  " icon-props)) ("notes.org" (string 3 "  " icon-props)) ("script.py" (string 3 "  " icon-props)) ("subdir" (string 3 "  " icon-props))) :count 7 :same-as-before t :text-unchanged t)"#
+        ]],
     )
 }
 
@@ -67,8 +67,8 @@ fn inserting_a_subdirectory_gets_icons_on_its_lines_and_its_dot_entries() -> Par
          :display-count (atid-test-display-count))))"##,
         true,
         expect![[
-        r#"OK (:before-count 7 :after (("." (string 4 "    " plain)) (".." (string 4 "    " plain)) (".hidden-config" (string 3 "  " icon-props)) ("README.md" (string 3 "  " icon-props)) ("notes.org" (string 3 "  " icon-props)) ("script.py" (string 3 "  " icon-props)) ("subdir" (string 3 "  " icon-props)) ("subdir/." (string 3 "  " icon-props)) ("subdir/.." (string 3 "  " icon-props)) ("subdir/nested.el" (string 3 "  " icon-props))) :display-count 10)"#
-    ]],
+            r#"OK (:before-count 7 :after (("." (string 4 "    " plain)) (".." (string 4 "    " plain)) (".hidden-config" (string 3 "  " icon-props)) ("README.md" (string 3 "  " icon-props)) ("notes.org" (string 3 "  " icon-props)) ("script.py" (string 3 "  " icon-props)) ("subdir" (string 3 "  " icon-props)) ("subdir/." (string 3 "  " icon-props)) ("subdir/.." (string 3 "  " icon-props)) ("subdir/nested.el" (string 3 "  " icon-props))) :display-count 10)"#
+        ]],
     )
 }
 
@@ -91,8 +91,8 @@ fn turning_the_mode_off_removes_every_display_property_including_dired_s_own() -
            :text-identical (string= pristine-text (atid-test-text))))))"##,
         true,
         expect![[
-        r#"OK (:pristine-count 1 :on-count 7 :off-count 0 :off-lines (("." none) (".." none) (".hidden-config" none) ("README.md" none) ("notes.org" none) ("script.py" none) ("subdir" none)) :mode-off nil :text-identical t)"#
-    ]],
+            r#"OK (:pristine-count 1 :on-count 7 :off-count 0 :off-lines (("." none) (".." none) (".hidden-config" none) ("README.md" none) ("notes.org" none) ("script.py" none) ("subdir" none)) :mode-off nil :text-identical t)"#
+        ]],
     )
 }
 
@@ -116,8 +116,8 @@ fn enabling_the_mode_outside_dired_changes_nothing_but_the_flag() -> ParityBatch
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (:mode-flag t :fontifier-unchanged t :extra-props nil :text-unchanged t :display-count 0 :lighter (all-the-icons-dired-lighter))"#
-    ]],
+            r#"OK (:mode-flag t :fontifier-unchanged t :extra-props nil :text-unchanged t :display-count 0 :lighter (all-the-icons-dired-lighter))"#
+        ]],
     )
 }
 

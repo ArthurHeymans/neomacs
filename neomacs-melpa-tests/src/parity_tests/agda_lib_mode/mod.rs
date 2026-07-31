@@ -42,10 +42,6 @@ pub(crate) fn assert_agda_lib_mode_autoload_parity(elisp_form: &str, expected: E
     assert_agda_lib_mode_source_parity("agda-lib-mode-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_agda_lib_mode_autoload_parity` cases (2a).
 pub(crate) fn assert_agda_lib_mode_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

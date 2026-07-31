@@ -51,8 +51,8 @@ fn set_up_slime_ac_installs_the_chosen_source_in_each_buffer_separately() -> Par
     (nreverse observed)))"##,
         true,
         expect![[
-        r#"OK ((:modes-known (t t)) (:lisp-before #1=(ac-source-words-in-same-mode-buffers)) (:lisp-after #2=(ac-source-slime-simple . #1#) :buffer-local t) (:fuzzy-buffer (ac-source-slime-fuzzy . #1#)) (:repl-mode slime-repl-mode :repl-sources (ac-source-slime-simple . #1#)) (:repl-prefix "str" :repl-candidates ("string" "string=" "stringp")) (:repl-line "(string") (:lisp-unchanged #2#))"#
-    ]],
+            r#"OK ((:modes-known (t t)) (:lisp-before #1=(ac-source-words-in-same-mode-buffers)) (:lisp-after #2=(ac-source-slime-simple . #1#) :buffer-local t) (:fuzzy-buffer (ac-source-slime-fuzzy . #1#)) (:repl-mode slime-repl-mode :repl-sources (ac-source-slime-simple . #1#)) (:repl-prefix "str" :repl-candidates ("string" "string=" "stringp")) (:repl-line "(string") (:lisp-unchanged #2#))"#
+        ]],
     )
 }
 
@@ -77,8 +77,8 @@ fn completing_in_a_lisp_buffer_asks_swank_and_inserts_the_chosen_symbol() -> Par
                          :mode major-mode))))"##,
         true,
         expect![[
-        r#"OK (:prefix "ca" :prefix-start 19 :candidates ("car" "cadr" "case" "catch") :annotations (("car" nil "l") ("cadr" nil "l") ("case" nil "l") ("catch" nil "l")) :requests ("(:emacs-rex (swank:simple-completions \"ca\" '#1=\"COMMON-LISP-USER\") #1# t 4)") :line "  (car" :point 22 :mode lisp-mode)"#
-    ]],
+            r#"OK (:prefix "ca" :prefix-start 19 :candidates ("car" "cadr" "case" "catch") :annotations (("car" nil "l") ("cadr" nil "l") ("case" nil "l") ("catch" nil "l")) :requests ("(:emacs-rex (swank:simple-completions \"ca\" '#1=\"COMMON-LISP-USER\") #1# t 4)") :line "  (car" :point 22 :mode lisp-mode)"#
+        ]],
     )
 }
 
@@ -104,8 +104,8 @@ fn the_fuzzy_source_labels_each_candidate_with_the_flags_swank_returned() -> Par
                         :annotations (acs-test-summaries))))))"##,
         true,
         expect![[
-        r#"OK ((:with-flags t :candidates ("car" "cadr" "case" "catch") :annotations (("car" "-f--e-" "l") ("cadr" "-f--e-" "l") ("case" "-m----" "l") ("catch" "-m----" "l")) :request "(:emacs-rex (swank:fuzzy-completions \"ca\" #1=\"COMMON-LISP-USER\" :limit 50 :time-limit-in-msec 1500) #1# t 4)") (:with-flags nil :candidates ("car" "cadr" "case" "catch") :annotations (("car" nil "l") ("cadr" nil "l") ("case" nil "l") ("catch" nil "l"))))"#
-    ]],
+            r#"OK ((:with-flags t :candidates ("car" "cadr" "case" "catch") :annotations (("car" "-f--e-" "l") ("cadr" "-f--e-" "l") ("case" "-m----" "l") ("catch" "-m----" "l")) :request "(:emacs-rex (swank:fuzzy-completions \"ca\" #1=\"COMMON-LISP-USER\" :limit 50 :time-limit-in-msec 1500) #1# t 4)") (:with-flags nil :candidates ("car" "cadr" "case" "catch") :annotations (("car" nil "l") ("cadr" nil "l") ("case" nil "l") ("catch" nil "l"))))"#
+        ]],
     )
 }
 
@@ -126,8 +126,8 @@ fn an_uppercase_prefix_is_carried_into_every_candidate_and_inserted() -> ParityB
     (append result (list :line (acs-test-line) :point (point)))))"##,
         true,
         expect![[
-        r#"OK (:prefix "CA" :candidates ("CAr" "CAdr" "CAse" "CAtch") :request "(:emacs-rex (swank:simple-completions \"CA\" '#1=\"COMMON-LISP-USER\") #1# t 4)" :line "  (CAr" :point 22)"#
-    ]],
+            r#"OK (:prefix "CA" :candidates ("CAr" "CAdr" "CAse" "CAtch") :request "(:emacs-rex (swank:simple-completions \"CA\" '#1=\"COMMON-LISP-USER\") #1# t 4)" :line "  (CAr" :point 22)"#
+        ]],
     )
 }
 
@@ -147,8 +147,8 @@ fn each_candidate_documents_itself_from_the_running_lisp() -> ParityBatchCase {
         :requests (last (acs-test-swank-requests) 3)))"##,
         true,
         expect![[
-        r#"OK (:car "Return the car of LIST.  Signals TYPE-ERROR otherwise." :case "CASE keyform {({key | (key*)} form*)}*" :catch "Not documented." :requests ("(:emacs-rex (swank:documentation-symbol \"car\") \"COMMON-LISP-USER\" t 5)" "(:emacs-rex (swank:documentation-symbol \"case\") \"COMMON-LISP-USER\" t 6)" "(:emacs-rex (swank:documentation-symbol \"catch\") \"COMMON-LISP-USER\" t 7)"))"#
-    ]],
+            r#"OK (:car "Return the car of LIST.  Signals TYPE-ERROR otherwise." :case "CASE keyform {({key | (key*)} form*)}*" :catch "Not documented." :requests ("(:emacs-rex (swank:documentation-symbol \"car\") \"COMMON-LISP-USER\" t 5)" "(:emacs-rex (swank:documentation-symbol \"case\") \"COMMON-LISP-USER\" t 6)" "(:emacs-rex (swank:documentation-symbol \"catch\") \"COMMON-LISP-USER\" t 7)"))"#
+        ]],
     )
 }
 
@@ -172,8 +172,8 @@ fn without_a_connection_neither_source_contacts_swank() -> ParityBatchCase {
         :line (acs-test-line)))"##,
         true,
         expect![[
-        r#"OK (:connected nil :simple nil :fuzzy nil :prefix "ca" :candidates ("cabinet" "caboose") :sources (ac-source-slime-simple ac-source-words-in-same-mode-buffers) :requests nil :line "(ca")"#
-    ]],
+            r#"OK (:connected nil :simple nil :fuzzy nil :prefix "ca" :candidates ("cabinet" "caboose") :sources (ac-source-slime-simple ac-source-words-in-same-mode-buffers) :requests nil :line "(ca")"#
+        ]],
     )
 }
 

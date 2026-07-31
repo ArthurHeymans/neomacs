@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_apt_sources_list_batch};
 
-fn apt_sources_list_authors_fontifies_and_saves_a_multi_repository_configuration() -> ParityBatchCase {
+fn apt_sources_list_authors_fontifies_and_saves_a_multi_repository_configuration() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "apt_sources_list_authors_fontifies_and_saves_a_multi_repository_configuration",
         r##"(let* ((root
@@ -92,12 +93,13 @@ fn apt_sources_list_authors_fontifies_and_saves_a_multi_repository_configuration
          result)"##,
         true,
         expect![[
-        r##"OK (:mode apt-sources-list-mode :faces (("deb-src" apt-sources-list-type) ("arch=amd64" apt-sources-list-options) ("https://security.debian.org" apt-sources-list-uri) ("bookworm-security" apt-sources-list-suite) ("non-free-firmware" apt-sources-list-components) ("# primary" font-lock-comment-delimiter-face) ("primary" font-lock-comment-face)) :buffer "# Managed Debian repositories\n\ndeb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian bookworm main contrib non-free-firmware # primary\ndeb-src [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian bookworm main contrib non-free-firmware # primary\n# Debian security\ndeb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://security.debian.org/debian-security bookworm-security main\n" :disk "# Managed Debian repositories\n\ndeb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian bookworm main contrib non-free-firmware # primary\ndeb-src [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian bookworm main contrib non-free-firmware # primary\n# Debian security\ndeb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://security.debian.org/debian-security bookworm-security main\n")"##
-    ]],
+            r##"OK (:mode apt-sources-list-mode :faces (("deb-src" apt-sources-list-type) ("arch=amd64" apt-sources-list-options) ("https://security.debian.org" apt-sources-list-uri) ("bookworm-security" apt-sources-list-suite) ("non-free-firmware" apt-sources-list-components) ("# primary" font-lock-comment-delimiter-face) ("primary" font-lock-comment-face)) :buffer "# Managed Debian repositories\n\ndeb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian bookworm main contrib non-free-firmware # primary\ndeb-src [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian bookworm main contrib non-free-firmware # primary\n# Debian security\ndeb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://security.debian.org/debian-security bookworm-security main\n" :disk "# Managed Debian repositories\n\ndeb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian bookworm main contrib non-free-firmware # primary\ndeb-src [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://deb.debian.org/debian bookworm main contrib non-free-firmware # primary\n# Debian security\ndeb [arch=amd64 signed-by=/usr/share/keyrings/debian-archive-keyring.gpg] https://security.debian.org/debian-security bookworm-security main\n")"##
+        ]],
     )
 }
 
-fn apt_sources_list_keyboard_workflow_adds_copies_and_updates_a_security_repository() -> ParityBatchCase {
+fn apt_sources_list_keyboard_workflow_adds_copies_and_updates_a_security_repository()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apt_sources_list_keyboard_workflow_adds_copies_and_updates_a_security_repository",
         r##"(let* ((root
@@ -155,12 +157,13 @@ fn apt_sources_list_keyboard_workflow_adds_copies_and_updates_a_security_reposit
          result)"##,
         true,
         expect![[
-        r##"OK (:mode apt-sources-list-mode :point-line 2 :buffer "# Debian security\ndeb [arch=amd64] https://mirror.example/debian-security bookworm-security main contrib\ndeb-src https://security.debian.org/debian-security bookworm-security main contrib\n" :disk "# Debian security\ndeb [arch=amd64] https://mirror.example/debian-security bookworm-security main contrib\ndeb-src https://security.debian.org/debian-security bookworm-security main contrib\n")"##
-    ]],
+            r##"OK (:mode apt-sources-list-mode :point-line 2 :buffer "# Debian security\ndeb [arch=amd64] https://mirror.example/debian-security bookworm-security main contrib\ndeb-src https://security.debian.org/debian-security bookworm-security main contrib\n" :disk "# Debian security\ndeb [arch=amd64] https://mirror.example/debian-security bookworm-security main contrib\ndeb-src https://security.debian.org/debian-security bookworm-security main contrib\n")"##
+        ]],
     )
 }
 
-fn apt_sources_list_migrates_a_vendor_mirror_between_exact_and_component_suites() -> ParityBatchCase {
+fn apt_sources_list_migrates_a_vendor_mirror_between_exact_and_component_suites() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "apt_sources_list_migrates_a_vendor_mirror_between_exact_and_component_suites",
         r##"(let* ((root
@@ -241,8 +244,8 @@ fn apt_sources_list_migrates_a_vendor_mirror_between_exact_and_component_suites(
          result)"##,
         true,
         expect![[
-        r##"OK (:component-suite "deb [arch=amd64 trusted=yes] file:/srv/vendor-v2 bookworm main contrib # exact local mirror\n" :expanded-components "deb [arch=amd64 trusted=yes] file:/srv/vendor-v2 bookworm main contrib non-free-firmware # exact local mirror\n" :exact-suite "deb [arch=amd64 trusted=yes] file:/srv/vendor-v2 dists/bookworm/main/binary-amd64/ # exact local mirror\n" :mismatch apt-sources-list-suite-component-mismatch :unchanged-after-error t :disk "deb [arch=amd64 trusted=yes] file:/srv/vendor-v2 dists/bookworm/main/binary-amd64/ # exact local mirror\n")"##
-    ]],
+            r##"OK (:component-suite "deb [arch=amd64 trusted=yes] file:/srv/vendor-v2 bookworm main contrib # exact local mirror\n" :expanded-components "deb [arch=amd64 trusted=yes] file:/srv/vendor-v2 bookworm main contrib non-free-firmware # exact local mirror\n" :exact-suite "deb [arch=amd64 trusted=yes] file:/srv/vendor-v2 dists/bookworm/main/binary-amd64/ # exact local mirror\n" :mismatch apt-sources-list-suite-component-mismatch :unchanged-after-error t :disk "deb [arch=amd64 trusted=yes] file:/srv/vendor-v2 dists/bookworm/main/binary-amd64/ # exact local mirror\n")"##
+        ]],
     )
 }
 
@@ -333,12 +336,13 @@ fn apt_sources_list_disables_reenables_and_navigates_repository_entries() -> Par
          result)"##,
         true,
         expect![[
-        r##"OK (:disabled "deb https://deb.debian.org/debian bookworm main\n# deb https://deb.debian.org/debian bookworm-updates main\n# operator note\ndeb malformed repository\ndeb https://security.debian.org/debian-security bookworm-security main\n" :skipped-to "deb https://security.debian.org/debian-security bookworm-security main" :restored-next "deb https://deb.debian.org/debian bookworm-updates main" :final "deb https://deb.debian.org/debian bookworm main\ndeb https://deb.debian.org/debian bookworm-updates main contrib\n# operator note\ndeb malformed repository\ndeb https://security.debian.org/debian-security bookworm-security main\n" :disk "deb https://deb.debian.org/debian bookworm main\ndeb https://deb.debian.org/debian bookworm-updates main contrib\n# operator note\ndeb malformed repository\ndeb https://security.debian.org/debian-security bookworm-security main\n")"##
-    ]],
+            r##"OK (:disabled "deb https://deb.debian.org/debian bookworm main\n# deb https://deb.debian.org/debian bookworm-updates main\n# operator note\ndeb malformed repository\ndeb https://security.debian.org/debian-security bookworm-security main\n" :skipped-to "deb https://security.debian.org/debian-security bookworm-security main" :restored-next "deb https://deb.debian.org/debian bookworm-updates main" :final "deb https://deb.debian.org/debian bookworm main\ndeb https://deb.debian.org/debian bookworm-updates main contrib\n# operator note\ndeb malformed repository\ndeb https://security.debian.org/debian-security bookworm-security main\n" :disk "deb https://deb.debian.org/debian bookworm main\ndeb https://deb.debian.org/debian bookworm-updates main contrib\n# operator note\ndeb malformed repository\ndeb https://security.debian.org/debian-security bookworm-security main\n")"##
+        ]],
     )
 }
 
-fn apt_sources_list_validation_rejects_malformed_edits_and_navigation_boundaries_without_damage() -> ParityBatchCase {
+fn apt_sources_list_validation_rejects_malformed_edits_and_navigation_boundaries_without_damage()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apt_sources_list_validation_rejects_malformed_edits_and_navigation_boundaries_without_damage",
         r##"(let* ((root
@@ -438,8 +442,8 @@ fn apt_sources_list_validation_rejects_malformed_edits_and_navigation_boundaries
          result)"##,
         true,
         expect![[
-        r#"OK (:visits ("deb https://one.example/debian bookworm main" "deb-src [arch=arm64] https://two.example/debian bookworm main contrib") :malformed-source nil :malformed-edit apt-sources-list-not-found :boundary (error ("No further repositories found buffer")) :buffer-unchanged t :disk-unchanged t)"#
-    ]],
+            r#"OK (:visits ("deb https://one.example/debian bookworm main" "deb-src [arch=arm64] https://two.example/debian bookworm main contrib") :malformed-source nil :malformed-edit apt-sources-list-not-found :boundary (error ("No further repositories found buffer")) :buffer-unchanged t :disk-unchanged t)"#
+        ]],
     )
 }
 

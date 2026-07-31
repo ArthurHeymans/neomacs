@@ -31,12 +31,13 @@ fn zero_x_c_live_table_rows_cover_ambiguous_and_prefixed_inputs() -> ParityBatch
                  "8:17")))"##,
         true,
         expect![[
-        r#"OK ((("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0x10" "10" "16" "20" "10000") ("0d10" "A" "10" "12" "1010") ("0o10" "8" "8" "10" "1000") ("0b10" "2" "2" "2" "10")) (("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0xff" "FF" "255" "377" "11111111")) (("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0o17" "F" "15" "17" "1111")))"#
-    ]],
+            r#"OK ((("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0x10" "10" "16" "20" "10000") ("0d10" "A" "10" "12" "1010") ("0o10" "8" "8" "10" "1000") ("0b10" "2" "2" "2" "10")) (("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0xff" "FF" "255" "377" "11111111")) (("Input" "Base 16" "Base 10" "Base 8" "Base 2") ("0o17" "F" "15" "17" "1111")))"#
+        ]],
     )
 }
 
-fn zero_x_c_live_table_rows_signal_when_configured_input_bases_filter_to_empty() -> ParityBatchCase {
+fn zero_x_c_live_table_rows_signal_when_configured_input_bases_filter_to_empty() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "zero_x_c_live_table_rows_signal_when_configured_input_bases_filter_to_empty",
         r##"(let ((0xc-max-base 36)
@@ -78,8 +79,8 @@ fn zero_x_c_live_display_formats_columns_and_renders_errors() -> ParityBatchCase
                     "*0xc Live Conversion*"))))"##,
         true,
         expect![[
-        r#"OK ("Input  Base 16  Base 10  Base 8  Base 2    \n0xff   FF       255      377     11111111  \n" "0xc-live: (error Not a number)")"#
-    ]],
+            r#"OK ("Input  Base 16  Base 10  Base 8  Base 2    \n0xff   FF       255      377     11111111  \n" "0xc-live: (error Not a number)")"#
+        ]],
     )
 }
 

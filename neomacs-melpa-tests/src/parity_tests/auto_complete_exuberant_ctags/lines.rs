@@ -17,12 +17,13 @@ fn auto_complete_exuberant_ctags_get_line_preserves_practical_tag_records() -> P
                             (point-max)))"##,
         true,
         expect![[
-        r#"OK ("render_frame\11ui.rs\11/^fn render_frame/;\"\11kind:f\11language:Rust" "render_frame\11ui.rs\11/^fn render_frame/;\"\11kind:f\11language:Rust" 1 61)"#
-    ]],
+            r#"OK ("render_frame\11ui.rs\11/^fn render_frame/;\"\11kind:f\11language:Rust" "render_frame\11ui.rs\11/^fn render_frame/;\"\11kind:f\11language:Rust" 1 61)"#
+        ]],
     )
 }
 
-fn auto_complete_exuberant_ctags_get_line_filters_headers_but_not_embedded_markers() -> ParityBatchCase {
+fn auto_complete_exuberant_ctags_get_line_filters_headers_but_not_embedded_markers()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_exuberant_ctags_get_line_filters_headers_but_not_embedded_markers",
         r##"(mapcar
@@ -38,8 +39,8 @@ fn auto_complete_exuberant_ctags_get_line_filters_headers_but_not_embedded_marke
                              " !_\tfile\tkind:v\tlanguage:C"))"##,
         true,
         expect![[
-        r#"OK ("" "" "alpha!_beta\11file\11kind:v\11language:C" " !_\11file\11kind:v\11language:C")"#
-    ]],
+            r#"OK ("" "" "alpha!_beta\11file\11kind:v\11language:C" " !_\11file\11kind:v\11language:C")"#
+        ]],
     )
 }
 
@@ -113,8 +114,8 @@ fn auto_complete_exuberant_ctags_get_line_invalid_ranges_signal_exactly() -> Par
                             '((0 2) (1 9) (3 2))))"##,
         true,
         expect![[
-        r#"OK ((:signal args-out-of-range ((:buffer nil) 0 2)) (:signal args-out-of-range ((:buffer nil) 1 9)) (:value "b"))"#
-    ]],
+            r#"OK ((:signal args-out-of-range ((:buffer nil) 0 2)) (:signal args-out-of-range ((:buffer nil) 1 9)) (:value "b"))"#
+        ]],
     )
 }
 

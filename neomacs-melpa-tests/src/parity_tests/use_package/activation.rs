@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_use_package_batch};
 
-fn use_package_commands_create_interactive_autoloads_without_loading_the_feature() -> ParityBatchCase {
+fn use_package_commands_create_interactive_autoloads_without_loading_the_feature() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "use_package_commands_create_interactive_autoloads_without_loading_the_feature",
         r##"(progn
@@ -25,8 +26,8 @@ fn use_package_commands_create_interactive_autoloads_without_loading_the_feature
                   neomacs-use-package-command-two)))"##,
         true,
         expect![[
-        r#"OK ((neomacs-use-package-command-one t "neomacs-use-package-command-library" nil t) (neomacs-use-package-command-two t "neomacs-use-package-command-library" nil t))"#
-    ]],
+            r#"OK ((neomacs-use-package-command-one t "neomacs-use-package-command-library" nil t) (neomacs-use-package-command-two t "neomacs-use-package-command-library" nil t))"#
+        ]],
     )
 }
 
@@ -62,7 +63,8 @@ fn use_package_hooks_apply_suffixes_autoload_symbols_and_run_lambda_entries() ->
     )
 }
 
-fn use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries() -> ParityBatchCase {
+fn use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries",
         r##"(let ((auto-mode-alist nil)
@@ -91,8 +93,8 @@ fn use_package_mode_interpreter_magic_and_fallback_register_exact_alist_entries(
                   'neomacs-use-package-detect-mode))))"##,
         true,
         expect![[
-        r##"OK ((("\\.neo2\\'" . neomacs-use-package-detect-mode) ("\\.neo\\'" . neomacs-use-package-detect-mode)) (("neo2" . neomacs-use-package-detect-mode) ("neo" . neomacs-use-package-detect-mode)) (("NEO!" . neomacs-use-package-detect-mode)) (("fallback" . neomacs-use-package-detect-mode)) t)"##
-    ]],
+            r##"OK ((("\\.neo2\\'" . neomacs-use-package-detect-mode) ("\\.neo\\'" . neomacs-use-package-detect-mode)) (("neo2" . neomacs-use-package-detect-mode) ("neo" . neomacs-use-package-detect-mode)) (("NEO!" . neomacs-use-package-detect-mode)) (("fallback" . neomacs-use-package-detect-mode)) t)"##
+        ]],
     )
 }
 

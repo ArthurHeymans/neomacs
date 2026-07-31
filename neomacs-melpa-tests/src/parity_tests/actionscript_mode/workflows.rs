@@ -42,8 +42,8 @@ fn visiting_an_as_file_sets_up_the_actionscript_editing_environment() -> ParityB
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ((actionscript-mode "Actionscript" nil t actionscript-indent-line "//" "" "\\(//+\\|/\\*+\\)\\s *" t (actionscript-font-lock-keywords-2) 4 2) (t t as-beginning-of-defun as-end-of-defun as-mark-defun comment-region uncomment-region) (("Ticker.as" . actionscript-mode) ("Ticker.asc") ("Ticker.as.bak" nil t) ("Ticker.AS" . actionscript-mode) ("ticker.as~")) (nil 1 682))"#
-    ]],
+            r#"OK ((actionscript-mode "Actionscript" nil t actionscript-indent-line "//" "" "\\(//+\\|/\\*+\\)\\s *" t (actionscript-font-lock-keywords-2) 4 2) (t t as-beginning-of-defun as-end-of-defun as-mark-defun comment-region uncomment-region) (("Ticker.as" . actionscript-mode) ("Ticker.asc") ("Ticker.as.bak" nil t) ("Ticker.AS" . actionscript-mode) ("ticker.as~")) (nil 1 682))"#
+        ]],
     )
 }
 
@@ -86,8 +86,8 @@ fn comment_dwim_round_trips_comments_through_the_mode_bindings() -> ParityBatchC
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ("package {\n    public class Comments {\n        public function go():void {\n            // var total:int = 0;\n            // total += 1;\n            trace(total);\n        }\n    }\n}\n" "package {\n    public class Comments {\n        public function go():void {\n            var total:int = 0;\n            total += 1;\n            trace(total);\n        }\n    }\n}\n" "            total += 1;\11\11//keep" "package {\n    public class Comments {\n        public function go():void {\n            // var total:int = 0;\n            total += 1;\11\11//keep\n            trace(total);\n        }\n    }\n}\n" "package {\n    public class Comments {\n        public function go():void {\n            var total:int = 0;\n            total += 1;\11\11//keep\n            trace(total);\n        }\n    }\n}\n" 106 t)"#
-    ]],
+            r#"OK ("package {\n    public class Comments {\n        public function go():void {\n            // var total:int = 0;\n            // total += 1;\n            trace(total);\n        }\n    }\n}\n" "package {\n    public class Comments {\n        public function go():void {\n            var total:int = 0;\n            total += 1;\n            trace(total);\n        }\n    }\n}\n" "            total += 1;\11\11//keep" "package {\n    public class Comments {\n        public function go():void {\n            // var total:int = 0;\n            total += 1;\11\11//keep\n            trace(total);\n        }\n    }\n}\n" "package {\n    public class Comments {\n        public function go():void {\n            var total:int = 0;\n            total += 1;\11\11//keep\n            trace(total);\n        }\n    }\n}\n" 106 t)"#
+        ]],
     )
 }
 
@@ -112,8 +112,8 @@ fn indent_region_lays_out_a_class_and_needs_fontification_to_skip_braces() -> Pa
     (kill-buffer plain)))"##,
         true,
         expect![[
-        r#"OK (("package com.example.game {\n\n    import flash.display.Sprite;\n    import flash.events.Event;\n\n    /**\n    * A sprite that counts frames.\n    */\n    public class Ticker extends Sprite implements ITickable {\n\n\11public static const MAX_TICKS:int = 100;\n\n\11private var _label:String = 'ready';\n\11private var _count:uint = 0;\n\n\11public function Ticker(label:String = \"ready\") {\n\11    _label = label;\n\11    addEventListener(Event.ENTER_FRAME, onEnterFrame);\n\11}\n\n\11public function get count():uint {\n\11    return _count;\n\11}\n\n\11private function onEnterFrame(event:Event):void {\n\11    if (_count < MAX_TICKS) {\n\11\11_count++;\n\11\11trace(\"tick } \" + _count);  // closing brace } in a comment\n\11    } else {\n\11\11removeEventListener(Event.ENTER_FRAME, onEnterFrame);\n\11    }\n\11}\n    }\n}\n" t t 8) "package com.example.game {\n\n    import flash.display.Sprite;\n    import flash.events.Event;\n\n    /**\n    * A sprite that counts frames.\n    */\n    public class Ticker extends Sprite implements ITickable {\n\n\11public static const MAX_TICKS:int = 100;\n\n\11private var _label:String = 'ready';\n\11private var _count:uint = 0;\n\n\11public function Ticker(label:String = \"ready\") {\n\11    _label = label;\n\11    addEventListener(Event.ENTER_FRAME, onEnterFrame);\n\11}\n\n\11public function get count():uint {\n\11    return _count;\n\11}\n\n\11private function onEnterFrame(event:Event):void {\n\11    if (_count < MAX_TICKS) {\n\11\11_count++;\n\11\11trace(\"tick } \" + _count);  // closing brace } in a comment\n    } else {\n\11removeEventListener(Event.ENTER_FRAME, onEnterFrame);\n    }\n}\n}\n}\n")"#
-    ]],
+            r#"OK (("package com.example.game {\n\n    import flash.display.Sprite;\n    import flash.events.Event;\n\n    /**\n    * A sprite that counts frames.\n    */\n    public class Ticker extends Sprite implements ITickable {\n\n\11public static const MAX_TICKS:int = 100;\n\n\11private var _label:String = 'ready';\n\11private var _count:uint = 0;\n\n\11public function Ticker(label:String = \"ready\") {\n\11    _label = label;\n\11    addEventListener(Event.ENTER_FRAME, onEnterFrame);\n\11}\n\n\11public function get count():uint {\n\11    return _count;\n\11}\n\n\11private function onEnterFrame(event:Event):void {\n\11    if (_count < MAX_TICKS) {\n\11\11_count++;\n\11\11trace(\"tick } \" + _count);  // closing brace } in a comment\n\11    } else {\n\11\11removeEventListener(Event.ENTER_FRAME, onEnterFrame);\n\11    }\n\11}\n    }\n}\n" t t 8) "package com.example.game {\n\n    import flash.display.Sprite;\n    import flash.events.Event;\n\n    /**\n    * A sprite that counts frames.\n    */\n    public class Ticker extends Sprite implements ITickable {\n\n\11public static const MAX_TICKS:int = 100;\n\n\11private var _label:String = 'ready';\n\11private var _count:uint = 0;\n\n\11public function Ticker(label:String = \"ready\") {\n\11    _label = label;\n\11    addEventListener(Event.ENTER_FRAME, onEnterFrame);\n\11}\n\n\11public function get count():uint {\n\11    return _count;\n\11}\n\n\11private function onEnterFrame(event:Event):void {\n\11    if (_count < MAX_TICKS) {\n\11\11_count++;\n\11\11trace(\"tick } \" + _count);  // closing brace } in a comment\n    } else {\n\11removeEventListener(Event.ENTER_FRAME, onEnterFrame);\n    }\n}\n}\n}\n")"#
+        ]],
     )
 }
 
@@ -135,8 +135,8 @@ fn font_lock_marks_packages_imports_classes_strings_and_comments() -> ParityBatc
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ((("package" . font-lock-keyword-face) ("com" . font-lock-constant-face) ("import" . font-lock-keyword-face) ("flash" . font-lock-constant-face) ("display" . font-lock-constant-face) ("Sprite" . font-lock-type-face) ("import" . font-lock-keyword-face) ("flash" . font-lock-constant-face) ("events" . font-lock-constant-face) ("Event" . font-lock-type-face) ("/**" . font-lock-comment-delimiter-face) ("\n * A sprite that counts frames.\n */" . font-lock-comment-face) ("public" . font-lock-keyword-face) ("class" . font-lock-keyword-face) ("Ticker" . font-lock-type-face) ("extends" . font-lock-keyword-face) ("Sprite" . font-lock-type-face) ("implements" . font-lock-keyword-face) ("ITickable" . font-lock-type-face) ("public" . font-lock-keyword-face) ("static" . font-lock-keyword-face) ("const" . font-lock-keyword-face) ("int" . font-lock-function-name-face) ("private" . font-lock-keyword-face) ("var" . font-lock-keyword-face) ("String" . font-lock-function-name-face) ("'ready'" . font-lock-string-face) ("private" . font-lock-keyword-face) ("var" . font-lock-keyword-face) ("uint" . font-lock-function-name-face)) (("private" . font-lock-keyword-face) ("function" . font-lock-keyword-face) ("onEnterFrame" . font-lock-function-name-face) ("void" . font-lock-keyword-face) ("if" . font-lock-keyword-face) ("trace" . font-lock-function-name-face) ("\"tick } \"" . font-lock-string-face) ("// " . font-lock-comment-delimiter-face) ("closing brace } in a comment\n" . font-lock-comment-face)) (font-lock-string-face font-lock-string-face font-lock-comment-delimiter-face font-lock-comment-face nil))"#
-    ]],
+            r#"OK ((("package" . font-lock-keyword-face) ("com" . font-lock-constant-face) ("import" . font-lock-keyword-face) ("flash" . font-lock-constant-face) ("display" . font-lock-constant-face) ("Sprite" . font-lock-type-face) ("import" . font-lock-keyword-face) ("flash" . font-lock-constant-face) ("events" . font-lock-constant-face) ("Event" . font-lock-type-face) ("/**" . font-lock-comment-delimiter-face) ("\n * A sprite that counts frames.\n */" . font-lock-comment-face) ("public" . font-lock-keyword-face) ("class" . font-lock-keyword-face) ("Ticker" . font-lock-type-face) ("extends" . font-lock-keyword-face) ("Sprite" . font-lock-type-face) ("implements" . font-lock-keyword-face) ("ITickable" . font-lock-type-face) ("public" . font-lock-keyword-face) ("static" . font-lock-keyword-face) ("const" . font-lock-keyword-face) ("int" . font-lock-function-name-face) ("private" . font-lock-keyword-face) ("var" . font-lock-keyword-face) ("String" . font-lock-function-name-face) ("'ready'" . font-lock-string-face) ("private" . font-lock-keyword-face) ("var" . font-lock-keyword-face) ("uint" . font-lock-function-name-face)) (("private" . font-lock-keyword-face) ("function" . font-lock-keyword-face) ("onEnterFrame" . font-lock-function-name-face) ("void" . font-lock-keyword-face) ("if" . font-lock-keyword-face) ("trace" . font-lock-function-name-face) ("\"tick } \"" . font-lock-string-face) ("// " . font-lock-comment-delimiter-face) ("closing brace } in a comment\n" . font-lock-comment-face)) (font-lock-string-face font-lock-string-face font-lock-comment-delimiter-face font-lock-comment-face nil))"#
+        ]],
     )
 }
 
@@ -166,8 +166,8 @@ fn the_syntax_table_classifies_strings_comments_and_dollar_identifiers() -> Pari
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ((119 119 34 34 46 46 46 40 62) ((:depth 2 :in-string 34 :in-comment nil :comment-style nil :start 48 :innermost-open 21) (:depth 2 :in-string 39 :in-comment nil :comment-style nil :start 87 :innermost-open 21) (:depth 2 :in-string nil :in-comment t :comment-style nil :start 106 :innermost-open 21) (:depth 3 :in-string nil :in-comment t :comment-style 1 :start 185 :innermost-open 148) (:depth 5 :in-string nil :in-comment nil :comment-style nil :start nil :innermost-open 159) (:depth 4 :in-string nil :in-comment nil :comment-style nil :start nil :innermost-open 169)) (38 "$mixed_name") (168 "(a && (b || c))") (184 "; }"))"#
-    ]],
+            r#"OK ((119 119 34 34 46 46 46 40 62) ((:depth 2 :in-string 34 :in-comment nil :comment-style nil :start 48 :innermost-open 21) (:depth 2 :in-string 39 :in-comment nil :comment-style nil :start 87 :innermost-open 21) (:depth 2 :in-string nil :in-comment t :comment-style nil :start 106 :innermost-open 21) (:depth 3 :in-string nil :in-comment t :comment-style 1 :start 185 :innermost-open 148) (:depth 5 :in-string nil :in-comment nil :comment-style nil :start nil :innermost-open 159) (:depth 4 :in-string nil :in-comment nil :comment-style nil :start nil :innermost-open 169)) (38 "$mixed_name") (168 "(a && (b || c))") (184 "; }"))"#
+        ]],
     )
 }
 
@@ -203,8 +203,8 @@ fn defun_motion_commands_walk_actionscript_functions() -> ParityBatchCase {
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ((466 25 "private function onEnterFrame(event:Event):void {") (678 32 "}") (413 464 "public function get count():uint {\nreturn _count;\n}") (411 19) nil)"#
-    ]],
+            r#"OK ((466 25 "private function onEnterFrame(event:Event):void {") (678 32 "}") (413 464 "public function get count():uint {\nreturn _count;\n}") (411 19) nil)"#
+        ]],
     )
 }
 
@@ -243,8 +243,8 @@ fn imenu_indexes_functions_once_wired_with_the_packages_own_helper() -> ParityBa
     (kill-buffer bare))))"##,
         true,
         expect![[
-        r#"OK ((nil t (imenu-unavailable "This buffer cannot use ‘imenu-default-create-index-function’")) nil (("*Rescan*" . -99) ("Ticker" . 294) ("count" . 413) ("onEnterFrame" . 466)) (466 "private function onEnterFrame(event:Event):void {"))"#
-    ]],
+            r#"OK ((nil t (imenu-unavailable "This buffer cannot use ‘imenu-default-create-index-function’")) nil (("*Rescan*" . -99) ("Ticker" . 294) ("count" . 413) ("onEnterFrame" . 466)) (466 "private function onEnterFrame(event:Event):void {"))"#
+        ]],
     )
 }
 

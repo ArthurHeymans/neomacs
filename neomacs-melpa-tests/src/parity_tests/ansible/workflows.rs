@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_ansible_batch};
 
-fn editing_a_nested_production_playbook_finds_the_project_and_adds_ansible_semantics() -> ParityBatchCase {
+fn editing_a_nested_production_playbook_finds_the_project_and_adds_ansible_semantics()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "editing_a_nested_production_playbook_finds_the_project_and_adds_ansible_semantics",
         r##"
@@ -75,12 +76,13 @@ fn editing_a_nested_production_playbook_finds_the_project_and_adds_ansible_seman
 "##,
         true,
         expect![[
-        r#"OK ((t "." ("group_vars/production/vault.yml" "playbooks/production/deploy.yml" "playbooks/production/rollback.yml" "site.yml") "LANG=C.UTF-8 ansible-lint [ORACLE-SANDBOX]/ansible-project/playbooks/production/deploy.yml" (("hosts" . ansible-section-face) ("tasks" . ansible-section-face) ("name" . font-lock-builtin-face) ("Publish release" . ansible-task-label-face) ("copy" . font-lock-keyword-face) ("{{" . font-lock-builtin-face) ("artifact_path" . font-lock-function-name-face) ("}}" . font-lock-builtin-face) ("when" . font-lock-builtin-face)) nil) nil (nil nil nil nil nil) "---\n- hosts: production\n  tasks:\n    - name: Publish release\n      copy:\n        src: \"{{ artifact_path }}\"\n        dest: /srv/storefront/app.tar\n      when: release_ready\n")"#
-    ]],
+            r#"OK ((t "." ("group_vars/production/vault.yml" "playbooks/production/deploy.yml" "playbooks/production/rollback.yml" "site.yml") "LANG=C.UTF-8 ansible-lint [ORACLE-SANDBOX]/ansible-project/playbooks/production/deploy.yml" (("hosts" . ansible-section-face) ("tasks" . ansible-section-face) ("name" . font-lock-builtin-face) ("Publish release" . ansible-task-label-face) ("copy" . font-lock-keyword-face) ("{{" . font-lock-builtin-face) ("artifact_path" . font-lock-function-name-face) ("}}" . font-lock-builtin-face) ("when" . font-lock-builtin-face)) nil) nil (nil nil nil nil nil) "---\n- hosts: production\n  tasks:\n    - name: Publish release\n      copy:\n        src: \"{{ artifact_path }}\"\n        dest: /srv/storefront/app.tar\n      when: release_ready\n")"#
+        ]],
     )
 }
 
-fn opening_editing_and_saving_a_vault_file_keeps_plaintext_in_emacs_and_ciphertext_on_disk() -> ParityBatchCase {
+fn opening_editing_and_saving_a_vault_file_keeps_plaintext_in_emacs_and_ciphertext_on_disk()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "opening_editing_and_saving_a_vault_file_keeps_plaintext_in_emacs_and_ciphertext_on_disk",
         r##"
@@ -149,12 +151,13 @@ fn opening_editing_and_saving_a_vault_file_keeps_plaintext_in_emacs_and_cipherte
 "##,
         true,
         expect![[
-        r#"OK (("api_token: initial-secret\nrelease_channel: stable" nil t t) "api_token: initial-secret\nrelease_channel: canary" nil "$ANSIBLE_VAULT;1.1;AES256\nENC:api_token: initial-secret\nENC:release_channel: canary" "decrypt|release-secret\nencrypt|release-secret\ndecrypt|release-secret\n" nil (ansible-encrypt-buffer ansible-decrypt-buffer))"#
-    ]],
+            r#"OK (("api_token: initial-secret\nrelease_channel: stable" nil t t) "api_token: initial-secret\nrelease_channel: canary" nil "$ANSIBLE_VAULT;1.1;AES256\nENC:api_token: initial-secret\nENC:release_channel: canary" "decrypt|release-secret\nencrypt|release-secret\ndecrypt|release-secret\n" nil (ansible-encrypt-buffer ansible-decrypt-buffer))"#
+        ]],
     )
 }
 
-fn encrypting_and_decrypting_an_indented_vars_region_preserves_the_following_play() -> ParityBatchCase {
+fn encrypting_and_decrypting_an_indented_vars_region_preserves_the_following_play()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "encrypting_and_decrypting_an_indented_vars_region_preserves_the_following_play",
         r##"
@@ -201,8 +204,8 @@ fn encrypting_and_decrypting_an_indented_vars_region_preserves_the_following_pla
 "##,
         true,
         expect![[
-        r#"OK ("- hosts: production\n  vars:\n    $ANSIBLE_VAULT;1.1;AES256\n    ENC:api_token: checkout-secret\n    ENC:deploy_key: ssh-ed25519-demo\n  tasks:\n    - name: Publish release\n      copy:\n        src: \"{{ artifact_path }}\"\n        dest: /srv/storefront/app.tar\n" "- hosts: production\n  vars:\n    api_token: checkout-secret\n    deploy_key: ssh-ed25519-demo\n  tasks:\n    - name: Publish release\n      copy:\n        src: \"{{ artifact_path }}\"\n        dest: /srv/storefront/app.tar\n" nil "encrypt|team-secret\ndecrypt|team-secret\n" nil)"#
-    ]],
+            r#"OK ("- hosts: production\n  vars:\n    $ANSIBLE_VAULT;1.1;AES256\n    ENC:api_token: checkout-secret\n    ENC:deploy_key: ssh-ed25519-demo\n  tasks:\n    - name: Publish release\n      copy:\n        src: \"{{ artifact_path }}\"\n        dest: /srv/storefront/app.tar\n" "- hosts: production\n  vars:\n    api_token: checkout-secret\n    deploy_key: ssh-ed25519-demo\n  tasks:\n    - name: Publish release\n      copy:\n        src: \"{{ artifact_path }}\"\n        dest: /srv/storefront/app.tar\n" nil "encrypt|team-secret\ndecrypt|team-secret\n" nil)"#
+        ]],
     )
 }
 

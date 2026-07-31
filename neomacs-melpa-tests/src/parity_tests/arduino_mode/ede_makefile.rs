@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_ede_arduino_batch};
 
-fn library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_directory() -> ParityBatchCase {
+fn library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_directory()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_directory",
         r##"(let* ((root
@@ -64,12 +65,13 @@ fn library_guessing_scans_real_includes_skips_local_headers_and_adds_utility_dir
                       (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK (#("Wire" 0 4 (fontified nil)) #("Servo" 0 5 (fontified nil)) #("Servo/utility" 0 5 (fontified nil)))"#
-    ]],
+            r#"OK (#("Wire" 0 4 (fontified nil)) #("Servo" 0 5 (fontified nil)) #("Servo/utility" 0 5 (fontified nil)))"#
+        ]],
     )
 }
 
-fn buffer_local_library_override_preserves_declared_order_without_scanning_source() -> ParityBatchCase {
+fn buffer_local_library_override_preserves_declared_order_without_scanning_source()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "buffer_local_library_override_preserves_declared_order_without_scanning_source",
         r##"(let* ((root
@@ -108,7 +110,8 @@ fn buffer_local_library_override_preserves_declared_order_without_scanning_sourc
     )
 }
 
-fn makefile_generation_supplies_complete_real_project_board_and_library_contract() -> ParityBatchCase {
+fn makefile_generation_supplies_complete_real_project_board_and_library_contract() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "makefile_generation_supplies_complete_real_project_board_and_library_contract",
         r##"(let* ((root
@@ -211,12 +214,13 @@ fn makefile_generation_supplies_complete_real_project_board_and_library_contract
                       (delete-directory root t)))"##,
         true,
         expect![[
-        r##"OK ("# generated makefile\n" (:sync :setup (:insert "arduino:ede-empty" "TARGET" "BuildDemo" "ARDUINO_LIBS" "Servo Ethernet/utility" "MCU" "atmega328p" "F_CPU" "16000000L" "PORT" "/dev/ttyACM0" "AVRDUDE_ARD_BAUDRATE" "57600" "AVRDUDE_ARD_PROGRAMMER" "arduino" "ARDUINO_MK" "/opt/arduino/Arduino.mk" "ARDUINO_HOME" "/opt/arduino")) nil)"##
-    ]],
+            r##"OK ("# generated makefile\n" (:sync :setup (:insert "arduino:ede-empty" "TARGET" "BuildDemo" "ARDUINO_LIBS" "Servo Ethernet/utility" "MCU" "atmega328p" "F_CPU" "16000000L" "PORT" "/dev/ttyACM0" "AVRDUDE_ARD_BAUDRATE" "57600" "AVRDUDE_ARD_PROGRAMMER" "arduino" "ARDUINO_MK" "/opt/arduino/Arduino.mk" "ARDUINO_HOME" "/opt/arduino")) nil)"##
+        ]],
     )
 }
 
-fn makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero() -> ParityBatchCase {
+fn makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero",
         r##"(let* ((project
@@ -261,12 +265,13 @@ fn makefile_generation_rejects_ino_before_one_zero_and_pde_at_or_after_one_zero(
                     (nreverse outcomes))"##,
         true,
         expect![[
-        r#"OK ((error "Makefile doesn’t support .ino files until Arduino 1.0") (error "Makefile doesn’t support .pde files after Arduino 1.0"))"#
-    ]],
+            r#"OK ((error "Makefile doesn’t support .ino files until Arduino 1.0") (error "Makefile doesn’t support .pde files after Arduino 1.0"))"#
+        ]],
     )
 }
 
-fn makefile_generation_refuses_to_replace_unmanaged_content_when_user_declines() -> ParityBatchCase {
+fn makefile_generation_refuses_to_replace_unmanaged_content_when_user_declines() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "makefile_generation_refuses_to_replace_unmanaged_content_when_user_declines",
         r##"(let* ((root

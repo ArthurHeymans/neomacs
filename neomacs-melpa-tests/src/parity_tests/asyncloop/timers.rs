@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asyncloop_batch};
 
-fn asyncloop_real_idle_timer_event_handler_runs_series_after_current_call_stack() -> ParityBatchCase {
+fn asyncloop_real_idle_timer_event_handler_runs_series_after_current_call_stack() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asyncloop_real_idle_timer_event_handler_runs_series_after_current_call_stack",
         r##"(let (events loop timer)
@@ -45,7 +46,8 @@ fn asyncloop_real_idle_timer_event_handler_runs_series_after_current_call_stack(
     )
 }
 
-fn asyncloop_real_idle_timer_pause_then_resume_preserves_remaining_stage_order() -> ParityBatchCase {
+fn asyncloop_real_idle_timer_pause_then_resume_preserves_remaining_stage_order() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asyncloop_real_idle_timer_pause_then_resume_preserves_remaining_stage_order",
         r##"(let (events loop first-timer second-timer)
@@ -90,7 +92,8 @@ fn asyncloop_real_idle_timer_pause_then_resume_preserves_remaining_stage_order()
     )
 }
 
-fn asyncloop_real_idle_timer_cancel_removes_pending_dispatch_and_worker_side_effects() -> ParityBatchCase {
+fn asyncloop_real_idle_timer_cancel_removes_pending_dispatch_and_worker_side_effects()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asyncloop_real_idle_timer_cancel_removes_pending_dispatch_and_worker_side_effects",
         r##"(let (events loop timer before)
@@ -131,7 +134,8 @@ fn asyncloop_real_idle_timer_cancel_removes_pending_dispatch_and_worker_side_eff
     )
 }
 
-fn asyncloop_real_idle_timer_handlers_follow_real_queue_order_without_cross_talk() -> ParityBatchCase {
+fn asyncloop_real_idle_timer_handlers_follow_real_queue_order_without_cross_talk() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asyncloop_real_idle_timer_handlers_follow_real_queue_order_without_cross_talk",
         r##"(let (events loop-a loop-b timer-a timer-b queued)

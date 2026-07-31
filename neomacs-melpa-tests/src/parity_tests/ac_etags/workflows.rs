@@ -37,8 +37,8 @@ fn ac_etags_completes_a_tag_prefix_from_a_real_tags_table() -> ParityBatchCase {
 "#,
         true,
         expect![[
-        r#"OK ((ac-source-etags) t ("bank") "bank_" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung") (("bank_open" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_close" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_audit" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_transfer" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_überweisung" "s" ac-etags-candidate-face ac-etags-selection-face)) "int main(void) { bank_open" 27 3 "s" ac-etags--candidates (("bank_" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")) ac-candidate-face ac-selection-face)"#
-    ]],
+            r#"OK ((ac-source-etags) t ("bank") "bank_" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung") (("bank_open" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_close" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_audit" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_transfer" "s" ac-etags-candidate-face ac-etags-selection-face) ("bank_überweisung" "s" ac-etags-candidate-face ac-etags-selection-face)) "int main(void) { bank_open" 27 3 "s" ac-etags--candidates (("bank_" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")) ac-candidate-face ac-selection-face)"#
+        ]],
     )
 }
 
@@ -77,8 +77,8 @@ fn ac_etags_requires_option_sets_the_minimum_prefix_length() -> ParityBatchCase 
 "#,
         true,
         expect![[
-        r#"OK (3 integer ("int x = b" 3 nil nil) ("int x = ba" 3 nil nil) ("int x = ban" 3 "ban" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) ("int x = b" 1 "b" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) ("int x = bank" 5 nil nil) ("int x = bank_" 5 "bank_" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")))"#
-    ]],
+            r#"OK (3 integer ("int x = b" 3 nil nil) ("int x = ba" 3 nil nil) ("int x = ban" 3 "ban" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) ("int x = b" 1 "b" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) ("int x = bank" 5 nil nil) ("int x = bank_" 5 "bank_" ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")))"#
+        ]],
     )
 }
 
@@ -113,8 +113,8 @@ fn ac_etags_cache_serves_a_repeated_prefix_until_the_cache_is_cleared() -> Parit
 "#,
         true,
         expect![[
-        r#"OK ((("bank") ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) (("bank_" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")) (("ledger") ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) 0 (("ledger") ("bank_settle" "bank_reconcile")) (("bank_" "bank_reconcile" "bank_settle")) t)"#
-    ]],
+            r#"OK ((("bank") ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) (("bank_" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")) (("ledger") ("bank_open" "bank_close" "bank_audit" "bank_transfer" "bank_überweisung")) 0 (("ledger") ("bank_settle" "bank_reconcile")) (("bank_" "bank_reconcile" "bank_settle")) t)"#
+        ]],
     )
 }
 
@@ -145,8 +145,8 @@ fn ac_etags_completes_across_several_tags_tables_at_once() -> ParityBatchCase {
 "#,
         true,
         expect![[
-        r#"OK (("bank") ("ledger" "bank") ("bank_open" "bank_close" "bank_audit" "bank_settle" "bank_transfer" "bank_reconcile" "bank_überweisung") "call bank_open" 15 (("bank_" "bank_reconcile" "bank_settle" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")))"#
-    ]],
+            r#"OK (("bank") ("ledger" "bank") ("bank_open" "bank_close" "bank_audit" "bank_settle" "bank_transfer" "bank_reconcile" "bank_überweisung") "call bank_open" 15 (("bank_" "bank_reconcile" "bank_settle" "bank_open" "bank_close" "bank_transfer" "bank_audit" "bank_überweisung")))"#
+        ]],
     )
 }
 

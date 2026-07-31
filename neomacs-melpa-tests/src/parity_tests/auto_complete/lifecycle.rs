@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_batch};
 
-fn auto_complete_mode_enable_disable_installs_and_removes_buffer_local_hooks_and_state() -> ParityBatchCase {
+fn auto_complete_mode_enable_disable_installs_and_removes_buffer_local_hooks_and_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_mode_enable_disable_installs_and_removes_buffer_local_hooks_and_state",
         r##"(with-temp-buffer
@@ -63,12 +64,13 @@ fn auto_complete_mode_enable_disable_installs_and_removes_buffer_local_hooks_and
                                   ac-prefix))))))"##,
         true,
         expect![
-        "OK ((nil nil nil nil) (t 2 (ac-handle-pre-command t) (ac-handle-post-command t) (ac-clear-variables-after-save t) nil) (nil 3 nil nil nil nil nil nil))"
-    ],
+            "OK ((nil nil nil nil) (t 2 (ac-handle-pre-command t) (ac-handle-post-command t) (ac-clear-variables-after-save t) nil) (nil 3 nil nil nil nil nil nil))"
+        ],
     )
 }
 
-fn auto_complete_trigger_command_classifier_handles_builtin_custom_electric_and_excluded_commands() -> ParityBatchCase {
+fn auto_complete_trigger_command_classifier_handles_builtin_custom_electric_and_excluded_commands()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_trigger_command_classifier_handles_builtin_custom_electric_and_excluded_commands",
         r##"(let ((ac-trigger-commands
@@ -97,8 +99,8 @@ fn auto_complete_trigger_command_classifier_handles_builtin_custom_electric_and_
                               nil)))"##,
         true,
         expect![[
-        r#"OK ((self-insert-command (self-insert-command . #1=(fixture-trigger)) nil) (fixture-trigger #1# nil) (fixture-blocked nil nil) (my-self-insert-command 3 nil) (electric-pair-post-self-insert-function 0 nil) (electric-buffer-list nil nil) (ac-source-command nil 0) (package-install nil nil) ("not-a-symbol" nil nil) (nil nil nil))"#
-    ]],
+            r#"OK ((self-insert-command (self-insert-command . #1=(fixture-trigger)) nil) (fixture-trigger #1# nil) (fixture-blocked nil nil) (my-self-insert-command 3 nil) (electric-pair-post-self-insert-function 0 nil) (electric-buffer-list nil nil) (ac-source-command nil 0) (package-install nil nil) ("not-a-symbol" nil nil) (nil nil nil))"#
+        ]],
     )
 }
 
@@ -133,12 +135,13 @@ fn auto_complete_disabled_faces_block_pre_command_trigger_at_exact_point() -> Pa
                              '(1 4 8 9 10 12))))"##,
         true,
         expect![
-        "OK ((1 font-lock-comment-face #1=(font-lock-comment-face font-lock-string-face) #1#) (4 font-lock-comment-face #1# #1#) (8 nil nil nil) (9 font-lock-keyword-face nil nil) (10 font-lock-keyword-face nil nil) (12 font-lock-keyword-face nil nil))"
-    ],
+            "OK ((1 font-lock-comment-face #1=(font-lock-comment-face font-lock-string-face) #1#) (4 font-lock-comment-face #1# #1#) (8 nil nil nil) (9 font-lock-keyword-face nil nil) (10 font-lock-keyword-face nil nil) (12 font-lock-keyword-face nil nil))"
+        ],
     )
 }
 
-fn auto_complete_pre_and_post_command_hooks_start_update_and_abort_real_completion_session() -> ParityBatchCase {
+fn auto_complete_pre_and_post_command_hooks_start_update_and_abort_real_completion_session()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_pre_and_post_command_hooks_start_update_and_abort_real_completion_session",
         r##"(save-window-excursion
@@ -216,8 +219,8 @@ fn auto_complete_pre_and_post_command_hooks_start_update_and_abort_real_completi
                                 (auto-complete-mode -1)))))"##,
         true,
         expect![[
-        r#"OK ((t nil nil) (t t "al" ("alpha" "alpine") t) ("alp" t t "alp" ("alpha" "alpine") t) (nil nil nil nil nil))"#
-    ]],
+            r#"OK ((t nil nil) (t t "al" ("alpha" "alpine") t) ("alp" t t "alp" ("alpha" "alpine") t) (nil nil nil nil nil))"#
+        ]],
     )
 }
 
@@ -302,7 +305,8 @@ fn auto_complete_trigger_key_replaces_old_binding_and_restores_fallback_space() 
     )
 }
 
-fn auto_complete_after_save_cache_registry_honors_predicates_and_registration_order() -> ParityBatchCase {
+fn auto_complete_after_save_cache_registry_honors_predicates_and_registration_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_after_save_cache_registry_honors_predicates_and_registration_order",
         r##"(let ((ac-clear-variables-after-save
@@ -345,8 +349,8 @@ fn auto_complete_after_save_cache_registry_honors_predicates_and_registration_or
                               predicate-calls)))"##,
         true,
         expect![
-        "OK (((kept . auto-complete-test-keep-p) (conditional . auto-complete-test-clear-p) (always)) always-value conditional-value kept-value 11)"
-    ],
+            "OK (((kept . auto-complete-test-keep-p) (conditional . auto-complete-test-clear-p) (always)) always-value conditional-value kept-value 11)"
+        ],
     )
 }
 
@@ -398,12 +402,13 @@ fn auto_complete_periodic_cache_registry_clears_on_exact_minute_multiples() -> P
                             (nreverse observations)))"##,
         true,
         expect![
-        "OK (((every-three . 3) (every-two . 2) (each . 1)) ((1 each-1 two-1 three-1) (2 each-2 two-2 three-2) (3 each-3 two-3 three-3) (4 each-4 two-4 three-4) (5 each-5 two-5 three-5) (6 each-6 two-6 three-6)))"
-    ],
+            "OK (((every-three . 3) (every-two . 2) (each . 1)) ((1 each-1 two-1 three-1) (2 each-2 two-2 three-2) (3 each-3 two-3 three-3) (4 each-4 two-4 three-4) (5 each-5 two-5 three-5) (6 each-6 two-6 three-6)))"
+        ],
     )
 }
 
-fn auto_complete_cleanup_resets_session_objects_and_records_selected_candidate_history() -> ParityBatchCase {
+fn auto_complete_cleanup_resets_session_objects_and_records_selected_candidate_history()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_cleanup_resets_session_objects_and_records_selected_candidate_history",
         r##"(save-window-excursion
@@ -465,12 +470,13 @@ fn auto_complete_cleanup_resets_session_objects_and_records_selected_candidate_h
                                 (ac-cleanup)))))"##,
         true,
         expect![[
-        r#"OK ((1 "fo" 1) ((ac-inline nil) (ac-menu nil) (ac-completing nil) (ac-point nil) (ac-prefix nil) (ac-selected-candidate nil) (ac-candidates nil) (ac-current-sources nil)) (0 1 0 0 0 0 0 0 0 0 0 0))"#
-    ]],
+            r#"OK ((1 "fo" 1) ((ac-inline nil) (ac-menu nil) (ac-completing nil) (ac-point nil) (ac-prefix nil) (ac-selected-candidate nil) (ac-candidates nil) (ac-current-sources nil)) (0 1 0 0 0 0 0 0 0 0 0 0))"#
+        ]],
     )
 }
 
-fn auto_complete_error_reports_original_condition_disables_mode_and_cleans_session() -> ParityBatchCase {
+fn auto_complete_error_reports_original_condition_disables_mode_and_cleans_session()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_error_reports_original_condition_disables_mode_and_cleans_session",
         r##"(with-temp-buffer

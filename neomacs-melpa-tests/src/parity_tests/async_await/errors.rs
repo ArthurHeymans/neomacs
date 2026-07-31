@@ -22,8 +22,8 @@ fn rejected_await_is_caught_by_condition_case_and_execution_continues() -> Parit
            (parity-catch-rejection)))"##,
         true,
         expect![
-        "OK (fulfilled (:fullfilled (:done ((:caught (error remote-failure)) :continued))))"
-    ],
+            "OK (fulfilled (:fullfilled (:done ((:caught (error remote-failure)) :continued))))"
+        ],
     )
 }
 
@@ -138,8 +138,8 @@ fn nested_condition_cases_distinguish_await_rejection_from_local_errors() -> Par
            '(:ok :local :reject)))"##,
         true,
         expect![[
-        r#"OK ((:ok (fulfilled (:fullfilled (:value :ok)))) (:local (fulfilled (:fullfilled (:value (:local (wrong-type-argument integerp "bad")))))) (:reject (fulfilled (:fullfilled (:outer (error (network 503)))))))"#
-    ]],
+            r#"OK ((:ok (fulfilled (:fullfilled (:value :ok)))) (:local (fulfilled (:fullfilled (:value (:local (wrong-type-argument integerp "bad")))))) (:reject (fulfilled (:fullfilled (:outer (error (network 503)))))))"#
+        ]],
     )
 }
 
@@ -184,8 +184,8 @@ fn check_return_value_preserves_all_non_marker_values_by_identity() -> ParityBat
                 fake-error)))))"##,
         true,
         expect![[
-        r#"OK ((nil 0 "text" :keyword (:ordinary 1 2) [alpha beta]) (t :iterator :reason) t t t)"#
-    ]],
+            r#"OK ((nil 0 "text" :keyword (:ordinary 1 2) [alpha beta]) (t :iterator :reason) t t t)"#
+        ]],
     )
 }
 
@@ -282,8 +282,8 @@ fn caught_rejection_can_rethrow_a_new_error_with_context() -> ParityBatchCase {
            (parity-rethrow)))"##,
         true,
         expect![[
-        r#"OK (rejected (:rejected (user-error "wrapped" (error (service unavailable)))))"#
-    ]],
+            r#"OK (rejected (:rejected (user-error "wrapped" (error (service unavailable)))))"#
+        ]],
     )
 }
 
@@ -314,8 +314,8 @@ fn rejection_reasons_keep_symbol_string_number_and_list_shapes() -> ParityBatchC
             '(nested reason))))"##,
         true,
         expect![[
-        r#"OK ((:symbol (fulfilled (:fullfilled (error (:symbol))))) ("string" (fulfilled (:fullfilled (error ("string"))))) (404 (fulfilled (:fullfilled (error (404))))) (#1=(nested reason) (fulfilled (:fullfilled (error (#1#))))))"#
-    ]],
+            r#"OK ((:symbol (fulfilled (:fullfilled (error (:symbol))))) ("string" (fulfilled (:fullfilled (error ("string"))))) (404 (fulfilled (:fullfilled (error (404))))) (#1=(nested reason) (fulfilled (:fullfilled (error (#1#))))))"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_clang_batch};
 
-fn auto_complete_clang_call_process_unsaved_uses_current_region_and_parses_stubbed_stdout() -> ParityBatchCase {
+fn auto_complete_clang_call_process_unsaved_uses_current_region_and_parses_stubbed_stdout()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_call_process_unsaved_uses_current_region_and_parses_stubbed_stdout",
         r##"(with-temp-buffer
@@ -49,8 +50,8 @@ fn auto_complete_clang_call_process_unsaved_uses_current_region_and_parses_stubb
                 (nreverse calls))))))"##,
         true,
         expect![[
-        r#"OK ((("value" "int value" nil)) ((1 27 "int main() { return val; }" "/fake/clang" nil "*clang-output*" nil ("-cc1" "-"))))"#
-    ]],
+            r#"OK ((("value" "int value" nil)) ((1 27 "int main() { return val; }" "/fake/clang" nil "*clang-output*" nil ("-cc1" "-"))))"#
+        ]],
     )
 }
 
@@ -95,12 +96,13 @@ fn auto_complete_clang_call_process_saved_uses_file_process_without_region() -> 
                 (nreverse calls))))))"##,
         true,
         expect![[
-        r#"OK ((("saved" "int saved" nil)) (("/fake/clang" nil "*clang-output*" nil ("-cc1" "saved.c"))))"#
-    ]],
+            r#"OK ((("saved" "int saved" nil)) (("/fake/clang" nil "*clang-output*" nil ("-cc1" "saved.c"))))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_nonzero_process_still_reports_error_and_returns_useful_completions() -> ParityBatchCase {
+fn auto_complete_clang_nonzero_process_still_reports_error_and_returns_useful_completions()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_nonzero_process_still_reports_error_and_returns_useful_completions",
         r##"(with-temp-buffer
@@ -203,12 +205,13 @@ fn auto_complete_clang_candidate_skips_process_inside_comment_and_string() -> Pa
                     (nreverse calls))))))))"##,
         true,
         expect![[
-        r#"OK (#1=("value") nil #1# (("val" "-cc1" "-fsyntax-only" "-x" "c" "-code-completion-at" "-:1:7" "-") ("val" "-cc1" "-fsyntax-only" "-x" "c" "-code-completion-at" "-:3:20" "-")))"#
-    ]],
+            r#"OK (#1=("value") nil #1# (("val" "-cc1" "-fsyntax-only" "-x" "c" "-code-completion-at" "-:1:7" "-") ("val" "-cc1" "-fsyntax-only" "-x" "c" "-code-completion-at" "-:3:20" "-")))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_candidate_auto_save_saves_modified_buffer_before_invocation() -> ParityBatchCase {
+fn auto_complete_clang_candidate_auto_save_saves_modified_buffer_before_invocation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_candidate_auto_save_saves_modified_buffer_before_invocation",
         r##"(with-temp-buffer
@@ -245,12 +248,13 @@ fn auto_complete_clang_candidate_auto_save_saves_modified_buffer_before_invocati
               (buffer-modified-p)))))"##,
         true,
         expect![[
-        r#"OK (("value") 1 ("val" ("-cc1" "-fsyntax-only" "-code-completion-at" "[ORACLE-SANDBOX]/autosave.c:1:5" "[ORACLE-SANDBOX]/autosave.c") nil) nil)"#
-    ]],
+            r#"OK (("value") 1 ("val" ("-cc1" "-fsyntax-only" "-code-completion-at" "[ORACLE-SANDBOX]/autosave.c:1:5" "[ORACLE-SANDBOX]/autosave.c") nil) nil)"#
+        ]],
     )
 }
 
-fn auto_complete_clang_candidate_widens_narrowing_and_builds_completion_at_prefix_start() -> ParityBatchCase {
+fn auto_complete_clang_candidate_widens_narrowing_and_builds_completion_at_prefix_start()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_candidate_widens_narrowing_and_builds_completion_at_prefix_start",
         r##"(with-temp-buffer
@@ -284,8 +288,8 @@ fn auto_complete_clang_candidate_widens_narrowing_and_builds_completion_at_prefi
               (buffer-narrowed-p)))))"##,
         true,
         expect![[
-        r#"OK (("beta") ("beta" ("-cc1" "-fsyntax-only" "-x" "c++" "-code-completion-at" "-:3:5" "-") 1 35) t)"#
-    ]],
+            r#"OK (("beta") ("beta" ("-cc1" "-fsyntax-only" "-x" "c++" "-code-completion-at" "-:3:5" "-") 1 35) t)"#
+        ]],
     )
 }
 
@@ -315,7 +319,8 @@ fn auto_complete_clang_prefix_prefers_symbol_then_member_access_operators() -> P
     )
 }
 
-fn auto_complete_clang_real_subprocess_consumes_unsaved_buffer_and_returns_candidates() -> ParityBatchCase {
+fn auto_complete_clang_real_subprocess_consumes_unsaved_buffer_and_returns_candidates()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_real_subprocess_consumes_unsaved_buffer_and_returns_candidates",
         r##"(let* ((root
@@ -347,8 +352,8 @@ fn auto_complete_clang_real_subprocess_consumes_unsaved_buffer_and_returns_candi
            (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK (("validate" "bool validate(<#int input#>)" nil) ("value" "int value" nil))"#
-    ]],
+            r#"OK (("validate" "bool validate(<#int input#>)" nil) ("value" "int value" nil))"#
+        ]],
     )
 }
 

@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_aider_helm_batch, assert_aider_batch};
+use super::{ParityBatchCase, assert_aider_batch, assert_aider_helm_batch};
 
 fn aider_markdown_safety_advice_contains_failures_only_inside_aider_mode() -> ParityBatchCase {
     ParityBatchCase::new(
@@ -34,8 +34,8 @@ fn aider_markdown_safety_advice_contains_failures_only_inside_aider_mode() -> Pa
             (nreverse calls)))"##,
         true,
         expect![[
-        r#"OK (("dynamic" "literal" "" "" "\\`never-match\\`") ("original" "original") ((boom) ("outside" nil) (outside)))"#
-    ]],
+            r#"OK (("dynamic" "literal" "" "" "\\`never-match\\`") ("original" "original") ((boom) ("outside" nil) (outside)))"#
+        ]],
     )
 }
 
@@ -64,8 +64,8 @@ fn aider_highlight_refinement_creates_and_clears_real_diff_overlays() -> ParityB
                    (overlays-in (point-min) (point-max))))))"##,
         true,
         expect![
-        "OK ((15 27 34 47) ((15 27 nil 1000) (22 26 smerge-refined-removed 1000) (34 47 nil 1000) (41 46 smerge-refined-added 1000)) (#<overlay in no buffer> #<overlay in no buffer>))"
-    ],
+            "OK ((15 27 34 47) ((15 27 nil 1000) (22 26 smerge-refined-removed 1000) (34 47 nil 1000) (41 46 smerge-refined-added 1000)) (#<overlay in no buffer> #<overlay in no buffer>))"
+        ],
     )
 }
 
@@ -95,8 +95,8 @@ fn aider_git_branch_resolution_and_diff_parameter_workflows_match() -> ParityBat
             (nreverse checks))))"##,
         true,
         expect![[
-        r#"OK (("main" "origin/topic" "origin/topic" "abc123" "missing") ("abc123^" . "abc123") ("main" . "HEAD") ("main" . "topic") ("origin/main" . "origin/topic") ((branch "origin/main") (branch "main") (branch "origin/topic") (branch "origin/topic") (branch "origin/abc123") (branch "abc123") (rev "abc123") (branch "origin/missing") (branch "missing") (rev "missing") (branch "origin/main") (branch "main")))"#
-    ]],
+            r#"OK (("main" "origin/topic" "origin/topic" "abc123" "missing") ("abc123^" . "abc123") ("main" . "HEAD") ("main" . "topic") ("origin/main" . "origin/topic") ((branch "origin/main") (branch "main") (branch "origin/topic") (branch "origin/topic") (branch "origin/abc123") (branch "abc123") (rev "abc123") (branch "origin/missing") (branch "missing") (rev "missing") (branch "origin/main") (branch "main")))"#
+        ]],
     )
 }
 
@@ -126,8 +126,8 @@ fn aider_real_git_staged_diff_generation_writes_expected_patch() -> ParityBatchC
             (process-lines "git" "status" "--short"))))"##,
         true,
         expect![[
-        r#"OK (t "diff --git a/demo.txt b/demo.txt\nindex 5626abf..814f4a4 100644\n--- a/demo.txt\n+++ b/demo.txt\n@@ -1 +1,2 @@\n one\n+two\n" ("M  demo.txt" "?? staged.diff"))"#
-    ]],
+            r#"OK (t "diff --git a/demo.txt b/demo.txt\nindex 5626abf..814f4a4 100644\n--- a/demo.txt\n+++ b/demo.txt\n@@ -1 +1,2 @@\n one\n+two\n" ("M  demo.txt" "?? staged.diff"))"#
+        ]],
     )
 }
 
@@ -153,8 +153,8 @@ fn aider_log_prompt_builders_cover_keyword_and_whole_repository_analysis() -> Pa
               sent))))"##,
         true,
         expect![[
-        r#"OK ("Please analyze the following Git log for the entire repository. Provide insights on:\n1. Overall project evolution and major development phases, with author name in each phase.\n2. Identification of key features, refactorings, or architectural changes and their timeline, with author name for each one.\n3. Patterns in development activity (e.g., periods of rapid development, bug fixing, etc.), with author name.\n4. Significant contributors or shifts in contribution patterns (if discernible from commit messages).\n5. Potential areas of technical debt or architectural concerns suggested by the commit history.\n6. General trends in the project's direction or focus over time." "Analyze the commits filtered by keyword 'parser'. Provide insights on:\n1. Overall 'parser' related feature evolution and major development phases, with author name in each phase.\n2. Frequency and patterns of 'parser' related commits.\n3. Files or areas most impacted by 'parser' changes.\n4. Main contributors and their roles in 'parser' work.\n5. Trends or hotspots in 'parser' related development.\n6. Suggestions for improving or refactoring 'parser' implementation.\n" "Analyze the Git commit history for the entire repository 'neomacs'.\n\nRepository: neomacs\n\nThe detailed Git log content is in the 'git.log' file (which has been added to the chat).\nPlease use its content for your analysis, following these instructions:\nFocus on correctness and regressions." 135)"#
-    ]],
+            r#"OK ("Please analyze the following Git log for the entire repository. Provide insights on:\n1. Overall project evolution and major development phases, with author name in each phase.\n2. Identification of key features, refactorings, or architectural changes and their timeline, with author name for each one.\n3. Patterns in development activity (e.g., periods of rapid development, bug fixing, etc.), with author name.\n4. Significant contributors or shifts in contribution patterns (if discernible from commit messages).\n5. Potential areas of technical debt or architectural concerns suggested by the commit history.\n6. General trends in the project's direction or focus over time." "Analyze the commits filtered by keyword 'parser'. Provide insights on:\n1. Overall 'parser' related feature evolution and major development phases, with author name in each phase.\n2. Frequency and patterns of 'parser' related commits.\n3. Files or areas most impacted by 'parser' changes.\n4. Main contributors and their roles in 'parser' work.\n5. Trends or hotspots in 'parser' related development.\n6. Suggestions for improving or refactoring 'parser' implementation.\n" "Analyze the Git commit history for the entire repository 'neomacs'.\n\nRepository: neomacs\n\nThe detailed Git log content is in the 'git.log' file (which has been added to the chat).\nPlease use its content for your analysis, following these instructions:\nFocus on correctness and regressions." 135)"#
+        ]],
     )
 }
 
@@ -191,12 +191,13 @@ fn aider_question_and_code_read_workflows_build_contextual_commands() -> ParityB
            (nreverse calls)))"##,
         true,
         expect![[
-        r#"OK ((read "Question for the selected region in function 'calculate': " nil 11) (current "/ask " "Question for the selected region in function 'calculate': What are the invariants?: first line\nsecond line") (read "Enter analysis instructions: " "In the current file, analyze function 'calculate' using bottom-up reading approach.\nExplain its basic operations, data structures, and control flow." 0) (send "/ask What are the invariants?" t) (read "Enter maintainability analysis instructions: " "Please analyze the code in the current file for maintainability and code quality:\n1. Readability: Is the code clear, well-formatted, and easy to understand? Are variable/function names meaningful?\n2. Complexity: Are functions/methods too long or complex (high cyclomatic complexity)? Are classes too large (violating SRP)?\n3. Duplication: Is there significant duplicated code (potential for DRY principle violation)?\n4. Code Smells: Are there common code smells (e.g., magic numbers, feature envy, inappropriate intimacy)?\n5. Comments/Documentation: Is the code adequately commented? Is documentation (e.g., docstrings) present and accurate?\n6. Testability: Is the code structured in a way that makes it easy to write unit tests (e.g., low coupling, dependency injection)?\n7. Consistency: Is the code style consistent throughout the file?\n8. Modularity: Is the code well-modularized with clear responsibilities?" 0) (send "/ask What are the invariants?" t))"#
-    ]],
+            r#"OK ((read "Question for the selected region in function 'calculate': " nil 11) (current "/ask " "Question for the selected region in function 'calculate': What are the invariants?: first line\nsecond line") (read "Enter analysis instructions: " "In the current file, analyze function 'calculate' using bottom-up reading approach.\nExplain its basic operations, data structures, and control flow." 0) (send "/ask What are the invariants?" t) (read "Enter maintainability analysis instructions: " "Please analyze the code in the current file for maintainability and code quality:\n1. Readability: Is the code clear, well-formatted, and easy to understand? Are variable/function names meaningful?\n2. Complexity: Are functions/methods too long or complex (high cyclomatic complexity)? Are classes too large (violating SRP)?\n3. Duplication: Is there significant duplicated code (potential for DRY principle violation)?\n4. Code Smells: Are there common code smells (e.g., magic numbers, feature envy, inappropriate intimacy)?\n5. Comments/Documentation: Is the code adequately commented? Is documentation (e.g., docstrings) present and accurate?\n6. Testability: Is the code structured in a way that makes it easy to write unit tests (e.g., low coupling, dependency injection)?\n7. Consistency: Is the code style consistent throughout the file?\n8. Modularity: Is the code well-modularized with clear responsibilities?" 0) (send "/ask What are the invariants?" t))"#
+        ]],
     )
 }
 
-fn aider_model_selection_sends_model_then_reasoning_effort_for_openai_models_only() -> ParityBatchCase {
+fn aider_model_selection_sends_model_then_reasoning_effort_for_openai_models_only()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aider_model_selection_sends_model_then_reasoning_effort_for_openai_models_only",
         r##"(let (sent messages answers)
@@ -218,8 +219,8 @@ fn aider_model_selection_sends_model_then_reasoning_effort_for_openai_models_onl
            (list (nreverse sent) (nreverse messages))))"##,
         true,
         expect![[
-        r#"OK ((("/model o4-mini" t) ("/reasoning-effort high" t) ("/editor-model sonnet" t)) ("model changed to o4-mini, customize aider-popular-models for the model candidates" "Reasoning effort set to high for model o4-mini" "editor-model changed to sonnet, customize aider-popular-models for the model candidates"))"#
-    ]],
+            r#"OK ((("/model o4-mini" t) ("/reasoning-effort high" t) ("/editor-model sonnet" t)) ("model changed to o4-mini, customize aider-popular-models for the model candidates" "Reasoning effort set to high for model o4-mini" "editor-model changed to sonnet, customize aider-popular-models for the model candidates"))"#
+        ]],
     )
 }
 
@@ -265,8 +266,8 @@ fn aider_helm_history_merges_cli_candidates_and_persists_latest_input() -> Parit
                 (read (buffer-string)))))))"##,
         true,
         expect![[
-        r#"OK ("new answer" ("Prompt: " ("helm-new" "candidate" "shared" "==================== HISTORY ========================================" "shared" "helm-old" "cli-new" "cli-old") (:must-match nil :name "Helm Read String, Use C-c C-y to edit selected command. C-b and C-f to move cursor during editing" :fuzzy t :initial-input "seed")) ("new answer" "helm-new" "shared" "helm-old" "cli-new" "cli-old"))"#
-    ]],
+            r#"OK ("new answer" ("Prompt: " ("helm-new" "candidate" "shared" "==================== HISTORY ========================================" "shared" "helm-old" "cli-new" "cli-old") (:must-match nil :name "Helm Read String, Use C-c C-y to edit selected command. C-b and C-f to move cursor during editing" :fuzzy t :initial-input "seed")) ("new answer" "helm-new" "shared" "helm-old" "cli-new" "cli-old"))"#
+        ]],
     )
 }
 
@@ -286,8 +287,7 @@ fn workflows_aider_batch() {
 
 #[test]
 fn workflows_aider_helm_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        aider_helm_history_merges_cli_candidates_and_persists_latest_input(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![aider_helm_history_merges_cli_candidates_and_persists_latest_input()];
     assert_aider_helm_batch(&cases);
 }

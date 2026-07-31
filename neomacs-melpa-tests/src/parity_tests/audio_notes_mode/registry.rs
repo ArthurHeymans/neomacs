@@ -1,8 +1,11 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_audio_notes_mode_autoload_batch, assert_audio_notes_mode_batch};
+use super::{
+    ParityBatchCase, assert_audio_notes_mode_autoload_batch, assert_audio_notes_mode_batch,
+};
 
-fn audio_notes_mode_exact_package_descriptor_origin_and_dependency_contract_match() -> ParityBatchCase {
+fn audio_notes_mode_exact_package_descriptor_origin_and_dependency_contract_match()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_exact_package_descriptor_origin_and_dependency_contract_match",
         r##"(let* ((descriptor
@@ -46,12 +49,13 @@ fn audio_notes_mode_exact_package_descriptor_origin_and_dependency_contract_matc
                             (alist-get :maintainers extras)))"##,
         true,
         expect![[
-        r#"OK (audio-notes-mode "20170611.2159" "Play audio notes synced from somewhere else." nil nil nil "[PACKAGE]" "fa38350829c7e97257efc746a010471d33748a68" "fa38350829c7" "https://github.com/Bruce-Connor/audio-notes-mode" ("hypermedia" "convenience") (("Artur Malabarba" . "bruce.connor.am@gmail.com")) (("Artur Malabarba" . "bruce.connor.am@gmail.com")))"#
-    ]],
+            r#"OK (audio-notes-mode "20170611.2159" "Play audio notes synced from somewhere else." nil nil nil "[PACKAGE]" "fa38350829c7e97257efc746a010471d33748a68" "fa38350829c7" "https://github.com/Bruce-Connor/audio-notes-mode" ("hypermedia" "convenience") (("Artur Malabarba" . "bruce.connor.am@gmail.com")) (("Artur Malabarba" . "bruce.connor.am@gmail.com")))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_installed_payload_inventory_and_exact_archive_hashes_match() -> ParityBatchCase {
+fn audio_notes_mode_installed_payload_inventory_and_exact_archive_hashes_match() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "audio_notes_mode_installed_payload_inventory_and_exact_archive_hashes_match",
         r##"(let* ((directory
@@ -97,8 +101,8 @@ fn audio_notes_mode_installed_payload_inventory_and_exact_archive_hashes_match()
                              #'string<)))"##,
         true,
         expect![[
-        r#"OK (("audio-notes-mode-autoloads.el" :generated t) ("audio-notes-mode-pkg.el" :archive 469 "2a1e422c77fd0c59101523248bd0cef98a0f14d424618d7f874363553180ab65") ("audio-notes-mode.el" :archive 20079 "83c5bf06158a0cce041afaeb552284a52d4a49156b4857fc3a942bfe3fbfb7ad") ("audio-notes-mode.elc" :generated t))"#
-    ]],
+            r#"OK (("audio-notes-mode-autoloads.el" :generated t) ("audio-notes-mode-pkg.el" :archive 469 "2a1e422c77fd0c59101523248bd0cef98a0f14d424618d7f874363553180ab65") ("audio-notes-mode.el" :archive 20079 "83c5bf06158a0cce041afaeb552284a52d4a49156b4857fc3a942bfe3fbfb7ad") ("audio-notes-mode.elc" :generated t))"#
+        ]],
     )
 }
 
@@ -151,8 +155,8 @@ fn audio_notes_mode_complete_callable_command_and_alias_surface_matches() -> Par
                              'anm/play-current)))"##,
         true,
         expect![[
-        r#"OK (((anm/bug-report t t nil (interactive nil) "ec2c9351c6fc6f5b92ad84dd996e531f704cef755c6dc8888b5a4a712e73b083") (anm/customize t t nil (interactive nil) "14bb4b48d57ae76f19b07c0f2141a816d12f0d9b409ddcb194998542f850056a") (anm/-mplayer-send t nil (cmd) nil "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") (anm/-mplayer-parse-seconds t nil (seconds) nil "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") (anm/mplayer-seek-forward t t (N) (interactive "P") "23bb629ca80683b3425da217dcd29c93efc108fca91cb3c040e33f197006a807") (anm/mplayer-seek-backward t t (N) (interactive "P") "00977819a3d753a0160fe33a4ceba3386cabad251834232e8ccc2b3e18cd0ec0") (anm/-is-mplayer-p t nil nil nil "98ce167714f751b75c84d379c6a17b2f37cc85fb992fb8d6e3dbc4ab69538812") (anm/-is-alive-p t nil nil nil "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") (anm/display-on-modeline t t (t-or-nil-or-color) (interactive "i") "382acf786d691a5f8fff7aae2343c45c20bd7340cb977124ee6faaa752d42ce3") (anm/global-mode-string t nil nil nil "76c2feb1834a8d1f412b3b7c9083a626a9b1bb0904730704a114325ecd65de69") (anm/play-next t t nil (interactive nil) "b69ac48a79b11a2f6d47e77d63d002027ea0a49046c4381e78186923137fc63e") (anm/play-current t t nil (interactive nil) "21b2f23aa6918a45a911ecbc38a779fb4669f234a45625461fff181ead3643f0") (anm/play-pause-current t t nil (interactive nil) "21b2f23aa6918a45a911ecbc38a779fb4669f234a45625461fff181ead3643f0") (anm/stop t t nil (interactive nil) "3a04bbb18cd25b62ee8478be99e10f4d2e25f29a79fab29abc76eaee873d485b") (anm/play-file t nil (file) nil "33e0b99c879cdfd24a72e65085c6dd0924f56c58a33ed087b379a0e7b87fa246") (anm/list-files t nil nil nil "c99b9ca3481b53cd7ea49dc687ee51314fe660f772e33c5bd263f5243ad6e05f") (audio-notes-mode t t (&optional arg) (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) "ff1fa79d4d3ee5386d590f87aaa5778bdf5fed101ce5719a616b03af6286b329")) t anm/play-pause-current)"#
-    ]],
+            r#"OK (((anm/bug-report t t nil (interactive nil) "ec2c9351c6fc6f5b92ad84dd996e531f704cef755c6dc8888b5a4a712e73b083") (anm/customize t t nil (interactive nil) "14bb4b48d57ae76f19b07c0f2141a816d12f0d9b409ddcb194998542f850056a") (anm/-mplayer-send t nil (cmd) nil "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") (anm/-mplayer-parse-seconds t nil (seconds) nil "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") (anm/mplayer-seek-forward t t (N) (interactive "P") "23bb629ca80683b3425da217dcd29c93efc108fca91cb3c040e33f197006a807") (anm/mplayer-seek-backward t t (N) (interactive "P") "00977819a3d753a0160fe33a4ceba3386cabad251834232e8ccc2b3e18cd0ec0") (anm/-is-mplayer-p t nil nil nil "98ce167714f751b75c84d379c6a17b2f37cc85fb992fb8d6e3dbc4ab69538812") (anm/-is-alive-p t nil nil nil "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") (anm/display-on-modeline t t (t-or-nil-or-color) (interactive "i") "382acf786d691a5f8fff7aae2343c45c20bd7340cb977124ee6faaa752d42ce3") (anm/global-mode-string t nil nil nil "76c2feb1834a8d1f412b3b7c9083a626a9b1bb0904730704a114325ecd65de69") (anm/play-next t t nil (interactive nil) "b69ac48a79b11a2f6d47e77d63d002027ea0a49046c4381e78186923137fc63e") (anm/play-current t t nil (interactive nil) "21b2f23aa6918a45a911ecbc38a779fb4669f234a45625461fff181ead3643f0") (anm/play-pause-current t t nil (interactive nil) "21b2f23aa6918a45a911ecbc38a779fb4669f234a45625461fff181ead3643f0") (anm/stop t t nil (interactive nil) "3a04bbb18cd25b62ee8478be99e10f4d2e25f29a79fab29abc76eaee873d485b") (anm/play-file t nil (file) nil "33e0b99c879cdfd24a72e65085c6dd0924f56c58a33ed087b379a0e7b87fa246") (anm/list-files t nil nil nil "c99b9ca3481b53cd7ea49dc687ee51314fe660f772e33c5bd263f5243ad6e05f") (audio-notes-mode t t (&optional arg) (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) "ff1fa79d4d3ee5386d590f87aaa5778bdf5fed101ce5719a616b03af6286b329")) t anm/play-pause-current)"#
+        ]],
     )
 }
 
@@ -185,8 +189,8 @@ fn audio_notes_mode_complete_customization_defaults_and_metadata_match() -> Pari
                             symbols))"##,
         true,
         expect![[
-        r#"OK ((anm/display-greeting t boolean (t) nil (audio-notes-mode . "0.1") nil) (anm/notes-directory "~/Dropbox/AudioNotes/" string ((concat (if (boundp 'org-directory) org-directory "~/Dropbox/") "AudioNotes/")) nil (audio-notes-mode . "0.7") nil) (anm/goto-file nil (choice string nil) (nil) nil nil nil) (anm/file-regexp "^[^\\.].*.\\(mp[34]\\|wav\\|3ga\\|3gpp\\|m4a\\)$" regexp ("^[^\\.].*.\\(mp[34]\\|wav\\|3ga\\|3gpp\\|m4a\\)$") nil nil nil) (anm/lighter " ▶" string ((if (char-displayable-p 9654) " ▶" " anm")) nil (audio-notes-mode . "0.1") nil) (anm/hook-into-org-pull nil (choice (const :tag "Always, activate on org-pull." t) (const :tag "Don't activate on org-pull." nil)) (nil) nil (audio-notes-mode . "0.1") nil) (anm/after-play-hook nil hook ('nil) nil (audio-notes-mode . "0.1") nil) (anm/before-play-hook nil hook ('nil) nil (audio-notes-mode . "0.1") nil) (anm/process-buffer-name "*Audio notes player*" string ("*Audio notes player*") nil (audio-notes-mode . "0.1") nil) (anm/player-command internal (choice (const :tag "Emacs internal player" internal) (cons (string :tag "Executable name") (repeat (choice (const :tag "File Name" file) (string :tag "Other Arguments"))))) ((cond ((executable-find "mplayer") anm/default-mplayer) ((executable-find "smplayer") anm/default-smplayer) ((executable-find "vlc") anm/default-vlc) (t 'internal))) nil (audio-notes-mode . "0.1") nil) (anm/default-seek-step 5 integer (5) (audio-notes-mode . "1.0") nil nil) (anm/delete-command #1=(delete-file file t) sexp ('#1#) nil (audio-notes-mode . "0.7") nil))"#
-    ]],
+            r#"OK ((anm/display-greeting t boolean (t) nil (audio-notes-mode . "0.1") nil) (anm/notes-directory "~/Dropbox/AudioNotes/" string ((concat (if (boundp 'org-directory) org-directory "~/Dropbox/") "AudioNotes/")) nil (audio-notes-mode . "0.7") nil) (anm/goto-file nil (choice string nil) (nil) nil nil nil) (anm/file-regexp "^[^\\.].*.\\(mp[34]\\|wav\\|3ga\\|3gpp\\|m4a\\)$" regexp ("^[^\\.].*.\\(mp[34]\\|wav\\|3ga\\|3gpp\\|m4a\\)$") nil nil nil) (anm/lighter " ▶" string ((if (char-displayable-p 9654) " ▶" " anm")) nil (audio-notes-mode . "0.1") nil) (anm/hook-into-org-pull nil (choice (const :tag "Always, activate on org-pull." t) (const :tag "Don't activate on org-pull." nil)) (nil) nil (audio-notes-mode . "0.1") nil) (anm/after-play-hook nil hook ('nil) nil (audio-notes-mode . "0.1") nil) (anm/before-play-hook nil hook ('nil) nil (audio-notes-mode . "0.1") nil) (anm/process-buffer-name "*Audio notes player*" string ("*Audio notes player*") nil (audio-notes-mode . "0.1") nil) (anm/player-command internal (choice (const :tag "Emacs internal player" internal) (cons (string :tag "Executable name") (repeat (choice (const :tag "File Name" file) (string :tag "Other Arguments"))))) ((cond ((executable-find "mplayer") anm/default-mplayer) ((executable-find "smplayer") anm/default-smplayer) ((executable-find "vlc") anm/default-vlc) (t 'internal))) nil (audio-notes-mode . "0.1") nil) (anm/default-seek-step 5 integer (5) (audio-notes-mode . "1.0") nil nil) (anm/delete-command #1=(delete-file file t) sexp ('#1#) nil (audio-notes-mode . "0.7") nil))"#
+        ]],
     )
 }
 
@@ -227,8 +231,8 @@ fn audio_notes_mode_constants_runtime_state_and_documentation_contract_match() -
                            'group-documentation))"##,
         true,
         expect![[
-        r#"OK ("1.1.1" 7 ("mplayer" "-quiet" file) ("vlc" file) "Which media player to use for the audio files, must be a symbol or a list.\n\nIf it's the symbol 'internal: uses emacs' internal player.\n\nIf it's a list: the first element is the executable name (like\n\"mplayer\") and all following elements are arguments to be\npassed to it. All arguments must either be strings or the symbol\n'file, which will be replaced by the filename (you probably\nshould include 'file at least once). For example, the default\nvalue (if you have mplayer installed) is\n\n    %S\n\nEmacs internal player should be able to play wav files, but not\nmp4, so your decision on which to use should be based on this." "You're in `audio-notes-mode'. This mode will deactivate after you go through your notes, to quit manually use \\[audio-notes-mode].\n\\[anm/play-next]: DELETES this audio note and moves to the next one.\n\\[anm/play-current]: Replays this audio note.\nTo disable this message, edit `anm/display-greeting'." ((anm/dired-buffer t nil "The buffer displaying the notes.") (anm/goto-file-buffer t nil "The buffer the user asked to open.") (anm/process-buffer t nil "Process buffer.") (anm/process t nil "Process.") (anm/mode-line-color t "ForestGreen" "") (anm/current t nil "Currently played file.") (anm/did-visit t nil "Did we visit a file and mess up the configuration.") (anm/found-files t nil "")) t ((anm/display-greeting custom-variable) (anm/notes-directory custom-variable) (anm/goto-file custom-variable) (anm/file-regexp custom-variable) (anm/lighter custom-variable) (anm/hook-into-org-pull custom-variable) (anm/after-play-hook custom-variable) (anm/before-play-hook custom-variable) (anm/process-buffer-name custom-variable) (anm/player-command custom-variable) (anm/default-seek-step custom-variable) (anm/delete-command custom-variable) (audio-notes-mode custom-variable)) nil)"#
-    ]],
+            r#"OK ("1.1.1" 7 ("mplayer" "-quiet" file) ("vlc" file) "Which media player to use for the audio files, must be a symbol or a list.\n\nIf it's the symbol 'internal: uses emacs' internal player.\n\nIf it's a list: the first element is the executable name (like\n\"mplayer\") and all following elements are arguments to be\npassed to it. All arguments must either be strings or the symbol\n'file, which will be replaced by the filename (you probably\nshould include 'file at least once). For example, the default\nvalue (if you have mplayer installed) is\n\n    %S\n\nEmacs internal player should be able to play wav files, but not\nmp4, so your decision on which to use should be based on this." "You're in `audio-notes-mode'. This mode will deactivate after you go through your notes, to quit manually use \\[audio-notes-mode].\n\\[anm/play-next]: DELETES this audio note and moves to the next one.\n\\[anm/play-current]: Replays this audio note.\nTo disable this message, edit `anm/display-greeting'." ((anm/dired-buffer t nil "The buffer displaying the notes.") (anm/goto-file-buffer t nil "The buffer the user asked to open.") (anm/process-buffer t nil "Process buffer.") (anm/process t nil "Process.") (anm/mode-line-color t "ForestGreen" "") (anm/current t nil "Currently played file.") (anm/did-visit t nil "Did we visit a file and mess up the configuration.") (anm/found-files t nil "")) t ((anm/display-greeting custom-variable) (anm/notes-directory custom-variable) (anm/goto-file custom-variable) (anm/file-regexp custom-variable) (anm/lighter custom-variable) (anm/hook-into-org-pull custom-variable) (anm/after-play-hook custom-variable) (anm/before-play-hook custom-variable) (anm/process-buffer-name custom-variable) (anm/player-command custom-variable) (anm/default-seek-step custom-variable) (anm/delete-command custom-variable) (audio-notes-mode custom-variable)) nil)"#
+        ]],
     )
 }
 
@@ -275,12 +279,13 @@ fn audio_notes_mode_global_minor_mode_metadata_and_initial_keymap_match() -> Par
                              "C-c C-b")))"##,
         true,
         expect![[
-        r#"OK (nil nil boolean (nil) nil nil (audio-notes-mode anm/lighter) (audio-notes-mode keymap (3 keymap (17 . audio-notes-mode) (19 . anm/stop) (16 . anm/play-pause-current) (14 . anm/play-next) (11 . anm/play-pause-current) (10 . anm/play-next))) (("C-c C-j" anm/play-next) ("C-c C-k" anm/play-pause-current) ("C-c C-n" anm/play-next) ("C-c C-p" anm/play-pause-current) ("C-c C-s" anm/stop) ("C-c C-q" audio-notes-mode) ("C-c C-f" nil) ("C-c C-b" nil)))"#
-    ]],
+            r#"OK (nil nil boolean (nil) nil nil (audio-notes-mode anm/lighter) (audio-notes-mode keymap (3 keymap (17 . audio-notes-mode) (19 . anm/stop) (16 . anm/play-pause-current) (14 . anm/play-next) (11 . anm/play-pause-current) (10 . anm/play-next))) (("C-c C-j" anm/play-next) ("C-c C-k" anm/play-pause-current) ("C-c C-n" anm/play-next) ("C-c C-p" anm/play-pause-current) ("C-c C-s" anm/stop) ("C-c C-q" audio-notes-mode) ("C-c C-f" nil) ("C-c C-b" nil)))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_source_reload_preserves_user_values_alias_and_advice_identity() -> ParityBatchCase {
+fn audio_notes_mode_source_reload_preserves_user_values_alias_and_advice_identity()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_source_reload_preserves_user_values_alias_and_advice_identity",
         r##"(let* ((source
@@ -324,12 +329,13 @@ fn audio_notes_mode_source_reload_preserves_user_values_alias_and_advice_identit
                              'audio-notes-mode)))"##,
         true,
         expect![[
-        r#"OK (:user-greeting "/user/notes/" ("custom-player" file) "/user/current.wav" t nil t t)"#
-    ]],
+            r#"OK (:user-greeting "/user/notes/" ("custom-player" file) "/user/current.wav" t nil t t)"#
+        ]],
     )
 }
 
-fn audio_notes_mode_generated_autoloads_register_exact_commands_paths_and_feature() -> ParityBatchCase {
+fn audio_notes_mode_generated_autoloads_register_exact_commands_paths_and_feature()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_generated_autoloads_register_exact_commands_paths_and_feature",
         r##"(list
@@ -373,8 +379,8 @@ fn audio_notes_mode_generated_autoloads_register_exact_commands_paths_and_featur
                            'definition-prefixes))"##,
         true,
         expect![[
-        r#"OK (t nil ((anm/display-on-modeline t "audio-notes-mode" t) (audio-notes-mode t "audio-notes-mode" t)) ("[PACKAGE]") nil)"#
-    ]],
+            r#"OK (t nil ((anm/display-on-modeline t "audio-notes-mode" t) (audio-notes-mode t "audio-notes-mode" t)) ("[PACKAGE]") nil)"#
+        ]],
     )
 }
 
@@ -394,8 +400,7 @@ fn registry_audio_notes_mode_batch() {
 
 #[test]
 fn registry_audio_notes_mode_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        audio_notes_mode_generated_autoloads_register_exact_commands_paths_and_feature(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![audio_notes_mode_generated_autoloads_register_exact_commands_paths_and_feature()];
     assert_audio_notes_mode_autoload_batch(&cases);
 }

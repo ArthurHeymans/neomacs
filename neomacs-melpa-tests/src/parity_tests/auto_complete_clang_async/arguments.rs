@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_clang_async_batch};
 
-fn auto_complete_clang_async_language_option_covers_c_cpp_objc_extensions_and_fallback_modes() -> ParityBatchCase {
+fn auto_complete_clang_async_language_option_covers_c_cpp_objc_extensions_and_fallback_modes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_language_option_covers_c_cpp_objc_extensions_and_fallback_modes",
         r##"(mapcar
@@ -27,12 +28,13 @@ fn auto_complete_clang_async_language_option_covers_c_cpp_objc_extensions_and_fa
                              (fundamental-mode "fixture.txt")))"##,
         true,
         expect![[
-        r#"OK ((c-mode "fixture.c" (:value "c")) (c++-mode "fixture.cc" (:value "c++")) (objc-mode "fixture.m" (:value "objective-c")) (objc-mode "fixture.mm" (:value "objective-c++")) (objc-mode nil (:signal wrong-type-argument (stringp nil))) (fundamental-mode "fixture.txt" (:value "c++")))"#
-    ]],
+            r#"OK ((c-mode "fixture.c" (:value "c")) (c++-mode "fixture.cc" (:value "c++")) (objc-mode "fixture.m" (:value "objective-c")) (objc-mode "fixture.mm" (:value "objective-c++")) (objc-mode nil (:signal wrong-type-argument (stringp nil))) (fundamental-mode "fixture.txt" (:value "c++")))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_custom_language_function_overrides_mode_and_runs_once_per_query() -> ParityBatchCase {
+fn auto_complete_clang_async_custom_language_function_overrides_mode_and_runs_once_per_query()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_custom_language_function_overrides_mode_and_runs_once_per_query",
         r##"(with-temp-buffer
@@ -53,7 +55,8 @@ fn auto_complete_clang_async_custom_language_function_overrides_mode_and_runs_on
     )
 }
 
-fn auto_complete_clang_async_complete_arguments_preserve_flags_duplicates_spaces_and_prefix_header() -> ParityBatchCase {
+fn auto_complete_clang_async_complete_arguments_preserve_flags_duplicates_spaces_and_prefix_header()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_complete_arguments_preserve_flags_duplicates_spaces_and_prefix_header",
         r##"(with-temp-buffer
@@ -74,12 +77,13 @@ fn auto_complete_clang_async_complete_arguments_preserve_flags_duplicates_spaces
                               ac-clang-prefix-header)))"##,
         true,
         expect![[
-        r#"OK (("-cc1" "-fsyntax-only" "-x" "c++" "-Iinclude" "-DNAME=value with space" "-Wall" "-Iinclude" "-include-pch" "[ORACLE-TMPDIR]/auto-complete-clang-async/headers/prefix.pch") ("-Iinclude" "-DNAME=value with space" "-Wall" "-Iinclude") "../headers/prefix.pch")"#
-    ]],
+            r#"OK (("-cc1" "-fsyntax-only" "-x" "c++" "-Iinclude" "-DNAME=value with space" "-Wall" "-Iinclude" "-include-pch" "[ORACLE-TMPDIR]/auto-complete-clang-async/headers/prefix.pch") ("-Iinclude" "-DNAME=value with space" "-Wall" "-Iinclude") "../headers/prefix.pch")"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_complete_arguments_omit_non_string_prefix_header_and_handle_nil_flags() -> ParityBatchCase {
+fn auto_complete_clang_async_complete_arguments_omit_non_string_prefix_header_and_handle_nil_flags()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_complete_arguments_omit_non_string_prefix_header_and_handle_nil_flags",
         r##"(mapcar
@@ -99,12 +103,13 @@ fn auto_complete_clang_async_complete_arguments_omit_non_string_prefix_header_an
                              (("-std=c11") . "")))"##,
         true,
         expect![[
-        r#"OK (((nil) ("-cc1" "-fsyntax-only" "-x" "c")) ((nil . 42) ("-cc1" "-fsyntax-only" "-x" "c")) ((("-pedantic")) ("-cc1" "-fsyntax-only" "-x" "c" "-pedantic")) ((("-std=c11") . "") ("-cc1" "-fsyntax-only" "-x" "c" "-std=c11" "-include-pch" "[ORACLE-SANDBOX]")))"#
-    ]],
+            r#"OK (((nil) ("-cc1" "-fsyntax-only" "-x" "c")) ((nil . 42) ("-cc1" "-fsyntax-only" "-x" "c")) ((("-pedantic")) ("-cc1" "-fsyntax-only" "-x" "c" "-pedantic")) ((("-std=c11") . "") ("-cc1" "-fsyntax-only" "-x" "c" "-std=c11" "-include-pch" "[ORACLE-SANDBOX]")))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_prefix_header_setter_distinguishes_empty_whitespace_and_real_paths() -> ParityBatchCase {
+fn auto_complete_clang_async_prefix_header_setter_distinguishes_empty_whitespace_and_real_paths()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_prefix_header_setter_distinguishes_empty_whitespace_and_real_paths",
         r##"(with-temp-buffer
@@ -125,12 +130,13 @@ fn auto_complete_clang_async_prefix_header_setter_distinguishes_empty_whitespace
                                 "with space.pch"))))"##,
         true,
         expect![[
-        r#"OK (("" nil nil) (" " nil nil) ("\11" nil nil) ("  \11  " nil nil) ("./prefix.pch" "./prefix.pch" "./prefix.pch") ("with space.pch" "with space.pch" "with space.pch"))"#
-    ]],
+            r#"OK (("" nil nil) (" " nil nil) ("\11" nil nil) ("  \11  " nil nil) ("./prefix.pch" "./prefix.pch" "./prefix.pch") ("with space.pch" "with space.pch" "with space.pch"))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_interactive_cflags_setter_splits_input_and_sends_exact_update_once() -> ParityBatchCase {
+fn auto_complete_clang_async_interactive_cflags_setter_splits_input_and_sends_exact_update_once()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_interactive_cflags_setter_splits_input_and_sends_exact_update_once",
         r##"(with-temp-buffer
@@ -163,12 +169,13 @@ fn auto_complete_clang_async_interactive_cflags_setter_splits_input_and_sends_ex
                                 (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (:updated #1=("-Iinclude" "-DDEBUG=1" "-Wall") ((:read "New cflags: ") (:update #1#)))"#
-    ]],
+            r#"OK (:updated #1=("-Iinclude" "-DDEBUG=1" "-Wall") ((:read "New cflags: ") (:update #1#)))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_shell_cflags_setter_uses_file_context_splits_output_and_updates_once() -> ParityBatchCase {
+fn auto_complete_clang_async_shell_cflags_setter_uses_file_context_splits_output_and_updates_once()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_shell_cflags_setter_uses_file_context_splits_output_and_updates_once",
         r##"(with-temp-buffer
@@ -215,12 +222,13 @@ fn auto_complete_clang_async_shell_cflags_setter_uses_file_context_splits_output
                                 (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (:updated #1=("-Iinc" "-DVALUE=7" "-Wextra") ((:read "Shell command: " nil nil "source.cpp") (:shell "./flags.sh") (:update #1#)))"#
-    ]],
+            r#"OK (:updated #1=("-Iinc" "-DVALUE=7" "-Wextra") ((:read "Shell command: " nil nil "source.cpp") (:shell "./flags.sh") (:update #1#)))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_buffer_local_flags_prefix_header_and_process_state_remain_isolated() -> ParityBatchCase {
+fn auto_complete_clang_async_buffer_local_flags_prefix_header_and_process_state_remain_isolated()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_buffer_local_flags_prefix_header_and_process_state_remain_isolated",
         r##"(let ((first
@@ -272,8 +280,8 @@ fn auto_complete_clang_async_buffer_local_flags_prefix_header_and_process_state_
                              (kill-buffer second)))"##,
         true,
         expect![[
-        r#"OK ((" *acclang-config-first*" ("-DFIRST") "first.pch" wait ("first") (t t t t nil)) (" *acclang-config-second*" ("-DSECOND") "second.pch" acknowledged ("second") (t t t t nil)))"#
-    ]],
+            r#"OK ((" *acclang-config-first*" ("-DFIRST") "first.pch" wait ("first") (t t t t nil)) (" *acclang-config-second*" ("-DSECOND") "second.pch" acknowledged ("second") (t t t t nil)))"#
+        ]],
     )
 }
 

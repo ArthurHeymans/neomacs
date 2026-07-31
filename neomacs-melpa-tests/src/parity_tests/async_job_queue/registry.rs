@@ -37,8 +37,8 @@ fn exact_archive_metadata_dependencies_and_source_identity_match_the_pin() -> Pa
 "##,
         true,
         expect![[
-        r#"OK ("20230427.2122" ((async "1.4") (emacs "25.1") (queue "0.2")) "d5afa48bcdb8fffa7cf60d6d4719705af78ae58681d3e63502075d5c4137e8b7" t)"#
-    ]],
+            r#"OK ("20230427.2122" ((async "1.4") (emacs "25.1") (queue "0.2")) "d5afa48bcdb8fffa7cf60d6d4719705af78ae58681d3e63502075d5c4137e8b7" t)"#
+        ]],
     )
 }
 
@@ -88,8 +88,8 @@ fn every_declared_queue_callable_has_the_exact_kind_and_argument_list() -> Parit
 "##,
         true,
         expect![
-        "OK ((async-job-queue--call-with-warn macro (&rest app-form)) (async-job-queue--job-slot function (job)) (async-job-queue-displayable-table function (tbl)) (async-job-queue-displayable-slot function (slot)) (async-job-queue-displayable-job function (job)) (async-job-queue--expr-to-async function (e)) (async-job-queue--slots-in-use-list function (tbl)) (async-job-queue--slots-free-list function (tbl)) (async-job-queue-make-job-queue function (freq &optional N on-empty inactive on-activate on-deactivate id)) (async-job-queue--alloc-slot function (tbl)) (async-job-queue--reclaim-slot function (s)) (async-job-queue--dispatch function (tbl &optional job)) (async-job-queue-schedule-job function (tbl prog &optional id on-dispatch on-finish max-time on-timeout on-quit)) (async-job-queue--dispatch-queued function (tbl)) (async-job-queue--terminate-job-process function (job fut)) (async-job-queue--cleanup-job function (job slot)) (async-job-queue--handle-finished-job function (slot job v)) (async-job-queue--handle-terminated-job function (slot job fut)) (async-job-queue-cancel-job function (job)) (async-job-queue-cancel-job-queue function (tbl)) (async-job-queue--timer-info function (tmr)) (async-job-queue--make-timer function (freq rpt fxn &rest args)) (async-job-queue--ensure-queue-running function (tbl)) (async-job-queue--process-queue function (tbl)) (async-job-queue-add-deactivation function (tbl callback)) (async-job-queue-add-activation function (tbl callback)) (async-job-queue-deactivate-queue function (tbl &optional key)) (async-job-queue-activate-queue function (tbl &optional key)))"
-    ],
+            "OK ((async-job-queue--call-with-warn macro (&rest app-form)) (async-job-queue--job-slot function (job)) (async-job-queue-displayable-table function (tbl)) (async-job-queue-displayable-slot function (slot)) (async-job-queue-displayable-job function (job)) (async-job-queue--expr-to-async function (e)) (async-job-queue--slots-in-use-list function (tbl)) (async-job-queue--slots-free-list function (tbl)) (async-job-queue-make-job-queue function (freq &optional N on-empty inactive on-activate on-deactivate id)) (async-job-queue--alloc-slot function (tbl)) (async-job-queue--reclaim-slot function (s)) (async-job-queue--dispatch function (tbl &optional job)) (async-job-queue-schedule-job function (tbl prog &optional id on-dispatch on-finish max-time on-timeout on-quit)) (async-job-queue--dispatch-queued function (tbl)) (async-job-queue--terminate-job-process function (job fut)) (async-job-queue--cleanup-job function (job slot)) (async-job-queue--handle-finished-job function (slot job v)) (async-job-queue--handle-terminated-job function (slot job fut)) (async-job-queue-cancel-job function (job)) (async-job-queue-cancel-job-queue function (tbl)) (async-job-queue--timer-info function (tmr)) (async-job-queue--make-timer function (freq rpt fxn &rest args)) (async-job-queue--ensure-queue-running function (tbl)) (async-job-queue--process-queue function (tbl)) (async-job-queue-add-deactivation function (tbl callback)) (async-job-queue-add-activation function (tbl callback)) (async-job-queue-deactivate-queue function (tbl &optional key)) (async-job-queue-activate-queue function (tbl &optional key)))"
+        ],
     )
 }
 
@@ -125,8 +125,8 @@ fn table_struct_registry_covers_constructor_predicate_copy_and_every_accessor() 
 "##,
         true,
         expect![
-        "OK ((async-job-queue--table-create t (&rest --cl-rest--)) (async-job-queue--table-p t (x)) (async-job-queue--table-copy t (arg)) (async-job-queue--table-id t (x)) (async-job-queue--table-slots t (x)) (async-job-queue--table-active t (x)) (async-job-queue--table-in-use t (x)) (async-job-queue--table-free t (x)) (async-job-queue--table-queue t (x)) (async-job-queue--table-on-empty t (x)) (async-job-queue--table-on-activate t (x)) (async-job-queue--table-on-deactivate t (x)) (async-job-queue--table-first-used t (x)) (async-job-queue--table-last-used t (x)) (async-job-queue--table-first-free t (x)) (async-job-queue--table-last-free t (x)) (async-job-queue--table-freq t (x)) (async-job-queue--table-timer t (x)))"
-    ],
+            "OK ((async-job-queue--table-create t (&rest --cl-rest--)) (async-job-queue--table-p t (x)) (async-job-queue--table-copy t (arg)) (async-job-queue--table-id t (x)) (async-job-queue--table-slots t (x)) (async-job-queue--table-active t (x)) (async-job-queue--table-in-use t (x)) (async-job-queue--table-free t (x)) (async-job-queue--table-queue t (x)) (async-job-queue--table-on-empty t (x)) (async-job-queue--table-on-activate t (x)) (async-job-queue--table-on-deactivate t (x)) (async-job-queue--table-first-used t (x)) (async-job-queue--table-last-used t (x)) (async-job-queue--table-first-free t (x)) (async-job-queue--table-last-free t (x)) (async-job-queue--table-freq t (x)) (async-job-queue--table-timer t (x)))"
+        ],
     )
 }
 
@@ -177,8 +177,8 @@ fn queue_slot_and_job_struct_registries_cover_every_generated_callable() -> Pari
 "##,
         true,
         expect![
-        "OK (((async-job-queue--queue-create t (&rest --cl-rest--)) (async-job-queue--queue-p t (x)) (async-job-queue--queue-copy t (arg)) (async-job-queue--queue-head t (x)) (async-job-queue--queue-last t (x))) ((async-job-queue--slot-create t (&rest --cl-rest--)) (async-job-queue--slot-p t (x)) (async-job-queue--slot-copy t (arg)) (async-job-queue--slot-table t (x)) (async-job-queue--slot-index t (x)) (async-job-queue--slot-next t (x)) (async-job-queue--slot-prev t (x)) (async-job-queue--slot-job t (x))) ((async-job-queue--job-create t (&rest --cl-rest--)) (async-job-queue--job-p t (x)) (async-job-queue--job-copy t (arg)) (async-job-queue--job-id t (x)) (async-job-queue--job-table t (x)) (async-job-queue--job-run-slot t (x)) (async-job-queue--job-program t (x)) (async-job-queue--job-started t (x)) (async-job-queue--job-max-time t (x)) (async-job-queue--job-future t (x)) (async-job-queue--job-ended t (x)) (async-job-queue--job-returned t (x)) (async-job-queue--job-result t (x)) (async-job-queue--job-dispatched t (x)) (async-job-queue--job-succeed t (x)) (async-job-queue--job-timeout t (x)) (async-job-queue--job-quit t (x))))"
-    ],
+            "OK (((async-job-queue--queue-create t (&rest --cl-rest--)) (async-job-queue--queue-p t (x)) (async-job-queue--queue-copy t (arg)) (async-job-queue--queue-head t (x)) (async-job-queue--queue-last t (x))) ((async-job-queue--slot-create t (&rest --cl-rest--)) (async-job-queue--slot-p t (x)) (async-job-queue--slot-copy t (arg)) (async-job-queue--slot-table t (x)) (async-job-queue--slot-index t (x)) (async-job-queue--slot-next t (x)) (async-job-queue--slot-prev t (x)) (async-job-queue--slot-job t (x))) ((async-job-queue--job-create t (&rest --cl-rest--)) (async-job-queue--job-p t (x)) (async-job-queue--job-copy t (arg)) (async-job-queue--job-id t (x)) (async-job-queue--job-table t (x)) (async-job-queue--job-run-slot t (x)) (async-job-queue--job-program t (x)) (async-job-queue--job-started t (x)) (async-job-queue--job-max-time t (x)) (async-job-queue--job-future t (x)) (async-job-queue--job-ended t (x)) (async-job-queue--job-returned t (x)) (async-job-queue--job-result t (x)) (async-job-queue--job-dispatched t (x)) (async-job-queue--job-succeed t (x)) (async-job-queue--job-timeout t (x)) (async-job-queue--job-quit t (x))))"
+        ],
     )
 }
 
@@ -216,8 +216,8 @@ fn customization_conditions_group_and_generated_autoload_state_are_exact() -> Pa
 "##,
         true,
         expect![[
-        r#"OK (t t natnum t t t t "Customization group for async-job-queue package." (async-job-queue-slot-already-free error) "Slot in job queue is already free" (async-job-queue--table-no-free-slot error) "No free slots in job queue" 0)"#
-    ]],
+            r#"OK (t t natnum t t t t "Customization group for async-job-queue package." (async-job-queue-slot-already-free error) "Slot in job queue is already free" (async-job-queue--table-no-free-slot error) "No free slots in job queue" 0)"#
+        ]],
     )
 }
 
@@ -253,8 +253,8 @@ fn generated_autoload_file_registers_prefix_without_eagerly_loading_runtime() ->
 "##,
         true,
         expect![[
-        r#"OK (t nil nil nil ("[PACKAGE]/async-job-queue-autoloads.el" (provide . async-job-queue-autoloads)))"#
-    ]],
+            r#"OK (t nil nil nil ("[PACKAGE]/async-job-queue-autoloads.el" (provide . async-job-queue-autoloads)))"#
+        ]],
     )
 }
 
@@ -272,8 +272,7 @@ fn registry_async_job_queue_batch() {
 
 #[test]
 fn registry_async_job_queue_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        generated_autoload_file_registers_prefix_without_eagerly_loading_runtime(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![generated_autoload_file_registers_prefix_without_eagerly_loading_runtime()];
     assert_async_job_queue_autoload_batch(&cases);
 }

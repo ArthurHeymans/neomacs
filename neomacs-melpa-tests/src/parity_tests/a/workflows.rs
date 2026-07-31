@@ -49,8 +49,8 @@ fn reads_nested_player_profile() -> ParityBatchCase {
     (a-get profile :stats))))"##,
         true,
         expect![[
-                r#"OK (t t nil 5 2 3 (:name :handle :stats :log :tags) (99 4) "plexus" nil :anonymous 99 42 "α-conversion" "λ" :unranked :no-entry t nil t nil ("2021-09-29" "2021-09-30") ("streak=4" "score=99"))"#
-            ]],
+            r#"OK (t t nil 5 2 3 (:name :handle :stats :log :tags) (99 4) "plexus" nil :anonymous 99 42 "α-conversion" "λ" :unranked :no-entry t nil t nil ("2021-09-29" "2021-09-30") ("streak=4" "score=99"))"#
+        ]],
     )
 }
 
@@ -98,8 +98,8 @@ fn immutable_edit_pipeline() -> ParityBatchCase {
            :owners (a-list :lead "Ärne")))))"##,
         true,
         expect![[
-                r#"OK ("Sprint 42 (final)" #1=["write docs" "fix parser"] ["write docs" "FIX PARSER"] #2=["review α patch"] "Sprint 42" ((:reviewer . "Bo") . #3=((:lead . "Ärne"))) (:title :columns :owners) ((:velocity (:median . 21))) (:metrics :title :columns :owners) (:status :title :columns :owners) "Sprint 43" :active (:reviews :title :columns :owners) t nil t ((:title . "Sprint 42") (:columns ("todo" . #1#) ("doing" . #2#)) (:owners . #3#)) t)"#
-            ]],
+            r#"OK ("Sprint 42 (final)" #1=["write docs" "fix parser"] ["write docs" "FIX PARSER"] #2=["review α patch"] "Sprint 42" ((:reviewer . "Bo") . #3=((:lead . "Ärne"))) (:title :columns :owners) ((:velocity (:median . 21))) (:metrics :title :columns :owners) (:status :title :columns :owners) "Sprint 43" :active (:reviews :title :columns :owners) t nil t ((:title . "Sprint 42") (:columns ("todo" . #1#) ("doing" . #2#)) (:owners . #3#)) t)"#
+        ]],
     )
 }
 
@@ -135,8 +135,8 @@ fn merges_layered_configuration() -> ParityBatchCase {
     (a-dissoc settings :plugins))))"##,
         true,
         expect![[
-                r#"OK (((:strict . t) (:font . "Iosevka") (:indent . 4) (:theme . "dark") #2=(:plugins . #1=["core"])) (:strict :font :indent :theme :plugins) "dark" 4 ((:gc . 3) (:parse . 19) #4=(:render . 5)) ((:release . "βα")) nil ((:plugins . #1#) (:theme . "light") (:indent . 2)) #3=((:indent . 2) (:theme . "light") #2#) #3# ((:indent . 4) (:strict . t)) ((:parse . 12) #4#) (:font :theme) ":theme=dark;:indent=4;:font=Iosevka;:strict=t;")"#
-            ]],
+            r#"OK (((:strict . t) (:font . "Iosevka") (:indent . 4) (:theme . "dark") #2=(:plugins . #1=["core"])) (:strict :font :indent :theme :plugins) "dark" 4 ((:gc . 3) (:parse . 19) #4=(:render . 5)) ((:release . "βα")) nil ((:plugins . #1#) (:theme . "light") (:indent . 2)) #3=((:indent . 2) (:theme . "light") #2#) #3# ((:indent . 4) (:strict . t)) ((:parse . 12) #4#) (:font :theme) ":theme=dark;:indent=4;:font=Iosevka;:strict=t;")"#
+        ]],
     )
 }
 
@@ -174,8 +174,8 @@ fn redacts_secret_keys() -> ParityBatchCase {
    (a-dissoc ["keep" "me"] 0)))"##,
         true,
         expect![[
-                r#"OK (((:headers . #1=(("Accept" . "application/json") ("Authorization" . "Bearer s3cr3t"))) (:retries . 3) (:url . "https://example.invalid/résumé")) (("Accept" . "application/json")) 3 nil :redacted "https://example.invalid/résumé" (:ip :user) 2 equal :redacted "ärne" 3 "s3cr3t" ((:url . "https://example.invalid/résumé") (:token . "s3cr3t") (:retries . 3) (:headers . #1#)) ((:headers . #1#) (:retries . 3) (:token . "s3cr3t") (:url . "https://example.invalid/résumé")) ((:headers . #1#) (:retries . 3) (:token . "s3cr3t") (:url . "https://example.invalid/résumé")) nil nil)"#
-            ]],
+            r#"OK (((:headers . #1=(("Accept" . "application/json") ("Authorization" . "Bearer s3cr3t"))) (:retries . 3) (:url . "https://example.invalid/résumé")) (("Accept" . "application/json")) 3 nil :redacted "https://example.invalid/résumé" (:ip :user) 2 equal :redacted "ärne" 3 "s3cr3t" ((:url . "https://example.invalid/résumé") (:token . "s3cr3t") (:retries . 3) (:headers . #1#)) ((:headers . #1#) (:retries . 3) (:token . "s3cr3t") (:url . "https://example.invalid/résumé")) ((:headers . #1#) (:retries . 3) (:token . "s3cr3t") (:url . "https://example.invalid/résumé")) nil nil)"#
+        ]],
     )
 }
 
@@ -255,8 +255,8 @@ fn misuse_reports_exact_errors() -> ParityBatchCase {
    (a-vals ["not" "associative"])))"##,
         true,
         expect![[
-                r#"OK (((get-integer signal user-error ("Not associative: 5")) (get-string signal user-error ("Not associative: \"config\"")) (has-key-integer signal user-error ("Not associative: 1")) (get-in-leaf signal user-error ("Not associative: \"/etc\"")) (assoc-odd signal user-error ("a-assoc requires an even number of arguments!"))) 2 nil :fallback t nil nil nil [1 2 3 nil nil :late] nil :not-found nil [] :missing nil nil)"#
-            ]],
+            r#"OK (((get-integer signal user-error ("Not associative: 5")) (get-string signal user-error ("Not associative: \"config\"")) (has-key-integer signal user-error ("Not associative: 1")) (get-in-leaf signal user-error ("Not associative: \"/etc\"")) (assoc-odd signal user-error ("a-assoc requires an even number of arguments!"))) 2 nil :fallback t nil nil nil [1 2 3 nil nil :late] nil :not-found nil [] :missing nil nil)"#
+        ]],
     )
 }
 

@@ -42,8 +42,8 @@ fn atl_markup_descriptor_and_archive_sources_pin_exact_melpa_payload() -> Parity
             sources)))"##,
         true,
         expect![[
-        r#"OK ((atl-markup "20240101.933" "Automatically truncate lines for markup languages." ((emacs (24 3))) ((:maintainers ("Jen-Chieh" . "jcs090218@gmail.com")) (:authors ("Jen-Chieh" . "jcs090218@gmail.com")) (:keywords "convenience" "automatic" "truncate" "visual" "lines") (:revdesc . "b616343ffe17") (:commit . "b616343ffe17060d521b214b8e90f5da1e880934") (:url . "https://github.com/jcs-elpa/atl-markup"))) (("atl-markup-pkg.el" 476 "bd2679cb82a061f1a7a3f6aadd39357f78176ecf6941896fdb5c5d1a01ffdd58") ("atl-markup.el" 4268 "8d94c8e0fb4830d4aee6804758206f2f1d13cea5311e73e531a5531d23daf313")))"#
-    ]],
+            r#"OK ((atl-markup "20240101.933" "Automatically truncate lines for markup languages." ((emacs (24 3))) ((:maintainers ("Jen-Chieh" . "jcs090218@gmail.com")) (:authors ("Jen-Chieh" . "jcs090218@gmail.com")) (:keywords "convenience" "automatic" "truncate" "visual" "lines") (:revdesc . "b616343ffe17") (:commit . "b616343ffe17060d521b214b8e90f5da1e880934") (:url . "https://github.com/jcs-elpa/atl-markup"))) (("atl-markup-pkg.el" 476 "bd2679cb82a061f1a7a3f6aadd39357f78176ecf6941896fdb5c5d1a01ffdd58") ("atl-markup.el" 4268 "8d94c8e0fb4830d4aee6804758206f2f1d13cea5311e73e531a5531d23daf313")))"#
+        ]],
     )
 }
 
@@ -90,12 +90,13 @@ fn atl_markup_complete_prefixed_symbol_inventory_records_every_surface() -> Pari
                (car right))))))"##,
         true,
         expect![
-        "OK ((atl-markup nil nil nil ((atl-markup-ignore-regex custom-variable) (atl-markup-delay custom-variable)) nil) (atl-markup--comment-block-p t nil nil nil nil) (atl-markup--disable t nil nil nil nil) (atl-markup--enable t nil nil nil nil) (atl-markup--inside-tag-p t nil nil nil nil) (atl-markup--mute-apply t nil nil nil (fnc &rest args)) (atl-markup--post-command-hook t nil nil nil nil) (atl-markup--timer nil t nil nil nil) (atl-markup--web-truncate-lines-by-face t nil nil nil nil) (atl-markup-autoloads nil nil nil nil nil) (atl-markup-delay nil t t nil nil) (atl-markup-ignore-regex nil t t nil nil) (atl-markup-mode t t nil nil (&optional arg)) (atl-markup-mode-hook nil t t nil nil) (atl-markup-mode-map nil nil nil nil nil) (atl-markup-mode-off-hook nil nil nil nil nil) (atl-markup-mode-on-hook nil nil nil nil nil))"
-    ],
+            "OK ((atl-markup nil nil nil ((atl-markup-ignore-regex custom-variable) (atl-markup-delay custom-variable)) nil) (atl-markup--comment-block-p t nil nil nil nil) (atl-markup--disable t nil nil nil nil) (atl-markup--enable t nil nil nil nil) (atl-markup--inside-tag-p t nil nil nil nil) (atl-markup--mute-apply t nil nil nil (fnc &rest args)) (atl-markup--post-command-hook t nil nil nil nil) (atl-markup--timer nil t nil nil nil) (atl-markup--web-truncate-lines-by-face t nil nil nil nil) (atl-markup-autoloads nil nil nil nil nil) (atl-markup-delay nil t t nil nil) (atl-markup-ignore-regex nil t t nil nil) (atl-markup-mode t t nil nil (&optional arg)) (atl-markup-mode-hook nil t t nil nil) (atl-markup-mode-map nil nil nil nil nil) (atl-markup-mode-off-hook nil nil nil nil nil) (atl-markup-mode-on-hook nil nil nil nil nil))"
+        ],
     )
 }
 
-fn atl_markup_all_functions_have_exact_call_interactive_and_documentation_contracts() -> ParityBatchCase {
+fn atl_markup_all_functions_have_exact_call_interactive_and_documentation_contracts()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_all_functions_have_exact_call_interactive_and_documentation_contracts",
         r##"(mapcar
@@ -125,8 +126,8 @@ fn atl_markup_all_functions_have_exact_call_interactive_and_documentation_contra
             atl-markup-mode))"##,
         true,
         expect![[
-        r#"OK ((atl-markup--comment-block-p t nil nil nil "Return non-nil if current cursor is on comment." "atl-markup.el") (atl-markup--mute-apply t nil nil (fnc &rest args) "Execute FNC with ARGS without message." "atl-markup.el") (atl-markup--inside-tag-p t nil nil nil "Check if current point inside the tag." "atl-markup.el") (atl-markup--web-truncate-lines-by-face t nil nil nil "Enable/Disable the truncate lines mode depends on the face cursor currently on." "atl-markup.el") (atl-markup--post-command-hook t nil nil nil "Post command hook to do auto truncate lines in current buffer." "atl-markup.el") (atl-markup--enable t nil nil nil "Enable 'atl-markup-mode'." "atl-markup.el") (atl-markup--disable t nil nil nil "Disable 'atl-markup-mode'." "atl-markup.el") (atl-markup-mode t t (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) (&optional arg) "Minor mode 'atl-markup-mode'.\n\nThis is a minor mode.  If called interactively, toggle the `Atl-Markup\nmode' mode.  If the prefix argument is positive, enable the mode, and if\nit is zero or negative, disable the mode.\n\nIf called from Lisp, toggle the mode if ARG is `toggle'.  Enable the\nmode if ARG is nil, omitted, or is a positive number.  Disable the mode\nif ARG is a negative number.\n\nTo check whether the minor mode is enabled in the current buffer,\nevaluate the variable `atl-markup-mode'.\n\nThe mode's hook is called both when the mode is enabled and when it is\ndisabled." "atl-markup.el"))"#
-    ]],
+            r#"OK ((atl-markup--comment-block-p t nil nil nil "Return non-nil if current cursor is on comment." "atl-markup.el") (atl-markup--mute-apply t nil nil (fnc &rest args) "Execute FNC with ARGS without message." "atl-markup.el") (atl-markup--inside-tag-p t nil nil nil "Check if current point inside the tag." "atl-markup.el") (atl-markup--web-truncate-lines-by-face t nil nil nil "Enable/Disable the truncate lines mode depends on the face cursor currently on." "atl-markup.el") (atl-markup--post-command-hook t nil nil nil "Post command hook to do auto truncate lines in current buffer." "atl-markup.el") (atl-markup--enable t nil nil nil "Enable 'atl-markup-mode'." "atl-markup.el") (atl-markup--disable t nil nil nil "Disable 'atl-markup-mode'." "atl-markup.el") (atl-markup-mode t t (interactive (list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) (&optional arg) "Minor mode 'atl-markup-mode'.\n\nThis is a minor mode.  If called interactively, toggle the `Atl-Markup\nmode' mode.  If the prefix argument is positive, enable the mode, and if\nit is zero or negative, disable the mode.\n\nIf called from Lisp, toggle the mode if ARG is `toggle'.  Enable the\nmode if ARG is nil, omitted, or is a positive number.  Disable the mode\nif ARG is a negative number.\n\nTo check whether the minor mode is enabled in the current buffer,\nevaluate the variable `atl-markup-mode'.\n\nThe mode's hook is called both when the mode is enabled and when it is\ndisabled." "atl-markup.el"))"#
+        ]],
     )
 }
 
@@ -190,8 +191,8 @@ fn atl_markup_customization_group_defaults_and_minor_mode_metadata_are_exact() -
            (get 'atl-markup-mode 'custom-group)))"##,
         true,
         expect![[
-        r#"OK (((atl-markup-ignore-regex custom-variable) (atl-markup-delay custom-variable)) "Automatically truncate lines for markup languages." "atl-markup-" ((url-link :tag "Repository" "https://github.com/jcs-elpa/atl-markup")) ((atl-markup-ignore-regex t "[ \11\15\n]" t "[ \11\15\n]" t string nil "Regular expression string that will ignore auto truncate lines' action.") (atl-markup-delay t 0.1 t 0.1 t float nil "Time delay to active auto truncate lines for markup languages.") (atl-markup-mode-hook t nil t nil t hook nil "Hook run after entering or leaving `atl-markup-mode'.\nNo problems result if this variable is not bound.\n`add-hook' automatically binds it.  (This is true for all hook variables.)")) (nil t (atl-markup-mode " ATL-MrkUp") nil nil nil))"#
-    ]],
+            r#"OK (((atl-markup-ignore-regex custom-variable) (atl-markup-delay custom-variable)) "Automatically truncate lines for markup languages." "atl-markup-" ((url-link :tag "Repository" "https://github.com/jcs-elpa/atl-markup")) ((atl-markup-ignore-regex t "[ \11\15\n]" t "[ \11\15\n]" t string nil "Regular expression string that will ignore auto truncate lines' action.") (atl-markup-delay t 0.1 t 0.1 t float nil "Time delay to active auto truncate lines for markup languages.") (atl-markup-mode-hook t nil t nil t hook nil "Hook run after entering or leaving `atl-markup-mode'.\nNo problems result if this variable is not bound.\n`add-hook' automatically binds it.  (This is true for all hook variables.)")) (nil t (atl-markup-mode " ATL-MrkUp") nil nil nil))"#
+        ]],
     )
 }
 
@@ -225,12 +226,13 @@ fn atl_markup_internal_timer_variable_contract_is_exact() -> ParityBatchCase {
            (local-variable-p symbol)))"##,
         true,
         expect![[
-        r#"OK (atl-markup--timer t nil t nil t nil "Timer to active auto truncate lines." "atl-markup.el" nil nil nil)"#
-    ]],
+            r#"OK (atl-markup--timer t nil t nil t nil "Timer to active auto truncate lines." "atl-markup.el" nil nil nil)"#
+        ]],
     )
 }
 
-fn atl_markup_installed_source_byte_compiles_loads_and_drives_practical_navigation() -> ParityBatchCase {
+fn atl_markup_installed_source_byte_compiles_loads_and_drives_practical_navigation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_installed_source_byte_compiles_loads_and_drives_practical_navigation",
         r##"(progn
@@ -299,12 +301,13 @@ fn atl_markup_installed_source_byte_compiles_loads_and_drives_practical_navigati
                  source))))))"##,
         true,
         expect![[
-        r#"OK (t (:ok t) t "atl-markup.elc" (t nil t t) "8d94c8e0fb4830d4aee6804758206f2f1d13cea5311e73e531a5531d23daf313")"#
-    ]],
+            r#"OK (t (:ok t) t "atl-markup.elc" (t nil t t) "8d94c8e0fb4830d4aee6804758206f2f1d13cea5311e73e531a5531d23daf313")"#
+        ]],
     )
 }
 
-fn atl_markup_generated_autoload_preserves_feature_history_prefix_and_command_contract() -> ParityBatchCase {
+fn atl_markup_generated_autoload_preserves_feature_history_prefix_and_command_contract()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_generated_autoload_preserves_feature_history_prefix_and_command_contract",
         r##"(let* ((history
@@ -366,8 +369,8 @@ fn atl_markup_generated_autoload_preserves_feature_history_prefix_and_command_co
               atl-markup-delay))))"##,
         true,
         expect![[
-        r#"OK (t nil ((defun atl-markup-mode) (provide atl-markup-autoloads)) ("atl-markup") t "atl-markup" t "[Arg list not available until function definition is loaded.]" ((atl-markup--inside-tag-p nil nil) (atl-markup--post-command-hook nil nil) (atl-markup-delay nil nil)))"#
-    ]],
+            r#"OK (t nil ((defun atl-markup-mode) (provide atl-markup-autoloads)) ("atl-markup") t "atl-markup" t "[Arg list not available until function definition is loaded.]" ((atl-markup--inside-tag-p nil nil) (atl-markup--post-command-hook nil nil) (atl-markup-delay nil nil)))"#
+        ]],
     )
 }
 
@@ -386,8 +389,7 @@ fn registry_atl_markup_batch() {
 
 #[test]
 fn registry_atl_markup_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        atl_markup_generated_autoload_preserves_feature_history_prefix_and_command_contract(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![atl_markup_generated_autoload_preserves_feature_history_prefix_and_command_contract()];
     assert_atl_markup_autoload_batch(&cases);
 }

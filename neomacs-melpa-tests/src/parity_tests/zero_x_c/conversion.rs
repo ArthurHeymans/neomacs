@@ -70,12 +70,13 @@ fn zero_x_c_character_conversion_reports_maximum_and_ascii_limits() -> ParityBat
                   (0xc--char-to-string 36))))"##,
         true,
         expect![[
-        r#"OK ((error ("That base is larger than the maximum allowed base: 16")) (error ("That character cannot fit in this base")) (error ("That character is too large to represent in ascii")))"#
-    ]],
+            r#"OK ((error ("That base is larger than the maximum allowed base: 16")) (error ("That character cannot fit in this base")) (error ("That character is too large to represent in ascii")))"#
+        ]],
     )
 }
 
-fn zero_x_c_string_to_number_handles_hints_padding_extensions_and_explicit_base() -> ParityBatchCase {
+fn zero_x_c_string_to_number_handles_hints_padding_extensions_and_explicit_base() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "zero_x_c_string_to_number_handles_hints_padding_extensions_and_explicit_base",
         r##"(let ((0xc-max-base 36)
@@ -138,8 +139,8 @@ fn zero_x_c_digit_and_reverse_helpers_cover_all_ascii_digits() -> ParityBatchCas
                 (0xc--reverse-string "")))"##,
         true,
         expect![[
-        r#"OK ((0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35) "ff01x0" "racecar" "")"#
-    ]],
+            r#"OK ((0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35) "ff01x0" "racecar" "")"#
+        ]],
     )
 }
 

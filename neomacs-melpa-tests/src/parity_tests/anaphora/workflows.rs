@@ -9,7 +9,8 @@ use super::{ParityBatchCase, assert_anaphora_batch};
 /// lookup returned.  `awhen' returns nil for a missing project and the value of
 /// its last body form for a found one, including when that project is empty.
 
-fn looking_a_project_up_binds_it_in_both_branches_and_evaluates_the_lookup_once() -> ParityBatchCase {
+fn looking_a_project_up_binds_it_in_both_branches_and_evaluates_the_lookup_once() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "looking_a_project_up_binds_it_in_both_branches_and_evaluates_the_lookup_once",
         r##"(let ((lookups 0))
@@ -28,8 +29,8 @@ fn looking_a_project_up_binds_it_in_both_branches_and_evaluates_the_lookup_once(
           :lookups lookups)))"##,
         true,
         expect![[
-        r#"OK (:found ("neomacs" 3) :missing (:fallback nil) :when-found ("scratch" nil) :when-missing nil :lookups 4)"#
-    ]],
+            r#"OK (:found ("neomacs" 3) :missing (:fallback nil) :when-found ("scratch" nil) :when-missing nil :lookups 4)"#
+        ]],
     )
 }
 
@@ -54,8 +55,8 @@ fn nested_anaphoric_forms_shadow_it_and_restore_the_outer_binding() -> ParityBat
         :restored-again (plist-get it :name)))"##,
         true,
         expect![[
-        r#"OK (:outer "neomacs" :inner (:login "eval-exec" :deeper "EXEC@EXAMPLE.COM") :restored "neomacs" :captured "neomacs" :second-project ("scratch" (:no-email nil)) :restored-again "neomacs")"#
-    ]],
+            r#"OK (:outer "neomacs" :inner (:login "eval-exec" :deeper "EXEC@EXAMPLE.COM") :restored "neomacs" :captured "neomacs" :second-project ("scratch" (:no-email nil)) :restored-again "neomacs")"#
+        ]],
     )
 }
 
@@ -80,8 +81,8 @@ fn aand_walks_into_nested_data_and_stops_at_the_first_missing_step() -> ParityBa
             :steps (nreverse steps)))))"##,
         true,
         expect![[
-        r#"OK (:full "EXEC@EXAMPLE.COM" :short nil :none nil :steps (:owner :email :upcase :owner :email))"#
-    ]],
+            r#"OK (:full "EXEC@EXAMPLE.COM" :short nil :none nil :steps (:owner :email :upcase :owner :email))"#
+        ]],
     )
 }
 
@@ -103,8 +104,8 @@ fn acond_classifies_each_record_with_the_value_its_own_clause_tested() -> Parity
           :bare-clause-value (acond ((plist-get (car (anaphora-test-tasks "neomacs")) :title))))))"##,
         true,
         expect![[
-        r#"OK (:classified ((:done t) (:estimated 8 16) "write docs") :tests 2 :no-clause-matches nil :bare-clause-value "port isearch")"#
-    ]],
+            r#"OK (:classified ((:done t) (:estimated 8 16) "write docs") :tests 2 :no-clause-matches nil :bare-clause-value "port isearch")"#
+        ]],
     )
 }
 
@@ -135,12 +136,13 @@ fn a_recursive_walk_a_work_queue_and_the_arithmetic_macros_build_a_report() -> P
         :empty-sums (list (a+) (a*) (a- 4))))"##,
         true,
         expect![[
-        r#"OK (:tree-total 15 :titles (("port isearch" 12) ("fix the collector" 17) ("write docs" 10)) :points (5 8 0) :sum 13 :product 48 :difference 2 :quotient 4 :no-it-in-the-dividend (void-variable it) :empty-sums (0 1 -4))"#
-    ]],
+            r#"OK (:tree-total 15 :titles (("port isearch" 12) ("fix the collector" 17) ("write docs" 10)) :points (5 8 0) :sum 13 :product 48 :difference 2 :quotient 4 :no-it-in-the-dividend (void-variable it) :empty-sums (0 1 -4))"#
+        ]],
     )
 }
 
-fn the_long_names_are_the_same_macros_and_the_short_aliases_carry_their_metadata() -> ParityBatchCase {
+fn the_long_names_are_the_same_macros_and_the_short_aliases_carry_their_metadata() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "the_long_names_are_the_same_macros_and_the_short_aliases_carry_their_metadata",
         r##"(let ((installed
@@ -171,8 +173,8 @@ fn the_long_names_are_the_same_macros_and_the_short_aliases_carry_their_metadata
                                    :none)))))"##,
         true,
         expect![[
-        r#"OK (:installed (:same-result ("neomacs" "neomacs") :alias anaphoric-if :indent (2 2 1) :edebug (t cond lambda) :long-names-only nil) :after-removal (:short (nil nil nil) :long (t t) :long-still-works "scratch") :after-reinstall (t anaphoric-+ "scratch"))"#
-    ]],
+            r#"OK (:installed (:same-result ("neomacs" "neomacs") :alias anaphoric-if :indent (2 2 1) :edebug (t cond lambda) :long-names-only nil) :after-removal (:short (nil nil nil) :long (t t) :long-still-works "scratch") :after-reinstall (t anaphoric-+ "scratch"))"#
+        ]],
     )
 }
 
@@ -209,8 +211,8 @@ fn byte_compiling_the_same_anaphoric_code_gives_the_same_answers() -> ParityBatc
         :interpreted-is-byte-code (byte-code-function-p interpreted)))"##,
         true,
         expect![[
-        r#"OK (:interpreted (:login "EVAL-EXEC" :states ((:done t) 80 :none) :depth 3 :drained (1 4 9)) :agree t :compiled-is-byte-code t :interpreted-is-byte-code nil)"#
-    ]],
+            r#"OK (:interpreted (:login "EVAL-EXEC" :states ((:done t) 80 :none) :depth 3 :drained (1 4 9)) :agree t :compiled-is-byte-code t :interpreted-is-byte-code nil)"#
+        ]],
     )
 }
 

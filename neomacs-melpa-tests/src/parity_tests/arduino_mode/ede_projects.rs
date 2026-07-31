@@ -173,8 +173,8 @@ fn project_loader_creates_registers_and_populates_a_new_ino_project() -> ParityB
                       (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK (t t "Robot" t t nil ("Creating new project" "Obsolete name argument \"Robot\" passed to ede-arduino-project constructor"))"#
-    ]],
+            r#"OK (t t "Robot" t t nil ("Creating new project" "Obsolete name argument \"Robot\" passed to ede-arduino-project constructor"))"#
+        ]],
     )
 }
 
@@ -316,7 +316,8 @@ fn upload_and_target_compile_delegate_to_current_project_with_exact_commands() -
     )
 }
 
-fn project_compile_creates_makefile_before_invoking_requested_or_default_command() -> ParityBatchCase {
+fn project_compile_creates_makefile_before_invoking_requested_or_default_command() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "project_compile_creates_makefile_before_invoking_requested_or_default_command",
         r##"(let* ((project
@@ -362,8 +363,8 @@ fn project_compile_creates_makefile_before_invoking_requested_or_default_command
                         (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (:compilation :compilation ((:makefile t) (:compile "gmake all upload") (:makefile t) (:compile "gmake")))"#
-    ]],
+            r#"OK (:compilation :compilation ((:makefile t) (:compile "gmake all upload") (:makefile t) (:compile "gmake")))"#
+        ]],
     )
 }
 
@@ -413,7 +414,8 @@ fn serial_monitor_uses_active_preference_port_and_switches_to_line_mode() -> Par
     )
 }
 
-fn preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines() -> ParityBatchCase {
+fn preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines",
         r##"(let ((target
@@ -468,8 +470,8 @@ fn preprocessor_map_keeps_builtin_levels_and_merges_refreshed_semantic_defines()
                        (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ((("HIGH" . "0x1") ("LOW" . "0x0") ("CUSTOM_PIN" . "42")) ((:table "/opt/arduino/hardware/arduino/cores/arduino/wiring.h") (:needs-refresh fake-table) (:refresh fake-table)))"#
-    ]],
+            r#"OK ((("HIGH" . "0x1") ("LOW" . "0x0") ("CUSTOM_PIN" . "42")) ((:table "/opt/arduino/hardware/arduino/cores/arduino/wiring.h") (:needs-refresh fake-table) (:refresh fake-table)))"#
+        ]],
     )
 }
 
@@ -502,8 +504,8 @@ fn system_include_path_combines_core_and_each_detected_library() -> ParityBatchC
                        (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (("/opt/arduino/hardware/arduino/cores/arduino" "/opt/arduino/libraries/Servo" "/opt/arduino/libraries/Ethernet/utility") (:sync))"#
-    ]],
+            r#"OK (("/opt/arduino/hardware/arduino/cores/arduino" "/opt/arduino/libraries/Servo" "/opt/arduino/libraries/Ethernet/utility") (:sync))"#
+        ]],
     )
 }
 

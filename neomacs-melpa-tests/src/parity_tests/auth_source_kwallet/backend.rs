@@ -12,12 +12,13 @@ fn auth_source_kwallet_parser_builds_exact_kwallet_backend_contract() -> ParityB
                             backend))"##,
         true,
         expect![[
-        r#"OK (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore)"#
-    ]],
+            r#"OK (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore)"#
+        ]],
     )
 }
 
-fn auth_source_kwallet_parser_rejects_every_similar_but_nonidentical_entry_shape() -> ParityBatchCase {
+fn auth_source_kwallet_parser_rejects_every_similar_but_nonidentical_entry_shape() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_kwallet_parser_rejects_every_similar_but_nonidentical_entry_shape",
         r##"(mapcar
@@ -36,12 +37,13 @@ fn auth_source_kwallet_parser_rejects_every_similar_but_nonidentical_entry_shape
                             KWallet))"##,
         true,
         expect![[
-        r#"OK ((nil nil) ("kwallet" nil) (:kwallet nil) ((kwallet) nil) ((:source kwallet) nil) ((:type kwallet) nil) (kwallet-query nil) (KWallet nil))"#
-    ]],
+            r#"OK ((nil nil) ("kwallet" nil) (:kwallet nil) ((kwallet) nil) ((:source kwallet) nil) ((:type kwallet) nil) (kwallet-query nil) (KWallet nil))"#
+        ]],
     )
 }
 
-fn auth_source_kwallet_enable_adds_source_advice_and_forgets_existing_auth_cache() -> ParityBatchCase {
+fn auth_source_kwallet_enable_adds_source_advice_and_forgets_existing_auth_cache() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_kwallet_enable_adds_source_advice_and_forgets_existing_auth_cache",
         r##"(let* ((spec
@@ -81,8 +83,8 @@ fn auth_source_kwallet_enable_adds_source_advice_and_forgets_existing_auth_cache
                               'kwallet))))"##,
         true,
         expect![[
-        r#"OK (nil (t ((:user "old-user" :secret "old-secret"))) nil nil (kwallet "primary.authinfo") t (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore))"#
-    ]],
+            r#"OK (nil (t ((:user "old-user" :secret "old-secret"))) nil nil (kwallet "primary.authinfo") t (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore))"#
+        ]],
     )
 }
 
@@ -116,12 +118,13 @@ fn auth_source_kwallet_repeated_enable_is_idempotent_for_source_and_advice() -> 
                                'kwallet)))))"##,
         true,
         expect![[
-        r#"OK ((kwallet) 1 1 (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore))"#
-    ]],
+            r#"OK ((kwallet) 1 1 (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore))"#
+        ]],
     )
 }
 
-fn auth_source_kwallet_enable_preserves_existing_kwallet_position_in_mixed_sources() -> ParityBatchCase {
+fn auth_source_kwallet_enable_preserves_existing_kwallet_position_in_mixed_sources()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_kwallet_enable_preserves_existing_kwallet_position_in_mixed_sources",
         r##"(let ((auth-sources
@@ -142,7 +145,8 @@ fn auth_source_kwallet_enable_preserves_existing_kwallet_position_in_mixed_sourc
     )
 }
 
-fn auth_source_kwallet_advised_core_parser_handles_kwallet_and_leaves_other_entries_to_core() -> ParityBatchCase {
+fn auth_source_kwallet_advised_core_parser_handles_kwallet_and_leaves_other_entries_to_core()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_kwallet_advised_core_parser_handles_kwallet_and_leaves_other_entries_to_core",
         r##"(progn
@@ -163,12 +167,13 @@ fn auth_source_kwallet_advised_core_parser_handles_kwallet_and_leaves_other_entr
                                 "also-missing.authinfo")))))"##,
         true,
         expect![[
-        r#"OK ((kwallet (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore)) ("missing.authinfo" (auth-source-backend "" ignore t t t ignore ignore)) (:kwallet (auth-source-backend "" ignore t t t ignore ignore)) ((:source "also-missing.authinfo") (auth-source-backend "" ignore t t t ignore ignore)))"#
-    ]],
+            r#"OK ((kwallet (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore)) ("missing.authinfo" (auth-source-backend "" ignore t t t ignore ignore)) (:kwallet (auth-source-backend "" ignore t t t ignore ignore)) ((:source "also-missing.authinfo") (auth-source-backend "" ignore t t t ignore ignore)))"#
+        ]],
     )
 }
 
-fn auth_source_kwallet_advice_removal_disables_parsing_without_mutating_sources() -> ParityBatchCase {
+fn auth_source_kwallet_advice_removal_disables_parsing_without_mutating_sources() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_kwallet_advice_removal_disables_parsing_without_mutating_sources",
         r##"(progn
@@ -193,12 +198,13 @@ fn auth_source_kwallet_advice_removal_disables_parsing_without_mutating_sources(
                               t))))"##,
         true,
         expect![[
-        r#"OK ((auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore) (kwallet) (auth-source-backend "" ignore t t t ignore ignore) nil)"#
-    ]],
+            r#"OK ((auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore) (kwallet) (auth-source-backend "" ignore t t t ignore ignore) nil)"#
+        ]],
     )
 }
 
-fn auth_source_kwallet_backend_equality_and_seq_deduplication_match_core_auth_source() -> ParityBatchCase {
+fn auth_source_kwallet_backend_equality_and_seq_deduplication_match_core_auth_source()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_kwallet_backend_equality_and_seq_deduplication_match_core_auth_source",
         r##"(progn
@@ -224,12 +230,13 @@ fn auth_source_kwallet_backend_equality_and_seq_deduplication_match_core_auth_so
                               backends))))"##,
         true,
         expect![[
-        r#"OK (3 ((auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore) (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore) (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore)) 1 ((auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore)))"#
-    ]],
+            r#"OK (3 ((auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore) (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore) (auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore)) 1 ((auth-source-backend "KWallet" kwallet t t t auth-source-kwallet--kwallet-search ignore)))"#
+        ]],
     )
 }
 
-fn auth_source_kwallet_backend_parameter_parser_can_apply_host_user_and_port_constraints() -> ParityBatchCase {
+fn auth_source_kwallet_backend_parameter_parser_can_apply_host_user_and_port_constraints()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_kwallet_backend_parameter_parser_can_apply_host_user_and_port_constraints",
         r##"(let* ((backend
@@ -248,8 +255,8 @@ fn auth_source_kwallet_backend_parameter_parser_can_apply_host_user_and_port_con
                             configured))"##,
         true,
         expect![[
-        r#"OK (auth-source-backend "KWallet" kwallet "api.example" "deploy" "https" auth-source-kwallet--kwallet-search ignore)"#
-    ]],
+            r#"OK (auth-source-backend "KWallet" kwallet "api.example" "deploy" "https" auth-source-kwallet--kwallet-search ignore)"#
+        ]],
     )
 }
 

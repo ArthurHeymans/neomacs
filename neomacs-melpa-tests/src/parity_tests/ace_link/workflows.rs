@@ -38,8 +38,8 @@ fn ace_link_info_labels_visible_references_and_follows_the_chosen_one() -> Parit
            :keys (ace-link-test-pressed)))))"##,
         true,
         expect![[
-        r#"OK (:top (:node "Top" :key ace-link-info :style (ace-link-info . at) :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "")) :followed (:node "Advanced" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 61 :line 2 :column 0 :line-text "") :text "File: sandbox.info,  Node: Advanced,  Prev: Basics,  Up: Top\n\n2 Advanced\n==========\n\nBack to *note Basics::.\n") :single-candidate (:node "Basics" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 73 :line 2 :column 0 :line-text "")) :keys (("s" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water.")))))"#
-    ]],
+            r#"OK (:top (:node "Top" :key ace-link-info :style (ace-link-info . at) :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "")) :followed (:node "Advanced" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 61 :line 2 :column 0 :line-text "") :text "File: sandbox.info,  Node: Advanced,  Prev: Basics,  Up: Top\n\n2 Advanced\n==========\n\nBack to *note Basics::.\n") :single-candidate (:node "Basics" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 73 :line 2 :column 0 :line-text "")) :keys (("s" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water.")))))"#
+        ]],
     )
 }
 
@@ -63,8 +63,8 @@ fn ace_link_info_aborts_on_c_g_and_reports_an_unknown_label_key() -> ParityBatch
            :keys (ace-link-test-pressed)))))"##,
         true,
         expect![[
-        r#"OK (:before (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :aborted (:node "Top" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :labels nil) :after-unknown-key (:node "Top" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :labels nil) :keys (("C-g" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water."))) ("z" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water."))) ("C-g" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water.")))))"#
-    ]],
+            r#"OK (:before (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :aborted (:node "Top" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :labels nil) :after-unknown-key (:node "Top" :where (:buffer "*info*" :window-buffer "*info*" :mode Info-mode :point 58 :line 2 :column 0 :line-text "") :labels nil) :keys (("C-g" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water."))) ("z" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water."))) ("C-g" ((101 "a" "Basics::      How to begin.") (131 "s" "Advanced::    Deeper water.")))))"#
+        ]],
     )
 }
 
@@ -95,8 +95,8 @@ fn ace_link_help_follows_the_source_button_to_the_defining_file() -> ParityBatch
                          (point-min) (point-max)))))))"##,
         true,
         expect![[
-        r#"OK (:help (:mode help-mode :key ace-link-help :style (ace-link-help . post) :text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n") :keys (("s" ((24 "ai" "interpreted-function in") (49 "s/" "[ORACLE-SANDBOX]/lib/notes-util.el’.") (303 "dn" "notes-util-format’ and ‘describe-function’ for details.") (327 "fd" "describe-function’ for details.")))) :where (:buffer "notes-util.el" :window-buffer "notes-util.el" :mode emacs-lisp-mode :point 59 :line 2 :column 0 :line-text "(defun notes-util-render (entry)") :help-text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n")"#
-    ]],
+            r#"OK (:help (:mode help-mode :key ace-link-help :style (ace-link-help . post) :text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n") :keys (("s" ((24 "ai" "interpreted-function in") (49 "s/" "[ORACLE-SANDBOX]/lib/notes-util.el’.") (303 "dn" "notes-util-format’ and ‘describe-function’ for details.") (327 "fd" "describe-function’ for details.")))) :where (:buffer "notes-util.el" :window-buffer "notes-util.el" :mode emacs-lisp-mode :point 59 :line 2 :column 0 :line-text "(defun notes-util-render (entry)") :help-text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n")"#
+        ]],
     )
 }
 
@@ -143,8 +143,8 @@ fn ace_link_org_offers_every_visible_link_type_and_follows_each_kind() -> Parity
                :browsed (ace-link-test-browsed)))))))"##,
         true,
         expect![[
-        r##"OK (:folded (:mode org-mode :style (ace-link-org . pre) :archive-invisible org-fold-outline) :internal (:buffer "plan.org" :window-buffer "plan.org" :mode org-mode :point 202 :line 8 :column 0 :line-text "* Milestones") :remote (:where (:buffer "plan.org" :window-buffer "plan.org" :mode org-mode :point 35 :line 4 :column 9 :line-text "Read the [[https://example.org/manual][project manual]] and") :browsed (#1=(browse "https://example.org/manual"))) :file (:buffer "appendix.org" :window-buffer "appendix.org" :mode org-mode :point 0 :line 1 :column 0 :line-text "#+title: Appendix") :keys (("d" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]]."))) ("a" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]]."))) ("s" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]].")))) :browsed (#1#))"##
-    ]],
+            r##"OK (:folded (:mode org-mode :style (ace-link-org . pre) :archive-invisible org-fold-outline) :internal (:buffer "plan.org" :window-buffer "plan.org" :mode org-mode :point 202 :line 8 :column 0 :line-text "* Milestones") :remote (:where (:buffer "plan.org" :window-buffer "plan.org" :mode org-mode :point 35 :line 4 :column 9 :line-text "Read the [[https://example.org/manual][project manual]] and") :browsed (#1=(browse "https://example.org/manual"))) :file (:buffer "appendix.org" :window-buffer "appendix.org" :mode org-mode :point 0 :line 1 :column 0 :line-text "#+title: Appendix") :keys (("d" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]]."))) ("a" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]]."))) ("s" ((35 "a[" "[[https://example.org/manual][project manual]] and") (90 "s[" "[[file:appendix.org][appendix]].  Jump to [[*Milestones][milestones]].") (132 "d[" "[[*Milestones][milestones]].") (174 "f<" "<https://example.org/bare>") (219 "g[" "[[https://example.org/tracker][tracker]].") (279 "h[" "[[https://example.org/hidden][hidden link]].")))) :browsed (#1#))"##
+        ]],
     )
 }
 
@@ -180,8 +180,8 @@ fn ace_link_compilation_jumps_from_a_real_compile_run_to_the_error_site() -> Par
                          (point-min) (point-max)))))))"##,
         true,
         expect![[
-        r#"OK (:compilation (:mode compilation-mode :running nil :key ace-link-compilation :style (ace-link-compilation . post) :dispatch (ace-link-compilation compilation-mode grep-mode)) :keys (("s" ((358 "as" "src/parser.c:2:3: warning: unused value") (398 "ss" "src/lexer.c:2:17: error: bad token")))) :where (:buffer "lexer.c" :window-buffer "lexer.c" :mode c-mode :point 28 :line 2 :column 16 :line-text "int lex(void) { return 1; }") :file-text "/* lexer */\nint lex(void) { return 1; }\n")"#
-    ]],
+            r#"OK (:compilation (:mode compilation-mode :running nil :key ace-link-compilation :style (ace-link-compilation . post) :dispatch (ace-link-compilation compilation-mode grep-mode)) :keys (("s" ((358 "as" "src/parser.c:2:3: warning: unused value") (398 "ss" "src/lexer.c:2:17: error: bad token")))) :where (:buffer "lexer.c" :window-buffer "lexer.c" :mode c-mode :point 28 :line 2 :column 16 :line-text "int lex(void) { return 1; }") :file-text "/* lexer */\nint lex(void) { return 1; }\n")"#
+        ]],
     )
 }
 
@@ -224,8 +224,8 @@ fn ace_link_eww_follows_a_local_page_and_a_prefix_opens_the_external_browser() -
              :keys (ace-link-test-pressed))))))"##,
         true,
         expect![[
-        r#"OK (:index (:mode eww-mode :title "Field notes" :key ace-link-eww :style (ace-link-eww . post) :text "Field\nnotes\n\n\nStart\nwith\nthe\nintroduction,\nthen\nread\nthe\nAPI\nreference.\n\n\nExternal:\nupstream.\n") :followed (:title "Introduction" :url "file://[ORACLE-SANDBOX]/site/intro.html" :where (:buffer "*eww*" :window-buffer "*eww*" :mode eww-mode :point 0 :line 1 :column 0 :line-text "Introduction")) :external (:title "Field notes" :where (:buffer "*eww*" :window-buffer "*eww*" :mode eww-mode :point 84 :line 17 :column 0 :line-text "upstream.")) :browsed ((browse-external "https://example.org/upstream")) :keys (("a" ((29 "ai" "introduction,") (57 "sA" "API") (84 "du" "upstream."))) ("d" ((29 "ai" "introduction,") (57 "sA" "API") (84 "du" "upstream.")))))"#
-    ]],
+            r#"OK (:index (:mode eww-mode :title "Field notes" :key ace-link-eww :style (ace-link-eww . post) :text "Field\nnotes\n\n\nStart\nwith\nthe\nintroduction,\nthen\nread\nthe\nAPI\nreference.\n\n\nExternal:\nupstream.\n") :followed (:title "Introduction" :url "file://[ORACLE-SANDBOX]/site/intro.html" :where (:buffer "*eww*" :window-buffer "*eww*" :mode eww-mode :point 0 :line 1 :column 0 :line-text "Introduction")) :external (:title "Field notes" :where (:buffer "*eww*" :window-buffer "*eww*" :mode eww-mode :point 84 :line 17 :column 0 :line-text "upstream.")) :browsed ((browse-external "https://example.org/upstream")) :keys (("a" ((29 "ai" "introduction,") (57 "sA" "API") (84 "du" "upstream."))) ("d" ((29 "ai" "introduction,") (57 "sA" "API") (84 "du" "upstream.")))))"#
+        ]],
     )
 }
 
@@ -265,8 +265,8 @@ fn ace_link_dispatches_on_major_mode_and_falls_back_when_unsupported() -> Parity
              :where (ace-link-test-where))))))"##,
         true,
         expect![[
-        r#"OK (:plain (:mode fundamental-mode :unsupported (error "fundamental-mode isn’t supported") :fallback (fallback fundamental-mode 1)) :minor (:minor-mode t :table ((ace-link-compilation compilation-shell-minor-mode)) :dispatch (error "fundamental-mode isn’t supported")) :keys (("s" ((7 "a" "src/parser.c:2:3: warning: unused value") (47 "s" "src/parser.c:3:1: error: stray brace")))) :where (:buffer "parser.c" :window-buffer "parser.c" :mode c-mode :point 29 :line 3 :column 0 :line-text "}"))"#
-    ]],
+            r#"OK (:plain (:mode fundamental-mode :unsupported (error "fundamental-mode isn’t supported") :fallback (fallback fundamental-mode 1)) :minor (:minor-mode t :table ((ace-link-compilation compilation-shell-minor-mode)) :dispatch (error "fundamental-mode isn’t supported")) :keys (("s" ((7 "a" "src/parser.c:2:3: warning: unused value") (47 "s" "src/parser.c:3:1: error: stray brace")))) :where (:buffer "parser.c" :window-buffer "parser.c" :mode c-mode :point 29 :line 3 :column 0 :line-text "}"))"#
+        ]],
     )
 }
 

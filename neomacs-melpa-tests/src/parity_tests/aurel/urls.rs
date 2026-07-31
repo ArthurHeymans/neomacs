@@ -14,8 +14,8 @@ fn aurel_form_encodes_mixed_field_values_in_order() -> ParityBatchCase {
            ("unicode" . "λ/β?")))"##,
         true,
         expect![[
-        r#"OK "plain=value&space=a%20b&symbol=symbolic&number=42&nothing=nil&unicode=%CE%BB%2F%CE%B2%3F""#
-    ]],
+            r#"OK "plain=value&space=a%20b&symbol=symbolic&number=42&nothing=nil&unicode=%CE%BB%2F%CE%B2%3F""#
+        ]],
     )
 }
 
@@ -38,8 +38,8 @@ fn aurel_rpc_builder_covers_info_search_and_invalid_methods() -> ParityBatchCase
              '(("arg" . "unsafe"))))))"##,
         true,
         expect![[
-        r#"OK ("https://aur.archlinux.org/rpc/v5/info?arg[]=ripgrep&arg[]=emacs-git" "https://aur.archlinux.org/rpc/v5/search/editor?by=name-desc" (:error error ("Unknown search type: delete")))"#
-    ]],
+            r#"OK ("https://aur.archlinux.org/rpc/v5/info?arg[]=ripgrep&arg[]=emacs-git" "https://aur.archlinux.org/rpc/v5/search/editor?by=name-desc" (:error error ("Unknown search type: delete")))"#
+        ]],
     )
 }
 
@@ -56,8 +56,8 @@ fn aurel_package_info_url_preserves_repeated_arguments_and_escaping() -> ParityB
            ("one" "two words" "c++")))"##,
         true,
         expect![[
-        r#"OK ("https://aur.archlinux.org/rpc/v5/info?" "https://aur.archlinux.org/rpc/v5/info?arg[]=one" "https://aur.archlinux.org/rpc/v5/info?arg[]=one&arg[]=two%20words&arg[]=c%2B%2B")"#
-    ]],
+            r#"OK ("https://aur.archlinux.org/rpc/v5/info?" "https://aur.archlinux.org/rpc/v5/info?arg[]=one" "https://aur.archlinux.org/rpc/v5/info?arg[]=one&arg[]=two%20words&arg[]=c%2B%2B")"#
+        ]],
     )
 }
 
@@ -77,8 +77,8 @@ fn aurel_search_url_helpers_select_exact_rpc_fields() -> ParityBatchCase {
          (aurel-get-package-cgit-url "emacs-git"))"##,
         true,
         expect![[
-        r#"OK ("https://aur.archlinux.org/rpc/v5/search/commonlisp?by=name-desc" "https://aur.archlinux.org/rpc/v5/search/clang++?by=name" "https://aur.archlinux.org/rpc/v5/search/emacs?by=name" "https://aur.archlinux.org/rpc/v5/search/alice@example?by=maintainer" "https://aur.archlinux.org/account/AliceSmith" "https://aur.archlinux.org/packages/emacs-git" "https://aur.archlinux.org/pkgbase/emacs" "https://aur.archlinux.org/pkgbase/emacs/vote" "https://aur.archlinux.org/emacs-git.git" "https://aur.archlinux.org/cgit/aur.git/?h=emacs-git")"#
-    ]],
+            r#"OK ("https://aur.archlinux.org/rpc/v5/search/commonlisp?by=name-desc" "https://aur.archlinux.org/rpc/v5/search/clang++?by=name" "https://aur.archlinux.org/rpc/v5/search/emacs?by=name" "https://aur.archlinux.org/rpc/v5/search/alice@example?by=maintainer" "https://aur.archlinux.org/account/AliceSmith" "https://aur.archlinux.org/packages/emacs-git" "https://aur.archlinux.org/pkgbase/emacs" "https://aur.archlinux.org/pkgbase/emacs/vote" "https://aur.archlinux.org/emacs-git.git" "https://aur.archlinux.org/cgit/aur.git/?h=emacs-git")"#
+        ]],
     )
 }
 
@@ -138,8 +138,8 @@ fn aurel_search_dispatch_forwards_each_public_search_contract() -> ParityBatchCa
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (:by-name :by-string :by-name-string :by-maintainer (:error error ("Wrong search type ‘unsupported’")) ((:name "one" "two") (:string "long phrase" "short") (:name-string "emacs") (:maintainer "alice")))"#
-    ]],
+            r#"OK (:by-name :by-string :by-name-string :by-maintainer (:error error ("Wrong search type ‘unsupported’")) ((:name "one" "two") (:string "long phrase" "short") (:name-string "emacs") (:maintainer "alice")))"#
+        ]],
     )
 }
 
@@ -170,8 +170,8 @@ fn aurel_public_search_commands_forward_real_user_inputs() -> ParityBatchCase {
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:displayed . #1=(name "exact-package")) (:displayed . #2=(string "font" "programming language" "terminal")) (:displayed . #3=(name-string "emacs")) (:displayed . #4=(maintainer "alice")) (:displayed . #5=(name "local-one" "local-two")) (#1# #2# #3# #4# #5#))"#
-    ]],
+            r#"OK ((:displayed . #1=(name "exact-package")) (:displayed . #2=(string "font" "programming language" "terminal")) (:displayed . #3=(name-string "emacs")) (:displayed . #4=(maintainer "alice")) (:displayed . #5=(name "local-one" "local-two")) (#1# #2# #3# #4# #5#))"#
+        ]],
     )
 }
 
@@ -197,8 +197,8 @@ fn aurel_multi_string_search_uses_longest_term_and_filters_the_rest() -> ParityB
             captured)))"##,
         true,
         expect![[
-        r#"OK (:received ("https://aur.archlinux.org/rpc/v5/search/longestphrase?by=name-desc" (name description) ("medium" "tiny")))"#
-    ]],
+            r#"OK (:received ("https://aur.archlinux.org/rpc/v5/search/longestphrase?by=name-desc" (name description) ("medium" "tiny")))"#
+        ]],
     )
 }
 
@@ -223,8 +223,8 @@ fn aurel_get_package_wrappers_construct_url_then_receive_once() -> ParityBatchCa
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:received "https://aur.archlinux.org/rpc/v5/info?arg[]=one&arg[]=two") (:received "https://aur.archlinux.org/rpc/v5/search/editor?by=name") (:received "https://aur.archlinux.org/rpc/v5/search/alice?by=maintainer") ("https://aur.archlinux.org/rpc/v5/info?arg[]=one&arg[]=two" "https://aur.archlinux.org/rpc/v5/search/editor?by=name" "https://aur.archlinux.org/rpc/v5/search/alice?by=maintainer"))"#
-    ]],
+            r#"OK ((:received "https://aur.archlinux.org/rpc/v5/info?arg[]=one&arg[]=two") (:received "https://aur.archlinux.org/rpc/v5/search/editor?by=name") (:received "https://aur.archlinux.org/rpc/v5/search/alice?by=maintainer") ("https://aur.archlinux.org/rpc/v5/info?arg[]=one&arg[]=two" "https://aur.archlinux.org/rpc/v5/search/editor?by=name" "https://aur.archlinux.org/rpc/v5/search/alice?by=maintainer"))"#
+        ]],
     )
 }
 

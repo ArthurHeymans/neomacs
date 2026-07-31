@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_compile_batch};
 
-fn auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nosearch_trees() -> ParityBatchCase {
+fn auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nosearch_trees()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nosearch_trees",
         r##"(let* ((root
@@ -37,12 +38,13 @@ fn auto_compile_recursive_start_compiles_real_libraries_and_skips_hidden_and_nos
           (list top nested hidden nosearch)))"##,
         true,
         expect![[
-        r#"OK (("top.el" t) ("lib/nested.el" t) (".hidden/hidden.el" nil) ("vendor/skipped.el" nil))"#
-    ]],
+            r#"OK (("top.el" t) ("lib/nested.el" t) (".hidden/hidden.el" nil) ("vendor/skipped.el" nil))"#
+        ]],
     )
 }
 
-fn auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respects_skipped_trees() -> ParityBatchCase {
+fn auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respects_skipped_trees()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respects_skipped_trees",
         r##"(let* ((root
@@ -84,7 +86,8 @@ fn auto_compile_recursive_quit_removes_regular_and_stray_destinations_but_respec
     )
 }
 
-fn auto_compile_recursive_quit_option_controls_nonlibrary_source_destination_removal() -> ParityBatchCase {
+fn auto_compile_recursive_quit_option_controls_nonlibrary_source_destination_removal()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_compile_recursive_quit_option_controls_nonlibrary_source_destination_removal",
         r##"(let* ((root
@@ -255,7 +258,8 @@ fn auto_compile_require_advice_rebuilds_then_loads_new_bytecode_behavior() -> Pa
     )
 }
 
-fn auto_compile_load_advice_is_inert_when_mode_disabled_and_active_when_enabled() -> ParityBatchCase {
+fn auto_compile_load_advice_is_inert_when_mode_disabled_and_active_when_enabled() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_compile_load_advice_is_inert_when_mode_disabled_and_active_when_enabled",
         r##"(let ((calls nil))
@@ -286,7 +290,8 @@ fn auto_compile_load_advice_is_inert_when_mode_disabled_and_active_when_enabled(
     )
 }
 
-fn auto_compile_on_load_removes_earlier_stray_bytecode_that_would_shadow_real_source() -> ParityBatchCase {
+fn auto_compile_on_load_removes_earlier_stray_bytecode_that_would_shadow_real_source()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_compile_on_load_removes_earlier_stray_bytecode_that_would_shadow_real_source",
         r##"(let* ((early
@@ -325,7 +330,8 @@ fn auto_compile_on_load_removes_earlier_stray_bytecode_that_would_shadow_real_so
     )
 }
 
-fn auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure() -> ParityBatchCase {
+fn auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure",
         r##"(let* ((source
@@ -353,8 +359,8 @@ fn auto_compile_on_load_compiler_error_deletes_destination_and_contains_failure(
             (current-message))))"##,
         true,
         expect![[
-        r#"OK ("Deleting [ORACLE-SANDBOX]/auto-compile-fixture/load-error/broken.elc...done" nil nil)"#
-    ]],
+            r#"OK ("Deleting [ORACLE-SANDBOX]/auto-compile-fixture/load-error/broken.elc...done" nil nil)"#
+        ]],
     )
 }
 

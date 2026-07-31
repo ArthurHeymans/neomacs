@@ -1,7 +1,8 @@
 use super::{ParityBatchCase, assert_astyle_batch};
 use expect_test::{Expect, expect};
 
-fn region_command_delegates_exact_program_arguments_io_policy_and_success_predicate() -> ParityBatchCase {
+fn region_command_delegates_exact_program_arguments_io_policy_and_success_predicate()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "region_command_delegates_exact_program_arguments_io_policy_and_success_predicate",
         r##"
@@ -72,8 +73,8 @@ fn region_command_delegates_exact_program_arguments_io_policy_and_success_predic
 "##,
         true,
         expect![[
-        r#"OK (:formatted (:temporary-name astyle :call astyle 8 33 "astyle" ("--style=google" "--indent=spaces=4" "--suffix=none") t t "input.c" t nil t nil) nil "before\nint main(){\nreturn 0;\n}\nafter\n")"#
-    ]],
+            r#"OK (:formatted (:temporary-name astyle :call astyle 8 33 "astyle" ("--style=google" "--indent=spaces=4" "--suffix=none") t t "input.c" t nil t nil) nil "before\nint main(){\nreturn 0;\n}\nafter\n")"#
+        ]],
     )
 }
 
@@ -115,7 +116,8 @@ fn buffer_command_reports_progress_and_delegates_accessible_bounds_and_prefix() 
     )
 }
 
-fn real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_arguments() -> ParityBatchCase {
+fn real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_arguments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_arguments",
         r##"
@@ -158,12 +160,13 @@ fn real_buffer_formatting_runs_sandbox_executable_replaces_content_and_records_a
 "##,
         true,
         expect![[
-        r#"OK (nil "int main() {\n    return 0;\n}\n" 11 "--style=google\n--indent=spaces=4\n--suffix=none\n" (special-mode ""))"#
-    ]],
+            r#"OK (nil "int main() {\n    return 0;\n}\n" 11 "--style=google\n--indent=spaces=4\n--suffix=none\n" (special-mode ""))"#
+        ]],
     )
 }
 
-fn real_region_formatting_changes_only_selected_c_function_and_preserves_surroundings() -> ParityBatchCase {
+fn real_region_formatting_changes_only_selected_c_function_and_preserves_surroundings()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "real_region_formatting_changes_only_selected_c_function_and_preserves_surroundings",
         r##"
@@ -207,8 +210,8 @@ fn real_region_formatting_changes_only_selected_c_function_and_preserves_surroun
 "##,
         true,
         expect![[
-        r#"OK (nil "prefix\nint main() {\n    return 0;\n}\nsuffix\n" "--style=linux\n--indent=spaces=2\n--pad-oper\n--pad-header\n--break-blocks\n--delete-empty-lines\n--align-pointer=type\n--align-reference=name\n" (8 32))"#
-    ]],
+            r#"OK (nil "prefix\nint main() {\n    return 0;\n}\nsuffix\n" "--style=linux\n--indent=spaces=2\n--pad-oper\n--pad-header\n--break-blocks\n--delete-empty-lines\n--align-pointer=type\n--align-reference=name\n" (8 32))"#
+        ]],
     )
 }
 
@@ -261,12 +264,13 @@ fn project_rc_argument_is_passed_to_real_formatter_without_default_flags() -> Pa
 "##,
         true,
         expect![[
-        r#"OK (nil "int main() {\n    return 0;\n}\n" "--options=[ORACLE-SANDBOX]/rc-project/.astylerc\n" "[ORACLE-SANDBOX]/rc-project/.astylerc")"#
-    ]],
+            r#"OK (nil "int main() {\n    return 0;\n}\n" "--options=[ORACLE-SANDBOX]/rc-project/.astylerc\n" "[ORACLE-SANDBOX]/rc-project/.astylerc")"#
+        ]],
     )
 }
 
-fn formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_errors() -> ParityBatchCase {
+fn formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_errors()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_errors",
         r##"
@@ -327,8 +331,8 @@ fn formatter_failure_preserves_buffer_decodes_ansi_stderr_and_honors_display_err
 "##,
         true,
         expect![[
-        r#"OK (nil "int main(){\nreturn 0;\n}\n" nil (("*astyle errors*" nil)) (special-mode t "fixture formatter failed\n") (t t))"#
-    ]],
+            r#"OK (nil "int main(){\nreturn 0;\n}\n" nil (("*astyle errors*" nil)) (special-mode t "fixture formatter failed\n") (t t))"#
+        ]],
     )
 }
 
@@ -375,8 +379,8 @@ fn missing_formatter_program_preserves_content_and_reports_launch_failure() -> P
 "##,
         true,
         expect![[
-        r#"OK ("astyle failed: see *astyle errors*" "int main(){\nreturn 0;\n}\n" nil (special-mode 0 50))"#
-    ]],
+            r#"OK ("astyle failed: see *astyle errors*" "int main(){\nreturn 0;\n}\n" nil (special-mode 0 50))"#
+        ]],
     )
 }
 

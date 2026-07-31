@@ -90,12 +90,13 @@ fn narrowing_a_real_window_relayouts_the_table_only_once_g_reverts_it() -> Parit
                (delete-other-windows)))"##,
         true,
         expect![[
-        r#"OK (((:after-m-x (("*ASCII*" . 80) ("*scratch*" . 80)) 80 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  " 60 1 t) (:after-narrowing (("*ASCII*" . 49) ("*scratch*" . 30) ("*scratch*" . 80)) 49 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  " 60 1 t) (:after-g (("*ASCII*" . 49) ("*scratch*" . 30) ("*scratch*" . 80)) 49 6 "00  NUL  16  SYN  2C  ,  42  B  58  X  6E  n  " 46 1 t)) :narrowing-alone-changed-the-table nil :g-changed-the-table t :new-layout-fits-the-window t)"#
-    ]],
+            r#"OK (((:after-m-x (("*ASCII*" . 80) ("*scratch*" . 80)) 80 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  " 60 1 t) (:after-narrowing (("*ASCII*" . 49) ("*scratch*" . 30) ("*scratch*" . 80)) 49 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  " 60 1 t) (:after-g (("*ASCII*" . 49) ("*scratch*" . 30) ("*scratch*" . 80)) 49 6 "00  NUL  16  SYN  2C  ,  42  B  58  X  6E  n  " 46 1 t)) :narrowing-alone-changed-the-table nil :g-changed-the-table t :new-layout-fits-the-window t)"#
+        ]],
     )
 }
 
-fn reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one() -> ParityBatchCase {
+fn reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one",
         r##"(let* ((widest-layout-fitting
@@ -165,8 +166,8 @@ fn reverting_with_two_real_windows_fits_the_narrowest_one_not_the_selected_one()
                (delete-other-windows)))"##,
         true,
         expect![[
-        r#"OK (((:both-windows-show "*ASCII*" "*ASCII*") (:two-windows (("*ASCII*" . 49) ("*ASCII*" . 30) ("*scratch*" . 80)) 49 30 3 "00  NUL  2B  +  56  V  ") (:one-window (("*ASCII*" . 80) ("*scratch*" . 80)) 80 80 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  ")) :rendered-layout 3 :narrowest-window-admits 3 :selected-window-alone-would-admit 6 :widened-again (3 8))"#
-    ]],
+            r#"OK (((:both-windows-show "*ASCII*" "*ASCII*") (:two-windows (("*ASCII*" . 49) ("*ASCII*" . 30) ("*scratch*" . 80)) 49 30 3 "00  NUL  2B  +  56  V  ") (:one-window (("*ASCII*" . 80) ("*scratch*" . 80)) 80 80 8 "00  NUL  10  DLE  20     30  0  40  @  50  P  60  `  70  p  ")) :rendered-layout 3 :narrowest-window-admits 3 :selected-window-alone-would-admit 6 :widened-again (3 8))"#
+        ]],
     )
 }
 

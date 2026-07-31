@@ -113,8 +113,8 @@ fn at_watchable_notifies_in_order_assigns_after_callbacks_and_unwatches() -> Par
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (1 2 1 ((first :foo 1 absent) (second :foo 1 absent) (first :watchers 1 2) (second :watchers 1 2) (first :bar 2 absent)))"#
-    ]],
+            r#"OK (1 2 1 ((first :foo 1 absent) (second :foo 1 absent) (first :watchers 1 2) (second :watchers 1 2) (first :bar 2 absent)))"#
+        ]],
     )
 }
 

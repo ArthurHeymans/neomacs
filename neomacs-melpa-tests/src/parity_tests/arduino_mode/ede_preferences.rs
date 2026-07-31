@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_ede_arduino_batch};
 
-fn preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_data() -> ParityBatchCase {
+fn preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_data()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_data",
         r##"(let ((prefs-file
@@ -48,8 +49,8 @@ fn preferences_reader_parses_real_file_expands_sketchbook_and_attaches_board_dat
                       (delete-file prefs-file)))"##,
         true,
         expect![[
-        r#"OK ("/dev/ttyACM2" "mega" "[ORACLE-HOME]/Embedded Projects/" (:board "mega") t t ("mega"))"#
-    ]],
+            r#"OK ("/dev/ttyACM2" "mega" "[ORACLE-HOME]/Embedded Projects/" (:board "mega") t t ("mega"))"#
+        ]],
     )
 }
 
@@ -137,12 +138,13 @@ fn malformed_preferences_report_each_missing_required_key_precisely() -> ParityB
                       (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK ((error "Cannot find serial.port from the arduino preferences") (error "Cannot find board from the arduino preferences") (error "Cannot find sketchbook.path from the arduino preferences"))"#
-    ]],
+            r#"OK ((error "Cannot find serial.port from the arduino preferences") (error "Cannot find board from the arduino preferences") (error "Cannot find sketchbook.path from the arduino preferences"))"#
+        ]],
     )
 }
 
-fn sync_declining_to_launch_ide_when_preferences_are_missing_signals_exact_error() -> ParityBatchCase {
+fn sync_declining_to_launch_ide_when_preferences_are_missing_signals_exact_error() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "sync_declining_to_launch_ide_when_preferences_are_missing_signals_exact_error",
         r##"(let ((ede-arduino-preferences-file
@@ -155,12 +157,13 @@ fn sync_declining_to_launch_ide_when_preferences_are_missing_signals_exact_error
                       (ede-arduino-sync)))"##,
         false,
         expect![[
-        r#"ERR (error "EDE cannot build/upload arduino projects without preferences from the arduino IDE")"#
-    ]],
+            r#"ERR (error "EDE cannot build/upload arduino projects without preferences from the arduino IDE")"#
+        ]],
     )
 }
 
-fn sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active_object() -> ParityBatchCase {
+fn sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active_object()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active_object",
         r##"(let ((ede-arduino-preferences-file
@@ -202,8 +205,8 @@ fn sync_accepting_missing_preferences_launches_ide_then_reads_and_returns_active
                          (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (t ((:confirm "Can't find arduino preferences.  Start IDE to configure? ") :launch (:read "missing-but-created-by-ide.txt")))"#
-    ]],
+            r#"OK (t ((:confirm "Can't find arduino preferences.  Start IDE to configure? ") :launch (:read "missing-but-created-by-ide.txt")))"#
+        ]],
     )
 }
 
@@ -326,8 +329,8 @@ fn version_makefile_boards_and_library_helpers_resolve_real_install_layout() -> 
                       (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK ("2.3.4" "Arduino.mk" "hardware/vendor/boards.txt" "libraries" "libraries/Servo")"#
-    ]],
+            r#"OK ("2.3.4" "Arduino.mk" "hardware/vendor/boards.txt" "libraries" "libraries/Servo")"#
+        ]],
     )
 }
 
@@ -370,8 +373,8 @@ fn board_reader_builds_complete_board_object_from_realistic_boards_file() -> Par
                       (delete-file boards-file)))"##,
         true,
         expect![[
-        r#"OK (t "Arduino Uno" "arduino" "115200" "32256" "atmega328p" "16000000L" "arduino")"#
-    ]],
+            r#"OK (t "Arduino Uno" "arduino" "115200" "32256" "atmega328p" "16000000L" "arduino")"#
+        ]],
     )
 }
 
@@ -414,8 +417,8 @@ fn ide_launcher_uses_current_directory_buffer_and_configured_command() -> Parity
                       (delete-directory work t)))"##,
         true,
         expect![[
-        r#"OK (fake-process ((("arduino" (:buffer nil) "/opt/arduino/arduino") t "")) "")"#
-    ]],
+            r#"OK (fake-process ((("arduino" (:buffer nil) "/opt/arduino/arduino") t "")) "")"#
+        ]],
     )
 }
 

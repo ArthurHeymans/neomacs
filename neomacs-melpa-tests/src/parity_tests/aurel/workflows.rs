@@ -43,8 +43,8 @@ fn aurel_download_clones_missing_repository_and_returns_destination() -> ParityB
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("/fixture/downloads/demo" ((:message "Cloning https://aur.example/demo.git") (:exists "/fixture/downloads/demo") (:call "/fixture/downloads/" "git" nil (:buffer "*aurel debug*") nil "clone" "https://aur.example/demo.git")))"#
-    ]],
+            r#"OK ("/fixture/downloads/demo" ((:message "Cloning https://aur.example/demo.git") (:exists "/fixture/downloads/demo") (:call "/fixture/downloads/" "git" nil (:buffer "*aurel debug*") nil "clone" "https://aur.example/demo.git")))"#
+        ]],
     )
 }
 
@@ -85,8 +85,8 @@ fn aurel_download_existing_repository_skips_clone_and_reports_destination() -> P
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("/fixture/downloads/existing" ((:message "Cloning ssh://aur.example/existing.git") (:exists "/fixture/downloads/existing") (:message "Package directory already exists: /fixture/downloads/existing")))"#
-    ]],
+            r#"OK ("/fixture/downloads/existing" ((:message "Cloning ssh://aur.example/existing.git") (:exists "/fixture/downloads/existing") (:message "Package directory already exists: /fixture/downloads/existing")))"#
+        ]],
     )
 }
 
@@ -147,8 +147,8 @@ fn aurel_download_adapters_open_dired_pkgbuild_and_eshell_destinations() -> Pari
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:dired :file :cd ((:download "fixture:demo" "/one") (:dired "/one/demo") (:download "fixture:demo" "/two/") (:exists "/two/demo/PKGBUILD") (:find-file "/two/demo/PKGBUILD") (:download "fixture:demo" "/three") :eshell (:cd "/three/demo")))"#
-    ]],
+            r#"OK (:dired :file :cd ((:download "fixture:demo" "/one") (:dired "/one/demo") (:download "fixture:demo" "/two/") (:exists "/two/demo/PKGBUILD") (:find-file "/two/demo/PKGBUILD") (:download "fixture:demo" "/three") :eshell (:cd "/three/demo")))"#
+        ]],
     )
 }
 
@@ -185,8 +185,8 @@ fn aurel_pkgbuild_adapter_reports_exact_missing_file_after_download() -> ParityB
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ((:error error ("File ‘/fixture/demo/PKGBUILD’ does not exist")) ((:download "fixture:demo" "/fixture") (:exists "/fixture/demo/PKGBUILD")))"#
-    ]],
+            r#"OK ((:error error ("File ‘/fixture/demo/PKGBUILD’ does not exist")) ((:download "fixture:demo" "/fixture") (:exists "/fixture/demo/PKGBUILD")))"#
+        ]],
     )
 }
 
@@ -308,8 +308,8 @@ fn aurel_list_download_handles_single_cancelled_and_confirmed_multi_selection() 
               (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (:single nil ((:multi "fixture:two") (:multi "fixture:three")) ((:single "fixture:one" "/fixture/out/") (:confirm "Download 2 marked packages? ") (:multi "fixture:two" "/fixture/out/") (:multi "fixture:three" "/fixture/out/")))"#
-    ]],
+            r#"OK (:single nil ((:multi "fixture:two") (:multi "fixture:three")) ((:single "fixture:one" "/fixture/out/") (:confirm "Download 2 marked packages? ") (:multi "fixture:two" "/fixture/out/") (:multi "fixture:three" "/fixture/out/")))"#
+        ]],
     )
 }
 
@@ -360,8 +360,8 @@ fn aurel_user_action_honors_confirmation_then_posts_cookie_token() -> ParityBatc
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (nil t ((:confirm "Vote for `demo-base' package?") (:confirm "Enable notifications for `demo-base' package?") (:login) (:post "https://aur.archlinux.org/pkgbase/demo-base/notify" (("token" . "TOKEN-42") ("do_Notify" . "")) nil)))"#
-    ]],
+            r#"OK (nil t ((:confirm "Vote for `demo-base' package?") (:confirm "Enable notifications for `demo-base' package?") (:login) (:post "https://aur.archlinux.org/pkgbase/demo-base/notify" (("token" . "TOKEN-42") ("do_Notify" . "")) nil)))"#
+        ]],
     )
 }
 
@@ -422,8 +422,8 @@ fn aurel_login_maybe_prefers_cookie_then_auth_secret_then_forced_prompts() -> Pa
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (t :logged-in :logged-in ((:auth :host "aur.archlinux.org") (:login "auth-user" "auth-secret" t :noerror) (:auth :host "aur.archlinux.org") (:read-user "AUR user name: " "") (:read-password "Password: ") (:login "prompt-user" "prompt-secret" t :forced-noerror)))"#
-    ]],
+            r#"OK (t :logged-in :logged-in ((:auth :host "aur.archlinux.org") (:login "auth-user" "auth-secret" t :noerror) (:auth :host "aur.archlinux.org") (:read-user "AUR user name: " "") (:read-password "Password: ") (:login "prompt-user" "prompt-secret" t :forced-noerror)))"#
+        ]],
     )
 }
 
@@ -464,8 +464,8 @@ fn aurel_user_package_info_fetches_html_and_adds_nested_account_state() -> Parit
               (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (((voted . t) (subscribed)) ((user-info (voted . t) (subscribed)) (name . "demo") (id . 42)) ((:login nil t) (:retrieve "fixture:demo") (:login nil t) (:retrieve "https://aur.archlinux.org/packages/demo")))"#
-    ]],
+            r#"OK (((voted . t) (subscribed)) ((user-info (voted . t) (subscribed)) (name . "demo") (id . 42)) ((:login nil t) (:retrieve "fixture:demo") (:login nil t) (:retrieve "https://aur.archlinux.org/packages/demo")))"#
+        ]],
     )
 }
 
@@ -507,8 +507,8 @@ fn aurel_info_user_action_reverts_only_after_success_without_norevert() -> Parit
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (nil :reverted nil ((:action vote "demo") (:action subscribe "demo") (:revert nil t) (:action unsubscribe "demo")))"#
-    ]],
+            r#"OK (nil :reverted nil ((:action vote "demo") (:action subscribe "demo") (:revert nil t) (:action unsubscribe "demo")))"#
+        ]],
     )
 }
 
@@ -547,8 +547,8 @@ fn aurel_debug_writes_only_enabled_levels_with_deterministic_timestamp() -> Pari
               (buffer-string)))))"##,
         true,
         expect![[
-        r#"OK (nil nil nil "12:34:56.789 received 2 packages\n12:34:56.789 url=fixture\n")"#
-    ]],
+            r#"OK (nil nil nil "12:34:56.789 received 2 packages\n12:34:56.789 url=fixture\n")"#
+        ]],
     )
 }
 

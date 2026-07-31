@@ -46,7 +46,8 @@ fn auto_complete_pcmp_completions_advice_ignores_inactive_requests() -> ParityBa
     )
 }
 
-fn auto_complete_pcmp_show_completions_advice_suppresses_ui_and_captures_input() -> ParityBatchCase {
+fn auto_complete_pcmp_show_completions_advice_suppresses_ui_and_captures_input() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_pcmp_show_completions_advice_suppresses_ui_and_captures_input",
         r##"(let ((ac-pcmp--active-p t)
@@ -126,8 +127,8 @@ fn auto_complete_pcmp_stub_advice_maps_real_completion_outcomes_to_status() -> P
            ("zz" ("alpha" "beta"))))"##,
         true,
         expect![[
-        r#"OK ((("fo" #1=("foo")) nil sole #1# "fo") (("fo" #2=("foobar" "foobaz")) nil nil #2# "fo") (("foo" #3=("foo" "foobar")) nil nil #3# "foo") (("zz" #4=("alpha" "beta")) nil nil #4# "zz"))"#
-    ]],
+            r#"OK ((("fo" #1=("foo")) nil sole #1# "fo") (("fo" #2=("foobar" "foobaz")) nil nil #2# "fo") (("foo" #3=("foo" "foobar")) nil nil #3# "foo") (("zz" #4=("alpha" "beta")) nil nil #4# "zz"))"#
+        ]],
     )
 }
 
@@ -149,7 +150,8 @@ fn auto_complete_pcmp_stub_advice_does_not_overwrite_existing_candidates() -> Pa
     )
 }
 
-fn auto_complete_pcmp_stub_advice_inactive_path_preserves_native_return_and_state() -> ParityBatchCase {
+fn auto_complete_pcmp_stub_advice_inactive_path_preserves_native_return_and_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_pcmp_stub_advice_inactive_path_preserves_native_return_and_state",
         r##"(with-temp-buffer

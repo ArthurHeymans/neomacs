@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_all_the_icons_ivy_rich_batch};
 
-fn pinned_package_loads_its_real_ivy_rich_ivy_and_all_the_icons_dependency_graph() -> ParityBatchCase {
+fn pinned_package_loads_its_real_ivy_rich_ivy_and_all_the_icons_dependency_graph() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "pinned_package_loads_its_real_ivy_rich_ivy_and_all_the_icons_dependency_graph",
         r##"(let ((packages
@@ -30,8 +31,8 @@ fn pinned_package_loads_its_real_ivy_rich_ivy_and_all_the_icons_dependency_graph
                  '(cl-lib subr-x package bookmark project))))"##,
         true,
         expect![[
-        r#"OK (((all-the-icons-ivy-rich t "20230420.1234" "all-the-icons-ivy-rich.el") (ivy-rich t "20230425.1422" "ivy-rich.el") (ivy t "20260413.2102" "ivy.el") (all-the-icons t "20250527.927" "all-the-icons.el")) (cl-lib subr-x package bookmark project))"#
-    ]],
+            r#"OK (((all-the-icons-ivy-rich t "20230420.1234" "all-the-icons-ivy-rich.el") (ivy-rich t "20230425.1422" "ivy-rich.el") (ivy t "20260413.2102" "ivy.el") (all-the-icons t "20250527.927" "all-the-icons.el")) (cl-lib subr-x package bookmark project))"#
+        ]],
     )
 }
 
@@ -67,8 +68,8 @@ fn readme_color_size_and_icon_customizations_change_a_rendered_file_candidate() 
                     disabled))))"##,
         true,
         expect![[
-        r#"OK ((" " (:inherit all-the-icons-lcyan :family "github-octicons" :height 1.4) #1=(raise 0.0)) (" " (:inherit all-the-icons-ivy-rich-icon-face :family "github-octicons" :height 0.75) #1#) nil)"#
-    ]],
+            r#"OK ((" " (:inherit all-the-icons-lcyan :family "github-octicons" :height 1.4) #1=(raise 0.0)) (" " (:inherit all-the-icons-ivy-rich-icon-face :family "github-octicons" :height 0.75) #1#) nil)"#
+        ]],
     )
 }
 
@@ -193,8 +194,8 @@ fn enabled_package_mode_builds_and_applies_real_file_and_buffer_transformers() -
                rendered)"##,
         true,
         expect![[
-        r#"OK (t t (" " "work-notes.el" "" "-rw-r-----" "18" "Jan 02 12:34") (" " "work-notes.el" "29" "*" "" "air" "src" (:inherit all-the-icons-purple :family "file-icons" :height 1.0) all-the-icons-ivy-rich-major-mode-face))"#
-    ]],
+            r#"OK (t t (" " "work-notes.el" "" "-rw-r-----" "18" "Jan 02 12:34") (" " "work-notes.el" "29" "*" "" "air" "src" (:inherit all-the-icons-purple :family "file-icons" :height 1.0) all-the-icons-ivy-rich-major-mode-face))"#
+        ]],
     )
 }
 

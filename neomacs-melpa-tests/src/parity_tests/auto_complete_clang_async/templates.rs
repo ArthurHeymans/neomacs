@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_clang_async_batch};
 
-fn auto_complete_clang_async_template_source_returns_buffer_local_candidates_and_start_point() -> ParityBatchCase {
+fn auto_complete_clang_async_template_source_returns_buffer_local_candidates_and_start_point()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_template_source_returns_buffer_local_candidates_and_start_point",
         r##"(with-temp-buffer
@@ -28,12 +29,13 @@ fn auto_complete_clang_async_template_source_returns_buffer_local_candidates_and
                                  ac-source-clang-template))))))"##,
         true,
         expect![[
-        r#"OK (#1=("(<#int x#>)" "(<#double x#>)") 3 ((candidates . ac-clang-template-candidate) (prefix . ac-clang-template-prefix) (requires . 0) (action . ac-clang-template-action) (document . ac-clang-document) (cache) (symbol . "t")) #1# 3)"#
-    ]],
+            r#"OK (#1=("(<#int x#>)" "(<#double x#>)") 3 ((candidates . ac-clang-template-candidate) (prefix . ac-clang-template-prefix) (requires . 0) (action . ac-clang-template-action) (document . ac-clang-document) (cache) (symbol . "t")) #1# 3)"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_action_builds_overload_template_candidates_with_help_and_raw_args() -> ParityBatchCase {
+fn auto_complete_clang_async_action_builds_overload_template_candidates_with_help_and_raw_args()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_action_builds_overload_template_candidates_with_help_and_raw_args",
         r##"(with-temp-buffer
@@ -68,12 +70,13 @@ fn auto_complete_clang_async_action_builds_overload_template_candidates_with_hel
                                 (buffer-string)))))"##,
         true,
         expect![[
-        r#"OK (nil (11 (("(int x)" "int" "(<#int x#>)") ("(double x)" "double" "(<#double x#>)"))) 11 "obj.method")"#
-    ]],
+            r#"OK (nil (11 (("(int x)" "int" "(<#int x#>)") ("(double x)" "double" "(<#double x#>)"))) 11 "obj.method")"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_action_adds_optional_and_variadic_short_forms_without_duplicates() -> ParityBatchCase {
+fn auto_complete_clang_async_action_adds_optional_and_variadic_short_forms_without_duplicates()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_action_adds_optional_and_variadic_short_forms_without_duplicates",
         r##"(with-temp-buffer
@@ -106,12 +109,13 @@ fn auto_complete_clang_async_action_adds_optional_and_variadic_short_forms_witho
                                 (length captured)))))"##,
         true,
         expect![[
-        r#"OK (nil (("(int required{#, int optional#})" "void" "(<#int required#>{#, <#int optional#>#})") ("(int required)" "void" "(<#int required#>)") ("(const char *fmt, ...)" "int" "(<#const char *fmt#>, <#...#>)")) 3)"#
-    ]],
+            r#"OK (nil (("(int required{#, int optional#})" "void" "(<#int required#>{#, <#int optional#>#})") ("(int required)" "void" "(<#int required#>)") ("(const char *fmt, ...)" "int" "(<#const char *fmt#>, <#...#>)")) 3)"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_action_single_template_starts_completion_and_reports_clean_help() -> ParityBatchCase {
+fn auto_complete_clang_async_action_single_template_starts_completion_and_reports_clean_help()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_action_single_template_starts_completion_and_reports_clean_help",
         r##"(with-temp-buffer
@@ -153,12 +157,13 @@ fn auto_complete_clang_async_action_single_template_starts_completion_and_report
                                 (nreverse messages)))))"##,
         true,
         expect![[
-        r#"OK (#1=("Widget value : const Widget") (((": const Widget" "Widget" ": const Widget"))) #1#)"#
-    ]],
+            r#"OK (#1=("Widget value : const Widget") (((": const Widget" "Widget" ": const Widget"))) #1#)"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_action_without_template_candidates_only_reports_documentation() -> ParityBatchCase {
+fn auto_complete_clang_async_action_without_template_candidates_only_reports_documentation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_action_without_template_candidates_only_reports_documentation",
         r##"(let* ((item
@@ -197,7 +202,8 @@ fn auto_complete_clang_async_action_without_template_candidates_only_reports_doc
     )
 }
 
-fn auto_complete_clang_async_template_action_expands_real_nested_arguments_through_yasnippet_api() -> ParityBatchCase {
+fn auto_complete_clang_async_template_action_expands_real_nested_arguments_through_yasnippet_api()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_template_action_expands_real_nested_arguments_through_yasnippet_api",
         r##"(with-temp-buffer
@@ -227,12 +233,13 @@ fn auto_complete_clang_async_template_action_expands_real_nested_arguments_throu
                               (point))))"##,
         true,
         expect![[
-        r#"OK (:expanded (("(${std::vector<int> values}, ${callback(int, char)})" 1 7)) "method" 7)"#
-    ]],
+            r#"OK (:expanded (("(${std::vector<int> values}, ${callback(int, char)})" 1 7)) "method" 7)"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_template_action_retries_legacy_yasnippet_argument_order_on_error() -> ParityBatchCase {
+fn auto_complete_clang_async_template_action_retries_legacy_yasnippet_argument_order_on_error()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_template_action_retries_legacy_yasnippet_argument_order_on_error",
         r##"(with-temp-buffer
@@ -269,7 +276,8 @@ fn auto_complete_clang_async_template_action_retries_legacy_yasnippet_argument_o
     )
 }
 
-fn auto_complete_clang_async_template_action_uses_legacy_snippet_package_when_available() -> ParityBatchCase {
+fn auto_complete_clang_async_template_action_uses_legacy_snippet_package_when_available()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_template_action_uses_legacy_snippet_package_when_available",
         r##"(with-temp-buffer
@@ -307,7 +315,8 @@ fn auto_complete_clang_async_template_action_uses_legacy_snippet_package_when_av
     )
 }
 
-fn auto_complete_clang_async_template_action_without_snippet_backend_preserves_text_and_warns() -> ParityBatchCase {
+fn auto_complete_clang_async_template_action_without_snippet_backend_preserves_text_and_warns()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_template_action_without_snippet_backend_preserves_text_and_warns",
         r##"(with-temp-buffer
@@ -354,8 +363,8 @@ fn auto_complete_clang_async_template_action_without_snippet_backend_preserves_t
                                 (nreverse messages)))))"##,
         true,
         expect![[
-        r#"OK (#1=("Dude! You are too out! Please install a yasnippet or a snippet script:)") "call" 5 #1#)"#
-    ]],
+            r#"OK (#1=("Dude! You are too out! Please install a yasnippet or a snippet script:)") "call" 5 #1#)"#
+        ]],
     )
 }
 

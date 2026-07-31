@@ -20,7 +20,8 @@ fn auth_source_keytar_backend_parse_builds_exact_keytar_backend_contract() -> Pa
     )
 }
 
-fn auth_source_keytar_backend_parse_rejects_every_non_keytar_entry_without_side_effects() -> ParityBatchCase {
+fn auth_source_keytar_backend_parse_rejects_every_non_keytar_entry_without_side_effects()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_backend_parse_rejects_every_non_keytar_entry_without_side_effects",
         r##"(let (calls)
@@ -47,12 +48,13 @@ fn auth_source_keytar_backend_parse_rejects_every_non_keytar_entry_without_side_
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((nil nil) ("keytar" nil) (KEYTAR nil) ((keytar) nil) ((:source keytar) nil) (keytar-config nil) (0 nil)) nil)"#
-    ]],
+            r#"OK (((nil nil) ("keytar" nil) (KEYTAR nil) ((keytar) nil) ((:source keytar) nil) (keytar-config nil) (0 nil)) nil)"#
+        ]],
     )
 }
 
-fn auth_source_keytar_backend_parse_forwards_entry_and_unmodified_backend_to_parameter_parser() -> ParityBatchCase {
+fn auth_source_keytar_backend_parse_forwards_entry_and_unmodified_backend_to_parameter_parser()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_backend_parse_forwards_entry_and_unmodified_backend_to_parameter_parser",
         r##"(let (calls)
@@ -76,12 +78,13 @@ fn auth_source_keytar_backend_parse_forwards_entry_and_unmodified_backend_to_par
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:parsed keytar "Keytar") ((keytar ("Keytar" keytar auth-source-keytar-search))))"#
-    ]],
+            r#"OK ((:parsed keytar "Keytar") ((keytar ("Keytar" keytar auth-source-keytar-search))))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_backend_parse_propagates_parameter_parser_failure_after_backend_construction() -> ParityBatchCase {
+fn auth_source_keytar_backend_parse_propagates_parameter_parser_failure_after_backend_construction()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_backend_parse_propagates_parameter_parser_failure_after_backend_construction",
         r##"(let (observed)
@@ -104,8 +107,8 @@ fn auth_source_keytar_backend_parse_propagates_parameter_parser_failure_after_ba
              observed)))"##,
         true,
         expect![[
-        r#"OK ((:error error ("fixture backend parser failed")) (keytar ("Keytar" keytar auth-source-keytar-search)))"#
-    ]],
+            r#"OK ((:error error ("fixture backend parser failed")) (keytar ("Keytar" keytar auth-source-keytar-search)))"#
+        ]],
     )
 }
 
@@ -130,12 +133,13 @@ fn auth_source_keytar_load_registers_parser_once_in_modern_auth_source_hook() ->
            'auth-source-backend-parse))"##,
         true,
         expect![
-        "OK (t (auth-source-keytar-backend-parse auth-source-backends-parser-secrets auth-source-backends-parser-macos-keychain auth-source-backends-parser-file) 1 nil)"
-    ],
+            "OK (t (auth-source-keytar-backend-parse auth-source-backends-parser-secrets auth-source-backends-parser-macos-keychain auth-source-backends-parser-file) 1 nil)"
+        ],
     )
 }
 
-fn auth_source_keytar_registered_hook_parses_keytar_and_declines_other_sources() -> ParityBatchCase {
+fn auth_source_keytar_registered_hook_parses_keytar_and_declines_other_sources() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_keytar_registered_hook_parses_keytar_and_declines_other_sources",
         r##"(list
@@ -151,8 +155,8 @@ fn auth_source_keytar_registered_hook_parses_keytar_and_declines_other_sources()
            'unknown-backend))"##,
         true,
         expect![[
-        r#"OK (("Keytar" keytar auth-source-keytar-search) #s(auth-source-backend ignore "" t t t nil ignore ignore) #s(auth-source-backend ignore "" t t t nil ignore ignore))"#
-    ]],
+            r#"OK (("Keytar" keytar auth-source-keytar-search) #s(auth-source-backend ignore "" t t t nil ignore ignore) #s(auth-source-backend ignore "" t t t nil ignore ignore))"#
+        ]],
     )
 }
 
@@ -197,7 +201,8 @@ fn auth_source_keytar_source_reloads_do_not_duplicate_modern_parser_hook() -> Pa
     )
 }
 
-fn auth_source_keytar_legacy_reload_uses_before_until_advice_when_parser_hook_is_unbound() -> ParityBatchCase {
+fn auth_source_keytar_legacy_reload_uses_before_until_advice_when_parser_hook_is_unbound()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_legacy_reload_uses_before_until_advice_when_parser_hook_is_unbound",
         r##"(let ((source

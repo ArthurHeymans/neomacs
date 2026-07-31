@@ -19,8 +19,8 @@ fn academic_phrases_inserts_a_chosen_phrase_into_a_paper_draft_at_point() -> Par
         (academic-test-prompts)))"##,
         true,
         expect![[
-        r#"OK ("\\section{Introduction}\n\nÜberblick: X is the leading cause of ...renewable energy adoption.\n" 92 91 (("Choose a category: " 57) ("Choose a phrase: " 12) ("X is the [main/leading/primary/major] cause of ..." 4)))"#
-    ]],
+            r#"OK ("\\section{Introduction}\n\nÜberblick: X is the leading cause of ...renewable energy adoption.\n" 92 91 (("Choose a category: " 57) ("Choose a phrase: " 12) ("X is the [main/leading/primary/major] cause of ..." 4)))"#
+        ]],
     )
 }
 
@@ -39,8 +39,8 @@ fn academic_phrases_by_section_restricts_the_categories_to_that_paper_section() 
         (academic-test-prompts)))"##,
         true,
         expect![[
-        r#"OK ("Our method has many practical applications." 44 (("Choose a section: " 8) ("Choose a category: " 14) ("Choose a phrase: " 10) ("Our method has many [interesting/attractive/beneficial/useful/practical/effective/valuable] applications." 7)))"#
-    ]],
+            r#"OK ("Our method has many practical applications." 44 (("Choose a section: " 8) ("Choose a category: " 14) ("Choose a phrase: " 10) ("Our method has many [interesting/attractive/beneficial/useful/practical/effective/valuable] applications." 7)))"#
+        ]],
     )
 }
 
@@ -61,12 +61,13 @@ fn academic_phrases_fills_every_placeholder_of_a_multiple_choice_template() -> P
         (academic-test-prompts)))"##,
         true,
         expect![[
-        r#"OK ("We gratefully acknowledge Dr. Y for her valuable suggestions and discussions." 78 nil nil (("Choose a category: " 57) ("Choose a phrase: " 10) ("We [thank/are grateful to/gratefully acknowledge] Dr. Y for her [help/valuable suggestions and discussions]." 3) ("We [thank/are grateful to/gratefully acknowledge] Dr. Y for her [help/valuable suggestions and discussions]." 2)))"#
-    ]],
+            r#"OK ("We gratefully acknowledge Dr. Y for her valuable suggestions and discussions." 78 nil nil (("Choose a category: " 57) ("Choose a phrase: " 10) ("We [thank/are grateful to/gratefully acknowledge] Dr. Y for her [help/valuable suggestions and discussions]." 3) ("We [thank/are grateful to/gratefully acknowledge] Dr. Y for her [help/valuable suggestions and discussions]." 2)))"#
+        ]],
     )
 }
 
-fn academic_phrases_offers_the_documented_sections_and_their_own_category_lists() -> ParityBatchCase {
+fn academic_phrases_offers_the_documented_sections_and_their_own_category_lists() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "academic_phrases_offers_the_documented_sections_and_their_own_category_lists",
         r##"(let (observed)
@@ -94,12 +95,13 @@ fn academic_phrases_offers_the_documented_sections_and_their_own_category_lists(
   (nreverse observed))"##,
         true,
         expect![[
-        r#"OK (("Abstract" 8 4 "Stating the aim of your paper and its contribution" "Establishing why your topic X is important") ("Introduction" 8 16 "Using the opinions of others to justify your criticism of someone’s work" "Establishing why your topic X is important") ("Literature Review" 8 0 nil nil) ("Methods" 8 14 "Outlining alternative approaches " "Describing purpose of testing / methods used") ("Results" 8 12 "Outlining undesired or unexpected results" "Describing benefits of your method, equipment etc.") ("Discussion" 8 11 "Announcing your conclusions and summarizing content" "Highlighting significant results and achievements") ("Conclusions" 8 7 "Future work proposed for third parties to carry out" "Announcing your conclusions and summarizing content") ("Acknowledgements" 8 1 "Acknowledgements" "Acknowledgements"))"#
-    ]],
+            r#"OK (("Abstract" 8 4 "Stating the aim of your paper and its contribution" "Establishing why your topic X is important") ("Introduction" 8 16 "Using the opinions of others to justify your criticism of someone’s work" "Establishing why your topic X is important") ("Literature Review" 8 0 nil nil) ("Methods" 8 14 "Outlining alternative approaches " "Describing purpose of testing / methods used") ("Results" 8 12 "Outlining undesired or unexpected results" "Describing benefits of your method, equipment etc.") ("Discussion" 8 11 "Announcing your conclusions and summarizing content" "Highlighting significant results and achievements") ("Conclusions" 8 7 "Future work proposed for third parties to carry out" "Announcing your conclusions and summarizing content") ("Acknowledgements" 8 1 "Acknowledgements" "Acknowledgements"))"#
+        ]],
     )
 }
 
-fn academic_phrases_renders_every_category_and_phrase_without_a_leftover_placeholder() -> ParityBatchCase {
+fn academic_phrases_renders_every_category_and_phrase_without_a_leftover_placeholder()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "academic_phrases_renders_every_category_and_phrase_without_a_leftover_placeholder",
         r##"(let* ((pick-first (lambda (candidates) (car candidates)))

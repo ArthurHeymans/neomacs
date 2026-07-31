@@ -25,8 +25,8 @@ fn session_link_normalization_handles_terminal_wrapping_urls_and_spaces() -> Par
 "##,
         true,
         expect![[
-        r#"OK (("src/Foo.java" "/workspace/My Image.png" "/workspace/Foo.java" "/workspace/Foo.java" "/workspace/image-wrapped.png" "./screens/My Image.png" nil) "/workspace/My Image.png" "https://example.com/app-page=true")"#
-    ]],
+            r#"OK (("src/Foo.java" "/workspace/My Image.png" "/workspace/Foo.java" "/workspace/Foo.java" "/workspace/image-wrapped.png" "./screens/My Image.png" nil) "/workspace/My Image.png" "https://example.com/app-page=true")"#
+        ]],
     )
 }
 
@@ -50,8 +50,8 @@ fn session_link_parser_covers_editor_compiler_and_github_location_syntaxes() -> 
 "##,
         true,
         expect![[
-        r#"OK ((:url "https://example.com/review/42") (:file "src/lib.rs" :line-start 42 :column-start 7) (:file "src/lib.rs" :line-start 42) (:file "src/lib.rs:L42-L60") (:file "src/lib.rs" :line-start 42) (:file "src/lib.rs" :line-start 42 :column-start 7) (:file "src/lib.rs" :line-start 42) (:file "./README.md") nil)"#
-    ]],
+            r#"OK ((:url "https://example.com/review/42") (:file "src/lib.rs" :line-start 42 :column-start 7) (:file "src/lib.rs" :line-start 42) (:file "src/lib.rs:L42-L60") (:file "src/lib.rs" :line-start 42) (:file "src/lib.rs" :line-start 42 :column-start 7) (:file "src/lib.rs" :line-start 42) (:file "./README.md") nil)"#
+        ]],
     )
 }
 
@@ -94,8 +94,8 @@ fn session_linkification_marks_real_project_files_locations_and_urls() -> Parity
 "##,
         true,
         expect![[
-        r#"OK (("src/payment.rs" "src/payment.rs" link highlight) ("src/payment.rs:42:7" "src/payment.rs:42:7" link highlight) ("https://example.com/pull/77" "https://example.com/pull/77" link highlight))"#
-    ]],
+            r#"OK (("src/payment.rs" "src/payment.rs" link highlight) ("src/payment.rs:42:7" "src/payment.rs:42:7" link highlight) ("https://example.com/pull/77" "https://example.com/pull/77" link highlight))"#
+        ]],
     )
 }
 
@@ -130,8 +130,8 @@ fn session_linkification_reconstructs_wrapped_urls_without_claiming_prose() -> P
 "##,
         true,
         expect![[
-        r#"OK (("https://example.com/repo/project-int" "https://example.com/repo/project-interface.el") ("erface.el" "https://example.com/repo/project-interface.el") ("https://example.com/repo/pkg" "https://example.com/repo/pkg") ("-interface.el" "-interface.el"))"#
-    ]],
+            r#"OK (("https://example.com/repo/project-int" "https://example.com/repo/project-interface.el") ("erface.el" "https://example.com/repo/project-interface.el") ("https://example.com/repo/pkg" "https://example.com/repo/pkg") ("-interface.el" "-interface.el"))"#
+        ]],
     )
 }
 
@@ -163,8 +163,8 @@ fn session_symbol_filters_are_language_aware_near_file_references() -> ParityBat
 "##,
         true,
         expect![[
-        r#"OK ((emacs-lisp-mode ("ai-code-session-register" t) ("make-ai-code-session" t) ("42" nil) ("*scratch*" nil)) (python-mode ("retry_payment" t) ("PaymentService" t) ("simple" nil) ("UPPER_CASE" nil)) (java-mode ("PaymentService" t) ("retryPayment" nil) ("Simple" nil) ("ALLCAPS" nil)))"#
-    ]],
+            r#"OK ((emacs-lisp-mode ("ai-code-session-register" t) ("make-ai-code-session" t) ("42" nil) ("*scratch*" nil)) (python-mode ("retry_payment" t) ("PaymentService" t) ("simple" nil) ("UPPER_CASE" nil)) (java-mode ("PaymentService" t) ("retryPayment" nil) ("Simple" nil) ("ALLCAPS" nil)))"#
+        ]],
     )
 }
 

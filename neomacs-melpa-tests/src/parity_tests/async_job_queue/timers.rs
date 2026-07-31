@@ -2,7 +2,8 @@ use expect_test::{Expect, expect};
 
 use super::{ParityBatchCase, assert_async_job_queue_batch};
 
-fn timer_factory_routes_numeric_and_absolute_frequencies_with_exact_repeat_policy() -> ParityBatchCase {
+fn timer_factory_routes_numeric_and_absolute_frequencies_with_exact_repeat_policy()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "timer_factory_routes_numeric_and_absolute_frequencies_with_exact_repeat_policy",
         r##"
@@ -30,8 +31,8 @@ fn timer_factory_routes_numeric_and_absolute_frequencies_with_exact_repeat_polic
 "##,
         true,
         expect![
-        "OK (numeric-timer numeric-timer absolute-timer ((run-with-timer 0.25 0.25 ignore alpha 2) (run-with-timer 4 nil list beta) (run-at-time #1=(26000 12 0 0) #1# vector gamma)))"
-    ],
+            "OK (numeric-timer numeric-timer absolute-timer ((run-with-timer 0.25 0.25 ignore alpha 2) (run-with-timer 4 nil list beta) (run-at-time #1=(26000 12 0 0) #1# vector gamma)))"
+        ],
     )
 }
 
@@ -78,8 +79,8 @@ fn timer_info_is_nonrecursive_and_covers_every_timer_field() -> ParityBatchCase 
 "##,
         true,
         expect![
-        "OK (nil [timer (triggered t) (high-seconds 12) (low-seconds 34) (micro-seconds 56) (pico-seconds 78) (repeat-delay 0.5) #'fixture-function (idle-delay nil) (integral-multiple 4)])"
-    ],
+            "OK (nil [timer (triggered t) (high-seconds 12) (low-seconds 34) (micro-seconds 56) (pico-seconds 78) (repeat-delay 0.5) #'fixture-function (idle-delay nil) (integral-multiple 4)])"
+        ],
     )
 }
 
@@ -138,8 +139,8 @@ fn ensure_running_creates_one_timer_for_work_and_keeps_it_while_inactive() -> Pa
 "##,
         true,
         expect![
-        "OK (ensure-timer ensure-timer ensure-timer 1 ((0.1 0.1 t t)) nil (:id ensure-work :active nil :in-use 1 :free 0 :used-slots (0) :free-slots nil :queued 0 :timer t))"
-    ],
+            "OK (ensure-timer ensure-timer ensure-timer 1 ((0.1 0.1 t t)) nil (:id ensure-work :active nil :in-use 1 :free 0 :used-slots (0) :free-slots nil :queued 0 :timer t))"
+        ],
     )
 }
 
@@ -183,8 +184,8 @@ fn ensure_running_calls_on_empty_before_cancelling_the_last_timer() -> ParityBat
 "##,
         true,
         expect![
-        "OK (nil ((empty ensure-empty 0 0 t) (cancel last-timer)) (last-timer) (:id ensure-empty :active t :in-use 0 :free 2 :used-slots nil :free-slots (0 1) :queued 0 :timer nil))"
-    ],
+            "OK (nil ((empty ensure-empty 0 0 t) (cancel last-timer)) (last-timer) (:id ensure-empty :active t :in-use 0 :free 2 :used-slots nil :free-slots (0 1) :queued 0 :timer nil))"
+        ],
     )
 }
 

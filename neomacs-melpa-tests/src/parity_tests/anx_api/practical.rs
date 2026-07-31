@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_anx_api_batch};
 
-fn anx_api_authenticated_campaign_session_uses_real_http_parsing_and_result_buffers() -> ParityBatchCase {
+fn anx_api_authenticated_campaign_session_uses_real_http_parsing_and_result_buffers()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "anx_api_authenticated_campaign_session_uses_real_http_parsing_and_result_buffers",
         r##"(let ((*anx-sandbox-url* "https://sandbox.example/v1")
@@ -141,12 +142,13 @@ fn anx_api_authenticated_campaign_session_uses_real_http_parsing_and_result_buff
       (list payload-buffer)))))"##,
         true,
         expect![[
-        r#"OK (("correct horse" "operator@example.test" "correct horse" ("password: ") "current api url is https://sandbox.example/v1" "current api url is https://api.example/v1" "current api url is https://sandbox.example/v1" "https://sandbox.example/v1") (("https://sandbox.example/v1/auth" "POST" #1=(("Content-Type" . "application/x-www-form-urlencoded")) "{\"auth\":{\"username\":\"operator@example.test\",\"password\":\"correct horse\"}}") ("https://sandbox.example/v1/campaign/9?stats=true" "GET" #1# "") ("https://sandbox.example/v1/user?current" "GET" #1# "") ("https://sandbox.example/v1/campaign/9" "PUT" #1# "{\"campaign\":{\"id\":9,\"name\":\"Launch\",\"active\":true},\"audit\":{\"ticket\":\"OPS-314\"}}")) ((authenticate "https://sandbox.example/v1/auth" "https://sandbox.example/v1/auth") (campaign-get "https://sandbox.example/v1/campaign/9?stats=true" "https://sandbox.example/v1/campaign/9?stats=true") (who-am-i "*anx-who-am-i*" "*anx-who-am-i*") (campaign-update "https://sandbox.example/v1/campaign/9[PUT]" "https://sandbox.example/v1/campaign/9[PUT]")) (("https://sandbox.example/v1/auth" emacs-lisp-mode t t 54 "\n((response (status . \"OK\") (token . \"session-17\")))\n" ((response (status . "OK") (token . "session-17")))) ("https://sandbox.example/v1/campaign/9?stats=true" emacs-lisp-mode t t 112 "\n((response (status . \"OK\")) (campaign (id . 9) (name . \"Launch\")) (stats (impressions . 1200) (clicks . 48)))\n" ((response (status . "OK")) (campaign (id . 9) (name . "Launch")) (stats (impressions . 1200) (clicks . 48)))) ("*anx-who-am-i*" emacs-lisp-mode t t 68 "\n((response (status . \"OK\")) (user (id . 42) (name . \"Operator\")))\n" ((response (status . "OK")) (user (id . 42) (name . "Operator")))) ("https://sandbox.example/v1/campaign/9[PUT]" emacs-lisp-mode t t 82 "\n((response (status . \"OK\")) (campaign (id . 9) (name . \"Launch\") (active . t)))\n" ((response (status . "OK")) (campaign (id . 9) (name . "Launch") (active . t))))))"#
-    ]],
+            r#"OK (("correct horse" "operator@example.test" "correct horse" ("password: ") "current api url is https://sandbox.example/v1" "current api url is https://api.example/v1" "current api url is https://sandbox.example/v1" "https://sandbox.example/v1") (("https://sandbox.example/v1/auth" "POST" #1=(("Content-Type" . "application/x-www-form-urlencoded")) "{\"auth\":{\"username\":\"operator@example.test\",\"password\":\"correct horse\"}}") ("https://sandbox.example/v1/campaign/9?stats=true" "GET" #1# "") ("https://sandbox.example/v1/user?current" "GET" #1# "") ("https://sandbox.example/v1/campaign/9" "PUT" #1# "{\"campaign\":{\"id\":9,\"name\":\"Launch\",\"active\":true},\"audit\":{\"ticket\":\"OPS-314\"}}")) ((authenticate "https://sandbox.example/v1/auth" "https://sandbox.example/v1/auth") (campaign-get "https://sandbox.example/v1/campaign/9?stats=true" "https://sandbox.example/v1/campaign/9?stats=true") (who-am-i "*anx-who-am-i*" "*anx-who-am-i*") (campaign-update "https://sandbox.example/v1/campaign/9[PUT]" "https://sandbox.example/v1/campaign/9[PUT]")) (("https://sandbox.example/v1/auth" emacs-lisp-mode t t 54 "\n((response (status . \"OK\") (token . \"session-17\")))\n" ((response (status . "OK") (token . "session-17")))) ("https://sandbox.example/v1/campaign/9?stats=true" emacs-lisp-mode t t 112 "\n((response (status . \"OK\")) (campaign (id . 9) (name . \"Launch\")) (stats (impressions . 1200) (clicks . 48)))\n" ((response (status . "OK")) (campaign (id . 9) (name . "Launch")) (stats (impressions . 1200) (clicks . 48)))) ("*anx-who-am-i*" emacs-lisp-mode t t 68 "\n((response (status . \"OK\")) (user (id . 42) (name . \"Operator\")))\n" ((response (status . "OK")) (user (id . 42) (name . "Operator")))) ("https://sandbox.example/v1/campaign/9[PUT]" emacs-lisp-mode t t 82 "\n((response (status . \"OK\")) (campaign (id . 9) (name . \"Launch\") (active . t)))\n" ((response (status . "OK")) (campaign (id . 9) (name . "Launch") (active . t))))))"#
+        ]],
     )
 }
 
-fn anx_api_documented_lisp_json_edit_roundtrip_preserves_a_real_campaign_payload() -> ParityBatchCase {
+fn anx_api_documented_lisp_json_edit_roundtrip_preserves_a_real_campaign_payload() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "anx_api_documented_lisp_json_edit_roundtrip_preserves_a_real_campaign_payload",
         r##"(let (source json-buffer lisp-buffer)
@@ -212,12 +214,13 @@ fn anx_api_documented_lisp_json_edit_roundtrip_preserves_a_real_campaign_payload
         (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r##"OK (("campaign-draft.json" "campaign-draft.json") "\n\"{\\\"campaign\\\":{\\\"id\\\":9,\\\"name\\\":\\\"Launch\\\",\\\"active\\\":true},\\\"segments\\\":[101,202],\\\"budget\\\":1250}\"\n" "{\"campaign\":{\"id\":9,\"name\":\"Launch\",\"active\":true},\"segments\":[101,202],\"budget\":1250}" "\n{\"campaign\":{\"id\":9,\"name\":\"Launch revised\",\"active\":true},\"segments\":[101,202],\"budget\":1750}\n" "\"\n{\\\"campaign\\\":{\\\"id\\\":9,\\\"name\\\":\\\"Launch revised\\\",\\\"active\\\":true},\\\"segments\\\":[101,202],\\\"budget\\\":1750}\n\"" "\n{\"campaign\":{\"id\":9,\"name\":\"Launch revised\",\"active\":true},\"segments\":[101,202],\"budget\":1750}\n" ("campaign-draft.json.el" "campaign-draft.json.el") (emacs-lisp-mode t t 102 "\n((campaign (id . 9) (name . \"Launch revised\") (active . t)) (segments . [101 202]) (budget . 1750))\n" ((campaign (id . 9) (name . "Launch revised") (active . t)) (segments . [101 202]) (budget . 1750))))"##
-    ]],
+            r##"OK (("campaign-draft.json" "campaign-draft.json") "\n\"{\\\"campaign\\\":{\\\"id\\\":9,\\\"name\\\":\\\"Launch\\\",\\\"active\\\":true},\\\"segments\\\":[101,202],\\\"budget\\\":1250}\"\n" "{\"campaign\":{\"id\":9,\"name\":\"Launch\",\"active\":true},\"segments\":[101,202],\"budget\":1250}" "\n{\"campaign\":{\"id\":9,\"name\":\"Launch revised\",\"active\":true},\"segments\":[101,202],\"budget\":1750}\n" "\"\n{\\\"campaign\\\":{\\\"id\\\":9,\\\"name\\\":\\\"Launch revised\\\",\\\"active\\\":true},\\\"segments\\\":[101,202],\\\"budget\\\":1750}\n\"" "\n{\"campaign\":{\"id\":9,\"name\":\"Launch revised\",\"active\":true},\"segments\":[101,202],\"budget\":1750}\n" ("campaign-draft.json.el" "campaign-draft.json.el") (emacs-lisp-mode t t 102 "\n((campaign (id . 9) (name . \"Launch revised\") (active . t)) (segments . [101 202]) (budget . 1750))\n" ((campaign (id . 9) (name . "Launch revised") (active . t)) (segments . [101 202]) (budget . 1750))))"##
+        ]],
     )
 }
 
-fn anx_api_raw_report_download_can_be_inspected_and_saved_to_the_configured_archive() -> ParityBatchCase {
+fn anx_api_raw_report_download_can_be_inspected_and_saved_to_the_configured_archive()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "anx_api_raw_report_download_can_be_inspected_and_saved_to_the_configured_archive",
         r##"(let* ((root
@@ -290,8 +293,8 @@ fn anx_api_raw_report_download_can_be_inspected_and_saved_to_the_configured_arch
       (delete-directory root t))))"##,
         true,
         expect![[
-        r#"OK (("https://reports.example.test/download?id=77" nil nil) ("https://reports.example.test/download?id=77" "https://reports.example.test/download?id=77") "https://reports.example.test/download?id=77" "https:__reports.example.test_download?id=77_Mon_Jan_02_03:04:05_2006" fundamental-mode t 102 "\n\"HTTP/1.1 200 OK\\15\\nContent-Type: text/csv\\15\\n\\15\\ncampaign,impressions,clicks\\nLaunch,1200,48\\n\"\n" "archive/https:__reports.example.test_download?id=77_Mon_Jan_02_03:04:05_2006" t "\n\"HTTP/1.1 200 OK\\15\\nContent-Type: text/csv\\15\\n\\15\\ncampaign,impressions,clicks\\nLaunch,1200,48\\n\"\n")"#
-    ]],
+            r#"OK (("https://reports.example.test/download?id=77" nil nil) ("https://reports.example.test/download?id=77" "https://reports.example.test/download?id=77") "https://reports.example.test/download?id=77" "https:__reports.example.test_download?id=77_Mon_Jan_02_03:04:05_2006" fundamental-mode t 102 "\n\"HTTP/1.1 200 OK\\15\\nContent-Type: text/csv\\15\\n\\15\\ncampaign,impressions,clicks\\nLaunch,1200,48\\n\"\n" "archive/https:__reports.example.test_download?id=77_Mon_Jan_02_03:04:05_2006" t "\n\"HTTP/1.1 200 OK\\15\\nContent-Type: text/csv\\15\\n\\15\\ncampaign,impressions,clicks\\nLaunch,1200,48\\n\"\n")"#
+        ]],
     )
 }
 

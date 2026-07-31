@@ -15,8 +15,8 @@ fn evil_ex_parser_builds_exact_command_range_and_argument_forms() -> ParityBatch
                (evil-ex-parse "make-frame"))"##,
         true,
         expect![[
-        r#"OK ((evil-ex-call-command (string-to-number "5") "cmd" "arg") (evil-ex-call-command (string-to-number "5") "cmd" "!arg") (evil-ex-call-command (string-to-number "5") "arg" nil) (evil-ex-call-command (let ((l1 (evil-ex-line nil (+ (evil-ex-signed-number (intern "+") (string-to-number "1")))))) (save-excursion (and l1 (string= "," ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line nil (+ (evil-ex-signed-number (intern "+") (string-to-number "2"))))))) "t" "-1") (evil-ex-call-command nil "ido-mode" nil) (evil-ex-call-command nil "yas/reload-all" nil) (evil-ex-call-command nil "make-frame" nil))"#
-    ]],
+            r#"OK ((evil-ex-call-command (string-to-number "5") "cmd" "arg") (evil-ex-call-command (string-to-number "5") "cmd" "!arg") (evil-ex-call-command (string-to-number "5") "arg" nil) (evil-ex-call-command (let ((l1 (evil-ex-line nil (+ (evil-ex-signed-number (intern "+") (string-to-number "1")))))) (save-excursion (and l1 (string= "," ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line nil (+ (evil-ex-signed-number (intern "+") (string-to-number "2"))))))) "t" "-1") (evil-ex-call-command nil "ido-mode" nil) (evil-ex-call-command nil "yas/reload-all" nil) (evil-ex-call-command nil "make-frame" nil))"#
+        ]],
     )
 }
 
@@ -35,8 +35,8 @@ fn evil_ex_parser_builds_exact_percent_marker_numeric_and_relative_ranges() -> P
                (evil-ex-parse ";']" nil 'range))"##,
         true,
         expect![[
-        r#"OK ((evil-ex-full-range) (evil-ex-last-visual-range) (let ((l1 (evil-ex-line (string-to-number "5") nil))) (save-excursion (and l1 (string= "," ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line (string-to-number "27") nil)))) (let ((l1 (evil-ex-line (string-to-number "5") nil))) (save-excursion (and l1 (string= "," ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line (evil-ex-last-line) nil)))) (let ((l1 (evil-ex-line (string-to-number "5") nil))) (save-excursion (and l1 (string= "," ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line (evil-ex-marker "x") nil)))) (evil-ex-char-marker-range "x" "y") (let ((l1 (evil-ex-line (string-to-number "5") nil))) (save-excursion (and l1 (string= "," ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line nil (+ (evil-ex-signed-number (intern "+") nil)))))) (evil-ex-range (evil-ex-line (evil-ex-current-line) (+ (evil-ex-signed-number (intern "+") (string-to-number "42"))))) (let ((l1 nil)) (save-excursion (and l1 (string= ";" ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line (evil-ex-marker "]") nil)))))"#
-    ]],
+            r#"OK ((evil-ex-full-range) (evil-ex-last-visual-range) (let ((l1 (evil-ex-line (string-to-number "5") nil))) (save-excursion (and l1 (string= "," ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line (string-to-number "27") nil)))) (let ((l1 (evil-ex-line (string-to-number "5") nil))) (save-excursion (and l1 (string= "," ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line (evil-ex-last-line) nil)))) (let ((l1 (evil-ex-line (string-to-number "5") nil))) (save-excursion (and l1 (string= "," ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line (evil-ex-marker "x") nil)))) (evil-ex-char-marker-range "x" "y") (let ((l1 (evil-ex-line (string-to-number "5") nil))) (save-excursion (and l1 (string= "," ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line nil (+ (evil-ex-signed-number (intern "+") nil)))))) (evil-ex-range (evil-ex-line (evil-ex-current-line) (+ (evil-ex-signed-number (intern "+") (string-to-number "42"))))) (let ((l1 nil)) (save-excursion (and l1 (string= ";" ";") (goto-line l1)) (evil-ex-range l1 (evil-ex-line (evil-ex-marker "]") nil)))))"#
+        ]],
     )
 }
 
@@ -60,8 +60,8 @@ fn evil_ex_line_and_range_helpers_clamp_offsets_and_cover_the_buffer() -> Parity
                 (evil-ex-full-range)))"##,
         true,
         expect![
-        "OK (2 1 2 4 2 3 -6 99 (5 9 line :expanded t) (5 20 line :expanded t) (1 20 line :expanded t))"
-    ],
+            "OK (2 1 2 4 2 3 -6 99 (5 9 line :expanded t) (5 20 line :expanded t) (1 20 line :expanded t))"
+        ],
     )
 }
 
@@ -80,8 +80,8 @@ fn evil_ex_command_definitions_support_exact_prefix_and_completed_bindings() -> 
                 (evil-ex-binding "missing" t)))"##,
         true,
         expect![[
-        r#"OK ((("neoalias" . "neotest") ("neotoggle" . backward-char) ("neotest" . forward-char)) forward-char forward-char forward-char nil)"#
-    ]],
+            r#"OK ((("neoalias" . "neotest") ("neotoggle" . backward-char) ("neotest" . forward-char)) forward-char forward-char forward-char nil)"#
+        ]],
     )
 }
 
@@ -118,8 +118,8 @@ fn evil_ex_regex_case_helpers_cover_smart_explicit_and_escaped_overrides() -> Pa
                   ("\\Ccd\\ce" . smart))))"##,
         true,
         expect![[
-        r#"OK ("cdeCDE" "cdeCDE" "\\\\ccde\\\\CCDE" "\\\\cde\\\\CDE" (insensitive sensitive sensitive insensitive insensitive sensitive insensitive sensitive))"#
-    ]],
+            r#"OK ("cdeCDE" "cdeCDE" "\\\\ccde\\\\CCDE" "\\\\cde\\\\CDE" (insensitive sensitive sensitive insensitive insensitive sensitive insensitive sensitive))"#
+        ]],
     )
 }
 
@@ -154,8 +154,8 @@ fn evil_search_moves_forward_backward_honors_case_and_wrap_settings() -> ParityB
                  (nreverse positions)))"##,
         true,
         expect![[
-        r#"OK ((t 7) (t 11) (t 15) (t 11) (signal user-error ("\"missing\": string not found") 11))"#
-    ]],
+            r#"OK ((t 7) (t 11) (t 15) (t 11) (signal user-error ("\"missing\": string not found") 11))"#
+        ]],
     )
 }
 
@@ -182,8 +182,8 @@ fn evil_ex_execute_applies_substitute_delete_copy_move_and_sort_commands() -> Pa
                  "%sort"))"##,
         true,
         expect![[
-        r#"OK (("%s/foo/BAR/g" "delta BAR\nalpha BAR\ncharlie BAR\nbravo BAR\n" 33 normal) ("2delete" "delta foo\ncharlie foo\nbravo foo\n" 11 normal) ("1copy 4" "delta foo\nalpha foo\ncharlie foo\nbravo foo\ndelta foo\n" 43 normal) ("1move 3" "alpha foo\ncharlie foo\ndelta foo\nbravo foo\n" 23 normal) ("%sort" "alpha foo\nbravo foo\ncharlie foo\ndelta foo\n" 1 normal))"#
-    ]],
+            r#"OK (("%s/foo/BAR/g" "delta BAR\nalpha BAR\ncharlie BAR\nbravo BAR\n" 33 normal) ("2delete" "delta foo\ncharlie foo\nbravo foo\n" 11 normal) ("1copy 4" "delta foo\nalpha foo\ncharlie foo\nbravo foo\ndelta foo\n" 43 normal) ("1move 3" "alpha foo\ncharlie foo\ndelta foo\nbravo foo\n" 23 normal) ("%sort" "alpha foo\nbravo foo\ncharlie foo\ndelta foo\n" 1 normal))"#
+        ]],
     )
 }
 

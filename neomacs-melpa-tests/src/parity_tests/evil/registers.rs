@@ -18,8 +18,8 @@ fn evil_named_registers_replace_lowercase_and_append_uppercase_values() -> Parit
                 register-alist))"##,
         true,
         expect![[
-        r#"OK ("alpha-beta" "alpha-beta" #1=[98 121 116 101 115] #1# ((98 . #1#) (97 . "alpha-beta")))"#
-    ]],
+            r#"OK ("alpha-beta" "alpha-beta" #1=[98 121 116 101 115] #1# ((98 . #1#) (97 . "alpha-beta")))"#
+        ]],
     )
 }
 

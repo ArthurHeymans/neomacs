@@ -171,10 +171,5 @@ pub(crate) fn assert_ace_link_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ace_link_parity` cases (2a).
 pub(crate) fn assert_ace_link_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ace_link_oracle(),
-        &name,
-        "ace_link_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ace_link_oracle(), &name, "ace_link_parity", cases);
 }

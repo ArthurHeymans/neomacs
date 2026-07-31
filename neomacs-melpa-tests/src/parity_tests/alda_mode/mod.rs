@@ -220,8 +220,6 @@ pub(crate) fn assert_alda_mode_autoload_parity(elisp_form: &str, expected: Expec
     assert_alda_mode_source_parity("alda-mode-autoloads.el", elisp_form, expected);
 }
 
-
-
 /// Multi-probe batch for `assert_alda_mode_autoload_parity` cases (2a).
 pub(crate) fn assert_alda_mode_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

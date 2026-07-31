@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_all_the_icons_ivy_rich_batch};
 
-fn real_local_file_reports_exact_size_time_modes_and_per_character_privilege_faces() -> ParityBatchCase {
+fn real_local_file_reports_exact_size_time_modes_and_per_character_privilege_faces()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "real_local_file_reports_exact_size_time_modes_and_per_character_privilege_faces",
         r##"(let* ((root
@@ -42,8 +43,8 @@ fn real_local_file_reports_exact_size_time_modes_and_per_character_privilege_fac
                    (delete-directory root t))))"##,
         true,
         expect![[
-        r#"OK ("10" "Jan 02 12:34" "" "-rwxr-xr--" (all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-write all-the-icons-ivy-rich-file-priv-exec all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-exec all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no))"#
-    ]],
+            r#"OK ("10" "Jan 02 12:34" "" "-rwxr-xr--" (all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-write all-the-icons-ivy-rich-file-priv-exec all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-exec all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no))"#
+        ]],
     )
 }
 
@@ -115,8 +116,8 @@ fn counsel_file_candidate_resolves_a_real_symlink_and_preserves_ivy_faces() -> P
                    (delete-directory root t))))"##,
         true,
         expect![[
-        r#"OK ("link.el -> target.el" nil all-the-icons-ivy-rich-doc-face "9" "lrwxrwxrwx")"#
-    ]],
+            r#"OK ("link.el -> target.el" nil all-the-icons-ivy-rich-doc-face "9" "lrwxrwxrwx")"#
+        ]],
     )
 }
 
@@ -150,8 +151,8 @@ fn project_root_respects_disabled_remote_and_builtin_project_boundaries() -> Par
                    (delete-directory root t))))"##,
         true,
         expect![[
-        r#"OK ("all-the-icons-ivy-rich-project/" nil "/ssh:neomacs-parity.invalid:/workspace/")"#
-    ]],
+            r#"OK ("all-the-icons-ivy-rich-project/" nil "/ssh:neomacs-parity.invalid:/workspace/")"#
+        ]],
     )
 }
 
@@ -199,7 +200,8 @@ fn project_columns_read_real_candidate_metadata_from_the_detected_root() -> Pari
     )
 }
 
-fn project_transformer_distinguishes_directory_unvisited_and_visited_real_files() -> ParityBatchCase {
+fn project_transformer_distinguishes_directory_unvisited_and_visited_real_files() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "project_transformer_distinguishes_directory_unvisited_and_visited_real_files",
         r##"(let* ((root
@@ -310,8 +312,8 @@ fn file_mode_cache_reuses_one_propertized_mode_string_across_matching_files() ->
                    (delete-directory root t))))"##,
         true,
         expect![[
-        r#"OK ("-rw-------" t t 1 (all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-write all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no))"#
-    ]],
+            r#"OK ("-rw-------" t t 1 (all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-read all-the-icons-ivy-rich-file-priv-write all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no all-the-icons-ivy-rich-file-priv-no))"#
+        ]],
     )
 }
 

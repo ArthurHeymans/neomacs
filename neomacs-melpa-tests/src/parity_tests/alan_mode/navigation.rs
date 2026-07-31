@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alan_mode_batch};
 
-fn alan_identifiers_paths_parent_navigation_and_clipboard_follow_real_nested_model() -> ParityBatchCase {
+fn alan_identifiers_paths_parent_navigation_and_clipboard_follow_real_nested_model()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alan_identifiers_paths_parent_navigation_and_clipboard_follow_real_nested_model",
         r##"(with-temp-buffer
@@ -36,12 +37,13 @@ fn alan_identifiers_paths_parent_navigation_and_clipboard_follow_real_nested_mod
                          origin)))"##,
         true,
         expect![[
-        r#"OK ("'balance'" "'balance'" #("'root'.'accounts'" 0 6 (face font-lock-variable-name-face) 7 17 (face font-lock-variable-name-face)) #("'root'.'accounts'" 0 6 (face font-lock-variable-name-face) 7 17 (face font-lock-variable-name-face)) nil 2 61 61)"#
-    ]],
+            r#"OK ("'balance'" "'balance'" #("'root'.'accounts'" 0 6 (face font-lock-variable-name-face) 7 17 (face font-lock-variable-name-face)) #("'root'.'accounts'" 0 6 (face font-lock-variable-name-face) 7 17 (face font-lock-variable-name-face)) nil 2 61 61)"#
+        ]],
     )
 }
 
-fn alan_xref_backend_finds_real_definitions_across_open_buffers_and_formats_context() -> ParityBatchCase {
+fn alan_xref_backend_finds_real_definitions_across_open_buffers_and_formats_context()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alan_xref_backend_finds_real_definitions_across_open_buffers_and_formats_context",
         r##"(let ((alan-xref-limit-to-project-scope nil)
@@ -88,12 +90,13 @@ fn alan_xref_backend_finds_real_definitions_across_open_buffers_and_formats_cont
                         (kill-buffer second)))"##,
         true,
         expect![[
-        r#"OK (("'orders'" "'Customer'") (("'Customer' component :1" " *alan-second*" 1) ("'Customer' component :1" " *alan-first*" 1)))"#
-    ]],
+            r#"OK (("'orders'" "'Customer'") (("'Customer' component :1" " *alan-second*" 1) ("'Customer' component :1" " *alan-first*" 1)))"#
+        ]],
     )
 }
 
-fn alan_documentation_include_links_need_thingatpt_which_alan_mode_never_requires() -> ParityBatchCase {
+fn alan_documentation_include_links_need_thingatpt_which_alan_mode_never_requires()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alan_documentation_include_links_need_thingatpt_which_alan_mode_never_requires",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -141,12 +144,13 @@ fn alan_documentation_include_links_need_thingatpt_which_alan_mode_never_require
                  :missing missing)))))))"##,
         true,
         expect![[
-        r#"OK (:library-loaded-first nil :autoloaded (t nil) :bare-session (:signalled void-function thing-at-point-looking-at) :after-require ((:detected t) :visited-the-target t :missing (user-error "File not found missing-file.alan")))"#
-    ]],
+            r#"OK (:library-loaded-first nil :autoloaded (t nil) :bare-session (:signalled void-function thing-at-point-looking-at) :after-require ((:detected t) :visited-the-target t :missing (user-error "File not found missing-file.alan")))"#
+        ]],
     )
 }
 
-fn alan_phrase_addition_updates_phrase_and_translation_files_once_and_runs_hook() -> ParityBatchCase {
+fn alan_phrase_addition_updates_phrase_and_translation_files_once_and_runs_hook() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "alan_phrase_addition_updates_phrase_and_translation_files_once_and_runs_hook",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -202,12 +206,13 @@ fn alan_phrase_addition_updates_phrase_and_translation_files_once_and_runs_hook(
                               (kill-buffer buffer))))))"##,
         true,
         expect![[
-        r#"OK ("'Existing'\n'New phrase'\n" "'Existing': \"Existing\"\n'New phrase': \"New phrase\"\n" "'Existing': \"Bestaand\"\n'New phrase': \"New phrase\"\n" (added))"#
-    ]],
+            r#"OK ("'Existing'\n'New phrase'\n" "'Existing': \"Existing\"\n'New phrase': \"New phrase\"\n" "'Existing': \"Bestaand\"\n'New phrase': \"New phrase\"\n" (added))"#
+        ]],
     )
 }
 
-fn alan_phrase_removal_updates_the_phrase_and_every_translation_then_runs_hook() -> ParityBatchCase {
+fn alan_phrase_removal_updates_the_phrase_and_every_translation_then_runs_hook() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "alan_phrase_removal_updates_the_phrase_and_every_translation_then_runs_hook",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -265,8 +270,8 @@ fn alan_phrase_removal_updates_the_phrase_and_every_translation_then_runs_hook()
                               (kill-buffer buffer))))))"##,
         true,
         expect![[
-        r#"OK ("'Existing'\n'After'\n" "'Existing': \"Existing\"\n'After': \"After\"\n" "'Existing': \"Bestaand\"\n'After': \"Na\"\n" (removed))"#
-    ]],
+            r#"OK ("'Existing'\n'After'\n" "'Existing': \"Existing\"\n'After': \"After\"\n" "'Existing': \"Bestaand\"\n'After': \"Na\"\n" (removed))"#
+        ]],
     )
 }
 

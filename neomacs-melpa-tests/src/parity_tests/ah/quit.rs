@@ -78,15 +78,14 @@ fn keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks() -> Parity
 "##,
         true,
         expect![
-        "OK ((quit nil) (quit nil) 1 nil ((before keyboard-quit nil 1) (after keyboard-quit nil 1) (before isearch-abort t 11) (after isearch-abort nil 1)) nil)"
-    ],
+            "OK ((quit nil) (quit nil) 1 nil ((before keyboard-quit nil 1) (after keyboard-quit nil 1) (before isearch-abort t 11) (after isearch-abort nil 1)) nil)"
+        ],
     )
 }
 
 #[test]
 fn quit_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![keyboard_quit_and_real_isearch_abort_deliver_deferred_after_hooks()];
     assert_ah_batch(&cases);
 }

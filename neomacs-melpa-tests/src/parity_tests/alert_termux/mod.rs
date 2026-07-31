@@ -58,10 +58,6 @@ pub(crate) fn assert_alert_termux_autoload_parity(elisp_form: &str, expected: Ex
     assert_alert_termux_source_parity("alert-termux-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_alert_termux_autoload_parity` cases (2a).
 pub(crate) fn assert_alert_termux_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

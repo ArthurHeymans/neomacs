@@ -68,8 +68,7 @@ fn loading_a_real_custom_theme_observes_hook_state_and_applies_its_setting() -> 
 
 #[test]
 fn theme_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        loading_a_real_custom_theme_observes_hook_state_and_applies_its_setting(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![loading_a_real_custom_theme_observes_hook_state_and_applies_its_setting()];
     assert_ah_batch(&cases);
 }

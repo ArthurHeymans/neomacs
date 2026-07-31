@@ -58,8 +58,8 @@ fn cli_wrappers_construct_complete_launch_specs_at_external_boundary() -> Parity
 "##,
         true,
         expect![[
-        r#"OK (("gemini" ("--model" "pro") "Gemini" "gemini" nil nil t nil) ("agy" ("--sandbox") "Antigravity" "antigravity" nil nil t (4)) ("interpreter" ("--local") "Open Interpreter" "open-interpreter" nil nil t nil) ("cursor-agent" ("--mode" "ask") "Cursor" "cursor" nil nil t nil) ("codebuddy" ("--verbose") "CodeBuddy" "codebuddy" nil nil t nil) ("aider" ("--no-auto-commits") "Aider" "aider" nil nil t nil) ("grok" ("--model" "grok-4") "Grok" "grok" nil nil nil nil) ("opencode" ("--port" "4096") "Opencode" "opencode" ("OTUI_USE_ALTERNATE_SCREEN=main-screen") nil nil nil) ("kilo" ("--agent" "review") "Kilo" "kilo" ("OTUI_USE_ALTERNATE_SCREEN=main-screen") nil nil nil) ("kiro-cli" ("chat" "--trust-all-tools" "--agent" "architect" "--verbose") "Kiro" "kiro" nil nil t nil) ("pi" ("--provider" "local") "Pi" "pi" nil "\33[13;2u" t nil))"#
-    ]],
+            r#"OK (("gemini" ("--model" "pro") "Gemini" "gemini" nil nil t nil) ("agy" ("--sandbox") "Antigravity" "antigravity" nil nil t (4)) ("interpreter" ("--local") "Open Interpreter" "open-interpreter" nil nil t nil) ("cursor-agent" ("--mode" "ask") "Cursor" "cursor" nil nil t nil) ("codebuddy" ("--verbose") "CodeBuddy" "codebuddy" nil nil t nil) ("aider" ("--no-auto-commits") "Aider" "aider" nil nil t nil) ("grok" ("--model" "grok-4") "Grok" "grok" nil nil nil nil) ("opencode" ("--port" "4096") "Opencode" "opencode" ("OTUI_USE_ALTERNATE_SCREEN=main-screen") nil nil nil) ("kilo" ("--agent" "review") "Kilo" "kilo" ("OTUI_USE_ALTERNATE_SCREEN=main-screen") nil nil nil) ("kiro-cli" ("chat" "--trust-all-tools" "--agent" "architect" "--verbose") "Kiro" "kiro" nil nil t nil) ("pi" ("--provider" "local") "Pi" "pi" nil "\33[13;2u" t nil))"#
+        ]],
     )
 }
 
@@ -105,12 +105,13 @@ fn mcp_capable_wrappers_forward_environment_multiline_and_prepare_hooks() -> Par
 "##,
         true,
         expect![[
-        r#"OK (("/opt/bin/codex" ("--oss") "Codex" "codex" nil nil t nil) ("/opt/bin/claude" ("--model" "opus") "Claude Code" "claude" ("TERM_PROGRAM=emacs" "FORCE_CODE_TERMINAL=true" "CLAUDE_CODE_NO_FLICKER=1") "\33\15" t (4)) ("/opt/bin/copilot" ("--allow-all") "Copilot" "copilot" ("TERM_PROGRAM=vscode" "NO_COLOR=1") "\15\n" t nil))"#
-    ]],
+            r#"OK (("/opt/bin/codex" ("--oss") "Codex" "codex" nil nil t nil) ("/opt/bin/claude" ("--model" "opus") "Claude Code" "claude" ("TERM_PROGRAM=emacs" "FORCE_CODE_TERMINAL=true" "CLAUDE_CODE_NO_FLICKER=1") "\33\15" t (4)) ("/opt/bin/copilot" ("--allow-all") "Copilot" "copilot" ("TERM_PROGRAM=vscode" "NO_COLOR=1") "\15\n" t nil))"#
+        ]],
     )
 }
 
-fn resume_commands_append_backend_specific_flags_and_open_pickers_when_required() -> ParityBatchCase {
+fn resume_commands_append_backend_specific_flags_and_open_pickers_when_required() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "resume_commands_append_backend_specific_flags_and_open_pickers_when_required",
         r##"
@@ -156,8 +157,8 @@ fn resume_commands_append_backend_specific_flags_and_open_pickers_when_required(
 "##,
         true,
         expect![[
-        r#"OK ((start "codex" ("--profile" "work" "resume") nil) (start "claude" ("--model" "sonnet" "--resume") (4)) (start "gemini" ("--model" "pro" "--resume") nil) (start "copilot" ("--allow-all" "--resume") nil) (picker "copilot") (start "opencode" ("--port" "4096" "--continue") nil) (picker "opencode") (start "kilo" ("--agent" "review" "--continue") nil) (picker "kilo") (start "grok" ("--model" "grok-4" "resume") nil) (picker "grok") (start "kiro" ("chat" "--verbose" "--resume") nil))"#
-    ]],
+            r#"OK ((start "codex" ("--profile" "work" "resume") nil) (start "claude" ("--model" "sonnet" "--resume") (4)) (start "gemini" ("--model" "pro" "--resume") nil) (start "copilot" ("--allow-all" "--resume") nil) (picker "copilot") (start "opencode" ("--port" "4096" "--continue") nil) (picker "opencode") (start "kilo" ("--agent" "review" "--continue") nil) (picker "kilo") (start "grok" ("--model" "grok-4" "resume") nil) (picker "grok") (start "kiro" ("chat" "--verbose" "--resume") nil))"#
+        ]],
     )
 }
 
@@ -201,8 +202,8 @@ fn backend_send_switch_and_escape_commands_route_labels_prefixes_and_payloads() 
 "##,
         true,
         expect![[
-        r#"OK ((send "Codex" "codex" "Inspect the failing ledger test, then propose a minimal fix.") (send "Claude Code" "claude" "Review the transaction boundary for duplicate writes.") (switch "Gemini" "gemini" t) (switch "Copilot" "copilot" nil) (send "Aider" "aider" "/add src/payment.rs") (switch "Opencode" "opencode" (4)) (send "Kilo" "kilo" "Run focused tests.") (switch "Grok" "grok" nil) (escape))"#
-    ]],
+            r#"OK ((send "Codex" "codex" "Inspect the failing ledger test, then propose a minimal fix.") (send "Claude Code" "claude" "Review the transaction boundary for duplicate writes.") (switch "Gemini" "gemini" t) (switch "Copilot" "copilot" nil) (send "Aider" "aider" "/add src/payment.rs") (switch "Opencode" "opencode" (4)) (send "Kilo" "kilo" "Run focused tests.") (switch "Grok" "grok" nil) (escape))"#
+        ]],
     )
 }
 
@@ -226,8 +227,8 @@ fn kiro_command_builder_orders_chat_trust_agent_and_user_switches() -> ParityBat
 "##,
         true,
         expect![[
-        r#"OK (("chat" "--trust-all-tools" "--agent" "security-review" "--verbose" "--profile" "work") "/opt/kiro cli chat --trust-all-tools --agent security-review --verbose --profile work" ("chat"))"#
-    ]],
+            r#"OK (("chat" "--trust-all-tools" "--agent" "security-review" "--verbose" "--profile" "work") "/opt/kiro cli chat --trust-all-tools --agent security-review --verbose --profile work" ("chat"))"#
+        ]],
     )
 }
 

@@ -52,8 +52,8 @@ fn async_defun_preserves_required_optional_and_rest_argument_semantics() -> Pari
              :required :optional 1 2 3))))"##,
         true,
         expect![
-        "OK ((required &optional optional &rest rest) (fulfilled (:fullfilled (:required nil nil 0))) (fulfilled (:fullfilled (:required :optional (1 2 3) 3))))"
-    ],
+            "OK ((required &optional optional &rest rest) (fulfilled (:fullfilled (:required nil nil 0))) (fulfilled (:fullfilled (:required :optional (1 2 3) 3))))"
+        ],
     )
 }
 
@@ -75,8 +75,8 @@ fn async_defun_preserves_docstring_declarations_and_interactive_contract() -> Pa
             (parity-command 6))))"##,
         true,
         expect![[
-        r#"OK ("Return COUNT asynchronously." (interactive "p") t (count) (fulfilled (:fullfilled 12)))"#
-    ]],
+            r#"OK ("Return COUNT asynchronously." (interactive "p") t (count) (fulfilled (:fullfilled 12)))"#
+        ]],
     )
 }
 
@@ -123,8 +123,8 @@ fn one_async_lambda_is_reusable_without_state_leaking_between_invocations() -> P
                      '(8 9 10)))))"##,
         true,
         expect![
-        "OK ((fulfilled (:fullfilled ((:left 1) (:left 2)))) (fulfilled (:fullfilled ((:right 8) (:right 9) (:right 10)))))"
-    ],
+            "OK ((fulfilled (:fullfilled ((:left 1) (:left 2)))) (fulfilled (:fullfilled ((:right 8) (:right 9) (:right 10)))))"
+        ],
     )
 }
 
@@ -186,8 +186,8 @@ fn awaits_inside_loops_conditionals_and_let_star_keep_control_flow() -> ParityBa
             '(2 4 7 9))))"##,
         true,
         expect![
-        "OK (fulfilled (:fullfilled ((0 2 2 :even) (1 4 5 :odd) (2 7 9 :odd) (3 9 12 :even))))"
-    ],
+            "OK (fulfilled (:fullfilled ((0 2 2 :even) (1 4 5 :odd) (2 7 9 :odd) (3 9 12 :even))))"
+        ],
     )
 }
 
@@ -314,8 +314,8 @@ fn invocation_runs_until_first_await_then_resumes_asynchronously() -> ParityBatc
                (nreverse events)))))"##,
         true,
         expect![
-        "OK ((:before-await) (fulfilled (:fullfilled :complete)) (:before-await :resumed))"
-    ],
+            "OK ((:before-await) (fulfilled (:fullfilled :complete)) (:before-await :resumed))"
+        ],
     )
 }
 

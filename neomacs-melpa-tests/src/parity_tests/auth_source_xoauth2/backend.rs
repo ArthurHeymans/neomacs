@@ -29,8 +29,8 @@ fn auth_source_xoauth2_search_builds_token_request_and_match() -> ParityBatchCas
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:host "smtp.example" :port 587 :user "alice@example" :secret "access-token") ((:post "https://token.example/oauth" "client_id=client id&client_secret=s&cret&refresh_token=refresh+token&grant_type=refresh_token") (:debug "XOAUTH2 access token (user=%s host=%s): %s" ("alice@example" "smtp.example" "access-token"))))"#
-    ]],
+            r#"OK ((:host "smtp.example" :port 587 :user "alice@example" :secret "access-token") ((:post "https://token.example/oauth" "client_id=client id&client_secret=s&cret&refresh_token=refresh+token&grant_type=refresh_token") (:debug "XOAUTH2 access token (user=%s host=%s): %s" ("alice@example" "smtp.example" "access-token"))))"#
+        ]],
     )
 }
 
@@ -114,8 +114,8 @@ fn auth_source_xoauth2_function_provider_receives_exact_coordinates() -> ParityB
               (nreverse posts)))))"##,
         true,
         expect![[
-        r#"OK ((:host "imap.example" :port 993 :user "alice" :secret "token") (("imap.example" "alice" 993)) (("url" "client_id=id&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
-    ]],
+            r#"OK ((:host "imap.example" :port 993 :user "alice" :secret "token") (("imap.example" "alice" 993)) (("url" "client_id=id&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
+        ]],
     )
 }
 
@@ -145,12 +145,13 @@ fn auth_source_xoauth2_string_provider_delegates_to_file_backend() -> ParityBatc
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:host "host" :port "port" :user "user" :secret "file-token") (("/fixture/credentials.gpg" "host" "user" "port") ("url" "client_id=id&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
-    ]],
+            r#"OK ((:host "host" :port "port" :user "user" :secret "file-token") (("/fixture/credentials.gpg" "host" "user" "port") ("url" "client_id=id&client_secret=secret&refresh_token=refresh&grant_type=refresh_token")))"#
+        ]],
     )
 }
 
-fn auth_source_xoauth2_public_search_scans_host_port_product_until_first_match() -> ParityBatchCase {
+fn auth_source_xoauth2_public_search_scans_host_port_product_until_first_match() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_xoauth2_public_search_scans_host_port_product_until_first_match",
         r##"(let ((backend
@@ -180,8 +181,8 @@ fn auth_source_xoauth2_public_search_scans_host_port_product_until_first_match()
             (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((:host "second.example" :user "alice" :port 993 :secret "token")) (("first.example" "alice" 143) ("first.example" "alice" 993) ("first.example" "alice" 995) ("second.example" "alice" 143) ("second.example" "alice" 993)))"#
-    ]],
+            r#"OK (((:host "second.example" :user "alice" :port 993 :secret "token")) (("first.example" "alice" 143) ("first.example" "alice" 993) ("first.example" "alice" 995) ("second.example" "alice" 143) ("second.example" "alice" 993)))"#
+        ]],
     )
 }
 
@@ -235,8 +236,8 @@ fn auth_source_xoauth2_public_search_validates_requested_type() -> ParityBatchCa
             '(nil xoauth2 password-store pass))))"##,
         true,
         expect![[
-        r#"OK ((:ok nil) (:ok nil) (:error error ("Invalid XOAuth2 search: nil nil")) (:error error ("Invalid XOAuth2 search: nil nil")))"#
-    ]],
+            r#"OK ((:ok nil) (:ok nil) (:error error ("Invalid XOAuth2 search: nil nil")) (:error error ("Invalid XOAuth2 search: nil nil")))"#
+        ]],
     )
 }
 
@@ -263,8 +264,8 @@ fn auth_source_xoauth2_backend_parser_and_slots_match_registration() -> ParityBa
            '(nil "xoauth2" pass default xoauth2-other))))"##,
         true,
         expect![[
-        r#"OK (t (xoauth2 "." t t t auth-source-xoauth2-search) t (nil nil nil nil nil))"#
-    ]],
+            r#"OK (t (xoauth2 "." t t t auth-source-xoauth2-search) t (nil nil nil nil nil))"#
+        ]],
     )
 }
 

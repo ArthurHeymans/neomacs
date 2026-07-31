@@ -45,8 +45,8 @@ fn auto_org_md_practical_save_hook_exports_org_buffer_once() -> ParityBatchCase 
              (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ((("notes.org" #("* Initial\nBody\n" 0 10 (fontified nil) 10 15 (fontified nil)) nil)) nil (auto-org-md-export t) "* Initial\nBody\n")"#
-    ]],
+            r#"OK ((("notes.org" #("* Initial\nBody\n" 0 10 (fontified nil) 10 15 (fontified nil)) nil)) nil (auto-org-md-export t) "* Initial\nBody\n")"#
+        ]],
     )
 }
 
@@ -126,8 +126,8 @@ fn auto_org_md_disabling_mode_stops_future_save_exports() -> ParityBatchCase {
              (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ((#("* Initial\nFirst\n" 0 10 (fontified nil) 10 16 (fontified nil))) nil "* Initial\nFirst\nSecond\n")"#
-    ]],
+            r#"OK ((#("* Initial\nFirst\n" 0 10 (fontified nil) 10 16 (fontified nil))) nil "* Initial\nFirst\nSecond\n")"#
+        ]],
     )
 }
 
@@ -167,8 +167,8 @@ fn auto_org_md_real_export_writes_simple_markdown_document() -> ParityBatchCase 
              (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ("guide.md" t "\n# Table of Contents\n\n1.  [Overview](#overview)\n    1.  [Tasks](#tasks)\n\n\n\n<a id=\"overview\"></a>\n\n# Overview\n\nPlain body with **bold** and *italic* text.\n\n\n<a id=\"tasks\"></a>\n\n## Tasks\n\n-   [X] Export the document\n-   [ ] Review the result\n\n" nil)"#
-    ]],
+            r#"OK ("guide.md" t "\n# Table of Contents\n\n1.  [Overview](#overview)\n    1.  [Tasks](#tasks)\n\n\n\n<a id=\"overview\"></a>\n\n# Overview\n\nPlain body with **bold** and *italic* text.\n\n\n<a id=\"tasks\"></a>\n\n## Tasks\n\n-   [X] Export the document\n-   [ ] Review the result\n\n" nil)"#
+        ]],
     )
 }
 
@@ -206,8 +206,8 @@ fn auto_org_md_real_export_handles_links_source_blocks_and_tables() -> ParityBat
              (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (t "\n\n# Release\n\nSee [the specification](https://example.invalid/spec).\n\n<table border=\"2\" cellspacing=\"0\" cellpadding=\"6\" rules=\"groups\" frame=\"hsides\">\n\n\n<colgroup>\n<col  class=\"org-left\" />\n\n<col  class=\"org-left\" />\n</colgroup>\n<thead>\n<tr>\n<th scope=\"col\" class=\"org-left\">Item</th>\n<th scope=\"col\" class=\"org-left\">State</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td class=\"org-left\">API</td>\n<td class=\"org-left\">ready</td>\n</tr>\n</tbody>\n</table>\n\n    (message \"ready\")\n\n")"#
-    ]],
+            r#"OK (t "\n\n# Release\n\nSee [the specification](https://example.invalid/spec).\n\n<table border=\"2\" cellspacing=\"0\" cellpadding=\"6\" rules=\"groups\" frame=\"hsides\">\n\n\n<colgroup>\n<col  class=\"org-left\" />\n\n<col  class=\"org-left\" />\n</colgroup>\n<thead>\n<tr>\n<th scope=\"col\" class=\"org-left\">Item</th>\n<th scope=\"col\" class=\"org-left\">State</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td class=\"org-left\">API</td>\n<td class=\"org-left\">ready</td>\n</tr>\n</tbody>\n</table>\n\n    (message \"ready\")\n\n")"#
+        ]],
     )
 }
 
@@ -265,8 +265,8 @@ fn auto_org_md_real_save_replaces_markdown_with_latest_org_content() -> ParityBa
              (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ("\n# Table of Contents\n\n1.  [Status](#status)\n    1.  [Detail](#detail)\n\n\n<a id=\"status\"></a>\n\n# Status\n\nVersion one.\n\n\n<a id=\"detail\"></a>\n\n## Detail\n\nFirst export.\n\n" "\n# Table of Contents\n\n1.  [Status](#status)\n\n\n<a id=\"status\"></a>\n\n# Status\n\nVersion two.\n\n-   stable\n-   published\n\n" nil)"#
-    ]],
+            r#"OK ("\n# Table of Contents\n\n1.  [Status](#status)\n    1.  [Detail](#detail)\n\n\n<a id=\"status\"></a>\n\n# Status\n\nVersion one.\n\n\n<a id=\"detail\"></a>\n\n## Detail\n\nFirst export.\n\n" "\n# Table of Contents\n\n1.  [Status](#status)\n\n\n<a id=\"status\"></a>\n\n# Status\n\nVersion two.\n\n-   stable\n-   published\n\n" nil)"#
+        ]],
     )
 }
 
@@ -332,8 +332,8 @@ fn auto_org_md_two_local_hooks_export_independent_org_files() -> ParityBatchCase
              (kill-buffer second-buffer))))"##,
         true,
         expect![[
-        r#"OK ("\n# Table of Contents\n\n1.  [First](#first)\n\n\n<a id=\"first\"></a>\n\n# First\n\nAlpha.\nSaved.\n\n" "\n# Table of Contents\n\n1.  [Second](#second)\n\n\n<a id=\"second\"></a>\n\n# Second\n\nBeta.\nSaved.\n\n" (auto-org-md-export t) (auto-org-md-export t))"#
-    ]],
+            r#"OK ("\n# Table of Contents\n\n1.  [First](#first)\n\n\n<a id=\"first\"></a>\n\n# First\n\nAlpha.\nSaved.\n\n" "\n# Table of Contents\n\n1.  [Second](#second)\n\n\n<a id=\"second\"></a>\n\n# Second\n\nBeta.\nSaved.\n\n" (auto-org-md-export t) (auto-org-md-export t))"#
+        ]],
     )
 }
 
@@ -379,8 +379,8 @@ fn auto_org_md_export_follows_renamed_visited_file() -> ParityBatchCase {
              (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (t t t "\n# Table of Contents\n\n1.  [Draft](#draft)\n\n\n<a id=\"draft\"></a>\n\n# Draft\n\nOriginal path.\n\n" "\n# Table of Contents\n\n1.  [Draft](#draft)\n\n\n<a id=\"draft\"></a>\n\n# Draft\n\nOriginal path.\nFinal path.\n\n")"#
-    ]],
+            r#"OK (t t t "\n# Table of Contents\n\n1.  [Draft](#draft)\n\n\n<a id=\"draft\"></a>\n\n# Draft\n\nOriginal path.\n\n" "\n# Table of Contents\n\n1.  [Draft](#draft)\n\n\n<a id=\"draft\"></a>\n\n# Draft\n\nOriginal path.\nFinal path.\n\n")"#
+        ]],
     )
 }
 
@@ -398,8 +398,8 @@ fn auto_org_md_unsaved_org_buffer_surfaces_export_filename_contract() -> ParityB
           (buffer-modified-p)))"##,
         true,
         expect![[
-        r#"OK (nil (:signal end-of-file ("Error reading from stdin")) "* Unsaved\nNo visited file.\n" t)"#
-    ]],
+            r#"OK (nil (:signal end-of-file ("Error reading from stdin")) "* Unsaved\nNo visited file.\n" t)"#
+        ]],
     )
 }
 
@@ -437,8 +437,8 @@ fn auto_org_md_after_save_export_error_preserves_saved_org_content() -> ParityBa
              (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ((:signal error ("fixture export failed")) nil "* Before\nSaved before export failure.\n")"#
-    ]],
+            r#"OK ((:signal error ("fixture export failed")) nil "* Before\nSaved before export failure.\n")"#
+        ]],
     )
 }
 

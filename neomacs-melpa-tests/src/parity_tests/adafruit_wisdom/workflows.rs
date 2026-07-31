@@ -39,8 +39,8 @@ fn fetching_a_quote_asks_the_feed_and_shows_it_in_the_echo_area() -> ParityBatch
                   :cache-equal (equal (adaw-test-cache-contents) adaw-test-feed))))))"##,
         true,
         expect![[
-        r##"OK (:url-retrieve (:result t :messages ("Make it work, then make it beautiful.") :headers (("GET /feed/quotes.xml HTTP/1.1" "MIME-Version: 1.0" "Connection: keep-alive" "Host: 127.0.0.1:<port>" "Accept-encoding: gzip" "Accept: */*" "User-Agent: <editor>")) :cache "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>Adafruit Industries quotes</title>\n    <item><title>Make it work, then make it beautiful.</title></item>\n    <item><title>Solder &amp; patience &#8212; na&#239;ve questions win.</title></item>\n    <item><title>Ingénierie: mesure deux fois, coupe une fois.</title></item>\n  </channel>\n</rss>\n" :buffer "notes:\n" :point 8) :curl (:result t :request-lines ("GET /feed/quotes.xml HTTP/1.1") :cache-equal t))"##
-    ]],
+            r##"OK (:url-retrieve (:result t :messages ("Make it work, then make it beautiful.") :headers (("GET /feed/quotes.xml HTTP/1.1" "MIME-Version: 1.0" "Connection: keep-alive" "Host: 127.0.0.1:<port>" "Accept-encoding: gzip" "Accept: */*" "User-Agent: <editor>")) :cache "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>Adafruit Industries quotes</title>\n    <item><title>Make it work, then make it beautiful.</title></item>\n    <item><title>Solder &amp; patience &#8212; na&#239;ve questions win.</title></item>\n    <item><title>Ingénierie: mesure deux fois, coupe une fois.</title></item>\n  </channel>\n</rss>\n" :buffer "notes:\n" :point 8) :curl (:result t :request-lines ("GET /feed/quotes.xml HTTP/1.1") :cache-equal t))"##
+        ]],
     )
 }
 
@@ -67,8 +67,8 @@ fn the_cached_feed_is_reused_until_its_day_long_ttl_expires() -> ParityBatchCase
                                           (expand-file-name "~/")))))"##,
         true,
         expect![[
-        r##"OK (:phases ((:first-fetch 1) (:still-warm 1) (:within-ttl 1) (:past-ttl 2)) :ttl 86400.0 :cache-path ".emacs.d/adafruit-wisdom.cache")"##
-    ]],
+            r##"OK (:phases ((:first-fetch 1) (:still-warm 1) (:within-ttl 1) (:past-ttl 2)) :ttl 86400.0 :cache-path ".emacs.d/adafruit-wisdom.cache")"##
+        ]],
     )
 }
 
@@ -90,8 +90,8 @@ fn a_prefix_argument_inserts_the_quote_at_point_instead_of_showing_it() -> Parit
             :requests (length (adaw-test-requests))))))"##,
         true,
         expect![[
-        r##"OK (:result t :buffer "notes:\nSolder & patience — naïve questions win." :point 48 :modified t :messages nil :requests 1)"##
-    ]],
+            r##"OK (:result t :buffer "notes:\nSolder & patience — naïve questions win." :point 48 :modified t :messages nil :requests 1)"##
+        ]],
     )
 }
 
@@ -111,8 +111,8 @@ fn entities_and_non_ascii_survive_the_feed_and_the_cache_file() -> ParityBatchCa
           :requests (length (adaw-test-requests)))))"##,
         true,
         expect![[
-        r##"OK (:picks ("Make it work, then make it beautiful." "Solder & patience — naïve questions win." "Ingénierie: mesure deux fois, coupe une fois.") :items 3 :cache-is-the-raw-feed t :requests 1)"##
-    ]],
+            r##"OK (:picks ("Make it work, then make it beautiful." "Solder & patience — naïve questions win." "Ingénierie: mesure deux fois, coupe une fois.") :items 3 :cache-is-the-raw-feed t :requests 1)"##
+        ]],
     )
 }
 
@@ -134,8 +134,8 @@ fn a_quote_containing_a_percent_sign_cannot_be_displayed() -> ParityBatchCase {
           :buffer (buffer-substring-no-properties (point-min) (point-max)))))"##,
         true,
         expect![[
-        r##"OK (:quote "Ship it 100% & iterate" :display (error "Not enough arguments for format string") :messages nil :buffer "notes:\n")"##
-    ]],
+            r##"OK (:quote "Ship it 100% & iterate" :display (error "Not enough arguments for format string") :messages nil :buffer "notes:\n")"##
+        ]],
     )
 }
 
@@ -154,8 +154,8 @@ fn an_error_page_is_cached_as_if_it_were_the_feed() -> ParityBatchCase {
         :requests-after (length (adaw-test-requests))))"##,
         true,
         expect![[
-        r##"OK (:first (args-out-of-range 0) :cache "<html><body>upstream is down</body></html>" :requests 1 :second (args-out-of-range 0) :requests-after 1)"##
-    ]],
+            r##"OK (:first (args-out-of-range 0) :cache "<html><body>upstream is down</body></html>" :requests 1 :second (args-out-of-range 0) :requests-after 1)"##
+        ]],
     )
 }
 
@@ -170,8 +170,8 @@ fn a_refused_connection_reports_the_error_and_writes_no_cache() -> ParityBatchCa
         :cache (adaw-test-cache-exists)))"##,
         true,
         expect![[
-        r##"OK (:error (file-error "make client process failed" "Connection refused") :cache nil)"##
-    ]],
+            r##"OK (:error (file-error "make client process failed" "Connection refused") :cache nil)"##
+        ]],
     )
 }
 

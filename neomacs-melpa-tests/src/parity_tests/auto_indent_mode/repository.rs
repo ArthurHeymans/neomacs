@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_indent_mode_batch};
 
-fn auto_indent_mode_repository_detection_walks_all_marker_types_and_caches_result() -> ParityBatchCase {
+fn auto_indent_mode_repository_detection_walks_all_marker_types_and_caches_result()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_indent_mode_repository_detection_walks_all_marker_types_and_caches_result",
         r##"(let ((root
@@ -47,8 +48,8 @@ fn auto_indent_mode_repository_detection_walks_all_marker_types_and_caches_resul
              (delete-directory root t))))"##,
         true,
         expect![[
-        r#"OK ((".git" t "git/" t) (".hg" t "../../../../" t) (".bzr" t "../../../../" t) ("_darcs" t "../../../../" t))"#
-    ]],
+            r#"OK ((".git" t "git/" t) (".hg" t "../../../../" t) (".bzr" t "../../../../" t) ("_darcs" t "../../../../" t))"#
+        ]],
     )
 }
 
@@ -84,7 +85,8 @@ fn auto_indent_mode_non_repository_result_is_cached_as_sentinel() -> ParityBatch
     )
 }
 
-fn auto_indent_mode_aggressive_policy_combines_file_style_and_repository_state() -> ParityBatchCase {
+fn auto_indent_mode_aggressive_policy_combines_file_style_and_repository_state() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_indent_mode_aggressive_policy_combines_file_style_and_repository_state",
         r##"(mapcar
@@ -102,8 +104,8 @@ fn auto_indent_mode_aggressive_policy_combines_file_style_and_repository_state()
            ("/file.el" unknown "/repo/")))"##,
         true,
         expect![[
-        r#"OK (((nil moderate nil) t) (("/file.el" aggressive not-repository) t) (("/file.el" conservative not-repository) nil) (("/file.el" moderate "/repo/") nil) (("/file.el" moderate not-repository) t) (("/file.el" unknown "/repo/") t))"#
-    ]],
+            r#"OK (((nil moderate nil) t) (("/file.el" aggressive not-repository) t) (("/file.el" conservative not-repository) nil) (("/file.el" moderate "/repo/") nil) (("/file.el" moderate not-repository) t) (("/file.el" unknown "/repo/") t))"#
+        ]],
     )
 }
 
@@ -134,8 +136,8 @@ fn auto_indent_mode_add_to_alist_inserts_replaces_and_honors_no_replace() -> Par
             (copy-tree auto-indent-test-alist)))))"##,
         true,
         expect![[
-        r#"OK ((("gamma" . 3) ("Alpha" . 1) ("beta" . 2)) (("gamma" . 3) ("Alpha" . 10) ("beta" . 2)) (("gamma" . 3) ("Alpha" . 10) ("beta" . 2)) (("BETA" . 20) ("gamma" . 3) ("Alpha" . 10) ("beta" . 2)))"#
-    ]],
+            r#"OK ((("gamma" . 3) ("Alpha" . 1) ("beta" . 2)) (("gamma" . 3) ("Alpha" . 10) ("beta" . 2)) (("gamma" . 3) ("Alpha" . 10) ("beta" . 2)) (("BETA" . 20) ("gamma" . 3) ("Alpha" . 10) ("beta" . 2)))"#
+        ]],
     )
 }
 
@@ -169,8 +171,8 @@ fn auto_indent_mode_pair_interval_uses_major_mode_then_default_and_throttle() ->
              1))))"##,
         true,
         expect![[
-        r#"OK (((((fixture-mode 0.2 4) (default 0.5 1)) nil) 1.0) ((((other-mode 0.2 4) (default 0.5 1)) nil) 2.5) ((((fixture-mode 0.2 4) (default 0.5 1)) 0.3) 0.3) ((((fixture-mode "NaN" 4) (default 0.5 1)) 1) 0.0025))"#
-    ]],
+            r#"OK (((((fixture-mode 0.2 4) (default 0.5 1)) nil) 1.0) ((((other-mode 0.2 4) (default 0.5 1)) nil) 2.5) ((((fixture-mode 0.2 4) (default 0.5 1)) 0.3) 0.3) ((((fixture-mode "NaN" 4) (default 0.5 1)) 1) 0.0025))"#
+        ]],
     )
 }
 
@@ -197,8 +199,8 @@ fn auto_indent_mode_pair_interval_update_records_observed_rate_per_line() -> Par
            (list first second)))"##,
         true,
         expect![
-        "OK (((fixture-mode 0.01 1) (default 0.001 0)) ((fixture-mode 0.0010000000000000002 2) (default 0.001 0)))"
-    ],
+            "OK (((fixture-mode 0.01 1) (default 0.001 0)) ((fixture-mode 0.0010000000000000002 2) (default 0.001 0)))"
+        ],
     )
 }
 
@@ -225,8 +227,8 @@ fn auto_indent_mode_save_interval_only_persists_when_both_options_enable() -> Pa
               (t . t)))))"##,
         true,
         expect![
-        "OK (((nil) nil nil) ((t) nil nil) ((nil . t) nil nil) ((t . t) :saved ((auto-indent-next-pair-timer-geo-mean ((default 0.02 3))))))"
-    ],
+            "OK (((nil) nil nil) ((t) nil nil) ((nil . t) nil nil) ((t . t) :saved ((auto-indent-next-pair-timer-geo-mean ((default 0.02 3))))))"
+        ],
     )
 }
 

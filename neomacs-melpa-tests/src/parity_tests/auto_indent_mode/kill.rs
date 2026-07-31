@@ -68,8 +68,8 @@ fn auto_indent_mode_kill_line_whole_line_and_blanks_have_distinct_extent() -> Pa
          '(whole-line blanks))"##,
         true,
         expect![[
-        r#"OK ((whole-line "alpha\n\n\nbeta\ngamma" 19 ("")) (blanks "alpha\n\n\nbeta\ngamma" 19 ("")))"#
-    ]],
+            r#"OK ((whole-line "alpha\n\n\nbeta\ngamma" 19 ("")) (blanks "alpha\n\n\nbeta\ngamma" 19 ("")))"#
+        ]],
     )
 }
 
@@ -95,8 +95,8 @@ fn auto_indent_mode_kill_line_active_region_delegates_to_region_kill() -> Parity
                 kill-ring)))))"##,
         true,
         expect![[
-        r#"OK (:signal invalid-function (#[(&optional beg end &optional yank-handler) ((if (not t) #1=(if (called-interactively-p 'any) (kill-region beg end) (kill-region beg end yank-handler)) #1# (auto-indent-deindent-last-kill))) nil nil "Kill region advice and function.  Allows the region to delete the beginning white-space if desired." (list (point) (mark))]))"#
-    ]],
+            r#"OK (:signal invalid-function (#[(&optional beg end &optional yank-handler) ((if (not t) #1=(if (called-interactively-p 'any) (kill-region beg end) (kill-region beg end yank-handler)) #1# (auto-indent-deindent-last-kill))) nil nil "Kill region advice and function.  Allows the region to delete the beginning white-space if desired." (list (point) (mark))]))"#
+        ]],
     )
 }
 
@@ -121,12 +121,13 @@ fn auto_indent_mode_kill_region_function_deindents_multiline_kill_ring_entry() -
                 (current-kill 0 t))))))"##,
         true,
         expect![[
-        r#"OK (:signal invalid-function (#[(&optional beg end &optional yank-handler) ((if (not t) #1=(if (called-interactively-p 'any) (kill-region beg end) (kill-region beg end yank-handler)) #1# (auto-indent-deindent-last-kill))) nil nil "Kill region advice and function.  Allows the region to delete the beginning white-space if desired." (list (point) (mark))]))"#
-    ]],
+            r#"OK (:signal invalid-function (#[(&optional beg end &optional yank-handler) ((if (not t) #1=(if (called-interactively-p 'any) (kill-region beg end) (kill-region beg end yank-handler)) #1# (auto-indent-deindent-last-kill))) nil nil "Kill region advice and function.  Allows the region to delete the beginning white-space if desired." (list (point) (mark))]))"#
+        ]],
     )
 }
 
-fn auto_indent_mode_kill_ring_save_copies_without_deleting_and_normalizes_indent() -> ParityBatchCase {
+fn auto_indent_mode_kill_ring_save_copies_without_deleting_and_normalizes_indent() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_indent_mode_kill_ring_save_copies_without_deleting_and_normalizes_indent",
         r##"(auto-indent-test-error
@@ -189,12 +190,13 @@ fn auto_indent_mode_command_classifiers_cover_symbols_and_live_bindings() -> Par
            nil))"##,
         true,
         expect![
-        "OK ((delete-backward-char (delete-backward-char backward-delete-char backward-delete-char-untabify nil) nil nil nil nil) (backward-delete-char (backward-delete-char backward-delete-char-untabify nil) nil nil nil nil) (delete-char nil (delete-char delete-forward-char delete-char) nil nil nil) (kill-line nil nil (kill-line kill-line kill-line) nil nil) (kill-region nil nil nil (kill-region nil) (kill-region nil)) (kill-ring-save nil nil nil nil nil) (self-insert-command nil nil nil nil nil) (nil (nil) nil nil (nil) (nil)))"
-    ],
+            "OK ((delete-backward-char (delete-backward-char backward-delete-char backward-delete-char-untabify nil) nil nil nil nil) (backward-delete-char (backward-delete-char backward-delete-char-untabify nil) nil nil nil nil) (delete-char nil (delete-char delete-forward-char delete-char) nil nil nil) (kill-line nil nil (kill-line kill-line kill-line) nil nil) (kill-region nil nil nil (kill-region nil) (kill-region nil)) (kill-ring-save nil nil nil nil nil) (self-insert-command nil nil nil nil nil) (nil (nil) nil nil (nil) (nil)))"
+        ],
     )
 }
 
-fn auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands() -> ParityBatchCase {
+fn auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands",
         r##"(mapcar
@@ -214,8 +216,8 @@ fn auto_indent_mode_remove_advice_policy_handles_modes_minibuffer_and_commands()
            (emacs-lisp-mode 42 nil)))"##,
         true,
         expect![
-        "OK (((text-mode kill-line nil) (text-mode)) ((emacs-lisp-mode auto-indent-kill-line nil) 0) ((emacs-lisp-mode kill-line auto-indent-delete-char) 0) ((emacs-lisp-mode kill-line delete-char) nil) ((emacs-lisp-mode 42 nil) t))"
-    ],
+            "OK (((text-mode kill-line nil) (text-mode)) ((emacs-lisp-mode auto-indent-kill-line nil) 0) ((emacs-lisp-mode kill-line auto-indent-delete-char) 0) ((emacs-lisp-mode kill-line delete-char) nil) ((emacs-lisp-mode 42 nil) t))"
+        ],
     )
 }
 

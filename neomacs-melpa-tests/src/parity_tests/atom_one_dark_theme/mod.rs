@@ -131,8 +131,6 @@ pub(crate) fn assert_atom_one_dark_theme_autoload_parity(elisp_form: &str, expec
     );
 }
 
-
-
 /// Multi-probe batch for `assert_atom_one_dark_theme_autoload_parity` cases (2a).
 pub(crate) fn assert_atom_one_dark_theme_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

@@ -89,15 +89,14 @@ fn the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched() ->
                 (disable-theme 'atom-one-dark))))"##,
         true,
         expect![[
-        r##"OK (:with-remapping (:face-properties (font-lock-function-name-face font-lock-variable-name-face) :remapped ((font-lock-function-name-face "#61AFEF" "#E06C75") (font-lock-variable-name-face "#E06C75" "#D19A66"))) :without-remapping (:face-properties (font-lock-function-name-face font-lock-variable-name-face) :remapped ((font-lock-function-name-face "#61AFEF" nil) (font-lock-variable-name-face "#E06C75" nil))) :face-properties-are-identical t :colours-differ t)"##
-    ]],
+            r##"OK (:with-remapping (:face-properties (font-lock-function-name-face font-lock-variable-name-face) :remapped ((font-lock-function-name-face "#61AFEF" "#E06C75") (font-lock-variable-name-face "#E06C75" "#D19A66"))) :without-remapping (:face-properties (font-lock-function-name-face font-lock-variable-name-face) :remapped ((font-lock-function-name-face "#61AFEF" nil) (font-lock-variable-name-face "#E06C75" nil))) :face-properties-are-identical t :colours-differ t)"##
+        ]],
     )
 }
 
 #[test]
 fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![the_html_remap_changes_the_colour_and_leaves_the_face_property_untouched()];
     assert_atom_one_dark_theme_batch(&cases);
 }

@@ -72,11 +72,13 @@ NEOMACS-TEST-OUTCOME:beta:ERR (user-error \"nope\")
 #[test]
 fn rejects_duplicate_or_missing_batch_outcomes() {
     assert!(extract_marked_batch_outcomes("no markers", MARKER).is_err());
-    assert!(extract_marked_batch_outcomes(
-        "NEOMACS-TEST-OUTCOME:a:OK t\nNEOMACS-TEST-OUTCOME:a:OK nil\n",
-        MARKER,
-    )
-    .is_err());
+    assert!(
+        extract_marked_batch_outcomes(
+            "NEOMACS-TEST-OUTCOME:a:OK t\nNEOMACS-TEST-OUTCOME:a:OK nil\n",
+            MARKER,
+        )
+        .is_err()
+    );
 }
 
 #[test]

@@ -26,7 +26,8 @@ fn delayed_promises_resume_sequential_work_in_exact_source_order() -> ParityBatc
     )
 }
 
-fn concurrent_invocations_complete_by_delay_without_cross_contaminating_results() -> ParityBatchCase {
+fn concurrent_invocations_complete_by_delay_without_cross_contaminating_results() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "concurrent_invocations_complete_by_delay_without_cross_contaminating_results",
         r##"(let (completion-order)
@@ -58,8 +59,8 @@ fn concurrent_invocations_complete_by_delay_without_cross_contaminating_results(
               completion-order))))"##,
         true,
         expect![
-        "OK (((fulfilled (:fullfilled (:slow 10))) (fulfilled (:fullfilled (:fast 20))) (fulfilled (:fullfilled (:middle 30)))) (:fast :middle :slow))"
-    ],
+            "OK (((fulfilled (:fullfilled (:slow 10))) (fulfilled (:fullfilled (:fast 20))) (fulfilled (:fullfilled (:middle 30)))) (:fast :middle :slow))"
+        ],
     )
 }
 
@@ -83,8 +84,8 @@ fn async_function_awaits_real_subprocess_stdout_and_preserves_newlines() -> Pari
            (parity-process-output)))"##,
         true,
         expect![[
-        r#"OK (fulfilled (:fullfilled ("alpha\nbeta gamma\n" ("alpha" "beta gamma") 17)))"#
-    ]],
+            r#"OK (fulfilled (:fullfilled ("alpha\nbeta gamma\n" ("alpha" "beta gamma") 17)))"#
+        ]],
     )
 }
 
@@ -109,8 +110,8 @@ fn async_function_sends_real_multiline_input_to_subprocess_and_uses_result() -> 
             "one two\nthree\n")))"##,
         true,
         expect![[
-        r#"OK (fulfilled (:fullfilled (("ONE TWO\nTHREE\n" "") "ONE TWO\nTHREE\n" "")))"#
-    ]],
+            r#"OK (fulfilled (:fullfilled (("ONE TWO\nTHREE\n" "") "ONE TWO\nTHREE\n" "")))"#
+        ]],
     )
 }
 
@@ -204,7 +205,8 @@ fn delayed_filesystem_producer_is_awaited_before_exact_consumer_transform() -> P
     )
 }
 
-fn awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties() -> ParityBatchCase {
+fn awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties",
         r##"(let ((buffer
@@ -236,8 +238,8 @@ fn awaited_resume_can_mutate_captured_buffer_then_return_exact_text_properties()
             (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (fulfilled (:fullfilled (#("start -> finished" 9 17 (category parity face bold)) bold parity t)))"#
-    ]],
+            r#"OK (fulfilled (:fullfilled (#("start -> finished" 9 17 (category parity face bold)) bold parity t)))"#
+        ]],
     )
 }
 
@@ -316,7 +318,8 @@ fn async_lambda_forms_a_real_parse_filter_aggregate_pipeline() -> ParityBatchCas
     )
 }
 
-fn zero_await_and_empty_iteration_remain_pending_while_nonempty_iteration_resumes() -> ParityBatchCase {
+fn zero_await_and_empty_iteration_remain_pending_while_nonempty_iteration_resumes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "zero_await_and_empty_iteration_remain_pending_while_nonempty_iteration_resumes",
         r##"(progn
@@ -380,8 +383,8 @@ fn two_stateful_async_workers_keep_independent_lexical_accumulators() -> ParityB
               (funcall right '(5 5))))))"##,
         true,
         expect![
-        "OK ((fulfilled (:fullfilled ((:left 1) (:left 3)))) (fulfilled (:fullfilled ((:right 10)))) (fulfilled (:fullfilled ((:left 6)))) (fulfilled (:fullfilled ((:right 15) (:right 20)))))"
-    ],
+            "OK ((fulfilled (:fullfilled ((:left 1) (:left 3)))) (fulfilled (:fullfilled ((:right 10)))) (fulfilled (:fullfilled ((:left 6)))) (fulfilled (:fullfilled ((:right 15) (:right 20)))))"
+        ],
     )
 }
 

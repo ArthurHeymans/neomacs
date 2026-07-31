@@ -23,8 +23,8 @@ fn agda_editor_tactics_record_info_parses_the_documented_full_record() -> Parity
        c : Y a")"##,
         true,
         expect![[
-        r#"OK (:name "R" :level "" :body ((:param "X : Set") (:param "x : X") (:param "y : Y x") (:local "w : Set") (:local "w = X") (:local "m = w") (:field "a : X") (:local "b : X") (:local "b = X") (:field "c : Y a")))"#
-    ]],
+            r#"OK (:name "R" :level "" :body ((:param "X : Set") (:param "x : X") (:param "y : Y x") (:local "w : Set") (:local "w = X") (:local "m = w") (:field "a : X") (:local "b : X") (:local "b = X") (:field "c : Y a")))"#
+        ]],
     )
 }
 
@@ -41,8 +41,8 @@ fn agda_editor_tactics_record_info_preserves_parameters_and_universe_level() -> 
       _≈_ : A → A → Set b"))"##,
         true,
         expect![[
-        r#"OK ((:name "Box" :level " (lsuc ℓ)" :body ((:param "ℓ : Level") (:param "A : Set ℓ") (:field "value : A"))) (:name "Relation" :level " (a ⊔ lsuc b)" :body ((:param "a b : Level") (:param "A : Set a") (:field "_≈_ : A → A → Set b"))))"#
-    ]],
+            r#"OK ((:name "Box" :level " (lsuc ℓ)" :body ((:param "ℓ : Level") (:param "A : Set ℓ") (:field "value : A"))) (:name "Relation" :level " (a ⊔ lsuc b)" :body ((:param "a b : Level") (:param "A : Set a") (:field "_≈_ : A → A → Set b"))))"#
+        ]],
     )
 }
 
@@ -62,8 +62,8 @@ fn agda_editor_tactics_record_info_classifies_preamble_locals_and_fields() -> Pa
   twice x = step (step x)")"##,
         true,
         expect![[
-        r#"OK (:name "Computed" :level "" :body ((:param "A : Set") (:local "Alias : Set") (:local "Alias = A") (:local "identity : Alias → Alias") (:local "identity x = x") (:field "seed : Alias") (:field "step : Alias → Alias") (:local "twice : Alias → Alias") (:local "twice x = step (step x)")))"#
-    ]],
+            r#"OK (:name "Computed" :level "" :body ((:param "A : Set") (:local "Alias : Set") (:local "Alias = A") (:local "identity : Alias → Alias") (:local "identity x = x") (:field "seed : Alias") (:field "step : Alias → Alias") (:local "twice : Alias → Alias") (:local "twice x = step (step x)")))"#
+        ]],
     )
 }
 
@@ -84,12 +84,13 @@ fn agda_editor_tactics_record_info_handles_multiple_field_sections() -> ParityBa
   witness = operation initial")"##,
         true,
         expect![[
-        r#"OK (:name "SplitFields" :level "₁" :body ((:field "Carrier : Set") (:field "initial : Carrier") (:local "derived : Carrier") (:local "derived = initial") (:field "operation : Carrier → Carrier") (:field "law : operation initial ≡ initial") (:local "witness : Carrier") (:local "witness = operation initial")))"#
-    ]],
+            r#"OK (:name "SplitFields" :level "₁" :body ((:field "Carrier : Set") (:field "initial : Carrier") (:local "derived : Carrier") (:local "derived = initial") (:field "operation : Carrier → Carrier") (:field "law : operation initial ≡ initial") (:local "witness : Carrier") (:local "witness = operation initial")))"#
+        ]],
     )
 }
 
-fn agda_editor_tactics_record_info_omits_blank_lines_but_preserves_declaration_order() -> ParityBatchCase {
+fn agda_editor_tactics_record_info_omits_blank_lines_but_preserves_declaration_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "agda_editor_tactics_record_info_omits_blank_lines_but_preserves_declaration_order",
         r##"(let* ((parsed
@@ -113,8 +114,8 @@ fn agda_editor_tactics_record_info_omits_blank_lines_but_preserves_declaration_o
          (list parsed (length body) (mapcar #'car body) (mapcar #'cadr body)))"##,
         true,
         expect![[
-        r#"OK ((:name "Sparse" :level "" :body ((:param "A : Set") (:local "before : A → A") (:local "before x = x") (:local "first : A") (:local "second : A") (:local "after : A") (:local "after = first"))) 7 (:param :local :local :local :local :local :local) ("A : Set" "before : A → A" "before x = x" "first : A" "second : A" "after : A" "after = first"))"#
-    ]],
+            r#"OK ((:name "Sparse" :level "" :body ((:param "A : Set") (:local "before : A → A") (:local "before x = x") (:local "first : A") (:local "second : A") (:local "after : A") (:local "after = first"))) 7 (:param :local :local :local :local :local :local) ("A : Set" "before : A → A" "before x = x" "first : A" "second : A" "after : A" "after = first"))"#
+        ]],
     )
 }
 
@@ -134,8 +135,8 @@ fn agda_editor_tactics_record_info_uses_each_field_block_indentation() -> Parity
        two-local = two")"##,
         true,
         expect![[
-        r#"OK (:name "MixedIndent" :level "" :body ((:field "one : Set") (:local "one-local : Set") (:local "one-local = one") (:local "another-local = one-local") (:field "two : Set") (:local "two-local : Set") (:local "two-local = two")))"#
-    ]],
+            r#"OK (:name "MixedIndent" :level "" :body ((:field "one : Set") (:local "one-local : Set") (:local "one-local = one") (:local "another-local = one-local") (:field "two : Set") (:local "two-local : Set") (:local "two-local = two")))"#
+        ]],
     )
 }
 
@@ -153,8 +154,8 @@ fn agda_editor_tactics_record_info_parses_a_parameterless_record() -> ParityBatc
         Carrier : Set₁"))"##,
         true,
         expect![[
-        r#"OK ((:name "UnitLike" :level "" :body ((:field "inhabitant : ⊤"))) (:name "Higher" :level " (lsuc (lsuc zero))" :body ((:field "Carrier : Set₁"))))"#
-    ]],
+            r#"OK ((:name "UnitLike" :level "" :body ((:field "inhabitant : ⊤"))) (:name "Higher" :level " (lsuc (lsuc zero))" :body ((:field "Carrier : Set₁"))))"#
+        ]],
     )
 }
 
@@ -190,8 +191,8 @@ fn agda_editor_tactics_record_info_exposes_documented_parser_boundaries() -> Par
     value : A"))"##,
         true,
         expect![[
-        r#"OK ((:value (:name "NoFields" :level "" :body ((:local "local : Set")))) (:value (:name "Hidden" :level "" :body ((:field "value : Set")))) (:value (:name "Implicit" :level "" :body ((:field "value : A")))))"#
-    ]],
+            r#"OK ((:value (:name "NoFields" :level "" :body ((:local "local : Set")))) (:value (:name "Hidden" :level "" :body ((:field "value : Set")))) (:value (:name "Implicit" :level "" :body ((:field "value : A")))))"#
+        ]],
     )
 }
 

@@ -32,8 +32,8 @@ fn abc_mode_opens_a_real_tunebook_and_sets_up_the_editing_environment() -> Parit
       (kill-buffer each))))"##,
         true,
         expect![[
-        r#"OK ((abc-mode "abc" text-mode "%" "" "^[ \11]*X[ \11]*:[ \11]*\\([0-9]+\\)" t t 265 1 nil t abc-renumber-songs abc-forward-song abc-crescendo-region) abc-mode text-mode)"#
-    ]],
+            r#"OK ((abc-mode "abc" text-mode "%" "" "^[ \11]*X[ \11]*:[ \11]*\\([0-9]+\\)" t t 265 1 nil t abc-renumber-songs abc-forward-song abc-crescendo-region) abc-mode text-mode)"#
+        ]],
     )
 }
 
@@ -93,8 +93,8 @@ fn abc_mode_renumbers_a_tunebook_with_duplicate_reference_numbers() -> ParityBat
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ("X:1\nT:Si Beag, Si Mor\nC:Turlough O'Carolan\nM:3/4\nL:1/8\nQ:1/4=120\nK:D\n|:A2|d3 e f2|e3 d B2|A3 B A2|F4 A2|\n%% a comment line\nX:2\nT:The Butterfly\nM:9/8\nL:1/8\nK:Em\n|:B3 AFE|B2 E E2 F|G3 AGF|GFE FED|\nX:3\nT:Planxty Irwin\nM:3/4\nL:1/8\nK:G\nD2|G3 A B2|d3 e d2|B3 A G2|E4 D2|\n" 266 t ("X:2" "X:7" "X:7") (4 1))"#
-    ]],
+            r#"OK ("X:1\nT:Si Beag, Si Mor\nC:Turlough O'Carolan\nM:3/4\nL:1/8\nQ:1/4=120\nK:D\n|:A2|d3 e f2|e3 d B2|A3 B A2|F4 A2|\n%% a comment line\nX:2\nT:The Butterfly\nM:9/8\nL:1/8\nK:Em\n|:B3 AFE|B2 E E2 F|G3 AGF|GFE FED|\nX:3\nT:Planxty Irwin\nM:3/4\nL:1/8\nK:G\nD2|G3 A B2|d3 e d2|B3 A G2|E4 D2|\n" 266 t ("X:2" "X:7" "X:7") (4 1))"#
+        ]],
     )
 }
 
@@ -135,8 +135,8 @@ fn abc_mode_wraps_a_selected_phrase_in_slur_crescendo_and_repeat_marks() -> Pari
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ("X:1\nT:Marks\nK:D\n(A2 B2 c2 d2)|e2 f2 g2 a2|\n" "X:1\nT:Marks\nK:D\n(A2 B2 c2 d2)|e2 f2 g2 a2|\n!crescendo(!!crescendo)!" "X:1\nT:Marks\nK:D\n(A2 B2 c2 d2)|e2 f2 g2 a2|\n |: !crescendo(!!crescendo)! :| " "X:1\nT:Marks\nK:D\n(A2 B2 c2 d2)|e2 f2 g2 a2|\n!diminuendo(! |: !crescendo(!!crescendo)! :| !diminuendo)!" 102 4)"#
-    ]],
+            r#"OK ("X:1\nT:Marks\nK:D\n(A2 B2 c2 d2)|e2 f2 g2 a2|\n" "X:1\nT:Marks\nK:D\n(A2 B2 c2 d2)|e2 f2 g2 a2|\n!crescendo(!!crescendo)!" "X:1\nT:Marks\nK:D\n(A2 B2 c2 d2)|e2 f2 g2 a2|\n |: !crescendo(!!crescendo)! :| " "X:1\nT:Marks\nK:D\n(A2 B2 c2 d2)|e2 f2 g2 a2|\n!diminuendo(! |: !crescendo(!!crescendo)! :| !diminuendo)!" 102 4)"#
+        ]],
     )
 }
 
@@ -164,8 +164,8 @@ fn abc_mode_lists_every_tune_title_in_an_occur_buffer() -> ParityBatchCase {
       (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ("*Occur*" "*Occur*" (occur-mode "3 matches for \"^T:\" in buffer: titles.abc\n      2:T:Si Beag, Si Mor\n     11:T:The Butterfly\n     17:T:Planxty Irwin\n" 5))"#
-    ]],
+            r#"OK ("*Occur*" "*Occur*" (occur-mode "3 matches for \"^T:\" in buffer: titles.abc\n      2:T:Si Beag, Si Mor\n     11:T:The Butterfly\n     17:T:Planxty Irwin\n" 5))"#
+        ]],
     )
 }
 
@@ -197,8 +197,8 @@ fn abc_mode_extracts_chords_and_aligns_bar_lines_of_a_melody_line() -> ParityBat
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ("\"G\"x2 x2 |\"C\"x2 xx |\"D7\"x2 x2 |\"G\"x4 |" "X:1\nT:Chords\nK:G\n\"G\"x2 x2 |\"C\"x2 xx |\"D7\"x2 x2 |\"G\"x4 |\n|G2 A2\11| c2 e2\11|d2 f2\11\11|g4\11|\n" (abc-mode text-mode outline-mode) t)"#
-    ]],
+            r#"OK ("\"G\"x2 x2 |\"C\"x2 xx |\"D7\"x2 x2 |\"G\"x4 |" "X:1\nT:Chords\nK:G\n\"G\"x2 x2 |\"C\"x2 xx |\"D7\"x2 x2 |\"G\"x4 |\n|G2 A2\11| c2 e2\11|d2 f2\11\11|g4\11|\n" (abc-mode text-mode outline-mode) t)"#
+        ]],
     )
 }
 
@@ -222,8 +222,8 @@ fn abc_mode_runs_abc2ps_and_abc2midi_on_the_saved_tunebook() -> ParityBatchCase 
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (("abcm2ps -e 7 book.abc -O =" "abc2midi book.abc") "abcm2ps" "abc2midi" "" nil)"#
-    ]],
+            r#"OK (("abcm2ps -e 7 book.abc -O =" "abc2midi book.abc") "abcm2ps" "abc2midi" "" nil)"#
+        ]],
     )
 }
 

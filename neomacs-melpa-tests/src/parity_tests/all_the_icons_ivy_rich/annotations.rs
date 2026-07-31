@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_all_the_icons_ivy_rich_batch};
 
-fn package_candidates_are_normalized_across_markers_and_real_world_version_shapes() -> ParityBatchCase {
+fn package_candidates_are_normalized_across_markers_and_real_world_version_shapes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "package_candidates_are_normalized_across_markers_and_real_world_version_shapes",
         r##"(mapcar
@@ -19,12 +20,13 @@ fn package_candidates_are_normalized_across_markers_and_real_world_version_shape
                  "unversioned-package"))"##,
         true,
         expect![[
-        r#"OK (("dash" . "dash") ("+dash-2.19.1" . "dash") ("-ivy-rich-0.1.0" . "ivy-rich") ("all-the-icons-5.0.0.1" . "all-the-icons") ("package-with-digits-2fa-1.20" . "package-with-digits-2fa") ("unversioned-package" . "unversioned-package"))"#
-    ]],
+            r#"OK (("dash" . "dash") ("+dash-2.19.1" . "dash") ("-ivy-rich-0.1.0" . "ivy-rich") ("all-the-icons-5.0.0.1" . "all-the-icons") ("package-with-digits-2fa-1.20" . "package-with-digits-2fa") ("unversioned-package" . "unversioned-package"))"#
+        ]],
     )
 }
 
-fn documentation_truncation_extracts_only_the_first_line_and_enforces_eighty_columns() -> ParityBatchCase {
+fn documentation_truncation_extracts_only_the_first_line_and_enforces_eighty_columns()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "documentation_truncation_extracts_only_the_first_line_and_enforces_eighty_columns",
         r##"(list
@@ -42,12 +44,13 @@ fn documentation_truncation_extracts_only_the_first_line_and_enforces_eighty_col
                  (make-string 100 ?x))))"##,
         true,
         expect![[
-        r#"OK ("" "" "first line" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa界界" 80)"#
-    ]],
+            r#"OK ("" "" "first line" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa界界" 80)"#
+        ]],
     )
 }
 
-fn function_argument_annotations_cover_commands_lambdas_macros_subrs_and_unknown_symbols() -> ParityBatchCase {
+fn function_argument_annotations_cover_commands_lambdas_macros_subrs_and_unknown_symbols()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "function_argument_annotations_cover_commands_lambdas_macros_subrs_and_unknown_symbols",
         r##"(progn
@@ -73,12 +76,13 @@ fn function_argument_annotations_cover_commands_lambdas_macros_subrs_and_unknown
                   "all-the-icons-ivy-rich-not-defined")))"##,
         true,
         expect![[
-        r#"OK (("all-the-icons-ivy-rich-fixture-command" . "(PATH &optional FORCE &rest SWITCHES)") ("all-the-icons-ivy-rich-fixture-macro" . "(BINDING &rest BODY)") ("mapcar" . "(FUNCTION SEQUENCE)") ("if" . "(COND THEN ELSE...)") ("all-the-icons-ivy-rich-not-defined" . ""))"#
-    ]],
+            r#"OK (("all-the-icons-ivy-rich-fixture-command" . "(PATH &optional FORCE &rest SWITCHES)") ("all-the-icons-ivy-rich-fixture-macro" . "(BINDING &rest BODY)") ("mapcar" . "(FUNCTION SEQUENCE)") ("if" . "(COND THEN ELSE...)") ("all-the-icons-ivy-rich-not-defined" . ""))"#
+        ]],
     )
 }
 
-fn variable_annotations_render_practical_scalar_collection_and_opaque_runtime_values() -> ParityBatchCase {
+fn variable_annotations_render_practical_scalar_collection_and_opaque_runtime_values()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "variable_annotations_render_practical_scalar_collection_and_opaque_runtime_values",
         r##"(let ((symbols
@@ -125,12 +129,13 @@ fn variable_annotations_render_practical_scalar_collection_and_opaque_runtime_va
                 symbols))"##,
         true,
         expect![[
-        r##"OK ((all-the-icons-ivy-rich-value-unbound #("#<unbound>" 0 10 (face all-the-icons-ivy-rich-null-face))) (all-the-icons-ivy-rich-value-nil #("nil" 0 3 (face all-the-icons-ivy-rich-null-face))) (all-the-icons-ivy-rich-value-true #("t" 0 1 (face all-the-icons-ivy-rich-true-face))) (all-the-icons-ivy-rich-value-number #("42.5" 0 4 (face all-the-icons-ivy-rich-number-face))) (all-the-icons-ivy-rich-value-symbol #("ready" 0 5 (face all-the-icons-ivy-rich-symbol-face))) (all-the-icons-ivy-rich-value-string #("\"alpha\\nbeta\"" 0 13 (face all-the-icons-ivy-rich-string-face))) (all-the-icons-ivy-rich-value-list #("(alpha (beta . gamma) 3)" 0 24 (face all-the-icons-ivy-rich-list-face))) (all-the-icons-ivy-rich-value-keymap #("#<keymap>" 0 9 (face all-the-icons-ivy-rich-value-face))) (all-the-icons-ivy-rich-value-bool-vector #("#<bool-vector>" 0 14 (face all-the-icons-ivy-rich-value-face))) (all-the-icons-ivy-rich-value-hash-table #("#<hash-table>" 0 13 (face all-the-icons-ivy-rich-value-face))) (all-the-icons-ivy-rich-value-syntax-table #("#<syntax-table>" 0 15 (face all-the-icons-ivy-rich-value-face))) (all-the-icons-ivy-rich-value-char-table #("#<char-table>" 0 13 (face all-the-icons-ivy-rich-value-face))) (all-the-icons-ivy-rich-value-function #("#'forward-char" 0 14 (face all-the-icons-ivy-rich-function-face))))"##
-    ]],
+            r##"OK ((all-the-icons-ivy-rich-value-unbound #("#<unbound>" 0 10 (face all-the-icons-ivy-rich-null-face))) (all-the-icons-ivy-rich-value-nil #("nil" 0 3 (face all-the-icons-ivy-rich-null-face))) (all-the-icons-ivy-rich-value-true #("t" 0 1 (face all-the-icons-ivy-rich-true-face))) (all-the-icons-ivy-rich-value-number #("42.5" 0 4 (face all-the-icons-ivy-rich-number-face))) (all-the-icons-ivy-rich-value-symbol #("ready" 0 5 (face all-the-icons-ivy-rich-symbol-face))) (all-the-icons-ivy-rich-value-string #("\"alpha\\nbeta\"" 0 13 (face all-the-icons-ivy-rich-string-face))) (all-the-icons-ivy-rich-value-list #("(alpha (beta . gamma) 3)" 0 24 (face all-the-icons-ivy-rich-list-face))) (all-the-icons-ivy-rich-value-keymap #("#<keymap>" 0 9 (face all-the-icons-ivy-rich-value-face))) (all-the-icons-ivy-rich-value-bool-vector #("#<bool-vector>" 0 14 (face all-the-icons-ivy-rich-value-face))) (all-the-icons-ivy-rich-value-hash-table #("#<hash-table>" 0 13 (face all-the-icons-ivy-rich-value-face))) (all-the-icons-ivy-rich-value-syntax-table #("#<syntax-table>" 0 15 (face all-the-icons-ivy-rich-value-face))) (all-the-icons-ivy-rich-value-char-table #("#<char-table>" 0 13 (face all-the-icons-ivy-rich-value-face))) (all-the-icons-ivy-rich-value-function #("#'forward-char" 0 14 (face all-the-icons-ivy-rich-function-face))))"##
+        ]],
     )
 }
 
-fn variable_annotation_print_limits_and_escaping_match_interactive_describe_usage() -> ParityBatchCase {
+fn variable_annotation_print_limits_and_escaping_match_interactive_describe_usage()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "variable_annotation_print_limits_and_escaping_match_interactive_describe_usage",
         r##"(let ((all-the-icons-ivy-rich-field-width 3))
@@ -149,12 +154,13 @@ fn variable_annotation_print_limits_and_escaping_match_interactive_describe_usag
                  "all-the-icons-ivy-rich-control-string")))"##,
         true,
         expect![[
-        r#"OK (#("\"ab\\n\"" 0 6 (face all-the-icons-ivy-rich-string-face)) #("(one two three ...)" 0 19 (face all-the-icons-ivy-rich-list-face)) #("\"a\\1b\"" 0 6 (face all-the-icons-ivy-rich-string-face)))"#
-    ]],
+            r#"OK (#("\"ab\\n\"" 0 6 (face all-the-icons-ivy-rich-string-face)) #("(one two three ...)" 0 19 (face all-the-icons-ivy-rich-list-face)) #("\"a\\1b\"" 0 6 (face all-the-icons-ivy-rich-string-face)))"#
+        ]],
     )
 }
 
-fn symbol_classes_combine_command_macro_special_advice_custom_local_obsolete_and_face_traits() -> ParityBatchCase {
+fn symbol_classes_combine_command_macro_special_advice_custom_local_obsolete_and_face_traits()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "symbol_classes_combine_command_macro_special_advice_custom_local_obsolete_and_face_traits",
         r##"(progn
@@ -208,12 +214,13 @@ fn symbol_classes_combine_command_macro_special_advice_custom_local_obsolete_and
                     all-the-icons-ivy-rich-class-face))))"##,
         true,
         expect![[
-        r#"OK ((all-the-icons-ivy-rich-class-command . "c") (all-the-icons-ivy-rich-class-function . "f!") (all-the-icons-ivy-rich-class-macro . "m") (if . "M") (all-the-icons-ivy-rich-class-custom . "U") (all-the-icons-ivy-rich-class-local . "lv") (all-the-icons-ivy-rich-class-obsolete . "v-") (all-the-icons-ivy-rich-class-face . "a"))"#
-    ]],
+            r#"OK ((all-the-icons-ivy-rich-class-command . "c") (all-the-icons-ivy-rich-class-function . "f!") (all-the-icons-ivy-rich-class-macro . "m") (if . "M") (all-the-icons-ivy-rich-class-custom . "U") (all-the-icons-ivy-rich-class-local . "lv") (all-the-icons-ivy-rich-class-obsolete . "v-") (all-the-icons-ivy-rich-class-face . "a"))"#
+        ]],
     )
 }
 
-fn symbol_documentation_routes_functions_variables_faces_and_unknowns_to_their_real_sources() -> ParityBatchCase {
+fn symbol_documentation_routes_functions_variables_faces_and_unknowns_to_their_real_sources()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "symbol_documentation_routes_functions_variables_faces_and_unknowns_to_their_real_sources",
         r##"(progn
@@ -243,12 +250,13 @@ Face second line.")
                   "all-the-icons-ivy-rich-doc-missing")))"##,
         true,
         expect![[
-        r#"OK (("all-the-icons-ivy-rich-doc-function" . "Function first line.") ("all-the-icons-ivy-rich-doc-variable" . "Variable first line.") ("all-the-icons-ivy-rich-doc-face" . "Face used for documentation string.") (":keyword" . "") ("all-the-icons-ivy-rich-doc-missing" . ""))"#
-    ]],
+            r#"OK (("all-the-icons-ivy-rich-doc-function" . "Function first line.") ("all-the-icons-ivy-rich-doc-variable" . "Variable first line.") ("all-the-icons-ivy-rich-doc-face" . "Face used for documentation string.") (":keyword" . "") ("all-the-icons-ivy-rich-doc-missing" . ""))"#
+        ]],
     )
 }
 
-fn imenu_annotations_parse_grouped_candidates_and_follow_the_current_major_mode() -> ParityBatchCase {
+fn imenu_annotations_parse_grouped_candidates_and_follow_the_current_major_mode() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "imenu_annotations_parse_grouped_candidates_and_follow_the_current_major_mode",
         r##"(progn
@@ -277,8 +285,8 @@ fn imenu_annotations_parse_grouped_candidates_and_follow_the_current_major_mode(
                       candidate))))))"##,
         true,
         expect![[
-        r#"OK ("all-the-icons-ivy-rich-imenu-fixture" ("f" "Fixture shown by an Imenu annotation.") ("" ""))"#
-    ]],
+            r#"OK ("all-the-icons-ivy-rich-imenu-fixture" ("f" "Fixture shown by an Imenu annotation.") ("" ""))"#
+        ]],
     )
 }
 
@@ -312,12 +320,13 @@ fn custom_charset_coding_and_input_method_annotations_use_real_emacs_metadata() 
                  "neomacs-fixture")))"##,
         true,
         expect![[
-        r#"OK ("Fixture custom group documentation." "Fixture custom option documentation." "ASCII (ISO646 IRV)" "UTF-8 (no signature (BOM))" "Fixture input method documentation.")"#
-    ]],
+            r#"OK ("Fixture custom group documentation." "Fixture custom option documentation." "ASCII (ISO646 IRV)" "UTF-8 (no signature (BOM))" "Fixture input method documentation.")"#
+        ]],
     )
 }
 
-fn keybinding_annotations_extract_the_command_after_the_fixed_descbinds_prefix() -> ParityBatchCase {
+fn keybinding_annotations_extract_the_command_after_the_fixed_descbinds_prefix() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "keybinding_annotations_extract_the_command_after_the_fixed_descbinds_prefix",
         r##"(list
@@ -331,12 +340,13 @@ fn keybinding_annotations_extract_the_command_after_the_fixed_descbinds_prefix()
                 "too-short        backward-char"))"##,
         true,
         expect![[
-        r#"OK ("Edit file FILENAME." "Insert COUNT copies of CHARACTER." "" "Move point N characters backward (forward if N is negative).")"#
-    ]],
+            r#"OK ("Edit file FILENAME." "Insert COUNT copies of CHARACTER." "" "Move point N characters backward (forward if N is negative).")"#
+        ]],
     )
 }
 
-fn grep_and_magit_todo_transformers_preserve_payloads_while_annotating_location_fields() -> ParityBatchCase {
+fn grep_and_magit_todo_transformers_preserve_payloads_while_annotating_location_fields()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "grep_and_magit_todo_transformers_preserve_payloads_while_annotating_location_fields",
         r##"(mapcar
@@ -357,12 +367,13 @@ fn grep_and_magit_todo_transformers_preserve_payloads_while_annotating_location_
                  "single"))"##,
         true,
         expect![[
-        r#"OK (("src/main.rs:42:TODO handle edge:case" #("src/main.rs:42:TODO handle edge:case" 0 11 (face ivy-grep-info) 12 14 (face ivy-grep-info)) #("src/main.rs:42:TODO handle edge:case" 0 19 (face ivy-grep-info))) ("src/main.rs:error(permission denied)" #("src/main.rs:error(permission denied)" 0 11 (face ivy-grep-info) 18 35 (face error)) #("src/main.rs:error(permission denied)" 0 28 (face ivy-grep-info))) ("README.md TODO improve installation" "README.md TODO improve installation" #("README.md TODO improve installation" 0 9 (face ivy-grep-info))) ("single" "single" #("single " 0 6 (face ivy-grep-info))))"#
-    ]],
+            r#"OK (("src/main.rs:42:TODO handle edge:case" #("src/main.rs:42:TODO handle edge:case" 0 11 (face ivy-grep-info) 12 14 (face ivy-grep-info)) #("src/main.rs:42:TODO handle edge:case" 0 19 (face ivy-grep-info))) ("src/main.rs:error(permission denied)" #("src/main.rs:error(permission denied)" 0 11 (face ivy-grep-info) 18 35 (face error)) #("src/main.rs:error(permission denied)" 0 28 (face ivy-grep-info))) ("README.md TODO improve installation" "README.md TODO improve installation" #("README.md TODO improve installation" 0 9 (face ivy-grep-info))) ("single" "single" #("single " 0 6 (face ivy-grep-info))))"#
+        ]],
     )
 }
 
-fn bookmark_annotations_use_real_bookmark_records_for_name_path_and_compact_context() -> ParityBatchCase {
+fn bookmark_annotations_use_real_bookmark_records_for_name_path_and_compact_context()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "bookmark_annotations_use_real_bookmark_records_for_name_path_and_compact_context",
         r##"(let ((bookmark-alist
@@ -387,7 +398,8 @@ fn bookmark_annotations_use_real_bookmark_records_for_name_path_and_compact_cont
     )
 }
 
-fn installed_package_annotations_report_real_version_archive_summary_and_status() -> ParityBatchCase {
+fn installed_package_annotations_report_real_version_archive_summary_and_status() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "installed_package_annotations_report_real_version_archive_summary_and_status",
         r##"(let
@@ -413,8 +425,8 @@ fn installed_package_annotations_report_real_version_archive_summary_and_status(
                   "not-a-real-package-9.9")))"##,
         true,
         expect![[
-        r#"OK (("all-the-icons-ivy-rich-20230420.1234" "all-the-icons-ivy-rich" "" "" "" #("installed" 0 9 (face all-the-icons-ivy-rich-package-status-installed-face))) ("ivy-rich-20230425.1422" "ivy-rich" "" "" "" #("dependency" 0 10 (face all-the-icons-ivy-rich-package-status-installed-face))) ("not-a-real-package-9.9" "not-a-real-package" "" "" "" #("orphan" 0 6 (face all-the-icons-ivy-rich-error-face))))"#
-    ]],
+            r#"OK (("all-the-icons-ivy-rich-20230420.1234" "all-the-icons-ivy-rich" "" "" "" #("installed" 0 9 (face all-the-icons-ivy-rich-package-status-installed-face))) ("ivy-rich-20230425.1422" "ivy-rich" "" "" "" #("dependency" 0 10 (face all-the-icons-ivy-rich-package-status-installed-face))) ("not-a-real-package-9.9" "not-a-real-package" "" "" "" #("orphan" 0 6 (face all-the-icons-ivy-rich-error-face))))"#
+        ]],
     )
 }
 
@@ -460,8 +472,8 @@ fn library_buffer_and_kill_annotations_follow_live_editor_state() -> ParityBatch
                    (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (("all-the-icons-ivy-rich" nil) (#("all-the-icons-ivy-rich-not-loaded" 0 33 (face all-the-icons-ivy-rich-off-face)) all-the-icons-ivy-rich-off-face) "" t)"#
-    ]],
+            r#"OK (("all-the-icons-ivy-rich" nil) (#("all-the-icons-ivy-rich-not-loaded" 0 33 (face all-the-icons-ivy-rich-off-face)) all-the-icons-ivy-rich-off-face) "" t)"#
+        ]],
     )
 }
 

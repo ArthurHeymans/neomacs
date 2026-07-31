@@ -2962,8 +2962,13 @@ pub fn run_elisp_oracle_batch(
     ) -> Result<Vec<(String, EvalOutcome)>, String> {
         let sandbox = MelpaSandbox::new(batch_name)?;
         let form = wrap_elisp_batch_outcomes(setup, cases, OUTCOME_MARKER)?;
-        let phase =
-            run_outcome_phase(runtime, &sandbox, batch_name, ScenarioPhase::RestartProbe, &form)?;
+        let phase = run_outcome_phase(
+            runtime,
+            &sandbox,
+            batch_name,
+            ScenarioPhase::RestartProbe,
+            &form,
+        )?;
         let outcomes = extract_marked_batch_outcomes(&phase.stdout, OUTCOME_MARKER).map_err(
             |error| {
                 format!(
@@ -2999,8 +3004,7 @@ pub fn run_elisp_oracle_batch(
         )
     });
 
-    let gnu_outcomes =
-        gnu_result.map_err(|error| format!("GNU Emacs baseline failed: {error}"))?;
+    let gnu_outcomes = gnu_result.map_err(|error| format!("GNU Emacs baseline failed: {error}"))?;
     let neomacs_outcomes =
         neomacs_result.map_err(|error| format!("Neomacs comparison failed: {error}"))?;
 

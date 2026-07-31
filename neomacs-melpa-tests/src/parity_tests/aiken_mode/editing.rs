@@ -21,8 +21,8 @@ trace @\"validated\"\n")
 "##,
         true,
         expect![[
-        r#"OK ("let amount = 42\nexpect amount > 0\ntrace @\"validated\"\n" "// let amount = 42\n// expect amount > 0\n// trace @\"validated\"\n" "let amount = 42\nexpect amount > 0\ntrace @\"validated\"\n" t)"#
-    ]],
+            r#"OK ("let amount = 42\nexpect amount > 0\ntrace @\"validated\"\n" "// let amount = 42\n// expect amount > 0\n// trace @\"validated\"\n" "let amount = 42\nexpect amount > 0\ntrace @\"validated\"\n" t)"#
+        ]],
     )
 }
 
@@ -51,8 +51,8 @@ fn syntax_parser_tracks_code_line_comments_strings_and_nested_delimiters() -> Pa
 "##,
         true,
         expect![[
-        r#"OK (("fn" 0 nil nil) ("// not" 1 t nil) ("real comment" 1 nil t) ("when" 1 nil nil) ("fields, _" 2 nil nil) ("}" 1 nil t))"#
-    ]],
+            r#"OK (("fn" 0 nil nil) ("// not" 1 t nil) ("real comment" 1 nil t) ("when" 1 nil nil) ("fields, _" 2 nil nil) ("}" 1 nil t))"#
+        ]],
     )
 }
 
@@ -102,8 +102,8 @@ fn balanced_expression_navigation_skips_strings_and_comment_delimiters() -> Pari
 "##,
         true,
         expect![[
-        r#"OK ("{ Payment { owner: \"}\" }, // ignored }\n  [Some(1), Some(2)] }" 62 62 t 125)"#
-    ]],
+            r#"OK ("{ Payment { owner: \"}\" }, // ignored }\n  [Some(1), Some(2)] }" 62 62 t 125)"#
+        ]],
     )
 }
 
@@ -131,8 +131,8 @@ _ -> False\n\
 "##,
         true,
         expect![[
-        r#"OK ("validator spend {\nspend(datum: Data) {\nwhen datum is {\nConstr(fields) -> True\n_ -> False\n}\n}\n}\n" nil indent-relative nil)"#
-    ]],
+            r#"OK ("validator spend {\nspend(datum: Data) {\nwhen datum is {\nConstr(fields) -> True\n_ -> False\n}\n}\n}\n" nil indent-relative nil)"#
+        ]],
     )
 }
 
@@ -190,8 +190,8 @@ let amount = calculate_payment_amount(transaction)\n")
 "##,
         true,
         expect![[
-        r#"OK ("// This validator checks that every\n// payment output remains positive\n// and belongs to the expected owner\n// before settlement.\nlet amount = calculate_payment_amount(transaction)\n" t 130)"#
-    ]],
+            r#"OK ("// This validator checks that every\n// payment output remains positive\n// and belongs to the expected owner\n// before settlement.\nlet amount = calculate_payment_amount(transaction)\n" t 130)"#
+        ]],
     )
 }
 
@@ -213,8 +213,8 @@ fn comment_dwim_appends_and_removes_end_of_line_comment_practically() -> ParityB
 "##,
         true,
         expect![[
-        r#"OK ("let amount = 42                 // positive amount" "let amount = 42" 15)"#
-    ]],
+            r#"OK ("let amount = 42                 // positive amount" "let amount = 42" 15)"#
+        ]],
     )
 }
 

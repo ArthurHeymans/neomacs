@@ -1,6 +1,8 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_distel_autoload_batch, assert_auto_complete_distel_batch};
+use super::{
+    ParityBatchCase, assert_auto_complete_distel_autoload_batch, assert_auto_complete_distel_batch,
+};
 
 fn auto_complete_distel_exact_descriptor_and_companion_dependency_match() -> ParityBatchCase {
     ParityBatchCase::new(
@@ -24,8 +26,8 @@ fn auto_complete_distel_exact_descriptor_and_companion_dependency_match() -> Par
             popup))"##,
         true,
         expect![[
-        r#"OK ((auto-complete-distel "20180827.1344" "Erlang/distel completion backend for auto-complete-mode." ((auto-complete (1 4)) (distel-completion-lib (1 0 0))) ((:keywords "erlang" "distel" "auto-complete") (:revdesc . "acc4c0a55219") (:commit . "acc4c0a5521904203d797fe96b08e5fae4233c7e") (:url . "github.com/sebastiw/distel-completion"))) (distel-completion-lib "20180827.1344" "Completion library for Erlang/Distel." nil ((:keywords "erlang" "distel" "completion") (:revdesc . "acc4c0a55219") (:commit . "acc4c0a5521904203d797fe96b08e5fae4233c7e") (:url . "github.com/sebastiw/distel-completion"))) (auto-complete "20251231.1622" "Auto Completion for GNU Emacs." ((emacs (25 1)) (popup (0 5 8))) ((:maintainers ("Jen-Chieh Shen" . "jcs090218@gmail.com")) (:authors ("Tomohiro Matsuyama" . "m2ym.pub@gmail.com")) (:keywords "completion" "convenience") (:revdesc . "07f9915e0834") (:commit . "07f9915e08342410b933145d7934998709753a29") (:url . "https://github.com/auto-complete/auto-complete"))) (popup "20251231.1622" "Visual Popup User Interface." ((emacs (24 3))) ((:maintainers ("Jen-Chieh" . "jcs090218@gmail.com")) (:authors ("Tomohiro Matsuyama" . "m2ym.pub@gmail.com")) (:keywords "lisp") (:revdesc . "45a0b759076c") (:commit . "45a0b759076ce4139aba36dde0a2904136282e73") (:url . "https://github.com/auto-complete/popup-el"))))"#
-    ]],
+            r#"OK ((auto-complete-distel "20180827.1344" "Erlang/distel completion backend for auto-complete-mode." ((auto-complete (1 4)) (distel-completion-lib (1 0 0))) ((:keywords "erlang" "distel" "auto-complete") (:revdesc . "acc4c0a55219") (:commit . "acc4c0a5521904203d797fe96b08e5fae4233c7e") (:url . "github.com/sebastiw/distel-completion"))) (distel-completion-lib "20180827.1344" "Completion library for Erlang/Distel." nil ((:keywords "erlang" "distel" "completion") (:revdesc . "acc4c0a55219") (:commit . "acc4c0a5521904203d797fe96b08e5fae4233c7e") (:url . "github.com/sebastiw/distel-completion"))) (auto-complete "20251231.1622" "Auto Completion for GNU Emacs." ((emacs (25 1)) (popup (0 5 8))) ((:maintainers ("Jen-Chieh Shen" . "jcs090218@gmail.com")) (:authors ("Tomohiro Matsuyama" . "m2ym.pub@gmail.com")) (:keywords "completion" "convenience") (:revdesc . "07f9915e0834") (:commit . "07f9915e08342410b933145d7934998709753a29") (:url . "https://github.com/auto-complete/auto-complete"))) (popup "20251231.1622" "Visual Popup User Interface." ((emacs (24 3))) ((:maintainers ("Jen-Chieh" . "jcs090218@gmail.com")) (:authors ("Tomohiro Matsuyama" . "m2ym.pub@gmail.com")) (:keywords "lisp") (:revdesc . "45a0b759076c") (:commit . "45a0b759076ce4139aba36dde0a2904136282e73") (:url . "https://github.com/auto-complete/popup-el"))))"#
+        ]],
     )
 }
 
@@ -69,8 +71,8 @@ fn auto_complete_distel_exact_installed_payload_bytes_match_melpa_archives() -> 
              "distel-completion-lib.el")))"##,
         true,
         expect![[
-        r#"OK ((auto-complete-distel ("auto-complete-distel-pkg.el" 415 "19f9edabfe643d9245e7a14f35714ed501dcced987a9211fdbf4f2e58bf80696") ("auto-complete-distel.el" 1584 "c6d0e71b57662604e963cdaca992f2ed5851679d7310e5ff314f8c83c3089068")) (distel-completion-lib ("distel-completion-lib-pkg.el" 328 "86d936b2c0bb5b20563c9ac62a2d22cbbed6bc2df81c4cbc3a2c9e1f424f87c3") ("distel-completion-lib.el" 9247 "89a2e03906cdcae7f04ec032039d8e9cb1d91b4f964ec94dc406873f250d80e7")))"#
-    ]],
+            r#"OK ((auto-complete-distel ("auto-complete-distel-pkg.el" 415 "19f9edabfe643d9245e7a14f35714ed501dcced987a9211fdbf4f2e58bf80696") ("auto-complete-distel.el" 1584 "c6d0e71b57662604e963cdaca992f2ed5851679d7310e5ff314f8c83c3089068")) (distel-completion-lib ("distel-completion-lib-pkg.el" 328 "86d936b2c0bb5b20563c9ac62a2d22cbbed6bc2df81c4cbc3a2c9e1f424f87c3") ("distel-completion-lib.el" 9247 "89a2e03906cdcae7f04ec032039d8e9cb1d91b4f964ec94dc406873f250d80e7")))"#
+        ]],
     )
 }
 
@@ -117,8 +119,8 @@ fn auto_complete_distel_complete_target_symbol_surface_matches() -> ParityBatchC
                (car right))))))"##,
         true,
         expect![[
-        r#"OK ((auto-complete-distel nil t nil nil "auto-complete-distel.el") (auto-complete-distel-get-start t nil nil nil "auto-complete-distel.el"))"#
-    ]],
+            r#"OK ((auto-complete-distel nil t nil nil "auto-complete-distel.el") (auto-complete-distel-get-start t nil nil nil "auto-complete-distel.el"))"#
+        ]],
     )
 }
 
@@ -155,12 +157,13 @@ fn auto_complete_distel_callable_and_variable_contracts_match() -> ParityBatchCa
              'defvar))))"##,
         true,
         expect![[
-        r#"OK ((auto-complete-distel-get-start nil nil nil "Find a valid start of a completion word." "auto-complete-distel.el") (auto-complete-distel ((prefix . auto-complete-distel-get-start) (candidates distel-completion-complete ac-prefix (current-buffer)) (document . distel-completion-get-doc-string) (requires . 0) (symbol . "m")) "All it takes to start a auto-complete backend." nil "auto-complete-distel.el"))"#
-    ]],
+            r#"OK ((auto-complete-distel-get-start nil nil nil "Find a valid start of a completion word." "auto-complete-distel.el") (auto-complete-distel ((prefix . auto-complete-distel-get-start) (candidates distel-completion-complete ac-prefix (current-buffer)) (document . distel-completion-get-doc-string) (requires . 0) (symbol . "m")) "All it takes to start a auto-complete backend." nil "auto-complete-distel.el"))"#
+        ]],
     )
 }
 
-fn auto_complete_distel_source_entries_are_exact_and_resolve_to_callable_behavior() -> ParityBatchCase {
+fn auto_complete_distel_source_entries_are_exact_and_resolve_to_callable_behavior()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_distel_source_entries_are_exact_and_resolve_to_callable_behavior",
         r##"(let ((prefix
@@ -190,8 +193,8 @@ fn auto_complete_distel_source_entries_are_exact_and_resolve_to_callable_behavio
                   auto-complete-distel))))"##,
         true,
         expect![[
-        r#"OK (((prefix . auto-complete-distel-get-start) (candidates . #1=(distel-completion-complete ac-prefix (current-buffer))) (document . distel-completion-get-doc-string) (requires . 0) (symbol . "m")) auto-complete-distel-get-start #1# distel-completion-get-doc-string t t 0 "m")"#
-    ]],
+            r#"OK (((prefix . auto-complete-distel-get-start) (candidates . #1=(distel-completion-complete ac-prefix (current-buffer))) (document . distel-completion-get-doc-string) (requires . 0) (symbol . "m")) auto-complete-distel-get-start #1# distel-completion-get-doc-string t t 0 "m")"#
+        ]],
     )
 }
 
@@ -222,8 +225,8 @@ fn auto_complete_distel_load_history_records_the_complete_target_contract() -> P
            (featurep 'distel)))"##,
         true,
         expect![[
-        r#"OK ("auto-complete-distel.el" ((require . auto-complete) (require . distel-completion-lib) (defun . auto-complete-distel-get-start) (provide . auto-complete-distel)) t t t)"#
-    ]],
+            r#"OK ("auto-complete-distel.el" ((require . auto-complete) (require . distel-completion-lib) (defun . auto-complete-distel-get-start) (provide . auto-complete-distel)) t t t)"#
+        ]],
     )
 }
 
@@ -280,8 +283,8 @@ fn auto_complete_distel_companion_library_surface_and_defaults_match() -> Parity
             distel-completion-try-erl-complete-cache)))"##,
         true,
         expect![[
-        r#"OK (((&distel-completion-receive-args nil nil) (&distel-completion-receive-completions nil nil) (&distel-completion-receive-describe (args) nil) (distel-completion-args (mod fun) nil) (distel-completion-complete (search-string buf) nil) (distel-completion-complete-function (module function) nil) (distel-completion-complete-module (module) nil) (distel-completion-describe (mod fun args) nil) (distel-completion-get-dabbrevs (args &optional times limit) nil) (distel-completion-get-doc-buffer (args) nil) (distel-completion-get-doc-string (args) t) (distel-completion-get-docs-from-internet-p (mod fun) nil) (distel-completion-get-functions (args) nil) (distel-completion-get-metadoc (mod fun) nil) (distel-completion-grab-word nil t) (distel-completion-html-to-string (string) nil) (distel-completion-is-comment-or-cite-p (&optional poin) nil) (distel-completion-local-docs (mod fun) nil)) (t nil "Try to find the documentation from erlang.org") ("a-zA-Z:_-" nil "Which syntax to skip backwards to find start of word.") (nil "" nil))"#
-    ]],
+            r#"OK (((&distel-completion-receive-args nil nil) (&distel-completion-receive-completions nil nil) (&distel-completion-receive-describe (args) nil) (distel-completion-args (mod fun) nil) (distel-completion-complete (search-string buf) nil) (distel-completion-complete-function (module function) nil) (distel-completion-complete-module (module) nil) (distel-completion-describe (mod fun args) nil) (distel-completion-get-dabbrevs (args &optional times limit) nil) (distel-completion-get-doc-buffer (args) nil) (distel-completion-get-doc-string (args) t) (distel-completion-get-docs-from-internet-p (mod fun) nil) (distel-completion-get-functions (args) nil) (distel-completion-get-metadoc (mod fun) nil) (distel-completion-grab-word nil t) (distel-completion-html-to-string (string) nil) (distel-completion-is-comment-or-cite-p (&optional poin) nil) (distel-completion-local-docs (mod fun) nil)) (t nil "Try to find the documentation from erlang.org") ("a-zA-Z:_-" nil "Which syntax to skip backwards to find start of word.") (nil "" nil))"#
+        ]],
     )
 }
 
@@ -331,8 +334,7 @@ fn registry_auto_complete_distel_batch() {
 
 #[test]
 fn registry_auto_complete_distel_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        auto_complete_distel_generated_autoload_contains_only_feature_contract(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![auto_complete_distel_generated_autoload_contains_only_feature_contract()];
     assert_auto_complete_distel_autoload_batch(&cases);
 }

@@ -90,8 +90,8 @@ fn agtags_update_tags_replaces_a_stale_database_and_activates_the_backend() -> P
 "####,
         true,
         expect![[
-        r#"OK (("[ORACLE-SANDBOX]/agtags-database-workflow/" nil (("GPATH" nil nil) ("GTAGS" nil nil) ("GRTAGS" nil nil))) ("[ORACLE-SANDBOX]/agtags-database-workflow/" agtags (("GPATH" t t) ("GTAGS" t t) ("GRTAGS" t t))) "Tags create successed: [ORACLE-SANDBOX]/agtags-database-workflow/\n" (("GPATH" t nil) ("GTAGS" t nil) ("GRTAGS" t nil)) t (nil nil) (agtags t t t) (("q" agtags-switch-dwim) ("b" agtags-update-tags) ("f" agtags-open-file) ("F" agtags-find-file) ("t" agtags-find-tag) ("r" agtags-find-rtag) ("p" agtags-find-with-string) ("g" agtags-find-with-pattern)) "gtags cwd=[ORACLE-SANDBOX]/agtags-database-workflow <-i>\n")"#
-    ]],
+            r#"OK (("[ORACLE-SANDBOX]/agtags-database-workflow/" nil (("GPATH" nil nil) ("GTAGS" nil nil) ("GRTAGS" nil nil))) ("[ORACLE-SANDBOX]/agtags-database-workflow/" agtags (("GPATH" t t) ("GTAGS" t t) ("GRTAGS" t t))) "Tags create successed: [ORACLE-SANDBOX]/agtags-database-workflow/\n" (("GPATH" t nil) ("GTAGS" t nil) ("GRTAGS" t nil)) t (nil nil) (agtags t t t) (("q" agtags-switch-dwim) ("b" agtags-update-tags) ("f" agtags-open-file) ("F" agtags-find-file) ("t" agtags-find-tag) ("r" agtags-find-rtag) ("p" agtags-find-with-string) ("g" agtags-find-with-pattern)) "gtags cwd=[ORACLE-SANDBOX]/agtags-database-workflow <-i>\n")"#
+        ]],
     )
 }
 
@@ -145,8 +145,8 @@ fn agtags_reports_failure_and_stays_inert_when_gnu_global_is_not_installed() -> 
 "####,
         true,
         expect![[
-        r#"OK ((nil nil) "Tags create failed: [ORACLE-SANDBOX]/agtags-missing-global/\n" ("." ".." ".git" "docs" "include" "src") ("[ORACLE-SANDBOX]/agtags-missing-global/" nil nil "parser_init" nil nil) (nil nil))"#
-    ]],
+            r#"OK ((nil nil) "Tags create failed: [ORACLE-SANDBOX]/agtags-missing-global/\n" ("." ".." ".git" "docs" "include" "src") ("[ORACLE-SANDBOX]/agtags-missing-global/" nil nil "parser_init" nil nil) (nil nil))"#
+        ]],
     )
 }
 

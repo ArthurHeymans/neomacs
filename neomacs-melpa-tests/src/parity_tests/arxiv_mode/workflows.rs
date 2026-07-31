@@ -143,8 +143,8 @@ fn simple_search_renders_results_navigates_to_an_abstract_and_opens_the_paper() 
             arxiv-highlight-overlay nil))))"##,
         true,
         expect![[
-        r#"OK ((arxiv-mode " Executable Editors in Practice\n Ada Lovelace, Grace Hopper\n 2025-01-02  [cs.PL] [cs.SE] \n\n Deterministic Display Pipelines\n Alan Turing, Barbara Liskov, et al.\n 2025-01-04  [cs.SE] [cs.PL] \n\n" ((all t "proof assistants \"editor semantics\"")) "all:proof assistants \"editor semantics\"" 2 1 2 0 (1 92) (arxiv-next-entry arxiv-prev-entry arxiv-SPC arxiv-open-current-url arxiv-download-pdf arxiv-download-pdf-export-bibtex arxiv-export-bibtex arxiv-export-bibtex-to-buffer)) (1 5 (92 193)) (arxiv-abstract-mode " arXiv:2501.00002" "\nDeterministic Display Pipelines\n\nAlan Turing, Barbara Liskov, Edsger Dijkstra\n\n    Rendering buffers reproducibly across implementations.\n\nComments: N/A\nSubjects: Software Engineering (cs.SE); Programming Languages (cs.PL)\nSubmitted: 2025-01-04 05:06:07 \nUpdated: 2025-01-05 06:07:08 " (("Deterministic Display Pipelines" "Link: http://arxiv.org/abs/2501.00002" t) ("Alan Turing" "Look up author: Alan Turing" t) ("Barbara Liskov" "Look up author: Barbara Liskov" t) ("Edsger Dijkstra" "Look up author: Edsger Dijkstra" t)) t t) (("http://export.arxiv.org/api/query?search_query=all:proof+assistants+%22editor+semantics%22&start=0&max_results=25")) (("http://arxiv.org/abs/2501.00002")))"#
-    ]],
+            r#"OK ((arxiv-mode " Executable Editors in Practice\n Ada Lovelace, Grace Hopper\n 2025-01-02  [cs.PL] [cs.SE] \n\n Deterministic Display Pipelines\n Alan Turing, Barbara Liskov, et al.\n 2025-01-04  [cs.SE] [cs.PL] \n\n" ((all t "proof assistants \"editor semantics\"")) "all:proof assistants \"editor semantics\"" 2 1 2 0 (1 92) (arxiv-next-entry arxiv-prev-entry arxiv-SPC arxiv-open-current-url arxiv-download-pdf arxiv-download-pdf-export-bibtex arxiv-export-bibtex arxiv-export-bibtex-to-buffer)) (1 5 (92 193)) (arxiv-abstract-mode " arXiv:2501.00002" "\nDeterministic Display Pipelines\n\nAlan Turing, Barbara Liskov, Edsger Dijkstra\n\n    Rendering buffers reproducibly across implementations.\n\nComments: N/A\nSubjects: Software Engineering (cs.SE); Programming Languages (cs.PL)\nSubmitted: 2025-01-04 05:06:07 \nUpdated: 2025-01-05 06:07:08 " (("Deterministic Display Pipelines" "Link: http://arxiv.org/abs/2501.00002" t) ("Alan Turing" "Look up author: Alan Turing" t) ("Barbara Liskov" "Look up author: Barbara Liskov" t) ("Edsger Dijkstra" "Look up author: Edsger Dijkstra" t)) t t) (("http://export.arxiv.org/api/query?search_query=all:proof+assistants+%22editor+semantics%22&start=0&max_results=25")) (("http://arxiv.org/abs/2501.00002")))"#
+        ]],
     )
 }
 
@@ -245,12 +245,13 @@ fn result_key_downloads_the_pdf_and_appends_a_linked_bibtex_entry() -> ParityBat
             arxiv-highlight-overlay nil))))"##,
         true,
         expect![[
-        r#"OK ((("http://export.arxiv.org/api/query?search_query=all:proof+assistant&start=0&max_results=10")) ((choose "save pdf as: " "[ORACLE-SANDBOX]" (nil nil "2502.42424.pdf")) (copy "http://arxiv.org/pdf/2502.42424" "[ORACLE-SANDBOX]/chosen-paper.pdf" 1) (choose "export to bibliography file: " "[ORACLE-SANDBOX]/library.bib" (nil confirm))) (44 "190d95b6d075f54ed65fe902b2fd51da639f6f63e830706cbbdea27fe7f36878" "%PDF-1.7\narxiv-mode practical fixture\n%%EOF\n") "% Team bibliography\n@article{lovelace25:_pract_proof_assis,\ntitle = {Practical Proof Assistants},\nauthor = {Lovelace, Ada and Turing, Alan M.},\nabstract = {A reproducible proof assistant workflow.},\narchivePrefix = {arXiv},\neprint = {2502.42424},\nurl = {http://arxiv.org/abs/2502.42424},\nyear = {2025},\ndoi = {10.1000/proof.42424},\njournal = {Journal of Mechanized Reasoning},\nfile = {:[ORACLE-SANDBOX]/chosen-paper.pdf:pdf}\n}\n")"#
-    ]],
+            r#"OK ((("http://export.arxiv.org/api/query?search_query=all:proof+assistant&start=0&max_results=10")) ((choose "save pdf as: " "[ORACLE-SANDBOX]" (nil nil "2502.42424.pdf")) (copy "http://arxiv.org/pdf/2502.42424" "[ORACLE-SANDBOX]/chosen-paper.pdf" 1) (choose "export to bibliography file: " "[ORACLE-SANDBOX]/library.bib" (nil confirm))) (44 "190d95b6d075f54ed65fe902b2fd51da639f6f63e830706cbbdea27fe7f36878" "%PDF-1.7\narxiv-mode practical fixture\n%%EOF\n") "% Team bibliography\n@article{lovelace25:_pract_proof_assis,\ntitle = {Practical Proof Assistants},\nauthor = {Lovelace, Ada and Turing, Alan M.},\nabstract = {A reproducible proof assistant workflow.},\narchivePrefix = {arXiv},\neprint = {2502.42424},\nurl = {http://arxiv.org/abs/2502.42424},\nyear = {2025},\ndoi = {10.1000/proof.42424},\njournal = {Journal of Mechanized Reasoning},\nfile = {:[ORACLE-SANDBOX]/chosen-paper.pdf:pdf}\n}\n")"#
+        ]],
     )
 }
 
-fn daily_list_sorts_primary_submissions_then_fetches_and_renders_the_next_page() -> ParityBatchCase {
+fn daily_list_sorts_primary_submissions_then_fetches_and_renders_the_next_page() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "daily_list_sorts_primary_submissions_then_fetches_and_renders_the_next_page",
         r##"(let* ((arxiv-pop-up-new-frame nil)
@@ -357,8 +358,8 @@ fn daily_list_sorts_primary_submissions_then_fetches_and_renders_the_next_page()
             arxiv-highlight-overlay nil))))"##,
         true,
         expect![[
-        r#"OK ((("Primary Category First" "Cross Listed First") ((date-start . "202401051900") (date-end . "202401081900") (category . "cs.PL")) " Showing new submissions in cs.PL from 20240105(Fri) to 20240108(Mon)." 1 2 3 " Primary Category First\n Ada Lovelace\n 2024-01-08  [cs.PL] [cs.SE] \n\n Cross Listed First\n Alan Turing\n 2024-01-08  [cs.AI] [cs.PL] \n\n") (2 9 ("Primary Category First" "Cross Listed First" "Third Page Result") " Primary Category First\n Ada Lovelace\n 2024-01-08  [cs.PL] [cs.SE] \n\n Cross Listed First\n Alan Turing\n 2024-01-08  [cs.AI] [cs.PL] \n\n Third Page Result\n Grace Hopper\n 2024-01-08  [cs.PL] \n\n" (134 190)) (("http://export.arxiv.org/api/query?search_query=submittedDate:[202401051900+TO+202401081900]+AND+cat:cs.PL*&sortBy=submittedDate&sortOrder=ascending&start=0&max_results=2") ("http://export.arxiv.org/api/query?search_query=submittedDate:[202401051900+TO+202401081900]+AND+cat:cs.PL*&sortBy=submittedDate&sortOrder=ascending&start=2&max_results=2")))"#
-    ]],
+            r#"OK ((("Primary Category First" "Cross Listed First") ((date-start . "202401051900") (date-end . "202401081900") (category . "cs.PL")) " Showing new submissions in cs.PL from 20240105(Fri) to 20240108(Mon)." 1 2 3 " Primary Category First\n Ada Lovelace\n 2024-01-08  [cs.PL] [cs.SE] \n\n Cross Listed First\n Alan Turing\n 2024-01-08  [cs.AI] [cs.PL] \n\n") (2 9 ("Primary Category First" "Cross Listed First" "Third Page Result") " Primary Category First\n Ada Lovelace\n 2024-01-08  [cs.PL] [cs.SE] \n\n Cross Listed First\n Alan Turing\n 2024-01-08  [cs.AI] [cs.PL] \n\n Third Page Result\n Grace Hopper\n 2024-01-08  [cs.PL] \n\n" (134 190)) (("http://export.arxiv.org/api/query?search_query=submittedDate:[202401051900+TO+202401081900]+AND+cat:cs.PL*&sortBy=submittedDate&sortOrder=ascending&start=0&max_results=2") ("http://export.arxiv.org/api/query?search_query=submittedDate:[202401051900+TO+202401081900]+AND+cat:cs.PL*&sortBy=submittedDate&sortOrder=ascending&start=2&max_results=2")))"#
+        ]],
     )
 }
 

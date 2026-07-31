@@ -233,16 +233,6 @@ pub(crate) fn assert_ob_arduino_signal_parity(elisp_form: &str, expected: Expect
     assert_arduino_source_signal_parity("ob-arduino.el", elisp_form, expected);
 }
 
-
-
-
-
-
-
-
-
-
-
 /// Multi-probe batch for `assert_arduino_init_parity` cases (2a).
 pub(crate) fn assert_arduino_init_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

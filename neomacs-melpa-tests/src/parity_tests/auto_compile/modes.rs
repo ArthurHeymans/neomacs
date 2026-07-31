@@ -59,12 +59,13 @@ fn auto_compile_local_mode_rejects_non_elisp_buffers_and_rolls_back_state() -> P
            t)))"##,
         true,
         expect![[
-        r#"OK (fundamental-mode (:signal user-error ("‘auto-compile-mode’ only makes sense in ‘emacs-lisp-mode’")) nil nil)"#
-    ]],
+            r#"OK (fundamental-mode (:signal user-error ("‘auto-compile-mode’ only makes sense in ‘emacs-lisp-mode’")) nil nil)"#
+        ]],
     )
 }
 
-fn auto_compile_global_save_mode_updates_existing_eligible_buffers_and_cleans_up() -> ParityBatchCase {
+fn auto_compile_global_save_mode_updates_existing_eligible_buffers_and_cleans_up() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_compile_global_save_mode_updates_existing_eligible_buffers_and_cleans_up",
         r##"(let ((elisp-buffer
@@ -111,7 +112,8 @@ fn auto_compile_global_save_mode_updates_existing_eligible_buffers_and_cleans_up
     )
 }
 
-fn auto_compile_global_turn_on_requires_exact_emacs_lisp_mode_not_merely_derived_mode() -> ParityBatchCase {
+fn auto_compile_global_turn_on_requires_exact_emacs_lisp_mode_not_merely_derived_mode()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_compile_global_turn_on_requires_exact_emacs_lisp_mode_not_merely_derived_mode",
         r##"(progn
@@ -136,12 +138,13 @@ fn auto_compile_global_turn_on_requires_exact_emacs_lisp_mode_not_merely_derived
              auto-compile-mode))))"##,
         true,
         expect![
-        "OK ((emacs-lisp-mode emacs-lisp-mode t) (auto-compile-test-derived-mode emacs-lisp-mode nil))"
-    ],
+            "OK ((emacs-lisp-mode emacs-lisp-mode t) (auto-compile-test-derived-mode emacs-lisp-mode nil))"
+        ],
     )
 }
 
-fn auto_compile_failed_modified_toggle_changes_option_and_reports_both_transitions() -> ParityBatchCase {
+fn auto_compile_failed_modified_toggle_changes_option_and_reports_both_transitions()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_compile_failed_modified_toggle_changes_option_and_reports_both_transitions",
         r##"(let ((auto-compile-mark-failed-modified nil))
@@ -197,8 +200,8 @@ fn auto_compile_custom_mode_line_setter_repositions_and_removes_control() -> Par
             original-option)))"##,
         true,
         expect![
-        "OK ((mode-line-front-space mode-line-modified mode-line-auto-compile mode-line-buffer-identification) (mode-line-front-space mode-line-modified mode-line-buffer-identification) nil)"
-    ],
+            "OK ((mode-line-front-space mode-line-modified mode-line-auto-compile mode-line-buffer-identification) (mode-line-front-space mode-line-modified mode-line-buffer-identification) nil)"
+        ],
     )
 }
 
@@ -256,7 +259,8 @@ fn auto_compile_ding_obeys_option_without_leaking_terminal_side_effects() -> Par
     )
 }
 
-fn auto_compile_display_log_signals_when_absent_and_selects_existing_compile_log() -> ParityBatchCase {
+fn auto_compile_display_log_signals_when_absent_and_selects_existing_compile_log() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_compile_display_log_signals_when_absent_and_selects_existing_compile_log",
         r##"(let ((existing
@@ -283,8 +287,8 @@ fn auto_compile_display_log_signals_when_absent_and_selects_existing_compile_log
              (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ((:signal user-error ("Buffer *Compile-Log* doesn’t exist")) "*Compile-Log*" "*Compile-Log*" "warning one\nwarning two\n")"#
-    ]],
+            r#"OK ((:signal user-error ("Buffer *Compile-Log* doesn’t exist")) "*Compile-Log*" "*Compile-Log*" "warning one\nwarning two\n")"#
+        ]],
     )
 }
 

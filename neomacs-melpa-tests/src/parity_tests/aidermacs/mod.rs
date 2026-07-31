@@ -43,10 +43,5 @@ pub(crate) fn assert_aidermacs_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_aidermacs_parity` cases (2a).
 pub(crate) fn assert_aidermacs_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        aidermacs_oracle(),
-        &name,
-        "aidermacs_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(aidermacs_oracle(), &name, "aidermacs_parity", cases);
 }

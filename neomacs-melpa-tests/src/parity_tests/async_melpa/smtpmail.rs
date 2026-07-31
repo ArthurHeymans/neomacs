@@ -17,8 +17,8 @@ fn current_smtpmail_registry_custom_group_and_hook_metadata_match_gnu_emacs() ->
 "##,
         true,
         expect![[
-        r#"OK ("Send e-mail with smtpmail.el asynchronously" nil nil "Hook running in the child emacs in ‘async-smtpmail-send-it’.\nIt is called just before calling ‘smtpmail-send-it’." nil)"#
-    ]],
+            r#"OK ("Send e-mail with smtpmail.el asynchronously" nil nil "Hook running in the child emacs in ‘async-smtpmail-send-it’.\nIt is called just before calling ‘smtpmail-send-it’." nil)"#
+        ]],
     )
 }
 
@@ -58,8 +58,8 @@ fn current_smtpmail_send_captures_complete_message_environment_and_completion() 
 "##,
         true,
         expect![[
-        r#"OK (fixture-mail-process lambda 65 90 145 213 3501 9021 ("Delivering message to Alice <alice@example.test>, bob@example.test..." "Delivering message to Alice <alice@example.test>, bob@example.test...done"))"#
-    ]],
+            r#"OK (fixture-mail-process lambda 65 90 145 213 3501 9021 ("Delivering message to Alice <alice@example.test>, bob@example.test..." "Delivering message to Alice <alice@example.test>, bob@example.test...done"))"#
+        ]],
     )
 }
 
@@ -109,8 +109,8 @@ fn current_smtpmail_child_recreates_unibyte_buffer_runs_hook_then_sends() -> Par
 "##,
         true,
         expect![[
-        r#"OK (:sent ((hook "From: sender@example.test\nTo: recipient@example.test\nSubject: fixture\n\nASCII wire payload\15\n" nil nil) (send "From: sender@example.test\nTo: recipient@example.test\nSubject: fixture\n\nASCII wire payload\15\n" nil nil)) t " *temp*")"#
-    ]],
+            r#"OK (:sent ((hook "From: sender@example.test\nTo: recipient@example.test\nSubject: fixture\n\nASCII wire payload\15\n" nil nil) (send "From: sender@example.test\nTo: recipient@example.test\nSubject: fixture\n\nASCII wire payload\15\n" nil nil)) t " *temp*")"#
+        ]],
     )
 }
 

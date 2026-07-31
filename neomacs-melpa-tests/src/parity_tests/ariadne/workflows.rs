@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_ariadne_batch, assert_ariadne_with_legacy_cl_batch};
 
-fn documented_key_binding_drives_a_multi_reply_definition_session_over_a_real_byte_stream() -> ParityBatchCase {
+fn documented_key_binding_drives_a_multi_reply_definition_session_over_a_real_byte_stream()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "documented_key_binding_drives_a_multi_reply_definition_session_over_a_real_byte_stream",
         r##"(let* ((sandbox
@@ -303,12 +304,13 @@ fn documented_key_binding_drives_a_multi_reply_definition_session_over_a_real_by
                (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK (ariadne-goto-definition (1 "ariadne" "localhost" 39014 "*ariadne*" ariadne-filter ariadne-sentinel nil nil) ([call ariadne find ("[ORACLE-SANDBOX]/ariadne-project/src/Main.hs" 2 9)] [call ariadne find ("[ORACLE-SANDBOX]/ariadne-project/src/Main.hs" 3 10)] [call ariadne find ("[ORACLE-SANDBOX]/ariadne-project/src/Main.hs" 4 9)] [call ariadne find ("[ORACLE-SANDBOX]/ariadne-project/src/Main.hs" 5 10)]) ("Lib.hs" 3 6 49 1 54 53) (2 9) "The name at point is defined in Data.Map.Internal" "BERT-RPC error: database unavailable" (t 5 10 19 1 "BERT-RPC error: database unavailable"))"#
-    ]],
+            r#"OK (ariadne-goto-definition (1 "ariadne" "localhost" 39014 "*ariadne*" ariadne-filter ariadne-sentinel nil nil) ([call ariadne find ("[ORACLE-SANDBOX]/ariadne-project/src/Main.hs" 2 9)] [call ariadne find ("[ORACLE-SANDBOX]/ariadne-project/src/Main.hs" 3 10)] [call ariadne find ("[ORACLE-SANDBOX]/ariadne-project/src/Main.hs" 4 9)] [call ariadne find ("[ORACLE-SANDBOX]/ariadne-project/src/Main.hs" 5 10)]) ("Lib.hs" 3 6 49 1 54 53) (2 9) "The name at point is defined in Data.Map.Internal" "BERT-RPC error: database unavailable" (t 5 10 19 1 "BERT-RPC error: database unavailable"))"#
+        ]],
     )
 }
 
-fn documented_command_ignores_an_unsaved_draft_then_reports_an_offline_server_after_save() -> ParityBatchCase {
+fn documented_command_ignores_an_unsaved_draft_then_reports_an_offline_server_after_save()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "documented_command_ignores_an_unsaved_draft_then_reports_an_offline_server_after_save",
         r##"(let* ((sandbox
@@ -391,8 +393,8 @@ fn documented_command_ignores_an_unsaved_draft_then_reports_an_offline_server_af
              (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (ariadne-goto-definition (nil t nil 0 t) ("Offline.hs" t t 2 9 nil 1 nil "Failed to connect to Ariadne.  Is ariadne-server running?" nil))"#
-    ]],
+            r#"OK (ariadne-goto-definition (nil t nil 0 t) ("Offline.hs" t t 2 9 nil 1 nil "Failed to connect to Ariadne.  Is ariadne-server running?" nil))"#
+        ]],
     )
 }
 

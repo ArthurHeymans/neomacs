@@ -60,10 +60,5 @@ pub(crate) fn assert_anyins_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_anyins_parity` cases (2a).
 pub(crate) fn assert_anyins_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        anyins_oracle(),
-        &name,
-        "anyins_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(anyins_oracle(), &name, "anyins_parity", cases);
 }

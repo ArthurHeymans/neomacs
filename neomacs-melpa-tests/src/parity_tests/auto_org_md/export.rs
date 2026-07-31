@@ -110,8 +110,8 @@ fn auto_org_md_export_forwards_exporter_return_values_exactly() -> ParityBatchCa
          '(nil t :file "notes.md" 42 (nested value)))"##,
         true,
         expect![[
-        r#"OK ((nil nil) (t t) (:file :file) ("notes.md" "notes.md") (42 42) (#1=(nested value) #1#))"#
-    ]],
+            r#"OK ((nil nil) (t t) (:file :file) ("notes.md" "notes.md") (42 42) (#1=(nested value) #1#))"#
+        ]],
     )
 }
 
@@ -209,7 +209,8 @@ fn auto_org_md_export_uses_runtime_derived_mode_predicate() -> ParityBatchCase {
     )
 }
 
-fn auto_org_md_export_is_noninteractive_but_callable_via_funcall_interactively() -> ParityBatchCase {
+fn auto_org_md_export_is_noninteractive_but_callable_via_funcall_interactively() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_org_md_export_is_noninteractive_but_callable_via_funcall_interactively",
         r##"(with-temp-buffer

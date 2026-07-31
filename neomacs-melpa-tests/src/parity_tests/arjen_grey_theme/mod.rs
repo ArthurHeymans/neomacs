@@ -75,8 +75,6 @@ pub(crate) fn assert_arjen_grey_theme_with_helm_parity(elisp_form: &str, expecte
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
 
-
-
 /// Multi-probe batch for `assert_arjen_grey_theme_autoload_parity` cases (2a).
 pub(crate) fn assert_arjen_grey_theme_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -104,10 +102,10 @@ pub(crate) fn assert_arjen_grey_theme_with_helm_batch(cases: &[ParityBatchCase])
     let name = current_test_name();
     assert_oracle_batch_cases(
         CachedMelpaOracle::new(ARJEN_GREY_THEME_MELPA_PIN, "arjen-grey-theme.el")
-        .expect("prepare pinned arjen-grey-theme source below ./tmp")
-        .with_melpa_dependency(HELM_MELPA_PIN)
-        .expect("prepare pinned Helm dependency below ./tmp")
-        .with_timeout(ARJEN_GREY_THEME_TEST_TIMEOUT),
+            .expect("prepare pinned arjen-grey-theme source below ./tmp")
+            .with_melpa_dependency(HELM_MELPA_PIN)
+            .expect("prepare pinned Helm dependency below ./tmp")
+            .with_timeout(ARJEN_GREY_THEME_TEST_TIMEOUT),
         &name,
         "arjen_grey_theme_with_helm_parity",
         cases,

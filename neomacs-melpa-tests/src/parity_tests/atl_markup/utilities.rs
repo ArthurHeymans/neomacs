@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atl_markup_batch};
 
-fn atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_call() -> ParityBatchCase {
+fn atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_call()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_call",
         r##"(let ((message-log-max
@@ -31,7 +32,8 @@ fn atl_markup_mute_apply_forwards_values_and_binds_message_controls_only_inside_
     )
 }
 
-fn atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_status() -> ParityBatchCase {
+fn atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_status()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_status",
         r##"(let* ((messages-buffer
@@ -80,7 +82,8 @@ fn atl_markup_mute_apply_suppresses_practical_message_log_output_and_restores_st
     )
 }
 
-fn atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwind() -> ParityBatchCase {
+fn atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwind()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_mute_apply_records_error_propagation_and_message_state_after_unwind",
         r##"(let ((message-log-max

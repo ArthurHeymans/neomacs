@@ -43,8 +43,8 @@ fn alert_termux_callable_surface_and_dependency_contract_match() -> ParityBatchC
             alert-encode-string alert-message-notify)))"##,
         true,
         expect![
-        "OK ((info) nil nil nil ((alert t (message &rest --cl-rest--)) (alert-define-style t (name &rest plist)) (alert-encode-string t (str)) (alert-message-notify t (info))))"
-    ],
+            "OK ((info) nil nil nil ((alert t (message &rest --cl-rest--)) (alert-define-style t (name &rest plist)) (alert-encode-string t (str)) (alert-message-notify t (info))))"
+        ],
     )
 }
 
@@ -80,8 +80,8 @@ fn alert_termux_style_can_be_selected_as_alert_default() -> ParityBatchCase {
                 (length alert-active-alerts))))))"##,
         true,
         expect![[
-        r#"OK (nil ((:message "Build finished") (:title "termux-origin") (:severity high) (:category ci) (:mode text-mode) (:persistent nil) (:data (:job 7))) 1)"#
-    ]],
+            r#"OK (nil ((:message "Build finished") (:title "termux-origin") (:severity high) (:category ci) (:mode text-mode) (:persistent nil) (:data (:job 7))) 1)"#
+        ]],
     )
 }
 
@@ -115,8 +115,7 @@ fn registry_alert_termux_batch() {
 
 #[test]
 fn registry_alert_termux_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        alert_termux_autoload_file_does_not_load_package_or_publish_commands(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![alert_termux_autoload_file_does_not_load_package_or_publish_commands()];
     assert_alert_termux_autoload_batch(&cases);
 }

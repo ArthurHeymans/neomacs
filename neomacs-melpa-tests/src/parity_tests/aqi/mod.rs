@@ -74,10 +74,5 @@ pub(crate) fn assert_aqi_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_aqi_parity` cases (2a).
 pub(crate) fn assert_aqi_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        aqi_oracle("aqi.el"),
-        &name,
-        "aqi_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(aqi_oracle("aqi.el"), &name, "aqi_parity", cases);
 }

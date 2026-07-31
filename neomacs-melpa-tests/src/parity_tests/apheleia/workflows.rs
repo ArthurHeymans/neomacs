@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_apheleia_batch};
 
-fn apheleia_ports_upstream_word_replacement_workflow_and_keeps_point_on_the_same_word() -> ParityBatchCase {
+fn apheleia_ports_upstream_word_replacement_workflow_and_keeps_point_on_the_same_word()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apheleia_ports_upstream_word_replacement_workflow_and_keeps_point_on_the_same_word",
         r##"(with-temp-buffer
@@ -30,12 +31,13 @@ fn apheleia_ports_upstream_word_replacement_workflow_and_keeps_point_on_the_same
             (buffer-modified-p))))"##,
         true,
         expect![[
-        r#"OK ((:error nil) "The slow brown fox jumped over the studious dog." 12 "brown" 11 t)"#
-    ]],
+            r#"OK ((:error nil) "The slow brown fox jumped over the studious dog." 12 "brown" 11 t)"#
+        ]],
     )
 }
 
-fn apheleia_preserves_two_displayed_windows_point_mark_and_mark_ring_through_a_real_patch() -> ParityBatchCase {
+fn apheleia_preserves_two_displayed_windows_point_mark_and_mark_ring_through_a_real_patch()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apheleia_preserves_two_displayed_windows_point_mark_and_mark_ring_through_a_real_patch",
         r##"(save-window-excursion
@@ -168,12 +170,13 @@ fn apheleia_preserves_two_displayed_windows_point_mark_and_mark_ring_through_a_r
                (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK (:callback (:error nil) :changed-line "line 20" :point (21 0 "line") :mark (36 0) :mark-active t :mark-ring ((31 0)) :windows ((:start 11 :point 21 :column 0) (:start 11 :point 31 :column 2)) :modified t)"#
-    ]],
+            r#"OK (:callback (:error nil) :changed-line "line 20" :point (21 0 "line") :mark (36 0) :mark-active t :mark-ring ((31 0)) :windows ((:start 11 :point 21 :column 0) (:start 11 :point 31 :column 2)) :modified t)"#
+        ]],
     )
 }
 
-fn apheleia_ports_upstream_line_reordering_workflow_without_moving_point_from_line_two() -> ParityBatchCase {
+fn apheleia_ports_upstream_line_reordering_workflow_without_moving_point_from_line_two()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apheleia_ports_upstream_line_reordering_workflow_without_moving_point_from_line_two",
         r##"(with-temp-buffer
@@ -202,12 +205,13 @@ fn apheleia_ports_upstream_line_reordering_workflow_without_moving_point_from_li
              (line-end-position)))))"##,
         true,
         expect![[
-        r#"OK ((:error nil) "line four moves first\nline one\nline two with cursor\nline three\n" 3 20 "line two with cursor")"#
-    ]],
+            r#"OK ((:error nil) "line four moves first\nline one\nline two with cursor\nline three\n" 3 20 "line two with cursor")"#
+        ]],
     )
 }
 
-fn apheleia_ports_upstream_whitespace_insertion_alignment_case_at_an_expression() -> ParityBatchCase {
+fn apheleia_ports_upstream_whitespace_insertion_alignment_case_at_an_expression() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "apheleia_ports_upstream_whitespace_insertion_alignment_case_at_an_expression",
         r##"(with-temp-buffer
@@ -233,12 +237,13 @@ fn apheleia_ports_upstream_whitespace_insertion_alignment_case_at_an_expression(
             (current-word))))"##,
         true,
         expect![[
-        r#"OK ((:error nil) "alpha\n    a = calculate(value)\nomega\n" 2 17 "calculate")"#
-    ]],
+            r#"OK ((:error nil) "alpha\n    a = calculate(value)\nomega\n" 2 17 "calculate")"#
+        ]],
     )
 }
 
-fn apheleia_chains_two_real_processes_in_order_and_emits_one_hook_event_per_formatter() -> ParityBatchCase {
+fn apheleia_chains_two_real_processes_in_order_and_emits_one_hook_event_per_formatter()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apheleia_chains_two_real_processes_in_order_and_emits_one_hook_event_per_formatter",
         r##"(with-temp-buffer
@@ -279,12 +284,13 @@ fn apheleia_chains_two_real_processes_in_order_and_emits_one_hook_event_per_form
             apheleia-test-hook-events)))"##,
         true,
         expect![[
-        r#"OK ((:error nil) "ALPHA DELTA\nDELTA GAMMA\n" ((uppercase nil nil) (rename nil nil)))"#
-    ]],
+            r#"OK ((:error nil) "ALPHA DELTA\nDELTA GAMMA\n" ((uppercase nil nil) (rename nil nil)))"#
+        ]],
     )
 }
 
-fn apheleia_input_output_and_inplace_placeholders_drive_real_file_based_formatters() -> ParityBatchCase {
+fn apheleia_input_output_and_inplace_placeholders_drive_real_file_based_formatters()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apheleia_input_output_and_inplace_placeholders_drive_real_file_based_formatters",
         r##"(mapcar
@@ -328,12 +334,13 @@ fn apheleia_input_output_and_inplace_placeholders_drive_real_file_based_formatte
              inplace))))"##,
         true,
         expect![[
-        r#"OK ((input-file (:error nil) "MIXED CASE\nSECOND LINE\n") (output-file (:error nil) "MIXED CASE\nSECOND LINE\n") (inplace-file (:error nil) "MIXED CASE\nSECOND LINE\n"))"#
-    ]],
+            r#"OK ((input-file (:error nil) "MIXED CASE\nSECOND LINE\n") (output-file (:error nil) "MIXED CASE\nSECOND LINE\n") (inplace-file (:error nil) "MIXED CASE\nSECOND LINE\n"))"#
+        ]],
     )
 }
 
-fn apheleia_lisp_formatter_receives_real_context_and_can_transform_chained_scratch_text() -> ParityBatchCase {
+fn apheleia_lisp_formatter_receives_real_context_and_can_transform_chained_scratch_text()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apheleia_lisp_formatter_receives_real_context_and_can_transform_chained_scratch_text",
         r##"(progn
@@ -389,7 +396,8 @@ fn apheleia_lisp_formatter_receives_real_context_and_can_transform_chained_scrat
     )
 }
 
-fn apheleia_builtin_lisp_formatter_reindents_a_practical_function_without_losing_point() -> ParityBatchCase {
+fn apheleia_builtin_lisp_formatter_reindents_a_practical_function_without_losing_point()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apheleia_builtin_lisp_formatter_reindents_a_practical_function_without_losing_point",
         r##"(with-temp-buffer
@@ -416,8 +424,8 @@ fn apheleia_builtin_lisp_formatter_reindents_a_practical_function_without_losing
             (current-word))))"##,
         true,
         expect![[
-        r#"OK ((:error nil) "(defun example (items)\n  (mapcar (lambda (item)\n\11    (when item\n\11      (list :value item)))\n\11  items))\n" 4 26 ":value")"#
-    ]],
+            r#"OK ((:error nil) "(defun example (items)\n  (mapcar (lambda (item)\n\11    (when item\n\11      (list :value item)))\n\11  items))\n" 4 26 ":value")"#
+        ]],
     )
 }
 
@@ -502,12 +510,13 @@ fn apheleia_mode_formats_and_resaves_a_real_file_after_save() -> ParityBatchCase
            (apheleia-test-cleanup root)))"##,
         true,
         expect![[
-        r#"OK (:hook ("FIRST LINE\nMIXED CASE\nSAVED ADDITION\n" 2 8 "CASE" nil) :disk "FIRST LINE\nMIXED CASE\nSAVED ADDITION\n" :buffer "FIRST LINE\nMIXED CASE\nSAVED ADDITION\n" :point (2 8 "CASE") :modified nil)"#
-    ]],
+            r#"OK (:hook ("FIRST LINE\nMIXED CASE\nSAVED ADDITION\n" 2 8 "CASE" nil) :disk "FIRST LINE\nMIXED CASE\nSAVED ADDITION\n" :buffer "FIRST LINE\nMIXED CASE\nSAVED ADDITION\n" :point (2 8 "CASE") :modified nil)"#
+        ]],
     )
 }
 
-fn apheleia_aborts_delayed_formatting_when_the_user_edits_the_buffer_in_flight() -> ParityBatchCase {
+fn apheleia_aborts_delayed_formatting_when_the_user_edits_the_buffer_in_flight() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "apheleia_aborts_delayed_formatting_when_the_user_edits_the_buffer_in_flight",
         r##"(with-temp-buffer
@@ -537,8 +546,8 @@ fn apheleia_aborts_delayed_formatting_when_the_user_edits_the_buffer_in_flight()
             (buffer-modified-p))))"##,
         true,
         expect![[
-        r#"OK ((:error (error . "Contents have changed")) "original text\nuser edit\n" t)"#
-    ]],
+            r#"OK ((:error (error . "Contents have changed")) "original text\nuser edit\n" t)"#
+        ]],
     )
 }
 
@@ -571,8 +580,8 @@ fn apheleia_surfaces_unknown_and_missing_formatters_without_modifying_content() 
               (buffer-string)))))"##,
         true,
         expect![[
-        r#"OK ((user-error "No such formatter defined in ‘apheleia-formatters’: undefined" "untouched\n") ((:error (error . "Could not find executable for formatter missing, skipping")) "also untouched\n"))"#
-    ]],
+            r#"OK ((user-error "No such formatter defined in ‘apheleia-formatters’: undefined" "untouched\n") ((:error (error . "Could not find executable for formatter missing, skipping")) "also untouched\n"))"#
+        ]],
     )
 }
 
@@ -639,12 +648,13 @@ fn apheleia_uses_a_project_configuration_file_in_a_real_formatter_command() -> P
          result)"##,
         true,
         expect![[
-        r#"OK ((:error nil) "PROJECT:alpha\nPROJECT:beta\n" 2 10 "beta" "alpha\nbeta\n")"#
-    ]],
+            r#"OK ((:error nil) "PROJECT:alpha\nPROJECT:beta\n" 2 10 "beta" "alpha\nbeta\n")"#
+        ]],
     )
 }
 
-fn apheleia_global_mode_enforces_and_releases_buffer_function_and_skip_policies() -> ParityBatchCase {
+fn apheleia_global_mode_enforces_and_releases_buffer_function_and_skip_policies() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "apheleia_global_mode_enforces_and_releases_buffer_function_and_skip_policies",
         r##"(let* ((root
@@ -809,8 +819,8 @@ fn apheleia_global_mode_enforces_and_releases_buffer_function_and_skip_policies(
          result)"##,
         true,
         expect![[
-        r#"OK (:phase-one (:existing "EXISTING RECORD\nPHASE ONE\n" :local-inhibit "local policy\nphase one\n" :function-inhibit "function policy\nphase one\n" :skip "skip policy\nphase one\n" :created "CREATED RECORD\nPHASE ONE\n") :resumed-function "FUNCTION POLICY\nPHASE ONE\nPHASE TWO\n" :resumed-skip "SKIP POLICY\nPHASE ONE\nPHASE TWO\n" :formatted-files ("created.txt" "existing.txt" "policy.txt" "skipped.txt"))"#
-    ]],
+            r#"OK (:phase-one (:existing "EXISTING RECORD\nPHASE ONE\n" :local-inhibit "local policy\nphase one\n" :function-inhibit "function policy\nphase one\n" :skip "skip policy\nphase one\n" :created "CREATED RECORD\nPHASE ONE\n") :resumed-function "FUNCTION POLICY\nPHASE ONE\nPHASE TWO\n" :resumed-skip "SKIP POLICY\nPHASE ONE\nPHASE TWO\n" :formatted-files ("created.txt" "existing.txt" "policy.txt" "skipped.txt"))"#
+        ]],
     )
 }
 
@@ -898,8 +908,8 @@ fn apheleia_failed_formatter_preserves_the_file_and_opens_its_real_error_log() -
          result)"##,
         true,
         expect![[
-        r#"OK (:callback (:error (error . "Failed to run sh: exit status 7 (see buffer *apheleia-sh-log*)")) :buffer "[server]\nport = invalid\n" :disk "[server]\nport = invalid\n" :log-buffer "*apheleia-sh-log*" :log-line 1 :log-column 0 :log "Sun Jan  2 03:04:05 2000 :: [ORACLE-SANDBOX]/apheleia-validation-error/\n$ sh -c printf\\ \\'config.toml\\:2\\:8\\:\\ invalid\\ port\\\\n\\'\\ \\>\\&2\\;\\ exit\\ 7\n\nconfig.toml:2:8: invalid port\n\nCommand failed with exit code 7.\n")"#
-    ]],
+            r#"OK (:callback (:error (error . "Failed to run sh: exit status 7 (see buffer *apheleia-sh-log*)")) :buffer "[server]\nport = invalid\n" :disk "[server]\nport = invalid\n" :log-buffer "*apheleia-sh-log*" :log-line 1 :log-column 0 :log "Sun Jan  2 03:04:05 2000 :: [ORACLE-SANDBOX]/apheleia-validation-error/\n$ sh -c printf\\ \\'config.toml\\:2\\:8\\:\\ invalid\\ port\\\\n\\'\\ \\>\\&2\\;\\ exit\\ 7\n\nconfig.toml:2:8: invalid port\n\nCommand failed with exit code 7.\n")"#
+        ]],
     )
 }
 

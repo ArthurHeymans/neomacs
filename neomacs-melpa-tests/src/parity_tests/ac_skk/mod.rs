@@ -207,10 +207,5 @@ pub(crate) fn assert_ac_skk_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ac_skk_parity` cases (2a).
 pub(crate) fn assert_ac_skk_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ac_skk_oracle(),
-        &name,
-        "ac_skk_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ac_skk_oracle(), &name, "ac_skk_parity", cases);
 }

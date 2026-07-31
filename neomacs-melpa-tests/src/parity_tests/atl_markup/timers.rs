@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atl_markup_batch};
 
-fn atl_markup_post_command_cancels_live_timer_then_schedules_exact_idle_callback() -> ParityBatchCase {
+fn atl_markup_post_command_cancels_live_timer_then_schedules_exact_idle_callback() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atl_markup_post_command_cancels_live_timer_then_schedules_exact_idle_callback",
         r##"(let ((atl-markup--timer
@@ -37,8 +38,8 @@ fn atl_markup_post_command_cancels_live_timer_then_schedules_exact_idle_callback
              (nreverse events))))"##,
         true,
         expect![
-        "OK (:new-timer nil ((timerp :old-timer) (cancel :old-timer) (schedule 0.375 nil atl-markup--web-truncate-lines-by-face)))"
-    ],
+            "OK (:new-timer nil ((timerp :old-timer) (cancel :old-timer) (schedule 0.375 nil atl-markup--web-truncate-lines-by-face)))"
+        ],
     )
 }
 
@@ -74,8 +75,8 @@ fn atl_markup_post_command_keeps_non_timer_sentinel_while_still_scheduling() -> 
              (nreverse events))))"##,
         true,
         expect![
-        "OK (:scheduled :not-a-timer ((timerp :not-a-timer) (schedule 2.5 nil atl-markup--web-truncate-lines-by-face)))"
-    ],
+            "OK (:scheduled :not-a-timer ((timerp :not-a-timer) (schedule 2.5 nil atl-markup--web-truncate-lines-by-face)))"
+        ],
     )
 }
 
@@ -112,8 +113,8 @@ fn atl_markup_post_command_preserves_live_timer_when_cancellation_signals() -> P
              (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ((:error error ("cannot cancel :live")) :live ((timerp :live) (cancel :live)))"#
-    ]],
+            r#"OK ((:error error ("cannot cancel :live")) :live ((timerp :live) (cancel :live)))"#
+        ]],
     )
 }
 
@@ -152,12 +153,13 @@ fn atl_markup_post_command_clears_cancelled_timer_before_schedule_failure() -> P
              (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ((:error error ("scheduler unavailable")) nil ((timerp :live) (cancel :live) (schedule 0.1 nil atl-markup--web-truncate-lines-by-face)))"#
-    ]],
+            r#"OK ((:error error ("scheduler unavailable")) nil ((timerp :live) (cancel :live) (schedule 0.1 nil atl-markup--web-truncate-lines-by-face)))"#
+        ]],
     )
 }
 
-fn atl_markup_repeated_post_commands_discard_scheduled_tokens_and_never_cancel_them() -> ParityBatchCase {
+fn atl_markup_repeated_post_commands_discard_scheduled_tokens_and_never_cancel_them()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_repeated_post_commands_discard_scheduled_tokens_and_never_cancel_them",
         r##"(let ((atl-markup--timer nil)
@@ -202,12 +204,13 @@ fn atl_markup_repeated_post_commands_discard_scheduled_tokens_and_never_cancel_t
              (nreverse events))))"##,
         true,
         expect![
-        "OK ((timer-1 timer-2 timer-3) nil ((timerp nil) (schedule timer-1 0.2 nil atl-markup--web-truncate-lines-by-face) (timerp nil) (schedule timer-2 0.2 nil atl-markup--web-truncate-lines-by-face) (timerp nil) (schedule timer-3 0.2 nil atl-markup--web-truncate-lines-by-face)))"
-    ],
+            "OK ((timer-1 timer-2 timer-3) nil ((timerp nil) (schedule timer-1 0.2 nil atl-markup--web-truncate-lines-by-face) (timerp nil) (schedule timer-2 0.2 nil atl-markup--web-truncate-lines-by-face) (timerp nil) (schedule timer-3 0.2 nil atl-markup--web-truncate-lines-by-face)))"
+        ],
     )
 }
 
-fn atl_markup_post_command_forwards_edge_delay_values_without_package_validation() -> ParityBatchCase {
+fn atl_markup_post_command_forwards_edge_delay_values_without_package_validation() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atl_markup_post_command_forwards_edge_delay_values_without_package_validation",
         r##"(mapcar
@@ -239,12 +242,13 @@ fn atl_markup_post_command_forwards_edge_delay_values_without_package_validation
             (1 2)))"##,
         true,
         expect![[
-        r#"OK ((0.0 :scheduled nil (0.0 nil atl-markup--web-truncate-lines-by-face) t) (-1.5 :scheduled nil (-1.5 nil atl-markup--web-truncate-lines-by-face) t) (99 :scheduled nil (99 nil atl-markup--web-truncate-lines-by-face) t) (nil :scheduled nil (nil nil atl-markup--web-truncate-lines-by-face) t) ("later" :scheduled nil ("later" nil atl-markup--web-truncate-lines-by-face) t) ((1 2) :scheduled nil ((1 2) nil atl-markup--web-truncate-lines-by-face) t))"#
-    ]],
+            r#"OK ((0.0 :scheduled nil (0.0 nil atl-markup--web-truncate-lines-by-face) t) (-1.5 :scheduled nil (-1.5 nil atl-markup--web-truncate-lines-by-face) t) (99 :scheduled nil (99 nil atl-markup--web-truncate-lines-by-face) t) (nil :scheduled nil (nil nil atl-markup--web-truncate-lines-by-face) t) ("later" :scheduled nil ("later" nil atl-markup--web-truncate-lines-by-face) t) ((1 2) :scheduled nil ((1 2) nil atl-markup--web-truncate-lines-by-face) t))"#
+        ]],
     )
 }
 
-fn atl_markup_global_timer_state_crosses_buffers_and_is_cancelled_from_second_buffer() -> ParityBatchCase {
+fn atl_markup_global_timer_state_crosses_buffers_and_is_cancelled_from_second_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_markup_global_timer_state_crosses_buffers_and_is_cancelled_from_second_buffer",
         r##"(let ((first
@@ -294,8 +298,8 @@ fn atl_markup_global_timer_state_crosses_buffers_and_is_cancelled_from_second_bu
             (kill-buffer second)))"##,
         true,
         expect![
-        "OK ((nil nil) (nil nil) ((cancel :first-buffer-timer) (schedule 0.1 nil atl-markup--web-truncate-lines-by-face)))"
-    ],
+            "OK ((nil nil) (nil nil) ((cancel :first-buffer-timer) (schedule 0.1 nil atl-markup--web-truncate-lines-by-face)))"
+        ],
     )
 }
 

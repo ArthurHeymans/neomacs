@@ -51,8 +51,8 @@ fn zero_x_zero_upload_file_expands_path_and_forwards_exact_size() -> ParityBatch
                  (delete-file file)))"##,
         true,
         expect![[
-        r#"OK (uploaded ((send #1=(:host "example.test") "payload.txt" nil) (handle #1# 7 response)))"#
-    ]],
+            r#"OK (uploaded ((send #1=(:host "example.test") "payload.txt" nil) (handle #1# 7 response)))"#
+        ]],
     )
 }
 
@@ -112,8 +112,8 @@ fn zero_x_zero_upload_text_forwards_full_buffer_and_active_region_bounds() -> Pa
                       (nreverse events))))))"##,
         true,
         expect![[
-        r#"OK (uploaded uploaded ((send "upload.txt" (:start 1 :end 7)) (handle 6 response) (send "upload.txt" (:start 2 :end 5)) (handle 3 response)))"#
-    ]],
+            r#"OK (uploaded uploaded ((send "upload.txt" (:start 1 :end 7)) (handle 6 response) (send "upload.txt" (:start 2 :end 5)) (handle 3 response)))"#
+        ]],
     )
 }
 
@@ -153,8 +153,8 @@ fn zero_x_zero_upload_kill_ring_copies_content_into_an_isolated_buffer() -> Pari
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (uploaded ((send " *temp*" (:start 1 :end 14) "copied λ text") (handle 13 response)))"#
-    ]],
+            r#"OK (uploaded ((send " *temp*" (:start 1 :end 14) "copied λ text") (handle 13 response)))"#
+        ]],
     )
 }
 
@@ -193,8 +193,8 @@ fn zero_x_zero_shorten_uri_builds_curl_request_and_skips_timeout_estimate() -> P
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (shortened ((curl ("-s" "-S" "-F" "shorten=https://long.example/path?q=1" "https://example.test") nil) (handle (:scheme "https" :host "example.test") nil response)))"#
-    ]],
+            r#"OK (shortened ((curl ("-s" "-S" "-F" "shorten=https://long.example/path?q=1" "https://example.test") nil) (handle (:scheme "https" :host "example.test") nil response)))"#
+        ]],
     )
 }
 
@@ -253,8 +253,8 @@ fn zero_x_zero_popup_upload_forwards_content_then_kills_the_popup() -> ParityBat
                 (buffer-live-p popup)))"##,
         true,
         expect![[
-        r#"OK (t ((send "popup-upload.txt" (:start 1 :end 11) "popup body") (handle 10 response)) nil)"#
-    ]],
+            r#"OK (t ((send "popup-upload.txt" (:start 1 :end 11) "popup body") (handle 10 response)) nil)"#
+        ]],
     )
 }
 
@@ -384,8 +384,8 @@ fn zero_x_zero_dwim_dispatches_region_kill_dired_file_guess_and_fallback() -> Pa
                     (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (text kill-ring file file nil text (text kill-ring (file "/dired/file") (prompt "Is publicly sharing this file, /guessed/file, what you intended?") (file "/guessed/file") (prompt "Is publicly sharing this file, /guessed/file, what you intended?") text))"#
-    ]],
+            r#"OK (text kill-ring file file nil text (text kill-ring (file "/dired/file") (prompt "Is publicly sharing this file, /guessed/file, what you intended?") (file "/guessed/file") (prompt "Is publicly sharing this file, /guessed/file, what you intended?") text))"#
+        ]],
     )
 }
 

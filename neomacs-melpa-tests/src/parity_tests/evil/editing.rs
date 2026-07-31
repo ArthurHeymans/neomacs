@@ -21,12 +21,13 @@ fn evil_normal_motion_keys_move_by_words_lines_and_line_boundaries() -> ParityBa
                  (nreverse positions)))"##,
         true,
         expect![[
-        r#"OK (("w" 2 nil nil) ("e" 3 nil nil) ("b" 4 nil nil) ("$" 5 nil nil) ("j" 6 nil nil) ("0" 7 nil nil) ("k" 8 nil nil))"#
-    ]],
+            r#"OK (("w" 2 nil nil) ("e" 3 nil nil) ("b" 4 nil nil) ("$" 5 nil nil) ("j" 6 nil nil) ("0" 7 nil nil) ("k" 8 nil nil))"#
+        ]],
     )
 }
 
-fn evil_insert_append_and_line_open_commands_preserve_text_point_and_final_state() -> ParityBatchCase {
+fn evil_insert_append_and_line_open_commands_preserve_text_point_and_final_state() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "evil_insert_append_and_line_open_commands_preserve_text_point_and_final_state",
         r##"(mapcar
@@ -49,12 +50,13 @@ fn evil_insert_append_and_line_open_commands_preserve_text_point_and_final_state
                  ("alpha" 3 "A X ESC")))"##,
         true,
         expect![[
-        r#"OK (("iX" 3 nil) ("iXaX" 5 nil) ("iXaXoX" 7 nil) ("iXaXoXOX" 9 nil) ("iXaXoXOXIX" 11 nil) ("iXaXoXOXIXAX" 13 nil))"#
-    ]],
+            r#"OK (("iX" 3 nil) ("iXaX" 5 nil) ("iXaXoX" 7 nil) ("iXaXoXOX" 9 nil) ("iXaXoXOXIX" 11 nil) ("iXaXoXOXIXAX" 13 nil))"#
+        ]],
     )
 }
 
-fn evil_delete_change_and_substitute_commands_apply_counts_and_enter_expected_states() -> ParityBatchCase {
+fn evil_delete_change_and_substitute_commands_apply_counts_and_enter_expected_states()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "evil_delete_change_and_substitute_commands_apply_counts_and_enter_expected_states",
         r##"(mapcar
@@ -72,8 +74,8 @@ fn evil_delete_change_and_substitute_commands_apply_counts_and_enter_expected_st
                '("dw" "2dw" "dd" "cw X ESC" "cc X ESC" "s X ESC" "2x"))"##,
         true,
         expect![[
-        r#"OK (("dw" "dw" 3 nil) ("2dw" "dw2dw" 6 nil) ("dd" "dw2dwdd" 8 nil) ("cw X ESC" "dw2dwddcwX" 11 nil) ("cc X ESC" "dw2dwddcwXccX" 14 nil) ("s X ESC" "dw2dwddcwXccXsX" 16 nil) ("2x" "dw2dwddcwXccXsX2x" 18 nil))"#
-    ]],
+            r#"OK (("dw" "dw" 3 nil) ("2dw" "dw2dw" 6 nil) ("dd" "dw2dwdd" 8 nil) ("cw X ESC" "dw2dwddcwX" 11 nil) ("cc X ESC" "dw2dwddcwXccX" 14 nil) ("s X ESC" "dw2dwddcwXccXsX" 16 nil) ("2x" "dw2dwddcwXccXsX2x" 18 nil))"#
+        ]],
     )
 }
 
@@ -98,8 +100,8 @@ fn evil_yank_and_paste_commands_preserve_characterwise_and_linewise_shapes() -> 
                '("yw w p" "yy j p" "2yy G P" "ye $ p"))"##,
         true,
         expect![[
-        r#"OK (("yw w p" "ywwp" 5 nil) ("yy j p" "ywwpyyjp" 9 nil) ("2yy G P" "ywwpyyjp2yyGP" 14 nil) ("ye $ p" "ywwpyyjp2yyGPye$p" 18 nil))"#
-    ]],
+            r#"OK (("yw w p" "ywwp" 5 nil) ("yy j p" "ywwpyyjp" 9 nil) ("2yy G P" "ywwpyyjp2yyGP" 14 nil) ("ye $ p" "ywwpyyjp2yyGPye$p" 18 nil))"#
+        ]],
     )
 }
 
@@ -122,8 +124,8 @@ fn evil_visual_character_and_line_operations_transform_exact_regions() -> Parity
                '("v e d" "v e ~" "V j d" "v w y $ p"))"##,
         true,
         expect![[
-        r#"OK (("v e d" "ved" 4 nil) ("v e ~" "vedve~" 7 nil) ("V j d" "vedve~Vjd" 10 nil) ("v w y $ p" "vedve~Vjdvwy$p" 15 nil))"#
-    ]],
+            r#"OK (("v e d" "ved" 4 nil) ("v e ~" "vedve~" 7 nil) ("V j d" "vedve~Vjd" 10 nil) ("v w y $ p" "vedve~Vjdvwy$p" 15 nil))"#
+        ]],
     )
 }
 
@@ -144,8 +146,8 @@ fn evil_find_till_and_repeat_find_commands_track_direction_and_offsets() -> Pari
                  (nreverse positions)))"##,
         true,
         expect![[
-        r#"OK (("f b" 3 nil) (";" 4 nil) ("," 5 nil) ("t a" 7 nil) (";" 8 nil) ("," 9 nil))"#
-    ]],
+            r#"OK (("f b" 3 nil) (";" 4 nil) ("," 5 nil) ("t a" 7 nil) (";" 8 nil) ("," 9 nil))"#
+        ]],
     )
 }
 
@@ -173,7 +175,8 @@ fn evil_join_case_inversion_and_rot13_commands_match_vim_text_transformations() 
     )
 }
 
-fn evil_numeric_increment_and_decrement_find_numbers_after_point_and_apply_counts() -> ParityBatchCase {
+fn evil_numeric_increment_and_decrement_find_numbers_after_point_and_apply_counts()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "evil_numeric_increment_and_decrement_find_numbers_after_point_and_apply_counts",
         r##"(mapcar
@@ -188,8 +191,8 @@ fn evil_numeric_increment_and_decrement_find_numbers_after_point_and_apply_count
                '("C-a" "3 C-a" "C-x" "w C-a" "3 w 2 C-a"))"##,
         true,
         expect![[
-        r#"OK (("C-a" "" 1) ("3 C-a" "3" 1) ("C-x" "3" 1) ("w C-a" "w3" 1) ("3 w 2 C-a" "3w2w3" 1))"#
-    ]],
+            r#"OK (("C-a" "" 1) ("3 C-a" "3" 1) ("C-x" "3" 1) ("w C-a" "w3" 1) ("3 w 2 C-a" "3w2w3" 1))"#
+        ]],
     )
 }
 

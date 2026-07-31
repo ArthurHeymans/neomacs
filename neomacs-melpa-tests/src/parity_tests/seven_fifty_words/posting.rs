@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_seven_fifty_words_batch};
 
-fn seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel() -> ParityBatchCase {
+fn seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sentinel",
         r##"(let ((750words-client-command
@@ -61,12 +62,13 @@ fn seven_fifty_words_file_starts_formatted_command_and_installs_live_process_sen
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (installed ((generate "*750words-client-command*") (async "client --input=draft with spaces.txt" output-buffer) (get-process output-buffer) (live client-process) (sentinel client-process t) (callback output-buffer client-process "done")))"#
-    ]],
+            r#"OK (installed ((generate "*750words-client-command*") (async "client --input=draft with spaces.txt" output-buffer) (get-process output-buffer) (live client-process) (sentinel client-process t) (callback output-buffer client-process "done")))"#
+        ]],
     )
 }
 
-fn seven_fifty_words_file_reports_non_live_process_without_installing_sentinel() -> ParityBatchCase {
+fn seven_fifty_words_file_reports_non_live_process_without_installing_sentinel() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "seven_fifty_words_file_reports_non_live_process_without_installing_sentinel",
         r##"(let ((750words-client-command
@@ -105,8 +107,8 @@ fn seven_fifty_words_file_reports_non_live_process_without_installing_sentinel()
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("Running 'post draft.txt' failed." ("Running 'post draft.txt' failed."))"#
-    ]],
+            r#"OK ("Running 'post draft.txt' failed." ("Running 'post draft.txt' failed."))"#
+        ]],
     )
 }
 
@@ -156,8 +158,8 @@ fn seven_fifty_words_post_process_handles_exit_and_signal_in_exact_order() -> Pa
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (handled handled ((status first-process) (switch first-output) special (shell first-process "finished\n") (status second-process) (switch second-output) special (shell second-process "killed\n")))"#
-    ]],
+            r#"OK (handled handled ((status first-process) (switch first-output) special (shell first-process "finished\n") (status second-process) (switch second-output) special (shell second-process "killed\n")))"#
+        ]],
     )
 }
 
@@ -266,7 +268,8 @@ fn seven_fifty_words_buffer_forwards_current_minimum_and_maximum() -> ParityBatc
     )
 }
 
-fn seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim() -> ParityBatchCase {
+fn seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "seven_fifty_words_region_or_buffer_dispatches_active_region_bounds_verbatim",
         r##"(let (events)

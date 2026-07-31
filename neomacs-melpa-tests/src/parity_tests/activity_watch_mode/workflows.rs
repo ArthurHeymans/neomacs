@@ -67,8 +67,8 @@ fn enabling_the_mode_installs_the_watch_hooks_and_timers() -> ParityBatchCase {
       (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ((nil nil nil nil) (t nil nil) (t (t t t) t (activity-watch--save 2) (activity-watch--stop-timer (0 30 0 0) t) t t) (nil t t) (nil (nil nil nil) nil nil nil) (activity-watch-mode " activity-watch"))"#
-    ]],
+            r#"OK ((nil nil nil nil) (t nil nil) (t (t t t) t (activity-watch--save 2) (activity-watch--stop-timer (0 30 0 0) t) t t) (nil t t) (nil (nil nil nil) nil nil nil) (activity-watch-mode " activity-watch"))"#
+        ]],
     )
 }
 
@@ -98,8 +98,8 @@ fn saving_a_watched_file_creates_the_bucket_and_posts_one_heartbeat() -> ParityB
       (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ((("POST" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>" ("\"Content-Type: application/json\"") "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}") ("POST" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>/heartbeat?pulsetime=30" ("\"Content-Type: application/json\"") "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}")) t t t t nil)"#
-    ]],
+            r#"OK ((("POST" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>" ("\"Content-Type: application/json\"") "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}") ("POST" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>/heartbeat?pulsetime=30" ("\"Content-Type: application/json\"") "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}")) t t t t nil)"#
+        ]],
     )
 }
 
@@ -163,8 +163,8 @@ fn heartbeats_are_skipped_for_rate_limits_and_buffers_without_a_file() -> Parity
         (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK (2 2 (nil 2) (nil 0 3) 5 7 ("http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>/heartbeat?pulsetime=30"))"#
-    ]],
+            r#"OK (2 2 (nil 2) (nil 0 3) 5 7 ("http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>" "http://localhost:5600/api/0/buckets/aw-watcher-emacs_<HOST>/heartbeat?pulsetime=30"))"#
+        ]],
     )
 }
 
@@ -212,8 +212,8 @@ fn the_heartbeat_names_the_project_the_configured_resolver_finds() -> ParityBatc
       (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (((projectile project magit-dir-force magit-origin) "unknown" ("{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")) ("src" ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"src\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"src\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")) ("repo" ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"repo\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"repo\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")))"#
-    ]],
+            r#"OK (((projectile project magit-dir-force magit-origin) "unknown" ("{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")) ("src" ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"src\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"src\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")) ("repo" ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"repo\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"repo\",\"file\":\"[ORACLE-SANDBOX]/repo/src/lib.el\",\"branch\":\"unknown\"}}")))"#
+        ]],
     )
 }
 
@@ -302,8 +302,8 @@ fn an_active_org_clock_adds_its_ticket_property_to_the_heartbeat() -> ParityBatc
         (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK ("TICKET_ID" nil ("{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"ticket_id\":\"OPS-4711\",\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"ticket_id\":\"OPS-4711\",\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}") ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}"))"#
-    ]],
+            r#"OK ("TICKET_ID" nil ("{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"hostname\":\"<HOST>\",\"client\":\"emacs-activity-watch\",\"type\":\"app.editor.activity\"}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"ticket_id\":\"OPS-4711\",\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"ticket_id\":\"OPS-4711\",\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}") ("{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}" "{\"timestamp\":\"<TIME>\",\"duration\":0,\"data\":{\"language\":\"emacs-lisp-mode\",\"project\":\"unknown\",\"file\":\"[ORACLE-SANDBOX]/work/main.el\",\"branch\":\"unknown\"}}"))"#
+        ]],
     )
 }
 

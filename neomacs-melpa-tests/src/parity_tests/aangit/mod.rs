@@ -116,10 +116,5 @@ pub(crate) fn assert_aangit_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_aangit_parity` cases (2a).
 pub(crate) fn assert_aangit_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        aangit_oracle(),
-        &name,
-        "aangit_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(aangit_oracle(), &name, "aangit_parity", cases);
 }

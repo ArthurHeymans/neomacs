@@ -21,12 +21,13 @@ fn asx_query_string_sites_handles_default_custom_single_and_empty_site_sets() ->
           nil))"##,
         true,
         expect![[
-        r#"OK ((("stackoverflow.com" "stackexchange.com" "superuser.com" "serverfault.com" "askubuntu.com") "site:stackoverflow.com OR site:stackexchange.com OR site:superuser.com OR site:serverfault.com OR site:askubuntu.com" "mapcar examples site:stackoverflow.com OR site:stackexchange.com OR site:superuser.com OR site:serverfault.com OR site:askubuntu.com") (("emacs.stackexchange.com") "site:emacs.stackexchange.com" "mapcar examples site:emacs.stackexchange.com") (("stackoverflow.com" "unix.stackexchange.com") "site:stackoverflow.com OR site:unix.stackexchange.com" "mapcar examples site:stackoverflow.com OR site:unix.stackexchange.com") (nil "" "mapcar examples "))"#
-    ]],
+            r#"OK ((("stackoverflow.com" "stackexchange.com" "superuser.com" "serverfault.com" "askubuntu.com") "site:stackoverflow.com OR site:stackexchange.com OR site:superuser.com OR site:serverfault.com OR site:askubuntu.com" "mapcar examples site:stackoverflow.com OR site:stackexchange.com OR site:superuser.com OR site:serverfault.com OR site:askubuntu.com") (("emacs.stackexchange.com") "site:emacs.stackexchange.com" "mapcar examples site:emacs.stackexchange.com") (("stackoverflow.com" "unix.stackexchange.com") "site:stackoverflow.com OR site:unix.stackexchange.com" "mapcar examples site:stackoverflow.com OR site:unix.stackexchange.com") (nil "" "mapcar examples "))"#
+        ]],
     )
 }
 
-fn asx_search_engine_lookup_and_query_construction_support_builtin_and_custom_engines() -> ParityBatchCase {
+fn asx_search_engine_lookup_and_query_construction_support_builtin_and_custom_engines()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_search_engine_lookup_and_query_construction_support_builtin_and_custom_engines",
         r##"(let ((asx-sites
@@ -52,12 +53,13 @@ fn asx_search_engine_lookup_and_query_construction_support_builtin_and_custom_en
             fixture)))"##,
         true,
         expect![[
-        r#"OK ((google (:format "https://www.google.com/search?q=%s" :extract-fn #'asx--extract-links-google) "https://www.google.com/search?q=C%2B%2B%20%26%20Elisp%20site%3Aemacs.stackexchange.com") (duckduckgo (:format "https://www.duckduckgo.com/?q=%s" :extract-fn #'asx--extract-links-duckduckgo) "https://www.duckduckgo.com/?q=C%2B%2B%20%26%20Elisp%20site%3Aemacs.stackexchange.com") (fixture (:format "https://search.invalid/?term=%s" :extract-fn identity) "https://search.invalid/?term=C%2B%2B%20%26%20Elisp%20site%3Aemacs.stackexchange.com"))"#
-    ]],
+            r#"OK ((google (:format "https://www.google.com/search?q=%s" :extract-fn #'asx--extract-links-google) "https://www.google.com/search?q=C%2B%2B%20%26%20Elisp%20site%3Aemacs.stackexchange.com") (duckduckgo (:format "https://www.duckduckgo.com/?q=%s" :extract-fn #'asx--extract-links-duckduckgo) "https://www.duckduckgo.com/?q=C%2B%2B%20%26%20Elisp%20site%3Aemacs.stackexchange.com") (fixture (:format "https://search.invalid/?term=%s" :extract-fn identity) "https://search.invalid/?term=C%2B%2B%20%26%20Elisp%20site%3Aemacs.stackexchange.com"))"#
+        ]],
     )
 }
 
-fn asx_query_construction_percent_encodes_unicode_punctuation_and_site_expression() -> ParityBatchCase {
+fn asx_query_construction_percent_encodes_unicode_punctuation_and_site_expression()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_query_construction_percent_encodes_unicode_punctuation_and_site_expression",
         r##"(let ((asx-sites
@@ -77,12 +79,13 @@ fn asx_query_construction_percent_encodes_unicode_punctuation_and_site_expressio
             "quotes \"and spaces\"")))"##,
         true,
         expect![[
-        r#"OK (("mapcar & seq-filter" "mapcar & seq-filter site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=mapcar%20%26%20seq-filter%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com") ("naïve café" "naïve café site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=na%C3%AFve%20caf%C3%A9%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com") ("C# / F#" "C# / F# site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=C%23%20%2F%20F%23%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com") ("quotes \"and spaces\"" "quotes \"and spaces\" site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=quotes%20%22and%20spaces%22%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com"))"#
-    ]],
+            r#"OK (("mapcar & seq-filter" "mapcar & seq-filter site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=mapcar%20%26%20seq-filter%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com") ("naïve café" "naïve café site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=na%C3%AFve%20caf%C3%A9%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com") ("C# / F#" "C# / F# site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=C%23%20%2F%20F%23%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com") ("quotes \"and spaces\"" "quotes \"and spaces\" site:stackoverflow.com OR site:emacs.stackexchange.com" "https://www.google.com/search?q=quotes%20%22and%20spaces%22%20site%3Astackoverflow.com%20OR%20site%3Aemacs.stackexchange.com"))"#
+        ]],
     )
 }
 
-fn asx_primary_command_updates_history_constructs_url_and_dispatches_search_callback() -> ParityBatchCase {
+fn asx_primary_command_updates_history_constructs_url_and_dispatches_search_callback()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_primary_command_updates_history_constructs_url_and_dispatches_search_callback",
         r##"(let ((asx--query-history
@@ -120,12 +123,13 @@ fn asx_primary_command_updates_history_constructs_url_and_dispatches_search_call
             (nreverse requests))))"##,
         true,
         expect![[
-        r#"OK (:queued ("How to map a list?" "older") ("Loading: How to map a list?") (("https://www.google.com/search?q=How%20to%20map%20a%20list%3F%20site%3Aemacs.stackexchange.com" asx--handle-search nil)))"#
-    ]],
+            r#"OK (:queued ("How to map a list?" "older") ("Loading: How to map a list?") (("https://www.google.com/search?q=How%20to%20map%20a%20list%3F%20site%3Aemacs.stackexchange.com" asx--handle-search nil)))"#
+        ]],
     )
 }
 
-fn asx_primary_command_rejects_empty_query_without_mutating_history_or_dispatching() -> ParityBatchCase {
+fn asx_primary_command_rejects_empty_query_without_mutating_history_or_dispatching()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_primary_command_rejects_empty_query_without_mutating_history_or_dispatching",
         r##"(let ((asx--query-history
@@ -186,7 +190,8 @@ fn asx_symbol_or_region_prefers_active_region_then_uses_xref_identifier() -> Par
     )
 }
 
-fn asx_initial_input_only_reads_symbol_or_region_when_prefix_argument_is_active() -> ParityBatchCase {
+fn asx_initial_input_only_reads_symbol_or_region_when_prefix_argument_is_active() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asx_initial_input_only_reads_symbol_or_region_when_prefix_argument_is_active",
         r##"(let (calls)
@@ -262,8 +267,8 @@ fn asx_read_query_selects_ivy_helm_or_plain_read_string_in_priority_order() -> P
           (nreverse events)))"##,
         true,
         expect![[
-        r#"OK ("ivy query" "helm query" "plain query" (ivy helm (plain "Query: " "seed" asx--query-history)))"#
-    ]],
+            r#"OK ("ivy query" "helm query" "plain query" (ivy helm (plain "Query: " "seed" asx--query-history)))"#
+        ]],
     )
 }
 
@@ -287,12 +292,13 @@ fn asx_ivy_search_passes_dynamic_collection_history_initial_input_and_caller() -
            (asx--ivy-search)))"##,
         true,
         expect![[
-        r#"OK ("Query: " counsel-search-function (:dynamic-collection t :history asx--query-history :initial-input "region seed" :caller counsel-search))"#
-    ]],
+            r#"OK ("Query: " counsel-search-function (:dynamic-collection t :history asx--query-history :initial-input "region seed" :caller counsel-search))"#
+        ]],
     )
 }
 
-fn asx_helm_search_builds_volatile_three_character_google_source_and_target_buffer() -> ParityBatchCase {
+fn asx_helm_search_builds_volatile_three_character_google_source_and_target_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_helm_search_builds_volatile_three_character_google_source_and_target_buffer",
         r##"(let ((asx--query-history
@@ -328,8 +334,8 @@ fn asx_helm_search_builds_volatile_three_character_google_source_and_target_buff
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:shown ((("Query" ("candidate one" "candidate two") asx--query-history t 3) "*Helm Google*")))"#
-    ]],
+            r#"OK (:shown ((("Query" ("candidate one" "candidate two") asx--query-history t 3) "*Helm Google*")))"#
+        ]],
     )
 }
 

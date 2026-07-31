@@ -1,6 +1,8 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_pcmp_autoload_batch, assert_auto_complete_pcmp_batch};
+use super::{
+    ParityBatchCase, assert_auto_complete_pcmp_autoload_batch, assert_auto_complete_pcmp_batch,
+};
 
 fn auto_complete_pcmp_registers_feature_api_commands_and_documentation() -> ParityBatchCase {
     ParityBatchCase::new(
@@ -19,8 +21,8 @@ fn auto_complete_pcmp_registers_feature_api_commands_and_documentation() -> Pari
             ac-pcmp/self-insert-command-with-ac-start)))"##,
         true,
         expect![[
-        r#"OK (t ((ac-pcmp/get-ac-candidates t nil "Return the result of ‘pcomplete’.") (ac-pcmp/do-ac-action t nil "Do the same action that ‘pcomplete’ does after completion.") (ac-pcmp/self-insert-command-with-ac-start t t "Do ‘self-insert-command’ and ‘auto-complete’.")))"#
-    ]],
+            r#"OK (t ((ac-pcmp/get-ac-candidates t nil "Return the result of ‘pcomplete’.") (ac-pcmp/do-ac-action t nil "Do the same action that ‘pcomplete’ does after completion.") (ac-pcmp/self-insert-command-with-ac-start t t "Do ‘self-insert-command’ and ‘auto-complete’.")))"#
+        ]],
     )
 }
 
@@ -41,8 +43,8 @@ fn auto_complete_pcmp_internal_state_variables_have_exact_initial_contract() -> 
            ac-pcmp--point))"##,
         true,
         expect![
-        "OK ((ac-pcmp--active-p t nil nil) (ac-pcmp--candidates t nil nil) (ac-pcmp--status t nil nil) (ac-pcmp--point t nil nil))"
-    ],
+            "OK ((ac-pcmp--active-p t nil nil) (ac-pcmp--candidates t nil nil) (ac-pcmp--status t nil nil) (ac-pcmp--point t nil nil))"
+        ],
     )
 }
 
@@ -68,8 +70,8 @@ fn auto_complete_pcmp_advice_registry_covers_all_capture_phases() -> ParityBatch
            (pcomplete-stub after ac-pcmp)))"##,
         true,
         expect![
-        "OK ((pcomplete-completions after ac-pcmp t t) (pcomplete-show-completions around ac-pcmp t t) (pcomplete-stub before ac-pcmp t t) (pcomplete-stub after ac-pcmp t t))"
-    ],
+            "OK ((pcomplete-completions after ac-pcmp t t) (pcomplete-show-completions around ac-pcmp t t) (pcomplete-stub before ac-pcmp t t) (pcomplete-stub after ac-pcmp t t))"
+        ],
     )
 }
 
@@ -94,8 +96,8 @@ fn auto_complete_pcmp_logger_generates_expected_levels_and_control_functions() -
          (ac-pcmp--log-disable-logging))"##,
         true,
         expect![
-        "OK (((ac-pcmp--fatal t) (ac-pcmp--error t) (ac-pcmp--warn t) (ac-pcmp--info t) (ac-pcmp--debug t) (ac-pcmp--trace t) (ac-pcmp--log-set-level t) (ac-pcmp--log-enable-logging t) (ac-pcmp--log-disable-logging t)) nil t nil)"
-    ],
+            "OK (((ac-pcmp--fatal t) (ac-pcmp--error t) (ac-pcmp--warn t) (ac-pcmp--info t) (ac-pcmp--debug t) (ac-pcmp--trace t) (ac-pcmp--log-set-level t) (ac-pcmp--log-enable-logging t) (ac-pcmp--log-disable-logging t)) nil t nil)"
+        ],
     )
 }
 
@@ -138,7 +140,8 @@ fn auto_complete_pcmp_load_history_records_api_and_provide_entries() -> ParityBa
     )
 }
 
-fn auto_complete_pcmp_generated_autoload_file_has_no_eager_runtime_side_effects() -> ParityBatchCase {
+fn auto_complete_pcmp_generated_autoload_file_has_no_eager_runtime_side_effects() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_pcmp_generated_autoload_file_has_no_eager_runtime_side_effects",
         r##"(list
@@ -172,8 +175,7 @@ fn registry_auto_complete_pcmp_batch() {
 
 #[test]
 fn registry_auto_complete_pcmp_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        auto_complete_pcmp_generated_autoload_file_has_no_eager_runtime_side_effects(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![auto_complete_pcmp_generated_autoload_file_has_no_eager_runtime_side_effects()];
     assert_auto_complete_pcmp_autoload_batch(&cases);
 }

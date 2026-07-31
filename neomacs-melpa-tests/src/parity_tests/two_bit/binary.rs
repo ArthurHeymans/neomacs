@@ -48,8 +48,8 @@ fn two_bit_public_constants_and_struct_defaults_match_the_pinned_release() -> Pa
                   sequence))))"##,
         true,
         expect![[
-        r#"OK (440477507 ["T" "C" "A" "G"] t (nil nil nil nil nil nil nil nil) t (nil nil nil) t (nil nil nil nil nil nil))"#
-    ]],
+            r#"OK (440477507 ["T" "C" "A" "G"] t (nil nil nil nil nil nil nil nil) t (nil nil nil) t (nil nil nil nil nil nil))"#
+        ]],
     )
 }
 
@@ -358,8 +358,8 @@ fn two_bit_open_decodes_little_and_big_endian_headers_and_public_metadata() -> P
                      (delete-file file)))))"##,
         true,
         expect![[
-        r#"OK ((440477507 nil 0 2 nil 2 ("alpha" "beta")) (1126646042 t 0 2 t 2 ("alpha" "beta")))"#
-    ]],
+            r#"OK ((440477507 nil 0 2 nil 2 ("alpha" "beta")) (1126646042 t 0 2 t 2 ("alpha" "beta")))"#
+        ]],
     )
 }
 

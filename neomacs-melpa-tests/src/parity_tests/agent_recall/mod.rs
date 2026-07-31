@@ -46,10 +46,6 @@ pub(crate) fn assert_agent_recall_autoload_parity(elisp_form: &str, expected: Ex
     assert_agent_recall_source_parity("agent-recall-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_agent_recall_autoload_parity` cases (2a).
 pub(crate) fn assert_agent_recall_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

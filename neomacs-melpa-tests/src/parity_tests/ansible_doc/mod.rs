@@ -182,10 +182,5 @@ pub(crate) fn assert_ansible_doc_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ansible_doc_parity` cases (2a).
 pub(crate) fn assert_ansible_doc_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ansible_doc_oracle(),
-        &name,
-        "ansible_doc_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ansible_doc_oracle(), &name, "ansible_doc_parity", cases);
 }

@@ -44,8 +44,8 @@ fn completing_an_html_abbreviation_expands_it_into_real_markup() -> ParityBatchC
 "####,
         true,
         expect![[
-        r#"OK (:mode html-mode :emmet-mode t :css-transform nil :sources (ac-source-emmet-html-aliases ac-source-emmet-html-snippets) :global-sources (ac-source-words-in-same-mode-buffers) :prefix "btn" :candidates ("btn" "btn:b" "btn:r" "btn:s") :metadata ((:candidate "btn" :documentation "button" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1=(lambda nil (call-interactively 'emmet-expand-line))) (:candidate "btn:b" :documentation "button[type=button]" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "btn:r" :documentation "button[type=reset]" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "btn:s" :documentation "button[type=submit]" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#)) :first (:buffer "<button></button>" :point 9) :second (:candidates ("art") :prefix "art" :buffer "<button></button>\n<article></article>" :point 28) :modified t)"#
-    ]],
+            r#"OK (:mode html-mode :emmet-mode t :css-transform nil :sources (ac-source-emmet-html-aliases ac-source-emmet-html-snippets) :global-sources (ac-source-words-in-same-mode-buffers) :prefix "btn" :candidates ("btn" "btn:b" "btn:r" "btn:s") :metadata ((:candidate "btn" :documentation "button" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1=(lambda nil (call-interactively 'emmet-expand-line))) (:candidate "btn:b" :documentation "button[type=button]" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "btn:r" :documentation "button[type=reset]" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "btn:s" :documentation "button[type=submit]" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#)) :first (:buffer "<button></button>" :point 9) :second (:candidates ("art") :prefix "art" :buffer "<button></button>\n<article></article>" :point 28) :modified t)"#
+        ]],
     )
 }
 
@@ -87,8 +87,8 @@ fn completing_a_css_abbreviation_expands_it_into_a_real_declaration() -> ParityB
 "####,
         true,
         expect![[
-        r#"OK (:mode css-mode :emmet-mode t :css-transform t :sources (ac-source-emmet-css-snippets) :global-sources (ac-source-words-in-same-mode-buffers) :prefix "pos" :candidates ("pos" "pos:a" "pos:f" "pos:r" "pos:s") :metadata ((:candidate "pos" :documentation "position:${1:relative};" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1=(lambda nil (call-interactively 'emmet-expand-line))) (:candidate "pos:a" :documentation "position:absolute;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "pos:f" :documentation "position:fixed;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "pos:r" :documentation "position:relative;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "pos:s" :documentation "position:static;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#)) :first (:buffer "position: relative;" :point 20) :second (:candidates ("ai" "ai:b" "ai:c" "ai:s" "ai:fe" "ai:fs") :prefix "ai" :buffer "position: relative;\nalign-items: ;" :point 34) :modified t)"#
-    ]],
+            r#"OK (:mode css-mode :emmet-mode t :css-transform t :sources (ac-source-emmet-css-snippets) :global-sources (ac-source-words-in-same-mode-buffers) :prefix "pos" :candidates ("pos" "pos:a" "pos:f" "pos:r" "pos:s") :metadata ((:candidate "pos" :documentation "position:${1:relative};" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1=(lambda nil (call-interactively 'emmet-expand-line))) (:candidate "pos:a" :documentation "position:absolute;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "pos:f" :documentation "position:fixed;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "pos:r" :documentation "position:relative;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "pos:s" :documentation "position:static;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#)) :first (:buffer "position: relative;" :point 20) :second (:candidates ("ai" "ai:b" "ai:c" "ai:s" "ai:fe" "ai:fs") :prefix "ai" :buffer "position: relative;\nalign-items: ;" :point 34) :modified t)"#
+        ]],
     )
 }
 
@@ -123,12 +123,13 @@ fn candidate_documentation_and_popup_metadata_come_from_emmets_snippet_tables() 
 "####,
         true,
         expect![[
-        r#"OK (:snapshot-sizes (9 112 641) :html-snippet-keys ("!!!" "!!!4s" "!!!4t" "!!!xs" "!!!xt" "!!!xxs" "cc:ie" "cc:ie6" "cc:noie") :html ((:typed "cc" :prefix "cc" :candidates ("cc:ie" "cc:ie6" "cc:noie") :metadata ((:candidate "cc:ie" :documentation "<!--[if IE]>\n\11${child}\n<![endif]-->" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1=(lambda nil (call-interactively 'emmet-expand-line))) (:candidate "cc:ie6" :documentation "<!--[if lte IE 6]>\n\11${child}\n<![endif]-->" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "cc:noie" :documentation "<!--[if !IE]><!-->\n\11${child}\n<!--<![endif]-->" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#))) (:typed "bq" :prefix "bq" :candidates ("bq") :metadata ((:candidate "bq" :documentation "blockquote" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#)))) :css ((:typed "colmr" :prefix "colmr" :candidates ("colmr" "colmrc" "colmrs" "colmrw") :metadata ((:candidate "colmr" :documentation "column-rule:|;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "colmrc" :documentation "column-rule-color:|;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "colmrs" :documentation "column-rule-style:|;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "colmrw" :documentation "column-rule-width:|;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#)))) :sources (ac-emmet-html-snippets-keys ac-emmet-html-aliases-keys ac-emmet-css-snippets-keys 1 "a"))"#
-    ]],
+            r#"OK (:snapshot-sizes (9 112 641) :html-snippet-keys ("!!!" "!!!4s" "!!!4t" "!!!xs" "!!!xt" "!!!xxs" "cc:ie" "cc:ie6" "cc:noie") :html ((:typed "cc" :prefix "cc" :candidates ("cc:ie" "cc:ie6" "cc:noie") :metadata ((:candidate "cc:ie" :documentation "<!--[if IE]>\n\11${child}\n<![endif]-->" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1=(lambda nil (call-interactively 'emmet-expand-line))) (:candidate "cc:ie6" :documentation "<!--[if lte IE 6]>\n\11${child}\n<![endif]-->" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "cc:noie" :documentation "<!--[if !IE]><!-->\n\11${child}\n<!--<![endif]-->" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#))) (:typed "bq" :prefix "bq" :candidates ("bq") :metadata ((:candidate "bq" :documentation "blockquote" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#)))) :css ((:typed "colmr" :prefix "colmr" :candidates ("colmr" "colmrc" "colmrs" "colmrw") :metadata ((:candidate "colmr" :documentation "column-rule:|;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "colmrc" :documentation "column-rule-color:|;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "colmrs" :documentation "column-rule-style:|;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#) (:candidate "colmrw" :documentation "column-rule-width:|;" :summary nil :symbol "a" :candidate-face ac-emmet-candidate-face :selection-face ac-emmet-selection-face :expands-with #1#)))) :sources (ac-emmet-html-snippets-keys ac-emmet-html-aliases-keys ac-emmet-css-snippets-keys 1 "a"))"#
+        ]],
     )
 }
 
-fn the_html_source_is_not_offered_in_css_and_the_css_source_is_not_offered_in_html() -> ParityBatchCase {
+fn the_html_source_is_not_offered_in_css_and_the_css_source_is_not_offered_in_html()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "the_html_source_is_not_offered_in_css_and_the_css_source_is_not_offered_in_html",
         r####"
@@ -175,8 +176,8 @@ fn the_html_source_is_not_offered_in_css_and_the_css_source_is_not_offered_in_ht
 "####,
         true,
         expect![[
-        r#"OK (:html (:mode html-mode :sources (ac-source-emmet-html-aliases ac-source-emmet-html-snippets) :html-abbreviation (:typed "bq" :prefix "bq" :candidates ("bq")) :css-abbreviation (:typed "pos" :prefix "pos" :candidates nil)) :css (:mode css-mode :sources (ac-source-emmet-css-snippets) :css-abbreviation (:typed "pos" :prefix "pos" :candidates ("pos" "pos:a" "pos:f" "pos:r" "pos:s")) :html-abbreviation (:typed "bq" :prefix "bq" :candidates nil)) :global-sources-before #1=(ac-source-words-in-same-mode-buffers) :global-sources-after #1# :global-untouched t :setup-commands (t t))"#
-    ]],
+            r#"OK (:html (:mode html-mode :sources (ac-source-emmet-html-aliases ac-source-emmet-html-snippets) :html-abbreviation (:typed "bq" :prefix "bq" :candidates ("bq")) :css-abbreviation (:typed "pos" :prefix "pos" :candidates nil)) :css (:mode css-mode :sources (ac-source-emmet-css-snippets) :css-abbreviation (:typed "pos" :prefix "pos" :candidates ("pos" "pos:a" "pos:f" "pos:r" "pos:s")) :html-abbreviation (:typed "bq" :prefix "bq" :candidates nil)) :global-sources-before #1=(ac-source-words-in-same-mode-buffers) :global-sources-after #1# :global-untouched t :setup-commands (t t))"#
+        ]],
     )
 }
 
@@ -201,8 +202,8 @@ fn typing_more_characters_narrows_the_offered_abbreviations() -> ParityBatchCase
 "####,
         true,
         expect![[
-        r#"OK (:html ((:typed "" :prefix nil :candidates nil) (:typed "b" :prefix "b" :candidates ("bq" "btn" "bdo:l" "bdo:r" "btn:b" "btn:r" "btn:s")) (:typed "bt" :prefix "bt" :candidates ("btn" "btn:b" "btn:r" "btn:s")) (:typed "btn" :prefix "btn" :candidates ("btn" "btn:b" "btn:r" "btn:s")) (:typed "btn:" :prefix "btn:" :candidates ("btn:b" "btn:r" "btn:s")) (:typed "btn:b" :prefix "btn:b" :candidates ("btn:b")) (:typed "btn:bb" :prefix "btn:bb" :candidates nil)) :css ((:typed "" :prefix nil :candidates nil) (:typed "colm" :prefix "colm" :candidates ("colm" "colmc" "colmf" "colmg" "colmr" "colms" "colmw" "colmrc" "colmrs" "colmrw")) (:typed "colmr" :prefix "colmr" :candidates ("colmr" "colmrc" "colmrs" "colmrw")) (:typed "colmrs" :prefix "colmrs" :candidates ("colmrs")) (:typed "colmrsx" :prefix "colmrsx" :candidates nil) (:typed "ai" :prefix "ai" :candidates ("ai" "ai:b" "ai:c" "ai:s" "ai:fe" "ai:fs")) (:typed "ai:" :prefix nil :candidates nil) (:typed "ai:fs" :prefix "fs" :candidates ("fs" "fsm" "fst" "fs:i" "fs:n" "fs:o" "fsm:a" "fsm:n" "fst:c" "fst:e" "fst:n" "fsm:aw" "fst:ec" "fst:ee" "fst:sc" "fst:se" "fst:uc" "fst:ue"))) :requires 1)"#
-    ]],
+            r#"OK (:html ((:typed "" :prefix nil :candidates nil) (:typed "b" :prefix "b" :candidates ("bq" "btn" "bdo:l" "bdo:r" "btn:b" "btn:r" "btn:s")) (:typed "bt" :prefix "bt" :candidates ("btn" "btn:b" "btn:r" "btn:s")) (:typed "btn" :prefix "btn" :candidates ("btn" "btn:b" "btn:r" "btn:s")) (:typed "btn:" :prefix "btn:" :candidates ("btn:b" "btn:r" "btn:s")) (:typed "btn:b" :prefix "btn:b" :candidates ("btn:b")) (:typed "btn:bb" :prefix "btn:bb" :candidates nil)) :css ((:typed "" :prefix nil :candidates nil) (:typed "colm" :prefix "colm" :candidates ("colm" "colmc" "colmf" "colmg" "colmr" "colms" "colmw" "colmrc" "colmrs" "colmrw")) (:typed "colmr" :prefix "colmr" :candidates ("colmr" "colmrc" "colmrs" "colmrw")) (:typed "colmrs" :prefix "colmrs" :candidates ("colmrs")) (:typed "colmrsx" :prefix "colmrsx" :candidates nil) (:typed "ai" :prefix "ai" :candidates ("ai" "ai:b" "ai:c" "ai:s" "ai:fe" "ai:fs")) (:typed "ai:" :prefix nil :candidates nil) (:typed "ai:fs" :prefix "fs" :candidates ("fs" "fsm" "fst" "fs:i" "fs:n" "fs:o" "fsm:a" "fsm:n" "fst:c" "fst:e" "fst:n" "fsm:aw" "fst:ec" "fst:ee" "fst:sc" "fst:se" "fst:uc" "fst:ue"))) :requires 1)"#
+        ]],
     )
 }
 
@@ -238,8 +239,8 @@ fn an_abbreviation_with_no_snippet_leaves_the_buffer_untouched() -> ParityBatchC
 "####,
         true,
         expect![[
-        r#"OK (:before "<p>keep me</p>\nzzqq" :point-before 20 :prefix "zzqq" :candidates nil :after "<p>keep me</p>\nzzqq" :point-after 20 :buffer-unchanged t :recovered-candidates ("bq") :final "<p>keep me</p>\nzzqq\n<blockquote></blockquote>" :final-point 33)"#
-    ]],
+            r#"OK (:before "<p>keep me</p>\nzzqq" :point-before 20 :prefix "zzqq" :candidates nil :after "<p>keep me</p>\nzzqq" :point-after 20 :buffer-unchanged t :recovered-candidates ("bq") :final "<p>keep me</p>\nzzqq\n<blockquote></blockquote>" :final-point 33)"#
+        ]],
     )
 }
 
@@ -271,8 +272,7 @@ fn workflows_ac_emmet_batch() {
 
 #[test]
 fn workflows_unshimmed_ac_emmet_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        installing_ac_emmet_unshimmed_fails_on_the_legacy_loop_macro(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![installing_ac_emmet_unshimmed_fails_on_the_legacy_loop_macro()];
     assert_unshimmed_ac_emmet_batch(&cases);
 }

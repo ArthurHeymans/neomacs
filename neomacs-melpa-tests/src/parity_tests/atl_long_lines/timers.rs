@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atl_long_lines_batch};
 
-fn atl_long_lines_start_timer_schedules_one_shot_idle_callback_with_custom_delay() -> ParityBatchCase {
+fn atl_long_lines_start_timer_schedules_one_shot_idle_callback_with_custom_delay() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atl_long_lines_start_timer_schedules_one_shot_idle_callback_with_custom_delay",
         r##"(let ((atl-long-lines-delay 1.25)
@@ -159,7 +160,8 @@ fn atl_long_lines_repeated_start_timer_keeps_only_the_latest_scheduled_handle() 
     )
 }
 
-fn atl_long_lines_start_timer_forwards_fractional_zero_and_negative_delays_unchanged() -> ParityBatchCase {
+fn atl_long_lines_start_timer_forwards_fractional_zero_and_negative_delays_unchanged()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_start_timer_forwards_fractional_zero_and_negative_delays_unchanged",
         r##"(let (observed)
@@ -191,8 +193,8 @@ fn atl_long_lines_start_timer_forwards_fractional_zero_and_negative_delays_uncha
            (nreverse observed)))"##,
         true,
         expect![
-        "OK ((0 nil atl-long-lines-do-toggle nil) (0.125 nil atl-long-lines-do-toggle nil) (-1 nil atl-long-lines-do-toggle nil) (3 nil atl-long-lines-do-toggle nil))"
-    ],
+            "OK ((0 nil atl-long-lines-do-toggle nil) (0.125 nil atl-long-lines-do-toggle nil) (-1 nil atl-long-lines-do-toggle nil) (3 nil atl-long-lines-do-toggle nil))"
+        ],
     )
 }
 
@@ -222,7 +224,8 @@ fn atl_long_lines_start_timer_creates_a_real_registered_one_shot_idle_timer() ->
     )
 }
 
-fn atl_long_lines_real_reschedule_unregisters_old_idle_timer_and_registers_new_one() -> ParityBatchCase {
+fn atl_long_lines_real_reschedule_unregisters_old_idle_timer_and_registers_new_one()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_real_reschedule_unregisters_old_idle_timer_and_registers_new_one",
         r##"(let ((atl-long-lines-delay 60)
@@ -258,7 +261,8 @@ fn atl_long_lines_real_reschedule_unregisters_old_idle_timer_and_registers_new_o
     )
 }
 
-fn atl_long_lines_disabling_mode_removes_hook_but_leaves_already_scheduled_timer_active() -> ParityBatchCase {
+fn atl_long_lines_disabling_mode_removes_hook_but_leaves_already_scheduled_timer_active()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_disabling_mode_removes_hook_but_leaves_already_scheduled_timer_active",
         r##"(with-temp-buffer

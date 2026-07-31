@@ -228,10 +228,5 @@ pub(crate) fn assert_alarm_clock_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_alarm_clock_parity` cases (2a).
 pub(crate) fn assert_alarm_clock_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        alarm_clock_oracle(),
-        &name,
-        "alarm_clock_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(alarm_clock_oracle(), &name, "alarm_clock_parity", cases);
 }

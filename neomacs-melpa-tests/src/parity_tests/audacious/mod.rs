@@ -94,10 +94,6 @@ pub(crate) fn assert_audacious_autoload_parity(elisp_form: &str, expected: Expec
     assert_audacious_source_parity("audacious-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_audacious_autoload_parity` cases (2a).
 pub(crate) fn assert_audacious_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -112,10 +108,5 @@ pub(crate) fn assert_audacious_autoload_batch(cases: &[ParityBatchCase]) {
 /// Multi-probe batch for `assert_audacious_parity` cases (2a).
 pub(crate) fn assert_audacious_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        audacious_oracle(),
-        &name,
-        "audacious_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(audacious_oracle(), &name, "audacious_parity", cases);
 }

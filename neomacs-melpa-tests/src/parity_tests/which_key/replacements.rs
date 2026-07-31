@@ -22,8 +22,8 @@ fn which_key_keymap_based_replacements_cover_cons_string_and_created_prefixes() 
                 (keymapp (lookup-key map (kbd "C-c")))))"##,
         true,
         expect![[
-        r#"OK ((("C-a" . "mycomplete") ("C-b" . "group:mymap") ("C-c" . "group:mymap2")) complete t t)"#
-    ]],
+            r#"OK ((("C-a" . "mycomplete") ("C-b" . "group:mymap") ("C-c" . "group:mymap2")) complete t t)"#
+        ]],
     )
 }
 
@@ -65,12 +65,13 @@ fn which_key_global_and_major_mode_prefix_declarations_are_applied_separately() 
                 which-key--prefix-title-alist))"##,
         true,
         expect![[
-        r#"OK (("SPC C-k" . "cancel") ("C-c C-c" . "complete") "complete title" "complete" ((neomacs-which-key-test-mode (("\\`C-c C-k\\'") nil . "cancel") (("\\`C-c C-c\\'") nil . "complete")) (("\\`SPC C-k\\'") nil . "cancel") (("\\`SPC C-c\\'") nil . "complete")) ((neomacs-which-key-test-mode ("C-c C-c" . "complete title")) ("SPC C-c" . "complete title")))"#
-    ]],
+            r#"OK (("SPC C-k" . "cancel") ("C-c C-c" . "complete") "complete title" "complete" ((neomacs-which-key-test-mode (("\\`C-c C-k\\'") nil . "cancel") (("\\`C-c C-c\\'") nil . "complete")) (("\\`SPC C-k\\'") nil . "cancel") (("\\`SPC C-c\\'") nil . "complete")) ((neomacs-which-key-test-mode ("C-c C-c" . "complete title")) ("SPC C-c" . "complete title")))"#
+        ]],
     )
 }
 
-fn which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_text() -> ParityBatchCase {
+fn which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_text()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_text",
         r##"(let ((which-key-replacement-alist
@@ -107,8 +108,8 @@ fn which_key_replacement_matching_handles_regex_quoting_lambdas_and_bad_regex_te
                   ("SPC t 2" . "test mode"))))"##,
         true,
         expect![[
-        r#"OK (("C-c *" . "c-c *") ("C-c a" . "c-c a") ("C-c ." . "test .") ("C-c *" . "c-c *") ("C-c [" . "bad regexp") ("C-c \\" . "regexp quoting") ("SPC . ." . "don't replace") ("SPC t 1" . "[x] test mode") ("SPC t 2" . "[ ] test mode"))"#
-    ]],
+            r#"OK (("C-c *" . "c-c *") ("C-c a" . "c-c a") ("C-c ." . "test .") ("C-c *" . "c-c *") ("C-c [" . "bad regexp") ("C-c \\" . "regexp quoting") ("SPC . ." . "don't replace") ("SPC t 1" . "[x] test mode") ("SPC t 2" . "[ ] test mode"))"#
+        ]],
     )
 }
 
@@ -127,8 +128,8 @@ fn which_key_multiple_replacements_chain_in_declaration_order() -> ParityBatchCa
                   ("C-c C-c" . "unrelated"))))"##,
         true,
         expect![[
-        r#"OK (("C-c C-c" . "HLM-x") ("C-c C-c" . "PRJTL-x") ("C-c C-c" . "HLM-PRJTL-x") ("C-c C-c" . "unrelated"))"#
-    ]],
+            r#"OK (("C-c C-c" . "HLM-x") ("C-c C-c" . "PRJTL-x") ("C-c C-c" . "HLM-PRJTL-x") ("C-c C-c" . "unrelated"))"#
+        ]],
     )
 }
 
@@ -146,8 +147,8 @@ fn which_key_nil_replacement_suppresses_matching_bindings_only() -> ParityBatchC
                  '("C-c C-c" . "other-command"))))"##,
         true,
         expect![[
-        r#"OK (nil ("C-c C-c" . "winum-select-window-0") ("C-c C-c" . "other-command"))"#
-    ]],
+            r#"OK (nil ("C-c C-c" . "winum-select-window-0") ("C-c C-c" . "other-command"))"#
+        ]],
     )
 }
 
@@ -189,8 +190,8 @@ fn which_key_major_mode_replacement_rejects_non_symbol_modes() -> ParityBatchCas
                "alpha")"##,
         false,
         expect![[
-        r#"ERR (error "‘\"not-a-mode\"’ should be a symbol corresponding to a value of major-mode")"#
-    ]],
+            r#"ERR (error "‘\"not-a-mode\"’ should be a symbol corresponding to a value of major-mode")"#
+        ]],
     )
 }
 

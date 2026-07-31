@@ -59,10 +59,6 @@ pub(crate) fn assert_all_the_icons_nerd_fonts_autoload_parity(elisp_form: &str, 
     );
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_all_the_icons_nerd_fonts_autoload_parity` cases (2a).
 pub(crate) fn assert_all_the_icons_nerd_fonts_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

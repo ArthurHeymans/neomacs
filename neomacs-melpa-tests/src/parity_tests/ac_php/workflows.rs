@@ -48,8 +48,8 @@ fn indexing_the_project_runs_the_real_indexer_contract_and_loads_the_symbols() -
 "##,
         true,
         expect![[
-        r##"OK (:major-mode php-mode :indexer-finished t :calls (("phpctags" ".ac-php-conf.json" "cache" "--rebuild=no" "--realpath_flag=yes")) :config "{\n  \"use-cscope\": null,\n  \"tag-dir\": null,\n  \"filter\": {\n    \"php-file-ext-list\": [\n      \"php\"\n    ],\n    \"php-path-list\": [\n      \".\"\n    ],\n    \"ignore-ruleset\": [\n      \"# like .gitignore file \",\n      \"/vendor/**/[tT]ests/**/*.php\",\n      \"/vendor/**/[Ee]xamples/**/*.php\",\n      \"/vendor/composer/*.php\",\n      \"/vendor/*.php\",\n      \"# not need php_codesniffer\",\n      \"/vendor/squizlabs/php_codesniffer/**/*.php\",\n      \"#  -- end -- \"\n    ]\n  }\n}" :index-files ("tags-vendor.el" "tags.el") :progress 83 :classes ("\\Shop\\Model\\Product" "\\Shop\\Service\\BaseCart" "\\Shop\\Service\\Cart") :indexed-files ("src/Model/Product.php" "src/Service/BaseCart.php" "src/Service/Cart.php"))"##
-    ]],
+            r##"OK (:major-mode php-mode :indexer-finished t :calls (("phpctags" ".ac-php-conf.json" "cache" "--rebuild=no" "--realpath_flag=yes")) :config "{\n  \"use-cscope\": null,\n  \"tag-dir\": null,\n  \"filter\": {\n    \"php-file-ext-list\": [\n      \"php\"\n    ],\n    \"php-path-list\": [\n      \".\"\n    ],\n    \"ignore-ruleset\": [\n      \"# like .gitignore file \",\n      \"/vendor/**/[tT]ests/**/*.php\",\n      \"/vendor/**/[Ee]xamples/**/*.php\",\n      \"/vendor/composer/*.php\",\n      \"/vendor/*.php\",\n      \"# not need php_codesniffer\",\n      \"/vendor/squizlabs/php_codesniffer/**/*.php\",\n      \"#  -- end -- \"\n    ]\n  }\n}" :index-files ("tags-vendor.el" "tags.el") :progress 83 :classes ("\\Shop\\Model\\Product" "\\Shop\\Service\\BaseCart" "\\Shop\\Service\\Cart") :indexed-files ("src/Model/Product.php" "src/Service/BaseCart.php" "src/Service/Cart.php"))"##
+        ]],
     )
 }
 
@@ -75,8 +75,8 @@ fn completing_this_arrow_offers_the_class_and_its_inherited_members() -> ParityB
 "##,
         true,
         expect![[
-        r#"OK (:prefix-point 166 :point 166 :candidates ("itemCount(" "reset(" "total(") :annotated (("itemCount(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Service\\BaseCart" :help "") ("reset(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Service\\BaseCart" :help "") ("total(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Service\\Cart" :help "")))"#
-    ]],
+            r#"OK (:prefix-point 166 :point 166 :candidates ("itemCount(" "reset(" "total(") :annotated (("itemCount(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Service\\BaseCart" :help "") ("reset(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Service\\BaseCart" :help "") ("total(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Service\\Cart" :help "")))"#
+        ]],
     )
 }
 
@@ -107,8 +107,8 @@ fn a_local_typed_by_new_completes_the_other_class_without_hiding_anything() -> P
 "##,
         true,
         expect![[
-        r#"OK (:instance ("CURRENCY" "__construct(" "auditLog(" "getName(" "name" "priceCents" "setPrice(") :static ("CURRENCY" "__construct(" "auditLog(" "getName(" "name" "priceCents" "setPrice(") :same-list t :annotated (("CURRENCY" :tag-type "d" :access "public" :return-type "void" :from "\\Shop\\Model\\Product" :help "") ("__construct(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Model\\Product" :help "$name, $priceCents") ("auditLog(" :tag-type "m" :access "protected" :return-type "" :from "\\Shop\\Model\\Product" :help "$message") ("getName(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Model\\Product" :help "") ("name" :tag-type "p" :access "private" :return-type "string" :from "\\Shop\\Model\\Product" :help "") ("priceCents" :tag-type "p" :access "public" :return-type "int" :from "\\Shop\\Model\\Product" :help "") ("setPrice(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Model\\Product" :help "$cents, $vat=19")))"#
-    ]],
+            r#"OK (:instance ("CURRENCY" "__construct(" "auditLog(" "getName(" "name" "priceCents" "setPrice(") :static ("CURRENCY" "__construct(" "auditLog(" "getName(" "name" "priceCents" "setPrice(") :same-list t :annotated (("CURRENCY" :tag-type "d" :access "public" :return-type "void" :from "\\Shop\\Model\\Product" :help "") ("__construct(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Model\\Product" :help "$name, $priceCents") ("auditLog(" :tag-type "m" :access "protected" :return-type "" :from "\\Shop\\Model\\Product" :help "$message") ("getName(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Model\\Product" :help "") ("name" :tag-type "p" :access "private" :return-type "string" :from "\\Shop\\Model\\Product" :help "") ("priceCents" :tag-type "p" :access "public" :return-type "int" :from "\\Shop\\Model\\Product" :help "") ("setPrice(" :tag-type "m" :access "public" :return-type "" :from "\\Shop\\Model\\Product" :help "$cents, $vat=19")))"#
+        ]],
     )
 }
 
@@ -140,8 +140,8 @@ fn an_unqualified_function_completes_only_inside_its_own_namespace() -> ParityBa
 "##,
         true,
         expect![[
-        r#"OK (:in-declaring-namespace ("formatMoney(") :annotated (("formatMoney(" :tag-type "f" :access nil :return-type "" :from nil :help "$cents, $currency='EUR'")) :in-other-namespace nil)"#
-    ]],
+            r#"OK (:in-declaring-namespace ("formatMoney(") :annotated (("formatMoney(" :tag-type "f" :access nil :return-type "" :from nil :help "$cents, $currency='EUR'")) :in-other-namespace nil)"#
+        ]],
     )
 }
 
@@ -181,8 +181,8 @@ fn the_documentation_beside_a_candidate_renders_every_kind_of_entry() -> ParityB
 "##,
         true,
         expect![[
-        r#"OK (("CURRENCY" "CURRENCY\n\11[  type]:void\n\11[access]:public\n\11[  from]:\\Shop\\Model\\Product") ("name" "name\n\11[  type]:string\n\11[access]:private\n\11[  from]:\\Shop\\Model\\Product") ("setPrice(" "setPrice($cents, $vat=19)\n\11[  type]:\n\11[access]:public\n\11[  from]:\\Shop\\Model\\Product") ("getName(" "getName()\n\11[  type]:\n\11[access]:public\n\11[  from]:\\Shop\\Model\\Product") ("formatMoney(" " formatMoney($cents, $currency='EUR') "))"#
-    ]],
+            r#"OK (("CURRENCY" "CURRENCY\n\11[  type]:void\n\11[access]:public\n\11[  from]:\\Shop\\Model\\Product") ("name" "name\n\11[  type]:string\n\11[access]:private\n\11[  from]:\\Shop\\Model\\Product") ("setPrice(" "setPrice($cents, $vat=19)\n\11[  type]:\n\11[access]:public\n\11[  from]:\\Shop\\Model\\Product") ("getName(" "getName()\n\11[  type]:\n\11[access]:public\n\11[  from]:\\Shop\\Model\\Product") ("formatMoney(" " formatMoney($cents, $currency='EUR') "))"#
+        ]],
     )
 }
 
@@ -221,8 +221,8 @@ fn choosing_a_method_offers_its_argument_lists_and_expands_the_chosen_one() -> P
 "##,
         true,
         expect![[
-        r#"OK (:first-round ("setPrice(") :templates ("$cents)" "$cents, $vat)") :second-source ((candidates . ac-php-template-candidate)) :line "$product->setPrice($cents)return $product;" :live-snippets 1)"#
-    ]],
+            r#"OK (:first-round ("setPrice(") :templates ("$cents)" "$cents, $vat)") :second-source ((candidates . ac-php-template-candidate)) :line "$product->setPrice($cents)return $product;" :live-snippets 1)"#
+        ]],
     )
 }
 

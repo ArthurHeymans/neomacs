@@ -280,7 +280,8 @@ fn general_auto_unbind_replaces_a_non_prefix_before_installing_nested_keys() -> 
     )
 }
 
-fn general_simulate_key_generates_a_named_command_and_executes_the_target_binding() -> ParityBatchCase {
+fn general_simulate_key_generates_a_named_command_and_executes_the_target_binding()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "general_simulate_key_generates_a_named_command_and_executes_the_target_binding",
         r##"(progn
@@ -353,8 +354,8 @@ fn general_key_dispatch_runs_a_matching_command_and_tracks_it() -> ParityBatchCa
                   general--last-dispatch-command)))"##,
         true,
         expect![[
-        r#"OK (neomacs-general-dispatch "General dispatch command." (alternate) neomacs-general-alternate)"#
-    ]],
+            r#"OK (neomacs-general-dispatch "General dispatch command." (alternate) neomacs-general-alternate)"#
+        ]],
     )
 }
 

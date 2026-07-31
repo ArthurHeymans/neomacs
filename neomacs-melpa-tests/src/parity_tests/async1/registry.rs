@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_async1_autoload_batch, assert_async1_batch};
 
-fn async1_exact_package_descriptor_origin_dependency_and_feature_contract_match() -> ParityBatchCase {
+fn async1_exact_package_descriptor_origin_dependency_and_feature_contract_match() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_exact_package_descriptor_origin_dependency_and_feature_contract_match",
         r##"(let ((descriptor
@@ -24,12 +25,13 @@ fn async1_exact_package_descriptor_origin_dependency_and_feature_contract_match(
            (locate-library "async1"))))"##,
         true,
         expect![[
-        r#"OK (async1 "20260421.2116" "Unroll chain of async callbacks, parallel and sequencial." nil ((emacs (24 1)) (compat (30 1))) ((:maintainers (nil . "github.com/Anoncheg1,codeberg.org/Anoncheg")) (:authors (nil . "github.com/Anoncheg1,codeberg.org/Anoncheg")) (:keywords "tools" "async" "callback" "lisp" "extensions") (:revdesc . "88cccffe14bd") (:commit . "88cccffe14bdd0a61dbb2e33edf8c335706f24dc") (:url . "https://github.com/Anoncheg1/emacs-async1")) t t "async1.el")"#
-    ]],
+            r#"OK (async1 "20260421.2116" "Unroll chain of async callbacks, parallel and sequencial." nil ((emacs (24 1)) (compat (30 1))) ((:maintainers (nil . "github.com/Anoncheg1,codeberg.org/Anoncheg")) (:authors (nil . "github.com/Anoncheg1,codeberg.org/Anoncheg")) (:keywords "tools" "async" "callback" "lisp" "extensions") (:revdesc . "88cccffe14bd") (:commit . "88cccffe14bdd0a61dbb2e33edf8c335706f24dc") (:url . "https://github.com/Anoncheg1/emacs-async1")) t t "async1.el")"#
+        ]],
     )
 }
 
-fn async1_installed_payload_inventory_hashes_archive_files_not_generated_artifacts() -> ParityBatchCase {
+fn async1_installed_payload_inventory_hashes_archive_files_not_generated_artifacts()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_installed_payload_inventory_hashes_archive_files_not_generated_artifacts",
         r##"(let* ((descriptor
@@ -69,12 +71,13 @@ fn async1_installed_payload_inventory_hashes_archive_files_not_generated_artifac
            #'string<)))"##,
         true,
         expect![[
-        r#"OK (("async1-autoloads.el" :generated t) ("async1-pkg.el" :archive 527 "7548e340551a8ce89d08b81537cf42f0f50109114ead378698a945cb234312b0") ("async1.el" :archive 11529 "97ef51118ed5c11fa4df75e97a41f323a9f77bda89a1b76c0f23464ba1d213ef") ("async1.elc" :generated t))"#
-    ]],
+            r#"OK (("async1-autoloads.el" :generated t) ("async1-pkg.el" :archive 527 "7548e340551a8ce89d08b81537cf42f0f50109114ead378698a945cb234312b0") ("async1.el" :archive 11529 "97ef51118ed5c11fa4df75e97a41f323a9f77bda89a1b76c0f23464ba1d213ef") ("async1.elc" :generated t))"#
+        ]],
     )
 }
 
-fn async1_compat_dependency_is_satisfied_by_builtin_or_installed_runtime_support() -> ParityBatchCase {
+fn async1_compat_dependency_is_satisfied_by_builtin_or_installed_runtime_support() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_compat_dependency_is_satisfied_by_builtin_or_installed_runtime_support",
         r##"(let ((descriptor
@@ -157,8 +160,8 @@ fn async1_complete_callable_command_arglist_and_source_surface_matches() -> Pari
                    (symbol-name right))))))"##,
         true,
         expect![[
-        r#"OK ((async1--handle-parallel-step nil nil "(specs data chain-step current-index)" "async1.el") (async1--handle-sequential-step nil nil "(step data chain-step current-index)" "async1.el") (async1-create-function nil nil "(spec)" "async1.el") (async1-default-aggregator nil nil "(results)" "async1.el") (async1-default-template nil nil "(data callback delay result-suffix)" "async1.el") (async1-plist-get nil nil "(plist key &optional default)" "async1.el") (async1-plist-remove nil nil "(plist key)" "async1.el") (async1-start nil nil "(initial-data sequence &optional final-callback)" "async1.el"))"#
-    ]],
+            r#"OK ((async1--handle-parallel-step nil nil "(specs data chain-step current-index)" "async1.el") (async1--handle-sequential-step nil nil "(step data chain-step current-index)" "async1.el") (async1-create-function nil nil "(spec)" "async1.el") (async1-default-aggregator nil nil "(results)" "async1.el") (async1-default-template nil nil "(data callback delay result-suffix)" "async1.el") (async1-plist-get nil nil "(plist key &optional default)" "async1.el") (async1-plist-remove nil nil "(plist key)" "async1.el") (async1-start nil nil "(initial-data sequence &optional final-callback)" "async1.el"))"#
+        ]],
     )
 }
 
@@ -212,7 +215,8 @@ fn async1_declares_no_package_variables_constants_custom_options_or_macros() -> 
     )
 }
 
-fn async1_generated_autoload_surface_contains_only_the_five_documented_entries() -> ParityBatchCase {
+fn async1_generated_autoload_surface_contains_only_the_five_documented_entries() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_generated_autoload_surface_contains_only_the_five_documented_entries",
         r##"(list
@@ -238,8 +242,8 @@ fn async1_generated_autoload_surface_contains_only_the_five_documented_entries()
             async1--handle-sequential-step)))"##,
         true,
         expect![[
-        r#"OK (nil ((async1-default-template t t "async1.el") (async1-default-aggregator t t "async1.el") (async1-plist-remove t t "async1.el") (async1-plist-get t t "async1.el") (async1-start t t "async1.el") (async1-create-function nil nil nil) (async1--handle-parallel-step nil nil nil) (async1--handle-sequential-step nil nil nil)))"#
-    ]],
+            r#"OK (nil ((async1-default-template t t "async1.el") (async1-default-aggregator t t "async1.el") (async1-plist-remove t t "async1.el") (async1-plist-get t t "async1.el") (async1-start t t "async1.el") (async1-create-function nil nil nil) (async1--handle-parallel-step nil nil nil) (async1--handle-sequential-step nil nil nil)))"#
+        ]],
     )
 }
 
@@ -257,8 +261,7 @@ fn registry_async1_batch() {
 
 #[test]
 fn registry_async1_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        async1_generated_autoload_surface_contains_only_the_five_documented_entries(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![async1_generated_autoload_surface_contains_only_the_five_documented_entries()];
     assert_async1_autoload_batch(&cases);
 }

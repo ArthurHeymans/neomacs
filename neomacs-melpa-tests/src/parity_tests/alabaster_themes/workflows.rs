@@ -68,8 +68,8 @@ fn no_themed_face_resolves_on_this_display_and_the_gate_says_why() -> ParityBatc
                                 before after)))))"##,
         true,
         expect![[
-        r#"OK (:display (:color-cells 16777216 :visual-class static-gray :graphic nil) :gate (:clause ((class color) (min-colors 256)) :matches nil :colour-count-alone-matches t :class-alone-matches nil) :theme-enabled t :registered-face-count 501 :before ((default "unspecified-fg" "unspecified-bg") (font-lock-string-face unspecified unspecified) (font-lock-keyword-face unspecified unspecified) (region unspecified unspecified) (mode-line unspecified unspecified)) :after ((default "unspecified-fg" "unspecified-bg") (font-lock-string-face unspecified unspecified) (font-lock-keyword-face unspecified unspecified) (region unspecified unspecified) (mode-line unspecified unspecified)) :faces-whose-appearance-changed nil)"#
-    ]],
+            r#"OK (:display (:color-cells 16777216 :visual-class static-gray :graphic nil) :gate (:clause ((class color) (min-colors 256)) :matches nil :colour-count-alone-matches t :class-alone-matches nil) :theme-enabled t :registered-face-count 501 :before ((default "unspecified-fg" "unspecified-bg") (font-lock-string-face unspecified unspecified) (font-lock-keyword-face unspecified unspecified) (region unspecified unspecified) (mode-line unspecified unspecified)) :after ((default "unspecified-fg" "unspecified-bg") (font-lock-string-face unspecified unspecified) (font-lock-keyword-face unspecified unspecified) (region unspecified unspecified) (mode-line unspecified unspecified)) :faces-whose-appearance-changed nil)"#
+        ]],
     )
 }
 
@@ -98,8 +98,8 @@ fn the_registered_specs_carry_the_real_colours_the_resolved_reads_cannot_see() -
                   :count (length clauses))))))"##,
         true,
         expect![[
-        r##"OK (:specs ((default ((((class color) (min-colors 256)) :background "#0E1415" :foreground "#CECECE"))) (font-lock-string-face ((((class color) (min-colors 256)) :foreground "#95CB82"))) (font-lock-keyword-face ((((class color) (min-colors 256)) :foreground "#CECECE"))) (org-level-1 ((((class color) (min-colors 256)) :inherit bold :height unspecified :weight unspecified :foreground "#8AB1F0"))) (diff-added ((((class color) (min-colors 256)) :background "#1f3a1f" :foreground "#95CB82")))) :every-spec-uses-the-same-clause (:clauses (((class color) (min-colors 256))) :count 5))"##
-    ]],
+            r##"OK (:specs ((default ((((class color) (min-colors 256)) :background "#0E1415" :foreground "#CECECE"))) (font-lock-string-face ((((class color) (min-colors 256)) :foreground "#95CB82"))) (font-lock-keyword-face ((((class color) (min-colors 256)) :foreground "#CECECE"))) (org-level-1 ((((class color) (min-colors 256)) :inherit bold :height unspecified :weight unspecified :foreground "#8AB1F0"))) (diff-added ((((class color) (min-colors 256)) :background "#1f3a1f" :foreground "#95CB82")))) :every-spec-uses-the-same-clause (:clauses (((class color) (min-colors 256))) :count 5))"##
+        ]],
     )
 }
 

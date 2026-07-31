@@ -122,8 +122,8 @@ fn projectile_task_manifest_parsers_read_controlled_project_files() -> ParityBat
                  (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK ((("npm:build" . "npm run build") ("npm:test" . "npm run test")) (("deno:dev" . "deno task dev")) (("composer:lint" . "composer run-script lint")))"#
-    ]],
+            r#"OK ((("npm:build" . "npm run build") ("npm:test" . "npm run test")) (("deno:dev" . "deno task dev")) (("composer:lint" . "composer run-script lint")))"#
+        ]],
     )
 }
 
@@ -150,8 +150,8 @@ fn projectile_text_task_parsers_ignore_assignments_and_nested_keys() -> ParityBa
                  (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK ((("just:build" . "just build") ("just:fmt" . "just fmt") ("just:test" . "just test")) (("task:build" . "task build") ("task:test" . "task test")) (("make:all" . "make all") ("make:test" . "make test")))"#
-    ]],
+            r#"OK ((("just:build" . "just build") ("just:fmt" . "just fmt") ("just:test" . "just test")) (("task:build" . "task build") ("task:test" . "task test")) (("make:all" . "make all") ("make:test" . "make test")))"#
+        ]],
     )
 }
 

@@ -39,8 +39,8 @@ fn a_trigger_glows_the_line_the_command_moved_to_until_its_timer_fires() -> Pari
   (afterglow-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:armed (:mode t :triggers 1 :advised (afterglow-test-move) :armed ((afterglow-test-move . t))) :glowing (:point 18 :line 2 :overlays ((18 36 hl-line 100 "*afterglow-workflow*")) :delays (2) :timer-count 1) :fired 1 :after (:overlays nil :overlay-live nil :pending 0 :buffer "*afterglow-workflow*" :point 18))"#
-    ]],
+            r#"OK (:armed (:mode t :triggers 1 :advised (afterglow-test-move) :armed ((afterglow-test-move . t))) :glowing (:point 18 :line 2 :overlays ((18 36 hl-line 100 "*afterglow-workflow*")) :delays (2) :timer-count 1) :fired 1 :after (:overlays nil :overlay-live nil :pending 0 :buffer "*afterglow-workflow*" :point 18))"#
+        ]],
     )
 }
 
@@ -90,8 +90,8 @@ fn trigger_properties_choose_what_the_glow_covers() -> ParityBatchCase {
   (afterglow-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:window-bounds (1 . 69) :results ((word :line 1 :overlays ((7 11 hl-line 100 "*afterglow-workflow*")) :timers 1) (line-width :line 1 :overlays ((1 6 hl-line 100 "*afterglow-workflow*")) :timers 1) (custom-function :line 1 :overlays ((7 11 highlight 100 "*afterglow-workflow*")) :timers 1) (window :line 1 :overlays ((1 69 hl-line 100 "*afterglow-workflow*")) :timers 1) (empty-line :line 4 :overlays nil :timers 0) (region :region-active t :bounds ((1 . 6)) :overlays ((1 6 hl-line 100 "*afterglow-workflow*")))))"#
-    ]],
+            r#"OK (:window-bounds (1 . 69) :results ((word :line 1 :overlays ((7 11 hl-line 100 "*afterglow-workflow*")) :timers 1) (line-width :line 1 :overlays ((1 6 hl-line 100 "*afterglow-workflow*")) :timers 1) (custom-function :line 1 :overlays ((7 11 highlight 100 "*afterglow-workflow*")) :timers 1) (window :line 1 :overlays ((1 69 hl-line 100 "*afterglow-workflow*")) :timers 1) (empty-line :line 4 :overlays nil :timers 0) (region :region-active t :bounds ((1 . 6)) :overlays ((1 6 hl-line 100 "*afterglow-workflow*")))))"#
+        ]],
     )
 }
 
@@ -126,8 +126,8 @@ fn the_duration_and_face_customizations_change_the_overlay_itself() -> ParityBat
   (afterglow-test-cleanup))"##,
         true,
         expect![[
-        r#"OK ((stock-defaults :default-duration 1 :default-face hl-line :overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :delays (10)) (custom-defaults :default-duration 2 :default-face error :overlays ((1 17 error 100 "*afterglow-workflow*")) :delays (20)) (trigger-overrides :default-duration 2 :default-face error :overlays ((1 17 success 100 "*afterglow-workflow*")) :delays (5)))"#
-    ]],
+            r#"OK ((stock-defaults :default-duration 1 :default-face hl-line :overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :delays (10)) (custom-defaults :default-duration 2 :default-face error :overlays ((1 17 error 100 "*afterglow-workflow*")) :delays (20)) (trigger-overrides :default-duration 2 :default-face error :overlays ((1 17 success 100 "*afterglow-workflow*")) :delays (5)))"#
+        ]],
     )
 }
 
@@ -173,8 +173,8 @@ fn adding_and_removing_triggers_arms_and_disarms_the_advice() -> ParityBatchCase
   (afterglow-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:before (:mode nil :triggers 0 :advised nil :armed ((afterglow-test-command) (afterglow-test-move))) :added (:mode nil :triggers 2 :advised (afterglow-test-command afterglow-test-move) :armed ((afterglow-test-command . t) (afterglow-test-move . t))) :replaced (:mode nil :triggers 2 :advised (afterglow-test-command afterglow-test-move) :armed ((afterglow-test-command . t) (afterglow-test-move . t))) :glowing ((7 11 hl-line 100 "*afterglow-workflow*")) :removed (:mode nil :triggers 0 :advised nil :armed ((afterglow-test-command) (afterglow-test-move))) :after-removal (:overlays nil :timers 0))"#
-    ]],
+            r#"OK (:before (:mode nil :triggers 0 :advised nil :armed ((afterglow-test-command) (afterglow-test-move))) :added (:mode nil :triggers 2 :advised (afterglow-test-command afterglow-test-move) :armed ((afterglow-test-command . t) (afterglow-test-move . t))) :replaced (:mode nil :triggers 2 :advised (afterglow-test-command afterglow-test-move) :armed ((afterglow-test-command . t) (afterglow-test-move . t))) :glowing ((7 11 hl-line 100 "*afterglow-workflow*")) :removed (:mode nil :triggers 0 :advised nil :armed ((afterglow-test-command) (afterglow-test-move))) :after-removal (:overlays nil :timers 0))"#
+        ]],
     )
 }
 
@@ -211,8 +211,8 @@ fn switching_the_mode_off_stops_new_glows_but_leaves_the_last_one_on_screen() ->
   (afterglow-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:glowing (:overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :properties (priority 100 face hl-line) :state (:mode t :triggers 1 :advised (afterglow-test-command) :armed ((afterglow-test-command . t)))) :switched-off (:overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :state (:mode nil :triggers 1 :advised nil :armed ((afterglow-test-command))) :pending 1) :no-new-glow (:point 25 :overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :timers 1) :after-timer nil)"#
-    ]],
+            r#"OK (:glowing (:overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :properties (priority 100 face hl-line) :state (:mode t :triggers 1 :advised (afterglow-test-command) :armed ((afterglow-test-command . t)))) :switched-off (:overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :state (:mode nil :triggers 1 :advised nil :armed ((afterglow-test-command))) :pending 1) :no-new-glow (:point 25 :overlays ((1 17 hl-line 100 "*afterglow-workflow*")) :timers 1) :after-timer nil)"#
+        ]],
     )
 }
 
@@ -244,8 +244,8 @@ fn a_second_glow_makes_the_first_timer_cancel_it_early() -> ParityBatchCase {
   (afterglow-test-cleanup))"##,
         true,
         expect![[
-        r#"OK (:first-glow ((18 36 hl-line 100 "*afterglow-workflow*")) :second-glow (:overlays ((37 51 hl-line 100 "*afterglow-workflow*")) :pending 2) :after-first-timer (:overlays nil :pending 1) :after-both nil)"#
-    ]],
+            r#"OK (:first-glow ((18 36 hl-line 100 "*afterglow-workflow*")) :second-glow (:overlays ((37 51 hl-line 100 "*afterglow-workflow*")) :pending 2) :after-first-timer (:overlays nil :pending 1) :after-both nil)"#
+        ]],
     )
 }
 

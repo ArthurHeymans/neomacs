@@ -19,8 +19,8 @@ fn zero_b_layout_exposes_its_documented_defaults() -> ParityBatchCase {
                   "C-c C-l C-b")))"##,
         true,
         expect![[
-        r#"OK (nil "default" (("C-c" . 0blayout-new) ("C-k" . 0blayout-kill) ("C-b" . 0blayout-switch)) t nil (0blayout-new 0blayout-kill 0blayout-switch))"#
-    ]],
+            r#"OK (nil "default" (("C-c" . 0blayout-new) ("C-k" . 0blayout-kill) ("C-b" . 0blayout-switch)) t nil (0blayout-new 0blayout-kill 0blayout-switch))"#
+        ]],
     )
 }
 

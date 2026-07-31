@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_dictionary_batch};
 
-fn auto_dictionary_conditional_insert_selects_exact_dictionary_and_registers_overlay() -> ParityBatchCase {
+fn auto_dictionary_conditional_insert_selects_exact_dictionary_and_registers_overlay()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_conditional_insert_selects_exact_dictionary_and_registers_overlay",
         r##"(with-temp-buffer
@@ -29,12 +30,13 @@ fn auto_dictionary_conditional_insert_selects_exact_dictionary_and_registers_ove
                t)))))"##,
         true,
         expect![[
-        r#"OK ("Alice schreibt" 1 (7 15 t adict-conditional-text-face ("en" "writes" "de" "schreibt" t "wrote") (adict-conditional-modification)) t)"#
-    ]],
+            r#"OK ("Alice schreibt" 1 (7 15 t adict-conditional-text-face ("en" "writes" "de" "schreibt" t "wrote") (adict-conditional-modification)) t)"#
+        ]],
     )
 }
 
-fn auto_dictionary_conditional_insert_uses_fallback_or_empty_text_when_unmatched() -> ParityBatchCase {
+fn auto_dictionary_conditional_insert_uses_fallback_or_empty_text_when_unmatched() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dictionary_conditional_insert_uses_fallback_or_empty_text_when_unmatched",
         r##"(list
@@ -63,12 +65,13 @@ fn auto_dictionary_conditional_insert_uses_fallback_or_empty_text_when_unmatched
                 adict-conditional-overlay-list))))))"##,
         true,
         expect![[
-        r#"OK (("wrote" (1 6 t adict-conditional-text-face ("en" "writes" "de" "schreibt" t "wrote") #1=(adict-conditional-modification))) ("" (nil nil t adict-conditional-text-face ("en" "writes" "de" "schreibt") #1#)))"#
-    ]],
+            r#"OK (("wrote" (1 6 t adict-conditional-text-face ("en" "writes" "de" "schreibt" t "wrote") #1=(adict-conditional-modification))) ("" (nil nil t adict-conditional-text-face ("en" "writes" "de" "schreibt") #1#)))"#
+        ]],
     )
 }
 
-fn auto_dictionary_conditional_update_replaces_text_in_place_and_moves_overlay() -> ParityBatchCase {
+fn auto_dictionary_conditional_update_replaces_text_in_place_and_moves_overlay() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dictionary_conditional_update_replaces_text_in_place_and_moves_overlay",
         r##"(with-temp-buffer
@@ -107,8 +110,8 @@ fn auto_dictionary_conditional_update_replaces_text_in_place_and_moves_overlay()
                   overlay)))))))"##,
         true,
         expect![[
-        r#"OK (("Bob writes:\n" (5 11 t adict-conditional-text-face #1=("en" "writes" "de" "schreibt" "fr" "écrit") #2=(adict-conditional-modification))) ("Bob schreibt:\n" (5 13 t adict-conditional-text-face #1# #2#)) ("Bob écrit:\n" (5 10 t adict-conditional-text-face #1# #2#)))"#
-    ]],
+            r#"OK (("Bob writes:\n" (5 11 t adict-conditional-text-face #1=("en" "writes" "de" "schreibt" "fr" "écrit") #2=(adict-conditional-modification))) ("Bob schreibt:\n" (5 13 t adict-conditional-text-face #1# #2#)) ("Bob écrit:\n" (5 10 t adict-conditional-text-face #1# #2#)))"#
+        ]],
     )
 }
 
@@ -151,12 +154,13 @@ fn auto_dictionary_conditional_update_handles_multiple_independent_insertions() 
                adict-conditional-overlay-list)))))"##,
         true,
         expect![[
-        r#"OK ("Hello, team. Alice writes." "Hallo, team. Alice schreibt." ((20 . 26) (1 . 6)) ((20 . 28) (1 . 6)) 2)"#
-    ]],
+            r#"OK ("Hello, team. Alice writes." "Hallo, team. Alice schreibt." ((20 . 26) (1 . 6)) ((20 . 28) (1 . 6)) 2)"#
+        ]],
     )
 }
 
-fn auto_dictionary_user_edit_inside_only_conditional_overlay_unregisters_update_hook() -> ParityBatchCase {
+fn auto_dictionary_user_edit_inside_only_conditional_overlay_unregisters_update_hook()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_user_edit_inside_only_conditional_overlay_unregisters_update_hook",
         r##"(with-temp-buffer
@@ -184,7 +188,8 @@ fn auto_dictionary_user_edit_inside_only_conditional_overlay_unregisters_update_
     )
 }
 
-fn auto_dictionary_editing_one_of_two_conditional_overlays_keeps_remaining_update_live() -> ParityBatchCase {
+fn auto_dictionary_editing_one_of_two_conditional_overlays_keeps_remaining_update_live()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_editing_one_of_two_conditional_overlays_keeps_remaining_update_live",
         r##"(with-temp-buffer
@@ -247,7 +252,8 @@ fn auto_dictionary_conditional_insert_prefers_first_duplicate_dictionary_pair() 
     )
 }
 
-fn auto_dictionary_dictionary_change_hook_updates_practical_localized_signature() -> ParityBatchCase {
+fn auto_dictionary_dictionary_change_hook_updates_practical_localized_signature() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dictionary_dictionary_change_hook_updates_practical_localized_signature",
         r##"(with-temp-buffer
@@ -289,8 +295,8 @@ fn auto_dictionary_dictionary_change_hook_updates_practical_localized_signature(
                    adict-conditional-overlay-list)))))))"##,
         true,
         expect![[
-        r#"OK ("Regards,\nAlice — Engineering" "Regards,\nAlice — Entwicklung" "Regards,\nAlice — Ingénierie" ("de" "fr") " fr" 1)"#
-    ]],
+            r#"OK ("Regards,\nAlice — Engineering" "Regards,\nAlice — Entwicklung" "Regards,\nAlice — Ingénierie" ("de" "fr") " fr" 1)"#
+        ]],
     )
 }
 

@@ -85,15 +85,14 @@ fn the_editor_helper_the_package_installs_emits_frames_its_own_parser_decodes() 
          :without-files (invoke '() prefix-entry))))))"##,
         true,
         expect![[
-        r#"OK (:regular (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "0" "ai-code-editor-viewport-v1" "regular" "+2:3" "api.el" "")) :staging (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "0" "ai-code-editor-viewport-v1" "staging" "api.el" "")) :submit (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "1" "ai-code-editor-viewport-v1" "regular" "api.el" "")) :without-frame-prefix (:payloads 0 :fields nil) :without-files (:payloads 0 :fields nil))"#
-    ]],
+            r#"OK (:regular (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "0" "ai-code-editor-viewport-v1" "regular" "+2:3" "api.el" "")) :staging (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "0" "ai-code-editor-viewport-v1" "staging" "api.el" "")) :submit (:payloads 1 :fields ("[STATUS-FILE]" "[SANDBOX]/repo" "1" "ai-code-editor-viewport-v1" "regular" "api.el" "")) :without-frame-prefix (:payloads 0 :fields nil) :without-files (:payloads 0 :fields nil))"#
+        ]],
     )
 }
 
 #[test]
 fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        the_editor_helper_the_package_installs_emits_frames_its_own_parser_decodes(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![the_editor_helper_the_package_installs_emits_frames_its_own_parser_decodes()];
     assert_ai_code_batch(&cases);
 }

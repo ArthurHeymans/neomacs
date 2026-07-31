@@ -34,8 +34,8 @@ fn auto_compile_descriptor_and_sources_pin_exact_melpa_payload() -> ParityBatchC
            sources)))"##,
         true,
         expect![[
-        r#"OK ((auto-compile "20260601.1449" "Automatically compile Emacs Lisp libraries." ((emacs (28 1))) ((:maintainers ("Jonas Bernoulli" . "emacs.auto-compile@jonas.bernoulli.dev")) (:authors ("Jonas Bernoulli" . "emacs.auto-compile@jonas.bernoulli.dev")) (:keywords "compile" "convenience" "lisp") (:revdesc . "4db3a0e497fe") (:commit . "4db3a0e497feecc8b3dbeeefacdf363ae60a6392") (:url . "https://github.com/emacscollective/auto-compile"))) (("auto-compile-pkg.el" 508 "34be4dd27a5ec8ff762d0a289a3d4341737c17216ded0c4b7c7be3270de9397e") ("auto-compile.el" 34973 "8596d57356684a1ceab03ee3c65cbf911b01c4fccda6d9052af866469e55c95f")))"#
-    ]],
+            r#"OK ((auto-compile "20260601.1449" "Automatically compile Emacs Lisp libraries." ((emacs (28 1))) ((:maintainers ("Jonas Bernoulli" . "emacs.auto-compile@jonas.bernoulli.dev")) (:authors ("Jonas Bernoulli" . "emacs.auto-compile@jonas.bernoulli.dev")) (:keywords "compile" "convenience" "lisp") (:revdesc . "4db3a0e497fe") (:commit . "4db3a0e497feecc8b3dbeeefacdf363ae60a6392") (:url . "https://github.com/emacscollective/auto-compile"))) (("auto-compile-pkg.el" 508 "34be4dd27a5ec8ff762d0a289a3d4341737c17216ded0c4b7c7be3270de9397e") ("auto-compile.el" 34973 "8596d57356684a1ceab03ee3c65cbf911b01c4fccda6d9052af866469e55c95f")))"#
+        ]],
     )
 }
 
@@ -65,8 +65,8 @@ fn auto_compile_feature_aliases_and_definition_origins_are_exact() -> ParityBatc
             mode-line-auto-compile-control)))"##,
         true,
         expect![[
-        r#"OK (t nil ((auto-compile-mode t "auto-compile.el") (auto-compile-on-save-mode t "auto-compile.el") (auto-compile-on-load-mode t "auto-compile.el") (toggle-auto-compile t "auto-compile.el") (auto-compile-toggle t "auto-compile.el") (auto-compile-byte-compile t "auto-compile.el") (auto-compile-delete-dest t "auto-compile.el") (auto-compile-source-file-p t "auto-compile.el") (auto-compile-on-load t "auto-compile.el") (mode-line-auto-compile-control t "auto-compile.el")))"#
-    ]],
+            r#"OK (t nil ((auto-compile-mode t "auto-compile.el") (auto-compile-on-save-mode t "auto-compile.el") (auto-compile-on-load-mode t "auto-compile.el") (toggle-auto-compile t "auto-compile.el") (auto-compile-toggle t "auto-compile.el") (auto-compile-byte-compile t "auto-compile.el") (auto-compile-delete-dest t "auto-compile.el") (auto-compile-source-file-p t "auto-compile.el") (auto-compile-on-load t "auto-compile.el") (mode-line-auto-compile-control t "auto-compile.el")))"#
+        ]],
     )
 }
 
@@ -91,8 +91,8 @@ fn auto_compile_public_commands_have_exact_interactive_contracts() -> ParityBatc
            auto-compile-mode-line-byte-compile))"##,
         true,
         expect![[
-        r#"OK ((auto-compile-mode t (interactive #1=(list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) (&optional arg)) (auto-compile-on-save-mode t (interactive #1#) (&optional arg)) (auto-compile-on-load-mode t (interactive #1#) (&optional arg)) (toggle-auto-compile t (interactive #2=(let* ((file (and (eq major-mode 'emacs-lisp-mode) (buffer-file-name))) (action (cond (current-prefix-arg (if (> (prefix-numeric-value current-prefix-arg) 0) 'start 'quit)) (file (if (file-exists-p (byte-compile-dest-file file)) 'quit 'start)) (t (let* ((val (read-char-choice "Toggle automatic compilation (s=tart, q=uit, C-g)? " '(115 113)))) (cond ((eql val 115) (let nil 'start)) ((eql val 113) (let nil 'quit)))))))) (list (read-file-name (concat (capitalize (symbol-name action)) " auto-compiling: ") (and file (file-name-directory file)) nil t (and file (file-name-nondirectory file))) action t))) #3=(file action &optional interactive)) (auto-compile-toggle t (interactive #2#) #3#) (auto-compile-toggle-mark-failed-modified t (interactive nil) nil) (auto-compile-display-log t (interactive nil) nil) (mode-line-toggle-auto-compile t (interactive "e") (event)) (auto-compile-mode-line-byte-compile t (interactive "e") (event)))"#
-    ]],
+            r#"OK ((auto-compile-mode t (interactive #1=(list (if current-prefix-arg (prefix-numeric-value current-prefix-arg) 'toggle))) (&optional arg)) (auto-compile-on-save-mode t (interactive #1#) (&optional arg)) (auto-compile-on-load-mode t (interactive #1#) (&optional arg)) (toggle-auto-compile t (interactive #2=(let* ((file (and (eq major-mode 'emacs-lisp-mode) (buffer-file-name))) (action (cond (current-prefix-arg (if (> (prefix-numeric-value current-prefix-arg) 0) 'start 'quit)) (file (if (file-exists-p (byte-compile-dest-file file)) 'quit 'start)) (t (let* ((val (read-char-choice "Toggle automatic compilation (s=tart, q=uit, C-g)? " '(115 113)))) (cond ((eql val 115) (let nil 'start)) ((eql val 113) (let nil 'quit)))))))) (list (read-file-name (concat (capitalize (symbol-name action)) " auto-compiling: ") (and file (file-name-directory file)) nil t (and file (file-name-nondirectory file))) action t))) #3=(file action &optional interactive)) (auto-compile-toggle t (interactive #2#) #3#) (auto-compile-toggle-mark-failed-modified t (interactive nil) nil) (auto-compile-display-log t (interactive nil) nil) (mode-line-toggle-auto-compile t (interactive "e") (event)) (auto-compile-mode-line-byte-compile t (interactive "e") (event)))"#
+        ]],
     )
 }
 
@@ -124,8 +124,8 @@ fn auto_compile_options_have_exact_defaults_and_custom_types() -> ParityBatchCas
            auto-compile-source-recreate-deletes-dest))"##,
         true,
         expect![[
-        r#"OK ((auto-compile-visit-failed t ((funcall #'#[nil (t) #1=(warning-minimum-level t)])) boolean nil) (auto-compile-mark-failed-modified nil ((funcall #'#[nil (nil) #1#])) boolean nil) (auto-compile-ding t ((funcall #'#[nil (t) #1#])) boolean nil) (auto-compile-native-compile nil ((funcall #'#[nil (nil) #1#])) boolean nil) (auto-compile-check-parens t ((funcall #'#[nil (t) #1#])) boolean nil) (auto-compile-inhibit-compile-hook nil ((funcall #'#[nil (nil) #1#])) hook nil) (auto-compile-verbose nil ((funcall #'#[nil (nil) #1#])) boolean nil) (auto-compile-display-buffer t ((funcall #'#[nil (t) #1#])) boolean nil) (auto-compile-mode-line-counter nil ((funcall #'#[nil (nil) #1#])) boolean nil) (auto-compile-use-mode-line mode-line-remote ((funcall #'#[nil ((car (auto-compile--tree-member 'mode-line-remote (default-value 'mode-line-format)))) #1#])) (choice (const :tag "Don't insert" nil) (const :tag "After mode-line-modified" mode-line-modified) (const :tag "After mode-line-remote" mode-line-remote) (sexp :tag "After construct")) nil) (auto-compile-toggle-recompiles t ((funcall #'#[nil (t) #1#])) boolean nil) (auto-compile-predicate-function auto-compile-source-file-p ((funcall #'#[nil ('auto-compile-source-file-p) #1#])) (choice (const auto-compile-source-file-p) (const elx-library-p) function) nil) (auto-compile-delete-stray-dest t ((funcall #'#[nil (t) #1#])) boolean nil) (auto-compile-toggle-deletes-nonlib-dest nil ((funcall #'#[nil (nil) #1#])) boolean nil) (auto-compile-source-recreate-deletes-dest nil ((funcall #'#[nil (nil) #1#])) boolean nil))"#
-    ]],
+            r#"OK ((auto-compile-visit-failed t ((funcall #'#[nil (t) #1=(warning-minimum-level t)])) boolean nil) (auto-compile-mark-failed-modified nil ((funcall #'#[nil (nil) #1#])) boolean nil) (auto-compile-ding t ((funcall #'#[nil (t) #1#])) boolean nil) (auto-compile-native-compile nil ((funcall #'#[nil (nil) #1#])) boolean nil) (auto-compile-check-parens t ((funcall #'#[nil (t) #1#])) boolean nil) (auto-compile-inhibit-compile-hook nil ((funcall #'#[nil (nil) #1#])) hook nil) (auto-compile-verbose nil ((funcall #'#[nil (nil) #1#])) boolean nil) (auto-compile-display-buffer t ((funcall #'#[nil (t) #1#])) boolean nil) (auto-compile-mode-line-counter nil ((funcall #'#[nil (nil) #1#])) boolean nil) (auto-compile-use-mode-line mode-line-remote ((funcall #'#[nil ((car (auto-compile--tree-member 'mode-line-remote (default-value 'mode-line-format)))) #1#])) (choice (const :tag "Don't insert" nil) (const :tag "After mode-line-modified" mode-line-modified) (const :tag "After mode-line-remote" mode-line-remote) (sexp :tag "After construct")) nil) (auto-compile-toggle-recompiles t ((funcall #'#[nil (t) #1#])) boolean nil) (auto-compile-predicate-function auto-compile-source-file-p ((funcall #'#[nil ('auto-compile-source-file-p) #1#])) (choice (const auto-compile-source-file-p) (const elx-library-p) function) nil) (auto-compile-delete-stray-dest t ((funcall #'#[nil (t) #1#])) boolean nil) (auto-compile-toggle-deletes-nonlib-dest nil ((funcall #'#[nil (nil) #1#])) boolean nil) (auto-compile-source-recreate-deletes-dest nil ((funcall #'#[nil (nil) #1#])) boolean nil))"#
+        ]],
     )
 }
 
@@ -148,8 +148,8 @@ fn auto_compile_source_load_history_records_modes_advices_and_provider() -> Pari
           history))"##,
         true,
         expect![
-        "OK ((defun . auto-compile--static-if) (defun . auto-compile-mode) (defun . auto-compile-on-save-mode) (defun . auto-compile-mode--set-explicitly) (defun . auto-compile-on-save-mode-enable-in-buffer) (defun . auto-compile-mode--turn-on) (defun . auto-compile--tree-member) (defun . auto-compile-modify-mode-line) (defun . toggle-auto-compile) (defun . auto-compile-toggle) (defun . auto-compile-toggle-mark-failed-modified) (defun . auto-compile-source-file-p) (defun . auto-compile--byte-compile-source-file) (defun . byte-compile-log-warning@auto-compile) (defun . auto-compile-byte-compile) (defun . auto-compile--byte-compile-file) (defun . auto-compile-delete-dest) (defun . auto-compile-handle-compile-error) (defun . auto-compile-ding) (defun . save-buffers-kill-emacs@auto-compile) (defun . save-buffers-kill-terminal@auto-compile) (defun . auto-compile-inhibit-compile-detached-git-head) (defun . mode-line-auto-compile-control) (defun . auto-compile-display-log) (defun . mode-line-toggle-auto-compile) (defun . auto-compile-mode-line-byte-compile) (defun . auto-compile-on-load-mode) (defun . load@auto-compile) (defun . require@auto-compile) (defun . auto-compile-on-load) (defun . auto-compile--locate-library) (defun . auto-compile-use-mode-line-set) (provide . auto-compile))"
-    ],
+            "OK ((defun . auto-compile--static-if) (defun . auto-compile-mode) (defun . auto-compile-on-save-mode) (defun . auto-compile-mode--set-explicitly) (defun . auto-compile-on-save-mode-enable-in-buffer) (defun . auto-compile-mode--turn-on) (defun . auto-compile--tree-member) (defun . auto-compile-modify-mode-line) (defun . toggle-auto-compile) (defun . auto-compile-toggle) (defun . auto-compile-toggle-mark-failed-modified) (defun . auto-compile-source-file-p) (defun . auto-compile--byte-compile-source-file) (defun . byte-compile-log-warning@auto-compile) (defun . auto-compile-byte-compile) (defun . auto-compile--byte-compile-file) (defun . auto-compile-delete-dest) (defun . auto-compile-handle-compile-error) (defun . auto-compile-ding) (defun . save-buffers-kill-emacs@auto-compile) (defun . save-buffers-kill-terminal@auto-compile) (defun . auto-compile-inhibit-compile-detached-git-head) (defun . mode-line-auto-compile-control) (defun . auto-compile-display-log) (defun . mode-line-toggle-auto-compile) (defun . auto-compile-mode-line-byte-compile) (defun . auto-compile-on-load-mode) (defun . load@auto-compile) (defun . require@auto-compile) (defun . auto-compile-on-load) (defun . auto-compile--locate-library) (defun . auto-compile-use-mode-line-set) (provide . auto-compile))"
+        ],
     )
 }
 
@@ -201,12 +201,13 @@ fn auto_compile_group_links_and_mode_variable_metadata_are_exact() -> ParityBatc
           'auto-compile-pretend-byte-compiled))"##,
         true,
         expect![[
-        r#"OK (((auto-compile-on-save-mode custom-variable) (auto-compile-visit-failed custom-variable) (auto-compile-mark-failed-modified custom-variable) (auto-compile-ding custom-variable) (auto-compile-native-compile custom-variable) (auto-compile-check-parens custom-variable) (auto-compile-inhibit-compile-hook custom-variable) (auto-compile-verbose custom-variable) (auto-compile-display-buffer custom-variable) (auto-compile-mode-line-counter custom-variable) (auto-compile-use-mode-line custom-variable) (auto-compile-toggle-recompiles custom-variable) (auto-compile-predicate-function custom-variable) (auto-compile-delete-stray-dest custom-variable) (auto-compile-toggle-deletes-nonlib-dest custom-variable) (auto-compile-source-recreate-deletes-dest custom-variable) (auto-compile-on-load-mode custom-variable)) "Automatically compile Emacs Lisp source libraries." nil "Non-nil if Auto-Compile mode is enabled.\nUse the command `auto-compile-mode' to change this variable." boolean boolean t t t)"#
-    ]],
+            r#"OK (((auto-compile-on-save-mode custom-variable) (auto-compile-visit-failed custom-variable) (auto-compile-mark-failed-modified custom-variable) (auto-compile-ding custom-variable) (auto-compile-native-compile custom-variable) (auto-compile-check-parens custom-variable) (auto-compile-inhibit-compile-hook custom-variable) (auto-compile-verbose custom-variable) (auto-compile-display-buffer custom-variable) (auto-compile-mode-line-counter custom-variable) (auto-compile-use-mode-line custom-variable) (auto-compile-toggle-recompiles custom-variable) (auto-compile-predicate-function custom-variable) (auto-compile-delete-stray-dest custom-variable) (auto-compile-toggle-deletes-nonlib-dest custom-variable) (auto-compile-source-recreate-deletes-dest custom-variable) (auto-compile-on-load-mode custom-variable)) "Automatically compile Emacs Lisp source libraries." nil "Non-nil if Auto-Compile mode is enabled.\nUse the command `auto-compile-mode' to change this variable." boolean boolean t t t)"#
+        ]],
     )
 }
 
-fn auto_compile_generated_autoloads_register_all_entry_points_without_loading_source() -> ParityBatchCase {
+fn auto_compile_generated_autoloads_register_all_entry_points_without_loading_source()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_compile_generated_autoloads_register_all_entry_points_without_loading_source",
         r##"(let* ((file
@@ -232,8 +233,8 @@ fn auto_compile_generated_autoloads_register_all_entry_points_without_loading_so
              auto-compile-on-load-mode))))"##,
         true,
         expect![
-        "OK (t nil ((defun . auto-compile-mode) (defun . auto-compile-on-save-mode) (defun . toggle-auto-compile) (defun . auto-compile-on-load-mode) (provide . auto-compile-autoloads)) ((auto-compile-mode t t t) (auto-compile-on-save-mode t t t) (toggle-auto-compile t t t) (auto-compile-on-load-mode t t t)))"
-    ],
+            "OK (t nil ((defun . auto-compile-mode) (defun . auto-compile-on-save-mode) (defun . toggle-auto-compile) (defun . auto-compile-on-load-mode) (provide . auto-compile-autoloads)) ((auto-compile-mode t t t) (auto-compile-on-save-mode t t t) (toggle-auto-compile t t t) (auto-compile-on-load-mode t t t)))"
+        ],
     )
 }
 
@@ -253,8 +254,7 @@ fn registry_auto_compile_batch() {
 
 #[test]
 fn registry_auto_compile_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        auto_compile_generated_autoloads_register_all_entry_points_without_loading_source(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![auto_compile_generated_autoloads_register_all_entry_points_without_loading_source()];
     assert_auto_compile_autoload_batch(&cases);
 }

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_auctex_batch};
 
-fn auto_complete_auctex_macro_candidates_normalize_real_auctex_entries_and_filter_prefix() -> ParityBatchCase {
+fn auto_complete_auctex_macro_candidates_normalize_real_auctex_entries_and_filter_prefix()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_macro_candidates_normalize_real_auctex_entries_and_filter_prefix",
         r##"(let ((TeX-symbol-list
@@ -18,7 +19,8 @@ fn auto_complete_auctex_macro_candidates_normalize_real_auctex_entries_and_filte
     )
 }
 
-fn auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_case_rules() -> ParityBatchCase {
+fn auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_case_rules()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_case_rules",
         r##"(let ((TeX-symbol-list
@@ -39,8 +41,8 @@ fn auto_complete_auctex_macro_candidates_preserve_source_order_duplicates_and_ca
            '("al" "Al" "alpha" "z")))"##,
         true,
         expect![[
-        r#"OK (("al" ("alpha" "alphabet" "alpha" "alpine")) ("Al" ("Alpha")) ("alpha" ("alpha" "alphabet" "alpha")) ("z" nil))"#
-    ]],
+            r#"OK (("al" ("alpha" "alphabet" "alpha" "alpine")) ("Al" ("Alpha")) ("alpha" ("alpha" "alphabet" "alpha")) ("z" nil))"#
+        ]],
     )
 }
 
@@ -63,12 +65,13 @@ fn auto_complete_auctex_symbol_candidates_filter_real_math_command_names() -> Pa
            '("" "al" "le" "L" "missing")))"##,
         true,
         expect![[
-        r#"OK (("" ("alpha" "beta" "leq" "Leftarrow")) ("al" ("alpha")) ("le" ("leq")) ("L" ("Leftarrow")) ("missing" nil))"#
-    ]],
+            r#"OK (("" ("alpha" "beta" "leq" "Leftarrow")) ("al" ("alpha")) ("le" ("leq")) ("L" ("Leftarrow")) ("missing" nil))"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missing_entries() -> ParityBatchCase {
+fn auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missing_entries()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missing_entries",
         r##"(let ((LaTeX-math-default
@@ -89,12 +92,13 @@ fn auto_complete_auctex_symbol_document_formats_strings_lists_unicode_and_missin
              "unknown")))"##,
         true,
         expect![[
-        r#"OK (("alpha" "Greek alpha == α") ("leq" "AMS less or equal == ≤") ("nexists" "does not exist == ") ("empty" " == ") ("unknown" " == "))"#
-    ]],
+            r#"OK (("alpha" "Greek alpha == α") ("leq" "AMS less or equal == ≤") ("nexists" "does not exist == ") ("empty" " == ") ("unknown" " == "))"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering() -> ParityBatchCase {
+fn auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering",
         r##"(let ((LaTeX-environment-list
@@ -115,12 +119,13 @@ fn auto_complete_auctex_environment_candidates_add_beg_prefix_before_filtering()
            '("beg" "begf" "begfigure" "figure" "begz")))"##,
         true,
         expect![[
-        r#"OK (("beg" ("begdocument" "begdescription" "begfigure" "begfigure*" "begframe" "begtable")) ("begf" ("begfigure" "begfigure*" "begframe")) ("begfigure" ("begfigure" "begfigure*")) ("figure" nil) ("begz" nil))"#
-    ]],
+            r#"OK (("beg" ("begdocument" "begdescription" "begfigure" "begfigure*" "begframe" "begtable")) ("begf" ("begfigure" "begfigure*" "begframe")) ("begfigure" ("begfigure" "begfigure*")) ("figure" nil) ("begz" nil))"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_environment_candidates_honor_custom_prefix_and_duplicate_entries() -> ParityBatchCase {
+fn auto_complete_auctex_environment_candidates_honor_custom_prefix_and_duplicate_entries()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_environment_candidates_honor_custom_prefix_and_duplicate_entries",
         r##"(let ((LaTeX-environment-list
@@ -155,7 +160,8 @@ fn auto_complete_auctex_label_candidates_filter_real_cross_reference_records() -
     )
 }
 
-fn auto_complete_auctex_bibliography_candidates_filter_keys_and_preserve_metadata_order() -> ParityBatchCase {
+fn auto_complete_auctex_bibliography_candidates_filter_keys_and_preserve_metadata_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_bibliography_candidates_filter_keys_and_preserve_metadata_order",
         r##"(let ((LaTeX-bibitem-list
@@ -171,7 +177,8 @@ fn auto_complete_auctex_bibliography_candidates_filter_keys_and_preserve_metadat
     )
 }
 
-fn auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_cite_prefixes() -> ParityBatchCase {
+fn auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_cite_prefixes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_cite_prefixes",
         r##"(with-temp-buffer
@@ -218,8 +225,8 @@ fn auto_complete_auctex_source_prefix_regexps_extract_practical_macro_ref_and_ci
               "\\cite{first,knuth19"))))"##,
         true,
         expect![[
-        r#"OK ((ac-source-auctex-macros "\\includegr" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 2 (((init . TeX-symbol-list) (candidates . ac-auctex-macro-candidates) (action . ac-auctex-macro-action) (requires . 0) (symbol . "m") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "includegr") (ac-source-auctex-symbols "formula: \\alp" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 11 (((init . LaTeX-math-mode) (candidates . ac-auctex-symbol-candidates) (document . ac-auctex-symbol-document) (action . ac-auctex-symbol-action) (requires . 0) (symbol . "s") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "alp") (ac-source-auctex-environments "\\begfig" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 2 (((init . LaTeX-environment-list) (candidates . ac-auctex-environment-candidates) (action . ac-auctex-environment-action) (requires . 0) (symbol . "e") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "begfig") (ac-source-auctex-labels "See \\ref{sec:impl" "\\\\ref{\\([^}]*\\)\\=" ("\\\\ref{\\([^}]*\\)\\=" 10 (((init . LaTeX-label-list) (candidates . ac-auctex-label-candidates) (requires . 0) (symbol . "r") (prefix . "\\\\ref{\\([^}]*\\)\\=")))) "sec:impl") (ac-source-auctex-bibs "\\cite[p. 42]{knuth19" "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" ("\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" 14 (((init . LaTeX-bibitem-list) (candidates . ac-auctex-bib-candidates) (requires . 0) (symbol . "b") (prefix . "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=")))) "knuth19") (ac-source-auctex-bibs "\\cite{first,knuth19" "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" nil nil))"#
-    ]],
+            r#"OK ((ac-source-auctex-macros "\\includegr" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 2 (((init . TeX-symbol-list) (candidates . ac-auctex-macro-candidates) (action . ac-auctex-macro-action) (requires . 0) (symbol . "m") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "includegr") (ac-source-auctex-symbols "formula: \\alp" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 11 (((init . LaTeX-math-mode) (candidates . ac-auctex-symbol-candidates) (document . ac-auctex-symbol-document) (action . ac-auctex-symbol-action) (requires . 0) (symbol . "s") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "alp") (ac-source-auctex-environments "\\begfig" "\\\\\\([a-zA-Z]*\\)\\=" ("\\\\\\([a-zA-Z]*\\)\\=" 2 (((init . LaTeX-environment-list) (candidates . ac-auctex-environment-candidates) (action . ac-auctex-environment-action) (requires . 0) (symbol . "e") (prefix . "\\\\\\([a-zA-Z]*\\)\\=")))) "begfig") (ac-source-auctex-labels "See \\ref{sec:impl" "\\\\ref{\\([^}]*\\)\\=" ("\\\\ref{\\([^}]*\\)\\=" 10 (((init . LaTeX-label-list) (candidates . ac-auctex-label-candidates) (requires . 0) (symbol . "r") (prefix . "\\\\ref{\\([^}]*\\)\\=")))) "sec:impl") (ac-source-auctex-bibs "\\cite[p. 42]{knuth19" "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" ("\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" 14 (((init . LaTeX-bibitem-list) (candidates . ac-auctex-bib-candidates) (requires . 0) (symbol . "b") (prefix . "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=")))) "knuth19") (ac-source-auctex-bibs "\\cite{first,knuth19" "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" nil nil))"#
+        ]],
     )
 }
 

@@ -17,8 +17,8 @@ fn a_plain_search_builds_the_argv_and_renders_grouped_results() -> ParityBatchCa
  (list :calls (ag-test-calls) :rendered (ag-test-rendered)))"##,
         true,
         expect![[
-        r#"OK (:calls (("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".")) :rendered (:name "*ag search text:Grüße dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --literal --group --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- Gr\\ü\\ße .\nFile: src/greeting.el\n1:4:;; Grüße an alle\n2:24:(defun greet () \"Grüße\")\n\nFile: docs/design notes.md\n3:9:We say Grüße in the greeting module.\n\nFile: README.md\n1:1:Grüße everyone.\n\n<STATUS>\n"))"#
-    ]],
+            r#"OK (:calls (("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".")) :rendered (:name "*ag search text:Grüße dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --literal --group --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- Gr\\ü\\ße .\nFile: src/greeting.el\n1:4:;; Grüße an alle\n2:24:(defun greet () \"Grüße\")\n\nFile: docs/design notes.md\n3:9:We say Grüße in the greeting module.\n\nFile: README.md\n1:1:Grüße everyone.\n\n<STATUS>\n"))"#
+        ]],
     )
 }
 
@@ -48,8 +48,8 @@ fn visiting_each_match_lands_on_the_exact_file_line_and_column() -> ParityBatchC
          :error-alist (with-current-buffer results compilation-error-regexp-alist))))"##,
         true,
         expect![[
-        r#"OK (:hops (("src/greeting.el" 1 3 ";; Grüße an alle") ("src/greeting.el" 2 23 "(defun greet () \"Grüße\")") ("docs/design notes.md" 3 8 "We say Grüße in the greeting module.") ("README.md" 1 0 "Grüße everyone.")) :results-mode ag-mode :next-error-fn ag/next-error-function :error-alist (compilation-ag-nogroup compilation-ag-group))"#
-    ]],
+            r#"OK (:hops (("src/greeting.el" 1 3 ";; Grüße an alle") ("src/greeting.el" 2 23 "(defun greet () \"Grüße\")") ("docs/design notes.md" 3 8 "We say Grüße in the greeting module.") ("README.md" 1 0 "Grüße everyone.")) :results-mode ag-mode :next-error-fn ag/next-error-function :error-alist (compilation-ag-nogroup compilation-ag-group))"#
+        ]],
     )
 }
 
@@ -76,8 +76,8 @@ fn each_search_command_produces_its_own_argv_and_buffer_name() -> ParityBatchCas
                         #'string<))))"##,
         true,
         expect![[
-        r#"OK (:calls (("--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Gr[uü][ßs]" ".") ("--elisp" "--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".") ("--file-search-regex" "\\.md$" "--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".") ("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".")) :project-root "[ORACLE-SANDBOX]/project/" :buffers ("*ag search regexp:Gr[uü][ßs] dir:[ORACLE-SANDBOX]/project/*" "*ag search text:Grüße dir:[ORACLE-SANDBOX]/project/*"))"#
-    ]],
+            r#"OK (:calls (("--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Gr[uü][ßs]" ".") ("--elisp" "--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".") ("--file-search-regex" "\\.md$" "--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".") ("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".")) :project-root "[ORACLE-SANDBOX]/project/" :buffers ("*ag search regexp:Gr[uü][ßs] dir:[ORACLE-SANDBOX]/project/*" "*ag search text:Grüße dir:[ORACLE-SANDBOX]/project/*"))"#
+        ]],
     )
 }
 
@@ -101,8 +101,8 @@ fn customizations_change_both_the_argv_and_the_rendering() -> ParityBatchCase {
      (list :calls (ag-test-calls) :rendered rendered :match-face faces))))"##,
         true,
         expect![[
-        r#"OK (:calls (("--ignore" "vendor" "--ignore" "node_modules" "--context=2" "--literal" "--nogroup" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".")) :rendered (:name "*ag search text:Grüße dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --ignore vendor --ignore node_modules --context\\=2 --literal --nogroup --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- Gr\\ü\\ße .\nsrc/greeting.el\n1:4:;; Grüße an alle\n2:24:(defun greet () \"Grüße\")\n\ndocs/design notes.md\n3:9:We say Grüße in the greeting module.\n\nREADME.md\n1:1:Grüße everyone.\n\n<STATUS>\n") :match-face (ag-match-face "1:4:;; Grüße an alle"))"#
-    ]],
+            r#"OK (:calls (("--ignore" "vendor" "--ignore" "node_modules" "--context=2" "--literal" "--nogroup" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "Grüße" ".")) :rendered (:name "*ag search text:Grüße dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --ignore vendor --ignore node_modules --context\\=2 --literal --nogroup --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- Gr\\ü\\ße .\nsrc/greeting.el\n1:4:;; Grüße an alle\n2:24:(defun greet () \"Grüße\")\n\ndocs/design notes.md\n3:9:We say Grüße in the greeting module.\n\nREADME.md\n1:1:Grüße everyone.\n\n<STATUS>\n") :match-face (ag-match-face "1:4:;; Grüße an alle"))"#
+        ]],
     )
 }
 
@@ -121,8 +121,8 @@ fn a_search_with_no_matches_and_a_failing_search_are_both_rendered() -> ParityBa
    (list :none none :failed (ag-test-rendered) :calls (ag-test-calls))))"##,
         true,
         expect![[
-        r#"OK (:none (:name "*ag search text:NOTHING dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --literal --group --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- NOTHING .\n\n<STATUS>\n") :failed (:name "*ag search text:EXPLODE dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --literal --group --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- EXPLODE .\nag: unknown option\n\n<STATUS>\n") :calls (("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "NOTHING" ".") ("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "EXPLODE" ".")))"#
-    ]],
+            r#"OK (:none (:name "*ag search text:NOTHING dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --literal --group --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- NOTHING .\n\n<STATUS>\n") :failed (:name "*ag search text:EXPLODE dir:[ORACLE-SANDBOX]/project/*" :mode ag-mode :text "-*- mode: ag; default-directory: \"<ROOT>/project/\" -*-\n<STATUS>\n\n<ROOT>/bin/ag --literal --group --line-number --column --color --color-match 30\\;43 --color-path 1\\;32 --smart-case --stats -- EXPLODE .\nag: unknown option\n\n<STATUS>\n") :calls (("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "NOTHING" ".") ("--literal" "--group" "--line-number" "--column" "--color" "--color-match" "30;43" "--color-path" "1;32" "--smart-case" "--stats" "--" "EXPLODE" ".")))"#
+        ]],
     )
 }
 

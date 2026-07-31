@@ -37,8 +37,8 @@ fn mode_activation_builds_mixed_language_parsers_and_exact_local_contract() -> P
            (local-variable-p 'treesit-range-settings)))"##,
         true,
         expect![[
-        r#"OK (astro-ts-mode "Astro" html-mode (astro) astro "\\(?:\\(?:commen\\|tex\\)t\\)" (astro css tsx) 2 ((astro-comment astro-keyword astro-definition css-selector css-comment css-query css-keyword tsx-comment tsx-declaration tsx-jsx) (astro-string css-property css-constant css-string tsx-keyword tsx-string tsx-escape-sequence) (css-error css-variable css-function css-operator tsx-constant tsx-expression tsx-identifier tsx-number tsx-pattern tsx-property) (astro-bracket css-bracket tsx-function tsx-bracket tsx-delimiter)) ((treesit-compiled-query tsx t nil nil) (treesit-compiled-query css t nil nil)) astro-ts-mode--treesit-language-at-point t t t)"#
-    ]],
+            r#"OK (astro-ts-mode "Astro" html-mode (astro) astro "\\(?:\\(?:commen\\|tex\\)t\\)" (astro css tsx) 2 ((astro-comment astro-keyword astro-definition css-selector css-comment css-query css-keyword tsx-comment tsx-declaration tsx-jsx) (astro-string css-property css-constant css-string tsx-keyword tsx-string tsx-escape-sequence) (css-error css-variable css-function css-operator tsx-constant tsx-expression tsx-identifier tsx-number tsx-pattern tsx-property) (astro-bracket css-bracket tsx-function tsx-bracket tsx-delimiter)) ((treesit-compiled-query tsx t nil nil) (treesit-compiled-query css t nil nil)) astro-ts-mode--treesit-language-at-point t t t)"#
+        ]],
     )
 }
 
@@ -63,8 +63,8 @@ fn missing_grammar_errors_are_checked_in_astro_css_then_tsx_order() -> ParityBat
           '(astro css tsx))"##,
         true,
         expect![[
-        r#"OK ((astro error ("Tree-sitter grammar for Astro isn’t available") astro-ts-mode) (css error ("Tree-sitter grammar for CSS isn’t available") astro-ts-mode) (tsx error ("Tree-sitter grammar for Typescript/TSX isn’t available") astro-ts-mode))"#
-    ]],
+            r#"OK ((astro error ("Tree-sitter grammar for Astro isn’t available") astro-ts-mode) (css error ("Tree-sitter grammar for CSS isn’t available") astro-ts-mode) (tsx error ("Tree-sitter grammar for Typescript/TSX isn’t available") astro-ts-mode))"#
+        ]],
     )
 }
 
@@ -84,8 +84,8 @@ fn real_astro_file_name_selects_mode_only_when_grammar_is_available() -> ParityB
           '("component.astro" "component.html" "component.txt"))"##,
         true,
         expect![[
-        r#"OK (("component.astro" astro-ts-mode "Astro" (astro)) ("component.html" mhtml-mode ((sgml-xml-mode "XHTML+" "HTML+") (:eval (mhtml--submode-lighter))) nil) ("component.txt" text-mode "Text" nil))"#
-    ]],
+            r#"OK (("component.astro" astro-ts-mode "Astro" (astro)) ("component.html" mhtml-mode ((sgml-xml-mode "XHTML+" "HTML+") (:eval (mhtml--submode-lighter))) nil) ("component.txt" text-mode "Text" nil))"#
+        ]],
     )
 }
 
@@ -140,8 +140,8 @@ fn language_at_point_routes_real_frontmatter_attributes_html_script_and_style() 
              "const count" ".card" "color")))"##,
         true,
         expect![[
-        r#"OK (("const title" "frontmatter_js_block" tsx tsx) ("class" "attribute_name" astro astro) ("{title}" "attribute_js_expr" tsx tsx) ("article" "tag_name" astro astro) ("const count" "raw_text" tsx tsx) (".card" "raw_text" css css) ("color" "raw_text" css css))"#
-    ]],
+            r#"OK (("const title" "frontmatter_js_block" tsx tsx) ("class" "attribute_name" astro astro) ("{title}" "attribute_js_expr" tsx tsx) ("article" "tag_name" astro astro) ("const count" "raw_text" tsx tsx) (".card" "raw_text" css css) ("color" "raw_text" css css))"#
+        ]],
     )
 }
 
@@ -175,8 +175,8 @@ fn parser_ranges_materialize_tsx_and_css_regions_with_exact_source_slices() -> P
                         right)))))))"##,
         true,
         expect![[
-        r#"OK ((astro nil "(document (frontmatter (frontmatter_js_block)) (element (start_tag (tag_name) (attribute (attribute_name) (attribute_interpolation (attribute_js_expr)))) (html_interpolation (permissible_text)) (end_tag (tag_name))) (script_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name))) (style_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name))))") (css ((116 . 139)) "(stylesheet (rule_set (selectors (class_selector (class_name (identifier)))) (block (declaration (property_name) (plain_value)))))") (tsx ((4 . 21)) "(program (lexical_declaration (variable_declarator name: (identifier) value: (number))))") (tsx ((43 . 48)) "(program (expression_statement (identifier)))") (tsx ((51 . 60)) "(program (expression_statement (binary_expression left: (identifier) right: (number))))") (tsx ((76 . 99)) "(program (lexical_declaration (variable_declarator name: (identifier) value: (identifier))))"))"#
-    ]],
+            r#"OK ((astro nil "(document (frontmatter (frontmatter_js_block)) (element (start_tag (tag_name) (attribute (attribute_name) (attribute_interpolation (attribute_js_expr)))) (html_interpolation (permissible_text)) (end_tag (tag_name))) (script_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name))) (style_element (start_tag (tag_name)) (raw_text) (end_tag (tag_name))))") (css ((116 . 139)) "(stylesheet (rule_set (selectors (class_selector (class_name (identifier)))) (block (declaration (property_name) (plain_value)))))") (tsx ((4 . 21)) "(program (lexical_declaration (variable_declarator name: (identifier) value: (number))))") (tsx ((43 . 48)) "(program (expression_statement (identifier)))") (tsx ((51 . 60)) "(program (expression_statement (binary_expression left: (identifier) right: (number))))") (tsx ((76 . 99)) "(program (lexical_declaration (variable_declarator name: (identifier) value: (identifier))))"))"#
+        ]],
     )
 }
 
@@ -198,8 +198,8 @@ fn custom_indent_offset_is_copied_into_both_astro_and_css_local_settings() -> Pa
                'astro treesit-simple-indent-rules)))))"##,
         true,
         expect![[
-        r#"OK (5 5 (((parent-is "document") column-0 0) ((parent-is "comment") prev-adaptive-prefix 0) ((parent-is "element") parent-bol astro-ts-mode-indent-offset) ((parent-is "script_element") parent-bol astro-ts-mode-indent-offset) ((parent-is "style_element") parent-bol astro-ts-mode-indent-offset) ((parent-is "start_tag") parent-bol astro-ts-mode-indent-offset) ((parent-is "self_closing_tag") parent-bol astro-ts-mode-indent-offset)))"#
-    ]],
+            r#"OK (5 5 (((parent-is "document") column-0 0) ((parent-is "comment") prev-adaptive-prefix 0) ((parent-is "element") parent-bol astro-ts-mode-indent-offset) ((parent-is "script_element") parent-bol astro-ts-mode-indent-offset) ((parent-is "style_element") parent-bol astro-ts-mode-indent-offset) ((parent-is "start_tag") parent-bol astro-ts-mode-indent-offset) ((parent-is "self_closing_tag") parent-bol astro-ts-mode-indent-offset)))"#
+        ]],
     )
 }
 
@@ -230,8 +230,8 @@ fn repeated_mode_activation_replaces_parsers_without_accumulating_duplicates() -
                          (nth 2 snapshots))))))"##,
         true,
         expect![
-        "OK (((astro-ts-mode (astro) 1) (astro-ts-mode (astro) 1) (astro-ts-mode (astro) 1)) t)"
-    ],
+            "OK (((astro-ts-mode (astro) 1) (astro-ts-mode (astro) 1) (astro-ts-mode (astro) 1)) t)"
+        ],
     )
 }
 
@@ -254,8 +254,8 @@ fn inherited_html_comment_and_syntax_behavior_remains_practical() -> ParityBatch
            (char-syntax ?>)))"##,
         true,
         expect![[
-        r#"OK ("<!-- " " -->" #("<section>\n<!-- Hello -->\n</section>" 0 10 (fontified nil) 10 11 (syntax-table (2097163) fontified nil) 11 15 (fontified nil) 15 20 (fontified nil) 20 23 (fontified nil) 23 24 (syntax-table (2097164) fontified nil) 24 35 (fontified nil)) nil 40 41)"#
-    ]],
+            r#"OK ("<!-- " " -->" #("<section>\n<!-- Hello -->\n</section>" 0 10 (fontified nil) 10 11 (syntax-table (2097163) fontified nil) 11 15 (fontified nil) 15 20 (fontified nil) 20 23 (fontified nil) 23 24 (syntax-table (2097164) fontified nil) 24 35 (fontified nil)) nil 40 41)"#
+        ]],
     )
 }
 

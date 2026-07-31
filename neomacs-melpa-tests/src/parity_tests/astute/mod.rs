@@ -109,10 +109,6 @@ pub(crate) fn assert_astute_autoload_parity(elisp_form: &str, expected: Expect) 
     assert_astute_source_parity("astute-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_astute_autoload_parity` cases (2a).
 pub(crate) fn assert_astute_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -127,10 +123,5 @@ pub(crate) fn assert_astute_autoload_batch(cases: &[ParityBatchCase]) {
 /// Multi-probe batch for `assert_astute_parity` cases (2a).
 pub(crate) fn assert_astute_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        astute_oracle("astute.el"),
-        &name,
-        "astute_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(astute_oracle("astute.el"), &name, "astute_parity", cases);
 }

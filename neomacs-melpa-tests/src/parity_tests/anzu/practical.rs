@@ -77,8 +77,8 @@ fn incremental_search_reports_each_repeated_match_and_restores_the_mode_line() -
     result)"##,
         true,
         expect![[
-        r#"OK (:first (:point 6 :line 1 :text "alpha" :indicator "(1/4)") :second (:point 17 :line 1 :text "alpha" :indicator "(2/4)") :during-mode-line (:eval (anzu--update-mode-line)) :after-search (:isearch nil :anzu t :mode-line-restored t) :after-disable (:anzu nil :mode-line-restored t))"#
-    ]],
+            r#"OK (:first (:point 6 :line 1 :text "alpha" :indicator "(1/4)") :second (:point 17 :line 1 :text "alpha" :indicator "(2/4)") :during-mode-line (:eval (anzu--update-mode-line)) :after-search (:isearch nil :anzu t :mode-line-restored t) :after-disable (:anzu nil :mode-line-restored t))"#
+        ]],
     )
 }
 
@@ -142,8 +142,8 @@ fn replace_at_cursor_renames_a_symbol_only_inside_the_current_defun() -> ParityB
     result)"##,
         true,
         expect![[
-        r#"OK (:before (:point 20 :symbol "target") :after (:point 16 :symbol "environment") :buffer "(defun deploy (environment)\n  (let ((status environment))\n    (message \"%s -> %s\" environment status)))\n\n(setq target 'staging)\n" :prompts ("Query replace regexp \\_<target\\_> with: ") :history ("environment") :mark 1 :mode-line-restored t :stale-anzu-overlays 0)"#
-    ]],
+            r#"OK (:before (:point 20 :symbol "target") :after (:point 16 :symbol "environment") :buffer "(defun deploy (environment)\n  (let ((status environment))\n    (message \"%s -> %s\" environment status)))\n\n(setq target 'staging)\n" :prompts ("Query replace regexp \\_<target\\_> with: ") :history ("environment") :mark 1 :mode-line-restored t :stale-anzu-overlays 0)"#
+        ]],
     )
 }
 
@@ -229,8 +229,8 @@ fn regexp_isearch_flows_into_selective_capture_group_replacement() -> ParityBatc
     result)"##,
         true,
         expect![[
-        r#"OK (:search (:point 22 :line 1 :text "INFO user=alice id=17" :indicator "(1/3)") :buffer "OK id=17 owner=alice\nWARN user=bob id=23\nINFO user=carol id=42\nOK id=99 owner=dave\n" :point 83 :mark 1 :input-prompts ("Query replace regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with: ") :decision-prompts ("Query replacing regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with OK id=17 owner=alice: (? for help) " "Query replacing regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with OK id=42 owner=carol: (? for help) " "Query replacing regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with OK id=99 owner=dave: (? for help) ") :input-answers-left nil :decisions-left nil :history ("OK id=\\2 owner=\\1" "^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$") :isearch nil :anzu t :mode-line-restored t :stale-anzu-overlays 0)"#
-    ]],
+            r#"OK (:search (:point 22 :line 1 :text "INFO user=alice id=17" :indicator "(1/3)") :buffer "OK id=17 owner=alice\nWARN user=bob id=23\nINFO user=carol id=42\nOK id=99 owner=dave\n" :point 83 :mark 1 :input-prompts ("Query replace regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with: ") :decision-prompts ("Query replacing regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with OK id=17 owner=alice: (? for help) " "Query replacing regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with OK id=42 owner=carol: (? for help) " "Query replacing regexp ^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$ with OK id=99 owner=dave: (? for help) ") :input-answers-left nil :decisions-left nil :history ("OK id=\\2 owner=\\1" "^INFO user=\\([[:alpha:]]+\\) id=\\([[:digit:]]+\\)$") :isearch nil :anzu t :mode-line-restored t :stale-anzu-overlays 0)"#
+        ]],
     )
 }
 
@@ -311,8 +311,8 @@ fn global_mode_covers_existing_and_future_buffers_then_stops_cleanly() -> Parity
     result)"##,
         true,
         expect![[
-        r#"OK (:enabled (:existing t :future t) :future-buffer-search (:point 18 :line 1 :text "release" :indicator "(1/3)") :disabled (:existing nil :future nil :new-buffer nil) :global nil)"#
-    ]],
+            r#"OK (:enabled (:existing t :future t) :future-buffer-search (:point 18 :line 1 :text "release" :indicator "(1/3)") :disabled (:existing nil :future nil :new-buffer nil) :global nil)"#
+        ]],
     )
 }
 
@@ -394,8 +394,8 @@ fn search_threshold_and_no_match_face_track_a_refined_log_query() -> ParityBatch
     result)"##,
         true,
         expect![[
-        r#"OK (:first (:point 6 :line 1 :indicator "(1/3+)" :face anzu-mode-line) :second (:point 40 :line 3 :indicator "(2/3+)" :face anzu-mode-line) :refined-query (:success nil :indicator "(0/0)" :face anzu-mode-line-no-match))"#
-    ]],
+            r#"OK (:first (:point 6 :line 1 :indicator "(1/3+)" :face anzu-mode-line) :second (:point 40 :line 3 :indicator "(2/3+)" :face anzu-mode-line) :refined-query (:success nil :indicator "(0/0)" :face anzu-mode-line-no-match))"#
+        ]],
     )
 }
 

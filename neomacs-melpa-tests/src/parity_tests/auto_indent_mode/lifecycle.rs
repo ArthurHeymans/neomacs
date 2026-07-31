@@ -28,8 +28,8 @@ fn auto_indent_mode_default_engine_installs_local_hooks_and_activates_advices() 
                move-beginning-of-line)))))"##,
         true,
         expect![
-        "OK (t (auto-indent-mode-pre-command-hook eldoc-pre-command-refresh-echo-area t) (auto-indent-mode-post-command-hook eldoc-schedule-timer t . #1=(auto-indent-mode-post-command-hook-last)) #1# (auto-indent-mode-post-command-hook t) ((delete-char t t) (kill-line t t) (kill-region t t) (backward-delete-char-untabify t t) (move-beginning-of-line t t)))"
-    ],
+            "OK (t (auto-indent-mode-pre-command-hook eldoc-pre-command-refresh-echo-area t) (auto-indent-mode-post-command-hook eldoc-schedule-timer t . #1=(auto-indent-mode-post-command-hook-last)) #1# (auto-indent-mode-post-command-hook t) ((delete-char t t) (kill-line t t) (kill-region t t) (backward-delete-char-untabify t t) (move-beginning-of-line t t)))"
+        ],
     )
 }
 
@@ -69,8 +69,8 @@ fn auto_indent_mode_disable_removes_primary_hooks_and_preserves_source_quirks() 
                     pre-command-hook)))))"##,
         true,
         expect![
-        "OK ((#2=(auto-indent-file-when-save) (auto-indent-file-when-visit url-handlers-set-buffer-mode vc-refresh-state epa-file-find-file-hook) (auto-indent-mode-post-command-hook eldoc-schedule-timer t . #1=(auto-indent-mode-post-command-hook-last)) #1#) nil #2# nil nil #1# nil)"
-    ],
+            "OK ((#2=(auto-indent-file-when-save) (auto-indent-file-when-visit url-handlers-set-buffer-mode vc-refresh-state epa-file-find-file-hook) (auto-indent-mode-post-command-hook eldoc-schedule-timer t . #1=(auto-indent-mode-post-command-hook-last)) #1#) nil #2# nil nil #1# nil)"
+        ],
     )
 }
 
@@ -113,8 +113,8 @@ fn auto_indent_mode_on_respects_disabled_major_modes() -> ParityBatchCase {
          '(fundamental-mode text-mode emacs-lisp-mode))"##,
         true,
         expect![
-        "OK ((fundamental-mode fundamental-mode nil) (text-mode text-mode nil) (emacs-lisp-mode emacs-lisp-mode t))"
-    ],
+            "OK ((fundamental-mode fundamental-mode nil) (text-mode text-mode nil) (emacs-lisp-mode emacs-lisp-mode t))"
+        ],
     )
 }
 
@@ -207,8 +207,8 @@ fn auto_indent_deactivate_advices_disables_every_available_editing_advice() -> P
                move-beginning-of-line)))))"##,
         true,
         expect![
-        "OK (((delete-char t t) (kill-line t t) (kill-region t t) (kill-ring-save t t) (backward-delete-char-untabify t t) (move-beginning-of-line t t)) ((delete-char t nil) (kill-line t nil) (kill-region t nil) (kill-ring-save t nil) (backward-delete-char-untabify t nil) (move-beginning-of-line t nil)))"
-    ],
+            "OK (((delete-char t t) (kill-line t t) (kill-region t t) (kill-ring-save t t) (backward-delete-char-untabify t t) (move-beginning-of-line t t)) ((delete-char t nil) (kill-line t nil) (kill-region t nil) (kill-ring-save t nil) (backward-delete-char-untabify t nil) (move-beginning-of-line t nil)))"
+        ],
     )
 }
 
@@ -262,8 +262,8 @@ fn auto_indent_eol_char_newline_inserts_configured_character_once() -> ParityBat
           '("statement" "statement;" "statement;   ")))"##,
         true,
         expect![[
-        r#"OK (("statement" "statement:\n" 12) ("statement;" "statement;\n" 12) ("statement;   " "statement;   \n" 15))"#
-    ]],
+            r#"OK (("statement" "statement:\n" 12) ("statement;" "statement;\n" 12) ("statement;   " "statement;   \n" 15))"#
+        ]],
     )
 }
 

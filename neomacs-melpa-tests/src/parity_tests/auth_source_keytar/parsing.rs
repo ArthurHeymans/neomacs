@@ -15,7 +15,8 @@ fn auth_source_keytar_read_password_extracts_real_keytar_credential_rendering() 
     )
 }
 
-fn auth_source_keytar_read_password_trims_outer_whitespace_but_preserves_internal_content() -> ParityBatchCase {
+fn auth_source_keytar_read_password_trims_outer_whitespace_but_preserves_internal_content()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_read_password_trims_outer_whitespace_but_preserves_internal_content",
         r##"(mapcar
@@ -28,7 +29,8 @@ fn auth_source_keytar_read_password_trims_outer_whitespace_but_preserves_interna
     )
 }
 
-fn auth_source_keytar_read_password_uses_first_marker_and_globally_removes_closing_fragment() -> ParityBatchCase {
+fn auth_source_keytar_read_password_uses_first_marker_and_globally_removes_closing_fragment()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_read_password_uses_first_marker_and_globally_removes_closing_fragment",
         r##"(mapcar
@@ -41,7 +43,8 @@ fn auth_source_keytar_read_password_uses_first_marker_and_globally_removes_closi
     )
 }
 
-fn auth_source_keytar_read_password_reports_exact_malformed_and_missing_marker_errors() -> ParityBatchCase {
+fn auth_source_keytar_read_password_reports_exact_malformed_and_missing_marker_errors()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_read_password_reports_exact_malformed_and_missing_marker_errors",
         r##"(mapcar
@@ -59,12 +62,13 @@ fn auth_source_keytar_read_password_reports_exact_malformed_and_missing_marker_e
             "PASSWORD: 'uppercase' }"))"##,
         true,
         expect![[
-        r#"OK (("" (:error wrong-type-argument (arrayp nil))) ("password" (:error wrong-type-argument (arrayp nil))) ("password:" (:error wrong-type-argument (arrayp nil))) ("password: no quote" (:error wrong-type-argument (arrayp nil))) ("{ account: 'alice' }" (:error wrong-type-argument (arrayp nil))) ("PASSWORD: 'uppercase' }" (:ok "uppercase")))"#
-    ]],
+            r#"OK (("" (:error wrong-type-argument (arrayp nil))) ("password" (:error wrong-type-argument (arrayp nil))) ("password:" (:error wrong-type-argument (arrayp nil))) ("password: no quote" (:error wrong-type-argument (arrayp nil))) ("{ account: 'alice' }" (:error wrong-type-argument (arrayp nil))) ("PASSWORD: 'uppercase' }" (:ok "uppercase")))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_read_password_rejects_non_string_secrets_with_exact_signals() -> ParityBatchCase {
+fn auth_source_keytar_read_password_rejects_non_string_secrets_with_exact_signals()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_read_password_rejects_non_string_secrets_with_exact_signals",
         r##"(mapcar
@@ -81,12 +85,13 @@ fn auth_source_keytar_read_password_rejects_non_string_secrets_with_exact_signal
             [112 97 115 115]))"##,
         true,
         expect![[
-        r#"OK ((nil (:error wrong-type-argument (stringp nil))) (password-symbol (:error wrong-type-argument (sequencep password-symbol))) (42 (:error wrong-type-argument (sequencep 42))) (#1=("password: 'nested' }") (:error wrong-type-argument (stringp #1#))) (#2=[112 97 115 115] (:error wrong-type-argument (stringp #2#))))"#
-    ]],
+            r#"OK ((nil (:error wrong-type-argument (stringp nil))) (password-symbol (:error wrong-type-argument (sequencep password-symbol))) (42 (:error wrong-type-argument (sequencep 42))) (#1=("password: 'nested' }") (:error wrong-type-argument (stringp #1#))) (#2=[112 97 115 115] (:error wrong-type-argument (stringp #2#))))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_build_result_parses_multiline_keytar_output_and_reverses_provider_order() -> ParityBatchCase {
+fn auth_source_keytar_build_result_parses_multiline_keytar_output_and_reverses_provider_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_build_result_parses_multiline_keytar_output_and_reverses_provider_order",
         r##"(let (calls)
@@ -101,12 +106,13 @@ fn auth_source_keytar_build_result_parses_multiline_keytar_output_and_reverses_p
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((:secret "token-三") (:secret "beta-secret") (:secret "alpha secret")) ("production/api"))"#
-    ]],
+            r#"OK (((:secret "token-三") (:secret "beta-secret") (:secret "alpha secret")) ("production/api"))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_build_result_empty_and_whitespace_outputs_have_exact_nil_or_error_contracts() -> ParityBatchCase {
+fn auth_source_keytar_build_result_empty_and_whitespace_outputs_have_exact_nil_or_error_contracts()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_build_result_empty_and_whitespace_outputs_have_exact_nil_or_error_contracts",
         r##"(mapcar
@@ -128,12 +134,13 @@ fn auth_source_keytar_build_result_empty_and_whitespace_outputs_have_exact_nil_o
             "[ \n \t\n ]"))"##,
         true,
         expect![[
-        r#"OK (("[]" (:ok nil)) ("[\n]" (:ok nil)) ("" (:ok nil)) ("\n\n" (:ok nil)) ("[ \n \11\n ]" (:error wrong-type-argument (arrayp nil))))"#
-    ]],
+            r#"OK (("[]" (:ok nil)) ("[\n]" (:ok nil)) ("" (:ok nil)) ("\n\n" (:ok nil)) ("[ \n \11\n ]" (:error wrong-type-argument (arrayp nil))))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_build_result_preserves_empty_unicode_and_shell_like_passwords_as_data() -> ParityBatchCase {
+fn auth_source_keytar_build_result_preserves_empty_unicode_and_shell_like_passwords_as_data()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_build_result_preserves_empty_unicode_and_shell_like_passwords_as_data",
         r##"(cl-letf
@@ -144,12 +151,13 @@ fn auth_source_keytar_build_result_preserves_empty_unicode_and_shell_like_passwo
            "special-secrets"))"##,
         true,
         expect![[
-        r#"OK ((:secret "$(touch nope); $HOME & spaces") (:secret "密钥🔐") (:secret ""))"#
-    ]],
+            r#"OK ((:secret "$(touch nope); $HOME & spaces") (:secret "密钥🔐") (:secret ""))"#
+        ]],
     )
 }
 
-fn auth_source_keytar_build_result_single_line_provider_output_yields_only_first_embedded_password() -> ParityBatchCase {
+fn auth_source_keytar_build_result_single_line_provider_output_yields_only_first_embedded_password()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_build_result_single_line_provider_output_yields_only_first_embedded_password",
         r##"(cl-letf
@@ -163,7 +171,8 @@ fn auth_source_keytar_build_result_single_line_provider_output_yields_only_first
     )
 }
 
-fn auth_source_keytar_build_result_blank_lines_surface_failure_before_trailing_comma_cleanup() -> ParityBatchCase {
+fn auth_source_keytar_build_result_blank_lines_surface_failure_before_trailing_comma_cleanup()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_build_result_blank_lines_surface_failure_before_trailing_comma_cleanup",
         r##"(cl-letf
@@ -179,7 +188,8 @@ fn auth_source_keytar_build_result_blank_lines_surface_failure_before_trailing_c
     )
 }
 
-fn auth_source_keytar_build_result_propagates_provider_failures_and_non_string_results() -> ParityBatchCase {
+fn auth_source_keytar_build_result_propagates_provider_failures_and_non_string_results()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_keytar_build_result_propagates_provider_failures_and_non_string_results",
         r##"(mapcar
@@ -204,8 +214,8 @@ fn auth_source_keytar_build_result_propagates_provider_failures_and_non_string_r
             ("list-result")))"##,
         true,
         expect![[
-        r#"OK ((provider-error (:error error ("fixture provider failed"))) (nil (:error wrong-type-argument (arrayp nil))) (17 (:error wrong-type-argument (sequencep 17))) (credential-symbol (:error wrong-type-argument (sequencep credential-symbol))) (#1=("list-result") (:error wrong-type-argument (stringp #1#))))"#
-    ]],
+            r#"OK ((provider-error (:error error ("fixture provider failed"))) (nil (:error wrong-type-argument (arrayp nil))) (17 (:error wrong-type-argument (sequencep 17))) (credential-symbol (:error wrong-type-argument (sequencep credential-symbol))) (#1=("list-result") (:error wrong-type-argument (stringp #1#))))"#
+        ]],
     )
 }
 

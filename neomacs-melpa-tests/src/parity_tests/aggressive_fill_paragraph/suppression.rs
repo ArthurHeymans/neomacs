@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_aggressive_fill_paragraph_batch};
 
-fn aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_comments_and_prose() -> ParityBatchCase {
+fn aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_comments_and_prose()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_comments_and_prose",
         r####"(list
@@ -97,8 +98,8 @@ fn aggressive_fill_paragraph_preserves_structured_prefixes_but_fills_ordinary_co
                                (current-column))))"####,
         true,
         expect![[
-        r#"OK (("// * Deploy the parser canary to one region before promoting it to every production region \n\n// This ordinary explanation is\n// deliberately long enough to require\n// comment-aware wrapping " 191 5 26) ("| Owner Name | Status |\n| Parser | Canary |\n\n#+BEGIN_SRC emacs-lisp :results output\n(message \"deploy\")\n#+END_SRC\n\nThis operational note explains why the\nparser canary remains isolated until\nevery recovery check succeeds. " 222 10 31))"#
-    ]],
+            r#"OK (("// * Deploy the parser canary to one region before promoting it to every production region \n\n// This ordinary explanation is\n// deliberately long enough to require\n// comment-aware wrapping " 191 5 26) ("| Owner Name | Status |\n| Parser | Canary |\n\n#+BEGIN_SRC emacs-lisp :results output\n(message \"deploy\")\n#+END_SRC\n\nThis operational note explains why the\nparser canary remains isolated until\nevery recovery check succeeds. " 222 10 31))"#
+        ]],
     )
 }
 

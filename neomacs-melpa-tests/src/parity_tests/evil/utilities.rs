@@ -31,8 +31,8 @@ fn evil_property_helpers_set_merge_and_query_single_and_all_symbols() -> ParityB
                  neomacs-evil-properties t :baz)))"##,
         true,
         expect![
-        "OK (((beta :foo nil :bar value :baz t) (alpha :foo t :bar nil)) t nil nil ((alpha . t) (beta)) ((alpha) (beta . value)) ((beta . t)))"
-    ],
+            "OK (((beta :foo nil :bar value :baz t) (alpha :foo t :bar nil)) t nil nil ((alpha . t) (beta)) ((alpha) (beta . value)) ((beta . t)))"
+        ],
     )
 }
 
@@ -71,8 +71,8 @@ fn evil_concat_helpers_deduplicate_lists_and_override_association_values() -> Pa
                 '(:a three :c four)))"##,
         true,
         expect![
-        "OK ((a b c) (a b c) ((b . two) (a . three) (c . four)) (:a three :b two :c four))"
-    ],
+            "OK ((a b c) (a b c) ((b . two) (a . three) (c . four)) (:a three :b two :c four))"
+        ],
     )
 }
 
@@ -111,8 +111,8 @@ fn evil_extract_count_parses_exact_commands_counts_and_trailing_keys() -> Parity
                 (evil-extract-count "0XY")))"##,
         true,
         expect![[
-        r#"OK ((nil evil-delete-char "x" nil) (nil evil-beginning-of-visual-line "g0" nil) (420 evil-delete-char "x" nil) (2301 evil-beginning-of-visual-line "g0" nil) (nil evil-delete-char "x" "AB") (2301 evil-beginning-of-visual-line "g0" "CD") (nil evil-beginning-of-line "0" nil) (nil evil-beginning-of-line "0" "XY"))"#
-    ]],
+            r#"OK ((nil evil-delete-char "x" nil) (nil evil-beginning-of-visual-line "g0" nil) (420 evil-delete-char "x" nil) (2301 evil-beginning-of-visual-line "g0" nil) (nil evil-delete-char "x" "AB") (2301 evil-beginning-of-visual-line "g0" "CD") (nil evil-beginning-of-line "0" nil) (nil evil-beginning-of-line "0" "XY"))"#
+        ]],
     )
 }
 
@@ -128,7 +128,8 @@ fn evil_extract_count_rejects_a_count_without_a_command() -> ParityBatchCase {
     )
 }
 
-fn evil_vim_regexp_transform_handles_classes_escaped_backslashes_and_magic_modes() -> ParityBatchCase {
+fn evil_vim_regexp_transform_handles_classes_escaped_backslashes_and_magic_modes() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "evil_vim_regexp_transform_handles_classes_escaped_backslashes_and_magic_modes",
         r##"(let ((patterns
@@ -149,8 +150,8 @@ fn evil_vim_regexp_transform_handles_classes_escaped_backslashes_and_magic_modes
                    patterns))))"##,
         true,
         expect![[
-        r#"OK (("x[[:space:]]x" "x[^[:digit:]]x" "x\\wx" "x[^a-z]x" "x\\\\sx" "x\\\\[[:space:]]x") ("x[[:space:]]x" "x[^[:digit:]]x" "x\\wx" "x[^a-z]x" "x\\\\sx" "x\\\\[[:space:]]x"))"#
-    ]],
+            r#"OK (("x[[:space:]]x" "x[^[:digit:]]x" "x\\wx" "x[^a-z]x" "x\\\\sx" "x\\\\[[:space:]]x") ("x[[:space:]]x" "x[^[:digit:]]x" "x\\wx" "x[^a-z]x" "x\\\\sx" "x\\\\[[:space:]]x"))"#
+        ]],
     )
 }
 

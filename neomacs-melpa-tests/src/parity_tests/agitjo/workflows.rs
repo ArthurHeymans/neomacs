@@ -46,12 +46,13 @@ fn the_documented_setup_block_adds_one_key_to_magit_status_and_magit_dispatch() 
   (nreverse observed))"##,
         true,
         expect![[
-        r##"OK ((:before (:status-key nil :dispatch-entry nil :dispatch-keys 51)) (:after (:status-key agitjo-push :dispatch-entry ("#" . agitjo-push) :dispatch-keys 52 :added (("#" . agitjo-push)) :nothing-else-changed t)) (:agitjo-push-menu (("-f" . agitjo-force-push-switch) ("-s" . agitjo-topic-variable) ("-t" . agitjo-title-option) ("+" . agitjo--pullreq-type-switches) ("u" . agitjo-push-pullreq-current-to-upstream) ("e" . agitjo-push-pullreq-current) ("l" . agitjo-push-pullreq-local-branch) ("r" . agitjo-push-pullreq-local-branch-or-ref) ("C" . magit-branch-configure) ("V" . agitjo-visit-last-pushed-pullreq))))"##
-    ]],
+            r##"OK ((:before (:status-key nil :dispatch-entry nil :dispatch-keys 51)) (:after (:status-key agitjo-push :dispatch-entry ("#" . agitjo-push) :dispatch-keys 52 :added (("#" . agitjo-push)) :nothing-else-changed t)) (:agitjo-push-menu (("-f" . agitjo-force-push-switch) ("-s" . agitjo-topic-variable) ("-t" . agitjo-title-option) ("+" . agitjo--pullreq-type-switches) ("u" . agitjo-push-pullreq-current-to-upstream) ("e" . agitjo-push-pullreq-current) ("l" . agitjo-push-pullreq-local-branch) ("r" . agitjo-push-pullreq-local-branch-or-ref) ("C" . magit-branch-configure) ("V" . agitjo-visit-last-pushed-pullreq))))"##
+        ]],
     )
 }
 
-fn without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch() -> ParityBatchCase {
+fn without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch",
         r##"(let* ((agitjo--current-topics nil)
@@ -91,12 +92,13 @@ fn without_a_session_topic_the_refspec_falls_back_to_each_projects_source_branch
   (nreverse observed))"##,
         true,
         expect![[
-        r#"OK ((:untopiced (:topic nil :refspec "feature/parser-recovery:refs/for/main/feature/parser-recovery")) (:topiced (:topic "team/handbook-42" :refspec "feature/handbook:refs/for/main/team/handbook-42")))"#
-    ]],
+            r#"OK ((:untopiced (:topic nil :refspec "feature/parser-recovery:refs/for/main/feature/parser-recovery")) (:topiced (:topic "team/handbook-42" :refspec "feature/handbook:refs/for/main/team/handbook-42")))"#
+        ]],
     )
 }
 
-fn the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_given() -> ParityBatchCase {
+fn the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_given()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_given",
         r##"(let* ((agitjo--current-topics nil)
@@ -141,12 +143,13 @@ fn the_draft_switch_titles_the_request_wip_from_the_commit_subject_when_none_is_
   (nreverse observed))"##,
         true,
         expect![[
-        r#"OK ((:draft-with-an-explicit-title ("--push-option=title=WIP: Parser recovery")) (:draft-without-a-title ("--push-option=title=WIP: Recover parser transitions after lookahead reset")) (:normal-with-an-explicit-title ("--push-option=title=Parser recovery")) (:commit-subject "Recover parser transitions after lookahead reset"))"#
-    ]],
+            r#"OK ((:draft-with-an-explicit-title ("--push-option=title=WIP: Parser recovery")) (:draft-without-a-title ("--push-option=title=WIP: Recover parser transitions after lookahead reset")) (:normal-with-an-explicit-title ("--push-option=title=Parser recovery")) (:commit-subject "Recover parser transitions after lookahead reset"))"#
+        ]],
     )
 }
 
-fn visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_output() -> ParityBatchCase {
+fn visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_output()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_output",
         r##"(let* ((agitjo--current-topics nil)
@@ -200,8 +203,8 @@ fn visiting_the_last_pushed_pull_request_takes_the_most_recent_link_from_git_out
   (nreverse observed))"##,
         true,
         expect![[
-        r#"OK ((:before-any-push (user-error "No pull request link could be found") :opened nil) (:after-two-pushes opened :opened ("https://forge.invalid/halvin/agitjo/pulls/42")))"#
-    ]],
+            r#"OK ((:before-any-push (user-error "No pull request link could be found") :opened nil) (:after-two-pushes opened :opened ("https://forge.invalid/halvin/agitjo/pulls/42")))"#
+        ]],
     )
 }
 
@@ -260,8 +263,8 @@ fn the_draft_template_comes_from_the_remote_main_branch_and_prefers_forgejo() ->
   (nreverse observed))"####,
         true,
         expect![[
-        r###"OK ((:three-candidate-templates (:draft "## From origin main\n\nDescribe the change.\n" :draft-file "template-origin/.git/agitjo/pullreq-draft")) (:forgejo-and-github-templates (:draft "## Forgejo template\n")))"###
-    ]],
+            r###"OK ((:three-candidate-templates (:draft "## From origin main\n\nDescribe the change.\n" :draft-file "template-origin/.git/agitjo/pullreq-draft")) (:forgejo-and-github-templates (:draft "## Forgejo template\n")))"###
+        ]],
     )
 }
 
@@ -300,8 +303,8 @@ fn confirming_from_an_unrelated_buffer_refuses_and_pushes_nothing() -> ParityBat
   (nreverse observed))"##,
         true,
         expect![[
-        r#"OK ((:before (:draft-directory-exists nil :draft no-draft-file)) (:refusal (user-error "Function called outside AGitjo post buffer")) (:after (:draft-directory-exists t :draft no-draft-file :pushes nil :unrelated-buffer-text "not a pull request draft\n")))"#
-    ]],
+            r#"OK ((:before (:draft-directory-exists nil :draft no-draft-file)) (:refusal (user-error "Function called outside AGitjo post buffer")) (:after (:draft-directory-exists t :draft no-draft-file :pushes nil :unrelated-buffer-text "not a pull request draft\n")))"#
+        ]],
     )
 }
 

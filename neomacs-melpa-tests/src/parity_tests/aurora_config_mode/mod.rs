@@ -121,8 +121,6 @@ pub(crate) fn assert_aurora_config_mode_autoload_parity(elisp_form: &str, expect
     );
 }
 
-
-
 /// Multi-probe batch for `assert_aurora_config_mode_autoload_parity` cases (2a).
 pub(crate) fn assert_aurora_config_mode_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asdf_vm_batch};
 
-fn asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_faces() -> ParityBatchCase {
+fn asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_faces()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_faces",
         r##"(cl-letf
@@ -39,12 +40,13 @@ fn asdf_vm_plugin_menu_entries_merge_repository_and_installed_state_with_exact_f
                 (asdf-vm-plugin-menu--list-entries)))"##,
         true,
         expect![[
-        r#"OK (("https://example/ruby.git" (("available" asdf-vm-plugin-menu-status-available) ("ruby" asdf-vm-plugin-menu-status-available) ("https://example/ruby.git" asdf-vm-plugin-menu-status-available))) ("https://example/node.git" (("installed" asdf-vm-plugin-menu-status-installed) ("nodejs" asdf-vm-plugin-menu-status-installed) ("https://example/node.git" asdf-vm-plugin-menu-status-installed))) ("https://example/資料.git" (("installed" asdf-vm-plugin-menu-status-installed) ("資料" asdf-vm-plugin-menu-status-installed) ("https://example/資料.git" asdf-vm-plugin-menu-status-installed))))"#
-    ]],
+            r#"OK (("https://example/ruby.git" (("available" asdf-vm-plugin-menu-status-available) ("ruby" asdf-vm-plugin-menu-status-available) ("https://example/ruby.git" asdf-vm-plugin-menu-status-available))) ("https://example/node.git" (("installed" asdf-vm-plugin-menu-status-installed) ("nodejs" asdf-vm-plugin-menu-status-installed) ("https://example/node.git" asdf-vm-plugin-menu-status-installed))) ("https://example/資料.git" (("installed" asdf-vm-plugin-menu-status-installed) ("資料" asdf-vm-plugin-menu-status-installed) ("https://example/資料.git" asdf-vm-plugin-menu-status-installed))))"#
+        ]],
     )
 }
 
-fn asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_keymap() -> ParityBatchCase {
+fn asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_keymap()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_keymap",
         r##"(with-temp-buffer
@@ -82,12 +84,13 @@ fn asdf_vm_plugin_menu_mode_initializes_columns_padding_sort_refresh_imenu_and_k
                      "x")))))"##,
         true,
         expect![[
-        r#"OK (asdf-vm-plugin-menu-mode "ASDF-VM Plugin Menu" [("Status" 12 asdf-vm-plugin-menu--status-predicate) ("Plugin" 31 asdf-vm-plugin-menu--name-predicate) ("Repository Url" 42 asdf-vm-plugin-menu--url-predicate)] 4 ("Status") asdf-vm-plugin-menu--refresh asdf-vm-plugin-menu--imenu-prev-index-position-function tabulated-list-get-id (("u" asdf-vm-plugin-menu-mark-unmark) ("DEL" asdf-vm-plugin-menu-backup-unmark) ("d" asdf-vm-plugin-menu-mark-delete) ("i" asdf-vm-plugin-menu-mark-install) ("r" revert-buffer) ("w" asdf-vm-plugin-browse-url) ("x" asdf-vm-plugin-menu-execute)))"#
-    ]],
+            r#"OK (asdf-vm-plugin-menu-mode "ASDF-VM Plugin Menu" [("Status" 12 asdf-vm-plugin-menu--status-predicate) ("Plugin" 31 asdf-vm-plugin-menu--name-predicate) ("Repository Url" 42 asdf-vm-plugin-menu--url-predicate)] 4 ("Status") asdf-vm-plugin-menu--refresh asdf-vm-plugin-menu--imenu-prev-index-position-function tabulated-list-get-id (("u" asdf-vm-plugin-menu-mark-unmark) ("DEL" asdf-vm-plugin-menu-backup-unmark) ("d" asdf-vm-plugin-menu-mark-delete) ("i" asdf-vm-plugin-menu-mark-install) ("r" revert-buffer) ("w" asdf-vm-plugin-browse-url) ("x" asdf-vm-plugin-menu-execute)))"#
+        ]],
     )
 }
 
-fn asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_strings() -> ParityBatchCase {
+fn asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_strings()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_strings",
         r##"(with-temp-buffer
@@ -132,12 +135,13 @@ fn asdf_vm_plugin_menu_field_getters_return_selected_entry_columns_or_empty_stri
                       (funcall read-fields))))))"##,
         true,
         expect![[
-        r#"OK (("ruby-id" "installed" "ruby" "https://example/ruby.git") (nil (nil "" "" "")) ("ruby-id" "installed" "ruby" "https://example/ruby.git") ("node-id" "available" "nodejs" "https://example/node.git"))"#
-    ]],
+            r#"OK (("ruby-id" "installed" "ruby" "https://example/ruby.git") (nil (nil "" "" "")) ("ruby-id" "installed" "ruby" "https://example/ruby.git") ("node-id" "available" "nodejs" "https://example/node.git"))"#
+        ]],
     )
 }
 
-fn asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuses() -> ParityBatchCase {
+fn asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuses()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuses",
         r##"(let ((wrong-mode
@@ -208,12 +212,13 @@ fn asdf_vm_plugin_menu_mark_commands_enforce_mode_and_only_mark_eligible_statuse
                            "node-id"))))))))"##,
         true,
         expect![[
-        r#"OK ((:error asdf-vm-incorrect-mode-error (fundamental-mode)) "node-id" nil (("ruby-id" 68) ("node-id" 73)) (("ruby-id" 32) ("node-id" 32)))"#
-    ]],
+            r#"OK ((:error asdf-vm-incorrect-mode-error (fundamental-mode)) "node-id" nil (("ruby-id" 68) ("node-id" 73)) (("ruby-id" 32) ("node-id" 32)))"#
+        ]],
     )
 }
 
-fn asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error() -> ParityBatchCase {
+fn asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error",
         r##"(let ((browse-url-secondary-browser-function
@@ -245,12 +250,13 @@ fn asdf_vm_plugin_browse_url_dispatches_primary_secondary_and_missing_url_error(
                   (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (:primary (:secondary "https://example/node") (:error asdf-vm-plugin-menu-missing-url-error ("ruby")) (("https://example/ruby")))"#
-    ]],
+            r#"OK (:primary (:secondary "https://example/node") (:error asdf-vm-plugin-menu-missing-url-error ("ruby")) (("https://example/ruby")))"#
+        ]],
     )
 }
 
-fn asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_refreshes() -> ParityBatchCase {
+fn asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_refreshes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_refreshes",
         r##"(with-temp-buffer
@@ -310,8 +316,8 @@ fn asdf_vm_plugin_menu_execute_scans_marks_runs_delete_and_install_batches_then_
                     (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (:refreshed ((:remove "ruby" t) (:add "資料" "https://example/資料.git" t) (:add "nodejs" "https://example/nodejs.git" t) (:refresh)))"#
-    ]],
+            r#"OK (:refreshed ((:remove "ruby" t) (:add "資料" "https://example/資料.git" t) (:add "nodejs" "https://example/nodejs.git" t) (:refresh)))"#
+        ]],
     )
 }
 
@@ -354,7 +360,8 @@ fn asdf_vm_plugin_menu_sort_predicates_apply_status_name_and_repository_rules() 
     )
 }
 
-fn asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_window() -> ParityBatchCase {
+fn asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_window()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_window",
         r##"(let ((asdf-vm-plugin-menu-buffer-name
@@ -393,8 +400,8 @@ fn asdf_vm_plugin_menu_command_creates_utf8_buffer_refreshes_and_displays_same_w
                       (nreverse calls))))))"##,
         true,
         expect![[
-        r#"OK ("*fixture-plugin-menu*" asdf-vm-plugin-menu-mode utf-8 ((:refresh "*fixture-plugin-menu*" nil) (:display "*fixture-plugin-menu*" nil)))"#
-    ]],
+            r#"OK ("*fixture-plugin-menu*" asdf-vm-plugin-menu-mode utf-8 ((:refresh "*fixture-plugin-menu*" nil) (:display "*fixture-plugin-menu*" nil)))"#
+        ]],
     )
 }
 

@@ -172,12 +172,13 @@ fn aidermacs_run_builds_code_architect_config_and_subtree_cli_contracts() -> Par
                                     (buffer-name buffer))))))))"##,
         true,
         expect![[
-        r#"OK (("aider-ce" ("--model" "code-model" "--no-auto-commits" "--no-auto-accept-architect" "--watch-files" "--weak-model" "weak-model" "--linear-output" "--read" "[ORACLE-SANDBOX]/rules.md" "--read" "[ORACLE-SANDBOX]/repo/docs/guide.md" "--verbose" "--thinking-tokens 8k") "*aidermacs:[ORACLE-SANDBOX]/repo/*") ("aider-ce" ("--chat-mode" "architect" "--model" "reasoner" "--editor-model" "editor" "--linear-output" "--subtree-only") "*aidermacs:[ORACLE-SANDBOX]/repo/*") ("aider-ce" ("--config" "[ORACLE-SANDBOX]/aider.yml" "--subtree-only" "--debug") "*aidermacs:[ORACLE-SANDBOX]/repo/*"))"#
-    ]],
+            r#"OK (("aider-ce" ("--model" "code-model" "--no-auto-commits" "--no-auto-accept-architect" "--watch-files" "--weak-model" "weak-model" "--linear-output" "--read" "[ORACLE-SANDBOX]/rules.md" "--read" "[ORACLE-SANDBOX]/repo/docs/guide.md" "--verbose" "--thinking-tokens 8k") "*aidermacs:[ORACLE-SANDBOX]/repo/*") ("aider-ce" ("--chat-mode" "architect" "--model" "reasoner" "--editor-model" "editor" "--linear-output" "--subtree-only") "*aidermacs:[ORACLE-SANDBOX]/repo/*") ("aider-ce" ("--config" "[ORACLE-SANDBOX]/aider.yml" "--subtree-only" "--debug") "*aidermacs:[ORACLE-SANDBOX]/repo/*"))"#
+        ]],
     )
 }
 
-fn aidermacs_system_notification_dispatches_linux_windows_and_fallback_boundaries() -> ParityBatchCase {
+fn aidermacs_system_notification_dispatches_linux_windows_and_fallback_boundaries()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aidermacs_system_notification_dispatches_linux_windows_and_fallback_boundaries",
         r##"(let ((aidermacs-enable-notifications t)
@@ -205,8 +206,8 @@ fn aidermacs_system_notification_dispatches_linux_windows_and_fallback_boundarie
                         (nreverse calls)))"##,
         true,
         expect![[
-        r#"OK (("notify-send" nil nil nil "Build" "Tests finished" "-t" "0") ("powershell" nil nil nil "-Command" "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); [System.Windows.Forms.MessageBox]::Show('Needs attention', 'Review', [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)"))"#
-    ]],
+            r#"OK (("notify-send" nil nil nil "Build" "Tests finished" "-t" "0") ("powershell" nil nil nil "-Command" "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); [System.Windows.Forms.MessageBox]::Show('Needs attention', 'Review', [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)"))"#
+        ]],
     )
 }
 

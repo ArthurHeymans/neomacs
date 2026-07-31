@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_archive_region_batch};
 
-fn archive_region_prefix_workflow_moves_repeated_selections_and_opens_the_companion_file() -> ParityBatchCase {
+fn archive_region_prefix_workflow_moves_repeated_selections_and_opens_the_companion_file()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "archive_region_prefix_workflow_moves_repeated_selections_and_opens_the_companion_file",
         r##"(save-window-excursion
@@ -113,8 +114,8 @@ fn archive_region_prefix_workflow_moves_repeated_selections_and_opens_the_compan
        source archive))))"##,
         true,
         expect![[
-        r##"OK ("(setq project-name \"Neomacs\")\n\n(setq current-cache nil)\n(message \"current deploy\")\n" "(setq project-name \"Neomacs\")\n\n(setq current-cache nil)\n(message \"current deploy\")\n" ";; [2026/07/27]\n;; (archive-region-pos \"(setq project-name \\\"Neomacs\\\")\")\n(setq obsolete-cache t)\n\n;; [2026/07/28]\n;; (archive-region-pos \"(setq current-cache nil)\")\n(message \"old deploy\")\n\n" "(message \"draft deploy\")\n" (";; (message \"old deploy\")\n" ";; (setq obsolete-cache t)\n" "(message \"draft deploy\")\n") "project.el_archive" ";; [2026/07/27]\n;; (archive-region-pos \"(setq project-name \\\"Neomacs\\\")\")\n(setq obsolete-cache t)\n\n;; [2026/07/28]\n;; (archive-region-pos \"(setq current-cache nil)\")\n(message \"old deploy\")\n\n" ("[%Y/%m/%d]" "[%Y/%m/%d]") nil)"##
-    ]],
+            r##"OK ("(setq project-name \"Neomacs\")\n\n(setq current-cache nil)\n(message \"current deploy\")\n" "(setq project-name \"Neomacs\")\n\n(setq current-cache nil)\n(message \"current deploy\")\n" ";; [2026/07/27]\n;; (archive-region-pos \"(setq project-name \\\"Neomacs\\\")\")\n(setq obsolete-cache t)\n\n;; [2026/07/28]\n;; (archive-region-pos \"(setq current-cache nil)\")\n(message \"old deploy\")\n\n" "(message \"draft deploy\")\n" (";; (message \"old deploy\")\n" ";; (setq obsolete-cache t)\n" "(message \"draft deploy\")\n") "project.el_archive" ";; [2026/07/27]\n;; (archive-region-pos \"(setq project-name \\\"Neomacs\\\")\")\n(setq obsolete-cache t)\n\n;; [2026/07/28]\n;; (archive-region-pos \"(setq current-cache nil)\")\n(message \"old deploy\")\n\n" ("[%Y/%m/%d]" "[%Y/%m/%d]") nil)"##
+        ]],
     )
 }
 
@@ -223,12 +224,13 @@ fn archive_region_navigation_link_supports_a_real_copy_and_restore_workflow() ->
        source archive))))"##,
         true,
         expect![[
-        r##"OK (";; [2026/07/28]\n;; (archive-region-pos \"(setq checkpoint 'stable)\")\n(message \"restore λ\")\n\n" (archive-region-pos "(setq checkpoint 'stable)") ("restore.el" 2 "(setq checkpoint 'stable)") "(message \"restore λ\")\n" "(setq project 'neomacs)\n(setq checkpoint 'stable)\n(message \"restore λ\")\n(setq next-step 'ship)\n" "(setq project 'neomacs)\n(setq checkpoint 'stable)\n(message \"restore \316\273\")\n(setq next-step 'ship)\n" "")"##
-    ]],
+            r##"OK (";; [2026/07/28]\n;; (archive-region-pos \"(setq checkpoint 'stable)\")\n(message \"restore λ\")\n\n" (archive-region-pos "(setq checkpoint 'stable)") ("restore.el" 2 "(setq checkpoint 'stable)") "(message \"restore λ\")\n" "(setq project 'neomacs)\n(setq checkpoint 'stable)\n(message \"restore λ\")\n(setq next-step 'ship)\n" "(setq project 'neomacs)\n(setq checkpoint 'stable)\n(message \"restore \316\273\")\n(setq next-step 'ship)\n" "")"##
+        ]],
     )
 }
 
-fn archive_region_custom_markdown_history_keeps_comment_syntax_suffix_and_date_contract() -> ParityBatchCase {
+fn archive_region_custom_markdown_history_keeps_comment_syntax_suffix_and_date_contract()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "archive_region_custom_markdown_history_keeps_comment_syntax_suffix_and_date_contract",
         r##"(save-window-excursion
@@ -299,12 +301,13 @@ fn archive_region_custom_markdown_history_keeps_comment_syntax_suffix_and_date_c
        source archive))))"##,
         true,
         expect![[
-        r##"OK ("%Y-%m-%dT%H:%M" "# Release notes\n\nCurrent rollout procedure\n" "release-notes.md.history.md" "<!-- 2026-07-28T09:30 -->\n<!-- (archive-region-pos \"# Release notes\") -->\nold rollout procedure\n\n" "<!-- 2026-07-28T09:30 -->\n<!-- (archive-region-pos \"# Release notes\") -->\nold rollout procedure\n\n")"##
-    ]],
+            r##"OK ("%Y-%m-%dT%H:%M" "# Release notes\n\nCurrent rollout procedure\n" "release-notes.md.history.md" "<!-- 2026-07-28T09:30 -->\n<!-- (archive-region-pos \"# Release notes\") -->\nold rollout procedure\n\n" "<!-- 2026-07-28T09:30 -->\n<!-- (archive-region-pos \"# Release notes\") -->\nold rollout procedure\n\n")"##
+        ]],
     )
 }
 
-fn archive_region_failed_append_can_be_reverted_and_retried_without_losing_source_text() -> ParityBatchCase {
+fn archive_region_failed_append_can_be_reverted_and_retried_without_losing_source_text()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "archive_region_failed_append_can_be_reverted_and_retried_without_losing_source_text",
         r##"(let* ((source
@@ -391,8 +394,8 @@ fn archive_region_failed_append_can_be_reverted_and_retried_without_losing_sourc
      source archive)))"##,
         true,
         expect![[
-        r##"OK ((:error file-error ("Opening output file" "Is a directory" "[ORACLE-SANDBOX]/recovery.el_archive")) "(setq retained t)\n;; [2026/07/28]\n;; (archive-region-pos \"(setq retained t)\")\n(message \"archive after recovery\")\n\n(setq tail t)\n" "(setq retained t)\n;; (message \"archive after recovery\")\n(setq tail t)\n" "(setq retained t)\n(setq tail t)\n" ";; [2026/07/28]\n;; (archive-region-pos \"(setq retained t)\")\n(message \"archive after recovery\")\n\n" 2)"##
-    ]],
+            r##"OK ((:error file-error ("Opening output file" "Is a directory" "[ORACLE-SANDBOX]/recovery.el_archive")) "(setq retained t)\n;; [2026/07/28]\n;; (archive-region-pos \"(setq retained t)\")\n(message \"archive after recovery\")\n\n(setq tail t)\n" "(setq retained t)\n;; (message \"archive after recovery\")\n(setq tail t)\n" "(setq retained t)\n(setq tail t)\n" ";; [2026/07/28]\n;; (archive-region-pos \"(setq retained t)\")\n(message \"archive after recovery\")\n\n" 2)"##
+        ]],
     )
 }
 

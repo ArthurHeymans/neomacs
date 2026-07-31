@@ -48,10 +48,5 @@ pub(crate) fn assert_aiken_mode_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_aiken_mode_parity` cases (2a).
 pub(crate) fn assert_aiken_mode_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        aiken_mode_oracle(),
-        &name,
-        "aiken_mode_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(aiken_mode_oracle(), &name, "aiken_mode_parity", cases);
 }

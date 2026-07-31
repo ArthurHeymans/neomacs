@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_arxiv_citation_batch};
 
-fn gui_selection_resolves_an_unpublished_paper_and_updates_real_bibliographies() -> ParityBatchCase {
+fn gui_selection_resolves_an_unpublished_paper_and_updates_real_bibliographies() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "gui_selection_resolves_an_unpublished_paper_and_updates_real_bibliographies",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -73,8 +74,8 @@ fn gui_selection_resolves_an_unpublished_paper_and_updates_real_bibliographies()
           (delete-file file))))))"##,
         true,
         expect![[
-        r#"OK (nil t (primary (selection CLIPBOARD)) (("https://zbmath.org/?q=arXiv:2501.01234" t t) ("http://export.arxiv.org/api/query?id_list=2501.01234" t t)) ("% Shared research bibliography\n\n@Article{lovelace25:operat-seman-ai,\n author        = {Lovelace, Ada and Hopper, GraceBrewsterMurray},\n journal       = {arXiv e-prints},\n title         = {{O}perational {S}emantics for {A}{I}: {A} {R}eproducible {S}tudy},\n year          = {2025},\n eprint        = {2501.01234},\n eprintclass   = {cs.PL},\n eprinttype    = {arXiv},\n keywords      = {cs.PL, cs.AI},\n}\n" "@Book{existing,\n title = {Existing Result},\n}\n\n@Article{lovelace25:operat-seman-ai,\n author        = {Lovelace, Ada and Hopper, GraceBrewsterMurray},\n journal       = {arXiv e-prints},\n title         = {{O}perational {S}emantics for {A}{I}: {A} {R}eproducible {S}tudy},\n year          = {2025},\n eprint        = {2501.01234},\n eprintclass   = {cs.PL},\n eprinttype    = {arXiv},\n keywords      = {cs.PL, cs.AI},\n}\n"))"#
-    ]],
+            r#"OK (nil t (primary (selection CLIPBOARD)) (("https://zbmath.org/?q=arXiv:2501.01234" t t) ("http://export.arxiv.org/api/query?id_list=2501.01234" t t)) ("% Shared research bibliography\n\n@Article{lovelace25:operat-seman-ai,\n author        = {Lovelace, Ada and Hopper, GraceBrewsterMurray},\n journal       = {arXiv e-prints},\n title         = {{O}perational {S}emantics for {A}{I}: {A} {R}eproducible {S}tudy},\n year          = {2025},\n eprint        = {2501.01234},\n eprintclass   = {cs.PL},\n eprinttype    = {arXiv},\n keywords      = {cs.PL, cs.AI},\n}\n" "@Book{existing,\n title = {Existing Result},\n}\n\n@Article{lovelace25:operat-seman-ai,\n author        = {Lovelace, Ada and Hopper, GraceBrewsterMurray},\n journal       = {arXiv e-prints},\n title         = {{O}perational {S}emantics for {A}{I}: {A} {R}eproducible {S}tudy},\n year          = {2025},\n eprint        = {2501.01234},\n eprintclass   = {cs.PL},\n eprinttype    = {arXiv},\n keywords      = {cs.PL, cs.AI},\n}\n"))"#
+        ]],
     )
 }
 
@@ -137,8 +138,8 @@ fn clipboard_zbmath_result_replaces_the_remote_key_and_appends_aligned_bibtex() 
         (delete-file bibliography)))))"##,
         true,
         expect![[
-        r#"OK (nil (("https://zbmath.org/?q=an:145668001" t t) ("https://zbmath.org/bibtex/1456.68001.bib" t t)) "% Published papers\n\n@Article{lovelace24:execut-seman-editor,\nauthor       = {Lovelace, Ada and Turing, Alan},\ntitle        = {Executable Semantics for Editors},\njournal      = {Journal of Reproducible Systems},\nyear         = {2024},\nvolume       = {17},\npages        = {101--129},\n}\n\n")"#
-    ]],
+            r#"OK (nil (("https://zbmath.org/?q=an:145668001" t t) ("https://zbmath.org/bibtex/1456.68001.bib" t t)) "% Published papers\n\n@Article{lovelace24:execut-seman-editor,\nauthor       = {Lovelace, Ada and Turing, Alan},\ntitle        = {Executable Semantics for Editors},\njournal      = {Journal of Reproducible Systems},\nyear         = {2024},\nvolume       = {17},\npages        = {101--129},\n}\n\n")"#
+        ]],
     )
 }
 
@@ -230,8 +231,8 @@ fn elfeed_downloads_a_real_pdf_file_with_the_documented_name_and_opens_it() -> P
         (makunbound 'elfeed-show-entry)))))"##,
         true,
         expect![[
-        r#"OK (viewed (("http://export.arxiv.org/api/query?id_list=2502.42424" t t)) ((entry-link (:id "feed-entry-42")) (copy "https://arxiv.org/pdf/2502.42424.pdf" "[ORACLE-SANDBOX]/library//lovelace-turing_practical-proof-assistants.pdf" t) (open "[ORACLE-SANDBOX]/library/lovelace-turing_practical-proof-assistants.pdf" (51 "904636248025ad20fb9c6bd8b700179a2a42edb5df3636e926c7e09055ee3f75" "%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n"))) t "%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n")"#
-    ]],
+            r#"OK (viewed (("http://export.arxiv.org/api/query?id_list=2502.42424" t t)) ((entry-link (:id "feed-entry-42")) (copy "https://arxiv.org/pdf/2502.42424.pdf" "[ORACLE-SANDBOX]/library//lovelace-turing_practical-proof-assistants.pdf" t) (open "[ORACLE-SANDBOX]/library/lovelace-turing_practical-proof-assistants.pdf" (51 "904636248025ad20fb9c6bd8b700179a2a42edb5df3636e926c7e09055ee3f75" "%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n"))) t "%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n")"#
+        ]],
     )
 }
 

@@ -34,10 +34,5 @@ pub(crate) fn assert_age_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_age_parity` cases (2a).
 pub(crate) fn assert_age_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        age_oracle(),
-        &name,
-        "age_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(age_oracle(), &name, "age_parity", cases);
 }

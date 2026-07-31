@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_projectile_batch};
 
-fn projectile_async_external_indexing_reports_success_and_nonzero_exit_contracts() -> ParityBatchCase {
+fn projectile_async_external_indexing_reports_success_and_nonzero_exit_contracts() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "projectile_async_external_indexing_reports_success_and_nonzero_exit_contracts",
         r##"(let ((root (file-name-as-directory
@@ -53,8 +54,7 @@ fn projectile_async_external_indexing_reports_success_and_nonzero_exit_contracts
 
 #[test]
 fn async_process_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        projectile_async_external_indexing_reports_success_and_nonzero_exit_contracts(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![projectile_async_external_indexing_reports_success_and_nonzero_exit_contracts()];
     assert_projectile_batch(&cases);
 }

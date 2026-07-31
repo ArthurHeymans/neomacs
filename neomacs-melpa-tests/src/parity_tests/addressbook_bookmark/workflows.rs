@@ -34,8 +34,8 @@ fn creating_contacts_records_addressbook_bookmarks() -> ParityBatchCase {
           (file-exists-p (ab-test-path "book/contacts.bmk")))))"##,
         true,
         expect![[
-        r#"OK ((("Zoë Müller") "(\"Zoë Müller\" (city . \"Köln\") (country . \"Deutschland\") (email . \"zoe@example.org, z.mueller@example.net\") (group . \"Freunde\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"Grüße aus Köln\") (phone . \"+49 221 4711\") (position . 0) (state . \"NRW\") (street . \"Hauptstraße 7\") (type . \"addressbook\") (web . \"https://zoë.example\") (zipcode . \"50667\"))" ("Name: " "Group: " "Group: " "Mail: " "Mail: " "Mail: " "Phone: " "Phone: " "Web: " "Web: " "Street: " "City: " "State: " "Zipcode: " "Country: " "Note: " "Image path: " "`Zoë Müller' Recorded. Add a new contact? ")) ("Ann Smith" "Zoë Müller") "(\"Ann Smith\" (city . \"Springfield\") (country . \"USA\") (email . \"ann@example.com\") (group . \"Work\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"\") (phone . \"\") (position . 0) (state . \"IL\") (street . \"12 Main Street\") (type . \"addressbook\") (web . \"\") (zipcode . \"62704\"))" ("Ann Smith" "Zoë Müller") t 2 nil)"#
-    ]],
+            r#"OK ((("Zoë Müller") "(\"Zoë Müller\" (city . \"Köln\") (country . \"Deutschland\") (email . \"zoe@example.org, z.mueller@example.net\") (group . \"Freunde\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"Grüße aus Köln\") (phone . \"+49 221 4711\") (position . 0) (state . \"NRW\") (street . \"Hauptstraße 7\") (type . \"addressbook\") (web . \"https://zoë.example\") (zipcode . \"50667\"))" ("Name: " "Group: " "Group: " "Mail: " "Mail: " "Mail: " "Phone: " "Phone: " "Web: " "Web: " "Street: " "City: " "State: " "Zipcode: " "Country: " "Note: " "Image path: " "`Zoë Müller' Recorded. Add a new contact? ")) ("Ann Smith" "Zoë Müller") "(\"Ann Smith\" (city . \"Springfield\") (country . \"USA\") (email . \"ann@example.com\") (group . \"Work\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"\") (phone . \"\") (position . 0) (state . \"IL\") (street . \"12 Main Street\") (type . \"addressbook\") (web . \"\") (zipcode . \"62704\"))" ("Ann Smith" "Zoë Müller") t 2 nil)"#
+        ]],
     )
 }
 
@@ -72,8 +72,8 @@ fn the_bookmark_file_round_trips_a_non_ascii_contact_and_filename() -> ParityBat
           (ab-test-record-text "Zoë Müller"))))"##,
         true,
         expect![[
-        r#"OK ((t ("." ".." "répertoire.bmk") (nil nil t) utf-8-emacs-unix) ";;;; Emacs Bookmark Format Version 1;;;; -*- coding: utf-8-emacs; mode: lisp-data -*-\n;;; This format is meant to be slightly human-readable;\n;;; nevertheless, you probably don't want to edit it.\n;;; -*- End Of Bookmark File Format Version Stamp -*-\n((\"Ann Smith\"\n  (position . 0)\n  (last-modified <TIME>)\n  (type . \"addressbook\")\n  (location . \"Addressbook entry\")\n  (image . \"\")\n  (email . \"ann@example.com\")\n  (phone . \"\")\n  (web . \"\")\n  (street . \"12 Main Street\")\n  (city . \"Springfield\")\n  (state . \"IL\")\n  (zipcode . \"62704\")\n  (country . \"USA\")\n  (note . \"\")\n  (group . \"Work\")\n  (handler . addressbook-bookmark-jump))\n(\"Zoë Müller\"\n (position . 0)\n (last-modified <TIME>)\n (type . \"addressbook\")\n (location . \"Addressbook entry\")\n (image . \"\")\n (email . \"zoe@example.org, z.mueller@example.net\")\n (phone . \"+49 221 4711\")\n (web . \"https://zoë.example\")\n (street . \"Hauptstraße 7\")\n (city . \"Köln\")\n (state . \"NRW\")\n (zipcode . \"50667\")\n (country . \"Deutschland\")\n (note . \"Grüße aus Köln\")\n (group . \"Freunde\")\n (handler . addressbook-bookmark-jump))\n)\n" (nil (90 111 195 171 32 77 195 188 108 108 101 114 34 10)) ("Ann Smith" "Zoë Müller") t "(\"Zoë Müller\" (city . \"Köln\") (country . \"Deutschland\") (email . \"zoe@example.org, z.mueller@example.net\") (group . \"Freunde\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"Grüße aus Köln\") (phone . \"+49 221 4711\") (position . 0) (state . \"NRW\") (street . \"Hauptstraße 7\") (type . \"addressbook\") (web . \"https://zoë.example\") (zipcode . \"50667\"))")"#
-    ]],
+            r#"OK ((t ("." ".." "répertoire.bmk") (nil nil t) utf-8-emacs-unix) ";;;; Emacs Bookmark Format Version 1;;;; -*- coding: utf-8-emacs; mode: lisp-data -*-\n;;; This format is meant to be slightly human-readable;\n;;; nevertheless, you probably don't want to edit it.\n;;; -*- End Of Bookmark File Format Version Stamp -*-\n((\"Ann Smith\"\n  (position . 0)\n  (last-modified <TIME>)\n  (type . \"addressbook\")\n  (location . \"Addressbook entry\")\n  (image . \"\")\n  (email . \"ann@example.com\")\n  (phone . \"\")\n  (web . \"\")\n  (street . \"12 Main Street\")\n  (city . \"Springfield\")\n  (state . \"IL\")\n  (zipcode . \"62704\")\n  (country . \"USA\")\n  (note . \"\")\n  (group . \"Work\")\n  (handler . addressbook-bookmark-jump))\n(\"Zoë Müller\"\n (position . 0)\n (last-modified <TIME>)\n (type . \"addressbook\")\n (location . \"Addressbook entry\")\n (image . \"\")\n (email . \"zoe@example.org, z.mueller@example.net\")\n (phone . \"+49 221 4711\")\n (web . \"https://zoë.example\")\n (street . \"Hauptstraße 7\")\n (city . \"Köln\")\n (state . \"NRW\")\n (zipcode . \"50667\")\n (country . \"Deutschland\")\n (note . \"Grüße aus Köln\")\n (group . \"Freunde\")\n (handler . addressbook-bookmark-jump))\n)\n" (nil (90 111 195 171 32 77 195 188 108 108 101 114 34 10)) ("Ann Smith" "Zoë Müller") t "(\"Zoë Müller\" (city . \"Köln\") (country . \"Deutschland\") (email . \"zoe@example.org, z.mueller@example.net\") (group . \"Freunde\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"Grüße aus Köln\") (phone . \"+49 221 4711\") (position . 0) (state . \"NRW\") (street . \"Hauptstraße 7\") (type . \"addressbook\") (web . \"https://zoë.example\") (zipcode . \"50667\"))")"#
+        ]],
     )
 }
 
@@ -104,8 +104,8 @@ fn a_latin_1_bookmark_file_keeps_its_accented_contact() -> ParityBatchCase {
           (assoc-default 'city (car bookmark-alist)))))"##,
         true,
         expect![[
-        r#"OK (nil (90 111 235 32 77 252 108 108 101 114 34 10) iso-latin-1-unix ("Zoë Müller") t "Köln")"#
-    ]],
+            r#"OK (nil (90 111 235 32 77 252 108 108 101 114 34 10) iso-latin-1-unix ("Zoë Müller") t "Köln")"#
+        ]],
     )
 }
 
@@ -139,8 +139,8 @@ fn the_addressbook_buffer_renders_every_recorded_field() -> ParityBatchCase {
       (kill-buffer addressbook-buffer-name))))"##,
         true,
         expect![[
-        r#"OK ("*addressbook*" addressbook-mode t "Addressbook Melpa-Test\n\n---------------------------------------------\nName:    Zoë Müller\nGroup:   Freunde\nMail:    zoe@example.org, z.mueller@example.net\nPhone:   +49 221 4711\nWeb:     https://zoë.example\nStreet:  Hauptstraße 7\nCity:    Köln\nState:   NRW\nZipcode: 50667\nCountry: Deutschland\nNote:    Grüße aus Köln\n---------------------------------------------\nName:    Ann Smith\nGroup:   Work\nMail:    ann@example.com\nStreet:  12 Main Street\nCity:    Springfield\nState:   IL\nZipcode: 62704\nCountry: USA\n---------------------------------------------\n" (((:foreground "green" :underline t)) ("Zoë Müller" ((:underline t)))) 1 "Zoë Müller")"#
-    ]],
+            r#"OK ("*addressbook*" addressbook-mode t "Addressbook Melpa-Test\n\n---------------------------------------------\nName:    Zoë Müller\nGroup:   Freunde\nMail:    zoe@example.org, z.mueller@example.net\nPhone:   +49 221 4711\nWeb:     https://zoë.example\nStreet:  Hauptstraße 7\nCity:    Köln\nState:   NRW\nZipcode: 50667\nCountry: Deutschland\nNote:    Grüße aus Köln\n---------------------------------------------\nName:    Ann Smith\nGroup:   Work\nMail:    ann@example.com\nStreet:  12 Main Street\nCity:    Springfield\nState:   IL\nZipcode: 62704\nCountry: USA\n---------------------------------------------\n" (((:foreground "green" :underline t)) ("Zoë Müller" ((:underline t)))) 1 "Zoë Müller")"#
+        ]],
     )
 }
 
@@ -174,8 +174,8 @@ fn editing_a_contact_offers_its_values_and_rewrites_the_entry() -> ParityBatchCa
       (kill-buffer addressbook-buffer-name))))"##,
         true,
         expect![[
-        r#"OK (addressbook-edit (("Name: " . "Zoë Müller") ("Group: " . "Freunde") ("Mail: " . "zoe@example.org, z.mueller@example.net") ("Phone: " . "+49 221 4711") ("Web: " . "https://zoë.example") ("Street: " . "Hauptstraße 7") ("City: " . "Köln") ("State: " . "NRW") ("Zipcode: " . "50667") ("Country: " . "Deutschland") ("Note: " . "Grüße aus Köln") ("Image path: " . "") ("Save changes? " . :y-or-n-p)) "(\"Zoë Müller\" (city . \"München\") (country . \"Deutschland\") (email . \"zoe@example.org\") (group . \"Freunde\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"Umgezogen\") (phone . \"+49 221 4711\") (position . 0) (state . \"Bayern\") (street . \"Sendlinger Straße 1\") (type . \"addressbook\") (web . \"https://zoë.example\") (zipcode . \"80331\"))" "Addressbook Melpa-Test\n\n---------------------------------------------\nName:    Zoë Müller\nGroup:   Freunde\nMail:    zoe@example.org\nPhone:   +49 221 4711\nWeb:     https://zoë.example\nStreet:  Sendlinger Straße 1\nCity:    München\nState:   Bayern\nZipcode: 80331\nCountry: Deutschland\nNote:    Umgezogen\n---------------------------------------------\nName:    Ann Smith\nGroup:   Work\nMail:    ann@example.com\nStreet:  12 Main Street\nCity:    Springfield\nState:   IL\nZipcode: 62704\nCountry: USA\n---------------------------------------------\n" 3)"#
-    ]],
+            r#"OK (addressbook-edit (("Name: " . "Zoë Müller") ("Group: " . "Freunde") ("Mail: " . "zoe@example.org, z.mueller@example.net") ("Phone: " . "+49 221 4711") ("Web: " . "https://zoë.example") ("Street: " . "Hauptstraße 7") ("City: " . "Köln") ("State: " . "NRW") ("Zipcode: " . "50667") ("Country: " . "Deutschland") ("Note: " . "Grüße aus Köln") ("Image path: " . "") ("Save changes? " . :y-or-n-p)) "(\"Zoë Müller\" (city . \"München\") (country . \"Deutschland\") (email . \"zoe@example.org\") (group . \"Freunde\") (handler . addressbook-bookmark-jump) (image . \"\") (last-modified <TIME>) (location . \"Addressbook entry\") (note . \"Umgezogen\") (phone . \"+49 221 4711\") (position . 0) (state . \"Bayern\") (street . \"Sendlinger Straße 1\") (type . \"addressbook\") (web . \"https://zoë.example\") (zipcode . \"80331\"))" "Addressbook Melpa-Test\n\n---------------------------------------------\nName:    Zoë Müller\nGroup:   Freunde\nMail:    zoe@example.org\nPhone:   +49 221 4711\nWeb:     https://zoë.example\nStreet:  Sendlinger Straße 1\nCity:    München\nState:   Bayern\nZipcode: 80331\nCountry: Deutschland\nNote:    Umgezogen\n---------------------------------------------\nName:    Ann Smith\nGroup:   Work\nMail:    ann@example.com\nStreet:  12 Main Street\nCity:    Springfield\nState:   IL\nZipcode: 62704\nCountry: USA\n---------------------------------------------\n" 3)"#
+        ]],
     )
 }
 
@@ -218,8 +218,8 @@ fn deleting_a_contact_leaves_the_buffer_refresh_broken() -> ParityBatchCase {
       (kill-buffer addressbook-buffer-name))))"##,
         true,
         expect![[
-        r#"OK ((("Zoë Müller") ("Zoë Müller") nil nil) ("Zoë Müller") (wrong-type-argument stringp nil) "Name:    Zoë Müller\nGroup:   Freunde\nMail:    zoe@example.org, z.mueller@example.net\nPhone:   +49 221 4711\nWeb:     https://zoë.example\nStreet:  Hauptstraße 7\nCity:    Köln\nState:   NRW\nZipcode: 50667\nCountry: Deutschland\nNote:    Grüße aus Köln\n---------------------------------------------\n")"#
-    ]],
+            r#"OK ((("Zoë Müller") ("Zoë Müller") nil nil) ("Zoë Müller") (wrong-type-argument stringp nil) "Name:    Zoë Müller\nGroup:   Freunde\nMail:    zoe@example.org, z.mueller@example.net\nPhone:   +49 221 4711\nWeb:     https://zoë.example\nStreet:  Hauptstraße 7\nCity:    Köln\nState:   NRW\nZipcode: 50667\nCountry: Deutschland\nNote:    Grüße aus Köln\n---------------------------------------------\n")"#
+        ]],
     )
 }
 
@@ -267,8 +267,8 @@ fn mail_completion_offers_the_recorded_addresses() -> ParityBatchCase {
       (when (get-buffer "*Completions*") (kill-buffer "*Completions*")))))"##,
         true,
         expect![[
-        r#"OK (("^\\(Newsgroups\\|Followup-To\\|Posted-To\\|Gcc\\):" "^\\(Newsgroups\\|Followup-To\\|Posted-To\\|Gcc\\):" "^\\(Resent-\\)?\\(To\\|B?Cc\\):" "^\\(Reply-To\\|From\\|Mail-Followup-To\\|Mail-Copies-To\\):" "^\\(Disposition-Notification-To\\|Return-Receipt-To\\):") (message-tab completion-at-point) (#("Ann Smith              ann@example.com" 23 38 (face font-lock-doc-face)) #("Zoë Müller             zoe@example.org" 23 38 (face font-lock-doc-face)) #("Zoë Müller             z.mueller@example.net" 23 44 (face font-lock-doc-face))) ("To: ann@example.com" 20) "Cc: Zoë Müller             z" "Type M-RET on a completion to select it.\nType M-<down> or M-<up> to move point between completions.\n\n2 possible completions:\nZoë Müller             z.mueller@example.net\nZoë Müller             zoe@example.org")"#
-    ]],
+            r#"OK (("^\\(Newsgroups\\|Followup-To\\|Posted-To\\|Gcc\\):" "^\\(Newsgroups\\|Followup-To\\|Posted-To\\|Gcc\\):" "^\\(Resent-\\)?\\(To\\|B?Cc\\):" "^\\(Reply-To\\|From\\|Mail-Followup-To\\|Mail-Copies-To\\):" "^\\(Disposition-Notification-To\\|Return-Receipt-To\\):") (message-tab completion-at-point) (#("Ann Smith              ann@example.com" 23 38 (face font-lock-doc-face)) #("Zoë Müller             zoe@example.org" 23 38 (face font-lock-doc-face)) #("Zoë Müller             z.mueller@example.net" 23 44 (face font-lock-doc-face))) ("To: ann@example.com" 20) "Cc: Zoë Müller             z" "Type M-RET on a completion to select it.\nType M-<down> or M-<up> to move point between completions.\n\n2 possible completions:\nZoë Müller             z.mueller@example.net\nZoë Müller             zoe@example.org")"#
+        ]],
     )
 }
 

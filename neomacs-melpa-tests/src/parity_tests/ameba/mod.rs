@@ -179,10 +179,5 @@ pub(crate) fn assert_ameba_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ameba_parity` cases (2a).
 pub(crate) fn assert_ameba_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ameba_oracle(),
-        &name,
-        "ameba_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ameba_oracle(), &name, "ameba_parity", cases);
 }

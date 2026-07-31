@@ -141,10 +141,5 @@ pub(crate) fn assert_ac_js2_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ac_js2_parity` cases (2a).
 pub(crate) fn assert_ac_js2_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ac_js2_oracle(),
-        &name,
-        "ac_js2_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ac_js2_oracle(), &name, "ac_js2_parity", cases);
 }

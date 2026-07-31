@@ -1,6 +1,11 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_arjen_grey_theme_autoload_parity, assert_arjen_grey_theme_parity, assert_arjen_grey_theme_with_helm_parity, assert_arjen_grey_theme_with_prelude_parity, assert_arjen_grey_theme_autoload_batch, assert_arjen_grey_theme_batch, assert_arjen_grey_theme_with_helm_batch};
+use super::{
+    ParityBatchCase, assert_arjen_grey_theme_autoload_batch,
+    assert_arjen_grey_theme_autoload_parity, assert_arjen_grey_theme_batch,
+    assert_arjen_grey_theme_parity, assert_arjen_grey_theme_with_helm_batch,
+    assert_arjen_grey_theme_with_helm_parity, assert_arjen_grey_theme_with_prelude_parity,
+};
 
 fn installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle() -> ParityBatchCase {
     ParityBatchCase::new(
@@ -70,8 +75,8 @@ fn installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle() 
                (list before first second after))"##,
         true,
         expect![[
-        r##"OK ((nil nil nil "unspecified-bg") (#1=(arjen-grey) #1# "#bdc3ce" "#2a2f38" "#bdc3ce" "#242a34" 1) (#2=(arjen-grey) #2# "#bdc3ce" "#2a2f38" "#e1cb8c" "#3c4449") (nil nil "unspecified-fg" "unspecified-bg"))"##
-    ]],
+            r##"OK ((nil nil nil "unspecified-bg") (#1=(arjen-grey) #1# "#bdc3ce" "#2a2f38" "#bdc3ce" "#242a34" 1) (#2=(arjen-grey) #2# "#bdc3ce" "#2a2f38" "#e1cb8c" "#3c4449") (nil nil "unspecified-fg" "unspecified-bg"))"##
+        ]],
     )
 }
 
@@ -155,8 +160,8 @@ fn styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces() -> Pa
                (disable-theme 'arjen-grey)))"##,
         true,
         expect![[
-        r##"OK (";; Publish one validated release artifact.\n(defun publish-release (artifact)\n  (if (file-exists-p artifact)\n      (message \"Publishing %s\" artifact)\n    (error \"Missing artifact\")))\n" (("Publish one" font-lock-comment-face "#63747c" unspecified) ("defun" font-lock-keyword-face "#b894b0" unspecified) ("publish-release" font-lock-function-name-face "#909fab" unspecified) ("if (" font-lock-keyword-face "#b894b0" unspecified) ("file-exists-p" nil nil nil) ("message" nil nil nil) ("\"Publishing %s\"" font-lock-string-face "#a8c194" unspecified) ("error" font-lock-warning-face "red" bold)) (:default "#bdc3ce" "#2a2f38" :cursor "#e1cb8c" :mode-line "#bdc3ce" "#242a34" :region "#3c4449" :selection "  (if (file-exists-p artifact)"))"##
-    ]],
+            r##"OK (";; Publish one validated release artifact.\n(defun publish-release (artifact)\n  (if (file-exists-p artifact)\n      (message \"Publishing %s\" artifact)\n    (error \"Missing artifact\")))\n" (("Publish one" font-lock-comment-face "#63747c" unspecified) ("defun" font-lock-keyword-face "#b894b0" unspecified) ("publish-release" font-lock-function-name-face "#909fab" unspecified) ("if (" font-lock-keyword-face "#b894b0" unspecified) ("file-exists-p" nil nil nil) ("message" nil nil nil) ("\"Publishing %s\"" font-lock-string-face "#a8c194" unspecified) ("error" font-lock-warning-face "red" bold)) (:default "#bdc3ce" "#2a2f38" :cursor "#e1cb8c" :mode-line "#bdc3ce" "#242a34" :region "#3c4449" :selection "  (if (file-exists-p artifact)"))"##
+        ]],
     )
 }
 
@@ -260,32 +265,29 @@ fn filters_and_selects_a_deployment_target_in_a_real_helm_session() -> ParityBat
                     'arjen-grey-deployment-target))))"##,
         true,
         expect![[
-        r##"OK ((:environment staging :directory "/srv/app-staging") ("stag" "staging — /srv/app-staging" "#bdc3ce" "#2a2f38" bold (:line-width -1 :style released-button) "#3c4449" nil))"##
-    ]],
+            r##"OK ((:environment staging :directory "/srv/app-staging") ("stag" "staging — /srv/app-staging" "#bdc3ce" "#2a2f38" bold (:line-width -1 :style released-button) "#3c4449" nil))"##
+        ]],
     )
 }
 
 #[test]
 fn workflows_arjen_grey_theme_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![installed_theme_loads_from_its_registered_path_and_survives_a_reload_cycle()];
     assert_arjen_grey_theme_autoload_batch(&cases);
 }
 
 #[test]
 fn workflows_arjen_grey_theme_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![styles_a_real_elisp_editing_session_with_semantic_and_editor_surfaces()];
     assert_arjen_grey_theme_batch(&cases);
 }
 
 #[test]
 fn workflows_arjen_grey_theme_with_helm_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        filters_and_selects_a_deployment_target_in_a_real_helm_session(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![filters_and_selects_a_deployment_target_in_a_real_helm_session()];
     assert_arjen_grey_theme_with_helm_batch(&cases);
 }
 

@@ -17,8 +17,8 @@ fn auto_complete_pcmp_candidates_capture_direct_pcomplete_result() -> ParityBatc
             (ac-pcmp-test-state))))"##,
         true,
         expect![[
-        r#"OK (("checkout" "cherry-pick" "cherry") 7 (:active nil :candidates nil :status none :point 7 :last-length nil :last-stub nil))"#
-    ]],
+            r#"OK (("checkout" "cherry-pick" "cherry") 7 (:active nil :candidates nil :status none :point 7 :last-length nil :last-stub nil))"#
+        ]],
     )
 }
 
@@ -37,8 +37,8 @@ fn auto_complete_pcmp_candidates_capture_show_completions_advice_path() -> Parit
             (ac-pcmp-test-state))))"##,
         true,
         expect![[
-        r#"OK (("build" "check" "clippy" "nextest") "cargo " (:active nil :candidates nil :status none :point 7 :last-length nil :last-stub nil))"#
-    ]],
+            r#"OK (("build" "check" "clippy" "nextest") "cargo " (:active nil :candidates nil :status none :point 7 :last-length nil :last-stub nil))"#
+        ]],
     )
 }
 
@@ -61,8 +61,8 @@ fn auto_complete_pcmp_candidates_capture_stub_advice_and_real_insertion() -> Par
               (ac-pcmp-test-state)))))"##,
         true,
         expect![[
-        r#"OK (("status" "stash" "stage") "sta" 4 nil (:active nil :candidates nil :status nil :point 4 :last-length nil :last-stub nil))"#
-    ]],
+            r#"OK (("status" "stash" "stage") "sta" 4 nil (:active nil :candidates nil :status nil :point 4 :last-length nil :last-stub nil))"#
+        ]],
     )
 }
 
@@ -91,7 +91,8 @@ fn auto_complete_pcmp_candidates_capture_pcomplete_completions_return_value() ->
     )
 }
 
-fn auto_complete_pcmp_first_candidate_capture_wins_across_multiple_advice_paths() -> ParityBatchCase {
+fn auto_complete_pcmp_first_candidate_capture_wins_across_multiple_advice_paths() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_pcmp_first_candidate_capture_wins_across_multiple_advice_paths",
         r##"(with-temp-buffer
@@ -133,12 +134,13 @@ fn auto_complete_pcmp_candidate_request_resets_stale_global_state_each_time() ->
                   (ac-pcmp-test-state)))))))"##,
         true,
         expect![[
-        r#"OK (("fresh") nil (:active nil :candidates ("stale") :status none :point 13 :last-length nil :last-stub nil))"#
-    ]],
+            r#"OK (("fresh") nil (:active nil :candidates ("stale") :status none :point 13 :last-length nil :last-stub nil))"#
+        ]],
     )
 }
 
-fn auto_complete_pcmp_candidate_request_records_exact_point_without_mutating_text() -> ParityBatchCase {
+fn auto_complete_pcmp_candidate_request_records_exact_point_without_mutating_text()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_pcmp_candidate_request_records_exact_point_without_mutating_text",
         r##"(mapcar
@@ -161,12 +163,13 @@ fn auto_complete_pcmp_candidate_request_records_exact_point_without_mutating_tex
            ("long command" . 8)))"##,
         true,
         expect![[
-        r#"OK ((("abc" . 1) #1=("candidate") 1 1 t) (("abc" . 2) #1# 2 2 t) (("long command" . 8) #1# 8 8 t))"#
-    ]],
+            r#"OK ((("abc" . 1) #1=("candidate") 1 1 t) (("abc" . 2) #1# 2 2 t) (("long command" . 8) #1# 8 8 t))"#
+        ]],
     )
 }
 
-fn auto_complete_pcmp_candidate_errors_become_prefixed_messages_and_nil_results() -> ParityBatchCase {
+fn auto_complete_pcmp_candidate_errors_become_prefixed_messages_and_nil_results() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_pcmp_candidate_errors_become_prefixed_messages_and_nil_results",
         r##"(cl-letf (((symbol-function 'call-interactively)

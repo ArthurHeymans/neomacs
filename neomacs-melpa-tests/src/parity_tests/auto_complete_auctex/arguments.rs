@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_auctex_batch};
 
-fn auto_complete_auctex_expand_argument_info_preserves_literal_and_optional_arguments() -> ParityBatchCase {
+fn auto_complete_auctex_expand_argument_info_preserves_literal_and_optional_arguments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_expand_argument_info_preserves_literal_and_optional_arguments",
         r##"(ac-auctex-expand-arg-info
@@ -15,7 +16,8 @@ fn auto_complete_auctex_expand_argument_info_preserves_literal_and_optional_argu
     )
 }
 
-fn auto_complete_auctex_expand_argument_info_resolves_direct_auctex_argument_functions() -> ParityBatchCase {
+fn auto_complete_auctex_expand_argument_info_resolves_direct_auctex_argument_functions()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_expand_argument_info_resolves_direct_auctex_argument_functions",
         r##"(ac-auctex-expand-arg-info
@@ -26,12 +28,13 @@ fn auto_complete_auctex_expand_argument_info_resolves_direct_auctex_argument_fun
             LaTeX-env-item))"##,
         true,
         expect![[
-        r#"OK ("Filename" "Name" ["opt1,..."] "Package" "Width" ["htbp!"] "lcrpmb|><" "")"#
-    ]],
+            r#"OK ("Filename" "Name" ["opt1,..."] "Package" "Width" ["htbp!"] "lcrpmb|><" "")"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_expand_argument_info_resolves_nested_function_specs_by_head() -> ParityBatchCase {
+fn auto_complete_auctex_expand_argument_info_resolves_nested_function_specs_by_head()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_expand_argument_info_resolves_nested_function_specs_by_head",
         r##"(ac-auctex-expand-arg-info
@@ -44,7 +47,8 @@ fn auto_complete_auctex_expand_argument_info_resolves_nested_function_specs_by_h
     )
 }
 
-fn auto_complete_auctex_expand_argument_info_turns_vector_handlers_into_optional_arguments() -> ParityBatchCase {
+fn auto_complete_auctex_expand_argument_info_turns_vector_handlers_into_optional_arguments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_expand_argument_info_turns_vector_handlers_into_optional_arguments",
         r##"(ac-auctex-expand-arg-info
@@ -86,7 +90,8 @@ fn auto_complete_auctex_expand_argument_info_defaults_unknown_and_empty_specs() 
     )
 }
 
-fn auto_complete_auctex_snippet_argument_numbers_required_and_optional_fields_exactly() -> ParityBatchCase {
+fn auto_complete_auctex_snippet_argument_numbers_required_and_optional_fields_exactly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_snippet_argument_numbers_required_and_optional_fields_exactly",
         r##"(mapcar
@@ -103,7 +108,8 @@ fn auto_complete_auctex_snippet_argument_numbers_required_and_optional_fields_ex
     )
 }
 
-fn auto_complete_auctex_macro_snippet_builds_practical_section_graphics_and_tabular_fields() -> ParityBatchCase {
+fn auto_complete_auctex_macro_snippet_builds_practical_section_graphics_and_tabular_fields()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_macro_snippet_builds_practical_section_graphics_and_tabular_fields",
         r##"(mapcar
@@ -123,12 +129,13 @@ fn auto_complete_auctex_macro_snippet_builds_practical_section_graphics_and_tabu
             ("empty")))"##,
         true,
         expect![[
-        r#"OK (("section" "${[${Short title}]}{${Title}}") ("includegraphics" "${[${width=0.8\\textwidth}]}{${Filename}}") ("tabular*" "{${Width}}${[${htbp!}]}{${lcrpmb|><}}") ("empty" ""))"#
-    ]],
+            r#"OK (("section" "${[${Short title}]}{${Title}}") ("includegraphics" "${[${width=0.8\\textwidth}]}{${Filename}}") ("tabular*" "{${Width}}${[${htbp!}]}{${lcrpmb|><}}") ("empty" ""))"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_macro_snippet_mixes_expanded_arity_handlers_and_literal_fields() -> ParityBatchCase {
+fn auto_complete_auctex_macro_snippet_mixes_expanded_arity_handlers_and_literal_fields()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_macro_snippet_mixes_expanded_arity_handlers_and_literal_fields",
         r##"(ac-auctex-macro-snippet
@@ -142,7 +149,8 @@ fn auto_complete_auctex_macro_snippet_mixes_expanded_arity_handlers_and_literal_
     )
 }
 
-fn auto_complete_auctex_expand_args_finds_environment_entry_and_forwards_exact_snippet() -> ParityBatchCase {
+fn auto_complete_auctex_expand_args_finds_environment_entry_and_forwards_exact_snippet()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_expand_args_finds_environment_entry_and_forwards_exact_snippet",
         r##"(let ((environment

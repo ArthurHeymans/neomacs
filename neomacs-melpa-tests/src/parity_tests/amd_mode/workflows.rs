@@ -45,8 +45,8 @@ fn starting_an_empty_module_and_importing_dependencies_by_name() -> ParityBatchC
                   (amd-test-text))))))))"##,
         true,
         expect![[
-        r#"OK (("define([], function() {\n    \n});\n" 29) "define(['lib/router'], function(router) {\n    \n});\n" "define(['lib/router',\n\11'widgets/button'], function(router, button) {\n    \n});\n" "define(['lib/router',\n\11'widgets/button'], function(router, button) {\n    \n});\n" t "define(['lib/router',\n\11'widgets/button',\n\11'lib/keyboard/bindings'], function(router, button, shortcut) {\n    \n});\n")"#
-    ]],
+            r#"OK (("define([], function() {\n    \n});\n" 29) "define(['lib/router'], function(router) {\n    \n});\n" "define(['lib/router',\n\11'widgets/button'], function(router, button) {\n    \n});\n" "define(['lib/router',\n\11'widgets/button'], function(router, button) {\n    \n});\n" t "define(['lib/router',\n\11'widgets/button',\n\11'lib/keyboard/bindings'], function(router, button, shortcut) {\n    \n});\n")"#
+        ]],
     )
 }
 
@@ -72,8 +72,8 @@ fn importing_a_file_uses_a_relative_path_only_where_the_settings_say_so() -> Par
             (import-both :always-relative)))))"##,
         true,
         expect![[
-        r#"OK ((:default "define(['src/app/util/format',\n\11'src/vendor/moment'], function(format, moment) {\n\n});\n") (:relative-when-below "define(['./util/format',\n\11'src/vendor/moment'], function(format, moment) {\n\n});\n") (:always-relative "define(['./util/format',\n\11'../vendor/moment'], function(format, moment) {\n\n});\n"))"#
-    ]],
+            r#"OK ((:default "define(['src/app/util/format',\n\11'src/vendor/moment'], function(format, moment) {\n\n});\n") (:relative-when-below "define(['./util/format',\n\11'src/vendor/moment'], function(format, moment) {\n\n});\n") (:always-relative "define(['./util/format',\n\11'../vendor/moment'], function(format, moment) {\n\n});\n"))"#
+        ]],
     )
 }
 
@@ -111,8 +111,8 @@ fn killing_and_reordering_a_dependency_keeps_the_parameter_list_in_step() -> Par
                   (amd-test-text))))))))"##,
         true,
         expect![[
-        r#"OK (("C-k" "C-S-<up>" "C-S-<down>") "define([\n    'lib/router',\n    'widgets/button'\n], function(router, button) {\n    return router;\n});\n" "define([\n    'widgets/button'\n], function(button) {\n    return router;\n});\n" "define([\n    'widgets/button',\n    'lib/router'\n], function(button, router) {\n    return router;\n});\n" "define([\n    'lib/router',\n    'widgets/button'\n], function(router, button) {\n    return router;\n});\n" "define([\n    'widgets/button',\n    'lib/router'\n], function(button, router) {\n    return router;\n});\n")"#
-    ]],
+            r#"OK (("C-k" "C-S-<up>" "C-S-<down>") "define([\n    'lib/router',\n    'widgets/button'\n], function(router, button) {\n    return router;\n});\n" "define([\n    'widgets/button'\n], function(button) {\n    return router;\n});\n" "define([\n    'widgets/button',\n    'lib/router'\n], function(button, router) {\n    return router;\n});\n" "define([\n    'lib/router',\n    'widgets/button'\n], function(router, button) {\n    return router;\n});\n" "define([\n    'widgets/button',\n    'lib/router'\n], function(button, router) {\n    return router;\n});\n")"#
+        ]],
     )
 }
 
@@ -150,8 +150,8 @@ fn copying_the_buffers_module_path_applies_the_projects_rewrite_rules() -> Parit
                       kill-ring)))))))"##,
         true,
         expect![[
-        r#"OK ("'src/widgets/forms/button'" "'widgets/forms/button'" "'ui/forms/button'" "'src/widgets/forms/button'" "'src/widgets/forms/button'" "define([], function() {\n\n});\n" (nil ((error "Not within a project") (error "Not within a project") (error "Not within a project")) "" nil))"#
-    ]],
+            r#"OK ("'src/widgets/forms/button'" "'widgets/forms/button'" "'ui/forms/button'" "'src/widgets/forms/button'" "'src/widgets/forms/button'" "define([], function() {\n\n});\n" (nil ((error "Not within a project") (error "Not within a project") (error "Not within a project")) "" nil))"#
+        ]],
     )
 }
 
@@ -184,8 +184,8 @@ fn searching_for_references_runs_ag_with_the_configured_ignores() -> ParityBatch
               (and (get-buffer "*xref*") t))))))"##,
         true,
         expect![[
-        r#"OK ((("--js" "--noheading" "--ignore-dir" "bower_components" "--ignore-dir" "node_modules" "--ignore-dir" "build" "--ignore-dir" "lib" "--ignore" "*.min.js" "define\\([^])]+['|\"](.*/)?button['|\"]") "src/app/other.js\n2:define(['widgets/button'], function(button) {\nsrc/app/main.js\n3:'widgets/button',\n") "No reference found" ("--js" "--noheading" "--ignore-dir" "dist" "--ignore" "*.bundle.js" "--ignore" "*.min.js" "define\\([^])]+['|\"](.*/)?button['|\"]") "No reference found\n" nil)"#
-    ]],
+            r#"OK ((("--js" "--noheading" "--ignore-dir" "bower_components" "--ignore-dir" "node_modules" "--ignore-dir" "build" "--ignore-dir" "lib" "--ignore" "*.min.js" "define\\([^])]+['|\"](.*/)?button['|\"]") "src/app/other.js\n2:define(['widgets/button'], function(button) {\nsrc/app/main.js\n3:'widgets/button',\n") "No reference found" ("--js" "--noheading" "--ignore-dir" "dist" "--ignore" "*.bundle.js" "--ignore" "*.min.js" "define\\([^])]+['|\"](.*/)?button['|\"]") "No reference found\n" nil)"#
+        ]],
     )
 }
 
@@ -213,8 +213,8 @@ fn a_reference_longer_than_a_hundred_characters_aborts_the_search() -> ParityBat
               (amd-test-xref-text "amd-long"))))))"##,
         true,
         expect![[
-        r#"OK ((:signal wrong-type-argument :on-a-line-of-length 135) ("--js" "--noheading" "--ignore-dir" "bower_components" "--ignore-dir" "node_modules" "--ignore-dir" "build" "--ignore-dir" "lib" "--ignore" "*.min.js" "define\\([^])]+['|\"](.*/)?button['|\"]") t "src/app/main.js\n3:define(['widgets/button'], function(button) {\n")"#
-    ]],
+            r#"OK ((:signal wrong-type-argument :on-a-line-of-length 135) ("--js" "--noheading" "--ignore-dir" "bower_components" "--ignore-dir" "node_modules" "--ignore-dir" "build" "--ignore-dir" "lib" "--ignore" "*.min.js" "define\\([^])]+['|\"](.*/)?button['|\"]") t "src/app/main.js\n3:define(['widgets/button'], function(button) {\n")"#
+        ]],
     )
 }
 

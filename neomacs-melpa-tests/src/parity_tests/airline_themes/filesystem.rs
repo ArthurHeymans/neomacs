@@ -32,7 +32,8 @@ fn airline_themes_reads_symbolic_and_detached_git_heads_with_exact_shortening() 
     )
 }
 
-fn airline_themes_discovers_real_nested_repository_branches_and_non_repositories() -> ParityBatchCase {
+fn airline_themes_discovers_real_nested_repository_branches_and_non_repositories() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "airline_themes_discovers_real_nested_repository_branches_and_non_repositories",
         r##"(progn
@@ -124,12 +125,13 @@ fn airline_themes_shortens_real_directory_shapes_to_the_requested_budget() -> Pa
           cases))"##,
         true,
         expect![[
-        r#"OK ((("/alpha/beta/gamma/delta/file.el" 80) "/alpha/beta/gamma/delta/file.el" 31) (("/alpha/beta/gamma/delta/file.el" 24) "/a/b/g/delta/file.el" 20) (("/alpha/beta/gamma/delta/file.el" 14) "/a/b/g/d/file.el" 16) (("/one/two/three/" 10) "/o/t/t/" 7) (("relative/deeply/nested/path" 12) "r/d/n/path" 10) (("/single" 1) "/single" 7) (("/" 0) "/" 1))"#
-    ]],
+            r#"OK ((("/alpha/beta/gamma/delta/file.el" 80) "/alpha/beta/gamma/delta/file.el" 31) (("/alpha/beta/gamma/delta/file.el" 24) "/a/b/g/delta/file.el" 20) (("/alpha/beta/gamma/delta/file.el" 14) "/a/b/g/d/file.el" 16) (("/one/two/three/" 10) "/o/t/t/" 7) (("relative/deeply/nested/path" 12) "r/d/n/path" 10) (("/single" 1) "/single" 7) (("/" 0) "/" 1))"#
+        ]],
     )
 }
 
-fn airline_themes_eshell_prompt_renders_real_directory_branch_and_face_segments() -> ParityBatchCase {
+fn airline_themes_eshell_prompt_renders_real_directory_branch_and_face_segments() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "airline_themes_eshell_prompt_renders_real_directory_branch_and_face_segments",
         r##"(condition-case prompt-error
@@ -178,8 +180,8 @@ fn airline_themes_eshell_prompt_renders_real_directory_branch_and_face_segments(
       (error (list 'prompt-error prompt-error)))"##,
         true,
         expect![[
-        r##"OK ("  [ORACLE-SANDBOX]/prompt/project/very/long/component  prompt-workflow  $ " t "^ [^#$]* [#$] " ((leading-space 32 (face (:foreground "#141413" :background "#0a9dff"))) (first-separator 57520 (face (:foreground "#0a9dff" :background "#005faf"))) (directory 99 (face (:foreground "#f4cf86" :background "#005faf"))) (branch 112 (face (:foreground "#0a9dff" :background "#242321"))) (trailing-space 32 (face nil))))"##
-    ]],
+            r##"OK ("  [ORACLE-SANDBOX]/prompt/project/very/long/component  prompt-workflow  $ " t "^ [^#$]* [#$] " ((leading-space 32 (face (:foreground "#141413" :background "#0a9dff"))) (first-separator 57520 (face (:foreground "#0a9dff" :background "#005faf"))) (directory 99 (face (:foreground "#f4cf86" :background "#005faf"))) (branch 112 (face (:foreground "#0a9dff" :background "#242321"))) (trailing-space 32 (face nil))))"##
+        ]],
     )
 }
 

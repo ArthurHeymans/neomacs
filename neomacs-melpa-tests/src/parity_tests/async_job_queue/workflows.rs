@@ -85,8 +85,8 @@ fn real_five_job_workflow_never_exceeds_two_slots_and_dispatches_fifo() -> Parit
 "##,
         true,
         expect![
-        "OK ((job-1 job-2 job-3 job-4 job-5) 2 ((job-1 #1=(:value 1) t #1# nil nil) (job-2 #2=(:value 2) t #2# nil nil) (job-3 #3=(:value 3) t #3# nil nil) (job-4 #4=(:value 4) t #4# nil nil) (job-5 #5=(:value 5) t #5# nil nil)) 1 (:id real-success :active t :in-use 0 :free 2 :used-slots nil :free-slots (0 1) :queued 0 :timer nil) ((:id job-1 :table nil :run-slot nil :started t :future nil :ended t :returned t :result #1#) (:id job-2 :table nil :run-slot nil :started t :future nil :ended t :returned t :result #2#) (:id job-3 :table nil :run-slot nil :started t :future nil :ended t :returned t :result #3#) (:id job-4 :table nil :run-slot nil :started t :future nil :ended t :returned t :result #4#) (:id job-5 :table nil :run-slot nil :started t :future nil :ended t :returned t :result #5#)))"
-    ],
+            "OK ((job-1 job-2 job-3 job-4 job-5) 2 ((job-1 #1=(:value 1) t #1# nil nil) (job-2 #2=(:value 2) t #2# nil nil) (job-3 #3=(:value 3) t #3# nil nil) (job-4 #4=(:value 4) t #4# nil nil) (job-5 #5=(:value 5) t #5# nil nil)) 1 (:id real-success :active t :in-use 0 :free 2 :used-slots nil :free-slots (0 1) :queued 0 :timer nil) ((:id job-1 :table nil :run-slot nil :started t :future nil :ended t :returned t :result #1#) (:id job-2 :table nil :run-slot nil :started t :future nil :ended t :returned t :result #2#) (:id job-3 :table nil :run-slot nil :started t :future nil :ended t :returned t :result #3#) (:id job-4 :table nil :run-slot nil :started t :future nil :ended t :returned t :result #4#) (:id job-5 :table nil :run-slot nil :started t :future nil :ended t :returned t :result #5#)))"
+        ],
     )
 }
 
@@ -154,8 +154,8 @@ fn real_timeout_rejects_long_job_without_success_and_releases_the_only_slot() ->
 "##,
         true,
         expect![
-        "OK (nil ((dispatch slow 0) (timeout slow nil nil nil)) (:id slow :table nil :run-slot nil :started t :future nil :ended t :returned nil :result nil) (:id real-timeout :active t :in-use 0 :free 1 :used-slots nil :free-slots (0) :queued 0 :timer nil))"
-    ],
+            "OK (nil ((dispatch slow 0) (timeout slow nil nil nil)) (:id slow :table nil :run-slot nil :started t :future nil :ended t :returned nil :result nil) (:id real-timeout :active t :in-use 0 :free 1 :used-slots nil :free-slots (0) :queued 0 :timer nil))"
+        ],
     )
 }
 
@@ -216,8 +216,8 @@ fn real_queue_cancellation_rejects_pending_before_running_and_kills_process() ->
 "##,
         true,
         expect![
-        "OK (((quit queued nil nil) (quit running nil nil)) (:id running :table nil :run-slot nil :started t :future nil :ended t :returned nil :result nil) (:id queued :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id real-cancel :active t :in-use 0 :free 1 :used-slots nil :free-slots (0) :queued 0 :timer nil))"
-    ],
+            "OK (((quit queued nil nil) (quit running nil nil)) (:id running :table nil :run-slot nil :started t :future nil :ended t :returned nil :result nil) (:id queued :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id real-cancel :active t :in-use 0 :free 1 :used-slots nil :free-slots (0) :queued 0 :timer nil))"
+        ],
     )
 }
 

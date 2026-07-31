@@ -68,7 +68,8 @@ fn auto_complete_exuberant_ctags_search_limit_includes_exact_boundary_only() -> 
     )
 }
 
-fn auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database() -> ParityBatchCase {
+fn auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database",
         r##"(let* ((root
@@ -93,7 +94,8 @@ fn auto_complete_exuberant_ctags_custom_filename_selects_only_requested_database
     )
 }
 
-fn auto_complete_exuberant_ctags_get_tag_file_returns_path_and_records_directory() -> ParityBatchCase {
+fn auto_complete_exuberant_ctags_get_tag_file_returns_path_and_records_directory() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_exuberant_ctags_get_tag_file_returns_path_and_records_directory",
         r##"(let* ((root

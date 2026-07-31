@@ -1,6 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_complete_exuberant_ctags_autoload_batch, assert_auto_complete_exuberant_ctags_batch};
+use super::{
+    ParityBatchCase, assert_auto_complete_exuberant_ctags_autoload_batch,
+    assert_auto_complete_exuberant_ctags_batch,
+};
 
 fn auto_complete_exuberant_ctags_exact_descriptor_and_archive_payload_match() -> ParityBatchCase {
     ParityBatchCase::new(
@@ -41,8 +44,8 @@ fn auto_complete_exuberant_ctags_exact_descriptor_and_archive_payload_match() ->
                                "auto-complete-exuberant-ctags.el"))))"##,
         true,
         expect![[
-        r#"OK (auto-complete-exuberant-ctags "20140320.724" "Exuberant ctags auto-complete.el source." ((auto-complete (1 4 0))) nil ((:maintainers ("Kenichirou Oyama" . "k1lowxb@gmail.com")) (:authors ("Kenichirou Oyama" . "k1lowxb@gmail.com")) (:keywords "anto-complete" "exuberant ctags") (:revdesc . "ff6121ff8b71") (:commit . "ff6121ff8b71beb5aa606d28fd389c484ed49765") (:url . "http://code.101000lab.org")) (("auto-complete-exuberant-ctags-pkg.el" 471 "9de48879cdc5ac388f3fbbc880ea338228efcb9255ee2f78a3280ba457fcd13a") ("auto-complete-exuberant-ctags.el" 7855 "fcb978dcfaab6f16f0157d1bb29d4101325eb57a68c2fae1c6ab2a910097188b")))"#
-    ]],
+            r#"OK (auto-complete-exuberant-ctags "20140320.724" "Exuberant ctags auto-complete.el source." ((auto-complete (1 4 0))) nil ((:maintainers ("Kenichirou Oyama" . "k1lowxb@gmail.com")) (:authors ("Kenichirou Oyama" . "k1lowxb@gmail.com")) (:keywords "anto-complete" "exuberant ctags") (:revdesc . "ff6121ff8b71") (:commit . "ff6121ff8b71beb5aa606d28fd389c484ed49765") (:url . "http://code.101000lab.org")) (("auto-complete-exuberant-ctags-pkg.el" 471 "9de48879cdc5ac388f3fbbc880ea338228efcb9255ee2f78a3280ba457fcd13a") ("auto-complete-exuberant-ctags.el" 7855 "fcb978dcfaab6f16f0157d1bb29d4101325eb57a68c2fae1c6ab2a910097188b")))"#
+        ]],
     )
 }
 
@@ -85,8 +88,8 @@ fn auto_complete_exuberant_ctags_complete_symbol_inventory_matches() -> ParityBa
                                (symbol-name (car right))))))"##,
         true,
         expect![[
-        r#"OK ((ac-exuberant-ctags nil nil nil nil nil nil) (ac-exuberant-ctags-build-index t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-candidate t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-find-tag-file t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-get-line t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-get-tag-file t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-index nil t nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-line-length-limit nil t nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-setup t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-tag-file-dir nil t nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-tag-file-name nil t nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-tag-file-search-limit nil t nil nil nil "auto-complete-exuberant-ctags"))"#
-    ]],
+            r#"OK ((ac-exuberant-ctags nil nil nil nil nil nil) (ac-exuberant-ctags-build-index t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-candidate t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-find-tag-file t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-get-line t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-get-tag-file t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-index nil t nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-line-length-limit nil t nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-setup t nil nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-tag-file-dir nil t nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-tag-file-name nil t nil nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-tag-file-search-limit nil t nil nil nil "auto-complete-exuberant-ctags"))"#
+        ]],
     )
 }
 
@@ -112,8 +115,8 @@ fn auto_complete_exuberant_ctags_callable_contracts_match() -> ParityBatchCase {
                              ac-exuberant-ctags-candidate))"##,
         true,
         expect![[
-        r#"OK ((ac-exuberant-ctags-setup nil nil "Setup ac-exuberant-ctags-setup." "auto-complete-exuberant-ctags") (ac-exuberant-ctags-build-index nil nil "Build index." "auto-complete-exuberant-ctags") (ac-exuberant-ctags-get-line (s e) nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-get-tag-file nil nil "Get Exuberant ctags tag file." "auto-complete-exuberant-ctags") (ac-exuberant-ctags-find-tag-file (current-dir) nil "Find tag file.\nTry to find tag file in upper directory if haven't found in CURRENT-DIR." "auto-complete-exuberant-ctags") (ac-exuberant-ctags-candidate nil nil nil "auto-complete-exuberant-ctags"))"#
-    ]],
+            r#"OK ((ac-exuberant-ctags-setup nil nil "Setup ac-exuberant-ctags-setup." "auto-complete-exuberant-ctags") (ac-exuberant-ctags-build-index nil nil "Build index." "auto-complete-exuberant-ctags") (ac-exuberant-ctags-get-line (s e) nil nil "auto-complete-exuberant-ctags") (ac-exuberant-ctags-get-tag-file nil nil "Get Exuberant ctags tag file." "auto-complete-exuberant-ctags") (ac-exuberant-ctags-find-tag-file (current-dir) nil "Find tag file.\nTry to find tag file in upper directory if haven't found in CURRENT-DIR." "auto-complete-exuberant-ctags") (ac-exuberant-ctags-candidate nil nil nil "auto-complete-exuberant-ctags"))"#
+        ]],
     )
 }
 
@@ -140,8 +143,8 @@ fn auto_complete_exuberant_ctags_customization_contract_matches() -> ParityBatch
                               ac-exuberant-ctags-line-length-limit)))"##,
         true,
         expect![[
-        r#"OK ("Exuberant ctags auto-complete.el source" "ac-exuberant-ctags-" ((ac-exuberant-ctags-tag-file-name custom-variable) (ac-exuberant-ctags-tag-file-search-limit custom-variable) (ac-exuberant-ctags-line-length-limit custom-variable)) ((ac-exuberant-ctags-tag-file-name "tags" string nil "Exuberant ctags tag file name.") (ac-exuberant-ctags-tag-file-search-limit 10 number nil "The limit level of directory that search tag file.\nDon't search tag file deeply if outside this value.\nThis value only use when option\n`ac-exuberant-ctags-tag-file-dir-cache' is nil.") (ac-exuberant-ctags-line-length-limit 400 number nil "The limit level of line length.\nDon't search line longer if outside this value.")))"#
-    ]],
+            r#"OK ("Exuberant ctags auto-complete.el source" "ac-exuberant-ctags-" ((ac-exuberant-ctags-tag-file-name custom-variable) (ac-exuberant-ctags-tag-file-search-limit custom-variable) (ac-exuberant-ctags-line-length-limit custom-variable)) ((ac-exuberant-ctags-tag-file-name "tags" string nil "Exuberant ctags tag file name.") (ac-exuberant-ctags-tag-file-search-limit 10 number nil "The limit level of directory that search tag file.\nDon't search tag file deeply if outside this value.\nThis value only use when option\n`ac-exuberant-ctags-tag-file-dir-cache' is nil.") (ac-exuberant-ctags-line-length-limit 400 number nil "The limit level of line length.\nDon't search line longer if outside this value.")))"#
+        ]],
     )
 }
 
@@ -171,8 +174,8 @@ fn auto_complete_exuberant_ctags_source_and_feature_contract_matches() -> Parity
                              load-history)))"##,
         true,
         expect![[
-        r#"OK (((init lambda nil (unless ac-exuberant-ctags-index (ac-exuberant-ctags-build-index))) (candidates . ac-exuberant-ctags-candidate) (requires . 3) (symbol . "s")) nil nil t t t ("auto-complete-exuberant-ctags" (require . auto-complete) ac-exuberant-ctags-tag-file-name ac-exuberant-ctags-tag-file-search-limit ac-exuberant-ctags-line-length-limit (defun . ac-exuberant-ctags-setup) ac-exuberant-ctags-index ac-exuberant-ctags-tag-file-dir (defun . ac-exuberant-ctags-build-index) (defun . ac-exuberant-ctags-get-line) (defun . ac-exuberant-ctags-get-tag-file) (defun . ac-exuberant-ctags-find-tag-file) (defun . ac-exuberant-ctags-candidate) (defun . ac-complete-exuberant-ctags) (provide . auto-complete-exuberant-ctags)))"#
-    ]],
+            r#"OK (((init lambda nil (unless ac-exuberant-ctags-index (ac-exuberant-ctags-build-index))) (candidates . ac-exuberant-ctags-candidate) (requires . 3) (symbol . "s")) nil nil t t t ("auto-complete-exuberant-ctags" (require . auto-complete) ac-exuberant-ctags-tag-file-name ac-exuberant-ctags-tag-file-search-limit ac-exuberant-ctags-line-length-limit (defun . ac-exuberant-ctags-setup) ac-exuberant-ctags-index ac-exuberant-ctags-tag-file-dir (defun . ac-exuberant-ctags-build-index) (defun . ac-exuberant-ctags-get-line) (defun . ac-exuberant-ctags-get-tag-file) (defun . ac-exuberant-ctags-find-tag-file) (defun . ac-exuberant-ctags-candidate) (defun . ac-complete-exuberant-ctags) (provide . auto-complete-exuberant-ctags)))"#
+        ]],
     )
 }
 
@@ -220,8 +223,7 @@ fn registry_auto_complete_exuberant_ctags_batch() {
 
 #[test]
 fn registry_auto_complete_exuberant_ctags_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        auto_complete_exuberant_ctags_generated_autoload_contract_matches(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![auto_complete_exuberant_ctags_generated_autoload_contract_matches()];
     assert_auto_complete_exuberant_ctags_autoload_batch(&cases);
 }

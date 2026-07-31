@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alert_termux_batch};
 
-fn alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments() -> ParityBatchCase {
+fn alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments",
         r##"(let ((alert-termux-command
@@ -31,8 +32,8 @@ fn alert_termux_notify_builds_title_content_unicode_and_output_capture_arguments
                (kill-buffer " *termux-notification output*")))))"##,
         true,
         expect![[
-        r#"OK (0 (("/data/data/com.termux/files/usr/bin/termux-notification" nil " *termux-notification output*" t nil ("-t" "<encoded>Deploy ✓" "-c" "<encoded>Finished 100% — 成功"))))"#
-    ]],
+            r#"OK (0 (("/data/data/com.termux/files/usr/bin/termux-notification" nil " *termux-notification output*" t nil ("-t" "<encoded>Deploy ✓" "-c" "<encoded>Finished 100% — 成功"))))"#
+        ]],
     )
 }
 
@@ -85,8 +86,8 @@ fn alert_termux_missing_command_delegates_complete_info_to_message_backend() -> 
               received))))"##,
         true,
         expect![[
-        r#"OK (fallback t (:title "No API" :message "Show in minibuffer" :severity moderate :data (:source timer)))"#
-    ]],
+            r#"OK (fallback t (:title "No API" :message "Show in minibuffer" :severity moderate :data (:source timer)))"#
+        ]],
     )
 }
 
@@ -183,8 +184,8 @@ fn alert_termux_end_to_end_explicit_style_dispatches_and_tracks_origin() -> Pari
                (kill-buffer " *termux-notification output*")))))"##,
         true,
         expect![[
-        r#"OK (nil (("termux-notification" ("-t" "Termux" "-c" "Battery low"))) ((t "Battery low" nil)) (alert-remove-on-command t))"#
-    ]],
+            r#"OK (nil (("termux-notification" ("-t" "Termux" "-c" "Battery low"))) ((t "Battery low" nil)) (alert-remove-on-command t))"#
+        ]],
     )
 }
 

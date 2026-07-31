@@ -87,8 +87,6 @@ pub(crate) fn assert_anju_autoload_parity(elisp_form: &str, expected: Expect) {
     assert_anju_source_parity("anju-autoloads.el", elisp_form, expected);
 }
 
-
-
 /// Multi-probe batch for `assert_anju_autoload_parity` cases (2a).
 pub(crate) fn assert_anju_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -103,10 +101,5 @@ pub(crate) fn assert_anju_autoload_batch(cases: &[ParityBatchCase]) {
 /// Multi-probe batch for `assert_anju_parity` cases (2a).
 pub(crate) fn assert_anju_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        anju_oracle("anju.el"),
-        &name,
-        "anju_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(anju_oracle("anju.el"), &name, "anju_parity", cases);
 }

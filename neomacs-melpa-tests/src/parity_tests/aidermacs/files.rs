@@ -15,8 +15,8 @@ fn aidermacs_file_command_builder_quotes_localizes_and_handles_empty_inputs() ->
                       (aidermacs--localize-tramp-path "/local/app.el"))"##,
         true,
         expect![[
-        r#"OK ("/add \"/work/src/main.el\" \"/work/docs/user guide.md\"" "/drop" "/srv/app/main.py" "/local/app.el")"#
-    ]],
+            r#"OK ("/add \"/work/src/main.el\" \"/work/docs/user guide.md\"" "/drop" "/srv/app/main.py" "/local/app.el")"#
+        ]],
     )
 }
 
@@ -52,7 +52,8 @@ fn aidermacs_ls_parser_tracks_real_editable_and_read_only_files_in_order() -> Pa
     )
 }
 
-fn aidermacs_output_parser_applies_real_chat_file_state_transitions_and_udiffs() -> ParityBatchCase {
+fn aidermacs_output_parser_applies_real_chat_file_state_transitions_and_udiffs() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "aidermacs_output_parser_applies_real_chat_file_state_transitions_and_udiffs",
         r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -112,8 +113,8 @@ fn aidermacs_file_tracking_requires_unambiguous_basename_matches() -> ParityBatc
                        (aidermacs--find-tracked-file "src/../src/main.el")))"##,
         true,
         expect![[
-        r#"OK ("src/main.el" "docs/guide.md (read-only)" "lib/tool.el" "src/main.el" "src/main.el")"#
-    ]],
+            r#"OK ("src/main.el" "docs/guide.md (read-only)" "lib/tool.el" "src/main.el" "src/main.el")"#
+        ]],
     )
 }
 
@@ -167,8 +168,8 @@ fn aidermacs_pre_edit_capture_detects_real_changes_and_cleanup_is_idempotent() -
                           (kill-buffer session))))"##,
         true,
         expect![[
-        r#"OK ((("src/one.el" "before one\n" t) ("src/two.el" "before two\n" t)) ("src/one.el" "src/two.el") nil nil)"#
-    ]],
+            r#"OK ((("src/one.el" "before one\n" t) ("src/two.el" "before two\n" t)) ("src/one.el" "src/two.el") nil nil)"#
+        ]],
     )
 }
 
@@ -196,8 +197,8 @@ fn aidermacs_add_and_drop_helpers_build_batched_commands_and_user_messages() -> 
                         (list (nreverse commands) (nreverse messages))))"##,
         true,
         expect![[
-        r#"OK (("/add \"/repo/src/a.el\" \"/repo/src/b b.el\"" "/read-only \"/repo/README.md\"" "/drop \"/repo/src/a.el\" \"/repo/src/b b.el\"") ("Added 2 files as editable" "Reference added" "No files to add." "Dropped 2 files" "No files to drop."))"#
-    ]],
+            r#"OK (("/add \"/repo/src/a.el\" \"/repo/src/b b.el\"" "/read-only \"/repo/README.md\"" "/drop \"/repo/src/a.el\" \"/repo/src/b b.el\"") ("Added 2 files as editable" "Reference added" "No files to add." "Dropped 2 files" "No files to drop."))"#
+        ]],
     )
 }
 

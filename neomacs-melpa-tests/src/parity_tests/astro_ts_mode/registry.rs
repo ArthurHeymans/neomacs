@@ -1,6 +1,6 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_astro_ts_mode_batch, assert_astro_ts_mode_autoload_batch};
+use super::{ParityBatchCase, assert_astro_ts_mode_autoload_batch, assert_astro_ts_mode_batch};
 
 fn descriptor_records_exact_pin_dependency_and_installed_payload() -> ParityBatchCase {
     ParityBatchCase::new(
@@ -17,8 +17,8 @@ fn descriptor_records_exact_pin_dependency_and_installed_payload() -> ParityBatc
             #'string<)))"##,
         true,
         expect![[
-        r#"OK ("20260417.101" ((emacs (30))) nil ("astro-ts-mode-autoloads.el" "astro-ts-mode-pkg.el" "astro-ts-mode.el" "astro-ts-mode.elc"))"#
-    ]],
+            r#"OK ("20260417.101" ((emacs (30))) nil ("astro-ts-mode-autoloads.el" "astro-ts-mode-pkg.el" "astro-ts-mode.el" "astro-ts-mode.elc"))"#
+        ]],
     )
 }
 
@@ -37,8 +37,8 @@ fn installed_source_has_exact_content_hash_feature_and_emacs_30_requirement() ->
            (package-desc-reqs desc)))"##,
         true,
         expect![[
-        r#"OK ("astro-ts-mode.el" "830194fce49caf655c31a0036cd01eb97f8e3ca75856c5855d86464da39dde73" t ((emacs (30))))"#
-    ]],
+            r#"OK ("astro-ts-mode.el" "830194fce49caf655c31a0036cd01eb97f8e3ca75856c5855d86464da39dde73" t ((emacs (30))))"#
+        ]],
     )
 }
 
@@ -57,12 +57,13 @@ fn complete_declared_callable_surface_has_exact_arities_and_command_status() -> 
             astro-ts-mode))"##,
         true,
         expect![[
-        r#"OK ((astro-ts-mode--prefix-font-lock-features (prefix settings) nil nil "Prefix with PREFIX the font lock features in SETTINGS.") (astro-ts-mode--treesit-language-at-point (point) nil nil "Return the language at POINT.") (astro-ts-mode nil t nil "Major mode for editing Astro templates, powered by tree-sitter.\n\nIn addition to any hooks its parent mode ‘html-mode’ might have run,\nthis mode runs the hook ‘astro-ts-mode-hook’, as the final or\npenultimate step during initialization.\n\n"))"#
-    ]],
+            r#"OK ((astro-ts-mode--prefix-font-lock-features (prefix settings) nil nil "Prefix with PREFIX the font lock features in SETTINGS.") (astro-ts-mode--treesit-language-at-point (point) nil nil "Return the language at POINT.") (astro-ts-mode nil t nil "Major mode for editing Astro templates, powered by tree-sitter.\n\nIn addition to any hooks its parent mode ‘html-mode’ might have run,\nthis mode runs the hook ‘astro-ts-mode-hook’, as the final or\npenultimate step during initialization.\n\n"))"#
+        ]],
     )
 }
 
-fn complete_declared_variable_surface_has_exact_defaults_kinds_groups_and_docs() -> ParityBatchCase {
+fn complete_declared_variable_surface_has_exact_defaults_kinds_groups_and_docs() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "complete_declared_variable_surface_has_exact_defaults_kinds_groups_and_docs",
         r##"(mapcar
@@ -87,8 +88,8 @@ fn complete_declared_variable_surface_has_exact_defaults_kinds_groups_and_docs()
             astro-ts-mode-abbrev-table))"##,
         true,
         expect![[
-        r#"OK ((astro-ts-mode-indent-offset t integer integer nil "Number of spaces for each indentation step in ‘astro-ts-mode’.") (astro-ts-mode--indent-rules t list nil nil "Tree-sitter indentation rules for ‘astro-ts-mode’.") (astro-ts-mode--font-lock-settings t list nil nil "Tree-sitter font-lock settings for ‘astro-ts-mode’.") (astro-ts-mode--range-settings t list nil nil nil) (astro-ts-mode-hook t list nil nil "Hook run after entering ‘astro-ts-mode’.\nNo problems result if this variable is not bound.\n‘add-hook’ automatically binds it.  (This is true for all hook variables.)") (astro-ts-mode-map t list nil nil "Keymap for ‘astro-ts-mode’.") (astro-ts-mode-syntax-table t char-table nil nil "Syntax table for ‘astro-ts-mode’.") (astro-ts-mode-abbrev-table t obarray nil nil "Abbrev table for ‘astro-ts-mode’."))"#
-    ]],
+            r#"OK ((astro-ts-mode-indent-offset t integer integer nil "Number of spaces for each indentation step in ‘astro-ts-mode’.") (astro-ts-mode--indent-rules t list nil nil "Tree-sitter indentation rules for ‘astro-ts-mode’.") (astro-ts-mode--font-lock-settings t list nil nil "Tree-sitter font-lock settings for ‘astro-ts-mode’.") (astro-ts-mode--range-settings t list nil nil nil) (astro-ts-mode-hook t list nil nil "Hook run after entering ‘astro-ts-mode’.\nNo problems result if this variable is not bound.\n‘add-hook’ automatically binds it.  (This is true for all hook variables.)") (astro-ts-mode-map t list nil nil "Keymap for ‘astro-ts-mode’.") (astro-ts-mode-syntax-table t char-table nil nil "Syntax table for ‘astro-ts-mode’.") (astro-ts-mode-abbrev-table t obarray nil nil "Abbrev table for ‘astro-ts-mode’."))"#
+        ]],
     )
 }
 
@@ -112,8 +113,8 @@ fn indent_registry_covers_astro_css_and_tsx_with_real_anchor_rules() -> ParityBa
            (prin1-to-string astro-ts-mode--indent-rules)))"##,
         true,
         expect![[
-        r#"OK ((astro css tsx) ((astro 11 (((parent-is "document") column-0 0) ((node-is "frontmatter") column-0 0) ((node-is "/>") parent-bol 0) ((node-is ">") parent-bol 0)) (((parent-is "self_closing_tag") parent-bol astro-ts-mode-indent-offset) ((parent-is "start_tag") parent-bol astro-ts-mode-indent-offset) ((parent-is "style_element") parent-bol astro-ts-mode-indent-offset))) (css 8 (((parent-is "stylesheet") parent-bol 0) ((node-is "}") parent-bol 0) ((node-is ")") parent-bol 0) ((node-is "]") parent-bol 0)) (((match nil "declaration" nil 3) (nth-sibling 2) 0) ((match nil "declaration" nil 0 3) parent-bol css-indent-offset) ((parent-is "arguments") parent-bol css-indent-offset))) (tsx 46 (((parent-is "program") parent-bol 0) ((parent-is "program") column-0 0) ((node-is "}") standalone-parent 0) ((node-is ")") parent-bol 0)) ((no-node parent-bol 0) ((parent-is "jsx_self_closing_element") parent typescript-ts-indent-offset) ((match "/" "jsx_self_closing_element") parent 0)))) "2f0dfaa1a709d09de37767ff80a4623c3ee308bd66d4ac15047ddf1bb599a619")"#
-    ]],
+            r#"OK ((astro css tsx) ((astro 11 (((parent-is "document") column-0 0) ((node-is "frontmatter") column-0 0) ((node-is "/>") parent-bol 0) ((node-is ">") parent-bol 0)) (((parent-is "self_closing_tag") parent-bol astro-ts-mode-indent-offset) ((parent-is "start_tag") parent-bol astro-ts-mode-indent-offset) ((parent-is "style_element") parent-bol astro-ts-mode-indent-offset))) (css 8 (((parent-is "stylesheet") parent-bol 0) ((node-is "}") parent-bol 0) ((node-is ")") parent-bol 0) ((node-is "]") parent-bol 0)) (((match nil "declaration" nil 3) (nth-sibling 2) 0) ((match nil "declaration" nil 0 3) parent-bol css-indent-offset) ((parent-is "arguments") parent-bol css-indent-offset))) (tsx 46 (((parent-is "program") parent-bol 0) ((parent-is "program") column-0 0) ((node-is "}") standalone-parent 0) ((node-is ")") parent-bol 0)) ((no-node parent-bol 0) ((parent-is "jsx_self_closing_element") parent typescript-ts-indent-offset) ((match "/" "jsx_self_closing_element") parent 0)))) "2f0dfaa1a709d09de37767ff80a4623c3ee308bd66d4ac15047ddf1bb599a619")"#
+        ]],
     )
 }
 
@@ -150,8 +151,8 @@ fn font_lock_registry_has_prefixed_embedded_features_and_native_astro_rules() ->
             astro-ts-mode--font-lock-settings)))"##,
         true,
         expect![
-        "OK (33 33 (tsx-comment tsx-constant tsx-keyword tsx-string tsx-declaration tsx-identifier tsx-property tsx-expression tsx-function tsx-pattern tsx-jsx tsx-number tsx-operator tsx-bracket tsx-delimiter tsx-escape-sequence) (css-comment css-string css-keyword css-variable css-operator css-selector css-property css-function css-constant css-query css-bracket css-error) (astro-comment astro-keyword astro-definition astro-string astro-bracket) ((treesit-compiled-query t tsx-comment nil) (treesit-compiled-query t tsx-constant nil) (treesit-compiled-query t tsx-keyword nil) (treesit-compiled-query t tsx-string nil) (treesit-compiled-query t tsx-declaration t) (treesit-compiled-query t tsx-identifier nil) (treesit-compiled-query t tsx-property nil) (treesit-compiled-query t tsx-expression nil) (treesit-compiled-query t tsx-function nil) (treesit-compiled-query t tsx-pattern nil) (treesit-compiled-query t tsx-jsx nil) (treesit-compiled-query t tsx-number nil) (treesit-compiled-query t tsx-operator nil) (treesit-compiled-query t tsx-bracket nil) (treesit-compiled-query t tsx-delimiter nil) (treesit-compiled-query t tsx-escape-sequence t) (treesit-compiled-query t css-comment nil) (treesit-compiled-query t css-string nil) (treesit-compiled-query t css-keyword nil) (treesit-compiled-query t css-variable nil) (treesit-compiled-query t css-operator nil) (treesit-compiled-query t css-selector nil) (treesit-compiled-query t css-property nil) (treesit-compiled-query t css-function nil) (treesit-compiled-query t css-constant nil) (treesit-compiled-query t css-query nil) (treesit-compiled-query t css-bracket nil) (treesit-compiled-query t css-error nil) (treesit-compiled-query t astro-comment nil) (treesit-compiled-query t astro-keyword nil) (treesit-compiled-query t astro-definition nil) (treesit-compiled-query t astro-string nil) (treesit-compiled-query t astro-bracket nil)))"
-    ],
+            "OK (33 33 (tsx-comment tsx-constant tsx-keyword tsx-string tsx-declaration tsx-identifier tsx-property tsx-expression tsx-function tsx-pattern tsx-jsx tsx-number tsx-operator tsx-bracket tsx-delimiter tsx-escape-sequence) (css-comment css-string css-keyword css-variable css-operator css-selector css-property css-function css-constant css-query css-bracket css-error) (astro-comment astro-keyword astro-definition astro-string astro-bracket) ((treesit-compiled-query t tsx-comment nil) (treesit-compiled-query t tsx-constant nil) (treesit-compiled-query t tsx-keyword nil) (treesit-compiled-query t tsx-string nil) (treesit-compiled-query t tsx-declaration t) (treesit-compiled-query t tsx-identifier nil) (treesit-compiled-query t tsx-property nil) (treesit-compiled-query t tsx-expression nil) (treesit-compiled-query t tsx-function nil) (treesit-compiled-query t tsx-pattern nil) (treesit-compiled-query t tsx-jsx nil) (treesit-compiled-query t tsx-number nil) (treesit-compiled-query t tsx-operator nil) (treesit-compiled-query t tsx-bracket nil) (treesit-compiled-query t tsx-delimiter nil) (treesit-compiled-query t tsx-escape-sequence t) (treesit-compiled-query t css-comment nil) (treesit-compiled-query t css-string nil) (treesit-compiled-query t css-keyword nil) (treesit-compiled-query t css-variable nil) (treesit-compiled-query t css-operator nil) (treesit-compiled-query t css-selector nil) (treesit-compiled-query t css-property nil) (treesit-compiled-query t css-function nil) (treesit-compiled-query t css-constant nil) (treesit-compiled-query t css-query nil) (treesit-compiled-query t css-bracket nil) (treesit-compiled-query t css-error nil) (treesit-compiled-query t astro-comment nil) (treesit-compiled-query t astro-keyword nil) (treesit-compiled-query t astro-definition nil) (treesit-compiled-query t astro-string nil) (treesit-compiled-query t astro-bracket nil)))"
+        ],
     )
 }
 
@@ -171,8 +172,8 @@ fn range_registry_embeds_tsx_and_css_in_every_documented_astro_context() -> Pari
            astro-ts-mode--range-settings))"##,
         true,
         expect![
-        "OK (2 ((treesit-compiled-query tsx t nil nil) (treesit-compiled-query css t nil nil)))"
-    ],
+            "OK (2 ((treesit-compiled-query tsx t nil nil) (treesit-compiled-query css t nil nil)))"
+        ],
     )
 }
 
@@ -202,8 +203,8 @@ fn mode_metadata_auto_association_and_source_ownership_are_exact() -> ParityBatc
              astro-ts-mode-abbrev-table)))"##,
         true,
         expect![[
-        r#"OK (html-mode astro-ts-mode astro ((astro-ts-mode "astro-ts-mode.el" nil) (astro-ts-mode--prefix-font-lock-features "astro-ts-mode.el" nil) (astro-ts-mode-indent-offset nil "astro-ts-mode.el") (astro-ts-mode--range-settings nil "astro-ts-mode.el") (astro-ts-mode-hook nil "astro-ts-mode.el") (astro-ts-mode-map nil "astro-ts-mode.el") (astro-ts-mode-syntax-table nil "astro-ts-mode.el") (astro-ts-mode-abbrev-table nil "astro-ts-mode.el")))"#
-    ]],
+            r#"OK (html-mode astro-ts-mode astro ((astro-ts-mode "astro-ts-mode.el" nil) (astro-ts-mode--prefix-font-lock-features "astro-ts-mode.el" nil) (astro-ts-mode-indent-offset nil "astro-ts-mode.el") (astro-ts-mode--range-settings nil "astro-ts-mode.el") (astro-ts-mode-hook nil "astro-ts-mode.el") (astro-ts-mode-map nil "astro-ts-mode.el") (astro-ts-mode-syntax-table nil "astro-ts-mode.el") (astro-ts-mode-abbrev-table nil "astro-ts-mode.el")))"#
+        ]],
     )
 }
 
@@ -261,8 +262,7 @@ fn registry_astro_ts_mode_batch() {
 
 #[test]
 fn registry_astro_ts_mode_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        autoload_file_signals_when_treesit_was_not_preloaded_like_upstream(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![autoload_file_signals_when_treesit_was_not_preloaded_like_upstream()];
     assert_astro_ts_mode_autoload_batch(&cases);
 }

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_highlight_symbol_batch};
 
-fn auto_highlight_symbol_mode_enable_disable_installs_and_removes_local_hooks_and_state() -> ParityBatchCase {
+fn auto_highlight_symbol_mode_enable_disable_installs_and_removes_local_hooks_and_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_mode_enable_disable_installs_and_removes_local_hooks_and_state",
         r##"(with-temp-buffer
@@ -29,12 +30,13 @@ fn auto_highlight_symbol_mode_enable_disable_installs_and_removes_local_hooks_an
                                   auto-highlight-symbol-test-events)))))"##,
         true,
         expect![[
-        r#"OK ((nil nil nil nil nil nil 0 0) (t #1=((name . "display area") (lighter . "HS") (start . window-start) (end . window-end)) " HS" nil (ahs-start-timer eldoc-schedule-timer t) (ahs-start-timer t) 0 0) (nil #1# " HS" nil nil nil 0 0) (:disabled :enabled))"#
-    ]],
+            r#"OK ((nil nil nil nil nil nil 0 0) (t #1=((name . "display area") (lighter . "HS") (start . window-start) (end . window-end)) " HS" nil (ahs-start-timer eldoc-schedule-timer t) (ahs-start-timer t) 0 0) (nil #1# " HS" nil nil nil 0 0) (:disabled :enabled))"#
+        ]],
     )
 }
 
-fn auto_highlight_symbol_repeated_enable_disable_is_hook_idempotent_and_buffer_local() -> ParityBatchCase {
+fn auto_highlight_symbol_repeated_enable_disable_is_hook_idempotent_and_buffer_local()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_repeated_enable_disable_is_hook_idempotent_and_buffer_local",
         r##"(let ((first
@@ -77,8 +79,8 @@ fn auto_highlight_symbol_repeated_enable_disable_is_hook_idempotent_and_buffer_l
                              (kill-buffer second)))"##,
         true,
         expect![[
-        r#"OK (((t 1 #1=((name . "display area") (lighter . "HS") (start . window-start) (end . window-end))) (t 1 #1#)) (nil #1# " HS" nil nil nil 0 0) (t #1# " HS" nil (ahs-start-timer t) (ahs-start-timer t) 0 0))"#
-    ]],
+            r#"OK (((t 1 #1=((name . "display area") (lighter . "HS") (start . window-start) (end . window-end))) (t 1 #1#)) (nil #1# " HS" nil nil nil 0 0) (t #1# " HS" nil (ahs-start-timer t) (ahs-start-timer t) 0 0))"#
+        ]],
     )
 }
 
@@ -142,7 +144,8 @@ fn auto_highlight_symbol_global_mode_enables_only_configured_major_modes() -> Pa
     )
 }
 
-fn auto_highlight_symbol_start_timer_cleans_old_state_and_uses_window_switch_delay_policy() -> ParityBatchCase {
+fn auto_highlight_symbol_start_timer_cleans_old_state_and_uses_window_switch_delay_policy()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_start_timer_cleans_old_state_and_uses_window_switch_delay_policy",
         r##"(save-window-excursion
@@ -223,8 +226,8 @@ fn auto_highlight_symbol_start_timer_cleans_old_state_and_uses_window_switch_del
                                     switch-disabled))))))"##,
         true,
         expect![
-        "OK ((same-window (:timer 1.25) (:edit-post (:unhighlight nil) (:cancel fixture-old-timer) (:schedule 1.25 nil ahs-idle-function))) (switched-window (:timer 0) (:edit-post (:unhighlight nil) (:cancel fixture-old-timer) (:schedule 0 nil ahs-idle-function))) (switch-disabled (:timer 1.25) (:edit-post (:unhighlight nil) (:cancel fixture-old-timer) (:schedule 1.25 nil ahs-idle-function))))"
-    ],
+            "OK ((same-window (:timer 1.25) (:edit-post (:unhighlight nil) (:cancel fixture-old-timer) (:schedule 1.25 nil ahs-idle-function))) (switched-window (:timer 0) (:edit-post (:unhighlight nil) (:cancel fixture-old-timer) (:schedule 0 nil ahs-idle-function))) (switch-disabled (:timer 1.25) (:edit-post (:unhighlight nil) (:cancel fixture-old-timer) (:schedule 1.25 nil ahs-idle-function))))"
+        ],
     )
 }
 
@@ -262,7 +265,8 @@ fn auto_highlight_symbol_stop_timer_cancels_only_live_timer_values() -> ParityBa
     )
 }
 
-fn auto_highlight_symbol_idle_function_dispatches_selected_or_all_windows_deterministically() -> ParityBatchCase {
+fn auto_highlight_symbol_idle_function_dispatches_selected_or_all_windows_deterministically()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_idle_function_dispatches_selected_or_all_windows_deterministically",
         r##"(save-window-excursion
@@ -305,7 +309,8 @@ fn auto_highlight_symbol_idle_function_dispatches_selected_or_all_windows_determ
     )
 }
 
-fn auto_highlight_symbol_focus_hooks_obey_configuration_and_change_selected_window_state() -> ParityBatchCase {
+fn auto_highlight_symbol_focus_hooks_obey_configuration_and_change_selected_window_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_focus_hooks_obey_configuration_and_change_selected_window_state",
         r##"(let (calls)
@@ -341,7 +346,8 @@ fn auto_highlight_symbol_focus_hooks_obey_configuration_and_change_selected_wind
     )
 }
 
-fn auto_highlight_symbol_clear_exits_edit_then_second_call_removes_map_and_hooks() -> ParityBatchCase {
+fn auto_highlight_symbol_clear_exits_edit_then_second_call_removes_map_and_hooks() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_highlight_symbol_clear_exits_edit_then_second_call_removes_map_and_hooks",
         r##"(save-window-excursion
@@ -389,12 +395,13 @@ fn auto_highlight_symbol_clear_exits_edit_then_second_call_removes_map_and_hooks
                                   (auto-highlight-symbol-test-overlays))))))"##,
         true,
         expect![[
-        r#"OK (((t #1=((name . "whole buffer") (lighter . "HSA") (face . ahs-plugin-whole-buffer-face) (start . point-min) (end . point-max)) " *HSA*" t #2=(ahs-start-timer t) #3=(ahs-start-timer t) 1 2) 1 ((1 6 current ahs-edit-mode-face 1000 t t) (1 6 others ahs-face nil t t) (7 12 others ahs-face nil t t))) ((t #1# " HSA" nil #2# #3# 0 0) 1 nil) (t #1# " HSA" nil nil nil 0 0) 0 nil)"#
-    ]],
+            r#"OK (((t #1=((name . "whole buffer") (lighter . "HSA") (face . ahs-plugin-whole-buffer-face) (start . point-min) (end . point-max)) " *HSA*" t #2=(ahs-start-timer t) #3=(ahs-start-timer t) 1 2) 1 ((1 6 current ahs-edit-mode-face 1000 t t) (1 6 others ahs-face nil t t) (7 12 others ahs-face nil t t))) ((t #1# " HSA" nil #2# #3# 0 0) 1 nil) (t #1# " HSA" nil nil nil 0 0) 0 nil)"#
+        ]],
     )
 }
 
-fn auto_highlight_symbol_set_idle_interval_distinguishes_integer_zero_float_zero_and_non_numbers() -> ParityBatchCase {
+fn auto_highlight_symbol_set_idle_interval_distinguishes_integer_zero_float_zero_and_non_numbers()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_set_idle_interval_distinguishes_integer_zero_float_zero_and_non_numbers",
         r##"(let ((ahs-idle-interval
@@ -414,12 +421,13 @@ fn auto_highlight_symbol_set_idle_interval_distinguishes_integer_zero_float_zero
                               nil)))"##,
         true,
         expect![[
-        r#"OK ((0 nil 1.0) (0.0 0.0 0.0) (0.25 0.25 0.25) (-1 -1 -1) ("2" nil -1) (nil nil -1))"#
-    ]],
+            r#"OK ((0 nil 1.0) (0.0 0.0 0.0) (0.25 0.25 0.25) (-1 -1 -1) ("2" nil -1) (nil nil -1))"#
+        ]],
     )
 }
 
-fn auto_highlight_symbol_mode_maybe_obeys_mode_list_and_does_not_enable_other_buffers() -> ParityBatchCase {
+fn auto_highlight_symbol_mode_maybe_obeys_mode_list_and_does_not_enable_other_buffers()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_mode_maybe_obeys_mode_list_and_does_not_enable_other_buffers",
         r##"(let ((ahs-modes
@@ -442,8 +450,8 @@ fn auto_highlight_symbol_mode_maybe_obeys_mode_list_and_does_not_enable_other_bu
                               python-mode)))"##,
         true,
         expect![[
-        r#"OK ((emacs-lisp-mode t t #1=((name . "display area") (lighter . "HS") (start . window-start) (end . window-end))) (text-mode t t #1#) (fundamental-mode nil nil nil) (python-mode nil nil nil))"#
-    ]],
+            r#"OK ((emacs-lisp-mode t t #1=((name . "display area") (lighter . "HS") (start . window-start) (end . window-end))) (text-mode t t #1#) (fundamental-mode nil nil nil) (python-mode nil nil nil))"#
+        ]],
     )
 }
 

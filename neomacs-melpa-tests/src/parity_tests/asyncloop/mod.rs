@@ -215,8 +215,6 @@ pub(crate) fn assert_asyncloop_autoload_parity(elisp_form: &str, expected: Expec
     assert_asyncloop_source_parity("asyncloop-autoloads.el", elisp_form, expected);
 }
 
-
-
 /// Multi-probe batch for `assert_asyncloop_autoload_parity` cases (2a).
 pub(crate) fn assert_asyncloop_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

@@ -1,8 +1,12 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_auto_dim_other_buffers_autoload_batch, assert_auto_dim_other_buffers_batch};
+use super::{
+    ParityBatchCase, assert_auto_dim_other_buffers_autoload_batch,
+    assert_auto_dim_other_buffers_batch,
+};
 
-fn auto_dim_other_buffers_mode_enable_installs_exact_hooks_focus_advice_and_initial_state() -> ParityBatchCase {
+fn auto_dim_other_buffers_mode_enable_installs_exact_hooks_focus_advice_and_initial_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_mode_enable_installs_exact_hooks_focus_advice_and_initial_state",
         r##"(save-window-excursion
@@ -48,12 +52,13 @@ fn auto_dim_other_buffers_mode_enable_installs_exact_hooks_focus_advice_and_init
                 (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK (t 1 1 t t t t ((t " *adob-mode-enable*" nil)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
-    ]],
+            r#"OK (t 1 1 t t t t ((t " *adob-mode-enable*" nil)) (t 1 (default) ((default ((:filtered (:window adob--dim t) auto-dim-other-buffers))))))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_mode_disable_removes_hooks_advice_state_and_every_owned_remap() -> ParityBatchCase {
+fn auto_dim_other_buffers_mode_disable_removes_hooks_advice_state_and_every_owned_remap()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_mode_disable_removes_hooks_advice_state_and_every_owned_remap",
         r##"(save-window-excursion
@@ -106,12 +111,13 @@ fn auto_dim_other_buffers_mode_disable_removes_hooks_advice_state_and_every_owne
                 (kill-buffer second)))))"##,
         true,
         expect![[
-        r#"OK (nil 0 0 nil nil nil nil (nil 0 nil nil) (nil 0 nil nil) ((t " *adob-disable-first*" nil) (nil " *adob-disable-second*" t)))"#
-    ]],
+            r#"OK (nil 0 0 nil nil nil nil (nil 0 nil nil) (nil 0 nil nil) ((t " *adob-disable-first*" nil) (nil " *adob-disable-second*" t)))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_repeated_enable_disable_and_toggle_keep_hooks_and_advice_idempotent() -> ParityBatchCase {
+fn auto_dim_other_buffers_repeated_enable_disable_and_toggle_keep_hooks_and_advice_idempotent()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_repeated_enable_disable_and_toggle_keep_hooks_and_advice_idempotent",
         r##"(let (states)
@@ -141,12 +147,13 @@ fn auto_dim_other_buffers_repeated_enable_disable_and_toggle_keep_hooks_and_advi
           (nreverse states))"##,
         true,
         expect![
-        "OK ((1 t 1 1 t t) (1 t 1 1 t t) (-1 nil 0 0 nil nil) (-1 nil 0 0 nil nil) (toggle t 1 1 t t) (toggle nil 0 0 nil nil))"
-    ],
+            "OK ((1 t 1 1 t t) (1 t 1 1 t t) (-1 nil 0 0 nil nil) (-1 nil 0 0 nil nil) (toggle t 1 1 t t) (toggle nil 0 0 nil nil))"
+        ],
     )
 }
 
-fn auto_dim_other_buffers_each_mode_transition_cancels_existing_focus_timer_before_work() -> ParityBatchCase {
+fn auto_dim_other_buffers_each_mode_transition_cancels_existing_focus_timer_before_work()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_each_mode_transition_cancels_existing_focus_timer_before_work",
         r##"(let ((adob--focus-change-timer
@@ -179,12 +186,13 @@ fn auto_dim_other_buffers_each_mode_transition_cancels_existing_focus_timer_befo
              (nreverse events))))"##,
         true,
         expect![
-        "OK (nil nil ((:cancel :enable-timer) :initialize (:cancel :disable-timer) (:cycle nil)))"
-    ],
+            "OK (nil nil ((:cancel :enable-timer) :initialize (:cancel :disable-timer) (:cycle nil)))"
+        ],
     )
 }
 
-fn auto_dim_other_buffers_never_dim_customize_setter_sets_default_and_reinitializes_only_when_enabled() -> ParityBatchCase {
+fn auto_dim_other_buffers_never_dim_customize_setter_sets_default_and_reinitializes_only_when_enabled()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_never_dim_customize_setter_sets_default_and_reinitializes_only_when_enabled",
         r##"(let ((setter
@@ -229,12 +237,13 @@ fn auto_dim_other_buffers_never_dim_customize_setter_sets_default_and_reinitiali
             (nreverse events)))"##,
         true,
         expect![[
-        r#"OK ((:disabled #1=(ignore) #1#) (:initialize (:buffer "*scratch*")) (:enabled #2=(always) #2#))"#
-    ]],
+            r#"OK ((:disabled #1=(ignore) #1#) (:initialize (:buffer "*scratch*")) (:enabled #2=(always) #2#))"#
+        ]],
     )
 }
 
-fn auto_dim_other_buffers_affected_faces_customize_setter_rebuilds_only_when_enabled() -> ParityBatchCase {
+fn auto_dim_other_buffers_affected_faces_customize_setter_rebuilds_only_when_enabled()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_affected_faces_customize_setter_rebuilds_only_when_enabled",
         r##"(let ((setter
@@ -279,12 +288,13 @@ fn auto_dim_other_buffers_affected_faces_customize_setter_rebuilds_only_when_ena
             (nreverse events)))"##,
         true,
         expect![
-        "OK ((:disabled nil ((default . auto-dim-other-buffers))) (:cycle t) (:enabled :cycled ((default nil . bold))))"
-    ],
+            "OK ((:disabled nil ((default . auto-dim-other-buffers))) (:cycle t) (:enabled :cycled ((default nil . bold))))"
+        ],
     )
 }
 
-fn auto_dim_other_buffers_mode_enable_failure_leaves_mode_and_installed_hooks_before_initialization() -> ParityBatchCase {
+fn auto_dim_other_buffers_mode_enable_failure_leaves_mode_and_installed_hooks_before_initialization()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_mode_enable_failure_leaves_mode_and_installed_hooks_before_initialization",
         r##"(let ((auto-dim-other-buffers-mode
@@ -323,7 +333,8 @@ fn auto_dim_other_buffers_mode_enable_failure_leaves_mode_and_installed_hooks_be
     )
 }
 
-fn auto_dim_other_buffers_autoload_mode_command_loads_source_and_runs_real_enable_disable_lifecycle() -> ParityBatchCase {
+fn auto_dim_other_buffers_autoload_mode_command_loads_source_and_runs_real_enable_disable_lifecycle()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dim_other_buffers_autoload_mode_command_loads_source_and_runs_real_enable_disable_lifecycle",
         r##"(save-window-excursion
@@ -370,8 +381,8 @@ fn auto_dim_other_buffers_autoload_mode_command_loads_source_and_runs_real_enabl
                 (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK ((nil t) (t nil t ((t " *adob-autoload*" nil)) (t 4 (default fringe org-block org-hide) ((org-hide ((:filtered (:window adob--dim t) auto-dim-other-buffers-hide))) (org-block ((:filtered (:window adob--dim t) auto-dim-other-buffers))) (fringe ((:filtered (:window adob--dim t) auto-dim-other-buffers))) (default ((:filtered (:window adob--dim t) auto-dim-other-buffers)))))) nil (nil 0 nil nil))"#
-    ]],
+            r#"OK ((nil t) (t nil t ((t " *adob-autoload*" nil)) (t 4 (default fringe org-block org-hide) ((org-hide ((:filtered (:window adob--dim t) auto-dim-other-buffers-hide))) (org-block ((:filtered (:window adob--dim t) auto-dim-other-buffers))) (fringe ((:filtered (:window adob--dim t) auto-dim-other-buffers))) (default ((:filtered (:window adob--dim t) auto-dim-other-buffers)))))) nil (nil 0 nil nil))"#
+        ]],
     )
 }
 

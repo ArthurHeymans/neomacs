@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atl_long_lines_batch};
 
-fn atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_match() -> ParityBatchCase {
+fn atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_match()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_match",
         r##"(with-temp-buffer
@@ -26,12 +27,13 @@ fn atl_long_lines_minor_mode_initial_metadata_lighter_keymap_and_hook_state_matc
            'post-command-hook)))"##,
         true,
         expect![[
-        r#"OK (nil nil (atl-long-lines-mode " ATL-LL") nil t (atl-long-lines-mode--set-explicitly) 0 nil)"#
-    ]],
+            r#"OK (nil nil (atl-long-lines-mode " ATL-LL") nil t (atl-long-lines-mode--set-explicitly) 0 nil)"#
+        ]],
     )
 }
 
-fn atl_long_lines_enabling_mode_installs_one_buffer_local_post_command_callback_idempotently() -> ParityBatchCase {
+fn atl_long_lines_enabling_mode_installs_one_buffer_local_post_command_callback_idempotently()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_enabling_mode_installs_one_buffer_local_post_command_callback_idempotently",
         r##"(with-temp-buffer

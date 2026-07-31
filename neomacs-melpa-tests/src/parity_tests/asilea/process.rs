@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asilea_batch};
 
-fn asilea_start_process_builds_pipe_process_with_exact_program_and_flattened_options() -> ParityBatchCase {
+fn asilea_start_process_builds_pipe_process_with_exact_program_and_flattened_options()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asilea_start_process_builds_pipe_process_with_exact_program_and_flattened_options",
         r##"(let ((options
@@ -43,8 +44,8 @@ fn asilea_start_process_builds_pipe_process_with_exact_program_and_flattened_opt
              (kill-buffer created-buffer))))"##,
         true,
         expect![[
-        r#"OK (:fake-process ((("/opt/compiler driver" (:buffer nil) "/opt/compiler driver" "-O3" "-march=native" "-mtune=native" "file name.c") nil t " *asilea process output*")))"#
-    ]],
+            r#"OK (:fake-process ((("/opt/compiler driver" (:buffer nil) "/opt/compiler driver" "-O3" "-march=native" "-mtune=native" "file name.c") nil t " *asilea process output*")))"#
+        ]],
     )
 }
 
@@ -91,8 +92,8 @@ fn asilea_start_process_creates_unique_internal_buffers_for_repeated_jobs() -> P
                (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK (1 2 (("compiler" :base-name t "compiler" ("-O2") nil) ("compiler" :unique-suffixed-name t "compiler" ("-O2") nil)) (t t) nil)"#
-    ]],
+            r#"OK (1 2 (("compiler" :base-name t "compiler" ("-O2") nil) ("compiler" :unique-suffixed-name t "compiler" ("-O2") nil)) (t t) nil)"#
+        ]],
     )
 }
 
@@ -125,7 +126,8 @@ fn asilea_start_process_omits_nil_groups_and_preserves_duplicate_arguments() -> 
     )
 }
 
-fn asilea_start_process_surfaces_state_shape_and_start_process_errors_without_leaking_contract() -> ParityBatchCase {
+fn asilea_start_process_surfaces_state_shape_and_start_process_errors_without_leaking_contract()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asilea_start_process_surfaces_state_shape_and_start_process_errors_without_leaking_contract",
         r##"(let ((options [["x"]])
@@ -173,8 +175,8 @@ fn asilea_start_process_surfaces_state_shape_and_start_process_errors_without_le
                  (kill-buffer buffer))))))"##,
         true,
         expect![[
-        r#"OK ((("missing-driver" [0] #1=[#2=["x"]]) :error file-missing ("Searching for program" "No such file" "missing-driver")) (("driver" [1] #1#) :error args-out-of-range (#2# 1)) (("driver" [] #1#) :error file-missing ("Searching for program" "No such file" "driver")))"#
-    ]],
+            r#"OK ((("missing-driver" [0] #1=[#2=["x"]]) :error file-missing ("Searching for program" "No such file" "missing-driver")) (("driver" [1] #1#) :error args-out-of-range (#2# 1)) (("driver" [] #1#) :error file-missing ("Searching for program" "No such file" "driver")))"#
+        ]],
     )
 }
 
@@ -184,7 +186,8 @@ fn process_public_surface_batch() {
         asilea_start_process_builds_pipe_process_with_exact_program_and_flattened_options(),
         asilea_start_process_creates_unique_internal_buffers_for_repeated_jobs(),
         asilea_start_process_omits_nil_groups_and_preserves_duplicate_arguments(),
-        asilea_start_process_surfaces_state_shape_and_start_process_errors_without_leaking_contract(),
+        asilea_start_process_surfaces_state_shape_and_start_process_errors_without_leaking_contract(
+        ),
     ];
     assert_asilea_batch(&cases);
 }

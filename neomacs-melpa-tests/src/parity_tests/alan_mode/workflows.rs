@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alan_mode_batch};
 
-fn opening_each_file_of_a_real_alan_project_selects_its_mode_and_configures_its_compiler() -> ParityBatchCase {
+fn opening_each_file_of_a_real_alan_project_selects_its_mode_and_configures_its_compiler()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "opening_each_file_of_a_real_alan_project_selects_its_mode_and_configures_its_compiler",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -54,8 +55,8 @@ fn opening_each_file_of_a_real_alan_project_selects_its_mode_and_configures_its_
     files)))"##,
         true,
         expect![[
-        r#"OK (:compiler-environment ("emacs" "warning") :tree-sitter-gate (t nil) :opened (("schema.alan" alan-schema-mode "schema" "dependencies/dev/internals/alan/language" "../.." t "dependencies/dev/internals/alan/tools/compiler-project" "dependencies/dev/internals/alan/language") ("grammar.alan" alan-grammar-mode "grammar" "dependencies/dev/internals/alan/language" "../.." t "dependencies/dev/internals/alan/tools/compiler-project" "dependencies/dev/internals/alan/language") ("wiring.alan" alan-wiring-mode "wiring" nil "." nil nil nil) ("application.alan" alan-application-mode "application" ".alan/devenv/platform/if-types/model/language" "." t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/platform/if-types/model/language") ("interface.alan" alan-interface-mode "interface" nil "." t nil nil) ("settings.alan" alan-settings-mode "settings" ".alan/devenv/system-types/auto-webclient/language" "." t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/system-types/auto-webclient/language") ("control.alan" alan-control-mode "control" nil "." t nil nil) ("mapping.alan" alan-mapping-mode "mapping" nil "." nil nil nil) ("migration.alan" alan-migration-mode "migration" nil "." t nil nil) ("deployment.alan" alan-deployment-mode "deployment" ".alan/devenv/platform/project-build-environment/language" "." nil "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/platform/project-build-environment/language") ("phrases.alan" alan-phrases-mode "phrases" nil "." nil nil nil) ("views/main.alan" alan-views-mode "views" ".alan/devenv/system-types/webclient/language" "../" t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/system-types/webclient/language") ("widgets/list.alan" alan-widget-mode "widget" ".alan/devenv/system-types/webclient/language" "../" t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/system-types/webclient/language") ("templates/page.alan" alan-template-mode "template" "dependencies/dev/internals/alan-to-text-transformation/language" "../../../" t "dependencies/dev/internals/alan/tools/compiler-project" "dependencies/dev/internals/alan-to-text-transformation/language") ("translations/nl.alan" alan-translations-mode "translations" nil "." nil nil nil) ("models/plain.alan" alan-mode "Alan" nil "." nil nil nil)))"#
-    ]],
+            r#"OK (:compiler-environment ("emacs" "warning") :tree-sitter-gate (t nil) :opened (("schema.alan" alan-schema-mode "schema" "dependencies/dev/internals/alan/language" "../.." t "dependencies/dev/internals/alan/tools/compiler-project" "dependencies/dev/internals/alan/language") ("grammar.alan" alan-grammar-mode "grammar" "dependencies/dev/internals/alan/language" "../.." t "dependencies/dev/internals/alan/tools/compiler-project" "dependencies/dev/internals/alan/language") ("wiring.alan" alan-wiring-mode "wiring" nil "." nil nil nil) ("application.alan" alan-application-mode "application" ".alan/devenv/platform/if-types/model/language" "." t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/platform/if-types/model/language") ("interface.alan" alan-interface-mode "interface" nil "." t nil nil) ("settings.alan" alan-settings-mode "settings" ".alan/devenv/system-types/auto-webclient/language" "." t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/system-types/auto-webclient/language") ("control.alan" alan-control-mode "control" nil "." t nil nil) ("mapping.alan" alan-mapping-mode "mapping" nil "." nil nil nil) ("migration.alan" alan-migration-mode "migration" nil "." t nil nil) ("deployment.alan" alan-deployment-mode "deployment" ".alan/devenv/platform/project-build-environment/language" "." nil "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/platform/project-build-environment/language") ("phrases.alan" alan-phrases-mode "phrases" nil "." nil nil nil) ("views/main.alan" alan-views-mode "views" ".alan/devenv/system-types/webclient/language" "../" t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/system-types/webclient/language") ("widgets/list.alan" alan-widget-mode "widget" ".alan/devenv/system-types/webclient/language" "../" t "dependencies/dev/internals/alan/tools/compiler-project" ".alan/devenv/system-types/webclient/language") ("templates/page.alan" alan-template-mode "template" "dependencies/dev/internals/alan-to-text-transformation/language" "../../../" t "dependencies/dev/internals/alan/tools/compiler-project" "dependencies/dev/internals/alan-to-text-transformation/language") ("translations/nl.alan" alan-translations-mode "translations" nil "." nil nil nil) ("models/plain.alan" alan-mode "Alan" nil "." nil nil nil)))"#
+        ]],
     )
 }
 
@@ -126,12 +127,13 @@ fn flycheck_runs_the_project_compiler_and_reports_only_this_files_diagnostics() 
       (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (:mode alan-schema-mode :finished t :status finished :executable "dependencies/dev/internals/alan/tools/compiler-project" :language "dependencies/dev/internals/alan/language" :project-root "../.." :invocations "cwd=[PROJECT]models/accounts\nargv: [[PROJECT]dependencies/dev/internals/alan/language] [-C] [../..] [/dev/null]\n" :emitted 4 :shown 2 :diagnostics ((3 5 error "models/accounts/schema.alan" " unresolved reference 'balance'\n candidates are 'balances'\n in collection 'accounts'") (7 1 warning "models/accounts/schema.alan" " node 'status' is never read")))"#
-    ]],
+            r#"OK (:mode alan-schema-mode :finished t :status finished :executable "dependencies/dev/internals/alan/tools/compiler-project" :language "dependencies/dev/internals/alan/language" :project-root "../.." :invocations "cwd=[PROJECT]models/accounts\nargv: [[PROJECT]dependencies/dev/internals/alan/language] [-C] [../..] [/dev/null]\n" :emitted 4 :shown 2 :diagnostics ((3 5 error "models/accounts/schema.alan" " unresolved reference 'balance'\n candidates are 'balances'\n in collection 'accounts'") (7 1 warning "models/accounts/schema.alan" " node 'status' is never read")))"#
+        ]],
     )
 }
 
-fn without_a_project_compiler_flycheck_falls_back_to_the_projects_build_script() -> ParityBatchCase {
+fn without_a_project_compiler_flycheck_falls_back_to_the_projects_build_script() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "without_a_project_compiler_flycheck_falls_back_to_the_projects_build_script",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -176,12 +178,13 @@ fn without_a_project_compiler_flycheck_falls_back_to_the_projects_build_script()
       (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (:mode alan-schema-mode :finished t :status finished :executable "alan" :language nil :compile-command "[PROJECT]alan build" :invocations "cwd=[PROJECT]models/accounts\nargv: [build]\n" :diagnostics ((2 9 error "models/accounts/schema.alan" " the build branch ran")))"#
-    ]],
+            r#"OK (:mode alan-schema-mode :finished t :status finished :executable "alan" :language nil :compile-command "[PROJECT]alan build" :invocations "cwd=[PROJECT]models/accounts\nargv: [build]\n" :diagnostics ((2 9 error "models/accounts/schema.alan" " the build branch ran")))"#
+        ]],
     )
 }
 
-fn the_documented_electric_layout_rule_opens_a_line_inside_an_empty_alan_block() -> ParityBatchCase {
+fn the_documented_electric_layout_rule_opens_a_line_inside_an_empty_alan_block() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "the_documented_electric_layout_rule_opens_a_line_inside_an_empty_alan_block",
         r##"(let* ((root (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -237,8 +240,8 @@ fn the_documented_electric_layout_rule_opens_a_line_inside_an_empty_alan_block()
         (kill-buffer opened)))))"##,
         true,
         expect![[
-        r#"OK (:syntax (alan-schema-mode 40 41) :generic-syntax (alan-mode 95 95) :without-rule ("'root' -> component {\n}" 23 2 0 "}") :with-rule ("'root' -> component {\n\11\n}" 24 2 2 "\11"))"#
-    ]],
+            r#"OK (:syntax (alan-schema-mode 40 41) :generic-syntax (alan-mode 95 95) :without-rule ("'root' -> component {\n}" 23 2 0 "}") :with-rule ("'root' -> component {\n\11\n}" 24 2 2 "\11"))"#
+        ]],
     )
 }
 

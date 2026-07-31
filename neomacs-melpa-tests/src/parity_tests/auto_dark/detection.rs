@@ -31,8 +31,8 @@ fn auto_dark_ns_applescript_adapter_uses_exact_program_and_truth_contract() -> P
              (car calls))))"##,
         true,
         expect![[
-        r#"OK ((("true" t) ("false" nil) ("\"true\"" nil) (" true " nil) ("" nil) (nil nil)) 6 1 "tell application \"System Events\"\n        tell appearance preferences\n                if (dark mode) then\n                        return \"true\"\n                else\n                        return \"false\"\n                end if\n        end tell\nend tell")"#
-    ]],
+            r#"OK ((("true" t) ("false" nil) ("\"true\"" nil) (" true " nil) ("" nil) (nil nil)) 6 1 "tell application \"System Events\"\n        tell appearance preferences\n                if (dark mode) then\n                        return \"true\"\n                else\n                        return \"false\"\n                end if\n        end tell\nend tell")"#
+        ]],
     )
 }
 
@@ -65,12 +65,13 @@ fn auto_dark_mac_applescript_adapter_uses_quoted_truth_contract() -> ParityBatch
              (car calls))))"##,
         true,
         expect![[
-        r#"OK ((("\"true\"" t) ("true" nil) ("\"false\"" nil) (" \"true\" " nil) ("" nil) (nil nil)) 6 1 "tell application \"System Events\"\n        tell appearance preferences\n                if (dark mode) then\n                        return \"true\"\n                else\n                        return \"false\"\n                end if\n        end tell\nend tell")"#
-    ]],
+            r#"OK ((("\"true\"" t) ("true" nil) ("\"false\"" nil) (" \"true\" " nil) ("" nil) (nil nil)) 6 1 "tell application \"System Events\"\n        tell appearance preferences\n                if (dark mode) then\n                        return \"true\"\n                else\n                        return \"false\"\n                end if\n        end tell\nend tell")"#
+        ]],
     )
 }
 
-fn auto_dark_current_applescript_mode_prefers_ns_then_mac_and_errors_without_support() -> ParityBatchCase {
+fn auto_dark_current_applescript_mode_prefers_ns_then_mac_and_errors_without_support()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dark_current_applescript_mode_prefers_ns_then_mac_and_errors_without_support",
         r##"(let (events)
@@ -109,8 +110,8 @@ fn auto_dark_current_applescript_mode_prefers_ns_then_mac_and_errors_without_sup
                      (nreverse events))))))))"##,
         true,
         expect![[
-        r#"OK (dark dark (:error error ("No AppleScript support available in this Emacs build.  Try setting ‘auto-dark-allow-osascript‘ to t")) (:ns :mac))"#
-    ]],
+            r#"OK (dark dark (:error error ("No AppleScript support available in this Emacs build.  Try setting ‘auto-dark-allow-osascript‘ to t")) (:ns :mac))"#
+        ]],
     )
 }
 
@@ -147,12 +148,13 @@ fn auto_dark_shell_adapters_forward_exact_commands_and_parse_outputs() -> Parity
                (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (t t t ("osascript -e 'tell application \"System Events\" to tell appearance preferences to return dark mode'" "echo -n $(cmd uimode night 2>&1 </dev/null)" "powershell.exe -noprofile -noninteractive -nologo -ex bypass -command Get-ItemPropertyValue 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' -Name AppsUseLightTheme"))"#
-    ]],
+            r#"OK (t t t ("osascript -e 'tell application \"System Events\" to tell appearance preferences to return dark mode'" "echo -n $(cmd uimode night 2>&1 </dev/null)" "powershell.exe -noprofile -noninteractive -nologo -ex bypass -command Get-ItemPropertyValue 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize' -Name AppsUseLightTheme"))"#
+        ]],
     )
 }
 
-fn auto_dark_powershell_parser_selects_first_numeric_line_and_only_zero_is_dark() -> ParityBatchCase {
+fn auto_dark_powershell_parser_selects_first_numeric_line_and_only_zero_is_dark() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dark_powershell_parser_selects_first_numeric_line_and_only_zero_is_dark",
         r##"(mapcar
@@ -177,8 +179,8 @@ fn auto_dark_powershell_parser_selects_first_numeric_line_and_only_zero_is_dark(
             ""))"##,
         true,
         expect![[
-        r#"OK (("0" t) ("1" nil) ("banner\n0\ntrailer" t) ("banner\n  1  \n0" nil) ("00" nil) ("-1" nil) ("0.0" nil) ("noise 0" nil) ("\n\n" nil) ("" nil))"#
-    ]],
+            r#"OK (("0" t) ("1" nil) ("banner\n0\ntrailer" t) ("banner\n  1  \n0" nil) ("00" nil) ("-1" nil) ("0.0" nil) ("noise 0" nil) ("\n\n" nil) ("" nil))"#
+        ]],
     )
 }
 
@@ -208,8 +210,8 @@ fn auto_dark_winreg_adapter_forwards_exact_registry_query_and_type_contract() ->
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((0 t) (1 nil) ("0" nil) (nil nil) (dark nil)) ((HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" "AppsUseLightTheme") (HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" "AppsUseLightTheme") (HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" "AppsUseLightTheme") (HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" "AppsUseLightTheme") (HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" "AppsUseLightTheme")))"#
-    ]],
+            r#"OK (((0 t) (1 nil) ("0" nil) (nil nil) (dark nil)) ((HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" "AppsUseLightTheme") (HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" "AppsUseLightTheme") (HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" "AppsUseLightTheme") (HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" "AppsUseLightTheme") (HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize" "AppsUseLightTheme")))"#
+        ]],
     )
 }
 
@@ -241,8 +243,8 @@ fn auto_dark_dbus_adapter_maps_portal_color_scheme_and_forwards_exact_call() -> 
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK (((((1)) (:ok dark)) (((0)) (:ok light)) (((2)) (:ok light)) (((3)) (:ok nil)) ((nil) (:ok nil)) (nil (:ok nil))) ((:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme") (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme") (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme") (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme") (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme") (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme")))"#
-    ]],
+            r#"OK (((((1)) (:ok dark)) (((0)) (:ok light)) (((2)) (:ok light)) (((3)) (:ok nil)) ((nil) (:ok nil)) (nil (:ok nil))) ((:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme") (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme") (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme") (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme") (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme") (:session "org.freedesktop.portal.Desktop" "/org/freedesktop/portal/desktop" "org.freedesktop.portal.Settings" "Read" "org.freedesktop.appearance" "color-scheme")))"#
+        ]],
     )
 }
 
@@ -307,8 +309,8 @@ fn auto_dark_current_system_mode_dispatches_every_configured_detector() -> Parit
              (nreverse events))))"##,
         true,
         expect![
-        "OK (((applescript dark) (osascript light) (dbus light) (powershell dark) (winreg light) (termux dark)) (:applescript :osascript :dbus :powershell :winreg :termux))"
-    ],
+            "OK (((applescript dark) (osascript light) (dbus light) (powershell dark) (winreg light) (termux dark)) (:applescript :osascript :dbus :powershell :winreg :termux))"
+        ],
     )
 }
 
@@ -339,12 +341,13 @@ fn auto_dark_current_system_mode_fallback_priority_and_warning_contract_match() 
            (probe nil nil nil)))"##,
         true,
         expect![[
-        r#"OK ((dark nil) (light nil) (dark nil) ("Warning (auto-dark): couldn’t determine current system appearance" nil))"#
-    ]],
+            r#"OK ((dark nil) (light nil) (dark nil) ("Warning (auto-dark): couldn’t determine current system appearance" nil))"#
+        ]],
     )
 }
 
-fn auto_dark_detection_method_feature_matrix_selects_each_supported_platform_path() -> ParityBatchCase {
+fn auto_dark_detection_method_feature_matrix_selects_each_supported_platform_path()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dark_detection_method_feature_matrix_selects_each_supported_platform_path",
         r##"(let (shell-calls dbus-calls)
@@ -415,12 +418,13 @@ fn auto_dark_detection_method_feature_matrix_selects_each_supported_platform_pat
                (nreverse shell-calls)))))"##,
         true,
         expect![
-        "OK (applescript osascript dbus termux powershell winreg powershell ((:session) (:session) (:session)) (\"command -v termux-fix-shebang\" \"command -v termux-fix-shebang\" \"uname -r\"))"
-    ],
+            "OK (applescript osascript dbus termux powershell winreg powershell ((:session) (:session) (:session)) (\"command -v termux-fix-shebang\" \"command -v termux-fix-shebang\" \"uname -r\"))"
+        ],
     )
 }
 
-fn auto_dark_detection_method_unsupported_platform_warns_and_returns_display_warning_result() -> ParityBatchCase {
+fn auto_dark_detection_method_unsupported_platform_warns_and_returns_display_warning_result()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dark_detection_method_unsupported_platform_warns_and_returns_display_warning_result",
         r##"(let ((system-type 'berkeley-unix)
@@ -438,8 +442,8 @@ fn auto_dark_detection_method_unsupported_platform_warns_and_returns_display_war
              (nreverse warnings))))"##,
         true,
         expect![[
-        r#"OK ("Error (auto-dark): Could not determine a viable theme detection mechanism! You can use ‘auto-dark-toggle-appearance’ to manually switch between modes." nil)"#
-    ]],
+            r#"OK ("Error (auto-dark): Could not determine a viable theme detection mechanism! You can use ‘auto-dark-toggle-appearance’ to manually switch between modes." nil)"#
+        ]],
     )
 }
 

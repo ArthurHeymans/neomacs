@@ -35,8 +35,8 @@ fn typing_romaji_offers_the_kana_reading_and_its_kanji_conversions() -> ParityBa
            :traffic (ac-mozc-test-traffic)))))"##,
         true,
         expect![[
-        r#"OK (:candidates ("かんじ" "カンジ" "漢字" "感じ" "幹事") :prefix "kanji" :prefix-start 7 :prefix-function 7 :popup-symbol "M" :popup-action ac-mozc-action :buffer "今日の天気はkanji" :point 12 :traffic (("start" "--suppress_stderr") ("(0 CreateSession)") ("(1 SendKey 1 107)") ("(2 SendKey 1 97)") ("(3 SendKey 1 110)") ("(4 SendKey 1 106)") ("(5 SendKey 1 105)") ("(6 SendKey 1 space)")))"#
-    ]],
+            r#"OK (:candidates ("かんじ" "カンジ" "漢字" "感じ" "幹事") :prefix "kanji" :prefix-start 7 :prefix-function 7 :popup-symbol "M" :popup-action ac-mozc-action :buffer "今日の天気はkanji" :point 12 :traffic (("start" "--suppress_stderr") ("(0 CreateSession)") ("(1 SendKey 1 107)") ("(2 SendKey 1 97)") ("(3 SendKey 1 110)") ("(4 SendKey 1 106)") ("(5 SendKey 1 105)") ("(6 SendKey 1 space)")))"#
+        ]],
     )
 }
 
@@ -61,8 +61,8 @@ fn completing_inserts_the_japanese_word_and_removes_the_space_before_it() -> Par
       (list (buffer-string) (point) ac-mozc-ac-point ac-mozc-remove-space)))))"##,
         true,
         expect![[
-        r#"OK (:remove-space ("helloおはよう" 10 nil t) :keep-space ("hello おはよう" 11 nil nil))"#
-    ]],
+            r#"OK (:remove-space ("helloおはよう" 10 nil t) :keep-space ("hello おはよう" 11 nil nil))"#
+        ]],
     )
 }
 
@@ -90,8 +90,8 @@ fn the_prefix_is_the_romaji_run_that_ends_at_point() -> ParityBatchCase {
              :prefix-start start)))))"##,
         true,
         expect![[
-        r#"OK (:prefixes (("日本語のnihongo" 5) ("kanji" 1) ("foo bar-baz" 5) ("123" nil) ("abc " nil) ("" nil) ("?!" 1)) :candidates ("にほんご" "ニホンゴ" "日本語") :prefix "nihongo" :prefix-start 5)"#
-    ]],
+            r#"OK (:prefixes (("日本語のnihongo" 5) ("kanji" 1) ("foo bar-baz" 5) ("123" nil) ("abc " nil) ("" nil) ("?!" 1)) :candidates ("にほんご" "ニホンゴ" "日本語") :prefix "nihongo" :prefix-start 5)"#
+        ]],
     )
 }
 
@@ -115,8 +115,8 @@ fn input_that_mozc_cannot_read_as_kana_offers_nothing_and_is_never_converted() -
       (list candidates (last (ac-mozc-test-traffic) 2))))))"##,
         true,
         expect![[
-        r#"OK (:not-kana (nil (("start" "--suppress_stderr") ("(0 CreateSession)") ("(1 SendKey 1 120)") ("(2 SendKey 1 121)") ("(3 SendKey 1 122)"))) :kana (("かんじ" "カンジ" "漢字" "感じ" "幹事") (("(9 SendKey 2 105)") ("(10 SendKey 2 space)"))))"#
-    ]],
+            r#"OK (:not-kana (nil (("start" "--suppress_stderr") ("(0 CreateSession)") ("(1 SendKey 1 120)") ("(2 SendKey 1 121)") ("(3 SendKey 1 122)"))) :kana (("かんじ" "カンジ" "漢字" "感じ" "幹事") (("(9 SendKey 2 105)") ("(10 SendKey 2 space)"))))"#
+        ]],
     )
 }
 
@@ -158,8 +158,8 @@ fn the_ascii_word_source_completes_words_embedded_in_japanese_text() -> ParityBa
       (kill-buffer program))))"##,
         true,
         expect![[
-        r#"OK (:candidates ("myVariable" "myFunction") :prefix "my" :prefix-start 3 :second ("plain") :split ("myVariable" "only" "plain") :partial ("myVariable" "myFunction") :traffic nothing-recorded)"#
-    ]],
+            r#"OK (:candidates ("myVariable" "myFunction") :prefix "my" :prefix-start 3 :second ("plain") :split ("myVariable" "only" "plain") :partial ("myVariable" "myFunction") :traffic nothing-recorded)"#
+        ]],
     )
 }
 
@@ -192,8 +192,8 @@ fn a_missing_or_dying_mozc_helper_reports_the_failure_and_disables_mozc_mode() -
             (ac-mozc-test-messages-since mark))))))"##,
         true,
         expect![[
-        r#"OK (:missing ((mozc-helper-process-error) nil "kanji\n" ("mozc.el: Starting mozc-helper-process..." "mozc.el: Failed to start mozc-helper-process.")) :dying ((error "Mozc session failed.") nil "kanji\n" ("mozc.el: Starting mozc-helper-process...done" "mozc.el: No response from the server")))"#
-    ]],
+            r#"OK (:missing ((mozc-helper-process-error) nil "kanji\n" ("mozc.el: Starting mozc-helper-process..." "mozc.el: Failed to start mozc-helper-process.")) :dying ((error "Mozc session failed.") nil "kanji\n" ("mozc.el: Starting mozc-helper-process...done" "mozc.el: No response from the server")))"#
+        ]],
     )
 }
 

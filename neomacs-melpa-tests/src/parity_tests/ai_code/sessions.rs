@@ -32,8 +32,8 @@ fn session_registration_updates_existing_work_and_merges_metadata() -> ParityBat
 "##,
         true,
         expect![[
-        r#"OK (t "S1" "gemini" t "issue.org" (:branch "main" :dirty-count 3 :status "running") t t)"#
-    ]],
+            r#"OK (t "S1" "gemini" t "issue.org" (:branch "main" :dirty-count 3 :status "running") t t)"#
+        ]],
     )
 }
 
@@ -165,8 +165,8 @@ fn session_dashboard_entry_formats_repository_task_backend_and_dirty_state() -> 
 "##,
         true,
         expect![[
-        r#"OK ("S42" ("S42" "payment-service" "fix-race.org" "Github Copilot Cli" "feature/atomic-ledger" "running" "7") "Open Interpreter")"#
-    ]],
+            r#"OK ("S42" ("S42" "payment-service" "fix-race.org" "Github Copilot Cli" "feature/atomic-ledger" "running" "7") "Open Interpreter")"#
+        ]],
     )
 }
 

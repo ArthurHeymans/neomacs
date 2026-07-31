@@ -26,8 +26,8 @@ fn collecting_matches_builds_a_linked_all_buffer() -> ParityBatchCase {
        (ae-test-text source)))"##,
         true,
         expect![[
-        r#"OK ((all-mode "notes.txt" all-next-error nil 1) "Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\nalpha four\nalpha six\n" ((54 64 "alpha one\n" 1) (64 75 "alpha four\n" 32) (75 85 "alpha six\n" 54)) ((54 . "1") (64 . "4") (75 . "6")) ((54 59 "alpha") (64 69 "alpha") (75 80 "alpha")) "alpha one\nbeta two\ngamma three\nalpha four\ndelta five\nalpha six\n")"#
-    ]],
+            r#"OK ((all-mode "notes.txt" all-next-error nil 1) "Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\nalpha four\nalpha six\n" ((54 64 "alpha one\n" 1) (64 75 "alpha four\n" 32) (75 85 "alpha six\n" 54)) ((54 . "1") (64 . "4") (75 . "6")) ((54 59 "alpha") (64 69 "alpha") (75 80 "alpha")) "alpha one\nbeta two\ngamma three\nalpha four\ndelta five\nalpha six\n")"#
+        ]],
     )
 }
 
@@ -52,8 +52,8 @@ fn editing_a_collected_line_writes_back_to_the_source() -> ParityBatchCase {
            (ae-test-pieces)))))"##,
         true,
         expect![[
-        r#"OK (("Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\nALPHA FOUR!\nalpha six\n" "alpha one\nbeta two\ngamma three\nALPHA FOUR!\ndelta five\nalpha six\n") "Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\nALPHA FOUR!\nTODO alpha six\n" "alpha one\nbeta two\ngamma three\nALPHA FOUR!\ndelta five\nTODO alpha six\n" (1 t) ((54 64 "alpha one\n" 1) (64 76 "ALPHA FOUR!\n" 32) (76 91 "TODO alpha six\n" 55)))"#
-    ]],
+            r#"OK (("Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\nALPHA FOUR!\nalpha six\n" "alpha one\nbeta two\ngamma three\nALPHA FOUR!\ndelta five\nalpha six\n") "Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\nALPHA FOUR!\nTODO alpha six\n" "alpha one\nbeta two\ngamma three\nALPHA FOUR!\ndelta five\nTODO alpha six\n" (1 t) ((54 64 "alpha one\n" 1) (64 76 "ALPHA FOUR!\n" 32) (76 91 "TODO alpha six\n" 55)))"#
+        ]],
     )
 }
 
@@ -78,8 +78,8 @@ fn deleting_and_extending_collected_text_reaches_the_source() -> ParityBatchCase
            (ae-test-pieces)))))"##,
         true,
         expect![[
-        r#"OK (("Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\n\nalpha six\n" "alpha one\nbeta two\ngamma three\n\ndelta five\nalpha six\n") "Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\n\nalpha six six\n" "alpha one\nbeta two\ngamma three\n\ndelta five\nalpha six six\n" ((54 64 "alpha one\n" 1) (64 65 "\n" 32) (65 79 "alpha six six\n" 44)))"#
-    ]],
+            r#"OK (("Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\n\nalpha six\n" "alpha one\nbeta two\ngamma three\n\ndelta five\nalpha six\n") "Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\n\nalpha six six\n" "alpha one\nbeta two\ngamma three\n\ndelta five\nalpha six six\n" ((54 64 "alpha one\n" 1) (64 65 "\n" 32) (65 79 "alpha six six\n" 44)))"#
+        ]],
     )
 }
 
@@ -103,8 +103,8 @@ fn an_edit_spanning_two_matches_is_refused() -> ParityBatchCase {
              (with-current-buffer source (buffer-modified-p)))))))"##,
         true,
         expect![[
-        r#"OK ((error "Changes should be limited to a single text piece") "Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one!\nalpha four\nalpha six\n" "alpha one!\nbeta two\ngamma three\nalpha four\ndelta five\nalpha six\n" t)"#
-    ]],
+            r#"OK ((error "Changes should be limited to a single text piece") "Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one!\nalpha four\nalpha six\n" "alpha one!\nbeta two\ngamma three\nalpha four\ndelta five\nalpha six\n" t)"#
+        ]],
     )
 }
 
@@ -147,8 +147,8 @@ fn the_all_buffer_navigates_back_to_the_source() -> ParityBatchCase {
                          (min (point) (mark t)) (max (point) (mark t))))))))))))"##,
         true,
         expect![[
-        r#"OK ((all-mode-goto all-mark-whole-contents quit-window mc/edit-lines-in-all) ("notes.txt" "notes.txt" (32 4 "alpha four")) (:moved (1 1) 54) (54 85 t "alpha one\nalpha four\nalpha six\n"))"#
-    ]],
+            r#"OK ((all-mode-goto all-mark-whole-contents quit-window mc/edit-lines-in-all) ("notes.txt" "notes.txt" (32 4 "alpha four")) (:moved (1 1) 54) (54 85 t "alpha one\nalpha four\nalpha six\n"))"#
+        ]],
     )
 }
 
@@ -163,8 +163,8 @@ fn context_lines_merge_overlapping_matches_into_one_piece() -> ParityBatchCase {
        (ae-test-match-faces)))"##,
         true,
         expect![[
-        r#"OK ("Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\nbeta two\ngamma three\nalpha four\ndelta five\nalpha six\n--------\n" ((54 117 "alpha one\nbeta two\ngamma three\nalpha four\ndelta five\nalpha six\n" 1)) ((54 . "1") (64 . "2") (73 . "3") (85 . "4") (96 . "5") (107 . "6")) ((54 59 "alpha") (85 90 "alpha") (107 112 "alpha")))"#
-    ]],
+            r#"OK ("Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\nbeta two\ngamma three\nalpha four\ndelta five\nalpha six\n--------\n" ((54 117 "alpha one\nbeta two\ngamma three\nalpha four\ndelta five\nalpha six\n" 1)) ((54 . "1") (64 . "2") (73 . "3") (85 . "4") (96 . "5") (107 . "6")) ((54 59 "alpha") (85 90 "alpha") (107 112 "alpha")))"#
+        ]],
     )
 }
 
@@ -187,8 +187,8 @@ fn the_first_invocation_fails_because_it_kills_a_buffer_that_is_not_there() -> P
     (kill-buffer source)))"##,
         true,
         expect![[
-        r#"OK (nil (error "No buffer named *All*") nil (error "No buffer named *All*") :collected "Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\nalpha four\nalpha six\n")"#
-    ]],
+            r#"OK (nil (error "No buffer named *All*") nil (error "No buffer named *All*") :collected "Lines matching \"alpha\" in buffer notes.txt.\n--------\nalpha one\nalpha four\nalpha six\n")"#
+        ]],
     )
 }
 

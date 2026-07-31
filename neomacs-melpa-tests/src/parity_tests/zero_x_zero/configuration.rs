@@ -23,8 +23,8 @@ fn zero_x_zero_public_defaults_match_the_pinned_release() -> ParityBatchCase {
                 0x0-servers))"##,
         true,
         expect![[
-        r#"OK (0x0 if-installed ((0x0 "https" "0x0.st" "~/Desktop" 0x0--make-0x0-curl-args 30 365 536870912) (ttm "https" "ttm.sh" "~/Desktop" 0x0--make-0x0-curl-args 30 365 268435456) (envs "https" "envs.sh" "~/Desktop" 0x0--make-0x0-curl-args 30 365 536870912)))"#
-    ]],
+            r#"OK (0x0 if-installed ((0x0 "https" "0x0.st" "~/Desktop" 0x0--make-0x0-curl-args 30 365 536870912) (ttm "https" "ttm.sh" "~/Desktop" 0x0--make-0x0-curl-args 30 365 268435456) (envs "https" "envs.sh" "~/Desktop" 0x0--make-0x0-curl-args 30 365 536870912)))"#
+        ]],
     )
 }
 
@@ -150,8 +150,8 @@ fn zero_x_zero_pick_file_uses_dired_at_point_or_the_server_directory() -> Parity
                       (nreverse calls))))))"##,
         true,
         expect![[
-        r#"OK ("/dired/file" "/prompt/file" (dired (read-file-name "Pick a file to share: " "/server/default")))"#
-    ]],
+            r#"OK ("/dired/file" "/prompt/file" (dired (read-file-name "Pick a file to share: " "/server/default")))"#
+        ]],
     )
 }
 

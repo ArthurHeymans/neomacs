@@ -56,10 +56,5 @@ pub(crate) fn assert_git_commit_signal_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_git_commit_parity` cases (2a).
 pub(crate) fn assert_git_commit_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        git_commit_oracle(),
-        &name,
-        "git_commit_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(git_commit_oracle(), &name, "git_commit_parity", cases);
 }

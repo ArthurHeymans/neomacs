@@ -30,12 +30,13 @@ fn audacious_playlist_filters_only_pipe_rows_and_resets_prior_message_state() ->
             (nreverse messages))))"##,
         true,
         expect![[
-        r#"OK (" 1 | First\n 2 || Second\n" " 1 | First\n 2 || Second\n" (" 1 | First\n 2 || Second\n"))"#
-    ]],
+            r#"OK (" 1 | First\n 2 || Second\n" " 1 | First\n 2 || Second\n" (" 1 | First\n 2 || Second\n"))"#
+        ]],
     )
 }
 
-fn audacious_playlist_current_info_trims_queries_updates_state_and_formats_message() -> ParityBatchCase {
+fn audacious_playlist_current_info_trims_queries_updates_state_and_formats_message()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audacious_playlist_current_info_trims_queries_updates_state_and_formats_message",
         r##"(let (events)
@@ -70,12 +71,13 @@ fn audacious_playlist_current_info_trims_queries_updates_state_and_formats_messa
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("[2/5] \"Focus Mix\"" ("2" "5" "Focus Mix") ("audtool --current-playlist-name" "audtool --current-playlist" "audtool --number-of-playlists" "[2/5] \"Focus Mix\""))"#
-    ]],
+            r#"OK ("[2/5] \"Focus Mix\"" ("2" "5" "Focus Mix") ("audtool --current-playlist-name" "audtool --current-playlist" "audtool --number-of-playlists" "[2/5] \"Focus Mix\""))"#
+        ]],
     )
 }
 
-fn audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order() -> ParityBatchCase {
+fn audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order",
         r##"(let (events)
@@ -102,12 +104,13 @@ fn audacious_private_playlist_goto_switches_waits_plays_and_refreshes_in_order()
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:refreshed ((:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "+02") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") :refresh))"#
-    ]],
+            r#"OK (:refreshed ((:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "+02") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") :refresh))"#
+        ]],
     )
 }
 
-fn audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selection() -> ParityBatchCase {
+fn audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selection()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selection",
         r##"(let (events prompts)
@@ -148,12 +151,13 @@ fn audacious_public_playlist_goto_reads_live_length_and_executes_numeric_selecti
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:refreshed "003" "4" ("Playlist No. [1 - 4]: ") ((:shell "audtool --number-of-playlists") (:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "003") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") :refresh))"#
-    ]],
+            r#"OK (:refreshed "003" "4" ("Playlist No. [1 - 4]: ") ((:shell "audtool --number-of-playlists") (:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "003") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") :refresh))"#
+        ]],
     )
 }
 
-fn audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep() -> ParityBatchCase {
+fn audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep",
         r##"(let (events)
@@ -191,8 +195,8 @@ fn audacious_public_playlist_goto_invalid_value_reports_without_process_or_sleep
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("\"two\" is not number." "two" "9" ((:prompt "Playlist No. [1 - 9]: ") (:message "\"two\" is not number.")))"#
-    ]],
+            r#"OK ("\"two\" is not number." "two" "9" ((:prompt "Playlist No. [1 - 9]: ") (:message "\"two\" is not number.")))"#
+        ]],
     )
 }
 
@@ -242,8 +246,8 @@ fn audacious_playlist_next_and_prev_boundaries_report_without_switching() -> Par
             "4\n")))"##,
         true,
         expect![[
-        r#"OK ((audacious-playlist-next "Last playlist" 4 4 ("Last playlist")) (audacious-playlist-prev "First playlist" 1 4 ("First playlist")))"#
-    ]],
+            r#"OK ((audacious-playlist-next "Last playlist" 4 4 ("Last playlist")) (audacious-playlist-prev "First playlist" 1 4 ("First playlist")))"#
+        ]],
     )
 }
 
@@ -322,8 +326,8 @@ fn audacious_playlist_next_runs_complete_switch_refresh_and_song_workflow() -> P
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:song-refreshed ("3" "4" "New Mix") nil ((:shell "audtool --current-playlist-name") (:shell "audtool --current-playlist") (:shell "audtool --number-of-playlists") (:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "3") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") (:shell "audtool --current-playlist-name") (:shell "audtool --current-playlist") (:shell "audtool --number-of-playlists") (:message "[3/4] \"New Mix\"") (:message "[3/4] \"New Mix\"") (:sit 2) :song-refresh))"#
-    ]],
+            r#"OK (:song-refreshed ("3" "4" "New Mix") nil ((:shell "audtool --current-playlist-name") (:shell "audtool --current-playlist") (:shell "audtool --number-of-playlists") (:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "3") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") (:shell "audtool --current-playlist-name") (:shell "audtool --current-playlist") (:shell "audtool --number-of-playlists") (:message "[3/4] \"New Mix\"") (:message "[3/4] \"New Mix\"") (:sit 2) :song-refresh))"#
+        ]],
     )
 }
 
@@ -399,8 +403,8 @@ fn audacious_playlist_prev_runs_complete_switch_refresh_and_song_workflow() -> P
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:song-refreshed ("2" "5" "Previous Mix") 2 0 ((:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "2") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") (:message "[2/5] \"Previous Mix\"") (:message "[2/5] \"Previous Mix\"") (:sit 2) :song-refresh))"#
-    ]],
+            r#"OK (:song-refreshed ("2" "5" "Previous Mix") 2 0 ((:call "/fixture/bin/audtool" nil nil nil "--set-current-playlist" "2") (:sleep 0 20) (:call "/fixture/bin/audtool" nil nil nil "--play-current-playlist") (:message "[2/5] \"Previous Mix\"") (:message "[2/5] \"Previous Mix\"") (:sit 2) :song-refresh))"#
+        ]],
     )
 }
 

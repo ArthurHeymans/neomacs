@@ -26,12 +26,13 @@ fn use_package_bind_registers_global_and_map_bindings_through_bind_key() -> Pari
                   personal-keybindings)))"##,
         true,
         expect![[
-        r#"OK (neomacs-use-package-global-command neomacs-use-package-map-command t t ((("x" . neomacs-use-package-bind-map) neomacs-use-package-map-command nil) (("C-c u") neomacs-use-package-global-command nil)))"#
-    ]],
+            r#"OK (neomacs-use-package-global-command neomacs-use-package-map-command t t ((("x" . neomacs-use-package-bind-map) neomacs-use-package-map-command nil) (("C-c u") neomacs-use-package-global-command nil)))"#
+        ]],
     )
 }
 
-fn use_package_bind_keymap_loads_a_real_library_and_then_dispatches_its_prefix() -> ParityBatchCase {
+fn use_package_bind_keymap_loads_a_real_library_and_then_dispatches_its_prefix() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "use_package_bind_keymap_loads_a_real_library_and_then_dispatches_its_prefix",
         r##"(let* ((root
@@ -131,7 +132,8 @@ fn use_package_custom_face_records_exact_face_spec_and_modified_state() -> Parit
     )
 }
 
-fn use_package_ensure_calls_the_selected_install_boundary_with_normalized_arguments() -> ParityBatchCase {
+fn use_package_ensure_calls_the_selected_install_boundary_with_normalized_arguments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "use_package_ensure_calls_the_selected_install_boundary_with_normalized_arguments",
         r##"(let (calls)
@@ -155,12 +157,13 @@ fn use_package_ensure_calls_the_selected_install_boundary_with_normalized_argume
                  (nreverse calls)))"##,
         true,
         expect![[
-        r#"OK ((neomacs-use-package-ensure-target (dependency-a (dependency-b . "gnu")) nil nil))"#
-    ]],
+            r#"OK ((neomacs-use-package-ensure-target (dependency-a (dependency-b . "gnu")) nil nil))"#
+        ]],
     )
 }
 
-fn use_package_load_path_expands_static_and_computed_paths_below_user_emacs_directory() -> ParityBatchCase {
+fn use_package_load_path_expands_static_and_computed_paths_below_user_emacs_directory()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "use_package_load_path_expands_static_and_computed_paths_below_user_emacs_directory",
         r##"(let* ((user-emacs-directory

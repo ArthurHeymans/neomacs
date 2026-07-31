@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_auctex_batch};
 
-fn auto_complete_auctex_setup_prepends_all_sources_to_an_existing_completion_configuration() -> ParityBatchCase {
+fn auto_complete_auctex_setup_prepends_all_sources_to_an_existing_completion_configuration()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_setup_prepends_all_sources_to_an_existing_completion_configuration",
         r##"(let ((ac-sources
@@ -13,12 +14,13 @@ fn auto_complete_auctex_setup_prepends_all_sources_to_an_existing_completion_con
            ac-sources))"##,
         true,
         expect![
-        "OK (#1=(ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-words-in-buffer ac-source-files) #1#)"
-    ],
+            "OK (#1=(ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-words-in-buffer ac-source-files) #1#)"
+        ],
     )
 }
 
-fn auto_complete_auctex_repeated_setup_preserves_the_packages_exact_prepend_semantics() -> ParityBatchCase {
+fn auto_complete_auctex_repeated_setup_preserves_the_packages_exact_prepend_semantics()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_repeated_setup_preserves_the_packages_exact_prepend_semantics",
         r##"(let ((ac-sources
@@ -33,12 +35,13 @@ fn auto_complete_auctex_repeated_setup_preserves_the_packages_exact_prepend_sema
              (length ac-sources))))"##,
         true,
         expect![
-        "OK (#1=(ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-dictionary) (ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs . #1#) 11)"
-    ],
+            "OK (#1=(ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-dictionary) (ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs . #1#) 11)"
+        ],
     )
 }
 
-fn auto_complete_auctex_real_latex_mode_hook_installs_sources_in_an_authoring_buffer() -> ParityBatchCase {
+fn auto_complete_auctex_real_latex_mode_hook_installs_sources_in_an_authoring_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_real_latex_mode_hook_installs_sources_in_an_authoring_buffer",
         r##"(with-temp-buffer
@@ -59,12 +62,13 @@ fn auto_complete_auctex_real_latex_mode_hook_installs_sources_in_an_authoring_bu
                 LaTeX-bibitem-list)))))"##,
         true,
         expect![[
-        r#"OK (LaTeX-mode "LaTeX/P" t (ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-words-in-same-mode-buffers) t)"#
-    ]],
+            r#"OK (LaTeX-mode "LaTeX/P" t (ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-words-in-same-mode-buffers) t)"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_sources_are_data_only_and_do_not_generate_interactive_commands() -> ParityBatchCase {
+fn auto_complete_auctex_sources_are_data_only_and_do_not_generate_interactive_commands()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_sources_are_data_only_and_do_not_generate_interactive_commands",
         r##"(mapcar
@@ -87,12 +91,13 @@ fn auto_complete_auctex_sources_are_data_only_and_do_not_generate_interactive_co
             ac-source-auctex-bibs))"##,
         true,
         expect![
-        "OK ((ac-source-auctex-macros t auctex-macros nil nil) (ac-source-auctex-symbols t auctex-symbols nil nil) (ac-source-auctex-environments t auctex-environments nil nil) (ac-source-auctex-labels t auctex-labels nil nil) (ac-source-auctex-bibs t auctex-bibs nil nil))"
-    ],
+            "OK ((ac-source-auctex-macros t auctex-macros nil nil) (ac-source-auctex-symbols t auctex-symbols nil nil) (ac-source-auctex-environments t auctex-environments nil nil) (ac-source-auctex-labels t auctex-labels nil nil) (ac-source-auctex-bibs t auctex-bibs nil nil))"
+        ],
     )
 }
 
-fn auto_complete_auctex_practical_document_workflow_finds_macro_environment_label_and_citation() -> ParityBatchCase {
+fn auto_complete_auctex_practical_document_workflow_finds_macro_environment_label_and_citation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_practical_document_workflow_finds_macro_environment_label_and_citation",
         r##"(with-temp-buffer
@@ -133,12 +138,13 @@ fn auto_complete_auctex_practical_document_workflow_finds_macro_environment_labe
              (buffer-string))))"##,
         true,
         expect![[
-        r#"OK (("includegraphics" "include") ("begfigure" "begfigure*") ("sec:intro") ("knuth1984" "knuth1992") "\\documentclass{article}\n\\begin{document}\n\\section{Introduction}\\label{sec:intro}\nSee \\ref{sec:in} and \\cite[p. 42]{knu}\n\\begfig\n\\incl\n\\end{document}\n")"#
-    ]],
+            r#"OK (("includegraphics" "include") ("begfigure" "begfigure*") ("sec:intro") ("knuth1984" "knuth1992") "\\documentclass{article}\n\\begin{document}\n\\section{Introduction}\\label{sec:intro}\nSee \\ref{sec:in} and \\cite[p. 42]{knu}\n\\begfig\n\\incl\n\\end{document}\n")"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_practical_macro_selection_inserts_real_current_yasnippet_fields() -> ParityBatchCase {
+fn auto_complete_auctex_practical_macro_selection_inserts_real_current_yasnippet_fields()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_practical_macro_selection_inserts_real_current_yasnippet_fields",
         r##"(with-temp-buffer
@@ -171,12 +177,13 @@ fn auto_complete_auctex_practical_macro_selection_inserts_real_current_yasnippet
                (current-column)))))"##,
         true,
         expect![[
-        r#"OK ("includegraphics" t "\\documentclass{article}\n\\begin{document}\n\\includegraphics[width=0.8\\textwidth]{Filename}" 58 3 16)"#
-    ]],
+            r#"OK ("includegraphics" t "\\documentclass{article}\n\\begin{document}\n\\includegraphics[width=0.8\\textwidth]{Filename}" 58 3 16)"#
+        ]],
     )
 }
 
-fn auto_complete_auctex_source_reload_deduplicates_global_registration_but_hook_setup_repeats_sources() -> ParityBatchCase {
+fn auto_complete_auctex_source_reload_deduplicates_global_registration_but_hook_setup_repeats_sources()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_source_reload_deduplicates_global_registration_but_hook_setup_repeats_sources",
         r##"(let ((source
@@ -203,12 +210,13 @@ fn auto_complete_auctex_source_reload_deduplicates_global_registration_but_hook_
            ac-sources))"##,
         true,
         expect![
-        "OK (1 1 11 (ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-files))"
-    ],
+            "OK (1 1 11 (ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-auctex-symbols ac-source-auctex-macros ac-source-auctex-environments ac-source-auctex-labels ac-source-auctex-bibs ac-source-files))"
+        ],
     )
 }
 
-fn auto_complete_auctex_label_and_bibliography_prefixes_follow_cursor_position_in_real_text() -> ParityBatchCase {
+fn auto_complete_auctex_label_and_bibliography_prefixes_follow_cursor_position_in_real_text()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_auctex_label_and_bibliography_prefixes_follow_cursor_position_in_real_text",
         r##"(with-temp-buffer
@@ -266,8 +274,8 @@ fn auto_complete_auctex_label_and_bibliography_prefixes_follow_cursor_position_i
                 ac-auctex-bib-candidates)))))"##,
         true,
         expect![[
-        r#"OK ((ac-source-auctex-labels "sec:imple" ("\\\\ref{\\([^}]*\\)\\=" 10 (((init . LaTeX-label-list) (candidates . ac-auctex-label-candidates) (requires . 0) (symbol . "r") (prefix . "\\\\ref{\\([^}]*\\)\\=")))) "sec:imple" ("sec:implementation")) (ac-source-auctex-bibs "\\cite[chapter 2]{knuth" ("\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" 51 (((init . LaTeX-bibitem-list) (candidates . ac-auctex-bib-candidates) (requires . 0) (symbol . "b") (prefix . "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=")))) "knuth" ("knuth1984")))"#
-    ]],
+            r#"OK ((ac-source-auctex-labels "sec:imple" ("\\\\ref{\\([^}]*\\)\\=" 10 (((init . LaTeX-label-list) (candidates . ac-auctex-label-candidates) (requires . 0) (symbol . "r") (prefix . "\\\\ref{\\([^}]*\\)\\=")))) "sec:imple" ("sec:implementation")) (ac-source-auctex-bibs "\\cite[chapter 2]{knuth" ("\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=" 51 (((init . LaTeX-bibitem-list) (candidates . ac-auctex-bib-candidates) (requires . 0) (symbol . "b") (prefix . "\\\\cite\\(?:\\[[^]]*\\]\\)?{\\([^},]*\\)\\=")))) "knuth" ("knuth1984")))"#
+        ]],
     )
 }
 

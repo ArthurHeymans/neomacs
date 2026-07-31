@@ -25,8 +25,8 @@ fn the_fips_197_known_answer_vector_encrypts_and_decrypts_exactly() -> ParityBat
         :plain-unchanged (aes-test-hex plain)))"##,
         true,
         expect![[
-        r#"OK (:cipher "69c4e0d86a7b0430d8cdb78070b4c55a" :expected "69c4e0d86a7b0430d8cdb78070b4c55a" :matches t :roundtrip "00112233445566778899aabbccddeeff" :plain-unchanged "00112233445566778899aabbccddeeff")"#
-    ]],
+            r#"OK (:cipher "69c4e0d86a7b0430d8cdb78070b4c55a" :expected "69c4e0d86a7b0430d8cdb78070b4c55a" :matches t :roundtrip "00112233445566778899aabbccddeeff" :plain-unchanged "00112233445566778899aabbccddeeff")"#
+        ]],
     )
 }
 
@@ -63,8 +63,8 @@ fn a_real_file_round_trips_through_the_buffer_commands() -> ParityBatchCase {
         (kill-buffer buffer)))))"##,
         true,
         expect![[
-        r#"OK (:header "aes-encrypted V 1.3-OCB-B-4-4-M" :encrypted-all-ascii t :encrypted-length 134 :decrypted "Grüße, Welt!\nZeile zwei — mit Unicode.\n" :roundtrip-exact t)"#
-    ]],
+            r#"OK (:header "aes-encrypted V 1.3-OCB-B-4-4-M" :encrypted-all-ascii t :encrypted-length 134 :decrypted "Grüße, Welt!\nZeile zwei — mit Unicode.\n" :roundtrip-exact t)"#
+        ]],
     )
 }
 
@@ -113,8 +113,8 @@ fn raw_ciphertext_survives_a_binary_write_and_is_destroyed_by_a_legacy_coding() 
           :fips-latin-1-bytes (aes-test-bytes fips-latin))))"##,
         true,
         expect![[
-        r#"OK (:header "aes-encrypted V 1.3-CBC-N-4-4-M" :has-high-bytes t :length 80 :on-disk-length 80 :bytes-survived t :decrypts "Grüße — streng geheim\n" :fips-hex "69c4e0d86a7b0430d8cdb78070b4c55a" :fips-binary-bytes (105 196 224 216 106 123 4 48 216 205 183 128 112 180 197 90) :fips-shift-jis-bytes (105 196 224 216 106 123 4 48 216 32 128 112 180 197 90) :fips-latin-1-bytes (105 196 224 216 106 123 4 48 216 32 128 112 180 197 90))"#
-    ]],
+            r#"OK (:header "aes-encrypted V 1.3-CBC-N-4-4-M" :has-high-bytes t :length 80 :on-disk-length 80 :bytes-survived t :decrypts "Grüße — streng geheim\n" :fips-hex "69c4e0d86a7b0430d8cdb78070b4c55a" :fips-binary-bytes (105 196 224 216 106 123 4 48 216 205 183 128 112 180 197 90) :fips-shift-jis-bytes (105 196 224 216 106 123 4 48 216 32 128 112 180 197 90) :fips-latin-1-bytes (105 196 224 216 106 123 4 48 216 32 128 112 180 197 90))"#
+        ]],
     )
 }
 
@@ -136,8 +136,8 @@ fn a_wrong_password_or_damaged_ciphertext_yields_nothing() -> ParityBatchCase {
         :correct (aes-decrypt-buffer-or-string encrypted "richtig")))"##,
         true,
         expect![[
-        r#"OK (:wrong-password nil :not-encrypted nil :truncated nil :correct "streng geheim\n")"#
-    ]],
+            r#"OK (:wrong-password nil :not-encrypted nil :truncated nil :correct "streng geheim\n")"#
+        ]],
     )
 }
 
@@ -164,8 +164,8 @@ fn the_password_prompt_and_every_cipher_and_key_size_round_trip() -> ParityBatch
                     '(("CBC" 4) ("OCB" 6) ("CBC" 8)))))))"##,
         true,
         expect![[
-        r#"OK (:prompts (("encryption Password for string: " t) ("decryption Password for string: " nil)) :header "aes-encrypted V 1.3-OCB-B-4-4-U" :decrypted "Geheimnis\n" :variants (("CBC" 4 "aes-encrypted V 1.3-CBC-B-4-4-U" "Daten\n") ("OCB" 6 "aes-encrypted V 1.3-OCB-B-4-6-U" "Daten\n") ("CBC" 8 "aes-encrypted V 1.3-CBC-B-4-8-U" "Daten\n")))"#
-    ]],
+            r#"OK (:prompts (("encryption Password for string: " t) ("decryption Password for string: " nil)) :header "aes-encrypted V 1.3-OCB-B-4-4-U" :decrypted "Geheimnis\n" :variants (("CBC" 4 "aes-encrypted V 1.3-CBC-B-4-4-U" "Daten\n") ("OCB" 6 "aes-encrypted V 1.3-OCB-B-4-6-U" "Daten\n") ("CBC" 8 "aes-encrypted V 1.3-CBC-B-4-8-U" "Daten\n")))"#
+        ]],
     )
 }
 

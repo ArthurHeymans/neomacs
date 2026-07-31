@@ -77,8 +77,8 @@ fn general_ghook_keyword_infers_mode_functions_and_supports_explicit_lists() -> 
                 neomacs-general-hook-b))"##,
         true,
         expect![[
-        r#"OK ((neomacs-general-fake-mode forward-char backward-char) (neomacs-general-fake-mode))"#
-    ]],
+            r#"OK ((neomacs-general-fake-mode forward-char backward-char) (neomacs-general-fake-mode))"#
+        ]],
     )
 }
 
@@ -115,8 +115,8 @@ fn general_gfhook_keyword_infers_hook_names_and_preserves_append_order() -> Pari
                 neomacs-general-other-hook))"##,
         true,
         expect![[
-        r#"OK ((backward-char forward-char next-line) (beginning-of-line previous-line))"#
-    ]],
+            r#"OK ((backward-char forward-char next-line) (beginning-of-line previous-line))"#
+        ]],
     )
 }
 

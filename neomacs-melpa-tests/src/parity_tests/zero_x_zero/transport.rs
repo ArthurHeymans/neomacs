@@ -17,8 +17,8 @@ fn zero_x_zero_host_uri_supports_plain_and_basic_auth_servers() -> ParityBatchCa
                  '(:scheme nil :host nil))))"##,
         true,
         expect![[
-        r#"OK ("https://upload.example" "https://alice:s3cret@upload.example" "nil://nil")"#
-    ]],
+            r#"OK ("https://upload.example" "https://alice:s3cret@upload.example" "nil://nil")"#
+        ]],
     )
 }
 
@@ -35,8 +35,8 @@ fn zero_x_zero_curl_arguments_distinguish_file_and_buffer_uploads() -> ParityBat
                  server "upload.txt" t)))"##,
         true,
         expect![[
-        r#"OK (("-s" "-S" "-F" "file=@/path/a b.txt" "https://example.test") ("-s" "-S" "-F" "file=@-;filename=upload.txt" "https://example.test"))"#
-    ]],
+            r#"OK (("-s" "-S" "-F" "file=@/path/a b.txt" "https://example.test") ("-s" "-S" "-F" "file=@-;filename=upload.txt" "https://example.test"))"#
+        ]],
     )
 }
 
@@ -89,8 +89,8 @@ fn zero_x_zero_curl_dispatches_files_and_regions_to_exact_process_apis() -> Pari
                     buffers))))"##,
         true,
         expect![[
-        r#"OK ((call-process "/custom/curl" nil :buffer nil "-s" "https://one") (call-process-region 2 5 "/custom/curl" nil :buffer nil "-s" "https://two"))"#
-    ]],
+            r#"OK ((call-process "/custom/curl" nil :buffer nil "-s" "https://one") (call-process-region 2 5 "/custom/curl" nil :buffer nil "-s" "https://two"))"#
+        ]],
     )
 }
 
@@ -107,8 +107,8 @@ fn zero_x_zero_url_properties_distinguish_file_and_bounded_sources() -> ParityBa
                  server "/path/to/file.txt" t)))"##,
         true,
         expect![[
-        r#"OK ((:file-path "/path/to/file.txt" :query-str "name=\"file\"; filename=\"file.txt\"" :host-uri "http://local.test") (:file-path nil :query-str "name=\"file\"; filename=\"file.txt\"" :host-uri "http://local.test"))"#
-    ]],
+            r#"OK ((:file-path "/path/to/file.txt" :query-str "name=\"file\"; filename=\"file.txt\"" :host-uri "http://local.test") (:file-path nil :query-str "name=\"file\"; filename=\"file.txt\"" :host-uri "http://local.test"))"#
+        ]],
     )
 }
 
@@ -163,8 +163,8 @@ fn zero_x_zero_url_builds_multipart_body_and_strips_response_headers() -> Parity
                          (kill-buffer response)))))))"##,
         true,
         expect![[
-        r#"OK (("https://local.test" "POST" (("Content-Type" . "multipart/form-data; boundary=A-B-C")) "--A-B-C\15\nContent-Disposition: form-data; name=\"file\"; filename=\"x.txt\"\15\nContent-type: text/plain\15\n\15\n123\15\n--A-B-C--") ("*0x0 response*" "\nhttps://local.test/id\n"))"#
-    ]],
+            r#"OK (("https://local.test" "POST" (("Content-Type" . "multipart/form-data; boundary=A-B-C")) "--A-B-C\15\nContent-Disposition: form-data; name=\"file\"; filename=\"x.txt\"\15\nContent-type: text/plain\15\n\15\n123\15\n--A-B-C--") ("*0x0 response*" "\nhttps://local.test/id\n"))"#
+        ]],
     )
 }
 
@@ -218,8 +218,8 @@ fn zero_x_zero_send_selects_each_curl_policy_and_url_fallback() -> ParityBatchCa
                     (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (curl-result curl-result curl-result url-result ((curl ("-s" "-S" "-F" "file=@-;filename=one.txt" "https://example.test") #1=(:start 2 :end 4)) (executable-find "curl") (curl ("-s" "-S" "-F" "file=@-;filename=two.txt" "https://example.test") #1#) (curl ("-s" "-S" "-F" "file=@three.txt" "https://example.test") nil) (url (:file-path nil :query-str "name=\"file\"; filename=\"four.txt\"" :host-uri "https://example.test") #1#)))"#
-    ]],
+            r#"OK (curl-result curl-result curl-result url-result ((curl ("-s" "-S" "-F" "file=@-;filename=one.txt" "https://example.test") #1=(:start 2 :end 4)) (executable-find "curl") (curl ("-s" "-S" "-F" "file=@-;filename=two.txt" "https://example.test") #1#) (curl ("-s" "-S" "-F" "file=@three.txt" "https://example.test") nil) (url (:file-path nil :query-str "name=\"file\"; filename=\"four.txt\"" :host-uri "https://example.test") #1#)))"#
+        ]],
     )
 }
 
@@ -262,8 +262,8 @@ fn zero_x_zero_handle_response_yanks_uri_reports_timeout_and_kills_buffer() -> P
                     (buffer-live-p response)))))"##,
         true,
         expect![[
-        r#"OK ("https://example.test/item.txt" "https://example.test/item.txt" ("yanked `https://example.test/item.txt' into kill ring. Should last ~71.875 days.") nil)"#
-    ]],
+            r#"OK ("https://example.test/item.txt" "https://example.test/item.txt" ("yanked `https://example.test/item.txt' into kill ring. Should last ~71.875 days.") nil)"#
+        ]],
     )
 }
 
@@ -285,8 +285,8 @@ fn zero_x_zero_handle_response_failure_preserves_the_response_buffer() -> Parity
                    (kill-buffer response))))"##,
         false,
         expect![[
-        r#"ERR (error "Failed to upload/parse. see *0x0 bad response* for more details")"#
-    ]],
+            r#"ERR (error "Failed to upload/parse. see *0x0 bad response* for more details")"#
+        ]],
     )
 }
 

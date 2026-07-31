@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_anki_editor_view_batch};
 
-fn protocol_link_searches_real_card_directories_and_reveals_the_matching_subtree() -> ParityBatchCase {
+fn protocol_link_searches_real_card_directories_and_reveals_the_matching_subtree() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "protocol_link_searches_real_card_directories_and_reveals_the_matching_subtree",
         r##"(let* ((sandbox (getenv "NEOMACS_TEST_SANDBOX_ROOT"))
@@ -71,8 +72,8 @@ fn protocol_link_searches_real_card_directories_and_reveals_the_matching_subtree
         (delete-directory root t))))"##,
         true,
         expect![[
-        r#"OK (anki-editor-view--open-anki-note "active decks/networking.org" "TCP handshake" "4242" "** TCP handshake\n:PROPERTIES:\n:ANKI_NOTE_ID: 4242\n:END:\nSYN, SYN-ACK, ACK.\n*** Troubleshooting\nPacket captures should show all three messages.\n" nil (nil))"#
-    ]],
+            r#"OK (anki-editor-view--open-anki-note "active decks/networking.org" "TCP handshake" "4242" "** TCP handshake\n:PROPERTIES:\n:ANKI_NOTE_ID: 4242\n:END:\nSYN, SYN-ACK, ACK.\n*** Troubleshooting\nPacket captures should show all three messages.\n" nil (nil))"#
+        ]],
     )
 }
 
@@ -135,8 +136,8 @@ fn duplicate_note_ids_warn_and_open_the_first_search_result() -> ParityBatchCase
         (delete-directory root t))))"##,
         true,
         expect![[
-        r#"OK ("rg -n -e \":ANKI_NOTE_ID: 77\" --no-heading  \"[ORACLE-SANDBOX]/anki-editor-view-duplicates/archive.org\" \"[ORACLE-SANDBOX]/anki-editor-view-duplicates/current.org\"" "current.org" "Current explanation" "77" ("Warning: Found more than one (2) location of the Anki Note"))"#
-    ]],
+            r#"OK ("rg -n -e \":ANKI_NOTE_ID: 77\" --no-heading  \"[ORACLE-SANDBOX]/anki-editor-view-duplicates/archive.org\" \"[ORACLE-SANDBOX]/anki-editor-view-duplicates/current.org\"" "current.org" "Current explanation" "77" ("Warning: Found more than one (2) location of the Anki Note"))"#
+        ]],
     )
 }
 

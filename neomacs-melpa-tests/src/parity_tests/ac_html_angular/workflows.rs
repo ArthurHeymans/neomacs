@@ -45,8 +45,8 @@ fn enabling_angular_completion_prepends_its_source_for_this_buffer_only() -> Par
         (mapcar #'car (ac-html-angular-test-sources)))))"##,
         true,
         expect![[
-        r#"OK (:ac-html-angular+ (:before (#1=(("html" . web-completion-data-html-source-dir)) nil) :after #2=(("Angular15" . ac-html-angular-source-dir) . #1#) :buffer-local t :twice #2# :names ("Angular15" "html") :global #1# :directory-exists t :ships ("html-attributes-list" "html-attributes-short-docs" "html-tag-short-docs") :tag-list t) :next-buffer (#1# nil) :company-web-alias (t ("Angular15" "html")))"#
-    ]],
+            r#"OK (:ac-html-angular+ (:before (#1=(("html" . web-completion-data-html-source-dir)) nil) :after #2=(("Angular15" . ac-html-angular-source-dir) . #1#) :buffer-local t :twice #2# :names ("Angular15" "html") :global #1# :directory-exists t :ships ("html-attributes-list" "html-attributes-short-docs" "html-tag-short-docs") :tag-list t) :next-buffer (#1# nil) :company-web-alias (t ("Angular15" "html")))"#
+        ]],
     )
 }
 
@@ -76,8 +76,8 @@ fn an_angular_template_offers_the_directives_of_the_tag_being_edited() -> Parity
        :html-input-sample (seq-take (ac-html-angular-test-attributes "html" "input") 6)))"##,
         true,
         expect![[
-        r#"OK (:input ("max" "min" "name" "ng-blur" "ng-change" "ng-checked" "ng-copy" "ng-cut" "ng-disabled" "ng-false-value" "ng-focus" "ng-list" "ng-max" "ng-maxlength" "ng-min" "ng-minlength" "ng-model" "ng-paste" "ng-pattern" "ng-readonly" "ng-required" "ng-true-value" "ng-value" "pattern" "required" "value") :select ("multiple" "name" "ng-blur" "ng-change" "ng-copy" "ng-cut" "ng-focus" "ng-model" "ng-options" "ng-paste" "ng-required" "required") :textarea ("name" "ng-blur" "ng-change" "ng-copy" "ng-cut" "ng-focus" "ng-maxlength" "ng-minlength" "ng-model" "ng-paste" "ng-pattern" "ng-required" "required") :ng-include ("autoscroll" "onload") :tags-with-attributes ("a" "details" "form" "global" "html" "img" "input" "ng-include" "ng-messages" "ng-pluralize" "ng-view" "option" "script" "select" "textarea" "window") :merged-order ("Angular15" "html") :input-counts (69 92) :html-input-sample ("accept" "autocapitalize" "autocomplete" "autocorrect" "autofocus" "autosave"))"#
-    ]],
+            r#"OK (:input ("max" "min" "name" "ng-blur" "ng-change" "ng-checked" "ng-copy" "ng-cut" "ng-disabled" "ng-false-value" "ng-focus" "ng-list" "ng-max" "ng-maxlength" "ng-min" "ng-minlength" "ng-model" "ng-paste" "ng-pattern" "ng-readonly" "ng-required" "ng-true-value" "ng-value" "pattern" "required" "value") :select ("multiple" "name" "ng-blur" "ng-change" "ng-copy" "ng-cut" "ng-focus" "ng-model" "ng-options" "ng-paste" "ng-required" "required") :textarea ("name" "ng-blur" "ng-change" "ng-copy" "ng-cut" "ng-focus" "ng-maxlength" "ng-minlength" "ng-model" "ng-paste" "ng-pattern" "ng-required" "required") :ng-include ("autoscroll" "onload") :tags-with-attributes ("a" "details" "form" "global" "html" "img" "input" "ng-include" "ng-messages" "ng-pluralize" "ng-view" "option" "script" "select" "textarea" "window") :merged-order ("Angular15" "html") :input-counts (69 92) :html-input-sample ("accept" "autocapitalize" "autocomplete" "autocorrect" "autofocus" "autosave"))"#
+        ]],
     )
 }
 
@@ -97,8 +97,8 @@ fn the_global_directives_are_offered_on_every_tag() -> ParityBatchCase {
                                  "Angular15" "ng-include"))))"##,
         true,
         expect![[
-        r#"OK (:global ("ng-animate-swap" "ng-app" "ng-bind" "ng-bind-html" "ng-bind-template" "ng-class" "ng-class-even" "ng-class-odd" "ng-click" "ng-cloak" "ng-controller" "ng-dblclick" "ng-form" "ng-hide" "ng-if" "ng-include" "ng-init" "ng-jq" "ng-keydown" "ng-keypress" "ng-keyup" "ng-message" "ng-message-exp" "ng-messages" "ng-messages-include" "ng-model-options" "ng-mousedown" "ng-mouseenter" "ng-mouseleave" "ng-mousemove" "ng-mouseover" "ng-mouseup" "ng-non-bindable" "ng-options" "ng-pluralize" "ng-repeat" "ng-show" "ng-style" "ng-swipe-left" "ng-swipe-right" "ng-switch" "ng-transclude" "ng-view") :count 43 :on-input ("ng-animate-swap" "ng-app" "ng-bind" "ng-bind-html" "ng-bind-template" "ng-class" "ng-class-even" "ng-class-odd" "ng-click" "ng-cloak" "ng-controller" "ng-dblclick" "ng-form" "ng-hide" "ng-if" "ng-include" "ng-init" "ng-jq" "ng-keydown" "ng-keypress" "ng-keyup" "ng-message" "ng-message-exp" "ng-messages" "ng-messages-include" "ng-model-options" "ng-mousedown" "ng-mouseenter" "ng-mouseleave" "ng-mousemove" "ng-mouseover" "ng-mouseup" "ng-non-bindable" "ng-options" "ng-pluralize" "ng-repeat" "ng-show" "ng-style" "ng-swipe-left" "ng-swipe-right" "ng-switch" "ng-transclude" "ng-view") :on-unknown-tag ("ng-animate-swap" "ng-app" "ng-bind" "ng-bind-html" "ng-bind-template" "ng-class" "ng-class-even" "ng-class-odd" "ng-click" "ng-cloak" "ng-controller" "ng-dblclick" "ng-form" "ng-hide" "ng-if" "ng-include" "ng-init" "ng-jq" "ng-keydown" "ng-keypress" "ng-keyup" "ng-message" "ng-message-exp" "ng-messages" "ng-messages-include" "ng-model-options" "ng-mousedown" "ng-mouseenter" "ng-mouseleave" "ng-mousemove" "ng-mouseover" "ng-mouseup" "ng-non-bindable" "ng-options" "ng-pluralize" "ng-repeat" "ng-show" "ng-style" "ng-swipe-left" "ng-swipe-right" "ng-switch" "ng-transclude" "ng-view") :ng-include-attributes ("autoscroll" "onload" "ng-animate-swap" "ng-app" "ng-bind" "ng-bind-html" "ng-bind-template" "ng-class" "ng-class-even" "ng-class-odd" "ng-click" "ng-cloak" "ng-controller" "ng-dblclick" "ng-form" "ng-hide" "ng-if" "ng-include" "ng-init" "ng-jq" "ng-keydown" "ng-keypress" "ng-keyup" "ng-message" "ng-message-exp" "ng-messages" "ng-messages-include" "ng-model-options" "ng-mousedown" "ng-mouseenter" "ng-mouseleave" "ng-mousemove" "ng-mouseover" "ng-mouseup" "ng-non-bindable" "ng-options" "ng-pluralize" "ng-repeat" "ng-show" "ng-style" "ng-swipe-left" "ng-swipe-right" "ng-switch" "ng-transclude" "ng-view"))"#
-    ]],
+            r#"OK (:global ("ng-animate-swap" "ng-app" "ng-bind" "ng-bind-html" "ng-bind-template" "ng-class" "ng-class-even" "ng-class-odd" "ng-click" "ng-cloak" "ng-controller" "ng-dblclick" "ng-form" "ng-hide" "ng-if" "ng-include" "ng-init" "ng-jq" "ng-keydown" "ng-keypress" "ng-keyup" "ng-message" "ng-message-exp" "ng-messages" "ng-messages-include" "ng-model-options" "ng-mousedown" "ng-mouseenter" "ng-mouseleave" "ng-mousemove" "ng-mouseover" "ng-mouseup" "ng-non-bindable" "ng-options" "ng-pluralize" "ng-repeat" "ng-show" "ng-style" "ng-swipe-left" "ng-swipe-right" "ng-switch" "ng-transclude" "ng-view") :count 43 :on-input ("ng-animate-swap" "ng-app" "ng-bind" "ng-bind-html" "ng-bind-template" "ng-class" "ng-class-even" "ng-class-odd" "ng-click" "ng-cloak" "ng-controller" "ng-dblclick" "ng-form" "ng-hide" "ng-if" "ng-include" "ng-init" "ng-jq" "ng-keydown" "ng-keypress" "ng-keyup" "ng-message" "ng-message-exp" "ng-messages" "ng-messages-include" "ng-model-options" "ng-mousedown" "ng-mouseenter" "ng-mouseleave" "ng-mousemove" "ng-mouseover" "ng-mouseup" "ng-non-bindable" "ng-options" "ng-pluralize" "ng-repeat" "ng-show" "ng-style" "ng-swipe-left" "ng-swipe-right" "ng-switch" "ng-transclude" "ng-view") :on-unknown-tag ("ng-animate-swap" "ng-app" "ng-bind" "ng-bind-html" "ng-bind-template" "ng-class" "ng-class-even" "ng-class-odd" "ng-click" "ng-cloak" "ng-controller" "ng-dblclick" "ng-form" "ng-hide" "ng-if" "ng-include" "ng-init" "ng-jq" "ng-keydown" "ng-keypress" "ng-keyup" "ng-message" "ng-message-exp" "ng-messages" "ng-messages-include" "ng-model-options" "ng-mousedown" "ng-mouseenter" "ng-mouseleave" "ng-mousemove" "ng-mouseover" "ng-mouseup" "ng-non-bindable" "ng-options" "ng-pluralize" "ng-repeat" "ng-show" "ng-style" "ng-swipe-left" "ng-swipe-right" "ng-switch" "ng-transclude" "ng-view") :ng-include-attributes ("autoscroll" "onload" "ng-animate-swap" "ng-app" "ng-bind" "ng-bind-html" "ng-bind-template" "ng-class" "ng-class-even" "ng-class-odd" "ng-click" "ng-cloak" "ng-controller" "ng-dblclick" "ng-form" "ng-hide" "ng-if" "ng-include" "ng-init" "ng-jq" "ng-keydown" "ng-keypress" "ng-keyup" "ng-message" "ng-message-exp" "ng-messages" "ng-messages-include" "ng-model-options" "ng-mousedown" "ng-mouseenter" "ng-mouseleave" "ng-mousemove" "ng-mouseover" "ng-mouseup" "ng-non-bindable" "ng-options" "ng-pluralize" "ng-repeat" "ng-show" "ng-style" "ng-swipe-left" "ng-swipe-right" "ng-switch" "ng-transclude" "ng-view"))"#
+        ]],
     )
 }
 
@@ -123,8 +123,8 @@ fn every_offered_directive_carries_the_angular_documentation() -> ParityBatchCas
        :undocumented (ac-html-angular-test-undocumented "Angular15")))"##,
         true,
         expect![[
-        r#"OK (:tag-specific "Assignable angular expression to data-bind to." :select-specific "sets the options that the select is populated with and defines what is\nset on the model on selection. See `ngOptions`." :global-fallback "The ngClick directive allows you to specify custom behavior when\nan element is clicked." :markdown ("The `ngRepeat` directive instantiates a template once per item from a collection. Each template" "instance gets its own scope, where the given loop variable is set to the current collection item," "and `$index` is set to the item index or key." "Special properties are exposed on the local scope of each template instance, including:" "| Variable  | Type            | Details                                                                     |" "|-----------|-----------------|-----------------------------------------------------------------------------|") :not-shipped nil :undocumented nil)"#
-    ]],
+            r#"OK (:tag-specific "Assignable angular expression to data-bind to." :select-specific "sets the options that the select is populated with and defines what is\nset on the model on selection. See `ngOptions`." :global-fallback "The ngClick directive allows you to specify custom behavior when\nan element is clicked." :markdown ("The `ngRepeat` directive instantiates a template once per item from a collection. Each template" "instance gets its own scope, where the given loop variable is set to the current collection item," "and `$index` is set to the item index or key." "Special properties are exposed on the local scope of each template instance, including:" "| Variable  | Type            | Details                                                                     |" "|-----------|-----------------|-----------------------------------------------------------------------------|") :not-shipped nil :undocumented nil)"#
+        ]],
     )
 }
 
@@ -151,8 +151,8 @@ fn angular_elements_are_offered_as_tags_with_their_documentation() -> ParityBatc
                                    "html" "html-tag-list")))))"##,
         true,
         expect![[
-        r##"OK (:tags ("a" "form" "input" "ng-form" "ng-include" "ng-message" "ng-message-exp" "ng-messages" "ng-messages-include" "ng-pluralize" "ng-switch" "ng-transclude" "ng-view" "script" "select" "textarea") :count 16 :ng-view-doc ("# Overview" "`ngView` is a directive that complements the $route service by" "including the rendered template of the current route into the main layout (`index.html`) file.") :ng-include-doc "Fetches, compiles and includes an external HTML fragment." :undocumented-tags nil :attrv-list nil :attrv-docs nil :html-tags-count 147)"##
-    ]],
+            r##"OK (:tags ("a" "form" "input" "ng-form" "ng-include" "ng-message" "ng-message-exp" "ng-messages" "ng-messages-include" "ng-pluralize" "ng-switch" "ng-transclude" "ng-view" "script" "select" "textarea") :count 16 :ng-view-doc ("# Overview" "`ngView` is a directive that complements the $route service by" "including the rendered template of the current route into the main layout (`index.html`) file.") :ng-include-doc "Fetches, compiles and includes an external HTML fragment." :undocumented-tags nil :attrv-list nil :attrv-docs nil :html-tags-count 147)"##
+        ]],
     )
 }
 
@@ -181,8 +181,8 @@ fn a_plain_html_buffer_never_offers_the_angular_directives() -> ParityBatchCase 
                                 angular-input))))))"##,
         true,
         expect![[
-        r#"OK (:plain-sources ("html") :plain-angular-attributes nil :ng-view-is-not-html-tag nil :plain-input-has-no-directives nil :enabled-sources ("Angular15" "html") :gained 69 :gained-directives 63)"#
-    ]],
+            r#"OK (:plain-sources ("html") :plain-angular-attributes nil :ng-view-is-not-html-tag nil :plain-input-has-no-directives nil :enabled-sources ("Angular15" "html") :gained 69 :gained-directives 63)"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_aurora_config_mode_batch};
 
-fn aurora_config_mode_run_aurora_builds_exact_cli_command_from_operation_job_and_basename() -> ParityBatchCase {
+fn aurora_config_mode_run_aurora_builds_exact_cli_command_from_operation_job_and_basename()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_run_aurora_builds_exact_cli_command_from_operation_job_and_basename",
         r##"(with-temp-buffer
@@ -41,12 +42,13 @@ fn aurora_config_mode_run_aurora_builds_exact_cli_command_from_operation_job_and
                compile-command))))"##,
         true,
         expect![[
-        r#"OK (:compile-result (("aurora inspect cluster/role/prod/service service.aurora" "aurora inspect cluster/role/prod/service service.aurora" "service.aurora" t)) "make -k -j22 ")"#
-    ]],
+            r#"OK (:compile-result (("aurora inspect cluster/role/prod/service service.aurora" "aurora inspect cluster/role/prod/service service.aurora" "service.aurora" t)) "make -k -j22 ")"#
+        ]],
     )
 }
 
-fn aurora_config_mode_run_aurora_forwards_every_operation_and_jobpath_without_validation() -> ParityBatchCase {
+fn aurora_config_mode_run_aurora_forwards_every_operation_and_jobpath_without_validation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_run_aurora_forwards_every_operation_and_jobpath_without_validation",
         r##"(with-temp-buffer
@@ -78,12 +80,13 @@ fn aurora_config_mode_run_aurora_forwards_every_operation_and_jobpath_without_va
                (nreverse commands)))))"##,
         true,
         expect![[
-        r#"OK (((("inspect" "west/role/dev/job") (:compiled "aurora inspect west/role/dev/job job.mesos")) (("diff" "east/role/stage/job") (:compiled "aurora diff east/role/stage/job job.mesos")) (("" "") (:compiled "aurora   job.mesos")) (("custom-command" "one/two/three/four") (:compiled "aurora custom-command one/two/three/four job.mesos"))) ("aurora inspect west/role/dev/job job.mesos" "aurora diff east/role/stage/job job.mesos" "aurora   job.mesos" "aurora custom-command one/two/three/four job.mesos"))"#
-    ]],
+            r#"OK (((("inspect" "west/role/dev/job") (:compiled "aurora inspect west/role/dev/job job.mesos")) (("diff" "east/role/stage/job") (:compiled "aurora diff east/role/stage/job job.mesos")) (("" "") (:compiled "aurora   job.mesos")) (("custom-command" "one/two/three/four") (:compiled "aurora custom-command one/two/three/four job.mesos"))) ("aurora inspect west/role/dev/job job.mesos" "aurora diff east/role/stage/job job.mesos" "aurora   job.mesos" "aurora custom-command one/two/three/four job.mesos"))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_command_construction_preserves_unquoted_spaces_and_shell_metacharacters() -> ParityBatchCase {
+fn aurora_config_mode_command_construction_preserves_unquoted_spaces_and_shell_metacharacters()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_command_construction_preserves_unquoted_spaces_and_shell_metacharacters",
         r##"(with-temp-buffer
@@ -105,12 +108,13 @@ fn aurora_config_mode_command_construction_preserves_unquoted_spaces_and_shell_m
                (nreverse commands)))))"##,
         true,
         expect![[
-        r#"OK ("aurora inspect --verbose cluster/role env/job;touch-marker config name;echo.aurora" ("aurora inspect --verbose cluster/role env/job;touch-marker config name;echo.aurora"))"#
-    ]],
+            r#"OK ("aurora inspect --verbose cluster/role env/job;touch-marker config name;echo.aurora" ("aurora inspect --verbose cluster/role env/job;touch-marker config name;echo.aurora"))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_run_aurora_missing_file_and_non_string_parts_fail_before_compile() -> ParityBatchCase {
+fn aurora_config_mode_run_aurora_missing_file_and_non_string_parts_fail_before_compile()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_run_aurora_missing_file_and_non_string_parts_fail_before_compile",
         r##"(let (compile-calls)
@@ -147,12 +151,13 @@ fn aurora_config_mode_run_aurora_missing_file_and_non_string_parts_fail_before_c
              (nreverse compile-calls))))"##,
         true,
         expect![[
-        r#"OK ((:error wrong-type-argument (stringp nil)) (((inspect "valid/path") (:error wrong-type-argument (sequencep inspect))) (("inspect" job-symbol) (:error wrong-type-argument (sequencep job-symbol))) ((42 "valid/path") (:error wrong-type-argument (sequencep 42))) ((nil nil) (:ok :unexpected)) ((("inspect") "valid/path") (:error wrong-type-argument (characterp "inspect")))) ("aurora   fixture.aurora"))"#
-    ]],
+            r#"OK ((:error wrong-type-argument (stringp nil)) (((inspect "valid/path") (:error wrong-type-argument (sequencep inspect))) (("inspect" job-symbol) (:error wrong-type-argument (sequencep job-symbol))) ((42 "valid/path") (:error wrong-type-argument (sequencep 42))) ((nil nil) (:ok :unexpected)) ((("inspect") "valid/path") (:error wrong-type-argument (characterp "inspect")))) ("aurora   fixture.aurora"))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_inspect_and_diff_delegate_exact_operation_jobpath_and_return_value() -> ParityBatchCase {
+fn aurora_config_mode_inspect_and_diff_delegate_exact_operation_jobpath_and_return_value()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_inspect_and_diff_delegate_exact_operation_jobpath_and_return_value",
         r##"(let (calls)
@@ -177,12 +182,13 @@ fn aurora_config_mode_inspect_and_diff_delegate_exact_operation_jobpath_and_retu
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:result "inspect" "cluster/role/prod/api") (:result "diff" "cluster/role/prod/api") (:result "inspect" "") (:result "diff" nil) (("inspect" "cluster/role/prod/api") ("diff" "cluster/role/prod/api") ("inspect" "") ("diff" nil)))"#
-    ]],
+            r#"OK ((:result "inspect" "cluster/role/prod/api") (:result "diff" "cluster/role/prod/api") (:result "inspect" "") (:result "diff" nil) (("inspect" "cluster/role/prod/api") ("diff" "cluster/role/prod/api") ("inspect" "") ("diff" nil)))"#
+        ]],
     )
 }
 
-fn aurora_config_mode_interactive_inspect_and_diff_prompt_update_history_and_dispatch() -> ParityBatchCase {
+fn aurora_config_mode_interactive_inspect_and_diff_prompt_update_history_and_dispatch()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_interactive_inspect_and_diff_prompt_update_history_and_dispatch",
         r##"(with-temp-buffer
@@ -222,12 +228,13 @@ fn aurora_config_mode_interactive_inspect_and_diff_prompt_update_history_and_dis
                answers))))"##,
         true,
         expect![[
-        r#"OK ((:ran "inspect" "inspect/role/env/job") (:ran "diff" "diff/role/env/job") (("Job path as 'cluster/role/env/job': " "initial/role/env/job") ("Job path as 'cluster/role/env/job': " "inspect/role/env/job")) (("inspect" "inspect/role/env/job") ("diff" "diff/role/env/job")) "diff/role/env/job" nil)"#
-    ]],
+            r#"OK ((:ran "inspect" "inspect/role/env/job") (:ran "diff" "diff/role/env/job") (("Job path as 'cluster/role/env/job': " "initial/role/env/job") ("Job path as 'cluster/role/env/job': " "inspect/role/env/job")) (("inspect" "inspect/role/env/job") ("diff" "diff/role/env/job")) "diff/role/env/job" nil)"#
+        ]],
     )
 }
 
-fn aurora_config_mode_interactive_prompt_failure_prevents_command_dispatch_and_preserves_history() -> ParityBatchCase {
+fn aurora_config_mode_interactive_prompt_failure_prevents_command_dispatch_and_preserves_history()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_interactive_prompt_failure_prevents_command_dispatch_and_preserves_history",
         r##"(with-temp-buffer
@@ -258,12 +265,13 @@ fn aurora_config_mode_interactive_prompt_failure_prevents_command_dispatch_and_p
                (nreverse runs)))))"##,
         true,
         expect![[
-        r#"OK ((:error error ("fixture prompt failed")) (:error error ("fixture prompt failed")) "stable/role/env/job" nil)"#
-    ]],
+            r#"OK ((:error error ("fixture prompt failed")) (:error error ("fixture prompt failed")) "stable/role/env/job" nil)"#
+        ]],
     )
 }
 
-fn aurora_config_mode_compile_failure_exposes_constructed_dynamic_command_then_unwinds_cleanly() -> ParityBatchCase {
+fn aurora_config_mode_compile_failure_exposes_constructed_dynamic_command_then_unwinds_cleanly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aurora_config_mode_compile_failure_exposes_constructed_dynamic_command_then_unwinds_cleanly",
         r##"(with-temp-buffer
@@ -296,8 +304,8 @@ fn aurora_config_mode_compile_failure_exposes_constructed_dynamic_command_then_u
                compile-command))))"##,
         true,
         expect![[
-        r#"OK ((:error error ("fixture compile failure aurora diff cluster/role/test/failing failing.aurora")) (("aurora diff cluster/role/test/failing failing.aurora" "aurora diff cluster/role/test/failing failing.aurora")) "outer command")"#
-    ]],
+            r#"OK ((:error error ("fixture compile failure aurora diff cluster/role/test/failing failing.aurora")) (("aurora diff cluster/role/test/failing failing.aurora" "aurora diff cluster/role/test/failing failing.aurora")) "outer command")"#
+        ]],
     )
 }
 
@@ -331,8 +339,8 @@ fn aurora_config_mode_command_arity_failures_are_exact_and_side_effect_free() ->
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:error wrong-number-of-arguments (#1=#[(jobpath) ((aurora-config-run-aurora "inspect" jobpath)) nil nil "Run `aurora inspect JOBPATH' with the config in current buffer." (list (aurora-config-read-jobpath))] 0)) (:error wrong-number-of-arguments (#1# 2)) (:error wrong-number-of-arguments (#2=#[(jobpath) ((aurora-config-run-aurora "diff" jobpath)) nil nil "Run `aurora diff JOBPATH' with the config in current buffer." (list (aurora-config-read-jobpath))] 0)) (:error wrong-number-of-arguments (#2# 2)) nil)"#
-    ]],
+            r#"OK ((:error wrong-number-of-arguments (#1=#[(jobpath) ((aurora-config-run-aurora "inspect" jobpath)) nil nil "Run `aurora inspect JOBPATH' with the config in current buffer." (list (aurora-config-read-jobpath))] 0)) (:error wrong-number-of-arguments (#1# 2)) (:error wrong-number-of-arguments (#2=#[(jobpath) ((aurora-config-run-aurora "diff" jobpath)) nil nil "Run `aurora diff JOBPATH' with the config in current buffer." (list (aurora-config-read-jobpath))] 0)) (:error wrong-number-of-arguments (#2# 2)) nil)"#
+        ]],
     )
 }
 

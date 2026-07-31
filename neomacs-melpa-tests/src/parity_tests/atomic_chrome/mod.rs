@@ -141,8 +141,6 @@ pub(crate) fn assert_atomic_chrome_autoload_parity(elisp_form: &str, expected: E
     assert_atomic_chrome_source_parity("atomic-chrome-autoloads.el", elisp_form, expected);
 }
 
-
-
 /// Multi-probe batch for `assert_atomic_chrome_autoload_parity` cases (2a).
 pub(crate) fn assert_atomic_chrome_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

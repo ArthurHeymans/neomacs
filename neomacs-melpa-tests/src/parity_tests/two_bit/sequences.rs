@@ -267,8 +267,8 @@ fn two_bit_macroexpansions_evaluate_file_and_sequence_forms_once() -> ParityBatc
                    sequence))))"##,
         true,
         expect![[
-        r#"OK ((let ((data (2bit-open (progn (push 'file events) path) t))) (2bit-sequence-count data)) (let ((sequence (2bit-sequence (2bit-open (progn (push 'file events) path)) (progn (push 'name events) "alpha")))) (2bit-sequence-dna-size sequence)))"#
-    ]],
+            r#"OK ((let ((data (2bit-open (progn (push 'file events) path) t))) (2bit-sequence-count data)) (let ((sequence (2bit-sequence (2bit-open (progn (push 'file events) path)) (progn (push 'name events) "alpha")))) (2bit-sequence-dna-size sequence)))"#
+        ]],
     )
 }
 

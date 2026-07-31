@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atcoder_tools_batch};
 
-fn atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact_url() -> ParityBatchCase {
+fn atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact_url()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact_url",
         r##"(let* ((root
@@ -44,12 +45,13 @@ fn atcoder_tools_open_problem_parses_realistic_nested_metadata_and_browses_exact
                metadata)))))"##,
         true,
         expect![[
-        r#"OK (:opened ("https://atcoder.jp/contests/abc133/tasks/abc133_a" nil) "abc133/A/metadata.json" "c06bc8bc02204bf1743d3a4ad0fc93f6619b47c4e02a7f5076631ce56ae580a9")"#
-    ]],
+            r#"OK (:opened ("https://atcoder.jp/contests/abc133/tasks/abc133_a" nil) "abc133/A/metadata.json" "c06bc8bc02204bf1743d3a4ad0fc93f6619b47c4e02a7f5076631ce56ae580a9")"#
+        ]],
     )
 }
 
-fn atcoder_tools_open_problem_interpolates_unicode_spaces_and_reserved_ids_without_encoding() -> ParityBatchCase {
+fn atcoder_tools_open_problem_interpolates_unicode_spaces_and_reserved_ids_without_encoding()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atcoder_tools_open_problem_interpolates_unicode_spaces_and_reserved_ids_without_encoding",
         r##"(let* ((root
@@ -101,12 +103,13 @@ fn atcoder_tools_missing_unreadable_metadata_has_exact_early_error_contract() ->
              browse-calls)))"##,
         true,
         expect![[
-        r#"OK (nil (:error error ("Could not retrieve information from metadata.json")) nil)"#
-    ]],
+            r#"OK (nil (:error error ("Could not retrieve information from metadata.json")) nil)"#
+        ]],
     )
 }
 
-fn atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_browser_calls() -> ParityBatchCase {
+fn atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_browser_calls()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_browser_calls",
         r##"(let* ((root
@@ -145,8 +148,8 @@ fn atcoder_tools_malformed_metadata_json_matrix_records_parser_outcomes_and_brow
            (nreverse browse-calls)))"##,
         true,
         expect![[
-        r#"OK ((("empty" (:error json-end-of-file nil)) ("truncated" (:error json-end-of-file nil)) ("trailing" (:ok :opened)) ("scalar" (:error wrong-type-argument (listp 42))) ("array" (:error wrong-type-argument (listp [])))) (("https://atcoder.jp/contests/nil/tasks/nil")))"#
-    ]],
+            r#"OK ((("empty" (:error json-end-of-file nil)) ("truncated" (:error json-end-of-file nil)) ("trailing" (:ok :opened)) ("scalar" (:error wrong-type-argument (listp 42))) ("array" (:error wrong-type-argument (listp [])))) (("https://atcoder.jp/contests/nil/tasks/nil")))"#
+        ]],
     )
 }
 
@@ -187,8 +190,8 @@ fn atcoder_tools_partial_metadata_interpolates_missing_fields_as_nil() -> Parity
           (nreverse observations))"##,
         true,
         expect![[
-        r#"OK (("empty-object" (:ok "https://atcoder.jp/contests/nil/tasks/nil")) ("empty-problem" (:ok "https://atcoder.jp/contests/nil/tasks/nil")) ("contest-only" (:ok "https://atcoder.jp/contests/abc/tasks/nil")) ("problem-only" (:ok "https://atcoder.jp/contests/nil/tasks/task")))"#
-    ]],
+            r#"OK (("empty-object" (:ok "https://atcoder.jp/contests/nil/tasks/nil")) ("empty-problem" (:ok "https://atcoder.jp/contests/nil/tasks/nil")) ("contest-only" (:ok "https://atcoder.jp/contests/abc/tasks/nil")) ("problem-only" (:ok "https://atcoder.jp/contests/nil/tasks/task")))"#
+        ]],
     )
 }
 
@@ -228,8 +231,8 @@ fn atcoder_tools_metadata_value_types_follow_format_string_coercion_exactly() ->
           (nreverse observations))"##,
         true,
         expect![[
-        r#"OK (("number-bool" (:ok "https://atcoder.jp/contests/123/tasks/:json-false")) ("array-object" (:ok "https://atcoder.jp/contests/[a b]/tasks/((x . 1))")) ("null-number" (:ok "https://atcoder.jp/contests/nil/tasks/0")))"#
-    ]],
+            r#"OK (("number-bool" (:ok "https://atcoder.jp/contests/123/tasks/:json-false")) ("array-object" (:ok "https://atcoder.jp/contests/[a b]/tasks/((x . 1))")) ("null-number" (:ok "https://atcoder.jp/contests/nil/tasks/0")))"#
+        ]],
     )
 }
 
@@ -264,7 +267,8 @@ fn atcoder_tools_public_open_problem_uses_metadata_sibling_of_buffer_file() -> P
     )
 }
 
-fn atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error() -> ParityBatchCase {
+fn atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error",
         r##"(with-temp-buffer
@@ -279,8 +283,8 @@ fn atcoder_tools_public_open_problem_unsaved_buffer_preserves_exact_path_error()
                #'atcoder-tools-open-problem)))))"##,
         true,
         expect![
-        "OK ((:error wrong-type-argument (stringp nil)) (:error wrong-type-argument (stringp nil)))"
-    ],
+            "OK ((:error wrong-type-argument (stringp nil)) (:error wrong-type-argument (stringp nil)))"
+        ],
     )
 }
 
@@ -309,8 +313,8 @@ fn atcoder_tools_browser_failure_propagates_after_successful_metadata_parse() ->
              (file-readable-p metadata))))"##,
         true,
         expect![[
-        r#"OK ((:error error ("browser unavailable")) ("https://atcoder.jp/contests/abc500/tasks/abc500_c") t)"#
-    ]],
+            r#"OK ((:error error ("browser unavailable")) ("https://atcoder.jp/contests/abc500/tasks/abc500_c") t)"#
+        ]],
     )
 }
 

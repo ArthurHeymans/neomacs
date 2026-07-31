@@ -44,7 +44,8 @@ fn auto_highlight_symbol_forward_and_backward_navigation_wrap_real_matches() -> 
     )
 }
 
-fn auto_highlight_symbol_definition_navigation_skips_ordinary_occurrences_and_wraps() -> ParityBatchCase {
+fn auto_highlight_symbol_definition_navigation_skips_ordinary_occurrences_and_wraps()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_definition_navigation_skips_ordinary_occurrences_and_wraps",
         r##"(save-window-excursion
@@ -102,7 +103,8 @@ fn auto_highlight_symbol_definition_navigation_skips_ordinary_occurrences_and_wr
     )
 }
 
-fn auto_highlight_symbol_back_to_start_restores_original_match_after_navigation() -> ParityBatchCase {
+fn auto_highlight_symbol_back_to_start_restores_original_match_after_navigation() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_highlight_symbol_back_to_start_restores_original_match_after_navigation",
         r##"(save-window-excursion
@@ -140,7 +142,8 @@ fn auto_highlight_symbol_back_to_start_restores_original_match_after_navigation(
     )
 }
 
-fn auto_highlight_symbol_navigation_predicates_classify_position_definition_display_and_hidden() -> ParityBatchCase {
+fn auto_highlight_symbol_navigation_predicates_classify_position_definition_display_and_hidden()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_navigation_predicates_classify_position_definition_display_and_hidden",
         r##"(save-window-excursion
@@ -212,12 +215,13 @@ fn auto_highlight_symbol_navigation_predicates_classify_position_definition_disp
                                  after)))))"##,
         true,
         expect![
-        "OK ((1 nil t nil nil nil t nil) (7 nil nil nil nil t t nil) (13 t nil t t nil t t))"
-    ],
+            "OK ((1 nil t nil nil nil t nil) (7 nil nil nil nil t t nil) (13 t nil t t nil t t))"
+        ],
     )
 }
 
-fn auto_highlight_symbol_skip_invisible_policy_bypasses_hidden_match_during_navigation() -> ParityBatchCase {
+fn auto_highlight_symbol_skip_invisible_policy_bypasses_hidden_match_during_navigation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_skip_invisible_policy_bypasses_hidden_match_during_navigation",
         r##"(save-window-excursion
@@ -281,7 +285,8 @@ fn auto_highlight_symbol_skip_invisible_policy_bypasses_hidden_match_during_navi
     )
 }
 
-fn auto_highlight_symbol_immediate_invisible_policy_opens_selected_fold_then_recloses_old_fold() -> ParityBatchCase {
+fn auto_highlight_symbol_immediate_invisible_policy_opens_selected_fold_then_recloses_old_fold()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_highlight_symbol_immediate_invisible_policy_opens_selected_fold_then_recloses_old_fold",
         r##"(save-window-excursion
@@ -362,7 +367,8 @@ fn auto_highlight_symbol_immediate_invisible_policy_opens_selected_fold_then_rec
     )
 }
 
-fn auto_highlight_symbol_temporary_and_open_invisible_policies_differ_on_cleanup() -> ParityBatchCase {
+fn auto_highlight_symbol_temporary_and_open_invisible_policies_differ_on_cleanup() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_highlight_symbol_temporary_and_open_invisible_policies_differ_on_cleanup",
         r##"(save-window-excursion
@@ -451,8 +457,8 @@ fn auto_highlight_symbol_temporary_and_open_invisible_policies_differ_on_cleanup
                             '(temporary open)))"##,
         true,
         expect![[
-        r#"OK ((temporary (8 nil 1) ((:temporary nil) (:temporary t)) fixture nil) (open (8 nil 1) ((:temporary nil) :permanent-open) nil nil))"#
-    ]],
+            r#"OK ((temporary (8 nil 1) ((:temporary nil) (:temporary t)) fixture nil) (open (8 nil 1) ((:temporary nil) :permanent-open) nil nil))"#
+        ]],
     )
 }
 
@@ -501,9 +507,11 @@ fn navigation_public_surface_batch() {
         auto_highlight_symbol_forward_and_backward_navigation_wrap_real_matches(),
         auto_highlight_symbol_definition_navigation_skips_ordinary_occurrences_and_wraps(),
         auto_highlight_symbol_back_to_start_restores_original_match_after_navigation(),
-        auto_highlight_symbol_navigation_predicates_classify_position_definition_display_and_hidden(),
+        auto_highlight_symbol_navigation_predicates_classify_position_definition_display_and_hidden(
+        ),
         auto_highlight_symbol_skip_invisible_policy_bypasses_hidden_match_during_navigation(),
-        auto_highlight_symbol_immediate_invisible_policy_opens_selected_fold_then_recloses_old_fold(),
+        auto_highlight_symbol_immediate_invisible_policy_opens_selected_fold_then_recloses_old_fold(
+        ),
         auto_highlight_symbol_temporary_and_open_invisible_policies_differ_on_cleanup(),
         auto_highlight_symbol_selection_preserves_intra_symbol_cursor_offset(),
     ];

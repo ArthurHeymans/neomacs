@@ -74,8 +74,8 @@ fn zero_x_c_base_prefix_and_output_prefix_cover_builtin_and_numeric_bases() -> P
                 '(2 3 8 10 16 7 36)))"##,
         true,
         expect![[
-        r#"OK ((2 2 3 8 8 10 10 16 16 22 nil nil nil) ("0b" "0t" "0o" "0d" "0x" "7:" "36:"))"#
-    ]],
+            r#"OK ((2 2 3 8 8 10 10 16 16 22 nil nil nil) ("0b" "0t" "0o" "0d" "0x" "7:" "36:"))"#
+        ]],
     )
 }
 
@@ -119,8 +119,8 @@ fn zero_x_c_infer_base_reproduces_every_upstream_clamp_profile() -> ParityBatchC
                   (t . t))))"##,
         true,
         expect![[
-        r#"OK ((16 15 11 8 3 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 15 11 10 10 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 16 16 16 16 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 16 16 10 10 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7))"#
-    ]],
+            r#"OK ((16 15 11 8 3 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 15 11 10 10 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 16 16 16 16 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7) (16 16 16 10 10 2 36 29 2 3 8 10 16 2 8 10 16 22 1 7))"#
+        ]],
     )
 }
 
@@ -147,8 +147,8 @@ fn zero_x_c_infer_base_reports_invalid_prefix_digit_and_maximum_cases() -> Parit
                  (10 . "ziltoid")))"##,
         true,
         expect![[
-        r#"OK ((error ("Number exceeds maximum allowed base: 16")) (error ("Not a number")) (error ("Not a number")) (error ("Not a number")) (error ("Number has a digit of a higher base than its prefix")) (error ("Number exceeds maximum allowed base: 10")) (error ("Number exceeds maximum allowed base: 10")))"#
-    ]],
+            r#"OK ((error ("Number exceeds maximum allowed base: 16")) (error ("Not a number")) (error ("Not a number")) (error ("Not a number")) (error ("Number has a digit of a higher base than its prefix")) (error ("Number exceeds maximum allowed base: 10")) (error ("Number exceeds maximum allowed base: 10")))"#
+        ]],
     )
 }
 
@@ -199,8 +199,8 @@ fn zero_x_c_extension_expands_to_power_of_two_widths() -> ParityBatchCase {
                  "..."))"##,
         true,
         expect![[
-        r#"OK ("12345" "10100000" "1010" "ffffffff" "1.2.3.4.5.666666" "WHEEEEEEEEEEEEEE" "1111" "01111100" ".")"#
-    ]],
+            r#"OK ("12345" "10100000" "1010" "ffffffff" "1.2.3.4.5.666666" "WHEEEEEEEEEEEEEE" "1111" "01111100" ".")"#
+        ]],
     )
 }
 
@@ -220,8 +220,8 @@ fn zero_x_c_extension_rejects_multiple_tokens_and_mismatched_neighbors() -> Pari
                  "12345..6789"))"##,
         true,
         expect![[
-        r#"OK ((error ("Only one extension token may be used")) (error ("The digit before and after the extension token must be the same")))"#
-    ]],
+            r#"OK ((error ("Only one extension token may be used")) (error ("The digit before and after the extension token must be the same")))"#
+        ]],
     )
 }
 

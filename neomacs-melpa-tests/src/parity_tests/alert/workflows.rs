@@ -36,8 +36,8 @@ fn alerting_shows_the_message_and_logs_every_severity() -> ParityBatchCase {
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (("Build finished" "Disk almost full" "100% done") "<TIME> [INFO ] Build finished\n<TIME> [ERROR] Disk almost full\n<TIME> [TRACE] 100% done\n" (("*alert-origin*" "100% done" alert-message-remove) ("*alert-origin*" "Disk almost full" alert-message-remove) ("*alert-origin*" "Build finished" alert-message-remove)) ("100% done" "Build finished" "Disk almost full") normal)"#
-    ]],
+            r#"OK (("Build finished" "Disk almost full" "100% done") "<TIME> [INFO ] Build finished\n<TIME> [ERROR] Disk almost full\n<TIME> [TRACE] 100% done\n" (("*alert-origin*" "100% done" alert-message-remove) ("*alert-origin*" "Disk almost full" alert-message-remove) ("*alert-origin*" "Build finished" alert-message-remove)) ("100% done" "Build finished" "Disk almost full") normal)"#
+        ]],
     )
 }
 
@@ -76,8 +76,8 @@ fn a_custom_style_receives_the_complete_alert_plist() -> ParityBatchCase {
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ((al-test-recorder "Recorder al-test-recorder" t t) (((:message . "Nightly build failed") (:title . "CI") (:severity . urgent) (:category . build) (:mode . text-mode) (:buffer . "*alert-origin*") (:data job 42) (:id . nightly) (:persistent . t) (:never-persist) (:style))) (((:message . "Nightly build failed") (:severity . urgent))) 0 t "x")"#
-    ]],
+            r#"OK ((al-test-recorder "Recorder al-test-recorder" t t) (((:message . "Nightly build failed") (:title . "CI") (:severity . urgent) (:category . build) (:mode . text-mode) (:buffer . "*alert-origin*") (:data job 42) (:id . nightly) (:persistent . t) (:never-persist) (:style))) (((:message . "Nightly build failed") (:severity . urgent))) 0 t "x")"#
+        ]],
     )
 }
 
@@ -112,8 +112,8 @@ fn user_configuration_rules_route_each_alert_to_a_style() -> ParityBatchCase {
             (al-test-captured-infos :notify))))"##,
         true,
         expect![[
-        r#"OK ((al-test-urgent (:message . "server on fire") (:severity . urgent) (:category)) (al-test-chat (:message . "ping from audit team") (:severity . normal) (:category . chat)) (al-test-fallback (:message . "ping from audit team") (:severity . normal) (:category . chat)) (al-test-fallback (:message . "nothing matches me") (:severity . low) (:category . misc)))"#
-    ]],
+            r#"OK ((al-test-urgent (:message . "server on fire") (:severity . urgent) (:category)) (al-test-chat (:message . "ping from audit team") (:severity . normal) (:category . chat)) (al-test-fallback (:message . "ping from audit team") (:severity . normal) (:category . chat)) (al-test-fallback (:message . "nothing matches me") (:severity . low) (:category . misc)))"#
+        ]],
     )
 }
 
@@ -157,8 +157,8 @@ fn hiding_all_notifications_still_delivers_the_default_style() -> ParityBatchCas
                 (al-test-buffer-text " *log4e-alert*")))))))"##,
         true,
         expect![[
-        r#"OK (((al-test-default (:message . "hidden with a default style") (:persistent) (:never-persist))) nil ((al-test-rule (:message . "shown through the rule") (:severity . urgent) (:never-persist)) (al-test-forced (:message . "forced past the rules") (:severity . low) (:never-persist))) "<TIME> [FATAL] hidden with a default style\n<TIME> [FATAL] hidden with no default style\n<TIME> [FATAL] shown through the rule\n<TIME> [DEBUG] forced past the rules\n")"#
-    ]],
+            r#"OK (((al-test-default (:message . "hidden with a default style") (:persistent) (:never-persist))) nil ((al-test-rule (:message . "shown through the rule") (:severity . urgent) (:never-persist)) (al-test-forced (:message . "forced past the rules") (:severity . low) (:never-persist))) "<TIME> [FATAL] hidden with a default style\n<TIME> [FATAL] hidden with no default style\n<TIME> [FATAL] shown through the rule\n<TIME> [DEBUG] forced past the rules\n")"#
+        ]],
     )
 }
 
@@ -200,8 +200,8 @@ fn programmatic_rules_control_persistence_and_ordering() -> ParityBatchCase {
           (al-test-pending-fades))))"##,
         true,
         expect![[
-        r#"OK (((:selectors ((:severity urgent high) (:mode . "\\`text-mode\\'")) :style al-test-chat :options ((:persistent . :function) (:continue . t))) (:selectors ((:category . "audit")) :style al-test-audit :options ((:never-persist . t)))) ((:selectors ((:severity urgent high) (:mode . "\\`text-mode\\'")) :style al-test-chat :options ((:persistent . :function) (:continue . t))) (:selectors ((:category . "audit")) :style al-test-audit :options ((:never-persist . t)))) ((al-test-chat (:message . "urgent audit finding") (:severity . urgent) (:persistent) (:never-persist)) (al-test-audit (:message . "urgent audit finding") (:severity . urgent) (:persistent) (:never-persist . t)) (al-test-chat (:message . "routine note") (:severity . high) (:persistent) (:never-persist))) 3 ("routine note" "urgent audit finding"))"#
-    ]],
+            r#"OK (((:selectors ((:severity urgent high) (:mode . "\\`text-mode\\'")) :style al-test-chat :options ((:persistent . :function) (:continue . t))) (:selectors ((:category . "audit")) :style al-test-audit :options ((:never-persist . t)))) ((:selectors ((:severity urgent high) (:mode . "\\`text-mode\\'")) :style al-test-chat :options ((:persistent . :function) (:continue . t))) (:selectors ((:category . "audit")) :style al-test-audit :options ((:never-persist . t)))) ((al-test-chat (:message . "urgent audit finding") (:severity . urgent) (:persistent) (:never-persist)) (al-test-audit (:message . "urgent audit finding") (:severity . urgent) (:persistent) (:never-persist . t)) (al-test-chat (:message . "routine note") (:severity . high) (:persistent) (:never-persist))) 3 ("routine note" "urgent audit finding"))"#
+        ]],
     )
 }
 
@@ -233,8 +233,8 @@ fn an_unavailable_backend_falls_back_to_the_message_style() -> ParityBatchCase {
            (al-test-messages-since mark)))))"##,
         true,
         expect![[
-        r#"OK ((nil nil) (("Growl is not installed") no-command-ran) (("growlnotify --appIcon Emacs --name Emacs --title CI --priority 2 --sticky --message Build finished" "growlnotify --appIcon Emacs --name Emacs --title *alert-origin* --priority -2 --message Coffee ready") ("Growl is not installed")))"#
-    ]],
+            r#"OK ((nil nil) (("Growl is not installed") no-command-ran) (("growlnotify --appIcon Emacs --name Emacs --title CI --priority 2 --sticky --message Build finished" "growlnotify --appIcon Emacs --name Emacs --title *alert-origin* --priority -2 --message Coffee ready") ("Growl is not installed")))"#
+        ]],
     )
 }
 

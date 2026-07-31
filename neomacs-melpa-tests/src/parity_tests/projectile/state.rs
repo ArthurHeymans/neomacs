@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_projectile_batch};
 
-fn projectile_known_project_serialization_and_merge_preserve_disk_and_memory_changes() -> ParityBatchCase {
+fn projectile_known_project_serialization_and_merge_preserve_disk_and_memory_changes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "projectile_known_project_serialization_and_merge_preserve_disk_and_memory_changes",
         r##"(let* ((root (make-temp-file "projectile-state-" t))
@@ -30,12 +31,13 @@ fn projectile_known_project_serialization_and_merge_preserve_disk_and_memory_cha
                  (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK (("a1" "a2" "a3" "a4" "a5") ("a6" "a1" "a3" "b1" "b2") ("a6" "a1" "a3" "b1" "b2"))"#
-    ]],
+            r#"OK (("a1" "a2" "a3" "a4" "a5") ("a6" "a1" "a3" "b1" "b2") ("a6" "a1" "a3" "b1" "b2"))"#
+        ]],
     )
 }
 
-fn projectile_known_project_cleanup_and_recursive_forget_update_persisted_state() -> ParityBatchCase {
+fn projectile_known_project_cleanup_and_recursive_forget_update_persisted_state() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "projectile_known_project_cleanup_and_recursive_forget_update_persisted_state",
         r##"(let* ((root (file-name-as-directory
@@ -140,8 +142,8 @@ fn projectile_project_info_outside_a_project_signals_the_friendly_error() -> Par
                (projectile-ensure-project nil))"##,
         false,
         expect![[
-        r#"ERR (user-error "Projectile cannot find a project definition in /virtual/no-project/")"#
-    ]],
+            r#"ERR (user-error "Projectile cannot find a project definition in /virtual/no-project/")"#
+        ]],
     )
 }
 

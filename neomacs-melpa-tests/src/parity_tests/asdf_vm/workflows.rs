@@ -39,12 +39,13 @@ fn version_and_current_render_real_asdf_replies_from_both_output_streams() -> Pa
           :unrecorded (asdf-vm-test-unrecorded))))"##,
         true,
         expect![[
-        r#"OK (:version (:stdout no-such-buffer :stderr no-such-buffer) :after-current (:stdout no-such-buffer :stderr no-such-buffer) :calls ("version" "current") :unrecorded nil)"#
-    ]],
+            r#"OK (:version (:stdout no-such-buffer :stderr no-such-buffer) :after-current (:stdout no-such-buffer :stderr no-such-buffer) :calls ("version" "current") :unrecorded nil)"#
+        ]],
     )
 }
 
-fn setting_a_version_uses_the_0_16_subcommand_name_against_an_undeclared_floor() -> ParityBatchCase {
+fn setting_a_version_uses_the_0_16_subcommand_name_against_an_undeclared_floor() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "setting_a_version_uses_the_0_16_subcommand_name_against_an_undeclared_floor",
         r##"(progn
@@ -66,12 +67,13 @@ fn setting_a_version_uses_the_0_16_subcommand_name_against_an_undeclared_floor()
         :unrecorded (asdf-vm-test-unrecorded)))"##,
         true,
         expect![[
-        r#"OK (:declared-requirements "((emacs \"29.1\"))" :probes-the-asdf-version t :stdout no-such-buffer :stderr no-such-buffer :tool-versions-written nil :calls ("set nodejs 20.0.0") :unrecorded nil)"#
-    ]],
+            r#"OK (:declared-requirements "((emacs \"29.1\"))" :probes-the-asdf-version t :stdout no-such-buffer :stderr no-such-buffer :tool-versions-written nil :calls ("set nodejs 20.0.0") :unrecorded nil)"#
+        ]],
     )
 }
 
-fn listing_versions_of_an_uninstalled_plugin_fails_on_stderr_with_an_empty_stdout() -> ParityBatchCase {
+fn listing_versions_of_an_uninstalled_plugin_fails_on_stderr_with_an_empty_stdout()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "listing_versions_of_an_uninstalled_plugin_fails_on_stderr_with_an_empty_stdout",
         r##"(progn
@@ -85,8 +87,8 @@ fn listing_versions_of_an_uninstalled_plugin_fails_on_stderr_with_an_empty_stdou
         :unrecorded (asdf-vm-test-unrecorded)))"##,
         true,
         expect![[
-        r#"OK (:list-all (:stdout no-such-buffer :stderr no-such-buffer) :calls ("list all nodejs") :unrecorded nil)"#
-    ]],
+            r#"OK (:list-all (:stdout no-such-buffer :stderr no-such-buffer) :calls ("list all nodejs") :unrecorded nil)"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_package_update_batch};
 
-fn auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files() -> ParityBatchCase {
+fn auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable_files",
         r##"(let*
@@ -48,7 +49,8 @@ fn auto_package_update_file_helpers_distinguish_missing_overwrite_and_unwritable
     )
 }
 
-fn auto_package_update_current_day_round_trips_through_configured_sandbox_file() -> ParityBatchCase {
+fn auto_package_update_current_day_round_trips_through_configured_sandbox_file() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_package_update_current_day_round_trips_through_configured_sandbox_file",
         r##"(let*
@@ -81,7 +83,8 @@ fn auto_package_update_current_day_round_trips_through_configured_sandbox_file()
     )
 }
 
-fn auto_package_update_daily_timer_uses_exact_period_callback_and_return_value() -> ParityBatchCase {
+fn auto_package_update_daily_timer_uses_exact_period_callback_and_return_value() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_package_update_daily_timer_uses_exact_period_callback_and_return_value",
         r##"(let (calls)

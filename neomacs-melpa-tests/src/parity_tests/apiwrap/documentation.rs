@@ -30,8 +30,8 @@ fn the_documented_resource_and_the_internal_one_are_kept_apart() -> ParityBatchC
 "##,
         true,
         expect![[
-        r#"OK (:requested-resource "/repos/octocat/Hallo%20Welt/issues" :advertised-endpoint "/repos/:owner/:repo/issues" :docstring "List issues for a repository.\n\nDATA is a data structure to be sent with this request.  If it’s\nnot required, it can simply be omitted.\n\nPARAMS is a plist of parameters appended to the method call.\n\n--------------------\n\nThis generated function wraps the MyForge API endpoint\n\n    GET /repos/:owner/:repo/issues\n\nwhich is documented at\n\n    URL ‘issues/#list-issues-for-a-repository’")"#
-    ]],
+            r#"OK (:requested-resource "/repos/octocat/Hallo%20Welt/issues" :advertised-endpoint "/repos/:owner/:repo/issues" :docstring "List issues for a repository.\n\nDATA is a data structure to be sent with this request.  If it’s\nnot required, it can simply be omitted.\n\nPARAMS is a plist of parameters appended to the method call.\n\n--------------------\n\nThis generated function wraps the MyForge API endpoint\n\n    GET /repos/:owner/:repo/issues\n\nwhich is documented at\n\n    URL ‘issues/#list-issues-for-a-repository’")"#
+        ]],
     )
 }
 
@@ -54,8 +54,8 @@ fn the_generated_docstring_never_documents_the_object_parameter() -> ParityBatch
 "##,
         true,
         expect![[
-        r#"OK (:docstring "Symbol key.\n\nDATA is a data structure to be sent with this request.  If it’s\nnot required, it can simply be omitted.\n\nPARAMS is a plist of parameters appended to the method call.\n\n--------------------\n\nThis generated function wraps the KeyProbe API endpoint\n\n    GET /a/:name\n\nwhich is documented at\n\n    URL ‘link/a’" :mentions-symbol-keyed-doc nil :mentions-list-keyed-doc nil)"#
-    ]],
+            r#"OK (:docstring "Symbol key.\n\nDATA is a data structure to be sent with this request.  If it’s\nnot required, it can simply be omitted.\n\nPARAMS is a plist of parameters appended to the method call.\n\n--------------------\n\nThis generated function wraps the KeyProbe API endpoint\n\n    GET /a/:name\n\nwhich is documented at\n\n    URL ‘link/a’" :mentions-symbol-keyed-doc nil :mentions-list-keyed-doc nil)"#
+        ]],
     )
 }
 
@@ -92,8 +92,8 @@ fn configuring_a_condition_case_needs_bytecomp_before_the_hooks_work() -> Parity
 "##,
         true,
         expect![[
-        r#"OK (:without-bytecomp (:error void-function (byte-compile-warn)) :with-bytecomp (:wrapped (:wrapped (:status 200 :body ((echo . "/b/Hallo%20Welt")))) :handled (:handled wrong-type-argument stringp) :around-ran (:around-ran :around-ran) :calls ((:method get :resource "/b/Hallo%20Welt" :params nil :data nil) (:method get :resource "/c/Hallo%20Welt" :params nil :data nil))))"#
-    ]],
+            r#"OK (:without-bytecomp (:error void-function (byte-compile-warn)) :with-bytecomp (:wrapped (:wrapped (:status 200 :body ((echo . "/b/Hallo%20Welt")))) :handled (:handled wrong-type-argument stringp) :around-ran (:around-ran :around-ran) :calls ((:method get :resource "/b/Hallo%20Welt" :params nil :data nil) (:method get :resource "/c/Hallo%20Welt" :params nil :data nil))))"#
+        ]],
     )
 }
 

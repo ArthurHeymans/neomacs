@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alchemist_batch};
 
-fn alchemist_major_and_minor_modes_install_real_read_only_keymap_and_buffer_local_contracts() -> ParityBatchCase {
+fn alchemist_major_and_minor_modes_install_real_read_only_keymap_and_buffer_local_contracts()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_major_and_minor_modes_install_real_read_only_keymap_and_buffer_local_contracts",
         r##"(mapcar
@@ -28,12 +29,13 @@ fn alchemist_major_and_minor_modes_install_real_read_only_keymap_and_buffer_loca
                         alchemist-iex-mode))"##,
         true,
         expect![[
-        r#"OK ((alchemist-compile-mode alchemist-compile-mode "Elixir Compile Mode" t t nil quit-window self-insert-command self-insert-command nil nil) (alchemist-execute-mode alchemist-execute-mode "Elixir Execute Mode" t t nil quit-window self-insert-command self-insert-command nil nil) (alchemist-mix-mode alchemist-mix-mode "Mix Mode" t t nil quit-window alchemist-mix-rerun-last-task alchemist-mix-send-input-to-mix-process nil nil) (alchemist-test-report-mode alchemist-test-report-mode "Alchemist Test Report" t t nil quit-window alchemist-mix-rerun-last-test self-insert-command nil nil) (alchemist-iex-mode alchemist-iex-mode "Alchemist-IEx" nil nil (10) self-insert-command self-insert-command self-insert-command nil nil))"#
-    ]],
+            r#"OK ((alchemist-compile-mode alchemist-compile-mode "Elixir Compile Mode" t t nil quit-window self-insert-command self-insert-command nil nil) (alchemist-execute-mode alchemist-execute-mode "Elixir Execute Mode" t t nil quit-window self-insert-command self-insert-command nil nil) (alchemist-mix-mode alchemist-mix-mode "Mix Mode" t t nil quit-window alchemist-mix-rerun-last-task alchemist-mix-send-input-to-mix-process nil nil) (alchemist-test-report-mode alchemist-test-report-mode "Alchemist Test Report" t t nil quit-window alchemist-mix-rerun-last-test self-insert-command nil nil) (alchemist-iex-mode alchemist-iex-mode "Alchemist-IEx" nil nil (10) self-insert-command self-insert-command self-insert-command nil nil))"#
+        ]],
     )
 }
 
-fn alchemist_test_help_eval_macroexpand_info_hex_and_phoenix_minor_modes_toggle_exact_state() -> ParityBatchCase {
+fn alchemist_test_help_eval_macroexpand_info_hex_and_phoenix_minor_modes_toggle_exact_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_test_help_eval_macroexpand_info_hex_and_phoenix_minor_modes_toggle_exact_state",
         r##"(mapcar
@@ -65,12 +67,13 @@ fn alchemist_test_help_eval_macroexpand_info_hex_and_phoenix_minor_modes_toggle_
                         alchemist-phoenix-mode))"##,
         true,
         expect![[
-        r#"OK ((alchemist-test-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil self-insert-command nil nil) nil nil) (alchemist-help-minor-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" t quit-window nil nil) nil nil) (alchemist-eval-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil quit-window nil nil) nil nil) (alchemist-macroexpand-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil quit-window nil nil) nil nil) (alchemist-info-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil quit-window nil nil) nil nil) (alchemist-hex-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" t quit-window nil nil) nil t) (alchemist-phoenix-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil self-insert-command nil nil) nil nil))"#
-    ]],
+            r#"OK ((alchemist-test-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil self-insert-command nil nil) nil nil) (alchemist-help-minor-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" t quit-window nil nil) nil nil) (alchemist-eval-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil quit-window nil nil) nil nil) (alchemist-macroexpand-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil quit-window nil nil) nil nil) (alchemist-info-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil quit-window nil nil) nil nil) (alchemist-hex-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" t quit-window nil nil) nil t) (alchemist-phoenix-mode (fundamental-mode "Fundamental" nil) (t fundamental-mode "Fundamental" nil self-insert-command nil nil) nil nil))"#
+        ]],
     )
 }
 
-fn alchemist_save_hooks_only_run_hidden_project_test_and_compile_reports_when_enabled() -> ParityBatchCase {
+fn alchemist_save_hooks_only_run_hidden_project_test_and_compile_reports_when_enabled()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_save_hooks_only_run_hidden_project_test_and_compile_reports_when_enabled",
         r##"(let* ((sandbox
@@ -103,12 +106,13 @@ fn alchemist_save_hooks_only_run_hidden_project_test_and_compile_reports_when_en
                          (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (reported reported nil nil (("mix test" "alchemist-test-process" "*alchemist test report*" alchemist-test-report-mode alchemist-test--handle-exit t) ("mix compile" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode nil t)))"#
-    ]],
+            r#"OK (reported reported nil nil (("mix test" "alchemist-test-process" "*alchemist test report*" alchemist-test-report-mode alchemist-test--handle-exit t) ("mix compile" "alchemist-mix-report" "*alchemist mix*" alchemist-mix-mode nil t)))"#
+        ]],
     )
 }
 
-fn alchemist_refcard_resolves_real_multiple_bindings_and_builds_strict_tabulated_rows() -> ParityBatchCase {
+fn alchemist_refcard_resolves_real_multiple_bindings_and_builds_strict_tabulated_rows()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_refcard_resolves_real_multiple_bindings_and_builds_strict_tabulated_rows",
         r##"(let ((alchemist-server-processes nil))
@@ -143,12 +147,13 @@ fn alchemist_refcard_resolves_real_multiple_bindings_and_builds_strict_tabulated
                             (alchemist-refcard--tabulated-list-entries))))))"##,
         true,
         expect![[
-        r#"OK ((("alchemist-mix-test" "C-c a t" ("alchemist-mix-test" ["alchemist-mix-test" #("C-c a t" 0 7 (face font-lock-builtin-face))])) ("alchemist-goto-definition-at-point" "M-." ("alchemist-goto-definition-at-point" ["alchemist-goto-definition-at-point" #("M-." 0 3 (face font-lock-builtin-face))])) ("alchemist-eval-current-line" "C-c a v l" ("alchemist-eval-current-line" ["alchemist-eval-current-line" #("C-c a v l" 0 9 (face font-lock-builtin-face))])) ("alchemist-phoenix-router" "C-c a n r" ("alchemist-phoenix-router" ["alchemist-phoenix-router" #("C-c a n r" 0 9 (face font-lock-builtin-face))])) ("alchemist-refcard" "C-c a h r" ("alchemist-refcard" ["alchemist-refcard" #("C-c a h r" 0 9 (face font-lock-builtin-face))]))) ("" ["" ""]) ("" [#("Navigation" 0 10 (face font-lock-constant-face)) ""]) ("" [#("Alchemist Refcard v1.8.2" 0 24 (face font-lock-variable-name-face)) ""]) 99)"#
-    ]],
+            r#"OK ((("alchemist-mix-test" "C-c a t" ("alchemist-mix-test" ["alchemist-mix-test" #("C-c a t" 0 7 (face font-lock-builtin-face))])) ("alchemist-goto-definition-at-point" "M-." ("alchemist-goto-definition-at-point" ["alchemist-goto-definition-at-point" #("M-." 0 3 (face font-lock-builtin-face))])) ("alchemist-eval-current-line" "C-c a v l" ("alchemist-eval-current-line" ["alchemist-eval-current-line" #("C-c a v l" 0 9 (face font-lock-builtin-face))])) ("alchemist-phoenix-router" "C-c a n r" ("alchemist-phoenix-router" ["alchemist-phoenix-router" #("C-c a n r" 0 9 (face font-lock-builtin-face))])) ("alchemist-refcard" "C-c a h r" ("alchemist-refcard" ["alchemist-refcard" #("C-c a h r" 0 9 (face font-lock-builtin-face))]))) ("" ["" ""]) ("" [#("Navigation" 0 10 (face font-lock-constant-face)) ""]) ("" [#("Alchemist Refcard v1.8.2" 0 24 (face font-lock-variable-name-face)) ""]) 99)"#
+        ]],
     )
 }
 
-fn alchemist_report_callbacks_status_mode_activation_and_cleanup_follow_process_lifecycle_contract() -> ParityBatchCase {
+fn alchemist_report_callbacks_status_mode_activation_and_cleanup_follow_process_lifecycle_contract()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_report_callbacks_status_mode_activation_and_cleanup_follow_process_lifecycle_contract",
         r##"(let ((alchemist-report-on-render-function
@@ -201,12 +206,13 @@ fn alchemist_report_callbacks_status_mode_activation_and_cleanup_follow_process_
                           (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ("old output|rendered|exit:finished\n" "finished\n" t (alchemist-test-report-mode "Alchemist Test Report" t t t) "" nil)"#
-    ]],
+            r#"OK ("old output|rendered|exit:finished\n" "finished\n" t (alchemist-test-report-mode "Alchemist Test Report" t t t) "" nil)"#
+        ]],
     )
 }
 
-fn alchemist_message_replaces_real_buffer_applies_ansi_read_only_mode_and_display_boundary() -> ParityBatchCase {
+fn alchemist_message_replaces_real_buffer_applies_ansi_read_only_mode_and_display_boundary()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_message_replaces_real_buffer_applies_ansi_read_only_mode_and_display_boundary",
         r##"(let (displayed)
@@ -240,8 +246,8 @@ fn alchemist_message_replaces_real_buffer_applies_ansi_read_only_mode_and_displa
                              alchemist-message--buffer-name)))))"##,
         true,
         expect![[
-        r#"OK (t "*alchemist message*" ("Compilation failed\nline 2" t t "Fundamental" quit-window))"#
-    ]],
+            r#"OK (t "*alchemist message*" ("Compilation failed\nline 2" t t "Fundamental" quit-window))"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_asilea_batch};
 
-fn asilea_default_acceptance_always_accepts_lower_energy_for_unit_interval_draws() -> ParityBatchCase {
+fn asilea_default_acceptance_always_accepts_lower_energy_for_unit_interval_draws() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asilea_default_acceptance_always_accepts_lower_energy_for_unit_interval_draws",
         r##"(mapcar
@@ -25,8 +26,8 @@ fn asilea_default_acceptance_always_accepts_lower_energy_for_unit_interval_draws
            (9.5 10.0 2.0 0.75)))"##,
         true,
         expect![
-        "OK (((9 10 1 0.0) t (1.0)) ((9 10 1 0.999999) t (1.0)) ((0 100 0.001 0.999999) t (1.0)) ((-10 -9 100 0.999999) t (1.0)) ((9.5 10.0 2.0 0.75) t (1.0)))"
-    ],
+            "OK (((9 10 1 0.0) t (1.0)) ((9 10 1 0.999999) t (1.0)) ((0 100 0.001 0.999999) t (1.0)) ((-10 -9 100 0.999999) t (1.0)) ((9.5 10.0 2.0 0.75) t (1.0)))"
+        ],
     )
 }
 
@@ -46,7 +47,8 @@ fn asilea_default_acceptance_equal_energy_uses_strict_comparison_at_one() -> Par
     )
 }
 
-fn asilea_default_acceptance_worse_energy_respects_temperature_probability_thresholds() -> ParityBatchCase {
+fn asilea_default_acceptance_worse_energy_respects_temperature_probability_thresholds()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asilea_default_acceptance_worse_energy_respects_temperature_probability_thresholds",
         r##"(mapcar
@@ -83,8 +85,8 @@ fn asilea_default_acceptance_worse_energy_respects_temperature_probability_thres
            (10.5 10.0 0.5)))"##,
         true,
         expect![
-        "OK ((11 10 1.0 0.36787944117144233 ((0.0 t) (0.18393972058572117 t) (0.36787944117144233 nil) (0.7357588823428847 nil))) (20 10 10.0 0.36787944117144233 ((0.0 t) (0.18393972058572117 t) (0.36787944117144233 nil) (0.7357588823428847 nil))) (100 0 25.0 0.01831563888873418 ((0.0 t) (0.00915781944436709 t) (0.01831563888873418 nil) (0.03663127777746836 nil))) (10.5 10.0 0.5 0.36787944117144233 ((0.0 t) (0.18393972058572117 t) (0.36787944117144233 nil) (0.7357588823428847 nil))))"
-    ],
+            "OK ((11 10 1.0 0.36787944117144233 ((0.0 t) (0.18393972058572117 t) (0.36787944117144233 nil) (0.7357588823428847 nil))) (20 10 10.0 0.36787944117144233 ((0.0 t) (0.18393972058572117 t) (0.36787944117144233 nil) (0.7357588823428847 nil))) (100 0 25.0 0.01831563888873418 ((0.0 t) (0.00915781944436709 t) (0.01831563888873418 nil) (0.03663127777746836 nil))) (10.5 10.0 0.5 0.36787944117144233 ((0.0 t) (0.18393972058572117 t) (0.36787944117144233 nil) (0.7357588823428847 nil))))"
+        ],
     )
 }
 
@@ -104,7 +106,8 @@ fn asilea_default_acceptance_calls_random_function_once_with_float_limit() -> Pa
     )
 }
 
-fn asilea_default_acceptance_invalid_numeric_and_callback_inputs_signal_exact_errors() -> ParityBatchCase {
+fn asilea_default_acceptance_invalid_numeric_and_callback_inputs_signal_exact_errors()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asilea_default_acceptance_invalid_numeric_and_callback_inputs_signal_exact_errors",
         r##"(mapcar
@@ -133,8 +136,8 @@ fn asilea_default_acceptance_invalid_numeric_and_callback_inputs_signal_exact_er
            (10 9 1 ,(lambda (_limit) "draw"))))"##,
         true,
         expect![[
-        r#"OK (((10 9 0) :error arith-error nil) ((10 9 -1 #[(_limit) (0.5) (t)]) :ok t) (("10" 9 1) :error wrong-type-argument (number-or-marker-p "10")) ((10 nil 1) :error wrong-type-argument (number-or-marker-p nil)) ((10 9 "hot") :error wrong-type-argument (number-or-marker-p "hot")) ((10 9 1) :error void-function (nil)) ((10 9 1) :error wrong-type-argument (number-or-marker-p "draw")))"#
-    ]],
+            r#"OK (((10 9 0) :error arith-error nil) ((10 9 -1 #[(_limit) (0.5) (t)]) :ok t) (("10" 9 1) :error wrong-type-argument (number-or-marker-p "10")) ((10 nil 1) :error wrong-type-argument (number-or-marker-p nil)) ((10 9 "hot") :error wrong-type-argument (number-or-marker-p "hot")) ((10 9 1) :error void-function (nil)) ((10 9 1) :error wrong-type-argument (number-or-marker-p "draw")))"#
+        ]],
     )
 }
 

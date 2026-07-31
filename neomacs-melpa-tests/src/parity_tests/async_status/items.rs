@@ -35,8 +35,8 @@ fn add_item_registers_the_exact_file_watch_and_custom_label() -> ParityBatchCase
     (async-status-clean-up id)))"##,
         true,
         expect![[
-        r#"OK (t t (watch . 17) t 0 "Compile project" ((t (change) async-status--update-items)))"#
-    ]],
+            r#"OK (t t (watch . 17) t 0 "Compile project" ((t (change) async-status--update-items)))"#
+        ]],
     )
 }
 

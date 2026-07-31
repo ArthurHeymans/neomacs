@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_git_commit_batch};
 
-fn git_commit_buffer_message_removes_comments_scissors_and_normalizes_blank_edges() -> ParityBatchCase {
+fn git_commit_buffer_message_removes_comments_scissors_and_normalizes_blank_edges()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "git_commit_buffer_message_removes_comments_scissors_and_normalizes_blank_edges",
         r##"(list
@@ -20,8 +21,8 @@ fn git_commit_buffer_message_removes_comments_scissors_and_normalizes_blank_edge
                  (git-commit-buffer-message)))"##,
         true,
         expect![[
-        r#"OK ("\nSummary\n\nBody\nignored\n" "Summary\n\nBody\n" "Summary without newline\n")"#
-    ]],
+            r#"OK ("\nSummary\n\nBody\nignored\n" "Summary\n\nBody\n" "Summary without newline\n")"#
+        ]],
     )
 }
 
@@ -46,7 +47,8 @@ fn git_commit_buffer_message_rejects_whitespace_and_comment_only_buffers() -> Pa
     )
 }
 
-fn git_commit_ensure_comment_gap_only_expands_an_initial_empty_comment_boundary() -> ParityBatchCase {
+fn git_commit_ensure_comment_gap_only_expands_an_initial_empty_comment_boundary() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "git_commit_ensure_comment_gap_only_expands_an_initial_empty_comment_boundary",
         r##"(mapcar
@@ -62,12 +64,13 @@ fn git_commit_ensure_comment_gap_only_expands_an_initial_empty_comment_boundary(
                  "# instructions\n"))"##,
         true,
         expect![[
-        r##"OK ("\n\n# instructions\n" "\n\n# instructions\n" "summary\n# instructions\n" "# instructions\n")"##
-    ]],
+            r##"OK ("\n\n# instructions\n" "\n\n# instructions\n" "summary\n# instructions\n" "# instructions\n")"##
+        ]],
     )
 }
 
-fn git_commit_save_message_deduplicates_and_moves_the_latest_message_to_the_front() -> ParityBatchCase {
+fn git_commit_save_message_deduplicates_and_moves_the_latest_message_to_the_front()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "git_commit_save_message_deduplicates_and_moves_the_latest_message_to_the_front",
         r##"(with-temp-buffer
@@ -108,8 +111,8 @@ fn git_commit_previous_and_next_message_preserve_instruction_comments() -> Parit
                   (ring-elements log-edit-comment-ring))))"##,
         true,
         expect![[
-        r##"OK ("newer\n\n# instructions\n" 1 "draft\n\n# instructions\n" 0 ("draft\n" "newer\n" "older\n"))"##
-    ]],
+            r##"OK ("newer\n\n# instructions\n" 1 "draft\n\n# instructions\n" 0 ("draft\n" "newer\n" "older\n"))"##
+        ]],
     )
 }
 
@@ -164,8 +167,8 @@ fn git_commit_style_checks_short_circuit_prompts_and_honor_force() -> ParityBatc
                   (check "abcdef\nbody\n" nil t))))"##,
         true,
         expect![[
-        r#"OK ((t nil) (nil ("Summary line is too long.  Commit anyway? ")) (nil ("Summary line is too long.  Commit anyway? " "Second line is not empty.  Commit anyway? ")) (t nil))"#
-    ]],
+            r#"OK ((t nil) (nil ("Summary line is too long.  Commit anyway? ")) (nil ("Summary line is too long.  Commit anyway? " "Second line is not empty.  Commit anyway? ")) (t nil))"#
+        ]],
     )
 }
 
@@ -187,8 +190,8 @@ fn git_commit_cancel_message_reports_whether_the_message_was_saved() -> ParityBa
                  (nreverse messages)))"##,
         true,
         expect![[
-        r#"OK ("Commit canceled" "Commit canceled.  Message saved to `log-edit-comment-ring'")"#
-    ]],
+            r#"OK ("Commit canceled" "Commit canceled.  Message saved to `log-edit-comment-ring'")"#
+        ]],
     )
 }
 

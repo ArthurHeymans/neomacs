@@ -45,8 +45,8 @@ fn ac_inf_ruby_completes_a_repl_expression_from_the_live_ruby_process() -> Parit
                :requests (ac-inf-ruby-test-requests)))))))"##,
         true,
         expect![[
-        r#"OK (:installed (:sources #1=(ac-source-inf-ruby) :buffer-local t :source ((available . ac-inf-ruby-available) (candidates . ac-inf-ruby-candidates) (symbol . "r") (prefix . ac-inf-ruby-prefix)) :in-ac-modes t :auto-complete t :tab auto-complete) :offered ((:prefix "Str" :prefix-start 17 :common "Str" :menu-live t :selected "Str") (("Str" "r") ("String" "r") ("Struct" "r") ("StringIO" "r"))) :moved (:prefix "Str" :prefix-start 17 :common "Str" :menu-live t :selected "String") :completed (:text "irb(main):001:0> String" :point 23 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources #1#) :unique (:text "irb(main):001:0> String\n=> nil\nirb(main):003:0> Struct" :point 54 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources #1#) :requests ("Str" "Stru"))"#
-    ]],
+            r#"OK (:installed (:sources #1=(ac-source-inf-ruby) :buffer-local t :source ((available . ac-inf-ruby-available) (candidates . ac-inf-ruby-candidates) (symbol . "r") (prefix . ac-inf-ruby-prefix)) :in-ac-modes t :auto-complete t :tab auto-complete) :offered ((:prefix "Str" :prefix-start 17 :common "Str" :menu-live t :selected "Str") (("Str" "r") ("String" "r") ("Struct" "r") ("StringIO" "r"))) :moved (:prefix "Str" :prefix-start 17 :common "Str" :menu-live t :selected "String") :completed (:text "irb(main):001:0> String" :point 23 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources #1#) :unique (:text "irb(main):001:0> String\n=> nil\nirb(main):003:0> Struct" :point 54 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources #1#) :requests ("Str" "Stru"))"#
+        ]],
     )
 }
 
@@ -81,8 +81,8 @@ fn ac_inf_ruby_declines_to_complete_at_a_continuation_prompt() -> ParityBatchCas
                :after (ac-inf-ruby-test-buffer-state)))))))"##,
         true,
         expect![[
-        r#"OK (:blocked (:prompt "irb(main):002:1* " :top-level nil :prefix nil :started nil :menu nil :requests nil) :closed "irb(main):003:0> " :top-level 0 :offered ((:prefix "Str" :prefix-start 74 :common "Str" :menu-live t :selected "Str") (("Str" "r") ("String" "r") ("Struct" "r") ("StringIO" "r"))) :requests ("Str") :after (:text "irb(main):001:0> def greet\nirb(main):002:1* end\n=> :done\nirb(main):003:0> Str" :point 77 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
-    ]],
+            r#"OK (:blocked (:prompt "irb(main):002:1* " :top-level nil :prefix nil :started nil :menu nil :requests nil) :closed "irb(main):003:0> " :top-level 0 :offered ((:prefix "Str" :prefix-start 74 :common "Str" :menu-live t :selected "Str") (("Str" "r") ("String" "r") ("Struct" "r") ("StringIO" "r"))) :requests ("Str") :after (:text "irb(main):001:0> def greet\nirb(main):002:1* end\n=> :done\nirb(main):003:0> Str" :point 77 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
+        ]],
     )
 }
 
@@ -109,8 +109,8 @@ fn ac_inf_ruby_asks_the_repl_for_a_doubled_receiver_on_a_dotted_expression() -> 
            :after (ac-inf-ruby-test-buffer-state)))))"##,
         true,
         expect![[
-        r#"OK (:dotted ((:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil) nil "str.") :package-requests ("str.str.to_s") :inf-ruby-completions ("to_s" "to_str" "to_sym") :all-requests ("str.str.to_s" "str.to_s") :after (:text "irb(main):001:0> str.to_s" :point 25 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
-    ]],
+            r#"OK (:dotted ((:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil) nil "str.") :package-requests ("str.str.to_s") :inf-ruby-completions ("to_s" "to_str" "to_sym") :all-requests ("str.str.to_s" "str.to_s") :after (:text "irb(main):001:0> str.to_s" :point 25 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
+        ]],
     )
 }
 
@@ -147,8 +147,8 @@ fn ac_inf_ruby_source_stays_disabled_once_it_was_compiled_outside_the_repl() -> 
            :after (ac-inf-ruby-test-buffer-state)))))"##,
         true,
         expect![[
-        r#"OK (:elsewhere (:mode fundamental-mode :started nil :menu nil :cached no) :cached no :in-repl ((:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil) nil) :requests nothing-recorded :after (:text "irb(main):001:0> Str" :point 20 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
-    ]],
+            r#"OK (:elsewhere (:mode fundamental-mode :started nil :menu nil :cached no) :cached no :in-repl ((:prefix nil :prefix-start nil :common nil :menu-live nil :selected nil) nil) :requests nothing-recorded :after (:text "irb(main):001:0> Str" :point 20 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
+        ]],
     )
 }
 
@@ -170,8 +170,8 @@ fn ac_inf_ruby_reports_a_dead_repl_out_of_the_public_command() -> ParityBatchCas
        :after (ac-inf-ruby-test-buffer-state)))"##,
         true,
         expect![[
-        r#"OK (:process nil :outcome (error "No current process. See variable inf-ruby-buffers") :menu nil :requests nothing-recorded :after (:text "irb(main):001:0> \nProcess ruby killed\nStr\n" :point 41 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
-    ]],
+            r#"OK (:process nil :outcome (error "No current process. See variable inf-ruby-buffers") :menu nil :requests nothing-recorded :after (:text "irb(main):001:0> \nProcess ruby killed\nStr\n" :point 41 :mode inf-ruby-mode :top-level 0 :auto-complete t :sources (ac-source-inf-ruby)))"#
+        ]],
     )
 }
 

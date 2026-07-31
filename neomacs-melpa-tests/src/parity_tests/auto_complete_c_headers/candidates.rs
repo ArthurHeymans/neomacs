@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_c_headers_batch};
 
-fn auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_directories() -> ParityBatchCase {
+fn auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_directories()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_directories",
         r##"(let* ((root
@@ -43,12 +44,13 @@ fn auto_complete_c_headers_root_scan_returns_real_headers_suffix_free_files_and_
            (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK (("README" . "README") ("api.h" . "api.h") ("dir.h/" . "dir.h") ("engine.hpp" . "engine.hpp") ("legacy.hh" . "legacy.hh") ("project/" . "project") ("upper.H" . "upper.H") ("vector" . "vector"))"#
-    ]],
+            r#"OK (("README" . "README") ("api.h" . "api.h") ("dir.h/" . "dir.h") ("engine.hpp" . "engine.hpp") ("legacy.hh" . "legacy.hh") ("project/" . "project") ("upper.H" . "upper.H") ("vector" . "vector"))"#
+        ]],
     )
 }
 
-fn auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves_candidate_prefix() -> ParityBatchCase {
+fn auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves_candidate_prefix()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves_candidate_prefix",
         r##"(let* ((root
@@ -80,12 +82,13 @@ fn auto_complete_c_headers_nested_prefix_scans_only_that_directory_and_preserves
            (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK (("pkg/deeper/" . "pkg/deeper") ("pkg/detail.h" . "pkg/detail.h") ("pkg/vector" . "pkg/vector"))"#
-    ]],
+            r#"OK (("pkg/deeper/" . "pkg/deeper") ("pkg/detail.h" . "pkg/detail.h") ("pkg/vector" . "pkg/vector"))"#
+        ]],
     )
 }
 
-fn auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_in_order() -> ParityBatchCase {
+fn auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_in_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_in_order",
         r##"(let* ((first-root
@@ -138,7 +141,8 @@ fn auto_complete_c_headers_exact_duplicate_include_directories_are_scanned_once_
     )
 }
 
-fn auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_paths_and_first_lookup() -> ParityBatchCase {
+fn auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_paths_and_first_lookup()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_paths_and_first_lookup",
         r##"(let* ((first-root
@@ -182,8 +186,8 @@ fn auto_complete_c_headers_same_candidate_from_multiple_roots_preserves_both_pat
            (delete-directory second-root t)))"##,
         true,
         expect![[
-        r#"OK (("shared.h" "shared.h") ("first" "second") "[ORACLE-SANDBOX]/achead-shadow-first/shared.h\n--------------------------\nfirst")"#
-    ]],
+            r#"OK (("shared.h" "shared.h") ("first" "second") "[ORACLE-SANDBOX]/achead-shadow-first/shared.h\n--------------------------\nfirst")"#
+        ]],
     )
 }
 
@@ -218,7 +222,8 @@ fn auto_complete_c_headers_nil_patterns_still_offer_directories_but_no_files() -
     )
 }
 
-fn auto_complete_c_headers_custom_pattern_can_include_arbitrary_files_without_hiding_directories() -> ParityBatchCase {
+fn auto_complete_c_headers_custom_pattern_can_include_arbitrary_files_without_hiding_directories()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_custom_pattern_can_include_arbitrary_files_without_hiding_directories",
         r##"(let* ((root
@@ -252,7 +257,8 @@ fn auto_complete_c_headers_custom_pattern_can_include_arbitrary_files_without_hi
     )
 }
 
-fn auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_probe() -> ParityBatchCase {
+fn auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_probe()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_probe",
         r##"(let ((default-directory
@@ -290,12 +296,13 @@ fn auto_complete_c_headers_remote_inspection_prefixes_only_directory_listing_pro
             (nreverse directory-checks))))"##,
         true,
         expect![[
-        r#"OK ((("api.h" . "/usr/include/api.h") ("subdir/" . "/usr/include/subdir")) (("/ssh:host:/usr/include/" "^[^.]")) ("/usr/include/api.h" "/usr/include/api.h" "/usr/include/subdir" "/usr/include/subdir"))"#
-    ]],
+            r#"OK ((("api.h" . "/usr/include/api.h") ("subdir/" . "/usr/include/subdir")) (("/ssh:host:/usr/include/" "^[^.]")) ("/usr/include/api.h" "/usr/include/api.h" "/usr/include/subdir" "/usr/include/subdir"))"#
+        ]],
     )
 }
 
-fn auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory() -> ParityBatchCase {
+fn auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory",
         r##"(let ((default-directory
@@ -329,7 +336,8 @@ fn auto_complete_c_headers_disabled_remote_inspection_uses_unprefixed_directory(
     )
 }
 
-fn auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_default_directory() -> ParityBatchCase {
+fn auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_default_directory()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_default_directory",
         r##"(let* ((root
@@ -365,7 +373,8 @@ fn auto_complete_c_headers_relative_include_roots_resolve_file_checks_against_de
     )
 }
 
-fn auto_complete_c_headers_non_directory_basedir_uses_parent_scan_but_concatenates_raw_suffix() -> ParityBatchCase {
+fn auto_complete_c_headers_non_directory_basedir_uses_parent_scan_but_concatenates_raw_suffix()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_non_directory_basedir_uses_parent_scan_but_concatenates_raw_suffix",
         r##"(let* ((root

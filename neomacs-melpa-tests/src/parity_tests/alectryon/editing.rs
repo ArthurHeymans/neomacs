@@ -23,12 +23,13 @@ fn alectryon_inserts_block_markers_for_coq_and_lean_at_real_editing_points() -> 
    (lean4-mode "αβγ" 3)))"##,
         true,
         expect![[
-        r#"OK ((coq-mode "Check (*|\n\n|*)nat." 11 "") (lean4-mode "/-|\n\n|-/#check Nat" 5 "") (coq-mode "(*|\n\n|*)" 5 "") (lean4-mode "αβ/-|\n\n|-/γ" 7 ""))"#
-    ]],
+            r#"OK ((coq-mode "Check (*|\n\n|*)nat." 11 "") (lean4-mode "/-|\n\n|-/#check Nat" 5 "") (coq-mode "(*|\n\n|*)" 5 "") (lean4-mode "αβ/-|\n\n|-/γ" 7 ""))"#
+        ]],
     )
 }
 
-fn alectryon_block_marker_insertion_splits_existing_literate_comments_into_code_islands() -> ParityBatchCase {
+fn alectryon_block_marker_insertion_splits_existing_literate_comments_into_code_islands()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alectryon_block_marker_insertion_splits_existing_literate_comments_into_code_islands",
         r##"(mapcar
@@ -47,8 +48,8 @@ fn alectryon_block_marker_insertion_splits_existing_literate_comments_into_code_
    (lean4-mode "/-|A paragraph with prose.|-/" 15)))"##,
         true,
         expect![[
-        r#"OK ((coq-mode t "(*|A paragrap|*)\n\n\n\n(*|h with prose.|*)" 19 nil) (lean4-mode t "/-|A paragraph|-/\n\n\n\n/-| with prose.|-/" 20 nil))"#
-    ]],
+            r#"OK ((coq-mode t "(*|A paragrap|*)\n\n\n\n(*|h with prose.|*)" 19 nil) (lean4-mode t "/-|A paragraph|-/\n\n\n\n/-| with prose.|-/" 20 nil))"#
+        ]],
     )
 }
 
@@ -72,12 +73,13 @@ fn alectryon_dafny_gutter_insertion_handles_blank_code_and_prose_lines() -> Pari
    ("method A() {}\nmethod B() {}" 4)))"##,
         true,
         expect![[
-        r#"OK ((nil "/// " 5) (nil "method Main() {}\n\n/// \n" 23) (t "/// prose line\n\n\n" 17) (nil "method A() {}\n\n/// \n\nmethod B() {}" 20))"#
-    ]],
+            r#"OK ((nil "/// " 5) (nil "method Main() {}\n\n/// \n" 23) (t "/// prose line\n\n\n" 17) (nil "method A() {}\n\n/// \n\nmethod B() {}" 20))"#
+        ]],
     )
 }
 
-fn alectryon_newline_preserves_dafny_literate_gutters_but_not_code_or_block_comments() -> ParityBatchCase {
+fn alectryon_newline_preserves_dafny_literate_gutters_but_not_code_or_block_comments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alectryon_newline_preserves_dafny_literate_gutters_but_not_code_or_block_comments",
         r##"(list
@@ -107,12 +109,13 @@ fn alectryon_newline_preserves_dafny_literate_gutters_but_not_code_or_block_comm
    (list (buffer-string) (point))))"##,
         true,
         expect![[
-        r#"OK (("/// alpha\n/// beta" 15) ("method \nMain() {}" 9) ("(*|alpha\n beta|*)" 10))"#
-    ]],
+            r#"OK (("/// alpha\n/// beta" 15) ("method \nMain() {}" 9) ("(*|alpha\n beta|*)" 10))"#
+        ]],
     )
 }
 
-fn alectryon_font_lock_marks_real_block_delimiters_gutters_and_prose_with_properties() -> ParityBatchCase {
+fn alectryon_font_lock_marks_real_block_delimiters_gutters_and_prose_with_properties()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alectryon_font_lock_marks_real_block_delimiters_gutters_and_prose_with_properties",
         r##"(list
@@ -148,12 +151,13 @@ fn alectryon_font_lock_marks_real_block_delimiters_gutters_and_prose_with_proper
     '(1 3 4 5 10 20 21))))"##,
         true,
         expect![[
-        r#"OK (((1 #1=(alectryon-comment alectryon-comment-marker) #2=(space :align-to right) nil nil) (3 #1# #2# nil nil) (5 alectryon-comment nil nil nil) (10 alectryon-comment nil nil nil) (19 #3=(alectryon-comment alectryon-comment-marker) #2# nil nil) (20 #3# #2# nil nil) (24 nil nil nil nil)) ((1 #4=(alectryon-gutter alectryon-comment) #5=(space :width (+ (0) 0.5)) nil #6=(alectryon--gutter-marker-modification-hook)) (3 #4# #5# nil #6#) (4 alectryon-comment (space :width (+ 0.5 (0))) nil #6#) (5 alectryon-comment nil #("/// " 0 3 (display #7=(space :width (+ (0) 0.5)) face alectryon-gutter) 3 4 (display #8=(space :width (+ 0.5 (0))) face nil)) nil) (10 alectryon-comment nil #("/// " 0 3 (display #7# face alectryon-gutter) 3 4 (display #8# face nil)) nil) (20 alectryon-comment nil #("/// " 0 3 (display #7# face alectryon-gutter) 3 4 (display #8# face nil)) nil) (21 alectryon-comment nil nil nil)))"#
-    ]],
+            r#"OK (((1 #1=(alectryon-comment alectryon-comment-marker) #2=(space :align-to right) nil nil) (3 #1# #2# nil nil) (5 alectryon-comment nil nil nil) (10 alectryon-comment nil nil nil) (19 #3=(alectryon-comment alectryon-comment-marker) #2# nil nil) (20 #3# #2# nil nil) (24 nil nil nil nil)) ((1 #4=(alectryon-gutter alectryon-comment) #5=(space :width (+ (0) 0.5)) nil #6=(alectryon--gutter-marker-modification-hook)) (3 #4# #5# nil #6#) (4 alectryon-comment (space :width (+ 0.5 (0))) nil #6#) (5 alectryon-comment nil #("/// " 0 3 (display #7=(space :width (+ (0) 0.5)) face alectryon-gutter) 3 4 (display #8=(space :width (+ 0.5 (0))) face nil)) nil) (10 alectryon-comment nil #("/// " 0 3 (display #7# face alectryon-gutter) 3 4 (display #8# face nil)) nil) (20 alectryon-comment nil #("/// " 0 3 (display #7# face alectryon-gutter) 3 4 (display #8# face nil)) nil) (21 alectryon-comment nil nil nil)))"#
+        ]],
     )
 }
 
-fn alectryon_gutter_backspace_hook_removes_the_whole_visual_marker_only_at_boundaries() -> ParityBatchCase {
+fn alectryon_gutter_backspace_hook_removes_the_whole_visual_marker_only_at_boundaries()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alectryon_gutter_backspace_hook_removes_the_whole_visual_marker_only_at_boundaries",
         r##"(mapcar
@@ -174,7 +178,8 @@ fn alectryon_gutter_backspace_hook_removes_the_whole_visual_marker_only_at_bound
     )
 }
 
-fn alectryon_buffer_utilities_widen_narrowed_documents_and_choose_collision_free_point_markers() -> ParityBatchCase {
+fn alectryon_buffer_utilities_widen_narrowed_documents_and_choose_collision_free_point_markers()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alectryon_buffer_utilities_widen_narrowed_documents_and_choose_collision_free_point_markers",
         r##"(with-temp-buffer
@@ -194,12 +199,13 @@ fn alectryon_buffer_utilities_widen_narrowed_documents_and_choose_collision_free
        (point-min) (point-max)))))"##,
         true,
         expect![[
-        r#"OK ("ody\n" "￼127919￼prefix\nbody\nsuffix" "￼127919￼" "￼127920￼" nil nil 21 25)"#
-    ]],
+            r#"OK ("ody\n" "￼127919￼prefix\nbody\nsuffix" "￼127919￼" "￼127920￼" nil nil 21 25)"#
+        ]],
     )
 }
 
-fn alectryon_presentation_mode_hides_real_annotations_and_rejects_markup_views() -> ParityBatchCase {
+fn alectryon_presentation_mode_hides_real_annotations_and_rejects_markup_views() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "alectryon_presentation_mode_hides_real_annotations_and_rejects_markup_views",
         r##"(list
@@ -227,8 +233,8 @@ fn alectryon_presentation_mode_hides_real_annotations_and_rejects_markup_views()
                   alectryon-presentation-mode)))))"##,
         true,
         expect![[
-        r#"OK ((t (("([*]\\(\\(?:\\s-*[.][-a-z]+\\)+\\)\\s-*[*])" 0 '(face #1='(:height 0.5) display "👻") append)) (font-lock-comment-delimiter-face . #1#) "👻" "👻") (user-error "‘alectryon-presentation-mode’ needs Alectryon in programming mode" nil))"#
-    ]],
+            r#"OK ((t (("([*]\\(\\(?:\\s-*[.][-a-z]+\\)+\\)\\s-*[*])" 0 '(face #1='(:height 0.5) display "👻") append)) (font-lock-comment-delimiter-face . #1#) "👻" "👻") (user-error "‘alectryon-presentation-mode’ needs Alectryon in programming mode" nil))"#
+        ]],
     )
 }
 
@@ -241,7 +247,8 @@ fn editing_public_surface_batch() {
         alectryon_newline_preserves_dafny_literate_gutters_but_not_code_or_block_comments(),
         alectryon_font_lock_marks_real_block_delimiters_gutters_and_prose_with_properties(),
         alectryon_gutter_backspace_hook_removes_the_whole_visual_marker_only_at_boundaries(),
-        alectryon_buffer_utilities_widen_narrowed_documents_and_choose_collision_free_point_markers(),
+        alectryon_buffer_utilities_widen_narrowed_documents_and_choose_collision_free_point_markers(
+        ),
         alectryon_presentation_mode_hides_real_annotations_and_rejects_markup_views(),
     ];
     assert_alectryon_batch(&cases);

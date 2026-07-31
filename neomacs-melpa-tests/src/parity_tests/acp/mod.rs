@@ -179,10 +179,5 @@ pub(crate) fn assert_acp_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_acp_parity` cases (2a).
 pub(crate) fn assert_acp_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        acp_oracle(),
-        &name,
-        "acp_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(acp_oracle(), &name, "acp_parity", cases);
 }

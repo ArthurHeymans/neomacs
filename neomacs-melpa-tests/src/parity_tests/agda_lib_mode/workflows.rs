@@ -63,8 +63,8 @@ fn agda_lib_mode_opens_edits_and_saves_a_library_file_through_its_autoload() -> 
                                (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK (agda-lib-mode t "standard-library.agda-lib" #("name: standard-library\ninclude: src generated\n-- local development paths\n" 0 5 (face font-lock-keyword-face) 23 31 (face font-lock-keyword-face) 46 72 (face font-lock-comment-face)) (font-lock-keyword-face font-lock-keyword-face font-lock-comment-face) "-- " "name: standard-library\ninclude: src generated\n-- local development paths\n")"#
-    ]],
+            r#"OK (agda-lib-mode t "standard-library.agda-lib" #("name: standard-library\ninclude: src generated\n-- local development paths\n" 0 5 (face font-lock-keyword-face) 23 31 (face font-lock-keyword-face) 46 72 (face font-lock-comment-face)) (font-lock-keyword-face font-lock-keyword-face font-lock-comment-face) "-- " "name: standard-library\ninclude: src generated\n-- local development paths\n")"#
+        ]],
     )
 }
 
@@ -129,8 +129,8 @@ fn agda_lib_mode_repairs_comments_and_refontifies_a_real_library_document() -> P
                                  "depend:")))))"##,
         true,
         expect![[
-        r#"OK (#("name: sample\n-- include: src\ndepend: base\n" 0 5 (face font-lock-keyword-face) 13 28 (face font-lock-comment-face) 29 36 (face font-lock-keyword-face)) (font-lock-keyword-face font-lock-comment-face font-lock-keyword-face) #("name: sample\ninclude: src\ndepend: base\n" 0 5 (face font-lock-keyword-face) 13 21 (face font-lock-keyword-face) 26 33 (face font-lock-keyword-face)) (font-lock-keyword-face font-lock-keyword-face font-lock-keyword-face))"#
-    ]],
+            r#"OK (#("name: sample\n-- include: src\ndepend: base\n" 0 5 (face font-lock-keyword-face) 13 28 (face font-lock-comment-face) 29 36 (face font-lock-keyword-face)) (font-lock-keyword-face font-lock-comment-face font-lock-keyword-face) #("name: sample\ninclude: src\ndepend: base\n" 0 5 (face font-lock-keyword-face) 13 21 (face font-lock-keyword-face) 26 33 (face font-lock-keyword-face)) (font-lock-keyword-face font-lock-keyword-face font-lock-keyword-face))"#
+        ]],
     )
 }
 
@@ -173,8 +173,8 @@ fn agda_lib_mode_fills_and_round_trips_documentation_comments() -> ParityBatchCa
                               comment-start)))"##,
         true,
         expect![[
-        r#"OK ("-- This library exposes\n-- algebraic structures and\n-- carefully selected\n-- experimental modules.\ninclude: src\ndepend: base\n" "-- This library exposes\n-- algebraic structures and\n-- carefully selected\n-- experimental modules.\ninclude: src\ndepend: base\n" 2 "-- ")"#
-    ]],
+            r#"OK ("-- This library exposes\n-- algebraic structures and\n-- carefully selected\n-- experimental modules.\ninclude: src\ndepend: base\n" "-- This library exposes\n-- algebraic structures and\n-- carefully selected\n-- experimental modules.\ninclude: src\ndepend: base\n" 2 "-- ")"#
+        ]],
     )
 }
 
@@ -221,16 +221,15 @@ fn agda_lib_mode_highlights_fields_flags_and_comments_in_a_complete_document() -
                              (nreverse runs)))"##,
         true,
         expect![[
-        r#"OK ((1 6 "name:" font-lock-keyword-face) (24 32 "include:" font-lock-keyword-face) (59 66 "depend:" font-lock-keyword-face) (72 78 "flags:" font-lock-keyword-face) (98 119 "-- whole-line comment" font-lock-comment-face) (120 128 "include:" font-lock-keyword-face) (133 157 " -- trailing explanation" font-lock-comment-face))"#
-    ]],
+            r#"OK ((1 6 "name:" font-lock-keyword-face) (24 32 "include:" font-lock-keyword-face) (59 66 "depend:" font-lock-keyword-face) (72 78 "flags:" font-lock-keyword-face) (98 119 "-- whole-line comment" font-lock-comment-face) (120 128 "include:" font-lock-keyword-face) (133 157 " -- trailing explanation" font-lock-comment-face))"#
+        ]],
     )
 }
 
 #[test]
 fn workflows_agda_lib_mode_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        agda_lib_mode_opens_edits_and_saves_a_library_file_through_its_autoload(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![agda_lib_mode_opens_edits_and_saves_a_library_file_through_its_autoload()];
     assert_agda_lib_mode_autoload_batch(&cases);
 }
 

@@ -48,8 +48,8 @@ fn real_git_project_keeps_aiken_buffers_project_scoped_and_auto_selected() -> Pa
 "##,
         true,
         expect![[
-        r#"OK ((aiken-mode "validators/payment.ak" t) (aiken-mode "lib/helpers.ak" t) t)"#
-    ]],
+            r#"OK ((aiken-mode "validators/payment.ak" t) (aiken-mode "lib/helpers.ak" t) t)"#
+        ]],
     )
 }
 
@@ -95,8 +95,8 @@ fn compile_workflow_routes_aiken_check_from_project_without_starting_tool() -> P
 "##,
         true,
         expect![[
-        r#"OK (fake-compilation-buffer ("aiken check" nil nil nil t aiken-mode) "aiken check")"#
-    ]],
+            r#"OK (fake-compilation-buffer ("aiken check" nil nil nil t aiken-mode) "aiken check")"#
+        ]],
     )
 }
 
@@ -147,8 +147,8 @@ fn user_formatter_hook_can_replace_buffer_through_mocked_aiken_cli_boundary() ->
 "##,
         true,
         expect![[
-        r#"OK (("fn add(x:Int,y:Int){x+y}\n" "aiken" t t nil ("fmt" "-")) "fn add(x: Int, y: Int) { x + y }\n" 8 aiken-mode t)"#
-    ]],
+            r#"OK (("fn add(x:Int,y:Int){x+y}\n" "aiken" t t nil ("fmt" "-")) "fn add(x: Int, y: Int) { x + y }\n" 8 aiken-mode t)"#
+        ]],
     )
 }
 
@@ -195,8 +195,8 @@ fn project_save_hook_formats_only_aiken_buffers_and_preserves_plain_files() -> P
 "##,
         true,
         expect![[
-        r#"OK ((("validator.ak" aiken-mode)) "fn valid(x: Int) { True }\n" "x:Int is documentation\n")"#
-    ]],
+            r#"OK ((("validator.ak" aiken-mode)) "fn valid(x: Int) { True }\n" "x:Int is documentation\n")"#
+        ]],
     )
 }
 
@@ -243,8 +243,8 @@ fn compilation_error_text_retains_aiken_file_line_column_navigation_metadata() -
 "##,
         true,
         expect![[
-        r#"OK ("Checking acme/payment\nvalidators/payment.ak:3:5: error: expected Bool\n" t "validators/payment.ak" 3 5 font-lock-function-name-face)"#
-    ]],
+            r#"OK ("Checking acme/payment\nvalidators/payment.ak:3:5: error: expected Bool\n" t "validators/payment.ak" 3 5 font-lock-function-name-face)"#
+        ]],
     )
 }
 
@@ -282,8 +282,8 @@ fn mode_can_run_deterministic_process_filter_workflow_for_aiken_output() -> Pari
 "##,
         true,
         expect![[
-        r#"OK (fake-aiken-process ("aiken-check" ("aiken" "check") t t t) aiken-mode "")"#
-    ]],
+            r#"OK (fake-aiken-process ("aiken-check" ("aiken" "check") t t t) aiken-mode "")"#
+        ]],
     )
 }
 

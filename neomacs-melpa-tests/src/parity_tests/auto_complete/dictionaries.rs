@@ -40,7 +40,8 @@ fn auto_complete_file_dictionary_caches_contents_until_explicit_clear() -> Parit
     )
 }
 
-fn auto_complete_buffer_dictionary_combines_user_mode_extension_and_explicit_files_in_order() -> ParityBatchCase {
+fn auto_complete_buffer_dictionary_combines_user_mode_extension_and_explicit_files_in_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_buffer_dictionary_combines_user_mode_extension_and_explicit_files_in_order",
         r##"(let* ((root
@@ -101,12 +102,13 @@ fn auto_complete_buffer_dictionary_combines_user_mode_extension_and_explicit_fil
                                 (ac-buffer-dictionary)))))"##,
         true,
         expect![[
-        r#"OK (("mode-one" "shared" "extension-one" "shared") #1=("user-one" "shared" "mode-one" "shared" "extension-one" "shared" "file-one" "shared") t #1#)"#
-    ]],
+            r#"OK (("mode-one" "shared" "extension-one" "shared") #1=("user-one" "shared" "mode-one" "shared" "extension-one" "shared" "file-one" "shared") t #1#)"#
+        ]],
     )
 }
 
-fn auto_complete_dictionary_cache_is_buffer_local_and_clear_invalidates_every_live_buffer() -> ParityBatchCase {
+fn auto_complete_dictionary_cache_is_buffer_local_and_clear_invalidates_every_live_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_dictionary_cache_is_buffer_local_and_clear_invalidates_every_live_buffer",
         r##"(let* ((root
@@ -197,7 +199,8 @@ fn auto_complete_missing_dictionary_file_is_cached_as_nil_until_cache_clear() ->
     )
 }
 
-fn auto_complete_builtin_c_and_python_dictionaries_support_practical_prefix_queries() -> ParityBatchCase {
+fn auto_complete_builtin_c_and_python_dictionaries_support_practical_prefix_queries()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_builtin_c_and_python_dictionaries_support_practical_prefix_queries",
         r##"(let ((ac-dictionary-files nil)
@@ -242,12 +245,13 @@ fn auto_complete_builtin_c_and_python_dictionaries_support_practical_prefix_quer
                                   t))))))"##,
         true,
         expect![[
-        r#"OK ((55 ("struct") ("volatile") t) (379 ("ImportError" "ImportWarning") ("UnicodeDecodeError" "UnicodeEncodeError" "UnicodeError" "UnicodeTranslateError" "UnicodeWarning") ("zip" "zipfile" "zipimport") t))"#
-    ]],
+            r#"OK ((55 ("struct") ("volatile") t) (379 ("ImportError" "ImportWarning") ("UnicodeDecodeError" "UnicodeEncodeError" "UnicodeError" "UnicodeTranslateError" "UnicodeWarning") ("zip" "zipfile" "zipimport") t))"#
+        ]],
     )
 }
 
-fn auto_complete_dictionary_source_completes_real_user_address_and_retains_source_symbol() -> ParityBatchCase {
+fn auto_complete_dictionary_source_completes_real_user_address_and_retains_source_symbol()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_dictionary_source_completes_real_user_address_and_retains_source_symbol",
         r##"(save-window-excursion
@@ -308,12 +312,13 @@ fn auto_complete_dictionary_source_completes_real_user_address_and_retains_sourc
                                 (auto-complete-mode -1)))))"##,
         true,
         expect![[
-        r#"OK ((("alice@example.com" "d") ("alice@engineering.example" "d")) "alice" "alice@example.com" "alice@engineering.example" "alice@engineering.example" "alice@engineering.example" nil nil "alice@engineering.example")"#
-    ]],
+            r#"OK ((("alice@example.com" "d") ("alice@engineering.example" "d")) "alice" "alice@example.com" "alice@engineering.example" "alice@engineering.example" "alice@engineering.example" nil nil "alice@engineering.example")"#
+        ]],
     )
 }
 
-fn auto_complete_filename_source_lists_files_directories_and_respects_comment_and_regular_file_guards() -> ParityBatchCase {
+fn auto_complete_filename_source_lists_files_directories_and_respects_comment_and_regular_file_guards()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_filename_source_lists_files_directories_and_respects_comment_and_regular_file_guards",
         r##"(let* ((root
@@ -373,7 +378,8 @@ fn auto_complete_filename_source_lists_files_directories_and_respects_comment_an
     )
 }
 
-fn auto_complete_mode_dictionary_uses_both_major_mode_and_filename_extension_with_duplicate_data_intact() -> ParityBatchCase {
+fn auto_complete_mode_dictionary_uses_both_major_mode_and_filename_extension_with_duplicate_data_intact()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_mode_dictionary_uses_both_major_mode_and_filename_extension_with_duplicate_data_intact",
         r##"(let* ((root
@@ -416,8 +422,8 @@ fn auto_complete_mode_dictionary_uses_both_major_mode_and_filename_extension_wit
                                  'fundamental-mode)))))"##,
         true,
         expect![[
-        r#"OK (("mode-only" "duplicate" "extension-only" "duplicate") ("extension-only" "duplicate"))"#
-    ]],
+            r#"OK (("mode-only" "duplicate" "extension-only" "duplicate") ("extension-only" "duplicate"))"#
+        ]],
     )
 }
 

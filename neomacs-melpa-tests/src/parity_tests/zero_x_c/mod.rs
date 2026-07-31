@@ -64,28 +64,14 @@ pub(crate) fn assert_zero_x_c_live_signal_parity(form: &str, expected: Expect) {
     expected.assert_eq(&report.gnu_emacs.to_string());
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_zero_x_c_parity` cases (2a).
 pub(crate) fn assert_zero_x_c_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        zero_x_c_oracle(),
-        &name,
-        "zero_x_c_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(zero_x_c_oracle(), &name, "zero_x_c_parity", cases);
 }
 
 /// Multi-probe batch for `assert_zero_x_c_live_parity` cases (2a).
 pub(crate) fn assert_zero_x_c_live_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        zero_x_c_live_oracle(),
-        &name,
-        "zero_x_c_live_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(zero_x_c_live_oracle(), &name, "zero_x_c_live_parity", cases);
 }

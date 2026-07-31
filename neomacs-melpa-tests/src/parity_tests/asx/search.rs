@@ -9,8 +9,8 @@ fn asx_google_extractor_reads_result_titles_and_question_urls_in_dom_order() -> 
          (asx-test-search-dom))"##,
         true,
         expect![[
-        r#"OK (("First " . "https://stackoverflow.com/questions/101/first") ("Second result" . "https://emacs.stackexchange.com/questions/202/second"))"#
-    ]],
+            r#"OK (("First " . "https://stackoverflow.com/questions/101/first") ("Second result" . "https://emacs.stackexchange.com/questions/202/second"))"#
+        ]],
     )
 }
 
@@ -21,12 +21,13 @@ fn asx_duckduckgo_extractor_combines_nested_title_text_and_trims_display_urls() 
          (asx-test-search-dom))"##,
         true,
         expect![[
-        r#"OK (("Duck  one" . "stackoverflow.com/questions/303/duck-one") ("Duck two" . "example.com/articles/404"))"#
-    ]],
+            r#"OK (("Duck  one" . "stackoverflow.com/questions/303/duck-one") ("Duck two" . "example.com/articles/404"))"#
+        ]],
     )
 }
 
-fn asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration() -> ParityBatchCase {
+fn asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration",
         r##"(let ((dom
@@ -58,12 +59,13 @@ fn asx_extract_links_dispatches_through_builtin_and_custom_engine_configuration(
             calls)))"##,
         true,
         expect![[
-        r#"OK ((("First " . "https://stackoverflow.com/questions/101/first") ("Second result" . "https://emacs.stackexchange.com/questions/202/second")) (("Duck  one" . "stackoverflow.com/questions/303/duck-one") ("Duck two" . "example.com/articles/404")) (("Custom" . "https://custom.invalid/questions/9")) (html))"#
-    ]],
+            r#"OK ((("First " . "https://stackoverflow.com/questions/101/first") ("Second result" . "https://emacs.stackexchange.com/questions/202/second")) (("Duck  one" . "stackoverflow.com/questions/303/duck-one") ("Duck two" . "example.com/articles/404")) (("Custom" . "https://custom.invalid/questions/9")) (html))"#
+        ]],
     )
 }
 
-fn asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_links() -> ParityBatchCase {
+fn asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_links()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_links",
         r##"(asx--filter-posts
@@ -87,8 +89,8 @@ fn asx_filter_posts_keeps_only_question_paths_without_reordering_or_rewriting_li
             "https://example.com/questions/abc")))"##,
         true,
         expect![[
-        r#"OK (("Question" . "https://stackoverflow.com/questions/123/title") ("Bare question path" . "questions/9") ("Leading zeros" . "https://serverfault.com/questions/0007/x"))"#
-    ]],
+            r#"OK (("Question" . "https://stackoverflow.com/questions/123/title") ("Bare question path" . "questions/9") ("Leading zeros" . "https://serverfault.com/questions/0007/x"))"#
+        ]],
     )
 }
 
@@ -113,8 +115,8 @@ fn asx_post_prefixes_mark_every_title_equal_to_current_post_and_preserve_urls() 
            asx--posts)))"##,
         true,
         expect![[
-        r#"OK (#1=("Duplicate" . "url-2") ((("First" . "url-1") "   ") (#1# "=> ") (("Duplicate" . "url-3") "=> ") (("Last" . "url-4") "   ")) (("   First" . "url-1") ("=> Duplicate" . "url-2") ("=> Duplicate" . "url-3") ("   Last" . "url-4")))"#
-    ]],
+            r#"OK (#1=("Duplicate" . "url-2") ((("First" . "url-1") "   ") (#1# "=> ") (("Duplicate" . "url-3") "=> ") (("Last" . "url-4") "   ")) (("   First" . "url-1") ("=> Duplicate" . "url-2") ("=> Duplicate" . "url-3") ("   Last" . "url-4")))"#
+        ]],
     )
 }
 
@@ -146,12 +148,13 @@ fn asx_select_post_prompts_with_prefixed_candidates_and_stores_selected_index() 
             observed)))"##,
         true,
         expect![[
-        r#"OK (2 2 ("Third" . "url-3") ("Post: " (("=> First" . "url-1") ("   Second" . "url-2") ("   Third" . "url-3")) nil))"#
-    ]],
+            r#"OK (2 2 ("Third" . "url-3") ("Post: " (("=> First" . "url-1") ("   Second" . "url-2") ("   Third" . "url-3")) nil))"#
+        ]],
     )
 }
 
-fn asx_handle_search_filters_results_selects_first_and_requests_post_without_prompt() -> ParityBatchCase {
+fn asx_handle_search_filters_results_selects_first_and_requests_post_without_prompt()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_handle_search_filters_results_selects_first_and_requests_post_without_prompt",
         r##"(let ((asx-prompt-post-p nil)
@@ -177,8 +180,8 @@ fn asx_handle_search_filters_results_selects_first_and_requests_post_without_pro
             (nreverse requests))))"##,
         true,
         expect![[
-        r#"OK (:queued (#1=("First" . "https://stackoverflow.com/questions/1/first") ("Second" . "https://emacs.stackexchange.com/questions/2/second")) 0 (#1#))"#
-    ]],
+            r#"OK (:queued (#1=("First" . "https://stackoverflow.com/questions/1/first") ("Second" . "https://emacs.stackexchange.com/questions/2/second")) 0 (#1#))"#
+        ]],
     )
 }
 
@@ -217,8 +220,8 @@ fn asx_handle_search_prompt_path_uses_selector_before_requesting_chosen_post() -
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:queued #1=(("First" . "questions/1") #2=("Second" . "questions/2")) 1 ((:select #1#) (:request #2#)))"#
-    ]],
+            r#"OK (:queued #1=(("First" . "questions/1") #2=("Second" . "questions/2")) 1 ((:select #1#) (:request #2#)))"#
+        ]],
     )
 }
 
@@ -250,7 +253,8 @@ fn asx_handle_search_signals_when_extraction_contains_no_question_posts() -> Par
     )
 }
 
-fn asx_remove_and_next_deletes_all_matching_urls_then_advances_in_remaining_ring() -> ParityBatchCase {
+fn asx_remove_and_next_deletes_all_matching_urls_then_advances_in_remaining_ring() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asx_remove_and_next_deletes_all_matching_urls_then_advances_in_remaining_ring",
         r##"(let ((asx--posts
@@ -327,7 +331,8 @@ fn asx_navigation_commands_forward_exact_offsets_and_first_post_delta() -> Parit
     )
 }
 
-fn asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_post() -> ParityBatchCase {
+fn asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_post()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_post",
         r##"(let ((asx--posts
@@ -356,8 +361,8 @@ fn asx_n_post_wraps_forward_backward_and_large_offsets_then_requests_current_pos
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:requested :requested :requested :requested :requested 1 ((1 #2=("One" . "url-1")) (2 #1=("Two" . "url-2")) (0 ("Zero" . "url-0")) (2 #1#) (1 #2#)))"#
-    ]],
+            r#"OK (:requested :requested :requested :requested :requested 1 ((1 #2=("One" . "url-1")) (2 #1=("Two" . "url-2")) (0 ("Zero" . "url-0")) (2 #1#) (1 #2#)))"#
+        ]],
     )
 }
 
@@ -392,8 +397,8 @@ fn asx_jump_selects_from_current_posts_then_requests_the_selected_post() -> Pari
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:queued 1 ((:select (("First" . "url-1") #1=("Second" . "url-2"))) (:request #1#)))"#
-    ]],
+            r#"OK (:queued 1 ((:select (("First" . "url-1") #1=("Second" . "url-2"))) (:request #1#)))"#
+        ]],
     )
 }
 

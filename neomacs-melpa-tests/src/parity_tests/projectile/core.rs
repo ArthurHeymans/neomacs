@@ -52,12 +52,13 @@ fn projectile_glob_and_ignore_pattern_translation_handles_gitignore_shapes() -> 
                   "src/?eep/*.c")))"##,
         true,
         expect![[
-        r#"OK (("*.el" t t nil nil nil nil) ("build/" nil nil t t nil nil) ("/build/" nil nil t t nil nil) ("src/generated/**" nil nil nil nil t nil) ("src/?eep/*.c" nil nil nil nil nil t))"#
-    ]],
+            r#"OK (("*.el" t t nil nil nil nil) ("build/" nil nil t t nil nil) ("/build/" nil nil t t nil nil) ("src/generated/**" nil nil nil nil t nil) ("src/?eep/*.c" nil nil nil nil nil t))"#
+        ]],
     )
 }
 
-fn projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries() -> ParityBatchCase {
+fn projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries",
         r##"(let* ((projectile-dirconfig-comment-prefix ?#)
@@ -74,8 +75,8 @@ fn projectile_dirconfig_parser_preserves_keep_ignore_ensure_and_legacy_entries()
                 (projectile--dirconfig-classify-line "")))"##,
         true,
         expect![[
-        r#"OK (("src/" "tests/") ("build/" "legacy") ("build/keep.txt") ("legacy") (:keep . "lib") (:comment) nil)"#
-    ]],
+            r#"OK (("src/" "tests/") ("build/" "legacy") ("build/keep.txt") ("legacy") (:keep . "lib") (:comment) nil)"#
+        ]],
     )
 }
 
@@ -104,8 +105,8 @@ fn projectile_project_type_registration_and_updates_preserve_attributes() -> Par
                 projectile-project-root-files-bottom-up))"##,
         true,
         expect![[
-        r#"OK (("demo.toml" "demo.json") "_spec" "test_" "make all" ("demo.json" "demo.toml") (".git"))"#
-    ]],
+            r#"OK (("demo.toml" "demo.json") "_spec" "test_" "make all" ("demo.json" "demo.toml") (".git"))"#
+        ]],
     )
 }
 

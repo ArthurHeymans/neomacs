@@ -21,8 +21,8 @@ fn enabling_the_mode_swaps_the_formats_and_adds_an_icon_column() -> ParityBatchC
          :icons (atib-test-icon-cells))))"##,
         true,
         expect![[
-        r#"OK (:before-formats-were-default t :formats-swapped t :header " MRL   Name                    Size Mode             Filename/Process" :icons (("atib-code.el" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-large" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-org" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-plain" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-script.py" icon-glyph display face 32 ((space :relative-width 0.5)))))"#
-    ]],
+            r#"OK (:before-formats-were-default t :formats-swapped t :header " MRL   Name                    Size Mode             Filename/Process" :icons (("atib-code.el" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-large" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-org" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-plain" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-script.py" icon-glyph display face 32 ((space :relative-width 0.5)))))"#
+        ]],
     )
 }
 
@@ -40,8 +40,8 @@ fn the_icon_column_is_empty_when_either_gate_is_closed() -> ParityBatchCase {
      (list :with-graphic-predicate graphic :with-icon-disabled icon-off))))"##,
         true,
         expect![[
-        r#"OK (:with-graphic-predicate (nil (("atib-code.el" 32 no-display no-face 32 nil) ("atib-large" 32 no-display no-face 32 nil) ("atib-org" 32 no-display no-face 32 nil) ("atib-plain" 32 no-display no-face 32 nil) ("atib-script.py" 32 no-display no-face 32 nil))) :with-icon-disabled (("atib-code.el" 32 no-display no-face 32 nil) ("atib-large" 32 no-display no-face 32 nil) ("atib-org" 32 no-display no-face 32 nil) ("atib-plain" 32 no-display no-face 32 nil) ("atib-script.py" 32 no-display no-face 32 nil)))"#
-    ]],
+            r#"OK (:with-graphic-predicate (nil (("atib-code.el" 32 no-display no-face 32 nil) ("atib-large" 32 no-display no-face 32 nil) ("atib-org" 32 no-display no-face 32 nil) ("atib-plain" 32 no-display no-face 32 nil) ("atib-script.py" 32 no-display no-face 32 nil))) :with-icon-disabled (("atib-code.el" 32 no-display no-face 32 nil) ("atib-large" 32 no-display no-face 32 nil) ("atib-org" 32 no-display no-face 32 nil) ("atib-plain" 32 no-display no-face 32 nil) ("atib-script.py" 32 no-display no-face 32 nil)))"#
+        ]],
     )
 }
 
@@ -58,8 +58,8 @@ fn the_size_column_honours_the_human_readable_setting() -> ParityBatchCase {
            :mode-line-empty (format-mode-line mode-name nil nil (get-buffer "atib-org"))))))"##,
         true,
         expect![[
-        r#"OK (:human-readable (("atib-code.el" "atib-code.el" "24" "[ORACLE-SANDBOX]/atib-code.el") ("atib-large" "atib-large" "2k") ("atib-org" "atib-org" "8") ("atib-plain" "atib-plain" "15") ("atib-script.py" "atib-script.py" "15" "[ORACLE-SANDBOX]/atib-script.py")) :raw (("atib-code.el" "atib-code.el" "24" "[ORACLE-SANDBOX]/atib-code.el") ("atib-large" "atib-large" "2048") ("atib-org" "atib-org" "8") ("atib-plain" "atib-plain" "15") ("atib-script.py" "atib-script.py" "15" "[ORACLE-SANDBOX]/atib-script.py")) :mode-line-empty "")"#
-    ]],
+            r#"OK (:human-readable (("atib-code.el" "atib-code.el" "24" "[ORACLE-SANDBOX]/atib-code.el") ("atib-large" "atib-large" "2k") ("atib-org" "atib-org" "8") ("atib-plain" "atib-plain" "15") ("atib-script.py" "atib-script.py" "15" "[ORACLE-SANDBOX]/atib-script.py")) :raw (("atib-code.el" "atib-code.el" "24" "[ORACLE-SANDBOX]/atib-code.el") ("atib-large" "atib-large" "2048") ("atib-org" "atib-org" "8") ("atib-plain" "atib-plain" "15") ("atib-script.py" "atib-script.py" "15" "[ORACLE-SANDBOX]/atib-script.py")) :mode-line-empty "")"#
+        ]],
     )
 }
 
@@ -83,8 +83,8 @@ fn ibuffer_update_picks_up_a_new_buffer_and_drops_a_killed_one() -> ParityBatchC
            :after-kill (mapcar #'car (atib-test-icon-cells))))))"##,
         true,
         expect![[
-        r#"OK (:initial ("atib-code.el" "atib-large" "atib-org" "atib-plain" "atib-script.py") :after-add ("atib-code.el" "atib-large" "atib-neu" "atib-org" "atib-plain" "atib-script.py") :new-line-has-icon (icon-glyph display face 32 ((space :relative-width 0.5))) :after-kill ("atib-code.el" "atib-large" "atib-neu" "atib-org" "atib-script.py"))"#
-    ]],
+            r#"OK (:initial ("atib-code.el" "atib-large" "atib-org" "atib-plain" "atib-script.py") :after-add ("atib-code.el" "atib-large" "atib-neu" "atib-org" "atib-plain" "atib-script.py") :new-line-has-icon (icon-glyph display face 32 ((space :relative-width 0.5))) :after-kill ("atib-code.el" "atib-large" "atib-neu" "atib-org" "atib-script.py"))"#
+        ]],
     )
 }
 
@@ -103,8 +103,8 @@ fn turning_the_mode_off_restores_the_previous_formats() -> ParityBatchCase {
          :mode-flag (and all-the-icons-ibuffer-mode t))))"##,
         true,
         expect![[
-        r#"OK (:on-formats t :on-icons (("atib-code.el" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-large" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-org" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-plain" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-script.py" icon-glyph display face 32 ((space :relative-width 0.5)))) :off-formats-restored t :off-icons (("atib-code.el" 97 no-display no-face 116 nil) ("atib-large" 97 no-display no-face 116 nil) ("atib-org" 97 no-display no-face 116 nil) ("atib-plain" 97 no-display no-face 116 nil) ("atib-script.py" 97 no-display no-face 116 nil)) :mode-flag nil)"#
-    ]],
+            r#"OK (:on-formats t :on-icons (("atib-code.el" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-large" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-org" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-plain" icon-glyph display face 32 ((space :relative-width 0.5))) ("atib-script.py" icon-glyph display face 32 ((space :relative-width 0.5)))) :off-formats-restored t :off-icons (("atib-code.el" 97 no-display no-face 116 nil) ("atib-large" 97 no-display no-face 116 nil) ("atib-org" 97 no-display no-face 116 nil) ("atib-plain" 97 no-display no-face 116 nil) ("atib-script.py" 97 no-display no-face 116 nil)) :mode-flag nil)"#
+        ]],
     )
 }
 

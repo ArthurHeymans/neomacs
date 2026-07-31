@@ -34,12 +34,13 @@ fn bind_key_descriptions_cover_symbols_lambdas_closures_keymaps_and_byte_code() 
                    (get-binding-description map-symbol)))))"##,
         true,
         expect![[
-        r##"OK ((forward-char "#<lambda>" "#<closure>" "#<keymap>" "#<byte-compiled lambda>") ("Lambda documentation" "Closure documentation" "A documented keymap"))"##
-    ]],
+            r##"OK ((forward-char "#<lambda>" "#<closure>" "#<keymap>" "#<byte-compiled lambda>") ("Lambda documentation" "Closure documentation" "A documented keymap"))"##
+        ]],
     )
 }
 
-fn compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes() -> ParityBatchCase {
+fn compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes",
         r##"(let ((bind-key-segregation-regexp
@@ -62,7 +63,8 @@ fn compare_keybindings_reports_order_and_group_boundaries_for_maps_and_prefixes(
     )
 }
 
-fn describe_personal_keybindings_reports_original_current_and_rebound_commands() -> ParityBatchCase {
+fn describe_personal_keybindings_reports_original_current_and_rebound_commands() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "describe_personal_keybindings_reports_original_current_and_rebound_commands",
         r##"(progn
@@ -84,8 +86,8 @@ fn describe_personal_keybindings_reports_original_current_and_rebound_commands()
                     (point-min) (point-max)))))"##,
         true,
         expect![[
-        r#"OK "Key name    Command                     Comments\n----------- --------------------------- ---------------------\n\n\nneomacs-bind-key-report-map: a\n-------------------------------------------------------------\n\na           `forward-char'              was `beginning-of-line'\nb           `backward-char'             [now: `end-of-line']\n""#
-    ]],
+            r#"OK "Key name    Command                     Comments\n----------- --------------------------- ---------------------\n\n\nneomacs-bind-key-report-map: a\n-------------------------------------------------------------\n\na           `forward-char'              was `beginning-of-line'\nb           `backward-char'             [now: `end-of-line']\n""#
+        ]],
     )
 }
 
@@ -116,8 +118,8 @@ fn bind_key_registry_distinguishes_global_symbol_and_direct_map_descriptors() ->
                   (reverse personal-keybindings))))"##,
         true,
         expect![[
-        r#"OK (("C-c g" global forward-line nil) ("x" neomacs-bind-key-symbol-map forward-char nil) ("y" direct-map backward-char nil))"#
-    ]],
+            r#"OK (("C-c g" global forward-line nil) ("x" neomacs-bind-key-symbol-map forward-char nil) ("y" direct-map backward-char nil))"#
+        ]],
     )
 }
 

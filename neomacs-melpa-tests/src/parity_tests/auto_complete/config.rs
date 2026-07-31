@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_config_batch};
 
-fn auto_complete_config_additional_sources_and_generated_commands_match_exact_contracts() -> ParityBatchCase {
+fn auto_complete_config_additional_sources_and_generated_commands_match_exact_contracts()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_config_additional_sources_and_generated_commands_match_exact_contracts",
         r##"(mapcar
@@ -34,12 +35,13 @@ fn auto_complete_config_additional_sources_and_generated_commands_match_exact_co
                              . ac-complete-ghc-mod)))"##,
         true,
         expect![[
-        r#"OK ((ac-source-imenu ((depends imenu) (candidates . ac-imenu-candidates) (symbol . "s")) ac-complete-imenu (interactive nil)) (ac-source-gtags ((candidates . ac-gtags-candidate) (candidate-face . ac-gtags-candidate-face) (selection-face . ac-gtags-selection-face) (requires . 3) (symbol . "s")) ac-complete-gtags (interactive nil)) (ac-source-yasnippet ((depends yasnippet) (candidates . ac-yasnippet-candidates) (action . yas/expand) (candidate-face . ac-yasnippet-candidate-face) (selection-face . ac-yasnippet-selection-face) (symbol . "a")) ac-complete-yasnippet (interactive nil)) (ac-source-semantic ((available or (require 'semantic-ia nil t) (require 'semantic/ia nil t)) (candidates ac-semantic-candidates ac-prefix) (document . ac-semantic-doc) (action . ac-semantic-action) (prefix . cc-member) (requires . 0) (symbol . "m")) ac-complete-semantic (interactive nil)) (ac-source-semantic-raw ((available or (require 'semantic-ia nil t) (require 'semantic/ia nil t)) (candidates ac-semantic-candidates ac-prefix) (document . ac-semantic-doc) (action . ac-semantic-action) (symbol . "s")) ac-complete-semantic-raw (interactive nil)) (ac-source-eclim ((candidates . ac-eclim-candidates) (prefix . c-dot) (requires . 0) (symbol . "f")) ac-complete-eclim (interactive nil)) (ac-source-css-property ((candidates . ac-css-property-candidates) (prefix . ac-css-prefix) (requires . 0)) ac-complete-css-property (interactive nil)) (ac-source-slime ((depends slime) (candidates car (slime-simple-completions ac-prefix)) (symbol . "s") (cache)) ac-complete-slime (interactive nil)) (ac-source-ghc-mod ((depends ghc) (candidates ghc-select-completion-symbol) (symbol . "s") (cache)) ac-complete-ghc-mod (interactive nil)))"#
-    ]],
+            r#"OK ((ac-source-imenu ((depends imenu) (candidates . ac-imenu-candidates) (symbol . "s")) ac-complete-imenu (interactive nil)) (ac-source-gtags ((candidates . ac-gtags-candidate) (candidate-face . ac-gtags-candidate-face) (selection-face . ac-gtags-selection-face) (requires . 3) (symbol . "s")) ac-complete-gtags (interactive nil)) (ac-source-yasnippet ((depends yasnippet) (candidates . ac-yasnippet-candidates) (action . yas/expand) (candidate-face . ac-yasnippet-candidate-face) (selection-face . ac-yasnippet-selection-face) (symbol . "a")) ac-complete-yasnippet (interactive nil)) (ac-source-semantic ((available or (require 'semantic-ia nil t) (require 'semantic/ia nil t)) (candidates ac-semantic-candidates ac-prefix) (document . ac-semantic-doc) (action . ac-semantic-action) (prefix . cc-member) (requires . 0) (symbol . "m")) ac-complete-semantic (interactive nil)) (ac-source-semantic-raw ((available or (require 'semantic-ia nil t) (require 'semantic/ia nil t)) (candidates ac-semantic-candidates ac-prefix) (document . ac-semantic-doc) (action . ac-semantic-action) (symbol . "s")) ac-complete-semantic-raw (interactive nil)) (ac-source-eclim ((candidates . ac-eclim-candidates) (prefix . c-dot) (requires . 0) (symbol . "f")) ac-complete-eclim (interactive nil)) (ac-source-css-property ((candidates . ac-css-property-candidates) (prefix . ac-css-prefix) (requires . 0)) ac-complete-css-property (interactive nil)) (ac-source-slime ((depends slime) (candidates car (slime-simple-completions ac-prefix)) (symbol . "s") (cache)) ac-complete-slime (interactive nil)) (ac-source-ghc-mod ((depends ghc) (candidates ghc-select-completion-symbol) (symbol . "s") (cache)) ac-complete-ghc-mod (interactive nil)))"#
+        ]],
     )
 }
 
-fn auto_complete_imenu_candidates_flatten_nested_index_strip_suffixes_and_honor_prefix_and_limit() -> ParityBatchCase {
+fn auto_complete_imenu_candidates_flatten_nested_index_strip_suffixes_and_honor_prefix_and_limit()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_imenu_candidates_flatten_nested_index_strip_suffixes_and_honor_prefix_and_limit",
         r##"(with-temp-buffer
@@ -73,12 +75,13 @@ fn auto_complete_imenu_candidates_flatten_nested_index_strip_suffixes_and_honor_
                              ("z"))))"##,
         true,
         expect![[
-        r#"OK ((("a") ("alpine" "alpha" "alpha-value") (#1=("*Rescan*" . -99) . #2=(("*Rescan*" . -99) ("Functions" ("alpha()" . 10) ("alpine<>" . 20) ("beta=" . 30)) ("Variables" ("alpha-value" . 40) ("gamma" . 50))))) (("a" . 2) ("alpine" "alpha") (#1# . #2#)) (("b") ("beta") (#1# . #2#)) (("z") nil (#1# . #2#)))"#
-    ]],
+            r#"OK ((("a") ("alpine" "alpha" "alpha-value") (#1=("*Rescan*" . -99) . #2=(("*Rescan*" . -99) ("Functions" ("alpha()" . 10) ("alpine<>" . 20) ("beta=" . 30)) ("Variables" ("alpha-value" . 40) ("gamma" . 50))))) (("a" . 2) ("alpine" "alpha") (#1# . #2#)) (("b") ("beta") (#1# . #2#)) (("z") nil (#1# . #2#)))"#
+        ]],
     )
 }
 
-fn auto_complete_css_source_returns_real_properties_expanded_values_and_pseudo_classes() -> ParityBatchCase {
+fn auto_complete_css_source_returns_real_properties_expanded_values_and_pseudo_classes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_css_source_returns_real_properties_expanded_values_and_pseudo_classes",
         r##"(mapcar
@@ -96,12 +99,13 @@ fn auto_complete_css_source_returns_real_properties_expanded_values_and_pseudo_c
                             "unknown-property"))"##,
         true,
         expect![[
-        r#"OK ((t ("azimuth" "background" "background-attachment" "background-color" "background-image" "background-position" "background-repeat" "border" "border-bottom" "border-bottom-color" "border-bottom-style" "border-bottom-width" "border-collapse" "border-color" "border-left" "border-left-color" "border-left-style" "border-left-width" "border-right" "border-right-color" "border-right-style" "border-right-width" "border-spacing" "border-style" "border-top" "border-top-color" "border-top-style" "border-top-width" "border-width" "bottom" "caption-side" "clear" "clip" "color" "content" "counter-increment" "counter-reset" "cue" "cue-after" "cue-before" "cursor" "direction" "display" "elevation" "empty-cells" "float" "font" "font-family" "font-size" "font-style" "font-variant" "font-weight" "height" "left" "letter-spacing" "line-height" "list-style" "list-style-image" "list-style-position" "list-style-type" "margin" "margin-bottom" "margin-left" "margin-right" "margin-top" "max-height" "max-width" "min-height" "min-width" "orphans" "outline" "outline-color" "outline-style" "outline-width" "overflow" "padding" "padding-bottom" "padding-left" "padding-right" "padding-top" "page-break-after" "page-break-before" "page-break-inside" "pause" "pause-after" "pause-before" "pitch" "pitch-range" "play-during" "position" "quotes" "richness" "right" "speak" "speak-header" "speak-numeral" "speak-punctuation" "speech-rate" "stress" "table-layout" "text-align" "text-decoration" "text-indent" "text-transform" "top" "unicode-bidi" "vertical-align" "visibility" "voice-family" "volume" "white-space" "widows" "width" "word-spacing" "z-index")) ("background" ("transparent" "none" "repeat" "repeat-x" "repeat-y" "no-repeat" "scroll" "fixed" "left" "center" "right" "top" "center" "bottom" "left" "center" "right" "top" "center" "bottom" "aqua" "black" "blue" "fuchsia" "gray" "green" "lime" "maroon" "navy" "olive" "orange" "purple" "red" "silver" "teal" "white" "yellow" "rgb" "url")) ("border" ("none" "hidden" "dotted" "dashed" "solid" "double" "groove" "ridge" "inset" "outset" "transparent" "aqua" "black" "blue" "fuchsia" "gray" "green" "lime" "maroon" "navy" "olive" "orange" "purple" "red" "silver" "teal" "white" "yellow" "rgb")) ("font" ("/" "caption" "icon" "menu" "message-box" "small-caption" "status-bar" "normal" "italic" "oblique" "normal" "small-caps" "normal" "bold" "bolder" "lighter" "100" "200" "300" "400" "500" "600" "700" "800" "900" "normal" "xx-small" "x-small" "small" "medium" "large" "x-large" "xx-large" "larger" "smaller" "Courier" "Helvetica" "Times" "serif" "sans-serif" "cursive" "fantasy" "monospace")) ("font-family" ("Courier" "Helvetica" "Times" "serif" "sans-serif" "cursive" "fantasy" "monospace")) ("list-style" ("disc" "circle" "square" "decimal" "decimal-leading-zero" "lower-roman" "upper-roman" "lower-greek" "lower-latin" "upper-latin" "armenian" "georgian" "lower-alpha" "upper-alpha" "none" "inside" "outside" "none" "url")) ("unknown-property" ("active" "after" "before" "first" "first-child" "first-letter" "first-line" "focus" "hover" "lang" "left" "link" "right" "visited")))"#
-    ]],
+            r#"OK ((t ("azimuth" "background" "background-attachment" "background-color" "background-image" "background-position" "background-repeat" "border" "border-bottom" "border-bottom-color" "border-bottom-style" "border-bottom-width" "border-collapse" "border-color" "border-left" "border-left-color" "border-left-style" "border-left-width" "border-right" "border-right-color" "border-right-style" "border-right-width" "border-spacing" "border-style" "border-top" "border-top-color" "border-top-style" "border-top-width" "border-width" "bottom" "caption-side" "clear" "clip" "color" "content" "counter-increment" "counter-reset" "cue" "cue-after" "cue-before" "cursor" "direction" "display" "elevation" "empty-cells" "float" "font" "font-family" "font-size" "font-style" "font-variant" "font-weight" "height" "left" "letter-spacing" "line-height" "list-style" "list-style-image" "list-style-position" "list-style-type" "margin" "margin-bottom" "margin-left" "margin-right" "margin-top" "max-height" "max-width" "min-height" "min-width" "orphans" "outline" "outline-color" "outline-style" "outline-width" "overflow" "padding" "padding-bottom" "padding-left" "padding-right" "padding-top" "page-break-after" "page-break-before" "page-break-inside" "pause" "pause-after" "pause-before" "pitch" "pitch-range" "play-during" "position" "quotes" "richness" "right" "speak" "speak-header" "speak-numeral" "speak-punctuation" "speech-rate" "stress" "table-layout" "text-align" "text-decoration" "text-indent" "text-transform" "top" "unicode-bidi" "vertical-align" "visibility" "voice-family" "volume" "white-space" "widows" "width" "word-spacing" "z-index")) ("background" ("transparent" "none" "repeat" "repeat-x" "repeat-y" "no-repeat" "scroll" "fixed" "left" "center" "right" "top" "center" "bottom" "left" "center" "right" "top" "center" "bottom" "aqua" "black" "blue" "fuchsia" "gray" "green" "lime" "maroon" "navy" "olive" "orange" "purple" "red" "silver" "teal" "white" "yellow" "rgb" "url")) ("border" ("none" "hidden" "dotted" "dashed" "solid" "double" "groove" "ridge" "inset" "outset" "transparent" "aqua" "black" "blue" "fuchsia" "gray" "green" "lime" "maroon" "navy" "olive" "orange" "purple" "red" "silver" "teal" "white" "yellow" "rgb")) ("font" ("/" "caption" "icon" "menu" "message-box" "small-caption" "status-bar" "normal" "italic" "oblique" "normal" "small-caps" "normal" "bold" "bolder" "lighter" "100" "200" "300" "400" "500" "600" "700" "800" "900" "normal" "xx-small" "x-small" "small" "medium" "large" "x-large" "xx-large" "larger" "smaller" "Courier" "Helvetica" "Times" "serif" "sans-serif" "cursive" "fantasy" "monospace")) ("font-family" ("Courier" "Helvetica" "Times" "serif" "sans-serif" "cursive" "fantasy" "monospace")) ("list-style" ("disc" "circle" "square" "decimal" "decimal-leading-zero" "lower-roman" "upper-roman" "lower-greek" "lower-latin" "upper-latin" "armenian" "georgian" "lower-alpha" "upper-alpha" "none" "inside" "outside" "none" "url")) ("unknown-property" ("active" "after" "before" "first" "first-child" "first-letter" "first-line" "focus" "hover" "lang" "left" "link" "right" "visited")))"#
+        ]],
     )
 }
 
-fn auto_complete_css_prefix_tracks_property_or_property_name_across_real_declarations() -> ParityBatchCase {
+fn auto_complete_css_prefix_tracks_property_or_property_name_across_real_declarations()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_css_prefix_tracks_property_or_property_name_across_real_declarations",
         r##"(mapcar
@@ -129,12 +133,13 @@ fn auto_complete_css_prefix_tracks_property_or_property_name_across_real_declara
                             ""))"##,
         true,
         expect![[
-        r#"OK (("body { back" 8 "back" t) ("body { background: re" 20 "re" "background") ("body { color: rgb; mar" 20 "mar" t) (".item:hover { font-family: san" 28 "san" "font-family") ("/* color: red */" 17 "" "color") ("" 1 "" t))"#
-    ]],
+            r#"OK (("body { back" 8 "back" t) ("body { background: re" 20 "re" "background") ("body { color: rgb; mar" 20 "mar" t) (".item:hover { font-family: san" 28 "san" "font-family") ("/* color: red */" 17 "" "color") ("" 1 "" t))"#
+        ]],
     )
 }
 
-fn auto_complete_config_default_installs_expected_hooks_sources_and_global_mode_behavior() -> ParityBatchCase {
+fn auto_complete_config_default_installs_expected_hooks_sources_and_global_mode_behavior()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_config_default_installs_expected_hooks_sources_and_global_mode_behavior",
         r##"(progn
@@ -203,12 +208,13 @@ fn auto_complete_config_default_installs_expected_hooks_sources_and_global_mode_
                                  -1)))))"##,
         true,
         expect![
-        "OK ((nil (ac-source-words-in-same-mode-buffers)) t #1=(ac-source-abbrev ac-source-dictionary ac-source-words-in-same-mode-buffers) (ac-emacs-lisp-mode-setup) (ac-cc-mode-setup) (ac-css-mode-setup) (ac-common-setup auto-complete-mode--set-explicitly) (t (ac-source-words-in-same-mode-buffers ac-source-dictionary ac-source-abbrev ac-source-features ac-source-functions ac-source-yasnippet ac-source-variables ac-source-symbols)) (nil #1#))"
-    ],
+            "OK ((nil (ac-source-words-in-same-mode-buffers)) t #1=(ac-source-abbrev ac-source-dictionary ac-source-words-in-same-mode-buffers) (ac-emacs-lisp-mode-setup) (ac-cc-mode-setup) (ac-css-mode-setup) (ac-common-setup auto-complete-mode--set-explicitly) (t (ac-source-words-in-same-mode-buffers ac-source-dictionary ac-source-abbrev ac-source-features ac-source-functions ac-source-yasnippet ac-source-variables ac-source-symbols)) (nil #1#))"
+        ],
     )
 }
 
-fn auto_complete_mode_specific_setup_functions_merge_sources_without_duplicates() -> ParityBatchCase {
+fn auto_complete_mode_specific_setup_functions_merge_sources_without_duplicates() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_mode_specific_setup_functions_merge_sources_without_duplicates",
         r##"(mapcar
@@ -227,12 +233,13 @@ fn auto_complete_mode_specific_setup_functions_merge_sources_without_duplicates(
                             ac-common-setup))"##,
         true,
         expect![
-        "OK ((ac-emacs-lisp-mode-setup (ac-source-features ac-source-functions ac-source-yasnippet ac-source-variables ac-source-symbols)) (ac-cc-mode-setup (ac-source-symbols ac-source-yasnippet ac-source-gtags)) (ac-ruby-mode-setup #1=(ac-source-symbols ac-source-yasnippet)) (ac-css-mode-setup (ac-source-css-property . #1#)) (ac-common-setup #1#))"
-    ],
+            "OK ((ac-emacs-lisp-mode-setup (ac-source-features ac-source-functions ac-source-yasnippet ac-source-variables ac-source-symbols)) (ac-cc-mode-setup (ac-source-symbols ac-source-yasnippet ac-source-gtags)) (ac-ruby-mode-setup #1=(ac-source-symbols ac-source-yasnippet)) (ac-css-mode-setup (ac-source-css-property . #1#)) (ac-common-setup #1#))"
+        ],
     )
 }
 
-fn auto_complete_yasnippet_source_supports_modern_active_keys_and_legacy_parent_tables() -> ParityBatchCase {
+fn auto_complete_yasnippet_source_supports_modern_active_keys_and_legacy_parent_tables()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_yasnippet_source_supports_modern_active_keys_and_legacy_parent_tables",
         r##"(let ((modern-calls 0))
@@ -290,7 +297,8 @@ fn auto_complete_yasnippet_source_supports_modern_active_keys_and_legacy_parent_
     )
 }
 
-fn auto_complete_gtags_and_eclim_sources_transform_external_results_at_their_process_seams() -> ParityBatchCase {
+fn auto_complete_gtags_and_eclim_sources_transform_external_results_at_their_process_seams()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_gtags_and_eclim_sources_transform_external_results_at_their_process_seams",
         r##"(progn
@@ -315,8 +323,8 @@ fn auto_complete_gtags_and_eclim_sources_transform_external_results_at_their_pro
                              (ac-eclim-candidates))))"##,
         true,
         expect![[
-        r#"OK (nil ("alpha" "alpine" "" "") "global -ciq java.util.L" ("java.util.List" "java.util.LinkedList"))"#
-    ]],
+            r#"OK (nil ("alpha" "alpine" "" "") "global -ciq java.util.L" ("java.util.List" "java.util.LinkedList"))"#
+        ]],
     )
 }
 
@@ -370,12 +378,13 @@ fn auto_complete_semantic_source_preserves_candidate_values_and_documentation() 
                               (cdar candidates)))))"##,
         true,
         expect![[
-        r#"OK ((("" (:clone fixture-empty)) ("render" (:clone fixture-method))) "prototype:(:clone fixture-empty)\n\ndocumentation:(:clone fixture-empty)")"#
-    ]],
+            r#"OK ((("" (:clone fixture-empty)) ("render" (:clone fixture-method))) "prototype:(:clone fixture-empty)\n\ndocumentation:(:clone fixture-empty)")"#
+        ]],
     )
 }
 
-fn auto_complete_ropemacs_setup_initialization_and_candidate_cache_follow_real_python_workflow() -> ParityBatchCase {
+fn auto_complete_ropemacs_setup_initialization_and_candidate_cache_follow_real_python_workflow()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_ropemacs_setup_initialization_and_candidate_cache_follow_real_python_workflow",
         r##"(progn
@@ -424,8 +433,8 @@ fn auto_complete_ropemacs_setup_initialization_and_candidate_cache_follow_real_p
                                 pymacs-load)))))"##,
         true,
         expect![[
-        r#"OK (t ("ropemacs" "rope-") (("\\." ac-source-ropemacs)) ("path" "pure" "parse") t (ac-ropemacs-setup) ((pymacs-apply (autoload "pymacs" nil nil nil)) (pymacs-call (autoload "pymacs" nil nil nil)) (pymacs-eval (autoload "pymacs" nil t nil)) (pymacs-exec (autoload "pymacs" nil t nil)) (pymacs-load #[(&rest arguments) ((setq auto-complete-test-pymacs-load arguments)) (t)])))"#
-    ]],
+            r#"OK (t ("ropemacs" "rope-") (("\\." ac-source-ropemacs)) ("path" "pure" "parse") t (ac-ropemacs-setup) ((pymacs-apply (autoload "pymacs" nil nil nil)) (pymacs-call (autoload "pymacs" nil nil nil)) (pymacs-eval (autoload "pymacs" nil t nil)) (pymacs-exec (autoload "pymacs" nil t nil)) (pymacs-load #[(&rest arguments) ((setq auto-complete-test-pymacs-load arguments)) (t)])))"#
+        ]],
     )
 }
 

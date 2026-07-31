@@ -149,8 +149,8 @@ fn goto_chg_reverse_normalizes_each_prefix_shape_before_delegating() -> ParityBa
                  (nreverse calls)))"##,
         true,
         expect![
-        "OK ((- goto-last-change other) (nil goto-last-change other) ((-4) goto-last-change other) (-7 goto-last-change other) (- goto-last-change goto-last-change))"
-    ],
+            "OK ((- goto-last-change other) (nil goto-last-change other) ((-4) goto-last-change other) (-7 goto-last-change other) (- goto-last-change goto-last-change))"
+        ],
     )
 }
 
@@ -267,8 +267,8 @@ fn goto_chg_signals_at_the_older_and_newer_ends_of_history() -> ParityBatchCase 
                  (list older newer glc-probe-depth glc-direction)))"##,
         true,
         expect![[
-        r#"OK ((error ("No further change info")) (error ("No later change info")) 1 -1)"#
-    ]],
+            r#"OK ((error ("No further change info")) (error ("No later change info")) 1 -1)"#
+        ]],
     )
 }
 

@@ -36,8 +36,8 @@ fn visiting_an_asn1_file_selects_the_mode_and_indents_the_whole_module() -> Pari
 "##,
         true,
         expect![[
-        r#"OK (:mode asn1-mode :mode-name "ASN.1" :parent prog-mode :tab-width 4 :comment-start "--" :comment-end "" :outline-regexp "-- +[0-9]+\\(\\.[0-9]+\\)* " :outline-level asn1-mode-outline-level :indented "-- 1 Bestellsystem\n-- 1.1 Grundtypen\nBestellung DEFINITIONS AUTOMATIC TAGS ::=\n\11BEGIN\n\11IMPORTS\n\11\11Kunde, Adresse\n\11\11FROM Kundenverwaltung;\n\11Auftrag ::= SEQUENCE {\n\11\11\11\11\11\11 nummer INTEGER (1..65535),\n\11kunde Kunde,\n\11posten Postenliste,\n\11hinweis UTF8String OPTIONAL\n\11}\n\11Postenliste ::= SEQUENCE SIZE (1..99) OF Posten\n\11\11\11\11\11\11\11\11\11\11\11 -- 1.2 Zustände\n\11\11\11\11\11\11\11\11\11\11\11 Zustand ::= ENUMERATED {\n\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11offen (0),\n\11\11\11\11\11\11\11\11\11\11\11 versandt (1),\n\11\11\11\11\11\11\11\11\11\11\11 storniert (2)\n\11\11\11\11\11\11\11\11\11\11\11 }\n\11\11\11\11\11\11\11\11\11\11\11 -- 1.2.1 Zahlungsarten\n\11\11\11\11\11\11\11\11\11\11\11 Zahlung ::= CHOICE {\n\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11rechnung Rechnung,\n\11\11\11\11\11\11\11\11\11\11\11 lastschrift Lastschrift\n\11\11\11\11\11\11\11\11\11\11\11 }\n\11\11\11\11\11\11\11\11\11\11\11 standardHinweis UTF8String ::= \"Grüße aus München\"\n\11END\n" :stable-under-reindent t)"#
-    ]],
+            r#"OK (:mode asn1-mode :mode-name "ASN.1" :parent prog-mode :tab-width 4 :comment-start "--" :comment-end "" :outline-regexp "-- +[0-9]+\\(\\.[0-9]+\\)* " :outline-level asn1-mode-outline-level :indented "-- 1 Bestellsystem\n-- 1.1 Grundtypen\nBestellung DEFINITIONS AUTOMATIC TAGS ::=\n\11BEGIN\n\11IMPORTS\n\11\11Kunde, Adresse\n\11\11FROM Kundenverwaltung;\n\11Auftrag ::= SEQUENCE {\n\11\11\11\11\11\11 nummer INTEGER (1..65535),\n\11kunde Kunde,\n\11posten Postenliste,\n\11hinweis UTF8String OPTIONAL\n\11}\n\11Postenliste ::= SEQUENCE SIZE (1..99) OF Posten\n\11\11\11\11\11\11\11\11\11\11\11 -- 1.2 Zustände\n\11\11\11\11\11\11\11\11\11\11\11 Zustand ::= ENUMERATED {\n\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11offen (0),\n\11\11\11\11\11\11\11\11\11\11\11 versandt (1),\n\11\11\11\11\11\11\11\11\11\11\11 storniert (2)\n\11\11\11\11\11\11\11\11\11\11\11 }\n\11\11\11\11\11\11\11\11\11\11\11 -- 1.2.1 Zahlungsarten\n\11\11\11\11\11\11\11\11\11\11\11 Zahlung ::= CHOICE {\n\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11rechnung Rechnung,\n\11\11\11\11\11\11\11\11\11\11\11 lastschrift Lastschrift\n\11\11\11\11\11\11\11\11\11\11\11 }\n\11\11\11\11\11\11\11\11\11\11\11 standardHinweis UTF8String ::= \"Grüße aus München\"\n\11END\n" :stable-under-reindent t)"#
+        ]],
     )
 }
 
@@ -72,8 +72,8 @@ fn a_sequence_of_assignment_leaves_everything_after_it_one_level_deeper() -> Par
 "##,
         true,
         expect![[
-        r#"OK (:without-sequence-of "Bestellung DEFINITIONS AUTOMATIC TAGS ::=\n\11BEGIN\n\11Auftrag ::= SEQUENCE {\n\11\11\11\11\11\11 nummer INTEGER,\n\11kunde Kunde\n\11}\n\11Zustand ::= ENUMERATED {\n\11\11\11\11\11\11   offen (0),\n\11versandt (1)\n\11}\n\11END\n" :with-sequence-of "Bestellung DEFINITIONS AUTOMATIC TAGS ::=\n\11BEGIN\n\11Auftrag ::= SEQUENCE {\n\11\11\11\11\11\11 nummer INTEGER,\n\11kunde Kunde\n\11}\n\11Postenliste ::= SEQUENCE OF Posten\n\11\11\11\11\11\11\11\11Zustand ::= ENUMERATED {\n\11\11\11\11\11\11\11\11\11\11\11\11\11   offen (0),\n\11\11\11\11\11\11\11\11versandt (1)\n\11\11\11\11\11\11\11\11}\n\11END\n" :with-size-constraint "Bestellung DEFINITIONS AUTOMATIC TAGS ::=\n\11BEGIN\n\11Auftrag ::= SEQUENCE {\n\11\11\11\11\11\11 nummer INTEGER,\n\11kunde Kunde\n\11}\n\11Postenliste ::= SEQUENCE SIZE (1..99) OF Posten\n\11\11\11\11\11\11\11\11\11\11\11 Zustand ::= ENUMERATED {\n\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11offen (0),\n\11\11\11\11\11\11\11\11\11\11\11 versandt (1)\n\11\11\11\11\11\11\11\11\11\11\11 }\n\11END\n")"#
-    ]],
+            r#"OK (:without-sequence-of "Bestellung DEFINITIONS AUTOMATIC TAGS ::=\n\11BEGIN\n\11Auftrag ::= SEQUENCE {\n\11\11\11\11\11\11 nummer INTEGER,\n\11kunde Kunde\n\11}\n\11Zustand ::= ENUMERATED {\n\11\11\11\11\11\11   offen (0),\n\11versandt (1)\n\11}\n\11END\n" :with-sequence-of "Bestellung DEFINITIONS AUTOMATIC TAGS ::=\n\11BEGIN\n\11Auftrag ::= SEQUENCE {\n\11\11\11\11\11\11 nummer INTEGER,\n\11kunde Kunde\n\11}\n\11Postenliste ::= SEQUENCE OF Posten\n\11\11\11\11\11\11\11\11Zustand ::= ENUMERATED {\n\11\11\11\11\11\11\11\11\11\11\11\11\11   offen (0),\n\11\11\11\11\11\11\11\11versandt (1)\n\11\11\11\11\11\11\11\11}\n\11END\n" :with-size-constraint "Bestellung DEFINITIONS AUTOMATIC TAGS ::=\n\11BEGIN\n\11Auftrag ::= SEQUENCE {\n\11\11\11\11\11\11 nummer INTEGER,\n\11kunde Kunde\n\11}\n\11Postenliste ::= SEQUENCE SIZE (1..99) OF Posten\n\11\11\11\11\11\11\11\11\11\11\11 Zustand ::= ENUMERATED {\n\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11\11offen (0),\n\11\11\11\11\11\11\11\11\11\11\11 versandt (1)\n\11\11\11\11\11\11\11\11\11\11\11 }\n\11END\n")"#
+        ]],
     )
 }
 
@@ -86,8 +86,8 @@ fn fontifying_a_module_marks_keywords_assignment_names_constants_and_strings() -
 "##,
         true,
         expect![[
-        r#"OK (("-- " font-lock-comment-delimiter-face) ("1 Bestellsystem\n" font-lock-comment-face) ("-- " font-lock-comment-delimiter-face) ("1.1 Grundtypen\n" font-lock-comment-face) ("Bestellung" font-lock-variable-name-face) ("DEFINITIONS" font-lock-keyword-face) ("AUTOMATIC" font-lock-keyword-face) ("TAGS" font-lock-keyword-face) ("BEGIN" font-lock-keyword-face) ("IMPORTS" font-lock-keyword-face) ("FROM" font-lock-keyword-face) ("Auftrag" font-lock-variable-name-face) ("SEQUENCE" font-lock-keyword-face) ("INTEGER" font-lock-keyword-face) ("UTF8String" font-lock-keyword-face) ("OPTIONAL" font-lock-keyword-face) ("Postenliste" font-lock-variable-name-face) ("SEQUENCE" font-lock-keyword-face) ("SIZE" font-lock-keyword-face) ("OF" font-lock-keyword-face) ("-- " font-lock-comment-delimiter-face) ("1.2 Zustände\n" font-lock-comment-face) ("Zustand" font-lock-variable-name-face) ("ENUMERATED" font-lock-keyword-face) ("(0)" font-lock-constant-face) ("(1)" font-lock-constant-face) ("(2)" font-lock-constant-face) ("-- " font-lock-comment-delimiter-face) ("1.2.1 Zahlungsarten\n" font-lock-comment-face) ("Zahlung" font-lock-variable-name-face) ("CHOICE" font-lock-keyword-face) ("standardHinweis" font-lock-variable-name-face) ("UTF8String" font-lock-keyword-face) ("\"Grüße aus München\"" font-lock-string-face) ("END" font-lock-keyword-face))"#
-    ]],
+            r#"OK (("-- " font-lock-comment-delimiter-face) ("1 Bestellsystem\n" font-lock-comment-face) ("-- " font-lock-comment-delimiter-face) ("1.1 Grundtypen\n" font-lock-comment-face) ("Bestellung" font-lock-variable-name-face) ("DEFINITIONS" font-lock-keyword-face) ("AUTOMATIC" font-lock-keyword-face) ("TAGS" font-lock-keyword-face) ("BEGIN" font-lock-keyword-face) ("IMPORTS" font-lock-keyword-face) ("FROM" font-lock-keyword-face) ("Auftrag" font-lock-variable-name-face) ("SEQUENCE" font-lock-keyword-face) ("INTEGER" font-lock-keyword-face) ("UTF8String" font-lock-keyword-face) ("OPTIONAL" font-lock-keyword-face) ("Postenliste" font-lock-variable-name-face) ("SEQUENCE" font-lock-keyword-face) ("SIZE" font-lock-keyword-face) ("OF" font-lock-keyword-face) ("-- " font-lock-comment-delimiter-face) ("1.2 Zustände\n" font-lock-comment-face) ("Zustand" font-lock-variable-name-face) ("ENUMERATED" font-lock-keyword-face) ("(0)" font-lock-constant-face) ("(1)" font-lock-constant-face) ("(2)" font-lock-constant-face) ("-- " font-lock-comment-delimiter-face) ("1.2.1 Zahlungsarten\n" font-lock-comment-face) ("Zahlung" font-lock-variable-name-face) ("CHOICE" font-lock-keyword-face) ("standardHinweis" font-lock-variable-name-face) ("UTF8String" font-lock-keyword-face) ("\"Grüße aus München\"" font-lock-string-face) ("END" font-lock-keyword-face))"#
+        ]],
     )
 }
 
@@ -127,8 +127,8 @@ fn inline_double_dash_and_block_comments_are_parsed_and_round_trip() -> ParityBa
 "##,
         true,
         expect![[
-        r#"OK (:faces (("Kommentare" font-lock-variable-name-face) ("DEFINITIONS" font-lock-keyword-face) ("BEGIN" font-lock-keyword-face) ("Preis" font-lock-variable-name-face) ("INTEGER" font-lock-keyword-face) ("-- " font-lock-comment-delimiter-face) ("in Cent --" font-lock-comment-face) ("/* Blockkommentar über\n   mehrere Zeilen */" font-lock-comment-face) ("Waehrung" font-lock-variable-name-face) ("UTF8String" font-lock-keyword-face) ("END" font-lock-keyword-face)) :inside-a-comment (("in Cent" t) ("(0..100000)" nil) ("Blockkommentar" t) ("mehrere Zeilen" t) ("Waehrung" nil)) :commented "Kommentare DEFINITIONS ::=\nBEGIN\nPreis ::= INTEGER -- in Cent -- (0..100000)\n/* Blockkommentar über\n   mehrere Zeilen */\n-- Waehrung ::= UTF8String\nEND\n" :uncommented "Kommentare DEFINITIONS ::=\nBEGIN\nPreis ::= INTEGER -- in Cent -- (0..100000)\n/* Blockkommentar über\n   mehrere Zeilen */\nWaehrung ::= UTF8String\nEND\n")"#
-    ]],
+            r#"OK (:faces (("Kommentare" font-lock-variable-name-face) ("DEFINITIONS" font-lock-keyword-face) ("BEGIN" font-lock-keyword-face) ("Preis" font-lock-variable-name-face) ("INTEGER" font-lock-keyword-face) ("-- " font-lock-comment-delimiter-face) ("in Cent --" font-lock-comment-face) ("/* Blockkommentar über\n   mehrere Zeilen */" font-lock-comment-face) ("Waehrung" font-lock-variable-name-face) ("UTF8String" font-lock-keyword-face) ("END" font-lock-keyword-face)) :inside-a-comment (("in Cent" t) ("(0..100000)" nil) ("Blockkommentar" t) ("mehrere Zeilen" t) ("Waehrung" nil)) :commented "Kommentare DEFINITIONS ::=\nBEGIN\nPreis ::= INTEGER -- in Cent -- (0..100000)\n/* Blockkommentar über\n   mehrere Zeilen */\n-- Waehrung ::= UTF8String\nEND\n" :uncommented "Kommentare DEFINITIONS ::=\nBEGIN\nPreis ::= INTEGER -- in Cent -- (0..100000)\n/* Blockkommentar über\n   mehrere Zeilen */\nWaehrung ::= UTF8String\nEND\n")"#
+        ]],
     )
 }
 
@@ -157,8 +157,8 @@ fn the_numbered_sections_collapse_and_every_assignment_is_indexed() -> ParityBat
 "##,
         true,
         expect![[
-        r#"OK (:headings (("-- 1 Bestellsystem" 1) ("-- 1.1 Grundtypen" 2) ("-- 1.2 Zustände" 2) ("-- 1.2.1 Zahlungsarten" 3)) :collapsed-to-level-1 "-- 1 Bestellsystem\n" :collapsed-to-level-2 "-- 1 Bestellsystem\n-- 1.1 Grundtypen\n-- 1.2 Zustände\n" :restored-exactly t :index (("*Rescan*" -99) ("Bestellung" 38) ("Auftrag" 132) ("Postenliste" 245) ("Zustand" 309) ("Zahlung" 398) ("standardHinweis" 464)) :jumped-to-zahlung (22 0 "Zahlung ::= CHOICE {"))"#
-    ]],
+            r#"OK (:headings (("-- 1 Bestellsystem" 1) ("-- 1.1 Grundtypen" 2) ("-- 1.2 Zustände" 2) ("-- 1.2.1 Zahlungsarten" 3)) :collapsed-to-level-1 "-- 1 Bestellsystem\n" :collapsed-to-level-2 "-- 1 Bestellsystem\n-- 1.1 Grundtypen\n-- 1.2 Zustände\n" :restored-exactly t :index (("*Rescan*" -99) ("Bestellung" 38) ("Auftrag" 132) ("Postenliste" 245) ("Zustand" 309) ("Zahlung" 398) ("standardHinweis" 464)) :jumped-to-zahlung (22 0 "Zahlung ::= CHOICE {"))"#
+        ]],
     )
 }
 
@@ -179,8 +179,8 @@ fn typing_keyword_abbreviations_expands_them_into_the_definition() -> ParityBatc
 "##,
         true,
         expect![[
-        r#"OK (:text "NeueListe ::= SEQUENCE OF INTEGER" :abbrev-mode t :table-is-the-modes t :expansions (("se" "SEQUENCE") ("s" "SET") ("o" "OF") ("be" "BEGIN") ("e" "END") ("op" "OPTIONAL") ("utf" "UTF8String") ("oid" "OBJECT IDENTIFIER") ("enu" "ENUMERATED")))"#
-    ]],
+            r#"OK (:text "NeueListe ::= SEQUENCE OF INTEGER" :abbrev-mode t :table-is-the-modes t :expansions (("se" "SEQUENCE") ("s" "SET") ("o" "OF") ("be" "BEGIN") ("e" "END") ("op" "OPTIONAL") ("utf" "UTF8String") ("oid" "OBJECT IDENTIFIER") ("enu" "ENUMERATED")))"#
+        ]],
     )
 }
 
@@ -200,8 +200,8 @@ fn visiting_a_gdmo_file_selects_gdmo_mode_with_its_own_template_names() -> Parit
 "##,
         true,
         expect![[
-        r#"OK (:mode gdmo-mode :mode-name "GDMO" :parent prog-mode :tab-width 4 :shares-the-asn1-abbrev-table t :faces (("-- " font-lock-comment-delimiter-face) ("2 Verwaltete Objekte\n" font-lock-comment-face) ("kunde" font-lock-function-name-face) ("OBJECT" font-lock-keyword-face) ("CLASS" font-lock-keyword-face) ("FROM" font-lock-keyword-face) ("\"Rec. X.721 | ISO/IEC 10165-2 : 1992\"" font-lock-string-face) ("BY" font-lock-keyword-face) ("(9)" font-lock-constant-face) ("(3)" font-lock-constant-face) ("(2)" font-lock-constant-face) ("(3)" font-lock-constant-face) ("kundenPaket" font-lock-function-name-face) ("(9)" font-lock-constant-face) ("(3)" font-lock-constant-face) ("(2)" font-lock-constant-face) ("(4)" font-lock-constant-face)) :indented "-- 2 Verwaltete Objekte\nkunde MANAGED OBJECT CLASS\nDERIVED FROM \"Rec. X.721 | ISO/IEC 10165-2 : 1992\":top;\nCHARACTERIZED BY kundenPaket;\nREGISTERED AS { joint-iso-itu-t ms(9) smi(3) part2(2) managedObjectClass(3) 1 };\nkundenPaket PACKAGE\nBEHAVIOUR kundenVerhalten;\nATTRIBUTES kundenNummer GET,\nkundenName GET-REPLACE;\nREGISTERED AS { joint-iso-itu-t ms(9) smi(3) part2(2) package(4) 1 };\n")"#
-    ]],
+            r#"OK (:mode gdmo-mode :mode-name "GDMO" :parent prog-mode :tab-width 4 :shares-the-asn1-abbrev-table t :faces (("-- " font-lock-comment-delimiter-face) ("2 Verwaltete Objekte\n" font-lock-comment-face) ("kunde" font-lock-function-name-face) ("OBJECT" font-lock-keyword-face) ("CLASS" font-lock-keyword-face) ("FROM" font-lock-keyword-face) ("\"Rec. X.721 | ISO/IEC 10165-2 : 1992\"" font-lock-string-face) ("BY" font-lock-keyword-face) ("(9)" font-lock-constant-face) ("(3)" font-lock-constant-face) ("(2)" font-lock-constant-face) ("(3)" font-lock-constant-face) ("kundenPaket" font-lock-function-name-face) ("(9)" font-lock-constant-face) ("(3)" font-lock-constant-face) ("(2)" font-lock-constant-face) ("(4)" font-lock-constant-face)) :indented "-- 2 Verwaltete Objekte\nkunde MANAGED OBJECT CLASS\nDERIVED FROM \"Rec. X.721 | ISO/IEC 10165-2 : 1992\":top;\nCHARACTERIZED BY kundenPaket;\nREGISTERED AS { joint-iso-itu-t ms(9) smi(3) part2(2) managedObjectClass(3) 1 };\nkundenPaket PACKAGE\nBEHAVIOUR kundenVerhalten;\nATTRIBUTES kundenNummer GET,\nkundenName GET-REPLACE;\nREGISTERED AS { joint-iso-itu-t ms(9) smi(3) part2(2) package(4) 1 };\n")"#
+        ]],
     )
 }
 

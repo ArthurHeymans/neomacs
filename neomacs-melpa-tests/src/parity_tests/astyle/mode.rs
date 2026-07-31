@@ -49,7 +49,8 @@ fn enabling_disabling_and_toggling_mode_updates_only_local_before_save_hook() ->
     )
 }
 
-fn lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hook_behavior() -> ParityBatchCase {
+fn lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hook_behavior()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hook_behavior",
         r##"
@@ -75,8 +76,8 @@ fn lighter_customization_is_reflected_by_enabled_minor_mode_without_changing_hoo
 "##,
         true,
         expect![[
-        r#"OK (t " Format[C++]" (astyle-on-save-mode astyle-on-save-mode-lighter) (astyle-buffer t) string nil)"#
-    ]],
+            r#"OK (t " Format[C++]" (astyle-on-save-mode astyle-on-save-mode-lighter) (astyle-buffer t) string nil)"#
+        ]],
     )
 }
 
@@ -169,8 +170,8 @@ fn enabled_mode_formats_buffer_before_save_and_persists_formatted_content() -> P
 "##,
         true,
         expect![[
-        r#"OK (t "int main() {\n    return 0;\n}\n/* saved */\n" "int main() {\n    return 0;\n}\n/* saved */\n" "--style=google\n--indent=spaces=4\n--suffix=none\n" nil (astyle-buffer t))"#
-    ]],
+            r#"OK (t "int main() {\n    return 0;\n}\n/* saved */\n" "int main() {\n    return 0;\n}\n/* saved */\n" "--style=google\n--indent=spaces=4\n--suffix=none\n" nil (astyle-buffer t))"#
+        ]],
     )
 }
 
@@ -223,8 +224,8 @@ fn disabled_mode_saves_original_unformatted_content_and_does_not_run_program() -
 "##,
         true,
         expect![[
-        r#"OK (nil #("int main(){\nreturn 0;\n}\n/* raw */\n" 0 24 (fontified nil) 24 34 (fontified nil)) "int main(){\nreturn 0;\n}\n/* raw */\n" nil nil)"#
-    ]],
+            r#"OK (nil #("int main(){\nreturn 0;\n}\n/* raw */\n" 0 24 (fontified nil) 24 34 (fontified nil)) "int main(){\nreturn 0;\n}\n/* raw */\n" nil nil)"#
+        ]],
     )
 }
 
@@ -285,8 +286,8 @@ fn formatter_failure_during_save_keeps_raw_content_but_save_still_completes() ->
 "##,
         true,
         expect![[
-        r#"OK (#("int main(){\nreturn 0;\n}\n/* failure still saves */\n" 0 24 (fontified nil) 24 50 (fontified nil)) "int main(){\nreturn 0;\n}\n/* failure still saves */\n" "--style=google\n--indent=spaces=4\n--pad-oper\n--pad-header\n--break-blocks\n--delete-empty-lines\n--align-pointer=type\n--align-reference=name\n" nil nil "fixture formatter failed\n")"#
-    ]],
+            r#"OK (#("int main(){\nreturn 0;\n}\n/* failure still saves */\n" 0 24 (fontified nil) 24 50 (fontified nil)) "int main(){\nreturn 0;\n}\n/* failure still saves */\n" "--style=google\n--indent=spaces=4\n--pad-oper\n--pad-header\n--break-blocks\n--delete-empty-lines\n--align-pointer=type\n--align-reference=name\n" nil nil "fixture formatter failed\n")"#
+        ]],
     )
 }
 

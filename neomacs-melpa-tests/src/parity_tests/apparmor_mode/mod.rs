@@ -117,10 +117,5 @@ pub(crate) fn assert_apparmor_mode_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_apparmor_mode_parity` cases (2a).
 pub(crate) fn assert_apparmor_mode_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        apparmor_mode_oracle(),
-        &name,
-        "apparmor_mode_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(apparmor_mode_oracle(), &name, "apparmor_mode_parity", cases);
 }

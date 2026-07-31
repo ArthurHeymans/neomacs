@@ -85,12 +85,6 @@ pub(crate) fn assert_auto_complete_autoload_parity(elisp_form: &str, expected: E
     assert_auto_complete_source_parity("auto-complete-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
-
-
 /// Multi-probe batch for `assert_auto_complete_autoload_parity` cases (2a).
 pub(crate) fn assert_auto_complete_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

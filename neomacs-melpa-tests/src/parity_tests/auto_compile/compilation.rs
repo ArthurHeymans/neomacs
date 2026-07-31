@@ -211,7 +211,8 @@ fn auto_compile_unbalanced_visited_source_marks_retry_and_modified_state() -> Pa
     )
 }
 
-fn auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_retry_state() -> ParityBatchCase {
+fn auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_retry_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_retry_state",
         r##"(let* ((source
@@ -244,7 +245,8 @@ fn auto_compile_byte_compiler_nil_result_preserves_stale_destination_without_ret
     )
 }
 
-fn auto_compile_delete_destination_clears_retry_marker_in_visiting_source_buffer() -> ParityBatchCase {
+fn auto_compile_delete_destination_clears_retry_marker_in_visiting_source_buffer() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_compile_delete_destination_clears_retry_marker_in_visiting_source_buffer",
         r##"(let* ((source
@@ -292,12 +294,13 @@ fn auto_compile_delete_failure_is_contained_and_dings_once() -> ParityBatchCase 
             (current-message))))"##,
         true,
         expect![[
-        r#"OK ("Deleting [ORACLE-SANDBOX]/auto-compile-fixture/compile/not-a-file.elc...failed" t 1 nil)"#
-    ]],
+            r#"OK ("Deleting [ORACLE-SANDBOX]/auto-compile-fixture/compile/not-a-file.elc...failed" t 1 nil)"#
+        ]],
     )
 }
 
-fn auto_compile_warning_advice_counts_real_byte_compiler_diagnostics_per_buffer() -> ParityBatchCase {
+fn auto_compile_warning_advice_counts_real_byte_compiler_diagnostics_per_buffer() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_compile_warning_advice_counts_real_byte_compiler_diagnostics_per_buffer",
         r##"(let* ((source

@@ -23,12 +23,13 @@ fn auth_source_1password_default_reference_builds_real_vault_host_user_paths() -
             ("vault with spaces" "service host" "user name" 8443)))"##,
         true,
         expect![[
-        r#"OK ((("Personal" "api.example.com" "deploy" 443) "Personal/api.example.com/deploy") (("Engineering" "git.example.net" "alice@example.net" "ssh") "Engineering/git.example.net/alice@example.net") (("共有" "例え.テスト" "利用者" nil) "共有/例え.テスト/利用者") (("vault with spaces" "service host" "user name" 8443) "vault with spaces/service host/user name"))"#
-    ]],
+            r#"OK ((("Personal" "api.example.com" "deploy" 443) "Personal/api.example.com/deploy") (("Engineering" "git.example.net" "alice@example.net" "ssh") "Engineering/git.example.net/alice@example.net") (("共有" "例え.テスト" "利用者" nil) "共有/例え.テスト/利用者") (("vault with spaces" "service host" "user name" 8443) "vault with spaces/service host/user name"))"#
+        ]],
     )
 }
 
-fn auth_source_1password_default_reference_preserves_empty_and_embedded_slashes() -> ParityBatchCase {
+fn auth_source_1password_default_reference_preserves_empty_and_embedded_slashes() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_1password_default_reference_preserves_empty_and_embedded_slashes",
         r##"(mapcar
@@ -47,12 +48,13 @@ fn auth_source_1password_default_reference_preserves_empty_and_embedded_slashes(
             (" vault " " host " " user ")))"##,
         true,
         expect![[
-        r#"OK ("//" "Personal///api/v2/team/alice" "A//B/host///user" " vault / host / user ")"#
-    ]],
+            r#"OK ("//" "Personal///api/v2/team/alice" "A//B/host///user" " vault / host / user ")"#
+        ]],
     )
 }
 
-fn auth_source_1password_reference_ignores_backend_type_port_but_reads_dynamic_vault() -> ParityBatchCase {
+fn auth_source_1password_reference_ignores_backend_type_port_but_reads_dynamic_vault()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_1password_reference_ignores_backend_type_port_but_reads_dynamic_vault",
         r##"(let ((auth-source-1password-vault
@@ -80,12 +82,13 @@ fn auth_source_1password_reference_ignores_backend_type_port_but_reads_dynamic_v
            auth-source-1password-vault))"##,
         true,
         expect![[
-        r#"OK ("Operations/db.internal/reader" "Operations/db.internal/reader" "Temporary/db.internal/reader" "Operations")"#
-    ]],
+            r#"OK ("Operations/db.internal/reader" "Operations/db.internal/reader" "Temporary/db.internal/reader" "Operations")"#
+        ]],
     )
 }
 
-fn auth_source_1password_custom_reference_receives_full_auth_source_context_once() -> ParityBatchCase {
+fn auth_source_1password_custom_reference_receives_full_auth_source_context_once() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_1password_custom_reference_receives_full_auth_source_context_once",
         r##"(let (calls commands)
@@ -127,8 +130,8 @@ fn auth_source_1password_custom_reference_receives_full_auth_source_context_once
                (nreverse commands)))))"##,
         true,
         expect![[
-        r#"OK (((:user "service-account" :secret "generated-secret")) ((t password-store "db.prod" "service-account" 5432)) ("fixture-op read op://Custom/db.prod/5432/service-account"))"#
-    ]],
+            r#"OK (((:user "service-account" :secret "generated-secret")) ((t password-store "db.prod" "service-account" 5432)) ("fixture-op read op://Custom/db.prod/5432/service-account"))"#
+        ]],
     )
 }
 
@@ -171,12 +174,13 @@ fn auth_source_1password_reference_supports_symbol_and_lambda_customizers() -> P
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ("password-store:user@host#443" "lambda/example.org/ci" ((backend password-store "host" "user" 443)))"#
-    ]],
+            r#"OK ("password-store:user@host#443" "lambda/example.org/ci" ((backend password-store "host" "user" 443)))"#
+        ]],
     )
 }
 
-fn auth_source_1password_default_reference_treats_nil_components_as_empty_segments() -> ParityBatchCase {
+fn auth_source_1password_default_reference_treats_nil_components_as_empty_segments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auth_source_1password_default_reference_treats_nil_components_as_empty_segments",
         r##"(list
@@ -201,7 +205,8 @@ fn auth_source_1password_default_reference_treats_nil_components_as_empty_segmen
     )
 }
 
-fn auth_source_1password_default_reference_non_string_components_signal_exactly() -> ParityBatchCase {
+fn auth_source_1password_default_reference_non_string_components_signal_exactly() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auth_source_1password_default_reference_non_string_components_signal_exactly",
         r##"(list
@@ -231,8 +236,8 @@ fn auth_source_1password_default_reference_non_string_components_signal_exactly(
                 nil nil "host" '(user) nil)))))"##,
         true,
         expect![[
-        r#"OK ((:error wrong-type-argument (sequencep 42)) (:error wrong-type-argument (sequencep user-symbol)) (:error wrong-type-argument (characterp "Personal")) (:error wrong-type-argument (characterp user)))"#
-    ]],
+            r#"OK ((:error wrong-type-argument (sequencep 42)) (:error wrong-type-argument (sequencep user-symbol)) (:error wrong-type-argument (characterp "Personal")) (:error wrong-type-argument (characterp user)))"#
+        ]],
     )
 }
 

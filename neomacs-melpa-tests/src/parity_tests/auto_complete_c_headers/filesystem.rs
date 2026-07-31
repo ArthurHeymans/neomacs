@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_c_headers_batch};
 
-fn auto_complete_c_headers_directory_listing_excludes_dot_entries_and_caches_visible_names() -> ParityBatchCase {
+fn auto_complete_c_headers_directory_listing_excludes_dot_entries_and_caches_visible_names()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_directory_listing_excludes_dot_entries_and_caches_visible_names",
         r##"(let* ((root
@@ -110,7 +111,8 @@ fn auto_complete_c_headers_cache_keys_distinguish_exact_directory_spellings() ->
     )
 }
 
-fn auto_complete_c_headers_missing_directory_error_is_suppressed_and_not_cached() -> ParityBatchCase {
+fn auto_complete_c_headers_missing_directory_error_is_suppressed_and_not_cached() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_c_headers_missing_directory_error_is_suppressed_and_not_cached",
         r##"(let* ((root
@@ -140,7 +142,8 @@ fn auto_complete_c_headers_missing_directory_error_is_suppressed_and_not_cached(
     )
 }
 
-fn auto_complete_c_headers_empty_directory_nil_result_is_relisted_and_duplicate_cached() -> ParityBatchCase {
+fn auto_complete_c_headers_empty_directory_nil_result_is_relisted_and_duplicate_cached()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_empty_directory_nil_result_is_relisted_and_duplicate_cached",
         r##"(let ((achead:include-cache nil)
@@ -163,7 +166,8 @@ fn auto_complete_c_headers_empty_directory_nil_result_is_relisted_and_duplicate_
     )
 }
 
-fn auto_complete_c_headers_false_cached_value_also_forces_refresh_and_prepends_new_entry() -> ParityBatchCase {
+fn auto_complete_c_headers_false_cached_value_also_forces_refresh_and_prepends_new_entry()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_c_headers_false_cached_value_also_forces_refresh_and_prepends_new_entry",
         r##"(let ((achead:include-cache
@@ -221,7 +225,8 @@ fn auto_complete_c_headers_cached_names_are_shared_objects_not_copied() -> Parit
     )
 }
 
-fn auto_complete_c_headers_cache_can_be_preseeded_to_avoid_any_filesystem_probe() -> ParityBatchCase {
+fn auto_complete_c_headers_cache_can_be_preseeded_to_avoid_any_filesystem_probe() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_c_headers_cache_can_be_preseeded_to_avoid_any_filesystem_probe",
         r##"(let ((achead:include-cache

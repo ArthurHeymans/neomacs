@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alchemist_batch};
 
-fn alchemist_utils_transform_real_commands_modules_paths_versions_and_extensions() -> ParityBatchCase {
+fn alchemist_utils_transform_real_commands_modules_paths_versions_and_extensions() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "alchemist_utils_transform_real_commands_modules_paths_versions_and_extensions",
         r##"(list
@@ -43,12 +44,13 @@ fn alchemist_utils_transform_real_commands_modules_paths_versions_and_extensions
                        '("1.2.9" "1.3.0" "1.4.2" "2.0.0")))"##,
         true,
         expect![[
-        r#"OK (("MIX_ENV=test mix test --stale" "elixir -e IO.puts(1)" "mix help") "[{MyList, List},{AlreadySentError, Plug.Conn.AlreadySentError}]" "[Mix.Generator,ExUnit,]" ("MyApp/HttpClient" "Alreadycamel" "PrivateName") ("lib/user.ex" "test/user_test.exs" "name.ex.exs") ("MyApp.Accounts.User" "Umbrella.Apps.Web.Lib.Web.Router" "Foo") (("1.2.9" nil nil) ("1.3.0" t nil) ("1.4.2" t t) ("2.0.0" t t)))"#
-    ]],
+            r#"OK (("MIX_ENV=test mix test --stale" "elixir -e IO.puts(1)" "mix help") "[{MyList, List},{AlreadySentError, Plug.Conn.AlreadySentError}]" "[Mix.Generator,ExUnit,]" ("MyApp/HttpClient" "Alreadycamel" "PrivateName") ("lib/user.ex" "test/user_test.exs" "name.ex.exs") ("MyApp.Accounts.User" "Umbrella.Apps.Web.Lib.Web.Router" "Foo") (("1.2.9" nil nil) ("1.3.0" t nil) ("1.4.2" t t) ("2.0.0" t t)))"#
+        ]],
     )
 }
 
-fn alchemist_scope_recovers_nested_module_alias_import_and_use_context_from_real_code() -> ParityBatchCase {
+fn alchemist_scope_recovers_nested_module_alias_import_and_use_context_from_real_code()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_scope_recovers_nested_module_alias_import_and_use_context_from_real_code",
         r##"(with-temp-buffer
@@ -80,12 +82,13 @@ fn alchemist_scope_recovers_nested_module_alias_import_and_use_context_from_real
                        (alchemist-scope-expression)))"##,
         true,
         expect![[
-        r#"OK ("Inner42" (("String.Break" "Break") ("String.Casing" "Casing")) ("Mix.Generator") ("MyApp.Web") ("Mix.Generator" "MyApp.Web" "Inner42") "Connection.Query" "Connection.assign")"#
-    ]],
+            r#"OK ("Inner42" (("String.Break" "Break") ("String.Casing" "Casing")) ("Mix.Generator") ("MyApp.Web") ("Mix.Generator" "MyApp.Web" "Inner42") "Connection.Query" "Connection.assign")"#
+        ]],
     )
 }
 
-fn alchemist_scope_expression_and_extractors_cover_elixir_erlang_locals_and_punctuation() -> ParityBatchCase {
+fn alchemist_scope_expression_and_extractors_cover_elixir_erlang_locals_and_punctuation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_scope_expression_and_extractors_cover_elixir_erlang_locals_and_punctuation",
         r##"(let ((expressions
@@ -120,12 +123,13 @@ fn alchemist_scope_expression_and_extractors_cover_elixir_erlang_locals_and_punc
                           '("Map.get" ":bar" "Enum.map" "call!")))))"##,
         true,
         expect![[
-        r#"OK (((":gen_tcp.accept" ":gen_tcp" "accept") (":erlang" ":erlang" nil) ("List.duplicate" "List" "duplicate") ("String.Chars.impl_for" "String.Chars" "impl_for") ("Whatever._duplicate" "Whatever" "_duplicate") ("Enum.take!" "Enum" "take!") ("_local?" nil "_local?") ("Module." "Module" nil) ("to_string" nil "to_string")) ("Map.get" ":bar" "Enum.map" "My.App.call!"))"#
-    ]],
+            r#"OK (((":gen_tcp.accept" ":gen_tcp" "accept") (":erlang" ":erlang" nil) ("List.duplicate" "List" "duplicate") ("String.Chars.impl_for" "String.Chars" "impl_for") ("Whatever._duplicate" "Whatever" "_duplicate") ("Enum.take!" "Enum" "take!") ("_local?" nil "_local?") ("Module." "Module" nil) ("to_string" nil "to_string")) ("Map.get" ":bar" "Enum.map" "My.App.call!"))"#
+        ]],
     )
 }
 
-fn alchemist_scope_syntax_distinguishes_real_module_body_heredoc_and_nested_locations() -> ParityBatchCase {
+fn alchemist_scope_syntax_distinguishes_real_module_body_heredoc_and_nested_locations()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_scope_syntax_distinguishes_real_module_body_heredoc_and_nested_locations",
         r##"(with-temp-buffer
@@ -151,12 +155,13 @@ fn alchemist_scope_syntax_distinguishes_real_module_body_heredoc_and_nested_loca
                        '("Fake" "Inner" "run" "defmodule Outer")))"##,
         true,
         expect![[
-        r#"OK (("Fake" 35 t "Outer") ("Inner" nil t "Outer") ("run" nil t "Inner") ("defmodule Outer" nil t ""))"#
-    ]],
+            r#"OK (("Fake" 35 t "Outer") ("Inner" nil t "Outer") ("run" nil t "Inner") ("defmodule Outer" nil t ""))"#
+        ]],
     )
 }
 
-fn alchemist_interact_formats_single_and_multiline_results_and_builds_a_real_popup() -> ParityBatchCase {
+fn alchemist_interact_formats_single_and_multiline_results_and_builds_a_real_popup()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_interact_formats_single_and_multiline_results_and_builds_a_real_popup",
         r##"(list
@@ -188,8 +193,8 @@ fn alchemist_interact_formats_single_and_multiline_results_and_builds_a_real_pop
                           (kill-buffer buffer))))"##,
         true,
         expect![[
-        r#"OK ("value = \n# => sum = fn (a, b) ->\n# =>   a + b\n# => end\n# => sum.(21, 33)" "  # => IO.puts 1 + 1" (nil "*alchemist-parity-popup*" fundamental-mode t "line one\nline two"))"#
-    ]],
+            r#"OK ("value = \n# => sum = fn (a, b) ->\n# =>   a + b\n# => end\n# => sum.(21, 33)" "  # => IO.puts 1 + 1" (nil "*alchemist-parity-popup*" fundamental-mode t "line one\nline two"))"#
+        ]],
     )
 }
 

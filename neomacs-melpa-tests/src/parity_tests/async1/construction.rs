@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_async1_batch};
 
-fn async1_default_aggregator_ports_empty_single_and_multiple_upstream_cases_strictly() -> ParityBatchCase {
+fn async1_default_aggregator_ports_empty_single_and_multiple_upstream_cases_strictly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_default_aggregator_ports_empty_single_and_multiple_upstream_cases_strictly",
         r##"(list
@@ -19,8 +20,8 @@ fn async1_default_aggregator_ports_empty_single_and_multiple_upstream_cases_stri
              '("ok" 7 "after")))))"##,
         true,
         expect![[
-        r#"OK ("" "a" "{a, b, c}" "{α, , line\nbreak}" (:error wrong-type-argument (sequencep 7)))"#
-    ]],
+            r#"OK ("" "a" "{a, b, c}" "{α, , line\nbreak}" (:error wrong-type-argument (sequencep 7)))"#
+        ]],
     )
 }
 
@@ -52,8 +53,8 @@ fn async1_create_function_preserves_a_live_function_and_its_callback_contract() 
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (t :callback-return ((:step "input") (:callback "input -> transformed")))"#
-    ]],
+            r#"OK (t :callback-return ((:step "input") (:callback "input -> transformed")))"#
+        ]],
     )
 }
 
@@ -88,7 +89,8 @@ fn async1_create_function_preserves_a_fbound_symbol_without_wrapping_it() -> Par
     )
 }
 
-fn async1_create_function_explicit_plist_schedules_exact_delay_data_and_suffix() -> ParityBatchCase {
+fn async1_create_function_explicit_plist_schedules_exact_delay_data_and_suffix() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_create_function_explicit_plist_schedules_exact_delay_data_and_suffix",
         r##"(let (callback-values)
@@ -132,12 +134,13 @@ fn async1_create_function_explicit_plist_schedules_exact_delay_data_and_suffix()
               async1-test-now))))"##,
         true,
         expect![[
-        r#"OK (t (:async1-test-timer 1) ((2.5 1 nil :closure #1=("input -> compiled"))) ((:at 2.5 :id 1 :repeat nil :function :closure :arguments #1#)) ("input -> compiled") 2.5)"#
-    ]],
+            r#"OK (t (:async1-test-timer 1) ((2.5 1 nil :closure #1=("input -> compiled"))) ((:at 2.5 :id 1 :repeat nil :function :closure :arguments #1#)) ("input -> compiled") 2.5)"#
+        ]],
     )
 }
 
-fn async1_create_function_plist_defaults_apply_independently_for_result_and_delay() -> ParityBatchCase {
+fn async1_create_function_plist_defaults_apply_independently_for_result_and_delay()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_create_function_plist_defaults_apply_independently_for_result_and_delay",
         r##"(let (values)
@@ -169,8 +172,8 @@ fn async1_create_function_plist_defaults_apply_independently_for_result_and_dela
               async1-test-now))))"##,
         true,
         expect![[
-        r#"OK (((:at 1 :id 1 :repeat nil :function :closure :arguments ("Only result")) (:at 3 :id 2 :repeat nil :function :closure :arguments ("seed -> Result"))) ((:result-only "Only result") (:delay-only "seed -> Result")) 3)"#
-    ]],
+            r#"OK (((:at 1 :id 1 :repeat nil :function :closure :arguments ("Only result")) (:at 3 :id 2 :repeat nil :function :closure :arguments ("seed -> Result"))) ((:result-only "Only result") (:delay-only "seed -> Result")) 3)"#
+        ]],
     )
 }
 
@@ -222,12 +225,13 @@ fn async1_create_function_nested_sequence_runs_as_one_composable_async_step() ->
               async1-test-now))))"##,
         true,
         expect![[
-        r#"OK ((:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("outer -> inner-1")) (:at 3 :id 2 :repeat nil :function :closure :arguments ("outer -> inner-1 -> inner-2"))) ("outer -> inner-1 -> inner-2") 3)"#
-    ]],
+            r#"OK ((:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("outer -> inner-1")) (:at 3 :id 2 :repeat nil :function :closure :arguments ("outer -> inner-1 -> inner-2"))) ("outer -> inner-1 -> inner-2") 3)"#
+        ]],
     )
 }
 
-fn async1_create_function_reports_unknown_keys_symbol_values_and_explicit_nil_values() -> ParityBatchCase {
+fn async1_create_function_reports_unknown_keys_symbol_values_and_explicit_nil_values()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_create_function_reports_unknown_keys_symbol_values_and_explicit_nil_values",
         r##"(mapcar
@@ -252,12 +256,13 @@ fn async1_create_function_reports_unknown_keys_symbol_values_and_explicit_nil_va
              :delay 0))))"##,
         true,
         expect![[
-        r#"OK (((:invalid-key "value") (:error error ("Unknown key :invalid-key in async function spec"))) ((:result result-symbol :delay 0) (:error error ("Unknown key result-symbol in async function spec"))) ((:result nil :delay 0) (:error error ("Unknown key nil in async function spec"))) ((:delay nil :result "value") (:error error ("Unknown key nil in async function spec"))) ((:result "value" :extra ignored) (:error error ("Unknown key :extra in async function spec"))) ((:parallel (:result "branch" :delay 0)) (:error error ("Unknown key :parallel in async function spec"))))"#
-    ]],
+            r#"OK (((:invalid-key "value") (:error error ("Unknown key :invalid-key in async function spec"))) ((:result result-symbol :delay 0) (:error error ("Unknown key result-symbol in async function spec"))) ((:result nil :delay 0) (:error error ("Unknown key nil in async function spec"))) ((:delay nil :result "value") (:error error ("Unknown key nil in async function spec"))) ((:result "value" :extra ignored) (:error error ("Unknown key :extra in async function spec"))) ((:parallel (:result "branch" :delay 0)) (:error error ("Unknown key :parallel in async function spec"))))"#
+        ]],
     )
 }
 
-fn async1_create_function_tolerates_missing_delay_value_but_rejects_scalar_specs() -> ParityBatchCase {
+fn async1_create_function_tolerates_missing_delay_value_but_rejects_scalar_specs() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_create_function_tolerates_missing_delay_value_but_rejects_scalar_specs",
         r##"(let (callback-values)
@@ -308,8 +313,8 @@ fn async1_create_function_tolerates_missing_delay_value_but_rejects_scalar_specs
                  '(7 "not-a-plist" [:result "x"])))))))"##,
         true,
         expect![[
-        r#"OK (((:at 1 :id 1 :repeat nil :function :closure :arguments ("value"))) ("value") ((:error wrong-type-argument (sequencep 7)) (:ok t (:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("seed -> Result"))) ("seed -> Result")) (:ok t (:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("seed -> Result"))) ("seed -> Result"))))"#
-    ]],
+            r#"OK (((:at 1 :id 1 :repeat nil :function :closure :arguments ("value"))) ("value") ((:error wrong-type-argument (sequencep 7)) (:ok t (:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("seed -> Result"))) ("seed -> Result")) (:ok t (:async1-test-timer 1) ((:at 1 :id 1 :repeat nil :function :closure :arguments ("seed -> Result"))) ("seed -> Result"))))"#
+        ]],
     )
 }
 

@@ -58,8 +58,8 @@ fn goto_chg_fixup_edit_extracts_emacs_combined_undo_entries_only() -> ParityBatc
                 (glc-fixup-edit nil)))"##,
         true,
         expect![
-        "OK ((4 . 9) (apply ignore 2 3 undo--wrap-and-run-primitive-undo ((4 . 9))) (apply 1 2 3 other-wrapper ((4 . 9))) (apply 1 2 3 undo--wrap-and-run-primitive-undo ((4 . 9) (10 . 12))) (2 . 7) nil)"
-    ],
+            "OK ((4 . 9) (apply ignore 2 3 undo--wrap-and-run-primitive-undo ((4 . 9))) (apply 1 2 3 other-wrapper ((4 . 9))) (apply 1 2 3 undo--wrap-and-run-primitive-undo ((4 . 9) (10 . 12))) (2 . 7) nil)"
+        ],
     )
 }
 
@@ -107,8 +107,8 @@ fn goto_chg_descriptions_cover_position_insert_delete_property_and_metadata() ->
                 (glc-get-descript '(t 1 2 3) 6)))"##,
         true,
         expect![[
-        r#"OK ("New position" nil "T-1: Inserted 5 chars \"bcdef\"" "T-2: Inserted 5 chars" "T-3: Deleted \"removed\"" "T-4: Deleted \"xxxxxxxxxxxxxxxxxxxxxxxxxxxx...xxxxxxxxxxxxxxxxxxxxxxxxxxxx\"" "T-1: Property change" "T-5: Property change" nil)"#
-    ]],
+            r#"OK ("New position" nil "T-1: Inserted 5 chars \"bcdef\"" "T-2: Inserted 5 chars" "T-3: Deleted \"removed\"" "T-4: Deleted \"xxxxxxxxxxxxxxxxxxxxxxxxxxxx...xxxxxxxxxxxxxxxxxxxxxxxxxxxx\"" "T-1: Property change" "T-5: Property change" nil)"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_aggressive_fill_paragraph_batch};
 
-fn aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose() -> ParityBatchCase {
+fn aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose",
         r##"(with-temp-buffer
@@ -60,12 +61,13 @@ fn aggressive_fill_paragraph_real_space_command_reflows_and_undo_restores_prose(
                                 buffer-undo-list))))"##,
         true,
         expect![[
-        r#"OK (t "Release notes explain how parser\nrecovery prevents data loss while\npreserving request order across every\nretry. " 113 4 7 32 "Release notes explain how parser recovery prevents data loss while preserving request order across every retry." 112 t nil)"#
-    ]],
+            r#"OK (t "Release notes explain how parser\nrecovery prevents data loss while\npreserving request order across every\nretry. " 113 4 7 32 "Release notes explain how parser recovery prevents data loss while preserving request order across every retry." 112 t nil)"#
+        ]],
     )
 }
 
-fn aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_code() -> ParityBatchCase {
+fn aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_code()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_code",
         r####"(with-temp-buffer
@@ -121,8 +123,8 @@ fn aggressive_fill_paragraph_real_commands_fill_comments_without_reformatting_co
                                aggressive-fill-paragraph-mode)))"####,
         true,
         expect![[
-        r#"OK ("(defun publish-result (result)\n  ;; Explain why the parser retries the\n  ;; request while preserving the original\n  ;; ordering guarantee. \n  (message \"result=%S and this source form must remain on one line\" result)) " (140 4 25) (218 5 77) t)"#
-    ]],
+            r#"OK ("(defun publish-result (result)\n  ;; Explain why the parser retries the\n  ;; request while preserving the original\n  ;; ordering guarantee. \n  (message \"result=%S and this source form must remain on one line\" result)) " (140 4 25) (218 5 77) t)"#
+        ]],
     )
 }
 

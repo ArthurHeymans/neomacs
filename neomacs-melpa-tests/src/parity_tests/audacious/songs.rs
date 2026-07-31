@@ -36,12 +36,13 @@ fn audacious_integer_predicate_accepts_only_complete_signed_decimal_strings() ->
             integer)))"##,
         true,
         expect![[
-        r#"OK ((("0" t) ("+0" t) ("-0" t) ("007" t) ("+42" t) ("-19" t) ("" nil) ("+" nil) (" 2" nil) ("2 " nil) ("1.0" nil) ("1e2" nil) ("１２" nil)) ((:error wrong-type-argument (stringp nil)) (:error wrong-type-argument (stringp 12)) (:error wrong-type-argument (stringp integer))))"#
-    ]],
+            r#"OK ((("0" t) ("+0" t) ("-0" t) ("007" t) ("+42" t) ("-19" t) ("" nil) ("+" nil) (" 2" nil) ("2 " nil) ("1.0" nil) ("1e2" nil) ("１２" nil)) ((:error wrong-type-argument (stringp nil)) (:error wrong-type-argument (stringp 12)) (:error wrong-type-argument (stringp integer))))"#
+        ]],
     )
 }
 
-fn audacious_current_song_info_queries_every_field_trims_and_updates_global_state() -> ParityBatchCase {
+fn audacious_current_song_info_queries_every_field_trims_and_updates_global_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audacious_current_song_info_queries_every_field_trims_and_updates_global_state",
         r##"(let (events)
@@ -82,8 +83,8 @@ fn audacious_current_song_info_queries_every_field_trims_and_updates_global_stat
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("[7/12]: Artist – Song [01:23 / 03:45]" ("7" "12" "Artist – Song" "01:23" "03:45") ("audtool --playlist-position" "audtool --playlist-length" "audtool --current-song" "audtool --current-song-output-length" "audtool --current-song-length" "[7/12]: Artist – Song [01:23 / 03:45]"))"#
-    ]],
+            r#"OK ("[7/12]: Artist – Song [01:23 / 03:45]" ("7" "12" "Artist – Song" "01:23" "03:45") ("audtool --playlist-position" "audtool --playlist-length" "audtool --current-song" "audtool --current-song-output-length" "audtool --current-song-length" "[7/12]: Artist – Song [01:23 / 03:45]"))"#
+        ]],
     )
 }
 
@@ -130,12 +131,13 @@ fn audacious_song_goto_filters_display_builds_prompt_and_accepts_signed_index() 
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:refreshed "+03" "stale\n 1 | First\n-2 | Second\n" ("stale\n 1 | First\n-2 | Second\nSong No.: ") ((:shell "audtool --playlist-display") (:call "/fixture/bin/audtool" nil nil nil "--playlist-jump" "+03") (:sleep 0 20) :refresh))"#
-    ]],
+            r#"OK (:refreshed "+03" "stale\n 1 | First\n-2 | Second\n" ("stale\n 1 | First\n-2 | Second\nSong No.: ") ((:shell "audtool --playlist-display") (:call "/fixture/bin/audtool" nil nil nil "--playlist-jump" "+03") (:sleep 0 20) :refresh))"#
+        ]],
     )
 }
 
-fn audacious_song_goto_invalid_input_reports_exact_value_without_playback_side_effects() -> ParityBatchCase {
+fn audacious_song_goto_invalid_input_reports_exact_value_without_playback_side_effects()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audacious_song_goto_invalid_input_reports_exact_value_without_playback_side_effects",
         r##"(let ((audacious-msg "")
@@ -183,12 +185,13 @@ fn audacious_song_goto_invalid_input_reports_exact_value_without_playback_side_e
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK ("\"3.5\" is not number." "3.5" " 1 | One\n" ((:prompt " 1 | One\nSong No.: ") (:message "\"3.5\" is not number.")))"#
-    ]],
+            r#"OK ("\"3.5\" is not number." "3.5" " 1 | One\n" ((:prompt " 1 | One\nSong No.: ") (:message "\"3.5\" is not number.")))"#
+        ]],
     )
 }
 
-fn audacious_song_goto_repeated_prompt_accumulates_prior_playlist_rows_by_design() -> ParityBatchCase {
+fn audacious_song_goto_repeated_prompt_accumulates_prior_playlist_rows_by_design() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "audacious_song_goto_repeated_prompt_accumulates_prior_playlist_rows_by_design",
         r##"(let ((audacious-msg "")
@@ -225,8 +228,8 @@ fn audacious_song_goto_repeated_prompt_accumulates_prior_playlist_rows_by_design
             (nreverse messages))))"##,
         true,
         expect![[
-        r#"OK ("1 | Song 1\n2 | Song 2\n" ("1 | Song 1\nSong No.: " "1 | Song 1\n2 | Song 2\nSong No.: ") ("\"bad\" is not number." "\"bad\" is not number."))"#
-    ]],
+            r#"OK ("1 | Song 1\n2 | Song 2\n" ("1 | Song 1\nSong No.: " "1 | Song 1\n2 | Song 2\nSong No.: ") ("\"bad\" is not number." "\"bad\" is not number."))"#
+        ]],
     )
 }
 
@@ -277,12 +280,13 @@ fn audacious_helm_song_selection_builds_exact_candidates_jumps_and_refreshes() -
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:refreshed #1=("audacious" :candidates (" 1 | First" " 2 | Second") :fuzzy-match nil) "2" ((:shell "audtool --playlist-display") (:helm :sources #1# :buffer "*helm audacious*") (:call "/fixture/bin/audtool" nil nil nil "--playlist-jump" "2") (:sleep 0 20) :refresh))"#
-    ]],
+            r#"OK (:refreshed #1=("audacious" :candidates (" 1 | First" " 2 | Second") :fuzzy-match nil) "2" ((:shell "audtool --playlist-display") (:helm :sources #1# :buffer "*helm audacious*") (:call "/fixture/bin/audtool" nil nil nil "--playlist-jump" "2") (:sleep 0 20) :refresh))"#
+        ]],
     )
 }
 
-fn audacious_helm_cancel_returns_nil_without_mutating_song_or_starting_playback() -> ParityBatchCase {
+fn audacious_helm_cancel_returns_nil_without_mutating_song_or_starting_playback() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "audacious_helm_cancel_returns_nil_without_mutating_song_or_starting_playback",
         r##"(let ((audacious-song-position
@@ -312,8 +316,8 @@ fn audacious_helm_cancel_returns_nil_without_mutating_song_or_starting_playback(
             (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (nil :preserved ((:sources (:source "audacious" :candidates (" 1 | First") :fuzzy-match nil) :buffer "*helm audacious*")))"#
-    ]],
+            r#"OK (nil :preserved ((:sources (:source "audacious" :candidates (" 1 | First") :fuzzy-match nil) :buffer "*helm audacious*")))"#
+        ]],
     )
 }
 

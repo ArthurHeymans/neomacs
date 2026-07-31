@@ -30,8 +30,8 @@ fn truncation_exposes_the_package_behavior_for_tiny_and_negative_limits() -> Par
  '(3 2 1 0 -1 -10))"##,
         true,
         expect![[
-        r#"OK ((:ok "...") (:ok "abcde...") (:ok "abcd...") (:ok "abc...") (:ok "ab...") (:error args-out-of-range ("abcdef" 0 -13)))"#
-    ]],
+            r#"OK ((:ok "...") (:ok "abcde...") (:ok "abcd...") (:ok "abc...") (:ok "ab...") (:error args-out-of-range ("abcdef" 0 -13)))"#
+        ]],
     )
 }
 
@@ -66,8 +66,8 @@ fn redraw_formats_numeric_progress_and_forwards_complete_svg_geometry() -> Parit
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ("Compile                   <image>\n" ((0.375 (:background "test-background" :foreground "test-foreground") :height 2.0 :width 30.0)) ((image :type svg :progress 0.375)))"#
-    ]],
+            r#"OK ("Compile                   <image>\n" ((0.375 (:background "test-background" :foreground "test-foreground") :height 2.0 :width 30.0)) ((image :type svg :progress 0.375)))"#
+        ]],
     )
 }
 
@@ -199,8 +199,8 @@ fn show_forwards_the_complete_posframe_contract_then_refreshes() -> ParityBatchC
        (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (t ((:show "*async-status*" :border-color "test-fg" :border-width 2 :left-fringe 10 :right-fringe 10 :min-width 44 :max-width 44 :min-height 2 :max-height 2 :poshandler posframe-poshandler-frame-top-center) :refresh))"#
-    ]],
+            r#"OK (t ((:show "*async-status*" :border-color "test-fg" :border-width 2 :left-fringe 10 :right-fringe 10 :min-width 44 :max-width 44 :min-height 2 :max-height 2 :poshandler posframe-poshandler-frame-top-center) :refresh))"#
+        ]],
     )
 }
 
@@ -255,8 +255,8 @@ fn hide_obeys_force_and_empty_collection_rules_without_extra_calls() -> ParityBa
      (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((nil nil :hidden) (:hidden :hidden :hidden) (("*async-status*") ("*async-status*") ("*async-status*") ("*async-status*")))"#
-    ]],
+            r#"OK ((nil nil :hidden) (:hidden :hidden :hidden) (("*async-status*") ("*async-status*") ("*async-status*") ("*async-status*")))"#
+        ]],
     )
 }
 

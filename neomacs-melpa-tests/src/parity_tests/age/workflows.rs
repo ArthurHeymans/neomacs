@@ -230,8 +230,8 @@ fn age_opens_edits_and_saves_an_encrypted_org_file_transparently() -> ParityBatc
                                (age-file-disable))))"##,
         true,
         expect![[
-        r#"OK ((org-mode "* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n" t nil) "age-encryption.org/v1\n* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n" "* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n")"#
-    ]],
+            r#"OK ((org-mode "* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n" t nil) "age-encryption.org/v1\n* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n" "* Project Phoenix\n** TODO rotate deploy token\n** DONE publish runbook\n")"#
+        ]],
     )
 }
 
@@ -429,8 +429,8 @@ fn age_reports_a_corrupt_cipher_as_a_user_visible_decryption_error() -> ParityBa
                                   problem))))))"##,
         true,
         expect![[
-        r#"OK (age-error "Age error: \"Age failed with error\", \"malformed payload\"")"#
-    ]],
+            r#"OK (age-error "Age error: \"Age failed with error\", \"malformed payload\"")"#
+        ]],
     )
 }
 

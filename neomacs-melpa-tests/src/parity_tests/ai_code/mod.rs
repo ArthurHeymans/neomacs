@@ -60,10 +60,5 @@ pub(crate) fn assert_ai_code_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ai_code_parity` cases (2a).
 pub(crate) fn assert_ai_code_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ai_code_oracle("ai-code.el"),
-        &name,
-        "ai_code_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ai_code_oracle("ai-code.el"), &name, "ai_code_parity", cases);
 }

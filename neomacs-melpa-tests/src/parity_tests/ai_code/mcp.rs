@@ -26,8 +26,8 @@ fn mcp_initialize_and_builtin_tools_expose_stable_protocol_contract() -> ParityB
 "##,
         true,
         expect![[
-        r#"OK ("2024-11-05" ((name . "ai-code-mcp-tools") (version . "0.1.0")) ("buffer_query" "diagnostics_baseline" "editor_state" "get_diagnostics" "get_project_buffers" "get_project_files" "imenu_list_symbols" "notify_user" "project_info" "treesit_info" "visible_buffers" "xref_find_definitions_at_point" "xref_find_references") (("project_info" "object" nil) ("editor_state" "object" nil) ("visible_buffers" "object" nil) ("buffer_query" "object" ("buffer_name")) ("get_diagnostics" "object" nil) ("diagnostics_baseline" "object" nil) ("get_project_files" "object" nil) ("get_project_buffers" "object" nil) ("notify_user" "object" ("message_text")) ("imenu_list_symbols" "object" ("file_path")) ("xref_find_references" "object" ("identifier" "file_path")) ("xref_find_definitions_at_point" "object" ("file_path" "line" "column")) ("treesit_info" "object" ("file_path"))))"#
-    ]],
+            r#"OK ("2024-11-05" ((name . "ai-code-mcp-tools") (version . "0.1.0")) ("buffer_query" "diagnostics_baseline" "editor_state" "get_diagnostics" "get_project_buffers" "get_project_files" "imenu_list_symbols" "notify_user" "project_info" "treesit_info" "visible_buffers" "xref_find_definitions_at_point" "xref_find_references") (("project_info" "object" nil) ("editor_state" "object" nil) ("visible_buffers" "object" nil) ("buffer_query" "object" ("buffer_name")) ("get_diagnostics" "object" nil) ("diagnostics_baseline" "object" nil) ("get_project_files" "object" nil) ("get_project_buffers" "object" nil) ("notify_user" "object" ("message_text")) ("imenu_list_symbols" "object" ("file_path")) ("xref_find_references" "object" ("identifier" "file_path")) ("xref_find_definitions_at_point" "object" ("file_path" "line" "column")) ("treesit_info" "object" ("file_path"))))"#
+        ]],
     )
 }
 
@@ -63,8 +63,8 @@ fn mcp_custom_tool_schema_and_call_roundtrip_required_and_optional_arguments() -
 "##,
         true,
         expect![[
-        r#"OK (((name . "prepare_deploy") (description . "Prepare a deterministic deployment plan.") (inputSchema (type . "object") (properties (service (type . "string") (description . "Service name.")) (retries (type . "number") (description . "Retry budget.")) (dry-run (type . "boolean"))) (required . ["service" "retries"]))) ("service" "retries") "deploy:billing retries=3 dry-run=t")"#
-    ]],
+            r#"OK (((name . "prepare_deploy") (description . "Prepare a deterministic deployment plan.") (inputSchema (type . "object") (properties (service (type . "string") (description . "Service name.")) (retries (type . "number") (description . "Retry budget.")) (dry-run (type . "boolean"))) (required . ["service" "retries"]))) ("service" "retries") "deploy:billing retries=3 dry-run=t")"#
+        ]],
     )
 }
 
@@ -93,8 +93,8 @@ fn mcp_validation_reports_missing_argument_and_unknown_method_precisely() -> Par
 "##,
         true,
         expect![[
-        r#"OK ((error "Missing required argument: text") (error "Unknown MCP method: resources/list") (error "Tool :function is required"))"#
-    ]],
+            r#"OK ((error "Missing required argument: text") (error "Unknown MCP method: resources/list") (error "Tool :function is required"))"#
+        ]],
     )
 }
 
@@ -152,8 +152,8 @@ fn mcp_buffer_query_preserves_ranges_and_trailing_whitespace() -> ParityBatchCas
 "##,
         true,
         expect![[
-        r#"OK ("first  \nsecond\11\nthird\nfourth" "second\11\nthird" "Arguments start_line and num_lines must be positive integers" "Arguments start_line and num_lines must be positive integers")"#
-    ]],
+            r#"OK ("first  \nsecond\11\nthird\nfourth" "second\11\nthird" "Arguments start_line and num_lines must be positive integers" "Arguments start_line and num_lines must be positive integers")"#
+        ]],
     )
 }
 
@@ -200,8 +200,8 @@ fn mcp_uri_helpers_canonicalize_spaces_localhost_and_external_paths() -> ParityB
 "##,
         true,
         expect![[
-        r#"OK ("file:///workspace/payment%20service/src/api.el" "/workspace/payment service/src/api.el" "/workspace/payment service/src/api.el" "/workspace/payment service/src/api.el" "/external/shared/types.el")"#
-    ]],
+            r#"OK ("file:///workspace/payment%20service/src/api.el" "/workspace/payment service/src/api.el" "/workspace/payment service/src/api.el" "/workspace/payment service/src/api.el" "/external/shared/types.el")"#
+        ]],
     )
 }
 

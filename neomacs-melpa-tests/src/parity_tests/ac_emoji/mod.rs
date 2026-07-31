@@ -74,10 +74,5 @@ pub(crate) fn assert_ac_emoji_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ac_emoji_parity` cases (2a).
 pub(crate) fn assert_ac_emoji_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ac_emoji_oracle(),
-        &name,
-        "ac_emoji_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ac_emoji_oracle(), &name, "ac_emoji_parity", cases);
 }

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_audio_notes_mode_batch};
 
-fn audio_notes_mode_external_player_expands_file_arguments_replaces_live_process_and_disables_exit_query() -> ParityBatchCase {
+fn audio_notes_mode_external_player_expands_file_arguments_replaces_live_process_and_disables_exit_query()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_external_player_expands_file_arguments_replaces_live_process_and_disables_exit_query",
         r##"(progn
@@ -67,12 +68,13 @@ fn audio_notes_mode_external_player_expands_file_arguments_replaces_live_process
                               (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (:query-disabled new-process ((:status old-process) (:kill old-process) (:start "anm/player-command" fake-process-buffer "mock-player" ("--quiet" "[ORACLE-SANDBOX]/external-player/voice memo.wav" "--again" "[ORACLE-SANDBOX]/external-player/voice memo.wav")) (:query new-process nil)))"#
-    ]],
+            r#"OK (:query-disabled new-process ((:status old-process) (:kill old-process) (:start "anm/player-command" fake-process-buffer "mock-player" ("--quiet" "[ORACLE-SANDBOX]/external-player/voice memo.wav" "--again" "[ORACLE-SANDBOX]/external-player/voice memo.wav")) (:query new-process nil)))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_external_player_preserves_stopped_process_until_new_process_is_started() -> ParityBatchCase {
+fn audio_notes_mode_external_player_preserves_stopped_process_until_new_process_is_started()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_external_player_preserves_stopped_process_until_new_process_is_started",
         r##"(progn
@@ -124,12 +126,13 @@ fn audio_notes_mode_external_player_preserves_stopped_process_until_new_process_
                               (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK (:done replacement ((:status stopped-process) (:start "anm/player-command" nil "player" "[ORACLE-SANDBOX]/stopped-player/note.mp3") (:query replacement nil)))"#
-    ]],
+            r#"OK (:done replacement ((:status stopped-process) (:start "anm/player-command" nil "player" "[ORACLE-SANDBOX]/stopped-player/note.mp3") (:query replacement nil)))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_external_player_surfaces_undeclared_legacy_cl_runtime_dependency() -> ParityBatchCase {
+fn audio_notes_mode_external_player_surfaces_undeclared_legacy_cl_runtime_dependency()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_external_player_surfaces_undeclared_legacy_cl_runtime_dependency",
         r##"(let* ((directory
@@ -165,7 +168,8 @@ fn audio_notes_mode_external_player_surfaces_undeclared_legacy_cl_runtime_depend
     )
 }
 
-fn audio_notes_mode_internal_player_expands_real_file_and_returns_backend_value() -> ParityBatchCase {
+fn audio_notes_mode_internal_player_expands_real_file_and_returns_backend_value() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "audio_notes_mode_internal_player_expands_real_file_and_returns_backend_value",
         r##"(let* ((directory
@@ -197,7 +201,8 @@ fn audio_notes_mode_internal_player_expands_real_file_and_returns_backend_value(
     )
 }
 
-fn audio_notes_mode_internal_unknown_format_disables_mode_and_signals_guidance() -> ParityBatchCase {
+fn audio_notes_mode_internal_unknown_format_disables_mode_and_signals_guidance() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "audio_notes_mode_internal_unknown_format_disables_mode_and_signals_guidance",
         r##"(let* ((directory
@@ -231,12 +236,13 @@ fn audio_notes_mode_internal_unknown_format_disables_mode_and_signals_guidance()
                               (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:signal error ("Oops! Emacs internal player, can’t play the format of the file [ORACLE-SANDBOX]/unknown-format/memo.m4a.\nChange ‘anm/player’ to a command name (like \"mplayer\").")) ((:mode -1)))"#
-    ]],
+            r#"OK ((:signal error ("Oops! Emacs internal player, can’t play the format of the file [ORACLE-SANDBOX]/unknown-format/memo.m4a.\nChange ‘anm/player’ to a command name (like \"mplayer\").")) ((:mode -1)))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_internal_arbitrary_backend_error_preserves_legacy_signal_shape() -> ParityBatchCase {
+fn audio_notes_mode_internal_arbitrary_backend_error_preserves_legacy_signal_shape()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_internal_arbitrary_backend_error_preserves_legacy_signal_shape",
         r##"(let* ((directory
@@ -272,12 +278,13 @@ fn audio_notes_mode_internal_arbitrary_backend_error_preserves_legacy_signal_sha
                               (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:signal wrong-type-argument (stringp ("decoder failed" 17))) ((:mode -1)))"#
-    ]],
+            r#"OK ((:signal wrong-type-argument (stringp ("decoder failed" 17))) ((:mode -1)))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_play_file_rejects_missing_files_and_invalid_player_configurations() -> ParityBatchCase {
+fn audio_notes_mode_play_file_rejects_missing_files_and_invalid_player_configurations()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_play_file_rejects_missing_files_and_invalid_player_configurations",
         r##"(let ((missing
@@ -331,12 +338,13 @@ fn audio_notes_mode_play_file_rejects_missing_files_and_invalid_player_configura
                                   (nreverse calls))))))"##,
         true,
         expect![[
-        r#"OK ((:signal error ("FILE isn’t a file!")) ((nil (:signal void-function (concatenate))) (invalid (:signal error ("‘anm/player-command’ invalid: invalid"))) (42 (:signal error ("‘anm/player-command’ invalid: 42"))) ("player" (:signal error ("‘anm/player-command’ invalid: player")))) ((:mode -1)))"#
-    ]],
+            r#"OK ((:signal error ("FILE isn’t a file!")) ((nil (:signal void-function (concatenate))) (invalid (:signal error ("‘anm/player-command’ invalid: invalid"))) (42 (:signal error ("‘anm/player-command’ invalid: 42"))) ("player" (:signal error ("‘anm/player-command’ invalid: player")))) ((:mode -1)))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_first_note_workflow_selects_file_updates_buffers_and_runs_hooks_in_order() -> ParityBatchCase {
+fn audio_notes_mode_first_note_workflow_selects_file_updates_buffers_and_runs_hooks_in_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "audio_notes_mode_first_note_workflow_selects_file_updates_buffers_and_runs_hooks_in_order",
         r##"(let* ((directory
@@ -441,8 +449,8 @@ fn audio_notes_mode_first_note_workflow_selects_file_updates_buffers_and_runs_ho
                                (kill-buffer anm/process-buffer))))"##,
         true,
         expect![[
-        r#"OK (nil "01-first.wav" (20 "01-first.wav") "" (:list-files (:message "2 notes left. Playing 01-first.wav") (:revert nil) (:before "[ORACLE-SANDBOX]/first-note/01-first.wav") (:play-file "[ORACLE-SANDBOX]/first-note/01-first.wav") (:after "[ORACLE-SANDBOX]/first-note/01-first.wav")))"#
-    ]],
+            r#"OK (nil "01-first.wav" (20 "01-first.wav") "" (:list-files (:message "2 notes left. Playing 01-first.wav") (:revert nil) (:before "[ORACLE-SANDBOX]/first-note/01-first.wav") (:play-file "[ORACLE-SANDBOX]/first-note/01-first.wav") (:after "[ORACLE-SANDBOX]/first-note/01-first.wav")))"#
+        ]],
     )
 }
 
@@ -517,12 +525,13 @@ fn audio_notes_mode_replay_workflow_keeps_current_note_and_reports_replay() -> P
                                (kill-buffer anm/process-buffer))))"##,
         true,
         expect![[
-        r#"OK (nil t (:list-files (:message "Replaying current.mp3") :revert (:play "[ORACLE-SANDBOX]/replay/current.mp3")))"#
-    ]],
+            r#"OK (nil t (:list-files (:message "Replaying current.mp3") :revert (:play "[ORACLE-SANDBOX]/replay/current.mp3")))"#
+        ]],
     )
 }
 
-fn audio_notes_mode_live_playback_toggles_mplayer_pause_or_stops_other_players() -> ParityBatchCase {
+fn audio_notes_mode_live_playback_toggles_mplayer_pause_or_stops_other_players() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "audio_notes_mode_live_playback_toggles_mplayer_pause_or_stops_other_players",
         r##"(let ((anm/current
@@ -571,8 +580,8 @@ fn audio_notes_mode_live_playback_toggles_mplayer_pause_or_stops_other_players()
                                   (nreverse events))))))"##,
         true,
         expect![[
-        r#"OK (:paused :stopped (:alive (:mplayer t) (:send "pause") :alive (:mplayer nil) :stop))"#
-    ]],
+            r#"OK (:paused :stopped (:alive (:mplayer t) (:send "pause") :alive (:mplayer nil) :stop))"#
+        ]],
     )
 }
 
@@ -613,8 +622,8 @@ fn audio_notes_mode_empty_queue_exits_mode_without_touching_player_buffers() -> 
                               (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (:disabled nil (:list (:message "No more notes. Exiting `audio-notes-mode'.") (:mode -1)))"#
-    ]],
+            r#"OK (:disabled nil (:list (:message "No more notes. Exiting `audio-notes-mode'.") (:mode -1)))"#
+        ]],
     )
 }
 

@@ -82,8 +82,8 @@ fn author_completes_indents_navigates_and_saves_a_mail_automation_script() -> Pa
                     result))"##,
         true,
         expect![[
-        r#"OK (apples-mode "property projectName : \"Release\"\n-- Build one message for the current recipient.\non publishReport(recipientName)\n    tell application \"Mail\"\n        if recipientName is not \"\" then\n            repeat with attachmentName in {\"report.pdf\", \"chart.png\"}\n                set reportMessage to \"Ready for \" & recipientName & \": \" & attachmentName\n            end repeat\n        end if\n    end tell\nend publishReport\n" t (3 "on publishReport(recipientName)") (("publishReport" . font-lock-function-name-face) ("tell" . apples-statements) ("repeat" . apples-statements) ("reportMessage" . font-lock-variable-name-face) ("is not" . apples-operators)))"#
-    ]],
+            r#"OK (apples-mode "property projectName : \"Release\"\n-- Build one message for the current recipient.\non publishReport(recipientName)\n    tell application \"Mail\"\n        if recipientName is not \"\" then\n            repeat with attachmentName in {\"report.pdf\", \"chart.png\"}\n                set reportMessage to \"Ready for \" & recipientName & \": \" & attachmentName\n            end repeat\n        end if\n    end tell\nend publishReport\n" t (3 "on publishReport(recipientName)") (("publishReport" . font-lock-function-name-face) ("tell" . apples-statements) ("repeat" . apples-statements) ("reportMessage" . font-lock-variable-name-face) ("is not" . apples-operators)))"#
+        ]],
     )
 }
 
@@ -158,8 +158,8 @@ fn runs_a_selected_report_delivery_and_displays_the_external_result() -> ParityB
                            (buffer-string))))))"##,
         true,
         expect![[
-        r#"OK (apples-run-region/buffer "Result: Delivered 2 reports" t "repeat with recipientName in recipients\ndisplay dialog \"Delivering to \" & recipientName\nend repeat\nreturn \"Delivered 2 reports\"\n" "-ss\n-e\nrepeat with recipientName in recipients\ndisplay dialog \"Delivering to \" & recipientName\nend repeat\nreturn \"Delivered 2 reports\"\n\n")"#
-    ]],
+            r#"OK (apples-run-region/buffer "Result: Delivered 2 reports" t "repeat with recipientName in recipients\ndisplay dialog \"Delivering to \" & recipientName\nend repeat\nreturn \"Delivered 2 reports\"\n" "-ss\n-e\nrepeat with recipientName in recipients\ndisplay dialog \"Delivering to \" & recipientName\nend repeat\nreturn \"Delivered 2 reports\"\n\n")"#
+        ]],
     )
 }
 
@@ -253,8 +253,8 @@ fn failed_region_execution_highlights_the_broken_reference_and_moves_to_it() -> 
                            (buffer-string))))))"##,
         true,
         expect![[
-        r#"OK (("execution error: The variable missingValue is not defined. [-2753]" 2 18 "missingValue") "property reportName : \"Q2\"\nset reportPath to reportName\nreturn reportPath\n" t "-ss\n-e\nset reportPath to missingValue\nreturn reportPath\n\n")"#
-    ]],
+            r#"OK (("execution error: The variable missingValue is not defined. [-2753]" 2 18 "missingValue") "property reportName : \"Q2\"\nset reportPath to reportName\nreturn reportPath\n" t "-ss\n-e\nset reportPath to missingValue\nreturn reportPath\n\n")"#
+        ]],
     )
 }
 
@@ -319,8 +319,8 @@ fn compiles_then_decompiles_a_script_through_the_documented_toolchain() -> Parit
                        (buffer-string))))"##,
         true,
         expect![[
-        r#"OK (t "FAKE-COMPILED\non reportTitle(projectName)\n    return \"Status: \" & projectName\nend reportTitle\n" "on reportTitle(projectName)\n    return \"Status: \" & projectName\nend reportTitle")"#
-    ]],
+            r#"OK (t "FAKE-COMPILED\non reportTitle(projectName)\n    return \"Status: \" & projectName\nend reportTitle\n" "on reportTitle(projectName)\n    return \"Status: \" & projectName\nend reportTitle")"#
+        ]],
     )
 }
 
@@ -358,8 +358,8 @@ fn expands_and_edits_the_installed_tell_application_snippet_in_a_real_script() -
                          (null (yas-active-snippets)))))))"##,
         true,
         expect![[
-        r#"OK (t "tell application \"Mail\"\n    display dialog \"Release ready\" default answer \"Ship\"\nend tell" t)"#
-    ]],
+            r#"OK (t "tell application \"Mail\"\n    display dialog \"Release ready\" default answer \"Ship\"\nend tell" t)"#
+        ]],
     )
 }
 
@@ -397,8 +397,8 @@ fn scratch_buffer_persists_an_edit_when_killed_and_restores_it_when_reopened() -
                     (list restored persisted reopened))"##,
         true,
         expect![[
-        r#"OK ("set reportCount to 1\n" "set reportCount to 1\nset reportCount to reportCount + 1\nreturn reportCount\n" "set reportCount to 1\nset reportCount to reportCount + 1\nreturn reportCount\n")"#
-    ]],
+            r#"OK ("set reportCount to 1\n" "set reportCount to 1\nset reportCount to reportCount + 1\nreturn reportCount\n" "set reportCount to 1\nset reportCount to reportCount + 1\nreturn reportCount\n")"#
+        ]],
     )
 }
 

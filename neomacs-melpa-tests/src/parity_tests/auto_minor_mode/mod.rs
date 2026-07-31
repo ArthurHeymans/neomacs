@@ -165,10 +165,6 @@ pub(crate) fn assert_auto_minor_mode_autoload_parity(elisp_form: &str, expected:
     assert_auto_minor_mode_source_parity("auto-minor-mode-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_auto_minor_mode_autoload_parity` cases (2a).
 pub(crate) fn assert_auto_minor_mode_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

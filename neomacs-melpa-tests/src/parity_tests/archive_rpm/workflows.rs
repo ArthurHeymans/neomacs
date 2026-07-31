@@ -92,8 +92,8 @@ fn opens_a_cpio_bundle_browses_its_listing_and_extracts_a_configuration_file() -
         (delete-file path)))))"##,
         true,
         expect![[
-        r#"OK (archive-mode cpio t ("  drwxr-xr-x        0          0/0          ./etc/widget/" "  -rw-r-----       38       1000/100        ./etc/widget/server.conf" "  -rwxr-xr-x       29          0/0          ./usr/bin/widget-health" "  lrwxrwxrwx       13          0/0          ./usr/bin/widget-current -> widget-health") ("listen=127.0.0.1:8080\nmode=production\n" t t t))"#
-    ]],
+            r#"OK (archive-mode cpio t ("  drwxr-xr-x        0          0/0          ./etc/widget/" "  -rw-r-----       38       1000/100        ./etc/widget/server.conf" "  -rwxr-xr-x       29          0/0          ./usr/bin/widget-health" "  lrwxrwxrwx       13          0/0          ./usr/bin/widget-current -> widget-health") ("listen=127.0.0.1:8080\nmode=production\n" t t t))"#
+        ]],
     )
 }
 
@@ -208,8 +208,8 @@ fn extracts_a_firmware_image_from_an_rpm_without_changing_any_binary_byte() -> P
         (delete-directory bin-dir)))))"##,
         true,
         expect![[
-        r#"OK (archive-mode rpm t "  -rw-------       14          0/0          ./usr/lib/firmware/widget.bin" ((0 1 2 10 13 31 32 127 128 129 191 200 254 255) "78b23e4f97b8c75fecf06fddfb5c83b14e802f6918a71c27c244c8531782cf05" no-conversion t t t) "-q\n-c\n-d\n-q\n-c\n-d\n")"#
-    ]],
+            r#"OK (archive-mode rpm t "  -rw-------       14          0/0          ./usr/lib/firmware/widget.bin" ((0 1 2 10 13 31 32 127 128 129 191 200 254 255) "78b23e4f97b8c75fecf06fddfb5c83b14e802f6918a71c27c244c8531782cf05" no-conversion t t t) "-q\n-c\n-d\n-q\n-c\n-d\n")"#
+        ]],
     )
 }
 
@@ -300,8 +300,8 @@ fn opens_a_common_gzip_rpm_and_extracts_its_packaged_readme() -> ParityBatchCase
         (delete-file path)))))"##,
         true,
         expect![[
-        r#"OK (archive-mode rpm t "Name:         widget\nVersion:      3.2\nRelease:      7\nSummary:      Widget deployment files\nArchitecture: noarch\nFormat:       cpio\nCompression:  gzip\n\n" "  -rw-r--r--       27          0/0          ./usr/share/doc/widget/README.txt" ("Widget package\nVersion 3.2\n" t t))"#
-    ]],
+            r#"OK (archive-mode rpm t "Name:         widget\nVersion:      3.2\nRelease:      7\nSummary:      Widget deployment files\nArchitecture: noarch\nFormat:       cpio\nCompression:  gzip\n\n" "  -rw-r--r--       27          0/0          ./usr/share/doc/widget/README.txt" ("Widget package\nVersion 3.2\n" t t))"#
+        ]],
     )
 }
 

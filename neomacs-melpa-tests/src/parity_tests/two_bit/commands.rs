@@ -49,8 +49,8 @@ fn two_bit_location_prompt_parses_dash_and_dot_ranges_without_numeric_prompts() 
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (("genome.2bit" "alpha" 2 9) ("genome.2bit" "beta" 1 7) ((file "2bit file: ") (names "genome.2bit") (complete "Sequence: " ("alpha" "beta")) (file "2bit file: ") (names "genome.2bit") (complete "Sequence: " ("alpha" "beta"))))"#
-    ]],
+            r#"OK (("genome.2bit" "alpha" 2 9) ("genome.2bit" "beta" 1 7) ((file "2bit file: ") (names "genome.2bit") (complete "Sequence: " ("alpha" "beta")) (file "2bit file: ") (names "genome.2bit") (complete "Sequence: " ("alpha" "beta"))))"#
+        ]],
     )
 }
 
@@ -93,8 +93,8 @@ fn two_bit_location_prompt_reads_start_and_defaults_end_to_sequence_size() -> Pa
                   (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (("genome.2bit" "alpha" 3 8) ((number "alpha; Start: " 0) (sequence "genome.2bit" "alpha") (number "alpha; Start: 3; End: " 12)))"#
-    ]],
+            r#"OK (("genome.2bit" "alpha" 3 8) ((number "alpha; Start: " 0) (sequence "genome.2bit" "alpha") (number "alpha; Start: 3; End: " 12)))"#
+        ]],
     )
 }
 
@@ -207,8 +207,8 @@ fn two_bit_insert_fasta_wraps_every_complete_eighty_character_chunk() -> ParityB
                  (buffer-string))))"##,
         true,
         expect![[
-        r#"OK (nil "> fixture; chr1:10-172\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\nGG\n")"#
-    ]],
+            r#"OK (nil "> fixture; chr1:10-172\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC\nGG\n")"#
+        ]],
     )
 }
 
@@ -229,8 +229,8 @@ fn two_bit_insert_commands_publish_the_exact_interactive_argument_contract() -> 
                '2bit-insert-fasta))"##,
         true,
         expect![[
-        r#"OK ((interactive (2bit--location-prompt)) (interactive (2bit--location-prompt)) nil t t)"#
-    ]],
+            r#"OK ((interactive (2bit--location-prompt)) (interactive (2bit--location-prompt)) nil t t)"#
+        ]],
     )
 }
 

@@ -24,8 +24,8 @@ fn ast_grep_build_command_preserves_patterns_rewrites_and_expands_directory() ->
              "old($X)" "src/lib" "new($X)"))))"##,
         true,
         expect![[
-        r#"OK (("sg fixture" "run" "--pattern=console.log($A)" "--json=stream") ("sg fixture" "run" "--pattern=$A && $A()" "--json=stream" "$ROOT/src") ("sg fixture" "run" "--pattern=old($X)" "--rewrite=new($X)" "--json=stream" "$ROOT/src/lib"))"#
-    ]],
+            r#"OK (("sg fixture" "run" "--pattern=console.log($A)" "--json=stream") ("sg fixture" "run" "--pattern=$A && $A()" "--json=stream" "$ROOT/src") ("sg fixture" "run" "--pattern=old($X)" "--rewrite=new($X)" "--json=stream" "$ROOT/src/lib"))"#
+        ]],
     )
 }
 
@@ -49,12 +49,13 @@ fn ast_grep_command_string_shell_quotes_hostile_arguments_losslessly() -> Parity
            (file-exists-p "nope")))"##,
         true,
         expect![[
-        r#"OK ("ast\\ grep run --pattern\\=a\\ b\\;\\$\\(touch\\ nope\\) --rewrite\\=it\\'s\\ \\\"\\$X\\\" /work/a\\ dir" "<ast grep><run><--pattern=a b;$(touch nope)><--rewrite=it's \"$X\"></work/a dir>" nil)"#
-    ]],
+            r#"OK ("ast\\ grep run --pattern\\=a\\ b\\;\\$\\(touch\\ nope\\) --rewrite\\=it\\'s\\ \\\"\\$X\\\" /work/a\\ dir" "<ast grep><run><--pattern=a b;$(touch nope)><--rewrite=it's \"$X\"></work/a dir>" nil)"#
+        ]],
     )
 }
 
-fn ast_grep_read_file_and_executable_probe_cover_present_missing_and_disabled_tools() -> ParityBatchCase {
+fn ast_grep_read_file_and_executable_probe_cover_present_missing_and_disabled_tools()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "ast_grep_read_file_and_executable_probe_cover_present_missing_and_disabled_tools",
         r##"(let* ((file (ast-grep-test-write-file
@@ -112,8 +113,8 @@ fn ast_grep_call_runs_real_program_with_exact_argv_cwd_stdout_and_stderr() -> Pa
               t))))"##,
         true,
         expect![[
-        r#"OK ("match-one\nmatch-two\n" "cwd=$WORK\narg=run\narg=--pattern=a b\narg=--json=stream\narg=.\n" nil)"#
-    ]],
+            r#"OK ("match-one\nmatch-two\n" "cwd=$WORK\narg=run\narg=--pattern=a b\narg=--json=stream\narg=.\n" nil)"#
+        ]],
     )
 }
 
@@ -133,8 +134,8 @@ fn ast_grep_call_reports_real_exit_failures_with_both_output_streams() -> Parity
               "search"))))"##,
         true,
         expect![[
-        r#"OK (:error error ("The ast-grep failed with exit code 7: partial result\n\ninvalid pattern: $BAD"))"#
-    ]],
+            r#"OK (:error error ("The ast-grep failed with exit code 7: partial result\n\ninvalid pattern: $BAD"))"#
+        ]],
     )
 }
 
@@ -165,12 +166,13 @@ fn ast_grep_call_debug_mode_emits_command_directory_streams_and_status() -> Pari
              (nreverse messages))))"##,
         true,
         expect![[
-        r#"OK ("json-output\n" ("Debug: fixture command: [ORACLE-SANDBOX]/bin/sg-debug run --pattern\\=x\\ y" "Debug: Working directory: $WORK" "Debug: fixture stdout: json-output\n" "Debug: fixture stderr: warning-output\n" "Debug: fixture exit code: 0"))"#
-    ]],
+            r#"OK ("json-output\n" ("Debug: fixture command: [ORACLE-SANDBOX]/bin/sg-debug run --pattern\\=x\\ y" "Debug: Working directory: $WORK" "Debug: fixture stdout: json-output\n" "Debug: fixture stderr: warning-output\n" "Debug: fixture exit code: 0"))"#
+        ]],
     )
 }
 
-fn ast_grep_run_command_composes_real_search_command_and_parses_stream_workflow() -> ParityBatchCase {
+fn ast_grep_run_command_composes_real_search_command_and_parses_stream_workflow() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "ast_grep_run_command_composes_real_search_command_and_parses_stream_workflow",
         r##"(let* ((work (ast-grep-test-path "search-root"))
@@ -193,8 +195,8 @@ fn ast_grep_run_command_composes_real_search_command_and_parses_stream_workflow(
              (hash-table-count ast-grep--candidate-table))))"##,
         true,
         expect![[
-        r#"OK ("run\n--pattern=console.log($A)\n--json=stream\n[ORACLE-SANDBOX]/search-root\n" ("src/app.js:3:4:console.log(value)") (("src/app.js" 2 4 nil nil "console.log(value)" nil)) 1)"#
-    ]],
+            r#"OK ("run\n--pattern=console.log($A)\n--json=stream\n[ORACLE-SANDBOX]/search-root\n" ("src/app.js:3:4:console.log(value)") (("src/app.js" 2 4 nil nil "console.log(value)" nil)) 1)"#
+        ]],
     )
 }
 
@@ -222,8 +224,8 @@ fn ast_grep_project_directory_and_search_dispatch_real_user_workflow() -> Parity
                (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (:searched :searched :searched ((sync "/explicit/") (sync "/fixture/project/") (sync "~/source")))"#
-    ]],
+            r#"OK (:searched :searched :searched ((sync "/explicit/") (sync "/fixture/project/") (sync "~/source")))"#
+        ]],
     )
 }
 
@@ -252,8 +254,8 @@ fn ast_grep_project_root_uses_project_current_and_project_root_protocol() -> Par
                (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK ((nil ((:current nil))) "/fixture/root/" ((:current nil) (:root (fixture-project . "/fixture/root/"))))"#
-    ]],
+            r#"OK ((nil ((:current nil))) "/fixture/root/" ((:current nil) (:root (fixture-project . "/fixture/root/"))))"#
+        ]],
     )
 }
 
@@ -279,8 +281,8 @@ fn ast_grep_search_rejects_missing_executable_before_backend_selection() -> Pari
              dispatched)))"##,
         true,
         expect![[
-        r#"OK ((:error error ("The ast-grep executable not found. Please install ast-grep")) nil nil)"#
-    ]],
+            r#"OK ((:error error ("The ast-grep executable not found. Please install ast-grep")) nil nil)"#
+        ]],
     )
 }
 
@@ -294,8 +296,8 @@ fn ast_grep_project_commands_signal_useful_errors_outside_projects() -> ParityBa
            (ast-grep-test-error-data #'ast-grep-rewrite-project)))"##,
         true,
         expect![[
-        r#"OK ((:error error ("Not in a project")) (:error error ("Not in a project")))"#
-    ]],
+            r#"OK ((:error error ("Not in a project")) (:error error ("Not in a project")))"#
+        ]],
     )
 }
 

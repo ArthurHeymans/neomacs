@@ -85,8 +85,6 @@ pub(crate) fn assert_auto_auto_indent_autoload_parity(elisp_form: &str, expected
     assert_auto_auto_indent_source_parity("auto-auto-indent-autoloads.el", elisp_form, expected);
 }
 
-
-
 /// Multi-probe batch for `assert_auto_auto_indent_autoload_parity` cases (2a).
 pub(crate) fn assert_auto_auto_indent_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

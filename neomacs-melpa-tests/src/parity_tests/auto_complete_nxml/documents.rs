@@ -18,8 +18,8 @@ fn auto_complete_nxml_note_store_appends_lines_at_current_index() -> ParityBatch
                  (acnxml-test-hash-alist auto-complete-nxml-note-store-hash))))"##,
         true,
         expect![[
-        r#"OK ("first line\nsecond line" 1 "third line" ((0 . "first line\nsecond line") (1 . "third line")))"#
-    ]],
+            r#"OK ("first line\nsecond line" 1 "third line" ((0 . "first line\nsecond line") (1 . "third line")))"#
+        ]],
     )
 }
 
@@ -37,8 +37,8 @@ fn auto_complete_nxml_name_class_store_keeps_independent_indexed_values() -> Par
                  (acnxml-test-hash-alist auto-complete-nxml-ncls-store-hash))))"##,
         true,
         expect![[
-        r#"OK (1 #1=(name (ns . "root")) #2=(choice (other . "child")) ((0 . #1#) (1 . #2#)))"#
-    ]],
+            r#"OK (1 #1=(name (ns . "root")) #2=(choice (other . "child")) ((0 . #1#) (1 . #2#)))"#
+        ]],
     )
 }
 
@@ -88,12 +88,13 @@ fn auto_complete_nxml_make_document_combines_namespace_comment_and_note() -> Par
                     auto-complete-nxml-element-document-hash))))"##,
         true,
         expect![[
-        r#"OK (1 (:name "table" :ns "urn:xhtml" :comment "Schema comment" :note "A tabular element."))"#
-    ]],
+            r#"OK (1 (:name "table" :ns "urn:xhtml" :comment "Schema comment" :note "A tabular element."))"#
+        ]],
     )
 }
 
-fn auto_complete_nxml_make_document_distinguishes_missing_empty_and_malformed_name_classes() -> ParityBatchCase {
+fn auto_complete_nxml_make_document_distinguishes_missing_empty_and_malformed_name_classes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_nxml_make_document_distinguishes_missing_empty_and_malformed_name_classes",
         r##"(progn
@@ -115,8 +116,8 @@ fn auto_complete_nxml_make_document_distinguishes_missing_empty_and_malformed_na
           '(1 2 3)))"##,
         true,
         expect![
-        "OK ((1 (:value nil) 0) (2 (:signal wrong-type-argument (listp wildcard)) 0) (3 (:value nil) 0))"
-    ],
+            "OK ((1 (:value nil) 0) (2 (:signal wrong-type-argument (listp wildcard)) 0) (3 (:value nil) 0))"
+        ],
     )
 }
 
@@ -150,8 +151,8 @@ fn auto_complete_nxml_document_selected_formats_comment_note_and_fallback() -> P
             '("table" "empty" "missing" "/closing"))))"##,
         true,
         expect![[
-        r#"OK (("table" . "'table' is ELEMENT in ''.\n\nComment: \nMay contain rows.\n\nNote: \nUse tr children.\n") ("empty" . "'empty' is ELEMENT in ''.\n\nNot documented.\n") ("missing" . "'missing' is ELEMENT in ''.\n\nNot documented.\n") ("/closing" . ""))"#
-    ]],
+            r#"OK (("table" . "'table' is ELEMENT in ''.\n\nComment: \nMay contain rows.\n\nNote: \nUse tr children.\n") ("empty" . "'empty' is ELEMENT in ''.\n\nNot documented.\n") ("missing" . "'missing' is ELEMENT in ''.\n\nNot documented.\n") ("/closing" . ""))"#
+        ]],
     )
 }
 
@@ -184,8 +185,8 @@ fn auto_complete_nxml_document_selected_resolves_prefixed_namespace_keys() -> Pa
              "sum" hash "ELEMENT"))))"##,
         true,
         expect![[
-        r#"OK ("'sum' is ELEMENT in 'urn:math'.\n\nComment: \nAdds operands.\n" "'sum' is ELEMENT in 'urn:default'.\n\nNot documented.\n")"#
-    ]],
+            r#"OK ("'sum' is ELEMENT in 'urn:math'.\n\nComment: \nAdds operands.\n" "'sum' is ELEMENT in 'urn:default'.\n\nNot documented.\n")"#
+        ]],
     )
 }
 
@@ -233,8 +234,8 @@ fn auto_complete_nxml_document_wrappers_select_their_distinct_hashes() -> Parity
             (auto-complete-nxml-get-document-attr "shared"))))"##,
         true,
         expect![[
-        r#"OK ("'shared' is ELEMENT in ''.\n\nComment: \nelement-doc\n" "'shared' is ATTRIBUTE in ''.\n\nComment: \nattribute-doc\n")"#
-    ]],
+            r#"OK ("'shared' is ELEMENT in ''.\n\nComment: \nelement-doc\n" "'shared' is ATTRIBUTE in ''.\n\nComment: \nattribute-doc\n")"#
+        ]],
     )
 }
 

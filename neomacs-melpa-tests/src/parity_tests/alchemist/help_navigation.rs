@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alchemist_batch};
 
-fn alchemist_help_prepares_alias_qualified_searches_context_arguments_and_module_candidates() -> ParityBatchCase {
+fn alchemist_help_prepares_alias_qualified_searches_context_arguments_and_module_candidates()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_help_prepares_alias_qualified_searches_context_arguments_and_module_candidates",
         r##"(with-temp-buffer
@@ -36,12 +37,13 @@ fn alchemist_help_prepares_alias_qualified_searches_context_arguments_and_module
                           "Elixir.String\nEnum\nElixir.String\n:lists\nMap\n"))))"##,
         true,
         expect![[
-        r#"OK (("Phoenix.Controller.redirect" "Phoenix.Controller" ":gen_tcp.accept" "assert") "{ \"Controller.redirect\", [ context: Elixir, imports: [ExUnit.Assertions,GenServer,App], aliases: [] ] }" "{ \"Controller.redirect\", [ context: Elixir, imports: [ExUnit.Assertions,GenServer,App], aliases: [{Controller, Phoenix.Controller}] ] }" ("{ \"Enum.map\", [ context: Elixir, imports: [], aliases: [] ] }" "{ \"Enum.map\", [ context: Elixir, imports: [], aliases: [] ] }") (":lists" "Enum" "Map" "String"))"#
-    ]],
+            r#"OK (("Phoenix.Controller.redirect" "Phoenix.Controller" ":gen_tcp.accept" "assert") "{ \"Controller.redirect\", [ context: Elixir, imports: [ExUnit.Assertions,GenServer,App], aliases: [] ] }" "{ \"Controller.redirect\", [ context: Elixir, imports: [ExUnit.Assertions,GenServer,App], aliases: [{Controller, Phoenix.Controller}] ] }" ("{ \"Enum.map\", [ context: Elixir, imports: [], aliases: [] ] }" "{ \"Enum.map\", [ context: Elixir, imports: [], aliases: [] ] }") (":lists" "Enum" "Map" "String"))"#
+        ]],
     )
 }
 
-fn alchemist_help_lookup_completion_and_document_filters_execute_the_full_async_protocol() -> ParityBatchCase {
+fn alchemist_help_lookup_completion_and_document_filters_execute_the_full_async_protocol()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_help_lookup_completion_and_document_filters_execute_the_full_async_protocol",
         r##"(let ((alchemist-help-search-history nil)
@@ -88,12 +90,13 @@ fn alchemist_help_lookup_completion_and_document_filters_execute_the_full_async_
                          (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (completion "List.del" help "List.delete/2" nil nil nil nil ((complete "{ \"List.del\", [ context: Elixir, imports: [], aliases: [] ] }" alchemist-help-complete-filter-output) (prompt "List.del" ("List.delete" "delete/2" "delete_at/2")) (help "{ \"List.delete/2\", [ context: Elixir, imports: [], aliases: [] ] }" alchemist-help-filter-output) (display "Deletes an element.")))"#
-    ]],
+            r#"OK (completion "List.del" help "List.delete/2" nil nil nil nil ((complete "{ \"List.del\", [ context: Elixir, imports: [], aliases: [] ] }" alchemist-help-complete-filter-output) (prompt "List.del" ("List.delete" "delete/2" "delete_at/2")) (help "{ \"List.delete/2\", [ context: Elixir, imports: [], aliases: [] ] }" alchemist-help-filter-output) (display "Deletes an element.")))"#
+        ]],
     )
 }
 
-fn alchemist_help_modules_filter_sorts_deduplicates_prompts_and_normalizes_module_selection() -> ParityBatchCase {
+fn alchemist_help_modules_filter_sorts_deduplicates_prompts_and_normalizes_module_selection()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_help_modules_filter_sorts_deduplicates_prompts_and_normalizes_module_selection",
         r##"(let ((alchemist-help-filter-output nil)
@@ -122,12 +125,13 @@ fn alchemist_help_modules_filter_sorts_deduplicates_prompts_and_normalizes_modul
                          (nreverse events))))"##,
         true,
         expect![[
-        r#"OK (nil #1=("Elixir.String\nEnum\nElixir.String.Chars\n") looked-up ("Elixir.String\nEND-OF-INFO\n" . #1#) ((prompt "Elixir help: " ("Enum" "String" "String.Chars")) (lookup "String.Chars")))"#
-    ]],
+            r#"OK (nil #1=("Elixir.String\nEnum\nElixir.String.Chars\n") looked-up ("Elixir.String\nEND-OF-INFO\n" . #1#) ((prompt "Elixir help: " ("Enum" "String" "String.Chars")) (lookup "String.Chars")))"#
+        ]],
     )
 }
 
-fn alchemist_help_display_replaces_real_buffer_content_enables_mode_and_tracks_history() -> ParityBatchCase {
+fn alchemist_help_display_replaces_real_buffer_content_enables_mode_and_tracks_history()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_help_display_replaces_real_buffer_content_enables_mode_and_tracks_history",
         r##"(let ((alchemist-help-search-history
@@ -178,12 +182,13 @@ fn alchemist_help_display_replaces_real_buffer_content_enables_mode_and_tracks_h
                              alchemist-help-buffer-name)))))"##,
         true,
         expect![[
-        r#"OK (("List.flatten/1\nFlattens nested lists." t t) "*alchemist help*" ("List.flatten/1" "Enum.map/2") "No documentation for [Unknown.Module] found." "List.flatten/1\nFlattens nested lists.")"#
-    ]],
+            r#"OK (("List.flatten/1\nFlattens nested lists." t t) "*alchemist help*" ("List.flatten/1" "Enum.map/2") "No documentation for [Unknown.Module] found." "List.flatten/1\nFlattens nested lists.")"#
+        ]],
     )
 }
 
-fn alchemist_goto_maps_core_source_paths_classifies_files_and_extracts_real_definitions() -> ParityBatchCase {
+fn alchemist_goto_maps_core_source_paths_classifies_files_and_extracts_real_definitions()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_goto_maps_core_source_paths_classifies_files_and_extracts_real_definitions",
         r##"(let ((alchemist-goto-elixir-source-dir
@@ -216,12 +221,13 @@ fn alchemist_goto_maps_core_source_paths_classifies_files_and_extracts_real_defi
                           "def one_line, do: :ok"))))"##,
         true,
         expect![[
-        r#"OK ((("lib/elixir/lib/list.ex" 19 nil) ("test/example.exs" 12 nil) ("lib/stdlib/src/lists.erl" nil 20) ("README.md" nil nil)) "/sources/elixir/lib/elixir/lib/string.ex" "/sources/elixir/lib/elixir/src/elixir.erl" "/sources/otp/lib/stdlib/src/lists.erl" (#("def dgettext(backend, domain, msgid, bindings) when is_list(bindings)" 0 3 (face alchemist-goto--def-face) 4 12 (face alchemist-goto--name-face)) #("defmodule Test.Module" 0 9 (face alchemist-goto--def-face) 10 14 (face alchemist-goto--name-face)) #("defp render!" 0 4 (face alchemist-goto--def-face) 5 12 (face alchemist-goto--name-face)) #("defmacro __using__(_)" 0 8 (face alchemist-goto--def-face) 9 18 (face alchemist-goto--name-face)) #("def one_line" 0 3 (face alchemist-goto--def-face) 4 12 (face alchemist-goto--name-face))))"#
-    ]],
+            r#"OK ((("lib/elixir/lib/list.ex" 19 nil) ("test/example.exs" 12 nil) ("lib/stdlib/src/lists.erl" nil 20) ("README.md" nil nil)) "/sources/elixir/lib/elixir/lib/string.ex" "/sources/elixir/lib/elixir/src/elixir.erl" "/sources/otp/lib/stdlib/src/lists.erl" (#("def dgettext(backend, domain, msgid, bindings) when is_list(bindings)" 0 3 (face alchemist-goto--def-face) 4 12 (face alchemist-goto--name-face)) #("defmodule Test.Module" 0 9 (face alchemist-goto--def-face) 10 14 (face alchemist-goto--name-face)) #("defp render!" 0 4 (face alchemist-goto--def-face) 5 12 (face alchemist-goto--name-face)) #("defmacro __using__(_)" 0 8 (face alchemist-goto--def-face) 9 18 (face alchemist-goto--name-face)) #("def one_line" 0 3 (face alchemist-goto--def-face) 4 12 (face alchemist-goto--name-face))))"#
+        ]],
     )
 }
 
-fn alchemist_goto_scans_real_buffer_skips_heredoc_definitions_and_navigates_duplicates() -> ParityBatchCase {
+fn alchemist_goto_scans_real_buffer_skips_heredoc_definitions_and_navigates_duplicates()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_goto_scans_real_buffer_skips_heredoc_definitions_and_navigates_duplicates",
         r##"(with-temp-buffer
@@ -271,12 +277,13 @@ fn alchemist_goto_scans_real_buffer_skips_heredoc_definitions_and_navigates_dupl
                               candidates))))))"##,
         true,
         expect![[
-        r#"OK (("defmodule Demo" "def run(value)" "def run(value, opts)" "defp helper!") ("Demo" "run" "run" "helper!") (("defmodule Demo" :marker nil nil) ("def run(value)" :marker nil nil) ("def run(value, opts)" :marker nil nil) ("defp helper!" :marker nil nil)) 1 99 9 "Symbol definitions:" ("def run(value)" "def run(value, opts)"))"#
-    ]],
+            r#"OK (("defmodule Demo" "def run(value)" "def run(value, opts)" "defp helper!") ("Demo" "run" "run" "helper!") (("defmodule Demo" :marker nil nil) ("def run(value)" :marker nil nil) ("def run(value, opts)" :marker nil nil) ("defp helper!" :marker nil nil)) 1 99 9 "Symbol definitions:" ("def run(value)" "def run(value, opts)"))"#
+        ]],
     )
 }
 
-fn alchemist_goto_remote_request_filter_and_real_file_open_land_on_requested_function() -> ParityBatchCase {
+fn alchemist_goto_remote_request_filter_and_real_file_open_land_on_requested_function()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_goto_remote_request_filter_and_real_file_open_land_on_requested_function",
         r##"(let* ((sandbox
@@ -330,12 +337,13 @@ fn alchemist_goto_remote_request_filter_and_real_file_open_land_on_requested_fun
                             (kill-buffer (current-buffer))))))"##,
         true,
         expect![[
-        r#"OK (("{ \"Cart,total\", [ context: Elixir, imports: [Enum,Caller], aliases: [{Cart, Shop.Cart}] ] }" alchemist-goto-filter) "lib/shop/cart.ex" "cart.ex" 2 "  def total(items), do: length(items)\n")"#
-    ]],
+            r#"OK (("{ \"Cart,total\", [ context: Elixir, imports: [Enum,Caller], aliases: [{Cart, Shop.Cart}] ] }" alchemist-goto-filter) "lib/shop/cart.ex" "cart.ex" 2 "  def total(items), do: length(items)\n")"#
+        ]],
     )
 }
 
-fn alchemist_info_extracts_real_terms_builds_requests_and_renders_chunked_datatype_output() -> ParityBatchCase {
+fn alchemist_info_extracts_real_terms_builds_requests_and_renders_chunked_datatype_output()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alchemist_info_extracts_real_terms_builds_requests_and_renders_chunked_datatype_output",
         r##"(with-temp-buffer
@@ -385,8 +393,8 @@ fn alchemist_info_extracts_real_terms_builds_requests_and_renders_chunked_dataty
                                (nreverse events)))))))"##,
         true,
         expect![[
-        r#"OK ("Enum.any?" ":ok" (("{ :type, :info, 'Enum.any?' }" alchemist-info-datatype-filter) ("{ :type, :types, 'Enum.any?' }" alchemist-info-datatype-filter)) nil (("*alchemist-info-mode*" "Term\n  :ok\nData type\n  Atom" :anonymous-mode)))"#
-    ]],
+            r#"OK ("Enum.any?" ":ok" (("{ :type, :info, 'Enum.any?' }" alchemist-info-datatype-filter) ("{ :type, :types, 'Enum.any?' }" alchemist-info-datatype-filter)) nil (("*alchemist-info-mode*" "Term\n  :ok\nData type\n  Atom" :anonymous-mode)))"#
+        ]],
     )
 }
 

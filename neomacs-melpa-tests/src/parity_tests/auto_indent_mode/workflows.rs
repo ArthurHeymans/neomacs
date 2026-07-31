@@ -21,8 +21,8 @@ fn auto_indent_mode_practical_lisp_return_indents_nested_form() -> ParityBatchCa
             (syntax-ppss))))"##,
         true,
         expect![[
-        r#"OK (t "(let ((value 1))\n  (+ value 2))" 2 (0 nil 1 nil nil nil 0 nil nil nil nil))"#
-    ]],
+            r#"OK (t "(let ((value 1))\n  (+ value 2))" 2 (0 nil 1 nil nil nil 0 nil nil nil nil))"#
+        ]],
     )
 }
 
@@ -95,12 +95,13 @@ fn auto_indent_mode_practical_visit_then_save_applies_distinct_policies() -> Par
              (delete-file file))))"##,
         true,
         expect![[
-        r#"OK ("(progn\n\11(message \"x\")\n(message \"y\"))\n" nil "(progn\n  (message \"x\")\n  (message \"y\"))\n" t)"#
-    ]],
+            r#"OK ("(progn\n\11(message \"x\")\n(message \"y\"))\n" nil "(progn\n  (message \"x\")\n  (message \"y\"))\n" t)"#
+        ]],
     )
 }
 
-fn auto_indent_mode_practical_delete_and_kill_workflow_preserves_lisp_structure() -> ParityBatchCase {
+fn auto_indent_mode_practical_delete_and_kill_workflow_preserves_lisp_structure() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_indent_mode_practical_delete_and_kill_workflow_preserves_lisp_structure",
         r##"(with-temp-buffer
@@ -130,8 +131,8 @@ fn auto_indent_mode_practical_delete_and_kill_workflow_preserves_lisp_structure(
                (list :unbalanced error-data))))))"##,
         true,
         expect![[
-        r#"OK ("\"gamma\")" 1 ("(list \"alpha\", \"beta\",\n") (:unbalanced (user-error "Unmatched bracket or quote")))"#
-    ]],
+            r#"OK ("\"gamma\")" 1 ("(list \"alpha\", \"beta\",\n") (:unbalanced (user-error "Unmatched bracket or quote")))"#
+        ]],
     )
 }
 
@@ -236,8 +237,8 @@ fn auto_indent_mode_mode_toggle_changes_electric_and_hook_lifecycle_together() -
                   (nreverse electric-calls)))))))"##,
         true,
         expect![
-        "OK ((t t (auto-indent-mode-pre-command-hook eldoc-pre-command-refresh-echo-area t) (auto-indent-mode-post-command-hook eldoc-schedule-timer t auto-indent-mode-post-command-hook-last)) nil nil nil nil (0))"
-    ],
+            "OK ((t t (auto-indent-mode-pre-command-hook eldoc-pre-command-refresh-echo-area t) (auto-indent-mode-post-command-hook eldoc-schedule-timer t auto-indent-mode-post-command-hook-last)) nil nil nil nil (0))"
+        ],
     )
 }
 

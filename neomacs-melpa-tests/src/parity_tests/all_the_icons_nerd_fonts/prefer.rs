@@ -33,8 +33,8 @@ fn readme_preference_migrates_real_use_site_alists_and_their_rendered_icons() ->
             all-the-icons-nerd-fonts--override-map)))"##,
         true,
         expect![[
-        r#"OK (t ((rust all-the-icons-nerd-dev "rust" :face error) (generic all-the-icons-nerd-fa "address-book") (github all-the-icons-nerd-cod "github" :height 1.2) (material all-the-icons-nerd-md "star") (untouched all-the-icons-fileicon "unknown")) ((rust "" (59304) (:family "Symbols Nerd Font" :height 1.2 :inherit error) (raise -0.24)) (generic "" (62137) (:family "Symbols Nerd Font" :height 1.2) (raise -0.24)) (github "" (60036) (:family "Symbols Nerd Font" :height 1.44) (raise -0.24)) (material "󰓎" (984270) (:family "Symbols Nerd Font" :height 1.2) (raise -0.24))) nil nil)"#
-    ]],
+            r#"OK (t ((rust all-the-icons-nerd-dev "rust" :face error) (generic all-the-icons-nerd-fa "address-book") (github all-the-icons-nerd-cod "github" :height 1.2) (material all-the-icons-nerd-md "star") (untouched all-the-icons-fileicon "unknown")) ((rust "" (59304) (:family "Symbols Nerd Font" :height 1.2 :inherit error) (raise -0.24)) (generic "" (62137) (:family "Symbols Nerd Font" :height 1.2) (raise -0.24)) (github "" (60036) (:family "Symbols Nerd Font" :height 1.44) (raise -0.24)) (material "󰓎" (984270) (:family "Symbols Nerd Font" :height 1.2) (raise -0.24))) nil nil)"#
+        ]],
     )
 }
 
@@ -65,8 +65,8 @@ fn preference_is_idempotent_after_it_has_rewritten_real_associations() -> Parity
                all-the-icons-nerd-fonts-test-idempotent)))))"##,
         true,
         expect![[
-        r#"OK (((rust all-the-icons-nerd-dev "rust") (github all-the-icons-nerd-cod "github") (material all-the-icons-nerd-md "star") (generic all-the-icons-nerd-fa "address-book")) ((rust all-the-icons-nerd-dev "rust") (github all-the-icons-nerd-cod "github") (material all-the-icons-nerd-md "star") (generic all-the-icons-nerd-fa "address-book")) t)"#
-    ]],
+            r#"OK (((rust all-the-icons-nerd-dev "rust") (github all-the-icons-nerd-cod "github") (material all-the-icons-nerd-md "star") (generic all-the-icons-nerd-fa "address-book")) ((rust all-the-icons-nerd-dev "rust") (github all-the-icons-nerd-cod "github") (material all-the-icons-nerd-md "star") (generic all-the-icons-nerd-fa "address-book")) t)"#
+        ]],
     )
 }
 
@@ -112,12 +112,13 @@ fn advice_configuration_changes_direct_calls_but_not_alist_migration() -> Parity
           '(nil t)))"##,
         true,
         expect![[
-        r#"OK ((nil #1=((github all-the-icons-nerd-cod "github")) ("" "FontAwesome") ("" "FontAwesome") nil nil) (t #1# ("" "FontAwesome") ("" "Symbols Nerd Font") t t))"#
-    ]],
+            r#"OK ((nil #1=((github all-the-icons-nerd-cod "github")) ("" "FontAwesome") ("" "FontAwesome") nil nil) (t #1# ("" "FontAwesome") ("" "Symbols Nerd Font") t t))"#
+        ]],
     )
 }
 
-fn config_checker_distinguishes_valid_missing_skipped_unknown_and_unbound_sites() -> ParityBatchCase {
+fn config_checker_distinguishes_valid_missing_skipped_unknown_and_unbound_sites() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "config_checker_distinguishes_valid_missing_skipped_unknown_and_unbound_sites",
         r##"(progn
@@ -152,8 +153,8 @@ fn config_checker_distinguishes_valid_missing_skipped_unknown_and_unbound_sites(
              (nreverse warnings))))"##,
         true,
         expect![[
-        r#"OK ((all-the-icons-nerd-fonts "Missing icon=definitely-missing from family=nerd-fa in var=all-the-icons-nerd-fonts-test-missing-icons" nil) (all-the-icons-nerd-fonts "Could not find data-alist=all-the-icons-data/unknown-alist from var=all-the-icons-nerd-fonts-test-unknown-family" nil) (all-the-icons-nerd-fonts "all-the-icons override variable not bound: all-the-icons-nerd-fonts-test-entirely-unbound" nil))"#
-    ]],
+            r#"OK ((all-the-icons-nerd-fonts "Missing icon=definitely-missing from family=nerd-fa in var=all-the-icons-nerd-fonts-test-missing-icons" nil) (all-the-icons-nerd-fonts "Could not find data-alist=all-the-icons-data/unknown-alist from var=all-the-icons-nerd-fonts-test-unknown-family" nil) (all-the-icons-nerd-fonts "all-the-icons override variable not bound: all-the-icons-nerd-fonts-test-entirely-unbound" nil))"#
+        ]],
     )
 }
 

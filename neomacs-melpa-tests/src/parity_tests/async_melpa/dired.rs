@@ -34,8 +34,8 @@ fn current_dired_defaults_and_customization_metadata_match_gnu_emacs() -> Parity
 "##,
         true,
         expect![[
-        r#"OK ("\\`\\(tramp-\\(default\\|connection\\|remote\\)\\|ange-ftp\\)-.*" dired-async-mode-line-message (:eval (when (eq major-mode 'dired-mode) " Async")) nil 5000000 10000000 "dired-async.log" t string boolean nil t ((dired-async-message [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:foreground "yellow")))) (dired-async-failures [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:foreground "red")))) (dired-async-mode-message [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:foreground "Gold"))))) (file-creator operation fn-list name-constructor &optional _marker-char))"#
-    ]],
+            r#"OK ("\\`\\(tramp-\\(default\\|connection\\|remote\\)\\|ange-ftp\\)-.*" dired-async-mode-line-message (:eval (when (eq major-mode 'dired-mode) " Async")) nil 5000000 10000000 "dired-async.log" t string boolean nil t ((dired-async-message [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:foreground "yellow")))) (dired-async-failures [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:foreground "red")))) (dired-async-mode-message [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] ((t (:foreground "Gold"))))) (file-creator operation fn-list name-constructor &optional _marker-char))"#
+        ]],
     )
 }
 
@@ -95,8 +95,8 @@ fn current_dired_file_classification_uses_real_sizes_directories_and_devices() -
 "##,
         true,
         expect![
-        "OK ((directory (:value t)) (small (:value t)) (threshold (:value nil)) (nested (:value nil)) (device (:value t)) (copy (:value t)) (rename (:value t)))"
-    ],
+            "OK ((directory (:value t)) (small (:value t)) (threshold (:value nil)) (nested (:value nil)) (device (:value t)) (copy (:value t)) (rename (:value t)))"
+        ],
     )
 }
 
@@ -135,8 +135,8 @@ fn current_smart_create_files_splits_fast_work_and_promotes_large_aggregate() ->
 "##,
         true,
         expect![[
-        r#"OK ((((dired-copy-file "Copy" ("[ORACLE-SANDBOX]/dired/smart/large") #1=#[(file) ((expand-file-name (file-name-nondirectory file) "dest/")) #2=(t)] 42)) ((dired-copy-file "Copy" ("[ORACLE-SANDBOX]/dired/smart/small-a" "[ORACLE-SANDBOX]/dired/smart/small-b") #1# 42))) ((dired-copy-file "Copy" ("[ORACLE-SANDBOX]/dired/smart/small-a" "[ORACLE-SANDBOX]/dired/smart/small-b") #[(file) ((expand-file-name (file-name-nondirectory file) "dest/")) #2#] 43)) nil)"#
-    ]],
+            r#"OK ((((dired-copy-file "Copy" ("[ORACLE-SANDBOX]/dired/smart/large") #1=#[(file) ((expand-file-name (file-name-nondirectory file) "dest/")) #2=(t)] 42)) ((dired-copy-file "Copy" ("[ORACLE-SANDBOX]/dired/smart/small-a" "[ORACLE-SANDBOX]/dired/smart/small-b") #1# 42))) ((dired-copy-file "Copy" ("[ORACLE-SANDBOX]/dired/smart/small-a" "[ORACLE-SANDBOX]/dired/smart/small-b") #[(file) ((expand-file-name (file-name-nondirectory file) "dest/")) #2#] 43)) nil)"#
+        ]],
     )
 }
 
@@ -194,8 +194,8 @@ fn current_process_registry_filters_properties_and_kills_latest_job() -> ParityB
 "##,
         true,
         expect![[
-        r#"OK (("async-dired-one") ("async-dired-two") nil (run open listen connect stop) (-1))"#
-    ]],
+            r#"OK (("async-dired-one") ("async-dired-two") nil (run open listen connect stop) (-1))"#
+        ]],
     )
 }
 
@@ -224,7 +224,8 @@ fn current_mode_line_message_formats_face_and_restores_outer_mode_line() -> Pari
     )
 }
 
-fn current_after_file_create_imports_error_log_and_reports_success_and_failures() -> ParityBatchCase {
+fn current_after_file_create_imports_error_log_and_reports_success_and_failures() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "current_after_file_create_imports_error_log_and_reports_success_and_failures",
         r##"
@@ -265,8 +266,8 @@ fn current_after_file_create_imports_error_log_and_reports_success_and_failures(
 "##,
         true,
         expect![[
-        r#"OK (("Error: Copy failed: permission denied\n" special-mode nil) (("%s failed for %d of %d file%s -- See *Dired log* buffer" dired-async-failures "Copy" 1 3 "s") ("Asynchronous %s of %s on %s file%s done" dired-async-message "Copy" 2 3 "s")) (-1 -1))"#
-    ]],
+            r#"OK (("Error: Copy failed: permission denied\n" special-mode nil) (("%s failed for %d of %d file%s -- See *Dired log* buffer" dired-async-failures "Copy" 1 3 "s") ("Asynchronous %s of %s on %s file%s done" dired-async-message "Copy" 2 3 "s")) (-1 -1))"#
+        ]],
     )
 }
 
@@ -294,7 +295,8 @@ fn current_maybe_kill_ftp_form_kills_only_first_matching_buffer() -> ParityBatch
     )
 }
 
-fn current_create_files_same_destination_reports_skip_without_starting_process() -> ParityBatchCase {
+fn current_create_files_same_destination_reports_skip_without_starting_process() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "current_create_files_same_destination_reports_skip_without_starting_process",
         r##"
@@ -321,12 +323,13 @@ fn current_create_files_same_destination_reports_skip_without_starting_process()
 "##,
         true,
         expect![[
-        r#"OK ((:signal (wrong-type-argument stringp nil)) nil (("Cannot %s to same file: %s\n" "copy" "[ORACLE-SANDBOX]/dired/no-job/same.txt") (t)) (("%s: %d of %d file%s skipped -- See *Dired log* buffer" dired-async-failures "Copy" 1 1 "")) nil)"#
-    ]],
+            r#"OK ((:signal (wrong-type-argument stringp nil)) nil (("Cannot %s to same file: %s\n" "copy" "[ORACLE-SANDBOX]/dired/no-job/same.txt") (t)) (("%s: %d of %d file%s skipped -- See *Dired log* buffer" dired-async-failures "Copy" 1 1 "")) nil)"#
+        ]],
     )
 }
 
-fn current_create_files_async_branch_constructs_job_callback_and_process_metadata() -> ParityBatchCase {
+fn current_create_files_async_branch_constructs_job_callback_and_process_metadata()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "current_create_files_async_branch_constructs_job_callback_and_process_metadata",
         r##"
@@ -365,8 +368,8 @@ fn current_create_files_async_branch_constructs_job_callback_and_process_metadat
 "##,
         true,
         expect![[
-        r#"OK (lambda t t t ((fixture-process dired-async-process t)) (1) ("Copy proceeding asynchronously..."))"#
-    ]],
+            r#"OK (lambda t t t ((fixture-process dired-async-process t)) (1) ("Copy proceeding asynchronously..."))"#
+        ]],
     )
 }
 
@@ -442,8 +445,8 @@ fn current_wdired_advice_modes_and_four_command_wrappers_preserve_arguments() ->
 "##,
         true,
         expect![
-        "OK ((nil (:one :two)) ((copy (4) t) (symlink - t) (hardlink nil t) (rename 7 t)) (nil nil) (t t) nil)"
-    ],
+            "OK ((nil (:one :two)) ((copy (4) t) (symlink - t) (hardlink nil t) (rename 7 t)) (nil nil) (t t) nil)"
+        ],
     )
 }
 

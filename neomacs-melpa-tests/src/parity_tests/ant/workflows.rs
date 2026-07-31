@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_ant_batch};
 
-fn interactive_multi_target_build_discovers_the_project_runs_compilation_and_repeats_last_task() -> ParityBatchCase {
+fn interactive_multi_target_build_discovers_the_project_runs_compilation_and_repeats_last_task()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "interactive_multi_target_build_discovers_the_project_runs_compilation_and_repeats_last_task",
         r##"
@@ -73,12 +74,13 @@ fn interactive_multi_target_build_discovers_the_project_runs_compilation_and_rep
 "##,
         true,
         expect![[
-        r#"OK (("compile test" ("Task (default): " ("compile" "test" "package" "") "[ORACLE-SANDBOX]/storefront/") (compilation-mode "./") "-*- mode: compilation; default-directory: \"[ORACLE-SANDBOX]/storefront/\" -*-\nCompilation started at [TIME]\n\n[ORACLE-SANDBOX]/bin/ant -emacs compile test\nBuildfile: [ORACLE-SANDBOX]/storefront/build.xml\n\ncompile:\n    [javac] Compiling 12 source files\ntest:\n    [junit] Tests run: 48, Failures: 0\n\nBUILD SUCCESSFUL\n\nCompilation finished at [TIME]\n") "compile test" "-*- mode: compilation; default-directory: \"[ORACLE-SANDBOX]/storefront/\" -*-\nCompilation started at [TIME]\n\n[ORACLE-SANDBOX]/bin/ant -emacs compile test\nBuildfile: [ORACLE-SANDBOX]/storefront/build.xml\n\ncompile:\n    [javac] Compiling 12 source files\ntest:\n    [junit] Tests run: 48, Failures: 0\n\nBUILD SUCCESSFUL\n\nCompilation finished at [TIME]\n" "[ORACLE-SANDBOX]/storefront|-emacs compile test\n[ORACLE-SANDBOX]/storefront|-emacs compile test\n" (("[ORACLE-SANDBOX]/storefront/" "clean" "compile" "test" "package" "")))"#
-    ]],
+            r#"OK (("compile test" ("Task (default): " ("compile" "test" "package" "") "[ORACLE-SANDBOX]/storefront/") (compilation-mode "./") "-*- mode: compilation; default-directory: \"[ORACLE-SANDBOX]/storefront/\" -*-\nCompilation started at [TIME]\n\n[ORACLE-SANDBOX]/bin/ant -emacs compile test\nBuildfile: [ORACLE-SANDBOX]/storefront/build.xml\n\ncompile:\n    [javac] Compiling 12 source files\ntest:\n    [junit] Tests run: 48, Failures: 0\n\nBUILD SUCCESSFUL\n\nCompilation finished at [TIME]\n") "compile test" "-*- mode: compilation; default-directory: \"[ORACLE-SANDBOX]/storefront/\" -*-\nCompilation started at [TIME]\n\n[ORACLE-SANDBOX]/bin/ant -emacs compile test\nBuildfile: [ORACLE-SANDBOX]/storefront/build.xml\n\ncompile:\n    [javac] Compiling 12 source files\ntest:\n    [junit] Tests run: 48, Failures: 0\n\nBUILD SUCCESSFUL\n\nCompilation finished at [TIME]\n" "[ORACLE-SANDBOX]/storefront|-emacs compile test\n[ORACLE-SANDBOX]/storefront|-emacs compile test\n" (("[ORACLE-SANDBOX]/storefront/" "clean" "compile" "test" "package" "")))"#
+        ]],
     )
 }
 
-fn editing_a_custom_build_file_then_killing_the_cache_exposes_and_runs_the_new_target() -> ParityBatchCase {
+fn editing_a_custom_build_file_then_killing_the_cache_exposes_and_runs_the_new_target()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "editing_a_custom_build_file_then_killing_the_cache_exposes_and_runs_the_new_target",
         r##"
@@ -153,15 +155,16 @@ fn editing_a_custom_build_file_then_killing_the_cache_exposes_and_runs_the_new_t
 "##,
         true,
         expect![[
-        r#"OK ("./" #1=("compile" "test" "package" "") #2=("clean" . #1#) #2# ("compile" "test" "package" "deploy" "") "deploy" "-*- mode: compilation; default-directory: \"[ORACLE-SANDBOX]/storefront/\" -*-\nCompilation started at [TIME]\n\n[ORACLE-SANDBOX]/bin/ant -emacs -f project.xml deploy\nBuildfile: [ORACLE-SANDBOX]/storefront/project.xml\n\ndeploy:\n     [copy] storefront.jar -> staging\n\nBUILD SUCCESSFUL\n\nCompilation finished at [TIME]\n" "[ORACLE-SANDBOX]/storefront|-emacs -f project.xml deploy\n" "<project name=\"storefront\" default=\"test\">\n  <target name=\"clean\" description=\"Remove build output\"/>\n  <target name=\"compile\" description=\"Compile Java sources\"/>\n  <target name=\"test\" description=\"Run unit tests\"/>\n  <target name=\"package\" description=\"Create release archive\"/>\n  <target name=\"deploy\" description=\"Deploy staging\"/>\n</project>\n")"#
-    ]],
+            r#"OK ("./" #1=("compile" "test" "package" "") #2=("clean" . #1#) #2# ("compile" "test" "package" "deploy" "") "deploy" "-*- mode: compilation; default-directory: \"[ORACLE-SANDBOX]/storefront/\" -*-\nCompilation started at [TIME]\n\n[ORACLE-SANDBOX]/bin/ant -emacs -f project.xml deploy\nBuildfile: [ORACLE-SANDBOX]/storefront/project.xml\n\ndeploy:\n     [copy] storefront.jar -> staging\n\nBUILD SUCCESSFUL\n\nCompilation finished at [TIME]\n" "[ORACLE-SANDBOX]/storefront|-emacs -f project.xml deploy\n" "<project name=\"storefront\" default=\"test\">\n  <target name=\"clean\" description=\"Remove build output\"/>\n  <target name=\"compile\" description=\"Compile Java sources\"/>\n  <target name=\"test\" description=\"Run unit tests\"/>\n  <target name=\"package\" description=\"Create release archive\"/>\n  <target name=\"deploy\" description=\"Deploy staging\"/>\n</project>\n")"#
+        ]],
     )
 }
 
 #[test]
 fn workflows_public_surface_batch() {
     let cases: Vec<ParityBatchCase> = vec![
-        interactive_multi_target_build_discovers_the_project_runs_compilation_and_repeats_last_task(),
+        interactive_multi_target_build_discovers_the_project_runs_compilation_and_repeats_last_task(
+        ),
         editing_a_custom_build_file_then_killing_the_cache_exposes_and_runs_the_new_target(),
     ];
     assert_ant_batch(&cases);

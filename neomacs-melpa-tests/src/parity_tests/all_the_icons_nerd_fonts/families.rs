@@ -23,12 +23,13 @@ fn readme_family_customization_changes_the_font_used_by_real_icons() -> ParityBa
                 (get-text-property 0 'display icon)))"##,
         true,
         expect![[
-        r#"OK ("" (61595) "Project Nerd Symbols" #1=(:family "Project Nerd Symbols" :height 1.7999999999999998 :inherit success) #1# (raise 0.12))"#
-    ]],
+            r#"OK ("" (61595) "Project Nerd Symbols" #1=(:family "Project Nerd Symbols" :height 1.7999999999999998 :inherit success) #1# (raise 0.12))"#
+        ]],
     )
 }
 
-fn application_palette_renders_real_language_file_terminal_weather_and_powerline_icons() -> ParityBatchCase {
+fn application_palette_renders_real_language_file_terminal_weather_and_powerline_icons()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "application_palette_renders_real_language_file_terminal_weather_and_powerline_icons",
         r##"(mapcar
@@ -72,8 +73,8 @@ fn application_palette_renders_real_language_file_terminal_weather_and_powerline
                   "right-hard-divider" shadow)))"##,
         true,
         expect![[
-        r#"OK ((all-the-icons-nerd-fa "github" "" (61595) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-constant-face) (raise -0.24)) (all-the-icons-nerd-md "language-rust" "󱘗" (988695) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-type-face) (raise -0.24)) (all-the-icons-nerd-cod "terminal" "" (60037) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-builtin-face) (raise -0.24)) (all-the-icons-nerd-dev "python" "" (59196) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-keyword-face) (raise -0.24)) (all-the-icons-nerd-oct "file" "" (62629) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-string-face) (raise -0.24)) (all-the-icons-nerd-weather "day-sunny" "" (58125) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit warning) (raise -0.24)) (all-the-icons-nerd-seti "javascript" "" (58892) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-variable-name-face) (raise -0.24)) (all-the-icons-nerd-custom "c" "" (58910) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-function-name-face) (raise -0.24)) (all-the-icons-nerd-linux "docker" "" (62216) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-doc-face) (raise -0.24)) (all-the-icons-nerd-pl "right-hard-divider" "" (57522) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit shadow) (raise -0.24)))"#
-    ]],
+            r#"OK ((all-the-icons-nerd-fa "github" "" (61595) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-constant-face) (raise -0.24)) (all-the-icons-nerd-md "language-rust" "󱘗" (988695) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-type-face) (raise -0.24)) (all-the-icons-nerd-cod "terminal" "" (60037) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-builtin-face) (raise -0.24)) (all-the-icons-nerd-dev "python" "" (59196) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-keyword-face) (raise -0.24)) (all-the-icons-nerd-oct "file" "" (62629) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-string-face) (raise -0.24)) (all-the-icons-nerd-weather "day-sunny" "" (58125) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit warning) (raise -0.24)) (all-the-icons-nerd-seti "javascript" "" (58892) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-variable-name-face) (raise -0.24)) (all-the-icons-nerd-custom "c" "" (58910) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-function-name-face) (raise -0.24)) (all-the-icons-nerd-linux "docker" "" (62216) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit font-lock-doc-face) (raise -0.24)) (all-the-icons-nerd-pl "right-hard-divider" "" (57522) "Symbols Nerd Font" (:family "Symbols Nerd Font" :height 1.2 :inherit shadow) (raise -0.24)))"#
+        ]],
     )
 }
 
@@ -102,8 +103,8 @@ fn normalized_hyphenated_names_render_icons_whose_nerd_data_uses_underscores() -
                   "pixelated-squares-small-mirrored")))"##,
         true,
         expect![[
-        r#"OK (((all-the-icons-nerd-md "format-align-left") "󰉢" (983650) "Symbols Nerd Font") ((all-the-icons-nerd-custom "common-lisp") "" (59056) "Symbols Nerd Font") ((all-the-icons-nerd-pl "left-hard-divider") "" (57520) "Symbols Nerd Font") ((all-the-icons-nerd-ple "pixelated-squares-small-mirrored") "" (57541) "Symbols Nerd Font"))"#
-    ]],
+            r#"OK (((all-the-icons-nerd-md "format-align-left") "󰉢" (983650) "Symbols Nerd Font") ((all-the-icons-nerd-custom "common-lisp") "" (59056) "Symbols Nerd Font") ((all-the-icons-nerd-pl "left-hard-divider") "" (57520) "Symbols Nerd Font") ((all-the-icons-nerd-ple "pixelated-squares-small-mirrored") "" (57541) "Symbols Nerd Font"))"#
+        ]],
     )
 }
 
@@ -126,8 +127,8 @@ fn family_renderer_preserves_real_face_height_adjust_and_flip_arguments() -> Par
                 (get-text-property 0 'display icon)))"##,
         true,
         expect![[
-        r#"OK ("" (61595) "Symbols Nerd Font" (face #1=(:family "Symbols Nerd Font" :height 2.1 :inherit font-lock-keyword-face) font-lock-face #1# display #2=(raise -0.24) rear-nonsticky t) #2#)"#
-    ]],
+            r#"OK ("" (61595) "Symbols Nerd Font" (face #1=(:family "Symbols Nerd Font" :height 2.1 :inherit font-lock-keyword-face) font-lock-face #1# display #2=(raise -0.24) rear-nonsticky t) #2#)"#
+        ]],
     )
 }
 
@@ -143,8 +144,8 @@ fn unknown_icon_name_reports_the_real_family_and_candidate_to_the_user() -> Pari
                (error-message-string error))))"##,
         true,
         expect![[
-        r#"OK (error "Unable to find icon with name ‘definitely-missing’ in icon set ‘nerd-fa’")"#
-    ]],
+            r#"OK (error "Unable to find icon with name ‘definitely-missing’ in icon set ‘nerd-fa’")"#
+        ]],
     )
 }
 

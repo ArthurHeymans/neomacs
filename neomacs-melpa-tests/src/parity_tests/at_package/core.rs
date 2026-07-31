@@ -25,12 +25,13 @@ fn at_root_object_core_methods_features_and_help_binding_match_the_pin() -> Pari
                (kbd "C-h @")))"##,
         true,
         expect![[
-        r#"OK (t @ nil (:proto :set :get :init :new :is :keys) (t t t t t t) t t describe-@)"#
-    ]],
+            r#"OK (t @ nil (:proto :set :get :init :new :is :keys) (t t t t t t) t t describe-@)"#
+        ]],
     )
 }
 
-fn at_predicate_and_extend_cover_root_default_multiple_prototypes_and_properties() -> ParityBatchCase {
+fn at_predicate_and_extend_cover_root_default_multiple_prototypes_and_properties() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "at_predicate_and_extend_cover_root_default_multiple_prototypes_and_properties",
         r##"(let* ((left
@@ -155,8 +156,8 @@ fn at_internal_queue_preserves_fifo_head_and_empty_reset_contract() -> ParityBat
                 queue))"##,
         true,
         expect![[
-        r#"OK (nil first (first) second (first second) first (second) second nil (nil))"#
-    ]],
+            r#"OK (nil first (first) second (first second) first (second) second nil (nil))"#
+        ]],
     )
 }
 
@@ -306,7 +307,8 @@ fn at_new_calls_initializer_and_core_keys_and_is_methods_observe_the_child() -> 
     )
 }
 
-fn at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it() -> ParityBatchCase {
+fn at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it",
         r##"(let ((object
@@ -324,7 +326,8 @@ fn at_dynamic_getter_receives_missing_property_but_explicit_default_bypasses_it(
     )
 }
 
-fn at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions() -> ParityBatchCase {
+fn at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions",
         r##"(list
@@ -350,12 +353,13 @@ fn at_walk_replace_and_with_object_preserve_quote_and_expand_property_positions(
                 @:value))"##,
         true,
         expect![[
-        r#"OK ((setf (@ @@ :name) 10) (setf '@:name 10) (@! @@ :method (@ @@ :argument)) (let ((@@ object)) (list (@ @@ :value) (@! @@ :method 1) (@--super @@ :parent))) ok)"#
-    ]],
+            r#"OK ((setf (@ @@ :name) 10) (setf '@:name 10) (@! @@ :method (@ @@ :argument)) (let ((@@ object)) (list (@ @@ :value) (@! @@ :method 1) (@--super @@ :parent))) ok)"#
+        ]],
     )
 }
 
-fn at_definer_returns_property_preserves_docstring_and_binds_self_before_arguments() -> ParityBatchCase {
+fn at_definer_returns_property_preserves_docstring_and_binds_self_before_arguments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "at_definer_returns_property_preserves_docstring_and_binds_self_before_arguments",
         r##"(let ((object
@@ -375,8 +379,8 @@ fn at_definer_returns_property_preserves_docstring_and_binds_self_before_argumen
                  t)))"##,
         true,
         expect![[
-        r#"OK (:sum 15 17 "Add values to the base.\n\n(fn @@ LEFT &optional (RIGHT 2))" (@@ left &rest --cl-rest--))"#
-    ]],
+            r#"OK (:sum 15 17 "Add values to the base.\n\n(fn @@ LEFT &optional (RIGHT 2))" (@@ left &rest --cl-rest--))"#
+        ]],
     )
 }
 

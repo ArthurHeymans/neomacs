@@ -61,8 +61,8 @@ fn asyncloop_run_processes_a_practical_import_pipeline_once_in_order() -> Parity
               (length asyncloop-objects)))))"##,
         true,
         expect![[
-        r#"OK ((nil t t 3) ((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) ("one" "three" "two") ((:normalized ("one" "two" "one" "three")) (:deduplicated ("one" "two" "three")) (:sorted ("one" "three" "two"))) nil nil nil 1)"#
-    ]],
+            r#"OK ((nil t t 3) ((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) ("one" "three" "two") ((:normalized ("one" "two" "one" "three")) (:deduplicated ("one" "two" "three")) (:sorted ("one" "three" "two"))) nil nil nil 1)"#
+        ]],
     )
 }
 
@@ -97,7 +97,8 @@ fn asyncloop_run_deduplicates_back_to_back_hook_invocations_before_launch() -> P
     )
 }
 
-fn asyncloop_run_deduplicates_already_scheduled_hook_invocation_and_logs_reason() -> ParityBatchCase {
+fn asyncloop_run_deduplicates_already_scheduled_hook_invocation_and_logs_reason() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asyncloop_run_deduplicates_already_scheduled_hook_invocation_and_logs_reason",
         r##"(let (events logged)
@@ -132,8 +133,8 @@ fn asyncloop_run_deduplicates_already_scheduled_hook_invocation_and_logs_reason(
                   events))))))"##,
         true,
         expect![[
-        r#"OK (t 1 ("Already running, letting it continue") ((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:ran))"#
-    ]],
+            r#"OK (t 1 ("Already running, letting it continue") ((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:ran))"#
+        ]],
     )
 }
 
@@ -171,8 +172,8 @@ fn asyncloop_completed_loop_reuses_identity_but_runs_full_series_again() -> Pari
               (asyncloop-remainder second)))))"##,
         true,
         expect![
-        "OK (t ((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) 1 ((:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (1 2) 1 nil)"
-    ],
+            "OK (t ((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) 1 ((:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (1 2) 1 nil)"
+        ],
     )
 }
 
@@ -265,8 +266,8 @@ fn asyncloop_run_recovers_half_finished_series_and_calls_recovery_hook_first() -
                 (asyncloop-just-launched loop))))))"##,
         true,
         expect![
-        "OK (t ((:skipped :at 0 :id 1) (:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:recovered :second :third) nil nil nil)"
-    ],
+            "OK (t ((:skipped :at 0 :id 1) (:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:recovered :second :third) nil nil nil)"
+        ],
     )
 }
 
@@ -363,8 +364,8 @@ fn asyncloop_run_refuses_implicit_resume_of_a_paused_partial_series() -> ParityB
                    (asyncloop-remainder loop))))))))"##,
         true,
         expect![[
-        r#"OK (t ("Loop was paused, must be explicitly unpaused via `asyncloop-resume' or `asyncloop-cancel'") 1 nil t 1)"#
-    ]],
+            r#"OK (t ("Loop was paused, must be explicitly unpaused via `asyncloop-resume' or `asyncloop-cancel'") 1 nil t 1)"#
+        ]],
     )
 }
 
@@ -403,12 +404,13 @@ fn asyncloop_worker_can_replace_remainder_with_a_runtime_selected_branch() -> Pa
               (asyncloop-remainder loop)))))"##,
         true,
         expect![
-        "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:validate :audit :publish) nil)"
-    ],
+            "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat)) (:validate :audit :publish) nil)"
+        ],
     )
 }
 
-fn asyncloop_reentrant_same_series_invocation_has_deterministic_single_registry_lifecycle() -> ParityBatchCase {
+fn asyncloop_reentrant_same_series_invocation_has_deterministic_single_registry_lifecycle()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asyncloop_reentrant_same_series_invocation_has_deterministic_single_registry_lifecycle",
         r##"(let (events functions outer-loop nested-loop)
@@ -438,12 +440,13 @@ fn asyncloop_reentrant_same_series_invocation_has_deterministic_single_registry_
               asyncloop-test-timer-queue))))"##,
         true,
         expect![
-        "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat) (:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:first-enter :first-exit :second) t 1 nil nil nil)"
-    ],
+            "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat) (:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:first-enter :first-exit :second) t 1 nil nil nil)"
+        ],
     )
 }
 
-fn asyncloop_worker_error_preserves_current_stage_then_same_run_retries_from_start() -> ParityBatchCase {
+fn asyncloop_worker_error_preserves_current_stage_then_same_run_retries_from_start()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asyncloop_worker_error_preserves_current_stage_then_same_run_retries_from_start",
         r##"(let ((attempt 0)
@@ -501,12 +504,13 @@ fn asyncloop_worker_error_preserves_current_stage_then_same_run_retries_from_sta
               (asyncloop-remainder loop)))))"##,
         true,
         expect![[
-        r#"OK ((:signal error ("transient import failure")) (2 nil nil) ((:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) ((:attempt 1) (:attempt 2) :saved) nil 2 nil)"#
-    ]],
+            r#"OK ((:signal error ("transient import failure")) (2 nil nil) ((:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) ((:attempt 1) (:attempt 2) :saved) nil 2 nil)"#
+        ]],
     )
 }
 
-fn asyncloop_two_simultaneous_series_follow_timer_insertion_order_without_cross_talk() -> ParityBatchCase {
+fn asyncloop_two_simultaneous_series_follow_timer_insertion_order_without_cross_talk()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asyncloop_two_simultaneous_series_follow_timer_insertion_order_without_cross_talk",
         r##"(let (events loop-a loop-b)
@@ -536,8 +540,8 @@ fn asyncloop_two_simultaneous_series_follow_timer_insertion_order_without_cross_
             (length asyncloop-objects))))"##,
         true,
         expect![
-        "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat) (:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:a-load :a-save :b-load :b-save) nil nil 2)"
-    ],
+            "OK (((:ran :at 0 :id 1 :repeat nil :function asyncloop-eat) (:ran :at 0 :id 2 :repeat nil :function asyncloop-eat)) (:a-load :a-save :b-load :b-save) nil nil 2)"
+        ],
     )
 }
 

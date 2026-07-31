@@ -18,8 +18,8 @@ fn current_bytecomp_defaults_and_customization_metadata_match_gnu_emacs() -> Par
 "##,
         true,
         expect![[
-        r#"OK (all "async-bytecomp.log" "\\`load-path\\'" (choice (const :tag "All packages" all) (repeat symbol)) boolean nil "Byte compile Lisp code FILE asynchronously.\n\nSame as ‘byte-compile-file’ but asynchronous." (file-or-dir &optional quiet type log-file))"#
-    ]],
+            r#"OK (all "async-bytecomp.log" "\\`load-path\\'" (choice (const :tag "All packages" all) (repeat symbol)) boolean nil "Byte compile Lisp code FILE asynchronously.\n\nSame as ‘byte-compile-file’ but asynchronous." (file-or-dir &optional quiet type log-file))"#
+        ]],
     )
 }
 
@@ -52,8 +52,8 @@ fn current_bytecomp_log_file_is_imported_into_compilation_buffer_and_removed() -
 "##,
         true,
         expect![[
-        r#"OK ("*async-bytecomp-import*" t compilation-mode "fixture.el:3:2: Warning: first\nfixture.el:8:1: Error: broken\n" nil)"#
-    ]],
+            r#"OK ("*async-bytecomp-import*" t compilation-mode "fixture.el:3:2: Warning: first\nfixture.el:8:1: Error: broken\n" nil)"#
+        ]],
     )
 }
 
@@ -87,8 +87,8 @@ fn current_bytecomp_completion_reports_success_warnings_and_error_counts() -> Pa
 "##,
         true,
         expect![[
-        r#"OK ("Directory `completion' compiled asynchronously with success" "File `one.el' compiled asynchronously with warnings" "Directory `completion' compiled asynchronously with warnings")"#
-    ]],
+            r#"OK ("Directory `completion' compiled asynchronously with success" "File `one.el' compiled asynchronously with warnings" "Directory `completion' compiled asynchronously with warnings")"#
+        ]],
     )
 }
 
@@ -120,8 +120,8 @@ fn current_comp_buffer_to_file_uses_sandbox_prefix_and_preserves_diagnostics() -
 "##,
         true,
         expect![[
-        r#"OK (nil "[ORACLE-SANDBOX]/bytecomp/export/" t "fixture.el:9: Error: deterministic\n")"#
-    ]],
+            r#"OK (nil "[ORACLE-SANDBOX]/bytecomp/export/" t "fixture.el:9: Error: deterministic\n")"#
+        ]],
     )
 }
 
@@ -148,8 +148,8 @@ fn current_package_dependency_walk_is_transitive_deduplicated_and_cycle_safe() -
 "##,
         true,
         expect![
-        "OK ((right shared left app) (right left app shared fallback) (right shared left app))"
-    ],
+            "OK ((right shared left app) (right left app shared fallback) (right shared left app))"
+        ],
     )
 }
 
@@ -187,8 +187,8 @@ fn current_directory_recompile_removes_stale_elc_and_constructs_real_job() -> Pa
 "##,
         true,
         expect![[
-        r#"OK (#1=("Started compiling asynchronously directory [ORACLE-SANDBOX]/bytecomp/recompile/") nil ("async") lambda t t #1#)"#
-    ]],
+            r#"OK (#1=("Started compiling asynchronously directory [ORACLE-SANDBOX]/bytecomp/recompile/") nil ("async") lambda t t #1#)"#
+        ]],
     )
 }
 
@@ -219,8 +219,8 @@ fn current_single_file_compile_constructs_child_and_callback_protocol() -> Parit
 "##,
         true,
         expect![[
-        r#"OK (fixture-process lambda t t ("[ORACLE-SANDBOX]/bytecomp/single/fixture.el" nil file "fixture.log"))"#
-    ]],
+            r#"OK (fixture-process lambda t t ("[ORACLE-SANDBOX]/bytecomp/single/fixture.el" nil file "fixture.log"))"#
+        ]],
     )
 }
 
@@ -257,8 +257,8 @@ fn current_package_compile_routes_allowed_dependency_and_sync_packages() -> Pari
 "##,
         true,
         expect![[
-        r#"OK ((("[ORACLE-SANDBOX]/bytecomp/package/other/" t) ("[ORACLE-SANDBOX]/bytecomp/package/dep/" t)) ((other (:other))))"#
-    ]],
+            r#"OK ((("[ORACLE-SANDBOX]/bytecomp/package/other/" t) ("[ORACLE-SANDBOX]/bytecomp/package/dep/" t)) ((other (:other))))"#
+        ]],
     )
 }
 

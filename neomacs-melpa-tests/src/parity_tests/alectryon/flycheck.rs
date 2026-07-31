@@ -40,7 +40,8 @@ fn alectryon_parses_complete_realistic_json_diagnostics_into_flycheck_errors() -
     )
 }
 
-fn alectryon_flycheck_verification_reports_mode_and_markup_lint_support_matrix() -> ParityBatchCase {
+fn alectryon_flycheck_verification_reports_mode_and_markup_lint_support_matrix() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "alectryon_flycheck_verification_reports_mode_and_markup_lint_support_matrix",
         r##"(let (records)
@@ -63,12 +64,13 @@ fn alectryon_flycheck_verification_reports_mode_and_markup_lint_support_matrix()
   (nreverse records))"##,
         true,
         expect![[
-        r#"OK ((nil rst-mode (("Mode selection" #("Use M-x alectryon-mode to enable" 4 22 (font-lock-face help-key-binding face help-key-binding)) #1=(bold error)) ("Linting support" "Yes." success))) (nil markdown-mode (("Mode selection" #("Use M-x alectryon-mode to enable" 4 22 (font-lock-face help-key-binding face help-key-binding)) #1#) ("Linting support" "Yes." success))) (nil typst-ts-mode (("Mode selection" #("Use M-x alectryon-mode to enable" 4 22 (font-lock-face help-key-binding face help-key-binding)) #1#) ("Linting support" "Not supported in typst-ts-mode" #2=(bold error)))) (t rst-mode (("Mode selection" "OK, using `alectryon-mode'" success) ("Linting support" "Yes." success))) (t markdown-mode (("Mode selection" "OK, using `alectryon-mode'" success) ("Linting support" "Yes." success))) (t typst-ts-mode (("Mode selection" "OK, using `alectryon-mode'" success) ("Linting support" "Not supported in typst-ts-mode" #2#))))"#
-    ]],
+            r#"OK ((nil rst-mode (("Mode selection" #("Use M-x alectryon-mode to enable" 4 22 (font-lock-face help-key-binding face help-key-binding)) #1=(bold error)) ("Linting support" "Yes." success))) (nil markdown-mode (("Mode selection" #("Use M-x alectryon-mode to enable" 4 22 (font-lock-face help-key-binding face help-key-binding)) #1#) ("Linting support" "Yes." success))) (nil typst-ts-mode (("Mode selection" #("Use M-x alectryon-mode to enable" 4 22 (font-lock-face help-key-binding face help-key-binding)) #1#) ("Linting support" "Not supported in typst-ts-mode" #2=(bold error)))) (t rst-mode (("Mode selection" "OK, using `alectryon-mode'" success) ("Linting support" "Yes." success))) (t markdown-mode (("Mode selection" "OK, using `alectryon-mode'" success) ("Linting support" "Yes." success))) (t typst-ts-mode (("Mode selection" "OK, using `alectryon-mode'" success) ("Linting support" "Not supported in typst-ts-mode" #2#))))"#
+        ]],
     )
 }
 
-fn alectryon_flycheck_predicate_tracks_active_mode_and_lint_capability_in_real_buffers() -> ParityBatchCase {
+fn alectryon_flycheck_predicate_tracks_active_mode_and_lint_capability_in_real_buffers()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alectryon_flycheck_predicate_tracks_active_mode_and_lint_capability_in_real_buffers",
         r##"(let ((predicate (flycheck-checker-get 'alectryon 'predicate))
@@ -95,8 +97,8 @@ fn alectryon_flycheck_predicate_tracks_active_mode_and_lint_capability_in_real_b
   (nreverse records))"##,
         true,
         expect![[
-        r#"OK (((coq-mode rst-mode nil) nil "coq+rst" t) ((coq-mode rst-mode t) t "coq+rst" t) ((lean4-mode markdown-mode t) t "lean4+md" t) ((dafny-mode typst-ts-mode t) nil "dafny+typst" nil) ((rst-mode rst-mode t) t "rst" t) ((markdown-mode markdown-mode t) t "md" t))"#
-    ]],
+            r#"OK (((coq-mode rst-mode nil) nil "coq+rst" t) ((coq-mode rst-mode t) t "coq+rst" t) ((lean4-mode markdown-mode t) t "lean4+md" t) ((dafny-mode typst-ts-mode t) nil "dafny+typst" nil) ((rst-mode rst-mode t) t "rst" t) ((markdown-mode markdown-mode t) t "md" t))"#
+        ]],
     )
 }
 
@@ -125,8 +127,8 @@ fn alectryon_flycheck_checker_expands_real_source_and_frontend_arguments() -> Pa
     (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK (("alectryon" "--stdin-filename" source-original "--frontend" (eval (alectryon--config-frontend)) "--backend" "lint" "-") ("[ORACLE-SANDBOX]/chapter_rst.v") "coq+rst" (coq-mode lean4-mode dafny-mode rst-mode markdown-mode))"#
-    ]],
+            r#"OK (("alectryon" "--stdin-filename" source-original "--frontend" (eval (alectryon--config-frontend)) "--backend" "lint" "-") ("[ORACLE-SANDBOX]/chapter_rst.v") "coq+rst" (coq-mode lean4-mode dafny-mode rst-mode markdown-mode))"#
+        ]],
     )
 }
 

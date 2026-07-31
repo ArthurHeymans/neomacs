@@ -27,8 +27,8 @@ fn agda_editor_tactics_mode_enable_toggle_and_disable_lifecycle_matches() -> Par
               (reverse agda-editor-tactics-test-events)))))"##,
         true,
         expect![[
-        r#"OK (t t t t nil nil ((t " *temp*" nil) (t " *temp*" nil) (nil " *temp*" nil)))"#
-    ]],
+            r#"OK (t t t t nil nil ((t " *temp*" nil) (t " *temp*" nil) (nil " *temp*" nil)))"#
+        ]],
     )
 }
 
@@ -59,8 +59,8 @@ fn agda_editor_tactics_mode_state_is_buffer_local_and_independent() -> ParityBat
            (kill-buffer second)))"##,
         true,
         expect![[
-        r#"OK ((t "record First : Set where\n  field\n    value : Set" t) (nil "record Second : Set where\n  field\n    value : Set" t) nil)"#
-    ]],
+            r#"OK ((t "record First : Set where\n  field\n    value : Set" t) (nil "record Second : Set where\n  field\n    value : Set" t) nil)"#
+        ]],
     )
 }
 
@@ -85,8 +85,8 @@ fn agda_editor_tactics_mode_integrates_with_a_real_major_mode_hook() -> ParityBa
             (buffer-substring-no-properties (point-min) (point-max)))))"##,
         true,
         expect![[
-        r#"OK (agda-editor-tactics-test-mode "Agda-Tactics-Test" t t "record Hooked : Set where\n  field\n    x : Set")"#
-    ]],
+            r#"OK (agda-editor-tactics-test-mode "Agda-Tactics-Test" t t "record Hooked : Set where\n  field\n    x : Set")"#
+        ]],
     )
 }
 

@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_apple_container_tramp_batch};
 
-fn apple_container_completion_discovers_live_hosts_with_the_selected_cli_context() -> ParityBatchCase {
+fn apple_container_completion_discovers_live_hosts_with_the_selected_cli_context() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "apple_container_completion_discovers_live_hosts_with_the_selected_cli_context",
         r####"
@@ -76,12 +77,13 @@ fn apple_container_completion_discovers_live_hosts_with_the_selected_cli_context
 "####,
         true,
         expect![[
-        r#"OK (:payments "/container:payments:" :worker "/container:worker:" :container-calls "--context development ls\n--context development ls\n--context development exec -it payments sh\n--context development ls\n--context development ls\n--context development exec -it worker sh\n")"#
-    ]],
+            r#"OK (:payments "/container:payments:" :worker "/container:worker:" :container-calls "--context development ls\n--context development ls\n--context development exec -it payments sh\n--context development ls\n--context development ls\n--context development exec -it worker sh\n")"#
+        ]],
     )
 }
 
-fn apple_container_supports_a_real_remote_edit_write_rename_and_directory_session() -> ParityBatchCase {
+fn apple_container_supports_a_real_remote_edit_write_rename_and_directory_session()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apple_container_supports_a_real_remote_edit_write_rename_and_directory_session",
         r####"
@@ -215,12 +217,13 @@ fn apple_container_supports_a_real_remote_edit_write_rename_and_directory_sessio
 "####,
         true,
         expect![[
-        r#"OK (:remote ("/container:payments:" nil "payments" "[ORACLE-SANDBOX]/apple-container-remote-session/containers/payments/workspace/config.txt") :buffer ("mode=development\nworkers=4\n" 2 9 nil) :directory ("config.txt" "deploy-report.txt") :sizes (27 27) :config-on-disk "mode=development\nworkers=4\n" :report-on-disk "deployment=ready\nworkers=4\n" :container-calls "--context development exec -it payments sh\n")"#
-    ]],
+            r#"OK (:remote ("/container:payments:" nil "payments" "[ORACLE-SANDBOX]/apple-container-remote-session/containers/payments/workspace/config.txt") :buffer ("mode=development\nworkers=4\n" 2 9 nil) :directory ("config.txt" "deploy-report.txt") :sizes (27 27) :config-on-disk "mode=development\nworkers=4\n" :report-on-disk "deployment=ready\nworkers=4\n" :container-calls "--context development exec -it payments sh\n")"#
+        ]],
     )
 }
 
-fn apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edits() -> ParityBatchCase {
+fn apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edits()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edits",
         r####"
@@ -367,8 +370,8 @@ fn apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edi
 "####,
         true,
         expect![[
-        r#"OK (:remote-uid-cache (:configured-before t :stale-before-cleanup t :refreshed-after-cleanup t) :payments ("healthy\npayments-checked\n" nil) :retired ("healthy\nretired-checked\n" nil) :payments-on-disk "healthy\npayments-checked\n" :retired-on-disk "healthy\nretired-checked\n" :container-calls "--context development exec -it -u root payments sh\n--context development exec -it -u root retired sh\n--context development ls\n")"#
-    ]],
+            r#"OK (:remote-uid-cache (:configured-before t :stale-before-cleanup t :refreshed-after-cleanup t) :payments ("healthy\npayments-checked\n" nil) :retired ("healthy\nretired-checked\n" nil) :payments-on-disk "healthy\npayments-checked\n" :retired-on-disk "healthy\nretired-checked\n" :container-calls "--context development exec -it -u root payments sh\n--context development exec -it -u root retired sh\n--context development ls\n")"#
+        ]],
     )
 }
 

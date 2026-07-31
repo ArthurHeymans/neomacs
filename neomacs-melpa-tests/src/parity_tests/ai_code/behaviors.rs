@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_ai_code_batch};
 
-fn behavior_tags_extract_mode_modifiers_constraints_and_bundle_from_real_prompt() -> ParityBatchCase {
+fn behavior_tags_extract_mode_modifiers_constraints_and_bundle_from_real_prompt() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "behavior_tags_extract_mode_modifiers_constraints_and_bundle_from_real_prompt",
         r##"
@@ -14,8 +15,8 @@ fn behavior_tags_extract_mode_modifiers_constraints_and_bundle_from_real_prompt(
 "##,
         true,
         expect![[
-        r#"OK ((:mode nil :modifiers ("deep" "tdd") :constraint-modifiers nil :preset nil) "Implement ledger retries #code #no-breaking-changes @production-safe while preserving #unknown-tag" nil nil)"#
-    ]],
+            r#"OK ((:mode nil :modifiers ("deep" "tdd") :constraint-modifiers nil :preset nil) "Implement ledger retries #code #no-breaking-changes @production-safe while preserving #unknown-tag" nil nil)"#
+        ]],
     )
 }
 
@@ -36,8 +37,8 @@ fn behavior_keyword_classifier_distinguishes_real_engineering_intents() -> Parit
 "##,
         true,
         expect![[
-        r#"OK ((:mode "=code" :modifiers nil :confidence high) (:mode "=debug" :modifiers nil :confidence high) (:mode "=review" :modifiers nil :confidence medium) (:mode "=research" :modifiers nil :confidence high) (:mode "=test" :modifiers nil :confidence high) (:mode "=spec" :modifiers nil :confidence high))"#
-    ]],
+            r#"OK ((:mode "=code" :modifiers nil :confidence high) (:mode "=debug" :modifiers nil :confidence high) (:mode "=review" :modifiers nil :confidence medium) (:mode "=research" :modifiers nil :confidence high) (:mode "=test" :modifiers nil :confidence high) (:mode "=spec" :modifiers nil :confidence high))"#
+        ]],
     )
 }
 
@@ -71,8 +72,8 @@ fn behavior_state_is_strictly_isolated_between_repository_roots() -> ParityBatch
 "##,
         true,
         expect![[
-        r#"OK (((:mode "code" :modifiers ("tdd")) "tdd-dev" "production-safe" #1=(:mode "review" :modifiers ("challenge")) "code-review") nil #1#)"#
-    ]],
+            r#"OK (((:mode "code" :modifiers ("tdd")) "tdd-dev" "production-safe" #1=(:mode "review" :modifiers ("challenge")) "code-review") nil #1#)"#
+        ]],
     )
 }
 
@@ -103,8 +104,8 @@ fn behavior_constraints_expand_and_render_into_actionable_instruction() -> Parit
 "##,
         true,
         expect![[
-        r#"OK (nil "AdditionalContext: <operating-mode>\nModify code and verify the result.\n</operating-mode>\n\nAdditionalContext: <behavior-modifiers>\nTrace dependencies before editing.\n\nWork red, green, then refactor.\n</behavior-modifiers>\n\nAdditionalContext: <custom-constraints>\nRun the repository's focused test suite.\n</custom-constraints>\n\nThese behaviors apply until superseded by new hashtags. During compaction, preserve the most recent <operating-mode> and <behavior-modifiers> blocks." "AdditionalContext: <operating-mode>\nModify code and verify the result.\n</operating-mode>\n\nAdditionalContext: <behavior-modifiers>\nTrace dependencies before editing.\n\nWork red, green, then refactor.\n</behavior-modifiers>\n\nAdditionalContext: <custom-constraints>\nRun the repository's focused test suite.\n</custom-constraints>\n\nThese behaviors apply until superseded by new hashtags. During compaction, preserve the most recent <operating-mode> and <behavior-modifiers> blocks.\n\n<user-prompt>\nMake retries idempotent without changing the public API.\n</user-prompt>")"#
-    ]],
+            r#"OK (nil "AdditionalContext: <operating-mode>\nModify code and verify the result.\n</operating-mode>\n\nAdditionalContext: <behavior-modifiers>\nTrace dependencies before editing.\n\nWork red, green, then refactor.\n</behavior-modifiers>\n\nAdditionalContext: <custom-constraints>\nRun the repository's focused test suite.\n</custom-constraints>\n\nThese behaviors apply until superseded by new hashtags. During compaction, preserve the most recent <operating-mode> and <behavior-modifiers> blocks." "AdditionalContext: <operating-mode>\nModify code and verify the result.\n</operating-mode>\n\nAdditionalContext: <behavior-modifiers>\nTrace dependencies before editing.\n\nWork red, green, then refactor.\n</behavior-modifiers>\n\nAdditionalContext: <custom-constraints>\nRun the repository's focused test suite.\n</custom-constraints>\n\nThese behaviors apply until superseded by new hashtags. During compaction, preserve the most recent <operating-mode> and <behavior-modifiers> blocks.\n\n<user-prompt>\nMake retries idempotent without changing the public API.\n</user-prompt>")"#
+        ]],
     )
 }
 
@@ -156,8 +157,8 @@ fn behavior_json_parser_handles_wrapped_escaped_and_malformed_responses() -> Par
 "##,
         true,
         expect![[
-        r#"OK (((mode . "code") (modifiers . ["deep" "tdd"])) ((mode . "review") (note . "brace } in string")) ((mode . "debug") (nested (retry . t))) nil nil)"#
-    ]],
+            r#"OK (((mode . "code") (modifiers . ["deep" "tdd"])) ((mode . "review") (note . "brace } in string")) ((mode . "debug") (nested (retry . t))) nil nil)"#
+        ]],
     )
 }
 
@@ -176,8 +177,8 @@ fn behavior_clean_prompt_removes_injected_context_before_classification() -> Par
 "##,
         true,
         expect![[
-        r#"OK ("Implement a bounded retry queue and write integration tests." (:mode "=code" :modifiers nil :confidence high))"#
-    ]],
+            r#"OK ("Implement a bounded retry queue and write integration tests." (:mode "=code" :modifiers nil :confidence high))"#
+        ]],
     )
 }
 
@@ -201,8 +202,8 @@ fn behavior_agent_prompt_vector_reconstruction_preserves_non_text_parts() -> Par
 "##,
         true,
         expect![[
-        r#"OK ("" [((type . "text") (text . "Review this carefully")) (:type text :text "Review ") (:type image :source "/repo/diagram.png") (:type text :text "this #review #deep")])"#
-    ]],
+            r#"OK ("" [((type . "text") (text . "Review this carefully")) (:type text :text "Review ") (:type image :source "/repo/diagram.png") (:type text :text "this #review #deep")])"#
+        ]],
     )
 }
 

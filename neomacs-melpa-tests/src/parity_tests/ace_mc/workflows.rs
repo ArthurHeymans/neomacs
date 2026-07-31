@@ -29,8 +29,8 @@ fn line_mode_prefixes_every_selected_line_and_the_mc_keymap_ends_the_session() -
    (remove-hook 'ace-jump-mode-before-jump-hook #'ace-mc-test-record-labels)))"##,
         true,
         expect![[
-        r#"OK (:labels (((1 . "a") (24 . "b") (41 . "c")) ((1 . "a") (24 . "b") (41 . "c"))) :added (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (24 41) :num 3 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :typed (:text "TODO: alpha beta alpha gamma\nTODO: alpha delta beta\nTODO: omega alpha stop\n" :point 7 :cursors (36 59) :num 3 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :quit (:text "TODO: alpha beta alpha gamma\nTODO: alpha delta beta\nTODO: omega alpha stop\n" :point 7 :cursors nil :num 1 :mc-mode nil :ace-mode nil :ace-marking nil :overriding nil) :keymap (mc/keyboard-quit multiple-cursors-mode))"#
-    ]],
+            r#"OK (:labels (((1 . "a") (24 . "b") (41 . "c")) ((1 . "a") (24 . "b") (41 . "c"))) :added (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (24 41) :num 3 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :typed (:text "TODO: alpha beta alpha gamma\nTODO: alpha delta beta\nTODO: omega alpha stop\n" :point 7 :cursors (36 59) :num 3 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :quit (:text "TODO: alpha beta alpha gamma\nTODO: alpha delta beta\nTODO: omega alpha stop\n" :point 7 :cursors nil :num 1 :mc-mode nil :ace-mode nil :ace-marking nil :overriding nil) :keymap (mc/keyboard-quit multiple-cursors-mode))"#
+        ]],
     )
 }
 
@@ -55,12 +55,13 @@ fn an_active_region_adds_cursors_at_every_occurrence_and_renames_them_all() -> P
              :killed killed :renamed (ace-mc-test-state))))))"##,
         true,
         expect![[
-        r#"OK (:region (t 1 6 "alpha") :mode (nil ace-mc-regexp-mode) :added (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (12 24 47) :num 4 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :killed (:text " beta  gamma\n delta beta\nomega  stop\n" :point 1 :cursors (7 14 32) :num 4 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :renamed (:text "delta beta delta gamma\ndelta delta beta\nomega delta stop\n" :point 6 :cursors (17 29 52) :num 4 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil))"#
-    ]],
+            r#"OK (:region (t 1 6 "alpha") :mode (nil ace-mc-regexp-mode) :added (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (12 24 47) :num 4 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :killed (:text " beta  gamma\n delta beta\nomega  stop\n" :point 1 :cursors (7 14 32) :num 4 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :renamed (:text "delta beta delta gamma\ndelta delta beta\nomega delta stop\n" :point 6 :cursors (17 29 52) :num 4 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil))"#
+        ]],
     )
 }
 
-fn selecting_the_same_label_again_removes_that_cursor_and_the_last_one_ends_the_mode() -> ParityBatchCase {
+fn selecting_the_same_label_again_removes_that_cursor_and_the_last_one_ends_the_mode()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "selecting_the_same_label_again_removes_that_cursor_and_the_last_one_ends_the_mode",
         r##"(ace-mc-test-in-buffer
@@ -75,8 +76,8 @@ fn selecting_the_same_label_again_removes_that_cursor_and_the_last_one_ends_the_
            :removed-all (ace-mc-test-state)))))"##,
         true,
         expect![[
-        r#"OK (:added (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (24 41) :num 3 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :removed-one (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (41) :num 2 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :removed-all (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors nil :num 1 :mc-mode nil :ace-mode nil :ace-marking nil :overriding nil))"#
-    ]],
+            r#"OK (:added (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (24 41) :num 3 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :removed-one (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (41) :num 2 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :removed-all (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors nil :num 1 :mc-mode nil :ace-mode nil :ace-marking nil :overriding nil))"#
+        ]],
     )
 }
 
@@ -92,8 +93,8 @@ fn the_single_cursor_command_stops_after_one_selection() -> ParityBatchCase {
    (list :single single :loop-marking looping :typed (ace-mc-test-state))))"##,
         true,
         expect![[
-        r#"OK (:single (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (24) :num 2 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :loop-marking nil :typed (:text "Zalpha beta alpha gamma\nZalpha delta beta\nomega alpha stop\n" :point 2 :cursors (26) :num 2 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil))"#
-    ]],
+            r#"OK (:single (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (24) :num 2 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) :loop-marking nil :typed (:text "Zalpha beta alpha gamma\nZalpha delta beta\nomega alpha stop\n" :point 2 :cursors (26) :num 2 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil))"#
+        ]],
     )
 }
 
@@ -111,8 +112,8 @@ fn aborting_leaves_point_alone_and_keeps_cursors_added_before_the_abort() -> Par
          :aborted (ace-mc-test-state))))"##,
         true,
         expect![[
-        r#"OK (:immediate (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 8 :cursors nil :num 1 :mc-mode nil :ace-mode nil :ace-marking nil :overriding nil) :column (7 7) :aborted (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 8 :cursors (31) :num 2 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil))"#
-    ]],
+            r#"OK (:immediate (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 8 :cursors nil :num 1 :mc-mode nil :ace-mode nil :ace-marking nil :overriding nil) :column (7 7) :aborted (:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 8 :cursors (31) :num 2 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil))"#
+        ]],
     )
 }
 
@@ -129,8 +130,8 @@ fn the_query_char_submodes_add_cursors_at_word_starts_and_at_characters() -> Par
      (list :word word :char char :typed (ace-mc-test-state)))))"##,
         true,
         expect![[
-        r#"OK (:word ((:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (12 24) :num 3 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) ace-jump-word-mode 97) :char ((:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (7 12 24) :num 4 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) ace-jump-char-mode 98) :typed (:text "!alpha !beta !alpha gamma\n!alpha delta beta\nomega alpha stop\n" :point 2 :cursors (9 15 28) :num 4 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil))"#
-    ]],
+            r#"OK (:word ((:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (12 24) :num 3 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) ace-jump-word-mode 97) :char ((:text "alpha beta alpha gamma\nalpha delta beta\nomega alpha stop\n" :point 1 :cursors (7 12 24) :num 4 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil) ace-jump-char-mode 98) :typed (:text "!alpha !beta !alpha gamma\n!alpha delta beta\nomega alpha stop\n" :point 2 :cursors (9 15 28) :num 4 :mc-mode t :ace-mode nil :ace-marking nil :overriding nil))"#
+        ]],
     )
 }
 

@@ -29,8 +29,8 @@ fn zero_b_layout_save_replaces_the_current_entry_and_preserves_others() -> Parit
                     (nreverse messages)))))"##,
         true,
         expect![[
-        r#"OK ("Saved the currently active layout: work" ((work . new-work) (other . old-other)) ("Saved the currently active layout: work"))"#
-    ]],
+            r#"OK ("Saved the currently active layout: work" ((work . new-work) (other . old-other)) ("Saved the currently active layout: work"))"#
+        ]],
     )
 }
 
@@ -77,8 +77,8 @@ fn zero_b_layout_new_runs_save_reset_and_rename_in_order() -> ParityBatchCase {
                    (list result (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK ("focus" (save delete-other-windows (switch-to-buffer "*scratch*") (set-current-name "focus")))"#
-    ]],
+            r#"OK ("focus" (save delete-other-windows (switch-to-buffer "*scratch*") (set-current-name "focus")))"#
+        ]],
     )
 }
 
@@ -150,8 +150,8 @@ fn zero_b_layout_switch_saves_then_restores_a_known_layout() -> ParityBatchCase 
                    (list result (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK ("Switch to layout: 'target'" (save (set-window-configuration target-configuration) (set-current-name "target") (message "Switch to layout: 'target'")))"#
-    ]],
+            r#"OK ("Switch to layout: 'target'" (save (set-window-configuration target-configuration) (set-current-name "target") (message "Switch to layout: 'target'")))"#
+        ]],
     )
 }
 
@@ -175,8 +175,8 @@ fn zero_b_layout_switch_saves_before_reporting_an_unknown_layout() -> ParityBatc
                    (list result (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK ("No layout with name: 'missing' is defined" (save (message "No layout with name: 'missing' is defined")))"#
-    ]],
+            r#"OK ("No layout with name: 'missing' is defined" (save (message "No layout with name: 'missing' is defined")))"#
+        ]],
     )
 }
 
@@ -255,8 +255,8 @@ fn zero_b_layout_kill_removes_current_and_selects_the_first_survivor() -> Parity
                     (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK ("next" ((next . next-configuration) (later . later-configuration)) ((message "Killing layout: 'current'") (set-window-configuration next-configuration) (set-current-name "next")))"#
-    ]],
+            r#"OK ("next" ((next . next-configuration) (later . later-configuration)) ((message "Killing layout: 'current'") (set-window-configuration next-configuration) (set-current-name "next")))"#
+        ]],
     )
 }
 
@@ -299,8 +299,8 @@ fn zero_b_layout_kill_recreates_the_default_when_none_survive() -> ParityBatchCa
                     (nreverse events)))))"##,
         true,
         expect![[
-        r#"OK ("fallback" nil ((message "Killing layout: 'only'") (set-current-name "fallback") (new "fallback")))"#
-    ]],
+            r#"OK ("fallback" nil ((message "Killing layout: 'only'") (set-current-name "fallback") (new "fallback")))"#
+        ]],
     )
 }
 

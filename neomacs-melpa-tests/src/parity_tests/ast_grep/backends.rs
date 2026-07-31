@@ -1,6 +1,9 @@
 use expect_test::expect;
 
-use super::{ParityBatchCase, assert_ast_grep_consult_batch, assert_ast_grep_helm_batch, assert_ast_grep_ivy_batch, assert_ast_grep_batch};
+use super::{
+    ParityBatchCase, assert_ast_grep_batch, assert_ast_grep_consult_batch,
+    assert_ast_grep_helm_batch, assert_ast_grep_ivy_batch,
+};
 
 fn ast_grep_backend_selection_covers_forced_fallbacks_and_auto_ui_priority() -> ParityBatchCase {
     ParityBatchCase::new(
@@ -38,8 +41,8 @@ fn ast_grep_backend_selection_covers_forced_fallbacks_and_auto_ui_priority() -> 
                (auto nil nil nil t t)))))"##,
         true,
         expect![[
-        r#"OK (((sync nil nil t t t) sync "ast-grep backend: sync") ((consult nil nil t nil nil) consult "ast-grep backend: consult") ((consult nil nil nil t t) sync "ast-grep backend: consult -> sync") ((ivy nil nil t t nil) ivy "ast-grep backend: ivy") ((ivy nil nil t nil t) sync "ast-grep backend: ivy -> sync") ((helm nil nil t nil t) helm "ast-grep backend: helm") ((helm nil nil t t nil) sync "ast-grep backend: helm -> sync") ((auto t nil t t t) ivy "ast-grep backend: auto -> ivy") ((auto t nil t nil t) sync "ast-grep backend: auto -> sync") ((auto nil t t t t) helm "ast-grep backend: auto -> helm") ((auto nil t t t nil) sync "ast-grep backend: auto -> sync") ((auto nil nil t t t) consult "ast-grep backend: auto -> consult") ((auto nil nil nil t t) sync "ast-grep backend: auto -> sync"))"#
-    ]],
+            r#"OK (((sync nil nil t t t) sync "ast-grep backend: sync") ((consult nil nil t nil nil) consult "ast-grep backend: consult") ((consult nil nil nil t t) sync "ast-grep backend: consult -> sync") ((ivy nil nil t t nil) ivy "ast-grep backend: ivy") ((ivy nil nil t nil t) sync "ast-grep backend: ivy -> sync") ((helm nil nil t nil t) helm "ast-grep backend: helm") ((helm nil nil t t nil) sync "ast-grep backend: helm -> sync") ((auto t nil t t t) ivy "ast-grep backend: auto -> ivy") ((auto t nil t nil t) sync "ast-grep backend: auto -> sync") ((auto nil t t t t) helm "ast-grep backend: auto -> helm") ((auto nil t t t nil) sync "ast-grep backend: auto -> sync") ((auto nil nil t t t) consult "ast-grep backend: auto -> consult") ((auto nil nil nil t t) sync "ast-grep backend: auto -> sync"))"#
+        ]],
     )
 }
 
@@ -76,8 +79,8 @@ fn ast_grep_backend_runner_dispatches_exact_adapter_and_directory() -> ParityBat
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ((:consult-result :ivy-result :helm-result :sync-result nil) ((:require ast-grep-consult) (:consult "/fixture/project/") (:require ast-grep-ivy) (:ivy "/fixture/project/") (:require ast-grep-helm) (:helm "/fixture/project/") (:sync "/fixture/project/")))"#
-    ]],
+            r#"OK ((:consult-result :ivy-result :helm-result :sync-result nil) ((:require ast-grep-consult) (:consult "/fixture/project/") (:require ast-grep-ivy) (:ivy "/fixture/project/") (:require ast-grep-helm) (:helm "/fixture/project/") (:sync "/fixture/project/")))"#
+        ]],
     )
 }
 
@@ -98,12 +101,13 @@ fn ast_grep_describe_backend_returns_and_messages_the_same_resolution() -> Parit
              (nreverse messages))))"##,
         true,
         expect![[
-        r#"OK ("ast-grep backend: consult -> sync" ("ast-grep backend: consult -> sync"))"#
-    ]],
+            r#"OK ("ast-grep backend: consult -> sync" ("ast-grep backend: consult -> sync"))"#
+        ]],
     )
 }
 
-fn ast_grep_main_backend_availability_adapters_require_modules_and_forward_results() -> ParityBatchCase {
+fn ast_grep_main_backend_availability_adapters_require_modules_and_forward_results()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "ast_grep_main_backend_availability_adapters_require_modules_and_forward_results",
         r##"(let (calls)
@@ -130,8 +134,8 @@ fn ast_grep_main_backend_availability_adapters_require_modules_and_forward_resul
              (nreverse calls))))"##,
         true,
         expect![
-        "OK (:consult-ready nil :helm-ready ((:require ast-grep-consult) :consult-probe (:require ast-grep-ivy) (:require ast-grep-helm) :helm-probe))"
-    ],
+            "OK (:consult-ready nil :helm-ready ((:require ast-grep-consult) :consult-probe (:require ast-grep-ivy) (:require ast-grep-helm) :helm-probe))"
+        ],
     )
 }
 
@@ -164,12 +168,13 @@ fn ast_grep_consult_async_builder_enforces_minimum_and_builds_exact_argv() -> Pa
            '(nil "" "a" "ab" "abc" "αβγ" "console.log($A)")))"##,
         true,
         expect![[
-        r#"OK (nil nil nil nil ("sg" "run" "--pattern=abc" "--json=stream" "/fixture/root") ("sg" "run" "--pattern=αβγ" "--json=stream" "/fixture/root") ("sg" "run" "--pattern=console.log($A)" "--json=stream" "/fixture/root"))"#
-    ]],
+            r#"OK (nil nil nil nil ("sg" "run" "--pattern=abc" "--json=stream" "/fixture/root") ("sg" "run" "--pattern=αβγ" "--json=stream" "/fixture/root") ("sg" "run" "--pattern=console.log($A)" "--json=stream" "/fixture/root"))"#
+        ]],
     )
 }
 
-fn ast_grep_consult_async_source_builds_real_pipeline_and_transforms_json_items() -> ParityBatchCase {
+fn ast_grep_consult_async_source_builds_real_pipeline_and_transforms_json_items() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "ast_grep_consult_async_source_builds_real_pipeline_and_transforms_json_items",
         r##"(let (calls)
@@ -209,12 +214,13 @@ fn ast_grep_consult_async_source_builds_real_pipeline_and_transforms_json_items(
              (hash-table-count ast-grep--candidate-table))))"##,
         true,
         expect![[
-        r#"OK ((:source #1=(throttle-stage process-stage transform-stage)) (:throttle (:process nil ("ast-grep" "run" "--pattern=abc" "--json=stream" "/fixture/")) (:transform ("a.rs:2:2:one" "b.rs:4:4:two")) (:pipeline #1#)) 2)"#
-    ]],
+            r#"OK ((:source #1=(throttle-stage process-stage transform-stage)) (:throttle (:process nil ("ast-grep" "run" "--pattern=abc" "--json=stream" "/fixture/")) (:transform ("a.rs:2:2:one" "b.rs:4:4:two")) (:pipeline #1#)) 2)"#
+        ]],
     )
 }
 
-fn ast_grep_consult_state_previews_structured_match_at_character_column_and_cleans_up() -> ParityBatchCase {
+fn ast_grep_consult_state_previews_structured_match_at_character_column_and_cleans_up()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "ast_grep_consult_state_previews_structured_match_at_character_column_and_cleans_up",
         r##"(let* ((file
@@ -299,8 +305,8 @@ fn ast_grep_consult_search_wires_source_options_annotation_and_selected_jump() -
              (gethash "stale" ast-grep--candidate-table))))"##,
         true,
         expect![[
-        r#"OK (#1=("src/a.rs" 2 4 nil nil "target" nil) ((:source "/fixture/") (:read fixture-source (:prompt "ast-grep: " :lookup consult--lookup-member :state fixture-state :annotate #[(cand) ((list cand (ast-grep--candidate-icon-prefix cand) "")) (t)] :category ast-grep :history ast-grep-history :require-match t) :annotation (#("src/a.rs:3:4:target" 0 19 (ast-grep-match (:file "src/a.rs" :start-line 2 :start-column 4 :text "target"))) "" ""))) #1# nil)"#
-    ]],
+            r#"OK (#1=("src/a.rs" 2 4 nil nil "target" nil) ((:source "/fixture/") (:read fixture-source (:prompt "ast-grep: " :lookup consult--lookup-member :state fixture-state :annotate #[(cand) ((list cand (ast-grep--candidate-icon-prefix cand) "")) (t)] :category ast-grep :history ast-grep-history :require-match t) :annotation (#("src/a.rs:3:4:target" 0 19 (ast-grep-match (:file "src/a.rs" :start-line 2 :start-column 4 :text "target"))) "" ""))) #1# nil)"#
+        ]],
     )
 }
 
@@ -319,12 +325,13 @@ fn ast_grep_ivy_threshold_generation_and_shell_quoting_match_real_input_rules() 
             '("sg tool" "run" "--pattern=a b;nope" "/a dir"))))"##,
         true,
         expect![[
-        r#"OK ((("" "4 chars more") ("" "3 chars more") ("" "1 chars more") nil ("" "2 chars more")) 41 42 "sg\\ tool run --pattern\\=a\\ b\\;nope /a\\ dir")"#
-    ]],
+            r#"OK ((("" "4 chars more") ("" "3 chars more") ("" "1 chars more") nil ("" "2 chars more")) 41 42 "sg\\ tool run --pattern\\=a\\ b\\;nope /a\\ dir")"#
+        ]],
     )
 }
 
-fn ast_grep_ivy_availability_probe_requires_both_packages_with_short_circuiting() -> ParityBatchCase {
+fn ast_grep_ivy_availability_probe_requires_both_packages_with_short_circuiting() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "ast_grep_ivy_availability_probe_requires_both_packages_with_short_circuiting",
         r##"(let (available calls)
@@ -355,12 +362,13 @@ fn ast_grep_ivy_availability_probe_requires_both_packages_with_short_circuiting(
                   (nreverse calls)))))))"##,
         true,
         expect![
-        "OK ((nil ((ivy nil t))) (nil ((ivy nil t) (counsel nil t))) (ready ((ivy nil t) (counsel nil t))))"
-    ],
+            "OK ((nil ((ivy nil t))) (nil ((ivy nil t) (counsel nil t))) (ready ((ivy nil t) (counsel nil t))))"
+        ],
     )
 }
 
-fn ast_grep_ivy_timer_and_process_lifecycle_cancels_work_and_rejects_stale_owners() -> ParityBatchCase {
+fn ast_grep_ivy_timer_and_process_lifecycle_cancels_work_and_rejects_stale_owners()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "ast_grep_ivy_timer_and_process_lifecycle_cancels_work_and_rejects_stale_owners",
         r##"(let* ((ast-grep--ivy-generation 7)
@@ -406,7 +414,8 @@ fn ast_grep_ivy_timer_and_process_lifecycle_cancels_work_and_rejects_stale_owner
     )
 }
 
-fn ast_grep_ivy_async_filter_buffers_partial_json_and_forwards_complete_candidates() -> ParityBatchCase {
+fn ast_grep_ivy_async_filter_buffers_partial_json_and_forwards_complete_candidates()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "ast_grep_ivy_async_filter_buffers_partial_json_and_forwards_complete_candidates",
         r##"(let* ((process
@@ -440,8 +449,8 @@ fn ast_grep_ivy_async_filter_buffers_partial_json_and_forwards_complete_candidat
               (delete-process process))))"##,
         true,
         expect![[
-        r#"OK (((t "a.rs:2:2:one\nb.rs:4:4:two\n")) "partial" 2 ("a.rs" 1 2 nil nil "one" nil) ("b.rs" 3 4 nil nil "two" nil))"#
-    ]],
+            r#"OK (((t "a.rs:2:2:one\nb.rs:4:4:two\n")) "partial" 2 ("a.rs" 1 2 nil nil "one" nil) ("b.rs" 3 4 nil nil "two" nil))"#
+        ]],
     )
 }
 
@@ -473,8 +482,8 @@ fn ast_grep_ivy_collection_cancels_stale_work_and_starts_exact_async_command() -
                (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (("" "2 chars more") 0 nil 2 (:stop :stop (:async "sg run --pattern\\=abc --json\\=stream /fixture/root" nil t)))"#
-    ]],
+            r#"OK (("" "2 chars more") 0 nil 2 (:stop :stop (:async "sg run --pattern\\=abc --json\\=stream /fixture/root" nil t)))"#
+        ]],
     )
 }
 
@@ -524,8 +533,8 @@ fn ast_grep_ivy_action_transformer_and_search_wire_real_candidate_contract() -> 
                (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (#1=((:pulse 77) (:transformer ast-grep-search ast-grep--ivy-display-transformer) (:read "ast-grep: " t (:dynamic-collection t :action ast-grep--ivy-action :update-fn auto :unwind #[nil ((ast-grep--ivy-next-generation) (ast-grep--ivy-stop-process)) (t)] :history ast-grep-history :require-match t :caller ast-grep-search))) "src/a.rs:3:4:target" :ivy-result nil ((:goto ("src/a.rs" 2 4 nil nil "target" nil)) . #1#))"#
-    ]],
+            r#"OK (#1=((:pulse 77) (:transformer ast-grep-search ast-grep--ivy-display-transformer) (:read "ast-grep: " t (:dynamic-collection t :action ast-grep--ivy-action :update-fn auto :unwind #[nil ((ast-grep--ivy-next-generation) (ast-grep--ivy-stop-process)) (t)] :history ast-grep-history :require-match t :caller ast-grep-search))) "src/a.rs:3:4:target" :ivy-result nil ((:goto ("src/a.rs" 2 4 nil nil "target" nil)) . #1#))"#
+        ]],
     )
 }
 
@@ -546,12 +555,13 @@ fn ast_grep_helm_command_uses_display_width_so_cjk_matches_helm_gate() -> Parity
            '(nil "" "ab" "abc" "界" "界a" "αβγ")))"##,
         true,
         expect![[
-        r#"OK ((nil nil nil (:ok nil)) ("" 0 0 (:ok nil)) ("ab" 2 2 (:ok nil)) ("abc" 3 3 (:ok ("sg" "run" "--pattern=abc" "--json=stream" "/fixture/"))) ("界" 1 2 (:ok nil)) ("界a" 2 3 (:ok ("sg" "run" "--pattern=界a" "--json=stream" "/fixture/"))) ("αβγ" 3 3 (:ok ("sg" "run" "--pattern=αβγ" "--json=stream" "/fixture/"))))"#
-    ]],
+            r#"OK ((nil nil nil (:ok nil)) ("" 0 0 (:ok nil)) ("ab" 2 2 (:ok nil)) ("abc" 3 3 (:ok ("sg" "run" "--pattern=abc" "--json=stream" "/fixture/"))) ("界" 1 2 (:ok nil)) ("界a" 2 3 (:ok ("sg" "run" "--pattern=界a" "--json=stream" "/fixture/"))) ("αβγ" 3 3 (:ok ("sg" "run" "--pattern=αβγ" "--json=stream" "/fixture/"))))"#
+        ]],
     )
 }
 
-fn ast_grep_helm_availability_probe_requires_module_and_checks_both_entry_points() -> ParityBatchCase {
+fn ast_grep_helm_availability_probe_requires_module_and_checks_both_entry_points() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "ast_grep_helm_availability_probe_requires_module_and_checks_both_entry_points",
         r##"(let (load-result definitions calls)
@@ -579,8 +589,8 @@ fn ast_grep_helm_availability_probe_requires_module_and_checks_both_entry_points
                (t (helm helm-make-source))))))"##,
         true,
         expect![
-        "OK (((nil (helm helm-make-source)) nil ((helm nil t))) ((t (helm)) nil ((helm nil t))) ((t (helm-make-source)) nil ((helm nil t))) ((t (helm . #1=(helm-make-source))) #1# ((helm nil t))))"
-    ],
+            "OK (((nil (helm helm-make-source)) nil ((helm nil t))) ((t (helm)) nil ((helm nil t))) ((t (helm-make-source)) nil ((helm nil t))) ((t (helm . #1=(helm-make-source))) #1# ((helm nil t))))"
+        ],
     )
 }
 
@@ -614,8 +624,8 @@ fn ast_grep_helm_candidates_process_runs_real_program_with_exact_argv() -> Parit
             (makunbound 'helm-pattern)))"##,
         true,
         expect![[
-        r#"OK (t "ast-grep-helm" exit "run\n--pattern=console.log($A)\n--json=stream\n/fixture/project\n" 0)"#
-    ]],
+            r#"OK (t "ast-grep-helm" exit "run\n--pattern=console.log($A)\n--json=stream\n/fixture/project\n" 0)"#
+        ]],
     )
 }
 
@@ -662,8 +672,8 @@ fn ast_grep_helm_filter_display_preview_and_cleanup_manage_real_file_buffers() -
             (ast-grep-test-kill-file-buffer file)))"##,
         true,
         expect![[
-        r#"OK ("[ORACLE-SANDBOX]/helm/preview.rs:2:2:target()" "[ORACLE-SANDBOX]/helm/preview.rs:2:2:target()" (t 2 2 1 #1=(8 8)) nil nil (t 2 2 #1#))"#
-    ]],
+            r#"OK ("[ORACLE-SANDBOX]/helm/preview.rs:2:2:target()" "[ORACLE-SANDBOX]/helm/preview.rs:2:2:target()" (t 2 2 1 #1=(8 8)) nil nil (t 2 2 #1#))"#
+        ]],
     )
 }
 
@@ -698,12 +708,13 @@ fn ast_grep_helm_source_and_search_wire_all_async_preview_contract_slots() -> Pa
                (nreverse calls)))))"##,
         true,
         expect![[
-        r#"OK (((:follow nil) (:requires-pattern nil) (:nohighlight nil) (:nomark nil)) :helm-result nil ((:ensure helm-make-source) (:make "ast-grep" helm-source-async (:candidates-process #[nil #1=((ast-grep--helm-candidates-process directory)) ((directory . "/fixture/project/"))] :filter-one-by-one ast-grep--helm-filter-one-by-one :action ast-grep--helm-action :persistent-action ast-grep--helm-preview :persistent-help "Preview match" :cleanup ast-grep--helm-cleanup :follow 1 :requires-pattern 3 :nohighlight t :nomark t)) (:ensure helm) (:ensure helm-make-source) (:make "ast-grep" helm-source-async #2=(:candidates-process #[nil #1# ((directory . "/fixture/project/"))] :filter-one-by-one ast-grep--helm-filter-one-by-one :action ast-grep--helm-action :persistent-action ast-grep--helm-preview :persistent-help "Preview match" :cleanup ast-grep--helm-cleanup :follow 1 :requires-pattern 3 :nohighlight t :nomark t)) (:helm (:sources (:source "ast-grep" helm-source-async #2#) :prompt "ast-grep: " :buffer "*helm ast-grep*" :history ast-grep-history))))"#
-    ]],
+            r#"OK (((:follow nil) (:requires-pattern nil) (:nohighlight nil) (:nomark nil)) :helm-result nil ((:ensure helm-make-source) (:make "ast-grep" helm-source-async (:candidates-process #[nil #1=((ast-grep--helm-candidates-process directory)) ((directory . "/fixture/project/"))] :filter-one-by-one ast-grep--helm-filter-one-by-one :action ast-grep--helm-action :persistent-action ast-grep--helm-preview :persistent-help "Preview match" :cleanup ast-grep--helm-cleanup :follow 1 :requires-pattern 3 :nohighlight t :nomark t)) (:ensure helm) (:ensure helm-make-source) (:make "ast-grep" helm-source-async #2=(:candidates-process #[nil #1# ((directory . "/fixture/project/"))] :filter-one-by-one ast-grep--helm-filter-one-by-one :action ast-grep--helm-action :persistent-action ast-grep--helm-preview :persistent-help "Preview match" :cleanup ast-grep--helm-cleanup :follow 1 :requires-pattern 3 :nohighlight t :nomark t)) (:helm (:sources (:source "ast-grep" helm-source-async #2#) :prompt "ast-grep: " :buffer "*helm ast-grep*" :history ast-grep-history))))"#
+        ]],
     )
 }
 
-fn ast_grep_helm_short_pattern_and_missing_function_fail_with_precise_contract() -> ParityBatchCase {
+fn ast_grep_helm_short_pattern_and_missing_function_fail_with_precise_contract() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "ast_grep_helm_short_pattern_and_missing_function_fail_with_precise_contract",
         r##"(let ((ast-grep-async-min-input 3))
@@ -722,8 +733,8 @@ fn ast_grep_helm_short_pattern_and_missing_function_fail_with_precise_contract()
             (makunbound 'helm-pattern)))"##,
         true,
         expect![[
-        r#"OK ((:error error ("Helm pattern is shorter than ‘ast-grep-async-min-input’")) (:error error ("Helm function ‘ast-grep-certainly-missing’ is not available")))"#
-    ]],
+            r#"OK ((:error error ("Helm pattern is shorter than ‘ast-grep-async-min-input’")) (:error error ("Helm function ‘ast-grep-certainly-missing’ is not available")))"#
+        ]],
     )
 }
 

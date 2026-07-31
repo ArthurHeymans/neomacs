@@ -93,10 +93,5 @@ pub(crate) fn assert_add_hooks_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_add_hooks_parity` cases (2a).
 pub(crate) fn assert_add_hooks_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        add_hooks_oracle(),
-        &name,
-        "add_hooks_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(add_hooks_oracle(), &name, "add_hooks_parity", cases);
 }

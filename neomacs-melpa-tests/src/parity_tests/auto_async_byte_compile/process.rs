@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_async_byte_compile_batch};
 
-fn auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_path() -> ParityBatchCase {
+fn auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_path()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_path",
         r##"(let ((load-path
@@ -19,12 +20,13 @@ fn auto_async_byte_compile_process_args_without_init_file_preserve_exact_load_pa
              "/workspace/source file.el")))"##,
         true,
         expect![[
-        r#"OK ("/fixture/emacs" "-Q" "-batch" "--eval" "(setq load-path (cons \".\" '(\"/fixture/first\" \"/fixture/with space\" \"/fixture/密钥\")))" "-f" "batch-byte-compile" "/workspace/source file.el")"#
-    ]],
+            r#"OK ("/fixture/emacs" "-Q" "-batch" "--eval" "(setq load-path (cons \".\" '(\"/fixture/first\" \"/fixture/with space\" \"/fixture/密钥\")))" "-f" "batch-byte-compile" "/workspace/source file.el")"#
+        ]],
     )
 }
 
-fn auto_async_byte_compile_process_args_include_existing_init_file_in_exact_order() -> ParityBatchCase {
+fn auto_async_byte_compile_process_args_include_existing_init_file_in_exact_order()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_process_args_include_existing_init_file_in_exact_order",
         r##"(let* ((root
@@ -64,12 +66,13 @@ fn auto_async_byte_compile_process_args_include_existing_init_file_in_exact_orde
               (delete-file init))))"##,
         true,
         expect![[
-        r#"OK (("/fixture/editor" "-Q" "-batch" "--eval" "(setq load-path (cons \".\" '(\"/one\" \"/two\")))" "-l" "[ORACLE-SANDBOX]/fixture init.el" "-f" "batch-byte-compile" "/project/module.el") t t)"#
-    ]],
+            r#"OK (("/fixture/editor" "-Q" "-batch" "--eval" "(setq load-path (cons \".\" '(\"/one\" \"/two\")))" "-l" "[ORACLE-SANDBOX]/fixture init.el" "-f" "batch-byte-compile" "/project/module.el") t t)"#
+        ]],
     )
 }
 
-fn auto_async_byte_compile_emacs_command_returns_first_command_line_argument_verbatim() -> ParityBatchCase {
+fn auto_async_byte_compile_emacs_command_returns_first_command_line_argument_verbatim()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_emacs_command_returns_first_command_line_argument_verbatim",
         r##"(mapcar
@@ -85,12 +88,13 @@ fn auto_async_byte_compile_emacs_command_returns_first_command_line_argument_ver
             (neomacs-symbol "--batch")))"##,
         true,
         expect![[
-        r#"OK ((nil nil) (("emacs") "emacs") (("/path/with spaces/emacs" "-Q") "/path/with spaces/emacs") ((neomacs-symbol "--batch") neomacs-symbol))"#
-    ]],
+            r#"OK ((nil nil) (("emacs") "emacs") (("/path/with spaces/emacs" "-Q") "/path/with spaces/emacs") ((neomacs-symbol "--batch") neomacs-symbol))"#
+        ]],
     )
 }
 
-fn auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contract() -> ParityBatchCase {
+fn auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contract()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contract",
         r##"(let ((buffer-file-name
@@ -130,12 +134,13 @@ fn auto_async_byte_compile_doit_clears_result_and_forwards_exact_process_contrac
                (buffer-string)))))"##,
         true,
         expect![[
-        r#"OK (:sentinel-installed (("auto-async-byte-compile fixture module.el" " *auto-async-byte-compile*" "/fixture/editor" "--fixture" "/project/nested/fixture module.el")) ((fixture-process aabc/process-sentinel)) "")"#
-    ]],
+            r#"OK (:sentinel-installed (("auto-async-byte-compile fixture module.el" " *auto-async-byte-compile*" "/fixture/editor" "--fixture" "/project/nested/fixture module.el")) ((fixture-process aabc/process-sentinel)) "")"#
+        ]],
     )
 }
 
-fn auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empty() -> ParityBatchCase {
+fn auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empty()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empty",
         r##"(let ((buffer-file-name
@@ -166,7 +171,8 @@ fn auto_async_byte_compile_doit_start_failure_leaves_existing_result_buffer_empt
     )
 }
 
-fn auto_async_byte_compile_real_save_launches_batch_compiler_and_creates_loadable_elc() -> ParityBatchCase {
+fn auto_async_byte_compile_real_save_launches_batch_compiler_and_creates_loadable_elc()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_async_byte_compile_real_save_launches_batch_compiler_and_creates_loadable_elc",
         r##"(let* ((root

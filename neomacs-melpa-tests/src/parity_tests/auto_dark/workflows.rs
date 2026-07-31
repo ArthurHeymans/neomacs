@@ -105,15 +105,14 @@ fn the_shell_detectors_reach_real_programs_with_one_argument_vector_each() -> Pa
               "cmd uimode night 2>&1 </dev/null"))))"##,
         true,
         expect![[
-        r#"OK (:osascript-said t :osascript-argv ("-e" "tell application \"System Events\" to tell appearance preferences to return dark mode") :termux-said t :termux-argv ("uimode" "night") :without-the-redirect "Night mode: yes" :with-the-redirect "Night mode: yes")"#
-    ]],
+            r#"OK (:osascript-said t :osascript-argv ("-e" "tell application \"System Events\" to tell appearance preferences to return dark mode") :termux-said t :termux-argv ("uimode" "night") :without-the-redirect "Night mode: yes" :with-the-redirect "Night mode: yes")"#
+        ]],
     )
 }
 
 #[test]
 fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        the_shell_detectors_reach_real_programs_with_one_argument_vector_each(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![the_shell_detectors_reach_real_programs_with_one_argument_vector_each()];
     assert_auto_dark_batch(&cases);
 }

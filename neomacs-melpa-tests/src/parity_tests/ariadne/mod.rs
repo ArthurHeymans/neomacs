@@ -46,12 +46,7 @@ pub(crate) fn assert_ariadne_with_legacy_cl_parity(elisp_form: &str, expected: E
 /// Multi-probe batch for `assert_ariadne_parity` cases (2a).
 pub(crate) fn assert_ariadne_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ariadne_oracle(""),
-        &name,
-        "ariadne_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ariadne_oracle(""), &name, "ariadne_parity", cases);
 }
 
 /// Multi-probe batch for `assert_ariadne_with_legacy_cl_parity` cases (2a).

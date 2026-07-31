@@ -79,10 +79,6 @@ pub(crate) fn assert_async_await_autoload_parity(elisp_form: &str, expected: Exp
     assert_async_await_source_parity("async-await-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_async_await_autoload_parity` cases (2a).
 pub(crate) fn assert_async_await_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

@@ -35,8 +35,8 @@ fn ac_js2_mode_arms_completion_and_completes_a_local_name_at_point() -> ParityBa
            :point (point)))))"##,
         true,
         expect![[
-        r#"OK (:mode (:major js2-mode :minor t :capf ac-js2-completion-function :save t :skewer-hook t :clients nil :keys (ac-js2-jump-to-definition pop-tag-mark ac-js2-expand-function) :errors 0) :completion (:beg 428 :end 431 :locals ("visitor" "main" "shout" "config" "greet" "greeting") :total 230 :point 431) :line "    shout" :point 433)"#
-    ]],
+            r#"OK (:mode (:major js2-mode :minor t :capf ac-js2-completion-function :save t :skewer-hook t :clients nil :keys (ac-js2-jump-to-definition pop-tag-mark ac-js2-expand-function) :errors 0) :completion (:beg 428 :end 431 :locals ("visitor" "main" "shout" "config" "greet" "greeting") :total 230 :point 431) :line "    shout" :point 433)"#
+        ]],
     )
 }
 
@@ -51,8 +51,8 @@ fn parse_tree_candidates_carry_signatures_object_shapes_and_leading_comments() -
    (list :completion completion :docs docs)))"##,
         true,
         expect![[
-        r#"OK (:completion (:beg nil :end nil :locals ("main" "shout" "config" "greet" "greeting") :total 229 :point 452) :docs (("main" . "function main()") ("shout" . "function (text)") ("config" . "locale : \"de-DE\"\nretries : 3\nonError : function (error)") ("greet" . "Returns a polite greeting for NAME.\n\nfunction greet(name, punctuation)") ("greeting" . "Utilities for the demo app. */\n\"Grüße\"")))"#
-    ]],
+            r#"OK (:completion (:beg nil :end nil :locals ("main" "shout" "config" "greet" "greeting") :total 229 :point 452) :docs (("main" . "function main()") ("shout" . "function (text)") ("config" . "locale : \"de-DE\"\nretries : 3\nonError : function (error)") ("greet" . "Returns a polite greeting for NAME.\n\nfunction greet(name, punctuation)") ("greeting" . "Utilities for the demo app. */\n\"Grüße\"")))"#
+        ]],
     )
 }
 
@@ -70,8 +70,8 @@ fn dot_completion_lists_the_properties_of_a_real_object_literal() -> ParityBatch
    (list :completion completion :docs docs)))"##,
         true,
         expect![[
-        r#"OK (:completion (:beg 435 :end 435 :locals ("locale" "retries" "onError") :total 3 :point 435) :docs (("locale" . "\"de-DE\"") ("retries" . "3") ("onError" . "function (error)")))"#
-    ]],
+            r#"OK (:completion (:beg 435 :end 435 :locals ("locale" "retries" "onError") :total 3 :point 435) :docs (("locale" . "\"de-DE\"") ("retries" . "3") ("onError" . "function (error)")))"#
+        ]],
     )
 }
 
@@ -111,8 +111,8 @@ fn jump_to_definition_lands_on_declarations_and_object_literal_properties() -> P
                    :ring (ring-length find-tag-marker-ring)))))))))"##,
         true,
         expect![[
-        r#"OK (:origin 405 :jumped (99 "function greet(name, punctuation)" 1) :popped (user-error ("At start of xref history") 99) :prop (206 "locale: \"de-DE\"," 2) :missing (user-error ("At start of xref history") 455) :unsupported (error ("Node is not a supported jump node") 394) :ring 4)"#
-    ]],
+            r#"OK (:origin 405 :jumped (99 "function greet(name, punctuation)" 1) :popped (user-error ("At start of xref history") 99) :prop (206 "locale: \"de-DE\"," 2) :missing (user-error ("At start of xref history") 455) :unsupported (error ("Node is not a supported jump node") 394) :ring 4)"#
+        ]],
     )
 }
 
@@ -149,8 +149,8 @@ fn a_connected_browser_merges_its_properties_and_calls_stay_unevaluated() -> Par
                :requests (reverse requests)))))))"##,
         true,
         expect![[
-        r#"OK (:dot (:beg 461 :end 461 :candidates ("locale" "retries" "onError" "locale" "hasOwnProperty" "toLocaleString")) :docs (("locale" . "\"de-DE\"") ("retries" . "3") ("hasOwnProperty" . "function hasOwnProperty()") ("toLocaleString" . "function toLocaleString()")) :call-candidates nil :requests (("config" "complete" ((prototypes . t)))))"#
-    ]],
+            r#"OK (:dot (:beg 461 :end 461 :candidates ("locale" "retries" "onError" "locale" "hasOwnProperty" "toLocaleString")) :docs (("locale" . "\"de-DE\"") ("retries" . "3") ("hasOwnProperty" . "function hasOwnProperty()") ("toLocaleString" . "function toLocaleString()")) :call-candidates nil :requests (("config" "complete" ((prototypes . t)))))"#
+        ]],
     )
 }
 
@@ -179,8 +179,8 @@ fn an_empty_buffer_completes_the_externs_and_an_unparseable_one_signals() -> Par
     (list :empty empty :broken broken)))"##,
         true,
         expect![[
-        r#"OK (:empty (:beg nil :end nil :locals nil :total 224 :first "break" :errors 0) :broken (:errors (("msg.no.paren.after.parms" 41)) :completion (wrong-type-argument (number-or-marker-p nil)) :point 77 :text "var ready = true;\nfunction broken(alpha {\n    return alpha;\n}\nvar tail = 1;\n"))"#
-    ]],
+            r#"OK (:empty (:beg nil :end nil :locals nil :total 224 :first "break" :errors 0) :broken (:errors (("msg.no.paren.after.parms" 41)) :completion (wrong-type-argument (number-or-marker-p nil)) :point 77 :text "var ready = true;\nfunction broken(alpha {\n    return alpha;\n}\nvar tail = 1;\n"))"#
+        ]],
     )
 }
 

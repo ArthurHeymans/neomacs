@@ -105,10 +105,6 @@ pub(crate) fn assert_astyle_autoload_parity(elisp_form: &str, expected: Expect) 
     assert_astyle_source_parity("astyle-autoloads.el", elisp_form, expected);
 }
 
-
-
-
-
 /// Multi-probe batch for `assert_astyle_autoload_parity` cases (2a).
 pub(crate) fn assert_astyle_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -123,10 +119,5 @@ pub(crate) fn assert_astyle_autoload_batch(cases: &[ParityBatchCase]) {
 /// Multi-probe batch for `assert_astyle_parity` cases (2a).
 pub(crate) fn assert_astyle_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        astyle_oracle("astyle.el"),
-        &name,
-        "astyle_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(astyle_oracle("astyle.el"), &name, "astyle_parity", cases);
 }

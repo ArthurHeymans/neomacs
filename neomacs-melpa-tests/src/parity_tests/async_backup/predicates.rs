@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_async_backup_batch};
 
-fn async_backup_predicates_receive_expanded_file_in_order_before_process_launch() -> ParityBatchCase {
+fn async_backup_predicates_receive_expanded_file_in_order_before_process_launch() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async_backup_predicates_receive_expanded_file_in_order_before_process_launch",
         r##"(let* ((work
@@ -61,8 +62,8 @@ fn async_backup_predicates_receive_expanded_file_in_order_before_process_launch(
                 (nreverse events))))))"##,
         true,
         expect![[
-        r#"OK (:process t ((:first "$ROOT//predicates/work/input.org" t) (:second "$ROOT//predicates/work/input.org" t) (:start ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//predicates/work/input.org\" \"$ROOT//predicates/backups$ROOT//predicates/work/input-PRED.org\")"))))"#
-    ]],
+            r#"OK (:process t ((:first "$ROOT//predicates/work/input.org" t) (:second "$ROOT//predicates/work/input.org" t) (:start ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//predicates/work/input.org\" \"$ROOT//predicates/backups$ROOT//predicates/work/input-PRED.org\")"))))"#
+        ]],
     )
 }
 
@@ -125,8 +126,8 @@ fn async_backup_empty_predicate_list_vacuously_launches_backup() -> ParityBatchC
              (async-backup-test-normalize-command captured))))"##,
         true,
         expect![[
-        r#"OK (:launched ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//predicate-empty/input\" \"$ROOT//predicate-empty/backups$ROOT//predicate-empty/input-EMPTY\")"))"#
-    ]],
+            r#"OK (:launched ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//predicate-empty/input\" \"$ROOT//predicate-empty/backups$ROOT//predicate-empty/input-EMPTY\")"))"#
+        ]],
     )
 }
 
@@ -153,12 +154,13 @@ fn async_backup_default_identity_predicate_accepts_any_non_nil_expanded_path() -
              (async-backup-test-normalize-command captured))))"##,
         true,
         expect![[
-        r#"OK ((identity) nil :launched ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//identity/missing-but-non-nil.txt\" \"$ROOT//identity/backups$ROOT//identity/missing-but-non-nil-IDENTITY.txt\")"))"#
-    ]],
+            r#"OK ((identity) nil :launched ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//identity/missing-but-non-nil.txt\" \"$ROOT//identity/backups$ROOT//identity/missing-but-non-nil-IDENTITY.txt\")"))"#
+        ]],
     )
 }
 
-fn async_backup_predicate_signal_propagates_after_directory_creation_without_process() -> ParityBatchCase {
+fn async_backup_predicate_signal_propagates_after_directory_creation_without_process()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async_backup_predicate_signal_propagates_after_directory_creation_without_process",
         r##"(let* ((file
@@ -263,8 +265,8 @@ fn async_backup_predicate_can_filter_by_real_file_size_and_extension() -> Parity
                (nreverse launched)))))"##,
         true,
         expect![[
-        r#"OK ((nil :started nil) (("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//predicate-real/large.log\" \"$ROOT//predicate-real/backups$ROOT//predicate-real/large-FILTER.log\")")))"#
-    ]],
+            r#"OK ((nil :started nil) (("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//predicate-real/large.log\" \"$ROOT//predicate-real/backups$ROOT//predicate-real/large-FILTER.log\")")))"#
+        ]],
     )
 }
 
@@ -317,8 +319,8 @@ fn async_backup_predicates_observe_symlink_path_and_can_reject_it() -> ParityBat
                started))))"##,
         true,
         expect![[
-        r#"OK (nil ("$ROOT//predicate-symlink/link.txt" "real.txt" "$ROOT//predicate-symlink/real.txt") nil)"#
-    ]],
+            r#"OK (nil ("$ROOT//predicate-symlink/link.txt" "real.txt" "$ROOT//predicate-symlink/real.txt") nil)"#
+        ]],
     )
 }
 

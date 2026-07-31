@@ -2,7 +2,8 @@ use expect_test::{Expect, expect};
 
 use super::{ParityBatchCase, assert_async_job_queue_batch};
 
-fn finished_and_timed_out_handlers_reclaim_slots_and_set_distinct_terminal_state() -> ParityBatchCase {
+fn finished_and_timed_out_handlers_reclaim_slots_and_set_distinct_terminal_state() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "finished_and_timed_out_handlers_reclaim_slots_and_set_distinct_terminal_state",
         r##"
@@ -66,8 +67,8 @@ fn finished_and_timed_out_handlers_reclaim_slots_and_set_distinct_terminal_state
 "##,
         true,
         expect![
-        "OK (((success success #1=(:value 42) t #1#) (timeout timeout nil nil)) (timeout-future) (:id success :table nil :run-slot nil :started nil :future nil :ended t :returned t :result #1#) (:id timeout :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id handlers :active nil :in-use 0 :free 2 :used-slots nil :free-slots (0 1) :queued 0 :timer nil))"
-    ],
+            "OK (((success success #1=(:value 42) t #1#) (timeout timeout nil nil)) (timeout-future) (:id success :table nil :run-slot nil :started nil :future nil :ended t :returned t :result #1#) (:id timeout :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id handlers :active nil :in-use 0 :free 2 :used-slots nil :free-slots (0 1) :queued 0 :timer nil))"
+        ],
     )
 }
 
@@ -142,8 +143,8 @@ fn absent_terminal_callbacks_warn_after_cleanup_without_losing_terminal_state() 
 "##,
         true,
         expect![
-        "OK ((:warning-recorded :warning-recorded :warning-recorded) ((:error \"void-function: (nil)\") (:error \"void-function: (nil)\") (:error \"void-function: (nil)\")) (terminated-process cancelled-process) ((:id finished :table nil :run-slot nil :started nil :future nil :ended t :returned t :result (:done 7)) (:id terminated :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id cancelled :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil)) (:id absent-callbacks :active nil :in-use 0 :free 3 :used-slots nil :free-slots (0 1 2) :queued 0 :timer nil))"
-    ],
+            "OK ((:warning-recorded :warning-recorded :warning-recorded) ((:error \"void-function: (nil)\") (:error \"void-function: (nil)\") (:error \"void-function: (nil)\")) (terminated-process cancelled-process) ((:id finished :table nil :run-slot nil :started nil :future nil :ended t :returned t :result (:done 7)) (:id terminated :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id cancelled :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil)) (:id absent-callbacks :active nil :in-use 0 :free 3 :used-slots nil :free-slots (0 1 2) :queued 0 :timer nil))"
+        ],
     )
 }
 
@@ -254,12 +255,13 @@ fn direct_cancel_distinguishes_running_and_still_enqueued_job_lifecycle() -> Par
 "##,
         true,
         expect![
-        "OK (((quit running nil nil) (quit queued nil nil)) (running-future) (:id running :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id queued :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) t (:id queued :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id cancel-direct :active nil :in-use 0 :free 1 :used-slots nil :free-slots (0) :queued 0 :timer nil))"
-    ],
+            "OK (((quit running nil nil) (quit queued nil nil)) (running-future) (:id running :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id queued :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) t (:id queued :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id cancel-direct :active nil :in-use 0 :free 1 :used-slots nil :free-slots (0) :queued 0 :timer nil))"
+        ],
     )
 }
 
-fn cancelling_entire_queue_rejects_fifo_pending_then_active_jobs_and_stops_timer() -> ParityBatchCase {
+fn cancelling_entire_queue_rejects_fifo_pending_then_active_jobs_and_stops_timer() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "cancelling_entire_queue_rejects_fifo_pending_then_active_jobs_and_stops_timer",
         r##"
@@ -339,12 +341,13 @@ fn cancelling_entire_queue_rejects_fifo_pending_then_active_jobs_and_stops_timer
 "##,
         true,
         expect![
-        "OK (((quit queued-1) (quit queued-2) (quit active-1) (quit active-2)) (active-future-1 active-future-2) (queue-timer) (:id cancel-all :active nil :in-use 0 :free 2 :used-slots nil :free-slots (0 1) :queued 0 :timer nil) ((async-job-queue--slot (table cancel-all) (index 0) (next 1) (prev nil) (job nil)) (async-job-queue--slot (table cancel-all) (index 1) (next nil) (prev nil) (job nil))) ((:id active-1 :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id active-2 :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id queued-1 :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id queued-2 :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil)))"
-    ],
+            "OK (((quit queued-1) (quit queued-2) (quit active-1) (quit active-2)) (active-future-1 active-future-2) (queue-timer) (:id cancel-all :active nil :in-use 0 :free 2 :used-slots nil :free-slots (0 1) :queued 0 :timer nil) ((async-job-queue--slot (table cancel-all) (index 0) (next 1) (prev nil) (job nil)) (async-job-queue--slot (table cancel-all) (index 1) (next nil) (prev nil) (job nil))) ((:id active-1 :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id active-2 :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id queued-1 :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil) (:id queued-2 :table nil :run-slot nil :started nil :future nil :ended t :returned nil :result nil)))"
+        ],
     )
 }
 
-fn polling_processes_ready_timeout_and_pending_jobs_across_mutating_slot_lists() -> ParityBatchCase {
+fn polling_processes_ready_timeout_and_pending_jobs_across_mutating_slot_lists() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "polling_processes_ready_timeout_and_pending_jobs_across_mutating_slot_lists",
         r##"
@@ -421,8 +424,8 @@ fn polling_processes_ready_timeout_and_pending_jobs_across_mutating_slot_lists()
 "##,
         true,
         expect![
-        "OK ((:id poll :active t :in-use 2 :free 1 :used-slots (0 2) :free-slots (1) :queued 0 :timer t) (:id poll :active t :in-use 1 :free 2 :used-slots (0) :free-slots (1 2) :queued 0 :timer t) ((success ready #1=(value-from ready-future)) (timeout timeout)) (timeout-future) t ((:id pending :table poll :run-slot 0 :started t :future pending-future :ended nil :returned nil :result nil) (:id ready :table nil :run-slot nil :started t :future nil :ended t :returned t :result #1#) (:id timeout :table nil :run-slot nil :started t :future nil :ended t :returned nil :result nil)))"
-    ],
+            "OK ((:id poll :active t :in-use 2 :free 1 :used-slots (0 2) :free-slots (1) :queued 0 :timer t) (:id poll :active t :in-use 1 :free 2 :used-slots (0) :free-slots (1 2) :queued 0 :timer t) ((success ready #1=(value-from ready-future)) (timeout timeout)) (timeout-future) t ((:id pending :table poll :run-slot 0 :started t :future pending-future :ended nil :returned nil :result nil) (:id ready :table nil :run-slot nil :started t :future nil :ended t :returned t :result #1#) (:id timeout :table nil :run-slot nil :started t :future nil :ended t :returned nil :result nil)))"
+        ],
     )
 }
 

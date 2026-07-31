@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atomic_chrome_batch};
 
-fn atomic_chrome_edit_mode_lifecycle_installs_local_hooks_idempotently_and_leaves_them_on_disable() -> ParityBatchCase {
+fn atomic_chrome_edit_mode_lifecycle_installs_local_hooks_idempotently_and_leaves_them_on_disable()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_edit_mode_lifecycle_installs_local_hooks_idempotently_and_leaves_them_on_disable",
         r##"(with-temp-buffer
@@ -51,8 +52,8 @@ fn atomic_chrome_edit_mode_lifecycle_installs_local_hooks_idempotently_and_leave
                 post-command-hook)))))"##,
         true,
         expect![
-        "OK (((1 t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (1 t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (-1 nil nil (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (nil t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (0 nil nil (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (2 t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t)) ((mode-hook t) (mode-hook t) (mode-hook nil) (mode-hook t) (mode-hook nil) (mode-hook t)) 1 1)"
-    ],
+            "OK (((1 t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (1 t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (-1 nil nil (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (nil t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (0 nil nil (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t) (2 t t (atomic-chrome-close-connection) (atomic-chrome-send-buffer-text) t t)) ((mode-hook t) (mode-hook t) (mode-hook nil) (mode-hook t) (mode-hook nil) (mode-hook t)) 1 1)"
+        ],
     )
 }
 
@@ -81,12 +82,13 @@ fn atomic_chrome_edit_mode_with_auto_update_disabled_installs_only_close_hook() 
               post-command-hook))))"##,
         true,
         expect![
-        "OK (t t (atomic-chrome-close-connection) nil nil nil (atomic-chrome-close-connection) nil)"
-    ],
+            "OK (t t (atomic-chrome-close-connection) nil nil nil (atomic-chrome-close-connection) nil)"
+        ],
     )
 }
 
-fn atomic_chrome_turn_on_edit_mode_checks_table_membership_and_preserves_unrelated_buffer() -> ParityBatchCase {
+fn atomic_chrome_turn_on_edit_mode_checks_table_membership_and_preserves_unrelated_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_turn_on_edit_mode_checks_table_membership_and_preserves_unrelated_buffer",
         r##"(let ((registered
@@ -132,7 +134,8 @@ fn atomic_chrome_turn_on_edit_mode_checks_table_membership_and_preserves_unrelat
     )
 }
 
-fn global_atomic_chrome_edit_mode_enables_only_registered_live_buffers_and_disables_mode() -> ParityBatchCase {
+fn global_atomic_chrome_edit_mode_enables_only_registered_live_buffers_and_disables_mode()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "global_atomic_chrome_edit_mode_enables_only_registered_live_buffers_and_disables_mode",
         r##"(let ((registered
@@ -202,7 +205,8 @@ fn global_atomic_chrome_edit_mode_enables_only_registered_live_buffers_and_disab
     )
 }
 
-fn atomic_chrome_close_edit_buffer_runs_done_hook_then_frame_and_split_window_cleanup() -> ParityBatchCase {
+fn atomic_chrome_close_edit_buffer_runs_done_hook_then_frame_and_split_window_cleanup()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_close_edit_buffer_runs_done_hook_then_frame_and_split_window_cleanup",
         r##"(let ((buffer
@@ -275,12 +279,13 @@ fn atomic_chrome_close_edit_buffer_runs_done_hook_then_frame_and_split_window_cl
              buffer)))"##,
         true,
         expect![[
-        r#"OK (:quit t ((window " *atomic-close-split*") (done 8 16 "editable") (delete-frame :edit-frame) (quit t :edit-window t)))"#
-    ]],
+            r#"OK (:quit t ((window " *atomic-close-split*") (done 8 16 "editable") (delete-frame :edit-frame) (quit t :edit-window t)))"#
+        ]],
     )
 }
 
-fn atomic_chrome_atomic_protocol_practical_edit_update_send_and_disconnect_workflow() -> ParityBatchCase {
+fn atomic_chrome_atomic_protocol_practical_edit_update_send_and_disconnect_workflow()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_atomic_protocol_practical_edit_update_send_and_disconnect_workflow",
         r##"(let ((atomic-chrome-buffer-table
@@ -376,12 +381,13 @@ fn atomic_chrome_atomic_protocol_practical_edit_update_send_and_disconnect_workf
              edit-buffer)))"##,
         true,
         expect![[
-        r#"OK (("Browser editor" "(+ 1 2)\n;; local" emacs-lisp-mode t t t nil) ("Browser editor" "(+ 20 22)" emacs-lisp-mode t t t t) nil 0 ((show "Browser editor" "Browser editor") (send browser-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"(+ 1 2)\\n;; local\"}}") (socket-close browser-socket)))"#
-    ]],
+            r#"OK (("Browser editor" "(+ 1 2)\n;; local" emacs-lisp-mode t t t nil) ("Browser editor" "(+ 20 22)" emacs-lisp-mode t t t t) nil 0 ((show "Browser editor" "Browser editor") (send browser-socket "{\"type\":\"updateText\",\"payload\":{\"text\":\"(+ 1 2)\\n;; local\"}}") (socket-close browser-socket)))"#
+        ]],
     )
 }
 
-fn atomic_chrome_ghost_text_practical_create_bidirectional_update_and_send_workflow() -> ParityBatchCase {
+fn atomic_chrome_ghost_text_practical_create_bidirectional_update_and_send_workflow()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_ghost_text_practical_create_bidirectional_update_and_send_workflow",
         r##"(let ((atomic-chrome-buffer-table
@@ -449,8 +455,8 @@ fn atomic_chrome_ghost_text_practical_create_bidirectional_update_and_send_workf
              edit-buffer)))"##,
         true,
         expect![[
-        r#"OK (("Ghost editor" "draft" text-mode nil nil nil t) ("Ghost editor" "browser revision + emacs" text-mode nil nil nil nil) (("Ghost editor" (ghost-socket :ghost-server) :ghost-frame)) ((show "Ghost editor" "Ghost editor") (send ghost-socket "{\"text\":\"browser revision + emacs\"}")))"#
-    ]],
+            r#"OK (("Ghost editor" "draft" text-mode nil nil nil t) ("Ghost editor" "browser revision + emacs" text-mode nil nil nil nil) (("Ghost editor" (ghost-socket :ghost-server) :ghost-frame)) ((show "Ghost editor" "Ghost editor") (send ghost-socket "{\"text\":\"browser revision + emacs\"}")))"#
+        ]],
     )
 }
 

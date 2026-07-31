@@ -47,10 +47,5 @@ pub(crate) fn assert_transient_signal_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_transient_parity` cases (2a).
 pub(crate) fn assert_transient_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        transient_oracle(),
-        &name,
-        "transient_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(transient_oracle(), &name, "transient_parity", cases);
 }

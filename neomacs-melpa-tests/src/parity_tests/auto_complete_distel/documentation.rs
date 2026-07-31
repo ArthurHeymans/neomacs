@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_distel_batch};
 
-fn distel_completion_html_normalization_handles_paragraphs_breaks_entities_and_tags() -> ParityBatchCase {
+fn distel_completion_html_normalization_handles_paragraphs_breaks_entities_and_tags()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "distel_completion_html_normalization_handles_paragraphs_breaks_entities_and_tags",
         r##"(mapcar
@@ -14,12 +15,13 @@ fn distel_completion_html_normalization_handles_paragraphs_breaks_entities_and_t
             ""))"##,
         true,
         expect![[
-        r#"OK ("\nmap(Fun, List) -> List" "Types\nFun = fun()" "\nalpha\nbeta < gamma\n" "lists:map/2" "")"#
-    ]],
+            r#"OK ("\nmap(Fun, List) -> List" "Types\nFun = fun()" "\nalpha\nbeta < gamma\n" "lists:map/2" "")"#
+        ]],
     )
 }
 
-fn distel_completion_document_prefers_nonempty_local_distel_docs_but_still_collects_metadata() -> ParityBatchCase {
+fn distel_completion_document_prefers_nonempty_local_distel_docs_but_still_collects_metadata()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "distel_completion_document_prefers_nonempty_local_distel_docs_but_still_collects_metadata",
         r##"(let (calls)
@@ -55,12 +57,13 @@ fn distel_completion_document_prefers_nonempty_local_distel_docs_but_still_colle
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ("lists:map/2\nMap Fun over List." ((:local "lists" "map") (:metadata "lists" "map")))"#
-    ]],
+            r#"OK ("lists:map/2\nMap Fun over List." ((:local "lists" "map") (:metadata "lists" "map")))"#
+        ]],
     )
 }
 
-fn distel_completion_document_uses_internet_docs_when_local_distel_docs_are_empty() -> ParityBatchCase {
+fn distel_completion_document_uses_internet_docs_when_local_distel_docs_are_empty()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "distel_completion_document_uses_internet_docs_when_local_distel_docs_are_empty",
         r##"(let (calls)
@@ -96,12 +99,13 @@ fn distel_completion_document_uses_internet_docs_when_local_distel_docs_are_empt
              (nreverse calls))))"##,
         true,
         expect![[
-        r#"OK ("Erlang online documentation" ((:local "lists" "map") (:internet "lists" "map") (:metadata "lists" "map")))"#
-    ]],
+            r#"OK ("Erlang online documentation" ((:local "lists" "map") (:internet "lists" "map") (:metadata "lists" "map")))"#
+        ]],
     )
 }
 
-fn distel_completion_document_falls_back_to_formatted_metadata_then_explicit_no_help() -> ParityBatchCase {
+fn distel_completion_document_falls_back_to_formatted_metadata_then_explicit_no_help()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "distel_completion_document_falls_back_to_formatted_metadata_then_explicit_no_help",
         r##"(cl-letf
@@ -136,7 +140,8 @@ fn distel_completion_document_falls_back_to_formatted_metadata_then_explicit_no_
     )
 }
 
-fn distel_completion_document_without_function_obeys_internet_option_and_exact_fallback_text() -> ParityBatchCase {
+fn distel_completion_document_without_function_obeys_internet_option_and_exact_fallback_text()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "distel_completion_document_without_function_obeys_internet_option_and_exact_fallback_text",
         r##"(mapcar
@@ -165,12 +170,13 @@ fn distel_completion_document_without_function_obeys_internet_option_and_exact_f
           '(nil t))"##,
         true,
         expect![[
-        r#"OK ((nil "Couldn't find any help for lists." nil) (t "module documentation" (("lists" nil))))"#
-    ]],
+            r#"OK ((nil "Couldn't find any help for lists." nil) (t "module documentation" (("lists" nil))))"#
+        ]],
     )
 }
 
-fn distel_completion_internet_parser_requests_module_page_and_extracts_function_body() -> ParityBatchCase {
+fn distel_completion_internet_parser_requests_module_page_and_extracts_function_body()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "distel_completion_internet_parser_requests_module_page_and_extracts_function_body",
         r##"(let ((buffer
@@ -200,8 +206,8 @@ fn distel_completion_internet_parser_requests_module_page_and_extracts_function_
             (kill-buffer buffer)))"##,
         true,
         expect![[
-        r#"OK ("map(Fun, List)\nMaps <Fun> over List.\nReturns a new list." "http://www.erlang.org/doc/man/lists.html")"#
-    ]],
+            r#"OK ("map(Fun, List)\nMaps <Fun> over List.\nReturns a new list." "http://www.erlang.org/doc/man/lists.html")"#
+        ]],
     )
 }
 

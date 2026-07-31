@@ -25,8 +25,8 @@ fn setting_an_alarm_schedules_its_timer_and_lists_it() -> ParityBatchCase {
           :files (alarm-clock-test-files))))"##,
         true,
         expect![[
-        r#"OK (:scheduled ("Stand up" 120 t 2) :lines ((:time-matches-the-alarm t :remaining-hour-minute "00:01" :message "Stand up" :property-message "Stand up" :property-only-on-first-character t)) :header ("Time                 Remaining      Message" alarm-clock-mode t) :cache ";; Auto-generated file; don't edit\n((:time \"<ISO>\" :message \"Stand up\"))\n" :cache-records-the-alarms (("Stand up" . t)) :files ("." ".." "alarm-clock.cache"))"#
-    ]],
+            r#"OK (:scheduled ("Stand up" 120 t 2) :lines ((:time-matches-the-alarm t :remaining-hour-minute "00:01" :message "Stand up" :property-message "Stand up" :property-only-on-first-character t)) :header ("Time                 Remaining      Message" alarm-clock-mode t) :cache ";; Auto-generated file; don't edit\n((:time \"<ISO>\" :message \"Stand up\"))\n" :cache-records-the-alarms (("Stand up" . t)) :files ("." ".." "alarm-clock.cache"))"#
+        ]],
     )
 }
 
@@ -48,8 +48,8 @@ fn the_documented_time_specifications_all_schedule_the_delay_they_name() -> Pari
           :alarms-after-rejection (length alarm-clock--alist))))"##,
         true,
         expect![[
-        r#"OK (:scheduled (("forty five seconds" 45 t 2) ("three minutes" 180 t 1) ("ninety minutes" 5400 t 1) ("half a minute" 30 t 1)) :rejected (error "Invalid time specification") :alarms-after-rejection 4)"#
-    ]],
+            r#"OK (:scheduled (("forty five seconds" 45 t 2) ("three minutes" 180 t 1) ("ninety minutes" 5400 t 1) ("half a minute" 30 t 1)) :rejected (error "Invalid time specification") :alarms-after-rejection 4)"#
+        ]],
     )
 }
 
@@ -71,8 +71,8 @@ fn the_listing_is_sorted_and_carries_each_alarm_as_a_text_property() -> ParityBa
           :displayed (buffer-name (window-buffer (selected-window))))))"##,
         true,
         expect![[
-        r#"OK (:lines ((:time-matches-the-alarm t :remaining-hour-minute "00:09" :message "first" :property-message "first" :property-only-on-first-character t) (:time-matches-the-alarm t :remaining-hour-minute "00:59" :message "middle" :property-message "middle" :property-only-on-first-character t) (:time-matches-the-alarm t :remaining-hour-minute "01:59" :message "last" :property-message "last" :property-only-on-first-character t)) :header ("Time                 Remaining      Message" alarm-clock-mode t) :scheduled (("last" 7200 t 2) ("first" 600 t 1) ("middle" 3600 t 1)) :state (("last" t) ("middle" t) ("first" t)) :displayed "*alarm clock*")"#
-    ]],
+            r#"OK (:lines ((:time-matches-the-alarm t :remaining-hour-minute "00:09" :message "first" :property-message "first" :property-only-on-first-character t) (:time-matches-the-alarm t :remaining-hour-minute "00:59" :message "middle" :property-message "middle" :property-only-on-first-character t) (:time-matches-the-alarm t :remaining-hour-minute "01:59" :message "last" :property-message "last" :property-only-on-first-character t)) :header ("Time                 Remaining      Message" alarm-clock-mode t) :scheduled (("last" 7200 t 2) ("first" 600 t 1) ("middle" 3600 t 1)) :state (("last" t) ("middle" t) ("first" t)) :displayed "*alarm clock*")"#
+        ]],
     )
 }
 
@@ -104,8 +104,8 @@ fn saving_writes_the_alarms_and_restoring_brings_them_back_as_timers() -> Parity
               :lines (alarm-clock-test-lines))))))"##,
         true,
         expect![[
-        r#"OK (:scheduled (("water the plants" 3600 t 2) ("call the bank" 7200 t 1)) :saved (:cache ";; Auto-generated file; don't edit\n((:time \"<ISO>\" :message \"call the bank\")\n (:time \"<ISO>\" :message \"water the plants\"))\n" :cache-records-the-alarms (("call the bank" . t) ("water the plants" . t)) :cache-minutes (("call the bank" . 120) ("water the plants" . 60)) :files ("." ".." "alarm-clock.cache" "alarm-clock.cache~")) :files-after-second-save ("." ".." "alarm-clock.cache" "alarm-clock.cache~") :emptied nil :restored (("call the bank" 120 t) ("water the plants" 60 t)) :new-timers 2 :lines ((:time-matches-the-alarm t :remaining-hour-minute "00:59" :message "water the plants" :property-message "water the plants" :property-only-on-first-character t) (:time-matches-the-alarm t :remaining-hour-minute "01:59" :message "call the bank" :property-message "call the bank" :property-only-on-first-character t)))"#
-    ]],
+            r#"OK (:scheduled (("water the plants" 3600 t 2) ("call the bank" 7200 t 1)) :saved (:cache ";; Auto-generated file; don't edit\n((:time \"<ISO>\" :message \"call the bank\")\n (:time \"<ISO>\" :message \"water the plants\"))\n" :cache-records-the-alarms (("call the bank" . t) ("water the plants" . t)) :cache-minutes (("call the bank" . 120) ("water the plants" . 60)) :files ("." ".." "alarm-clock.cache" "alarm-clock.cache~")) :files-after-second-save ("." ".." "alarm-clock.cache" "alarm-clock.cache~") :emptied nil :restored (("call the bank" 120 t) ("water the plants" 60 t)) :new-timers 2 :lines ((:time-matches-the-alarm t :remaining-hour-minute "00:59" :message "water the plants" :property-message "water the plants" :property-only-on-first-character t) (:time-matches-the-alarm t :remaining-hour-minute "01:59" :message "call the bank" :property-message "call the bank" :property-only-on-first-character t)))"#
+        ]],
     )
 }
 
@@ -137,8 +137,8 @@ fn killing_an_alarm_cancels_its_timer_and_rewrites_the_saved_file() -> ParityBat
                      (condition-case error (alarm-clock-kill) (error error))))))))"##,
         true,
         expect![[
-        r#"OK (:scheduled (("doomed" 3600 t 2) ("survivor" 7200 t 1)) :before (:state (("survivor" t) ("doomed" t)) :scheduled t :cache-records-the-alarms (("survivor" . t) ("doomed" . t))) :after-state (("survivor" t)) :killed-timer-still-scheduled nil :lines ((:time-matches-the-alarm t :remaining-hour-minute "01:59" :message "survivor" :property-message "survivor" :property-only-on-first-character t)) :cache ";; Auto-generated file; don't edit\n((:time \"<ISO>\" :message \"survivor\"))\n" :cache-records-the-alarms (("survivor" . t)) :on-an-empty-line (user-error "No alarm clock on the current line"))"#
-    ]],
+            r#"OK (:scheduled (("doomed" 3600 t 2) ("survivor" 7200 t 1)) :before (:state (("survivor" t) ("doomed" t)) :scheduled t :cache-records-the-alarms (("survivor" . t) ("doomed" . t))) :after-state (("survivor" t)) :killed-timer-still-scheduled nil :lines ((:time-matches-the-alarm t :remaining-hour-minute "01:59" :message "survivor" :property-message "survivor" :property-only-on-first-character t)) :cache ";; Auto-generated file; don't edit\n((:time \"<ISO>\" :message \"survivor\"))\n" :cache-records-the-alarms (("survivor" . t)) :on-an-empty-line (user-error "No alarm clock on the current line"))"#
+        ]],
     )
 }
 
@@ -165,8 +165,8 @@ fn a_firing_alarm_reports_itself_in_the_echo_area_when_no_notifier_exists() -> P
             :state (alarm-clock-test-state)))))"##,
         true,
         expect![[
-        r#"OK (:notifiers (("notify-send") ("terminal-notifier") ("mpg123") ("afplay")) :alert-available nil :sound-file-exists t :messages ("[Alarm Clock] - Tea is ready") :processes-started 0 :timer-still-scheduled nil :new-timers-from-firing 1 :stopped nil :scheduled ("Tea is ready" 10 t 2) :state (("Tea is ready" nil)))"#
-    ]],
+            r#"OK (:notifiers (("notify-send") ("terminal-notifier") ("mpg123") ("afplay")) :alert-available nil :sound-file-exists t :messages ("[Alarm Clock] - Tea is ready") :processes-started 0 :timer-still-scheduled nil :new-timers-from-firing 1 :stopped nil :scheduled ("Tea is ready" 10 t 2) :state (("Tea is ready" nil)))"#
+        ]],
     )
 }
 
@@ -196,8 +196,8 @@ fn expired_and_malformed_saved_alarms_are_handled_when_restoring() -> ParityBatc
                 :alarms-after-malformed (length alarm-clock--alist)))))))"##,
         true,
         expect![[
-        r#"OK (:expired (:alarms (("still pending" 60 t)) :new-timers 2 :lines ((:time-matches-the-alarm t :remaining-hour-minute "00:59" :message "still pending" :property-message "still pending" :property-only-on-first-character t)) :file-still-has-both (("already rang" . -60) ("still pending" . 60))) :missing-file 0 :empty-file 0 :malformed (wrong-type-argument fixnump nil) :alarms-after-malformed 0)"#
-    ]],
+            r#"OK (:expired (:alarms (("still pending" 60 t)) :new-timers 2 :lines ((:time-matches-the-alarm t :remaining-hour-minute "00:59" :message "still pending" :property-message "still pending" :property-only-on-first-character t)) :file-still-has-both (("already rang" . -60) ("still pending" . 60))) :missing-file 0 :empty-file 0 :malformed (wrong-type-argument fixnump nil) :alarms-after-malformed 0)"#
+        ]],
     )
 }
 

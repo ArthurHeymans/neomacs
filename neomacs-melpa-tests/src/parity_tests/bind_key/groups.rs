@@ -28,8 +28,8 @@ fn bind_keys_prefix_map_sets_parent_binding_commands_docstring_and_menu_name() -
                   (mapcar #'car personal-keybindings))))"##,
         true,
         expect![[
-        r#"OK (neomacs-bind-key-prefix-map beginning-of-line end-of-line "Neomacs prefix documentation" t (("e" . neomacs-bind-key-prefix-map) ("a" . neomacs-bind-key-prefix-map) ("C-c b" . neomacs-bind-key-host-map)))"#
-    ]],
+            r#"OK (neomacs-bind-key-prefix-map beginning-of-line end-of-line "Neomacs prefix documentation" t (("e" . neomacs-bind-key-prefix-map) ("a" . neomacs-bind-key-prefix-map) ("C-c b" . neomacs-bind-key-host-map)))"#
+        ]],
     )
 }
 
@@ -61,8 +61,8 @@ fn bind_keys_repeat_map_sets_continue_properties_but_not_exit_properties() -> Pa
                    'variable-documentation))))"##,
         true,
         expect![[
-        r#"OK (neomacs-bind-key-next neomacs-bind-key-quit neomacs-bind-key-prev neomacs-bind-key-repeat-map nil neomacs-bind-key-repeat-map "Neomacs repeat map")"#
-    ]],
+            r#"OK (neomacs-bind-key-next neomacs-bind-key-quit neomacs-bind-key-prev neomacs-bind-key-repeat-map nil neomacs-bind-key-repeat-map "Neomacs repeat map")"#
+        ]],
     )
 }
 
@@ -93,8 +93,8 @@ fn bind_keys_switches_maps_and_prefix_groups_without_reordering_bindings() -> Pa
                   (mapcar #'caar (reverse personal-keybindings)))))"##,
         true,
         expect![[
-        r#"OK (beginning-of-line neomacs-bind-key-prefix-one forward-char backward-char end-of-line ("A" "x" "a" "b" "Z"))"#
-    ]],
+            r#"OK (beginning-of-line neomacs-bind-key-prefix-one forward-char backward-char end-of-line ("A" "x" "a" "b" "Z"))"#
+        ]],
     )
 }
 
@@ -125,8 +125,8 @@ fn bind_keys_package_defers_an_unbound_map_until_the_feature_loads() -> ParityBa
                   personal-keybindings)))"##,
         true,
         expect![[
-        r#"OK (nil t nil forward-char ((("x" . neomacs-deferred-bind-key-map) forward-char nil)))"#
-    ]],
+            r#"OK (nil t nil forward-char ((("x" . neomacs-deferred-bind-key-map) forward-char nil)))"#
+        ]],
     )
 }
 

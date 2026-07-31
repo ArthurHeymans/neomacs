@@ -53,8 +53,8 @@ fn async_purecopy_strips_nested_string_properties_without_mutating_the_input() -
                 (eq (nth 4 copy) (nth 4 original))))"##,
         true,
         expect![[
-        r#"OK (("top" (inside "nested") ("key" . "value") 17 [vector]) (nil nil nil nil) ((face bold) (help-echo "tip") (category key) (category value)) t)"#
-    ]],
+            r#"OK (("top" (inside "nested") ("key" . "value") 17 [vector]) (nil nil nil nil) ((face bold) (help-echo "tip") (category key) (category value)) t)"#
+        ]],
     )
 }
 
@@ -265,8 +265,8 @@ fn async_child_program_arguments_preserve_quiet_init_batch_and_payload_order() -
                 (async--receive-sexp payload)))"##,
         true,
         expect![[
-        r#"OK ("-q" "-l" "async.el" "-l" t "-batch" "-f" "async-batch-invoke" (lambda nil (list "λ" 42)))"#
-    ]],
+            r#"OK ("-q" "-l" "async.el" "-l" t "-batch" "-f" "async-batch-invoke" (lambda nil (list "λ" 42)))"#
+        ]],
     )
 }
 
@@ -284,8 +284,8 @@ fn async_sandbox_and_async_let_expand_to_the_upstream_callback_shape() -> Parity
                    (list x y))))"##,
         true,
         expect![[
-        r#"OK ((async-get (async-start (lambda nil 42))) (async-start (lambda nil (+ 1 2)) (lambda (x) (async-start (lambda nil (+ x 4)) (lambda (y) (progn (list x y)))))))"#
-    ]],
+            r#"OK ((async-get (async-start (lambda nil 42))) (async-start (lambda nil (+ 1 2)) (lambda (x) (async-start (lambda nil (+ x 4)) (lambda (y) (progn (list x y)))))))"#
+        ]],
     )
 }
 

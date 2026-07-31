@@ -47,10 +47,5 @@ pub(crate) fn assert_use_package_signal_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_use_package_parity` cases (2a).
 pub(crate) fn assert_use_package_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        use_package_oracle(),
-        &name,
-        "use_package_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(use_package_oracle(), &name, "use_package_parity", cases);
 }

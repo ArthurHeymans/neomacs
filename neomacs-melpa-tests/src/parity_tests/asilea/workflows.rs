@@ -42,7 +42,8 @@ use super::{ParityBatchCase, assert_asilea_batch};
 /// the result could be asserted.  Everything else is the real annealing loop,
 /// the real subprocesses and the real energy parser.
 
-fn the_documented_compiler_flag_search_flattens_groups_and_finds_the_best_score() -> ParityBatchCase {
+fn the_documented_compiler_flag_search_flattens_groups_and_finds_the_best_score() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "the_documented_compiler_flag_search_flattens_groups_and_finds_the_best_score",
         r##"(let* ((root (file-name-as-directory
@@ -101,15 +102,14 @@ fn the_documented_compiler_flag_search_flattens_groups_and_finds_the_best_score(
           (split-string (buffer-string) "\n" t))))"##,
         true,
         expect![[
-        r#"OK (:finished t :accepted-energy 72 :invocations ("-O2 -ffoo -fbar" "-O2 -ffoo" "-O2 -ffoo -fbar" "-O2 -ffoo" "-Ofast -ffoo" "-Ofast -ffoo" "-Ofast -ffoo -fbar" "-Ofast -ffoo" "-Ofast -ffoo" "-Ofast -ffoo" "-Ofast -ffoo -fbar" "-Ofast -ffoo"))"#
-    ]],
+            r#"OK (:finished t :accepted-energy 72 :invocations ("-O2 -ffoo -fbar" "-O2 -ffoo" "-O2 -ffoo -fbar" "-O2 -ffoo" "-Ofast -ffoo" "-Ofast -ffoo" "-Ofast -ffoo -fbar" "-Ofast -ffoo" "-Ofast -ffoo" "-Ofast -ffoo" "-Ofast -ffoo -fbar" "-Ofast -ffoo"))"#
+        ]],
     )
 }
 
 #[test]
 fn workflows_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        the_documented_compiler_flag_search_flattens_groups_and_finds_the_best_score(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![the_documented_compiler_flag_search_flattens_groups_and_finds_the_best_score()];
     assert_asilea_batch(&cases);
 }

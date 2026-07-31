@@ -44,8 +44,8 @@ fn async_functions_await_each_other_and_the_caller_gets_the_final_value() -> Par
 "##,
         true,
         expect![
-        "OK (:returns-a-promise t :unresolved-at-first t :value 16 :resolved-afterwards t :result-is-a-function t :calling-it-again 16 :awaiting-a-plain-value 42 :awaiting-many (a b c))"
-    ],
+            "OK (:returns-a-promise t :unresolved-at-first t :value 16 :resolved-afterwards t :result-is-a-function t :calling-it-again 16 :awaiting-a-plain-value 42 :awaiting-many (a b c))"
+        ],
     )
 }
 
@@ -88,8 +88,8 @@ fn an_error_inside_an_async_function_reaches_whoever_awaits_it() -> ParityBatchC
 "##,
         true,
         expect![[
-        r#"OK (:signalled (error "kaboom 7") :through-a-caller (error "kaboom 7") :caught-failure (:error error "kaboom 7") :caught-success (:success . ok) :handled-inside (:tag :error :data (error "kaboom 7")) :signals-every-time ((error "kaboom 7") (error "kaboom 7")))"#
-    ]],
+            r#"OK (:signalled (error "kaboom 7") :through-a-caller (error "kaboom 7") :caught-failure (:error error "kaboom 7") :caught-success (:success . ok) :handled-inside (:tag :error :data (error "kaboom 7")) :signals-every-time ((error "kaboom 7") (error "kaboom 7")))"#
+        ]],
     )
 }
 
@@ -125,8 +125,8 @@ fn racing_promises_against_each_other_and_against_a_timeout() -> ParityBatchCase
 "##,
         true,
         expect![
-        "OK (:both-in-finishing-order (fast slow) :beats-the-clock (:success . finished) :misses-the-clock (:error aio-timeout . 0.02))"
-    ],
+            "OK (:both-in-finishing-order (fast slow) :beats-the-clock (:success . finished) :misses-the-clock (:error aio-timeout . 0.02))"
+        ],
     )
 }
 
@@ -165,8 +165,8 @@ fn a_real_subprocess_feeds_a_chain_of_promises_through_one_callback() -> ParityB
 "##,
         true,
         expect![[
-        r#"OK (:text "alpha\nbeta\ngamma\n" :exit (exited 3 "exited abnormally with code 3"))"#
-    ]],
+            r#"OK (:text "alpha\nbeta\ngamma\n" :exit (exited 3 "exited abnormally with code 3"))"#
+        ]],
     )
 }
 
@@ -220,8 +220,8 @@ fn a_promise_settles_once_and_cancel_never_reports_that_it_worked() -> ParityBat
 "##,
         true,
         expect![
-        "OK (:resolved-twice first :cancelled (:return-value nil :awaiting (aio-cancel . because)) :cancel-after-settling (:return-value nil :value already) :cancel-return-values-are-indistinguishable (:on-a-fresh-promise nil :on-a-settled-promise nil :but-the-fresh-one-did-cancel aio-cancel :and-the-settled-one-kept-its-value done) :late-listener value)"
-    ],
+            "OK (:resolved-twice first :cancelled (:return-value nil :awaiting (aio-cancel . because)) :cancel-after-settling (:return-value nil :value already) :cancel-return-values-are-indistinguishable (:on-a-fresh-promise nil :on-a-settled-promise nil :but-the-fresh-one-did-cancel aio-cancel :and-the-settled-one-kept-its-value done) :late-listener value)"
+        ],
     )
 }
 
@@ -255,8 +255,8 @@ fn aio_with_async_forces_its_result_and_drops_the_bindings_around_it() -> Parity
 "##,
         true,
         expect![[
-        r#"OK (:value 3 :awaiting slept :dynamic-binding-does-not-reach-it outer :without-any-binding global :error-is-realised (error "unattended failure"))"#
-    ]],
+            r#"OK (:value 3 :awaiting slept :dynamic-binding-does-not-reach-it outer :without-any-binding global :error-is-realised (error "unattended failure"))"#
+        ]],
     )
 }
 

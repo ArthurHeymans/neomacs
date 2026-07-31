@@ -71,8 +71,8 @@ fn refreshing_runs_csswatcher_and_keeps_the_directory_it_names() -> ParityBatchC
                                                   root)))))))"##,
         true,
         expect![[
-        r#"OK ((:arguments ("SITE/index.html") :source-dir "SITE/.cache/completion" :buffer-local t :message "[csswatcher] parsed SITE/\n" :output-buffers nil) :with-command-args ("--debug" "--outputdir" "SITE/cache" "SITE/index.html") :with-another-command ("SITE/index.html") :source-dir-after "SITE/.cache/completion")"#
-    ]],
+            r#"OK ((:arguments ("SITE/index.html") :source-dir "SITE/.cache/completion" :buffer-local t :message "[csswatcher] parsed SITE/\n" :output-buffers nil) :with-command-args ("--debug" "--outputdir" "SITE/cache" "SITE/index.html") :with-another-command ("SITE/index.html") :source-dir-after "SITE/.cache/completion")"#
+        ]],
     )
 }
 
@@ -109,8 +109,8 @@ fn enabling_it_adds_one_project_source_to_this_buffer_only() -> ParityBatchCase 
                                        (default-value 'web-completion-data-sources)))))))"##,
         true,
         expect![[
-        r#"OK (:local-before nil :after-enabling (:sources (("Project" . ac-html-csswatcher-source-dir) ("html" . web-completion-data-html-source-dir)) :local t :source-dir "SITE/.cache/completion") :after-the-company-alias (("Project" . ac-html-csswatcher-source-dir) ("html" . web-completion-data-html-source-dir)) :aliases (t t t) :global-before (("html" . web-completion-data-html-source-dir)) :global-after (("html" . web-completion-data-html-source-dir)) :global-untouched t)"#
-    ]],
+            r#"OK (:local-before nil :after-enabling (:sources (("Project" . ac-html-csswatcher-source-dir) ("html" . web-completion-data-html-source-dir)) :local t :source-dir "SITE/.cache/completion") :after-the-company-alias (("Project" . ac-html-csswatcher-source-dir) ("html" . web-completion-data-html-source-dir)) :aliases (t t t) :global-before (("html" . web-completion-data-html-source-dir)) :global-after (("html" . web-completion-data-html-source-dir)) :global-untouched t)"#
+        ]],
     )
 }
 
@@ -155,8 +155,8 @@ fn a_failed_or_unparsable_scan_can_silently_empty_the_completions() -> ParityBat
                                     (process-list))))))))))"##,
         true,
         expect![[
-        r#"OK (:after-a-good-scan "SITE/.cache/completion" :after-a-failed-scan "SITE/.cache/completion" :kept-the-good-one t :after-unparsable-output nil :after-project-without-acsource nil :not-visiting-a-file (:returned nil :processes 0))"#
-    ]],
+            r#"OK (:after-a-good-scan "SITE/.cache/completion" :after-a-failed-scan "SITE/.cache/completion" :kept-the-good-one t :after-unparsable-output nil :after-project-without-acsource nil :not-visiting-a-file (:returned nil :processes 0))"#
+        ]],
     )
 }
 
@@ -199,8 +199,8 @@ fn setup_wires_markup_modes_to_scan_and_css_modes_to_rescan_on_save() -> ParityB
                       (ac-html-csswatcher-test-arguments log)))))))"##,
         true,
         expect![[
-        r#"OK (:before ((html-mode-hook nil) (web-mode-hook nil) (slim-mode-hook nil) (jade-mode-hook nil) (haml-mode-hook nil) (css-mode-hook nil) (less-mode-hook nil)) :after ((html-mode-hook t 1) (web-mode-hook t 1) (slim-mode-hook t 1) (jade-mode-hook t 1) (haml-mode-hook t 1) (css-mode-hook nil 1) (less-mode-hook nil 1)) :css-buffer-has-a-local-after-save-hook t :global-after-save-hook-untouched t :scanned-on-save ("SITE/css/app.css"))"#
-    ]],
+            r#"OK (:before ((html-mode-hook nil) (web-mode-hook nil) (slim-mode-hook nil) (jade-mode-hook nil) (haml-mode-hook nil) (css-mode-hook nil) (less-mode-hook nil)) :after ((html-mode-hook t 1) (web-mode-hook t 1) (slim-mode-hook t 1) (jade-mode-hook t 1) (haml-mode-hook t 1) (css-mode-hook nil 1) (less-mode-hook nil 1)) :css-buffer-has-a-local-after-save-hook t :global-after-save-hook-untouched t :scanned-on-save ("SITE/css/app.css"))"#
+        ]],
     )
 }
 

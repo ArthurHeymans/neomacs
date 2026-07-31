@@ -49,12 +49,13 @@ fn auto_complete_real_menu_filters_candidates_and_completes_selected_item() -> P
                                 (auto-complete-mode -1)))))"##,
         true,
         expect![[
-        r#"OK (("fo\n\n\n\n\n\n\n\n\n\n\n" "fo" ("format" "forward-char") t "format") "forward-char" "forward-char" nil nil nil)"#
-    ]],
+            r#"OK (("fo\n\n\n\n\n\n\n\n\n\n\n" "fo" ("format" "forward-char") t "format") "forward-char" "forward-char" nil nil nil)"#
+        ]],
     )
 }
 
-fn auto_complete_single_candidate_expands_immediately_without_leaving_menu_or_session() -> ParityBatchCase {
+fn auto_complete_single_candidate_expands_immediately_without_leaving_menu_or_session()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_single_candidate_expands_immediately_without_leaving_menu_or_session",
         r##"(save-window-excursion
@@ -89,7 +90,8 @@ fn auto_complete_single_candidate_expands_immediately_without_leaving_menu_or_se
     )
 }
 
-fn auto_complete_common_part_expands_then_stop_keeps_edit_and_removes_transient_popup_state() -> ParityBatchCase {
+fn auto_complete_common_part_expands_then_stop_keeps_edit_and_removes_transient_popup_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_common_part_expands_then_stop_keeps_edit_and_removes_transient_popup_state",
         r##"(save-window-excursion
@@ -131,12 +133,13 @@ fn auto_complete_common_part_expands_then_stop_keeps_edit_and_removes_transient_
                                 (auto-complete-mode -1)))))"##,
         true,
         expect![[
-        r#"OK (("de" "de" "de" "de" ("deploy-prod" "deploy-preview" "delete")) "de" nil nil nil)"#
-    ]],
+            r#"OK (("de" "de" "de" "de" ("deploy-prod" "deploy-preview" "delete")) "de" nil nil nil)"#
+        ]],
     )
 }
 
-fn auto_complete_incremental_update_narrows_candidates_then_no_match_aborts_cleanly() -> ParityBatchCase {
+fn auto_complete_incremental_update_narrows_candidates_then_no_match_aborts_cleanly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_incremental_update_narrows_candidates_then_no_match_aborts_cleanly",
         r##"(save-window-excursion
@@ -201,7 +204,8 @@ fn auto_complete_incremental_update_narrows_candidates_then_no_match_aborts_clea
     )
 }
 
-fn auto_complete_ret_executes_candidate_action_after_inserting_associated_display_name() -> ParityBatchCase {
+fn auto_complete_ret_executes_candidate_action_after_inserting_associated_display_name()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_ret_executes_candidate_action_after_inserting_associated_display_name",
         r##"(save-window-excursion
@@ -259,12 +263,13 @@ fn auto_complete_ret_executes_candidate_action_after_inserting_associated_displa
                                 (auto-complete-mode -1)))))"##,
         true,
         expect![[
-        r#"OK ((("deploy-production" production-id #1=(lambda nil (push (list (buffer-string) ac-selected-candidate) auto-complete-test-actions))) ("deploy-preview" preview-id #1#)) "deploy-preview" "deploy-preview" (("deploy-preview" nil)) nil)"#
-    ]],
+            r#"OK ((("deploy-production" production-id #1=(lambda nil (push (list (buffer-string) ac-selected-candidate) auto-complete-test-actions))) ("deploy-preview" preview-id #1#)) "deploy-preview" "deploy-preview" (("deploy-preview" nil)) nil)"#
+        ]],
     )
 }
 
-fn auto_complete_expansion_replaces_matching_right_hand_symbol_tail_but_preserves_unrelated_suffix() -> ParityBatchCase {
+fn auto_complete_expansion_replaces_matching_right_hand_symbol_tail_but_preserves_unrelated_suffix()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_expansion_replaces_matching_right_hand_symbol_tail_but_preserves_unrelated_suffix",
         r##"(mapcar
@@ -310,12 +315,13 @@ fn auto_complete_expansion_replaces_matching_right_hand_symbol_tail_but_preserve
                              "λambda")))"##,
         true,
         expect![[
-        r#"OK ((("forard-char" 4 1 "forward-char") 12 "forward-char" 13 "forward-char" "forward-char") (("for-other" 4 1 "forward-char") 4 "forward-char-other" 13 "forward-char" "forward-char") (("prefix prod suffix" 12 8 "production") 12 "prefix production suffix" 18 "production" "production") (("λambd" 4 1 "λambda") 4 "λambdabd" 7 "λambda" "λambda"))"#
-    ]],
+            r#"OK ((("forard-char" 4 1 "forward-char") 12 "forward-char" 13 "forward-char" "forward-char") (("for-other" 4 1 "forward-char") 4 "forward-char-other" 13 "forward-char" "forward-char") (("prefix prod suffix" 12 8 "production") 12 "prefix production suffix" 18 "production" "production") (("λambd" 4 1 "λambda") 4 "λambdabd" 7 "λambda" "λambda"))"#
+        ]],
     )
 }
 
-fn auto_complete_expansion_is_one_undoable_edit_and_repeated_expansion_removes_internal_boundaries() -> ParityBatchCase {
+fn auto_complete_expansion_is_one_undoable_edit_and_repeated_expansion_removes_internal_boundaries()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_expansion_is_one_undoable_edit_and_repeated_expansion_removes_internal_boundaries",
         r##"(with-temp-buffer
@@ -352,12 +358,13 @@ fn auto_complete_expansion_is_one_undoable_edit_and_repeated_expansion_removes_i
                                 buffer-undo-list)))))"##,
         true,
         expect![[
-        r#"OK (("format" "format" (nil (1 . 7) ("fo" . -1) 3)) ("forward-char" "forward-char" (nil (1 . 13) ("fo" . -1) 3)) "fo" ((1 . 3) ("forward-char" . 1) nil (1 . 13) ("fo" . -1) 3))"#
-    ]],
+            r#"OK (("format" "format" (nil (1 . 7) ("fo" . -1) 3)) ("forward-char" "forward-char" (nil (1 . 13) ("fo" . -1) 3)) "fo" ((1 . 3) ("forward-char" . 1) nil (1 . 13) ("fo" . -1) 3))"#
+        ]],
     )
 }
 
-fn auto_complete_menu_navigation_wraps_pages_and_completes_the_visible_selection() -> ParityBatchCase {
+fn auto_complete_menu_navigation_wraps_pages_and_completes_the_visible_selection() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_complete_menu_navigation_wraps_pages_and_completes_the_visible_selection",
         r##"(save-window-excursion
@@ -429,12 +436,13 @@ fn auto_complete_menu_navigation_wraps_pages_and_completes_the_visible_selection
                                 (auto-complete-mode -1)))))"##,
         true,
         expect![[
-        r#"OK ((("item-1" 0 0) ("item-3" 2 0) ("item-2" 1 0) ("item-6" 5 3)) "item-6" nil)"#
-    ]],
+            r#"OK ((("item-1" 0 0) ("item-3" 2 0) ("item-2" 1 0) ("item-6" 5 3)) "item-6" nil)"#
+        ]],
     )
 }
 
-fn auto_complete_numbered_selection_command_chooses_requested_candidate_and_finishes() -> ParityBatchCase {
+fn auto_complete_numbered_selection_command_chooses_requested_candidate_and_finishes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_numbered_selection_command_chooses_requested_candidate_and_finishes",
         r##"(save-window-excursion
@@ -472,7 +480,8 @@ fn auto_complete_numbered_selection_command_chooses_requested_candidate_and_fini
     )
 }
 
-fn auto_complete_inline_overlay_shows_common_suffix_without_mutating_buffer_and_hides_cleanly() -> ParityBatchCase {
+fn auto_complete_inline_overlay_shows_common_suffix_without_mutating_buffer_and_hides_cleanly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_inline_overlay_shows_common_suffix_without_mutating_buffer_and_hides_cleanly",
         r##"(with-temp-buffer
@@ -531,12 +540,13 @@ fn auto_complete_inline_overlay_shows_common_suffix_without_mutating_buffer_and_
                                 overlay)))))"##,
         true,
         expect![[
-        r#"OK (("format following" 4 8 "ward" #("w" 0 1 (face ac-completion-face)) #("ard" 0 3 (face ac-completion-face)) nil) (1 1 nil nil t) "format following" nil nil)"#
-    ]],
+            r#"OK (("format following" 4 8 "ward" #("w" 0 1 (face ac-completion-face)) #("ard" 0 3 (face ac-completion-face)) nil) (1 1 nil nil t) "format following" nil nil)"#
+        ]],
     )
 }
 
-fn auto_complete_candidate_documentation_flows_through_real_popup_menu_and_last_completion() -> ParityBatchCase {
+fn auto_complete_candidate_documentation_flows_through_real_popup_menu_and_last_completion()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_candidate_documentation_flows_through_real_popup_menu_and_last_completion",
         r##"(save-window-excursion
@@ -588,12 +598,13 @@ fn auto_complete_candidate_documentation_flows_through_real_popup_menu_and_last_
                                 (auto-complete-mode -1)))))"##,
         true,
         expect![[
-        r#"OK ("Documentation for render-payload" "Documentation for render-payload" 1 (:buffer nil) "render-page" "render-page")"#
-    ]],
+            r#"OK ("Documentation for render-payload" "Documentation for render-payload" 1 (:buffer nil) "render-page" "render-page")"#
+        ]],
     )
 }
 
-fn auto_complete_source_initialization_runs_once_per_prefix_start_and_restarts_after_point_changes() -> ParityBatchCase {
+fn auto_complete_source_initialization_runs_once_per_prefix_start_and_restarts_after_point_changes()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_source_initialization_runs_once_per_prefix_start_and_restarts_after_point_changes",
         r##"(with-temp-buffer
@@ -653,7 +664,8 @@ fn auto_complete_source_initialization_runs_once_per_prefix_start_and_restarts_a
     )
 }
 
-fn auto_complete_prefix_overlay_adds_temporary_end_newlines_and_cleanup_restores_exact_buffer() -> ParityBatchCase {
+fn auto_complete_prefix_overlay_adds_temporary_end_newlines_and_cleanup_restores_exact_buffer()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_prefix_overlay_adds_temporary_end_newlines_and_cleanup_restores_exact_buffer",
         r##"(with-temp-buffer

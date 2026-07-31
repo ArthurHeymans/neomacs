@@ -22,8 +22,8 @@ fn summarising_an_order_book_by_region_through_one_threaded_pipeline() -> Parity
 "##,
         true,
         expect![[
-        r#"OK (:result ((:region east :orders 2 :cents 12900 :customers ("Katherine" "Ada")) (:region north :orders 2 :cents 6075 :customers ("Ada")) (:region south :orders 2 :cents 5150 :customers ("Grace"))) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
-    ]],
+            r#"OK (:result ((:region east :orders 2 :cents 12900 :customers ("Katherine" "Ada")) (:region north :orders 2 :cents 6075 :customers ("Ada")) (:region south :orders 2 :cents 5150 :customers ("Grace"))) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
+        ]],
     )
 }
 
@@ -61,8 +61,8 @@ fn destructuring_each_record_with_let_and_lambda_patterns() -> ParityBatchCase {
 "##,
         true,
         expect![[
-        r#"OK (:result (:one-record (1041 "Ada" 2) :every-line ("1041 Ada 42.00" "1042 Grace 9.50" "1043 Ada 18.75" "1044 Katherine 123.00" "1045 Grace 42.00" "1046 Ada 6.00") :nested (:first-id 1041 :second-region south :second-is-the-whole t :rest-ids (1043 1044 1045 1046) :last-items ("pen" "pen")) :absent-key (nil 4200)) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
-    ]],
+            r#"OK (:result (:one-record (1041 "Ada" 2) :every-line ("1041 Ada 42.00" "1042 Grace 9.50" "1043 Ada 18.75" "1044 Katherine 123.00" "1045 Grace 42.00" "1046 Ada 6.00") :nested (:first-id 1041 :second-region south :second-is-the-whole t :rest-ids (1043 1044 1045 1046) :last-items ("pen" "pen")) :absent-key (nil 4200)) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
+        ]],
     )
 }
 
@@ -88,8 +88,8 @@ fn splitting_a_run_of_orders_into_windows_and_runs() -> ParityBatchCase {
 "##,
         true,
         expect![[
-        r#"OK (:result (:in-pairs ((4200 950) (1875 12300) (4200 600)) :threes ((4200 950 1875) (12300 4200 600)) :fours ((4200 950 1875 12300)) :fours-all ((4200 950 1875 12300) (4200 600)) :sliding ((4200 950 1875) (950 1875 12300) (1875 12300 4200) (12300 4200 600)) :runs-by-region (((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen"))) ((:id 1042 :customer "Grace" :region south :cents 950 :items ("pen"))) ((:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk"))) ((:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug"))) ((:id 1045 :customer "Grace" :region south :cents 4200 :items nil)) ((:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen")))) :split-on-a-big-one (((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk"))) ((:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen")))) :consecutive ((4200 . 950) (950 . 1875) (1875 . 12300) (12300 . 4200) (4200 . 600)) :running (4200 5150 7025 19325 23525 24125)) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
-    ]],
+            r#"OK (:result (:in-pairs ((4200 950) (1875 12300) (4200 600)) :threes ((4200 950 1875) (12300 4200 600)) :fours ((4200 950 1875 12300)) :fours-all ((4200 950 1875 12300) (4200 600)) :sliding ((4200 950 1875) (950 1875 12300) (1875 12300 4200) (12300 4200 600)) :runs-by-region (((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen"))) ((:id 1042 :customer "Grace" :region south :cents 950 :items ("pen"))) ((:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk"))) ((:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug"))) ((:id 1045 :customer "Grace" :region south :cents 4200 :items nil)) ((:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen")))) :split-on-a-big-one (((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk"))) ((:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen")))) :consecutive ((4200 . 950) (950 . 1875) (1875 . 12300) (12300 . 4200) (4200 . 600)) :running (4200 5150 7025 19325 23525 24125)) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
+        ]],
     )
 }
 
@@ -134,8 +134,8 @@ fn folding_over_the_book_to_build_a_ledger_and_pick_extremes() -> ParityBatchCas
 "##,
         true,
         expect![[
-        r#"OK (:result (:ledger (("Katherine" . 12300) ("Grace" . 5150) ("Ada" . 6675)) :reductions (0 4200 5150 7025 19325 23525 24125) :from-the-right (1041 1042 1043 1044 1045 1046) :largest 1044 :smallest 1046 :ties (1041 1045) :annotated ((north . 1041) (south . 1042) (north . 1043) (east . 1044) (south . 1045) (east . 1046))) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
-    ]],
+            r#"OK (:result (:ledger (("Katherine" . 12300) ("Grace" . 5150) ("Ada" . 6675)) :reductions (0 4200 5150 7025 19325 23525 24125) :from-the-right (1041 1042 1043 1044 1045 1046) :largest 1044 :smallest 1046 :ties (1041 1045) :annotated ((north . 1041) (south . 1042) (north . 1043) (east . 1044) (south . 1045) (east . 1046))) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
+        ]],
     )
 }
 
@@ -184,8 +184,8 @@ fn the_destructive_operations_rewrite_their_argument_and_the_others_do_not() -> 
 "##,
         true,
         expect![[
-        r#"OK (:pure (:results ((a b x . #1=(c d)) (a . #1#) (z . #2=(b . #1#)) (a b c "d") (b c)) :source-after (a . #2#) :source-unchanged t) :splice (:result (1 2 2 3 4 4) :source-after (1 2 3 4) :source-unchanged t) :destructive (:before (b c) :after-push (a b c) :after-pop (b c)) :sorting (:sorted (1 2 3) :source-after (3 1 2) :source-unchanged t))"#
-    ]],
+            r#"OK (:pure (:results ((a b x . #1=(c d)) (a . #1#) (z . #2=(b . #1#)) (a b c "d") (b c)) :source-after (a . #2#) :source-unchanged t) :splice (:result (1 2 2 3 4 4) :source-after (1 2 3 4) :source-unchanged t) :destructive (:before (b c) :after-push (a b c) :after-pop (b c)) :sorting (:sorted (1 2 3) :source-after (3 1 2) :source-unchanged t))"#
+        ]],
     )
 }
 
@@ -233,8 +233,8 @@ fn threading_and_short_circuiting_over_a_record_that_may_be_missing() -> ParityB
 "##,
         true,
         expect![[
-        r#"OK (:result (:present "DESK" :missing nil :empty-items nil :named "order for Ada" :if-let "Grace" :if-let-else "no such order" :when-let* ("pen" 2) :when-let*-stops nil) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
-    ]],
+            r#"OK (:result (:present "DESK" :missing nil :empty-items nil :named "order for Ada" :if-let "Grace" :if-let-else "no such order" :when-let* ("pen" 2) :when-let*-stops nil) :source-unchanged t :source ((:id 1041 :customer "Ada" :region north :cents 4200 :items ("book" "pen")) (:id 1042 :customer "Grace" :region south :cents 950 :items ("pen")) (:id 1043 :customer "Ada" :region north :cents 1875 :items ("desk")) (:id 1044 :customer "Katherine" :region east :cents 12300 :items ("desk" "lamp" "rug")) (:id 1045 :customer "Grace" :region south :cents 4200 :items nil) (:id 1046 :customer "Ada" :region east :cents 600 :items ("pen" "pen"))))"#
+        ]],
     )
 }
 

@@ -23,8 +23,8 @@ fn aider_file_paths_are_repo_relative_local_and_shell_space_aware() -> ParityBat
                  '("plain.el" "two words.el" "tabs\tstay.el")))"##,
         true,
         expect![[
-        r#"OK (("src/main.py" "\"docs/user guide.md\"" "../../outside/data.txt") ("/outside/file.py" "[ORACLE-SANDBOX]/relative.el") ("plain.el" "\"two words.el\"" "tabs\11stay.el"))"#
-    ]],
+            r#"OK (("src/main.py" "\"docs/user guide.md\"" "../../outside/data.txt") ("/outside/file.py" "[ORACLE-SANDBOX]/relative.el") ("plain.el" "\"two words.el\"" "tabs\11stay.el"))"#
+        ]],
     )
 }
 
@@ -58,8 +58,8 @@ fn aider_real_directory_suffix_and_content_filter_pipeline_matches() -> ParityBa
              (aider--filter-files-by-content-regex python nil)))))"##,
         true,
         expect![[
-        r#"OK (("helper.py" "main.py" "view.py" "test_main.py") ("main.py" "nested/view.py" "test_main.py") nil 4)"#
-    ]],
+            r#"OK (("helper.py" "main.py" "view.py" "test_main.py") ("main.py" "nested/view.py" "test_main.py") nil 4)"#
+        ]],
     )
 }
 
@@ -95,12 +95,13 @@ fn aider_dependency_scanner_ignores_comments_strings_tests_and_flycheck_files() 
                     (aider--filter-test-files dependents t)))))"##,
         true,
         expect![[
-        r#"OK (("helper.py" "ignored.py") ("client.py" "test_main.py") ("client.py" "test_main.py") ("client.py" "test_main.py"))"#
-    ]],
+            r#"OK (("helper.py" "ignored.py") ("client.py" "test_main.py") ("client.py" "test_main.py") ("client.py" "test_main.py"))"#
+        ]],
     )
 }
 
-fn aider_context_processing_deduplicates_and_sends_one_formatted_command_per_file() -> ParityBatchCase {
+fn aider_context_processing_deduplicates_and_sends_one_formatted_command_per_file()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "aider_context_processing_deduplicates_and_sends_one_formatted_command_per_file",
         r##"(let (sent switched)
@@ -121,12 +122,13 @@ fn aider_context_processing_deduplicates_and_sends_one_formatted_command_per_fil
            (list (nreverse sent) switched)))"##,
         true,
         expect![[
-        r#"OK ((("/read-only main.py" nil) ("/read-only helper.py" nil) ("/read-only \"shared file.py\"" nil) ("/read-only client.py" nil)) t)"#
-    ]],
+            r#"OK ((("/read-only main.py" nil) ("/read-only helper.py" nil) ("/read-only \"shared file.py\"" nil) ("/read-only client.py" nil)) t)"#
+        ]],
     )
 }
 
-fn aider_current_file_and_dired_command_workflows_build_exact_session_messages() -> ParityBatchCase {
+fn aider_current_file_and_dired_command_workflows_build_exact_session_messages() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "aider_current_file_and_dired_command_workflows_build_exact_session_messages",
         r##"(let* ((root (expand-file-name "files"
@@ -154,8 +156,8 @@ fn aider_current_file_and_dired_command_workflows_build_exact_session_messages()
            (nreverse sent)))"##,
         true,
         expect![[
-        r#"OK (("/add one.el" nil) ("/drop one.el" nil) ("/read-only one.el \"two words.el\"" t))"#
-    ]],
+            r#"OK (("/add one.el" nil) ("/drop one.el" nil) ("/read-only one.el \"two words.el\"" t))"#
+        ]],
     )
 }
 

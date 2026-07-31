@@ -122,12 +122,13 @@ fn global_atl_long_lines_cross_buffer_commands_share_and_supersede_one_timer() -
            (kill-buffer buffer-b)))"##,
         true,
         expect![[
-        "OK (((t 1) (t 1)) ((:schedule 1 :a 0.4 nil atl-long-lines-do-toggle nil) (:cancel 1 :a) (:schedule 2 :b 0.4 nil atl-long-lines-do-toggle nil)) (2) (2 :b) ((nil 0) (nil 0)))"
-    ]],
+            "OK (((t 1) (t 1)) ((:schedule 1 :a 0.4 nil atl-long-lines-do-toggle nil) (:cancel 1 :a) (:schedule 2 :b 0.4 nil atl-long-lines-do-toggle nil)) (2) (2 :b) ((nil 0) (nil 0)))"
+        ]],
     )
 }
 
-fn atl_long_lines_enabled_post_command_to_timer_callback_keeps_short_line_truncated() -> ParityBatchCase {
+fn atl_long_lines_enabled_post_command_to_timer_callback_keeps_short_line_truncated()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_enabled_post_command_to_timer_callback_keeps_short_line_truncated",
         r##"(with-temp-buffer
@@ -227,7 +228,8 @@ fn atl_long_lines_cursor_navigation_recomputes_wrapping_for_each_visited_line() 
     )
 }
 
-fn atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_callback_drives_ui() -> ParityBatchCase {
+fn atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_callback_drives_ui()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_callback_drives_ui",
         r##"(with-temp-buffer
@@ -300,7 +302,8 @@ fn atl_long_lines_rapid_post_commands_cancel_superseded_work_and_only_latest_cal
     )
 }
 
-fn atl_long_lines_runtime_delay_customization_affects_the_next_command_without_reenabling_mode() -> ParityBatchCase {
+fn atl_long_lines_runtime_delay_customization_affects_the_next_command_without_reenabling_mode()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_runtime_delay_customization_affects_the_next_command_without_reenabling_mode",
         r##"(with-temp-buffer
@@ -338,12 +341,13 @@ fn atl_long_lines_runtime_delay_customization_affects_the_next_command_without_r
               atl-long-lines--timer))))"##,
         true,
         expect![
-        "OK (t ((0.4 nil atl-long-lines-do-toggle nil) (2.5 nil atl-long-lines-do-toggle nil)) (:timer 2.5))"
-    ],
+            "OK (t ((0.4 nil atl-long-lines-do-toggle nil) (2.5 nil atl-long-lines-do-toggle nil)) (:timer 2.5))"
+        ],
     )
 }
 
-fn atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_restores_it() -> ParityBatchCase {
+fn atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_restores_it()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_restores_it",
         r##"(with-temp-buffer
@@ -380,7 +384,8 @@ fn atl_long_lines_disable_stops_future_post_command_scheduling_but_reenable_rest
     )
 }
 
-fn atl_long_lines_real_idle_timer_event_handler_applies_the_current_line_policy() -> ParityBatchCase {
+fn atl_long_lines_real_idle_timer_event_handler_applies_the_current_line_policy() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atl_long_lines_real_idle_timer_event_handler_applies_the_current_line_policy",
         r##"(with-temp-buffer

@@ -36,8 +36,8 @@ fn magit_repository_identity_config_and_branch_queries_match() -> ParityBatchCas
                  (delete-directory root t)))"##,
         true,
         expect![[
-        r#"OK (t nil ("first" "second") "second" t ("master" "origin/master" "upstream/main") ("master") ("origin/master" "upstream/main") ("origin/master") ("master"))"#
-    ]],
+            r#"OK (t nil ("first" "second") "second" t ("master" "origin/master" "upstream/main") ("master") ("origin/master" "upstream/main") ("origin/master") ("master"))"#
+        ]],
     )
 }
 

@@ -70,7 +70,8 @@ fn use_package_disabled_if_unless_and_requires_gate_all_runtime_forms() -> Parit
     )
 }
 
-fn use_package_catch_converts_a_missing_required_library_into_an_exact_warning() -> ParityBatchCase {
+fn use_package_catch_converts_a_missing_required_library_into_an_exact_warning() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "use_package_catch_converts_a_missing_required_library_into_an_exact_warning",
         r##"(let (warnings)
@@ -84,8 +85,8 @@ fn use_package_catch_converts_a_missing_required_library_into_an_exact_warning()
                    (list result (nreverse warnings)))))"##,
         true,
         expect![[
-        r#"OK (#1=((use-package "Cannot load neomacs-use-package-definitely-missing" :error)) #1#)"#
-    ]],
+            r#"OK (#1=((use-package "Cannot load neomacs-use-package-definitely-missing" :error)) #1#)"#
+        ]],
     )
 }
 
@@ -108,8 +109,8 @@ fn use_package_function_normalization_matches_upstream_function_forms() -> Parit
                   1 "text" (nil))))"##,
         true,
         expect![[
-        r#"OK ((nil t symbol symbol (lambda nil value) (lambda nil quoted) 1 "text" (nil)) (t t t nil nil t nil))"#
-    ]],
+            r#"OK ((nil t symbol symbol (lambda nil value) (lambda nil quoted) 1 "text" (nil)) (t t t nil nil t nil))"#
+        ]],
     )
 }
 
@@ -127,8 +128,8 @@ fn use_package_hook_normalization_handles_default_functions_groups_and_pairs() -
                  ((mode-a . one) (mode-b . two))))"##,
         true,
         expect![[
-        r#"OK (((mode . neomacs-package-mode)) ((mode . explicit-function)) (((mode-a mode-b) . neomacs-package-mode)) (((mode-a mode-b) . shared-function)) ((mode-a . one) (mode-b . two)))"#
-    ]],
+            r#"OK (((mode . neomacs-package-mode)) ((mode . explicit-function)) (((mode-a mode-b) . neomacs-package-mode)) (((mode-a mode-b) . shared-function)) ((mode-a . one) (mode-b . two)))"#
+        ]],
     )
 }
 

@@ -43,8 +43,8 @@ fn enabling_abl_mode_derives_project_shell_and_virtualenv_names_from_git() -> Pa
   (nreverse observed))"##,
         true,
         expect![[
-        r#"OK ((:enabled t :lighter (abl-mode " abl-mode") :base "ünïcode-projekt/" :branch "feature/ünïcode-tests" :project "ünïcode-projekt" :shell "ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" :virtualenv "ünïcode-projekt_feature-ünïcode-tests" :buffer-local (t t t) :keys (abl-mode-run-test-at-point abl-mode-rerun-last-test abl-mode-format-file)) (:disabled nil :keys nil) (:outside nil :base "" :messages ("Could not find project base. Please make sure there is a setup.py or requirements.txt in a higher directory.")))"#
-    ]],
+            r#"OK ((:enabled t :lighter (abl-mode " abl-mode") :base "ünïcode-projekt/" :branch "feature/ünïcode-tests" :project "ünïcode-projekt" :shell "ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" :virtualenv "ünïcode-projekt_feature-ünïcode-tests" :buffer-local (t t t) :keys (abl-mode-run-test-at-point abl-mode-rerun-last-test abl-mode-format-file)) (:disabled nil :keys nil) (:outside nil :base "" :messages ("Could not find project base. Please make sure there is a setup.py or requirements.txt in a higher directory.")))"#
+        ]],
     )
 }
 
@@ -76,8 +76,8 @@ fn running_the_test_at_point_sends_one_unittest_command_to_the_project_shell() -
           :windows (length (window-list)))))"##,
         true,
         expect![[
-        r#"OK (:ready 1 :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name") :argv ("python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name") :directories ("ünïcode-projekt") :shell-text "cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name\nabl-ready\n" :shell-mode shell-mode :messages ("Running test(s) tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name on ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" "[ORACLE-SANDBOX]/ünïcode-projekt ") :code-point (7 24) :current "ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" :windows 1)"#
-    ]],
+            r#"OK (:ready 1 :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name") :argv ("python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name") :directories ("ünïcode-projekt") :shell-text "cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name\nabl-ready\n" :shell-mode shell-mode :messages ("Running test(s) tests/ünïcode_tests.py::ÜnicodeTests::test_encodes_a_name on ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" "[ORACLE-SANDBOX]/ünïcode-projekt ") :code-point (7 24) :current "ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" :windows 1)"#
+        ]],
     )
 }
 
@@ -116,8 +116,8 @@ fn rerunning_the_last_test_repeats_the_class_entity_regardless_of_point() -> Par
   (nreverse observed))"##,
         true,
         expect![[
-        r#"OK ((:nothing-run-yet ("You haven’t run any tests yet.") :argv nothing-recorded :shell-buffer nil) (:entity-at-point "tests/ünïcode_tests.py") (:ready 2 :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests" "cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests") :argv ("python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests" "python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests") :messages ("Running test(s) tests/ünïcode_tests.py::ÜnicodeTests on ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" "[ORACLE-SANDBOX]/ünïcode-projekt ")))"#
-    ]],
+            r#"OK ((:nothing-run-yet ("You haven’t run any tests yet.") :argv nothing-recorded :shell-buffer nil) (:entity-at-point "tests/ünïcode_tests.py") (:ready 2 :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests" "cd [ORACLE-SANDBOX]/ünïcode-projekt/ && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests") :argv ("python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests" "python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests") :messages ("Running test(s) tests/ünïcode_tests.py::ÜnicodeTests on ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" "[ORACLE-SANDBOX]/ünïcode-projekt ")))"#
+        ]],
     )
 }
 
@@ -151,8 +151,8 @@ fn a_project_abl_file_switches_the_runner_to_pytest_with_module_names() -> Parit
           :messages (abl-test-messages-since mark))))"##,
         true,
         expect![[
-        r#"OK (:ready 1 :options ("pytest -q %s" nil nil t nil) :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && pytest -q tests.api layer.service_tests::test_service_root") :argv ("pytest|-q|tests.api|layer.service_tests::test_service_root") :directories ("ünïcode-projekt") :messages ("Running test(s) tests.api layer.service_tests::test_service_root on ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" "[ORACLE-SANDBOX]/ünïcode-projekt "))"#
-    ]],
+            r#"OK (:ready 1 :options ("pytest -q %s" nil nil t nil) :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && pytest -q tests.api layer.service_tests::test_service_root") :argv ("pytest|-q|tests.api|layer.service_tests::test_service_root") :directories ("ünïcode-projekt") :messages ("Running test(s) tests.api layer.service_tests::test_service_root on ABL-SHELL:ünïcode-projekt_feature/ünïcode-tests" "[ORACLE-SANDBOX]/ünïcode-projekt "))"#
+        ]],
     )
 }
 
@@ -179,8 +179,8 @@ fn an_existing_virtualenv_is_activated_before_the_test_command_runs() -> ParityB
           :directories (abl-test-directories))))"##,
         true,
         expect![[
-        r#"OK (:ready 1 :virtualenv "home/.virtualenvs/ünïcode-projekt_feature-ünïcode-tests" :name "ünïcode-projekt_feature-ünïcode-tests" :activate "workon %s" :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && workon ünïcode-projekt_feature-ünïcode-tests && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests::test_rejects_empty_input") :argv ("workon|ünïcode-projekt_feature-ünïcode-tests" "python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests::test_rejects_empty_input") :directories ("ünïcode-projekt" "ünïcode-projekt"))"#
-    ]],
+            r#"OK (:ready 1 :virtualenv "home/.virtualenvs/ünïcode-projekt_feature-ünïcode-tests" :name "ünïcode-projekt_feature-ünïcode-tests" :activate "workon %s" :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && workon ünïcode-projekt_feature-ünïcode-tests && python -m unittest tests/ünïcode_tests.py::ÜnicodeTests::test_rejects_empty_input") :argv ("workon|ünïcode-projekt_feature-ünïcode-tests" "python|-m|unittest|tests/ünïcode_tests.py::ÜnicodeTests::test_rejects_empty_input") :directories ("ünïcode-projekt" "ünïcode-projekt"))"#
+        ]],
     )
 }
 
@@ -206,8 +206,8 @@ fn formatting_the_current_file_and_then_the_whole_project_reuses_one_shell() -> 
           :modified (with-current-buffer code (buffer-modified-p)))))"##,
         true,
         expect![[
-        r#"OK (:ready 2 :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && black [ORACLE-SANDBOX]/ünïcode-projekt/tests/api layer/service_tests.py && isort --profile black [ORACLE-SANDBOX]/ünïcode-projekt/tests/api layer/service_tests.py" "cd [ORACLE-SANDBOX]/ünïcode-projekt/ && black . && isort --profile black .") :argv ("black|[ORACLE-SANDBOX]/ünïcode-projekt/tests/api|layer/service_tests.py" "isort|--profile|black|[ORACLE-SANDBOX]/ünïcode-projekt/tests/api|layer/service_tests.py" "black|." "isort|--profile|black|.") :directories ("ünïcode-projekt" "ünïcode-projekt" "ünïcode-projekt" "ünïcode-projekt") :modified nil)"#
-    ]],
+            r#"OK (:ready 2 :sent ("cd [ORACLE-SANDBOX]/ünïcode-projekt/ && black [ORACLE-SANDBOX]/ünïcode-projekt/tests/api layer/service_tests.py && isort --profile black [ORACLE-SANDBOX]/ünïcode-projekt/tests/api layer/service_tests.py" "cd [ORACLE-SANDBOX]/ünïcode-projekt/ && black . && isort --profile black .") :argv ("black|[ORACLE-SANDBOX]/ünïcode-projekt/tests/api|layer/service_tests.py" "isort|--profile|black|[ORACLE-SANDBOX]/ünïcode-projekt/tests/api|layer/service_tests.py" "black|." "isort|--profile|black|.") :directories ("ünïcode-projekt" "ünïcode-projekt" "ünïcode-projekt" "ünïcode-projekt") :modified nil)"#
+        ]],
     )
 }
 
@@ -234,8 +234,8 @@ fn running_a_test_outside_any_test_entity_signals_and_starts_no_shell() -> Parit
           :messages (abl-test-messages-since mark))))"##,
         true,
         expect![[
-        r#"OK (:signal (error "You do not appear to be in a recognized test entity") :point (4 8) :current "conftest.py" :argv nothing-recorded :shell-buffer nil :messages nil)"#
-    ]],
+            r#"OK (:signal (error "You do not appear to be in a recognized test entity") :point (4 8) :current "conftest.py" :argv nothing-recorded :shell-buffer nil :messages nil)"#
+        ]],
     )
 }
 

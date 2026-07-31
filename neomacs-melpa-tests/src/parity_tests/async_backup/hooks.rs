@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_async_backup_batch};
 
-fn async_backup_global_after_save_hook_backs_up_the_content_just_written_to_disk() -> ParityBatchCase {
+fn async_backup_global_after_save_hook_backs_up_the_content_just_written_to_disk() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async_backup_global_after_save_hook_backs_up_the_content_just_written_to_disk",
         r##"(let* ((file
@@ -46,8 +47,8 @@ fn async_backup_global_after_save_hook_backs_up_the_content_just_written_to_disk
              (get-buffer "*async-backup*"))))"##,
         true,
         expect![[
-        r#"OK ((async-backup) nil "* saved through the real hook\n" exit 0 t "* saved through the real hook\n")"#
-    ]],
+            r#"OK ((async-backup) nil "* saved through the real hook\n" exit 0 t "* saved through the real hook\n")"#
+        ]],
     )
 }
 
@@ -110,8 +111,8 @@ fn async_backup_local_after_save_hook_returns_from_save_while_child_is_gated() -
              (get-buffer "*async-backup*"))))"##,
         true,
         expect![[
-        r#"OK ((nil t (run open listen connect stop) nil "before\nsaved before child exits\n") exit 0 t "before\nsaved before child exits\n")"#
-    ]],
+            r#"OK ((nil t (run open listen connect stop) nil "before\nsaved before child exits\n") exit 0 t "before\nsaved before child exits\n")"#
+        ]],
     )
 }
 
@@ -173,8 +174,8 @@ fn async_backup_buffer_local_hook_runs_only_for_the_buffer_where_it_was_added() 
             (async-backup-test-kill-file-buffer file-b)))"##,
         true,
         expect![[
-        r#"OK ((("a.txt" ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//hooks-local/a.txt\" \"$ROOT//hooks-local/backups$ROOT//hooks-local/a-LOCAL.txt\")"))) (async-backup t) nil "A0\nA1\n" "B0\nB1\n")"#
-    ]],
+            r#"OK ((("a.txt" ("async-backup" "*async-backup*" "emacs" "-Q" "--batch" "--eval=(copy-file \"$ROOT//hooks-local/a.txt\" \"$ROOT//hooks-local/backups$ROOT//hooks-local/a-LOCAL.txt\")"))) (async-backup t) nil "A0\nA1\n" "B0\nB1\n")"#
+        ]],
     )
 }
 
@@ -293,7 +294,8 @@ fn async_backup_two_real_saves_create_immutable_versioned_backups() -> ParityBat
     )
 }
 
-fn async_backup_repeated_timestamp_reports_collision_and_preserves_first_saved_version() -> ParityBatchCase {
+fn async_backup_repeated_timestamp_reports_collision_and_preserves_first_saved_version()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async_backup_repeated_timestamp_reports_collision_and_preserves_first_saved_version",
         r##"(let* ((file
@@ -418,12 +420,13 @@ fn async_backup_child_outlives_visiting_buffer_and_copies_the_saved_disk_file() 
              (get-buffer "*async-backup*"))))"##,
         true,
         expect![[
-        r#"OK ((nil (run open listen connect stop) nil) exit 0 "saved before buffer teardown\n" "saved before buffer teardown\n")"#
-    ]],
+            r#"OK ((nil (run open listen connect stop) nil) exit 0 "saved before buffer teardown\n" "saved before buffer teardown\n")"#
+        ]],
     )
 }
 
-fn async_backup_false_predicate_does_not_break_save_but_still_creates_output_directory() -> ParityBatchCase {
+fn async_backup_false_predicate_does_not_break_save_but_still_creates_output_directory()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async_backup_false_predicate_does_not_break_save_but_still_creates_output_directory",
         r##"(let* ((file
@@ -478,7 +481,8 @@ fn async_backup_false_predicate_does_not_break_save_but_still_creates_output_dir
     )
 }
 
-fn async_backup_child_failure_is_observed_later_without_turning_save_into_an_error() -> ParityBatchCase {
+fn async_backup_child_failure_is_observed_later_without_turning_save_into_an_error()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async_backup_child_failure_is_observed_later_without_turning_save_into_an_error",
         r##"(let* ((file

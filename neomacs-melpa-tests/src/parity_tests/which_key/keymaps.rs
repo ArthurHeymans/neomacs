@@ -20,8 +20,8 @@ fn which_key_keymap_binding_extraction_covers_binding_definition_shapes() -> Par
                 (lambda (a b) (string-lessp (car a) (car b)))))"##,
         true,
         expect![[
-        r#"OK (("a" . "forward-char") ("b" . "literal") ("c" . "{ - C-f") ("d" . "function") ("e" . "Named") ("f" . "group:Group") ("g" . "next-line"))"#
-    ]],
+            r#"OK (("a" . "forward-char") ("b" . "literal") ("c" . "{ - C-f") ("d" . "function") ("e" . "Named") ("f" . "group:Group") ("g" . "next-line"))"#
+        ]],
     )
 }
 
@@ -42,12 +42,13 @@ fn which_key_recursive_binding_extraction_distinguishes_top_level_and_all() -> P
                  (lambda (a b) (string-lessp (car a) (car b))))))"##,
         true,
         expect![[
-        r#"OK ((("M-g" . "prefix") ("c" . "c") ("d" . "prefix") ("e" . "prefix")) (("M-g g" . "M-gg") ("c" . "c") ("d d" . "dd") ("e e e" . "eee")))"#
-    ]],
+            r#"OK ((("M-g" . "prefix") ("c" . "c") ("d" . "prefix") ("e" . "prefix")) (("M-g g" . "M-gg") ("c" . "c") ("d d" . "dd") ("e e e" . "eee")))"#
+        ]],
     )
 }
 
-fn which_key_keymap_binding_extraction_applies_prefix_start_and_filter_arguments() -> ParityBatchCase {
+fn which_key_keymap_binding_extraction_applies_prefix_start_and_filter_arguments() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "which_key_keymap_binding_extraction_applies_prefix_start_and_filter_arguments",
         r##"(let ((map (make-sparse-keymap)))
@@ -68,8 +69,8 @@ fn which_key_keymap_binding_extraction_applies_prefix_start_and_filter_arguments
                  map nil (kbd "C-x") nil t)))"##,
         true,
         expect![[
-        r#"OK ((("C-c a" . "forward-char") ("C-c b" . "backward-char") ("existing" . "value")) nil)"#
-    ]],
+            r#"OK ((("C-c a" . "forward-char") ("C-c b" . "backward-char") ("existing" . "value")) nil)"#
+        ]],
     )
 }
 
@@ -126,7 +127,8 @@ fn which_key_get_bindings_rejects_a_non_keymap_object() -> ParityBatchCase {
     )
 }
 
-fn which_key_public_show_commands_forward_exact_arguments_to_the_display_boundary() -> ParityBatchCase {
+fn which_key_public_show_commands_forward_exact_arguments_to_the_display_boundary()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "which_key_public_show_commands_forward_exact_arguments_to_the_display_boundary",
         r##"(progn
@@ -144,8 +146,8 @@ fn which_key_public_show_commands_forward_exact_arguments_to_the_display_boundar
                   (keymapp neomacs-which-key-map)))))"##,
         true,
         expect![[
-        r#"OK ((("neomacs-which-key-map" #1=(keymap (97 . forward-char)) nil nil t) ("neomacs-which-key-map" #1# nil t)) t)"#
-    ]],
+            r#"OK ((("neomacs-which-key-map" #1=(keymap (97 . forward-char)) nil nil t) ("neomacs-which-key-map" #1# nil t)) t)"#
+        ]],
     )
 }
 
@@ -170,8 +172,8 @@ fn which_key_major_mode_show_handles_present_and_missing_maps() -> ParityBatchCa
                  (list (nreverse calls) (nreverse messages))))"##,
         true,
         expect![[
-        r#"OK (nil ("which-key: No map named neomacs-which-key-mode-map" "which-key: No map named neomacs-which-key-mode-map" "which-key: No map named neomacs-which-key-missing-mode-map"))"#
-    ]],
+            r#"OK (nil ("which-key: No map named neomacs-which-key-mode-map" "which-key: No map named neomacs-which-key-mode-map" "which-key: No map named neomacs-which-key-missing-mode-map"))"#
+        ]],
     )
 }
 

@@ -20,8 +20,8 @@ fn prefix_font_lock_features_preserves_language_override_and_rule_payload() -> P
            settings))"##,
         true,
         expect![
-        "OK (#3=((tsx #1=((identifier) @font-lock-variable-name-face) identifier #2=((identifier) @font-lock-variable-name-face)) (tsx :override keyword keep)) ((tsx #1# embedded-identifier #2#) (tsx :override embedded-keyword keep)) #3#)"
-    ],
+            "OK (#3=((tsx #1=((identifier) @font-lock-variable-name-face) identifier #2=((identifier) @font-lock-variable-name-face)) (tsx :override keyword keep)) ((tsx #1# embedded-identifier #2#) (tsx :override embedded-keyword keep)) #3#)"
+        ],
     )
 }
 
@@ -71,8 +71,8 @@ fn real_typescript_settings_gain_only_tsx_feature_prefixes() -> ParityBatchCase 
             prefixed)))"##,
         true,
         expect![
-        "OK (16 16 ((comment tsx-comment t t t) (constant tsx-constant t t t) (keyword tsx-keyword t t t) (string tsx-string t t t) (declaration tsx-declaration t t t) (identifier tsx-identifier t t t) (property tsx-property t t t) (expression tsx-expression t t t) (function tsx-function t t t) (pattern tsx-pattern t t t) (jsx tsx-jsx t t t) (number tsx-number t t t)) t)"
-    ],
+            "OK (16 16 ((comment tsx-comment t t t) (constant tsx-constant t t t) (keyword tsx-keyword t t t) (string tsx-string t t t) (declaration tsx-declaration t t t) (identifier tsx-identifier t t t) (property tsx-property t t t) (expression tsx-expression t t t) (function tsx-function t t t) (pattern tsx-pattern t t t) (jsx tsx-jsx t t t) (number tsx-number t t t)) t)"
+        ],
     )
 }
 
@@ -100,8 +100,8 @@ fn real_css_settings_gain_only_css_feature_prefixes() -> ParityBatchCase {
             prefixed)))"##,
         true,
         expect![
-        "OK (12 12 ((treesit-compiled-query css-comment) (treesit-compiled-query css-string) (treesit-compiled-query css-keyword) (treesit-compiled-query css-variable) (treesit-compiled-query css-operator) (treesit-compiled-query css-selector) (treesit-compiled-query css-property) (treesit-compiled-query css-function) (treesit-compiled-query css-constant) (treesit-compiled-query css-query) (treesit-compiled-query css-bracket) (treesit-compiled-query css-error)) t)"
-    ],
+            "OK (12 12 ((treesit-compiled-query css-comment) (treesit-compiled-query css-string) (treesit-compiled-query css-keyword) (treesit-compiled-query css-variable) (treesit-compiled-query css-operator) (treesit-compiled-query css-selector) (treesit-compiled-query css-property) (treesit-compiled-query css-function) (treesit-compiled-query css-constant) (treesit-compiled-query css-query) (treesit-compiled-query css-bracket) (treesit-compiled-query css-error)) t)"
+        ],
     )
 }
 
@@ -124,8 +124,8 @@ fn distinct_prefixes_keep_colliding_embedded_feature_names_disjoint() -> ParityB
            settings))"##,
         true,
         expect![
-        "OK ((tsx-comment tsx-string tsx-bracket) (css-comment css-string css-bracket) ((tsx query comment override) (tsx query string override) (tsx query bracket override)))"
-    ],
+            "OK ((tsx-comment tsx-string tsx-bracket) (css-comment css-string css-bracket) ((tsx query comment override) (tsx query string override) (tsx query bracket override)))"
+        ],
     )
 }
 
@@ -147,8 +147,8 @@ fn repeated_prefixing_is_explicit_compositional_and_nonmutating() -> ParityBatch
                          (astro query bracket override)))))"##,
         true,
         expect![
-        "OK (((astro query definition override) (astro query bracket override)) ((astro query one-definition override) (astro query one-bracket override)) ((astro query two-one-definition override) (astro query two-one-bracket override)) t)"
-    ],
+            "OK (((astro query definition override) (astro query bracket override)) ((astro query one-definition override) (astro query one-bracket override)) ((astro query two-one-definition override) (astro query two-one-bracket override)) t)"
+        ],
     )
 }
 

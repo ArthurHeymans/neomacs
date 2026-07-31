@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_atomic_chrome_batch};
 
-fn atomic_chrome_buffer_table_lookup_round_trips_live_buffers_sockets_and_frames() -> ParityBatchCase {
+fn atomic_chrome_buffer_table_lookup_round_trips_live_buffers_sockets_and_frames() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atomic_chrome_buffer_table_lookup_round_trips_live_buffers_sockets_and_frames",
         r##"(let ((first
@@ -40,12 +41,13 @@ fn atomic_chrome_buffer_table_lookup_round_trips_live_buffers_sockets_and_frames
             (atomic-chrome-test-kill-buffer second)))"##,
         true,
         expect![[
-        r#"OK (#1=(socket 1) frame-a " *atomic-table-second*" " *atomic-table-first*" 2 ((" *atomic-table-first*" #1# frame-a) (" *atomic-table-second*" (socket 2) frame-b)))"#
-    ]],
+            r#"OK (#1=(socket 1) frame-a " *atomic-table-second*" " *atomic-table-first*" 2 ((" *atomic-table-first*" #1# frame-a) (" *atomic-table-second*" (socket 2) frame-b)))"#
+        ]],
     )
 }
 
-fn atomic_chrome_buffer_table_lookup_handles_missing_short_and_non_list_entries_exactly() -> ParityBatchCase {
+fn atomic_chrome_buffer_table_lookup_handles_missing_short_and_non_list_entries_exactly()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_buffer_table_lookup_handles_missing_short_and_non_list_entries_exactly",
         r##"(let ((atomic-chrome-buffer-table
@@ -86,12 +88,13 @@ fn atomic_chrome_buffer_table_lookup_handles_missing_short_and_non_list_entries_
             atomic-chrome-buffer-table)))"##,
         true,
         expect![
-        "OK (nil nil :socket-only nil nil nil (:error wrong-type-argument (listp 42)) (:error wrong-type-argument (listp 42)) (:error wrong-type-argument (listp 42)) 3)"
-    ],
+            "OK (nil nil :socket-only nil nil nil (:error wrong-type-argument (listp 42)) (:error wrong-type-argument (listp 42)) (:error wrong-type-argument (listp 42)) 3)"
+        ],
     )
 }
 
-fn atomic_chrome_socket_lookup_uses_equal_and_returns_the_last_matching_hash_iteration_entry() -> ParityBatchCase {
+fn atomic_chrome_socket_lookup_uses_equal_and_returns_the_last_matching_hash_iteration_entry()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_socket_lookup_uses_equal_and_returns_the_last_matching_hash_iteration_entry",
         r##"(let ((atomic-chrome-buffer-table
@@ -125,7 +128,8 @@ fn atomic_chrome_socket_lookup_uses_equal_and_returns_the_last_matching_hash_ite
     )
 }
 
-fn atomic_chrome_close_connection_removes_current_buffer_before_closing_socket() -> ParityBatchCase {
+fn atomic_chrome_close_connection_removes_current_buffer_before_closing_socket() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atomic_chrome_close_connection_removes_current_buffer_before_closing_socket",
         r##"(let ((atomic-chrome-buffer-table
@@ -163,7 +167,8 @@ fn atomic_chrome_close_connection_removes_current_buffer_before_closing_socket()
     )
 }
 
-fn atomic_chrome_close_connection_no_socket_is_noop_and_close_errors_leave_entry_removed() -> ParityBatchCase {
+fn atomic_chrome_close_connection_no_socket_is_noop_and_close_errors_leave_entry_removed()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atomic_chrome_close_connection_no_socket_is_noop_and_close_errors_leave_entry_removed",
         r##"(let ((atomic-chrome-buffer-table
@@ -198,8 +203,8 @@ fn atomic_chrome_close_connection_no_socket_is_noop_and_close_errors_leave_entry
                     atomic-chrome-buffer-table)))))))"##,
         true,
         expect![[
-        r#"OK (nil (:error error ("close failed :socket-failing")) (:socket-failing) nil 0)"#
-    ]],
+            r#"OK (nil (:error error ("close failed :socket-failing")) (:socket-failing) nil 0)"#
+        ]],
     )
 }
 

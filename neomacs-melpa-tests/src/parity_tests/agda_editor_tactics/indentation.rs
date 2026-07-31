@@ -15,8 +15,8 @@ fn agda_editor_tactics_indent_counts_leading_spaces_across_real_declarations() -
            "        proof = refl"))"##,
         true,
         expect![[
-        r#"OK (("record R : Set where" . 1) (" field" . 1) ("  field" . 2) ("    value : Set" . 4) ("        proof = refl" . 8))"#
-    ]],
+            r#"OK (("record R : Set where" . 1) (" field" . 1) ("  field" . 2) ("    value : Set" . 4) ("        proof = refl" . 8))"#
+        ]],
     )
 }
 
@@ -32,8 +32,8 @@ fn agda_editor_tactics_indent_distinguishes_spaces_tabs_and_empty_lines() -> Par
            "   " "\t" "  λ x → x"))"##,
         true,
         expect![[
-        r#"OK (("\"\"" 0) ("\"value : Set\"" 1) ("\"\\11value : Set\"" 1) ("\" \\11value : Set\"" 1) ("\"   \"" 3) ("\"\\11\"" 0) ("\"  λ x → x\"" 2))"#
-    ]],
+            r#"OK (("\"\"" 0) ("\"value : Set\"" 1) ("\"\\11value : Set\"" 1) ("\" \\11value : Set\"" 1) ("\"   \"" 3) ("\"\\11\"" 0) ("\"  λ x → x\"" 2))"#
+        ]],
     )
 }
 
@@ -50,8 +50,8 @@ fn agda_editor_tactics_indent_handles_unicode_and_internal_whitespace() -> Parit
            "  "))"##,
         true,
         expect![[
-        r#"OK (("  Σ-value : Set ℓ" 2) ("      _∙_ : Carrier → Carrier → Carrier" 6) ("  law : ∀ x → x ∙ ε ≡ x" 2) ("    spaced   internally" 4) ("  " 2))"#
-    ]],
+            r#"OK (("  Σ-value : Set ℓ" 2) ("      _∙_ : Carrier → Carrier → Carrier" 6) ("  law : ∀ x → x ∙ ε ≡ x" 2) ("    spaced   internally" 4) ("  " 2))"#
+        ]],
     )
 }
 

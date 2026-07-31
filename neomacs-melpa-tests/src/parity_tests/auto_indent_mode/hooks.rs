@@ -25,8 +25,8 @@ fn auto_indent_mode_pre_command_records_position_and_orders_post_hooks() -> Pari
           post-command-hook))"##,
         true,
         expect![
-        "OK (1 5 nil (auto-indent-mode-post-command-hook fixture-before fixture-after auto-indent-mode-post-command-hook-last))"
-    ],
+            "OK (1 5 nil (auto-indent-mode-post-command-hook fixture-before fixture-after auto-indent-mode-post-command-hook-last))"
+        ],
     )
 }
 
@@ -56,7 +56,8 @@ fn auto_indent_mode_pre_command_expands_pair_region_around_nested_point() -> Par
     )
 }
 
-fn auto_indent_mode_point_inside_pairs_handles_code_strings_and_unbalanced_text() -> ParityBatchCase {
+fn auto_indent_mode_point_inside_pairs_handles_code_strings_and_unbalanced_text() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_indent_mode_point_inside_pairs_handles_code_strings_and_unbalanced_text",
         r##"(mapcar
@@ -74,8 +75,8 @@ fn auto_indent_mode_point_inside_pairs_handles_code_strings_and_unbalanced_text(
            ("plain" . 3)))"##,
         true,
         expect![[
-        r#"OK ((("(alpha beta)" . 7) (1 1 2 nil nil nil 0 nil nil (1) nil) t) (("\"(text)\"" . 5) (0 nil nil 34 nil nil 0 nil 1 nil nil) nil) (("(unclosed" . 6) (1 1 2 nil nil nil 0 nil nil (1) nil) t) (("plain" . 3) (0 nil 1 nil nil nil 0 nil nil nil nil) nil))"#
-    ]],
+            r#"OK ((("(alpha beta)" . 7) (1 1 2 nil nil nil 0 nil nil (1) nil) t) (("\"(text)\"" . 5) (0 nil nil 34 nil nil 0 nil 1 nil nil) nil) (("(unclosed" . 6) (1 1 2 nil nil nil 0 nil nil (1) nil) t) (("plain" . 3) (0 nil 1 nil nil nil 0 nil nil nil nil) nil))"#
+        ]],
     )
 }
 
@@ -100,8 +101,8 @@ fn auto_indent_mode_post_command_routes_yank_to_yank_engine() -> ParityBatchCase
                     pre-command-hook)))))"##,
         true,
         expect![
-        "OK ((yank) (auto-indent-mode-pre-command-hook eldoc-pre-command-refresh-echo-area t))"
-    ],
+            "OK ((yank) (auto-indent-mode-pre-command-hook eldoc-pre-command-refresh-echo-area t))"
+        ],
     )
 }
 
@@ -140,8 +141,8 @@ fn auto_indent_mode_post_command_handles_return_and_blank_line_motion() -> Parit
            ("line\ntext" 8 2 next-line nil)))"##,
         true,
         expect![[
-        r#"OK ((("line\n  " 8 1 newline 10) (pair (indent 8))) (("line\n  " 8 1 next-line nil) ((indent 8))) (("line\ntext" 8 2 next-line nil) nil))"#
-    ]],
+            r#"OK ((("line\n  " 8 1 newline 10) (pair (indent 8))) (("line\n  " 8 1 next-line nil) ((indent 8))) (("line\ntext" 8 2 next-line nil) nil))"#
+        ]],
     )
 }
 
@@ -181,8 +182,8 @@ fn auto_indent_mode_post_command_last_schedules_pair_timer_deterministically() -
               (nreverse calls)))))"##,
         true,
         expect![
-        "OK (1 8 :fixture-timer ((:cancel :old-timer) (0.0 nil auto-indent-par-region nil)))"
-    ],
+            "OK (1 8 :fixture-timer ((:cancel :old-timer) (0.0 nil auto-indent-par-region nil)))"
+        ],
     )
 }
 

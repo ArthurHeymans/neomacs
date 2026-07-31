@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_alan_mode_batch};
 
-fn alan_mode_activation_installs_real_syntax_comments_indentation_and_xref_locally() -> ParityBatchCase {
+fn alan_mode_activation_installs_real_syntax_comments_indentation_and_xref_locally()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alan_mode_activation_installs_real_syntax_comments_indentation_and_xref_locally",
         r##"(with-temp-buffer
@@ -26,12 +27,13 @@ fn alan_mode_activation_installs_real_syntax_comments_indentation_and_xref_local
                        (local-variable-p 'font-lock-defaults)))"##,
         true,
         expect![[
-        r#"OK (alan-mode "Alan" ((39 34 nil) (47 46 nil) (42 46 nil) (91 95 nil) (93 95 nil) (123 95 nil) (125 95 nil)) "//" "" "/*" "*/" alan-mode-indent-line (alan--xref-backend t) t t)"#
-    ]],
+            r#"OK (alan-mode "Alan" ((39 34 nil) (47 46 nil) (42 46 nil) (91 95 nil) (93 95 nil) (123 95 nil) (125 95 nil)) "//" "" "/*" "*/" alan-mode-indent-line (alan--xref-backend t) t t)"#
+        ]],
     )
 }
 
-fn alan_mode_font_lock_distinguishes_identifiers_docs_comments_strings_and_types() -> ParityBatchCase {
+fn alan_mode_font_lock_distinguishes_identifiers_docs_comments_strings_and_types() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "alan_mode_font_lock_distinguishes_identifiers_docs_comments_strings_and_types",
         r##"(with-temp-buffer
@@ -60,8 +62,8 @@ fn alan_mode_font_lock_distinguishes_identifiers_docs_comments_strings_and_types
                          "stategroup" "ordinary" "comment" "deprecated")))"##,
         true,
         expect![[
-        r#"OK (("documentation" font-lock-doc-face nil t) ("Account" font-lock-doc-face nil t) ("component" font-lock-builtin-face nil nil) ("status" font-lock-variable-name-face 39 nil) ("stategroup" font-lock-type-face nil nil) ("ordinary" font-lock-string-face 34 nil) ("comment" font-lock-comment-face nil t) ("deprecated" font-lock-warning-face nil nil))"#
-    ]],
+            r#"OK (("documentation" font-lock-doc-face nil t) ("Account" font-lock-doc-face nil t) ("component" font-lock-builtin-face nil nil) ("status" font-lock-variable-name-face 39 nil) ("stategroup" font-lock-type-face nil nil) ("ordinary" font-lock-string-face 34 nil) ("comment" font-lock-comment-face nil t) ("deprecated" font-lock-warning-face nil nil))"#
+        ]],
     )
 }
 
@@ -92,12 +94,13 @@ fn alan_mode_indents_nested_and_single_line_blocks_as_a_user_edits_them() -> Par
                          (alan--single-block 0))))"##,
         true,
         expect![[
-        r#"OK ("'root' {\n'child' {\n'leaf': text\n}\n\11('first')\n\11('second')\n\11}\n" t t)"#
-    ]],
+            r#"OK ("'root' {\n'child' {\n'leaf': text\n}\n\11('first')\n\11('second')\n\11}\n" t t)"#
+        ]],
     )
 }
 
-fn alan_grammar_update_rebuilds_sorted_unique_keywords_and_preserves_annotations() -> ParityBatchCase {
+fn alan_grammar_update_rebuilds_sorted_unique_keywords_and_preserves_annotations() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "alan_grammar_update_rebuilds_sorted_unique_keywords_and_preserves_annotations",
         r##"(with-temp-buffer
@@ -118,8 +121,8 @@ fn alan_grammar_update_rebuilds_sorted_unique_keywords_and_preserves_annotations
                       (buffer-string))"##,
         true,
         expect![[
-        r#"OK "keywords\n\11'alpha'\n\11'keep' @raw\n\11'zeta'\n\n\nroot {\n\11['zeta', 'alpha', 'keep']\n\11['alpha']\n\11// ['ignored']\n}\n""#
-    ]],
+            r#"OK "keywords\n\11'alpha'\n\11'keep' @raw\n\11'zeta'\n\n\nroot {\n\11['zeta', 'alpha', 'keep']\n\11['alpha']\n\11// ['ignored']\n}\n""#
+        ]],
     )
 }
 
@@ -134,12 +137,13 @@ fn alan_template_yank_quotes_multiline_real_text_and_escapes_embedded_quotes() -
                             (current-kill 0 t)))"##,
         true,
         expect![[
-        r#"OK ("\"Hello \\\"Alan\\\"\" ;\n\"second line\" ;\n\"\" ;" 40 "Hello \"Alan\"\nsecond line\n")"#
-    ]],
+            r#"OK ("\"Hello \\\"Alan\\\"\" ;\n\"second line\" ;\n\"\" ;" 40 "Hello \"Alan\"\nsecond line\n")"#
+        ]],
     )
 }
 
-fn alan_application_numerical_types_are_collected_from_the_real_section_backwards() -> ParityBatchCase {
+fn alan_application_numerical_types_are_collected_from_the_real_section_backwards()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "alan_application_numerical_types_are_collected_from_the_real_section_backwards",
         r##"(with-temp-buffer
@@ -156,8 +160,8 @@ fn alan_application_numerical_types_are_collected_from_the_real_section_backward
                        (buffer-string)))"##,
         true,
         expect![[
-        r#"OK (("currency" "decimal" "integer") 1 "'outside'\nnumerical-types\n\11'integer'\n\11'decimal'\n\11'currency'\n")"#
-    ]],
+            r#"OK (("currency" "decimal" "integer") 1 "'outside'\nnumerical-types\n\11'integer'\n\11'decimal'\n\11'currency'\n")"#
+        ]],
     )
 }
 
@@ -195,8 +199,8 @@ fn alan_documentation_marks_and_synchronizes_a_real_multiline_block() -> ParityB
                                alan-parity-synced))))))"##,
         true,
         expect![[
-        r#"OK (t "  /// First line\n  /// Second line\n  /// Third line" 16 2 "'before': text\n  /// First line\n  /// Second line\n  /// Third line\n'after': text\n")"#
-    ]],
+            r#"OK (t "  /// First line\n  /// Second line\n  /// Third line" 16 2 "'before': text\n  /// First line\n  /// Second line\n  /// Third line\n'after': text\n")"#
+        ]],
     )
 }
 

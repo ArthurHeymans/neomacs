@@ -42,8 +42,8 @@ fn atcoder_tools_descriptor_and_archive_sources_pin_exact_melpa_payload() -> Par
             sources)))"##,
         true,
         expect![[
-        r#"OK ((atcoder-tools "20200109.1236" "An atcoder-tools client." ((emacs (26)) (f (0 20)) (s (1 12))) ((:maintainers ("Seong Yong-ju" . "sei40kr@gmail.com")) (:authors ("Seong Yong-ju" . "sei40kr@gmail.com")) (:keywords "extensions" "tools") (:revdesc . "cfe61ed18ea9") (:commit . "cfe61ed18ea9b3b1bfb6f9e7d80a47599680cd1f") (:url . "https://github.com/sei40kr/atcoder-tools"))) (("atcoder-tools-pkg.el" 463 "5a650e75ad0066da1a043e2892697be63d7e77ca624903c98e7150891c2dcc78") ("atcoder-tools.el" 6486 "5d71662d89c5f569b8e687a5a19ee5e1e571db950360669fbe4e8d7ae980a806")))"#
-    ]],
+            r#"OK ((atcoder-tools "20200109.1236" "An atcoder-tools client." ((emacs (26)) (f (0 20)) (s (1 12))) ((:maintainers ("Seong Yong-ju" . "sei40kr@gmail.com")) (:authors ("Seong Yong-ju" . "sei40kr@gmail.com")) (:keywords "extensions" "tools") (:revdesc . "cfe61ed18ea9") (:commit . "cfe61ed18ea9b3b1bfb6f9e7d80a47599680cd1f") (:url . "https://github.com/sei40kr/atcoder-tools"))) (("atcoder-tools-pkg.el" 463 "5a650e75ad0066da1a043e2892697be63d7e77ca624903c98e7150891c2dcc78") ("atcoder-tools.el" 6486 "5d71662d89c5f569b8e687a5a19ee5e1e571db950360669fbe4e8d7ae980a806")))"#
+        ]],
     )
 }
 
@@ -109,8 +109,8 @@ fn atcoder_tools_activates_exact_pinned_dependency_closure_and_source_digests() 
            expected)))"##,
         true,
         expect![[
-        r#"OK ((all (atcoder-tools "20200109.1236") (f "20241003.1131") (s "20220902.1511") (dash "20260221.1346")) ((atcoder-tools "20200109.1236" t "atcoder-tools-20200109.1236" "5d71662d89c5f569b8e687a5a19ee5e1e571db950360669fbe4e8d7ae980a806" t) (f "20241003.1131" t "f-20241003.1131" "6c50127cfb8ff86ada7667f0e6a4242002f41b4e132f11877de095be5cf3683e" t) (s "20220902.1511" t "s-20220902.1511" "fbb8ef1b861eef414fbb424ff3c55363f5b7a96866deec515c84a0523e61bed3" t) (dash "20260221.1346" t "dash-20260221.1346" "ce8043bfcfe64bfe69a411ee29e4c704213abd93aaa9a6da8b6791d3110d7f48" t)))"#
-    ]],
+            r#"OK ((all (atcoder-tools "20200109.1236") (f "20241003.1131") (s "20220902.1511") (dash "20260221.1346")) ((atcoder-tools "20200109.1236" t "atcoder-tools-20200109.1236" "5d71662d89c5f569b8e687a5a19ee5e1e571db950360669fbe4e8d7ae980a806" t) (f "20241003.1131" t "f-20241003.1131" "6c50127cfb8ff86ada7667f0e6a4242002f41b4e132f11877de095be5cf3683e" t) (s "20220902.1511" t "s-20220902.1511" "fbb8ef1b861eef414fbb424ff3c55363f5b7a96866deec515c84a0523e61bed3" t) (dash "20260221.1346" t "dash-20260221.1346" "ce8043bfcfe64bfe69a411ee29e4c704213abd93aaa9a6da8b6791d3110d7f48" t)))"#
+        ]],
     )
 }
 
@@ -153,8 +153,8 @@ fn atcoder_tools_complete_prefixed_symbol_inventory_records_every_surface() -> P
               (symbol-name (car right))))))"##,
         true,
         expect![
-        "OK ((atcoder-tools nil nil nil ((atcoder-tools-c-compiler custom-variable) (atcoder-tools-c++-compiler custom-variable) (atcoder-tools-rust-use-rustup custom-variable)) nil) (atcoder-tools- nil nil nil nil nil) (atcoder-tools--expand-cmd-templates t nil nil nil (cmd-templates working-directory src-file-name exec-file-name)) (atcoder-tools--open-problem t nil nil nil (metadata-file-name)) (atcoder-tools--run-config-alist nil t nil nil nil) (atcoder-tools--run-config-for-mode t nil nil nil (mode)) (atcoder-tools--test t nil nil nil (mode src-file-name)) (atcoder-tools-autoloads nil nil nil nil nil) (atcoder-tools-c++-compiler nil t t nil nil) (atcoder-tools-c-compiler nil t t nil nil) (atcoder-tools-open-problem t nil nil nil nil) (atcoder-tools-rust-use-rustup nil t t nil nil) (atcoder-tools-test t nil nil nil nil))"
-    ],
+            "OK ((atcoder-tools nil nil nil ((atcoder-tools-c-compiler custom-variable) (atcoder-tools-c++-compiler custom-variable) (atcoder-tools-rust-use-rustup custom-variable)) nil) (atcoder-tools- nil nil nil nil nil) (atcoder-tools--expand-cmd-templates t nil nil nil (cmd-templates working-directory src-file-name exec-file-name)) (atcoder-tools--open-problem t nil nil nil (metadata-file-name)) (atcoder-tools--run-config-alist nil t nil nil nil) (atcoder-tools--run-config-for-mode t nil nil nil (mode)) (atcoder-tools--test t nil nil nil (mode src-file-name)) (atcoder-tools-autoloads nil nil nil nil nil) (atcoder-tools-c++-compiler nil t t nil nil) (atcoder-tools-c-compiler nil t t nil nil) (atcoder-tools-open-problem t nil nil nil nil) (atcoder-tools-rust-use-rustup nil t t nil nil) (atcoder-tools-test t nil nil nil nil))"
+        ],
     )
 }
 
@@ -179,8 +179,8 @@ fn atcoder_tools_all_functions_have_exact_call_and_documentation_contracts() -> 
             atcoder-tools-open-problem))"##,
         true,
         expect![[
-        r#"OK ((atcoder-tools--run-config-for-mode t nil nil (mode) "Return an alist of run configuration for MODE.") (atcoder-tools--expand-cmd-templates t nil nil (cmd-templates working-directory src-file-name exec-file-name) "Expand each command in CMD-TEMPLATES, a list of command templates.\n\n%d in the template will be replaced with WORKING-DIRECTORY.\n%s in the template will be replaced with SRC-FILE-NAME.\n%e in the template will be replaced with EXEC-FILE-NAME.") (atcoder-tools--test t nil nil (mode src-file-name) "Internally called by `atcoder-tools-test'.\n\nMODE is the major mode of the solution buffer to test.\nSRC-FILE-NAME is the name of the solution file.") (atcoder-tools--open-problem t nil nil (metadata-file-name) "Internally called by `atcoder-tools-open-problem'.\n\nMETADATA-FILE-NAME is the path to metadata.json generated by atcoder-tools.") (atcoder-tools-test t t (interactive nil) nil "Test your solution using atcoder-tools.\n\nAn executable of the solution will be built if needed.") (atcoder-tools-open-problem t t (interactive nil) nil "Open the AtCoder's task page of current buffer in a web browser."))"#
-    ]],
+            r#"OK ((atcoder-tools--run-config-for-mode t nil nil (mode) "Return an alist of run configuration for MODE.") (atcoder-tools--expand-cmd-templates t nil nil (cmd-templates working-directory src-file-name exec-file-name) "Expand each command in CMD-TEMPLATES, a list of command templates.\n\n%d in the template will be replaced with WORKING-DIRECTORY.\n%s in the template will be replaced with SRC-FILE-NAME.\n%e in the template will be replaced with EXEC-FILE-NAME.") (atcoder-tools--test t nil nil (mode src-file-name) "Internally called by `atcoder-tools-test'.\n\nMODE is the major mode of the solution buffer to test.\nSRC-FILE-NAME is the name of the solution file.") (atcoder-tools--open-problem t nil nil (metadata-file-name) "Internally called by `atcoder-tools-open-problem'.\n\nMETADATA-FILE-NAME is the path to metadata.json generated by atcoder-tools.") (atcoder-tools-test t t (interactive nil) nil "Test your solution using atcoder-tools.\n\nAn executable of the solution will be built if needed.") (atcoder-tools-open-problem t t (interactive nil) nil "Open the AtCoder's task page of current buffer in a web browser."))"#
+        ]],
     )
 }
 
@@ -229,8 +229,8 @@ fn atcoder_tools_customization_schema_defaults_and_group_are_exact() -> ParityBa
              atcoder-tools-rust-use-rustup)))"##,
         true,
         expect![[
-        r#"OK (((atcoder-tools-c-compiler custom-variable) (atcoder-tools-c++-compiler custom-variable) (atcoder-tools-rust-use-rustup custom-variable)) "atcoder-tools client" ((atcoder-tools-c-compiler t gcc t gcc t (choice (const gcc) (const clang)) nil "The compiler to use to compile C code. Possible values are `gcc' and `clang'.") (atcoder-tools-c++-compiler t gcc t gcc t (choice (const gcc) (const clang)) nil "The compiler to use to compile C++ code. Possible values are `gcc' and `clang'.") (atcoder-tools-rust-use-rustup t t t t t bool nil "If non-nil, Rustup is used to compile Rust code.")))"#
-    ]],
+            r#"OK (((atcoder-tools-c-compiler custom-variable) (atcoder-tools-c++-compiler custom-variable) (atcoder-tools-rust-use-rustup custom-variable)) "atcoder-tools client" ((atcoder-tools-c-compiler t gcc t gcc t (choice (const gcc) (const clang)) nil "The compiler to use to compile C code. Possible values are `gcc' and `clang'.") (atcoder-tools-c++-compiler t gcc t gcc t (choice (const gcc) (const clang)) nil "The compiler to use to compile C++ code. Possible values are `gcc' and `clang'.") (atcoder-tools-rust-use-rustup t t t t t bool nil "If non-nil, Rustup is used to compile Rust code.")))"#
+        ]],
     )
 }
 
@@ -258,12 +258,13 @@ fn atcoder_tools_run_configuration_table_is_exact_and_independently_copyable() -
             atcoder-tools--run-config-alist)))"##,
         true,
         expect![[
-        r#"OK (((c-gcc (cmd-templates "gcc -x c -std=gnu11 -o %e -lm -O2 %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (c-clang (cmd-templates "clang -x c -lm -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (c++-gcc (cmd-templates "g++ -std=gnu++1y -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (c++-clang (cmd-templates "clang++ -std=c++14 -stdlib=libc++ -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (rust-rustc (cmd-templates "rustc -Oo %e %s" "env RUST_BACKTRACE=1 atcoder-tools test -e %e -d %d") (remove-exec . t)) (rust-rustup (cmd-templates "rustup run --install 1.15.1 rustc -Oo %e %s" "env RUST_BACKTRACE=1 atcoder-tools test -e %e -d %d") (remove-exec . t))) ((c-gcc (cmd-templates "gcc -x c -std=gnu11 -o %e -lm -O2 %s" "atcoder-tools test -e %e -d %d") (remove-exec)) (c-clang (cmd-templates "clang -x c -lm -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (c++-gcc (cmd-templates "g++ -std=gnu++1y -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (c++-clang (cmd-templates "clang++ -std=c++14 -stdlib=libc++ -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (rust-rustc (cmd-templates "rustc -Oo %e %s" "env RUST_BACKTRACE=1 atcoder-tools test -e %e -d %d") (remove-exec . t)) (rust-rustup (cmd-templates "rustup run --install 1.15.1 rustc -Oo %e %s" "env RUST_BACKTRACE=1 atcoder-tools test -e %e -d %d") (remove-exec . t))) t nil)"#
-    ]],
+            r#"OK (((c-gcc (cmd-templates "gcc -x c -std=gnu11 -o %e -lm -O2 %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (c-clang (cmd-templates "clang -x c -lm -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (c++-gcc (cmd-templates "g++ -std=gnu++1y -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (c++-clang (cmd-templates "clang++ -std=c++14 -stdlib=libc++ -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (rust-rustc (cmd-templates "rustc -Oo %e %s" "env RUST_BACKTRACE=1 atcoder-tools test -e %e -d %d") (remove-exec . t)) (rust-rustup (cmd-templates "rustup run --install 1.15.1 rustc -Oo %e %s" "env RUST_BACKTRACE=1 atcoder-tools test -e %e -d %d") (remove-exec . t))) ((c-gcc (cmd-templates "gcc -x c -std=gnu11 -o %e -lm -O2 %s" "atcoder-tools test -e %e -d %d") (remove-exec)) (c-clang (cmd-templates "clang -x c -lm -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (c++-gcc (cmd-templates "g++ -std=gnu++1y -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (c++-clang (cmd-templates "clang++ -std=c++14 -stdlib=libc++ -O2 -o %e %s" "atcoder-tools test -e %e -d %d") (remove-exec . t)) (rust-rustc (cmd-templates "rustc -Oo %e %s" "env RUST_BACKTRACE=1 atcoder-tools test -e %e -d %d") (remove-exec . t)) (rust-rustup (cmd-templates "rustup run --install 1.15.1 rustc -Oo %e %s" "env RUST_BACKTRACE=1 atcoder-tools test -e %e -d %d") (remove-exec . t))) t nil)"#
+        ]],
     )
 }
 
-fn atcoder_tools_installed_source_preserves_warning_fatal_invalid_custom_type_rejection() -> ParityBatchCase {
+fn atcoder_tools_installed_source_preserves_warning_fatal_invalid_custom_type_rejection()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "atcoder_tools_installed_source_preserves_warning_fatal_invalid_custom_type_rejection",
         r##"(progn
@@ -338,8 +339,8 @@ fn atcoder_tools_installed_source_preserves_warning_fatal_invalid_custom_type_re
                   t)))))))"##,
         true,
         expect![[
-        r#"OK ((:ok nil) nil "5d71662d89c5f569b8e687a5a19ee5e1e571db950360669fbe4e8d7ae980a806" invalid-bool-custom-type t)"#
-    ]],
+            r#"OK ((:ok nil) nil "5d71662d89c5f569b8e687a5a19ee5e1e571db950360669fbe4e8d7ae980a806" invalid-bool-custom-type t)"#
+        ]],
     )
 }
 
@@ -404,8 +405,8 @@ fn atcoder_tools_generated_autoload_exposes_only_public_interactive_commands() -
               atcoder-tools--run-config-for-mode))))"##,
         true,
         expect![[
-        r#"OK (t nil ((defun atcoder-tools-test) (defun atcoder-tools-open-problem) (provide atcoder-tools-autoloads)) ("atcoder-tools") ((atcoder-tools-test t "atcoder-tools" t "[Arg list not available until function definition is loaded.]") (atcoder-tools-open-problem t "atcoder-tools" t "[Arg list not available until function definition is loaded.]") (atcoder-tools--test nil nil nil t) (atcoder-tools--open-problem nil nil nil t) (atcoder-tools--run-config-for-mode nil nil nil t)))"#
-    ]],
+            r#"OK (t nil ((defun atcoder-tools-test) (defun atcoder-tools-open-problem) (provide atcoder-tools-autoloads)) ("atcoder-tools") ((atcoder-tools-test t "atcoder-tools" t "[Arg list not available until function definition is loaded.]") (atcoder-tools-open-problem t "atcoder-tools" t "[Arg list not available until function definition is loaded.]") (atcoder-tools--test nil nil nil t) (atcoder-tools--open-problem nil nil nil t) (atcoder-tools--run-config-for-mode nil nil nil t)))"#
+        ]],
     )
 }
 
@@ -425,8 +426,7 @@ fn registry_atcoder_tools_batch() {
 
 #[test]
 fn registry_atcoder_tools_autoload_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        atcoder_tools_generated_autoload_exposes_only_public_interactive_commands(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![atcoder_tools_generated_autoload_exposes_only_public_interactive_commands()];
     assert_atcoder_tools_autoload_batch(&cases);
 }

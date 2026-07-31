@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_sage_batch};
 
-fn auto_complete_sage_setup_enables_mode_and_prepends_repl_sources_in_real_buffer_state() -> ParityBatchCase {
+fn auto_complete_sage_setup_enables_mode_and_prepends_repl_sources_in_real_buffer_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_setup_enables_mode_and_prepends_repl_sources_in_real_buffer_state",
         r##"(with-temp-buffer
@@ -30,12 +31,13 @@ fn auto_complete_sage_setup_enables_mode_and_prepends_repl_sources_in_real_buffe
                                (auto-complete-mode -1))))"##,
         true,
         expect![
-        "OK ((nil #1=(ac-source-filename ac-source-words-in-buffer)) t (ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers . #1#) t (sage-shell-mode emacs-lisp-mode lisp-mode lisp-interaction-mode slime-repl-mode nim-mode c-mode cc-mode c++-mode objc-mode swift-mode go-mode java-mode malabar-mode clojure-mode clojurescript-mode scala-mode scheme-mode ocaml-mode tuareg-mode coq-mode haskell-mode agda-mode agda2-mode perl-mode cperl-mode python-mode ruby-mode lua-mode tcl-mode ecmascript-mode javascript-mode js-mode js-jsx-mode js2-mode js2-jsx-mode coffee-mode php-mode css-mode scss-mode less-css-mode elixir-mode makefile-mode sh-mode fortran-mode f90-mode ada-mode xml-mode sgml-mode web-mode ts-mode sclang-mode verilog-mode qml-mode apples-mode))"
-    ],
+            "OK ((nil #1=(ac-source-filename ac-source-words-in-buffer)) t (ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers . #1#) t (sage-shell-mode emacs-lisp-mode lisp-mode lisp-interaction-mode slime-repl-mode nim-mode c-mode cc-mode c++-mode objc-mode swift-mode go-mode java-mode malabar-mode clojure-mode clojurescript-mode scala-mode scheme-mode ocaml-mode tuareg-mode coq-mode haskell-mode agda-mode agda2-mode perl-mode cperl-mode python-mode ruby-mode lua-mode tcl-mode ecmascript-mode javascript-mode js-mode js-jsx-mode js2-mode js2-jsx-mode coffee-mode php-mode css-mode scss-mode less-css-mode elixir-mode makefile-mode sh-mode fortran-mode f90-mode ada-mode xml-mode sgml-mode web-mode ts-mode sclang-mode verilog-mode qml-mode apples-mode))"
+        ],
     )
 }
 
-fn auto_complete_sage_setup_enables_mode_and_appends_edit_sources_in_real_buffer_state() -> ParityBatchCase {
+fn auto_complete_sage_setup_enables_mode_and_appends_edit_sources_in_real_buffer_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_setup_enables_mode_and_appends_edit_sources_in_real_buffer_state",
         r##"(with-temp-buffer
@@ -58,12 +60,13 @@ fn auto_complete_sage_setup_enables_mode_and_appends_edit_sources_in_real_buffer
                              (auto-complete-mode -1)))"##,
         true,
         expect![
-        "OK (t (ac-source-filename ac-source-words-in-buffer ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers) t (sage-shell:sage-mode sage-shell-mode emacs-lisp-mode lisp-mode lisp-interaction-mode slime-repl-mode nim-mode c-mode cc-mode c++-mode objc-mode swift-mode go-mode java-mode malabar-mode clojure-mode clojurescript-mode scala-mode scheme-mode ocaml-mode tuareg-mode coq-mode haskell-mode agda-mode agda2-mode perl-mode cperl-mode python-mode ruby-mode lua-mode tcl-mode ecmascript-mode javascript-mode js-mode js-jsx-mode js2-mode js2-jsx-mode coffee-mode php-mode css-mode scss-mode less-css-mode elixir-mode makefile-mode sh-mode fortran-mode f90-mode ada-mode xml-mode sgml-mode web-mode ts-mode sclang-mode verilog-mode qml-mode apples-mode))"
-    ],
+            "OK (t (ac-source-filename ac-source-words-in-buffer ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers) t (sage-shell:sage-mode sage-shell-mode emacs-lisp-mode lisp-mode lisp-interaction-mode slime-repl-mode nim-mode c-mode cc-mode c++-mode objc-mode swift-mode go-mode java-mode malabar-mode clojure-mode clojurescript-mode scala-mode scheme-mode ocaml-mode tuareg-mode coq-mode haskell-mode agda-mode agda2-mode perl-mode cperl-mode python-mode ruby-mode lua-mode tcl-mode ecmascript-mode javascript-mode js-mode js-jsx-mode js2-mode js2-jsx-mode coffee-mode php-mode css-mode scss-mode less-css-mode elixir-mode makefile-mode sh-mode fortran-mode f90-mode ada-mode xml-mode sgml-mode web-mode ts-mode sclang-mode verilog-mode qml-mode apples-mode))"
+        ],
     )
 }
 
-fn auto_complete_sage_repeated_setup_preserves_packages_duplicate_source_semantics() -> ParityBatchCase {
+fn auto_complete_sage_repeated_setup_preserves_packages_duplicate_source_semantics()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_repeated_setup_preserves_packages_duplicate_source_semantics",
         r##"(mapcar
@@ -96,8 +99,8 @@ fn auto_complete_sage_repeated_setup_preserves_packages_duplicate_source_semanti
                              sage-shell:sage-mode))"##,
         true,
         expect![
-        "OK ((sage-shell-mode #1=(ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers ac-source-filename) (ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers . #1#) ((ac-source-filename 1) (ac-source-sage-methods 2) (ac-source-sage-modules 0))) (sage-shell:sage-mode (ac-source-filename . #2=(ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers)) (ac-source-filename ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers . #2#) ((ac-source-filename 1) (ac-source-sage-methods 0) (ac-source-sage-modules 2))))"
-    ],
+            "OK ((sage-shell-mode #1=(ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers ac-source-filename) (ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers . #1#) ((ac-source-filename 1) (ac-source-sage-methods 2) (ac-source-sage-modules 0))) (sage-shell:sage-mode (ac-source-filename . #2=(ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers)) (ac-source-filename ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers . #2#) ((ac-source-filename 1) (ac-source-sage-methods 0) (ac-source-sage-modules 2))))"
+        ],
     )
 }
 
@@ -127,7 +130,8 @@ fn auto_complete_sage_setup_in_unsupported_mode_only_enables_auto_complete() -> 
     )
 }
 
-fn auto_complete_sage_command_cache_hook_clears_only_command_docs_until_method_clear_runs() -> ParityBatchCase {
+fn auto_complete_sage_command_cache_hook_clears_only_command_docs_until_method_clear_runs()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_command_cache_hook_clears_only_command_docs_until_method_clear_runs",
         r##"(let ((process-buffer
@@ -165,7 +169,8 @@ fn auto_complete_sage_command_cache_hook_clears_only_command_docs_until_method_c
     )
 }
 
-fn auto_complete_sage_document_caches_and_completion_states_remain_buffer_isolated() -> ParityBatchCase {
+fn auto_complete_sage_document_caches_and_completion_states_remain_buffer_isolated()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_document_caches_and_completion_states_remain_buffer_isolated",
         r##"(let ((first
@@ -219,12 +224,13 @@ fn auto_complete_sage_document_caches_and_completion_states_remain_buffer_isolat
                              (kill-buffer second)))"##,
         true,
         expect![[
-        r#"OK ((" *acsage-isolation-first*" nil (("matrix.rank" . "first rank")) ((interface . "sage") (var-base-name . "matrix") (types "attributes")) ("matrix" . "matrix.rank")) (" *acsage-isolation-second*" (("plot" . "second plot")) (("graph.order" . "second order")) ((interface . "gap") (var-base-name . "graph") (types "attributes")) ("graph" . "graph.rank")))"#
-    ]],
+            r#"OK ((" *acsage-isolation-first*" nil (("matrix.rank" . "first rank")) ((interface . "sage") (var-base-name . "matrix") (types "attributes")) ("matrix" . "matrix.rank")) (" *acsage-isolation-second*" (("plot" . "second plot")) (("graph.order" . "second order")) ((interface . "gap") (var-base-name . "graph") (types "attributes")) ("graph" . "graph.rank")))"#
+        ]],
     )
 }
 
-fn auto_complete_sage_setup_routes_independent_repl_and_edit_buffers_without_cross_leakage() -> ParityBatchCase {
+fn auto_complete_sage_setup_routes_independent_repl_and_edit_buffers_without_cross_leakage()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_sage_setup_routes_independent_repl_and_edit_buffers_without_cross_leakage",
         r##"(let ((repl-buffer
@@ -274,8 +280,8 @@ fn auto_complete_sage_setup_routes_independent_repl_and_edit_buffers_without_cro
                              (kill-buffer edit-buffer)))"##,
         true,
         expect![
-        "OK ((sage-shell-mode t (ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers ac-source-filename) t) (sage-shell:sage-mode t (ac-source-filename ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers) t))"
-    ],
+            "OK ((sage-shell-mode t (ac-sage-repl-modules ac-source-sage-methods ac-sage-repl-vars-in-module ac-source-sage-other-interfaces as-source-sage-repl-argspec ac-source-sage-repl-python-kwds ac-source-repl-sage-commands ac-source-sage-words-in-buffers ac-source-filename) t) (sage-shell:sage-mode t (ac-source-filename ac-source-sage-modules ac-source-sage-vars-in-modules ac-source-sage-commands ac-source-sage-words-in-buffers) t))"
+        ],
     )
 }
 

@@ -21,8 +21,8 @@ fn zap_up_to_char_deletes_forward_and_labels_the_closest_match_first() -> Parity
     (ajz-test-state))))"##,
         true,
         expect![[
-        r#"OK (((nil "" 58 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z g" 58 t nil 58 (("a" . 68) ("b" . 33))) (ace-jump-move "a" 58 nil nil nil nil)) "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 58 58 t nil nil nil 0 nil)"#
-    ]],
+            r#"OK (((nil "" 58 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z g" 58 t nil 58 (("a" . 68) ("b" . 33))) (ace-jump-move "a" 58 nil nil nil nil)) "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 58 58 t nil nil nil 0 nil)"#
+        ]],
     )
 }
 
@@ -47,8 +47,8 @@ fn zap_to_char_and_up_to_char_differ_in_both_directions() -> ParityBatchCase {
     kill-ring)))"##,
         true,
         expect![[
-        r#"OK ((:to-char-forward "  - 2 arlic\n  - olive oi" 58 58) (:to-char-backward "  - 400 cloves of garlic\n" 33 33) (:up-to-char-backward "  - 400 gcloves of garlic" 34 34) nil)"#
-    ]],
+            r#"OK ((:to-char-forward "  - 2 arlic\n  - olive oi" 58 58) (:to-char-backward "  - 400 cloves of garlic\n" 33 33) (:up-to-char-backward "  - 400 gcloves of garlic" 34 34) nil)"#
+        ]],
     )
 }
 
@@ -72,8 +72,8 @@ fn kill_region_zapping_puts_the_deleted_text_on_the_kill_ring() -> ParityBatchCa
            (current-kill 0 t)))))"##,
         true,
         expect![[
-        r#"OK (("Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 58 #1=("cloves of ")) " 20 minutes, then serve.\ncloves of " 138 #1# "cloves of ")"#
-    ]],
+            r#"OK (("Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 58 #1=("cloves of ")) " 20 minutes, then serve.\ncloves of " 138 #1# "cloves of ")"#
+        ]],
     )
 }
 
@@ -103,8 +103,8 @@ fn forward_only_zapping_ignores_matches_behind_point() -> ParityBatchCase {
             (length (overlays-in (point-min) (point-max))))))))"##,
         true,
         expect![[
-        r#"OK ((((nil "" 62 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z o" 62 t nil 62 (("a" . 65) ("b" . 79) ("c" . 85) ("d" . 111))) (ace-jump-move "b" 62 nil nil nil nil)) "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 clovolive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 62 62) ((error "[AceJump] No one found") "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 cloves of garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 62 t 62 nil 0))"#
-    ]],
+            r#"OK ((((nil "" 62 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z o" 62 t nil 62 (("a" . 65) ("b" . 79) ("c" . 85) ("d" . 111))) (ace-jump-move "b" 62 nil nil nil nil)) "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 clovolive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 62 62) ((error "[AceJump] No one found") "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 cloves of garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 62 t 62 nil 0))"#
+        ]],
     )
 }
 
@@ -124,8 +124,8 @@ fn disabling_proximity_sorting_labels_matches_in_buffer_order() -> ParityBatchCa
           kill-ring))))"##,
         true,
         expect![[
-        r#"OK (((nil "" 58 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z g" 58 t nil 58 (("a" . 33) ("b" . 68))) (ace-jump-move "a" 34 nil nil nil nil)) "  - 400 gcloves of garlic" 34 34 nil)"#
-    ]],
+            r#"OK (((nil "" 58 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z g" 58 t nil 58 (("a" . 33) ("b" . 68))) (ace-jump-move "a" 34 nil nil nil nil)) "  - 400 gcloves of garlic" 34 34 nil)"#
+        ]],
     )
 }
 
@@ -160,8 +160,8 @@ fn the_fifty_two_character_limit_bounds_how_far_a_zap_can_reach() -> ParityBatch
           (remove-hook 'ace-jump-mode-before-jump-hook #'ajz-test-capture-labels)))))))"##,
         true,
         expect![[
-        r#"OK ((((nil "" 1 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z x" 1 t nil 1 (("A" . 35) ("B" . 37) ("C" . 38) ("D" . 39) ("E" . 41) ("F" . 42) ("G" . 43) ("H" . 45) ("I" . 46) ("J" . 47) ("K" . 49) ("L" . 50) ("M" . 51) ("N" . 53) ("O" . 54) ("P" . 55) ("Q" . 57) ("R" . 58) ("S" . 59) ("T" . 61) ("U" . 62) ("V" . 63) ("W" . 65) ("X" . 66) ("Y" . 67) ("Z" . 69) ("a" . 1) ("b" . 2) ("c" . 3) ("d" . 5) ("e" . 6) ("f" . 7) ("g" . 9) ("h" . 10) ("i" . 11) ("j" . 13) ("k" . 14) ("l" . 15) ("m" . 17) ("n" . 18) ("o" . 19) ("p" . 21) ("q" . 22) ("r" . 23) ("s" . 25) ("t" . 26) ("u" . 27) ("v" . 29) ("w" . 30) ("x" . 31) ("y" . 33) ("z" . 34))) (ace-jump-move "Z" 1 nil nil nil nil)) 4 1 "xxx\n") (54 2 1 ("z" . 37)))"#
-    ]],
+            r#"OK ((((nil "" 1 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z x" 1 t nil 1 (("A" . 35) ("B" . 37) ("C" . 38) ("D" . 39) ("E" . 41) ("F" . 42) ("G" . 43) ("H" . 45) ("I" . 46) ("J" . 47) ("K" . 49) ("L" . 50) ("M" . 51) ("N" . 53) ("O" . 54) ("P" . 55) ("Q" . 57) ("R" . 58) ("S" . 59) ("T" . 61) ("U" . 62) ("V" . 63) ("W" . 65) ("X" . 66) ("Y" . 67) ("Z" . 69) ("a" . 1) ("b" . 2) ("c" . 3) ("d" . 5) ("e" . 6) ("f" . 7) ("g" . 9) ("h" . 10) ("i" . 11) ("j" . 13) ("k" . 14) ("l" . 15) ("m" . 17) ("n" . 18) ("o" . 19) ("p" . 21) ("q" . 22) ("r" . 23) ("s" . 25) ("t" . 26) ("u" . 27) ("v" . 29) ("w" . 30) ("x" . 31) ("y" . 33) ("z" . 34))) (ace-jump-move "Z" 1 nil nil nil nil)) 4 1 "xxx\n") (54 2 1 ("z" . 37)))"#
+        ]],
     )
 }
 
@@ -184,8 +184,8 @@ fn an_unassigned_key_cancels_the_zap_and_leaves_the_text_untouched() -> ParityBa
     (key-binding (kbd "M-Z")))))"##,
         true,
         expect![[
-        r#"OK ((((nil "" 58 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z g" 58 t nil 58 (("a" . 68) ("b" . 33))) (ajz/keyboard-reset "!" 58 nil nil nil nil)) "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 cloves of garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 58 nil nil nil nil nil 0 nil) (((nil "" 58 nil nil nil nil) (ace-jump-zap-to-char "M-z g" 58 t t 58 (("a" . 68) ("b" . 33))) (ajz/keyboard-reset "C-g" 58 nil nil nil nil)) "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 cloves of garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 58 nil nil nil nil nil 0 nil) ace-jump-zap-up-to-char)"#
-    ]],
+            r#"OK ((((nil "" 58 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z g" 58 t nil 58 (("a" . 68) ("b" . 33))) (ajz/keyboard-reset "!" 58 nil nil nil nil)) "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 cloves of garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 58 nil nil nil nil nil 0 nil) (((nil "" 58 nil nil nil nil) (ace-jump-zap-to-char "M-z g" 58 t t 58 (("a" . 68) ("b" . 33))) (ajz/keyboard-reset "C-g" 58 nil nil nil nil)) "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 cloves of garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 58 nil nil nil nil nil 0 nil) ace-jump-zap-up-to-char)"#
+        ]],
     )
 }
 
@@ -213,8 +213,8 @@ fn the_dwim_commands_dispatch_between_the_builtin_zap_and_ace_jump() -> ParityBa
           (point) kill-ring))))"##,
         true,
         expect![[
-        r#"OK ((((nil "" 58 nil nil nil nil) (ace-jump-zap-to-char-dwim "" 14 nil nil nil nil) (kill-region "C-c z" 58 nil nil nil nil)) "  - 2 arlic\n  - olive oi" 58 nil ("cloves of g")) (((nil "" 58 nil nil nil nil) (nil "C-u" 58 nil nil nil nil) (ace-jump-zap-to-char-dwim "C-c z g" 58 t t 58 (("a" . 68) ("b" . 33))) (ace-jump-move "a" 58 nil nil nil nil)) "  - 2 arlic\n  - olive oi" 58 58 nil) ("  - 2 garlic\n  - olive o" 58 ("cloves of ")))"#
-    ]],
+            r#"OK ((((nil "" 58 nil nil nil nil) (ace-jump-zap-to-char-dwim "" 14 nil nil nil nil) (kill-region "C-c z" 58 nil nil nil nil)) "  - 2 arlic\n  - olive oi" 58 nil ("cloves of g")) (((nil "" 58 nil nil nil nil) (nil "C-u" 58 nil nil nil nil) (ace-jump-zap-to-char-dwim "C-c z g" 58 t t 58 (("a" . 68) ("b" . 33))) (ace-jump-move "a" 58 nil nil nil nil)) "  - 2 arlic\n  - olive oi" 58 58 nil) ("  - 2 garlic\n  - olive o" 58 ("cloves of ")))"#
+        ]],
     )
 }
 

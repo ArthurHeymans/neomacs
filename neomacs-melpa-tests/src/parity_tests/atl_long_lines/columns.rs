@@ -47,7 +47,8 @@ fn atl_long_lines_end_column_honors_buffer_local_tab_width_and_tab_stops() -> Pa
     )
 }
 
-fn atl_long_lines_end_column_counts_wide_combining_and_multilingual_characters() -> ParityBatchCase {
+fn atl_long_lines_end_column_counts_wide_combining_and_multilingual_characters() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atl_long_lines_end_column_counts_wide_combining_and_multilingual_characters",
         r##"(mapcar
@@ -119,7 +120,8 @@ fn atl_long_lines_end_column_respects_narrowing_at_a_partial_line_boundary() -> 
     )
 }
 
-fn atl_long_lines_end_column_preserves_point_mark_current_buffer_and_match_data() -> ParityBatchCase {
+fn atl_long_lines_end_column_preserves_point_mark_current_buffer_and_match_data() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "atl_long_lines_end_column_preserves_point_mark_current_buffer_and_match_data",
         r##"(let ((original

@@ -29,12 +29,13 @@ fn agda_editor_tactics_rendering_builds_nested_fields_and_local_lets() -> Parity
             (:field "right-id : ∀ x → x ∙ ε ≡ x"))))"##,
         true,
         expect![[
-        r#"OK "Monoid′ : Set ℓ\nMonoid′ = Σ Carrier ∶ Set ℓ • Σ ε ∶ Carrier • Σ _∙_ ∶ Carrier → Carrier → Carrier • let left-id : ∀ x → ε ∙ x ≡ x ; left-id = proof in Σ right-id ∶ ∀ x → x ∙ ε ≡ x • ⊤""#
-    ]],
+            r#"OK "Monoid′ : Set ℓ\nMonoid′ = Σ Carrier ∶ Set ℓ • Σ ε ∶ Carrier • Σ _∙_ ∶ Carrier → Carrier → Carrier • let left-id : ∀ x → ε ∙ x ≡ x ; left-id = proof in Σ right-id ∶ ∀ x → x ∙ ε ≡ x • ⊤""#
+        ]],
     )
 }
 
-fn agda_editor_tactics_rendering_turns_parameters_into_binders_and_lambda_arguments() -> ParityBatchCase {
+fn agda_editor_tactics_rendering_turns_parameters_into_binders_and_lambda_arguments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "agda_editor_tactics_rendering_turns_parameters_into_binders_and_lambda_arguments",
         r##"(agda-editor-tactics-as-Σ-nested
@@ -48,8 +49,8 @@ fn agda_editor_tactics_rendering_turns_parameters_into_binders_and_lambda_argume
             (:field "proof : value ≡ value"))))"##,
         true,
         expect![[
-        r#"OK "Dependent′ : (A : Set a) (B : A → Set b) (x : A) → Set (a ⊔ b)\nDependent′ = λ A B x → Σ value ∶ B x • Σ proof ∶ value ≡ value • ⊤""#
-    ]],
+            r#"OK "Dependent′ : (A : Set a) (B : A → Set b) (x : A) → Set (a ⊔ b)\nDependent′ = λ A B x → Σ value ∶ B x • Σ proof ∶ value ≡ value • ⊤""#
+        ]],
     )
 }
 
@@ -67,8 +68,8 @@ fn agda_editor_tactics_rendering_respects_custom_sigma_naming() -> ParityBatchCa
               (:field "item : A"))))))"##,
         true,
         expect![[
-        r#"OK ("%s-as-nested-Σ" "Configured-as-nested-Σ : (A : Set) → Set \nConfigured-as-nested-Σ = λ A → Σ item ∶ A • ⊤")"#
-    ]],
+            r#"OK ("%s-as-nested-Σ" "Configured-as-nested-Σ : (A : Set) → Set \nConfigured-as-nested-Σ = λ A → Σ item ∶ A • ⊤")"#
+        ]],
     )
 }
 
@@ -87,8 +88,8 @@ fn agda_editor_tactics_rendering_normalizes_whitespace_and_let_sequences() -> Pa
             (:local "proof = refl"))))"##,
         true,
         expect![[
-        r#"OK "Spacing′ : Set \nSpacing′ = let Alias : Set ; Alias = Set ; chosen = Alias in Σ value ∶ chosen • let proof : value ≡ value ; proof = refl in ⊤""#
-    ]],
+            r#"OK "Spacing′ : Set \nSpacing′ = let Alias : Set ; Alias = Set ; chosen = Alias in Σ value ∶ chosen • let proof : value ≡ value ; proof = refl in ⊤""#
+        ]],
     )
 }
 
@@ -105,8 +106,8 @@ fn agda_editor_tactics_rendering_replaces_colons_only_for_fields() -> ParityBatc
             (:field "proof : mapping x ≡ y"))))"##,
         true,
         expect![[
-        r#"OK "Colons′ : Set \nColons′ = let Alias : Set in Σ mapping ∶ A ∶→ B • let qualified = Module.value : Alias in Σ proof ∶ mapping x ≡ y • ⊤""#
-    ]],
+            r#"OK "Colons′ : Set \nColons′ = let Alias : Set in Σ mapping ∶ A ∶→ B • let qualified = Module.value : Alias in Σ proof ∶ mapping x ≡ y • ⊤""#
+        ]],
     )
 }
 
@@ -128,8 +129,8 @@ fn agda_editor_tactics_rendering_preserves_parameter_order_and_dependencies() ->
           (plist-get record :body)))"##,
         true,
         expect![[
-        r#"OK ("Category′ : (o : Level) (h : Level) → Set (lsuc (o ⊔ h))\nCategory′ = λ o h → Σ Obj ∶ Set o • Σ Hom ∶ Obj → Obj → Set h • Σ id ∶ ∀ {A} → Hom A A • Σ _∘_ ∶ ∀ {A B C} → Hom B C → Hom A B → Hom A C • ⊤" ((:param "o : Level") (:param "h : Level") (:field "Obj : Set o") (:field "Hom : Obj → Obj → Set h") (:field "id : ∀ {A} → Hom A A") (:field "_∘_ : ∀ {A B C} → Hom B C → Hom A B → Hom A C")))"#
-    ]],
+            r#"OK ("Category′ : (o : Level) (h : Level) → Set (lsuc (o ⊔ h))\nCategory′ = λ o h → Σ Obj ∶ Set o • Σ Hom ∶ Obj → Obj → Set h • Σ id ∶ ∀ {A} → Hom A A • Σ _∘_ ∶ ∀ {A B C} → Hom B C → Hom A B → Hom A C • ⊤" ((:param "o : Level") (:param "h : Level") (:field "Obj : Set o") (:field "Hom : Obj → Obj → Set h") (:field "id : ∀ {A} → Hom A A") (:field "_∘_ : ∀ {A B C} → Hom B C → Hom A B → Hom A C")))"#
+        ]],
     )
 }
 

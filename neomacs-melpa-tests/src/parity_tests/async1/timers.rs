@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_async1_batch};
 
-fn async1_default_template_ports_basic_nil_zero_and_empty_data_cases_deterministically() -> ParityBatchCase {
+fn async1_default_template_ports_basic_nil_zero_and_empty_data_cases_deterministically()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_default_template_ports_basic_nil_zero_and_empty_data_cases_deterministically",
         r##"(let (values returns)
@@ -49,12 +50,13 @@ fn async1_default_template_ports_basic_nil_zero_and_empty_data_cases_determinist
               async1-test-now))))"##,
         true,
         expect![[
-        r#"OK (((:async1-test-timer 1) (:async1-test-timer 2) (:async1-test-timer 3)) ((:at 0 :id 3 :repeat nil :function :closure :arguments (" -> suffix")) (:at 0.25 :id 2 :repeat nil :function :closure :arguments ("suffix")) (:at 0.5 :id 1 :repeat nil :function :closure :arguments ("test -> suffix"))) ((:empty " -> suffix") (:nil "suffix") (:basic "test -> suffix")) 0.5)"#
-    ]],
+            r#"OK (((:async1-test-timer 1) (:async1-test-timer 2) (:async1-test-timer 3)) ((:at 0 :id 3 :repeat nil :function :closure :arguments (" -> suffix")) (:at 0.25 :id 2 :repeat nil :function :closure :arguments ("suffix")) (:at 0.5 :id 1 :repeat nil :function :closure :arguments ("test -> suffix"))) ((:empty " -> suffix") (:nil "suffix") (:basic "test -> suffix")) 0.5)"#
+        ]],
     )
 }
 
-fn async1_default_template_real_zero_delay_timer_runs_callback_via_editor_event_loop() -> ParityBatchCase {
+fn async1_default_template_real_zero_delay_timer_runs_callback_via_editor_event_loop()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_default_template_real_zero_delay_timer_runs_callback_via_editor_event_loop",
         r##"(let (value
@@ -82,7 +84,8 @@ fn async1_default_template_real_zero_delay_timer_runs_callback_via_editor_event_
     )
 }
 
-fn async1_start_real_timer_pipeline_completes_sequential_and_parallel_workflow() -> ParityBatchCase {
+fn async1_start_real_timer_pipeline_completes_sequential_and_parallel_workflow() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_start_real_timer_pipeline_completes_sequential_and_parallel_workflow",
         r##"(let (final-values)
@@ -123,7 +126,8 @@ fn async1_start_real_timer_pipeline_completes_sequential_and_parallel_workflow()
     )
 }
 
-fn async1_start_real_timer_custom_step_preserves_lexical_capture_across_callback() -> ParityBatchCase {
+fn async1_start_real_timer_custom_step_preserves_lexical_capture_across_callback() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "async1_start_real_timer_custom_step_preserves_lexical_capture_across_callback",
         r##"(let ((captured "external")
@@ -155,12 +159,13 @@ fn async1_start_real_timer_custom_step_preserves_lexical_capture_across_callback
           final-values))"##,
         true,
         expect![[
-        r#"OK (#1=("seed -> external -> built-in") ((:scheduled "seed" "external") :finished) #1#)"#
-    ]],
+            r#"OK (#1=("seed -> external -> built-in") ((:scheduled "seed" "external") :finished) #1#)"#
+        ]],
     )
 }
 
-fn async1_start_real_simultaneous_zero_delay_parallel_uses_default_aggregate_and_print() -> ParityBatchCase {
+fn async1_start_real_simultaneous_zero_delay_parallel_uses_default_aggregate_and_print()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "async1_start_real_simultaneous_zero_delay_parallel_uses_default_aggregate_and_print",
         r##"(let (printed)

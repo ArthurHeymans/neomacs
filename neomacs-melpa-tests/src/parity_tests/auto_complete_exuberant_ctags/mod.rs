@@ -129,8 +129,6 @@ pub(crate) fn assert_auto_complete_exuberant_ctags_autoload_parity(
     );
 }
 
-
-
 /// Multi-probe batch for `assert_auto_complete_exuberant_ctags_autoload_parity` cases (2a).
 pub(crate) fn assert_auto_complete_exuberant_ctags_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();

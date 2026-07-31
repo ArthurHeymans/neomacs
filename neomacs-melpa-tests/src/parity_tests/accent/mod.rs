@@ -57,10 +57,5 @@ pub(crate) fn assert_accent_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_accent_parity` cases (2a).
 pub(crate) fn assert_accent_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        accent_oracle(),
-        &name,
-        "accent_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(accent_oracle(), &name, "accent_parity", cases);
 }

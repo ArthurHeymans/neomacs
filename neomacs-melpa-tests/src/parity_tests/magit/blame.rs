@@ -72,8 +72,7 @@ fn magit_blame_addition_populates_commit_details_for_a_visited_file() -> ParityB
 
 #[test]
 fn blame_public_surface_batch() {
-    let cases: Vec<ParityBatchCase> = vec![
-        magit_blame_addition_populates_commit_details_for_a_visited_file(),
-    ];
+    let cases: Vec<ParityBatchCase> =
+        vec![magit_blame_addition_populates_commit_details_for_a_visited_file()];
     assert_magit_batch(&cases);
 }

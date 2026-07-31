@@ -86,10 +86,5 @@ pub(crate) fn assert_apiwrap_parity(elisp_form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_apiwrap_parity` cases (2a).
 pub(crate) fn assert_apiwrap_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        apiwrap_oracle(),
-        &name,
-        "apiwrap_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(apiwrap_oracle(), &name, "apiwrap_parity", cases);
 }

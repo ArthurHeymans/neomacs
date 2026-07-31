@@ -47,12 +47,6 @@ pub(crate) fn assert_aider_helm_parity(elisp_form: &str, expected: Expect) {
     assert_aider_source_parity("aider-helm.el", elisp_form, expected);
 }
 
-
-
-
-
-
-
 /// Multi-probe batch for `assert_aider_autoload_parity` cases (2a).
 pub(crate) fn assert_aider_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
@@ -67,12 +61,7 @@ pub(crate) fn assert_aider_autoload_batch(cases: &[ParityBatchCase]) {
 /// Multi-probe batch for `assert_aider_parity` cases (2a).
 pub(crate) fn assert_aider_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        aider_oracle("aider.el"),
-        &name,
-        "aider_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(aider_oracle("aider.el"), &name, "aider_parity", cases);
 }
 
 /// Multi-probe batch for `assert_aider_helm_parity` cases (2a).

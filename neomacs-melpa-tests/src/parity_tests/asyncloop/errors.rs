@@ -30,8 +30,8 @@ fn asyncloop_run_rejects_empty_and_each_non_callable_stage_before_scheduling() -
           cases))"##,
         true,
         expect![[
-        r#"OK ((nil (:signal cl-assertion-failed (funs)) nil) ((not-defined) (:signal error ("Not a function or not yet defined as such: not-defined")) nil) ((ignore 42) (:signal error ("Not a function or not yet defined as such: 42")) nil) ((ignore "not-a-function") (:signal error ("Not a function or not yet defined as such: not-a-function")) nil) ((ignore nil) (:signal error ("Not a function or not yet defined as such: nil")) nil))"#
-    ]],
+            r#"OK ((nil (:signal cl-assertion-failed (funs)) nil) ((not-defined) (:signal error ("Not a function or not yet defined as such: not-defined")) nil) ((ignore 42) (:signal error ("Not a function or not yet defined as such: 42")) nil) ((ignore "not-a-function") (:signal error ("Not a function or not yet defined as such: not-a-function")) nil) ((ignore nil) (:signal error ("Not a function or not yet defined as such: nil")) nil))"#
+        ]],
     )
 }
 
@@ -61,8 +61,8 @@ fn asyncloop_create_rejects_unknown_keyword_and_odd_constructor_arguments() -> P
             (asyncloop-timer loop))))"##,
         true,
         expect![[
-        r#"OK ((:signal error ("Keyword argument :unknown-slot not one of (:starttime :log-buffer :immediate-break-on-user-activity :timer :paused :remainder :scheduled :just-launched)")) (:signal error ("Missing argument for :paused")) (:signal error ("Keyword argument not-a-keyword not one of (:starttime :log-buffer :immediate-break-on-user-activity :timer :paused :remainder :scheduled :just-launched)")) (:truthy nil))"#
-    ]],
+            r#"OK ((:signal error ("Keyword argument :unknown-slot not one of (:starttime :log-buffer :immediate-break-on-user-activity :timer :paused :remainder :scheduled :just-launched)")) (:signal error ("Missing argument for :paused")) (:signal error ("Keyword argument not-a-keyword not one of (:starttime :log-buffer :immediate-break-on-user-activity :timer :paused :remainder :scheduled :just-launched)")) (:truthy nil))"#
+        ]],
     )
 }
 
@@ -86,12 +86,13 @@ fn asyncloop_lifecycle_functions_reject_non_loop_values_with_exact_signals() -> 
            asyncloop-log))"##,
         true,
         expect![
-        "OK ((asyncloop-cancel (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-pause (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-resume (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-schedule (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-eat (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-chomp (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-log (:signal wrong-type-argument (asyncloop :not-a-loop))))"
-    ],
+            "OK ((asyncloop-cancel (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-pause (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-resume (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-schedule (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-eat (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-chomp (:signal wrong-type-argument (asyncloop :not-a-loop))) (asyncloop-log (:signal wrong-type-argument (asyncloop :not-a-loop))))"
+        ],
     )
 }
 
-fn asyncloop_non_immediate_interruption_cancels_remaining_series_and_records_reason() -> ParityBatchCase {
+fn asyncloop_non_immediate_interruption_cancels_remaining_series_and_records_reason()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "asyncloop_non_immediate_interruption_cancels_remaining_series_and_records_reason",
         r##"(let ((loop
@@ -145,7 +146,8 @@ fn asyncloop_non_immediate_interruption_cancels_remaining_series_and_records_rea
     )
 }
 
-fn asyncloop_immediate_worker_error_resignals_without_silently_advancing_stage() -> ParityBatchCase {
+fn asyncloop_immediate_worker_error_resignals_without_silently_advancing_stage() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "asyncloop_immediate_worker_error_resignals_without_silently_advancing_stage",
         r##"(let ((loop
@@ -190,8 +192,8 @@ fn asyncloop_immediate_worker_error_resignals_without_silently_advancing_stage()
             logged)))"##,
         true,
         expect![[
-        r#"OK ((:signal wrong-type-argument (integerp "record-id")) 2 nil nil ("During lambda: (wrong-type-argument integerp \"record-id\")"))"#
-    ]],
+            r#"OK ((:signal wrong-type-argument (integerp "record-id")) 2 nil nil ("During lambda: (wrong-type-argument integerp \"record-id\")"))"#
+        ]],
     )
 }
 

@@ -194,8 +194,8 @@ fn auto_org_md_mode_repeated_positive_argument_toggles_internal_property_off() -
                   (nreverse messages)))))))"##,
         true,
         expect![[
-        r#"OK ((t t (auto-org-md-export t)) (t nil nil) ("auto-org-md-mode is on." "auto-org-md-mode is off."))"#
-    ]],
+            r#"OK ((t t (auto-org-md-export t)) (t nil nil) ("auto-org-md-mode is on." "auto-org-md-mode is off."))"#
+        ]],
     )
 }
 

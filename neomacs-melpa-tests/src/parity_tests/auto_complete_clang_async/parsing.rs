@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_complete_clang_async_batch};
 
-fn auto_complete_clang_async_completion_parser_preserves_order_duplicates_and_detailed_help() -> ParityBatchCase {
+fn auto_complete_clang_async_completion_parser_preserves_order_duplicates_and_detailed_help()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_completion_parser_preserves_order_duplicates_and_detailed_help",
         r##"(with-temp-buffer
@@ -19,12 +20,13 @@ fn auto_complete_clang_async_completion_parser_preserves_order_duplicates_and_de
                              "alp")))"##,
         true,
         expect![[
-        r#"OK (("alpha" "[#double#]alpha(<#double x#>)" nil) ("alphabet" "[#char *#]alphabet" nil) ("alpha" "[#int#]alpha(<#int x#>)" nil))"#
-    ]],
+            r#"OK (("alpha" "[#double#]alpha(<#double x#>)" nil) ("alphabet" "[#char *#]alphabet" nil) ("alpha" "[#int#]alpha(<#int x#>)" nil))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_completion_parser_filters_prefix_pattern_colons_and_malformed_lines() -> ParityBatchCase {
+fn auto_complete_clang_async_completion_parser_filters_prefix_pattern_colons_and_malformed_lines()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_completion_parser_filters_prefix_pattern_colons_and_malformed_lines",
         r##"(with-temp-buffer
@@ -53,12 +55,13 @@ fn auto_complete_clang_async_completion_parser_filters_prefix_pattern_colons_and
                               "missing")))"##,
         true,
         expect![[
-        r#"OK (("" (("fork" " :" nil) ("forward" "::iterator : detail" nil) ("format" "[#int#]format(<#char *fmt#>)" nil) ("first" "" nil))) ("f" (("fork" " :" nil) ("forward" "::iterator : detail" nil) ("format" "[#int#]format(<#char *fmt#>)" nil) ("first" "" nil))) ("for" (("fork" " :" nil) ("forward" "::iterator : detail" nil) ("format" "[#int#]format(<#char *fmt#>)" nil))) ("format" (("format" "[#int#]format(<#char *fmt#>)" nil))) ("missing" nil))"#
-    ]],
+            r#"OK (("" (("fork" " :" nil) ("forward" "::iterator : detail" nil) ("format" "[#int#]format(<#char *fmt#>)" nil) ("first" "" nil))) ("f" (("fork" " :" nil) ("forward" "::iterator : detail" nil) ("format" "[#int#]format(<#char *fmt#>)" nil) ("first" "" nil))) ("for" (("fork" " :" nil) ("forward" "::iterator : detail" nil) ("format" "[#int#]format(<#char *fmt#>)" nil))) ("format" (("format" "[#int#]format(<#char *fmt#>)" nil))) ("missing" nil))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_document_cleanup_and_candidate_property_lookup_match() -> ParityBatchCase {
+fn auto_complete_clang_async_document_cleanup_and_candidate_property_lookup_match()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_document_cleanup_and_candidate_property_lookup_match",
         r##"(let ((candidate
@@ -85,12 +88,13 @@ fn auto_complete_clang_async_document_cleanup_and_candidate_property_lookup_matc
                              candidate)))"##,
         true,
         expect![[
-        r#"OK (nil "" "Result call(one, two)" "int format(const char *fmt, ...)" nil nil "[#int#]format(<#const char *fmt#>, <#...#>)")"#
-    ]],
+            r#"OK (nil "" "Result call(one, two)" "int format(const char *fmt, ...)" nil nil "[#int#]format(<#const char *fmt#>, <#...#>)")"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_prefix_recognizes_symbols_member_access_and_namespace_access() -> ParityBatchCase {
+fn auto_complete_clang_async_prefix_recognizes_symbols_member_access_and_namespace_access()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_prefix_recognizes_symbols_member_access_and_namespace_access",
         r##"(mapcar
@@ -123,12 +127,13 @@ fn auto_complete_clang_async_prefix_recognizes_symbols_member_access_and_namespa
                              ("member.tail" . 8)))"##,
         true,
         expect![[
-        r#"OK (("identifier" 11 1 "identifier") ("object." 8 8 "") ("pointer->" 10 10 "") ("namespace::" 12 12 "") ("operator:" 10 nil nil) ("operator-" 10 nil nil) ("a.." 4 4 "") ("left right" 11 6 "right") ("member.tail" 8 8 ""))"#
-    ]],
+            r#"OK (("identifier" 11 1 "identifier") ("object." 8 8 "") ("pointer->" 10 10 "") ("namespace::" 12 12 "") ("operator:" 10 nil nil) ("operator-" 10 nil nil) ("a.." 4 4 "") ("left right" 11 6 "right") ("member.tail" 8 8 ""))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_balanced_delimiter_counter_covers_nested_template_and_call_fragments() -> ParityBatchCase {
+fn auto_complete_clang_async_balanced_delimiter_counter_covers_nested_template_and_call_fragments()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_balanced_delimiter_counter_covers_nested_template_and_call_fragments",
         r##"(mapcar
@@ -153,12 +158,13 @@ fn auto_complete_clang_async_balanced_delimiter_counter_covers_nested_template_a
                              ")(<>"))"##,
         true,
         expect![[
-        r#"OK (("plain" t t) ("std::vector<int>" t t) ("std::map<Key, std::vector<Value>>" t t) ("std::vector<int" nil t) ("call(a, nested(b, c))" t t) ("call(a, nested(b, c)" t nil) ("operator<<" nil t) (")(<>" t t))"#
-    ]],
+            r#"OK (("plain" t t) ("std::vector<int>" t t) ("std::map<Key, std::vector<Value>>" t t) ("std::vector<int" nil t) ("call(a, nested(b, c))" t t) ("call(a, nested(b, c)" t nil) ("operator<<" nil t) (")(<>" t t))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_argument_splitter_keeps_nested_templates_calls_and_function_pointers() -> ParityBatchCase {
+fn auto_complete_clang_async_argument_splitter_keeps_nested_templates_calls_and_function_pointers()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_argument_splitter_keeps_nested_templates_calls_and_function_pointers",
         r##"(mapcar
@@ -175,12 +181,13 @@ fn auto_complete_clang_async_argument_splitter_keeps_nested_templates_calls_and_
                              ""))"##,
         true,
         expect![[
-        r#"OK (("a, b, c" ("a" "b" "c")) ("std::vector<int>, callback(x, y), tail" ("std::vector<int>" "callback(x, y)" "tail")) ("std::map<Key, std::vector<Value>>, std::function<void(int, char)>, flags" ("std::map<Key, std::vector<Value>>" "std::function<void(int, char)>" "flags")) ("(void (*)(int, char)), value" ("(void (*)(int, char))" "value")) ("unbalanced(a, b, tail" nil) ("" ("")))"#
-    ]],
+            r#"OK (("a, b, c" ("a" "b" "c")) ("std::vector<int>, callback(x, y), tail" ("std::vector<int>" "callback(x, y)" "tail")) ("std::map<Key, std::vector<Value>>, std::function<void(int, char)>, flags" ("std::map<Key, std::vector<Value>>" "std::function<void(int, char)>" "flags")) ("(void (*)(int, char)), value" ("(void (*)(int, char))" "value")) ("unbalanced(a, b, tail" nil) ("" ("")))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_position_string_tracks_real_lines_columns_and_unicode_characters() -> ParityBatchCase {
+fn auto_complete_clang_async_position_string_tracks_real_lines_columns_and_unicode_characters()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_position_string_tracks_real_lines_columns_and_unicode_characters",
         r##"(with-temp-buffer
@@ -203,12 +210,13 @@ fn auto_complete_clang_async_position_string_tracks_real_lines_columns_and_unico
                              (point-max))))"##,
         true,
         expect![[
-        r#"OK ((1 "row:1\ncolumn:1\n") (6 "row:1\ncolumn:6\n") (7 "row:2\ncolumn:1\n") (9 "row:2\ncolumn:3\n") (14 "row:2\ncolumn:8\n") (24 "row:3\ncolumn:3\n"))"#
-    ]],
+            r#"OK ((1 "row:1\ncolumn:1\n") (6 "row:1\ncolumn:6\n") (7 "row:2\ncolumn:1\n") (9 "row:2\ncolumn:3\n") (14 "row:2\ncolumn:8\n") (24 "row:3\ncolumn:3\n"))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_string_comment_detection_uses_real_c_and_cpp_syntax_state() -> ParityBatchCase {
+fn auto_complete_clang_async_string_comment_detection_uses_real_c_and_cpp_syntax_state()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_string_comment_detection_uses_real_c_and_cpp_syntax_state",
         r##"(mapcar
@@ -244,12 +252,13 @@ fn auto_complete_clang_async_string_comment_detection_uses_real_c_and_cpp_syntax
                               "int token")))"##,
         true,
         expect![[
-        r#"OK ((c-mode "int value; // comment token" "token" 12) (c-mode "const char *s = \"string token\";" "token" 17) (c++-mode "auto value = object.member;" "member" nil) (c++-mode "/* block token */ int token;" "block" 1) (c++-mode "/* block token */ int token;" "int token" nil))"#
-    ]],
+            r#"OK ((c-mode "int value; // comment token" "token" 12) (c-mode "const char *s = \"string token\";" "token" 17) (c++-mode "auto value = object.member;" "member" nil) (c++-mode "/* block token */ int token;" "block" 1) (c++-mode "/* block token */ int token;" "int token" nil))"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_error_handler_keeps_diagnostics_before_completion_and_normalizes_report() -> ParityBatchCase {
+fn auto_complete_clang_async_error_handler_keeps_diagnostics_before_completion_and_normalizes_report()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_error_handler_keeps_diagnostics_before_completion_and_normalizes_report",
         r##"(let ((ac-clang-complete-executable
@@ -289,12 +298,13 @@ fn auto_complete_clang_async_error_handler_keeps_diagnostics_before_completion_a
                               ac-clang-error-buffer-name)))"##,
         true,
         expect![[
-        r#"OK (t 1 ("clang failed with error 9:" "./clang-complete -cc1 -x c++ fixture.cpp" "" "fixture.cpp:3:5: error: missing member" "fixture.cpp:4:2: note: candidate") nil)"#
-    ]],
+            r#"OK (t 1 ("clang failed with error 9:" "./clang-complete -cc1 -x c++ fixture.cpp" "" "fixture.cpp:3:5: error: missing member" "fixture.cpp:4:2: note: candidate") nil)"#
+        ]],
     )
 }
 
-fn auto_complete_clang_async_real_synchronous_process_parses_useful_candidates_on_success_and_failure() -> ParityBatchCase {
+fn auto_complete_clang_async_real_synchronous_process_parses_useful_candidates_on_success_and_failure()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_complete_clang_async_real_synchronous_process_parses_useful_candidates_on_success_and_failure",
         r##"(mapcar
@@ -346,8 +356,8 @@ fn auto_complete_clang_async_real_synchronous_process_parses_useful_candidates_o
                               "cat >/dev/null; printf 'diagnostic before completion\\nCOMPLETION: format : [#int#]format(<#const char *fmt#>)\\n'; exit 7")))"##,
         true,
         expect![[
-        r#"OK ((success (("fork" "[#void#]fork()" nil) ("format" "[#int#]format(<#const char *fmt#>)" nil)) nil) (failure (("format" "[#int#]format(<#const char *fmt#>)" nil)) (t 25 141)))"#
-    ]],
+            r#"OK ((success (("fork" "[#void#]fork()" nil) ("format" "[#int#]format(<#const char *fmt#>)" nil)) nil) (failure (("format" "[#int#]format(<#const char *fmt#>)" nil)) (t 25 141)))"#
+        ]],
     )
 }
 

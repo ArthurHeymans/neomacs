@@ -42,8 +42,8 @@ fn linting_the_current_file_gives_a_compilation_buffer_you_can_navigate() -> Par
             (ameba-test-jump compilation)))))"##,
         true,
         expect![[
-        r#"OK (("--format" "flycheck" "PROJECT/src/greeter.cr") "*Ameba PROJECT/src/greeter.cr*" compilation-mode "-*- mode: compilation; default-directory: \"PROJECT/\" -*-\nCompilation started at [TIME]\n\nameba --format flycheck PROJECT/src/greeter.cr\nPROJECT/src/greeter.cr:14:5: W: [Lint/LiteralInCondition] Literal value found in conditional\nPROJECT/src/greeter.cr:6:5: W: [Lint/UselessAssign] Useless assignment to variable `unused`\n\nCompilation exited abnormally with code 1 at [TIME], duration [DURATION]\n" ("greeter.cr" 14 4 "    if true") ("greeter.cr" 6 4 "    unused = \"not used anywhere\""))"#
-    ]],
+            r#"OK (("--format" "flycheck" "PROJECT/src/greeter.cr") "*Ameba PROJECT/src/greeter.cr*" compilation-mode "-*- mode: compilation; default-directory: \"PROJECT/\" -*-\nCompilation started at [TIME]\n\nameba --format flycheck PROJECT/src/greeter.cr\nPROJECT/src/greeter.cr:14:5: W: [Lint/LiteralInCondition] Literal value found in conditional\nPROJECT/src/greeter.cr:6:5: W: [Lint/UselessAssign] Useless assignment to variable `unused`\n\nCompilation exited abnormally with code 1 at [TIME], duration [DURATION]\n" ("greeter.cr" 14 4 "    if true") ("greeter.cr" 6 4 "    unused = \"not used anywhere\""))"#
+        ]],
     )
 }
 
@@ -68,8 +68,8 @@ fn checking_the_project_asks_the_linter_to_skip_the_vendored_lib_directory() -> 
             (ameba-test-jump compilation)))))"##,
         true,
         expect![[
-        r#"OK (("--format" "flycheck" "PROJECT/" "!PROJECT/lib") "*Ameba PROJECT/ !PROJECT/lib*" "*Ameba PROJECT/ !PROJECT/lib*" "-*- mode: compilation; default-directory: \"PROJECT/\" -*-\nCompilation started at [TIME]\n\nameba --format flycheck PROJECT/ !PROJECT/lib\nPROJECT/src/greeter.cr:14:5: W: [Lint/LiteralInCondition] Literal value found in conditional\nPROJECT/src/greeter.cr:6:5: W: [Lint/UselessAssign] Useless assignment to variable `unused`\nPROJECT/src/util.cr:3:5: W: [Lint/UselessAssign] Useless assignment to variable `x`\n\nCompilation exited abnormally with code 1 at [TIME], duration [DURATION]\n" ("greeter.cr" 14 4 "    if true"))"#
-    ]],
+            r#"OK (("--format" "flycheck" "PROJECT/" "!PROJECT/lib") "*Ameba PROJECT/ !PROJECT/lib*" "*Ameba PROJECT/ !PROJECT/lib*" "-*- mode: compilation; default-directory: \"PROJECT/\" -*-\nCompilation started at [TIME]\n\nameba --format flycheck PROJECT/ !PROJECT/lib\nPROJECT/src/greeter.cr:14:5: W: [Lint/LiteralInCondition] Literal value found in conditional\nPROJECT/src/greeter.cr:6:5: W: [Lint/UselessAssign] Useless assignment to variable `unused`\nPROJECT/src/util.cr:3:5: W: [Lint/UselessAssign] Useless assignment to variable `x`\n\nCompilation exited abnormally with code 1 at [TIME], duration [DURATION]\n" ("greeter.cr" 14 4 "    if true"))"#
+        ]],
     )
 }
 
@@ -98,8 +98,8 @@ fn the_project_root_is_the_first_marker_in_the_list_not_the_nearest_one() -> Par
                     :lib (funcall describe (ameba-project-lib))))))))"##,
         true,
         expect![[
-        r#"OK ((:markers (".projectile" ".git" ".hg" ".ameba.yml" "shard.yml") :default :above-the-sandbox :lib "![ORACLE-WORKSPACE]/lib") (:only-shard :the-shard) (:with-projectile :the-shard :lib "!PROJECT/lib"))"#
-    ]],
+            r#"OK ((:markers (".projectile" ".git" ".hg" ".ameba.yml" "shard.yml") :default :above-the-sandbox :lib "![ORACLE-WORKSPACE]/lib") (:only-shard :the-shard) (:with-projectile :the-shard :lib "!PROJECT/lib"))"#
+        ]],
     )
 }
 
@@ -140,8 +140,8 @@ fn the_commands_refuse_without_a_linter_a_file_or_a_project() -> ParityBatchCase
          :command ameba-check-command)))"##,
         true,
         expect![[
-        r#"OK (((error "Ameba is not installed") nil) ((error "Buffer is not visiting a file") nil) ((error "You’re not into a project") nil nil) (:keymap-prefix "C-c C-r" :binding "C-c C-r f" :command "ameba --format flycheck"))"#
-    ]],
+            r#"OK (((error "Ameba is not installed") nil) ((error "Buffer is not visiting a file") nil) ((error "You’re not into a project") nil nil) (:keymap-prefix "C-c C-r" :binding "C-c C-r f" :command "ameba --format flycheck"))"#
+        ]],
     )
 }
 

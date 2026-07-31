@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_auto_dictionary_batch};
 
-fn auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order() -> ParityBatchCase {
+fn auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order",
         r##"(list
@@ -26,7 +27,8 @@ fn auto_dictionary_dictionary_name_search_honors_candidate_and_valid_list_order(
     )
 }
 
-fn auto_dictionary_dictionary_cons_preserves_language_even_when_dictionary_missing() -> ParityBatchCase {
+fn auto_dictionary_dictionary_cons_preserves_language_even_when_dictionary_missing()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_dictionary_cons_preserves_language_even_when_dictionary_missing",
         r##"(let ((adict-test-valid-dictionaries
@@ -51,12 +53,13 @@ fn auto_dictionary_custom_type_is_derived_from_language_list_in_order() -> Parit
          (adict--dictionary-alist-type))"##,
         true,
         expect![[
-        r#"OK (repeat (cons (choice (const "de") (const "en") (const "eo")) (choice (const :tag "Off" nil) (string :tag "Dictionary name"))))"#
-    ]],
+            r#"OK (repeat (cons (choice (const "de") (const "en") (const "eo")) (choice (const :tag "Off" nil) (string :tag "Dictionary name"))))"#
+        ]],
     )
 }
 
-fn auto_dictionary_real_multilingual_buffer_produces_exact_score_vector_and_winner() -> ParityBatchCase {
+fn auto_dictionary_real_multilingual_buffer_produces_exact_score_vector_and_winner()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_real_multilingual_buffer_produces_exact_score_vector_and_winner",
         r##"(with-temp-buffer
@@ -110,7 +113,8 @@ fn auto_dictionary_tied_scores_choose_lowest_positive_language_index() -> Parity
     )
 }
 
-fn auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index() -> ParityBatchCase {
+fn auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index",
         r##"(list
@@ -147,7 +151,8 @@ fn auto_dictionary_current_and_legacy_dictionary_formats_map_same_language_index
     )
 }
 
-fn auto_dictionary_disabled_language_still_detects_language_but_returns_no_dictionary() -> ParityBatchCase {
+fn auto_dictionary_disabled_language_still_detects_language_but_returns_no_dictionary()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_disabled_language_still_detects_language_but_returns_no_dictionary",
         r##"(with-temp-buffer
@@ -166,7 +171,8 @@ fn auto_dictionary_disabled_language_still_detects_language_but_returns_no_dicti
     )
 }
 
-fn auto_dictionary_foreach_word_handles_punctuation_case_length_and_region_bounds() -> ParityBatchCase {
+fn auto_dictionary_foreach_word_handles_punctuation_case_length_and_region_bounds()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_foreach_word_handles_punctuation_case_length_and_region_bounds",
         r##"(with-temp-buffer
@@ -210,7 +216,8 @@ fn auto_dictionary_foreach_word_respects_flyspell_generic_word_predicate() -> Pa
     )
 }
 
-fn auto_dictionary_foreach_word_excludes_conditional_overlay_text_from_scoring() -> ParityBatchCase {
+fn auto_dictionary_foreach_word_excludes_conditional_overlay_text_from_scoring() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "auto_dictionary_foreach_word_excludes_conditional_overlay_text_from_scoring",
         r##"(with-temp-buffer
@@ -272,7 +279,8 @@ fn auto_dictionary_idle_only_scan_stops_when_input_becomes_pending() -> ParityBa
     )
 }
 
-fn auto_dictionary_third_party_word_and_buffer_apis_cover_case_unknown_and_idle_abort() -> ParityBatchCase {
+fn auto_dictionary_third_party_word_and_buffer_apis_cover_case_unknown_and_idle_abort()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "auto_dictionary_third_party_word_and_buffer_apis_cover_case_unknown_and_idle_abort",
         r##"(list

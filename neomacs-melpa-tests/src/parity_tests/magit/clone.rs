@@ -23,8 +23,8 @@ fn magit_clone_name_expansion_supports_service_aliases_and_host_formats() -> Par
                   (magit-clone--name-to-url "ex:c"))))"##,
         true,
         expect![[
-        r#"OK ("git@github.com:a/b.git" "git@github.com:c/d.git" "cow@git.example.com:~a/b" "cow@git.example.com:~x/y" "cow@git.example.com:~foouser/c")"#
-    ]],
+            r#"OK ("git@github.com:a/b.git" "git@github.com:c/d.git" "cow@git.example.com:~a/b" "cow@git.example.com:~x/y" "cow@git.example.com:~foouser/c")"#
+        ]],
     )
 }
 
@@ -45,8 +45,8 @@ fn magit_clone_name_expansion_supports_one_global_format() -> ParityBatchCase {
                     "github:c/d" "gitlab:c/d"))))"##,
         true,
         expect![[
-        r#"OK ("bird@github.com:a/b.git" "bird@gitlab.com:a/b.git" "bird@github.com:c/d.git" "bird@gitlab.com:c/d.git")"#
-    ]],
+            r#"OK ("bird@github.com:a/b.git" "bird@gitlab.com:a/b.git" "bird@github.com:c/d.git" "bird@gitlab.com:c/d.git")"#
+        ]],
     )
 }
 
@@ -59,8 +59,8 @@ fn magit_clone_rejects_a_non_string_format() -> ParityBatchCase {
                  (magit-clone--name-to-url "gh:a/b")))"##,
         false,
         expect![[
-        r#"ERR (user-error "Bogus ‘magit-clone-url-format’ (bad type or missing default)")"#
-    ]],
+            r#"ERR (user-error "Bogus ‘magit-clone-url-format’ (bad type or missing default)")"#
+        ]],
     )
 }
 

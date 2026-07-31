@@ -68,8 +68,8 @@ fn evil_define_key_star_updates_existing_maps_without_auxiliary_indirection() ->
                 (evil-get-auxiliary-keymap map 'normal)))"##,
         true,
         expect![[
-        r#"OK (forward-char backward-char (keymap "Auxiliary keymap for Normal state" (98 . backward-char) (97 . forward-char)))"#
-    ]],
+            r#"OK (forward-char backward-char (keymap "Auxiliary keymap for Normal state" (98 . backward-char) (97 . forward-char)))"#
+        ]],
     )
 }
 

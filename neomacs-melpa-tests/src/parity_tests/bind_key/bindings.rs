@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_bind_key_batch};
 
-fn bind_key_binds_string_vector_and_remap_events_and_records_original_bindings() -> ParityBatchCase {
+fn bind_key_binds_string_vector_and_remap_events_and_records_original_bindings() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "bind_key_binds_string_vector_and_remap_events_and_records_original_bindings",
         r##"(let ((personal-keybindings nil)
@@ -18,12 +19,13 @@ fn bind_key_binds_string_vector_and_remap_events_and_records_original_bindings()
                 personal-keybindings))"##,
         true,
         expect![[
-        r#"OK (forward-line ignore backward-char ((("<remap> <forward-char>" . map) backward-char nil) (("<f8>" . map) ignore nil) (("C-c a" . map) forward-line beginning-of-line)))"#
-    ]],
+            r#"OK (forward-line ignore backward-char ((("<remap> <forward-char>" . map) backward-char nil) (("<f8>" . map) ignore nil) (("C-c a" . map) forward-line beginning-of-line)))"#
+        ]],
     )
 }
 
-fn bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entry() -> ParityBatchCase {
+fn bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entry()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entry",
         r##"(progn
@@ -39,12 +41,13 @@ fn bind_key_accepts_a_quoted_keymap_symbol_and_updates_an_existing_registry_entr
                   personal-keybindings)))"##,
         true,
         expect![[
-        r#"OK (backward-char ((("C-c q" . neomacs-bind-key-test-map) backward-char forward-char)))"#
-    ]],
+            r#"OK (backward-char ((("C-c q" . neomacs-bind-key-test-map) backward-char forward-char)))"#
+        ]],
     )
 }
 
-fn bind_key_predicate_filter_tracks_live_state_and_preserves_registry_metadata() -> ParityBatchCase {
+fn bind_key_predicate_filter_tracks_live_state_and_preserves_registry_metadata() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "bind_key_predicate_filter_tracks_live_state_and_preserves_registry_metadata",
         r##"(let ((personal-keybindings nil)
@@ -129,8 +132,8 @@ fn bind_key_star_wins_over_a_local_map_through_the_emulation_map() -> ParityBatc
                   personal-keybindings)))"##,
         true,
         expect![[
-        r#"OK (t forward-char backward-char forward-char ((("<f8>" . override-global-map) forward-char nil)))"#
-    ]],
+            r#"OK (t forward-char backward-char forward-char ((("<f8>" . override-global-map) forward-char nil)))"#
+        ]],
     )
 }
 
@@ -155,8 +158,8 @@ fn bind_keys_and_bind_keys_star_bind_multiple_commands_in_the_requested_maps() -
                   (mapcar #'car personal-keybindings))))"##,
         true,
         expect![[
-        r#"OK (beginning-of-line end-of-line next-line previous-line (("C-c p" . override-global-map) ("C-c n" . override-global-map) ("e" . neomacs-bind-keys-map) ("a" . neomacs-bind-keys-map)))"#
-    ]],
+            r#"OK (beginning-of-line end-of-line next-line previous-line (("C-c p" . override-global-map) ("C-c n" . override-global-map) ("e" . neomacs-bind-keys-map) ("a" . neomacs-bind-keys-map)))"#
+        ]],
     )
 }
 

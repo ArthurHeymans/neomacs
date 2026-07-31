@@ -156,10 +156,5 @@ pub(crate) fn assert_ac_etags_parity(form: &str, expected: Expect) {
 /// Multi-probe batch for `assert_ac_etags_parity` cases (2a).
 pub(crate) fn assert_ac_etags_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(
-        ac_etags_oracle(),
-        &name,
-        "ac_etags_parity",
-        cases,
-    );
+    assert_oracle_batch_cases(ac_etags_oracle(), &name, "ac_etags_parity", cases);
 }

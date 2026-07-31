@@ -27,8 +27,8 @@ fn transient_parse_suffixes_returns_canonical_layout_specs() -> ParityBatchCase 
                  specs))"##,
         true,
         expect![[
-        r#"OK ((transient-suffix :command neomacs-test-run) (transient-suffix :command neomacs-test-verbose))"#
-    ]],
+            r#"OK ((transient-suffix :command neomacs-test-run) (transient-suffix :command neomacs-test-verbose))"#
+        ]],
     )
 }
 
@@ -86,12 +86,13 @@ fn transient_history_key_initialization_and_push_deduplicate_values() -> ParityB
                      transient-history)))))"##,
         true,
         expect![[
-        r#"OK (neomacs-shared-history (nil ("old") ("duplicate") ("old")) (("old") ("new") ("duplicate")))"#
-    ]],
+            r#"OK (neomacs-shared-history (nil ("old") ("duplicate") ("old")) (("old") ("new") ("duplicate")))"#
+        ]],
     )
 }
 
-fn transient_suffix_dispatch_metadata_selects_no_export_call_and_exit_behaviors() -> ParityBatchCase {
+fn transient_suffix_dispatch_metadata_selects_no_export_call_and_exit_behaviors() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "transient_suffix_dispatch_metadata_selects_no_export_call_and_exit_behaviors",
         r##"(progn
@@ -181,8 +182,8 @@ fn transient_dispatch_executes_suffixes_and_exports_call_and_exit_state() -> Par
                   (nreverse neomacs-test-events))))"##,
         true,
         expect![[
-        r#"OK (((neomacs-test-no-export t transient--do-stay nil nil) (neomacs-test-call t transient--do-call neomacs-test-menu nil) (neomacs-test-exit nil transient--do-exit neomacs-test-menu t)) (no-export call exit))"#
-    ]],
+            r#"OK (((neomacs-test-no-export t transient--do-stay nil nil) (neomacs-test-call t transient--do-call neomacs-test-menu nil) (neomacs-test-exit nil transient--do-exit neomacs-test-menu t)) (no-export call exit))"#
+        ]],
     )
 }
 

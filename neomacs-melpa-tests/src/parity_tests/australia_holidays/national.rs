@@ -2,7 +2,8 @@ use expect_test::expect;
 
 use super::{ParityBatchCase, assert_australia_holidays_batch};
 
-fn australia_holidays_national_calendar_for_leap_year_2024_matches_exact_dates_and_labels() -> ParityBatchCase {
+fn australia_holidays_national_calendar_for_leap_year_2024_matches_exact_dates_and_labels()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "australia_holidays_national_calendar_for_leap_year_2024_matches_exact_dates_and_labels",
         r##"(australia-holidays-test-year
@@ -10,12 +11,13 @@ fn australia_holidays_national_calendar_for_leap_year_2024_matches_exact_dates_a
                           2024)"##,
         true,
         expect![[
-        r#"OK (((1 1 2024) "New Year") ((1 26 2024) "Australia Day") ((3 29 2024) "Good Friday") ((4 1 2024) "Easter Monday") ((4 25 2024) "ANZAC Day") ((12 25 2024) "Christmas Day"))"#
-    ]],
+            r#"OK (((1 1 2024) "New Year") ((1 26 2024) "Australia Day") ((3 29 2024) "Good Friday") ((4 1 2024) "Easter Monday") ((4 25 2024) "ANZAC Day") ((12 25 2024) "Christmas Day"))"#
+        ]],
     )
 }
 
-fn australia_holidays_national_calendar_for_2025_matches_exact_dates_and_labels() -> ParityBatchCase {
+fn australia_holidays_national_calendar_for_2025_matches_exact_dates_and_labels() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "australia_holidays_national_calendar_for_2025_matches_exact_dates_and_labels",
         r##"(australia-holidays-test-year
@@ -23,12 +25,13 @@ fn australia_holidays_national_calendar_for_2025_matches_exact_dates_and_labels(
                           2025)"##,
         true,
         expect![[
-        r#"OK (((1 1 2025) "New Year") ((1 26 2025) "Australia Day") ((4 18 2025) "Good Friday") ((4 21 2025) "Easter Monday") ((4 25 2025) "ANZAC Day") ((12 25 2025) "Christmas Day"))"#
-    ]],
+            r#"OK (((1 1 2025) "New Year") ((1 26 2025) "Australia Day") ((4 18 2025) "Good Friday") ((4 21 2025) "Easter Monday") ((4 25 2025) "ANZAC Day") ((12 25 2025) "Christmas Day"))"#
+        ]],
     )
 }
 
-fn australia_holidays_national_calendar_for_2026_keeps_weekend_anzac_on_fixed_date() -> ParityBatchCase {
+fn australia_holidays_national_calendar_for_2026_keeps_weekend_anzac_on_fixed_date()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "australia_holidays_national_calendar_for_2026_keeps_weekend_anzac_on_fixed_date",
         r##"(australia-holidays-test-year
@@ -36,12 +39,13 @@ fn australia_holidays_national_calendar_for_2026_keeps_weekend_anzac_on_fixed_da
                           2026)"##,
         true,
         expect![[
-        r#"OK (((1 1 2026) "New Year") ((1 26 2026) "Australia Day") ((4 3 2026) "Good Friday") ((4 6 2026) "Easter Monday") ((4 25 2026) "ANZAC Day") ((12 25 2026) "Christmas Day"))"#
-    ]],
+            r#"OK (((1 1 2026) "New Year") ((1 26 2026) "Australia Day") ((4 3 2026) "Good Friday") ((4 6 2026) "Easter Monday") ((4 25 2026) "ANZAC Day") ((12 25 2026) "Christmas Day"))"#
+        ]],
     )
 }
 
-fn australia_holidays_cross_year_range_orders_december_and_january_holidays_chronologically() -> ParityBatchCase {
+fn australia_holidays_cross_year_range_orders_december_and_january_holidays_chronologically()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "australia_holidays_cross_year_range_orders_december_and_january_holidays_chronologically",
         r##"(australia-holidays-test-between
@@ -50,12 +54,13 @@ fn australia_holidays_cross_year_range_orders_december_and_january_holidays_chro
                           '(2 2 2025))"##,
         true,
         expect![[
-        r#"OK (((12 25 2024) "Christmas Day") ((1 1 2025) "New Year") ((1 26 2025) "Australia Day"))"#
-    ]],
+            r#"OK (((12 25 2024) "Christmas Day") ((1 1 2025) "New Year") ((1 26 2025) "Australia Day"))"#
+        ]],
     )
 }
 
-fn australia_holidays_january_label_customization_is_read_at_each_calendar_evaluation() -> ParityBatchCase {
+fn australia_holidays_january_label_customization_is_read_at_each_calendar_evaluation()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "australia_holidays_january_label_customization_is_read_at_each_calendar_evaluation",
         r##"(let ((australia-holidays-include-january-26
@@ -87,7 +92,8 @@ fn australia_holidays_january_label_customization_is_read_at_each_calendar_evalu
     )
 }
 
-fn australia_holidays_january_include_option_accepts_all_truthy_values_and_rejects_nil() -> ParityBatchCase {
+fn australia_holidays_january_include_option_accepts_all_truthy_values_and_rejects_nil()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "australia_holidays_january_include_option_accepts_all_truthy_values_and_rejects_nil",
         r##"(mapcar
@@ -109,12 +115,13 @@ fn australia_holidays_january_include_option_accepts_all_truthy_values_and_rejec
                             (enabled)))"##,
         true,
         expect![[
-        r#"OK ((nil nil) (t ("January 26")) (:yes ("January 26")) (0 ("January 26")) ("" ("January 26")) ((enabled) ("January 26")))"#
-    ]],
+            r#"OK ((nil nil) (t ("January 26")) (:yes ("January 26")) (0 ("January 26")) ("" ("January 26")) ((enabled) ("January 26")))"#
+        ]],
     )
 }
 
-fn australia_holidays_calendar_check_distinguishes_holidays_and_ordinary_dates() -> ParityBatchCase {
+fn australia_holidays_calendar_check_distinguishes_holidays_and_ordinary_dates() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "australia_holidays_calendar_check_distinguishes_holidays_and_ordinary_dates",
         r##"(mapcar
@@ -134,12 +141,13 @@ fn australia_holidays_calendar_check_distinguishes_holidays_and_ordinary_dates()
                             (12 26 2025)))"##,
         true,
         expect![[
-        r#"OK (((1 1 2025) ("New Year")) ((1 2 2025) nil) ((1 26 2025) ("Australia Day")) ((4 18 2025) ("Good Friday")) ((4 21 2025) ("Easter Monday")) ((4 25 2025) ("ANZAC Day")) ((12 25 2025) ("Christmas Day")) ((12 26 2025) nil))"#
-    ]],
+            r#"OK (((1 1 2025) ("New Year")) ((1 2 2025) nil) ((1 26 2025) ("Australia Day")) ((4 18 2025) ("Good Friday")) ((4 21 2025) ("Easter Monday")) ((4 25 2025) ("ANZAC Day")) ((12 25 2025) ("Christmas Day")) ((12 26 2025) nil))"#
+        ]],
     )
 }
 
-fn australia_holidays_fixed_rules_do_not_synthesize_weekday_substitute_holidays() -> ParityBatchCase {
+fn australia_holidays_fixed_rules_do_not_synthesize_weekday_substitute_holidays() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "australia_holidays_fixed_rules_do_not_synthesize_weekday_substitute_holidays",
         r##"(mapcar
@@ -160,12 +168,13 @@ fn australia_holidays_fixed_rules_do_not_synthesize_weekday_substitute_holidays(
                             (12 27 2022)))"##,
         true,
         expect![[
-        r#"OK (((4 25 2021) 0 ("ANZAC Day")) ((4 26 2021) 1 nil) ((12 25 2021) 6 ("Christmas Day")) ((12 27 2021) 1 nil) ((1 1 2022) 6 ("New Year")) ((1 3 2022) 1 nil) ((12 25 2022) 0 ("Christmas Day")) ((12 27 2022) 2 nil))"#
-    ]],
+            r#"OK (((4 25 2021) 0 ("ANZAC Day")) ((4 26 2021) 1 nil) ((12 25 2021) 6 ("Christmas Day")) ((12 27 2021) 1 nil) ((1 1 2022) 6 ("New Year")) ((1 3 2022) 1 nil) ((12 25 2022) 0 ("Christmas Day")) ((12 27 2022) 2 nil))"#
+        ]],
     )
 }
 
-fn australia_holidays_easter_calculations_match_across_wide_early_and_late_date_sample() -> ParityBatchCase {
+fn australia_holidays_easter_calculations_match_across_wide_early_and_late_date_sample()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "australia_holidays_easter_calculations_match_across_wide_early_and_late_date_sample",
         r##"(mapcar
@@ -195,12 +204,13 @@ fn australia_holidays_easter_calculations_match_across_wide_early_and_late_date_
                             2100))"##,
         true,
         expect![[
-        r#"OK ((1999 (((4 2 1999) "Good Friday") ((4 5 1999) "Easter Monday"))) (2000 (((4 21 2000) "Good Friday") ((4 24 2000) "Easter Monday"))) (2008 (((3 21 2008) "Good Friday") ((3 24 2008) "Easter Monday"))) (2011 (((4 22 2011) "Good Friday") ((4 25 2011) "Easter Monday"))) (2019 (((4 19 2019) "Good Friday") ((4 22 2019) "Easter Monday"))) (2024 (((3 29 2024) "Good Friday") ((4 1 2024) "Easter Monday"))) (2025 (((4 18 2025) "Good Friday") ((4 21 2025) "Easter Monday"))) (2038 (((4 23 2038) "Good Friday") ((4 26 2038) "Easter Monday"))) (2099 (((4 10 2099) "Good Friday") ((4 13 2099) "Easter Monday"))) (2100 (((3 26 2100) "Good Friday") ((3 29 2100) "Easter Monday"))))"#
-    ]],
+            r#"OK ((1999 (((4 2 1999) "Good Friday") ((4 5 1999) "Easter Monday"))) (2000 (((4 21 2000) "Good Friday") ((4 24 2000) "Easter Monday"))) (2008 (((3 21 2008) "Good Friday") ((3 24 2008) "Easter Monday"))) (2011 (((4 22 2011) "Good Friday") ((4 25 2011) "Easter Monday"))) (2019 (((4 19 2019) "Good Friday") ((4 22 2019) "Easter Monday"))) (2024 (((3 29 2024) "Good Friday") ((4 1 2024) "Easter Monday"))) (2025 (((4 18 2025) "Good Friday") ((4 21 2025) "Easter Monday"))) (2038 (((4 23 2038) "Good Friday") ((4 26 2038) "Easter Monday"))) (2099 (((4 10 2099) "Good Friday") ((4 13 2099) "Easter Monday"))) (2100 (((3 26 2100) "Good Friday") ((3 29 2100) "Easter Monday"))))"#
+        ]],
     )
 }
 
-fn australia_holidays_three_month_calendar_window_handles_year_boundary_visibility() -> ParityBatchCase {
+fn australia_holidays_three_month_calendar_window_handles_year_boundary_visibility()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "australia_holidays_three_month_calendar_window_handles_year_boundary_visibility",
         r##"(let ((calendar-holidays
@@ -214,7 +224,8 @@ fn australia_holidays_three_month_calendar_window_handles_year_boundary_visibili
     )
 }
 
-fn australia_holidays_non_string_january_labels_flow_through_rule_evaluation_and_rendering_errors() -> ParityBatchCase {
+fn australia_holidays_non_string_january_labels_flow_through_rule_evaluation_and_rendering_errors()
+-> ParityBatchCase {
     ParityBatchCase::new(
         "australia_holidays_non_string_january_labels_flow_through_rule_evaluation_and_rendering_errors",
         r##"(mapcar
@@ -248,8 +259,8 @@ fn australia_holidays_non_string_january_labels_flow_through_rule_evaluation_and
                             "Valid"))"##,
         true,
         expect![[
-        r#"OK ((nil (nil) (:ok "Wednesday, January 1, 2025: New Year\nSunday, January 26, 2025: \nFriday, April 18, 2025: Good Friday\nMonday, April 21, 2025: Easter Monday\nFriday, April 25, 2025: ANZAC Day\nThursday, December 25, 2025: Christmas Day")) (symbol (symbol) (:signal wrong-type-argument (sequencep symbol))) (17 (17) (:signal wrong-type-argument (sequencep 17))) (#1=("list") (#1#) (:signal wrong-type-argument (characterp "list"))) ("Valid" ("Valid") (:ok "Wednesday, January 1, 2025: New Year\nSunday, January 26, 2025: Valid\nFriday, April 18, 2025: Good Friday\nMonday, April 21, 2025: Easter Monday\nFriday, April 25, 2025: ANZAC Day\nThursday, December 25, 2025: Christmas Day")))"#
-    ]],
+            r#"OK ((nil (nil) (:ok "Wednesday, January 1, 2025: New Year\nSunday, January 26, 2025: \nFriday, April 18, 2025: Good Friday\nMonday, April 21, 2025: Easter Monday\nFriday, April 25, 2025: ANZAC Day\nThursday, December 25, 2025: Christmas Day")) (symbol (symbol) (:signal wrong-type-argument (sequencep symbol))) (17 (17) (:signal wrong-type-argument (sequencep 17))) (#1=("list") (#1#) (:signal wrong-type-argument (characterp "list"))) ("Valid" ("Valid") (:ok "Wednesday, January 1, 2025: New Year\nSunday, January 26, 2025: Valid\nFriday, April 18, 2025: Good Friday\nMonday, April 21, 2025: Easter Monday\nFriday, April 25, 2025: ANZAC Day\nThursday, December 25, 2025: Christmas Day")))"#
+        ]],
     )
 }
 

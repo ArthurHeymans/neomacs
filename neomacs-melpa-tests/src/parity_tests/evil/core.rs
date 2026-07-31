@@ -41,8 +41,8 @@ fn evil_public_defaults_match_the_pinned_release() -> ParityBatchCase {
                evil-mode)"##,
         true,
         expect![[
-        r#"OK (t 4 t t nil t nil t t nil nil t before "^ \11\15\n" nil t t t nil nil 0.01 always t t nil nil t "C-z" normal t smart nil nil)"#
-    ]],
+            r#"OK (t 4 t t nil t nil t t nil nil t before "^ \11\15\n" nil t t t nil nil 0.01 always t t nil nil t "C-z" normal t smart nil nil)"#
+        ]],
     )
 }
 
@@ -67,12 +67,13 @@ fn evil_builtin_states_publish_complete_mode_keymap_and_tag_properties() -> Pari
                '(normal insert visual replace operator motion emacs))"##,
         true,
         expect![[
-        r#"OK ((normal evil-normal-state-minor-mode evil-normal-state-local-minor-mode t nil " <N> ") (insert evil-insert-state-minor-mode evil-insert-state-local-minor-mode t nil " <I> ") (visual evil-visual-state-minor-mode evil-visual-state-local-minor-mode t nil nil) (replace evil-replace-state-minor-mode evil-replace-state-local-minor-mode t nil " <R> ") (operator evil-operator-state-minor-mode evil-operator-state-local-minor-mode t nil " <O> ") (motion evil-motion-state-minor-mode evil-motion-state-local-minor-mode t nil " <M> ") (emacs evil-emacs-state-minor-mode evil-emacs-state-local-minor-mode t nil " <E> "))"#
-    ]],
+            r#"OK ((normal evil-normal-state-minor-mode evil-normal-state-local-minor-mode t nil " <N> ") (insert evil-insert-state-minor-mode evil-insert-state-local-minor-mode t nil " <I> ") (visual evil-visual-state-minor-mode evil-visual-state-local-minor-mode t nil nil) (replace evil-replace-state-minor-mode evil-replace-state-local-minor-mode t nil " <R> ") (operator evil-operator-state-minor-mode evil-operator-state-local-minor-mode t nil " <O> ") (motion evil-motion-state-minor-mode evil-motion-state-local-minor-mode t nil " <M> ") (emacs evil-emacs-state-minor-mode evil-emacs-state-local-minor-mode t nil " <E> "))"#
+        ]],
     )
 }
 
-fn evil_local_mode_enable_and_disable_manage_state_maps_and_buffer_local_state() -> ParityBatchCase {
+fn evil_local_mode_enable_and_disable_manage_state_maps_and_buffer_local_state() -> ParityBatchCase
+{
     ParityBatchCase::new(
         "evil_local_mode_enable_and_disable_manage_state_maps_and_buffer_local_state",
         r##"(with-temp-buffer
@@ -119,8 +120,8 @@ fn evil_state_transitions_track_previous_state_and_mode_line_tag() -> ParityBatc
                  (nreverse states)))"##,
         true,
         expect![[
-        r#"OK ((normal nil " <N> ") (visual normal "nil") (emacs visual " <E> ") (replace emacs " <R> ") (normal replace " <N> ") (replace emacs))"#
-    ]],
+            r#"OK ((normal nil " <N> ") (visual normal "nil") (emacs visual " <E> ") (replace emacs " <R> ") (normal replace " <N> ") (replace emacs))"#
+        ]],
     )
 }
 
@@ -170,8 +171,8 @@ fn evil_set_initial_state_updates_existing_modes_and_new_mode_entries() -> Parit
                 (evil-initial-state 'alpha-mode)))"##,
         true,
         expect![
-        "OK (nil (shared-mode beta-mode) (new-mode gamma-mode) (alpha-mode) insert motion normal)"
-    ],
+            "OK (nil (shared-mode beta-mode) (new-mode gamma-mode) (alpha-mode) insert motion normal)"
+        ],
     )
 }
 
@@ -202,8 +203,8 @@ fn evil_define_state_creates_commands_predicates_maps_and_properties() -> Parity
                    evil-motion-state-minor-mode))))"##,
         true,
         expect![
-        "OK (t t t evil-neomacs-parity-state-tag evil-neomacs-parity-state-message evil-neomacs-parity-state-cursor (motion) (neomacs-parity t t))"
-    ],
+            "OK (t t t evil-neomacs-parity-state-tag evil-neomacs-parity-state-message evil-neomacs-parity-state-cursor (motion) (neomacs-parity t t))"
+        ],
     )
 }
 
