@@ -9792,6 +9792,64 @@ fn treesit_query_compile_creates_lazy_compiled_query_record() {
 }
 
 #[test]
+fn treesit_query_compile_reuses_compiled_query_when_language_is_nil() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    install_test_treesit_json_language(&mut eval);
+    let query = crate::emacs_core::builtins::builtin_treesit_query_compile(
+        &mut eval,
+        vec![
+            Value::symbol("json"),
+            Value::string("(object) @object"),
+            Value::NIL,
+        ],
+    )
+    .expect("initial lazy query should compile");
+
+    let reused = crate::emacs_core::builtins::builtin_treesit_query_compile(
+        &mut eval,
+        vec![Value::NIL, query, Value::T],
+    )
+    .expect("a compiled query should supply its own language");
+
+    assert_eq!(reused, query);
+    assert_eq!(
+        crate::emacs_core::builtins::builtin_treesit_query_eagerly_compiled_p(
+            &mut eval,
+            vec![query],
+        )
+        .unwrap(),
+        Value::T
+    );
+}
+
+#[test]
+fn treesit_query_compile_preserves_nil_language_for_lazy_query() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let source = Value::string("(object) @object");
+
+    let query = crate::emacs_core::builtins::builtin_treesit_query_compile(
+        &mut eval,
+        vec![Value::NIL, source, Value::NIL],
+    )
+    .expect("nil is a symbol and lazy compilation should not load its grammar");
+
+    assert_eq!(
+        crate::emacs_core::builtins::builtin_treesit_compiled_query_p(vec![query]).unwrap(),
+        Value::T
+    );
+    assert_eq!(
+        crate::emacs_core::builtins::builtin_treesit_query_language(vec![query]).unwrap(),
+        Value::NIL
+    );
+    assert_eq!(
+        crate::emacs_core::builtins::builtin_treesit_query_source(vec![query]).unwrap(),
+        source
+    );
+}
+
+#[test]
 fn treesit_query_expand_and_pattern_expand_follow_gnu_sexp_forms() {
     crate::test_utils::init_test_tracing();
     let query = Value::list(vec![

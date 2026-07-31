@@ -10,7 +10,7 @@ use tree_sitter_language::LanguageFn;
 use crate::buffer::{Buffer, BufferId, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::builtins::buffers::expect_buffer_id;
 use crate::emacs_core::emacs_char::byte_to_char_pos;
-use crate::emacs_core::intern::{SymId, resolve_sym};
+use crate::emacs_core::intern::{NIL_SYM_ID, SymId, resolve_sym};
 use crate::emacs_core::treesit::{
     self as runtime, NODE_SLOT_PARSER, PARSER_SLOT_EMBED_LEVEL, PARSER_SLOT_LANGUAGE,
     PARSER_SLOT_NOTIFIERS, PARSER_SLOT_TAG, ParserTagFilter, QUERY_SLOT_LANGUAGE,
@@ -171,6 +171,9 @@ fn posix_versioned_candidates(base: &str, suffix: &str) -> Vec<String> {
 }
 
 fn parse_symbol_arg(name: &str, value: &Value) -> Result<SymId, Flow> {
+    if value.is_nil() {
+        return Ok(NIL_SYM_ID);
+    }
     value.as_symbol_id().ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
@@ -2764,12 +2767,12 @@ pub(crate) fn builtin_treesit_query_compile(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("treesit-query-compile", &args, 2, 3)?;
-    let language = expect_symbol_or_nil("treesit-query-compile", args[0])?;
-    if language.is_nil() {
-        return Err(query_type_error("treesit-query-compile", language));
-    }
-    let language_sym = parse_symbol_arg("treesit-query-compile", &language)?;
     let query = args[1];
+    if !query_like_p(query) {
+        return Err(query_type_error("treesit-query-compile", query));
+    }
+
+    let language = expect_symbol_or_nil("treesit-query-compile", args[0])?;
     let eager = args.get(2).is_some_and(|value| !value.is_nil());
 
     if runtime::is_compiled_query(query) {
@@ -2779,10 +2782,7 @@ pub(crate) fn builtin_treesit_query_compile(
         return Ok(query);
     }
 
-    if !query_like_p(query) {
-        return Err(query_type_error("treesit-query-compile", query));
-    }
-
+    let language_sym = parse_symbol_arg("treesit-query-compile", &language)?;
     let id = eval.treesit.insert_query(language_sym);
     let value = runtime::make_query_value(id, language, query);
     if eager {
