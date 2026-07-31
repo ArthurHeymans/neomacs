@@ -14,7 +14,7 @@ const AC_HTML_ANGULAR_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 /// `web-completion-data-sources' and a consumer -- company-web, or a later
 /// ac-html -- reads that directory and offers what it finds.  Neither consumer
 /// is available at the pinned versions: company-web is not in
-/// `melpa-sources.tsv', and the pinned ac-html (20151005.731) never looks at
+/// `melpa-package-lock.tsv', and the pinned ac-html (20151005.731) never looks at
 /// `web-completion-data-sources' at all, because its bundled
 /// `ac-html-default-data-provider.el' defines its own
 /// `web-completion-data-html-source-dir' pointing at ac-html's own

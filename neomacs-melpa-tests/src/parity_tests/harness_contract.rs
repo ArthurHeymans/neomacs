@@ -74,7 +74,7 @@ fn nextest_runs_melpa_infrastructure_preflight_once_before_parity_tests() {
     assert!(nextest.contains("[scripts.setup.melpa-infra-preflight]"));
     assert!(nextest.contains("scripts/melpa-infra-preflight.sh"));
     assert!(nextest.contains(
-        "filter = 'package(neomacs-melpa-tests) and not test(~parity_tests::harness_contract::)'"
+        "filter = 'package(neomacs-melpa-tests) and not (test(~parity_tests::harness_contract::) or test(~source_lock::tests::))'"
     ));
     assert!(nextest.contains("setup = 'melpa-infra-preflight'"));
     assert!(preflight.contains("NEXTEST_WORKSPACE_ROOT"));

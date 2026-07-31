@@ -14,7 +14,7 @@ const AC_HTML_BOOTSTRAP_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 /// contains no completion code at all; the data files are the product.
 ///
 /// Neither consumer is available at the pinned versions: company-web is not in
-/// `melpa-sources.tsv', and the pinned ac-html (20151005.731) never looks at
+/// `melpa-package-lock.tsv', and the pinned ac-html (20151005.731) never looks at
 /// `web-completion-data-sources', because its own
 /// `ac-html-default-data-provider.el' redefines
 /// `web-completion-data-html-source-dir' as a `defconst' pointing at ac-html's

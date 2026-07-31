@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Derive `melpa-source-dependencies.tsv` from each pinned package's own
-`Package-Requires` header, and report where the committed manifest disagrees.
+"""Derive dependency cells in `melpa-package-lock.tsv` from each pinned
+package's own `Package-Requires` header, and report lockfile disagreements.
 
-The manifest records one edge per line as `package<TAB>dependency`.  Versions are
-deliberately absent: `melpa-sources.tsv` pins every package at exactly one
-version, so carrying it on each edge would be derivable data that can disagree
-with the source lock.
+Each package lock row records its direct dependencies as a sorted comma-separated
+list of package names, or `-` when it has none. Versions are deliberately absent:
+the lock pins every package at exactly one version, so carrying versions on each
+edge would be derivable data that can disagree with the owning source row.
 
 An edge is included when the dependency is *pinned in the source lock*.  A
 requirement that is not pinned is either built into Emacs (`cl-lib`, `json`,
@@ -32,25 +32,38 @@ import re
 import sys
 
 WORKSPACE = pathlib.Path(__file__).resolve().parent.parent
-SOURCES = WORKSPACE / "neomacs-melpa-tests/melpa-sources.tsv"
-MANIFEST = WORKSPACE / "neomacs-melpa-tests/melpa-source-dependencies.tsv"
+MANIFEST = WORKSPACE / "neomacs-melpa-tests/melpa-package-lock.tsv"
 CACHES = ("tmp/melpa/source-install-cache", "tmp/melpa/package-cache")
 
-HEADER = "package\tdependency"
+HEADER = (
+    "package\tversion\tupstream\tupstream-revision\trepository\trevision\t"
+    "fallback-repository\tbuild\tdependencies"
+)
 REQUIRES = re.compile(r";;\s*Package-Requires:\s*(.+)$", re.M)
 REQUIREMENT = re.compile(r"\(\s*([A-Za-z0-9@_.+-]+)\s")
 
 
-def pinned_versions() -> dict[str, str]:
+def read_manifest() -> tuple[list[list[str]], dict[str, str], dict[str, set[str]]]:
+    rows: list[list[str]] = []
     versions: dict[str, str] = {}
-    with SOURCES.open(encoding="utf-8") as handle:
-        next(handle)
+    edges: dict[str, set[str]] = collections.defaultdict(set)
+    with MANIFEST.open(encoding="utf-8") as handle:
+        if next(handle).rstrip("\n") != HEADER:
+            sys.exit(f"{MANIFEST} does not start with the expected package-lock header")
         for line in handle:
             fields = line.rstrip("\n").split("\t")
+            if len(fields) != 9:
+                sys.exit(f"{MANIFEST} contains a row with {len(fields)} fields")
             if fields[0] in versions:
                 sys.exit(f"{fields[0]} is pinned at more than one version")
+            rows.append(fields)
             versions[fields[0]] = fields[1]
-    return versions
+            if fields[8] != "-":
+                dependencies = fields[8].split(",")
+                if dependencies != sorted(set(dependencies)):
+                    sys.exit(f"{fields[0]} dependencies are not sorted and unique")
+                edges[fields[0]].update(dependencies)
+    return rows, versions, edges
 
 
 def cached_main_files(versions: dict[str, str]) -> dict[str, pathlib.Path]:
@@ -84,26 +97,14 @@ def derived_edges(
     return edges, unpinned
 
 
-def committed_edges() -> dict[str, set[str]]:
-    edges: dict[str, set[str]] = collections.defaultdict(set)
-    with MANIFEST.open(encoding="utf-8") as handle:
-        if next(handle).rstrip("\n") != HEADER:
-            sys.exit(f"{MANIFEST} does not start with `{HEADER}`")
-        for line in handle:
-            package, dependency = line.rstrip("\n").split("\t")
-            edges[package].add(dependency)
-    return edges
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write", action="store_true", help="rewrite the manifest")
     arguments = parser.parse_args()
 
-    versions = pinned_versions()
+    rows, versions, committed = read_manifest()
     sources = cached_main_files(versions)
     derived, unpinned = derived_edges(versions, sources)
-    committed = committed_edges()
 
     missing = {
         package: sorted(dependencies - committed.get(package, set()))
@@ -140,12 +141,12 @@ def main() -> int:
             merged.setdefault(package, set()).update(dependencies)
             if package in sources:
                 merged[package] = set(dependencies)
-        lines = [HEADER]
-        for package in sorted(merged):
-            for dependency in sorted(merged[package]):
-                lines.append(f"{package}\t{dependency}")
-        MANIFEST.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print(f"\nwrote {len(lines) - 1} edges to {MANIFEST.relative_to(WORKSPACE)}")
+        for row in rows:
+            row[8] = ",".join(sorted(merged.get(row[0], set()))) or "-"
+        contents = "\n".join([HEADER, *("\t".join(row) for row in rows)]) + "\n"
+        MANIFEST.write_text(contents, encoding="utf-8")
+        edge_count = sum(len(dependencies) for dependencies in merged.values())
+        print(f"\nwrote {edge_count} edges to {MANIFEST.relative_to(WORKSPACE)}")
 
     return 1 if (missing or spurious) and not arguments.write else 0
 

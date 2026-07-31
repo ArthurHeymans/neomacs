@@ -36,10 +36,10 @@ filter = 'not binary_id(neomacs-gui-tests::real_gui_smoke)'
 run-wrapper = 'memory-limit'
 
 # Start both editor adapters once before package parity cases are dispatched.
-# Harness contract tests use fake runtimes and therefore remain independent of
-# a release Neomacs build.
+# Harness contract tests use fake runtimes, and source-lock tests only parse
+# embedded manifests, so both remain independent of a release Neomacs build.
 [[profile.default.scripts]]
-filter = 'package(neomacs-melpa-tests) and not test(~parity_tests::harness_contract::)'
+filter = 'package(neomacs-melpa-tests) and not (test(~parity_tests::harness_contract::) or test(~source_lock::tests::))'
 platform = { host = "cfg(unix)" }
 setup = 'melpa-infra-preflight'
 

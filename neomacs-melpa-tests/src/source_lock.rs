@@ -2,14 +2,15 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 use super::{
     CommandError, EmacsRuntime, configure_process_environment, elisp_string, output_with_timeout,
     package_preparation_run_id, publish_package_preparation_failure, workspace_root,
 };
 
-const LOCKED_PACKAGE_SOURCES: &str = include_str!("../melpa-sources.tsv");
-const LOCKED_PACKAGE_DEPENDENCIES: &str = include_str!("../melpa-source-dependencies.tsv");
+const LOCKED_PACKAGE_MANIFEST: &str = include_str!("../melpa-package-lock.tsv");
+static LOCKED_PACKAGE_CATALOG: OnceLock<Result<LockedPackageCatalog, String>> = OnceLock::new();
 
 const MELPA_RECIPE_REPOSITORY: &str = "https://github.com/melpa/melpa";
 const MELPA_RECIPE_REVISION: &str = "517749e477c16c0437cae029be71e672061a6c19";
@@ -18,7 +19,6 @@ const PACKAGE_BUILD_REVISION: &str = "d31dec67631f14ef8be3ad6438e172a07298082b";
 pub(crate) const SHALLOW_GIT_FETCH_ARGS: &[&str] = &["fetch", "--depth=1", "--no-tags"];
 
 type PackagePin = (&'static str, &'static str);
-type DependencyEdge = (PackagePin, PackagePin);
 
 #[derive(Clone, Copy)]
 struct SourceBuildTools<'a> {
@@ -98,11 +98,227 @@ impl<'a> LockedPackageSource<'a> {
     }
 }
 
-fn safe_package_pin(name: &str, version: &str) -> bool {
+#[derive(Debug)]
+struct LockedPackage {
+    source: LockedPackageSource<'static>,
+    dependencies: Vec<PackagePin>,
+}
+
+#[derive(Debug)]
+struct LockedPackageCatalog {
+    packages: Vec<LockedPackage>,
+}
+
+impl LockedPackageCatalog {
+    fn parse(manifest: &'static str) -> Result<Self, String> {
+        let mut lines = manifest.lines();
+        if lines.next()
+            != Some(
+                "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies",
+            )
+        {
+            return Err("locked package manifest has an invalid header".to_string());
+        }
+
+        let mut unresolved = Vec::new();
+        let mut pins = BTreeMap::new();
+        let mut previous_package_name = None;
+        for (index, line) in lines.enumerate() {
+            let line_number = index + 2;
+            let fields = line.split('\t').collect::<Vec<_>>();
+            let [
+                name,
+                version,
+                upstream_repository,
+                upstream_revision,
+                repository,
+                revision,
+                fallback_repository,
+                build,
+                dependency_names,
+            ] = fields.as_slice()
+            else {
+                return Err(format!(
+                    "locked package manifest line {line_number} is invalid"
+                ));
+            };
+            if dependency_names.is_empty() {
+                return Err(format!(
+                    "locked package manifest line {line_number} must use `-` for no dependencies"
+                ));
+            }
+            let build = match *build {
+                "melpa-recipe" => SourceBuild::MelpaRecipe,
+                "source-default" => SourceBuild::DefaultFiles,
+                build => match build.strip_prefix("source-glob:") {
+                    Some(path) if safe_source_path(path) => SourceBuild::Files(path),
+                    _ => {
+                        return Err(format!(
+                            "locked package manifest line {line_number} has invalid build rule `{build}`"
+                        ));
+                    }
+                },
+            };
+            if !safe_package_pin(name, version)
+                || !upstream_repository.starts_with("https://")
+                || upstream_repository.contains(['\n', '\r', '\t'])
+                || !full_lowercase_revision(upstream_revision)
+                || !repository.starts_with("https://")
+                || repository.contains(['\n', '\r', '\t'])
+                || !full_lowercase_revision(revision)
+                || (!fallback_repository.is_empty()
+                    && (!fallback_repository.starts_with("https://")
+                        || fallback_repository.contains(['\n', '\r', '\t'])
+                        || fallback_repository == repository))
+            {
+                return Err(format!(
+                    "locked package manifest line {line_number} must contain a safe exact pin, HTTPS provenance/acquisition repositories, and full lowercase revisions"
+                ));
+            }
+            if previous_package_name.is_some_and(|previous| previous >= *name) {
+                return Err(format!(
+                    "locked package manifest line {line_number} package rows must be sorted and unique"
+                ));
+            }
+            let pin = (*name, *version);
+            pins.insert(*name, pin);
+            previous_package_name = Some(*name);
+            unresolved.push((
+                LockedPackageSource {
+                    name,
+                    version,
+                    upstream_repository,
+                    upstream_revision,
+                    repository,
+                    revision,
+                    fallback_repository: (!fallback_repository.is_empty())
+                        .then_some(*fallback_repository),
+                    build,
+                },
+                *dependency_names,
+                line_number,
+            ));
+        }
+        if unresolved.is_empty() {
+            return Err("locked package manifest is empty".to_string());
+        }
+
+        let mut packages = Vec::with_capacity(unresolved.len());
+        for (source, dependency_names, line_number) in unresolved {
+            let mut dependencies = Vec::new();
+            let mut previous_dependency = None;
+            if dependency_names != "-" {
+                for dependency_name in dependency_names.split(',') {
+                    if !safe_package_name(dependency_name) {
+                        return Err(format!(
+                            "locked package manifest line {line_number} has invalid dependency name `{dependency_name}`"
+                        ));
+                    }
+                    if dependency_name == source.name {
+                        return Err(format!(
+                            "locked package manifest line {line_number} package {dependency_name} depends on itself"
+                        ));
+                    }
+                    if previous_dependency.is_some_and(|previous| previous >= dependency_name) {
+                        return Err(format!(
+                            "locked package manifest line {line_number} dependency names must be sorted and unique"
+                        ));
+                    }
+                    dependencies.push(pins.get(dependency_name).copied().ok_or_else(|| {
+                        format!(
+                            "locked package manifest line {line_number} names dependency {dependency_name}, which has no package row"
+                        )
+                    })?);
+                    previous_dependency = Some(dependency_name);
+                }
+            }
+            packages.push(LockedPackage {
+                source,
+                dependencies,
+            });
+        }
+
+        Ok(Self { packages })
+    }
+
+    fn install_plan(
+        &self,
+        package: (&str, &str),
+    ) -> Result<Vec<LockedPackageSource<'static>>, String> {
+        fn visit(
+            package: PackagePin,
+            packages: &[LockedPackage],
+            visiting: &mut BTreeSet<PackagePin>,
+            visited: &mut BTreeSet<PackagePin>,
+            plan: &mut Vec<LockedPackageSource<'static>>,
+        ) -> Result<(), String> {
+            if visited.contains(&package) {
+                return Ok(());
+            }
+            if !visiting.insert(package) {
+                return Err(format!(
+                    "locked package dependency cycle includes {} {}",
+                    package.0, package.1
+                ));
+            }
+            let locked_package = packages
+                .iter()
+                .find(|candidate| candidate.source.package() == package)
+                .ok_or_else(|| {
+                    format!(
+                        "exact package {} {} has no revision-pinned source lock",
+                        package.0, package.1
+                    )
+                })?;
+            for dependency in &locked_package.dependencies {
+                visit(*dependency, packages, visiting, visited, plan)?;
+            }
+            visiting.remove(&package);
+            visited.insert(package);
+            plan.push(locked_package.source);
+            Ok(())
+        }
+
+        let root = self
+            .packages
+            .iter()
+            .find(|candidate| candidate.source.package() == package)
+            .ok_or_else(|| {
+                format!(
+                    "exact package {} {} has no revision-pinned source lock",
+                    package.0, package.1
+                )
+            })?;
+        let mut visiting = BTreeSet::new();
+        let mut visited = BTreeSet::new();
+        let mut plan = Vec::new();
+        visit(
+            root.source.package(),
+            &self.packages,
+            &mut visiting,
+            &mut visited,
+            &mut plan,
+        )?;
+        Ok(plan)
+    }
+}
+
+fn locked_package_catalog() -> Result<&'static LockedPackageCatalog, String> {
+    LOCKED_PACKAGE_CATALOG
+        .get_or_init(|| LockedPackageCatalog::parse(LOCKED_PACKAGE_MANIFEST))
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+fn safe_package_name(name: &str) -> bool {
     !name.is_empty()
         && name
             .chars()
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '@'))
+}
+
+fn safe_package_pin(name: &str, version: &str) -> bool {
+    safe_package_name(name)
         && !version.is_empty()
         && version.chars().all(|character| {
             character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '+')
@@ -129,98 +345,19 @@ fn safe_source_path(path: &str) -> bool {
         && !path.split('/').any(|component| component == "..")
 }
 
-fn parse_locked_package_sources(
-    manifest: &'static str,
-) -> Result<Vec<LockedPackageSource<'static>>, String> {
-    let mut lines = manifest.lines();
-    if lines.next()
-        != Some(
-            "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild",
-        )
-    {
-        return Err("locked package source manifest has an invalid header".to_string());
-    }
-
-    let mut sources = Vec::new();
-    let mut pins = BTreeSet::new();
-    for (index, line) in lines.enumerate() {
-        let line_number = index + 2;
-        let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() != 8 {
-            return Err(format!(
-                "locked package source manifest line {line_number} is invalid"
-            ));
-        }
-        let [
-            name,
-            version,
-            upstream_repository,
-            upstream_revision,
-            repository,
-            revision,
-            fallback_repository,
-            build,
-        ] = fields.as_slice()
-        else {
-            unreachable!("the source manifest field count was checked")
-        };
-        let build = match *build {
-            "melpa-recipe" => SourceBuild::MelpaRecipe,
-            "source-default" => SourceBuild::DefaultFiles,
-            build => match build.strip_prefix("source-glob:") {
-                Some(path) if safe_source_path(path) => SourceBuild::Files(path),
-                _ => {
-                    return Err(format!(
-                        "locked package source manifest line {line_number} has invalid build rule `{build}`"
-                    ));
-                }
-            },
-        };
-        if !safe_package_pin(name, version)
-            || !upstream_repository.starts_with("https://")
-            || upstream_repository.contains(['\n', '\r', '\t'])
-            || !full_lowercase_revision(upstream_revision)
-            || !repository.starts_with("https://")
-            || repository.contains(['\n', '\r', '\t'])
-            || !full_lowercase_revision(revision)
-            || (!fallback_repository.is_empty()
-                && (!fallback_repository.starts_with("https://")
-                    || fallback_repository.contains(['\n', '\r', '\t'])
-                    || fallback_repository == repository))
-        {
-            return Err(format!(
-                "locked package source manifest line {line_number} must contain a safe exact pin, HTTPS provenance/acquisition repositories, and full lowercase revisions"
-            ));
-        }
-        if !pins.insert((*name, *version)) {
-            return Err(format!(
-                "locked package source manifest repeats {name} {version}"
-            ));
-        }
-        sources.push(LockedPackageSource {
-            name,
-            version,
-            upstream_repository,
-            upstream_revision,
-            repository,
-            revision,
-            fallback_repository: (!fallback_repository.is_empty()).then_some(*fallback_repository),
-            build,
-        });
-    }
-    if sources.is_empty() {
-        return Err("locked package source manifest is empty".to_string());
-    }
-    Ok(sources)
-}
-
 pub fn locked_melpa_sources() -> Result<Vec<LockedPackageSource<'static>>, String> {
-    parse_locked_package_sources(LOCKED_PACKAGE_SOURCES)
+    Ok(locked_package_catalog()?
+        .packages
+        .iter()
+        .map(|package| package.source)
+        .collect())
 }
 
 pub fn locked_melpa_source(package: (&str, &str)) -> Result<LockedPackageSource<'static>, String> {
-    locked_melpa_sources()?
-        .into_iter()
+    locked_package_catalog()?
+        .packages
+        .iter()
+        .map(|package| package.source)
         .find(|source| source.package() == package)
         .ok_or_else(|| {
             format!(
@@ -230,139 +367,10 @@ pub fn locked_melpa_source(package: (&str, &str)) -> Result<LockedPackageSource<
         })
 }
 
-/// Map every pinned package name to the single version `melpa-sources.tsv`
-/// gives it.
-///
-/// The dependency manifest records edges by **name only**.  A package is pinned
-/// at exactly one version tree-wide, so repeating the version on each edge would
-/// be derivable data that can disagree with the source lock — and the version an
-/// edge would carry is never consulted for anything except finding the same row
-/// this map already holds.
-fn locked_pins_by_name() -> Result<BTreeMap<&'static str, PackagePin>, String> {
-    let mut pins = BTreeMap::new();
-    for source in locked_melpa_sources()? {
-        let pin = source.package();
-        if pins.insert(pin.0, pin).is_some() {
-            return Err(format!(
-                "locked package source manifest pins {} at more than one version, so \
-                 dependency edges naming it would be ambiguous",
-                pin.0
-            ));
-        }
-    }
-    Ok(pins)
-}
-
-fn locked_dependencies() -> Result<Vec<DependencyEdge>, String> {
-    let pins = locked_pins_by_name()?;
-    let mut lines = LOCKED_PACKAGE_DEPENDENCIES.lines();
-    if lines.next() != Some("package\tdependency") {
-        return Err("locked package dependency manifest has an invalid header".to_string());
-    }
-
-    let mut dependencies = Vec::new();
-    let mut edges = BTreeSet::new();
-    for (index, line) in lines.enumerate() {
-        let line_number = index + 2;
-        let fields = line.split('\t').collect::<Vec<_>>();
-        if fields.len() != 2 || fields.iter().any(|field| field.is_empty()) {
-            return Err(format!(
-                "locked package dependency manifest line {line_number} is invalid"
-            ));
-        }
-        let resolve = |name: &str| -> Result<PackagePin, String> {
-            pins.get(name).copied().ok_or_else(|| {
-                format!(
-                    "locked package dependency manifest line {line_number} names {name}, \
-                     which has no revision-pinned source lock"
-                )
-            })
-        };
-        let package = resolve(fields[0])?;
-        let dependency = resolve(fields[1])?;
-        if package == dependency {
-            return Err(format!(
-                "locked package dependency manifest line {line_number} makes {} depend on itself",
-                package.0
-            ));
-        }
-        if !edges.insert((package, dependency)) {
-            return Err(format!(
-                "locked package dependency manifest repeats {} -> {}",
-                package.0, dependency.0
-            ));
-        }
-        dependencies.push((package, dependency));
-    }
-    Ok(dependencies)
-}
-
 pub fn locked_melpa_install_plan(
     package: (&str, &str),
 ) -> Result<Vec<LockedPackageSource<'static>>, String> {
-    fn visit(
-        package: PackagePin,
-        sources: &[LockedPackageSource<'static>],
-        dependencies: &[DependencyEdge],
-        visiting: &mut BTreeSet<PackagePin>,
-        visited: &mut BTreeSet<PackagePin>,
-        plan: &mut Vec<LockedPackageSource<'static>>,
-    ) -> Result<(), String> {
-        if visited.contains(&package) {
-            return Ok(());
-        }
-        if !visiting.insert(package) {
-            return Err(format!(
-                "locked package dependency cycle includes {} {}",
-                package.0, package.1
-            ));
-        }
-        for (_, dependency) in dependencies
-            .iter()
-            .filter(|(candidate, _)| *candidate == package)
-        {
-            visit(*dependency, sources, dependencies, visiting, visited, plan)?;
-        }
-        visiting.remove(&package);
-        visited.insert(package);
-        let source = sources
-            .iter()
-            .copied()
-            .find(|source| source.package() == package)
-            .ok_or_else(|| {
-                format!(
-                    "exact package {} {} has no revision-pinned source lock",
-                    package.0, package.1
-                )
-            })?;
-        plan.push(source);
-        Ok(())
-    }
-
-    let sources = locked_melpa_sources()?;
-    let dependencies = locked_dependencies()?;
-    let root = sources
-        .iter()
-        .copied()
-        .find(|source| source.package() == package)
-        .ok_or_else(|| {
-            format!(
-                "exact package {} {} has no revision-pinned source lock",
-                package.0, package.1
-            )
-        })?;
-    let mut visiting = BTreeSet::new();
-    let mut visited = BTreeSet::new();
-    let mut plan = Vec::new();
-    visit(
-        root.package(),
-        &sources,
-        &dependencies,
-        &mut visiting,
-        &mut visited,
-        &mut plan,
-    )?;
-    Ok(plan)
+    locked_package_catalog()?.install_plan(package)
 }
 
 fn run_command(
@@ -1092,7 +1100,7 @@ mod tests {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use super::{
-        LockedPackageSource, SourceBuild, SourceBuildTools, parse_locked_package_sources,
+        LockedPackageCatalog, LockedPackageSource, SourceBuild, SourceBuildTools,
         prepare_cached_source_artifact_with_tools, prepare_source_checkout,
     };
     use crate::{EmacsRuntime, MelpaSandbox};
@@ -1240,10 +1248,10 @@ printf 'NEOMACS-SOURCE-PACKAGE:ready:%s:%s\n' \
     }
 
     #[test]
-    fn source_lock_rejects_a_branch_in_place_of_a_full_revision() {
-        let error = parse_locked_package_sources(
-            "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\n\
-             demo\t1.0\thttps://upstream.example.invalid/demo\tmain\thttps://upstream.example.invalid/demo\tmain\thttps://github.com/emacsmirror/demo\tsource-default\n",
+    fn package_lock_rejects_a_branch_in_place_of_a_full_revision() {
+        let error = LockedPackageCatalog::parse(
+            "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+             demo\t1.0\thttps://upstream.example.invalid/demo\tmain\thttps://upstream.example.invalid/demo\tmain\thttps://github.com/emacsmirror/demo\tsource-default\t-\n",
         )
         .expect_err("a branch is not an immutable checkout identity");
 
@@ -1251,26 +1259,96 @@ printf 'NEOMACS-SOURCE-PACKAGE:ready:%s:%s\n' \
     }
 
     #[test]
-    fn source_lock_accepts_an_exact_shallow_checkout_identity() {
-        let sources = parse_locked_package_sources(
-            "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\n\
-             demo\t1.0\thttps://upstream.example.invalid/demo\t0123456789abcdef0123456789abcdef01234567\thttps://upstream.example.invalid/demo\t0123456789abcdef0123456789abcdef01234567\thttps://github.com/emacsmirror/demo\tsource-default\n",
+    fn package_lock_accepts_an_exact_shallow_checkout_identity() {
+        let catalog = LockedPackageCatalog::parse(
+            "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+             demo\t1.0\thttps://upstream.example.invalid/demo\t0123456789abcdef0123456789abcdef01234567\thttps://upstream.example.invalid/demo\t0123456789abcdef0123456789abcdef01234567\thttps://github.com/emacsmirror/demo\tsource-default\t-\n",
         )
         .expect("parse an exact source lock");
+        let source = catalog.packages[0].source;
 
-        assert_eq!(sources[0].build(), SourceBuild::DefaultFiles);
+        assert_eq!(source.build(), SourceBuild::DefaultFiles);
+        assert_eq!(source.repository(), "https://upstream.example.invalid/demo");
         assert_eq!(
-            sources[0].repository(),
-            "https://upstream.example.invalid/demo"
-        );
-        assert_eq!(
-            sources[0].fallback_repository(),
+            source.fallback_repository(),
             Some("https://github.com/emacsmirror/demo")
         );
         assert_eq!(
-            sources[0].revision(),
+            source.revision(),
             "0123456789abcdef0123456789abcdef01234567"
         );
+    }
+
+    #[test]
+    fn package_lock_keeps_dependencies_with_their_owning_source_row() {
+        let catalog = LockedPackageCatalog::parse(
+            "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+             dependency\t1.0\thttps://example.invalid/dependency\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/dependency\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\t-\n\
+             root\t2.0\thttps://example.invalid/root\t89abcdef0123456789abcdef0123456789abcdef\thttps://example.invalid/root\t89abcdef0123456789abcdef0123456789abcdef\t\tmelpa-recipe\tdependency\n",
+        )
+        .expect("parse one package graph");
+
+        assert_eq!(
+            catalog
+                .install_plan(("root", "2.0"))
+                .expect("resolve dependency-first plan")
+                .into_iter()
+                .map(|source| source.package())
+                .collect::<Vec<_>>(),
+            [("dependency", "1.0"), ("root", "2.0")]
+        );
+    }
+
+    #[test]
+    fn package_lock_rejects_unsorted_dependency_names() {
+        let error = LockedPackageCatalog::parse(
+            "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+             alpha\t1.0\thttps://example.invalid/alpha\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/alpha\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\t-\n\
+             root\t1.0\thttps://example.invalid/root\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/root\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\tzeta,alpha\n\
+             zeta\t1.0\thttps://example.invalid/zeta\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/zeta\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\t-\n",
+        )
+        .err()
+        .expect("dependency names must have one canonical order");
+
+        assert!(error.contains("sorted"));
+    }
+
+    #[test]
+    fn package_lock_rejects_self_dependencies_at_the_owning_row() {
+        let error = LockedPackageCatalog::parse(
+            "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+             recursive\t1.0\thttps://example.invalid/recursive\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/recursive\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\trecursive\n",
+        )
+        .err()
+        .expect("a package cannot directly depend on itself");
+
+        assert!(error.contains("depends on itself"));
+        assert!(error.contains("line 2"));
+    }
+
+    #[test]
+    fn package_lock_rejects_unsorted_package_rows() {
+        let error = LockedPackageCatalog::parse(
+            "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+             zeta\t1.0\thttps://example.invalid/zeta\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/zeta\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\t-\n\
+             alpha\t1.0\thttps://example.invalid/alpha\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/alpha\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\t-\n",
+        )
+        .err()
+        .expect("package rows must have one canonical order");
+
+        assert!(error.contains("package rows must be sorted"));
+    }
+
+    #[test]
+    fn package_lock_requires_an_explicit_empty_dependency_cell() {
+        let error = LockedPackageCatalog::parse(
+            "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+             demo\t1.0\thttps://example.invalid/demo\t0123456789abcdef0123456789abcdef01234567\thttps://example.invalid/demo\t0123456789abcdef0123456789abcdef01234567\t\tsource-default\t\n",
+        )
+        .err()
+        .expect("an empty final field is ambiguous and leaves trailing whitespace");
+
+        assert!(error.contains("use `-` for no dependencies"));
     }
 
     #[cfg(unix)]
