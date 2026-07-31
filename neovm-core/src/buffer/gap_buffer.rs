@@ -956,6 +956,14 @@ impl GapBuffer {
         }
         let below_byte = below.emacs_byte_pos_usize();
         let above_byte = above.emacs_byte_pos_usize();
+        // GNU marker.c CONSIDER interpolation: if the bracketing anchors
+        // span as many chars as bytes, everything between them is
+        // single-byte and the conversion is pure arithmetic. In an
+        // ASCII-dominant buffer this collapses most conversions to zero
+        // scanning (the multibyte characters cluster in a few spans).
+        if above_byte - below_byte == above.char_pos_usize() - below.char_pos_usize() {
+            return below.char_pos_usize() + (target - below_byte);
+        }
         if target - below_byte <= above_byte - target {
             below.char_pos_usize() + self.count_chars_in_logical_byte_range(below_byte, target)
         } else {
@@ -1035,6 +1043,10 @@ impl GapBuffer {
         extra: Option<TextPositionAnchor>,
     ) -> usize {
         let mut below = TextPositionAnchor::ZERO;
+        let mut above = TextPositionAnchor::new(
+            CharPos0::new(self.total_chars),
+            EmacsBytePos::new(self.total_bytes),
+        );
         for anchor in std::iter::once(TextPositionAnchor::new(
             CharPos0::new(self.gap_start_chars),
             EmacsBytePos::new(self.gap_start_bytes),
@@ -1045,10 +1057,53 @@ impl GapBuffer {
             if char_pos <= target && char_pos > below.char_pos_usize() {
                 below = anchor;
             }
+            if char_pos >= target && char_pos < above.char_pos_usize() {
+                above = anchor;
+            }
         }
         let below_byte = below.emacs_byte_pos_usize();
         let below_char = below.char_pos_usize();
-        below_byte + self.bytes_for_n_chars_from_logical_byte(below_byte, target - below_char)
+        let above_byte = above.emacs_byte_pos_usize();
+        let above_char = above.char_pos_usize();
+        // GNU marker.c CONSIDER interpolation — see char_pos_from_byte_anchors.
+        if above_byte - below_byte == above_char - below_char {
+            return below_byte + (target - below_char);
+        }
+        if target - below_char <= above_char - target {
+            below_byte + self.bytes_for_n_chars_from_logical_byte(below_byte, target - below_char)
+        } else {
+            above_byte - self.bytes_for_n_chars_before_logical_byte(above_byte, above_char - target)
+        }
+    }
+
+    /// Logical byte span covering the `nchars` characters ENDING at logical
+    /// byte `end_byte` (a char boundary), mapped through the gap — the
+    /// backward twin of `bytes_for_n_chars_from_logical_byte`, so a
+    /// conversion can scan from an anchor above the target when that side
+    /// is closer (GNU buf_charpos_to_bytepos scans from the nearer anchor).
+    fn bytes_for_n_chars_before_logical_byte(&self, end_byte: usize, nchars: usize) -> usize {
+        if nchars == 0 {
+            return 0;
+        }
+        let mut remaining = nchars;
+        let mut consumed = 0;
+        if end_byte > self.gap_start_bytes {
+            let phys_end = self.gap_end + (end_byte - self.gap_start_bytes);
+            let slice = &self.buf[self.gap_end..phys_end];
+            match nth_lead_from_end(slice, remaining, self.multibyte) {
+                Some(offset) => return consumed + (slice.len() - offset),
+                None => {
+                    remaining -= emacs_char_count_bytes(slice, self.multibyte).get();
+                    consumed += slice.len();
+                }
+            }
+        }
+        let pre_end = end_byte.min(self.gap_start_bytes);
+        let slice = &self.buf[..pre_end];
+        match nth_lead_from_end(slice, remaining, self.multibyte) {
+            Some(offset) => consumed + (slice.len() - offset),
+            None => consumed + slice.len(),
+        }
     }
 
     /// Logical byte span covering the next `nchars` characters starting at
@@ -1162,3 +1217,37 @@ impl fmt::Debug for GapBuffer {
 #[cfg(test)]
 #[path = "gap_buffer_test.rs"]
 mod tests;
+
+/// Byte offset (from the START of `slice`) of the lead byte that begins the
+/// `n`-th character counting BACKWARD from the end of `slice` (1-based), or
+/// `None` if `slice` holds fewer than `n` characters. Block-counts leads from
+/// the tail (vectorized) and walks only the final block, mirroring
+/// `char_to_byte_pos`'s forward form.
+fn nth_lead_from_end(slice: &[u8], n: usize, multibyte: bool) -> Option<usize> {
+    if !multibyte {
+        return (slice.len() >= n).then(|| slice.len() - n);
+    }
+    let mut remaining = n;
+    let mut end = slice.len();
+    const BLOCK: usize = 64;
+    while end >= BLOCK {
+        let leads = slice[end - BLOCK..end]
+            .iter()
+            .filter(|&&b| (b & 0xC0) != 0x80)
+            .count();
+        if leads >= remaining {
+            break;
+        }
+        remaining -= leads;
+        end -= BLOCK;
+    }
+    for i in (0..end).rev() {
+        if (slice[i] & 0xC0) != 0x80 {
+            remaining -= 1;
+            if remaining == 0 {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
