@@ -37,6 +37,8 @@ const AANGIT_TEST_PRELUDE: &str = r##"
 
 (defun aangit-test-setup-cli ()
   "Install recording `ng' and `npm' stand-ins and enter the workspace."
+  (when (file-directory-p aangit-test-root)
+    (delete-directory aangit-test-root t))
   (make-directory aangit-test-root t)
   (aangit-test-write-executable
    "ng"

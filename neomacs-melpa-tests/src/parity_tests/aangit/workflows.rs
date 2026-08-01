@@ -88,7 +88,6 @@ fn aangit_generate_service_and_module_submenus_issue_their_own_ng_commands() -> 
             r#"OK (("ng generate service auth" "ng generate module admin --defaults --routing --flat" "ng generate interface order") nil)"#
         ]],
     )
-    .fresh_process()
 }
 
 fn aangit_adds_each_selected_schematic_and_installs_an_npm_package() -> ParityBatchCase {
@@ -111,7 +110,6 @@ fn aangit_adds_each_selected_schematic_and_installs_an_npm_package() -> ParityBa
             r#"OK (("ng add --defaults --skip-confirmation @ngrx/store" "ng add --defaults --skip-confirmation @angular/cdk/schematics" "ng add --defaults --skip-confirmation @angular/material" "npm install rxjs@7.8.1 @types/node") nil)"#
         ]],
     )
-    .fresh_process()
 }
 
 fn aangit_reports_missing_names_and_runs_no_command_line_tool_at_all() -> ParityBatchCase {
@@ -145,7 +143,6 @@ fn aangit_reports_missing_names_and_runs_no_command_line_tool_at_all() -> Parity
             r#"OK (((component "missing component name") (service "missing service name") (module "missing module name") (interface "missing interface name") (npm "missing package name") (schematic "missing schematic name")) no-command-ran nil)"#
         ]],
     )
-    .fresh_process()
 }
 
 pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
