@@ -45,3 +45,41 @@ fn batch_keyboard_macro_drives_character_readers_like_gnu_emacs() {
         "batch keyboard-macro character reader semantics differ from GNU Emacs"
     );
 }
+
+#[test]
+fn minibuffer_recursive_command_starts_with_fresh_command_keys_like_gnu_emacs() {
+    if !oracle_enabled() {
+        eprintln!(
+            "skipping minibuffer recursive command-key audit: set NEOVM_FORCE_ORACLE_PATH or place GNU Emacs mirror alongside the repo"
+        );
+        return;
+    }
+
+    let form = r#"(progn
+  (defvar neovm-minibuffer-command-keys-log nil)
+  (defun neovm-minibuffer-command-keys-record ()
+    (when (minibufferp)
+      (push (list this-command
+                  (key-description (this-command-keys))
+                  (key-description (this-single-command-keys))
+                  (key-description (this-single-command-raw-keys)))
+            neovm-minibuffer-command-keys-log)))
+  (defun neovm-read-char-from-minibuffer-command ()
+    (interactive)
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (add-hook 'post-command-hook
+                    #'neovm-minibuffer-command-keys-record nil t))
+      (read-char-from-minibuffer "Character: ")))
+  (global-set-key (kbd "C-c r") #'neovm-read-char-from-minibuffer-command)
+  (execute-kbd-macro (kbd "C-c r g"))
+  (nreverse neovm-minibuffer-command-keys-log))"#;
+
+    let gnu = run_oracle_eval(form).expect("GNU Emacs evaluation");
+    let neovm = run_neovm_eval(form).expect("NeoVM evaluation");
+
+    assert_eq!(
+        neovm, gnu,
+        "minibuffer recursive command-key lifecycle differs from GNU Emacs"
+    );
+}

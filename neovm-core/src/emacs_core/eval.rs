@@ -7123,6 +7123,15 @@ impl Context {
         self.assign("last-prefix-arg", Value::NIL);
         self.assign("deactivate-mark", Value::NIL);
 
+        // GNU `command_loop_1` clears `this_command_key_count` and
+        // `this_single_command_key_start` before its initial
+        // `post-command-hook` (keyboard.c:1316-1327).  In a recursive
+        // minibuffer command loop, the outer command's translated key
+        // sequence is therefore hidden from that hook.  Keep the raw sequence:
+        // GNU does not clear `raw_keybuf_count` until immediately before
+        // `read_key_sequence` (keyboard.c:1416-1424).
+        self.set_translated_command_keys(Vec::new());
+
         if self
             .eval_symbol("memory-full")
             .unwrap_or(Value::NIL)

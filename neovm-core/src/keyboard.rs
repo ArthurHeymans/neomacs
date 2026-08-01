@@ -6025,7 +6025,6 @@ impl crate::emacs_core::eval::Context {
         self.command_loop.set_command_key_sequences(translated, raw);
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn set_translated_command_keys(&mut self, keys: Vec<Value>) {
         self.command_loop.set_translated_command_keys(keys);
     }
