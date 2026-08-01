@@ -299,38 +299,55 @@ fn auto_dim_other_buffers_force_window_update_calls_basic_refresh_then_optional_
 -> ParityBatchCase {
     ParityBatchCase::value(
         "auto_dim_other_buffers_force_window_update_calls_basic_refresh_then_optional_fringe_refresh",
-        r##"(let (events)
-          (cl-letf
-              (((symbol-function
-                 'force-window-update)
-                (lambda (object)
-                  (push
-                   (list :force object)
-                   events)))
-               ((symbol-function
-                 'adob--force-fringes-refresh)
-                (lambda (windows)
-                  (push
-                   (list :fringes windows)
-                   events)))
-               ((symbol-function
-                 'get-buffer-window-list)
-                (lambda (&rest arguments)
-                  (push
-                   (list :lookup arguments)
-                   events)
-                  '(:window-a :window-b))))
-            (let ((adob--has-fringes nil))
-              (adob--force-window-update
-               :plain-object))
-            (let ((adob--has-fringes t))
-              (adob--force-window-update
-               :window-object)
-              (adob--force-window-update
-               (current-buffer)))
-            (nreverse events)))"##,
+        r##"(let ((buffer
+                 (generate-new-buffer
+                  " *adob-force-target*"))
+                events)
+          (unwind-protect
+              (cl-letf
+                  (((symbol-function
+                     'force-window-update)
+                    (lambda (object)
+                      (push
+                       (list
+                        :force
+                        (if (eq object buffer)
+                            :fixture-buffer
+                          object))
+                       events)))
+                   ((symbol-function
+                     'adob--force-fringes-refresh)
+                    (lambda (windows)
+                      (push
+                       (list :fringes windows)
+                       events)))
+                   ((symbol-function
+                     'get-buffer-window-list)
+                    (lambda (&rest arguments)
+                      (push
+                       (list
+                        :lookup
+                        (cons
+                         (if (eq (car arguments)
+                                 buffer)
+                             :fixture-buffer
+                           (car arguments))
+                         (cdr arguments)))
+                       events)
+                      '(:window-a :window-b))))
+                (let ((adob--has-fringes nil))
+                  (adob--force-window-update
+                   :plain-object))
+                (let ((adob--has-fringes t))
+                  (adob--force-window-update
+                   :window-object)
+                  (adob--force-window-update
+                   buffer))
+                (nreverse events))
+            (when (buffer-live-p buffer)
+              (kill-buffer buffer))))"##,
         expect![[
-            r#"OK ((:force :plain-object) (:force :window-object) (:lookup (:window-object nil t)) (:fringes #2=(:window-a :window-b)) (:force (:buffer #1="*scratch*")) (:lookup ((:buffer #1#) nil t)) (:fringes #2#))"#
+            r#"OK ((:force :plain-object) (:force :window-object) (:lookup (:window-object nil t)) (:fringes #1=(:window-a :window-b)) (:force :fixture-buffer) (:lookup (:fixture-buffer nil t)) (:fringes #1#))"#
         ]],
     )
 }
