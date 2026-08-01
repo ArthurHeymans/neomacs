@@ -2398,10 +2398,22 @@ pub(crate) fn decode_file_name_lisp(
                     &eval.visible_variable_value_or_nil("default-file-name-coding-system"),
                 )
             });
-    match coding {
+    let decoded = match coding {
         Some(name) => crate::encoding::decode_bytes_to_lisp_string(bytes, &name),
         // Both variables nil: GNU returns the name unchanged (unibyte bytes).
         None => crate::heap_types::LispString::from_unibyte(bytes.to_vec()),
+    };
+
+    // GNU's `decode_file_name' uses `convert_string_nocopy': when decoding
+    // yields a string equal to the original unibyte filename, it returns the
+    // original object.  In particular, ASCII directory entries remain
+    // unibyte under UTF-8 while a name containing decoded non-ASCII becomes
+    // multibyte.  Preserve that representation distinction, not merely the
+    // bytes, because Lisp observes it through `multibyte-string-p'.
+    if decoded.schars() == bytes.len() && decoded.as_bytes() == bytes {
+        crate::heap_types::LispString::from_unibyte(bytes.to_vec())
+    } else {
+        decoded
     }
 }
 
@@ -5966,6 +5978,7 @@ pub(crate) fn builtin_write_region(
         )),
         _ => None,
     };
+    let default_lock_name = visit_file.clone().unwrap_or_else(|| resolved.clone());
 
     // GNU `Fwrite_region`, immediately after `Fexpand_file_name` and before the
     // file-name-handler dispatch:
@@ -5998,7 +6011,7 @@ pub(crate) fn builtin_write_region(
         }
         call_args[3] = Value::heap_string(resolved.clone());
         if call_args[6].is_nil() {
-            call_args[6] = Value::heap_string(resolved.clone());
+            call_args[6] = Value::heap_string(default_lock_name.clone());
         }
         return eval.funcall_general(handler, call_args);
     }
@@ -6010,7 +6023,13 @@ pub(crate) fn builtin_write_region(
             let mut call_args = Vec::with_capacity(args.len() + 1);
             call_args.push(op);
             call_args.extend_from_slice(&args);
+            while call_args.len() < 8 {
+                call_args.push(Value::NIL);
+            }
             call_args[3] = Value::heap_string(resolved.clone());
+            if call_args[6].is_nil() {
+                call_args[6] = Value::heap_string(default_lock_name.clone());
+            }
             return eval.funcall_general(visit_handler, call_args);
         }
     }
@@ -6072,52 +6091,87 @@ pub(crate) fn builtin_write_region(
     let coding_system = resolve_write_coding_system(eval, current_id, WriteCodingFallback::Utf8);
     let encoded = crate::encoding::encode_external_text_in_context(eval, content, coding_system)?;
 
+    // GNU `write_region' locks LOCKNAME after coding-system selection and
+    // keeps that lock scoped to the native open/write/close operation.  The
+    // buffer may already own the lock from its first modification; re-locking
+    // our own file is intentionally idempotent.
+    let lock_name = match args.get(5) {
+        Some(value) if !value.is_nil() => {
+            resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(value)?)
+        }
+        _ => default_lock_name,
+    };
+    super::filelock::lock_file_resolved(eval, &lock_name)?;
+
     // --- Write encoded bytes and handle fsync ---
-    let file = write_bytes_to_file_with_mode(&encoded.bytes, &resolved_path, append_mode).map_err(
-        |err| {
-            // GNU `Fwrite_region` reports *any* open failure via
-            // `report_file_errno ("Opening output file", filename, open_errno)`
-            // (fileio.c:5656) — the action is always "Opening output file",
-            // never "Writing to" (which GNU reserves for `a_write` errors).
-            // `get_file_errno_data` then handles errno specially: a MUSTBENEW
-            // =`excl` collision is EEXIST -> `(file-already-exists "File exists"
-            // FILENAME)` (action omitted), ENOENT -> `file-missing`, etc.
-            signal_file_action_error_value(
-                err,
-                "Opening output file",
-                Value::heap_string(resolved.clone()),
-            )
-        },
-    )?;
+    let write_result = (|| {
+        let file = write_bytes_to_file_with_mode(&encoded.bytes, &resolved_path, append_mode)
+            .map_err(|err| {
+                // GNU `Fwrite_region` reports *any* open failure via
+                // `report_file_errno ("Opening output file", filename, open_errno)`
+                // (fileio.c:5656) — the action is always "Opening output file",
+                // never "Writing to" (which GNU reserves for `a_write` errors).
+                // `get_file_errno_data` then handles errno specially: a MUSTBENEW
+                // =`excl` collision is EEXIST -> `(file-already-exists "File exists"
+                // FILENAME)` (action omitted), ENOENT -> `file-missing`, etc.
+                signal_file_action_error_value(
+                    err,
+                    "Opening output file",
+                    Value::heap_string(resolved.clone()),
+                )
+            })?;
 
-    // fsync after write unless write-region-inhibit-fsync is non-nil.
-    let inhibit_fsync = eval
-        .visible_variable_value_or_nil("write-region-inhibit-fsync")
-        .is_truthy();
-    if !inhibit_fsync {
-        file.sync_all().map_err(|err| {
-            signal_file_action_error_value(err, "Writing to", Value::heap_string(resolved.clone()))
-        })?;
-    }
-    drop(file);
+        // fsync after write unless write-region-inhibit-fsync is non-nil.
+        let inhibit_fsync = eval
+            .visible_variable_value_or_nil("write-region-inhibit-fsync")
+            .is_truthy();
+        if !inhibit_fsync {
+            file.sync_all().map_err(|err| {
+                signal_file_action_error_value(
+                    err,
+                    "Writing to",
+                    Value::heap_string(resolved.clone()),
+                )
+            })?;
+        }
+        drop(file);
 
-    let visiting_modtime = if visit_file.is_some() {
-        let meta = std::fs::metadata(&resolved_path).map_err(|err| {
-            signal_file_action_error_value(err, "Writing to", Value::heap_string(resolved.clone()))
-        })?;
-        let mtime = meta.modified().map_err(|err| {
-            signal_file_action_error_value(err, "Writing to", Value::heap_string(resolved.clone()))
-        })?;
-        let dur = mtime
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default();
-        Some((
-            dur.as_secs() as i64,
-            dur.subsec_nanos() as i32,
-            meta.len() as i64,
-        ))
-    } else {
-        None
+        let visiting_modtime = if visit_file.is_some() {
+            let meta = std::fs::metadata(&resolved_path).map_err(|err| {
+                signal_file_action_error_value(
+                    err,
+                    "Writing to",
+                    Value::heap_string(resolved.clone()),
+                )
+            })?;
+            let mtime = meta.modified().map_err(|err| {
+                signal_file_action_error_value(
+                    err,
+                    "Writing to",
+                    Value::heap_string(resolved.clone()),
+                )
+            })?;
+            let dur = mtime
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default();
+            Some((
+                dur.as_secs() as i64,
+                dur.subsec_nanos() as i32,
+                meta.len() as i64,
+            ))
+        } else {
+            None
+        };
+        Ok::<_, Flow>(visiting_modtime)
+    })();
+
+    // Always attempt the matching unlock, including open/write/fsync errors.
+    // Preserve the primary write error if cleanup also fails.
+    let unlock_result = super::filelock::unlock_file_resolved(eval, &lock_name);
+    let visiting_modtime = match (write_result, unlock_result) {
+        (Err(write_error), _) => return Err(write_error),
+        (Ok(_), Err(unlock_error)) => return Err(unlock_error),
+        (Ok(visiting_modtime), Ok(_)) => visiting_modtime,
     };
 
     let wrote_message_path = visit_file.clone();

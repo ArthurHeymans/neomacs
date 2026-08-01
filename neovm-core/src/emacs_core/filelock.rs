@@ -200,7 +200,7 @@ fn create_lock_file(lock_path: &Path, contents: &str, force: bool) -> io::Result
     fs::write(lock_path, contents)
 }
 
-fn lock_file_resolved(
+pub(crate) fn lock_file_resolved(
     eval: &mut super::eval::Context,
     filename: &LispString,
 ) -> Result<Value, Flow> {
@@ -236,7 +236,12 @@ fn lock_file_resolved(
     match current_lock_owner(&lock_path)
         .map_err(|err| file_lock_error("Testing file lock", filename, err))?
     {
-        LockOwner::None | LockOwner::Current => {}
+        LockOwner::None => {}
+        // GNU's `lock_if_free' treats our existing lock as success.  This is
+        // important for `write-region': modifying a visiting buffer normally
+        // acquired the lock already, and the save path locks the same file
+        // again before opening it.
+        LockOwner::Current => return Ok(Value::NIL),
         LockOwner::Other(owner) => {
             let attack = eval
                 .apply(
@@ -258,7 +263,7 @@ fn lock_file_resolved(
     Ok(Value::NIL)
 }
 
-fn unlock_file_resolved(
+pub(crate) fn unlock_file_resolved(
     eval: &mut super::eval::Context,
     filename: &LispString,
 ) -> Result<Value, Flow> {

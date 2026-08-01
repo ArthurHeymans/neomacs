@@ -2499,6 +2499,59 @@ fn directory_files_decodes_names_before_matching_and_returning_them() {
     let _ = fs::remove_dir_all(&dir);
 }
 
+#[test]
+fn directory_files_keeps_ascii_decoded_names_unibyte_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = std::env::temp_dir().join(format!(
+        "neovm_dirfiles_string_width_{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("répertoire.bmk"), "").unwrap();
+
+    let mut eval = Context::new();
+    eval.obarray.set_symbol_value(
+        "default-file-name-coding-system",
+        Value::symbol("utf-8-unix"),
+    );
+    let result = builtin_directory_files(
+        &mut eval,
+        vec![Value::string(dir.to_string_lossy().to_string())],
+    )
+    .expect("directory-files should decode directory entries");
+
+    let items = list_to_vec(&result).expect("directory-files must return a list");
+    let entries: Vec<_> = items
+        .iter()
+        .map(|value| value.as_lisp_string().expect("directory entry string"))
+        .collect();
+    let dot = entries
+        .iter()
+        .find(|entry| entry.as_bytes() == b".")
+        .expect("dot entry");
+    let dotdot = entries
+        .iter()
+        .find(|entry| entry.as_bytes() == b"..")
+        .expect("dot-dot entry");
+    let accented = entries
+        .iter()
+        .find(|entry| entry.as_utf8_str() == Some("répertoire.bmk"))
+        .expect("decoded accented entry");
+
+    assert!(!dot.is_multibyte(), "GNU keeps decoded ASCII names unibyte");
+    assert!(
+        !dotdot.is_multibyte(),
+        "GNU keeps decoded ASCII names unibyte"
+    );
+    assert!(
+        accented.is_multibyte(),
+        "a UTF-8 filename containing non-ASCII must be decoded to multibyte"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
 // GNU `directory_files_internal` (src/dired.c) applies COUNT to the *raw*
 // readdir stream — it breaks after COUNT entries (`if (ind == last) break;`)
 // and only THEN sorts.  So `(directory-files DIR nil nil nil COUNT)` is the
@@ -4831,6 +4884,104 @@ fn test_write_region_visit_sets_file_name_and_clears_modified() {
     assert_eq!(
         eval.current_message_text().as_deref(),
         Some(expected_message.as_str())
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn write_region_unlocks_a_successfully_saved_file() {
+    crate::test_utils::init_test_tracing();
+
+    let dir =
+        std::env::temp_dir().join(format!("neovm_write_region_unlock_{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let out_path = dir.join("visited.txt");
+    let lock_path = dir.join(".#visited.txt");
+    let out_str = out_path.to_string_lossy().to_string();
+
+    let mut eval = Context::new();
+    eval.set_variable("create-lockfiles", Value::T);
+    eval.buffers.current_buffer_mut().unwrap().insert("neo");
+    crate::emacs_core::filelock::builtin_lock_file(&mut eval, vec![Value::string(&out_str)])
+        .expect("first modification should lock the visited file");
+    assert!(
+        fs::symlink_metadata(&lock_path).is_ok(),
+        "precondition: a dangling Emacs lock symlink exists"
+    );
+
+    builtin_write_region(
+        &mut eval,
+        vec![
+            Value::NIL,
+            Value::NIL,
+            Value::string(&out_str),
+            Value::NIL,
+            Value::T,
+        ],
+    )
+    .expect("write-region with visit should save the buffer");
+
+    assert!(
+        matches!(
+            fs::symlink_metadata(&lock_path),
+            Err(error) if error.kind() == io::ErrorKind::NotFound
+        ),
+        "GNU unlocks LOCKNAME after write-region closes the file"
+    );
+    assert!(!eval.buffers.current_buffer().unwrap().is_modified());
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn write_region_unlocks_explicit_lockname_after_open_error() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = std::env::temp_dir().join(format!(
+        "neovm_write_region_error_unlock_{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let out_path = dir.join("missing-parent/out.txt");
+    let lock_target = dir.join("logical-visit.txt");
+    let lock_path = dir.join(".#logical-visit.txt");
+    let out_str = out_path.to_string_lossy().to_string();
+    let lock_target_str = lock_target.to_string_lossy().to_string();
+
+    let mut eval = Context::new();
+    eval.set_variable("create-lockfiles", Value::T);
+    eval.buffers.current_buffer_mut().unwrap().insert("neo");
+    crate::emacs_core::filelock::builtin_lock_file(
+        &mut eval,
+        vec![Value::string(&lock_target_str)],
+    )
+    .expect("pre-existing explicit lock");
+    assert!(fs::symlink_metadata(&lock_path).is_ok());
+
+    builtin_write_region(
+        &mut eval,
+        vec![
+            Value::NIL,
+            Value::NIL,
+            Value::string(&out_str),
+            Value::NIL,
+            Value::NIL,
+            Value::string(&lock_target_str),
+        ],
+    )
+    .expect_err("opening an output below a missing directory must fail");
+
+    assert!(
+        matches!(
+            fs::symlink_metadata(&lock_path),
+            Err(error) if error.kind() == io::ErrorKind::NotFound
+        ),
+        "GNU unlocks an explicit LOCKNAME when write-region fails after locking"
     );
 
     let _ = fs::remove_dir_all(&dir);
