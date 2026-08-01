@@ -752,6 +752,20 @@ impl<'a> crate::emacs_core::hook_runtime::HookRuntime for Vm<'a> {
         self.call_function_with_roots(function, args)
     }
 
+    fn report_safe_hook_error(
+        &mut self,
+        hook_sym: SymId,
+        function: Value,
+        signal: &crate::emacs_core::error::SignalData,
+    ) -> EvalResult {
+        crate::emacs_core::hook_runtime::HookRuntime::report_safe_hook_error(
+            &mut *self.ctx,
+            hook_sym,
+            function,
+            signal,
+        )
+    }
+
     fn remove_hook_function_after_error(&mut self, hook_sym: SymId, function: Value) {
         crate::emacs_core::hook_runtime::HookRuntime::remove_hook_function_after_error(
             &mut *self.ctx,

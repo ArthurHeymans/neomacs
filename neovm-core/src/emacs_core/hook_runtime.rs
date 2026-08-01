@@ -8,6 +8,12 @@ use crate::emacs_core::value::ValueKind;
 pub(crate) trait HookRuntime {
     fn hook_context(&self) -> &Context;
     fn call_hook_callable(&mut self, function: Value, args: &[Value]) -> EvalResult;
+    fn report_safe_hook_error(
+        &mut self,
+        hook_sym: SymId,
+        function: Value,
+        signal: &super::error::SignalData,
+    ) -> EvalResult;
     fn remove_hook_function_after_error(&mut self, hook_sym: SymId, function: Value);
     fn with_hook_root_scope<T>(
         &mut self,
@@ -23,6 +29,23 @@ impl HookRuntime for Context {
 
     fn call_hook_callable(&mut self, function: Value, args: &[Value]) -> EvalResult {
         self.apply(function, args.to_vec())
+    }
+
+    fn report_safe_hook_error(
+        &mut self,
+        hook_sym: SymId,
+        function: Value,
+        signal: &super::error::SignalData,
+    ) -> EvalResult {
+        let error_object = super::error::make_signal_binding_value(signal);
+        let args = vec![
+            Value::string("Error in %s (%S): %S"),
+            Value::from_sym_id(hook_sym),
+            function,
+            error_object,
+        ];
+        builtins::dispatch_builtin(self, "message", args)
+            .expect("`message` must remain a registered builtin")
     }
 
     fn remove_hook_function_after_error(&mut self, hook_sym: SymId, function: Value) {
@@ -195,17 +218,6 @@ fn remove_hook_function_after_error_in_context(
     }
 }
 
-fn log_safe_hook_error(
-    ctx: &Context,
-    hook_sym: SymId,
-    function: Value,
-    sig: &super::error::SignalData,
-) {
-    let hook_name = super::intern::resolve_sym(hook_sym);
-    let rendered = super::error::format_signal_data_with_eval(ctx, sig);
-    tracing::warn!("Error in {} ({}): {}", hook_name, function, rendered,);
-}
-
 /// Run a hook with error recovery. Mirrors GNU
 /// `keyboard.c:1908-1941` (`safe_run_hooks_error`) which logs
 /// the error via `(message "Error in %s (%S): %S" hook fun error)`,
@@ -235,7 +247,7 @@ pub(crate) fn safe_run_hook_value<R: HookRuntime>(
             match runtime.call_hook_callable(func, hook_args) {
                 Ok(_) => {}
                 Err(Flow::Signal(ref sig)) => {
-                    log_safe_hook_error(runtime.hook_context(), hook_sym, func, sig);
+                    let _ = runtime.report_safe_hook_error(hook_sym, func, sig)?;
                     runtime.remove_hook_function_after_error(hook_sym, func);
                 }
                 Err(flow) => return Err(flow),

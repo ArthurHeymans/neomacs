@@ -9890,7 +9890,7 @@ fn safe_run_hook_removes_failing_local_hook_and_continues_to_global_hook() {
              (defalias 'safe-hook-bad
                #'(lambda ()
                    (setq safe-hook-log (cons 'bad safe-hook-log))
-                   (error "boom")))
+                   (signal 'error '("boom"))))
              (defalias 'safe-hook-good
                #'(lambda ()
                    (setq safe-hook-log (cons 'good safe-hook-log))))
@@ -9911,6 +9911,16 @@ fn safe_run_hook_removes_failing_local_hook_and_continues_to_global_hook() {
         .eval_str("(list safe-hook-log safe-local-hook (default-value 'safe-local-hook))")
         .expect("inspect safe hook result");
     assert_eq!(format!("{}", result), "((good bad) (t) (safe-hook-good))");
+
+    let messages_id = ev
+        .buffers
+        .find_buffer_by_name("*Messages*")
+        .expect("safe hook errors should be reported through `message`");
+    let messages = ev.buffers.get(messages_id).expect("live *Messages* buffer");
+    assert_eq!(
+        messages.buffer_string(),
+        "Error in safe-local-hook (safe-hook-bad): (error \"boom\")\n"
+    );
 }
 
 #[test]
