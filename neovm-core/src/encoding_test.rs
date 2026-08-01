@@ -1259,6 +1259,39 @@ fn decode_iso2022_attaches_charset_property_for_designated_charset() {
 }
 
 #[test]
+fn iso2022_encoding_boundary_controls_final_ascii_reset() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::intern::intern;
+
+    let jis = register_test_jis();
+    let spec = crate::emacs_core::coding::Iso2022Spec {
+        initial: [Some(intern("ascii")), None, None, None],
+        request: vec![],
+        reg_usage: (0, 1),
+        flags: enumflags2::BitFlags::from_flag(crate::emacs_core::coding::IsoFlag::SevenBits)
+            | crate::emacs_core::coding::IsoFlag::Designation
+            | crate::emacs_core::coding::IsoFlag::AsciiAtEol,
+    };
+    let source = crate::heap_types::LispString::from_utf8("\u{10000}");
+
+    let complete = encode_via_iso2022(
+        &source,
+        &spec,
+        &[intern("ascii"), jis],
+        EncodingBoundary::CompleteText,
+    );
+    let file_region = encode_via_iso2022(
+        &source,
+        &spec,
+        &[intern("ascii"), jis],
+        EncodingBoundary::FileRegion,
+    );
+
+    assert_eq!(complete, b"\x1b$B!!\x1b(B");
+    assert_eq!(file_region, b"\x1b$B!!");
+}
+
+#[test]
 fn decode_euc_attaches_charset_property() {
     crate::test_utils::init_test_tracing();
     let jis = register_test_jis();

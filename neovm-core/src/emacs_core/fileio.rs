@@ -6089,7 +6089,7 @@ pub(crate) fn builtin_write_region(
     // --- Encode using the appropriate coding system ---
     // Priority: coding-system-for-write > buffer-file-coding-system > utf-8
     let coding_system = resolve_write_coding_system(eval, current_id, WriteCodingFallback::Utf8);
-    let encoded = crate::encoding::encode_external_text_in_context(eval, content, coding_system)?;
+    let encoded = crate::encoding::encode_file_region_in_context(eval, content, coding_system)?;
 
     // GNU `write_region' locks LOCKNAME after coding-system selection and
     // keeps that lock scoped to the native open/write/close operation.  The

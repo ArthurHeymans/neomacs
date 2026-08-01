@@ -1507,6 +1507,24 @@ enum CodingDirection {
     Decode,
 }
 
+/// Whether an encoding operation owns the end of the input stream.
+///
+/// GNU sets `CODING_MODE_LAST_BLOCK` for string and region conversion, but
+/// deliberately leaves it clear while `write-region` feeds text to `e_write`.
+/// Stateful encoders such as ISO-2022 use that distinction to decide whether
+/// to emit a final reset sequence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EncodingBoundary {
+    CompleteText,
+    FileRegion,
+}
+
+impl EncodingBoundary {
+    fn owns_end_of_stream(self) -> bool {
+        matches!(self, Self::CompleteText)
+    }
+}
+
 impl CodingDirection {
     fn string_function_name(self) -> &'static str {
         match self {
@@ -1555,6 +1573,7 @@ fn transformed_region_string_in_context(
             Value::NIL,
         ],
         direction,
+        EncodingBoundary::CompleteText,
     )
 }
 
@@ -2775,7 +2794,7 @@ fn encode_via_iso2022(
     s: &crate::heap_types::LispString,
     spec: &crate::emacs_core::coding::Iso2022Spec,
     charset_list: &[SymId],
-    _coding: &str,
+    boundary: EncodingBoundary,
 ) -> Vec<u8> {
     use crate::emacs_core::charset::{charset_encode_char, charset_iso2022_designation};
     use crate::emacs_core::coding::IsoFlag;
@@ -2909,7 +2928,7 @@ fn encode_via_iso2022(
             }
         }
     }
-    if reset_eol {
+    if reset_eol && boundary.owns_end_of_stream() {
         reset(&mut out, &mut desig, &mut gl);
     }
     out
@@ -3145,6 +3164,7 @@ fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     mut args: Vec<Value>,
     direction: CodingDirection,
+    encoding_boundary: EncodingBoundary,
 ) -> EvalResult {
     let name = direction.string_function_name();
     let encode = direction.is_encode();
@@ -3304,7 +3324,7 @@ fn builtin_coding_string_in_context(
             bytes.extend(encode_utf8_plain(&source_string()));
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if let Some((spec, charsets)) = &full_iso {
-            let bytes = encode_via_iso2022(&source_string(), spec, charsets, &coding);
+            let bytes = encode_via_iso2022(&source_string(), spec, charsets, encoding_boundary);
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if let Some((spec, charsets)) = &euc_coding {
             let bytes = encode_via_euc(&source_string(), spec, charsets, &coding);
@@ -3392,14 +3412,24 @@ pub(crate) fn builtin_encode_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_coding_string_in_context(ctx, args, CodingDirection::Encode)
+    builtin_coding_string_in_context(
+        ctx,
+        args,
+        CodingDirection::Encode,
+        EncodingBoundary::CompleteText,
+    )
 }
 
 pub(crate) fn builtin_decode_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_coding_string_in_context(ctx, args, CodingDirection::Decode)
+    builtin_coding_string_in_context(
+        ctx,
+        args,
+        CodingDirection::Decode,
+        EncodingBoundary::CompleteText,
+    )
 }
 
 /// An externally encoded byte stream together with the concrete coding system
@@ -3432,15 +3462,17 @@ impl RuntimeCodingSystem {
 /// call boundary.  The result also carries GNU's concrete
 /// `last-coding-system-used` value, so callers can report aliases and EOL
 /// subsidiaries consistently.
-pub(crate) fn encode_external_text_in_context(
+fn encode_external_text_with_boundary(
     ctx: &mut crate::emacs_core::eval::Context,
     text: crate::heap_types::LispString,
     coding: RuntimeCodingSystem,
+    boundary: EncodingBoundary,
 ) -> Result<EncodedTextBytes, crate::emacs_core::error::Flow> {
     let encoded = builtin_coding_string_in_context(
         ctx,
         vec![Value::heap_string(text), Value::symbol(coding.0)],
         CodingDirection::Encode,
+        boundary,
     )?;
     let bytes = encoded
         .as_lisp_string()
@@ -3456,6 +3488,27 @@ pub(crate) fn encode_external_text_in_context(
         bytes,
         coding_system,
     })
+}
+
+pub(crate) fn encode_external_text_in_context(
+    ctx: &mut crate::emacs_core::eval::Context,
+    text: crate::heap_types::LispString,
+    coding: RuntimeCodingSystem,
+) -> Result<EncodedTextBytes, crate::emacs_core::error::Flow> {
+    encode_external_text_with_boundary(ctx, text, coding, EncodingBoundary::CompleteText)
+}
+
+/// Encode the text passed to GNU's `write-region`/`e_write` path.
+///
+/// Unlike complete string or region conversion, this operation does not claim
+/// the final coding block. Stateful encoders therefore preserve their ending
+/// designation instead of appending a synthetic stream terminator.
+pub(crate) fn encode_file_region_in_context(
+    ctx: &mut crate::emacs_core::eval::Context,
+    text: crate::heap_types::LispString,
+    coding: RuntimeCodingSystem,
+) -> Result<EncodedTextBytes, crate::emacs_core::error::Flow> {
+    encode_external_text_with_boundary(ctx, text, coding, EncodingBoundary::FileRegion)
 }
 
 /// A file decode result whose coding-system selection remains an interned
@@ -3483,6 +3536,7 @@ pub(crate) fn decode_file_bytes_in_context(
         ctx,
         vec![source, Value::symbol(coding)],
         CodingDirection::Decode,
+        EncodingBoundary::CompleteText,
     )?;
     let text = decoded
         .as_lisp_string()

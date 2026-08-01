@@ -4081,6 +4081,35 @@ fn write_region_uses_runtime_shift_jis_codec() {
 }
 
 #[test]
+fn write_region_uses_iso2022_file_stream_boundary() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("iso-2022-jp.txt");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let results = bootstrap_eval(&format!(
+        r#"(let ((text "日本語の設計"))
+             (let ((coding-system-for-write 'iso-2022-jp))
+               (with-temp-buffer
+                 (insert text)
+                 (write-region nil nil "{path_lisp}" nil 'silent)))
+             (string-to-list (encode-coding-string text 'iso-2022-jp)))"#
+    ));
+
+    assert_eq!(
+        results[0],
+        "OK (27 36 66 70 124 75 92 56 108 36 78 64 95 55 87 27 40 66)"
+    );
+    assert_eq!(
+        std::fs::read(&path).expect("read ISO-2022-JP output"),
+        [27, 36, 66, 70, 124, 75, 92, 56, 108, 36, 78, 64, 95, 55, 87]
+    );
+}
+
+#[test]
 fn insert_file_contents_honors_dynamic_big5_coding_system_for_read() {
     crate::test_utils::init_test_tracing();
 
