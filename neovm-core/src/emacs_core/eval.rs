@@ -3385,6 +3385,12 @@ impl Context {
     /// first), like GNU `backtrace`, for the command-loop error log. Bounded to
     /// `max_frames`. Only invoked under a debug-tracing gate — it prints every
     /// live frame's function and arguments.
+    /// Render the current Lisp backtrace for diagnostics (public alias of the
+    /// uncaught-signal renderer, used by env-gated observability hooks).
+    pub(crate) fn render_lisp_backtrace(&self, max_frames: usize) -> String {
+        self.render_uncaught_signal_backtrace(max_frames)
+    }
+
     fn render_uncaught_signal_backtrace(&self, max_frames: usize) -> String {
         let mut lines: Vec<String> = Vec::new();
         for entry in self.specpdl.iter().rev() {

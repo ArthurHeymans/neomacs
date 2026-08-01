@@ -367,6 +367,26 @@ fn prepare_current_buffer_regexp_syntax(
     case_fold: bool,
     posix: bool,
 ) -> Result<BufferRegexpSyntaxProperties, Flow> {
+    prepare_current_buffer_regexp_syntax_to(eval, pattern, case_fold, posix, None)
+}
+
+/// Like [`prepare_current_buffer_regexp_syntax`], but propertizing only up to
+/// `propertize_target_char` (exclusive-ish; the last position the matcher can
+/// examine, plus one). GNU's matcher propertizes LAZILY as it scans
+/// (parse_sexp_propertize stops at charpos + 1); neomacs pre-propertizes
+/// because its Rust matcher cannot run re-entrant Lisp, so the target must be
+/// the SEARCH RANGE end — pre-propertizing to point-max made every bounded
+/// syntax-dependent search (looking-back, font-lock anchors) re-propertize
+/// the whole buffer tail after each edit flushed syntax-propertize--done:
+/// O(buffer) per keystroke. `None` keeps the conservative whole-accessible
+/// target (patterns whose scan range is genuinely unbounded).
+fn prepare_current_buffer_regexp_syntax_to(
+    eval: &mut super::eval::Context,
+    pattern: &crate::heap_types::LispString,
+    case_fold: bool,
+    posix: bool,
+    propertize_target_char: Option<i64>,
+) -> Result<BufferRegexpSyntaxProperties, Flow> {
     let dependency = {
         let buf = eval
             .buffers
@@ -383,11 +403,15 @@ fn prepare_current_buffer_regexp_syntax(
     };
 
     if dependency.is_buffer_syntax_dependent() && syntax_properties.is_honor() {
-        let target = eval
+        let accessible_target = eval
             .buffers
             .current_buffer()
             .map(|buf| buf.accessible_char_region().end().get().saturating_add(1))
             .unwrap_or(1);
+        let target = match propertize_target_char {
+            Some(explicit) => explicit.clamp(1, accessible_target as i64) as usize,
+            None => accessible_target,
+        };
         crate::emacs_core::syntax::maybe_syntax_propertize_for_scan(eval, target)?;
     }
 
@@ -402,7 +426,7 @@ fn prepare_buffer_regexp_search(
     posix: bool,
 ) -> Result<BufferRegexpSyntaxProperties, Flow> {
     let pattern = expect_lisp_string(&args[0])?;
-    let (_, opts, _, _) = current_search_context_in_manager(&eval.buffers, args, kind)?;
+    let (_, opts, _, start_char) = current_search_context_in_manager(&eval.buffers, args, kind)?;
     if opts.steps == 0 {
         return Ok(
             if crate::emacs_core::syntax::parse_sexp_lookup_properties_enabled(eval) {
@@ -413,7 +437,18 @@ fn prepare_buffer_regexp_search(
         );
     }
 
-    prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, posix)
+    // The matcher's reachable range: a backward search only examines
+    // positions at or before the starting point (matches end at or before
+    // point), so propertizing through point suffices; a forward search is
+    // capped by its BOUND argument when given.
+    let target = match opts.direction {
+        SearchDirection::Backward => Some(start_char.saturating_add(1)),
+        SearchDirection::Forward => match args.get(1) {
+            Some(v) if v.is_fixnum() => v.as_fixnum().map(|bound| bound.saturating_add(1)),
+            _ => None,
+        },
+    };
+    prepare_current_buffer_regexp_syntax_to(eval, pattern, case_fold, posix, target)
 }
 
 pub(crate) fn builtin_search_backward(

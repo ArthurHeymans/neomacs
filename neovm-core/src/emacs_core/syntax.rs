@@ -4596,10 +4596,20 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
 
     let honor_properties = parse_sexp_lookup_properties_enabled(ctx);
     if honor_properties {
+        // A backward scan (COUNT < 0) never examines positions past FROM, so
+        // propertizing through FROM suffices (GNU parse_sexp_propertize is
+        // lazy and would stop there); only forward scans need the
+        // conservative whole-accessible target.
         let target = ctx
             .buffers
             .current_buffer()
-            .map(|buf| buf.accessible_char_region().end().get().saturating_add(1))
+            .map(|buf| {
+                if count < 0 {
+                    (from.max(1) as usize).saturating_add(1)
+                } else {
+                    buf.accessible_char_region().end().get().saturating_add(1)
+                }
+            })
             .unwrap_or(1);
         maybe_syntax_propertize_for_scan(ctx, target)?;
     }
@@ -4665,10 +4675,20 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
 
     let honor_properties = parse_sexp_lookup_properties_enabled(ctx);
     if honor_properties {
+        // A backward scan (COUNT < 0) never examines positions past FROM, so
+        // propertizing through FROM suffices (GNU parse_sexp_propertize is
+        // lazy and would stop there); only forward scans need the
+        // conservative whole-accessible target.
         let target = ctx
             .buffers
             .current_buffer()
-            .map(|buf| buf.accessible_char_region().end().get().saturating_add(1))
+            .map(|buf| {
+                if count < 0 {
+                    (from.max(1) as usize).saturating_add(1)
+                } else {
+                    buf.accessible_char_region().end().get().saturating_add(1)
+                }
+            })
             .unwrap_or(1);
         maybe_syntax_propertize_for_scan(ctx, target)?;
     }
@@ -5574,6 +5594,31 @@ pub(crate) fn builtin_parse_partial_sexp(
     let oldstate = args.get(4).filter(|v| !v.is_nil());
     let commentstop = parse_commentstop_mode(args.get(5));
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
+    // Parse-span observability: one line per call when NEOMACS_SYNTAX_STATS_FILE
+    // names a path. The per-keystroke syntax cost is O(parsed span); this is
+    // the only way to see WHO parses from WHERE (syntax-ppss cache misses
+    // parse from far back; a healthy cache parses tiny spans).
+    if let Ok(stats_path) = std::env::var("NEOMACS_SYNTAX_STATS_FILE")
+        && !stats_path.is_empty()
+        && let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&stats_path)
+    {
+        use std::io::Write as _;
+        let _ = writeln!(f, "pps from={from} to={to} span={}", to - from);
+        // One-shot Lisp backtrace for the first far-position parse: names the
+        // machinery that drives whole-buffer reparse sweeps.
+        static FAR_PARSE_TRACED: std::sync::atomic::AtomicBool =
+            std::sync::atomic::AtomicBool::new(false);
+        if from > 100_000 && !FAR_PARSE_TRACED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            let _ = writeln!(
+                f,
+                "FAR-PARSE BACKTRACE:\n{}",
+                eval.render_lisp_backtrace(40)
+            );
+        }
+    }
     let (state, stop_pos) = parse_state_from_range_with_options(
         buf,
         &table,
@@ -5605,39 +5650,82 @@ pub(crate) fn builtin_skip_syntax_forward(
 ) -> EvalResult {
     let (syntax_chars, limit) = expect_skip_syntax_args("skip-syntax-forward", &args)?;
     let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    if honor_properties {
-        let target = eval
+
+    let (old_pt, limit_byte) = {
+        let buf = eval
             .buffers
             .current_buffer()
-            .map(|buf| {
-                limit.map_or_else(
-                    || buf.accessible_char_region().end().get().saturating_add(1),
-                    |raw| {
-                        let byte = lisp_pos_to_byte(buf, LispCharPos1::new(raw));
-                        buffer_byte_to_char_pos(buf, byte).saturating_add(1)
-                    },
-                )
-            })
-            .unwrap_or(0);
-        if target > 0 {
-            maybe_syntax_propertize_for_scan(eval, target)?;
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        (
+            buf.point_emacs_byte_pos(),
+            limit.map(|raw| lisp_pos_to_byte(buf, LispCharPos1::new(raw)).get()),
+        )
+    };
+
+    let new_pos = if honor_properties {
+        // GNU's skip_syntax propertizes LAZILY as the scan advances
+        // (parse_sexp_propertize stops at charpos + 1). The Rust scanner
+        // cannot run re-entrant Lisp mid-scan, so scan in bounded windows:
+        // propertize one window ahead, scan within it, and continue only when
+        // the whole window was consumed. Propertizing to the (often ZV)
+        // limit up front made a no-op `(skip-syntax-forward " ")` after an
+        // edit re-propertize the entire buffer tail: O(buffer) per call.
+        const SYNTAX_PROPERTIZE_WINDOW_CHARS: usize = 500;
+        let current_id = eval
+            .buffers
+            .current_buffer_id()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let mut stop;
+        loop {
+            let (window_end_char, window_end_byte, final_limit_byte) = {
+                let buf = eval
+                    .buffers
+                    .get(current_id)
+                    .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+                let from_char = buf.point_char_pos().get();
+                let accessible_end_char = buf.accessible_char_region().end().get();
+                let window_end_char = (from_char + SYNTAX_PROPERTIZE_WINDOW_CHARS)
+                    .min(accessible_end_char);
+                let window_end_byte = buf
+                    .char_pos_to_emacs_byte_pos_clamped(crate::buffer::CharPos0::new(
+                        window_end_char,
+                    ))
+                    .get();
+                let final_limit_byte =
+                    limit_byte.unwrap_or_else(|| buf.accessible_emacs_byte_region().end().get());
+                (window_end_char, window_end_byte, final_limit_byte)
+            };
+            let window_end_byte = window_end_byte.min(final_limit_byte);
+            maybe_syntax_propertize_for_scan(eval, window_end_char.saturating_add(1))?;
+            let buf = eval
+                .buffers
+                .get(current_id)
+                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+            let table = SyntaxTable::for_buffer(buf);
+            stop = skip_syntax_forward_with_options(
+                buf,
+                &table,
+                &syntax_chars,
+                Some(window_end_byte),
+                honor_properties,
+            );
+            if stop < window_end_byte || window_end_byte >= final_limit_byte {
+                break;
+            }
+            // The scan consumed the whole window: advance and continue.
+            let _ = eval
+                .buffers
+                .goto_buffer_emacs_byte_pos(current_id, EmacsBytePos::new(window_end_byte));
         }
-    }
-
-    let buf = eval
-        .buffers
-        .current_buffer()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let table = SyntaxTable::for_buffer(buf);
-    let limit = limit.map(|raw| lisp_pos_to_byte(buf, LispCharPos1::new(raw)).get());
-    let new_pos =
-        skip_syntax_forward_with_options(buf, &table, &syntax_chars, limit, honor_properties);
-
-    let old_pt = eval
-        .buffers
-        .current_buffer()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-        .point_emacs_byte_pos();
+        stop
+    } else {
+        let buf = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let table = SyntaxTable::for_buffer(buf);
+        skip_syntax_forward_with_options(buf, &table, &syntax_chars, limit_byte, honor_properties)
+    };
     let new_pos = EmacsBytePos::new(new_pos);
 
     let current_id = eval
