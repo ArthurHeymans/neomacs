@@ -4559,7 +4559,7 @@ impl Context {
         obarray.set_symbol_value("minibuffer--require-match", Value::NIL);
         obarray.set_symbol_value("minibuffer-auto-raise", Value::NIL);
         obarray.set_symbol_value("minibuffer-follows-selected-frame", Value::T);
-        obarray.set_symbol_value(
+        obarray.define_special_variable(
             "minibuffer-exit-hook",
             Value::list(vec![
                 Value::symbol("minibuffer--regexp-exit"),
@@ -4644,7 +4644,7 @@ impl Context {
         obarray.set_symbol_value("minibuffer-history-case-insensitive-variables", Value::NIL);
         obarray.set_symbol_value("minibuffer-on-screen-keyboard-displayed", Value::NIL);
         obarray.set_symbol_value("minibuffer-on-screen-keyboard-timer", Value::NIL);
-        obarray.set_symbol_value(
+        obarray.define_special_variable(
             "minibuffer-setup-hook",
             Value::list(vec![
                 Value::symbol("rfn-eshadow-setup-minibuffer"),

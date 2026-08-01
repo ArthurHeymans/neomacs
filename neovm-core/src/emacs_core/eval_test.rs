@@ -12276,6 +12276,8 @@ fn c_defvar_lisp_hook_state_is_bound_and_special_like_gnu() {
         "(mapcar (lambda (sym)
                    (list sym (boundp sym) (special-variable-p sym)))
                  '(kbd-macro-termination-hook
+                   minibuffer-exit-hook
+                   minibuffer-setup-hook
                    mouse-leave-buffer-hook
                    prefix-help-command
                    pre-command-hook
@@ -12284,7 +12286,7 @@ fn c_defvar_lisp_hook_state_is_bound_and_special_like_gnu() {
     );
     assert_eq!(
         results[0],
-        "OK ((kbd-macro-termination-hook t t) (mouse-leave-buffer-hook t t) (prefix-help-command t t) (pre-command-hook t t) (post-command-hook t t) (window-size-change-functions t t))"
+        "OK ((kbd-macro-termination-hook t t) (minibuffer-exit-hook t t) (minibuffer-setup-hook t t) (mouse-leave-buffer-hook t t) (prefix-help-command t t) (pre-command-hook t t) (post-command-hook t t) (window-size-change-functions t t))"
     );
 }
 
