@@ -1688,6 +1688,34 @@ impl LayoutEngine {
         // buffer edits or replace the GNU "current matrix" analogue.
         self.retained_window_chrome_metrics = accepted_window_chrome_metrics;
         self.layout_stats = next_layout_stats;
+        // Per-frame incremental-layout observability: append one line per
+        // accepted frame when NEOMACS_LAYOUT_STATS_FILE names a path. This is
+        // the only consumer-facing view of LayoutStats; the TTY typing
+        // harness uses it to verify which fast path actually engaged.
+        if let Ok(stats_path) = std::env::var("NEOMACS_LAYOUT_STATS_FILE")
+            && !stats_path.is_empty()
+        {
+            use std::io::Write as _;
+            let s = &self.layout_stats;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&stats_path)
+            {
+                let _ = writeln!(
+                    f,
+                    "full={} cursor_only={} scroll={} edit={} relaid_body={} relaid_chrome={} reused={} reused_shifted={}",
+                    s.full_windows,
+                    s.cursor_only_windows,
+                    s.scroll_windows,
+                    s.edit_windows,
+                    s.relaid_body_rows,
+                    s.relaid_chrome_rows,
+                    s.reused_rows,
+                    s.reused_shifted_rows,
+                );
+            }
+        }
         self.retained_window_matrices = next_retained_window_matrices;
         self.frame_face_arenas.insert(frame_id, sealed_face_arena);
         for buffer_id in acked_buffer_ids {
