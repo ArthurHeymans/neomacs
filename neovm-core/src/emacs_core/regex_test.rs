@@ -2478,6 +2478,22 @@ fn looking_at_respects_case_fold_false() {
 }
 
 #[test]
+fn looking_at_case_fold_preserves_unibyte_raw_bytes_in_multibyte_buffer() {
+    crate::test_utils::init_test_tracing();
+    let magic = LispString::from_unibyte(vec![0xed, 0xab, 0xee, 0xdb, 0x03, 0x00]);
+    let mut buf = make_test_buffer("");
+    buf.insert_lisp_string(&magic);
+    buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::ZERO);
+
+    let mut md = None;
+    assert_eq!(looking_at(&buf, &magic, true, &mut md), Ok(true));
+    assert_eq!(
+        match_group(md.expect("match data").group(0)),
+        Some(MatchGroup::new(1, 7))
+    );
+}
+
+#[test]
 fn looking_at_with_groups() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer("foo123bar");

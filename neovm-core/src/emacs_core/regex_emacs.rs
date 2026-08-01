@@ -1953,10 +1953,27 @@ fn goto_normal_char(
     laststart: &mut Option<usize>,
     laststart_is_group: &mut bool,
 ) {
-    let c = if let Some(table) = buf.translate.as_ref() {
-        table.translate(c)
+    let c = if buf.multibyte {
+        buf.translate.as_ref().map_or(c, |table| table.translate(c))
     } else {
-        c
+        // GNU `regex-emacs.c:normal_char` promotes a unibyte pattern byte
+        // before consulting the case table.  High bytes become byte8
+        // characters and deliberately bypass translation; otherwise values
+        // such as 0xDB are folded as Latin-1 letters even though they denote
+        // opaque raw bytes in the regexp.
+        let mut byte = c as u8;
+        let promoted = regex_unibyte_to_char(byte);
+        if !emacs_char::char_byte8_p(promoted)
+            && let Some(table) = buf.translate.as_ref()
+        {
+            let translated = table.translate(promoted);
+            if promoted != translated
+                && let Some(translated_byte) = regex_char_to_unibyte(translated)
+            {
+                byte = translated_byte;
+            }
+        }
+        byte as u32
     };
 
     let mut encoded = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];

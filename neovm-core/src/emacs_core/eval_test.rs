@@ -6105,6 +6105,22 @@ fn bootstrap_string_match_posix_upper_class_folds_to_alpha_under_case_fold() {
 }
 
 #[test]
+fn bootstrap_looking_at_case_fold_treats_unibyte_high_bytes_as_raw() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        bootstrap_eval_one(
+            r#"(with-temp-buffer
+                 (let ((magic (unibyte-string #xed #xab #xee #xdb 3 0))
+                       (case-fold-search t))
+                   (insert magic)
+                   (goto-char (point-min))
+                   (looking-at magic)))"#
+        ),
+        "OK t"
+    );
+}
+
+#[test]
 fn bootstrap_string_match_explicit_numbered_group_preserves_group_slot() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
