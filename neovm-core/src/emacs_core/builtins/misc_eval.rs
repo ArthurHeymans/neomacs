@@ -1519,21 +1519,11 @@ pub(crate) fn print_target_is_direct(target: Value) -> bool {
         || super::marker::is_marker(&target)
 }
 
-pub(crate) fn dispatch_print_callback_chars(
-    text: &str,
-    mut emit_char: impl FnMut(Value) -> Result<(), Flow>,
-) -> Result<(), Flow> {
-    for ch in text.chars() {
-        emit_char(Value::fixnum(ch as i64))?;
-    }
-    Ok(())
-}
-
-/// Issue #131: byte-faithful sibling of [`dispatch_print_callback_chars`]. Walks
-/// canonical Emacs internal-encoding bytes one character at a time (so eight-bit
-/// raw bytes and non-Unicode codes surface as their real character codes, not as
-/// in-Unicode storage sentinels) and invokes the callback with each code. Used by
-/// `princ` when the print target is a function.
+/// Walk canonical Emacs internal-encoding bytes one character at a time and
+/// invoke a callable print target with each code. Eight-bit raw bytes and
+/// non-Unicode codes therefore surface as their real Emacs character codes,
+/// never as lossy Rust Unicode replacements. Shared by `princ`, `prin1`, and
+/// `print` when their target is a function.
 pub(crate) fn dispatch_print_callback_emacs_chars(
     bytes: &[u8],
     mut emit_char: impl FnMut(Value) -> Result<(), Flow>,
@@ -2073,11 +2063,16 @@ pub(crate) fn builtin_prin1(eval: &mut super::eval::Context, args: Vec<Value>) -
         return builtin_prin1_impl(eval, args);
     }
 
-    let text = super::error::print_value_in_state_with_options(eval, &args[0], options);
+    // GNU's callable print target receives Emacs character codes one at a time.
+    // Keep the printer's canonical Emacs bytes intact until that boundary: a
+    // Rust String cannot represent byte8 or non-Unicode Emacs characters and
+    // would silently replace them before `external-debugging-output` (or any
+    // other character sink) sees them.
+    let bytes = super::error::print_value_bytes_in_state_with_options(eval, &args[0], options);
     let roots = eval.save_specpdl_roots();
     eval.push_specpdl_root(target);
     let prin1_result =
-        dispatch_print_callback_chars(&text, |ch| eval.apply(target, vec![ch]).map(|_| ()));
+        dispatch_print_callback_emacs_chars(&bytes, |ch| eval.apply(target, vec![ch]).map(|_| ()));
     eval.restore_specpdl_roots(roots);
     prin1_result?;
     Ok(args[0])
@@ -2130,14 +2125,14 @@ pub(crate) fn builtin_print(eval: &mut super::eval::Context, args: Vec<Value>) -
         return builtin_print_impl(eval, args);
     }
 
-    let mut text = String::new();
-    text.push('\n');
-    text.push_str(&super::error::print_value_in_state(eval, &args[0]));
-    text.push('\n');
+    let mut bytes = Vec::new();
+    bytes.push(b'\n');
+    bytes.extend_from_slice(&super::error::print_value_bytes_with_eval(eval, &args[0]));
+    bytes.push(b'\n');
     let roots = eval.save_specpdl_roots();
     eval.push_specpdl_root(target);
     let print_result =
-        dispatch_print_callback_chars(&text, |ch| eval.apply(target, vec![ch]).map(|_| ()));
+        dispatch_print_callback_emacs_chars(&bytes, |ch| eval.apply(target, vec![ch]).map(|_| ()));
     eval.restore_specpdl_roots(roots);
     print_result?;
     Ok(args[0])

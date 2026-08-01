@@ -564,7 +564,7 @@ fn read_from_client_reassembles_fragmented_multiple_wire_messages() -> ParityBat
       (kill-buffer buffer))))
 "##,
         expect![[
-            r#"OK (((:phase first :async-message t) (:phase second :payload "����" :async-message t)) 115 "\"KDpwaGFzZSBmaXJzdCA6YXN5bmMtbWVzc2FnZSB0KQ==\"\n\"KDpwaGFzZSBzZWNvbmQgOnBheWxvYWQgIs67IiA6YXN5bmMtbWVzc2FnZSB0KQ==\"\n")"#
+            r#"OK (((:phase first :async-message t) (:phase second :payload "λ" :async-message t)) 115 "\"KDpwaGFzZSBmaXJzdCA6YXN5bmMtbWVzc2FnZSB0KQ==\"\n\"KDpwaGFzZSBzZWNvbmQgOnBheWxvYWQgIs67IiA6YXN5bmMtbWVzc2FnZSB0KQ==\"\n")"#
         ]],
     )
 }
@@ -638,7 +638,7 @@ fn callback_receives_messages_before_final_result_and_future_then_yields_nil() -
       (process-buffer future)))))
 "##,
         expect![[
-            r#"OK (((:phase first :payload "����" :async-message t) (:phase second :payload (1 2 3) :async-message t) finished) nil t nil)"#
+            r#"OK (((:phase first :payload "λ" :async-message t) (:phase second :payload (1 2 3) :async-message t) finished) nil t nil)"#
         ]],
     )
 }
@@ -715,7 +715,7 @@ fn callback_reassembles_message_larger_than_process_chunk_with_unicode_edges() -
     (async-wait future)
     (nreverse events)))
 "##,
-        expect![[r#"OK ((message 65541 "����" "����") finished)"#]],
+        expect![[r#"OK ((message 65541 "λ" "��") finished)"#]],
     )
 }
 

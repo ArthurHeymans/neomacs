@@ -930,10 +930,14 @@ pub(crate) fn format_value_bytes_in_state_with_options(
         return handle.into_bytes();
     }
     // Use the stateful printer when print-circle, print-level, or print-length
-    // are active, then convert the result to bytes.
+    // are active. Its canonical sink is byte-based so byte8/non-Unicode
+    // characters survive graph preprocessing and depth/length limiting.
     if options.print_circle || options.print_level.is_some() || options.print_length.is_some() {
-        return super::print::print_value_stateful_with_buffers(value, Some(buffers), options)
-            .into_bytes();
+        return super::print::print_value_stateful_bytes_with_buffers(
+            value,
+            Some(buffers),
+            options,
+        );
     }
     match value.kind() {
         ValueKind::Cons => {

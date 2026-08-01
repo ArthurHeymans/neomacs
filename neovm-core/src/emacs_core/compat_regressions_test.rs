@@ -332,15 +332,23 @@ fn external_debugging_rejects_negative_fixnum() {
     }
 }
 
+fn debugging_output_test_file() -> tempfile::NamedTempFile {
+    let directory = std::env::current_dir()
+        .expect("current workspace directory")
+        .join("tmp/neovm-core-test-artifacts");
+    std::fs::create_dir_all(&directory).expect("create workspace-local test artifact directory");
+    tempfile::Builder::new()
+        .prefix("redirect-debugging-output-")
+        .tempfile_in(directory)
+        .expect("workspace-local debugging output file")
+}
+
 #[test]
 fn redirect_debugging_output_captures_external_debugging_output() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
-    let path = std::env::temp_dir().join(format!(
-        "neomacs-redirect-debugging-output-{}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_file(&path);
+    let output = debugging_output_test_file();
+    let path = output.path();
     let path_value = Value::string(path.to_string_lossy().as_ref());
 
     crate::emacs_core::builtins::builtin_redirect_debugging_output(&mut eval, vec![path_value])
@@ -359,8 +367,40 @@ fn redirect_debugging_output_captures_external_debugging_output() {
         .expect("reset debug output");
 
     let contents = std::fs::read_to_string(&path).expect("debug output file contents");
-    let _ = std::fs::remove_file(&path);
     assert_eq!(contents, "AB");
+}
+
+#[test]
+fn prin1_external_debugging_output_preserves_nested_unibyte_bytes_with_print_circle_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    eval.obarray
+        .set_symbol_value("locale-coding-system", Value::symbol("utf-8-unix"));
+    eval.obarray.set_symbol_value("print-circle", Value::T);
+    let output = debugging_output_test_file();
+    let path = output.path();
+    let path_value = Value::string(path.to_string_lossy().as_ref());
+
+    crate::emacs_core::builtins::builtin_redirect_debugging_output(&mut eval, vec![path_value])
+        .expect("redirect debug output to workspace-local file");
+    let payload = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        0xCE, 0xBB,
+    ]));
+    crate::emacs_core::builtins::builtin_prin1(
+        &mut eval,
+        vec![
+            Value::cons(payload, Value::NIL),
+            Value::symbol("external-debugging-output"),
+        ],
+    )
+    .expect("print unibyte payload through external-debugging-output");
+    crate::emacs_core::builtins::builtin_redirect_debugging_output(&mut eval, vec![Value::NIL])
+        .expect("reset debug output");
+
+    assert_eq!(
+        std::fs::read(path).expect("debug output bytes"),
+        [b'(', b'"', 0xCE, 0xBB, b'"', b')']
+    );
 }
 
 #[test]

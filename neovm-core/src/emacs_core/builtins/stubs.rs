@@ -722,17 +722,36 @@ pub(crate) fn builtin_external_debugging_output(
             vec![Value::string("Invalid character: f03fffff")],
         ));
     }
-    let character = char::from_u32(ch as u32).ok_or_else(|| {
-        signal(
-            "error",
-            vec![Value::string(format!("Invalid character: {ch:x}"))],
-        )
-    })?;
-    let mut encoded = [0; 4];
-    let bytes = character.encode_utf8(&mut encoded).as_bytes();
+    let character = u32::try_from(ch)
+        .ok()
+        .and_then(crate::emacs_core::emacs_char::EmacsChar::from_code)
+        .ok_or_else(|| {
+            signal(
+                "error",
+                vec![Value::string(format!("Invalid character: {ch:x}"))],
+            )
+        })?;
+    // GNU `printchar_to_stream` first serializes the full Emacs character
+    // (`CHAR_STRING`, including byte8/non-Unicode codes), then encodes it with
+    // `coding-system-for-write` or `locale-coding-system`.  Keeping this at the
+    // stream boundary lets every callable printer target pass real Emacs
+    // character codes without collapsing them through Rust Unicode.
+    let internal = crate::heap_types::LispString::from_emacs_bytes(character.to_emacs_bytes());
+    let coding = {
+        let explicit = eval.visible_variable_value_or_nil("coding-system-for-write");
+        if explicit.is_nil() {
+            eval.visible_variable_value_or_nil("locale-coding-system")
+        } else {
+            explicit
+        }
+    };
+    let bytes = match coding.as_symbol_name() {
+        Some(name) => crate::encoding::encode_lisp_string(&internal, name),
+        None => internal.as_bytes().to_vec(),
+    };
     if let Some(file) = eval.debugging_output_file.as_mut() {
         use std::io::Write;
-        file.write_all(bytes)
+        file.write_all(&bytes)
             .and_then(|_| file.flush())
             .map_err(|err| {
                 signal(
@@ -743,7 +762,7 @@ pub(crate) fn builtin_external_debugging_output(
     } else {
         use std::io::Write;
         std::io::stderr()
-            .write_all(bytes)
+            .write_all(&bytes)
             .and_then(|_| std::io::stderr().flush())
             .map_err(|err| {
                 signal(

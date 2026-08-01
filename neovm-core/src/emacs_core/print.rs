@@ -8,13 +8,62 @@ use super::chartable::{bool_vector_length, char_table_external_slots};
 use super::intern::{
     SymId, intern, lookup_interned_lisp_string, resolve_sym, resolve_sym_lisp_string,
 };
-use super::string_escape::{format_lisp_string_bytes_emacs, format_lisp_string_emacs};
+use super::string_escape::format_lisp_string_bytes_emacs;
 use super::value::{
     HashKey, HashTableTest, LispHashTable, StringTextPropertyRun, Value,
     get_string_text_properties_for_value, list_to_vec,
 };
 use crate::buffer::EmacsBytePos;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
+
+/// Canonical output buffer for the stateful printer.
+///
+/// GNU's `print_object` always emits Emacs characters to a sink; rendering to
+/// a Lisp string is only one possible sink.  Keeping bytes here is essential:
+/// Rust `String` cannot represent Emacs byte8/non-Unicode characters, so using
+/// it as the graph-aware printer's intermediate representation made
+/// `print-circle`, `print-level`, and `print-length` silently lossy.
+#[derive(Default)]
+struct StatefulPrintOutput {
+    bytes: Vec<u8>,
+}
+
+impl StatefulPrintOutput {
+    fn from_str(value: &str) -> Self {
+        Self {
+            bytes: value.as_bytes().to_vec(),
+        }
+    }
+
+    fn push(&mut self, character: char) {
+        let mut encoded = [0; 4];
+        self.bytes
+            .extend_from_slice(character.encode_utf8(&mut encoded).as_bytes());
+    }
+
+    fn push_str(&mut self, value: &str) {
+        self.bytes.extend_from_slice(value.as_bytes());
+    }
+
+    fn extend_from_slice(&mut self, bytes: &[u8]) {
+        self.bytes.extend_from_slice(bytes);
+    }
+
+    fn append(&mut self, other: Self) {
+        self.bytes.extend(other.bytes);
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.bytes
+    }
+}
+
+impl std::fmt::Write for StatefulPrintOutput {
+    fn write_str(&mut self, value: &str) -> std::fmt::Result {
+        self.push_str(value);
+        Ok(())
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PrintOptions {
@@ -64,7 +113,7 @@ fn hash_table_printed_test_name(table: &LispHashTable) -> Option<&'static str> {
     }
 }
 
-fn append_hash_table_test_string(table: &LispHashTable, out: &mut String) {
+fn append_hash_table_test_string(table: &LispHashTable, out: &mut StatefulPrintOutput) {
     if let Some(name) = hash_table_printed_test_name(table) {
         out.push_str(" test ");
         out.push_str(name);
@@ -406,7 +455,7 @@ enum PrintNumberTableAction {
 
 fn write_print_number_table_entry(
     value: &Value,
-    out: &mut String,
+    out: &mut StatefulPrintOutput,
     options: &PrintOptions,
 ) -> Option<PrintNumberTableAction> {
     if !options.print_circle {
@@ -419,7 +468,7 @@ fn write_print_number_table_entry(
     match entry.kind() {
         ValueKind::String => {
             let s = entry.as_lisp_string().unwrap();
-            out.push_str(&crate::emacs_core::emacs_char::to_utf8_lossy(s.as_bytes()));
+            out.extend_from_slice(s.as_bytes());
             Some(PrintNumberTableAction::PrintedReference)
         }
         ValueKind::Fixnum(n) if n < 0 => {
@@ -682,8 +731,19 @@ pub(crate) fn print_value_stateful_with_buffers(
     buffers: Option<&crate::buffer::BufferManager>,
     options: PrintOptions,
 ) -> String {
+    String::from_utf8_lossy(&print_value_stateful_bytes_with_buffers(
+        value, buffers, options,
+    ))
+    .into_owned()
+}
+
+pub(crate) fn print_value_stateful_bytes_with_buffers(
+    value: &Value,
+    buffers: Option<&crate::buffer::BufferManager>,
+    options: PrintOptions,
+) -> Vec<u8> {
     let _print_guard = enter_print_call(&options);
-    let mut out = String::new();
+    let mut out = StatefulPrintOutput::default();
     let number_table = active_print_number_table(&options);
     if options.print_circle {
         let mut circle = PrintCircleState::new();
@@ -716,7 +776,7 @@ pub(crate) fn print_value_stateful_with_buffers(
         };
         write_value_stateful(value, &mut out, &mut state);
     }
-    out
+    out.into_bytes()
 }
 
 pub(crate) fn default_cycle_candidate_key(value: &Value) -> Option<u64> {
@@ -758,9 +818,9 @@ fn push_default_cycle_object(value: &Value, state: &mut PrintState) -> bool {
 
 fn with_default_cycle_guard(
     value: &Value,
-    out: &mut String,
+    out: &mut StatefulPrintOutput,
     state: &mut PrintState,
-    render: impl FnOnce(&mut String, &mut PrintState),
+    render: impl FnOnce(&mut StatefulPrintOutput, &mut PrintState),
 ) {
     if !state.options.print_circle {
         render(out, state);
@@ -780,7 +840,7 @@ fn with_default_cycle_guard(
 
 /// Core stateful print routine. Writes the printed representation of `value`
 /// into `out`, respecting print-circle, print-level, and print-length.
-fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
+fn write_value_stateful(value: &Value, out: &mut StatefulPrintOutput, state: &mut PrintState) {
     if !state.options.print_circle {
         let key = default_cycle_candidate_key(value);
         if let Some(key) = key
@@ -802,7 +862,11 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
     write_value_stateful_inner(value, out, state);
 }
 
-fn write_value_stateful_inner(value: &Value, out: &mut String, state: &mut PrintState) {
+fn write_value_stateful_inner(
+    value: &Value,
+    out: &mut StatefulPrintOutput,
+    state: &mut PrintState,
+) {
     if let Some(handle) = print_special_handle(value, state.buffers) {
         out.push_str(&handle);
         return;
@@ -850,16 +914,17 @@ fn write_value_stateful_inner(value: &Value, out: &mut String, state: &mut Print
             }
         }
         ValueKind::Float => out.push_str(&format_float_with_options(value.xfloat(), state.options)),
-        ValueKind::Symbol(id) => out.push_str(&format_symbol(id, state.options)),
+        ValueKind::Symbol(id) => out.extend_from_slice(&symbol_bytes(id, state.options)),
         ValueKind::String => {
             with_default_cycle_guard(value, out, state, |out, state| {
                 let ls = value.as_lisp_string().unwrap();
                 if state.options.print_noescape {
-                    out.push_str(&crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()));
+                    out.extend_from_slice(ls.as_bytes());
                 } else {
                     match get_string_text_properties_for_value(*value) {
                         Some(runs) => write_lisp_propertized_string_stateful(ls, &runs, out, state),
-                        None => out.push_str(&format_lisp_string_emacs(ls, &state.options)),
+                        None => out
+                            .extend_from_slice(&format_lisp_string_bytes_emacs(ls, &state.options)),
                     }
                 }
             });
@@ -875,7 +940,7 @@ fn write_value_stateful_inner(value: &Value, out: &mut String, state: &mut Print
                 }
                 // Try shorthand (quote, function, backquote, etc.)
                 if let Some(shorthand) = write_list_shorthand_stateful(value, state) {
-                    out.push_str(&shorthand);
+                    out.append(shorthand);
                     return;
                 }
                 state.depth += 1;
@@ -1190,7 +1255,11 @@ pub(crate) fn with_bytecode_literal_slots_public<R>(
     with_bytecode_literal_slots(value, f)
 }
 
-fn write_bytecode_literal_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
+fn write_bytecode_literal_stateful(
+    value: &Value,
+    out: &mut StatefulPrintOutput,
+    state: &mut PrintState,
+) {
     with_default_cycle_guard(value, out, state, |out, state| {
         let _ = with_bytecode_literal_slots(value, |slots| {
             state.depth += 1;
@@ -1216,7 +1285,11 @@ fn write_bytecode_literal_stateful(value: &Value, out: &mut String, state: &mut 
     });
 }
 
-fn write_closure_body_forms_stateful(body: Value, out: &mut String, state: &mut PrintState) {
+fn write_closure_body_forms_stateful(
+    body: Value,
+    out: &mut StatefulPrintOutput,
+    state: &mut PrintState,
+) {
     let Some(forms) = list_to_vec(&body) else {
         write_value_stateful(&body, out, state);
         return;
@@ -1233,7 +1306,11 @@ fn write_closure_body_forms_stateful(body: Value, out: &mut String, state: &mut 
     }
 }
 
-fn write_interpreted_closure_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
+fn write_interpreted_closure_stateful(
+    value: &Value,
+    out: &mut StatefulPrintOutput,
+    state: &mut PrintState,
+) {
     out.push_str("#[");
     if let Some(slots) = value.closure_slots() {
         for (idx, item) in slots.iter().enumerate() {
@@ -1246,7 +1323,7 @@ fn write_interpreted_closure_stateful(value: &Value, out: &mut String, state: &m
     out.push(']');
 }
 
-fn write_lambda_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
+fn write_lambda_stateful(value: &Value, out: &mut StatefulPrintOutput, state: &mut PrintState) {
     with_lambda_print_guard(value, out, state, |out, state| {
         with_default_cycle_guard(value, out, state, |out, state| {
             write_interpreted_closure_stateful(value, out, state);
@@ -1254,7 +1331,7 @@ fn write_lambda_stateful(value: &Value, out: &mut String, state: &mut PrintState
     });
 }
 
-fn write_macro_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
+fn write_macro_stateful(value: &Value, out: &mut StatefulPrintOutput, state: &mut PrintState) {
     with_default_cycle_guard(value, out, state, |out, state| {
         out.push_str("(macro ");
         write_params_stateful(value.closure_params(), out, state);
@@ -1322,7 +1399,10 @@ fn symbol_shorthand(id: SymId) -> Option<SymbolShorthand> {
 
 /// Try to produce a shorthand form (quote, function, backquote, etc.) using
 /// stateful printing. Returns `Some(string)` on success.
-fn write_list_shorthand_stateful(value: &Value, state: &mut PrintState) -> Option<String> {
+fn write_list_shorthand_stateful(
+    value: &Value,
+    state: &mut PrintState,
+) -> Option<StatefulPrintOutput> {
     let items = list_to_vec(value)?;
     if items.len() != 2 {
         return None;
@@ -1335,7 +1415,7 @@ fn write_list_shorthand_stateful(value: &Value, state: &mut PrintState) -> Optio
 
     if symbol_id_is(head, "make-hash-table-from-literal") {
         if let Some(payload) = quote_payload_stateful(&items[1]) {
-            let mut out = String::from("#s");
+            let mut out = StatefulPrintOutput::from_str("#s");
             write_value_stateful(&payload, &mut out, state);
             return Some(out);
         }
@@ -1362,7 +1442,7 @@ fn write_list_shorthand_stateful(value: &Value, state: &mut PrintState) -> Optio
 
     let saved_options = state.options;
     state.options = nested_options;
-    let mut out = String::from(prefix);
+    let mut out = StatefulPrintOutput::from_str(prefix);
     write_value_stateful(&items[1], &mut out, state);
     state.options = saved_options;
     Some(out)
@@ -1377,7 +1457,7 @@ fn quote_payload_stateful(value: &Value) -> Option<Value> {
 }
 
 /// Print a cons cell (list elements) with stateful print support.
-fn write_cons_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
+fn write_cons_stateful(value: &Value, out: &mut StatefulPrintOutput, state: &mut PrintState) {
     let mut cursor = *value;
     let mut first = true;
     let mut maxlen = state.options.print_length.unwrap_or(i64::MAX);
@@ -1468,7 +1548,7 @@ fn write_cons_stateful(value: &Value, out: &mut String, state: &mut PrintState) 
 }
 
 /// Print a hash table with stateful support.
-fn write_hash_table_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
+fn write_hash_table_stateful(value: &Value, out: &mut StatefulPrintOutput, state: &mut PrintState) {
     let table = value.as_hash_table().unwrap().clone();
     out.push_str("#s(hash-table");
 
@@ -1540,9 +1620,9 @@ fn with_print_object_guard<R>(
 
 fn with_lambda_print_guard(
     value: &Value,
-    out: &mut String,
+    out: &mut StatefulPrintOutput,
     state: &mut PrintState,
-    render: impl FnOnce(&mut String, &mut PrintState),
+    render: impl FnOnce(&mut StatefulPrintOutput, &mut PrintState),
 ) {
     let object = PrintObjectRef::Lambda(value.0);
     PRINT_OBJECT_STACK.with(|stack| {
@@ -1690,11 +1770,11 @@ fn format_frame_handle(id: u64) -> String {
 fn write_lisp_propertized_string_stateful(
     ls: &crate::heap_types::LispString,
     runs: &[StringTextPropertyRun],
-    out: &mut String,
+    out: &mut StatefulPrintOutput,
     state: &mut PrintState<'_>,
 ) {
     out.push_str("#(");
-    out.push_str(&format_lisp_string_emacs(ls, &state.options));
+    out.extend_from_slice(&format_lisp_string_bytes_emacs(ls, &state.options));
     for run in runs {
         out.push(' ');
         out.push_str(&run.start.to_string());
@@ -1758,7 +1838,7 @@ pub fn print_value_bytes_with_options(value: &Value, options: PrintOptions) -> V
     let _print_guard = enter_print_call(&options);
     // Delegate to the stateful printer when circle/level/length are active.
     if options.print_circle || options.print_level.is_some() || options.print_length.is_some() {
-        return print_value_stateful(value, options).into_bytes();
+        return print_value_stateful_bytes_with_buffers(value, None, options);
     }
     let mut out = Vec::new();
     append_print_value_bytes(value, &mut out, options);
@@ -2072,15 +2152,15 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
     }
 }
 
-fn format_symbol(id: super::intern::SymId, options: PrintOptions) -> String {
-    String::from_utf8_lossy(&symbol_bytes(id, options)).into_owned()
-}
-
 fn append_symbol_bytes(id: super::intern::SymId, out: &mut Vec<u8>, options: PrintOptions) {
     out.extend_from_slice(&symbol_bytes(id, options));
 }
 
-fn write_symbol_with_pos_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
+fn write_symbol_with_pos_stateful(
+    value: &Value,
+    out: &mut StatefulPrintOutput,
+    state: &mut PrintState,
+) {
     let Some(swp) = value.as_symbol_with_pos() else {
         out.push_str("#<symbol-with-pos>");
         return;
@@ -2503,7 +2583,7 @@ fn params_value(params: Option<&super::value::LambdaParams>) -> Value {
 
 fn write_params_stateful(
     params: Option<&super::value::LambdaParams>,
-    out: &mut String,
+    out: &mut StatefulPrintOutput,
     state: &mut PrintState,
 ) {
     let value = params_value(params);
