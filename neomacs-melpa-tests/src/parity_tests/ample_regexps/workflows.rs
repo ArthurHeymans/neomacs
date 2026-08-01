@@ -14,14 +14,34 @@ fn define_arx_builds_the_macro_its_to_string_function_and_its_bindings() -> Pari
         r##"(progn
   (arx-test-define-log-rx)
   (list :surface (arx-test-surface 'log-rx)
-        :bindings log-rx-bindings
+        :bindings
+        (mapcar
+         (lambda (binding)
+           (if (eq (car binding) 'bracketed)
+               (let* ((evaluator (nth 2 binding))
+                      (application (nth 1 evaluator))
+                      (function (nth 3 application)))
+                 (list (nth 0 binding)
+                       (nth 1 binding)
+                       (list :evaluator (car evaluator)
+                             :dispatcher (car application)
+                             :arity (eval (nth 1 application) t)
+                             :predicate (nth 2 application)
+                             :byte-code-function
+                             (and (functionp function)
+                                  (byte-code-function-p function)
+                                  t)
+                             :name (eval (nth 4 application) t)
+                             :arguments (eval (nth 5 application) t))))
+             binding))
+         log-rx-bindings)
         :log-line (arx-test-expand '(log-rx stamp ws level ws qualified))
         :same-from-to-string (log-rx-to-string '(seq stamp ws level ws qualified) t)
         :macro-and-function-agree
         (equal (arx-test-expand '(log-rx stamp ws level ws qualified))
                (log-rx-to-string '(seq stamp ws level ws qualified) t))))"##,
         expect![[
-            r#"OK (:surface (:macro t :to-string t :bindings-bound t :arx-name "log-rx" :to-string-arx-name "log-rx" :form-count 6) :bindings ((ws (regexp "[ \11]+")) (level (or "DEBUG" "INFO" "WARN" "ERROR")) (ident (regexp "[A-Za-z_][A-Za-z0-9_]*")) (qualified (seq ident (* "." ident))) (stamp (seq (= 4 digit) "-" (= 2 digit) "-" (= 2 digit))) (bracketed (&rest bracketed-args) (eval (arx--apply-func-post-27 '(1 2) nil #[(form &rest args) "��������\10B��BBB��\"��" [args rx-to-string seq "[" ("]") t] 5] 'bracketed '(bracketed-args))))) :log-line "[[:digit:]]\\{4\\}-[[:digit:]]\\{2\\}-[[:digit:]]\\{2\\}\\(?:[ \11]+\\)\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\(?:[ \11]+\\)\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*" :same-from-to-string "[[:digit:]]\\{4\\}-[[:digit:]]\\{2\\}-[[:digit:]]\\{2\\}\\(?:[ \11]+\\)\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\(?:[ \11]+\\)\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*" :macro-and-function-agree t)"#
+            r#"OK (:surface (:macro t :to-string t :bindings-bound t :arx-name "log-rx" :to-string-arx-name "log-rx" :form-count 6) :bindings ((ws (regexp "[ \11]+")) (level (or "DEBUG" "INFO" "WARN" "ERROR")) (ident (regexp "[A-Za-z_][A-Za-z0-9_]*")) (qualified (seq ident (* "." ident))) (stamp (seq (= 4 digit) "-" (= 2 digit) "-" (= 2 digit))) (bracketed (&rest bracketed-args) (:evaluator eval :dispatcher arx--apply-func-post-27 :arity (1 2) :predicate nil :byte-code-function t :name bracketed :arguments (bracketed-args)))) :log-line "[[:digit:]]\\{4\\}-[[:digit:]]\\{2\\}-[[:digit:]]\\{2\\}\\(?:[ \11]+\\)\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\(?:[ \11]+\\)\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*" :same-from-to-string "[[:digit:]]\\{4\\}-[[:digit:]]\\{2\\}-[[:digit:]]\\{2\\}\\(?:[ \11]+\\)\\(?:DEBUG\\|ERROR\\|INFO\\|WARN\\)\\(?:[ \11]+\\)\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\(?:\\.\\(?:[A-Za-z_][A-Za-z0-9_]*\\)\\)*" :macro-and-function-agree t)"#
         ]],
     )
 }
