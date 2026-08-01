@@ -22,18 +22,74 @@ const ACHIEVEMENTS_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 const ACHIEVEMENTS_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
 
+;; `achievements' mutates the records in `achievements-list' in place, while
+;; unlocking its advanced collection loads another file that appends records.
+;; Keep an untouched copy of the package's initial, basic collection so every
+;; workflow starts from the same state even though the Rust batch deliberately
+;; reuses one editor process.
+(defvar ach-test-pristine-basic-achievements nil)
+(defvar ach-test-pristine-buffers nil)
+
 (defun ach-test-path (name)
   (expand-file-name name (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
 
+(defun ach-test-reset-case-state ()
+  "Restore package and editor state changed by an achievements workflow."
+  ;; The oracle evaluates this prelude before loading the requested package
+  ;; source, so capture the pristine package state lazily at the first case.
+  (unless ach-test-pristine-basic-achievements
+    (setq ach-test-pristine-basic-achievements
+          (mapcar #'copy-sequence achievements-list)
+          ach-test-pristine-buffers (buffer-list)))
+  (when achievements-mode
+    (achievements-mode -1))
+  (when (timerp achievements-timer)
+    (cancel-timer achievements-timer))
+  (setq achievements-mode nil
+        achievements-timer nil
+        achievements-post-command-list nil
+        achievements-score 0
+        achievements-total 0
+        achievements-list
+        (mapcar #'copy-sequence ach-test-pristine-basic-achievements)
+        command-history nil
+        file-name-history nil
+        yes-or-no-p-history nil)
+  ;; Requiring the advanced collection must append it again after a workflow
+  ;; crosses the score threshold.  Removing the feature restores the package's
+  ;; original lazy-load boundary without unloading its shared core functions.
+  (setq features (delq 'advanced-achievements features))
+  (remove-hook 'post-command-hook #'achievements-post-command-function)
+  (when (bound-and-true-p keyfreq-mode)
+    (keyfreq-mode -1))
+  (when (boundp 'keyfreq-table)
+    (clrhash keyfreq-table))
+  (dolist (buffer (buffer-list))
+    (unless (memq buffer ach-test-pristine-buffers)
+      (kill-buffer buffer)))
+  (when-let ((messages (get-buffer "*Messages*")))
+    (with-current-buffer messages
+      (let ((inhibit-read-only t))
+        (erase-buffer))))
+  (dolist (path (list (ach-test-path "achievements.eld")
+                      (ach-test-path "state")))
+    (when (file-exists-p path)
+      (if (file-directory-p path)
+          (delete-directory path t)
+        (delete-file path)))))
+
 (defmacro ach-test-with-live-buffer (&rest body)
   "Run BODY in a real, window-displayed buffer so typed keys reach it."
-  `(let ((buffer (generate-new-buffer "*achievements-workflow*")))
-     (unwind-protect
-         (progn
-           (set-window-buffer (selected-window) buffer)
-           (set-buffer buffer)
-           ,@body)
-       (kill-buffer buffer))))
+  `(progn
+     (ach-test-reset-case-state)
+     (let ((buffer (generate-new-buffer "*achievements-workflow*")))
+       (unwind-protect
+           (progn
+             (set-window-buffer (selected-window) buffer)
+             (set-buffer buffer)
+             ,@body)
+         (when (buffer-live-p buffer)
+           (kill-buffer buffer))))))
 
 (defun ach-test-earned ()
   "Names of every earned achievement, sorted."

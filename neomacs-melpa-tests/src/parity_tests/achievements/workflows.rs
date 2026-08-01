@@ -76,7 +76,10 @@ fn an_achievement_needing_several_commands_stays_locked_until_all_have_run() -> 
     ParityBatchCase::value(
         "an_achievement_needing_several_commands_stays_locked_until_all_have_run",
         r##"(ach-test-with-live-buffer
- (let ((achievements-file (ach-test-path "achievements.eld")))
+ (let ((achievements-file (ach-test-path "achievements.eld"))
+       ;; Help commands change the selected buffer.  A dynamically scoped copy
+       ;; keeps the real global lookup behavior without leaking test bindings.
+       (global-map (copy-keymap global-map)))
    (global-set-key (kbd "C-c 1") 'about-emacs)
    (global-set-key (kbd "C-c 2") 'describe-copying)
    (global-set-key (kbd "C-c 3") 'describe-distribution)
@@ -239,7 +242,6 @@ fn disabling_an_achievement_removes_it_from_the_list_for_good() -> ParityBatchCa
             r#"OK (("Top o' the morning" 98 undefined nil t t) ("Top o' the morning" "You've used Emacs as a replacement for top." nil 5 nil nil) 115 (("Top o' the morning") ("Achiever" . " ✓    5 Achiever                       You used the achievements package.")) 65 590.5 "Achiever")"#
         ]],
     )
-    .fresh_process()
 }
 
 pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
