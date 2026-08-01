@@ -326,6 +326,12 @@ pub(crate) fn signal_before_change(
         return Ok(());
     }
 
+    // GNU `prepare_to_modify_buffer_1` locks a clean file-visiting base buffer
+    // at this exact chokepoint, before first-change-hook and
+    // before-change-functions.  Text edits already converge here, so the lock
+    // transition remains complete without being duplicated across producers.
+    super::filelock::lock_current_buffer_before_change(ctx)?;
+
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(());
     };

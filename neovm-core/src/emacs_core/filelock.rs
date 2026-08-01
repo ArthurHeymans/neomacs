@@ -340,6 +340,35 @@ fn current_buffer_file_lock_target(
     }
 }
 
+/// Lock the current file-visiting buffer before its first text change.
+///
+/// This is the Rust-side counterpart of GNU `prepare_to_modify_buffer_1`
+/// (`src/insdel.c`): every real text edit crosses the central before-change
+/// boundary, and a clean base buffer acquires its file lock there before any
+/// first/before-change hook runs.  Keeping the transition here avoids teaching
+/// every insertion, deletion, replacement, process-filter, and text-property
+/// producer about file locking separately.
+pub(crate) fn lock_current_buffer_before_change(
+    eval: &mut super::eval::Context,
+) -> Result<(), Flow> {
+    let Some(buffer_id) = eval.buffers.current_buffer_id() else {
+        return Ok(());
+    };
+    let clean = eval
+        .buffers
+        .modified_state_root_id(buffer_id)
+        .and_then(|root_id| eval.buffers.get(root_id))
+        .is_some_and(|buffer| buffer.modified_state_value().is_nil());
+    if !clean {
+        return Ok(());
+    }
+    let Some(filename) = current_buffer_file_lock_target(eval, buffer_id) else {
+        return Ok(());
+    };
+    let _ = lock_file(eval, &filename)?;
+    Ok(())
+}
+
 pub(crate) fn sync_modified_buffer_file_lock(
     eval: &mut super::eval::Context,
     buffer_id: BufferId,
@@ -450,6 +479,47 @@ pub(crate) fn builtin_unlock_buffer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn first_text_change_locks_a_clean_file_visiting_buffer_like_gnu() {
+        crate::test_utils::init_test_tracing();
+        let root = std::env::current_dir()
+            .expect("workspace directory")
+            .join("tmp/neovm-core-test-artifacts")
+            .join(format!("first-change-lock-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("create workspace-local fixture directory");
+        let visited = root.join("visited.txt");
+        let lock = root.join(".#visited.txt");
+        fs::write(&visited, b"before\n").expect("write visited file");
+        let visited_value = Value::string(visited.to_string_lossy());
+
+        let mut eval = super::super::eval::Context::new();
+        eval.set_variable("create-lockfiles", Value::T);
+        let current = eval.buffers.current_buffer_id().expect("current buffer");
+        eval.buffers
+            .set_buffer_file_name(current, visited_value)
+            .expect("set buffer-file-name");
+        eval.buffers
+            .set_buffer_file_truename(current, visited_value)
+            .expect("set buffer-file-truename");
+
+        super::super::editfns::insert_lisp_string_with_change_hooks_in_buffer(
+            &mut eval,
+            current,
+            &LispString::from_utf8("changed"),
+        )
+        .expect("modify visiting buffer");
+
+        assert!(
+            fs::symlink_metadata(&lock).is_ok(),
+            "GNU locks a clean file-visiting buffer before its first text change"
+        );
+
+        let _ = fs::remove_file(&lock);
+        let _ = fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn lock_and_unlock_file_dispatch_matching_file_name_handlers_like_gnu() {
