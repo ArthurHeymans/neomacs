@@ -5,12 +5,23 @@ use std::time::Duration;
 
 use crate::source_lock::SHALLOW_GIT_FETCH_ARGS;
 use crate::{
-    EmacsRuntime, ErtScenario, MelpaSandbox, OracleBatchFailure, PackageScenario, PackageSource,
-    ScenarioPhase, SourceBuild, locked_melpa_install_plan, locked_melpa_source,
-    locked_melpa_sources, run_elisp_oracle, run_elisp_oracle_batch, run_ert_scenario,
-    run_oracle_scenario, run_scenario, workspace_root,
+    EmacsRuntime, ErtScenario, MelpaSandbox, OracleBatchFailure, PackageActivation,
+    PackageScenario, PackageSource, ScenarioPhase, SourceBuild, locked_melpa_install_plan,
+    locked_melpa_source, locked_melpa_sources, package_activation_elisp, run_elisp_oracle,
+    run_elisp_oracle_batch, run_ert_scenario, run_oracle_scenario, run_scenario, workspace_root,
 };
 use neomacs_test_oracle::{BatchProbe, EvalOutcome};
+
+#[test]
+fn installed_autoload_activation_never_loads_the_package_source() {
+    assert_eq!(
+        package_activation_elisp(PackageActivation::InstalledAutoloads),
+        "nil"
+    );
+    assert!(
+        package_activation_elisp(PackageActivation::SourceFile).contains("NEOMACS_PACKAGE_SOURCE")
+    );
+}
 
 #[test]
 fn sandbox_keeps_process_state_under_workspace_tmp() {

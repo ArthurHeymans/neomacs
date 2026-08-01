@@ -72,7 +72,7 @@ fn current_test_name() -> String {
 pub(crate) fn assert_audacious_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
     assert_oracle_batch_cases(
-        audacious_oracle(),
+        audacious_oracle().with_installed_autoloads(),
         &name,
         "audacious_autoload_parity",
         cases,

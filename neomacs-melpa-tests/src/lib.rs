@@ -1936,8 +1936,22 @@ pub struct CachedPackageOracle {
     package_directory_list: Vec<PathBuf>,
     package_load_list: Vec<(String, String)>,
     source_file: PathBuf,
+    activation: PackageActivation,
     prelude: String,
     timeout: Duration,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PackageActivation {
+    SourceFile,
+    InstalledAutoloads,
+}
+
+fn package_activation_elisp(activation: PackageActivation) -> &'static str {
+    match activation {
+        PackageActivation::SourceFile => r#"(load (getenv "NEOMACS_PACKAGE_SOURCE") nil t t)"#,
+        PackageActivation::InstalledAutoloads => "nil",
+    }
 }
 
 /// MELPA-focused name retained for package-specific parity modules.
@@ -1992,6 +2006,7 @@ impl CachedPackageOracle {
             package_directory_list: Vec::new(),
             package_load_list: vec![(package.0.to_string(), package.1.to_string())],
             source_file,
+            activation: PackageActivation::SourceFile,
             prelude: String::new(),
             timeout: DEFAULT_PROCESS_TIMEOUT,
         })
@@ -2000,6 +2015,13 @@ impl CachedPackageOracle {
     /// Evaluate an additional setup form before loading the package source.
     pub fn with_prelude(mut self, prelude: impl Into<String>) -> Self {
         self.prelude = prelude.into();
+        self
+    }
+
+    /// Exercise the package state established by `package-initialize` without
+    /// loading the selected source file afterward.
+    pub fn with_installed_autoloads(mut self) -> Self {
+        self.activation = PackageActivation::InstalledAutoloads;
         self
     }
 
@@ -2210,10 +2232,9 @@ impl CachedPackageOracle {
                          load-suffixes '(".el"))
                    (package-initialize)
                    {}
-                   (load
-                    (getenv "NEOMACS_PACKAGE_SOURCE")
-                    nil t t))"##,
-            self.prelude
+                   {})"##,
+            self.prelude,
+            package_activation_elisp(self.activation)
         )
     }
 

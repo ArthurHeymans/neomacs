@@ -52,7 +52,12 @@ fn current_test_name() -> String {
 /// Multi-probe batch for `assert_aurel_autoload_parity` cases (2a).
 pub(crate) fn assert_aurel_autoload_batch(cases: &[ParityBatchCase]) {
     let name = current_test_name();
-    assert_oracle_batch_cases(aurel_oracle(), &name, "aurel_autoload_parity", cases);
+    assert_oracle_batch_cases(
+        aurel_oracle().with_installed_autoloads(),
+        &name,
+        "aurel_autoload_parity",
+        cases,
+    );
 }
 
 /// Multi-probe batch for `assert_aurel_parity` cases (2a).
