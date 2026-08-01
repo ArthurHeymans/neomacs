@@ -811,18 +811,8 @@ fn encode_utf16_lisp_string(
         }
     }
 
-    if s.is_multibyte() {
-        let bytes = s.as_bytes();
-        let mut pos = 0usize;
-        while pos < bytes.len() {
-            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
-            push_utf16_codepoint(&mut out, endian, code);
-            pos += len;
-        }
-    } else {
-        for &byte in s.as_bytes() {
-            push_utf16_codepoint(&mut out, endian, byte as u32);
-        }
+    for code in coding_source_codepoints(s) {
+        push_utf16_codepoint(&mut out, endian, code);
     }
 
     out
@@ -1160,18 +1150,8 @@ pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str
         }
     };
 
-    if s.is_multibyte() {
-        let bytes = s.as_bytes();
-        let mut pos = 0usize;
-        while pos < bytes.len() {
-            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
-            push_encoded(code);
-            pos += len;
-        }
-    } else {
-        for &byte in s.as_bytes() {
-            push_encoded(byte as u32);
-        }
+    for code in coding_source_codepoints(s) {
+        push_encoded(code);
     }
 
     encode_eol_bytes(&out, coding_system)
@@ -1690,18 +1670,8 @@ fn encode_via_charset_list(
         }
         out.push(b' ');
     };
-    if s.is_multibyte() {
-        let bytes = s.as_bytes();
-        let mut pos = 0usize;
-        while pos < bytes.len() {
-            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
-            emit(code, &mut out);
-            pos += len;
-        }
-    } else {
-        for &byte in s.as_bytes() {
-            emit(u32::from(byte), &mut out);
-        }
+    for code in coding_source_codepoints(s) {
+        emit(code, &mut out);
     }
     encode_eol_bytes(&out, coding_system)
 }
@@ -1905,18 +1875,8 @@ fn encode_via_euc(
         }
         out.push(b' ');
     };
-    if s.is_multibyte() {
-        let bytes = s.as_bytes();
-        let mut pos = 0usize;
-        while pos < bytes.len() {
-            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
-            emit(code, &mut out);
-            pos += len;
-        }
-    } else {
-        for &byte in s.as_bytes() {
-            emit(u32::from(byte), &mut out);
-        }
+    for code in coding_source_codepoints(s) {
+        emit(code, &mut out);
     }
     encode_eol_bytes(&out, coding_system)
 }
@@ -2042,18 +2002,8 @@ fn encode_via_sjis(
             out.push(b' ');
         }
     };
-    if s.is_multibyte() {
-        let bytes = s.as_bytes();
-        let mut pos = 0usize;
-        while pos < bytes.len() {
-            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
-            emit(code, &mut out);
-            pos += len;
-        }
-    } else {
-        for &byte in s.as_bytes() {
-            emit(u32::from(byte), &mut out);
-        }
+    for code in coding_source_codepoints(s) {
+        emit(code, &mut out);
     }
     encode_eol_bytes(&out, coding_system)
 }
@@ -2123,7 +2073,7 @@ fn utf7_direct(c: u8, imap: bool) -> bool {
 /// Base64 of their UTF-16BE units between the shift char (`+`/`&`) and `-`.
 fn encode_via_utf7(s: &crate::heap_types::LispString, imap: bool) -> Vec<u8> {
     let esc = if imap { b'&' } else { b'+' };
-    let chars: Vec<u32> = lisp_string_codepoints(s);
+    let chars: Vec<u32> = coding_source_codepoints(s).collect();
     let mut out = Vec::with_capacity(chars.len());
     let mut i = 0usize;
     while i < chars.len() {
@@ -2246,7 +2196,7 @@ fn chinese_hz_charset(ctx: &crate::emacs_core::eval::Context, coding: &str) -> O
 fn encode_via_hz(s: &crate::heap_types::LispString, gb2312: SymId) -> Vec<u8> {
     let mut out = Vec::with_capacity(s.sbytes());
     let mut in_gb = false;
-    for code in lisp_string_codepoints(s) {
+    for code in coding_source_codepoints(s) {
         if code < 0x80 {
             if in_gb {
                 out.extend_from_slice(b"~}");
@@ -2333,21 +2283,45 @@ fn decode_via_hz(bytes: &[u8], gb2312: SymId) -> Vec<u8> {
     out
 }
 
-/// Code points (chars) of a Lisp string, decoding the Emacs internal bytes.
-fn lisp_string_codepoints(s: &crate::heap_types::LispString) -> Vec<u32> {
-    let mut codes = Vec::new();
-    if s.is_multibyte() {
-        let bytes = s.as_bytes();
-        let mut pos = 0usize;
-        while pos < bytes.len() {
-            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
-            codes.push(code);
-            pos += len;
+/// Characters consumed by GNU's non-CCL coding encoders.
+///
+/// `consume_chars` in GNU `src/coding.c` reads a multibyte source normally. For
+/// a unibyte source, however, it recognizes any valid embedded Emacs multibyte
+/// sequence as one character and promotes every other high octet to a byte8
+/// character. Keeping that policy in one iterator prevents individual codecs
+/// from accidentally treating unibyte octets as Latin-1 Unicode scalars.
+struct CodingSourceCodepoints<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+    multibyte: bool,
+}
+
+impl Iterator for CodingSourceCodepoints<'_> {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let source = self.bytes.get(self.pos..)?;
+        if source.is_empty() {
+            return None;
         }
-    } else {
-        codes.extend(s.as_bytes().iter().map(|&b| u32::from(b)));
+        let (code, len) = if self.multibyte
+            || crate::emacs_core::emacs_char::multibyte_length(source, true).is_some()
+        {
+            crate::emacs_core::emacs_char::string_char(source)
+        } else {
+            (crate::emacs_core::emacs_char::unibyte_to_char(source[0]), 1)
+        };
+        self.pos += len;
+        Some(code)
     }
-    codes
+}
+
+fn coding_source_codepoints(s: &crate::heap_types::LispString) -> CodingSourceCodepoints<'_> {
+    CodingSourceCodepoints {
+        bytes: s.as_bytes(),
+        pos: 0,
+        multibyte: s.is_multibyte(),
+    }
 }
 
 /// Whether `coding` is the emacs-mule coding system (Emacs's old internal
@@ -2612,7 +2586,7 @@ fn run_coding_with_conversion_hook(
 /// emit for the character payload.
 fn encode_utf8_plain(s: &crate::heap_types::LispString) -> Vec<u8> {
     let mut out = Vec::with_capacity(s.sbytes());
-    for cp in lisp_string_codepoints(s) {
+    for cp in coding_source_codepoints(s) {
         if crate::emacs_core::emacs_char::char_byte8_p(cp) {
             out.push(crate::emacs_core::emacs_char::char_to_byte8(cp));
         } else if let Some(ch) = char::from_u32(cp) {
@@ -2659,7 +2633,7 @@ fn emacs_mule_leading(id: i64) -> Vec<u8> {
 /// Encode `s` as emacs-mule.
 fn encode_via_emacs_mule(s: &crate::heap_types::LispString) -> Vec<u8> {
     let mut out = Vec::with_capacity(s.sbytes());
-    for code in lisp_string_codepoints(s) {
+    for code in coding_source_codepoints(s) {
         if code < 0x80 {
             out.push(code as u8);
         } else if crate::emacs_core::emacs_char::char_byte8_p(code) {
@@ -2844,7 +2818,7 @@ fn encode_via_iso2022(
         }
     };
 
-    for c in lisp_string_codepoints(s) {
+    for c in coding_source_codepoints(s) {
         if c < 0x20 || c == 0x7F {
             if c == 0x0A {
                 if reset_eol {
