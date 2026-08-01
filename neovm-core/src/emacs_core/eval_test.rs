@@ -12326,6 +12326,25 @@ fn c_defvar_runtime_globals_are_special_like_gnu() {
 }
 
 #[test]
+fn global_mode_string_is_a_dynamic_c_variable_like_gnu_xdisp() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            "(eval
+               '(let ((global-mode-string '(base)))
+                  (funcall (lambda ()
+                             (set 'global-mode-string
+                                  (cons 'entry
+                                        (symbol-value 'global-mode-string)))))
+                  (list (special-variable-p 'global-mode-string)
+                        global-mode-string))
+               t)"
+        ),
+        "OK (t (entry base))"
+    );
+}
+
+#[test]
 fn c_defvar_lisp_hook_state_is_bound_and_special_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
