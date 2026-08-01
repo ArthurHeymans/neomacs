@@ -5927,6 +5927,48 @@ fn pipe_process_send_after_eof_discards_input_like_gnu() {
 }
 
 #[test]
+fn process_send_eof_delivers_pty_eot_after_queued_input() {
+    crate::test_utils::init_test_tracing();
+    let shell = find_bin("sh");
+    let results = eval_all(&format!(
+        r##"(let* ((process-connection-type t)
+                   (output (generate-new-buffer " *pty-eof-output*"))
+                   (stderr (make-pipe-process
+                            :name "pty-eof-stderr"
+                            :noquery t
+                            :filter #'ignore))
+                   (process (make-process
+                             :name "pty-eof"
+                             :buffer output
+                             :command '("{shell}" "-c" "tr '[:lower:]' '[:upper:]'")
+                             :stderr stderr
+                             :sentinel #'ignore
+                             :noquery t))
+                   (deadline (+ (float-time) 1.0)))
+              (unwind-protect
+                  (progn
+                    (process-send-string process "one two\nthree\n")
+                    (process-send-eof process)
+                    (while (and (process-live-p process)
+                                (< (float-time) deadline))
+                      (accept-process-output process 0.05))
+                    (list
+                     (with-current-buffer output (buffer-string))
+                     (process-status process)
+                     (stringp (process-tty-name process 'stdin))))
+                (ignore-errors (delete-process process))
+                (ignore-errors (delete-process stderr))
+                (kill-buffer output)))"##,
+    ));
+    assert_eq!(
+        results,
+        [r#"OK ("ONE TWO
+THREE
+" exit t)"#]
+    );
+}
+
+#[test]
 fn process_coding_tty_and_kill_buffer_query_runtime_surface() {
     crate::test_utils::init_test_tracing();
     let cat = find_bin("cat");

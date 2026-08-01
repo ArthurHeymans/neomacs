@@ -13900,6 +13900,26 @@ pub(crate) fn builtin_process_send_eof(
         {
             eval.wait_while_network_process_connecting(id)?;
         }
+        if let Some(id) = maybe_id
+            && eval.processes.get(id).is_some_and(|proc| proc.tty_stdin)
+        {
+            if eval
+                .processes
+                .get(id)
+                .is_some_and(|proc| !process_allows_send(proc))
+            {
+                return Err(signal_process_not_running_in_manager(&eval.processes, id));
+            }
+            if let Some(proc) = eval.processes.get_mut(id) {
+                proc.eof_sent_to_process = true;
+            }
+            // GNU process.c sends an unencoded EOT byte through `send_process'
+            // when the child's input is a PTY.  Route it through the same
+            // reentrant write queue as ordinary input so EOF is ordered after
+            // every byte already accepted by `process-send-string'.
+            eval.send_process_input_reentrant(id, &LispString::from_unibyte(vec![0x04]))?;
+            return Ok(args.first().copied().unwrap_or(Value::NIL));
+        }
     }
     builtin_process_send_eof_impl(&mut eval.processes, &eval.buffers, args)
 }
