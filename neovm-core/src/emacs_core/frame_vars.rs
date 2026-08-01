@@ -8,6 +8,11 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("default-frame-scroll-bars", Value::symbol("right"));
     obarray.set_symbol_value("initial-frame-alist", Value::NIL);
     obarray.set_symbol_value("initial-window-system", Value::NIL);
+    // GNU graphical builds load term/common-win.el during loadup, which binds
+    // this public display variable even for batch sessions.  Neomacs defers
+    // its side-effectful GUI terminal layer until GUI startup, so preserve the
+    // stable frame-variable surface here instead.
+    obarray.define_special_variable("x-display-name", Value::NIL);
     // GNU `DEFVAR_KBOARD` both installs the forwarded value and declares the
     // symbol special.  Neomacs models the selected-frame value separately,
     // but Lisp bindings must retain the same dynamic-scope contract.
@@ -53,4 +58,22 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("terminal-frame", Value::NIL);
     obarray.set_symbol_value("frameset-filter-alist", Value::NIL);
     obarray.set_symbol_value("frameset-session-filter-alist", Value::NIL);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::emacs_core::eval::Context;
+
+    #[test]
+    fn graphical_backend_display_name_is_bound_in_batch_like_gnu() {
+        crate::test_utils::init_test_tracing();
+        let eval = Context::new();
+
+        assert_eq!(
+            eval.obarray().symbol_value("x-display-name").copied(),
+            Some(Value::NIL)
+        );
+        assert!(eval.obarray().is_special("x-display-name"));
+    }
 }
