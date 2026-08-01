@@ -36,6 +36,11 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     ] {
         obarray.make_special(name);
     }
+    // GNU Emacs marks this property in `syms_of_buffer` so changing major
+    // modes does not discard a buffer's cleanup hook.
+    obarray
+        .put_property("kill-buffer-hook", "permanent-local", Value::T)
+        .expect("bootstrap symbol properties must be writable");
     for name in [
         "inhibit-field-text-motion",
         "buffer-access-fontify-functions",

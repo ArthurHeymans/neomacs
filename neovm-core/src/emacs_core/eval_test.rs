@@ -10105,6 +10105,25 @@ fn kill_buffer_runs_query_functions_and_hook_in_target_buffer_context() {
 }
 
 #[test]
+fn kill_buffer_hook_survives_a_major_mode_local_variable_reset() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        "(progn
+           (setq kill-hook-ran nil)
+           (let ((buffer (get-buffer-create \" *kill-hook-permanent*\")))
+             (set-buffer buffer)
+             (make-local-variable 'kill-buffer-hook)
+             (setq kill-buffer-hook
+                   (list (lambda () (setq kill-hook-ran t))))
+             (kill-all-local-variables)
+             (kill-buffer buffer))
+           kill-hook-ran)",
+    );
+
+    assert_eq!(result, "OK t");
+}
+
+#[test]
 fn kill_buffer_query_abort_does_not_record_buffer_list_order_like_gnu() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
