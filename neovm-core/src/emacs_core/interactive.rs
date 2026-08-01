@@ -2733,6 +2733,11 @@ pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) 
     // before building the inserted text.
     let (chars_to_delete, spaces_to_insert) = self_insert_overwrite_plan(eval, ch, repeats)?;
 
+    let abbrev = self_insert_expand_abbrev_at_word_boundary(eval, ch)?;
+    if abbrev.suppress_self_insert {
+        return Ok(Value::NIL);
+    }
+
     let repeat_count = repeats as usize;
     let mut text = String::with_capacity(repeat_count * ch.len_utf8() + spaces_to_insert);
     for _ in 0..repeat_count {
@@ -2828,7 +2833,73 @@ pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) 
         Value::symbol("run-hooks"),
         vec![Value::symbol("post-self-insert-hook")],
     )?;
+    if abbrev.expanded {
+        // GNU returns the "needs undo boundary" result from
+        // `internal_self_insert` when `expand-abbrev` changed the buffer.
+        eval.assign("undo-auto--this-command-amalgamating", Value::NIL);
+    }
     Ok(Value::NIL)
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct SelfInsertAbbrevOutcome {
+    expanded: bool,
+    suppress_self_insert: bool,
+}
+
+/// Apply GNU `internal_self_insert`'s abbrev boundary policy before inserting
+/// the triggering character.  Keeping the syntax check here makes direct
+/// calls, keyboard macros, and the interactive command loop share one path.
+fn self_insert_expand_abbrev_at_word_boundary(
+    eval: &mut Context,
+    inserted: char,
+) -> Result<SelfInsertAbbrevOutcome, Flow> {
+    if dynamic_or_global_symbol_value(eval, "abbrev-mode").is_none_or(|value| value.is_nil()) {
+        return Ok(SelfInsertAbbrevOutcome::default());
+    }
+
+    let should_expand = eval
+        .buffers
+        .current_buffer_id()
+        .and_then(|buffer_id| eval.buffers.get(buffer_id))
+        .is_some_and(|buffer| {
+            let syntax = super::syntax::SyntaxTable::for_buffer(buffer);
+            let point = buffer.point_emacs_byte_pos();
+            point > buffer.accessible_emacs_byte_region().start()
+                && syntax.char_syntax(inserted) != super::syntax::SyntaxClass::Word
+                && buffer
+                    .char_before_emacs_byte_pos(point)
+                    .is_some_and(|previous| {
+                        syntax.char_syntax(previous) == super::syntax::SyntaxClass::Word
+                    })
+        });
+    if !should_expand {
+        return Ok(SelfInsertAbbrevOutcome::default());
+    }
+
+    let expanded = eval.apply(Value::symbol("expand-abbrev"), vec![])?;
+    if expanded.is_nil() {
+        return Ok(SelfInsertAbbrevOutcome::default());
+    }
+
+    let suppress_self_insert = match expanded.kind() {
+        ValueKind::Symbol(abbrev_symbol) => eval
+            .obarray()
+            .symbol_function_id(abbrev_symbol)
+            .and_then(|hook| match hook.kind() {
+                ValueKind::Symbol(hook_symbol) => eval
+                    .obarray()
+                    .get_property_id(hook_symbol, intern("no-self-insert")),
+                _ => None,
+            })
+            .is_some_and(|property| property.is_truthy()),
+        _ => false,
+    };
+
+    Ok(SelfInsertAbbrevOutcome {
+        expanded: true,
+        suppress_self_insert,
+    })
 }
 
 /// Port of the overwrite-mode block of GNU `internal_self_insert` (cmds.c).

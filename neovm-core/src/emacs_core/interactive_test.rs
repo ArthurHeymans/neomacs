@@ -4569,6 +4569,24 @@ fn self_insert_command_uses_last_command_event_character() {
 }
 
 #[test]
+fn self_insert_command_expands_abbrev_at_word_boundary() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let results = eval_all_with(
+        &mut ev,
+        r#"(define-abbrev-table 'probe-abbrev-table '(("se" "SEQUENCE")))
+           (with-temp-buffer
+             (setq local-abbrev-table probe-abbrev-table)
+             (abbrev-mode 1)
+             (insert "se")
+             (let ((last-command-event ?\s))
+               (self-insert-command 1))
+             (buffer-string))"#,
+    );
+    assert_eq!(results[1], "OK \"SEQUENCE \"");
+}
+
+#[test]
 fn self_insert_command_signals_read_only_without_inserting() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::test_utils::runtime_startup_context();
