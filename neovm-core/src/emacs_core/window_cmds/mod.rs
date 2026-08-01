@@ -4029,6 +4029,16 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
         .split_window(fid, wid, direction, buf_id, size_opt, placement)
         .ok_or_else(|| signal("error", vec![Value::string("Cannot split window")]))?;
 
+    // GNU allocates independent start/point/old-point markers for the new
+    // live leaf.  `FrameManager::split_window` intentionally clears marker IDs
+    // copied from the old leaf; attach fresh markers before returning the Lisp
+    // window object so subsequent buffer edits adjust both windows.
+    if let Some(frame) = frames.get_mut(fid)
+        && let Some(new_window) = frame.find_window_mut(new_wid)
+    {
+        crate::window::window_markers::create_window_markers(buffers, new_window, buf_id);
+    }
+
     // GNU `Fsplit_window_internal` (`src/window.c:5517-5644`)
     // assigns `wset_normal_*` for the new sibling from the
     // NORMAL-SIZE argument when supplied. The corresponding

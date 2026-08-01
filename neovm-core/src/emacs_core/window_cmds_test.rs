@@ -687,6 +687,27 @@ def
 }
 
 #[test]
+fn window_point_nonselected_window_reads_marker_adjusted_by_buffer_edits() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one_with_frame(
+        r#"(let ((other (split-window-internal (selected-window) nil nil nil)))
+             (erase-buffer)
+             (insert "    alpha
+beta
+")
+             (set-window-point other 12)
+             (replace-region-contents 1 5 "")
+             (list (buffer-string) (window-point other)))"#,
+    );
+    assert_eq!(
+        result,
+        r#"OK ("alpha
+beta
+" 8)"#
+    );
+}
+
+#[test]
 fn set_window_point_selected_window_updates_live_buffer_point_when_current_buffer_differs() {
     crate::test_utils::init_test_tracing();
     let r = eval_one_with_frame(

@@ -417,24 +417,28 @@ pub(crate) fn signal_after_change(
     byte_range: EmacsByteRange,
     old_len: CharLen,
 ) -> Result<(), Flow> {
+    let Some(current_id) = ctx.buffers.current_buffer_id() else {
+        return Ok(());
+    };
+
+    // GNU window positions are markers, so their Lisp-visible values already
+    // reflect this edit before after-change hooks run.  Neomacs keeps typed
+    // position caches beside the authoritative markers for layout; refresh all
+    // derived caches at this common post-edit boundary, including when
+    // modification hooks are inhibited.
+    ctx.sync_window_positions(current_id);
+
     // GNU evaporates overlays that a deletion left empty, independent of the
     // modification hooks, so do it up front. A pure insertion (old_len == 0)
     // cannot empty an overlay, so skip it; likewise skip buffers with no
     // overlays to keep the hot path allocation-free.
-    if old_len.get() > 0
-        && let Some(current_id) = ctx.buffers.current_buffer_id()
-        && buffer_has_overlays(ctx, current_id)
-    {
+    if old_len.get() > 0 && buffer_has_overlays(ctx, current_id) {
         evaporate_emptied_overlays(ctx, current_id);
     }
 
     if inhibit_modification_hooks(ctx) {
         return Ok(());
     }
-
-    let Some(current_id) = ctx.buffers.current_buffer_id() else {
-        return Ok(());
-    };
 
     finish_treesit_after_buffer_change(ctx, current_id, byte_range.start(), byte_range.end());
 
