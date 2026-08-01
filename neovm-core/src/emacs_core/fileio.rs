@@ -6101,7 +6101,7 @@ pub(crate) fn builtin_write_region(
         }
         _ => default_lock_name,
     };
-    super::filelock::lock_file_resolved(eval, &lock_name)?;
+    super::filelock::lock_file(eval, &lock_name)?;
 
     // --- Write encoded bytes and handle fsync ---
     let write_result = (|| {
@@ -6167,7 +6167,7 @@ pub(crate) fn builtin_write_region(
 
     // Always attempt the matching unlock, including open/write/fsync errors.
     // Preserve the primary write error if cleanup also fails.
-    let unlock_result = super::filelock::unlock_file_resolved(eval, &lock_name);
+    let unlock_result = super::filelock::unlock_file(eval, &lock_name);
     let visiting_modtime = match (write_result, unlock_result) {
         (Err(write_error), _) => return Err(write_error),
         (Ok(_), Err(unlock_error)) => return Err(unlock_error),

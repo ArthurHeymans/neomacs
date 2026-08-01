@@ -10,7 +10,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use super::error::{EvalResult, Flow, signal};
-use super::fileio::{lisp_file_name_to_path_buf, resolve_filename_lisp_for_eval};
+use super::fileio::{
+    find_file_name_handler_lisp_for_eval, lisp_file_name_to_path_buf,
+    resolve_filename_lisp_for_eval,
+};
 use super::value::{Value, ValueKind};
 use crate::buffer::BufferId;
 use crate::heap_types::LispString;
@@ -200,7 +203,7 @@ fn create_lock_file(lock_path: &Path, contents: &str, force: bool) -> io::Result
     fs::write(lock_path, contents)
 }
 
-pub(crate) fn lock_file_resolved(
+fn lock_file_resolved(
     eval: &mut super::eval::Context,
     filename: &LispString,
 ) -> Result<Value, Flow> {
@@ -263,7 +266,7 @@ pub(crate) fn lock_file_resolved(
     Ok(Value::NIL)
 }
 
-pub(crate) fn unlock_file_resolved(
+fn unlock_file_resolved(
     eval: &mut super::eval::Context,
     filename: &LispString,
 ) -> Result<Value, Flow> {
@@ -281,6 +284,46 @@ pub(crate) fn unlock_file_resolved(
             Err(err) => Err(file_lock_error("Unlocking file", filename, err)),
         },
     }
+}
+
+/// Handler-aware `lock-file` operation, corresponding to GNU `Flock_file`.
+/// Keep this boundary separate from `lock_file_resolved`: internal native
+/// filesystem work must never receive a remote or otherwise magic filename.
+pub(crate) fn lock_file(
+    eval: &mut super::eval::Context,
+    filename: &LispString,
+) -> Result<Value, Flow> {
+    let operation = Value::symbol("lock-file");
+    let handler = find_file_name_handler_lisp_for_eval(eval, filename, operation);
+    if !handler.is_nil() {
+        return eval.funcall_general(
+            handler,
+            vec![operation, Value::heap_string(filename.clone())],
+        );
+    }
+
+    let filename = resolve_filename_lisp_for_eval(eval, filename);
+    lock_file_resolved(eval, &filename)
+}
+
+/// Handler-aware `unlock-file` operation, corresponding to GNU
+/// `Funlock_file`.  GNU discards a file-name handler's return value.
+pub(crate) fn unlock_file(
+    eval: &mut super::eval::Context,
+    filename: &LispString,
+) -> Result<Value, Flow> {
+    let operation = Value::symbol("unlock-file");
+    let handler = find_file_name_handler_lisp_for_eval(eval, filename, operation);
+    if !handler.is_nil() {
+        eval.funcall_general(
+            handler,
+            vec![operation, Value::heap_string(filename.clone())],
+        )?;
+        return Ok(Value::NIL);
+    }
+
+    let filename = resolve_filename_lisp_for_eval(eval, filename);
+    unlock_file_resolved(eval, &filename)
 }
 
 fn current_buffer_file_lock_target(
@@ -309,9 +352,9 @@ pub(crate) fn sync_modified_buffer_file_lock(
 
     let filename = resolve_filename_lisp_for_eval(eval, &filename);
     if !was_modified && !flag.is_nil() {
-        let _ = lock_file_resolved(eval, &filename)?;
+        let _ = lock_file(eval, &filename)?;
     } else if was_modified && flag.is_nil() {
-        let _ = unlock_file_resolved(eval, &filename)?;
+        let _ = unlock_file(eval, &filename)?;
     }
     Ok(())
 }
@@ -319,15 +362,15 @@ pub(crate) fn sync_modified_buffer_file_lock(
 pub(crate) fn builtin_lock_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("lock-file", &args, 1)?;
     let filename = super::builtins::expect_lisp_string(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, filename);
-    lock_file_resolved(eval, &filename)
+    let filename = filename.clone();
+    lock_file(eval, &filename)
 }
 
 pub(crate) fn builtin_unlock_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("unlock-file", &args, 1)?;
     let filename = super::builtins::expect_lisp_string(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, filename);
-    unlock_file_resolved(eval, &filename)
+    let filename = filename.clone();
+    unlock_file(eval, &filename)
 }
 
 pub(crate) fn builtin_file_locked_p(
@@ -378,7 +421,7 @@ pub(crate) fn builtin_lock_buffer(eval: &mut super::eval::Context, args: Vec<Val
         .current_buffer()
         .is_some_and(|buffer| buffer.modified_state_value().is_truthy());
     if modified && let Some(filename) = filename {
-        let _ = lock_file_resolved(eval, &filename)?;
+        let _ = lock_file(eval, &filename)?;
     }
     Ok(Value::NIL)
 }
@@ -399,7 +442,7 @@ pub(crate) fn builtin_unlock_buffer(
             .as_lisp_string()
             .expect("ValueKind::String must carry LispString payload");
         let filename = resolve_filename_lisp_for_eval(eval, filename);
-        let _ = unlock_file_resolved(eval, &filename)?;
+        let _ = unlock_file(eval, &filename)?;
     }
     Ok(Value::NIL)
 }
@@ -407,6 +450,33 @@ pub(crate) fn builtin_unlock_buffer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lock_and_unlock_file_dispatch_matching_file_name_handlers_like_gnu() {
+        crate::test_utils::init_test_tracing();
+        let mut eval = super::super::eval::Context::new();
+
+        let result = eval.eval_str(
+            r#"(progn
+                 (setq neovm-file-lock-handler-calls nil)
+                 (setq file-name-handler-alist
+                       (list
+                        (cons "\\`/remote:"
+                              (lambda (operation &rest arguments)
+                                (setq neovm-file-lock-handler-calls
+                                      (cons (cons operation arguments)
+                                            neovm-file-lock-handler-calls))
+                                :handled))))
+                 (list (lock-file "/remote:host:/work/note.txt")
+                       (unlock-file "/remote:host:/work/note.txt")
+                       (reverse neovm-file-lock-handler-calls)))"#,
+        );
+
+        assert_eq!(
+            crate::emacs_core::format_eval_result(&result),
+            "OK (:handled nil ((lock-file \"/remote:host:/work/note.txt\") (unlock-file \"/remote:host:/work/note.txt\")))"
+        );
+    }
 
     #[cfg(unix)]
     #[test]
