@@ -2264,6 +2264,25 @@ fn call_process_pair_destination_splits_stderr_to_file() {
 }
 
 #[test]
+fn call_process_dotted_destination_ignores_non_list_stderr_tail_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(with-temp-buffer
+             (let ((stderr-buffer (get-buffer-create "*dotted-stderr*")))
+               (unwind-protect
+                   (list
+                    (call-process
+                     "{sh}" nil (cons (current-buffer) stderr-buffer) nil
+                     "-c" "printf out; printf err >&2")
+                    (buffer-string)
+                    (with-current-buffer stderr-buffer (buffer-string)))
+                 (kill-buffer stderr-buffer))))"#
+    ));
+    assert_eq!(result, r#"OK (0 "outerr" "")"#);
+}
+
+#[test]
 fn call_process_integer_destination_returns_nil() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");

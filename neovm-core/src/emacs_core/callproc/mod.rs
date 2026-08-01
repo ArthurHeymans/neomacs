@@ -463,9 +463,14 @@ fn is_file_keyword(value: &Value) -> bool {
     })
 }
 
-fn parse_file_target(items: &[Value]) -> Result<OutputTarget, Flow> {
-    let file_value = items.get(1).unwrap_or(&Value::NIL);
-    let file = super::builtins::expect_lisp_string(file_value)?.clone();
+fn parse_file_target(value: &Value) -> Result<OutputTarget, Flow> {
+    let tail = value.cons_cdr();
+    let file_value = if tail.is_cons() {
+        tail.cons_car()
+    } else {
+        tail
+    };
+    let file = super::builtins::expect_lisp_string(&file_value)?.clone();
     Ok(OutputTarget::File(file))
 }
 
@@ -501,10 +506,9 @@ fn parse_real_buffer_destination_in_state(
             }
         }
         ValueKind::Cons => {
-            let items = list_to_vec(value).ok_or_else(|| signal_wrong_type_string(*value))?;
-            let first = items.first().cloned().unwrap_or(Value::NIL);
+            let first = value.cons_car();
             if is_file_keyword(&first) {
-                Ok((parse_file_target(&items)?, false))
+                Ok((parse_file_target(value)?, false))
             } else {
                 Err(signal_wrong_type_string(first))
             }
@@ -535,11 +539,9 @@ fn parse_call_process_destination(
     destination: &Value,
 ) -> Result<DestinationSpec, Flow> {
     if destination.is_cons() {
-        let items =
-            list_to_vec(destination).ok_or_else(|| signal_wrong_type_string(*destination))?;
-        let first = items.first().cloned().unwrap_or(Value::NIL);
+        let first = destination.cons_car();
         if is_file_keyword(&first) {
-            let stdout = parse_file_target(&items)?;
+            let stdout = parse_file_target(destination)?;
             return Ok(DestinationSpec {
                 stdout,
                 stderr: StderrTarget::ToStdoutTarget,
@@ -547,9 +549,16 @@ fn parse_call_process_destination(
                 no_wait: false,
             });
         }
-        let second = items.get(1).cloned().unwrap_or(Value::NIL);
         let (stdout, no_wait) = parse_real_buffer_destination_in_state(buffers, &first)?;
-        let (stderr, stderr_file) = parse_stderr_destination(&second)?;
+        // GNU `call_process` accepts any cons here.  Its cdr contributes an
+        // explicit stderr target only when that cdr is itself a cons; dotted
+        // tails are ignored and stderr retains the default of sharing stdout.
+        let tail = destination.cons_cdr();
+        let (stderr, stderr_file) = if tail.is_cons() {
+            parse_stderr_destination(&tail.cons_car())?
+        } else {
+            (StderrTarget::ToStdoutTarget, None)
+        };
         return Ok(DestinationSpec {
             stdout,
             stderr,
