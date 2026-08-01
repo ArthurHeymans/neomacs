@@ -32,9 +32,14 @@ const ACE_JUMP_ZAP_TEST_PRELUDE: &str = r##"
 
 (defmacro ajz-test-with-live-buffer (&rest body)
   "Run BODY in a real, window-displayed buffer so typed keys reach it."
-  `(let ((buffer (generate-new-buffer "*ace-jump-zap-workflow*")))
+  `(let ((buffer (generate-new-buffer "*ace-jump-zap-workflow*"))
+         ;; A previous batch case may finish with an interactive command.
+         ;; Give each workflow the same command-loop baseline it has in a
+         ;; fresh editor while retaining one process for package setup.
+         (this-command nil))
      (unwind-protect
          (progn
+           (ajz/reset)
            (set-window-buffer (selected-window) buffer)
            (set-buffer buffer)
            (global-set-key (kbd "M-z") 'ace-jump-zap-to-char)
@@ -42,6 +47,7 @@ const ACE_JUMP_ZAP_TEST_PRELUDE: &str = r##"
            (global-set-key (kbd "C-c z") 'ace-jump-zap-to-char-dwim)
            (global-set-key (kbd "C-c Z") 'ace-jump-zap-up-to-char-dwim)
            ,@body)
+       (ajz/reset)
        (kill-buffer buffer))))
 
 (defun ajz-test-labels ()

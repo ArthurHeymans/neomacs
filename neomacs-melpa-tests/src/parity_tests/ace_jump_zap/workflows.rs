@@ -101,7 +101,6 @@ fn forward_only_zapping_ignores_matches_behind_point() -> ParityBatchCase {
             r#"OK ((((nil "" 62 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z o" 62 t nil 62 (("a" . 65) ("b" . 79) ("c" . 85) ("d" . 111))) (ace-jump-move "b" 62 nil nil nil nil)) "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 clovolive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 62 62) ((error "[AceJump] No one found") "Pasta with tomato sauce\n  - 400 g tomatoes, peeled\n  - 2 cloves of garlic\n  - olive oil, salt, pepper\nSimmer for 20 minutes, then serve.\n" 62 t 62 nil 0))"#
         ]],
     )
-    .fresh_process()
 }
 
 fn disabling_proximity_sorting_labels_matches_in_buffer_order() -> ParityBatchCase {
@@ -122,7 +121,6 @@ fn disabling_proximity_sorting_labels_matches_in_buffer_order() -> ParityBatchCa
             r#"OK (((nil "" 58 nil nil nil nil) (ace-jump-zap-up-to-char "M-Z g" 58 t nil 58 (("a" . 33) ("b" . 68))) (ace-jump-move "a" 34 nil nil nil nil)) "  - 400 gcloves of garlic" 34 34 nil)"#
         ]],
     )
-    .fresh_process()
 }
 
 fn the_fifty_two_character_limit_bounds_how_far_a_zap_can_reach() -> ParityBatchCase {
