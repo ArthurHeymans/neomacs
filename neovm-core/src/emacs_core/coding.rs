@@ -338,6 +338,27 @@ const PLIST_VERBATIM_KEY: i64 = i64::MIN + 4;
 /// `plist_put` order: in-place update for an existing key, append for a new
 /// one) and folded onto every reconstructed `coding-system-plist`.
 const PUT_OVERRIDES_KEY: i64 = i64::MIN + 5;
+const CCL_KEY_DECODER: i64 = i64::MIN + 6;
+const CCL_KEY_ENCODER: i64 = i64::MIN + 7;
+const CCL_KEY_VALIDS: i64 = i64::MIN + 8;
+
+/// The compiled-program designators and byte-validity table carried by a CCL
+/// coding system. These are the three type-specific attributes GNU's
+/// `define-coding-system` passes after the common coding attributes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CclCodingSpec {
+    pub(crate) decoder: Value,
+    pub(crate) encoder: Value,
+    pub(crate) valids: Value,
+}
+
+pub(crate) fn ccl_coding_spec(info: &CodingSystemInfo) -> Option<CclCodingSpec> {
+    Some(CclCodingSpec {
+        decoder: *info.int_properties.get(&CCL_KEY_DECODER)?,
+        encoder: *info.int_properties.get(&CCL_KEY_ENCODER)?,
+        valids: *info.int_properties.get(&CCL_KEY_VALIDS)?,
+    })
+}
 
 /// ISO-2022 control flags, one variant per bit. Bit values match
 /// `coding-system-iso-2022-flags` (mule.el) and `CODING_ISO_FLAG_*` (coding.c).
@@ -2771,6 +2792,15 @@ pub(crate) fn builtin_define_coding_system_internal(
         info.int_properties.insert(ISO2022_KEY_REG_USAGE, args[14]);
         info.int_properties.insert(ISO2022_KEY_REQUEST, args[15]);
         info.int_properties.insert(ISO2022_KEY_FLAGS, args[16]);
+    }
+
+    // arg[13..16] (CCL only): decoder program, encoder program, and the
+    // optional 256-entry byte-validity table. Keep the raw Lisp designators in
+    // pdump-backed internal slots and expose them through `CclCodingSpec`.
+    if resolve_sym(coding_type) == "ccl" && args.len() > 15 {
+        info.int_properties.insert(CCL_KEY_DECODER, args[13]);
+        info.int_properties.insert(CCL_KEY_ENCODER, args[14]);
+        info.int_properties.insert(CCL_KEY_VALIDS, args[15]);
     }
 
     // Register the base coding system.

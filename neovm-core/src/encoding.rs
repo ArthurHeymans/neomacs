@@ -2745,6 +2745,104 @@ fn full_iso2022_spec(
     Some((spec, info.charset_list.clone()))
 }
 
+fn runtime_ccl_spec(
+    ctx: &crate::emacs_core::eval::Context,
+    coding: &str,
+) -> Option<crate::emacs_core::coding::CclCodingSpec> {
+    let info = ctx.coding_systems.get(coding_system_base(coding))?;
+    (resolve_sym(info.coding_type) == "ccl")
+        .then(|| crate::emacs_core::coding::ccl_coding_spec(info))?
+}
+
+fn ccl_encoding_input(source: &crate::heap_types::LispString, coding: &str) -> Vec<i64> {
+    use crate::emacs_core::coding::EolType;
+
+    let mut input = Vec::with_capacity(source.schars());
+    for code in coding_source_codepoints(source) {
+        if code == u32::from(b'\n') {
+            match coding_name_eol(coding) {
+                EolType::Dos => input.extend([i64::from(b'\r'), i64::from(b'\n')]),
+                EolType::Mac => input.push(i64::from(b'\r')),
+                EolType::Unix | EolType::Undecided => input.push(i64::from(code)),
+            }
+        } else {
+            input.push(i64::from(code));
+        }
+    }
+    input
+}
+
+fn decode_ccl_eol(mut codes: Vec<i64>, coding: &str) -> Vec<i64> {
+    use crate::emacs_core::coding::EolType;
+
+    match coding_name_eol(coding) {
+        EolType::Dos => {
+            let mut decoded = Vec::with_capacity(codes.len());
+            let mut index = 0usize;
+            while index < codes.len() {
+                if codes[index] == i64::from(b'\r')
+                    && codes.get(index + 1) == Some(&i64::from(b'\n'))
+                {
+                    decoded.push(i64::from(b'\n'));
+                    index += 2;
+                } else {
+                    decoded.push(codes[index]);
+                    index += 1;
+                }
+            }
+            decoded
+        }
+        EolType::Mac => {
+            for code in &mut codes {
+                if *code == i64::from(b'\r') {
+                    *code = i64::from(b'\n');
+                }
+            }
+            codes
+        }
+        EolType::Unix | EolType::Undecided => codes,
+    }
+}
+
+fn encode_via_ccl(
+    source: &crate::heap_types::LispString,
+    spec: crate::emacs_core::coding::CclCodingSpec,
+    coding: &str,
+    boundary: EncodingBoundary,
+) -> Result<Vec<u8>, crate::emacs_core::error::Flow> {
+    let input = ccl_encoding_input(source, coding);
+    let output = crate::emacs_core::ccl::execute_compiled_ccl(
+        spec.encoder,
+        &input,
+        boundary.owns_end_of_stream(),
+    )?;
+    Ok(output.into_iter().map(|code| code as u8).collect())
+}
+
+fn decode_via_ccl(
+    source: &[u8],
+    spec: crate::emacs_core::coding::CclCodingSpec,
+    coding: &str,
+) -> Result<Vec<u8>, crate::emacs_core::error::Flow> {
+    let input = source
+        .iter()
+        .map(|byte| i64::from(*byte))
+        .collect::<Vec<_>>();
+    let output = crate::emacs_core::ccl::execute_compiled_ccl(spec.decoder, &input, true)?;
+    let output = decode_ccl_eol(output, coding);
+    let mut bytes = Vec::with_capacity(output.len());
+    let mut buffer = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    for code in output {
+        let code = u32::try_from(code)
+            .ok()
+            .filter(|code| *code <= crate::emacs_core::emacs_char::MAX_CHAR)
+            .unwrap_or(char::REPLACEMENT_CHARACTER as u32);
+        let length = crate::emacs_core::emacs_char::char_string(code, &mut buffer);
+        bytes.extend_from_slice(&buffer[..length]);
+    }
+    Ok(bytes)
+}
+
 /// The ESC designation sequence loading `charset` into graphic register `reg`
 /// (`ENCODE_DESIGNATION`, coding.c): `ESC <I> F` for 94/96-sets, `ESC $ [I] F`
 /// for the multi-byte sets (the intermediate `I` is omitted only for the
@@ -3226,6 +3324,7 @@ fn builtin_coding_string_in_context(
         "utf-8-with-signature" | "utf-8-auto"
     );
     let full_iso = full_iso2022_spec(ctx, &coding);
+    let ccl_coding = runtime_ccl_spec(ctx, &coding);
     let euc_coding = euc_iso2022_spec(ctx, &coding);
     let sjis_coding = sjis_charsets(ctx, &coding);
     let charset_coding = general_charset_coding_list(ctx, &coding, encode);
@@ -3241,6 +3340,7 @@ fn builtin_coding_string_in_context(
         || emacs_mule
         || no_conv_multibyte
         || utf8_signature
+        || ccl_coding.is_some()
         || full_iso.is_some()
         || euc_coding.is_some()
         || sjis_coding.is_some()
@@ -3323,6 +3423,9 @@ fn builtin_coding_string_in_context(
             let mut bytes = vec![0xEF, 0xBB, 0xBF];
             bytes.extend(encode_utf8_plain(&source_string()));
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        } else if let Some(spec) = ccl_coding {
+            let bytes = encode_via_ccl(&source_string(), spec, &coding, encoding_boundary)?;
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else if let Some((spec, charsets)) = &full_iso {
             let bytes = encode_via_iso2022(&source_string(), spec, charsets, encoding_boundary);
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
@@ -3356,6 +3459,10 @@ fn builtin_coding_string_in_context(
             src.drain(..3);
         }
         let bytes = decode_utf8_to_emacs_bytes(&src);
+        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+    } else if let Some(spec) = ccl_coding {
+        let source_bytes = lisp_string_coding_source_bytes(&source_string());
+        let bytes = decode_via_ccl(&source_bytes, spec, &coding)?;
         Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if let Some((spec, _)) = &full_iso {
         let source_bytes =

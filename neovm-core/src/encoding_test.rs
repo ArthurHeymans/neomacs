@@ -1292,6 +1292,65 @@ fn iso2022_encoding_boundary_controls_final_ascii_reset() {
 }
 
 #[test]
+fn ccl_coding_system_executes_registered_identity_program() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::ccl::reset_ccl_registry();
+
+    let mut eval = crate::emacs_core::Context::new();
+
+    let program = Value::vector(
+        [1, 5, 14, -249, -500, 22]
+            .into_iter()
+            .map(Value::fixnum)
+            .collect(),
+    );
+    crate::emacs_core::ccl::builtin_register_ccl_program_impl(vec![
+        Value::symbol("test-ccl-identity"),
+        program,
+    ])
+    .expect("register compiled identity CCL program");
+
+    crate::emacs_core::coding::builtin_define_coding_system_internal(
+        &mut eval.coding_systems,
+        vec![
+            Value::symbol("test-ccl-identity-coding"),
+            Value::char('C'),
+            Value::symbol("ccl"),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::fixnum('?' as i64),
+            Value::NIL,
+            Value::NIL,
+            Value::symbol("unix"),
+            Value::symbol("test-ccl-identity"),
+            Value::symbol("test-ccl-identity"),
+            Value::NIL,
+        ],
+    )
+    .expect("define CCL coding system");
+
+    assert_eq!(
+        fmt(
+            &mut eval,
+            r#"(let* ((packet (unibyte-string 0 1 65 127 128 255))
+                       (wire (encode-coding-string
+                              packet 'test-ccl-identity-coding))
+                       (decoded (decode-coding-string
+                                 wire 'test-ccl-identity-coding)))
+                  (list (append wire nil)
+                        (append decoded nil)
+                        (equal (append packet nil)
+                               (append decoded nil))))"#,
+        ),
+        "OK ((0 1 65 127 128 255) (0 1 65 127 128 255) t)"
+    );
+}
+
+#[test]
 fn decode_euc_attaches_charset_property() {
     crate::test_utils::init_test_tracing();
     let jis = register_test_jis();

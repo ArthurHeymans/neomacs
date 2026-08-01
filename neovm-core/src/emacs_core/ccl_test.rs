@@ -446,37 +446,111 @@ fn ccl_execute_on_string_accepts_registered_symbol_program_designator() {
     let _ = builtin_register_ccl_program_impl(vec![
         Value::symbol("ccl-designator-probe-on-string"),
         Value::vector(vec![
-            Value::fixnum(10),
-            Value::fixnum(0),
-            Value::fixnum(0),
-            Value::fixnum(0),
+            Value::fixnum(1),
+            Value::fixnum(5),
+            Value::fixnum(14),
+            Value::fixnum(-249),
+            Value::fixnum(-500),
+            Value::fixnum(22),
         ]),
     ])
     .expect("registration should succeed");
-    let err = builtin_ccl_execute_on_string_impl(vec![
+    let status = Value::vector(vec![Value::NIL; 9]);
+    let output = builtin_ccl_execute_on_string_impl(vec![
         Value::symbol("ccl-designator-probe-on-string"),
-        Value::vector(vec![
-            Value::fixnum(0),
-            Value::fixnum(0),
-            Value::fixnum(0),
-            Value::fixnum(0),
-            Value::fixnum(0),
-            Value::fixnum(0),
-            Value::fixnum(0),
-            Value::fixnum(0),
-            Value::fixnum(0),
-        ]),
-        Value::string("abc"),
+        status,
+        Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+            0, 1, 65, 127, 128, 255,
+        ])),
+        Value::NIL,
+        Value::T,
     ])
-    .expect_err("symbol designator should resolve to registered program");
-    match err {
-        Flow::Signal(sig) => {
-            assert_eq!(
-                sig.data[0],
-                Value::string("Error in CCL program at 6th code")
-            );
-        }
-        other => panic!("expected error signal, got {other:?}"),
+    .expect("registered identity program should execute");
+
+    assert_eq!(
+        output.as_lisp_string().unwrap().as_bytes(),
+        &[0, 1, 65, 127, 128, 255]
+    );
+    assert!(!output.as_lisp_string().unwrap().is_multibyte());
+    assert_eq!(
+        status.as_vector_data().unwrap().as_slice(),
+        &[
+            Value::fixnum(-1),
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(5),
+        ]
+    );
+}
+
+#[test]
+fn ccl_execute_on_string_resumes_identity_program_from_status_instruction() {
+    crate::test_utils::init_test_tracing();
+    let program = Value::vector(vec![
+        Value::fixnum(1),
+        Value::fixnum(5),
+        Value::fixnum(14),
+        Value::fixnum(-249),
+        Value::fixnum(-500),
+        Value::fixnum(22),
+    ]);
+    let status = Value::vector(vec![Value::NIL; 9]);
+
+    let first = builtin_ccl_execute_on_string_impl(vec![
+        program,
+        status,
+        Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![65, 128])),
+        Value::T,
+        Value::T,
+    ])
+    .expect("continued execution should suspend at the read instruction");
+    assert_eq!(first.as_lisp_string().unwrap().as_bytes(), &[65, 128]);
+    assert_eq!(status.as_vector_data().unwrap()[0], Value::fixnum(128));
+    assert_eq!(status.as_vector_data().unwrap()[8], Value::fixnum(4));
+
+    let second = builtin_ccl_execute_on_string_impl(vec![
+        program,
+        status,
+        Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![66, 255])),
+        Value::NIL,
+        Value::T,
+    ])
+    .expect("final execution should run the EOF block");
+    assert_eq!(second.as_lisp_string().unwrap().as_bytes(), &[66, 255]);
+    assert_eq!(status.as_vector_data().unwrap()[0], Value::fixnum(-1));
+    assert_eq!(status.as_vector_data().unwrap()[8], Value::fixnum(5));
+}
+
+#[test]
+fn ccl_execute_on_string_runs_packed_constant_string_in_eof_block() {
+    crate::test_utils::init_test_tracing();
+    // GNU `ccl-compile` output for:
+    //   (1 ((read r0) (write r0) (read r0)) (write "[EOF]"))
+    let program = Value::vector(
+        [1, 5, 14, 17, 14, 1332, 5_981_519, 4_611_328, 22]
+            .into_iter()
+            .map(Value::fixnum)
+            .collect(),
+    );
+
+    for (input, expected) in [(Vec::new(), b"[EOF]".as_slice()), (vec![b'a'], b"a[EOF]")] {
+        let status = Value::vector(vec![Value::NIL; 9]);
+        let output = builtin_ccl_execute_on_string_impl(vec![
+            program,
+            status,
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(input)),
+            Value::NIL,
+            Value::T,
+        ])
+        .expect("the final block should write its packed ASCII constant");
+        assert_eq!(output.as_lisp_string().unwrap().as_bytes(), expected);
+        assert_eq!(status.as_vector_data().unwrap()[0], Value::fixnum(-1));
+        assert_eq!(status.as_vector_data().unwrap()[8], Value::fixnum(8));
     }
 }
 

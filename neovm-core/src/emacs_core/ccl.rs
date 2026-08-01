@@ -5,8 +5,10 @@
 //! - `ccl-program-p` — basic predicate for vector-shaped CCL program headers
 //! - `register-ccl-program` — stores named CCL programs and returns stable ids
 //! - `register-code-conversion-map` — stores named conversion maps and returns stable ids
-//! - `ccl-execute` / `ccl-execute-on-string` — validates shape and designators
-//!   and mirrors current oracle error payloads for unsupported execution paths.
+//! - CCL-backed coding systems and `ccl-execute-on-string` share one bounded
+//!   bytecode machine, including resumable register/instruction state.
+//! - `ccl-execute` — validates shape and designators while the remaining
+//!   register-only instruction set is implemented incrementally.
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
@@ -155,6 +157,288 @@ fn ccl_program_code_index_message(
     format!("Error in CCL program at {index}th code")
 }
 
+fn invalid_ccl_program_at(index: usize) -> Flow {
+    signal(
+        "error",
+        vec![Value::string(format!(
+            "Error in CCL program at {}th code",
+            index.saturating_add(1)
+        ))],
+    )
+}
+
+fn compiled_ccl_words(designator: Value) -> Result<Vec<i64>, Flow> {
+    let Some((program, _)) = resolve_ccl_program_designator(&designator) else {
+        return Err(signal("error", vec![Value::string("Invalid CCL program")]));
+    };
+    if !is_valid_ccl_program(&program) {
+        return Err(signal("error", vec![Value::string("Invalid CCL program")]));
+    }
+    program
+        .as_vector_data()
+        .expect("validated CCL program is a vector")
+        .iter()
+        .map(|word| {
+            word.as_int()
+                .ok_or_else(|| signal("error", vec![Value::string("Invalid CCL program")]))
+        })
+        .collect()
+}
+
+fn ccl_relative_instruction(instruction: usize, offset: i64) -> Option<usize> {
+    let target = (instruction as i64).checked_add(offset)?;
+    usize::try_from(target).ok()
+}
+
+struct CclExecution {
+    output: Vec<i64>,
+    registers: [i64; 8],
+    instruction: usize,
+}
+
+fn execute_compiled_ccl_with_state(
+    designator: Value,
+    input: &[i64],
+    last_block: bool,
+    mut registers: [i64; 8],
+    initial_instruction: Option<usize>,
+) -> Result<CclExecution, Flow> {
+    const HEADER_MAIN: usize = 2;
+    const MAX_STEPS_PER_WORD: usize = 4096;
+
+    let words = compiled_ccl_words(designator)?;
+    let eof_instruction = usize::try_from(words[1])
+        .ok()
+        .filter(|instruction| *instruction < words.len())
+        .ok_or_else(|| invalid_ccl_program_at(1))?;
+    let mut source = 0usize;
+    let mut output = Vec::with_capacity(input.len());
+    let mut instruction = initial_instruction
+        .filter(|instruction| HEADER_MAIN < *instruction && *instruction < words.len())
+        .unwrap_or(HEADER_MAIN);
+    let step_limit = words
+        .len()
+        .saturating_add(input.len())
+        .saturating_add(1)
+        .saturating_mul(MAX_STEPS_PER_WORD);
+
+    for _ in 0..step_limit {
+        let this_instruction = instruction;
+        let code = *words
+            .get(instruction)
+            .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+        instruction += 1;
+        let field1 = code >> 8;
+        let register = usize::try_from((code & 0xff) >> 5)
+            .ok()
+            .filter(|register| *register < registers.len())
+            .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+        let other_register = usize::try_from(field1 & 7)
+            .ok()
+            .filter(|register| *register < registers.len())
+            .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+        let command = code & 0x1f;
+
+        let mut read_character = |destination: &mut i64| -> Option<bool> {
+            if let Some(value) = input.get(source) {
+                *destination = *value;
+                source += 1;
+                Some(false)
+            } else if last_block {
+                *destination = -1;
+                Some(true)
+            } else {
+                None
+            }
+        };
+
+        match command {
+            // CCL_SetRegister
+            0x00 => registers[register] = registers[other_register],
+            // CCL_SetShortConst
+            0x01 => registers[register] = field1,
+            // CCL_SetConst
+            0x02 => {
+                registers[register] = *words
+                    .get(instruction)
+                    .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                instruction += 1;
+            }
+            // CCL_Jump
+            0x04 => {
+                instruction = ccl_relative_instruction(instruction, field1)
+                    .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+            }
+            // CCL_JumpCond
+            0x05 if registers[register] == 0 => {
+                instruction = ccl_relative_instruction(instruction, field1)
+                    .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+            }
+            0x05 => {}
+            // CCL_WriteRegisterJump
+            0x06 => {
+                output.push(registers[register]);
+                instruction = ccl_relative_instruction(instruction, field1)
+                    .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+            }
+            // CCL_WriteRegisterReadJump. The compiler stores a paired
+            // CCL_ReadJump word after this fused instruction; GNU skips it
+            // after a successful read, but resumes at that word when input is
+            // exhausted in a non-final block.
+            0x07 => {
+                output.push(registers[register]);
+                instruction = instruction
+                    .checked_add(1)
+                    .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                match read_character(&mut registers[register]) {
+                    Some(true) => instruction = eof_instruction,
+                    Some(false) => {
+                        instruction = ccl_relative_instruction(instruction, field1 - 1)
+                            .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                    }
+                    None => {
+                        return Ok(CclExecution {
+                            output,
+                            registers,
+                            instruction: this_instruction + 1,
+                        });
+                    }
+                }
+            }
+            // CCL_WriteConstJump
+            0x08 => {
+                output.push(
+                    *words
+                        .get(instruction)
+                        .ok_or_else(|| invalid_ccl_program_at(this_instruction))?,
+                );
+                instruction = ccl_relative_instruction(instruction, field1)
+                    .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+            }
+            // CCL_ReadJump
+            0x0c => match read_character(&mut registers[register]) {
+                Some(true) => instruction = eof_instruction,
+                Some(false) => {
+                    instruction = ccl_relative_instruction(instruction, field1)
+                        .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                }
+                None => {
+                    return Ok(CclExecution {
+                        output,
+                        registers,
+                        instruction: this_instruction,
+                    });
+                }
+            },
+            // CCL_ReadRegister. Consecutive encoded operands read into one or
+            // more registers; a zero field terminates the sequence.
+            0x0e => {
+                let mut read_field = field1;
+                let mut read_register = register;
+                loop {
+                    match read_character(&mut registers[read_register]) {
+                        Some(true) => {
+                            instruction = eof_instruction;
+                            break;
+                        }
+                        Some(false) => {}
+                        None => {
+                            return Ok(CclExecution {
+                                output,
+                                registers,
+                                instruction: this_instruction,
+                            });
+                        }
+                    }
+                    if read_field == 0 {
+                        break;
+                    }
+                    let operand = *words
+                        .get(instruction)
+                        .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                    instruction += 1;
+                    read_field = operand >> 8;
+                    read_register = usize::try_from((operand & 0xff) >> 5)
+                        .ok()
+                        .filter(|register| *register < registers.len())
+                        .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                }
+            }
+            // CCL_WriteRegister
+            0x11 => {
+                let mut write_field = field1;
+                let mut write_register = register;
+                loop {
+                    output.push(registers[write_register]);
+                    if write_field == 0 {
+                        break;
+                    }
+                    let operand = *words
+                        .get(instruction)
+                        .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                    instruction += 1;
+                    write_field = operand >> 8;
+                    write_register = usize::try_from((operand & 0xff) >> 5)
+                        .ok()
+                        .filter(|register| *register < registers.len())
+                        .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                }
+            }
+            // CCL_WriteConstString. A zero register field embeds one
+            // character directly in FIELD1. A nonzero field stores an ASCII
+            // string three octets per following word, most-significant octet
+            // first (the representation emitted by GNU `ccl-embed-string`).
+            0x14 if register == 0 => output.push(field1),
+            0x14 => {
+                let length = usize::try_from(field1)
+                    .ok()
+                    .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                let packed_words = length.saturating_add(2) / 3;
+                let end = instruction
+                    .checked_add(packed_words)
+                    .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                let packed = words
+                    .get(instruction..end)
+                    .ok_or_else(|| invalid_ccl_program_at(this_instruction))?;
+                for character_index in 0..length {
+                    let word = packed[character_index / 3];
+                    let shift = (2 - (character_index % 3)) * 8;
+                    output.push((word >> shift) & 0xff);
+                }
+                instruction = end;
+            }
+            // CCL_End. GNU leaves IC pointing at the End instruction so a
+            // completed STATUS cannot accidentally resume beyond the vector.
+            0x16 => {
+                return Ok(CclExecution {
+                    output,
+                    registers,
+                    instruction: this_instruction,
+                });
+            }
+            _ => return Err(invalid_ccl_program_at(this_instruction)),
+        }
+    }
+
+    Err(invalid_ccl_program_at(instruction))
+}
+
+/// Execute one complete compiled CCL program over integer character codes.
+///
+/// GNU's `ccl_driver` is the common engine behind CCL coding systems and the
+/// explicit CCL execution primitives. Keep byte/character storage decisions
+/// outside this machine: a decoder consumes byte values and produces Emacs
+/// character codes, while an encoder consumes character codes and its caller
+/// truncates produced values to output octets.
+pub(crate) fn execute_compiled_ccl(
+    designator: Value,
+    input: &[i64],
+    last_block: bool,
+) -> Result<Vec<i64>, Flow> {
+    execute_compiled_ccl_with_state(designator, input, last_block, [0; 8], None)
+        .map(|execution| execution.output)
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
@@ -239,8 +523,50 @@ pub(crate) fn builtin_ccl_execute_impl(args: Vec<Value>) -> EvalResult {
     Err(signal("error", vec![Value::string(message)]))
 }
 
+fn ccl_string_input(string: &crate::heap_types::LispString) -> Vec<i64> {
+    if !string.is_multibyte() {
+        return string
+            .as_bytes()
+            .iter()
+            .map(|byte| i64::from(*byte))
+            .collect();
+    }
+
+    let bytes = string.as_bytes();
+    let mut input = Vec::with_capacity(string.schars());
+    let mut position = 0usize;
+    while position < bytes.len() {
+        let (character, length) = crate::emacs_core::emacs_char::string_char(&bytes[position..]);
+        input.push(i64::from(character));
+        position += length;
+    }
+    input
+}
+
+fn ccl_output_string(output: Vec<i64>, unibyte: bool) -> Value {
+    if unibyte {
+        return Value::heap_string(crate::heap_types::LispString::from_unibyte(
+            output
+                .into_iter()
+                .map(|character| character as u8)
+                .collect(),
+        ));
+    }
+
+    let mut bytes = Vec::with_capacity(output.len());
+    let mut encoded = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    for character in output {
+        let character = u32::try_from(character)
+            .ok()
+            .filter(|character| *character <= crate::emacs_core::emacs_char::MAX_CHAR)
+            .unwrap_or(char::REPLACEMENT_CHARACTER as u32);
+        let length = crate::emacs_core::emacs_char::char_string(character, &mut encoded);
+        bytes.extend_from_slice(&encoded[..length]);
+    }
+    Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+}
+
 /// (ccl-execute-on-string CCL-PROGRAM STATUS STRING &optional CONTINUE UNIBYTE-P) -> STRING
-/// Stub: returns STRING unchanged without processing.
 pub(crate) fn builtin_ccl_execute_on_string_impl(args: Vec<Value>) -> EvalResult {
     expect_min_args("ccl-execute-on-string", &args, 3)?;
     expect_max_args("ccl-execute-on-string", &args, 5)?;
@@ -261,33 +587,51 @@ pub(crate) fn builtin_ccl_execute_on_string_impl(args: Vec<Value>) -> EvalResult
         ));
     }
 
-    let Some((program, designator_kind)) = resolve_ccl_program_designator(&args[0]) else {
+    let Some((program, _)) = resolve_ccl_program_designator(&args[0]) else {
         return Err(signal("error", vec![Value::string("Invalid CCL program")]));
     };
     if !is_valid_ccl_program(&program) {
         return Err(signal("error", vec![Value::string("Invalid CCL program")]));
     }
 
-    // Arguments:
-    //   0: CCL-PROGRAM (we don't use)
-    //   1: STATUS vector (we don't use)
-    //   2: STRING (return this unchanged)
-    //   3: CONTINUE (optional, we don't use)
-    //   4: UNIBYTE-P (optional, we don't use)
+    let Some(string) = args[2].as_lisp_string() else {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("stringp"), args[2]],
+        ));
+    };
 
-    match args[2].kind() {
-        ValueKind::String => {
-            let message = ccl_program_code_index_message(&program, designator_kind);
-            Err(signal("error", vec![Value::string(message)]))
-        }
-        _other => {
-            // Type error: STRING must be a string or nil
-            Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("stringp"), args[2]],
-            ))
+    let status = args[1].as_vector_data().expect("validated STATUS vector");
+    let mut registers = [0i64; 8];
+    for (register, value) in registers.iter_mut().zip(status.iter().take(8)) {
+        if let Some(integer) = value.as_int()
+            && (i64::from(i32::MIN)..=i64::from(i32::MAX)).contains(&integer)
+        {
+            *register = integer;
         }
     }
+    let initial_instruction = status[8]
+        .as_int()
+        .and_then(|instruction| usize::try_from(instruction).ok());
+    let input = ccl_string_input(string);
+    let continue_execution = args.get(3).is_some_and(|value| !value.is_nil());
+    let unibyte = args.get(4).is_some_and(|value| !value.is_nil());
+    let execution = execute_compiled_ccl_with_state(
+        args[0],
+        &input,
+        !continue_execution,
+        registers,
+        initial_instruction,
+    )?;
+
+    for (index, register) in execution.registers.into_iter().enumerate() {
+        let updated = args[1].set_vector_slot(index, Value::fixnum(register));
+        debug_assert!(updated, "validated STATUS vector remains mutable");
+    }
+    let updated = args[1].set_vector_slot(8, Value::fixnum(execution.instruction as i64));
+    debug_assert!(updated, "validated STATUS vector remains mutable");
+
+    Ok(ccl_output_string(execution.output, unibyte))
 }
 
 /// (register-ccl-program NAME CCL-PROG) -> nil
