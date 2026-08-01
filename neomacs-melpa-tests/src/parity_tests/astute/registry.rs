@@ -46,6 +46,7 @@ fn astute_installed_payload_inventory_sizes_and_content_digests_match() -> Parit
                (file-attribute-size
                 (file-attributes path))
                (with-temp-buffer
+                 (set-buffer-multibyte nil)
                  (insert-file-contents-literally path)
                  (secure-hash
                   'sha256
