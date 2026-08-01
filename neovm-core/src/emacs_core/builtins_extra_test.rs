@@ -87,6 +87,16 @@ fn string_search() {
 }
 
 #[test]
+fn string_search_explicit_nil_start_defaults_to_zero_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result =
+        builtin_string_search(vec![Value::string(" "), Value::string("a b c"), Value::NIL])
+            .unwrap();
+
+    assert_eq!(result, Value::fixnum(1));
+}
+
+#[test]
 fn string_search_gnu_start_pos_errors() {
     crate::test_utils::init_test_tracing();
     let err = builtin_string_search(vec![

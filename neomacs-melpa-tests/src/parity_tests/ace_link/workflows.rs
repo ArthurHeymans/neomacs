@@ -8,12 +8,6 @@ use super::ParityBatchCase;
 /// lands in a node holding a single cross reference, where avy jumps without
 /// asking for a key at all.
 ///
-/// DIVERGENCE: Neomacs signals `(wrong-type-argument fixnump nil)' on the
-/// cross-reference half, because `string-search' rejects a nil START:
-/// `(string-search " " "a b c" nil)' is 1 in GNU Emacs and an error in Neomacs.
-/// `Info-follow-reference' calls it that way with an uninitialised loop
-/// variable, so no `*note' cross reference can be followed at all -- with or
-/// without ace-link.
 fn ace_link_info_labels_visible_references_and_follows_the_chosen_one() -> ParityBatchCase {
     ParityBatchCase::value(
         "ace_link_info_labels_visible_references_and_follows_the_chosen_one",
@@ -91,7 +85,7 @@ fn ace_link_help_follows_the_source_button_to_the_defining_file() -> ParityBatch
                         (buffer-substring-no-properties
                          (point-min) (point-max)))))))"##,
         expect![[
-            r#"OK (:help (:mode help-mode :key ace-link-help :style (ace-link-help . post) :text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n") :keys (("s" ((24 "ai" "interpreted-function in") (49 "s/" "[ORACLE-SANDBOX]/lib/notes-util.el’.") (303 "dn" "notes-util-format’ and ‘describe-function’ for details.") (327 "fd" "describe-function’ for details.")))) :where (:buffer "notes-util.el" :window-buffer "notes-util.el" :mode emacs-lisp-mode :point 59 :line 2 :column 0 :line-text "(defun notes-util-render (entry)") :help-text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n")"#
+            r#"OK (:help (:mode help-mode :key ace-link-help :style (ace-link-help . post) :text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n") :keys (("s" ((24 "ai" "interpreted-function in") (49 "s/" "[ORACLE-SANDBOX]/lib/notes-util.el’.") (268 "dn" "notes-util-format’ and ‘describe-function’ for details.") (292 "fd" "describe-function’ for details.")))) :where (:buffer "notes-util.el" :window-buffer "notes-util.el" :mode emacs-lisp-mode :point 59 :line 2 :column 0 :line-text "(defun notes-util-render (entry)") :help-text "notes-util-render is an interpreted-function in\n‘[ORACLE-SANDBOX]/lib/notes-util.el’.\n\n(notes-util-render ENTRY)\n\nRender ENTRY for the notebook.\nSee ‘notes-util-format’ and ‘describe-function’ for details.\n")"#
         ]],
     )
     .fresh_process()
@@ -175,7 +169,7 @@ fn ace_link_compilation_jumps_from_a_real_compile_run_to_the_error_site() -> Par
              :file-text (buffer-substring-no-properties
                          (point-min) (point-max)))))))"##,
         expect![[
-            r#"OK (:compilation (:mode compilation-mode :running nil :key ace-link-compilation :style (ace-link-compilation . post) :dispatch (ace-link-compilation compilation-mode grep-mode)) :keys (("s" ((358 "as" "src/parser.c:2:3: warning: unused value") (398 "ss" "src/lexer.c:2:17: error: bad token")))) :where (:buffer "lexer.c" :window-buffer "lexer.c" :mode c-mode :point 28 :line 2 :column 16 :line-text "int lex(void) { return 1; }") :file-text "/* lexer */\nint lex(void) { return 1; }\n")"#
+            r#"OK (:compilation (:mode compilation-mode :running nil :key ace-link-compilation :style (ace-link-compilation . post) :dispatch (ace-link-compilation compilation-mode grep-mode)) :keys (("s" ((323 "as" "src/parser.c:2:3: warning: unused value") (363 "ss" "src/lexer.c:2:17: error: bad token")))) :where (:buffer "lexer.c" :window-buffer "lexer.c" :mode c-mode :point 28 :line 2 :column 16 :line-text "int lex(void) { return 1; }") :file-text "/* lexer */\nint lex(void) { return 1; }\n")"#
         ]],
     )
     .fresh_process()

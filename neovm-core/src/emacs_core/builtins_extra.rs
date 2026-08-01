@@ -306,14 +306,16 @@ pub(crate) fn builtin_string_search(args: Vec<Value>) -> EvalResult {
         )
     })?;
     let char_len = haystack_ls.schars();
-    let start_char = if args.len() > 2 {
-        let n = expect_fixnum(&args[2])?;
-        if n < 0 || n as usize > char_len {
-            return Err(signal(LispCondition::ArgsOutOfRange, vec![args[2]]));
+    let start_char = match args.get(2) {
+        None => 0,
+        Some(start) if start.is_nil() => 0,
+        Some(start) => {
+            let n = expect_fixnum(start)?;
+            if n < 0 || n as usize > char_len {
+                return Err(signal(LispCondition::ArgsOutOfRange, vec![*start]));
+            }
+            n as usize
         }
-        n as usize
-    } else {
-        0
     };
 
     if needle_ls.schars() > haystack_ls.schars() - start_char {
