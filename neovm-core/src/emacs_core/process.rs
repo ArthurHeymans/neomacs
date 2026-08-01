@@ -2853,10 +2853,16 @@ fn tcp_socket_domain(addr: SocketAddr) -> Domain {
 }
 
 fn network_socket_io_error(message: &str, err: std::io::Error) -> Flow {
-    signal(
-        LispCondition::FileError,
-        vec![Value::string(message), Value::string(err.to_string())],
-    )
+    network_socket_io_error_with_name(message, Value::NIL, err)
+}
+
+/// Translate a socket errno through the same boundary as GNU
+/// `report_file_errno`.  NAME is the original network contact plist for
+/// connection failures, so callers receive both libc's bare strerror text and
+/// the keyword arguments that identify the failed connection.
+fn network_socket_io_error_with_name(message: &str, name: Value, err: std::io::Error) -> Flow {
+    let errno = err.raw_os_error().unwrap_or(libc::EIO);
+    signal_file_errno(message, name, errno)
 }
 
 fn bind_tcp_listener_socket(
@@ -2883,14 +2889,15 @@ fn bind_tcp_listener_socket(
 fn connect_tcp_stream_socket(
     addr: SocketAddr,
     options: &[NetworkSocketOptionSpec],
+    contact: Value,
 ) -> Result<TcpStream, Flow> {
     let socket = Socket::new(tcp_socket_domain(addr), Type::STREAM, Some(Protocol::TCP))
         .map_err(|err| network_socket_io_error("Cannot create client socket", err))?;
     apply_network_socket_options(&socket, options)?;
     let sock_addr = SockAddr::from(addr);
-    socket
-        .connect(&sock_addr)
-        .map_err(|err| network_socket_io_error("make client process failed", err))?;
+    socket.connect(&sock_addr).map_err(|err| {
+        network_socket_io_error_with_name("make client process failed", contact, err)
+    })?;
     socket
         .set_nonblocking(true)
         .map_err(|err| network_socket_io_error("set_nonblocking", err))?;
@@ -3198,10 +3205,11 @@ fn connect_tcp_stream_host(
     port: u16,
     family: NetworkProcessFamily,
     options: &[NetworkSocketOptionSpec],
+    contact: Value,
 ) -> Result<TcpStream, Flow> {
     let mut last_error = None;
     for addr in resolve_network_socket_addrs(host, port, family, NetworkSocketType::Stream)? {
-        match connect_tcp_stream_socket(addr, options) {
+        match connect_tcp_stream_socket(addr, options, contact) {
             Ok(stream) => return Ok(stream),
             Err(err) => last_error = Some(err),
         }
@@ -9747,7 +9755,7 @@ fn connect_network_process_at_explicit_address(
                 return Ok(Value::make_process(id));
             }
 
-            let stream = connect_tcp_stream_socket(addr, &socket_options)?;
+            let stream = connect_tcp_stream_socket(addr, &socket_options, contact)?;
             let remote_addr = stream.peer_addr().ok();
             let local_addr = stream.local_addr().ok();
 
@@ -11465,7 +11473,8 @@ pub(crate) fn builtin_make_network_process(
         return Ok(Value::make_process(id));
     }
 
-    let stream = connect_tcp_stream_host(host_str.as_str(), port, family, &socket_options)?;
+    let stream =
+        connect_tcp_stream_host(host_str.as_str(), port, family, &socket_options, contact)?;
     let remote_addr = stream.peer_addr().ok();
     let local_addr = stream.local_addr().ok();
 

@@ -5990,6 +5990,44 @@ fn make_network_process_honors_dynamic_coding_system_for_read_like_gnu() {
     assert_eq!(results, ["OK (binary . utf-8-unix)"]);
 }
 
+#[cfg(unix)]
+#[test]
+fn synchronous_network_refusal_reports_bare_errno_and_contact_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        r#"(let* ((server
+                   (make-network-process
+                    :name "network-refusal-port"
+                    :server t
+                    :service 0))
+                  (port (process-contact server :service)))
+             (delete-process server)
+             (condition-case error-data
+                 (make-network-process
+                  :name "network-refusal-client"
+                  :host "127.0.0.1"
+                  :service port)
+               (file-error
+                (list
+                 (car error-data)
+                 (nth 1 error-data)
+                 (nth 2 error-data)
+                 (nth 3 error-data)
+                 (nth 4 error-data)
+                 (nth 5 error-data)
+                 (nth 6 error-data)
+                 (nth 7 error-data)
+                 (equal port (nth 8 error-data))))))"#,
+    );
+
+    assert_eq!(
+        results,
+        [
+            "OK (file-error \"make client process failed\" \"Connection refused\" :name \"network-refusal-client\" :host \"127.0.0.1\" :service t)"
+        ]
+    );
+}
+
 #[test]
 fn process_list_network_serial_runtime_surface() {
     crate::test_utils::init_test_tracing();
