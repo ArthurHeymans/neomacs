@@ -2001,6 +2001,12 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
         Self { buffer }
     }
 
+    /// The underlying layout view (for buffer-local lookups the accessor does
+    /// not wrap).
+    pub fn view(&self) -> &'a B {
+        self.buffer
+    }
+
     /// Convert an internal neovm buffer character position to a byte position.
     ///
     /// `WindowParams` used by the pure-Rust layout path carry neovm-core's
@@ -2048,6 +2054,79 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
             })
             .expect("newline counting is infallible");
         count
+    }
+
+    /// Byte position just AFTER the `n`-th newline at or after `byte_from`,
+    /// or `None` when fewer than `n` newlines remain. Chunked scan with early
+    /// exit — cost is proportional to the distance to the `n`-th newline,
+    /// not to the buffer tail.
+    pub fn find_nth_newline_after(&self, byte_from: i64, n: usize) -> Option<i64> {
+        if n == 0 {
+            return Some(byte_from);
+        }
+        let range = clamped_layout_emacs_byte_range(self.buffer, byte_from, self.zv())?;
+        let mut remaining = n;
+        let mut offset: i64 = byte_from;
+        let mut found: Option<i64> = None;
+        let _ = self
+            .buffer
+            .layout_try_for_each_emacs_byte_range_chunk(range, |chunk| {
+                for (i, byte) in chunk.iter().enumerate() {
+                    if *byte == b'\n' {
+                        remaining -= 1;
+                        if remaining == 0 {
+                            found = Some(offset + i as i64 + 1);
+                            return Err(());
+                        }
+                    }
+                }
+                offset += chunk.len() as i64;
+                Ok(())
+            });
+        found
+    }
+
+    /// Whether any structure-affecting source exists in `[byte_from, byte_to)`
+    /// that could make the layout walk CONSUME buffer text beyond simple
+    /// line-by-line reading: overlays (display/invisible/before/after
+    /// strings), or `display` / `invisible` text properties. Used to gate the
+    /// bounded window read — when any is present the caller falls back to
+    /// reading the full accessible tail.
+    pub fn has_walk_consumption_hazard(&self, byte_from: i64, byte_to: i64) -> bool {
+        if !self.buffer.layout_overlays().is_empty() {
+            return true;
+        }
+        let Some(from) = layout_emacs_byte_pos_from_i64(byte_from) else {
+            return true;
+        };
+        let Some(to) = layout_emacs_byte_pos_from_i64(byte_to) else {
+            return true;
+        };
+        for prop in ["display", "invisible"] {
+            let name = Value::symbol(prop);
+            let mut pos = from;
+            loop {
+                if pos >= to {
+                    break;
+                }
+                if self
+                    .buffer
+                    .layout_text_prop_at_emacs_byte_pos(pos, name)
+                    .is_some()
+                {
+                    return true;
+                }
+                match self
+                    .buffer
+                    .layout_next_single_text_prop_change_after_emacs_byte_pos_bounded(
+                        pos, name, to,
+                    ) {
+                    Some(next) if next > pos => pos = next,
+                    _ => break,
+                }
+            }
+        }
+        false
     }
 
     /// Read a single byte at the given byte position.
