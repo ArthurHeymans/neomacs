@@ -3431,6 +3431,23 @@ impl Buffer {
         self.text.record_text_property_modification();
     }
 
+    /// Fold a text-property change over `byte_range` into the unchanged-region
+    /// accumulator. GNU `modify_text_properties` (textprop.c) runs
+    /// `BUF_COMPUTE_UNCHANGED (buf, start, end)` for every property write,
+    /// exactly like a char edit; mirroring that lets incremental layout treat
+    /// font-lock's per-keystroke refontification as a bounded dirty span
+    /// instead of escalating the whole window to a Full rebuild. A property
+    /// change never moves characters, so `old_z` is the current char count.
+    pub fn note_changed_property_region(&self, byte_range: EmacsByteRange) {
+        let range = self.text.byte_range_to_char_range(byte_range);
+        let z = self.text.char_count().get() as i64;
+        self.text.note_changed_char_region(
+            range.start().get() as i64,
+            range.end().get() as i64,
+            z,
+        );
+    }
+
     pub fn save_modified_tick(&self) -> i64 {
         self.text.save_modified_tick()
     }
@@ -5391,13 +5408,20 @@ impl BufferManager {
         Some(())
     }
 
-    pub fn record_buffer_text_property_modification(&mut self, id: BufferId) -> Option<()> {
+    pub fn record_buffer_text_property_modification(
+        &mut self,
+        id: BufferId,
+        byte_range: EmacsByteRange,
+    ) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         // Bumps `modified_tick` (as before) AND the dedicated
         // `props_modified_tick` — the single choke point every text-property
         // builtin (put/add/set/remove) routes through, so redisplay sees an
-        // appearance change without a char edit.
+        // appearance change without a char edit. The changed range also feeds
+        // the unchanged-region accumulator (GNU BUF_COMPUTE_UNCHANGED parity)
+        // so the change invalidates rows, not the whole window.
         buf.record_text_property_modification();
+        buf.note_changed_property_region(byte_range);
         Some(())
     }
 

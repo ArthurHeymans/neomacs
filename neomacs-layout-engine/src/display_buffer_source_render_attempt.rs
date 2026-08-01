@@ -85,6 +85,11 @@ pub(crate) enum BufferSourceRenderAttemptOutcome {
         /// Layout 0-based charpos point should move to.
         point_charpos: i64,
     },
+    /// A bounded fast-path walk failed its post-walk validation
+    /// (`ScrollReplay::expected_walk`): the regenerated span did not sync back
+    /// up with the reused rows. The caller must re-lay this window with no
+    /// replay plan; the checkpoint was already restored.
+    ReplayMispredicted,
     Finished {
         redisplay_positions: TextWindowRedisplayPositions,
         window_end_record: neovm_core::window::WindowEndRecord,

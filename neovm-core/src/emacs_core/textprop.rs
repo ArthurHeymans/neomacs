@@ -1365,7 +1365,7 @@ pub(crate) fn builtin_put_text_property_in_buffers(
         .put_buffer_text_property_in_emacs_byte_range(buf_id, byte_range, prop, val)
         .unwrap_or(false)
     {
-        let _ = buffers.record_buffer_text_property_modification(buf_id);
+        let _ = buffers.record_buffer_text_property_modification(buf_id, byte_range);
     }
     Ok(Value::NIL)
 }
@@ -1608,7 +1608,7 @@ pub(crate) fn builtin_add_text_properties_in_buffers(
         }
     }
     if any_changed {
-        let _ = buffers.record_buffer_text_property_modification(buf_id);
+        let _ = buffers.record_buffer_text_property_modification(buf_id, byte_range);
     }
     Ok(if any_changed { Value::T } else { Value::NIL })
 }
@@ -1807,7 +1807,7 @@ pub(crate) fn builtin_add_face_text_property_in_buffers(
         }
     }
     if any_changed {
-        let _ = buffers.record_buffer_text_property_modification(buf_id);
+        let _ = buffers.record_buffer_text_property_modification(buf_id, byte_range);
     }
     Ok(Value::NIL)
 }
@@ -1888,7 +1888,7 @@ pub(crate) fn builtin_remove_text_properties_in_buffers(
         }
     }
     if any_removed {
-        let _ = buffers.record_buffer_text_property_modification(buf_id);
+        let _ = buffers.record_buffer_text_property_modification(buf_id, byte_range);
     }
     Ok(if any_removed { Value::T } else { Value::NIL })
 }
@@ -1971,7 +1971,7 @@ pub(crate) fn builtin_set_text_properties_in_buffers(
         return Ok(Value::NIL);
     };
     let _ = buffers.set_buffer_text_properties_in_emacs_byte_range(buf_id, byte_range, pairs);
-    let _ = buffers.record_buffer_text_property_modification(buf_id);
+    let _ = buffers.record_buffer_text_property_modification(buf_id, byte_range);
     Ok(Value::T)
 }
 
@@ -2068,7 +2068,7 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
         let _ = buffers.remove_buffer_text_property_in_emacs_byte_range(buf_id, byte_range, name);
     }
     if changed {
-        let _ = buffers.record_buffer_text_property_modification(buf_id);
+        let _ = buffers.record_buffer_text_property_modification(buf_id, byte_range);
     }
     Ok(if changed { Value::T } else { Value::NIL })
 }

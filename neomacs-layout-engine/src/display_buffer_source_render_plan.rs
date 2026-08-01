@@ -760,6 +760,47 @@ impl BufferSourceOutputSetup {
                 buf_access,
             );
             let (mut output, evaluator) = output.into_parts();
+
+            // Post-walk validation (GNU try_window_id: the regenerated region
+            // must sync back up with the reused rows). The bounded walk just
+            // relaid the dirty span optimistically; if the span's structure
+            // changed in any way the prove-ahead gates could not see — a row
+            // wrapped (continued), the span re-flowed to a different height, or
+            // its end charpos no longer meets the first reused-below row — the
+            // reused rows below it are positioned wrong. Bail the whole replay:
+            // the caller re-lays the window from scratch, exactly as if no
+            // fast path had been planned.
+            if let Some(expected) = scroll.expected_walk {
+                let mut height = 0.0f32;
+                let mut last_end = None;
+                let mut broken = false;
+                for i in 0..expected.row_count {
+                    match output
+                        .builder()
+                        .current_window_row(scroll.exposed_row_base + i)
+                    {
+                        Some(row) if row.enabled && !row.continued => {
+                            height += row.height_px;
+                            last_end = Some(row.end_charpos);
+                        }
+                        _ => {
+                            broken = true;
+                            break;
+                        }
+                    }
+                }
+                if broken
+                    || last_end != Some(expected.last_row_end_charpos)
+                    || (height - expected.total_height_px).abs() >= 0.5
+                {
+                    crate::window_output::restore_text_window_retry_checkpoint(
+                        output.reborrow(),
+                        retry_checkpoint,
+                    );
+                    return BufferSourceRenderAttemptOutcome::ReplayMispredicted;
+                }
+            }
+
             let mut render_services =
                 ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
 

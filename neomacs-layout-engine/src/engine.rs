@@ -1904,21 +1904,71 @@ impl LayoutEngine {
             .buffer_manager()
             .get(neovm_core::buffer::BufferId(params.buffer_id))?;
         let (dirty_start, dirty_end) = buffer.changed_char_range()?;
-        // Below-reuse SAFETY GATE: only a simple insert — every inserted char is
-        // printable ASCII (graphic or space) — keeps the edited line one logical
-        // line of char_width glyphs, which is what makes the rows-below reuse
-        // (shift charpos, keep pixel_y) sound. A newline/tab/wide char (or a
-        // delete, dirty_end == dirty_start) escalates to above-only. Combined with
-        // edit_replay's monospace + width check this proves no row-structure change.
-        let simple_insert = self.allow_below_reuse
-            && dirty_end > dirty_start
+        // The span end in OLD (retained-matrix) coordinates: the accumulator
+        // tracks the unchanged suffix by length, so the old end is the new end
+        // minus the size delta.
+        let delta = curr_key.buffer_size - prev.key.buffer_size;
+        let dirty_end_old = dirty_end - delta;
+        // Below-reuse SAFETY GATE, part 1: every char in the dirty span is
+        // printable ASCII (graphic or space) — combined with edit_replay's
+        // monospace + width check this proves each span line still occupies
+        // exactly one row (no wrap, no newline count change), which is what
+        // makes the rows-below reuse (shift charpos, keep pixel_y) sound. A
+        // newline/tab/wide char in the span escalates to above-only. With
+        // property changes feeding the accumulator, the span covers the
+        // refontified region, so this also vets the refontified line's
+        // existing content.
+        // A pure delete has an empty NEW span (its old extent is the deleted
+        // range) — vacuously ASCII-safe; edit_replay + the post-walk
+        // validation own the delete-specific safety.
+        let simple_span = self.allow_below_reuse
             && (dirty_start..dirty_end).all(|cp| {
                 let byte = buffer.char_pos_to_emacs_byte_pos_clamped(
                     neovm_core::buffer::CharPos0::new(cp as usize),
                 );
                 matches!(buffer.char_at_emacs_byte_pos(byte), Some(c) if c.is_ascii_graphic() || c == ' ')
             });
-        prev.edit_replay(&curr_key, dirty_start, simple_insert)
+        // Part 2: no structure-affecting text property may cover the span.
+        // Face-class props (`face`, `font-lock-face`, `fontified`) only recolor
+        // glyphs; these change what the chars BECOME (replacement, hiding,
+        // prefixes, composition), which invalidates the one-line-one-row proof.
+        // GNU's try_window_id needs no such scan because its regenerated region
+        // re-syncs against the old matrix post-walk; here the post-walk
+        // `expected_walk` validation is the backstop and this scan keeps the
+        // replay from being built (and bailed) pointlessly.
+        let structure_props = [
+            "display",
+            "invisible",
+            "composition",
+            "line-prefix",
+            "wrap-prefix",
+        ];
+        let span_structure_safe = simple_span
+            && structure_props.iter().all(|prop| {
+                let name = neovm_core::emacs_core::value::Value::symbol(prop);
+                let mut byte = buffer.char_pos_to_emacs_byte_pos_clamped(
+                    neovm_core::buffer::CharPos0::new(dirty_start.max(0) as usize),
+                );
+                let end_byte = buffer.char_pos_to_emacs_byte_pos_clamped(
+                    neovm_core::buffer::CharPos0::new(dirty_end.max(0) as usize),
+                );
+                loop {
+                    if byte >= end_byte {
+                        return true;
+                    }
+                    if buffer
+                        .text_props_get_property_at_emacs_byte_pos(byte, name)
+                        .is_some()
+                    {
+                        return false;
+                    }
+                    match buffer.text_props_next_single_change_after_emacs_byte_pos(byte, name) {
+                        Some(next) if next > byte => byte = next,
+                        _ => return true,
+                    }
+                }
+            });
+        prev.edit_replay(&curr_key, dirty_start, dirty_end_old, span_structure_safe)
     }
 
     fn layout_window_rust(
@@ -2030,6 +2080,27 @@ impl LayoutEngine {
                         ..neovm_core::window::WindowDisplaySnapshot::default()
                     });
                 return WindowLayoutOutcome::Skipped;
+            }
+            BufferSourceRenderAttemptOutcome::ReplayMispredicted => {
+                // The bounded edit-replay walk failed post-walk validation
+                // (span re-wrapped / re-measured / lost position continuity).
+                // Re-lay this window from scratch with no fast-path plan —
+                // replay-free layout cannot mispredict, so this terminates.
+                return self.layout_window_rust(
+                    evaluator,
+                    frame_id,
+                    params,
+                    frame_params,
+                    layout_box,
+                    face_resolver,
+                    reserve_right_border_col,
+                    remaining_visibility_retries,
+                    None,
+                    None,
+                    false,
+                    position_publication,
+                    face_attempt,
+                );
             }
             BufferSourceRenderAttemptOutcome::Retry { window_start } => {
                 let mut retry_params = params.clone();

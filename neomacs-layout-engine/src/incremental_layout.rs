@@ -245,17 +245,25 @@ impl RetainedWindowKey {
         aligned == *curr
     }
 
-    /// Whether a window may take the localized-edit fast path: only the CHARS
-    /// tick moved (a plain text edit) — props/overlay/face ticks, window_start,
-    /// and geometry are all unchanged. A props/overlay/face move (e.g. font-lock
-    /// re-fontifying the edited region) escalates to a full rebuild (the honest
-    /// degradation, spec §4.4). `point` may also move with the edit.
+    /// Whether a window may take the localized-edit fast path: the CHARS tick
+    /// (a plain text edit) and/or the PROPS tick (a text-property write —
+    /// font-lock re-fontifying the edited region) moved, while overlay/face
+    /// ticks, window_start, and geometry are all unchanged. Property changes
+    /// are covered because they feed the same unchanged-region accumulator as
+    /// char edits (GNU BUF_COMPUTE_UNCHANGED parity, textprop.c), so the
+    /// dirty span bounds BOTH kinds of damage; GNU's try_window_id likewise
+    /// proceeds through property changes and hard-bails only on overlay
+    /// modiff (xdisp.c GIVE_UP 200). An overlay/face move still escalates to
+    /// a full rebuild. `point` may also move with the edit.
     pub fn edit_eligible(prev: &Self, curr: &Self) -> bool {
-        if prev.chars_modified_tick == curr.chars_modified_tick {
+        if prev.chars_modified_tick == curr.chars_modified_tick
+            && prev.props_modified_tick == curr.props_modified_tick
+        {
             return false;
         }
         let mut aligned = prev.clone();
         aligned.chars_modified_tick = curr.chars_modified_tick;
+        aligned.props_modified_tick = curr.props_modified_tick;
         aligned.point = curr.point;
         // A char edit necessarily changes the buffer size; that is the expected
         // consequence, not an escalation. `buffer_begv` is NOT aligned, so a
@@ -368,8 +376,31 @@ pub struct ScrollReplay {
     /// `reused_rows`. When false (scroll, above-only edit) the walk runs to the
     /// window bottom as usual.
     pub bound_walk: bool,
+    /// Post-walk validation contract for `bound_walk` plans (GNU try_window_id
+    /// analog: the regenerated region must sync back up with the reused rows).
+    /// `None` for unbounded walks. The render compares the walked span against
+    /// these NEW-coordinate expectations and bails the replay (relaying the
+    /// window without it) on any mismatch — the runtime backstop for whatever
+    /// the prove-ahead gates could not see (a property change re-wrapping or
+    /// re-measuring a span line).
+    pub expected_walk: Option<ExpectedBoundWalk>,
     /// Sealed frame-face generation that owns every ID in `reused_rows`.
     pub(crate) face_generation: FrameFaceGeneration,
+}
+
+/// What a bounded edit-replay walk must produce for the reused-below rows to
+/// remain valid. All values are in post-edit (NEW) coordinates.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ExpectedBoundWalk {
+    /// The last walked row must end exactly here (old span-end charpos shifted
+    /// by the edit delta) — position continuity with the first reused-below row.
+    pub last_row_end_charpos: usize,
+    /// Total pixel height the walked span must occupy (the retained span rows'
+    /// height sum) — the reused-below rows keep their `pixel_y` only if the
+    /// span's height is unchanged.
+    pub total_height_px: f32,
+    /// No walked row may be continued (a wrap changes the row structure).
+    pub row_count: usize,
 }
 
 fn referenced_face_ids<'a>(rows: impl IntoIterator<Item = &'a GlyphRow>) -> Vec<FaceId> {
@@ -603,6 +634,7 @@ impl RetainedWindowMatrix {
             new_point: curr.point,
             cursor_style,
             bound_walk: false,
+            expected_walk: None,
             face_generation: self.face_generation,
         })
     }
@@ -619,6 +651,7 @@ impl RetainedWindowMatrix {
         &self,
         curr: &RetainedWindowKey,
         dirty_start: i64,
+        dirty_end_old: i64,
         allow_below_reuse: bool,
     ) -> Option<ScrollReplay> {
         if self.validity != MatrixValidity::Valid {
@@ -719,38 +752,60 @@ impl RetainedWindowMatrix {
             .cloned()
             .collect();
         let dirty_row = body[first_dirty].1;
+        // The dirty SPAN: every body row whose OLD extent intersects
+        // `[dirty_start, dirty_end_old)` must be relaid — with property changes
+        // feeding the accumulator, the span routinely covers the whole
+        // refontified region, not just the edited line. Rows strictly below the
+        // span are untouched content whose positions shift by the edit delta.
+        // A pure insert has an empty old span (`dirty_end_old == dirty_start`),
+        // which keeps the span at exactly the edited row.
+        let span_last = (first_dirty..body.len())
+            .take_while(|&i| i == first_dirty || (body[i].1.start_charpos as i64) < dirty_end_old)
+            .last()
+            .unwrap_or(first_dirty);
+        let span_count = span_last - first_dirty + 1;
 
         // BELOW-REUSE (full try_window_id, post-walk-validated). When this is a
-        // simple insert into a monospace edited row that has rows below it, build
-        // the plan OPTIMISTICALLY: reuse the rows below the edit too (content
+        // simple insert into a monospace span that has rows below it, build
+        // the plan OPTIMISTICALLY: reuse the rows below the span too (content
         // unchanged, charpos shifted by the inserted count, same pixel_y) and
-        // BOUND the walk to the edited line. The render validates post-walk (the
-        // walked edited row must stay one non-continued row ending exactly where
-        // the first reused-below row begins); on failure it bails to above-only.
+        // BOUND the walk to the span rows. The render validates post-walk
+        // against `expected_walk` (row count, no continuation, end-charpos and
+        // height continuity with the first reused-below row); on failure it
+        // bails to a replay-free relayout.
         // `allow_below_reuse` is the kill switch for this path, not a staging
         // gate: it defaults to TRUE at every `LayoutEngine` construction site,
         // so below-reuse is the production path. Tests flip it off to isolate
         // above-only reuse.
         if allow_below_reuse {
             let delta = curr.buffer_size - self.key.buffer_size;
-            let text_glyphs = &dirty_row.glyphs[GlyphArea::Text.index()];
-            let monospace = !text_glyphs.is_empty()
-                && text_glyphs
-                    .iter()
-                    .all(|g| (g.pixel_width - curr.char_width).abs() < 0.5);
-            // The edited line must PROVABLY still fit in one row after the insert
-            // (no wrap → the rows below keep their pixel_y). `allow_below_reuse`
-            // already guarantees the inserted chars are simple/char_width (the
-            // caller's ASCII check), so `(cols + delta) * char_width` is exact.
-            let stays_one_row = (text_glyphs.len() as f32 + delta as f32) * curr.char_width
-                <= curr.partition.text_body().width;
+            // Every span row must be plain monospace text, and every span line
+            // must PROVABLY still fit in one row after the insert (no wrap →
+            // the rows below keep their pixel_y). `allow_below_reuse` already
+            // guarantees the span chars are simple/char_width (the caller's
+            // ASCII + structure-props check), so `(cols + delta) * char_width`
+            // is exact. Applying `delta` to every span row is over-conservative
+            // (the insert lands in exactly one of them) but always safe.
+            let span_rows = || body[first_dirty..=span_last].iter().map(|(_, row)| *row);
+            let monospace = span_rows().all(|row| {
+                let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
+                !text_glyphs.is_empty()
+                    && text_glyphs
+                        .iter()
+                        .all(|g| (g.pixel_width - curr.char_width).abs() < 0.5)
+            });
+            let stays_one_row = span_rows().all(|row| {
+                let cols = row.glyphs[GlyphArea::Text.index()].len();
+                (cols as f32 + delta.max(0) as f32) * curr.char_width
+                    <= curr.partition.text_body().width
+            });
             // Pointer identities on the rows below shift with the insert only
             // when their buffer positions lie entirely at/after it. A range
             // that BEGINS above the edit can be restructured by the insert
             // itself (a text-property interval splits around non-inheriting
             // inserted text), which no position shift reproduces — such rows
             // fall back to the above-only reuse below, which relays them.
-            let below_pointers_shiftable = body.iter().skip(first_dirty + 1).all(|(_, row)| {
+            let below_pointers_shiftable = body.iter().skip(span_last + 1).all(|(_, row)| {
                 row.pointer_appearances().iter().all(|appearance| {
                     let identity = appearance.source;
                     let range_ok = identity.kind != GlyphPointerSourceKind::Buffer
@@ -764,12 +819,27 @@ impl RetainedWindowMatrix {
                     range_ok && anchor_ok
                 })
             });
-            if delta > 0
-                && !pointer_shrunk_prefix
-                && first_dirty + 1 < body.len()
+            // `delta == 0` is the props-only refontification frame: content and
+            // positions below the span are bitwise unchanged, so below-reuse
+            // needs no shift and no fit proof beyond the span rows themselves.
+            // `delta < 0` is a delete: the span rows only shrink (never wrap),
+            // and the deleted chars cannot be inspected — a deleted NEWLINE
+            // changes the row structure, which the prove-ahead gates cannot
+            // see, so deletes lean entirely on the post-walk `expected_walk`
+            // validation (the merged line misses the end-charpos contract and
+            // the replay bails). Pointer-appearance shifting is add-only, so
+            // deletes additionally require pointer-free rows below.
+            let below_pointer_free = || {
+                body.iter()
+                    .skip(span_last + 1)
+                    .all(|(_, row)| row.pointer_appearances().is_empty())
+            };
+            if !pointer_shrunk_prefix
+                && span_last + 1 < body.len()
                 && monospace
                 && stays_one_row
                 && below_pointers_shiftable
+                && (delta >= 0 || below_pointer_free())
             {
                 let shift = |p: LispCharPos1| {
                     LispCharPos1::from_one_based_usize(
@@ -778,7 +848,7 @@ impl RetainedWindowMatrix {
                 };
                 let mut below_indices: std::collections::HashSet<i64> =
                     std::collections::HashSet::new();
-                for &(idx, row) in body.iter().skip(first_dirty + 1) {
+                for &(idx, row) in body.iter().skip(span_last + 1) {
                     let mut row = row.clone();
                     row.cursor_col = None;
                     row.cursor_type = None;
@@ -805,10 +875,15 @@ impl RetainedWindowMatrix {
                     // crosses the relaid row into these reused rows must key
                     // identically to the fresh appearance the relaid row got,
                     // or hover paints the pieces separately.
-                    row.shift_pointer_appearance_buffer_positions(
-                        dirty_start.max(0) as u64,
-                        delta as u64,
-                    );
+                    // Add-only API; deletes are gated to pointer-free rows
+                    // above, so a negative delta never reaches this call with
+                    // anything to shift.
+                    if delta > 0 {
+                        row.shift_pointer_appearance_buffer_positions(
+                            dirty_start.max(0) as u64,
+                            delta as u64,
+                        );
+                    }
                     below_indices.insert(idx as i64);
                     reused_rows.push((idx, row));
                 }
@@ -833,6 +908,7 @@ impl RetainedWindowMatrix {
                     point.buffer_pos = shift(point.buffer_pos);
                     reused_points.push(point);
                 }
+                let span_end_row = body[span_last].1;
                 return Some(ScrollReplay {
                     dvpos: 0.0,
                     reused_rows,
@@ -840,14 +916,19 @@ impl RetainedWindowMatrix {
                     reused_points,
                     exposed_start_charpos: dirty_row.start_charpos as i64,
                     exposed_row_base: body[first_dirty].0,
-                    // Bound the walk to the edited line (one row — no body row is
-                    // continued, so every line occupies exactly one row).
-                    exposed_row_count: 1,
+                    // Bound the walk to the dirty span's rows (no body row is
+                    // continued, so every span line occupies exactly one row).
+                    exposed_row_count: span_count,
                     exposed_text_y: dirty_row.pixel_y,
                     new_window_start: curr.window_start,
                     new_point: curr.point,
                     cursor_style,
                     bound_walk: true,
+                    expected_walk: Some(ExpectedBoundWalk {
+                        last_row_end_charpos: (span_end_row.end_charpos as i64 + delta) as usize,
+                        total_height_px: span_rows().map(|row| row.height_px).sum(),
+                        row_count: span_count,
+                    }),
                     face_generation: self.face_generation,
                 });
             }
@@ -866,6 +947,7 @@ impl RetainedWindowMatrix {
             new_point: curr.point,
             cursor_style,
             bound_walk: false,
+            expected_walk: None,
             face_generation: self.face_generation,
         })
     }
@@ -1199,7 +1281,7 @@ mod scroll_classifier_tests {
         // allow_below_reuse = true → reuse above (0,1) AND below (3,4); below rows
         // are charpos-shifted by +1; the walk is bounded to the one edited row.
         let r = m
-            .edit_replay(&curr, 25, true)
+            .edit_replay(&curr, 25, 25, true)
             .expect("below-reuse is eligible");
         assert!(r.bound_walk, "walk bounded to the edited line");
         assert_eq!(r.exposed_row_count, 1, "only the edited line is walked");
@@ -1218,7 +1300,7 @@ mod scroll_classifier_tests {
         // allow_below_reuse = false → the above-only edit replay (no below reuse,
         // walk runs to the bottom).
         let above_only = m
-            .edit_replay(&curr, 25, false)
+            .edit_replay(&curr, 25, 25, false)
             .expect("above-only edit replay");
         assert!(!above_only.bound_walk);
         assert_eq!(
@@ -1233,6 +1315,149 @@ mod scroll_classifier_tests {
         assert_eq!(
             above_only.exposed_row_count, 3,
             "edited line + 2 rows below"
+        );
+    }
+
+    /// A props-only refontification frame (font-lock after-the-fact pass, or
+    /// the props part of a keystroke): chars tick unchanged, props tick moved,
+    /// dirty span covering two rows. The span rows are relaid; the rows below
+    /// the span are reused UNSHIFTED (delta = 0); expected_walk carries the
+    /// span's continuity contract.
+    #[test]
+    fn edit_replay_props_only_span_relays_span_rows_and_reuses_below_unshifted() {
+        use neomacs_display_protocol::glyph_matrix::Glyph;
+        let mut m = synthetic_matrix(0, 5); // rows start at 0,10,20,30,40
+        for row_idx in [2usize, 3] {
+            let base = row_idx * 10;
+            for c in 0..10 {
+                let mut g = Glyph::char('a', FaceId::new(0), base + c);
+                g.pixel_width = 8.0;
+                m.matrix.rows[row_idx].glyphs[GlyphArea::Text.index()].push(g);
+            }
+        }
+        // Font-lock rewrote faces over chars [22, 35): props tick moved, size
+        // unchanged.
+        let mut curr = synthetic_key(0, 25);
+        curr.props_modified_tick = 6;
+
+        let r = m
+            .edit_replay(&curr, 22, 35, true)
+            .expect("props-only span replay is eligible");
+        assert!(r.bound_walk);
+        assert_eq!(r.exposed_row_base, 2, "span starts at row 2 (chars 20..)");
+        assert_eq!(r.exposed_row_count, 2, "rows 2 and 3 intersect [22,35)");
+        assert_eq!(
+            r.reused_rows.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
+            vec![0, 1, 4],
+            "above (0,1) verbatim + below-span (4) reused"
+        );
+        let below = r.reused_rows.iter().find(|(i, _)| *i == 4).unwrap();
+        assert_eq!(below.1.start_charpos, 40, "delta 0: no shift");
+        let expected = r.expected_walk.expect("bound walk carries the contract");
+        assert_eq!(expected.row_count, 2);
+        assert_eq!(
+            expected.last_row_end_charpos, 39,
+            "old row-3 end 39 + delta 0"
+        );
+        assert!((expected.total_height_px - 32.0).abs() < 0.01);
+    }
+
+    /// An insert whose accumulated dirty span (edit + refontification) covers
+    /// two rows: both span rows are relaid, rows below the span shift by the
+    /// insert delta.
+    #[test]
+    fn edit_replay_insert_with_multi_row_span_shifts_only_below_span() {
+        use neomacs_display_protocol::glyph_matrix::Glyph;
+        let mut m = synthetic_matrix(0, 5);
+        for row_idx in [2usize, 3] {
+            let base = row_idx * 10;
+            for c in 0..10 {
+                let mut g = Glyph::char('a', FaceId::new(0), base + c);
+                g.pixel_width = 8.0;
+                m.matrix.rows[row_idx].glyphs[GlyphArea::Text.index()].push(g);
+            }
+        }
+        // Insert 1 char at 25, font-lock refontified [20, 36) (NEW coords).
+        // Old-coordinate span end = 36 - 1 = 35.
+        let mut curr = synthetic_key(0, 26);
+        curr.chars_modified_tick = 6;
+        curr.props_modified_tick = 7;
+        curr.buffer_size = 1001;
+
+        let r = m
+            .edit_replay(&curr, 20, 35, true)
+            .expect("multi-row span insert replay is eligible");
+        assert!(r.bound_walk);
+        assert_eq!(r.exposed_row_base, 2);
+        assert_eq!(r.exposed_row_count, 2, "rows 2 and 3 intersect [20,35)");
+        assert_eq!(
+            r.reused_rows.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
+            vec![0, 1, 4]
+        );
+        let below = r.reused_rows.iter().find(|(i, _)| *i == 4).unwrap();
+        assert_eq!(below.1.start_charpos, 41, "row 4 start 40 -> 41");
+        let expected = r.expected_walk.unwrap();
+        assert_eq!(expected.row_count, 2);
+        assert_eq!(
+            expected.last_row_end_charpos, 40,
+            "old row-3 end 39 + delta 1"
+        );
+    }
+
+    /// Props tick movement alone now qualifies for the edit path (GNU
+    /// try_window_id proceeds through property changes); overlay/face moves
+    /// still escalate.
+    #[test]
+    fn edit_eligible_accepts_props_tick_movement_but_not_overlay_or_face() {
+        let prev = synthetic_key(0, 10);
+        let mut props_only = synthetic_key(0, 12);
+        props_only.props_modified_tick = 9;
+        assert!(RetainedWindowKey::edit_eligible(&prev, &props_only));
+
+        let mut overlay_moved = props_only.clone();
+        overlay_moved.overlay_modified_tick = 6;
+        assert!(!RetainedWindowKey::edit_eligible(&prev, &overlay_moved));
+
+        let mut face_moved = props_only.clone();
+        face_moved.face_change_count = 6;
+        assert!(!RetainedWindowKey::edit_eligible(&prev, &face_moved));
+    }
+
+    /// A simple in-line delete (delta < 0) also reuses the rows below the
+    /// span, shifted DOWN by the deleted count; the deleted-newline hazard is
+    /// owned by the post-walk expected_walk validation, so the plan builds
+    /// optimistically.
+    #[test]
+    fn edit_replay_delete_reuses_below_rows_with_negative_shift() {
+        use neomacs_display_protocol::glyph_matrix::Glyph;
+        let mut m = synthetic_matrix(0, 5); // rows start at 0,10,20,30,40
+        for c in 0..10 {
+            let mut g = Glyph::char('a', FaceId::new(0), 20 + c);
+            g.pixel_width = 8.0;
+            m.matrix.rows[2].glyphs[GlyphArea::Text.index()].push(g);
+        }
+        // 1 char deleted at 25: old span [25, 26), new span empty; size -1.
+        let mut curr = synthetic_key(0, 25);
+        curr.chars_modified_tick = 6;
+        curr.buffer_size = 999;
+
+        let r = m
+            .edit_replay(&curr, 25, 26, true)
+            .expect("delete below-reuse is eligible");
+        assert!(r.bound_walk);
+        assert_eq!(r.exposed_row_base, 2);
+        assert_eq!(r.exposed_row_count, 1);
+        assert_eq!(
+            r.reused_rows.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
+            vec![0, 1, 3, 4]
+        );
+        let below3 = r.reused_rows.iter().find(|(i, _)| *i == 3).unwrap();
+        assert_eq!(below3.1.start_charpos, 29, "row 3 start 30 -> 29");
+        let expected = r.expected_walk.unwrap();
+        assert_eq!(expected.row_count, 1);
+        assert_eq!(
+            expected.last_row_end_charpos, 28,
+            "old row-2 end 29 + delta -1"
         );
     }
 }
