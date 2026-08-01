@@ -383,6 +383,25 @@ fn string_match_supported_capture_pattern_uses_backref_engine_semantics() {
 }
 
 #[test]
+fn string_match_treats_postfix_after_buffer_start_anchor_as_literal_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut md = None;
+    let result = string_match_full_with_case_fold(
+        "\\`+\\([0-9]+\\)\\(?::\\([0-9]+\\)\\)?\\'",
+        "+12:4",
+        0,
+        false,
+        &mut md,
+    );
+
+    assert_eq!(result, Ok(Some(0)));
+    let md = md.expect("match data");
+    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(0, 5)));
+    assert_eq!(match_group(md.group(1)), Some(MatchGroup::new(1, 3)));
+    assert_eq!(match_group(md.group(2)), Some(MatchGroup::new(4, 5)));
+}
+
+#[test]
 fn string_match_noncapturing_group_pattern_uses_backref_engine_semantics() {
     crate::test_utils::init_test_tracing();
     let mut md = None;

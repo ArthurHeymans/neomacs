@@ -1337,7 +1337,10 @@ pub(crate) fn regex_compile_lisp_with_translation(
 
                     // \` — beginning of buffer
                     b'`' => {
-                        laststart = Some(bpos!());
+                        // GNU regex-emacs.c deliberately makes postfix operators
+                        // following \` literal, matching its treatment of ^.
+                        laststart = None;
+                        laststart_is_group = false;
                         pending_exact = None;
                         emit_op!(RegexOp::BegBuf);
                     }
