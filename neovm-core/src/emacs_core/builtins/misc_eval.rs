@@ -1765,8 +1765,24 @@ fn print_value_princ_bytes_inner(
             out.push(b')');
             out
         }
-        // Byte-code objects, interpreted closures, etc. are printed by GNU's
-        // `princ` through `print_object (obj, printcharfun, escapeflag=false)`
+        // Interpreted-function closures are PVEC_CLOSURE in GNU and use the
+        // same readable `#[...]` traversal as vectors, with `escapeflag=false`
+        // propagated to every slot (src/print.c:2599-2614).
+        ValueKind::Veclike(VecLikeType::Lambda) => {
+            let mut out = b"#[".to_vec();
+            if let Some(slots) = value.closure_slots() {
+                for (i, item) in slots.iter().enumerate() {
+                    if i > 0 {
+                        out.push(b' ');
+                    }
+                    out.extend_from_slice(&recurse(item));
+                }
+            }
+            out.push(b']');
+            out
+        }
+        // Byte-code objects are printed by GNU's `princ` through
+        // `print_object (obj, printcharfun, escapeflag=false)`
         // (`src/print.c`), recursing into the slots WITHOUT the escape flag, so
         // nested strings drop their surrounding quotes — but eight-bit bytes are
         // still octal-escaped by `print_string` (handled by the `nested` String

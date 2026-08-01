@@ -325,6 +325,31 @@ fn format_exact_percent_s_reuses_the_string_argument_like_gnu() {
 }
 
 #[test]
+fn format_percent_s_prints_interpreted_closure_slots_without_string_quotes() {
+    crate::test_utils::init_test_tracing();
+
+    let mut ctx = crate::emacs_core::eval::Context::new();
+    let result = ctx
+        .eval_str(
+            r##"(list
+  (format "%s"
+          (lambda ()
+            (interactive)
+            (message "Rollback the current deployment")))
+  (format "%S"
+          (lambda ()
+            (interactive)
+            (message "Rollback the current deployment"))))"##,
+        )
+        .expect("format should print interpreted functions");
+
+    assert_eq!(
+        crate::emacs_core::print::print_value(&result),
+        r##"("#[nil ((message Rollback the current deployment)) nil nil nil nil]" "#[nil ((message \"Rollback the current deployment\")) nil nil nil nil]")"##,
+    );
+}
+
+#[test]
 fn format_percent_s_promotes_result_when_printer_outputs_non_ascii_text() {
     crate::test_utils::init_test_tracing();
 
