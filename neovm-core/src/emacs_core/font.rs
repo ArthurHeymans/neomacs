@@ -685,54 +685,39 @@ fn live_frame_id_for_face_update(
     }
 }
 
-fn set_frame_face_color_from_frame_parameter(
-    eval: &mut super::eval::Context,
-    frame_id: FrameId,
-    face_name: &str,
-    attr: LFaceAttr,
-    value: Value,
-) -> Result<(), crate::emacs_core::error::Flow> {
-    builtin_internal_set_lisp_face_attribute(
-        eval,
-        vec![
-            Value::symbol(face_name),
-            Value::symbol(attr.keyword()),
-            value,
-            Value::make_frame(frame_id.0),
-        ],
-    )?;
-    Ok(())
-}
-
 pub(crate) fn update_face_from_frame_parameter(
     eval: &mut super::eval::Context,
     frame_id: FrameId,
     param: FrameParam,
     new_value: Value,
 ) -> Result<(), crate::emacs_core::error::Flow> {
-    match param {
-        FrameParam::ForegroundColor => {
-            set_frame_face_color_from_frame_parameter(
-                eval,
-                frame_id,
-                "default",
-                LFaceAttr::Foreground,
-                new_value,
-            )?;
-        }
+    let attr = match param {
+        FrameParam::ForegroundColor => LFaceAttr::Foreground,
         FrameParam::BackgroundColor => {
             if let Some(function) = eval.obarray().symbol_function("frame-set-background-mode") {
                 let _ = eval.apply(function, vec![Value::make_frame(frame_id.0)])?;
             }
-            set_frame_face_color_from_frame_parameter(
-                eval,
-                frame_id,
-                "default",
-                LFaceAttr::Background,
-                new_value,
-            )?;
+            LFaceAttr::Background
         }
-        _ => {}
+        _ => return Ok(()),
+    };
+
+    // GNU `update_face_from_frame_parameter' writes the frame-local Lisp face
+    // slot directly and then calls `realize_basic_faces'.  Do not route this
+    // derived frame-parameter update back through the public face setter: that
+    // gives the frame parameter a second, competing source of authority and
+    // skips TTY default-face realization.
+    if let Some(vector) =
+        ensure_frame_lisp_face_vector(eval, frame_id, "default", FrameFaceInitial::SelectedBase)
+    {
+        let value = if new_value.is_string() {
+            new_value
+        } else {
+            Value::symbol("unspecified")
+        };
+        set_lisp_face_vector_attr(vector, attr, value);
+        realize_default_lisp_face_for_frame(eval, frame_id);
+        eval.face_change_count += 1;
     }
     Ok(())
 }
@@ -5630,6 +5615,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
         ));
     }
 
+    let mut changed_live_frames = Vec::new();
     {
         let mut apply_set = |defaults_frame: bool| -> Result<(), Flow> {
             if defaults_frame {
@@ -5694,6 +5680,8 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                     if let Some(vector) =
                         ensure_frame_lisp_face_vector(eval, frame_id, &face_name, initial)
                     {
+                        let changed =
+                            lisp_face_vector_attr(vector, canonical_attr) != Some(canonical_value);
                         set_lisp_face_vector_attr_with_font_derivatives(
                             &face_name,
                             vector,
@@ -5701,6 +5689,9 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                             canonical_value,
                             canonical_value,
                         )?;
+                        if changed && !changed_live_frames.contains(&frame_id) {
+                            changed_live_frames.push(frame_id);
+                        }
                     }
                 }
             }
@@ -5785,23 +5776,26 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                 sync_live_default_face_font_state(eval, frame_id);
             }
 
-            if let Some(frame_id) = live_frame_id
-                && face_name == "default"
-            {
+            if face_name == "default" {
                 let frame_param = match attr_name_str {
                     ":foreground" => Some(FrameParam::ForegroundColor),
                     ":background" => Some(FrameParam::BackgroundColor),
                     _ => None,
                 };
-                if let Some(param) = frame_param {
-                    if let Some(frame) = eval.frames.get_mut(frame_id) {
-                        frame.set_known_parameter(param, public_effective_value);
-                    }
-                    if attr_name_str == ":background"
-                        && let Some(function) =
-                            eval.obarray().symbol_function("frame-set-background-mode")
-                    {
-                        let _ = eval.apply(function, vec![Value::make_frame(frame_id.0)])?;
+                if let Some(param) = frame_param
+                    && !canonical_value.is_symbol_named("unspecified")
+                    && !canonical_value.is_symbol_named(":ignore-defface")
+                {
+                    for frame_id in changed_live_frames.iter().copied() {
+                        if let Some(frame) = eval.frames.get_mut(frame_id) {
+                            frame.set_known_parameter(param, public_effective_value);
+                        }
+                        update_face_from_frame_parameter(
+                            eval,
+                            frame_id,
+                            param,
+                            public_effective_value,
+                        )?;
                     }
                 }
             }

@@ -3325,6 +3325,36 @@ fn runtime_face_sync_realizes_default_colors_from_frame_parameters() {
 }
 
 #[test]
+fn tty_default_face_color_realization_normalizes_font_attributes_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let rendered = bootstrap_eval_all(
+        r##"(progn
+             (face-spec-reset-face 'default (selected-frame))
+             (set-face-attribute 'default (selected-frame)
+                                 :foreground "#ffffff"
+                                 :background nil
+                                 :family "Terminus"
+                                 :foundry "xos4"
+                                 :slant 'normal
+                                 :weight 'normal
+                                 :height 130
+                                 :width 'normal)
+             (list (face-attribute 'default :family nil 'default)
+                   (face-attribute 'default :foundry nil 'default)
+                   (face-attribute 'default :height nil 'default)))"##,
+    );
+
+    // GNU xfaces.c routes a default-face color change through the frame
+    // parameter path.  `update_face_from_frame_parameter' then calls
+    // `realize_basic_faces', whose TTY branch canonicalizes the live frame's
+    // family/foundry/width/height before the remaining attributes are applied.
+    assert_eq!(
+        rendered,
+        vec![r#"OK ("default" "default" 130)"#.to_string()]
+    );
+}
+
+#[test]
 fn redisplay_face_preparation_reuses_generation_until_a_lisp_face_changes() {
     crate::test_utils::init_test_tracing();
     clear_font_cache_state();
