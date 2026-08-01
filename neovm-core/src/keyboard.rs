@@ -2778,6 +2778,22 @@ impl crate::emacs_core::eval::Context {
         value.as_number_f64()
     }
 
+    /// Whether GNU's keyboard reader considers the input interactive enough
+    /// to display a prompt or pending key sequence.
+    ///
+    /// GNU `INTERACTIVE` is false in batch mode and while replaying a keyboard
+    /// macro (`commands.h`).  Its delayed prefix-echo path separately rejects
+    /// `noninteractive` (`keyboard.c:2854-2863`).  Neomacs currently renders a
+    /// positive `echo-keystrokes` value immediately, so applying the stronger
+    /// `INTERACTIVE` gate here also prevents a fast keyboard macro from
+    /// spuriously materializing echo-area buffers.
+    fn keyboard_input_is_interactive(&self) -> bool {
+        !self.noninteractive()
+            && self
+                .eval_symbol("executing-kbd-macro")
+                .is_ok_and(|value| value.is_nil())
+    }
+
     /// Return true if EVENT matches `help-char` (default `Ctrl-h`
     /// == 8) or any entry in `help-event-list`.
     ///
@@ -3576,7 +3592,9 @@ impl crate::emacs_core::eval::Context {
             .and_then(|s| s.as_utf8_str())
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
-        if let Some(prompt) = key_sequence_prompt.as_deref() {
+        if self.keyboard_input_is_interactive()
+            && let Some(prompt) = key_sequence_prompt.as_deref()
+        {
             self.set_current_message(Some(LispString::from_utf8(prompt)));
         }
 
@@ -3984,7 +4002,8 @@ impl crate::emacs_core::eval::Context {
                 // corrects the "echo regardless of
                 // echo-keystrokes" bug but leaves the deadline
                 // scheduler for a later pass.
-                if self.lisp_echo_keystrokes_seconds().is_some_and(|s| s > 0.0)
+                if self.keyboard_input_is_interactive()
+                    && self.lisp_echo_keystrokes_seconds().is_some_and(|s| s > 0.0)
                     && let Some(echo_msg) = self.prefix_echo_message(&translated_events)
                 {
                     let full = match key_sequence_prompt.as_deref() {

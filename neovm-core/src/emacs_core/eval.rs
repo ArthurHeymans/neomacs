@@ -6840,28 +6840,12 @@ impl Context {
                 tracing::info!("Undefined key sequence: {}", desc.join(" "));
             }
 
-            // Set this-command, real-this-command, last-command-event,
-            // this-command-keys. Mirrors GNU `keyboard.c:1336-1353`:
-            //
-            //   Vreal_last_command = KVAR (current_kboard, Vreal_last_command);
-            //   Vreal_this_command = cmd;
-            //   /* Now do the remap. */
-            //   cmd = Fcommand_remapping (cmd, Qnil, Qnil);
-            //   ...
-            //   Vthis_command = cmd;
-            //   if (NILP (Vthis_original_command))
-            //     Vthis_original_command = cmd;
-            //
-            // Keyboard audit Findings 1, 2, 3, 4 in
-            // `drafts/keyboard-command-loop-audit.md`.
-            // Snapshot the previous this-command into real-last-command
-            // before we overwrite (Finding 3 — GNU
-            // `keyboard.c:1336-1339`).
-            let previous_this_command = self.eval_symbol("this-command").unwrap_or(Value::NIL);
-            self.assign("real-last-command", previous_this_command);
-
             // The unmapped command (real-this-command) is the binding
             // we read from the keymap, before any remapping is applied.
+            // Do not touch `real-last-command` here: GNU updates it only after
+            // the preceding command's `post-command-hook` and leaves that
+            // value visible to the next `pre-command-hook` (keyboard.c's
+            // `kset_real_last_command` near the command-loop finalize tail).
             self.assign("real-this-command", binding);
 
             // Apply command remapping per GNU

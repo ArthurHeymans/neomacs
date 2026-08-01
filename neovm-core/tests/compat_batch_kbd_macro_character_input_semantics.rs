@@ -83,3 +83,64 @@ fn minibuffer_recursive_command_starts_with_fresh_command_keys_like_gnu_emacs() 
         "minibuffer recursive command-key lifecycle differs from GNU Emacs"
     );
 }
+
+#[test]
+fn pre_command_hook_sees_the_previous_macro_command_like_gnu_emacs() {
+    if !oracle_enabled() {
+        eprintln!(
+            "skipping keyboard-macro command-history audit: set NEOVM_FORCE_ORACLE_PATH or place GNU Emacs mirror alongside the repo"
+        );
+        return;
+    }
+
+    let form = r#"(progn
+  (defvar neovm-command-lifecycle-log nil)
+  (defun neovm-command-lifecycle-a () (interactive))
+  (defun neovm-command-lifecycle-b () (interactive))
+  (defun neovm-command-lifecycle-record ()
+    (when (memq this-command
+                '(neovm-command-lifecycle-a neovm-command-lifecycle-b))
+      (push (list this-command real-this-command
+                  last-command real-last-command)
+            neovm-command-lifecycle-log)))
+  (global-set-key (kbd "C-c a") #'neovm-command-lifecycle-a)
+  (global-set-key (kbd "C-c b") #'neovm-command-lifecycle-b)
+  (add-hook 'pre-command-hook #'neovm-command-lifecycle-record)
+  (execute-kbd-macro (kbd "C-c a C-c b"))
+  (nreverse neovm-command-lifecycle-log))"#;
+
+    let gnu = run_oracle_eval(form).expect("GNU Emacs evaluation");
+    let neovm = run_neovm_eval(form).expect("NeoVM evaluation");
+
+    assert_eq!(
+        neovm, gnu,
+        "pre-command-hook command-history lifecycle differs from GNU Emacs"
+    );
+}
+
+#[test]
+fn batch_keyboard_macro_prefixes_do_not_create_echo_area_buffers_like_gnu_emacs() {
+    if !oracle_enabled() {
+        eprintln!(
+            "skipping batch key-prefix echo audit: set NEOVM_FORCE_ORACLE_PATH or place GNU Emacs mirror alongside the repo"
+        );
+        return;
+    }
+
+    let form = r#"(progn
+  (defun neovm-batch-prefix-command () (interactive))
+  (let ((global-map (copy-keymap global-map)))
+    (global-set-key (kbd "C-c p") #'neovm-batch-prefix-command)
+    (execute-kbd-macro (kbd "C-c p")))
+  (list (get-buffer " *Echo Area 0*")
+        (get-buffer " *Echo Area 1*")
+        (current-message)))"#;
+
+    let gnu = run_oracle_eval(form).expect("GNU Emacs evaluation");
+    let neovm = run_neovm_eval(form).expect("NeoVM evaluation");
+
+    assert_eq!(
+        neovm, gnu,
+        "batch keyboard-macro prefix echo lifecycle differs from GNU Emacs"
+    );
+}
