@@ -32,6 +32,8 @@ fn auto_complete_rst_genesource_eval_executes_generated_elisp_into_runtime_sourc
         r##"(let
                              ((auto-complete-rst-directive-options-map
                                (make-hash-table :test 'equal))
+                              (auto-complete-rst-genesource-py
+                               "/fixture/genesource.py")
                               shell-calls)
                            (cl-letf
                                (((symbol-function 'shell-command)
@@ -54,7 +56,7 @@ fn auto_complete_rst_genesource_eval_executes_generated_elisp_into_runtime_sourc
                               (auto-complete-rst-test-hash-alist
                                auto-complete-rst-directive-options-map))))"##,
         expect![[
-            r####"OK ((("python -W ignore [ORACLE-WORKSPACE]/tmp/melpa/package-cache/auto-complete-rst/20140225.944/home/.emacs.d/elpa/auto-complete-rst-20140225.944/genesource.py" t nil)) ("note::" "code-block::" "image::" "py:function::") ("ref:" "doc:" "py:class:" "emphasis:") (("code-block" "class:" "linenos:" "caption:") ("image" "alt:" "height:" "width:") ("note" "class:" "name:") ("py:function" "module:" "noindex:")))"####
+            r####"OK ((("python -W ignore /fixture/genesource.py" t nil)) ("note::" "code-block::" "image::" "py:function::") ("ref:" "doc:" "py:class:" "emphasis:") (("code-block" "class:" "linenos:" "caption:") ("image" "alt:" "height:" "width:") ("note" "class:" "name:") ("py:function" "module:" "noindex:")))"####
         ]],
     )
 }

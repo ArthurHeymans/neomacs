@@ -648,11 +648,8 @@ fn signal_invalid_read_syntax_in_buffer_object(
     )
 }
 
-fn end_of_file_during_parsing_error() -> Flow {
-    signal(
-        LispCondition::EndOfFile,
-        vec![Value::string("End of file during parsing")],
-    )
+pub(crate) fn end_of_file_error_for_source(source: Option<Value>) -> Flow {
+    signal(LispCondition::EndOfFile, source.into_iter().collect())
 }
 
 /// Read the next top-level form from the active load-read cursor — the stream
@@ -668,9 +665,10 @@ fn read_from_active_load_cursor(
     let Some(cursor) = ctx.load_read_cursors.last() else {
         // `standard-input` names the load stream but no load is active: treat
         // as a spent stream (EOF) rather than crashing.
-        return Err(end_of_file_during_parsing_error());
+        return Err(end_of_file_error_for_source(None));
     };
     let source = cursor.source;
+    let eof_source = cursor.eof_source;
     let pos = cursor.pos;
     let shorthands = cursor.shorthands.clone();
 
@@ -683,13 +681,13 @@ fn read_from_active_load_cursor(
     let read_source = super::value_reader::LispReadSource::new(lisp_str);
     let end = read_source.logical_len();
     if pos >= end {
-        return Err(end_of_file_during_parsing_error());
+        return Err(end_of_file_error_for_source(eof_source));
     }
     let read_result = read_source
         .read_one_range_with_locate_syms(pos, end, locate_syms, &ctx.obarray, shorthands.as_ref())
         .map_err(signal_reader_error_from_string)?;
     let Some((value, next_pos)) = read_result else {
-        return Err(end_of_file_during_parsing_error());
+        return Err(end_of_file_error_for_source(eof_source));
     };
     // Advance the shared cursor so the readevalloop resumes after this form.
     if let Some(cursor) = ctx.load_read_cursors.last_mut() {
@@ -701,7 +699,7 @@ fn read_from_active_load_cursor(
 
 fn signal_reader_error_from_string(e: super::value_reader::ReadError) -> Flow {
     match e.kind {
-        super::value_reader::ReadErrorKind::EndOfFile => signal(LispCondition::EndOfFile, vec![]),
+        super::value_reader::ReadErrorKind::EndOfFile => end_of_file_error_for_source(None),
         super::value_reader::ReadErrorKind::Error => {
             signal("error", vec![Value::string(e.message)])
         }
@@ -720,7 +718,9 @@ fn signal_reader_error_from_buffer(
     e: super::value_reader::ReadError,
 ) -> Flow {
     match e.kind {
-        super::value_reader::ReadErrorKind::EndOfFile => signal(LispCondition::EndOfFile, vec![]),
+        super::value_reader::ReadErrorKind::EndOfFile => {
+            end_of_file_error_for_source(Some(Value::make_buffer(buffer.id)))
+        }
         super::value_reader::ReadErrorKind::Error => {
             signal("error", vec![Value::string(e.message)])
         }
@@ -966,7 +966,9 @@ pub fn builtin_read_impl(
                 let start = buf.point_emacs_byte_pos();
                 let end = buf.accessible_emacs_byte_region().end();
                 if start >= end {
-                    return Err(end_of_file_during_parsing_error());
+                    return Err(end_of_file_error_for_source(Some(Value::make_buffer(
+                        buf_id,
+                    ))));
                 }
 
                 match super::value_reader::read_one_from_buffer_with_locate_syms(
@@ -982,7 +984,8 @@ pub fn builtin_read_impl(
             };
 
             let _ = &mut ctx.buffers.goto_buffer_emacs_byte_pos(buf_id, new_pt);
-            let value = maybe_value.ok_or_else(end_of_file_during_parsing_error)?;
+            let value = maybe_value
+                .ok_or_else(|| end_of_file_error_for_source(Some(Value::make_buffer(buf_id))))?;
             ctx.obarray_mut().materialize_read_symbols(value);
             Ok(value)
         }

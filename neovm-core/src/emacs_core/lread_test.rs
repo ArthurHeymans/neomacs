@@ -28,6 +28,25 @@ fn eval_buffer_evaluates_current_buffer_forms() {
 }
 
 #[test]
+fn eval_buffer_incomplete_form_signals_source_buffer_like_gnu_emacs() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buffer_id = ev.buffers.current_buffer().expect("current buffer").id;
+    ev.buffers
+        .current_buffer_mut()
+        .expect("current buffer")
+        .insert("(defun incomplete (");
+
+    let result = builtin_eval_buffer(&mut ev, vec![]);
+    assert!(matches!(
+        result,
+        Err(Flow::Signal(sig))
+            if sig.symbol_name() == "end-of-file"
+                && sig.data == vec![Value::make_buffer(buffer_id)]
+    ));
+}
+
+#[test]
 fn eval_buffer_preserves_unibyte_string_literals() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

@@ -97,9 +97,14 @@ fn strip_reader_prefix_lisp_string(source: &crate::heap_types::LispString) -> (u
     }
 }
 
-fn signal_reader_error_for_eval_source(e: super::value_reader::ReadError) -> Flow {
+fn signal_reader_error_for_eval_source(
+    e: super::value_reader::ReadError,
+    eof_source: Option<Value>,
+) -> Flow {
     match e.kind {
-        super::value_reader::ReadErrorKind::EndOfFile => signal(LispCondition::EndOfFile, vec![]),
+        super::value_reader::ReadErrorKind::EndOfFile => {
+            super::reader::end_of_file_error_for_source(eof_source)
+        }
         super::value_reader::ReadErrorKind::Error => {
             signal("error", vec![Value::string(e.message)])
         }
@@ -116,14 +121,16 @@ fn signal_reader_error_for_eval_source(e: super::value_reader::ReadError) -> Flo
 pub(crate) fn eval_forms_from_lisp_source(
     eval: &mut super::eval::Context,
     source: &crate::heap_types::LispString,
+    eof_source: Option<Value>,
 ) -> EvalResult {
     let macroexpand_fn = super::load::get_eager_macroexpand_fn(eval);
-    eval_forms_from_lisp_source_streaming(eval, source, macroexpand_fn)
+    eval_forms_from_lisp_source_streaming(eval, source, eof_source, macroexpand_fn)
 }
 
 fn eval_forms_from_lisp_source_streaming(
     eval: &mut super::eval::Context,
     source: &crate::heap_types::LispString,
+    eof_source: Option<Value>,
     macroexpand_fn: Option<Value>,
 ) -> EvalResult {
     let (start_pos, shebang_only_line) = strip_reader_prefix_lisp_string(source);
@@ -151,6 +158,7 @@ fn eval_forms_from_lisp_source_streaming(
     );
     eval.load_read_cursors.push(super::eval::LoadReadCursor {
         source: source_value,
+        eof_source,
         pos: start_pos,
         shorthands: None,
     });
@@ -166,7 +174,7 @@ fn eval_forms_from_lisp_source_streaming(
                 .pos;
             let read_result = read_source
                 .read_one(pos, &eval.obarray)
-                .map_err(signal_reader_error_for_eval_source)?;
+                .map_err(|error| signal_reader_error_for_eval_source(error, eof_source))?;
             let Some((form, next_pos)) = read_result else {
                 break;
             };
@@ -464,7 +472,7 @@ pub(crate) fn builtin_eval_buffer(eval: &mut super::eval::Context, args: Vec<Val
             )
             .map_err(map_eval_error_to_flow)
         } else {
-            let result = eval_forms_from_lisp_source(eval, &source);
+            let result = eval_forms_from_lisp_source(eval, &source, Some(buffer_value));
             if result.is_ok()
                 && let Some(filename) = filename.as_ref()
             {
@@ -498,7 +506,11 @@ pub(crate) fn builtin_eval_region(eval: &mut super::eval::Context, args: Vec<Val
     if source.as_bytes().is_empty() {
         return Ok(Value::NIL);
     }
-    eval_forms_from_lisp_source(eval, &source)
+    let buffer = eval
+        .buffers
+        .current_buffer()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    eval_forms_from_lisp_source(eval, &source, Some(Value::make_buffer(buffer.id)))
 }
 
 fn eval_region_with_read_function(

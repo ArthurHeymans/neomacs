@@ -1940,6 +1940,10 @@ pub(crate) struct LoadReadCursor {
     /// Heap `LispString` Value being read.  Rooted for the cursor's lifetime
     /// via `push_specpdl_root` when the cursor is pushed.
     pub(crate) source: Value,
+    /// Lisp-visible source object used as `end-of-file' signal data.  Neomacs
+    /// parses a string snapshot, while GNU retains the original buffer or file
+    /// identity for reader diagnostics.
+    pub(crate) eof_source: Option<Value>,
     /// Shared byte offset into `source`, advanced by both the readevalloop and
     /// `(read STREAM=standard-input)`.
     pub(crate) pos: usize,

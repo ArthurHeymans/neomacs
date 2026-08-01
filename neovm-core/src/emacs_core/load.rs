@@ -1847,12 +1847,15 @@ fn streaming_readevalloop_lisp_source(
     let setup_specpdl_base = eval.specpdl.len();
     let content_value = Value::heap_string(content.clone());
     eval.push_specpdl_root(content_value);
+    let eof_source = Value::heap_string(hist_file_name.clone());
+    eval.push_specpdl_root(eof_source);
     eval.specbind(
         intern("standard-input"),
         Value::symbol(super::eval::LOAD_READ_STREAM_SYMBOL),
     );
     eval.load_read_cursors.push(super::eval::LoadReadCursor {
         source: content_value,
+        eof_source: Some(eof_source),
         pos: 0,
         shorthands: shorthands.cloned(),
     });

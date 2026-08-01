@@ -4482,7 +4482,7 @@ fn read_from_buffer_preserves_string_literals_during_eval() {
 }
 
 #[test]
-fn read_from_buffer_incomplete_list_signals_end_of_file_like_gnu_emacs() {
+fn read_from_buffer_incomplete_list_signals_source_buffer_like_gnu_emacs() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let buf_id = ev.buffers.create_buffer(" *reader-incomplete-list*");
@@ -4493,7 +4493,12 @@ fn read_from_buffer_incomplete_list_signals_end_of_file_like_gnu_emacs() {
     }
 
     let result = builtin_read(&mut ev, vec![Value::make_buffer(buf_id)]);
-    assert!(matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"));
+    assert!(matches!(
+        result,
+        Err(Flow::Signal(sig))
+            if sig.symbol_name() == "end-of-file"
+                && sig.data == vec![Value::make_buffer(buf_id)]
+    ));
 }
 
 #[test]
