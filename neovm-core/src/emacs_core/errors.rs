@@ -17,7 +17,7 @@
 //! symbol.
 
 use super::error::{
-    EvalResult, Flow, signal, signal_id, signal_suppressed, signal_with_data, signal_with_data_id,
+    EvalResult, Flow, signal, signal_suppressed, signal_with_data, signal_with_data_id,
 };
 use super::intern::{SymId, intern, resolve_sym};
 use super::symbol::Obarray;
@@ -589,14 +589,7 @@ fn register_simple(obarray: &mut Obarray, name: &str, message: &str, parents: &[
 // ---------------------------------------------------------------------------
 
 fn build_signal_flow(symbol_name: &str, data: Value) -> Flow {
-    match data.kind() {
-        ValueKind::Nil => signal(symbol_name, vec![]),
-        ValueKind::Cons => match list_to_vec(&data) {
-            Some(data) => signal(symbol_name, data),
-            None => signal_with_data(symbol_name, data),
-        },
-        _ => signal_with_data(symbol_name, data),
-    }
+    signal_with_data(symbol_name, data)
 }
 
 fn build_peculiar_signal_flow(eval: &super::eval::Context, error_object: Value) -> Flow {
@@ -634,20 +627,8 @@ fn build_peculiar_signal_flow(eval: &super::eval::Context, error_object: Value) 
 /// Identity-preserving, signal-hook-suppressed variant of `build_signal_flow`.
 fn build_signal_flow_id_suppressed(symbol: SymId, data: Value) -> Flow {
     use super::error::signal_internal_id;
-    match data.kind() {
-        ValueKind::Nil => signal_internal_id(symbol, vec![], None, true),
-        ValueKind::Cons => match list_to_vec(&data) {
-            Some(items) => signal_internal_id(symbol, items, None, true),
-            None => {
-                let normalized = list_to_vec(&data).unwrap_or_else(|| vec![data]);
-                signal_internal_id(symbol, normalized, Some(data), true)
-            }
-        },
-        _ => {
-            let normalized = list_to_vec(&data).unwrap_or_else(|| vec![data]);
-            signal_internal_id(symbol, normalized, Some(data), true)
-        }
-    }
+    let normalized = list_to_vec(&data).unwrap_or_else(|| vec![data]);
+    signal_internal_id(symbol, normalized, Some(data), true)
 }
 
 /// Eval-aware `signal`, including GNU's "peculiar error" handling for
@@ -703,14 +684,7 @@ pub(crate) fn builtin_signal(eval: &mut super::eval::Context, args: Vec<Value>) 
 
 /// Identity-preserving variant of `build_signal_flow`.
 fn build_signal_flow_id(symbol: SymId, data: Value) -> Flow {
-    match data.kind() {
-        ValueKind::Nil => signal_id(symbol, vec![]),
-        ValueKind::Cons => match list_to_vec(&data) {
-            Some(data) => signal_id(symbol, data),
-            None => signal_with_data_id(symbol, data),
-        },
-        _ => signal_with_data_id(symbol, data),
-    }
+    signal_with_data_id(symbol, data)
 }
 
 /// `(signal CONS)` with nil DATA: the cons *is* the whole error object,

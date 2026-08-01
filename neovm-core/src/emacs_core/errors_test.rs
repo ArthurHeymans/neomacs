@@ -551,6 +551,21 @@ fn condition_case_preserves_raw_signal_binding_shape() {
 }
 
 #[test]
+fn condition_case_preserves_proper_signal_data_identity_like_gnu_fsignal() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let value = eval
+        .eval_str(
+            "(let ((data (list :keys (list \"unknown\"))))\
+               (condition-case err\
+                   (signal 'wrong-type-argument data)\
+                 (error (eq (cdr err) data))))",
+        )
+        .expect("condition-case should catch signal");
+    assert_eq!(value, Value::T);
+}
+
+#[test]
 fn builtin_signal_wrong_arity() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();

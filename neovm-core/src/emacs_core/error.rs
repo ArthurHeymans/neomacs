@@ -264,11 +264,6 @@ fn signal_with_data_internal(
     )
 }
 
-/// Identity-preserving signal flow (see `signal_internal_id`).
-pub(crate) fn signal_id(symbol: SymId, data: Vec<Value>) -> Flow {
-    signal_internal_id(symbol, data, None, false)
-}
-
 /// Identity-preserving signal flow with a raw cdr payload.
 pub(crate) fn signal_with_data_id(symbol: SymId, data: Value) -> Flow {
     let normalized = super::value::list_to_vec(&data).unwrap_or_else(|| vec![data]);
@@ -324,12 +319,6 @@ pub(crate) fn signal_from_binding_value(value: Value) -> Option<Flow> {
     let symbol = pair_car;
     let tail = pair_cdr;
     let symbol_name = symbol.as_symbol_name()?;
-    if tail.is_nil() {
-        return Some(signal(symbol_name, vec![]));
-    }
-    if let Some(items) = super::value::list_to_vec(&tail) {
-        return Some(signal(symbol_name, items));
-    }
     Some(signal_with_data(symbol_name, tail))
 }
 
