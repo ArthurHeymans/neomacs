@@ -75,6 +75,8 @@ const ADAFRUIT_WISDOM_TEST_PRELUDE: &str = r##"
 
 (defun adaw-test-start-server ()
   "Start the stand-in quote feed and return its port."
+  (when (process-live-p adaw-test-server)
+    (delete-process adaw-test-server))
   (setq adaw-test-requests nil)
   (setq adaw-test-server
         (make-network-process :name "adaw-feed"
@@ -95,6 +97,9 @@ const ADAFRUIT_WISDOM_TEST_PRELUDE: &str = r##"
 
 (defun adaw-test-setup (&optional backend)
   "Point the package at the stand-in feed and return its URL."
+  ;; Batch cases share an Emacs process for speed, but a package cache is part
+  ;; of this fixture's external state and must never leak into the next case.
+  (adaw-test-forget-cache)
   (setq request-backend (or backend 'url-retrieve)
         request-log-level -1
         request-message-level -1)

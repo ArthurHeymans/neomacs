@@ -157,8 +157,30 @@ inspects the encrypted format, so nothing about it is authored here."
 (defun agx-test-run-count ()
   (length (directory-files agx-test-records nil "\\`[0-9][0-9]-age\\'")))
 
+(defun agx-test-reset ()
+  "Reset state shared by otherwise-independent batched workflow cases."
+  ;; Keep batched cases process-local while giving each one the clean project
+  ;; it had when cases ran as separate tests.  In particular, do not retain a
+  ;; file-visiting buffer whose backing ciphertext is about to be replaced:
+  ;; `save-buffer' would correctly treat that as an external modification and
+  ;; prompt on stdin in batch mode.
+  (dolist (buffer (buffer-list))
+    (with-current-buffer buffer
+      (when (and buffer-file-name
+                 (file-in-directory-p buffer-file-name agx-test-root))
+        (set-buffer-modified-p nil)
+        (kill-buffer buffer))))
+  (when (file-directory-p agx-test-root)
+    (delete-directory agx-test-root t))
+  (when (file-directory-p agx-test-records)
+    (delete-directory agx-test-records t))
+  (let ((total (expand-file-name ".total" agx-test-home)))
+    (when (file-exists-p total)
+      (delete-file total)))
+  (make-directory agx-test-records t))
+
 (defun agx-test-project (&optional secret-name)
-  "Create a real agenix project: secrets.nix plus an armoured secret file."
+  "Create or extend a real agenix project with SECRET-NAME declared."
   (let* ((name (or secret-name "db-password.age"))
          (nix (expand-file-name "secrets.nix" agx-test-root)))
     (make-directory agx-test-root t)

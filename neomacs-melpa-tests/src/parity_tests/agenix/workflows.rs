@@ -16,6 +16,7 @@ fn decrypts_a_secret_into_a_buffer_when_the_file_is_opened() -> ParityBatchCase 
         "decrypts_a_secret_into_a_buffer_when_the_file_is_opened",
         r##"
         (progn
+          (agx-test-reset)
           (agx-test-install-age)
           (agx-test-project)
           (let ((key (agx-test-keygen "id_ed25519")))
@@ -41,6 +42,7 @@ fn re_encrypts_on_save_without_the_plaintext_reaching_disk() -> ParityBatchCase 
         "re_encrypts_on_save_without_the_plaintext_reaching_disk",
         r##"
         (progn
+          (agx-test-reset)
           (agx-test-install-age)
           (agx-test-project)
           (let ((key (agx-test-keygen "id_ed25519")))
@@ -78,6 +80,7 @@ fn key_files_customization_decides_the_identity_flags() -> ParityBatchCase {
         "key_files_customization_decides_the_identity_flags",
         r##"
         (progn
+          (agx-test-reset)
           (agx-test-install-age)
           (agx-test-project)
           (let* ((primary (agx-test-keygen "id_ed25519"))
@@ -110,6 +113,7 @@ fn reports_the_failure_and_shows_ciphertext_when_no_key_matches() -> ParityBatch
         "reports_the_failure_and_shows_ciphertext_when_no_key_matches",
         r##"
         (progn
+          (agx-test-reset)
           (agx-test-install-age)
           (agx-test-project)
           (let ((wrong (agx-test-keygen "id_wrong")))
@@ -135,6 +139,7 @@ fn refuses_to_decrypt_an_undeclared_secret_and_prepares_a_new_one() -> ParityBat
         "refuses_to_decrypt_an_undeclared_secret_and_prepares_a_new_one",
         r##"
         (progn
+          (agx-test-reset)
           (agx-test-install-age)
           (agx-test-project)
           (let ((key (agx-test-keygen "id_ed25519")))
