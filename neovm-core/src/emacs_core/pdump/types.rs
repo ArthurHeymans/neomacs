@@ -421,6 +421,10 @@ pub enum DumpSymbolVal {
     /// the dump only needs to signal "this symbol is a forwarder"; the
     /// actual descriptor pointer is never serialized.
     Forwarded,
+    /// `SymbolRedirect::Forwarded` backed by GNU `Lisp_Boolfwd` semantics.
+    /// The stable descriptor pointer is rebuilt on load; only its current
+    /// native Boolean value belongs in the portable image.
+    BoolForwarded(bool),
 }
 
 /// Serialized per-symbol metadata.  Format v21: all legacy fields

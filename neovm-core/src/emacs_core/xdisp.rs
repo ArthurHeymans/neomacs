@@ -5427,8 +5427,10 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("hscroll-step", Value::fixnum(0));
     obarray.set_symbol_value("auto-hscroll-mode", Value::T);
     obarray.set_symbol_value("void-text-area-pointer", Value::symbol("arrow"));
-    obarray.set_symbol_value("inhibit-message", Value::NIL);
-    obarray.make_special("inhibit-message");
+    // GNU xdisp.c registers this with DEFVAR_BOOL.  Native Boolean storage is
+    // observable from Lisp: every non-nil assignment reads back as canonical
+    // `t`, including dynamic bindings and their restoration.
+    obarray.define_bool_variable("inhibit-message", false);
     obarray.set_symbol_value("make-cursor-line-fully-visible", Value::T);
     obarray.set_symbol_value("x-stretch-cursor", Value::NIL);
     // GNU `src/xdisp.c:38708` (`DEFVAR_BOOL ("inhibit-try-cursor-movement", ...)`)

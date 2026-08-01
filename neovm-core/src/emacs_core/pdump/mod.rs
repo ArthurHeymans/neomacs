@@ -140,7 +140,9 @@ use crate::emacs_core::value;
 // v55: Runtime VecLikeType discriminants now mirror GNU `enum pvec_type` for
 //   all shared vectorlike tags; old mmap heap headers used Neomacs-local codes.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-const FORMAT_VERSION: u32 = 55;
+// v56: preserve native Boolean (`Lisp_Boolfwd`) symbol storage and rebuild
+// its stable descriptor when loading the obarray image.
+const FORMAT_VERSION: u32 = 56;
 
 const FINGERPRINT_PLACEHOLDER: [u8; 32] = *b"NEOMACS_PDUMP_FINGERPRINT_SLOT!!";
 

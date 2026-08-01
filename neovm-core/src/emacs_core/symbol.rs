@@ -1577,7 +1577,17 @@ impl Obarray {
                     Some(value)
                 }
             }
-            SymbolRedirect::Forwarded => None,
+            SymbolRedirect::Forwarded => {
+                let fwd = unsafe { &*sym.val.fwd };
+                if matches!(fwd.ty, crate::emacs_core::forward::LispFwdType::Bool) {
+                    let bool_fwd = unsafe {
+                        &*(fwd as *const _ as *const crate::emacs_core::forward::LispBoolFwd)
+                    };
+                    Some(Value::bool_val(bool_fwd.get()))
+                } else {
+                    None
+                }
+            }
         }
     }
 
@@ -1613,7 +1623,16 @@ impl Obarray {
                     }
                     return Some(value);
                 }
-                SymbolRedirect::Forwarded => return None,
+                SymbolRedirect::Forwarded => {
+                    let fwd = unsafe { &*sym.val.fwd };
+                    if matches!(fwd.ty, crate::emacs_core::forward::LispFwdType::Bool) {
+                        let bool_fwd = unsafe {
+                            &*(fwd as *const _ as *const crate::emacs_core::forward::LispBoolFwd)
+                        };
+                        return Some(Value::bool_val(bool_fwd.get()));
+                    }
+                    return None;
+                }
             }
         }
         None // alias cycle
@@ -1676,7 +1695,20 @@ impl Obarray {
                         }
                     });
                 }
-                SymbolRedirect::Forwarded => return None,
+                SymbolRedirect::Forwarded => {
+                    let fwd = unsafe { &*sym.val.fwd };
+                    if matches!(fwd.ty, crate::emacs_core::forward::LispFwdType::Bool) {
+                        let bool_fwd = unsafe {
+                            &*(fwd as *const _ as *const crate::emacs_core::forward::LispBoolFwd)
+                        };
+                        return Some(if bool_fwd.get() {
+                            &Value::T
+                        } else {
+                            &Value::NIL
+                        });
+                    }
+                    return None;
+                }
             }
         }
         None // alias cycle
@@ -1917,6 +1949,36 @@ impl Obarray {
         };
     }
 
+    /// Install a GNU `Lisp_Boolfwd`-equivalent descriptor on a symbol.
+    /// Every non-nil write becomes native `true`, and reads expose only `t`
+    /// or `nil`, matching `do_symval_forwarding` / `store_symval_forwarding`
+    /// in GNU `src/data.c`.
+    pub fn install_boolfwd(
+        &mut self,
+        id: SymId,
+        fwd: &'static crate::emacs_core::forward::LispBoolFwd,
+    ) {
+        let _seq_guard = self.seqlock_guard(id);
+        let sym = self.ensure_symbol_id(id);
+        if sym.flags.redirect() == SymbolRedirect::Plainval {
+            crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
+        }
+        sym.flags.set_redirect(SymbolRedirect::Forwarded);
+        sym.flags.set_declared_special(true);
+        sym.val = SymbolVal {
+            fwd: fwd as *const crate::emacs_core::forward::LispBoolFwd
+                as *const crate::emacs_core::forward::LispFwd,
+        };
+    }
+
+    /// Define a global Lisp variable with GNU `DEFVAR_BOOL` storage.
+    pub fn define_bool_variable(&mut self, name: &str, initial: bool) {
+        let id = intern(name);
+        self.mark_global_member(id);
+        let fwd = crate::emacs_core::forward::alloc_boolfwd(initial);
+        self.install_boolfwd(id, fwd);
+    }
+
     /// Read a symbol's value via the redirect dispatch. Mirrors GNU
     /// `find_symbol_value` (`src/data.c:1584-1609`).
     ///
@@ -1986,10 +2048,17 @@ impl Obarray {
                     // this in sync with `BufferManager::buffer_defaults`
                     // is `setq-default`'s job).
                     let fwd = unsafe { &*sym.val.fwd };
-                    use crate::emacs_core::forward::{LispBufferObjFwd, LispFwdType};
-                    if matches!(fwd.ty, LispFwdType::BufferObj) {
-                        let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
-                        return Some(buf_fwd.default);
+                    use crate::emacs_core::forward::{LispBoolFwd, LispBufferObjFwd, LispFwdType};
+                    match fwd.ty {
+                        LispFwdType::Bool => {
+                            let bool_fwd = unsafe { &*(fwd as *const _ as *const LispBoolFwd) };
+                            return Some(Value::bool_val(bool_fwd.get()));
+                        }
+                        LispFwdType::BufferObj => {
+                            let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
+                            return Some(buf_fwd.default);
+                        }
+                        _ => {}
                     }
                     // Other forwarder types not yet implemented.
                     return None;
@@ -2263,7 +2332,15 @@ impl Obarray {
         // VARALIAS should have been resolved by resolve_alias_for_write;
         // FORWARDED is a no-op placeholder. Everything else becomes Plainval.
         match sym.flags.redirect() {
-            SymbolRedirect::Forwarded => { /* no-op placeholder */ }
+            SymbolRedirect::Forwarded => {
+                let fwd = unsafe { &*sym.val.fwd };
+                if matches!(fwd.ty, crate::emacs_core::forward::LispFwdType::Bool) {
+                    let bool_fwd = unsafe {
+                        &*(fwd as *const _ as *const crate::emacs_core::forward::LispBoolFwd)
+                    };
+                    bool_fwd.set(!value.is_nil());
+                }
+            }
             _ => {
                 // SATB: a Plainval cell holds a heap Value about to be clobbered —
                 // retain its pre-image during a concurrent mark. Gated on the OLD
@@ -2527,10 +2604,10 @@ impl Obarray {
                         .is_some_and(|blv| blv.defcell.cons_cdr() != Value::UNBOUND);
                 }
                 SymbolRedirect::Forwarded => {
-                    // Phase 10D: BUFFER_OBJFWD slots are never unbound.
+                    // Native and per-buffer forwarded slots are never unbound.
                     use crate::emacs_core::forward::LispFwdType;
                     let fwd = unsafe { &*s.val.fwd };
-                    return matches!(fwd.ty, LispFwdType::BufferObj);
+                    return matches!(fwd.ty, LispFwdType::Bool | LispFwdType::BufferObj);
                 }
             }
         }
@@ -2928,11 +3005,22 @@ impl Obarray {
                     });
                 }
                 SymbolRedirect::Forwarded => {
-                    use crate::emacs_core::forward::{LispBufferObjFwd, LispFwdType};
+                    use crate::emacs_core::forward::{LispBoolFwd, LispBufferObjFwd, LispFwdType};
                     let fwd = unsafe { &*sym.val.fwd };
-                    if matches!(fwd.ty, LispFwdType::BufferObj) {
-                        let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
-                        return Some(&buf_fwd.default);
+                    match fwd.ty {
+                        LispFwdType::Bool => {
+                            let bool_fwd = unsafe { &*(fwd as *const _ as *const LispBoolFwd) };
+                            return Some(if bool_fwd.get() {
+                                &Value::T
+                            } else {
+                                &Value::NIL
+                            });
+                        }
+                        LispFwdType::BufferObj => {
+                            let buf_fwd = unsafe { &*(fwd as *const _ as *const LispBufferObjFwd) };
+                            return Some(&buf_fwd.default);
+                        }
+                        _ => {}
                     }
                     return None;
                 }

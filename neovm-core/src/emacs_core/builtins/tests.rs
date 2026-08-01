@@ -13336,6 +13336,32 @@ fn echo_area_print_calls_append_until_next_message_like_gnu() {
 }
 
 #[test]
+fn inhibit_message_has_gnu_native_boolean_storage_semantics() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    let result = eval.eval_str(
+        r#"(let ((set-result (set 'inhibit-message :assigned)))
+             (list set-result
+                   inhibit-message
+                   (let ((inhibit-message :inner))
+                     (list inhibit-message
+                           (condition-case error-data
+                               (signal 'error (list inhibit-message))
+                             (error
+                              (list (car (cdr error-data))
+                                    inhibit-message)))))
+                   inhibit-message))"#,
+    );
+
+    // GNU xdisp.c registers this variable with DEFVAR_BOOL.  data.c's
+    // store_symval_forwarding therefore preserves `set' return values while
+    // canonicalizing every non-nil stored value (including specbindings and
+    // their restoration) to t.
+    assert_eq!(format_eval_result(&result), "OK (:assigned t (t (t t)) t)");
+}
+
+#[test]
 fn message_respects_inhibit_message_and_clears_echo_area() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

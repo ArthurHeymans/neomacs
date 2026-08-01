@@ -9,18 +9,16 @@
 //!
 //! # Implementation status
 //!
-//! Currently only `BufferObj` (per-buffer slots, GNU's
-//! `Lisp_Buffer_Objfwd`) is wired into the matcher. The other four
-//! GNU variants — `Int`, `Bool`, `Obj`, `KboardObj` — have descriptor
-//! types declared here and a stub fallback in
-//! [`crate::emacs_core::symbol::Obarray::find_symbol_value`] that
-//! routes to the legacy `Plainval` reader.
+//! `BufferObj` (per-buffer slots, GNU's `Lisp_Buffer_Objfwd`) and `Bool`
+//! (GNU's `Lisp_Boolfwd`) are wired into the matcher. The remaining three
+//! GNU variants — `Int`, `Obj`, `KboardObj` — have descriptor types declared
+//! here and a stub fallback in
+//! [`crate::emacs_core::symbol::Obarray::find_symbol_value`].
 //!
 //! Buffer-local audit HIGH 3 in
 //! `drafts/buffer-local-variables-audit.md` flags the missing arms.
-//! In practice the divergence has no observable impact because
-//! neomacs backs every `DEFVAR_INT` / `DEFVAR_BOOL` / `DEFVAR_LISP`
-//! variable as a `Plainval` symbol stored in the obarray rather than
+//! Neomacs still backs most `DEFVAR_INT` / `DEFVAR_LISP` variables as a
+//! `Plainval` symbol stored in the obarray rather than
 //! as a static C global. The Rust subsystems that GNU would consult
 //! via `Vgc_cons_threshold` / `Vinhibit_quit` / etc. all read the
 //! obarray directly through `eval.obarray.symbol_value(...)`, so
@@ -36,6 +34,7 @@
 
 use super::value::Value;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Discriminant for [`LispFwd`]. Mirrors GNU `enum Lisp_Fwd_Type`
 /// (`src/lisp.h:3046-3055`). Always read the first field of any `*Fwd`
@@ -89,13 +88,27 @@ pub struct LispIntFwd {
     pub set: fn(i64),
 }
 
-/// `Lisp_Boolfwd`: forward to a static bool. Phase 8 wires this up.
+/// `Lisp_Boolfwd`: forward to a native Boolean cell.
+///
+/// GNU stores a pointer to a C `bool`.  Each Neomacs context owns an
+/// independently leaked descriptor instead, avoiding process-global state
+/// between evaluators while retaining the same forwarded-value semantics.
 #[repr(C)]
-#[derive(Copy, Clone)]
 pub struct LispBoolFwd {
     pub ty: LispFwdType,
-    pub get: fn() -> bool,
-    pub set: fn(bool),
+    value: AtomicBool,
+}
+
+impl LispBoolFwd {
+    #[inline]
+    pub fn get(&self) -> bool {
+        self.value.load(Ordering::Relaxed)
+    }
+
+    #[inline]
+    pub fn set(&self, value: bool) {
+        self.value.store(value, Ordering::Relaxed);
+    }
 }
 
 /// `Lisp_Objfwd`: forward to a static `Value` global. Phase 8 wires this up.
@@ -171,6 +184,19 @@ pub fn alloc_buffer_objfwd(
         default,
     });
     Box::leak(fwd)
+}
+
+/// Allocate a process-lifetime native Boolean forwarder.
+///
+/// GNU's `DEFVAR_BOOL` descriptors are static C objects.  Neomacs constructs
+/// contexts dynamically, so leaking one tiny descriptor per registered
+/// variable and context provides the same stable-pointer contract without
+/// coupling otherwise independent evaluators through a global Boolean.
+pub fn alloc_boolfwd(initial: bool) -> &'static LispBoolFwd {
+    Box::leak(Box::new(LispBoolFwd {
+        ty: LispFwdType::Bool,
+        value: AtomicBool::new(initial),
+    }))
 }
 
 #[cfg(test)]

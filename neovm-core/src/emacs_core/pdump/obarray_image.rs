@@ -12,7 +12,7 @@ use super::object_value_codec::{Cursor, write_bool, write_u8, write_u32, write_v
 use super::types::{DumpObarray, DumpSymId, DumpSymbolData, DumpSymbolVal};
 
 const OBARRAY_MAGIC: [u8; 16] = *b"NEOOBARRAY\0\0\0\0\0\0";
-const OBARRAY_FORMAT_VERSION: u32 = 1;
+const OBARRAY_FORMAT_VERSION: u32 = 2;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -167,6 +167,7 @@ const SYMBOL_VAL_PLAIN: u8 = 0;
 const SYMBOL_VAL_ALIAS: u8 = 1;
 const SYMBOL_VAL_LOCALIZED: u8 = 2;
 const SYMBOL_VAL_FORWARDED: u8 = 3;
+const SYMBOL_VAL_BOOL_FORWARDED: u8 = 4;
 
 fn write_symbol_data(out: &mut Vec<u8>, data: &DumpSymbolData) -> Result<(), DumpError> {
     write_u8(out, data.redirect);
@@ -210,6 +211,10 @@ fn write_symbol_val(out: &mut Vec<u8>, val: &DumpSymbolVal) -> Result<(), DumpEr
             write_bool(out, *local_if_set);
         }
         DumpSymbolVal::Forwarded => write_u8(out, SYMBOL_VAL_FORWARDED),
+        DumpSymbolVal::BoolForwarded(value) => {
+            write_u8(out, SYMBOL_VAL_BOOL_FORWARDED);
+            write_bool(out, *value);
+        }
     }
     Ok(())
 }
@@ -225,6 +230,9 @@ fn read_symbol_val(cursor: &mut Cursor<'_>) -> Result<DumpSymbolVal, DumpError> 
             local_if_set: cursor.read_bool("localized local-if-set")?,
         }),
         SYMBOL_VAL_FORWARDED => Ok(DumpSymbolVal::Forwarded),
+        SYMBOL_VAL_BOOL_FORWARDED => Ok(DumpSymbolVal::BoolForwarded(
+            cursor.read_bool("Boolean forwarder value")?,
+        )),
         other => Err(DumpError::ImageFormatError(format!(
             "unknown symbol value-cell tag {other}"
         ))),
@@ -267,8 +275,20 @@ mod tests {
                         plist: DumpValue::Unbound,
                     },
                 ),
+                (
+                    DumpSymId(4),
+                    DumpSymbolData {
+                        redirect: 3,
+                        trapped_write: 0,
+                        interned: 1,
+                        declared_special: true,
+                        val: DumpSymbolVal::BoolForwarded(true),
+                        function: DumpValue::Nil,
+                        plist: DumpValue::Nil,
+                    },
+                ),
             ],
-            global_members: vec![DumpSymId(1), DumpSymId(2)],
+            global_members: vec![DumpSymId(1), DumpSymId(2), DumpSymId(4)],
             function_unbound: vec![DumpSymId(3)],
             function_epoch: 77,
         };

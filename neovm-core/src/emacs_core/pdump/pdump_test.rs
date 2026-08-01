@@ -41,6 +41,32 @@ fn test_pdump_round_trip_basic() {
 }
 
 #[test]
+fn pdump_round_trip_rebuilds_native_boolean_forwarders() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    assert_eq!(
+        format_eval_result(
+            &eval.eval_str("(progn (setq inhibit-message :dumped) inhibit-message)")
+        ),
+        "OK t"
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let dump_path = dir.path().join("native-boolean.pdump");
+    dump_to_file(&eval, &dump_path).expect("dump should succeed");
+    let mut loaded = load_from_dump(&dump_path).expect("load should succeed");
+
+    let result = loaded.eval_str(
+        "(list inhibit-message
+               (set 'inhibit-message nil)
+               inhibit-message
+               (set 'inhibit-message :after-load)
+               inhibit-message)",
+    );
+    assert_eq!(format_eval_result(&result), "OK (t nil nil :after-load t)");
+}
+
+#[test]
 fn pdump_round_trip_preserves_selected_global_map_separately_from_lisp_variable() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
