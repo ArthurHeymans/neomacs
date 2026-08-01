@@ -8606,7 +8606,8 @@ fn insert_default_process_buffer_payload(
                 super::editfns::lisp_string_text_extent(text),
             )?;
             super::editfns::signal_before_text_change(eval, change)?;
-            eval.buffers.insert_lisp_string_into_buffer(buffer_id, text);
+            eval.buffers
+                .insert_lisp_string_into_buffer_before_markers(buffer_id, text);
             super::editfns::signal_after_text_change(eval, change)?;
         }
         DefaultProcessBufferInsertion::StatusMessage(text) => {

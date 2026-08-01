@@ -1244,6 +1244,16 @@ fn internal_default_process_filter_moves_stored_process_mark() {
     ev.processes
         .sync_process_mark(&mut ev.buffers, pid)
         .expect("sync process mark");
+    assert_eq!(
+        eval_one_in_context(
+            &mut ev,
+            r#"(progn
+                 (set-buffer "*proc-filter-mark*")
+                 (setq process-filter-peer-marker (copy-marker (point-max)))
+                 (marker-position process-filter-peer-marker))"#,
+        ),
+        "OK 1"
+    );
 
     builtin_internal_default_process_filter(
         &mut ev,
@@ -1257,6 +1267,11 @@ fn internal_default_process_filter_moves_stored_process_mark() {
         super::super::marker::marker_position_as_int_with_buffers(&ev.buffers, &mark)
             .expect("marker-position"),
         3
+    );
+    assert_eq!(
+        eval_one_in_context(&mut ev, "(marker-position process-filter-peer-marker)"),
+        "OK 3",
+        "GNU's default process filter inserts before every marker at the process mark"
     );
     assert_eq!(
         ev.buffers
