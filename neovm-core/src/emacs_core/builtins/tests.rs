@@ -13115,6 +13115,32 @@ fn message_logs_to_visible_messages_buffer_name_like_gnu() {
 }
 
 #[test]
+fn native_add_to_log_coalesces_without_changing_the_echo_area() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.set_variable("noninteractive", Value::NIL);
+
+    eval.add_to_log("Invalid face reference: missing-face");
+    eval.add_to_log("Invalid face reference: missing-face");
+
+    let messages_id = eval
+        .buffers
+        .find_buffer_by_name("*Messages*")
+        .expect("native diagnostic should create *Messages*");
+    let messages = eval.buffers.get(messages_id).expect("*Messages* live");
+    assert_eq!(
+        messages.buffer_string(),
+        "Invalid face reference: missing-face [2 times]\n"
+    );
+    assert!(
+        builtin_current_message(&mut eval, vec![])
+            .expect("current-message should remain readable")
+            .is_nil(),
+        "GNU add_to_log records a diagnostic without displaying it in the echo area"
+    );
+}
+
+#[test]
 fn message_progress_completion_replaces_previous_log_entry_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

@@ -2073,6 +2073,69 @@ fn test_window_text_pixel_size_plain_text_unchanged_by_fix() {
     assert_eq!(result.cons_cdr(), Value::fixnum(2));
 }
 
+/// GNU's display iterator resolves every `face' property run while measuring
+/// text for `window-text-pixel-size'.  A missing named face is therefore a
+/// log-only diagnostic even when no redisplay callback is installed (the path
+/// used by `fit-window-to-buffer' in batch mode).
+#[test]
+fn window_text_pixel_size_logs_invalid_named_face_property_runs() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("prefix alpha attrs layered");
+    crate::emacs_core::textprop::builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(8),
+            Value::fixnum(13),
+            Value::symbol("face"),
+            Value::symbol("missing-face"),
+        ],
+    )
+    .expect("put missing face property");
+    crate::emacs_core::textprop::builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(14),
+            Value::fixnum(19),
+            Value::symbol("face"),
+            Value::list(vec![Value::keyword(":weight"), Value::symbol("bold")]),
+        ],
+    )
+    .expect("put valid face attribute plist");
+    crate::emacs_core::textprop::builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(20),
+            Value::fixnum(27),
+            Value::symbol("face"),
+            Value::list(vec![
+                Value::symbol("bold"),
+                Value::symbol("other-missing-face"),
+            ]),
+        ],
+    )
+    .expect("put layered face references");
+
+    builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::make_window(selected_window as u64)])
+        .expect("window-text-pixel-size");
+
+    let messages_id = eval
+        .buffers
+        .find_buffer_by_name("*Messages*")
+        .expect("face diagnostic should create *Messages*");
+    assert_eq!(
+        eval.buffers
+            .get(messages_id)
+            .expect("*Messages* live")
+            .buffer_string(),
+        "Invalid face reference: missing-face\nInvalid face reference: other-missing-face\n"
+    );
+}
+
 fn window_text_pixel_size_backend_trace(kind: BufferTextBackendKind) -> (i64, i64) {
     let mut eval = interactive_context();
     convert_current_buffer_text_backend(&mut eval, kind);

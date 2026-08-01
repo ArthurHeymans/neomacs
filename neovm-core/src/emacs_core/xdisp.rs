@@ -3338,6 +3338,55 @@ fn window_text_pixel_size_to_pos(
     }
 }
 
+/// Resolve named `face` text-property runs traversed by
+/// `window-text-pixel-size`, returning GNU-compatible log diagnostics for
+/// missing faces.
+///
+/// GNU's measurement uses the normal display iterator, whose
+/// `face_at_buffer_position` merges the `face` property once per property run
+/// with diagnostics enabled.  Neomacs performs a headless monospace scan in
+/// this primitive, so make that otherwise-observable part of face resolution
+/// explicit at the same measurement boundary.
+fn invalid_named_face_diagnostics_in_buffer_region(
+    eval: &super::eval::Context,
+    frame_id: FrameId,
+    buffer_id: BufferId,
+    from: EmacsBytePos,
+    to: EmacsBytePos,
+) -> Vec<String> {
+    let Some(buf) = eval.buffers.get(buffer_id) else {
+        return Vec::new();
+    };
+    let face = Value::symbol("face");
+    let mut pos = buf.emacs_byte_pos_to_char_pos_clamped(from);
+    let end = buf.emacs_byte_pos_to_char_pos_clamped(to);
+    let mut diagnostics = Vec::new();
+
+    while pos < end {
+        let (face_ref, _, run_end) = buf.get_property_run_at_char_pos(pos, face);
+        if let Some(face_ref) = face_ref {
+            diagnostics.extend(
+                super::font::invalid_display_face_references(eval, frame_id, face_ref)
+                    .into_iter()
+                    .map(|invalid| {
+                        format!(
+                            "Invalid face reference: {}",
+                            super::print::print_value(&invalid)
+                        )
+                    }),
+            );
+        }
+
+        pos = if run_end > pos {
+            run_end.min(end)
+        } else {
+            CharPos0::new(pos.get().saturating_add(1)).min(end)
+        };
+    }
+
+    diagnostics
+}
+
 /// `(window-text-pixel-size &optional WINDOW FROM TO X-LIMIT Y-LIMIT MODE)` evaluator-backed variant.
 ///
 /// Computes approximate pixel dimensions of text in the window region.
@@ -3373,6 +3422,14 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     let apply_trim = args
         .get(2)
         .is_some_and(|v| v.is_t() || v.is_symbol_named("t"));
+
+    // Collect first so the immutable buffer borrow ends before `add_to_log`
+    // mutates the buffer manager to append to *Messages*.
+    let face_diagnostics =
+        invalid_named_face_diagnostics_in_buffer_region(eval, fid, buf_id, from_pos, to_pos);
+    for diagnostic in face_diagnostics {
+        eval.add_to_log(&diagnostic);
+    }
 
     // Count lines and max columns in the region, honoring `display` text
     // properties (e.g. `(space :align-to N)`) that change a line's pixel width.

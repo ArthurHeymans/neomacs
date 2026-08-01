@@ -2923,6 +2923,10 @@ pub struct FaceResolver {
     /// window, so the same buffer shown in two windows highlights only the
     /// selected one — see the overlay-face loop in `face_at_pos`.
     current_window_id: std::cell::Cell<Option<u64>>,
+    /// Diagnostics produced while merging buffer face references. Layout can
+    /// retry speculatively, so the resolver records them without mutating the
+    /// evaluator; the engine logs only the accepted attempt.
+    invalid_face_references: std::cell::RefCell<Vec<String>>,
     font_sizing: FontSizing,
 }
 
@@ -3027,8 +3031,19 @@ impl FaceResolver {
             window_system,
             current_window_parameters: std::cell::RefCell::new(Vec::new()),
             current_window_id: std::cell::Cell::new(None),
+            invalid_face_references: std::cell::RefCell::new(Vec::new()),
             font_sizing,
         }
+    }
+
+    /// Discard diagnostics from a speculative frame-layout attempt.
+    pub(crate) fn clear_diagnostics(&self) {
+        self.invalid_face_references.borrow_mut().clear();
+    }
+
+    /// Drain invalid named face references from the accepted layout attempt.
+    pub(crate) fn take_invalid_face_references(&self) -> Vec<String> {
+        self.invalid_face_references.take()
     }
 
     /// Point the resolver at the window whose faces are about to be resolved,
@@ -3250,6 +3265,9 @@ impl FaceResolver {
         }
 
         let Some(face) = self.face_table.get(name).cloned() else {
+            self.invalid_face_references
+                .borrow_mut()
+                .push(name.to_owned());
             return NeoFace::default();
         };
         self.resolve_face_overlay_spec(face, depth)

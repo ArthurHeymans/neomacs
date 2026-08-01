@@ -17492,6 +17492,38 @@ fn layout_frame_rust_shrinks_frame_tab_bar_from_stale_reserved_height() {
 }
 
 #[test]
+fn layout_frame_rust_logs_invalid_named_face_references_like_gnu_emacs() {
+    let mut eval = Context::new();
+    eval.eval_str(r#"(insert (propertize "invalid face" 'face 'neomacs-missing-display-face))"#)
+        .expect("insert propertized buffer text");
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-invalid-face-reference", 320, 120, buffer_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let messages_id = eval
+        .buffer_manager()
+        .find_buffer_by_name("*Messages*")
+        .expect("redisplay diagnostic creates the messages buffer");
+    let messages = eval
+        .buffer_manager()
+        .get(messages_id)
+        .expect("messages buffer remains live")
+        .buffer_string();
+    assert!(
+        messages.contains("Invalid face reference: neomacs-missing-display-face"),
+        "GNU xfaces.c merge_face_ref logs invalid named face references during redisplay: {messages:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_keeps_echo_message_in_minibuffer_window_for_tty() {
     assert_echo_message_renders_in_minibuffer_window(false);
 }

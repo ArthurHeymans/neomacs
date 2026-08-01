@@ -798,6 +798,11 @@ impl LayoutEngine {
             accepted_window_chrome_metrics,
             accepted_face_attempt,
         ) = 'frame_layout: loop {
+            // Layout retries are speculative. GNU logs invalid face references
+            // observed by the accepted redisplay, not once per discarded
+            // geometry attempt.
+            face_resolver.clear_diagnostics();
+
             // Collect window and frame params from neovm-core
             let (frame_params, mut window_params_list) =
                 match super::neovm_bridge::collect_layout_params_with_font_sizing(
@@ -1209,6 +1214,9 @@ impl LayoutEngine {
                         neovm_core::window::WindowEndState::Unrecorded
                         | neovm_core::window::WindowEndState::Stale(_) => None,
                     });
+                for face_name in face_resolver.take_invalid_face_references() {
+                    evaluator.add_to_log(&format!("Invalid face reference: {face_name}"));
+                }
                 evaluator.retire_interaction_presentation(presentation_id);
                 self.reset_frame_attempt_state();
                 return record;
@@ -1702,6 +1710,9 @@ impl LayoutEngine {
                     snapshots,
                 )
                 .expect("layout presentation identity is fresh");
+        }
+        for face_name in face_resolver.take_invalid_face_references() {
+            evaluator.add_to_log(&format!("Invalid face reference: {face_name}"));
         }
         None
     }

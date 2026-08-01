@@ -227,6 +227,18 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
     }
 }
 
+impl super::eval::Context {
+    /// Append a plain diagnostic to the configured messages buffer without
+    /// changing the echo area.
+    ///
+    /// This is the Rust-side equivalent of GNU Emacs `add_to_log`: redisplay
+    /// and other native subsystems use it for diagnostics that belong in
+    /// `*Messages*`, but must not become the current echo-area message.
+    pub fn add_to_log(&mut self, message: &str) {
+        message_dolog(self, &crate::heap_types::LispString::from_utf8(message));
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum EchoMessageSetResult {
     EchoArea(crate::heap_types::LispString),

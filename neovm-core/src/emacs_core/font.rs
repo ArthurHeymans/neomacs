@@ -4660,6 +4660,91 @@ fn lookup_frame_lisp_face_vector_by_symbol(
     crate::emacs_core::xfaces::lookup_frame_face_hash_entry(table, key)
 }
 
+/// Whether `face_ref` resolves to a named face available on `frame_id`.
+///
+/// Display code must ask the frame-local Lisp face table, rather than the
+/// renderer's derived `FaceTable`: GNU's `merge_named_face` resolves aliases
+/// and then consults the frame face hash while walking a `face` property.  Keep
+/// that ownership boundary available to non-rendering display operations such
+/// as `window-text-pixel-size` too.
+fn display_named_face_exists(
+    eval: &super::eval::Context,
+    frame_id: FrameId,
+    face_ref: Value,
+) -> bool {
+    let Ok(resolved) = resolve_face_designator(eval, face_ref, FaceAliasCyclePolicy::UseDefault)
+    else {
+        return false;
+    };
+    let Some(name) = resolved.name() else {
+        return false;
+    };
+
+    lookup_frame_lisp_face_vector_by_symbol(eval, frame_id, name.symbol()).is_some()
+        || known_resolved_face_name(resolved).is_some()
+}
+
+/// Return invalid atomic face references nested in a display `face` value, in
+/// GNU merge order.
+///
+/// `merge_face_ref` accepts an atomic named face, a list of face references,
+/// or an attribute plist.  Lists are merged from right to left; attribute
+/// plists only contain another face reference in `:inherit`.  Keeping that
+/// grammar here prevents headless measurement from mistaking a valid plist for
+/// one invalid face while preserving the order of GNU's diagnostics.
+pub(crate) fn invalid_display_face_references(
+    eval: &super::eval::Context,
+    frame_id: FrameId,
+    face_ref: Value,
+) -> Vec<Value> {
+    fn collect(
+        eval: &super::eval::Context,
+        frame_id: FrameId,
+        face_ref: Value,
+        invalid: &mut Vec<Value>,
+    ) {
+        if face_ref.is_nil() {
+            return;
+        }
+        if !face_ref.is_cons() {
+            if !display_named_face_exists(eval, frame_id, face_ref) {
+                invalid.push(face_ref);
+            }
+            return;
+        }
+
+        let first = face_ref.cons_car();
+        if first.is_symbol_named("foreground-color") || first.is_symbol_named("background-color") {
+            return;
+        }
+
+        if first
+            .as_symbol_name()
+            .is_some_and(|name| name.starts_with(':'))
+        {
+            let mut plist = face_ref;
+            while plist.is_cons() && plist.cons_cdr().is_cons() {
+                let keyword = plist.cons_car();
+                let value = plist.cons_cdr().cons_car();
+                if keyword.is_symbol_named(":inherit") {
+                    collect(eval, frame_id, value, invalid);
+                }
+                plist = plist.cons_cdr().cons_cdr();
+            }
+            return;
+        }
+
+        // Earlier list elements take precedence, so GNU merges and diagnoses
+        // the tail before the head.
+        collect(eval, frame_id, face_ref.cons_cdr(), invalid);
+        collect(eval, frame_id, first, invalid);
+    }
+
+    let mut invalid = Vec::new();
+    collect(eval, frame_id, face_ref, &mut invalid);
+    invalid
+}
+
 fn ensure_frame_lisp_face_vector(
     eval: &mut super::eval::Context,
     frame_id: FrameId,
