@@ -3809,7 +3809,18 @@ pub(crate) fn builtin_get_buffer_window(
         let Some(frame) = eval.frames.get(frame_id) else {
             continue;
         };
-        for wid in frame.window_list() {
+        // GNU's `window_loop` starts each search at the selected window of
+        // its base frame.  Apart from matching its traversal order, this is
+        // the public selection policy of `get-buffer-window`: when the same
+        // buffer is displayed more than once, the selected window wins.
+        let mut window_ids = frame.window_list();
+        if let Some(selected_index) = window_ids
+            .iter()
+            .position(|window_id| *window_id == frame.selected_window)
+        {
+            window_ids.rotate_left(selected_index);
+        }
+        for wid in window_ids {
             let matches = frame
                 .find_window(wid)
                 .and_then(|w| w.buffer_id())

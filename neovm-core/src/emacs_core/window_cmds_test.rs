@@ -1365,6 +1365,23 @@ fn get_buffer_window_finds_selected_window_for_current_buffer() {
 }
 
 #[test]
+fn get_buffer_window_prefers_selected_window_when_buffer_is_displayed_twice() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one_with_frame(
+        r#"(let ((shared (get-buffer-create "*get-buffer-window-shared*")))
+             (unwind-protect
+                 (progn
+                   (set-window-buffer (selected-window) shared)
+                   (let ((second (split-window-internal (selected-window) nil nil nil)))
+                     (set-window-buffer second shared)
+                     (select-window second)
+                     (eq (get-buffer-window shared) (selected-window))))
+               (kill-buffer shared)))"#,
+    );
+    assert_eq!(result, "OK t");
+}
+
+#[test]
 fn get_buffer_window_list_returns_matching_windows() {
     crate::test_utils::init_test_tracing();
     let result = bootstrap_eval_with_frame("(length (get-buffer-window-list (window-buffer)))");
