@@ -2220,7 +2220,13 @@ impl KeyboardInputRuntime for super::eval::Context {
     }
 
     fn is_executing_keyboard_macro(&self) -> bool {
-        self.command_loop.is_executing_kbd_macro()
+        // GNU's `read_minibuf` consults `Vexecuting_kbd_macro`, not an
+        // independent command-loop flag.  The Lisp variable is special and
+        // may be dynamically bound by batch callers that feed
+        // `unread-command-events`; use its visible value so that real macro
+        // playback and those scoped callers share one semantic authority.
+        self.visible_variable_value_or_nil("executing-kbd-macro")
+            .is_truthy()
     }
 
     fn has_pending_low_level_events(&self) -> bool {

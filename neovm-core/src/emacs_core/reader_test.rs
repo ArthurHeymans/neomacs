@@ -1734,6 +1734,19 @@ fn minibuffer_input_source_distinguishes_stdin_macros_and_live_input() {
 }
 
 #[test]
+fn completing_read_uses_dynamically_bound_keyboard_macro_events_in_batch_mode() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(let ((executing-kbd-macro t)
+                  (unread-command-events (append "al" '(tab return)))
+                  (completion-styles '(basic)))
+              (completing-read "Choose: " '("alpha" "beta")))"#,
+    );
+
+    assert_eq!(results, vec![r#"OK "alpha""#]);
+}
+
+#[test]
 fn read_char_consumes_executing_keyboard_macro_event_without_input_receiver() {
     crate::test_utils::init_test_tracing();
     let mut batch = Context::new();
