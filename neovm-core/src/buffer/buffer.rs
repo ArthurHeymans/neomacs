@@ -3441,11 +3441,8 @@ impl Buffer {
     pub fn note_changed_property_region(&self, byte_range: EmacsByteRange) {
         let range = self.text.byte_range_to_char_range(byte_range);
         let z = self.text.char_count().get() as i64;
-        self.text.note_changed_char_region(
-            range.start().get() as i64,
-            range.end().get() as i64,
-            z,
-        );
+        self.text
+            .note_changed_char_region(range.start().get() as i64, range.end().get() as i64, z);
     }
 
     pub fn save_modified_tick(&self) -> i64 {

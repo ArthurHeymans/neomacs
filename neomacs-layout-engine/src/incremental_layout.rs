@@ -1171,16 +1171,10 @@ mod scroll_classifier_tests {
         use neomacs_display_protocol::glyph_matrix::Glyph;
 
         let mut retained = synthetic_matrix(0, 3);
-        MatrixRow::make_mut(&mut retained.matrix.rows[0]).glyphs[GlyphArea::Text.index()].push(Glyph::char(
-            'a',
-            FaceId::new(27),
-            0,
-        ));
-        MatrixRow::make_mut(&mut retained.matrix.rows[1]).glyphs[GlyphArea::Text.index()].push(Glyph::char(
-            'b',
-            FaceId::new(31),
-            10,
-        ));
+        MatrixRow::make_mut(&mut retained.matrix.rows[0]).glyphs[GlyphArea::Text.index()]
+            .push(Glyph::char('a', FaceId::new(27), 0));
+        MatrixRow::make_mut(&mut retained.matrix.rows[1]).glyphs[GlyphArea::Text.index()]
+            .push(Glyph::char('b', FaceId::new(31), 10));
 
         let replay = retained
             .cursor_only_replay(&synthetic_key(0, 15))
@@ -1375,7 +1369,8 @@ mod scroll_classifier_tests {
             for c in 0..10 {
                 let mut g = Glyph::char('a', FaceId::new(0), base + c);
                 g.pixel_width = 8.0;
-                MatrixRow::make_mut(&mut m.matrix.rows[row_idx]).glyphs[GlyphArea::Text.index()].push(g);
+                MatrixRow::make_mut(&mut m.matrix.rows[row_idx]).glyphs[GlyphArea::Text.index()]
+                    .push(g);
             }
         }
         // Font-lock rewrote faces over chars [22, 35): props tick moved, size
@@ -1417,7 +1412,8 @@ mod scroll_classifier_tests {
             for c in 0..10 {
                 let mut g = Glyph::char('a', FaceId::new(0), base + c);
                 g.pixel_width = 8.0;
-                MatrixRow::make_mut(&mut m.matrix.rows[row_idx]).glyphs[GlyphArea::Text.index()].push(g);
+                MatrixRow::make_mut(&mut m.matrix.rows[row_idx]).glyphs[GlyphArea::Text.index()]
+                    .push(g);
             }
         }
         // Insert 1 char at 25, font-lock refontified [20, 36) (NEW coords).

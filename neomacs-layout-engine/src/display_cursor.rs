@@ -82,7 +82,10 @@ pub(crate) struct CursorVisualColumnRows<'a> {
 }
 
 impl<'a> CursorVisualColumnRows<'a> {
-    pub(crate) fn new(rows: &'a [neomacs_display_protocol::glyph_matrix::MatrixRow], ncols: usize) -> Self {
+    pub(crate) fn new(
+        rows: &'a [neomacs_display_protocol::glyph_matrix::MatrixRow],
+        ncols: usize,
+    ) -> Self {
         Self { rows, ncols }
     }
 

@@ -1,7 +1,6 @@
 //! Mutable output window state owned while layout builds a frame snapshot.
 
 use crate::display_cursor::{CursorVisualColumnResolutionContext, CursorVisualColumnRows};
-use neomacs_display_protocol::glyph_matrix::MatrixRow;
 use crate::display_output_row_request::{
     DisplayCurrentRowMutation, DisplayWindowRowMutation, DisplayWindowRowsMutation,
     OutputCompleteRowInstallRequest, OutputCurrentRowDecorationRequest, OutputRowBeginRequest,
@@ -10,6 +9,7 @@ use crate::display_output_row_request::{
 use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_row_finalizer::GlyphRowFinalizationContext;
 use neomacs_display_protocol::frame_glyphs::PhysCursor;
+use neomacs_display_protocol::glyph_matrix::MatrixRow;
 use neomacs_display_protocol::glyph_matrix::{GlyphMatrix, GlyphRow, WindowMatrixEntry};
 use neomacs_display_protocol::types::{DisplayWindowId, Rect};
 

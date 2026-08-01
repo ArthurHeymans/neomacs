@@ -2118,9 +2118,8 @@ impl<'a, B: LayoutBufferView> RustBufferAccess<'a, B> {
                 }
                 match self
                     .buffer
-                    .layout_next_single_text_prop_change_after_emacs_byte_pos_bounded(
-                        pos, name, to,
-                    ) {
+                    .layout_next_single_text_prop_change_after_emacs_byte_pos_bounded(pos, name, to)
+                {
                     Some(next) if next > pos => pos = next,
                     _ => break,
                 }

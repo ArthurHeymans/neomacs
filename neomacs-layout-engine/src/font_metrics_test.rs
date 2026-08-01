@@ -2130,7 +2130,8 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
     let mut matrix = GlyphMatrix::new(1, 20);
     std::sync::Arc::make_mut(&mut matrix.rows[0]).enabled = true;
     for (i, ch) in "a好b".chars().enumerate() {
-        std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
+        std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
+            .push(Glyph::char(ch, FaceId::new(0), i));
     }
     state.window_matrices.push(WindowMatrixEntry {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
