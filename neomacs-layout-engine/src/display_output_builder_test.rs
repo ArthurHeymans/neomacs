@@ -1657,8 +1657,8 @@ fn buffer_mouse_face_is_derived_only_from_the_final_authoritative_row() {
 
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(3, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
-    builder.install_finalized_output_row(0, stale);
-    builder.install_finalized_output_row(0, replacement);
+    builder.install_finalized_output_row(0, std::sync::Arc::new(stale));
+    builder.install_finalized_output_row(0, std::sync::Arc::new(replacement));
     builder.end_window();
 
     let state = builder.finish(10, 1, 8.0, 16.0);
@@ -1699,7 +1699,7 @@ fn retained_buffer_mouse_face_uses_replayed_row_geometry() {
 
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(3, 2, 10, Rect::new(2.0, 4.0, 80.0, 40.0), true);
-    builder.install_finalized_output_row(1, retained);
+    builder.install_finalized_output_row(1, std::sync::Arc::new(retained));
     builder.end_window();
 
     let state = builder.finish(10, 2, 8.0, 16.0);

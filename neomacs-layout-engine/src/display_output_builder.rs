@@ -166,7 +166,11 @@ impl DisplayOutputBuilder {
     /// Install an already-finalized (visual-order) row into the current window
     /// grid verbatim, marking it finalized so it is not bidi-reordered again.
     /// Used by the Phase 1 cursor-only fast path to replay retained body rows.
-    pub(crate) fn install_finalized_output_row(&mut self, row: usize, source: GlyphRow) {
+    pub(crate) fn install_finalized_output_row(
+        &mut self,
+        row: usize,
+        source: neomacs_display_protocol::glyph_matrix::MatrixRow,
+    ) {
         self.window_state.install_finalized_window_row(row, source);
     }
 

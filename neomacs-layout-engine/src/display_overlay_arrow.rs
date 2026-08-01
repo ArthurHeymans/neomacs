@@ -236,7 +236,7 @@ fn stamp_left_fringe_bitmap(
     });
     output
         .builder()
-        .install_finalized_output_row(row_index, row);
+        .install_finalized_output_row(row_index, std::sync::Arc::new(row));
     true
 }
 
@@ -318,7 +318,7 @@ fn overwrite_leading_glyphs(
     if drawn {
         output
             .builder()
-            .install_finalized_output_row(row_index, row);
+            .install_finalized_output_row(row_index, std::sync::Arc::new(row));
     }
     drawn
 }

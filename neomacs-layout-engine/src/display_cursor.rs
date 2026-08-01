@@ -77,17 +77,17 @@ pub(crate) fn cursor_window_matches_current(cursor_window_id: i64, current_windo
 
 #[derive(Clone, Copy)]
 pub(crate) struct CursorVisualColumnRows<'a> {
-    rows: &'a [GlyphRow],
+    rows: &'a [neomacs_display_protocol::glyph_matrix::MatrixRow],
     ncols: usize,
 }
 
 impl<'a> CursorVisualColumnRows<'a> {
-    pub(crate) fn new(rows: &'a [GlyphRow], ncols: usize) -> Self {
+    pub(crate) fn new(rows: &'a [neomacs_display_protocol::glyph_matrix::MatrixRow], ncols: usize) -> Self {
         Self { rows, ncols }
     }
 
     fn row(self, row: usize) -> Option<&'a GlyphRow> {
-        self.rows.get(row)
+        self.rows.get(row).map(|row| row.as_ref())
     }
 
     fn ncols(self) -> usize {

@@ -19,7 +19,7 @@ use neomacs_display_protocol::frame_glyphs::{CursorStyle, PhysCursor};
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::glyph_matrix::{
     GlyphArea, GlyphMatrix, GlyphPointerOccurrenceIdentity, GlyphPointerSourceKind, GlyphRow,
-    NO_BUFFER_POSITION_CHARPOS,
+    MatrixRow, NO_BUFFER_POSITION_CHARPOS,
 };
 use neomacs_display_protocol::types::FaceId;
 #[cfg(test)]
@@ -313,7 +313,7 @@ pub struct CursorOnlyReplay {
     /// `(matrix_row_index, finalized GlyphRow)` for each retained NON-chrome
     /// row, installed verbatim (cursor decoration stripped, re-applied for the
     /// new point).
-    pub body_rows: Vec<(usize, GlyphRow)>,
+    pub body_rows: Vec<(usize, MatrixRow)>,
     /// Retained body `DisplayRowSnapshot`s (point-independent) to seed the
     /// emitter so `finish_and_install` rebuilds an identical window snapshot.
     pub body_row_snapshots: Vec<DisplayRowSnapshot>,
@@ -345,7 +345,7 @@ pub struct ScrollReplay {
     pub dvpos: f32,
     /// `(new_matrix_row_index, shifted GlyphRow)` for each reused body row, with
     /// `pixel_y` already shifted by `dvpos` and cursor decoration stripped.
-    pub reused_rows: Vec<(usize, GlyphRow)>,
+    pub reused_rows: Vec<(usize, MatrixRow)>,
     /// The reused rows' display-snapshot rows, re-indexed (`row -= s`) and
     /// y-shifted (`y += round(dvpos)`), to seed the emitter so `finish` rebuilds
     /// an identical window snapshot.
@@ -413,13 +413,13 @@ fn referenced_face_ids<'a>(rows: impl IntoIterator<Item = &'a GlyphRow>) -> Vec<
 
 impl CursorOnlyReplay {
     pub(crate) fn retained_face_ids(&self) -> Vec<FaceId> {
-        referenced_face_ids(self.body_rows.iter().map(|(_, row)| row))
+        referenced_face_ids(self.body_rows.iter().map(|(_, row)| row.as_ref()))
     }
 }
 
 impl ScrollReplay {
     pub(crate) fn retained_face_ids(&self) -> Vec<FaceId> {
-        referenced_face_ids(self.reused_rows.iter().map(|(_, row)| row))
+        referenced_face_ids(self.reused_rows.iter().map(|(_, row)| row.as_ref()))
     }
 }
 
@@ -455,7 +455,7 @@ impl RetainedWindowMatrix {
             return None;
         }
         let new_point = curr.point;
-        let mut body_rows: Vec<(usize, GlyphRow)> = Vec::new();
+        let mut body_rows: Vec<(usize, MatrixRow)> = Vec::new();
         let mut body_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
         let mut cursor_style: Option<CursorStyle> = None;
         let mut new_cursor: Option<(usize, &GlyphRow)> = None;
@@ -469,10 +469,11 @@ impl RetainedWindowMatrix {
             let start = row.start_charpos as i64;
             let end = row.end_charpos as i64;
             if new_cursor.is_none() && start <= new_point && new_point <= end {
-                new_cursor = Some((idx, row));
+                new_cursor = Some((idx, row.as_ref()));
             }
             body_indices.insert(idx);
-            body_rows.push((idx, row.clone()));
+            // Copy-on-write reuse: a refcount bump, not a per-glyph deep copy.
+            body_rows.push((idx, MatrixRow::clone(row)));
         }
         if body_rows.is_empty() {
             return None;
@@ -538,7 +539,7 @@ impl RetainedWindowMatrix {
         // Collect body rows in matrix order; bail on anything that the uniform
         // shift cannot reproduce (line numbers renumber; continuation/truncation
         // /fringe rows have position-dependent decoration).
-        let mut body: Vec<(usize, &GlyphRow)> = Vec::new();
+        let mut body: Vec<(usize, &MatrixRow)> = Vec::new();
         for (idx, row) in self.matrix.rows.iter().enumerate() {
             if !row.enabled || Self::is_chrome_role(row.role) {
                 continue;
@@ -587,12 +588,14 @@ impl RetainedWindowMatrix {
         let mut remap: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
         let mut reused_rows = Vec::with_capacity(last - s + 1);
         for p in s..=last {
-            let mut shifted = body[p].1.clone();
+            // A shift mutates placement (pixel_y), so this reuse is a real
+            // copy; verbatim reuse elsewhere is a refcount bump.
+            let mut shifted = GlyphRow::clone(body[p].1);
             shifted.pixel_y += dvpos;
             shifted.cursor_col = None;
             shifted.cursor_type = None;
             remap.insert(body[p].0 as i64, body[p - s].0 as i64);
-            reused_rows.push((body[p - s].0, shifted));
+            reused_rows.push((body[p - s].0, MatrixRow::new(shifted)));
         }
         let reused_row_snapshots = self
             .display_snapshot
@@ -661,7 +664,7 @@ impl RetainedWindowMatrix {
         if !RetainedWindowKey::edit_eligible(&self.key, curr) || curr.vscroll != 0 {
             return None;
         }
-        let mut body: Vec<(usize, &GlyphRow)> = Vec::new();
+        let mut body: Vec<(usize, &MatrixRow)> = Vec::new();
         for (idx, row) in self.matrix.rows.iter().enumerate() {
             if !row.enabled || Self::is_chrome_role(row.role) {
                 continue;
@@ -732,9 +735,16 @@ impl RetainedWindowMatrix {
         let mut reused_rows = Vec::with_capacity(first_dirty);
         let mut above_indices: std::collections::HashSet<i64> = std::collections::HashSet::new();
         for &(idx, row) in body.iter().take(first_dirty) {
-            let mut row = row.clone();
-            row.cursor_col = None;
-            row.cursor_type = None;
+            // Verbatim reuse is a refcount bump; only a row still carrying
+            // cursor decoration pays a copy to strip it.
+            let row = if row.cursor_col.is_some() || row.cursor_type.is_some() {
+                let mut stripped = GlyphRow::clone(row);
+                stripped.cursor_col = None;
+                stripped.cursor_type = None;
+                MatrixRow::new(stripped)
+            } else {
+                MatrixRow::clone(row)
+            };
             above_indices.insert(idx as i64);
             reused_rows.push((idx, row));
         }
@@ -867,7 +877,22 @@ impl RetainedWindowMatrix {
                 let mut below_indices: std::collections::HashSet<i64> =
                     std::collections::HashSet::new();
                 for &(idx, row) in body.iter().skip(span_last + 1) {
-                    let mut row = row.clone();
+                    // A props-only frame (delta 0) shifts nothing: verbatim
+                    // refcount reuse unless a stale cursor must be stripped.
+                    if delta == 0 {
+                        let row = if row.cursor_col.is_some() || row.cursor_type.is_some() {
+                            let mut stripped = GlyphRow::clone(row);
+                            stripped.cursor_col = None;
+                            stripped.cursor_type = None;
+                            MatrixRow::new(stripped)
+                        } else {
+                            MatrixRow::clone(row)
+                        };
+                        below_indices.insert(idx as i64);
+                        reused_rows.push((idx, row));
+                        continue;
+                    }
+                    let mut row = GlyphRow::clone(row);
                     row.cursor_col = None;
                     row.cursor_type = None;
                     // Every enabled body row below the edit sits at a real buffer
@@ -903,7 +928,7 @@ impl RetainedWindowMatrix {
                         );
                     }
                     below_indices.insert(idx as i64);
-                    reused_rows.push((idx, row));
+                    reused_rows.push((idx, MatrixRow::new(row)));
                 }
                 for snap in self
                     .display_snapshot
@@ -1079,7 +1104,7 @@ mod scroll_classifier_tests {
     fn synthetic_matrix(base: i64, n_body: usize) -> RetainedWindowMatrix {
         let mut matrix = GlyphMatrix::new(n_body + 1, 100);
         for i in 0..n_body {
-            let row = &mut matrix.rows[i];
+            let row = MatrixRow::make_mut(&mut matrix.rows[i]);
             row.enabled = true;
             row.role = GlyphRowRole::Text;
             row.displays_text = true;
@@ -1089,7 +1114,7 @@ mod scroll_classifier_tests {
             row.height_px = 16.0;
             row.ascent_px = 16.0;
         }
-        let ml = &mut matrix.rows[n_body];
+        let ml = MatrixRow::make_mut(&mut matrix.rows[n_body]);
         ml.enabled = true;
         ml.role = GlyphRowRole::ModeLine;
         ml.mode_line = true;
@@ -1146,12 +1171,12 @@ mod scroll_classifier_tests {
         use neomacs_display_protocol::glyph_matrix::Glyph;
 
         let mut retained = synthetic_matrix(0, 3);
-        retained.matrix.rows[0].glyphs[GlyphArea::Text.index()].push(Glyph::char(
+        MatrixRow::make_mut(&mut retained.matrix.rows[0]).glyphs[GlyphArea::Text.index()].push(Glyph::char(
             'a',
             FaceId::new(27),
             0,
         ));
-        retained.matrix.rows[1].glyphs[GlyphArea::Text.index()].push(Glyph::char(
+        MatrixRow::make_mut(&mut retained.matrix.rows[1]).glyphs[GlyphArea::Text.index()].push(Glyph::char(
             'b',
             FaceId::new(31),
             10,
@@ -1288,7 +1313,7 @@ mod scroll_classifier_tests {
         for c in 0..10 {
             let mut g = Glyph::char('a', FaceId::new(0), (20 + c) as usize);
             g.pixel_width = 8.0;
-            m.matrix.rows[2].glyphs[GlyphArea::Text.index()].push(g);
+            MatrixRow::make_mut(&mut m.matrix.rows[2]).glyphs[GlyphArea::Text.index()].push(g);
         }
         // A 1-char insert at charpos 25 (inside row 2): chars tick moved, point +
         // buffer_size grew by 1, everything else equal.
@@ -1350,7 +1375,7 @@ mod scroll_classifier_tests {
             for c in 0..10 {
                 let mut g = Glyph::char('a', FaceId::new(0), base + c);
                 g.pixel_width = 8.0;
-                m.matrix.rows[row_idx].glyphs[GlyphArea::Text.index()].push(g);
+                MatrixRow::make_mut(&mut m.matrix.rows[row_idx]).glyphs[GlyphArea::Text.index()].push(g);
             }
         }
         // Font-lock rewrote faces over chars [22, 35): props tick moved, size
@@ -1392,7 +1417,7 @@ mod scroll_classifier_tests {
             for c in 0..10 {
                 let mut g = Glyph::char('a', FaceId::new(0), base + c);
                 g.pixel_width = 8.0;
-                m.matrix.rows[row_idx].glyphs[GlyphArea::Text.index()].push(g);
+                MatrixRow::make_mut(&mut m.matrix.rows[row_idx]).glyphs[GlyphArea::Text.index()].push(g);
             }
         }
         // Insert 1 char at 25, font-lock refontified [20, 36) (NEW coords).
@@ -1452,7 +1477,7 @@ mod scroll_classifier_tests {
         for c in 0..10 {
             let mut g = Glyph::char('a', FaceId::new(0), 20 + c);
             g.pixel_width = 8.0;
-            m.matrix.rows[2].glyphs[GlyphArea::Text.index()].push(g);
+            MatrixRow::make_mut(&mut m.matrix.rows[2]).glyphs[GlyphArea::Text.index()].push(g);
         }
         // 1 char deleted at 25: old span [25, 26), new span empty; size -1.
         let mut curr = synthetic_key(0, 25);

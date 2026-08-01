@@ -604,9 +604,17 @@ impl BufferSourceOutputSetup {
             // Install retained body rows verbatim (already bidi-finalized), with
             // the prior cursor decoration stripped — the new cursor is set below.
             for (idx, row) in replay.body_rows {
-                let mut row = row;
-                row.cursor_col = None;
-                row.cursor_type = None;
+                // Verbatim install is a refcount bump; only a row still
+                // carrying the prior cursor decoration pays a copy to strip
+                // it (the new cursor is set below).
+                let row = if row.cursor_col.is_some() || row.cursor_type.is_some() {
+                    let mut stripped = neomacs_display_protocol::GlyphRow::clone(&row);
+                    stripped.cursor_col = None;
+                    stripped.cursor_type = None;
+                    std::sync::Arc::new(stripped)
+                } else {
+                    row
+                };
                 output.builder().install_finalized_output_row(idx, row);
             }
 

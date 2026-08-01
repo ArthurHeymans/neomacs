@@ -1,6 +1,7 @@
 //! Mutable output window state owned while layout builds a frame snapshot.
 
 use crate::display_cursor::{CursorVisualColumnResolutionContext, CursorVisualColumnRows};
+use neomacs_display_protocol::glyph_matrix::MatrixRow;
 use crate::display_output_row_request::{
     DisplayCurrentRowMutation, DisplayWindowRowMutation, DisplayWindowRowsMutation,
     OutputCompleteRowInstallRequest, OutputCurrentRowDecorationRequest, OutputRowBeginRequest,
@@ -225,7 +226,7 @@ impl OutputWindowBuildState {
     /// Install a complete, already bidi-finalized row into the current window
     /// grid verbatim (Phase 1 cursor-only replay). See
     /// [`OutputWindowRowGrid::install_finalized_row`].
-    pub(crate) fn install_finalized_window_row(&mut self, row: usize, source: GlyphRow) {
+    pub(crate) fn install_finalized_window_row(&mut self, row: usize, source: MatrixRow) {
         if let Some(grid) = self.current_row_grid.as_mut() {
             grid.install_finalized_row(row, source);
         }
@@ -367,7 +368,7 @@ impl OutputWindowRowGrid {
     }
 
     pub(crate) fn row(&self, row: usize) -> Option<&GlyphRow> {
-        self.matrix.rows.get(row)
+        self.matrix.rows.get(row).map(|row| row.as_ref())
     }
 
     /// Find the enabled buffer-text row whose `[start_charpos, end_charpos]`
@@ -383,7 +384,10 @@ impl OutputWindowRowGrid {
     }
 
     pub(crate) fn row_mut(&mut self, row: usize) -> Option<&mut GlyphRow> {
-        self.matrix.rows.get_mut(row)
+        // Copy-on-write: rows under construction are uniquely owned, so this
+        // is an in-place borrow; a shared (reused) row is cloned on first
+        // mutation only.
+        self.matrix.rows.get_mut(row).map(MatrixRow::make_mut)
     }
 
     pub(crate) fn edit_row_with_matrix_cols<R>(
@@ -399,7 +403,7 @@ impl OutputWindowRowGrid {
     fn edit_rows_with_matrix_cols(&mut self, mut f: impl FnMut(&mut GlyphRow, usize)) {
         let ncols = self.matrix.ncols;
         for row in &mut self.matrix.rows {
-            f(row, ncols);
+            f(MatrixRow::make_mut(row), ncols);
         }
     }
 
@@ -407,10 +411,16 @@ impl OutputWindowRowGrid {
     /// decorates a spurious cursor at its pinned point; the real cursor is set
     /// afterward).
     pub(crate) fn clear_all_cursors(&mut self) {
-        self.edit_rows_with_matrix_cols(|row, _| {
-            row.cursor_col = None;
-            row.cursor_type = None;
-        });
+        for row in &mut self.matrix.rows {
+            // Only rows actually carrying cursor decoration are touched — a
+            // make_mut on a shared cursor-free row would deep-copy it for
+            // nothing.
+            if row.cursor_col.is_some() || row.cursor_type.is_some() {
+                let row = MatrixRow::make_mut(row);
+                row.cursor_col = None;
+                row.cursor_type = None;
+            }
+        }
     }
 
     pub(crate) fn write_row_metrics(&mut self, row: usize, metrics: OutputRowMetricsRequest) {
@@ -435,10 +445,12 @@ impl OutputWindowRowGrid {
 
     pub(crate) fn replace_row(&mut self, row: usize, source: GlyphRow) {
         self.clear_finalized(row);
-        let Some(row) = self.row_mut(row) else {
+        let Some(slot) = self.matrix.rows.get_mut(row) else {
             return;
         };
-        *row = source;
+        // A freshly built row replaces the slot wholesale; assigning the Arc
+        // avoids a make_mut copy of whatever shared row was there before.
+        *slot = MatrixRow::new(source);
     }
 
     /// Install a complete, ALREADY bidi-finalized (visual-order) row verbatim
@@ -449,8 +461,9 @@ impl OutputWindowRowGrid {
     /// re-finalizing them would double-reverse an RTL row. Unlike `replace_row`
     /// (which clears the finalized flag for the normal install→finalize flow),
     /// this sets it.
-    pub(crate) fn install_finalized_row(&mut self, row: usize, source: GlyphRow) {
-        let Some(slot) = self.row_mut(row) else {
+    pub(crate) fn install_finalized_row(&mut self, row: usize, source: MatrixRow) {
+        // Store the shared row directly — verbatim replay never copies.
+        let Some(slot) = self.matrix.rows.get_mut(row) else {
             return;
         };
         *slot = source;

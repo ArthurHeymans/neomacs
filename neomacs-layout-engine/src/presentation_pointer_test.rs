@@ -32,7 +32,7 @@ fn pointer_projection_uses_authoritative_row_origin_and_start_column() {
     });
     row.rebuild_pointer_runs(8.0, 80.0);
     let mut matrix = GlyphMatrix::new(1, 10);
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(4),
@@ -61,7 +61,7 @@ fn pointer_projection_supports_window_chrome_rows_from_the_same_matrix() {
     });
     row.rebuild_pointer_runs(8.0, 80.0);
     let mut matrix = GlyphMatrix::new(1, 10);
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(4),

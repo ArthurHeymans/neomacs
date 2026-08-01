@@ -370,8 +370,6 @@ pub struct GlyphRow {
     ///
     /// Keeping damage beside the row hash makes it impossible to shift a
     /// parallel damage vector out of alignment with `GlyphMatrix::rows`.
-    #[serde(default)]
-    pub damage: RowDamage,
     /// Row is valid and should be displayed.
     pub enabled: bool,
     /// Semantic role: text body, mode-line, header-line, tab-line, etc.
@@ -450,7 +448,6 @@ impl GlyphRow {
             pointer_appearances: Vec::new(),
             pointer_runs: Vec::new(),
             hash: 0,
-            damage: RowDamage::New,
             enabled: true,
             role,
             cursor_col: None,
@@ -762,9 +759,27 @@ pub struct GlyphPointerRun {
     pub width: f32,
 }
 
+/// Copy-on-write row storage. Rows under construction are uniquely owned, so
+/// `Arc::make_mut` mutates in place for free; once a frame is accepted the
+/// same rows are SHARED by refcount between the sealed presentation, the
+/// retained per-window matrix, and any replay plan built from it — the Rust
+/// equivalent of GNU's pointer-swapped current/desired matrices (dispnew.c
+/// never copies row contents either). Cloning a matrix or reusing a row costs
+/// a refcount bump, not a per-glyph deep copy; the first mutation of a shared
+/// row (e.g. re-decorating the cursor on a reused row) clones just that row.
+pub type MatrixRow = std::sync::Arc<GlyphRow>;
+
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct GlyphMatrix {
-    pub rows: Vec<GlyphRow>,
+    pub rows: Vec<MatrixRow>,
+    /// Per-row layout provenance for THIS frame (spec 4.6), parallel to
+    /// `rows`. Damage lives beside — not inside — the copy-on-write rows:
+    /// it is per-frame transient metadata, and stamping it on a shared
+    /// `MatrixRow` would force a deep copy of every reused row each frame.
+    /// The `row_damage()` / `set_row_damage()` accessors and the resize
+    /// paths keep it aligned with `rows`.
+    #[serde(default)]
+    pub row_damage: Vec<RowDamage>,
     pub nrows: usize,
     pub ncols: usize,
     pub matrix_x: usize,
@@ -787,10 +802,11 @@ impl GlyphMatrix {
             .map(|_| {
                 let mut row = GlyphRow::new(GlyphRowRole::Text);
                 row.enabled = false;
-                row
+                MatrixRow::new(row)
             })
             .collect();
         Self {
+            row_damage: vec![RowDamage::New; nrows],
             rows,
             nrows,
             ncols,
@@ -803,7 +819,7 @@ impl GlyphMatrix {
 
     pub fn clear(&mut self) {
         for row in &mut self.rows {
-            row.clear();
+            MatrixRow::make_mut(row).clear();
         }
     }
 
@@ -811,16 +827,33 @@ impl GlyphMatrix {
         self.rows.resize_with(nrows, || {
             let mut row = GlyphRow::new(GlyphRowRole::Text);
             row.enabled = false;
-            row
+            MatrixRow::new(row)
         });
         self.rows.truncate(nrows);
+        self.row_damage.resize(nrows, RowDamage::New);
         self.nrows = nrows;
         self.ncols = ncols;
+    }
+
+    /// This frame's provenance for row `idx` (`New` when out of range or
+    /// never stamped this frame).
+    pub fn row_damage(&self, idx: usize) -> RowDamage {
+        self.row_damage.get(idx).copied().unwrap_or(RowDamage::New)
+    }
+
+    pub fn set_row_damage(&mut self, idx: usize, damage: RowDamage) {
+        if self.row_damage.len() < self.rows.len() {
+            self.row_damage.resize(self.rows.len(), RowDamage::New);
+        }
+        if let Some(slot) = self.row_damage.get_mut(idx) {
+            *slot = damage;
+        }
     }
 
     pub fn ensure_hashes(&mut self) {
         for row in &mut self.rows {
             if row.hash == 0 && row.total_glyphs() > 0 {
+                let row = MatrixRow::make_mut(row);
                 row.hash = row.compute_hash();
             }
         }

@@ -320,10 +320,10 @@ fn frame_damage_is_derived_from_each_authoritative_row() {
     use neomacs_display_protocol::{DisplayWindowId, FaceId, Rect};
 
     let mut matrix = GlyphMatrix::new(1, 1);
-    matrix.rows[0].glyphs[GlyphArea::Text.index()].push(
+    std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text.index()].push(
         neomacs_display_protocol::glyph_matrix::Glyph::char('x', FaceId::new(0), 0),
     );
-    matrix.rows[0].damage = RowDamage::Reused;
+    matrix.set_row_damage(0, RowDamage::Reused);
     let mut state = FrameDisplayState::new(1, 1, 8.0, 16.0);
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(10),

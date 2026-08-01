@@ -2128,9 +2128,9 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
     state.faces.insert(FaceId::new(0), face);
 
     let mut matrix = GlyphMatrix::new(1, 20);
-    matrix.rows[0].enabled = true;
+    std::sync::Arc::make_mut(&mut matrix.rows[0]).enabled = true;
     for (i, ch) in "a好b".chars().enumerate() {
-        matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
+        std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
     state.window_matrices.push(WindowMatrixEntry {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
@@ -2288,12 +2288,12 @@ fn realize_frame_fonts_publishes_shaped_clusters_for_composites() {
     state.faces.insert(FaceId::new(0), face);
 
     let mut matrix = GlyphMatrix::new(1, 20);
-    matrix.rows[0].enabled = true;
+    std::sync::Arc::make_mut(&mut matrix.rows[0]).enabled = true;
     let mut composite = Glyph::char('e', FaceId::new(0), 0);
     composite.glyph_type = GlyphType::Composite {
         text: "e\u{0301}".into(),
     };
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(composite);
+    std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize].push(composite);
     state.window_matrices.push(WindowMatrixEntry {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(1),
         matrix,

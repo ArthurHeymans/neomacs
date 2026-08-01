@@ -18212,7 +18212,9 @@ fn phase5_fast_paths_emit_row_damage() {
             .find(|e| e.window_id.get() == win.0 as i64)
             .expect("selected window matrix");
         (
-            entry.matrix.rows.iter().map(|row| row.damage).collect(),
+            (0..entry.matrix.rows.len())
+                .map(|idx| entry.matrix.row_damage(idx))
+                .collect(),
             entry.matrix.rows.iter().map(|r| r.role).collect(),
         )
     }

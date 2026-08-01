@@ -637,7 +637,8 @@ impl TtyRif {
             let char_w = state.char_width.max(1.0);
             let char_h = state.char_height.max(1.0);
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
-                if let crate::glyph_matrix::RowDamage::ReusedShifted { dvpos } = glyph_row.damage
+                if let crate::glyph_matrix::RowDamage::ReusedShifted { dvpos } =
+                    entry.matrix.row_damage(row_idx)
                     && char_h == 1.0
                 {
                     // dvpos is the uniform pixel shift (negative = content

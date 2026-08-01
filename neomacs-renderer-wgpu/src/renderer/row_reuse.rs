@@ -94,8 +94,9 @@ impl FrameRowDamage {
                 .matrix
                 .rows
                 .iter()
-                .map(|row| RowDamageInfo {
-                    damage: row.damage,
+                .enumerate()
+                .map(|(idx, row)| RowDamageInfo {
+                    damage: entry.matrix.row_damage(idx),
                     row_hash: row.hash,
                 })
                 .collect();

@@ -30,11 +30,12 @@ fn golden_state() -> FrameDisplayState {
     let mut matrix = GlyphMatrix::new(2, 16);
     let text_area = GlyphArea::Text as usize;
 
-    matrix.rows[0].enabled = true;
-    matrix.rows[0].glyphs[text_area].push(Glyph::char('h', FaceId::new(0), 1));
-    matrix.rows[0].glyphs[text_area].push(Glyph::char('i', FaceId::new(0), 2));
-    matrix.rows[0].glyphs[text_area].push(Glyph::stretch(2, FaceId::new(0)));
-    matrix.rows[0].glyphs[text_area].push(Glyph {
+    let row0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    row0.enabled = true;
+    row0.glyphs[text_area].push(Glyph::char('h', FaceId::new(0), 1));
+    row0.glyphs[text_area].push(Glyph::char('i', FaceId::new(0), 2));
+    row0.glyphs[text_area].push(Glyph::stretch(2, FaceId::new(0)));
+    row0.glyphs[text_area].push(Glyph {
         glyph_type: GlyphType::Image {
             image_id: 7,
             width_cols: 1,
@@ -46,16 +47,17 @@ fn golden_state() -> FrameDisplayState {
     });
     let mut wide = Glyph::char('你', FaceId::new(0), 4);
     wide.wide = true;
-    matrix.rows[0].glyphs[text_area].push(wide);
+    row0.glyphs[text_area].push(wide);
     let mut padding = Glyph::char('你', FaceId::new(0), 4);
     padding.padding = true;
-    matrix.rows[0].glyphs[text_area].push(padding);
+    row0.glyphs[text_area].push(padding);
 
-    matrix.rows[1].enabled = true;
-    matrix.rows[1].role = GlyphRowRole::ModeLine;
-    matrix.rows[1].mode_line = true;
+    let row1 = std::sync::Arc::make_mut(&mut matrix.rows[1]);
+    row1.enabled = true;
+    row1.role = GlyphRowRole::ModeLine;
+    row1.mode_line = true;
     for (i, ch) in "-U:--".chars().enumerate() {
-        matrix.rows[1].glyphs[text_area].push(Glyph::char(ch, FaceId::new(0), i));
+        row1.glyphs[text_area].push(Glyph::char(ch, FaceId::new(0), i));
     }
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -133,7 +135,7 @@ fn render_text_faces_lists_runs_with_hex_colors() {
 fn render_text_skips_disabled_rows_and_falls_back_without_window_info() {
     let mut state = golden_state();
     state.window_infos.clear();
-    state.window_matrices[0].matrix.rows[1].enabled = false;
+    std::sync::Arc::make_mut(&mut state.window_matrices[0].matrix.rows[1]).enabled = false;
     let out = state.render_text();
     assert!(
         out.contains("-- window 1 selected --"),
@@ -157,16 +159,9 @@ fn face_run_name_falls_back_to_basic_face_and_raw_id() {
         .faces
         .insert(FaceId::new(99), Face::new(FaceId::new(99)));
     let text_area = GlyphArea::Text as usize;
-    state.window_matrices[0].matrix.rows[1].glyphs[text_area].push(Glyph::char(
-        'm',
-        FaceId::new(1),
-        10,
-    ));
-    state.window_matrices[0].matrix.rows[1].glyphs[text_area].push(Glyph::char(
-        'd',
-        FaceId::new(99),
-        11,
-    ));
+    let row = std::sync::Arc::make_mut(&mut state.window_matrices[0].matrix.rows[1]);
+    row.glyphs[text_area].push(Glyph::char('m', FaceId::new(1), 10));
+    row.glyphs[text_area].push(Glyph::char('d', FaceId::new(99), 11));
     let out = state.render_text_faces();
     assert!(
         out.contains("mode-line-active fg=#"),

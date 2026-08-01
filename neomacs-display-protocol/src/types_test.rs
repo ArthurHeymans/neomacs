@@ -838,9 +838,21 @@ fn srgb_u8_roundtrip_is_exact_through_the_lut_pair() {
     for v in 0..=255u8 {
         let pixel = 0xFF000000 | ((v as u32) << 16) | ((v as u32) << 8) | v as u32;
         let c = Color::from_pixel(pixel);
-        assert_eq!(Color::linear_component_to_srgb_u8(c.r), v, "r channel, v={v}");
-        assert_eq!(Color::linear_component_to_srgb_u8(c.g), v, "g channel, v={v}");
-        assert_eq!(Color::linear_component_to_srgb_u8(c.b), v, "b channel, v={v}");
+        assert_eq!(
+            Color::linear_component_to_srgb_u8(c.r),
+            v,
+            "r channel, v={v}"
+        );
+        assert_eq!(
+            Color::linear_component_to_srgb_u8(c.g),
+            v,
+            "g channel, v={v}"
+        );
+        assert_eq!(
+            Color::linear_component_to_srgb_u8(c.b),
+            v,
+            "b channel, v={v}"
+        );
     }
 }
 
@@ -880,6 +892,10 @@ fn linear_component_to_srgb_u8_matches_the_arithmetic_form() {
         }
     }
     for c in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1.0, 2.0] {
-        assert_eq!(Color::linear_component_to_srgb_u8(c), arithmetic(c), "c={c}");
+        assert_eq!(
+            Color::linear_component_to_srgb_u8(c),
+            arithmetic(c),
+            "c={c}"
+        );
     }
 }

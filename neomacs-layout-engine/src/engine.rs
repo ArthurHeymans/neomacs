@@ -1606,14 +1606,15 @@ impl LayoutEngine {
                 // chrome + disabled + relaid body rows are `New`.
                 {
                     let mut body_seen = 0usize;
-                    for row in &mut entry.matrix.rows {
+                    for idx in 0..entry.matrix.rows.len() {
+                        let row = &entry.matrix.rows[idx];
                         let is_chrome = if role_based {
                             RetainedWindowMatrix::is_chrome_role(row.role)
                         } else {
                             row.mode_line
                         };
                         if !row.enabled || is_chrome {
-                            row.damage = RowDamage::New;
+                            entry.matrix.set_row_damage(idx, RowDamage::New);
                             continue;
                         }
                         let d = if cursor_only {
@@ -1633,7 +1634,7 @@ impl LayoutEngine {
                         } else {
                             RowDamage::New
                         };
-                        row.damage = d;
+                        entry.matrix.set_row_damage(idx, d);
                         body_seen += 1;
                     }
                 }

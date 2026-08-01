@@ -180,7 +180,7 @@ fn rasterize_shows_placeholder_for_surface_glyph() {
         width_cols: cols as u16,
     };
     row.glyphs[GlyphArea::Text as usize].push(surface);
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -264,7 +264,7 @@ fn make_simple_state(text: &str) -> FrameDisplayState {
     for (i, ch) in text.chars().enumerate() {
         row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -308,7 +308,7 @@ fn make_grid_state(
         row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
     if rows > 0 {
-        matrix.rows[0] = row;
+        matrix.rows[0] = std::sync::Arc::new(row);
     }
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -351,7 +351,7 @@ fn rasterize_respects_matrix_position() {
     matrix.matrix_y = 2;
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -393,7 +393,7 @@ fn rasterize_face_fill_paints_blank_cells_before_glyphs() {
     let mut matrix = GlyphMatrix::new(1, 6);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('X', FaceId::new(8), 0));
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
         matrix,
@@ -427,7 +427,7 @@ fn rasterize_uses_grid_rows_not_pixel_row_metrics() {
         row.height_px = 13.0;
         row.ascent_px = 10.0;
         row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), row_idx));
-        matrix.rows[row_idx] = row;
+        matrix.rows[row_idx] = std::sync::Arc::new(row);
     }
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -456,11 +456,11 @@ fn rasterize_text_rows_use_text_pixel_bounds_but_chrome_rows_do_not() {
 
     let mut text_row = GlyphRow::new(GlyphRowRole::Text);
     text_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('T', FaceId::new(0), 0));
-    matrix.rows[0] = text_row;
+    matrix.rows[0] = std::sync::Arc::new(text_row);
 
     let mut mode_line_row = GlyphRow::new(GlyphRowRole::ModeLine);
     mode_line_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('M', FaceId::new(0), 0));
-    matrix.rows[1] = mode_line_row;
+    matrix.rows[1] = std::sync::Arc::new(mode_line_row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -545,7 +545,7 @@ fn rasterize_frame_tree_clips_negative_child_rows_without_shifting_the_source_ro
     let mut second_row = GlyphRow::new(GlyphRowRole::Text);
     second_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 0));
     second_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
-    child.window_matrices[0].matrix.rows[1] = second_row;
+    child.window_matrices[0].matrix.rows[1] = std::sync::Arc::new(second_row);
 
     let mut rif = TtyRif::new(6, 3);
     rif.rasterize_frame_tree(&root, &[child]);
@@ -638,7 +638,7 @@ fn clipping_a_wide_child_glyph_does_not_leave_an_unrenderable_padding_cell() {
     let root = make_grid_state(1, 0, 0.0, 0.0, 4, 2, "root");
     let mut child = make_grid_state(2, 1, -1.0, 0.0, 2, 1, "");
     child.undecorated = true;
-    let row = &mut child.window_matrices[0].matrix.rows[0];
+    let row = std::sync::Arc::make_mut(&mut child.window_matrices[0].matrix.rows[0]);
     let mut wide = Glyph::char('\u{4f60}', FaceId::new(0), 0);
     wide.wide = true;
     row.glyphs[GlyphArea::Text as usize].push(wide);
@@ -660,7 +660,7 @@ fn rasterize_disabled_rows_are_skipped() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('X', FaceId::new(0), 0));
     row.enabled = false;
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -695,7 +695,7 @@ fn rasterize_wide_char_creates_padding() {
     row.glyphs[GlyphArea::Text as usize].push(g);
     // Followed by a normal char.
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('!', FaceId::new(0), 1));
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -731,7 +731,7 @@ fn rasterize_explicit_padding_glyph_is_not_duplicated() {
     row.glyphs[GlyphArea::Text as usize].push(wide);
     row.glyphs[GlyphArea::Text as usize].push(Glyph::padding_for(FaceId::new(0), 0));
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('!', FaceId::new(0), 1));
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -761,7 +761,7 @@ fn rasterize_stretch_glyph_uses_declared_width() {
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
     row.glyphs[GlyphArea::Text as usize].push(Glyph::stretch(4, FaceId::new(0)));
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -798,7 +798,7 @@ fn rasterize_tracks_phys_cursor_position() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', FaceId::new(0), 1));
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -847,11 +847,11 @@ fn rasterize_prefers_phys_cursor_over_matrix_cursor_columns() {
     row0.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
     row0.cursor_col = Some(1);
     row0.cursor_type = Some(CursorStyle::FilledBox);
-    matrix.rows[0] = row0;
+    matrix.rows[0] = std::sync::Arc::new(row0);
 
     let mut row1 = GlyphRow::new(GlyphRowRole::Text);
     row1.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', FaceId::new(0), 1));
-    matrix.rows[1] = row1;
+    matrix.rows[1] = std::sync::Arc::new(row1);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -961,7 +961,7 @@ fn rasterize_ignores_matrix_cursor_columns_without_phys_cursor() {
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
     row.cursor_col = Some(1);
     row.cursor_type = Some(CursorStyle::FilledBox);
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -991,7 +991,7 @@ fn rasterize_keeps_phys_filled_box_cursor_out_of_cell_attrs() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', FaceId::new(0), 1));
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -1044,7 +1044,7 @@ fn rasterize_ignores_nonselected_hollow_cursor_visual_on_tty() {
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('y', FaceId::new(0), 1));
     row.cursor_col = Some(1);
     row.cursor_type = Some(CursorStyle::Hollow);
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(9),
@@ -1073,7 +1073,7 @@ fn rasterize_uses_hardware_bar_shape_for_phys_bar_cursor() {
     let mut matrix = GlyphMatrix::new(5, 10);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -1155,7 +1155,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_only() {
     }
     top_row.cursor_col = Some(3);
     top_row.cursor_type = Some(CursorStyle::FilledBox);
-    top_matrix.rows[0] = top_row;
+    top_matrix.rows[0] = std::sync::Arc::new(top_row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -1177,7 +1177,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_only() {
     // `cursor-in-non-selected-windows` is non-nil.
     bot_row.cursor_col = Some(7);
     bot_row.cursor_type = Some(CursorStyle::Hollow);
-    bot_matrix.rows[0] = bot_row;
+    bot_matrix.rows[0] = std::sync::Arc::new(bot_row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(2),
@@ -1247,7 +1247,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
     }
     w1_row.cursor_col = Some(9);
     w1_row.cursor_type = Some(CursorStyle::Hollow);
-    w1_matrix.rows[0] = w1_row;
+    w1_matrix.rows[0] = std::sync::Arc::new(w1_row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -1266,7 +1266,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
     }
     w2_row.cursor_col = Some(2);
     w2_row.cursor_type = Some(CursorStyle::FilledBox);
-    w2_matrix.rows[0] = w2_row;
+    w2_matrix.rows[0] = std::sync::Arc::new(w2_row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(2),
@@ -1686,7 +1686,7 @@ fn state_with_text_glyphs(cols: usize, glyphs: Vec<Glyph>) -> FrameDisplayState 
     let mut matrix = GlyphMatrix::new(5, cols);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     row.glyphs[GlyphArea::Text as usize] = glyphs;
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
         matrix,
@@ -2636,7 +2636,7 @@ fn wide_base_in_the_final_column_rasterizes_as_a_space() {
     let mut wide = Glyph::char('\u{4e16}', FaceId::new(0), 9);
     wide.wide = true;
     row.glyphs[GlyphArea::Text as usize].push(wide);
-    matrix.rows[0] = row;
+    matrix.rows[0] = std::sync::Arc::new(row);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -2760,10 +2760,10 @@ fn layout_reused_shifted_damage_seeds_the_region_scroll() {
             {
                 row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
             }
+            matrix.rows[r] = std::sync::Arc::new(row);
             if shifted {
-                row.damage = RowDamage::ReusedShifted { dvpos: Px(-1.0) };
+                matrix.set_row_damage(r, RowDamage::ReusedShifted { dvpos: Px(-1.0) });
             }
-            matrix.rows[r] = row;
         }
         state.window_matrices.push(WindowMatrixEntry {
             window_id: DisplayWindowId::new(1),
