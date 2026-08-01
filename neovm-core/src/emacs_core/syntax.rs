@@ -4130,12 +4130,27 @@ fn scan_backward_comment_body(
                 if flags2.contains(SyntaxFlags::COMMENT_END_FIRST)
                     && CommentStyle::from_end_flags(flags2, flags) == style
                 {
-                    if nested {
-                        nesting += 1;
-                        buf.goto_emacs_byte_pos(unit2.start);
-                        continue;
-                    } else {
-                        break;
+                    // GNU `back_comment` gives the first ambiguous two-char
+                    // delimiter opener precedence.  This matters for `--`,
+                    // whose two characters can carry both start and end flags:
+                    // the delimiter nearest the terminating newline starts the
+                    // comment; only an earlier occurrence can end the backward
+                    // search for that opener.
+                    let first_ambiguous_opener = comstart_pos.is_none()
+                        && flags2.contains(SyntaxFlags::COMMENT_START_FIRST)
+                        && flags.contains(SyntaxFlags::COMMENT_START_SECOND)
+                        && CommentStyle::from_start_flags(flags2, flags) == style
+                        && (flags2.contains(SyntaxFlags::COMMENT_NESTABLE)
+                            || flags.contains(SyntaxFlags::COMMENT_NESTABLE))
+                            == nested;
+                    if !first_ambiguous_opener {
+                        if nested {
+                            nesting += 1;
+                            buf.goto_emacs_byte_pos(unit2.start);
+                            continue;
+                        } else {
+                            break;
+                        }
                     }
                 }
             }

@@ -1650,6 +1650,25 @@ fn backward_comment_two_char_end_style_uses_first_ender_char() {
 }
 
 #[test]
+fn backward_comment_treats_first_ambiguous_two_char_delimiter_as_opener() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "AB\n-- C\nDE\n");
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        let mut table = super::SyntaxTable::isolate_for_buffer(buf);
+        table.modify_syntax_entry('-', string_to_syntax(". 1234").unwrap());
+        table.modify_syntax_entry('\n', string_to_syntax(">").unwrap());
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(8));
+    }
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(-100)]).unwrap();
+
+    assert_eq!(moved, Value::NIL);
+    assert_eq!(current_point_lisp_pos(&eval), 3);
+}
+
+#[test]
 fn forward_comment_validates_arity_and_type() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
