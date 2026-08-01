@@ -11286,6 +11286,17 @@ fn insert_before_markers_advances_before_markers_at_point() {
 }
 
 #[test]
+fn keymap_prompt_resolves_an_uninterned_symbol_function_keymap() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(let ((map (make-symbol "menu-function")))
+             (fset map (make-sparse-keymap "Submenu"))
+             (list (keymapp map) (keymap-prompt map)))"#,
+    );
+    assert_eq!(results[0], r#"OK (t "Submenu")"#);
+}
+
+#[test]
 fn insert_read_only_shape_and_noop_cases_match_gnu() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(

@@ -5791,12 +5791,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         2,
         Some(2),
     );
-    ctx.defsubr(
-        "keymap-prompt",
-        |_ctx, args| builtin_keymap_prompt(args),
-        1,
-        Some(1),
-    );
+    ctx.defsubr("keymap-prompt", builtin_keymap_prompt, 1, Some(1));
     ctx.defsubr_interactive(
         "lower-frame",
         |_ctx, args| builtin_lower_frame(args),
