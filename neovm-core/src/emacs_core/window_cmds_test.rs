@@ -3234,6 +3234,24 @@ fn vertical_motion_truncates_partial_width_split_windows_like_gnu() {
 }
 
 #[test]
+fn tty_window_body_width_reserves_the_non_rightmost_separator_column() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(progn
+             (delete-other-windows)
+             (let* ((left (selected-window))
+                    (right (split-window-horizontally 50)))
+               (list (list (window-body-width left)
+                           (window-total-width left)
+                           (window-right-divider-width left))
+                     (list (window-body-width right)
+                           (window-total-width right)
+                           (window-right-divider-width right)))))"#,
+    );
+    assert_eq!(result, "OK ((49 50 0) (30 30 0))");
+}
+
+#[test]
 fn raw_context_does_not_prebind_window_inside_aliases() {
     crate::test_utils::init_test_tracing();
     let eval = super::super::eval::Context::new();

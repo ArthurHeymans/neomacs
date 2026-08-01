@@ -971,13 +971,30 @@ fn window_body_horizontal_offsets_pixels(
             };
             let left_scroll_bar = frames.window_left_scroll_bar_area_width(w.id());
             let right_scroll_bar = frames.window_right_scroll_bar_area_width(w.id());
+            // GNU `window_body_width` (`src/window.c`) removes the explicit
+            // right divider from every non-rightmost window.  On text
+            // terminals without such a divider it instead reserves one
+            // canonical column for the vertical separator.
+            let right_divider_or_tty_separator = if window_is_rightmost(frame, w.id()) {
+                0
+            } else {
+                let divider = frame_divider_width(frame, FrameParam::RightDividerWidth);
+                if divider > 0 {
+                    divider
+                } else if frame.effective_window_system().is_none() {
+                    char_width.round().max(1.0) as i64
+                } else {
+                    0
+                }
+            };
             (
                 left_scroll_bar
                     .saturating_add(left_fringe)
                     .saturating_add(left_margin),
                 right_scroll_bar
                     .saturating_add(right_fringe)
-                    .saturating_add(right_margin),
+                    .saturating_add(right_margin)
+                    .saturating_add(right_divider_or_tty_separator),
             )
         }
         Window::Internal { .. } => (0, 0),
@@ -985,9 +1002,9 @@ fn window_body_horizontal_offsets_pixels(
 }
 
 /// Text-area width of a leaf window in pixels (total minus scroll bars,
-/// fringes, and margins).  Shared with auto-hscroll (`super::hscroll`) so the
-/// column geometry it follows matches what `window-body-width` reports and what
-/// the layout engine renders.
+/// fringes, margins, and the right divider or terminal separator).  Shared
+/// with auto-hscroll (`super::hscroll`) so the column geometry it follows
+/// matches what `window-body-width` reports and what the layout engine renders.
 pub(crate) fn window_body_width_pixels(frames: &FrameManager, fid: FrameId, w: &Window) -> i64 {
     let total = window_width_pixels(w);
     let (left, right) = window_body_horizontal_offsets_pixels(frames, fid, w);
