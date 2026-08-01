@@ -107,7 +107,9 @@ fn offscreen_clear_readback() {
             timeout: Some(std::time::Duration::from_secs(3)),
         })
         .expect("poll");
-    let data = slice.get_mapped_range();
+    let data = slice
+        .get_mapped_range()
+        .expect("headless probe readback buffer should remain mapped");
     let px = [data[0], data[1], data[2], data[3]];
     eprintln!("PIXEL: {:?}", px);
     assert_eq!(px, [0, 255, 0, 255], "cleared green pixel should read back");

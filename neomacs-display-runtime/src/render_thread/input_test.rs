@@ -64,6 +64,7 @@ fn make_test_device() -> Option<wgpu::Device> {
         power_preference: wgpu::PowerPreference::LowPower,
         compatible_surface: None,
         force_fallback_adapter: false,
+        apply_limit_buckets: false,
     }))
     .ok()?;
     let (device, _queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
@@ -334,7 +335,9 @@ fn presented_pointer_runtime_render_readback(
             timeout: Some(std::time::Duration::from_secs(3)),
         })
         .expect("pointer render poll");
-    let mapped = slice.get_mapped_range();
+    let mapped = slice
+        .get_mapped_range()
+        .expect("render readback buffer should remain mapped");
     let mut pixels = vec![0; (unpadded * HEIGHT) as usize];
     for row in 0..HEIGHT {
         let source = (row * padded) as usize;

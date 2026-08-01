@@ -135,7 +135,9 @@ fn read_back(h: &Harness) -> Vec<u8> {
             timeout: Some(std::time::Duration::from_secs(3)),
         })
         .expect("poll");
-    let data = slice.get_mapped_range();
+    let data = slice
+        .get_mapped_range()
+        .expect("offscreen frame readback buffer should remain mapped");
     // Un-pad into tight W*H*4.
     let mut out = vec![0u8; (unpadded * H) as usize];
     for row in 0..H {
@@ -647,7 +649,9 @@ fn read_tex(r: &WgpuRenderer, t: &wgpu::Texture) -> Vec<u8> {
             timeout: Some(std::time::Duration::from_secs(3)),
         })
         .expect("poll");
-    let data = slice.get_mapped_range();
+    let data = slice
+        .get_mapped_range()
+        .expect("offscreen frame readback buffer should remain mapped");
     let mut out = vec![0u8; (unpadded * H) as usize];
     for row in 0..H {
         let s = (row * padded) as usize;

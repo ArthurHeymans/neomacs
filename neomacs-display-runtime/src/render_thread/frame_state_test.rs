@@ -31,6 +31,7 @@ fn make_test_device() -> Option<wgpu::Device> {
         power_preference: wgpu::PowerPreference::LowPower,
         compatible_surface: None,
         force_fallback_adapter: false,
+        apply_limit_buckets: false,
     }))
     .ok()?;
     let (device, _queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {

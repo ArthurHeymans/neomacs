@@ -1049,12 +1049,21 @@ impl Drop for FcFontSetGuard {
 }
 
 #[cfg(unix)]
-fn add_string_property(pattern: &mut Pattern<'_>, key: &std::ffi::CStr, value: &str) -> bool {
-    let Ok(value) = CString::new(value) else {
-        return false;
-    };
-    pattern.add_string(key, &value);
-    true
+fn add_string_property(pattern: &mut Pattern<'_>, key: &std::ffi::CStr, value: &str) -> Option<()> {
+    let value = CString::new(value).ok()?;
+    pattern.add_string(key, &value).ok()
+}
+
+#[cfg(unix)]
+fn with_matched_family_pattern<T>(
+    fc: &fontconfig::Fontconfig,
+    family: &str,
+    read: impl FnOnce(&Pattern<'_>) -> Option<T>,
+) -> Option<T> {
+    let mut pattern = Pattern::new(fc).ok()?;
+    add_string_property(&mut pattern, fontconfig::FC_FAMILY, family)?;
+    let matched = pattern.font_match().ok()?;
+    read(&matched)
 }
 
 #[cfg(unix)]
@@ -1083,11 +1092,8 @@ impl Drop for FcCharSetGuard {
 
 #[cfg(unix)]
 fn pattern_family(pattern: &Pattern<'_>) -> Option<String> {
-    pattern
-        .get_string(fontconfig::FC_FAMILY)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
+    let family = pattern.get_string(fontconfig::FC_FAMILY).ok()?.trim();
+    (!family.is_empty()).then(|| family.to_owned())
 }
 
 #[cfg(unix)]
@@ -1819,17 +1825,7 @@ fn query_xft_dpi() -> Option<f32> {
 /// Query Fontconfig for the concrete family name matching a generic family.
 fn fc_match_family(generic: &str) -> Option<String> {
     let fc = fontconfig_handle()?;
-    let mut pattern = Pattern::new(fc);
-    if !add_string_property(&mut pattern, fontconfig::FC_FAMILY, generic) {
-        return None;
-    }
-    let matched = pattern.font_match();
-    let family = pattern_family(&matched)?;
-    if family.is_empty() {
-        None
-    } else {
-        Some(family)
-    }
+    with_matched_family_pattern(fc, generic, pattern_family)
 }
 
 #[cfg(not(unix))]
@@ -1867,12 +1863,9 @@ fn family_spacing(family: &str) -> Option<i32> {
     }
 
     let spacing = fontconfig_handle().and_then(|fc| {
-        let mut pattern = Pattern::new(fc);
-        if !add_string_property(&mut pattern, fontconfig::FC_FAMILY, family) {
-            return None;
-        }
-        let matched = pattern.font_match();
-        matched.get_int(fontconfig::FC_SPACING)
+        with_matched_family_pattern(fc, family, |matched| {
+            matched.get_int(fontconfig::FC_SPACING).ok()
+        })
     });
 
     if let Ok(mut cache) = cache.lock() {
@@ -1922,12 +1915,9 @@ fn query_default_subpixel_order() -> FontconfigSubpixelOrder {
         return FontconfigSubpixelOrder::Unknown;
     };
 
-    let mut pattern = Pattern::new(fc);
-    if !add_string_property(&mut pattern, fontconfig::FC_FAMILY, "Monospace") {
-        return FontconfigSubpixelOrder::Unknown;
-    }
-    let matched = pattern.font_match();
-    match matched.get_int(FC_RGBA) {
+    let rgba =
+        with_matched_family_pattern(fc, "Monospace", |matched| matched.get_int(FC_RGBA).ok());
+    match rgba {
         Some(FC_RGBA_NONE) => FontconfigSubpixelOrder::None,
         Some(FC_RGBA_RGB) => FontconfigSubpixelOrder::Rgb,
         Some(FC_RGBA_BGR) => FontconfigSubpixelOrder::Bgr,

@@ -2045,6 +2045,7 @@ impl GuiFrameWindowManager {
                     let config = wgpu::SurfaceConfiguration {
                         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                         format,
+                        color_space: wgpu::SurfaceColorSpace::Auto,
                         width: phys.width,
                         height: phys.height,
                         present_mode: wgpu::PresentMode::Fifo,
@@ -2489,6 +2490,7 @@ impl GuiFrameWindowManager {
             let config = wgpu::SurfaceConfiguration {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                 format,
+                color_space: wgpu::SurfaceColorSpace::Auto,
                 width: native.width,
                 height: native.height,
                 present_mode: wgpu::PresentMode::Fifo,

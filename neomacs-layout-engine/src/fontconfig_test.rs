@@ -595,6 +595,12 @@ fn fontconfig_handle_initializes() {
     assert!(super::fontconfig_handle().is_some(), "fontconfig handle");
 }
 
+#[cfg(unix)]
+#[test]
+fn invalid_fontconfig_family_is_not_classified_as_monospace() {
+    assert!(!super::family_prefers_monospace("invalid\0family"));
+}
+
 #[test]
 fn default_subpixel_order_resolves_to_known_variant() {
     assert!(matches!(

@@ -43,6 +43,7 @@ impl RenderApp {
                 power_preference: crate::gpu_power_preference(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })) {
                 Ok(a) => a,
                 Err(e) => {
@@ -152,6 +153,7 @@ impl RenderApp {
         let config = wgpu::SurfaceConfiguration {
             usage: surface_usage,
             format,
+            color_space: wgpu::SurfaceColorSpace::Auto,
             width: pending_width,
             height: pending_height,
             present_mode: wgpu::PresentMode::Fifo,

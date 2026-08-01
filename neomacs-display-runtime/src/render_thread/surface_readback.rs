@@ -147,7 +147,14 @@ fn log_surface_readback(
         }
     }
 
-    let mapped = readback.slice(..).get_mapped_range();
+    let mapped = match readback.slice(..).get_mapped_range() {
+        Ok(mapped) => mapped,
+        Err(err) => {
+            tracing::warn!("{label} mapped range failed: {err}");
+            readback.unmap();
+            return;
+        }
+    };
     let mode_rect = widest_mode_line_rect(frame);
     let mode_band = mode_rect.map(|(_, y, _, rect_height)| {
         let y0 = y.min(height.saturating_sub(1));

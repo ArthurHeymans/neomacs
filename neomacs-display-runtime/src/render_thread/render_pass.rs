@@ -1433,7 +1433,7 @@ impl RenderApp {
             {
                 window.pre_present_notify();
             }
-            output.present();
+            renderer.queue().present(output);
             super::frame_stats::note_present(std::time::Instant::now());
             if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
                 tracing::debug!(

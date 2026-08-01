@@ -222,7 +222,7 @@ impl WgpuRenderer {
             vertex: wgpu::VertexState {
                 module: &rect_shader,
                 entry_point: Some("vs_main"),
-                buffers: &[RectVertex::desc()],
+                buffers: &[Some(RectVertex::desc())],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -268,7 +268,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &rounded_rect_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[RoundedRectVertex::desc()],
+                    buffers: &[Some(RoundedRectVertex::desc())],
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -309,7 +309,7 @@ impl WgpuRenderer {
             vertex: wgpu::VertexState {
                 module: &rounded_rect_shader,
                 entry_point: Some("vs_main"),
-                buffers: &[RoundedRectVertex::desc()],
+                buffers: &[Some(RoundedRectVertex::desc())],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -404,7 +404,7 @@ impl WgpuRenderer {
             vertex: wgpu::VertexState {
                 module: &glyph_shader,
                 entry_point: Some("vs_main"),
-                buffers: &[GlyphVertex::desc()],
+                buffers: &[Some(GlyphVertex::desc())],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -443,7 +443,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &subpixel_glyph_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[SubpixelGlyphVertex::desc()],
+                    buffers: &[Some(SubpixelGlyphVertex::desc())],
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -516,7 +516,7 @@ impl WgpuRenderer {
             vertex: wgpu::VertexState {
                 module: &image_shader,
                 entry_point: Some("vs_main"),
-                buffers: &[GlyphVertex::desc()], // Reuse glyph vertex format
+                buffers: &[Some(GlyphVertex::desc())], // Reuse glyph vertex format
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -557,7 +557,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &image_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[GlyphVertex::desc()],
+                    buffers: &[Some(GlyphVertex::desc())],
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -625,7 +625,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &rect_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[RectVertex::desc()],
+                    buffers: &[Some(RectVertex::desc())],
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -665,7 +665,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &rounded_rect_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[RoundedRectVertex::desc()],
+                    buffers: &[Some(RoundedRectVertex::desc())],
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -705,7 +705,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &glyph_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[GlyphVertex::desc()],
+                    buffers: &[Some(GlyphVertex::desc())],
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -744,7 +744,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &subpixel_glyph_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[SubpixelGlyphVertex::desc()],
+                    buffers: &[Some(SubpixelGlyphVertex::desc())],
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -784,7 +784,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &image_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[GlyphVertex::desc()],
+                    buffers: &[Some(GlyphVertex::desc())],
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -824,7 +824,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &image_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[GlyphVertex::desc()],
+                    buffers: &[Some(GlyphVertex::desc())],
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -864,7 +864,7 @@ impl WgpuRenderer {
                 vertex: wgpu::VertexState {
                     module: &rounded_rect_shader,
                     entry_point: Some("vs_main"),
-                    buffers: &[RoundedRectVertex::desc()],
+                    buffers: &[Some(RoundedRectVertex::desc())],
                     compilation_options: Default::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -922,6 +922,7 @@ impl WgpuRenderer {
             let config = wgpu::SurfaceConfiguration {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                 format: target_format,
+                color_space: wgpu::SurfaceColorSpace::Auto,
                 width,
                 height,
                 present_mode: wgpu::PresentMode::Fifo, // VSync
@@ -1006,6 +1007,7 @@ impl WgpuRenderer {
                 power_preference: crate::gpu_power_preference(),
                 compatible_surface: surface.as_ref(),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .map_err(|e| format!("Failed to find a suitable GPU adapter: {}", e))?;
@@ -1196,7 +1198,7 @@ impl WgpuRenderer {
 
         self.render_to_view(&view, scene);
 
-        output.present();
+        self.queue.present(output);
     }
 
     /// Render a scene to a texture view.
