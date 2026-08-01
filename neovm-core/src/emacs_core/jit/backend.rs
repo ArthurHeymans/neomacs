@@ -106,7 +106,8 @@ fn build_smoke_fn<M: Module>(
     // the `extern "C" fn` type the JIT wrapper transmutes the finalized pointer
     // to. Derived from the module's own target config, so it is correct for both
     // the JIT host ISA and any AOT target ISA.
-    let call_conv = module.target_config().default_call_conv;
+    let frontend_config = module.target_config();
+    let call_conv = frontend_config.default_call_conv;
 
     // Signature: (i64) -> i64.
     let mut sig = Signature::new(call_conv);
@@ -128,7 +129,7 @@ fn build_smoke_fn<M: Module>(
         let sum = fb.ins().iadd(arg_val, addend_val);
         fb.ins().return_(&[sum]);
 
-        fb.finalize();
+        fb.finalize(frontend_config);
     }
 
     // Declare + define the function in the module.

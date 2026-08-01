@@ -58,6 +58,16 @@ neomacs-renderer-wgpu = { path = "neomacs-renderer-wgpu", default-features = fal
 neomacs-diagnostics = { path = "neomacs-diagnostics", default-features = false }
 neomacs-test-oracle = { path = "neomacs-test-oracle" }
 
+# Cranelift is one API-coupled release train: these crates exchange nominal IR
+# types and must move together. Dependabot groups the family, and xtask verifies
+# that every member stays on the same minor release line.
+cranelift-codegen = "0.134.3"
+cranelift-frontend = "0.134.3"
+cranelift-jit = "0.134.3"
+cranelift-module = "0.134.3"
+cranelift-object = "0.134.3"
+cranelift-native = "0.134.3"
+
 # Logging / tracing
 tracing = { version = "0.1", features = ["attributes"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }

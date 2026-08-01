@@ -2,6 +2,76 @@ use super::*;
 use flate2::{Compression, write::GzEncoder};
 
 #[test]
+fn cranelift_dependencies_are_workspace_owned_and_share_one_release_line() {
+    let workspace_manifest = include_str!("../../Cargo.toml");
+    let versions: Vec<(&str, &str)> = workspace_manifest
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("cranelift-"))
+        .map(|line| {
+            let (name, requirement) = line
+                .split_once(" = ")
+                .expect("Cranelift dependency must have an inline requirement");
+            let version = requirement
+                .strip_prefix('"')
+                .and_then(|tail| tail.split('"').next())
+                .or_else(|| {
+                    requirement
+                        .split_once("version = \"")
+                        .and_then(|(_, tail)| tail.split('"').next())
+                })
+                .expect("Cranelift dependency must declare a version");
+            (name, version)
+        })
+        .collect();
+
+    assert_eq!(versions.len(), 6, "all Cranelift crates must be covered");
+    let release_line = |version: &str| {
+        version
+            .rsplit_once('.')
+            .map(|(line, _)| line.to_owned())
+            .expect("Cranelift version must contain a patch component")
+    };
+    let expected = release_line(versions[0].1);
+    assert!(
+        versions
+            .iter()
+            .all(|(_, version)| release_line(version) == expected),
+        "Cranelift crates form one API-coupled release train; found {versions:?}"
+    );
+
+    let crate_manifest = include_str!("../../neovm-core/Cargo.toml");
+    let declarations: Vec<&str> = crate_manifest
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("cranelift-"))
+        .collect();
+    assert_eq!(
+        declarations.len(),
+        6,
+        "all Cranelift crates must be covered"
+    );
+    assert!(
+        declarations
+            .iter()
+            .all(|line| line.contains("workspace = true") && line.contains("optional = true")),
+        "neovm-core must consume optional workspace-owned Cranelift dependencies: {declarations:?}"
+    );
+}
+
+#[test]
+fn dependabot_groups_cranelift_release_train() {
+    let config = include_str!("../../.github/dependabot.yml");
+    let groups = config
+        .split_once("\n    groups:\n")
+        .map(|(_, groups)| groups)
+        .expect("Cargo Dependabot updates must define dependency groups");
+
+    assert!(groups.starts_with("      cranelift:\n"));
+    assert!(groups.contains("\n          - \"cranelift-*\"\n"));
+}
+
+#[test]
 #[cfg(unix)]
 fn doom_install_contract_uses_neomacs_in_an_isolated_home() {
     use std::os::unix::fs::PermissionsExt;

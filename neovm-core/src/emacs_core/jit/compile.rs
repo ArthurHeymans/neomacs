@@ -66,7 +66,7 @@ use crate::emacs_core::error::LispCondition;
 use cranelift_codegen::ir::Value as ClifValue;
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::{
-    AbiParam, Block, BlockArg, FuncRef, Function, InstBuilder, MemFlags, Signature, StackSlot,
+    AbiParam, Block, BlockArg, FuncRef, Function, InstBuilder, MemFlagsData, Signature, StackSlot,
     StackSlotData, StackSlotKind, Type, UserFuncName, types,
 };
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
@@ -3417,10 +3417,10 @@ fn materialize_op_sym_id(
     match reloc_index.get(&key) {
         Some(&idx) => {
             let base = reloc_base.expect("reloc_base set when an op-symbol is reloc'd");
-            let sym_bits = fb
-                .ins()
-                .load(types::I64, MemFlags::trusted(), base, (idx * 8) as i32);
-            fb.ins().ushr_imm(sym_bits, TAG_BITS as i64)
+            let sym_bits =
+                fb.ins()
+                    .load(types::I64, MemFlagsData::trusted(), base, (idx * 8) as i32);
+            fb.ins().ushr_imm_u(sym_bits, TAG_BITS as i64)
         }
         None => fb.ins().iconst(types::I64, sym as i64),
     }
@@ -3442,8 +3442,12 @@ fn materialize_spec_expected(
     if aot {
         let base =
             spec_expected_base.expect("AOT sets spec_expected_base at an Op::Call spec site");
-        fb.ins()
-            .load(types::I64, MemFlags::trusted(), base, (slot_idx * 8) as i32)
+        fb.ins().load(
+            types::I64,
+            MemFlagsData::trusted(),
+            base,
+            (slot_idx * 8) as i32,
+        )
     } else {
         fb.ins().iconst(types::I64, expected as i64)
     }
@@ -3464,7 +3468,7 @@ fn materialize_spec_slot(
     if aot {
         let base = spec_slot_base.expect("AOT sets spec_slot_base at an Op::Call spec site");
         fb.ins()
-            .iadd_imm(base, (slot_idx * core::mem::size_of::<SpecSlot>()) as i64)
+            .iadd_imm_u(base, (slot_idx * core::mem::size_of::<SpecSlot>()) as i64)
     } else {
         fb.ins().iconst(types::I64, slot_ptr)
     }
@@ -4107,6 +4111,46 @@ fn emit_guard(fb: &mut FunctionBuilder, deopt: Block, cond: ClifValue) {
     fb.seal_block(cont);
 }
 
+/// Return the bits of `v` when it is a Cranelift integer constant.
+///
+/// Since Cranelift 0.134, immediate convenience builders materialize an
+/// `iconst` operand instead of preserving a distinct immediate instruction
+/// shape. Keep that representation knowledge at this single inspection seam.
+fn iconst_bits(fb: &FunctionBuilder, v: ClifValue) -> Option<i64> {
+    use cranelift_codegen::ir::{InstructionData, Opcode, ValueDef};
+    let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v) else {
+        return None;
+    };
+    match fb.func.dfg.insts[inst] {
+        InstructionData::UnaryImm {
+            opcode: Opcode::Iconst,
+            imm,
+        } => Some(imm.bits()),
+        _ => None,
+    }
+}
+
+/// Return `(value, immediate)` for a binary instruction whose right operand is
+/// an `iconst`. This is the 0.134 IR shape produced by helpers such as
+/// `bor_imm_u` and `ishl_imm_u`.
+fn binary_value_and_iconst(
+    fb: &FunctionBuilder,
+    v: ClifValue,
+    expected_opcode: cranelift_codegen::ir::Opcode,
+) -> Option<(ClifValue, i64)> {
+    use cranelift_codegen::ir::{InstructionData, ValueDef};
+    let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v) else {
+        return None;
+    };
+    let InstructionData::Binary { opcode, args } = fb.func.dfg.insts[inst] else {
+        return None;
+    };
+    if opcode != expected_opcode {
+        return None;
+    }
+    Some((args[0], iconst_bits(fb, args[1])?))
+}
+
 /// True if `v` is a compile-time fixnum constant — an `iconst` whose immediate
 /// already carries the fixnum tag bits. A runtime fixnum guard on such a value
 /// is provably unnecessary (it is the same fixnum on every path), so
@@ -4115,16 +4159,8 @@ fn emit_guard(fb: &mut FunctionBuilder, deopt: Block, cond: ClifValue) {
 /// pervasive (`(+ i 1)`, `(< i n)`, `(1+ i)`), and a fixnum `iconst` dominates
 /// every use, so eliding its guard cannot change any result or deopt.
 fn is_fixnum_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
-    use cranelift_codegen::ir::{InstructionData, Opcode, ValueDef};
-    if let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v)
-        && let InstructionData::UnaryImm {
-            opcode: Opcode::Iconst,
-            imm,
-        } = fb.func.dfg.insts[inst]
-    {
-        return (imm.bits() & FIXNUM_CHECK_MASK as i64) == FIXNUM_CHECK_VALUE as i64;
-    }
-    false
+    iconst_bits(fb, v)
+        .is_some_and(|bits| (bits & FIXNUM_CHECK_MASK as i64) == FIXNUM_CHECK_VALUE as i64)
 }
 
 /// True if `v` is a compile-time constant (`iconst`) whose bits are a NON-HEAP
@@ -4138,14 +4174,8 @@ fn is_fixnum_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
 /// baseline runs Cranelift at `opt_level="none"` (no constant folding), skipping
 /// here removes a dead tag-test the optimizer would otherwise leave in.
 fn is_nonheap_const(fb: &FunctionBuilder, v: ClifValue) -> bool {
-    use cranelift_codegen::ir::{InstructionData, Opcode, ValueDef};
-    if let ValueDef::Result(inst, _) = fb.func.dfg.value_def(v)
-        && let InstructionData::UnaryImm {
-            opcode: Opcode::Iconst,
-            imm,
-        } = fb.func.dfg.insts[inst]
-    {
-        let bits = imm.bits() as usize;
+    if let Some(bits) = iconst_bits(fb, v) {
+        let bits = bits as usize;
         return (bits & FIXNUM_CHECK_MASK) == FIXNUM_CHECK_VALUE || (bits & TAG_MASK) == TAG_SYMBOL;
     }
     false
@@ -4210,37 +4240,20 @@ fn callee_is_symbol_const(
 /// some non-retag op produced the same bit pattern — any value with low bits
 /// `0b10` passes the guard. opt_level=none keeps the instruction sequence stable.)
 fn is_known_fixnum(fb: &FunctionBuilder, v: ClifValue) -> bool {
-    use cranelift_codegen::ir::{InstructionData, Opcode, ValueDef};
+    use cranelift_codegen::ir::Opcode;
     if is_fixnum_const(fb, v) {
         return true;
     }
-    let ValueDef::Result(bor, _) = fb.func.dfg.value_def(v) else {
+    let Some((shifted, tag)) = binary_value_and_iconst(fb, v, Opcode::Bor) else {
         return false;
     };
-    let InstructionData::BinaryImm64 {
-        opcode: Opcode::BorImm,
-        imm,
-        arg,
-    } = fb.func.dfg.insts[bor]
-    else {
-        return false;
-    };
-    if imm.bits() != FIXNUM_CHECK_VALUE as i64 {
+    if tag != FIXNUM_CHECK_VALUE as i64 {
         return false;
     }
     // The bor operand must clear the low FIXNUM_SHIFT bits (a left shift by at
     // least FIXNUM_SHIFT), so `v`'s low two bits are exactly the fixnum tag.
-    let ValueDef::Result(shl, _) = fb.func.dfg.value_def(arg) else {
-        return false;
-    };
-    matches!(
-        fb.func.dfg.insts[shl],
-        InstructionData::BinaryImm64 {
-            opcode: Opcode::IshlImm,
-            imm: shift,
-            ..
-        } if shift.bits() >= FIXNUM_SHIFT as i64
-    )
+    binary_value_and_iconst(fb, shifted, Opcode::Ishl)
+        .is_some_and(|(_, shift)| shift >= FIXNUM_SHIFT as i64)
 }
 
 /// Guard that `v` is a fixnum (`(v & 0b11) == 0b10`), deopting otherwise.
@@ -4253,17 +4266,17 @@ fn guard_fixnum(fb: &mut FunctionBuilder, deopt: Block, v: ClifValue, known: &Ha
     if is_known_fixnum(fb, v) || known.contains(&v) {
         return;
     }
-    let tag = fb.ins().band_imm(v, FIXNUM_CHECK_MASK as i64);
+    let tag = fb.ins().band_imm_u(v, FIXNUM_CHECK_MASK as i64);
     let is_fix = fb
         .ins()
-        .icmp_imm(IntCC::Equal, tag, FIXNUM_CHECK_VALUE as i64);
+        .icmp_imm_u(IntCC::Equal, tag, FIXNUM_CHECK_VALUE as i64);
     emit_guard(fb, deopt, is_fix);
 }
 
 /// Retag an untagged i64 `n` as a fixnum `Value`: `(n << 2) | 2`.
 fn retag_fixnum(fb: &mut FunctionBuilder, n: ClifValue) -> ClifValue {
-    let shifted = fb.ins().ishl_imm(n, FIXNUM_SHIFT as i64);
-    fb.ins().bor_imm(shifted, FIXNUM_CHECK_VALUE as i64)
+    let shifted = fb.ins().ishl_imm_u(n, FIXNUM_SHIFT as i64);
+    fb.ins().bor_imm_u(shifted, FIXNUM_CHECK_VALUE as i64)
 }
 
 /// Lower a fixnum-fast-path binary op (`Add`/`Sub`) with the exact parity the
@@ -4282,8 +4295,8 @@ fn lower_fixnum_binop(
     guard_fixnum(fb, deopt, b, known);
 
     // Untag (arithmetic shift right by 2 == GNU XFIXNUM), compute, range-check.
-    let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
-    let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
+    let av = fb.ins().sshr_imm_u(a, FIXNUM_SHIFT as i64);
+    let bv = fb.ins().sshr_imm_u(b, FIXNUM_SHIFT as i64);
     // Operands are <= 61-bit, so the i64 result cannot overflow; a fixnum-range
     // check is sufficient and matches the interpreter exactly.
     let res = if is_sub {
@@ -4293,12 +4306,12 @@ fn lower_fixnum_binop(
     };
 
     // Guard: MOST_NEGATIVE_FIXNUM <= res <= MOST_POSITIVE_FIXNUM.
-    let ge_lo = fb.ins().icmp_imm(
+    let ge_lo = fb.ins().icmp_imm_u(
         IntCC::SignedGreaterThanOrEqual,
         res,
         Value::MOST_NEGATIVE_FIXNUM,
     );
-    let le_hi = fb.ins().icmp_imm(
+    let le_hi = fb.ins().icmp_imm_u(
         IntCC::SignedLessThanOrEqual,
         res,
         Value::MOST_POSITIVE_FIXNUM,
@@ -4334,19 +4347,19 @@ fn lower_fixnum_unop(
     known: &HashSet<ClifValue>,
 ) -> ClifValue {
     guard_fixnum(fb, deopt, a, known);
-    let n = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
+    let n = fb.ins().sshr_imm_u(a, FIXNUM_SHIFT as i64);
 
     // The only input that leaves fixnum range is the op's boundary value.
     let bound = match kind {
         UnaryKind::Add1 => Value::MOST_POSITIVE_FIXNUM,
         UnaryKind::Sub1 | UnaryKind::Negate => Value::MOST_NEGATIVE_FIXNUM,
     };
-    let in_range = fb.ins().icmp_imm(IntCC::NotEqual, n, bound);
+    let in_range = fb.ins().icmp_imm_u(IntCC::NotEqual, n, bound);
     emit_guard(fb, deopt, in_range);
 
     let res = match kind {
-        UnaryKind::Add1 => fb.ins().iadd_imm(n, 1),
-        UnaryKind::Sub1 => fb.ins().iadd_imm(n, -1),
+        UnaryKind::Add1 => fb.ins().iadd_imm_u(n, 1),
+        UnaryKind::Sub1 => fb.ins().iadd_imm_u(n, -1),
         UnaryKind::Negate => fb.ins().ineg(n),
     };
     retag_fixnum(fb, res)
@@ -4368,8 +4381,8 @@ fn lower_fixnum_mul(
 ) -> ClifValue {
     guard_fixnum(fb, deopt, a, known);
     guard_fixnum(fb, deopt, b, known);
-    let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
-    let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
+    let av = fb.ins().sshr_imm_u(a, FIXNUM_SHIFT as i64);
+    let bv = fb.ins().sshr_imm_u(b, FIXNUM_SHIFT as i64);
 
     let a128 = fb.ins().sextend(types::I128, av);
     let b128 = fb.ins().sextend(types::I128, bv);
@@ -4414,10 +4427,10 @@ fn lower_fixnum_divrem(
 ) -> ClifValue {
     guard_fixnum(fb, deopt, a, known);
     guard_fixnum(fb, deopt, b, known);
-    let bv = fb.ins().sshr_imm(b, FIXNUM_SHIFT as i64);
-    let nonzero = fb.ins().icmp_imm(IntCC::NotEqual, bv, 0);
+    let bv = fb.ins().sshr_imm_u(b, FIXNUM_SHIFT as i64);
+    let nonzero = fb.ins().icmp_imm_u(IntCC::NotEqual, bv, 0);
     emit_guard(fb, deopt, nonzero);
-    let av = fb.ins().sshr_imm(a, FIXNUM_SHIFT as i64);
+    let av = fb.ins().sshr_imm_u(a, FIXNUM_SHIFT as i64);
     let res = if is_rem {
         fb.ins().srem(av, bv)
     } else {
@@ -4444,19 +4457,23 @@ enum PredKind {
 /// it matches the interpreter for any value by inspecting the tag bits).
 fn lower_predicate(fb: &mut FunctionBuilder, kind: PredKind, a: ClifValue) -> ClifValue {
     let cond = match kind {
-        PredKind::Null => fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64),
+        PredKind::Null => fb
+            .ins()
+            .icmp_imm_u(IntCC::Equal, a, Value::NIL.bits() as i64),
         PredKind::Consp => {
-            let tag = fb.ins().band_imm(a, TAG_MASK as i64);
-            fb.ins().icmp_imm(IntCC::Equal, tag, TAG_CONS as i64)
+            let tag = fb.ins().band_imm_u(a, TAG_MASK as i64);
+            fb.ins().icmp_imm_u(IntCC::Equal, tag, TAG_CONS as i64)
         }
         PredKind::Stringp => {
-            let tag = fb.ins().band_imm(a, TAG_MASK as i64);
-            fb.ins().icmp_imm(IntCC::Equal, tag, TAG_STRING as i64)
+            let tag = fb.ins().band_imm_u(a, TAG_MASK as i64);
+            fb.ins().icmp_imm_u(IntCC::Equal, tag, TAG_STRING as i64)
         }
         PredKind::Listp => {
-            let is_nil = fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64);
-            let tag = fb.ins().band_imm(a, TAG_MASK as i64);
-            let is_cons = fb.ins().icmp_imm(IntCC::Equal, tag, TAG_CONS as i64);
+            let is_nil = fb
+                .ins()
+                .icmp_imm_u(IntCC::Equal, a, Value::NIL.bits() as i64);
+            let tag = fb.ins().band_imm_u(a, TAG_MASK as i64);
+            let is_cons = fb.ins().icmp_imm_u(IntCC::Equal, tag, TAG_CONS as i64);
             fb.ins().bor(is_nil, is_cons)
         }
     };
@@ -4478,10 +4495,12 @@ fn lower_car_cdr(
     safe: bool,
     a: ClifValue,
 ) -> ClifValue {
-    let tag = fb.ins().band_imm(a, TAG_MASK as i64);
-    let is_cons = fb.ins().icmp_imm(IntCC::Equal, tag, TAG_CONS as i64);
+    let tag = fb.ins().band_imm_u(a, TAG_MASK as i64);
+    let is_cons = fb.ins().icmp_imm_u(IntCC::Equal, tag, TAG_CONS as i64);
     if !safe {
-        let is_nil = fb.ins().icmp_imm(IntCC::Equal, a, Value::NIL.bits() as i64);
+        let is_nil = fb
+            .ins()
+            .icmp_imm_u(IntCC::Equal, a, Value::NIL.bits() as i64);
         let valid = fb.ins().bor(is_cons, is_nil);
         emit_guard(
             fb,
@@ -4499,7 +4518,7 @@ fn lower_car_cdr(
     fb.ins().brif(is_cons, cons_blk, &[], nil_blk, &[]);
 
     fb.switch_to_block(cons_blk);
-    let ptr = fb.ins().band_imm(a, !(TAG_MASK as i64));
+    let ptr = fb.ins().band_imm_u(a, !(TAG_MASK as i64));
     let offset = if is_cdr {
         core::mem::offset_of!(ConsCell, cdr_or_next)
     } else {
@@ -4507,7 +4526,7 @@ fn lower_car_cdr(
     };
     let field = fb
         .ins()
-        .load(types::I64, MemFlags::trusted(), ptr, offset as i32);
+        .load(types::I64, MemFlagsData::trusted(), ptr, offset as i32);
     fb.def_var(res, field);
     fb.ins().jump(merge, &[]);
 
@@ -4549,7 +4568,7 @@ fn mir_as_raw(
         Ok(cv)
     } else {
         guard_fixnum(fb, deopt, cv, &HashSet::new());
-        Ok(fb.ins().sshr_imm(cv, FIXNUM_SHIFT as i64))
+        Ok(fb.ins().sshr_imm_u(cv, FIXNUM_SHIFT as i64))
     }
 }
 
@@ -4663,7 +4682,7 @@ fn emit_gc_push_many(fb: &mut FunctionBuilder, rt: &RtCtx, vals: &[ClifValue]) {
     // Lever 2 batch: N static stores into the gather buffer + one shim call.
     for (i, &v) in vals.iter().enumerate() {
         fb.ins()
-            .stack_store(v, rt.residual_buf_slot, (i * 8) as i32);
+            .stack_store(rt.ptr_ty, v, rt.residual_buf_slot, (i * 8) as i32);
     }
     let addr = fb.ins().stack_addr(rt.ptr_ty, rt.residual_buf_slot, 0);
     let count = fb.ins().iconst(types::I64, vals.len() as i64);
@@ -4734,12 +4753,12 @@ fn raw_fixnum_addsub(
     } else {
         fb.ins().iadd(av, bv)
     };
-    let ge_lo = fb.ins().icmp_imm(
+    let ge_lo = fb.ins().icmp_imm_u(
         IntCC::SignedGreaterThanOrEqual,
         res,
         Value::MOST_NEGATIVE_FIXNUM,
     );
-    let le_hi = fb.ins().icmp_imm(
+    let le_hi = fb.ins().icmp_imm_u(
         IntCC::SignedLessThanOrEqual,
         res,
         Value::MOST_POSITIVE_FIXNUM,
@@ -4762,11 +4781,11 @@ fn raw_fixnum_unop(
         UnaryKind::Add1 => Value::MOST_POSITIVE_FIXNUM,
         UnaryKind::Sub1 | UnaryKind::Negate => Value::MOST_NEGATIVE_FIXNUM,
     };
-    let in_range = fb.ins().icmp_imm(IntCC::NotEqual, av, bound);
+    let in_range = fb.ins().icmp_imm_u(IntCC::NotEqual, av, bound);
     emit_guard(fb, deopt, in_range);
     match kind {
-        UnaryKind::Add1 => fb.ins().iadd_imm(av, 1),
-        UnaryKind::Sub1 => fb.ins().iadd_imm(av, -1),
+        UnaryKind::Add1 => fb.ins().iadd_imm_u(av, 1),
+        UnaryKind::Sub1 => fb.ins().iadd_imm_u(av, -1),
         UnaryKind::Negate => fb.ins().ineg(av),
     }
 }
@@ -4807,18 +4826,18 @@ fn raw_fixnum_divrem(
     av: ClifValue,
     bv: ClifValue,
 ) -> ClifValue {
-    let nonzero = fb.ins().icmp_imm(IntCC::NotEqual, bv, 0);
+    let nonzero = fb.ins().icmp_imm_u(IntCC::NotEqual, bv, 0);
     emit_guard(fb, deopt, nonzero);
     if is_rem {
         fb.ins().srem(av, bv)
     } else {
         let res = fb.ins().sdiv(av, bv);
-        let ge = fb.ins().icmp_imm(
+        let ge = fb.ins().icmp_imm_u(
             IntCC::SignedGreaterThanOrEqual,
             res,
             Value::MOST_NEGATIVE_FIXNUM,
         );
-        let le = fb.ins().icmp_imm(
+        let le = fb.ins().icmp_imm_u(
             IntCC::SignedLessThanOrEqual,
             res,
             Value::MOST_POSITIVE_FIXNUM,
@@ -5084,8 +5103,9 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
 ) -> Result<cranelift_module::FuncId, CompileError> {
     use mir::{BinKind, CmpKind, MirOp, MirTerm, PredKind as MP, UnaryKind as MU};
 
-    let call_conv = module.target_config().default_call_conv;
-    let ptr_ty = module.target_config().pointer_type();
+    let frontend_config = module.target_config();
+    let call_conv = frontend_config.default_call_conv;
+    let ptr_ty = frontend_config.pointer_type();
 
     // Unified 4-param entry ABI: fn(vmctx, args, out, sidecar) -> status. The
     // `sidecar` param is the per-(thread,leaf) base block (LeafSidecar). AOT code
@@ -5224,10 +5244,12 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
             None
         } else if aot {
             let sc = sidecar_param.expect("AOT sets sidecar_param");
-            Some(
-                fb.ins()
-                    .load(ptr_ty, MemFlags::trusted(), sc, LeafSidecar::OFF_RELOC_BASE),
-            )
+            Some(fb.ins().load(
+                ptr_ty,
+                MemFlagsData::trusted(),
+                sc,
+                LeafSidecar::OFF_RELOC_BASE,
+            ))
         } else {
             Some(fb.ins().iconst(ptr_ty, reloc_data.as_ptr() as i64))
         };
@@ -5246,9 +5268,12 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
         );
         let arg_vals: Vec<BlockArg> = (0..m.arity)
             .map(|i| {
-                let v = fb
-                    .ins()
-                    .load(types::I64, MemFlags::trusted(), args_ptr, (i * 8) as i32);
+                let v = fb.ins().load(
+                    types::I64,
+                    MemFlagsData::trusted(),
+                    args_ptr,
+                    (i * 8) as i32,
+                );
                 BlockArg::Value(v)
             })
             .collect();
@@ -5300,7 +5325,7 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                             let base = reloc_base.expect("reloc_base set when reloc nonempty");
                             cval[r] = Some(fb.ins().load(
                                 types::I64,
-                                MemFlags::trusted(),
+                                MemFlagsData::trusted(),
                                 base,
                                 (idx * 8) as i32,
                             ));
@@ -5435,7 +5460,8 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                         // Marshal the n args (args[1..]) tagged into the call buffer.
                         for (i, a) in args[1..].iter().enumerate() {
                             let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, *a)?;
-                            fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                            fb.ins()
+                                .stack_store(rt.ptr_ty, v, rt.call_args_slot, (i * 8) as i32);
                         }
                         let func_val =
                             mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, args[0])?;
@@ -5484,11 +5510,13 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                         // STATUS_OK -> continue; anything else is STATUS_SIGNAL.
                         let se = *signal_exit.get_or_insert_with(|| fb.create_block());
                         let cont = fb.create_block();
-                        let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+                        let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
                         fb.ins().brif(ok, cont, &[], se, &[]);
                         fb.switch_to_block(cont);
                         fb.seal_block(cont);
-                        let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+                        let result =
+                            fb.ins()
+                                .stack_load(rt.ptr_ty, types::I64, rt.call_result_slot, 0);
                         cval[r] = Some(result);
                         cval_raw[r] = false;
                     }
@@ -5560,7 +5588,7 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                 MirTerm::Return(v) => {
                     let rv = mir_as_tagged(&mut fb, &cval, &cval_raw, *v)?;
                     let out = out_ptr;
-                    fb.ins().store(MemFlags::trusted(), rv, out, 0);
+                    fb.ins().store(MemFlagsData::trusted(), rv, out, 0);
                     let ok = fb.ins().iconst(types::I64, STATUS_OK);
                     fb.ins().return_(&[ok]);
                 }
@@ -5584,7 +5612,9 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                     ..
                 } => {
                     let c = mir_as_tagged(&mut fb, &cval, &cval_raw, *cond)?;
-                    let is_nil = fb.ins().icmp_imm(IntCC::Equal, c, Value::NIL.bits() as i64);
+                    let is_nil = fb
+                        .ins()
+                        .icmp_imm_u(IntCC::Equal, c, Value::NIL.bits() as i64);
                     let mut ta: Vec<BlockArg> = Vec::with_capacity(taken_args.len());
                     for v in taken_args {
                         ta.push(BlockArg::Value(mir_as_tagged(
@@ -5631,7 +5661,7 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
         }
 
         fb.seal_all_blocks();
-        fb.finalize();
+        fb.finalize(frontend_config);
     }
 
     let fid = module
@@ -6141,14 +6171,16 @@ fn emit_pending_deopts(fb: &mut FunctionBuilder, refs: DeoptRefs, pending: &mut 
                 v
             };
             fb.ins()
-                .store(MemFlags::trusted(), tagged, spill_base, (j * 8) as i32);
+                .store(MemFlagsData::trusted(), tagged, spill_base, (j * 8) as i32);
         }
         let pc_v = fb.ins().iconst(types::I64, pd.pc as i64);
-        fb.ins().store(MemFlags::trusted(), pc_v, meta_pc, 0);
+        fb.ins().store(MemFlagsData::trusted(), pc_v, meta_pc, 0);
         let depth_v = fb.ins().iconst(types::I64, pd.stack.len() as i64);
-        fb.ins().store(MemFlags::trusted(), depth_v, meta_depth, 0);
+        fb.ins()
+            .store(MemFlagsData::trusted(), depth_v, meta_depth, 0);
         let h_v = fb.ins().iconst(types::I64, pd.handlers_len as i64);
-        fb.ins().store(MemFlags::trusted(), h_v, meta_handlers, 0);
+        fb.ins()
+            .store(MemFlagsData::trusted(), h_v, meta_handlers, 0);
         let code = fb.ins().iconst(types::I64, STATUS_DEOPT_AT);
         fb.ins().return_(&[code]);
     }
@@ -6191,7 +6223,7 @@ fn materialize_deopt_refs(
     if has_precise_deopt {
         let sc = sidecar.expect("AOT precise-deopt lowering requires the sidecar param");
         let load = |fb: &mut FunctionBuilder, off: i32| {
-            fb.ins().load(ptr_ty, MemFlags::trusted(), sc, off)
+            fb.ins().load(ptr_ty, MemFlagsData::trusted(), sc, off)
         };
         DeoptRefs::Sidecar {
             spill_base: load(fb, LeafSidecar::OFF_SPILL_BASE),
@@ -6297,14 +6329,16 @@ fn emit_pending_dispatches(
             }
             let hit = fb.create_block();
             let next = fb.create_block();
-            let is_m = fb.ins().icmp_imm(IntCC::Equal, idx, m as i64);
+            let is_m = fb.ins().icmp_imm_u(IntCC::Equal, idx, m as i64);
             fb.ins().brif(is_m, hit, &[], next, &[]);
             fb.switch_to_block(hit);
             fb.seal_block(hit);
             for (j, &v) in pd.stack.iter().take(push_depth).enumerate() {
                 fb.def_var(vars[j], v);
             }
-            let err = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            let err = fb
+                .ins()
+                .stack_load(rt.ptr_ty, types::I64, rt.call_result_slot, 0);
             fb.def_var(vars[push_depth], err);
             fb.ins().jump(block_for[&target], &[]);
             fb.switch_to_block(next);
@@ -6332,7 +6366,7 @@ fn stack_as_raw(
         stack[k]
     } else {
         guard_fixnum(fb, deopt, stack[k], known);
-        fb.ins().sshr_imm(stack[k], FIXNUM_SHIFT as i64)
+        fb.ins().sshr_imm_u(stack[k], FIXNUM_SHIFT as i64)
     }
 }
 
@@ -6459,7 +6493,7 @@ fn lower_simple_op(
                 let i = reloc_index[&v.bits()];
                 let base = reloc_base.expect("reloc_base set when a const is reloc'd");
                 fb.ins()
-                    .load(types::I64, MemFlags::trusted(), base, (i * 8) as i32)
+                    .load(types::I64, MemFlagsData::trusted(), base, (i * 8) as i32)
             } else {
                 // Fixnum / nil / t / char (immediate, session-stable): bake the bits.
                 fb.ins().iconst(types::I64, v.bits() as i64)
@@ -6608,8 +6642,8 @@ fn lower_simple_op(
             let fast = fb.create_block();
             let slow = fb.create_block();
             let merge = fb.create_block();
-            let tag = fb.ins().band_imm(a, TAG_MASK as i64);
-            let is_sym = fb.ins().icmp_imm(IntCC::Equal, tag, TAG_SYMBOL as i64);
+            let tag = fb.ins().band_imm_u(a, TAG_MASK as i64);
+            let is_sym = fb.ins().icmp_imm_u(IntCC::Equal, tag, TAG_SYMBOL as i64);
             fb.ins().brif(is_sym, fast, &[], slow, &[]);
 
             fb.switch_to_block(fast);
@@ -6727,10 +6761,10 @@ fn lower_simple_op(
             let fast = fb.create_block();
             let slow = fb.create_block();
             let merge = fb.create_block();
-            let tagbits = fb.ins().band_imm(a, FIXNUM_CHECK_MASK as i64);
+            let tagbits = fb.ins().band_imm_u(a, FIXNUM_CHECK_MASK as i64);
             let is_fix = fb
                 .ins()
-                .icmp_imm(IntCC::Equal, tagbits, FIXNUM_CHECK_VALUE as i64);
+                .icmp_imm_u(IntCC::Equal, tagbits, FIXNUM_CHECK_VALUE as i64);
             fb.ins().brif(is_fix, fast, &[], slow, &[]);
 
             fb.switch_to_block(fast);
@@ -6775,11 +6809,13 @@ fn lower_simple_op(
             }
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
-            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
             fb.ins().brif(ok, cont, &[], se, &[]);
             fb.switch_to_block(cont);
             fb.seal_block(cont);
-            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            let result = fb
+                .ins()
+                .stack_load(rt.ptr_ty, types::I64, rt.call_result_slot, 0);
             stack.push(result);
         }
         Op::VarSet(idx) => {
@@ -6805,7 +6841,7 @@ fn lower_simple_op(
             }
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
-            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
             fb.ins().brif(ok, cont, &[], se, &[]);
             fb.switch_to_block(cont);
             fb.seal_block(cont);
@@ -6882,7 +6918,7 @@ fn lower_simple_op(
                             debug_assert_eq!(op, ARITH_KIND_LOGXOR as u8);
                             // XOR clears the tag bit (2^2=0); restore it.
                             let x = fb.ins().bxor(a, b);
-                            fb.ins().bor_imm(x, FIXNUM_CHECK_VALUE as i64)
+                            fb.ins().bor_imm_u(x, FIXNUM_CHECK_VALUE as i64)
                         }
                     }
                 };
@@ -6902,7 +6938,8 @@ fn lower_simple_op(
                 }
                 _ => {
                     for (i, &v) in stack[args_at..].iter().enumerate() {
-                        fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                        fb.ins()
+                            .stack_store(rt.ptr_ty, v, rt.call_args_slot, (i * 8) as i32);
                     }
                     None
                 }
@@ -7026,13 +7063,15 @@ fn lower_simple_op(
             // STATUS_SIGNAL -> propagate via the handler-aware signal target.
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
-            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
             if let Some(gen_block) = generic_fallback {
                 let check = fb.create_block();
                 fb.ins().brif(ok, cont, &[], check, &[]);
                 fb.switch_to_block(check);
                 fb.seal_block(check);
-                let need_gen = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_NEED_GENERIC);
+                let need_gen = fb
+                    .ins()
+                    .icmp_imm_u(IntCC::Equal, status, STATUS_NEED_GENERIC);
                 fb.ins().brif(need_gen, gen_block, &[], se, &[]);
                 // Fallback: the ORIGINAL generic Op::Call lowering for this
                 // site — spill the register args (if any), root the residual
@@ -7043,7 +7082,8 @@ fn lower_simple_op(
                 fb.seal_block(gen_block);
                 if let Some(args) = &reg_args {
                     for (i, &v) in args.iter().enumerate() {
-                        fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                        fb.ins()
+                            .stack_store(rt.ptr_ty, v, rt.call_args_slot, (i * 8) as i32);
                     }
                 }
                 let saved_gen = if stack.is_empty() {
@@ -7063,14 +7103,16 @@ fn lower_simple_op(
                     fb.ins().call(rt.refs.gc_restore, &[s]);
                 }
                 let se_gen = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
-                let ok_gen = fb.ins().icmp_imm(IntCC::Equal, status_gen, STATUS_OK);
+                let ok_gen = fb.ins().icmp_imm_u(IntCC::Equal, status_gen, STATUS_OK);
                 fb.ins().brif(ok_gen, cont, &[], se_gen, &[]);
             } else {
                 fb.ins().brif(ok, cont, &[], se, &[]);
             }
             fb.switch_to_block(cont);
             fb.seal_block(cont);
-            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            let result = fb
+                .ins()
+                .stack_load(rt.ptr_ty, types::I64, rt.call_result_slot, 0);
             stack.push(result);
         }
         Op::Cons => {
@@ -7128,7 +7170,7 @@ fn lower_simple_op(
             let cont = fb.create_block();
             let signal =
                 signal_target_for_site(fb, signal_exit, handlers, pending, stack.as_slice());
-            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
             fb.ins().brif(ok, cont, &[], signal, &[]);
             fb.switch_to_block(cont);
             fb.seal_block(cont);
@@ -7200,11 +7242,13 @@ fn lower_simple_op(
             }
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
-            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
             fb.ins().brif(ok, cont, &[], se, &[]);
             fb.switch_to_block(cont);
             fb.seal_block(cont);
-            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            let result = fb
+                .ins()
+                .stack_load(rt.ptr_ty, types::I64, rt.call_result_slot, 0);
             stack.push(result);
         }
         Op::CallBuiltin(..) | Op::CallBuiltinSym(..) | Op::Aset => {
@@ -7248,7 +7292,8 @@ fn lower_simple_op(
             };
             let at = stack.len() - nargs;
             for (i, &v) in stack[at..].iter().enumerate() {
-                fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                fb.ins()
+                    .stack_store(rt.ptr_ty, v, rt.call_args_slot, (i * 8) as i32);
             }
             stack.truncate(at);
             // Root remaining live values (arbitrary lisp may run; the shim roots
@@ -7281,8 +7326,8 @@ fn lower_simple_op(
                     let base = reloc_base.expect("reloc_base set when an op-symbol is reloc'd");
                     let sym_bits =
                         fb.ins()
-                            .load(types::I64, MemFlags::trusted(), base, (idx * 8) as i32);
-                    fb.ins().ushr_imm(sym_bits, TAG_BITS as i64)
+                            .load(types::I64, MemFlagsData::trusted(), base, (idx * 8) as i32);
+                    fb.ins().ushr_imm_u(sym_bits, TAG_BITS as i64)
                 }
                 None => fb.ins().iconst(types::I64, sym as i64),
             };
@@ -7323,7 +7368,7 @@ fn lower_simple_op(
             }
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
-            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
             if let Some(gen_block) = generic_fallback {
                 // STATUS_OK -> cont; STATUS_NEED_GENERIC -> the general CBSym
                 // lowering; anything else -> STATUS_SIGNAL via the signal target.
@@ -7331,7 +7376,9 @@ fn lower_simple_op(
                 fb.ins().brif(ok, cont, &[], check, &[]);
                 fb.switch_to_block(check);
                 fb.seal_block(check);
-                let need_gen = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_NEED_GENERIC);
+                let need_gen = fb
+                    .ins()
+                    .icmp_imm_u(IntCC::Equal, status, STATUS_NEED_GENERIC);
                 fb.ins().brif(need_gen, gen_block, &[], se, &[]);
                 // Fallback: the ORIGINAL general CBSym lowering (variant 1 ->
                 // `Vm::callbuiltinsym_for_jit`). The fast shim left the args in
@@ -7358,14 +7405,16 @@ fn lower_simple_op(
                     fb.ins().call(rt.refs.gc_restore, &[s]);
                 }
                 let se_gen = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
-                let ok_gen = fb.ins().icmp_imm(IntCC::Equal, status_gen, STATUS_OK);
+                let ok_gen = fb.ins().icmp_imm_u(IntCC::Equal, status_gen, STATUS_OK);
                 fb.ins().brif(ok_gen, cont, &[], se_gen, &[]);
             } else {
                 fb.ins().brif(ok, cont, &[], se, &[]);
             }
             fb.switch_to_block(cont);
             fb.seal_block(cont);
-            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            let result = fb
+                .ins()
+                .stack_load(rt.ptr_ty, types::I64, rt.call_result_slot, 0);
             stack.push(result);
         }
         Op::List(n) => {
@@ -7378,7 +7427,8 @@ fn lower_simple_op(
             }
             let at = stack.len() - n;
             for (i, &v) in stack[at..].iter().enumerate() {
-                fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                fb.ins()
+                    .stack_store(rt.ptr_ty, v, rt.call_args_slot, (i * 8) as i32);
             }
             stack.truncate(at);
             // Root remaining live values (the allocation may GC; the shim
@@ -7412,7 +7462,8 @@ fn lower_simple_op(
                 }
                 let at = stack.len() - nargs;
                 for (i, &v) in stack[at..].iter().enumerate() {
-                    fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                    fb.ins()
+                        .stack_store(rt.ptr_ty, v, rt.call_args_slot, (i * 8) as i32);
                 }
                 stack.truncate(at);
                 let saved = if stack.is_empty() {
@@ -7436,11 +7487,13 @@ fn lower_simple_op(
                 }
                 let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
                 let cont = fb.create_block();
-                let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+                let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
                 fb.ins().brif(ok, cont, &[], se, &[]);
                 fb.switch_to_block(cont);
                 fb.seal_block(cont);
-                let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+                let result = fb
+                    .ins()
+                    .stack_load(rt.ptr_ty, types::I64, rt.call_result_slot, 0);
                 stack.push(result);
                 return Ok(());
             }
@@ -7487,11 +7540,13 @@ fn lower_simple_op(
             }
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
-            let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+            let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
             fb.ins().brif(ok, cont, &[], se, &[]);
             fb.switch_to_block(cont);
             fb.seal_block(cont);
-            let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
+            let result = fb
+                .ins()
+                .stack_load(rt.ptr_ty, types::I64, rt.call_result_slot, 0);
             stack.push(result);
         }
     }
@@ -8984,18 +9039,18 @@ fn emit_backedge_jump(
     handlers: &[HandlerStatic],
     pending: &mut Vec<PendingDispatch>,
 ) {
-    let c = fb.ins().stack_load(types::I64, counter_slot, 0);
-    let c1 = fb.ins().iadd_imm(c, 1);
-    let c1m = fb.ins().band_imm(c1, 0xFF);
-    fb.ins().stack_store(c1m, counter_slot, 0);
-    let wrapped = fb.ins().icmp_imm(IntCC::Equal, c1m, 0);
+    let c = fb.ins().stack_load(rt.ptr_ty, types::I64, counter_slot, 0);
+    let c1 = fb.ins().iadd_imm_u(c, 1);
+    let c1m = fb.ins().band_imm_u(c1, 0xFF);
+    fb.ins().stack_store(rt.ptr_ty, c1m, counter_slot, 0);
+    let wrapped = fb.ins().icmp_imm_u(IntCC::Equal, c1m, 0);
     let poll = fb.create_block();
     fb.ins().brif(wrapped, poll, &[], target_block, &[]);
 
     fb.switch_to_block(poll);
     fb.seal_block(poll);
     let one = fb.ins().iconst(types::I64, 1);
-    fb.ins().stack_store(one, counter_slot, 0);
+    fb.ins().stack_store(rt.ptr_ty, one, counter_slot, 0);
     // The live operand stack at the jump (already written to vars): rooted
     // across the poll, and the handler-entry snapshot if a quit signal lands
     // in a protected extent (condition-case catching `quit` around a loop).
@@ -9015,7 +9070,7 @@ fn emit_backedge_jump(
         fb.ins().call(rt.refs.gc_restore, &[s]);
     }
     let se = signal_target_for_site(fb, signal_exit, handlers, pending, &vals);
-    let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
+    let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
     fb.ins().brif(ok, target_block, &[], se, &[]);
 }
 
@@ -9561,8 +9616,9 @@ fn build_leaf_fn<M: Module>(
     // from `osr_pc` (the pre-loop prologue) are pruned so no dangling SSA survives.
     osr_pc: Option<usize>,
 ) -> Result<cranelift_module::FuncId, CompileError> {
-    let call_conv = module.target_config().default_call_conv;
-    let ptr_ty = module.target_config().pointer_type();
+    let frontend_config = module.target_config();
+    let call_conv = frontend_config.default_call_conv;
+    let ptr_ty = frontend_config.pointer_type();
 
     // ABI: fn(vmctx: *mut Context, args: *const i64, out: *mut i64) -> i64.
     // Reads `arity` argument words from `args`; returns STATUS_OK + writes the
@@ -9699,10 +9755,12 @@ fn build_leaf_fn<M: Module>(
             None
         } else if aot {
             let sc = sidecar_param.expect("AOT sets sidecar_param");
-            Some(
-                fb.ins()
-                    .load(ptr_ty, MemFlags::trusted(), sc, LeafSidecar::OFF_RELOC_BASE),
-            )
+            Some(fb.ins().load(
+                ptr_ty,
+                MemFlagsData::trusted(),
+                sc,
+                LeafSidecar::OFF_RELOC_BASE,
+            ))
         } else {
             Some(fb.ins().iconst(ptr_ty, reloc_data.as_ptr() as i64))
         };
@@ -9720,13 +9778,13 @@ fn build_leaf_fn<M: Module>(
             (
                 Some(fb.ins().load(
                     ptr_ty,
-                    MemFlags::trusted(),
+                    MemFlagsData::trusted(),
                     sc,
                     LeafSidecar::OFF_SPEC_SLOT_BASE,
                 )),
                 Some(fb.ins().load(
                     ptr_ty,
-                    MemFlags::trusted(),
+                    MemFlagsData::trusted(),
                     sc,
                     LeafSidecar::OFF_SPEC_EXPECTED_BASE,
                 )),
@@ -9757,7 +9815,7 @@ fn build_leaf_fn<M: Module>(
         if let Some(slot) = backedge_counter {
             // The interpreter starts quitcounter at 1.
             let one = fb.ins().iconst(types::I64, 1);
-            fb.ins().stack_store(one, slot, 0);
+            fb.ins().stack_store(ptr_ty, one, slot, 0);
         }
         // Entry seeding + jump target. Normal: seed the `arity` args into the
         // bottom slots and jump to bytecode block 0. OSR: the `args` pointer holds
@@ -9768,9 +9826,12 @@ fn build_leaf_fn<M: Module>(
             None => (arity, block_for[&0]),
         };
         for (i, var) in vars.iter().take(seed_count).enumerate() {
-            let v = fb
-                .ins()
-                .load(types::I64, MemFlags::trusted(), args_ptr, (i * 8) as i32);
+            let v = fb.ins().load(
+                types::I64,
+                MemFlagsData::trusted(),
+                args_ptr,
+                (i * 8) as i32,
+            );
             fb.def_var(*var, v);
         }
         fb.ins().jump(jump_target, &[]);
@@ -9839,7 +9900,7 @@ fn build_leaf_fn<M: Module>(
                     Op::Return => {
                         let result = stack.pop().ok_or(CompileError::StackUnderflow)?;
                         let out = fb.use_var(out_var);
-                        fb.ins().store(MemFlags::trusted(), result, out, 0);
+                        fb.ins().store(MemFlagsData::trusted(), result, out, 0);
                         let one = fb.ins().iconst(types::I64, 1);
                         fb.ins().return_(&[one]);
                         terminated = true;
@@ -9897,7 +9958,7 @@ fn build_leaf_fn<M: Module>(
                         write_stack_to_vars(&mut fb, &vars, &stack);
                         let is_nil =
                             fb.ins()
-                                .icmp_imm(IntCC::Equal, cond, Value::NIL.bits() as i64);
+                                .icmp_imm_u(IntCC::Equal, cond, Value::NIL.bits() as i64);
                         let tu = *t as usize;
                         let mut target = block_for[&tu];
                         let fallthrough = block_for[&(i + 1)];
@@ -9943,7 +10004,7 @@ fn build_leaf_fn<M: Module>(
                         write_stack_to_vars(&mut fb, &vars, &stack);
                         let is_nil =
                             fb.ins()
-                                .icmp_imm(IntCC::Equal, cond, Value::NIL.bits() as i64);
+                                .icmp_imm_u(IntCC::Equal, cond, Value::NIL.bits() as i64);
                         let tu = *t as usize;
                         let mut target = block_for[&tu];
                         let fallthrough = block_for[&(i + 1)];
@@ -10004,20 +10065,20 @@ fn build_leaf_fn<M: Module>(
                         );
                         let fall = block_for[&(i + 1)];
                         // miss -> fall through
-                        let miss = fb.ins().icmp_imm(IntCC::Equal, addr, JIT_SWITCH_MISS);
+                        let miss = fb.ins().icmp_imm_u(IntCC::Equal, addr, JIT_SWITCH_MISS);
                         let chain = fb.create_block();
                         fb.ins().brif(miss, fall, &[], chain, &[]);
                         fb.switch_to_block(chain);
                         fb.seal_block(chain);
                         // stale (-2): the shim stashed the flow already.
-                        let stale = fb.ins().icmp_imm(IntCC::Equal, addr, JIT_SWITCH_STALE);
+                        let stale = fb.ins().icmp_imm_u(IntCC::Equal, addr, JIT_SWITCH_STALE);
                         let mut cur_blk = fb.create_block();
                         fb.ins().brif(stale, sig, &[], cur_blk, &[]);
                         for &(raw, target) in targets {
                             fb.switch_to_block(cur_blk);
                             fb.seal_block(cur_blk);
                             let next = fb.create_block();
-                            let hit = fb.ins().icmp_imm(IntCC::Equal, addr, raw);
+                            let hit = fb.ins().icmp_imm_u(IntCC::Equal, addr, raw);
                             if target <= i {
                                 // Backward jump-table edge: poll through a
                                 // trampoline, exactly like Goto back-edges.
@@ -10185,7 +10246,7 @@ fn build_leaf_fn<M: Module>(
         }
 
         fb.seal_all_blocks();
-        fb.finalize();
+        fb.finalize(frontend_config);
     }
 
     let fid = module
@@ -10257,8 +10318,8 @@ mod tests {
         // is_known_fixnum additionally recognizes a retag_fixnum output (a
         // range-checked arithmetic result), eliding the re-guard on chained
         // arithmetic; a bare untagged iadd is not recognized.
-        let shifted = fb.ins().ishl_imm(sum, FIXNUM_SHIFT as i64);
-        let retagged = fb.ins().bor_imm(shifted, FIXNUM_CHECK_VALUE as i64);
+        let shifted = fb.ins().ishl_imm_u(sum, FIXNUM_SHIFT as i64);
+        let retagged = fb.ins().bor_imm_u(shifted, FIXNUM_CHECK_VALUE as i64);
         assert!(
             is_known_fixnum(&fb, retagged),
             "retag_fixnum output is a known fixnum"
