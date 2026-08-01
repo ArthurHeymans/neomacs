@@ -213,6 +213,7 @@ fn anju_unsets_every_legacy_mouse_binding_without_touching_mouse_two_yank() -> P
           (key-binding (kbd "<mouse-2>"))))"##,
         expect!["OK ((nil nil nil nil nil nil nil nil nil) nil nil mouse-yank-primary)"],
     )
+    .fresh_process()
 }
 
 fn anju_new_frame_command_prefixes_and_dispatches_interactively() -> ParityBatchCase {

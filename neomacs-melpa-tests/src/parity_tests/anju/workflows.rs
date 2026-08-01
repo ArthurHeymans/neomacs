@@ -66,6 +66,7 @@ fn the_documented_init_line_switches_on_context_menus_and_unbinds_legacy_mouse_k
             r#"OK (:before (:context-menu-mode nil :context-menu-functions (t prog-context-menu elisp-context-menu) :legacy (("<mode-line> C-<mouse-2>" . mouse-split-window-horizontally) ("<vertical-scroll-bar> C-<mouse-2>" . mouse-split-window-vertically) ("<vertical-line> C-<mouse-2>" . mouse-split-window-vertically) ("<mode-line> <mouse-2>" . mouse-delete-other-windows) ("<mode-line> <mouse-3>" . mouse-delete-window) ("<mode-line> <double-mouse-1>")) :buffer-identification (("<mode-line> <mouse-1>" . mode-line-previous-buffer) ("<mode-line> <mouse-3>" . mode-line-next-buffer))) :after (:context-menu-mode t :context-menu-functions (t prog-context-menu elisp-context-menu) :legacy (("<mode-line> C-<mouse-2>") ("<vertical-scroll-bar> C-<mouse-2>") ("<vertical-line> C-<mouse-2>") ("<mode-line> <mouse-2>") ("<mode-line> <mouse-3>") ("<mode-line> <double-mouse-1>" . anju-toggle-one-window)) :buffer-identification (("<mode-line> <mouse-1>" . anju-popup-buffer-menu) ("<mode-line> <mouse-3>"))) :context-menus-turned-on t :legacy-keys-were-bound-before t :every-legacy-key-now-unbound nil :context-menu-functions-changed nil)"#
         ]],
     )
+    .fresh_process()
 }
 
 fn disabling_one_area_leaves_that_area_untouched_and_the_others_applied() -> ParityBatchCase {
