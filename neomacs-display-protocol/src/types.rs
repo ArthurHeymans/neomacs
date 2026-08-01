@@ -262,6 +262,24 @@ impl std::fmt::Display for Cell {
     }
 }
 
+/// sRGB u8 component → linear f32, precomputed with the exact
+/// `srgb_component_to_linear` formula so table lookups are
+/// bit-identical to the direct computation.
+static SRGB_U8_TO_LINEAR: std::sync::LazyLock<[f32; 256]> = std::sync::LazyLock::new(|| {
+    std::array::from_fn(|i| Color::srgb_component_to_linear(i as f32 / 255.0))
+});
+
+/// Linear-space decision boundaries for quantizing a linear component
+/// to 8-bit sRGB: `BOUNDARIES[j] = srgb_to_linear((j + 0.5) / 255)`.
+/// Because the transfer function is monotonic, the number of
+/// boundaries at or below a linear value x equals
+/// `round(255 * linear_to_srgb(x))`, so an 8-step binary search
+/// replaces a `powf` per component.
+static LINEAR_TO_SRGB_U8_BOUNDARIES: std::sync::LazyLock<[f32; 255]> =
+    std::sync::LazyLock::new(|| {
+        std::array::from_fn(|j| Color::srgb_component_to_linear((j as f32 + 0.5) / 255.0))
+    });
+
 /// RGBA color with f32 components (0.0 - 1.0)
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -295,12 +313,18 @@ impl Color {
     /// and the GPU surface uses an sRGB format (expects linear values).
     pub fn from_pixel(pixel: u32) -> Self {
         let a = ((pixel >> 24) & 0xFF) as u8;
-        let r = ((pixel >> 16) & 0xFF) as u8;
-        let g = ((pixel >> 8) & 0xFF) as u8;
-        let b = (pixel & 0xFF) as u8;
+        let r = ((pixel >> 16) & 0xFF) as usize;
+        let g = ((pixel >> 8) & 0xFF) as usize;
+        let b = (pixel & 0xFF) as usize;
         // If alpha is 0, assume fully opaque
         let a = if a == 0 { 255 } else { a };
-        Self::from_u8(r, g, b, a).srgb_to_linear()
+        let lut = &*SRGB_U8_TO_LINEAR;
+        Self {
+            r: lut[r],
+            g: lut[g],
+            b: lut[b],
+            a: a as f32 / 255.0,
+        }
     }
 
     /// Convert a single sRGB component (0.0-1.0) to linear space.
@@ -354,6 +378,24 @@ impl Color {
             b: Self::linear_component_to_srgb(self.b),
             a: self.a,
         }
+    }
+
+    /// Quantize a linear component directly to its 8-bit sRGB value:
+    /// equivalent to `(linear_component_to_srgb(c).clamp(0.0, 1.0) * 255.0)
+    /// .round() as u8` but via a binary search over precomputed linear-space
+    /// midpoint boundaries instead of a `powf`. Hot on the TTY emit path,
+    /// which converts cell colors every rasterized frame.
+    pub fn linear_component_to_srgb_u8(c: f32) -> u8 {
+        let bounds = &*LINEAR_TO_SRGB_U8_BOUNDARIES;
+        // `!(c > ...)` also routes NaN to 0, matching the saturating
+        // `as u8` cast of the arithmetic form.
+        if !(c > bounds[0]) {
+            return 0;
+        }
+        if c >= bounds[254] {
+            return 255;
+        }
+        bounds.partition_point(|&bound| bound <= c) as u8
     }
 
     // Common colors

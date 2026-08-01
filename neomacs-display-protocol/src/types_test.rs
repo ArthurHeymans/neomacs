@@ -828,3 +828,58 @@ fn test_srgb_component_to_linear_continuity_at_threshold() {
         above
     );
 }
+
+#[test]
+fn srgb_u8_roundtrip_is_exact_through_the_lut_pair() {
+    // Every 8-bit sRGB channel value must survive from_pixel (sRGB->linear
+    // LUT) followed by linear_component_to_srgb_u8 (boundary search)
+    // unchanged: the TTY emit path relies on this to reproduce GNU's face
+    // pixel bytes exactly.
+    for v in 0..=255u8 {
+        let pixel = 0xFF000000 | ((v as u32) << 16) | ((v as u32) << 8) | v as u32;
+        let c = Color::from_pixel(pixel);
+        assert_eq!(Color::linear_component_to_srgb_u8(c.r), v, "r channel, v={v}");
+        assert_eq!(Color::linear_component_to_srgb_u8(c.g), v, "g channel, v={v}");
+        assert_eq!(Color::linear_component_to_srgb_u8(c.b), v, "b channel, v={v}");
+    }
+}
+
+#[test]
+fn from_pixel_lut_matches_direct_srgb_conversion_bit_exactly() {
+    for v in 0..=255u8 {
+        let via_lut = Color::from_pixel(0xFF000000 | (v as u32) << 16).r;
+        let direct = Color::srgb_component_to_linear(v as f32 / 255.0);
+        assert_eq!(via_lut.to_bits(), direct.to_bits(), "v={v}");
+    }
+}
+
+#[test]
+fn linear_component_to_srgb_u8_matches_the_arithmetic_form() {
+    // The boundary search must agree with round(255 * linear_to_srgb(c))
+    // across the domain, including out-of-range and non-finite inputs.
+    let arithmetic = |c: f32| -> u8 {
+        let srgb = Color::rgb(c, c, c).linear_to_srgb();
+        (srgb.r.clamp(0.0, 1.0) * 255.0).round() as u8
+    };
+    // At a quantization midpoint (255 * linear_to_srgb(c) within float noise
+    // of x.5) the two forms may legitimately disagree by 1: powf's forward
+    // and inverse are not bit-perfect inverses, so the old arithmetic form's
+    // rounding there was itself a coin flip. Everywhere else they must match.
+    let scaled = |c: f32| Color::rgb(c, c, c).linear_to_srgb().r.clamp(0.0, 1.0) * 255.0;
+    for i in -20_000i32..=220_000 {
+        let c = i as f32 / 200_000.0;
+        let got = Color::linear_component_to_srgb_u8(c);
+        let want = arithmetic(c);
+        if got != want {
+            let s = scaled(c);
+            let midpoint_distance = (s - s.floor() - 0.5).abs();
+            assert!(
+                got.abs_diff(want) == 1 && midpoint_distance < 1e-4,
+                "c={c}: got {got}, arithmetic {want}, scaled {s}"
+            );
+        }
+    }
+    for c in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1.0, 2.0] {
+        assert_eq!(Color::linear_component_to_srgb_u8(c), arithmetic(c), "c={c}");
+    }
+}

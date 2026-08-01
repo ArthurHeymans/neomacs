@@ -1792,11 +1792,10 @@ fn row_has_composite_cells(row: &[TtyCell]) -> bool {
 /// Mirrors GNU `src/term.c::tty_defined_color` which stores and
 /// emits face colors as sRGB pixel values with no conversion.
 fn color_to_rgb8(c: &Color) -> (u8, u8, u8) {
-    let srgb = c.linear_to_srgb();
     (
-        (srgb.r.clamp(0.0, 1.0) * 255.0).round() as u8,
-        (srgb.g.clamp(0.0, 1.0) * 255.0).round() as u8,
-        (srgb.b.clamp(0.0, 1.0) * 255.0).round() as u8,
+        Color::linear_component_to_srgb_u8(c.r),
+        Color::linear_component_to_srgb_u8(c.g),
+        Color::linear_component_to_srgb_u8(c.b),
     )
 }
 
