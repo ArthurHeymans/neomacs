@@ -5,11 +5,10 @@ use super::ParityBatchCase;
 fn records_updates_and_renders_a_release_inventory_with_audit_history() -> ParityBatchCase {
     ParityBatchCase::value(
         "records_updates_and_renders_a_release_inventory_with_audit_history",
-        r##"(progn
-  (setq annalist--tomes nil
-        annalist--local-tomes nil
-        annalist--tomes-settings nil
-        annalist--tomes-views (make-hash-table :test #'equal))
+        r##"(let ((annalist--tomes nil)
+      (annalist--local-tomes nil)
+      (annalist--tomes-settings nil)
+      (annalist--tomes-views (make-hash-table :test #'equal)))
   (annalist-define-tome
    'deployments
    (list
@@ -94,11 +93,10 @@ fn records_updates_and_renders_a_release_inventory_with_audit_history() -> Parit
 fn builds_a_filtered_nested_incident_runbook_with_extracted_elisp_actions() -> ParityBatchCase {
     ParityBatchCase::value(
         "builds_a_filtered_nested_incident_runbook_with_extracted_elisp_actions",
-        r##"(progn
-  (setq annalist--tomes nil
-        annalist--local-tomes nil
-        annalist--tomes-settings nil
-        annalist--tomes-views (make-hash-table :test #'equal))
+        r##"(let ((annalist--tomes nil)
+      (annalist--local-tomes nil)
+      (annalist--tomes-settings nil)
+      (annalist--tomes-views (make-hash-table :test #'equal)))
   (annalist-define-tome
    'incidents
    '(:primary-key (environment service)
@@ -173,7 +171,8 @@ fn builds_a_filtered_nested_incident_runbook_with_extracted_elisp_actions() -> P
 fn audits_live_keybinding_changes_with_the_builtin_valid_view() -> ParityBatchCase {
     ParityBatchCase::value(
         "audits_live_keybinding_changes_with_the_builtin_valid_view",
-        r##"(progn
+        r##"(let ((annalist--tomes nil)
+      (annalist--local-tomes nil))
   (defvar annalist-review-map (make-sparse-keymap))
   (setq annalist-review-map (make-sparse-keymap))
   (let ((deploy-key (kbd "C-c d"))
@@ -228,11 +227,10 @@ fn audits_live_keybinding_changes_with_the_builtin_valid_view() -> ParityBatchCa
 fn keeps_project_local_records_out_of_unrelated_description_buffers() -> ParityBatchCase {
     ParityBatchCase::value(
         "keeps_project_local_records_out_of_unrelated_description_buffers",
-        r##"(progn
-  (setq annalist--tomes nil
-        annalist--local-tomes nil
-        annalist--tomes-settings nil
-        annalist--tomes-views (make-hash-table :test #'equal))
+        r##"(let ((annalist--tomes nil)
+      (annalist--local-tomes nil)
+      (annalist--tomes-settings nil)
+      (annalist--tomes-views (make-hash-table :test #'equal)))
   (annalist-define-tome
    'tasks
    '(:primary-key (project task)
