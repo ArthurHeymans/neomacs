@@ -1226,11 +1226,11 @@ fn rounding_with_divisor(
     int_div: fn(i64, i64) -> i64,
 ) -> EvalResult {
     expect_range_args(name, args, 1, 2)?;
-    // GNU `rounding_driver` (src/floatfns.c) checks `if (NILP (d))` FIRST,
-    // treating a nil (or omitted) divisor as the single-arg form. So an
-    // explicitly-passed nil divisor — e.g. `(floor 5.5 nil)` or cl-lib's
-    // `(cl-floor 3.7)` forwarding its unsupplied `&optional y` — must take
-    // the single-arg path rather than failing the `numberp` check.
+    // GNU `rounding_driver` (`src/floatfns.c`) validates the numerator
+    // before doing anything else.  It then treats a nil (or omitted)
+    // divisor as the single-argument form, so cl-lib may safely forward an
+    // unsupplied `&optional y` as nil.
+    let _ = expect_number(&args[0])?;
     if args.len() == 1 || args[1].is_nil() {
         return match args[0].kind() {
             ValueKind::Fixnum(n) => Ok(Value::fixnum(n)),
@@ -1244,6 +1244,11 @@ fn rounding_with_divisor(
             )),
         };
     }
+    // The non-nil divisor is likewise checked with GNU's `CHECK_NUMBER`
+    // before integer/float dispatch.  Keeping this validation at the shared
+    // boundary prevents an implementation-specific `integer-or-marker-p`
+    // error from leaking out of the integer slow path.
+    let _ = expect_number(&args[1])?;
     // 2-arg form: (op ARG DIVISOR)
     if args[1].is_float() {
         let divisor = args[1].xfloat();

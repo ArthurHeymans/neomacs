@@ -82,6 +82,25 @@ fn round_no_divisor_bankers_rounding_unchanged() {
     assert_eq!(eval_one("(round 0.5)"), "OK 0");
 }
 
+#[test]
+fn rounding_non_numeric_operands_signal_numberp_in_gnu_check_order() {
+    assert_eq!(
+        eval_one(
+            r#"(mapcar
+                 (lambda (form)
+                   (condition-case err
+                       (eval form t)
+                     (error err)))
+                 '((ceiling 128 "8")
+                   (floor 128 "8")
+                   (round 128 "8")
+                   (truncate 128 "8")
+                   (ceiling "128" "8")))"#
+        ),
+        r#"OK ((wrong-type-argument numberp "8") (wrong-type-argument numberp "8") (wrong-type-argument numberp "8") (wrong-type-argument numberp "8") (wrong-type-argument numberp "128"))"#
+    );
+}
+
 // -----------------------------------------------------------------------
 // cl-lib wrappers forward their unsupplied &optional divisor as nil
 // straight to the primitive `(floor x y)` etc. We exercise the *exact*
