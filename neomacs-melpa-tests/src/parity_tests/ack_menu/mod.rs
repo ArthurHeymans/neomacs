@@ -49,6 +49,42 @@ const ACK_MENU_TEST_PRELUDE: &str = r##"
 (defvar ack-test-log
   (expand-file-name "ack-invocations.log" (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
 
+(defvar ack-test-pristine-buffers nil)
+
+(defun ack-test-reset-case-state ()
+  "Restore editor and package state changed by an ack-menu workflow."
+  ;; The oracle evaluates the prelude before loading package source, so take
+  ;; the baseline lazily when the first case begins.
+  (unless ack-test-pristine-buffers
+    (setq ack-test-pristine-buffers (buffer-list)))
+  (when (processp ack-process)
+    (delete-process ack-process))
+  (setq ack-process nil
+        ack-buffer--rerun-args nil
+        ack-parse-sgr-context nil
+        ack-error-pos nil
+        ack-menu-current-state nil
+        ack-menu-match-history nil
+        ack-directory-history nil
+        ack-literal-history nil
+        ack-regexp-history nil
+        mag-menu-current-args nil
+        mag-menu-current-options nil
+        mag-menu-previous-window-config nil
+        mag-menu-prefix nil
+        next-error-last-buffer nil)
+  (dolist (buffer (buffer-list))
+    (unless (memq buffer ack-test-pristine-buffers)
+      (kill-buffer buffer)))
+  (delete-other-windows)
+  (when-let ((scratch (get-buffer "*scratch*")))
+    (set-window-buffer (selected-window) scratch)
+    (set-buffer scratch))
+  (when-let ((messages (get-buffer "*Messages*")))
+    (with-current-buffer messages
+      (let ((inhibit-read-only t))
+        (erase-buffer)))))
+
 ;; Recording stand-in for ack.  Records argv and the working directory, then
 ;; searches the sandbox tree and prints ack's grouped --color output.
 (defconst ack-test-ack-program
@@ -137,6 +173,7 @@ exit 1
 
 (defun ack-test-setup ()
   "Build the search tree and install the recording `ack' stand-in."
+  (ack-test-reset-case-state)
   (when (file-directory-p ack-test-root)
     (delete-directory (directory-file-name ack-test-root) t))
   (make-directory ack-test-root t)

@@ -70,7 +70,6 @@ fn the_project_root_switch_widens_the_search_and_ignore_case_toggles_back_off() 
             r#"OK (:menu-after-bp (("--ignore-case") (("--directory=" . "./") ("--match=" . "handler"))) :wide (:invocations (("argv" "--color" "--nopager" "--ignore-case" "--match=handler") ("cwd" ".")) :text "docs/CHANGELOG\n1:Handler rewritten\n\ndocs/readme.md\n2:The café handler serves naïve clients.\n\nsrc/main.el\n2:(defun handler (request)\n3:  (message \"handler ready\"))\n\nsrc/notes with space.txt\n1:the handler notes\n\n" :options (("--ignore-case") ("--directory" . "./") ("--match" . "handler"))) :reopened (("--ignore-case") (("--directory=" . "./") ("--match=" . "handler"))) :toggled (nil (("--directory=" . "./") ("--match=" . "handler"))) :invocations (("argv" "--color" "--nopager" "--match=handler") ("cwd" ".")) :text "docs/readme.md\n2:The café handler serves naïve clients.\n\nsrc/main.el\n2:(defun handler (request)\n3:  (message \"handler ready\"))\n\nsrc/notes with space.txt\n1:the handler notes\n\n" :options (("--directory" . "./") ("--match" . "handler")))"#
         ]],
     )
-    .fresh_process()
 }
 
 fn navigating_the_results_visits_the_exact_file_line_and_column() -> ParityBatchCase {
@@ -120,7 +119,6 @@ fn navigating_the_results_visits_the_exact_file_line_and_column() -> ParityBatch
             r#"OK ((:n 18) (:n-n 63) (:p 18) (:next-file 37) (:match-after-file 63) (:visited ("readme.md" 19 2 9 "The café handler serves naïve clients.")) (:first ("CHANGELOG" 1 1 0 "Handler rewritten")) (:second ("readme.md" 19 2 9 "The café handler serves naïve clients.")) (:third ("main.el" 37 2 7 "(defun handler (request)")) (:fourth ("main.el" 67 3 12 "  (message \"handler ready\"))")) (:error-pos 147 :last-buffer "*ack*"))"#
         ]],
     )
-    .fresh_process()
 }
 
 fn only_printing_file_names_replaces_the_match_argument() -> ParityBatchCase {
@@ -215,7 +213,6 @@ fn no_matches_kills_the_results_buffer_and_a_failing_ack_reports_its_error() -> 
             r#"OK (:no-matches (:buffer nil :invocations (("argv" "--color" "--nopager" "--match=nothing-matches-this") ("cwd" ".")) :messages ("Ack finished with 0 matches")) :documented-type (wrong-type-argument listp "--bogus-option") :alist-type (:invocations (("argv" "--color" "--nopager" "--bogus-option" "--match=handler") ("cwd" ".")) :text "ack: Unknown option: --bogus-option\n" :segments (("ack: Unknown option: --bogus-option\n" nil nil nil nil)) :state (:mode ack-mode :read-only t :directory "./" :next-error-function ack-next-error-function :size 36)))"#
         ]],
     )
-    .fresh_process()
 }
 
 pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
