@@ -2252,6 +2252,19 @@ fn lookup_key_matches_parameterized_mouse_event_on_event_type() {
 }
 
 #[test]
+fn define_key_normalizes_lucid_events_in_keyboard_macro_definitions() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(let ((m (make-sparse-keymap)))
+                 (define-key m [kp-6] (vector (list ?6)))
+                 (lookup-key m [kp-6]))"#,
+        ),
+        "OK [54]"
+    );
+}
+
+#[test]
 fn define_key_sequence_preserves_gnu_prefix_symbol_bindings() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

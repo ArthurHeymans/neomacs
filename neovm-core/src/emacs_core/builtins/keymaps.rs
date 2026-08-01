@@ -95,7 +95,7 @@ pub(crate) fn expect_key_events(value: &Value) -> Result<Vec<Value>, Flow> {
                     // list; those remain parameterized events and key lookup
                     // matches on their car.
                     ValueKind::Cons => {
-                        if lucid_event_type_list_p(item) {
+                        if let Some(event) = convert_lucid_event_type_list(item) {
                             // GNU `Fdefine_key` converts a Lucid event type list
                             // such as `(shift tab)` via `Fevent_convert_list`
                             // (src/keymap.c:1156-1157, 1264-1265).  That routine
@@ -105,18 +105,7 @@ pub(crate) fn expect_key_events(value: &Value) -> Result<Vec<Value>, Flow> {
                             // character 9 and yields the integer 33554441.  Use
                             // the same conversion as `event-convert-list' so the
                             // stored key matches GNU exactly.
-                            let mut list_items = Vec::new();
-                            let mut cursor = *item;
-                            while cursor.is_cons() {
-                                list_items.push(cursor.cons_car());
-                                cursor = cursor.cons_cdr();
-                            }
-                            match crate::emacs_core::keyboard::pure::convert_lucid_event_list(
-                                &list_items,
-                            ) {
-                                Some(event) => events.push(event),
-                                None => events.push(*item),
-                            }
+                            events.push(event);
                         } else {
                             events.push(*item);
                         }
@@ -171,6 +160,40 @@ fn lucid_event_type_list_p(value: &Value) -> bool {
         cursor = cursor.cons_cdr();
     }
     cursor.is_nil()
+}
+
+fn convert_lucid_event_type_list(value: &Value) -> Option<Value> {
+    if !lucid_event_type_list_p(value) {
+        return None;
+    }
+
+    let mut items = Vec::new();
+    let mut cursor = *value;
+    while cursor.is_cons() {
+        items.push(cursor.cons_car());
+        cursor = cursor.cons_cdr();
+    }
+    crate::emacs_core::keyboard::pure::convert_lucid_event_list(&items)
+}
+
+/// GNU `Fdefine_key` treats a vector whose first element is a cons as an
+/// XEmacs-style keyboard macro and canonicalizes each Lucid event list in it.
+/// Keep that compatibility conversion at the `define-key` boundary so stored
+/// definitions, lookup results, and command-loop execution share one shape.
+fn normalize_keyboard_macro_definition(definition: Value) -> Value {
+    let Some(items) = definition.as_vector_data() else {
+        return definition;
+    };
+    if items.first().is_none_or(|item| !item.is_cons()) {
+        return definition;
+    }
+
+    Value::vector(
+        items
+            .iter()
+            .map(|item| convert_lucid_event_type_list(item).unwrap_or(*item))
+            .collect(),
+    )
 }
 
 /// Parse a key description from a Value (must be a string or vector).
@@ -321,7 +344,7 @@ pub(super) fn builtin_define_key(eval: &mut super::eval::Context, args: Vec<Valu
     let keymap = expect_keymap(eval, &args[0])?;
     let mut events = expect_key_events(&args[1])?;
     cache_key_event_symbol_properties(eval, &events)?;
-    let def = args[2];
+    let def = normalize_keyboard_macro_definition(args[2]);
     let remove = args.get(3).is_some_and(|v| v.is_truthy());
     // Expand meta-prefixed events to ESC + base, matching GNU Emacs
     // Fdefine_key's metized handling.
