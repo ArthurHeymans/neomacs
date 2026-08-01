@@ -149,6 +149,7 @@ flate2 = "1"
 # Parsing
 quick-xml = "0.41"
 tl = "0.7"
+htmlize = { version = "1.1", default-features = false, features = ["unescape"] }
 
 # Database
 rusqlite = { version = "0.35", features = ["bundled"] }

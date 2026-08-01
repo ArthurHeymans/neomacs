@@ -64,6 +64,7 @@ flate2.workspace = true
 rusqlite.workspace = true
 quick-xml.workspace = true
 tl.workspace = true
+htmlize.workspace = true
 rodio = { version = "0.20", optional = true }
 # Cranelift JIT backend — optional, enabled by the `jit` feature. The workspace
 # owns this API-coupled release train so its crates can only move together.

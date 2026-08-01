@@ -317,6 +317,27 @@ fn libxml_parse_html_region_strips_self_closing_void_tag_slash() {
     assert_eq!(parsed, expected);
 }
 
+#[test]
+fn libxml_parse_html_region_decodes_character_references_like_gnu_libxml2() {
+    crate::test_utils::init_test_tracing();
+
+    let parsed = parse_html_region(
+        br#"<p title="A &amp; B&nbsp;&#x41;&#65; &bogus; &amp x &copy x &amp=x">T &amp; &nbsp; &#x41; &#65; &copy; &bogus; &amp x &copy x &amp=x</p>"#,
+        false,
+    )
+    .unwrap();
+    let paragraph = Value::list(vec![
+        Value::symbol("p"),
+        Value::list(vec![Value::cons(
+            Value::symbol("title"),
+            Value::string("A & B\u{a0}AA &bogus; & x © x &amp=x"),
+        )]),
+        Value::string("T & \u{a0} A A © &bogus; & x © x &=x"),
+    ]);
+
+    assert_eq!(parsed, html(vec![body(vec![paragraph])]));
+}
+
 /// Build `(html nil CHILDREN...)`.
 fn html(children: Vec<Value>) -> Value {
     let mut v = vec![Value::symbol("html"), Value::NIL];

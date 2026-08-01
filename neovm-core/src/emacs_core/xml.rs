@@ -469,6 +469,11 @@ fn convert_tl_node(node: &tl::Node, parser: &tl::Parser, discard_comments: bool)
             if text.trim().is_empty() {
                 None
             } else {
+                // GNU's libxml2 parser resolves HTML character references
+                // before `make_dom' copies an XML_TEXT_NODE into Lisp.  `tl'
+                // deliberately exposes source bytes, so normalize them at
+                // this adapter boundary using the HTML text context.
+                let text = htmlize::unescape(text.as_ref());
                 Some(Value::string(text.as_ref()))
             }
         }
@@ -509,6 +514,10 @@ fn convert_tl_attributes(attrs: &tl::Attributes) -> Vec<Value> {
     let mut result = Vec::new();
     for (key, val) in attrs.iter() {
         let val_str = val.unwrap_or_default();
+        // Attribute reference recovery differs from text recovery when a
+        // semicolon is omitted and the next byte is alphanumeric or `='.
+        // libxml2 applies that context before exposing `property->content'.
+        let val_str = htmlize::unescape_attribute(val_str.as_ref());
         result.push(Value::cons(
             Value::symbol(key.as_ref()),
             Value::string(val_str.as_ref()),
