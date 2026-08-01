@@ -365,6 +365,12 @@ pub struct LayoutEngine {
     /// to their reused (verbatim, above-the-edit) row count. Read by the commit
     /// path to attribute rows + classify `Edit`.
     edit_window_ids: std::collections::HashMap<DisplayWindowId, usize>,
+    /// Per-buffer dirty span snapshotted BEFORE this frame's fontification
+    /// pass (GNU: the this_line decision reads BEG/END_UNCHANGED before
+    /// fontification fires). Phase A edit classification consumes this so the
+    /// span is the keystroke's damage, not the jit-lock chunk the
+    /// fontification pass is about to rewrite. Keyed by buffer id.
+    pre_fontify_dirty_spans: std::collections::HashMap<u64, Option<(i64, i64)>>,
     /// Phase 3 below-reuse switch (default true). The localized edit fast path
     /// reuses the rows BELOW the dirty span too (charpos-shifted, same pixel_y),
     /// relaying ONLY the edited line — but ONLY for a simple insert that provably
@@ -592,6 +598,7 @@ impl LayoutEngine {
             cursor_only_window_ids: std::collections::HashSet::new(),
             scroll_window_ids: std::collections::HashMap::new(),
             edit_window_ids: std::collections::HashMap::new(),
+            pre_fontify_dirty_spans: std::collections::HashMap::new(),
             allow_below_reuse: true,
             layout_stats: LayoutStats::default(),
         }
@@ -621,6 +628,7 @@ impl LayoutEngine {
             cursor_only_window_ids: std::collections::HashSet::new(),
             scroll_window_ids: std::collections::HashMap::new(),
             edit_window_ids: std::collections::HashMap::new(),
+            pre_fontify_dirty_spans: std::collections::HashMap::new(),
             allow_below_reuse: true,
             layout_stats: LayoutStats::default(),
         }
@@ -864,6 +872,28 @@ impl LayoutEngine {
                     evaluator.retire_interaction_presentation(presentation_id);
                     self.reset_frame_attempt_state();
                     return None;
+                }
+            }
+
+            // --- Pre-fontification dirty-span snapshot ---
+            // GNU's this_line/try_window_id decision reads BEG/END_UNCHANGED
+            // BEFORE fontification runs (fontification fires inside
+            // display_line via handle_fontified_prop, after the decision), so
+            // the keystroke's damage is the edited line — not the jit-lock
+            // chunk font-lock is about to unfontify+refontify. Snapshot each
+            // buffer's accumulated span now; Phase A classification consumes
+            // this snapshot. The fontification pass's own property damage is
+            // acked at the accepted break exactly like GNU's
+            // mark_window_display_accurate; a contextual face change beyond
+            // the span repaints via jit-lock's deferred contextual pass
+            // (jit-lock-context-timer), same as GNU.
+            self.pre_fontify_dirty_spans.clear();
+            for params in &window_params_list {
+                let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
+                if let Some(buffer) = evaluator.buffer_manager().get(buf_id) {
+                    self.pre_fontify_dirty_spans
+                        .entry(params.buffer_id)
+                        .or_insert_with(|| buffer.changed_char_range());
                 }
             }
 
@@ -1903,30 +1933,50 @@ impl LayoutEngine {
         let buffer = evaluator
             .buffer_manager()
             .get(neovm_core::buffer::BufferId(params.buffer_id))?;
-        let (dirty_start, dirty_end) = buffer.changed_char_range()?;
+        // The PRE-fontification span (GNU decision order): the keystroke's own
+        // damage. The fontification pass has already run by now and widened
+        // the live accumulator to the whole jit-lock chunk; using the live
+        // range would relay every chunk row for identical faces.
+        let (dirty_start, dirty_end) = (*self
+            .pre_fontify_dirty_spans
+            .get(&params.buffer_id)
+            .unwrap_or(&None))?;
         // The span end in OLD (retained-matrix) coordinates: the accumulator
         // tracks the unchanged suffix by length, so the old end is the new end
         // minus the size delta.
         let delta = curr_key.buffer_size - prev.key.buffer_size;
         let dirty_end_old = dirty_end - delta;
         // Below-reuse SAFETY GATE, part 1: every char in the dirty span is
-        // printable ASCII (graphic or space) — combined with edit_replay's
-        // monospace + width check this proves each span line still occupies
-        // exactly one row (no wrap, no newline count change), which is what
-        // makes the rows-below reuse (shift charpos, keep pixel_y) sound. A
-        // newline/tab/wide char in the span escalates to above-only. With
+        // printable ASCII (graphic or space) or a newline — combined with
+        // edit_replay's monospace + width check this proves each span line
+        // still occupies exactly one row (no wrap), which is what makes the
+        // rows-below reuse (shift charpos, keep pixel_y) sound. Newlines are
+        // allowed because the span relays WHOLE rows: an existing newline is
+        // a row boundary inside the span (jit-lock's line region includes the
+        // trailing newline), and an INSERTED newline — which does change the
+        // row structure — makes the bounded walk miss its expected_walk
+        // end-charpos contract and bail, the same runtime backstop deletes
+        // rely on. A tab or wide char escalates to above-only (the
+        // cols-times-char_width fit arithmetic would lie about them). With
         // property changes feeding the accumulator, the span covers the
-        // refontified region, so this also vets the refontified line's
-        // existing content.
+        // jit-lock line region, so this also vets the line's existing content.
         // A pure delete has an empty NEW span (its old extent is the deleted
         // range) — vacuously ASCII-safe; edit_replay + the post-walk
         // validation own the delete-specific safety.
+        let mut span_newlines = 0usize;
         let simple_span = self.allow_below_reuse
             && (dirty_start..dirty_end).all(|cp| {
                 let byte = buffer.char_pos_to_emacs_byte_pos_clamped(
                     neovm_core::buffer::CharPos0::new(cp as usize),
                 );
-                matches!(buffer.char_at_emacs_byte_pos(byte), Some(c) if c.is_ascii_graphic() || c == ' ')
+                match buffer.char_at_emacs_byte_pos(byte) {
+                    Some('\n') => {
+                        span_newlines += 1;
+                        true
+                    }
+                    Some(c) => c.is_ascii_graphic() || c == ' ',
+                    None => false,
+                }
             });
         // Part 2: no structure-affecting text property may cover the span.
         // Face-class props (`face`, `font-lock-face`, `fontified`) only recolor
@@ -1968,7 +2018,13 @@ impl LayoutEngine {
                     }
                 }
             });
-        prev.edit_replay(&curr_key, dirty_start, dirty_end_old, span_structure_safe)
+        prev.edit_replay(
+            &curr_key,
+            dirty_start,
+            dirty_end_old,
+            span_newlines,
+            span_structure_safe,
+        )
     }
 
     fn layout_window_rust(

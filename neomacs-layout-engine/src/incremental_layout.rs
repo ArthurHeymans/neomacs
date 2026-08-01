@@ -652,6 +652,7 @@ impl RetainedWindowMatrix {
         curr: &RetainedWindowKey,
         dirty_start: i64,
         dirty_end_old: i64,
+        span_newlines: usize,
         allow_below_reuse: bool,
     ) -> Option<ScrollReplay> {
         if self.validity != MatrixValidity::Valid {
@@ -834,8 +835,25 @@ impl RetainedWindowMatrix {
                     .skip(span_last + 1)
                     .all(|(_, row)| row.pointer_appearances().is_empty())
             };
+            // Line-structure invariant: below-reuse is sound only when the
+            // edit did not add or remove a newline — the span's line count
+            // (and with it every below row's pixel_y) is preserved exactly
+            // when the NEW span's newline count equals the OLD span's. The
+            // old span's content is gone, but its newline count survives in
+            // the retained rows: each span row whose line end lies strictly
+            // inside the old span contributed exactly one newline. Typing
+            // keeps 1/1 (the jit-lock line region includes the trailing
+            // newline both sides); Enter makes 1 new against 0 old (or 2
+            // against 1 under font-lock); a newline-join delete makes 0
+            // against 1 — all structure changes fall to above-only here, with
+            // the post-walk validation as the backstop for anything subtler.
+            let old_span_newlines = span_rows()
+                .filter(|row| (row.end_charpos as i64) < dirty_end_old)
+                .count();
+            let line_structure_preserved = span_newlines == old_span_newlines;
             if !pointer_shrunk_prefix
                 && span_last + 1 < body.len()
+                && line_structure_preserved
                 && monospace
                 && stays_one_row
                 && below_pointers_shiftable
@@ -1281,7 +1299,7 @@ mod scroll_classifier_tests {
         // allow_below_reuse = true → reuse above (0,1) AND below (3,4); below rows
         // are charpos-shifted by +1; the walk is bounded to the one edited row.
         let r = m
-            .edit_replay(&curr, 25, 25, true)
+            .edit_replay(&curr, 25, 25, 0, true)
             .expect("below-reuse is eligible");
         assert!(r.bound_walk, "walk bounded to the edited line");
         assert_eq!(r.exposed_row_count, 1, "only the edited line is walked");
@@ -1300,7 +1318,7 @@ mod scroll_classifier_tests {
         // allow_below_reuse = false → the above-only edit replay (no below reuse,
         // walk runs to the bottom).
         let above_only = m
-            .edit_replay(&curr, 25, 25, false)
+            .edit_replay(&curr, 25, 25, 0, false)
             .expect("above-only edit replay");
         assert!(!above_only.bound_walk);
         assert_eq!(
@@ -1341,7 +1359,7 @@ mod scroll_classifier_tests {
         curr.props_modified_tick = 6;
 
         let r = m
-            .edit_replay(&curr, 22, 35, true)
+            .edit_replay(&curr, 22, 35, 1, true)
             .expect("props-only span replay is eligible");
         assert!(r.bound_walk);
         assert_eq!(r.exposed_row_base, 2, "span starts at row 2 (chars 20..)");
@@ -1385,7 +1403,7 @@ mod scroll_classifier_tests {
         curr.buffer_size = 1001;
 
         let r = m
-            .edit_replay(&curr, 20, 35, true)
+            .edit_replay(&curr, 20, 35, 1, true)
             .expect("multi-row span insert replay is eligible");
         assert!(r.bound_walk);
         assert_eq!(r.exposed_row_base, 2);
@@ -1442,7 +1460,7 @@ mod scroll_classifier_tests {
         curr.buffer_size = 999;
 
         let r = m
-            .edit_replay(&curr, 25, 26, true)
+            .edit_replay(&curr, 25, 26, 0, true)
             .expect("delete below-reuse is eligible");
         assert!(r.bound_walk);
         assert_eq!(r.exposed_row_base, 2);
