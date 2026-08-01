@@ -2322,7 +2322,10 @@ pub(crate) fn builtin_propertize(args: Vec<Value>) -> EvalResult {
     if args[0].is_string()
         && let Some(src_table) = get_string_text_properties_table_for_value(args[0])
     {
-        set_string_text_properties_table_for_value(new_str, src_table);
+        // GNU `Fpropertize' starts with `Fcopy_sequence', whose string branch
+        // copies the interval tree and each interval plist spine.  Sharing the
+        // plist cons cells lets the properties added below mutate STRING.
+        set_string_text_properties_table_for_value(new_str, src_table.copy_interval_plist_spines());
     }
 
     // Parse and apply plist properties.  GNU `propertize` reverses this plist

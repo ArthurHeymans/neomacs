@@ -148,6 +148,23 @@ fn get_text_property_uses_category_symbol_identity() {
 }
 
 #[test]
+fn propertize_copies_interval_plist_spines_like_gnu_copy_sequence() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r##"(let* ((source (propertize "x" 'face 'old))
+                       (copy (propertize source 'face 'new)))
+                  (list (get-text-property 0 'face source)
+                        (get-text-property 0 'face copy)))"##,
+        )
+        .expect("propertize should preserve the source string's interval plist");
+
+    assert_eq!(result.cons_car(), Value::symbol("old"));
+    assert_eq!(result.cons_cdr().cons_car(), Value::symbol("new"));
+}
+
+#[test]
 fn put_text_property_outside_range() {
     crate::test_utils::init_test_tracing();
     let mut eval = eval_with_text("hello");
