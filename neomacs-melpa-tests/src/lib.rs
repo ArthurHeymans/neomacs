@@ -1356,8 +1356,10 @@ pub const IVY_RICH_MELPA_PIN: (&str, &str) = ("ivy-rich", "20230425.1422");
 /// `41d0e7f5ef51109c682016baa6fc6846e03e8517`.
 pub const JS2_MODE_MELPA_PIN: (&str, &str) = ("js2-mode", "20260627.1342");
 
-/// The exact multiple-cursors package required by js2-refactor's practical
-/// scope-aware rename workflow. MELPA built this archive from upstream commit
+/// The exact multiple-cursors package selected for practical multi-line,
+/// occurrence-based, ordered, region-transforming, alignment, lifecycle, and
+/// focused-context editing parity, and required by js2-refactor's scope-aware
+/// rename workflow. This MELPA version is pinned to upstream commit
 /// `94b8b07a4bab87f803123723b68227565429dfa1`.
 pub const MULTIPLE_CURSORS_MELPA_PIN: (&str, &str) = ("multiple-cursors", "20260419.931");
 
