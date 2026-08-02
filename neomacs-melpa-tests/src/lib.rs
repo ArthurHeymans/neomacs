@@ -1314,6 +1314,12 @@ pub const HT_MELPA_PIN: (&str, &str) = ("ht", "20230703.558");
 /// `59a2a45a35027948476d1d7751b0f0215b1e61aa`.
 pub const HYDRA_MELPA_PIN: (&str, &str) = ("hydra", "20250316.1254");
 
+/// The exact inf-ruby package selected by the practical comint-mode, source
+/// dispatch, completion, project-console, and debugger lifecycle parity corpus.
+/// MELPA built this archive from upstream commit
+/// `274398a24288a7db430a656b580ffbf889ca02aa`.
+pub const INF_RUBY_MELPA_PIN: (&str, &str) = ("inf-ruby", "20251224.216");
+
 /// The exact lv package required by the practical Hydra parity corpus.
 /// MELPA built this archive from upstream commit
 /// `87873d788891029d9e44fa5458321d6a05849b94`.
