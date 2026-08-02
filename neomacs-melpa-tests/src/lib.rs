@@ -1396,9 +1396,16 @@ pub const GENERAL_MELPA_PIN: (&str, &str) = ("general", "20250612.2309");
 /// The exact goto-chg package selected by the comprehensive API parity corpus.
 pub const GOTO_CHG_MELPA_PIN: (&str, &str) = ("goto-chg", "20240407.1110");
 
-/// The exact Helm package selected as audacious' runtime user-interface
-/// dependency.
+/// The exact Helm package selected by the practical source, matching, action,
+/// completion, imenu, and occur parity corpus, and as audacious' runtime
+/// user-interface dependency.
 pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
+
+/// The exact helm-core package required by the practical Helm parity corpus.
+pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
+
+/// The exact wfnames package required by the practical Helm parity corpus.
+pub const WFNAMES_MELPA_PIN: (&str, &str) = ("wfnames", "20260706.903");
 
 /// The exact Magit package selected by the comprehensive API parity corpus.
 pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
