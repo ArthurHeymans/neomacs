@@ -13545,6 +13545,38 @@ impl Context {
         self.apply_internal(function, args.into(), true)
     }
 
+    /// Call Lisp while suppressing signaled conditions, matching GNU Emacs's
+    /// `safe_funcall` (`src/eval.c`).  GNU uses this at diagnostic and display
+    /// boundaries where a broken callback must not recursively replace the
+    /// operation that is already handling an error.  `throw` and suspended
+    /// thread flow remain nonlocal exits; `internal_condition_case_n` does not
+    /// catch them in GNU either.
+    ///
+    /// `nil` is deliberately both the error sentinel and a valid callback
+    /// result.  Callers that need a fallback use it in either case, exactly as
+    /// GNU's `safe_calln` callers do.
+    pub(crate) fn safe_funcall<A>(&mut self, function: Value, args: A) -> EvalResult
+    where
+        A: Into<LispArgVec>,
+    {
+        let specpdl_count = self.specpdl.len();
+        self.specbind(intern("inhibit-redisplay"), Value::T);
+        // GNU's catch-all internal condition handler prevents the debugger
+        // from running.  Neomacs dispatches signals on function return, so an
+        // explicit binding provides the same boundary before we demote the
+        // resulting Flow::Signal below.
+        self.specbind(intern("inhibit-debugger"), Value::T);
+        let result = self.apply(function, args);
+        self.unbind_to(specpdl_count);
+        match result {
+            Err(Flow::Signal(flow)) => {
+                tracing::debug!(?flow, "error muted by safe_funcall");
+                Ok(Value::NIL)
+            }
+            other => other,
+        }
+    }
+
     /// Apply from GNU's Lisp-visible `apply` / `funcall` subrs.
     ///
     /// GNU bytecode `Bcall` increments the same `lisp_eval_depth` counter

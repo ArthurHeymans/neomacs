@@ -86,6 +86,55 @@ fn registry_define_error_multiple_parents() {
 }
 
 #[test]
+fn error_message_string_substitutes_custom_error_message_quotes_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(progn
+              (define-error 'neomacs-test-quoted-error
+                "Couldn't find `aria2c' executable, aborting"
+                'error)
+              (list
+                (let ((text-quoting-style 'curve))
+                  (error-message-string '(neomacs-test-quoted-error)))
+                (let ((text-quoting-style 'straight))
+                  (error-message-string '(neomacs-test-quoted-error)))
+                (let ((text-quoting-style 'grave))
+                  (error-message-string '(neomacs-test-quoted-error)))
+                (let ((text-quoting-style 'curve))
+                  (error-message-string
+                    '(error "Couldn't find `aria2c' executable, aborting")))
+                (let ((original (symbol-function 'substitute-command-keys)))
+                  (unwind-protect
+                      (progn
+                        (fset 'substitute-command-keys
+                              (lambda (_) (error "broken substitution")))
+                        (error-message-string '(neomacs-test-quoted-error)))
+                    (fset 'substitute-command-keys original)))
+                (let ((original (symbol-function 'substitute-command-keys)))
+                  (unwind-protect
+                      (progn
+                        (fset 'substitute-command-keys (lambda (_) t))
+                        (error-message-string '(neomacs-test-quoted-error)))
+                    (fset 'substitute-command-keys original)))
+                (let ((original (symbol-function 'substitute-command-keys)))
+                  (unwind-protect
+                      (catch 'neomacs-test-safe-call
+                        (fset 'substitute-command-keys
+                              (lambda (_)
+                                (throw 'neomacs-test-safe-call 'escaped)))
+                        (error-message-string '(neomacs-test-quoted-error)))
+                    (fset 'substitute-command-keys original)))))"#,
+    );
+
+    assert_eq!(
+        results,
+        vec![
+            r#"OK ("Couldn’t find ‘aria2c’ executable, aborting" "Couldn't find 'aria2c' executable, aborting" "Couldn't find `aria2c' executable, aborting" "Couldn't find `aria2c' executable, aborting" "Couldn't find `aria2c' executable, aborting" "peculiar error" escaped)"#
+        ]
+    );
+}
+
+#[test]
 fn registry_conditions_for() {
     crate::test_utils::init_test_tracing();
     let reg = ErrorRegistry::new();

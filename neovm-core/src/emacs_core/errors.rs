@@ -782,11 +782,47 @@ pub(crate) fn builtin_error_message_string(
     // `error-message` property is a string.  This deliberately includes
     // non-error conditions such as `quit` and `minibuffer-quit`, whose
     // `error-conditions` do not include `error`.
-    let Some(base_message) = eval
-        .obarray
-        .get_property(&sym_name, "error-message")
-        .and_then(|v| v.as_lisp_string().cloned())
-    else {
+    let Some(base_message_value) = eval.obarray.get_property(&sym_name, "error-message") else {
+        if data.is_empty() {
+            return Ok(Value::heap_string(lisp_lit("peculiar error")));
+        }
+        let detail = join_lisp(
+            data.iter().map(|v| error_arg_lisp(eval, v, true)).collect(),
+            ", ",
+        );
+        return Ok(Value::heap_string(
+            lisp_lit("peculiar error: ").concat(&detail),
+        ));
+    };
+
+    // GNU `print_error_message` passes the `error-message` property of every
+    // condition other than plain `error` through `substitute-command-keys`.
+    // Besides command substitutions, this applies the user's
+    // `text-quoting-style`.  The callback is intentionally a safe funcall:
+    // error rendering must keep the original message if the Lisp helper
+    // itself signals.  A non-nil, non-string callback result is retained and
+    // consequently renders as a peculiar error, matching GNU's downstream
+    // printer behavior.
+    let base_message_value = if sym_name != "error"
+        && eval
+            .obarray
+            .symbol_function_id(intern("substitute-command-keys"))
+            .is_some()
+    {
+        let substituted = eval.safe_funcall(
+            Value::symbol("substitute-command-keys"),
+            vec![base_message_value],
+        )?;
+        if substituted.is_nil() {
+            base_message_value
+        } else {
+            substituted
+        }
+    } else {
+        base_message_value
+    };
+
+    let Some(base_message) = base_message_value.as_lisp_string().cloned() else {
         if data.is_empty() {
             return Ok(Value::heap_string(lisp_lit("peculiar error")));
         }
