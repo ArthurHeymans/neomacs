@@ -257,6 +257,7 @@ mod compat;
 mod dash;
 mod evil;
 mod f;
+mod flycheck;
 mod frozen_packages;
 mod game_2048;
 mod general;

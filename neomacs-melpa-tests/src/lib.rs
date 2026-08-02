@@ -932,9 +932,9 @@ pub const ARCH_PACKER_MELPA_PIN: (&str, &str) = ("arch-packer", "20170730.1321")
 /// `b2ffd8441851659cb1cc844156073967729585e5`.
 pub const ARDUINO_MODE_MELPA_PIN: (&str, &str) = ("arduino-mode", "20240527.1603");
 
-/// The exact Flycheck package used to exercise arduino-mode's optional
-/// integration against its real dependency surface.
-pub const ARDUINO_MODE_FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260728.931");
+/// The exact Flycheck package selected by its direct diagnostics parity
+/// corpus and by arduino-mode's optional integration coverage.
+pub const FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260728.931");
 
 /// The exact arscript-mode package selected by the comprehensive mode,
 /// font-lock, indentation, and editing parity corpus. MELPA built this archive

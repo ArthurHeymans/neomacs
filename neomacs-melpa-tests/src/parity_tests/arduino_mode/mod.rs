@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::{ARDUINO_MODE_FLYCHECK_MELPA_PIN, ARDUINO_MODE_MELPA_PIN, CachedMelpaOracle};
+use crate::{ARDUINO_MODE_MELPA_PIN, CachedMelpaOracle, FLYCHECK_MELPA_PIN};
 
 use super::batch_support::assert_oracle_batch_cases;
 
@@ -170,7 +170,7 @@ fn arduino_mode_oracle(source_file: &str) -> CachedMelpaOracle {
         .with_timeout(ARDUINO_MODE_TEST_TIMEOUT);
     let oracle = if source_file == "flycheck-arduino.el" {
         oracle
-            .with_melpa_dependency(ARDUINO_MODE_FLYCHECK_MELPA_PIN)
+            .with_melpa_dependency(FLYCHECK_MELPA_PIN)
             .expect("prepare pinned Flycheck dependency below ./tmp")
     } else {
         oracle
