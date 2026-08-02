@@ -1345,6 +1345,17 @@ pub const IVY_RICH_MELPA_PIN: (&str, &str) = ("ivy-rich", "20230425.1422");
 /// `41d0e7f5ef51109c682016baa6fc6846e03e8517`.
 pub const JS2_MODE_MELPA_PIN: (&str, &str) = ("js2-mode", "20260627.1342");
 
+/// The exact multiple-cursors package required by js2-refactor's practical
+/// scope-aware rename workflow. MELPA built this archive from upstream commit
+/// `94b8b07a4bab87f803123723b68227565429dfa1`.
+pub const MULTIPLE_CURSORS_MELPA_PIN: (&str, &str) = ("multiple-cursors", "20260419.931");
+
+/// The exact js2-refactor package selected by the practical scope rewrite,
+/// signature migration, extraction, IIFE, and structural editing parity
+/// corpus. MELPA built this archive from upstream commit
+/// `e1177c728ae52a5e67157fb18ee1409d8e95386a`.
+pub const JS2_REFACTOR_MELPA_PIN: (&str, &str) = ("js2-refactor", "20250210.1811");
+
 /// The exact lv package required by the practical Hydra parity corpus.
 /// MELPA built this archive from upstream commit
 /// `87873d788891029d9e44fa5458321d6a05849b94`.
