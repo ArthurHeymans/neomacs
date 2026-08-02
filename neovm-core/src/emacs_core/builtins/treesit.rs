@@ -1031,39 +1031,25 @@ fn lookup_thing_definition(
     let thing_name = thing_symbol.as_symbol_name()?;
     let settings =
         super::misc_eval::dynamic_or_global_symbol_value(eval, "treesit-thing-settings")?;
-    let languages = crate::emacs_core::value::list_to_vec(&settings)?;
-    for language_entry in languages {
-        if !language_entry.is_cons() {
-            continue;
-        }
-        let lang = language_entry.cons_car();
-        if lang.as_symbol_name() != Some(language_name) {
-            continue;
-        }
-        let defs = language_entry.cons_cdr();
-        let defs = if defs.is_cons() && defs.cons_cdr().is_nil() {
-            defs.cons_car()
-        } else {
-            defs
-        };
-        let defs = crate::emacs_core::value::list_to_vec(&defs)?;
-        for def in defs {
-            if !def.is_cons() {
-                continue;
+    let find_entry = |mut alist: Value, key: &str| {
+        while alist.is_cons() {
+            let entry = alist.cons_car();
+            if entry.is_cons() && entry.cons_car().as_symbol_name() == Some(key) {
+                return Some(entry);
             }
-            let key = def.cons_car();
-            if key.as_symbol_name() != Some(thing_name) {
-                continue;
-            }
-            let rest = def.cons_cdr();
-            return Some(if rest.is_cons() {
-                rest.cons_car()
-            } else {
-                rest
-            });
+            alist = alist.cons_cdr();
         }
+        None
+    };
+
+    let language_entry = find_entry(settings, language_name)?;
+    let definition_entry = find_entry(language_entry.cons_cdr(), thing_name)?;
+    let definition = definition_entry.cons_cdr();
+    if definition.is_cons() {
+        Some(definition.cons_car())
+    } else {
+        None
     }
-    None
 }
 
 fn treesit_predicate_not_found(predicate: Value) -> Flow {
@@ -3527,6 +3513,25 @@ mod tests {
             None
         );
         assert_eq!(TreesitBooleanPredicate::And.name(), "and");
+    }
+
+    #[test]
+    fn treesit_node_match_resolves_a_single_thing_definition_from_gnu_alist_shape() {
+        let (mut eval, parser) = eval_with_json_parser(r#"[\"first\"]"#);
+        eval.eval_str("(setq treesit-thing-settings '((json (sentence \"array\"))))")
+            .expect("single tree-sitter thing definition");
+        let root = builtin_treesit_parser_root_node(&mut eval, vec![parser])
+            .expect("root node for json parser");
+        let array = builtin_treesit_node_child(&mut eval, vec![root, Value::fixnum(0)])
+            .expect("array node");
+
+        let matched = builtin_treesit_node_match_p(
+            &mut eval,
+            vec![array, Value::symbol("sentence"), Value::NIL],
+        )
+        .expect("defined thing predicate");
+
+        assert_eq!(matched, Value::T);
     }
 
     #[test]

@@ -2,6 +2,41 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
+fn sentence_navigation_resolves_the_enclosing_and_next_asciidoc_things() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "sentence_navigation_resolves_the_enclosing_and_next_asciidoc_things",
+        r##"(with-temp-buffer
+  (insert
+   "= Handbook\n\n"
+   "Opening sentence. Second sentence.\n\n"
+   "== Install\n\n"
+   "Install prose.\n\n"
+   "=== Linux\n\n")
+  (asciidoc-mode)
+  (cl-labels
+      ((summary
+        (node)
+        (and node
+             (list (treesit-node-type node)
+                   (treesit-node-start node)
+                   (treesit-node-end node)
+                   (treesit-node-match-p node 'text t)
+                   (treesit-node-match-p node 'sentence t)))))
+    (list
+     (summary (treesit-node-at 48 'asciidoc))
+     (summary (treesit-thing-at 48 'sentence))
+     (summary (treesit-thing-next 48 'sentence 'asciidoc))
+     (save-excursion
+       (goto-char 48)
+       (list (treesit-end-of-thing 'sentence 1) (point)))
+     (save-excursion
+       (goto-char 48)
+       (forward-sentence)
+       (point)))))"##,
+        expect![[r#"OK (("line" 13 48 nil nil) nil ("paragraph" 61 76 nil t) (76 76) 76)"#]],
+    )
+}
+
 fn imenu_defun_sentence_and_outline_navigation_traverse_a_real_document_hierarchy()
 -> ParityBatchCase {
     ParityBatchCase::value(
@@ -477,6 +512,7 @@ fn generic_and_antora_cross_file_resolution_use_deterministic_real_project_layou
 
 pub(super) fn navigation_public_surface_batch_cases() -> Vec<ParityBatchCase> {
     vec![
+        sentence_navigation_resolves_the_enclosing_and_next_asciidoc_things(),
         imenu_defun_sentence_and_outline_navigation_traverse_a_real_document_hierarchy(),
         outline_subtree_move_reports_the_exact_editor_error_without_mutating_the_document(),
         public_follow_command_jumps_to_anchors_and_routes_supported_urls_and_macros(),
