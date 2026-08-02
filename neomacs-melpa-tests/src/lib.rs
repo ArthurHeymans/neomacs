@@ -1414,6 +1414,13 @@ pub const MAKEY_MELPA_PIN: (&str, &str) = ("makey", "20131231.1430");
 /// `f441e8bc9951e73b12c61e9198658488dd8e86e1`.
 pub const MARKDOWN_MODE_MELPA_PIN: (&str, &str) = ("markdown-mode", "20260722.40");
 
+/// The exact Math Symbol Lists package selected for the practical completion,
+/// Unicode formula rendering, package-requirement, conflict-resolution,
+/// scripted-character, and full-corpus integrity parity suite. MELPA built
+/// this archive from upstream commit
+/// `ac3eb053d3b576fcdd192b0ac6ad5090ea3a7079`.
+pub const MATH_SYMBOL_LISTS_MELPA_PIN: (&str, &str) = ("math-symbol-lists", "20220828.2047");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

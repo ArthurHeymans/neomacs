@@ -312,6 +312,7 @@ mod magit;
 mod magit_section;
 mod makey;
 mod markdown_mode;
+mod math_symbol_lists;
 mod package_lifecycle;
 mod package_vc;
 mod projectile;
