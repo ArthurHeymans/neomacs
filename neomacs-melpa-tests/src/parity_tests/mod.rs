@@ -266,6 +266,7 @@ mod company;
 mod compat;
 mod cond_let;
 mod consult;
+mod csv_mode;
 mod dash;
 mod evil;
 mod f;

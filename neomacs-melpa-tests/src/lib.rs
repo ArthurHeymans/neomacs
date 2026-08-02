@@ -1287,6 +1287,10 @@ pub const CDB_MELPA_PIN: (&str, &str) = ("cdb", "20230318.2152");
 /// segmentation, mixed-language extraction, and bounds-driven editing corpus.
 pub const CHINESE_WORD_AT_POINT_MELPA_PIN: (&str, &str) = ("chinese-word-at-point", "20170811.941");
 
+/// The exact CSV Mode release selected from GNU ELPA by the practical quoted
+/// row, column editing, sorting, alignment, and transpose parity corpus.
+pub const CSV_MODE_GNU_ELPA_PIN: (&str, &str) = ("csv-mode", "1.27");
+
 /// The exact Avy package selected by the practical keyboard-driven jump,
 /// cross-window, dispatch action, line editing, and cancellation corpus.
 pub const AVY_MELPA_PIN: (&str, &str) = ("avy", "20241101.1357");
