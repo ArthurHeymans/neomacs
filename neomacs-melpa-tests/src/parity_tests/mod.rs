@@ -307,6 +307,7 @@ mod log4e;
 mod lv;
 mod m_buffer;
 mod macrostep;
+mod mag_menu;
 mod magit;
 mod magit_section;
 mod package_lifecycle;

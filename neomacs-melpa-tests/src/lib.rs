@@ -1393,6 +1393,13 @@ pub const M_BUFFER_MELPA_PIN: (&str, &str) = ("m-buffer", "20241215.2214");
 /// `d0928626b4711dcf9f8f90439d23701118724199`.
 pub const MACROSTEP_MELPA_PIN: (&str, &str) = ("macrostep", "20250202.2205");
 
+/// The exact Mag Menu package selected for the practical command option,
+/// rendered menu, keyboard interaction, action dispatch, help, and
+/// splitter-backed window lifecycle parity corpus. MELPA built this archive
+/// from upstream commit
+/// `9b9277021cd09fb1dba64b1d2a00705d20914bd6`.
+pub const MAG_MENU_MELPA_PIN: (&str, &str) = ("mag-menu", "20150505.1850");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
