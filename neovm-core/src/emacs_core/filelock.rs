@@ -326,6 +326,33 @@ pub(crate) fn unlock_file(
     unlock_file_resolved(eval, &filename)
 }
 
+/// Handler-aware `file-locked-p` operation, corresponding to GNU
+/// `Ffile_locked_p`.  Preserve the handler's tri-state result: nil means
+/// unlocked, t means owned by this Emacs, and a string names another owner.
+fn file_locked_p(eval: &mut super::eval::Context, filename: &LispString) -> Result<Value, Flow> {
+    let operation = Value::symbol("file-locked-p");
+    let handler = find_file_name_handler_lisp_for_eval(eval, filename, operation);
+    if !handler.is_nil() {
+        return eval.funcall_general(
+            handler,
+            vec![operation, Value::heap_string(filename.clone())],
+        );
+    }
+
+    let filename = resolve_filename_lisp_for_eval(eval, filename);
+    let Some(lock_path) = make_lock_file_name(eval, &filename)? else {
+        return Ok(Value::NIL);
+    };
+
+    match current_lock_owner(&lock_path)
+        .map_err(|err| file_lock_error("Testing file lock", &filename, err))?
+    {
+        LockOwner::None => Ok(Value::NIL),
+        LockOwner::Current => Ok(Value::T),
+        LockOwner::Other(user) => Ok(Value::string(user)),
+    }
+}
+
 fn current_buffer_file_lock_target(
     eval: &super::eval::Context,
     buffer_id: BufferId,
@@ -408,18 +435,8 @@ pub(crate) fn builtin_file_locked_p(
 ) -> EvalResult {
     expect_args("file-locked-p", &args, 1)?;
     let filename = super::builtins::expect_lisp_string(&args[0])?;
-    let filename = resolve_filename_lisp_for_eval(eval, filename);
-    let Some(lock_path) = make_lock_file_name(eval, &filename)? else {
-        return Ok(Value::NIL);
-    };
-
-    match current_lock_owner(&lock_path)
-        .map_err(|err| file_lock_error("Testing file lock", &filename, err))?
-    {
-        LockOwner::None => Ok(Value::NIL),
-        LockOwner::Current => Ok(Value::T),
-        LockOwner::Other(user) => Ok(Value::string(user)),
-    }
+    let filename = filename.clone();
+    file_locked_p(eval, &filename)
 }
 
 pub(crate) fn builtin_lock_buffer(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -536,15 +553,18 @@ mod tests {
                                 (setq neovm-file-lock-handler-calls
                                       (cons (cons operation arguments)
                                             neovm-file-lock-handler-calls))
-                                :handled))))
+                                (if (eq operation 'file-locked-p)
+                                    :remote-owner
+                                  :handled)))))
                  (list (lock-file "/remote:host:/work/note.txt")
+                       (file-locked-p "/remote:host:/work/note.txt")
                        (unlock-file "/remote:host:/work/note.txt")
                        (reverse neovm-file-lock-handler-calls)))"#,
         );
 
         assert_eq!(
             crate::emacs_core::format_eval_result(&result),
-            "OK (:handled nil ((lock-file \"/remote:host:/work/note.txt\") (unlock-file \"/remote:host:/work/note.txt\")))"
+            "OK (:handled :remote-owner nil ((lock-file \"/remote:host:/work/note.txt\") (file-locked-p \"/remote:host:/work/note.txt\") (unlock-file \"/remote:host:/work/note.txt\")))"
         );
     }
 

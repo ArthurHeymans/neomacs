@@ -222,6 +222,102 @@ fn apple_container_supports_a_real_remote_edit_write_rename_and_directory_sessio
     .fresh_process()
 }
 
+fn apple_container_remote_lock_round_trip_recognizes_the_connection_owner() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "apple_container_remote_lock_round_trip_recognizes_the_connection_owner",
+        r####"
+(let* ((runtime
+        (neomacs-apple-container-test-prepare
+         "apple-container-lock-owner"))
+       (root (nth 0 runtime))
+       (bin (nth 1 runtime))
+       (calls (nth 2 runtime))
+       (containers (nth 3 runtime))
+       (source
+        (expand-file-name
+         "payments/workspace/lock-owner.txt"
+         containers))
+       (remote
+        (concat
+         "/container:payments:"
+         source))
+       (exec-path (cons bin exec-path))
+       (process-environment
+        (append
+         (list
+          (concat
+           "APPLE_CONTAINER_TEST_LOG="
+           calls)
+          (concat
+           "PATH="
+           bin
+           ":"
+           (getenv "PATH")))
+         process-environment))
+       (apple-container-tramp-container-options
+        '("--context" "development"))
+       (tramp-persistency-file-name
+        (expand-file-name
+         "tramp-persistency.el"
+         root))
+       (tramp-verbose 0)
+       result)
+  (unwind-protect
+      (progn
+        (make-directory
+         (file-name-directory source)
+         t)
+        (with-temp-file source
+          (insert "fixture\n"))
+        (apple-container-tramp-setup)
+        (lock-file remote)
+        (let* ((info
+                (tramp-get-lock-file remote))
+               (matched
+                (string-match
+                 tramp-lock-file-info-regexp
+                 info))
+               (info-user
+                (match-string 1 info))
+               (info-host
+                (match-string 2 info))
+               (info-pid
+                (match-string 3 info))
+               (owner
+                (file-locked-p remote)))
+          (setq result
+                (list
+                 :format (integerp matched)
+                 :user
+                 (string-equal
+                  info-user
+                  (user-login-name))
+                 :host
+                 (string-equal
+                  info-host
+                  tramp-system-name)
+                 :connection
+                 (string-equal
+                  info-pid
+                  (tramp-get-lock-pid remote))
+                 :owner owner)))
+        (unlock-file remote)
+        (setq result
+              (append
+               result
+               (list
+                :after-unlock
+                (file-locked-p remote)))))
+    (ignore-errors
+      (unlock-file remote))
+    (neomacs-apple-container-test-cleanup root))
+  result)
+"####,
+        expect!["OK (:format t :user t :host t :connection t :owner t :after-unlock nil)"],
+    )
+    .fresh_process()
+}
+
 fn apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edits()
 -> ParityBatchCase {
     ParityBatchCase::value(
@@ -378,6 +474,7 @@ fn apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edi
 pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
     vec![
         apple_container_completion_discovers_live_hosts_with_the_selected_cli_context(),
+        apple_container_remote_lock_round_trip_recognizes_the_connection_owner(),
         apple_container_supports_a_real_remote_edit_write_rename_and_directory_session(),
         apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edits(),
     ]
