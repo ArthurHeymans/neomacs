@@ -293,6 +293,7 @@ mod haskell_mode;
 mod helm;
 mod helm_core;
 mod ht;
+mod hydra;
 mod magit;
 mod magit_section;
 mod package_lifecycle;

@@ -1308,6 +1308,17 @@ pub const AUTO_PACKAGE_UPDATE_MELPA_PIN: (&str, &str) = ("auto-package-update", 
 /// `1c49aad1c820c86f7ee35bf9fff8429502f60fef`.
 pub const HT_MELPA_PIN: (&str, &str) = ("ht", "20230703.558");
 
+/// The exact Hydra package selected by the practical command-family,
+/// transient-keymap, extension, radio, and source-editing parity corpus.
+/// MELPA built this archive from upstream commit
+/// `59a2a45a35027948476d1d7751b0f0215b1e61aa`.
+pub const HYDRA_MELPA_PIN: (&str, &str) = ("hydra", "20250316.1254");
+
+/// The exact lv package required by the practical Hydra parity corpus.
+/// MELPA built this archive from upstream commit
+/// `87873d788891029d9e44fa5458321d6a05849b94`.
+pub const LV_MELPA_PIN: (&str, &str) = ("lv", "20200507.1518");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
