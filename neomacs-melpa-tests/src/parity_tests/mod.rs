@@ -258,6 +258,7 @@ mod bert;
 mod bind_key;
 mod bui;
 mod casual;
+mod ccc;
 mod clojure_mode;
 mod company;
 mod compat;
