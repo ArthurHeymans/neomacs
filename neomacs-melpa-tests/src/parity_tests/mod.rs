@@ -276,6 +276,7 @@ mod elixir_mode;
 mod emmet_mode;
 mod epl;
 mod erlang;
+mod es_lib;
 mod evil;
 mod f;
 mod flycheck;
