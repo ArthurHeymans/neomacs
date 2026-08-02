@@ -5936,7 +5936,7 @@ impl super::eval::Context {
         target_process: Option<ProcessId>,
     ) -> Result<ProcessOutputServiceOutcome, Flow> {
         let mut outcome = ProcessOutputServiceOutcome::default();
-        let is_target = target_process == Some(stderr_id);
+        let is_target = target_process.is_none_or(|target| target == stderr_id);
 
         while let ProcessOutputRead::Data { data, bytes_read } =
             self.processes.read_process_output_result(stderr_id)
@@ -6211,16 +6211,7 @@ impl super::eval::Context {
                     }
                 }
                 {
-                    let (drained_output, notified) = self.run_process_status_notification(pid)?;
-                    // GNU `status_notify`'s return value counts the bytes it
-                    // DRAINED (feeding `got_some_output`, which completes the
-                    // wait); the sentinel run itself only services it.
-                    if drained_output {
-                        outcome.record_activity(is_target);
-                    }
-                    if notified {
-                        outcome.record_serviced();
-                    }
+                    outcome.absorb(self.run_process_status_notification(pid, target_process)?);
                 }
                 continue;
             }
@@ -6257,16 +6248,7 @@ impl super::eval::Context {
                     }
                 }
                 {
-                    let (drained_output, notified) = self.run_process_status_notification(pid)?;
-                    // GNU `status_notify`'s return value counts the bytes it
-                    // DRAINED (feeding `got_some_output`, which completes the
-                    // wait); the sentinel run itself only services it.
-                    if drained_output {
-                        outcome.record_activity(is_target);
-                    }
-                    if notified {
-                        outcome.record_serviced();
-                    }
+                    outcome.absorb(self.run_process_status_notification(pid, target_process)?);
                 }
                 continue;
             }
@@ -6556,7 +6538,7 @@ impl super::eval::Context {
                     if defer_status_after_output {
                         continue;
                     }
-                    let (_, _) = self.run_process_status_notification(pid)?;
+                    outcome.absorb(self.run_process_status_notification(pid, target_process)?);
                 }
 
                 continue;
@@ -6587,35 +6569,35 @@ impl super::eval::Context {
                         ProcessOutputDrainDisposition::Terminal => {}
                     }
                 }
-                let (drained_output, notified) = self.run_process_status_notification(pid)?;
-                if drained_output {
-                    outcome.record_activity(is_target);
-                }
-                if notified {
-                    outcome.record_serviced();
-                }
+                outcome.absorb(self.run_process_status_notification(pid, target_process)?);
             }
         }
 
         Ok(outcome)
     }
 
-    /// Returns `(drained_output, notified)`: GNU `status_notify` drains
-    /// remaining output (its return feeds `got_some_output`, i.e. completes
-    /// waits) and then runs the sentinel (which never completes a wait).
-    fn run_process_status_notification(&mut self, pid: ProcessId) -> Result<(bool, bool), Flow> {
-        // GNU `status_notify` (process.c) drains ALL remaining output from a
-        // terminated process before reporting its status and (when
-        // `delete-exited-processes' is non-nil) removing it from
-        // `Vprocess_alist'.  Mirror the drain here so trailing bytes buffered
-        // in the pipe after the child exited are not lost when the process is
-        // reaped below.
-        let mut saw_output = false;
+    /// GNU `status_notify` drains the terminated process's complete output
+    /// topology before publishing its status and running its sentinel.  Return
+    /// the resulting wait activity so output completes only a wait whose
+    /// target admits that stream; running the sentinel merely services it.
+    fn run_process_status_notification(
+        &mut self,
+        pid: ProcessId,
+        target_process: Option<ProcessId>,
+    ) -> Result<ProcessOutputServiceOutcome, Flow> {
+        let mut outcome = ProcessOutputServiceOutcome::default();
+        let owner_is_target = target_process.is_none_or(|target| target == pid);
+
+        // Drain the owner's primary stream before exposing its terminal
+        // status.  In GNU this happens while `status_notify` walks every
+        // process whose tick changed.
+        let mut saw_owner_output = false;
         while let ProcessOutputRead::Data { data, bytes_read } =
             self.processes.read_process_output_result(pid)
         {
             if bytes_read > 0 {
-                saw_output = true;
+                saw_owner_output = true;
+                outcome.record_activity(owner_is_target);
             }
             if !data.is_empty() {
                 let filter = self
@@ -6627,10 +6609,27 @@ impl super::eval::Context {
             }
         }
         if let Some(proc) = self.processes.get_mut(pid)
-            && process_should_defer_explicit_coding_status_after_output(proc, saw_output)
+            && process_should_defer_explicit_coding_status_after_output(proc, saw_owner_output)
         {
             proc.explicit_coding_status_deferred_once = true;
-            return Ok((saw_output, false));
+            return Ok(outcome);
+        }
+
+        // A `:stderr` destination is represented by an implicit pipe process,
+        // but it is still part of this child's output topology.  The child has
+        // exited, so every byte it wrote is now readable before EOF.  Drain
+        // those bytes through the stderr process's own filter before the main
+        // sentinel runs; asynchronous clients commonly inspect that buffer in
+        // the sentinel.  Keep wait accounting attached to the stderr process,
+        // as GNU does when WAIT_PROC names only the owner.
+        let stderr_id = self
+            .processes
+            .get(pid)
+            .and_then(|proc| process_value_to_id(&proc.stderrproc));
+        if let Some(stderr_id) = stderr_id.filter(|id| self.processes.get(*id).is_some()) {
+            outcome.absorb(
+                self.poll_associated_stderr_output_without_status(stderr_id, target_process)?,
+            );
         }
 
         let sentinel = self
@@ -6650,6 +6649,7 @@ impl super::eval::Context {
             .unwrap_or_else(|| "finished\n".to_string());
         self.processes.clear_status_notify_pending(pid);
         self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
+        outcome.record_serviced();
 
         // GNU `status_notify`: a terminated process (status exit/signal/closed)
         // is removed from `Vprocess_alist' when `delete-exited-processes' is
@@ -6668,7 +6668,7 @@ impl super::eval::Context {
                 self.processes.reap_exited_process(pid);
             }
         }
-        Ok((saw_output, true))
+        Ok(outcome)
     }
 }
 

@@ -1378,7 +1378,7 @@ fn process_status_notification_runs_default_sentinel_and_reaps() {
     ev.processes
         .set_child_exit_status_pending(pid, process_status_exit_value(0));
 
-    ev.run_process_status_notification(pid)
+    ev.run_process_status_notification(pid, None)
         .expect("status notification");
 
     assert_eq!(
@@ -1499,6 +1499,47 @@ fn make_process_stderr_separate_buffer_lifecycle_matches_gnu() {
             ":eb \"ERR\n\nProcess x stderr finished\n\")",
         )
     );
+}
+
+/// GNU `status_notify` runs only after the wait loop has serviced ready
+/// process descriptors.  Consequently a real process's terminal sentinel can
+/// inspect every byte already written to its separate stderr pipe, even when
+/// the caller targets the real process and the child exits immediately after
+/// stdin reaches EOF.  This is the ordering contract asynchronous consumers
+/// such as Apheleia use to build their error report inside the sentinel.
+#[test]
+fn terminal_sentinel_observes_separate_stderr_output_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((seen :pending)
+                  (stdout (generate-new-buffer " *sentinel-stdout*"))
+                  (stderr (generate-new-buffer " *sentinel-stderr*"))
+                  (process
+                   (make-process
+                    :name "sentinel-stderr-order"
+                    :buffer stdout
+                    :stderr stderr
+                    :command '("{sh}" "-c"
+                               "cat >/dev/null; printf ERR >&2; exit 7")
+                    :connection-type 'pipe
+                    :noquery t
+                    :sentinel
+                    (lambda (proc _event)
+                      (unless (process-live-p proc)
+                        (setq seen
+                              (list
+                               (with-current-buffer stderr (buffer-string))
+                               (process-exit-status proc)
+                               (process-status proc))))))))
+             (set-process-sentinel (get-buffer-process stderr) #'ignore)
+             (process-send-eof process)
+             (while (eq seen :pending)
+               (accept-process-output process 0.1))
+             seen)"#
+    ));
+
+    assert_eq!(result, r#"OK ("ERR" 7 exit)"#);
 }
 
 /// GNU gives a subprocess with no explicit `:stderr` one shared output
