@@ -1386,6 +1386,13 @@ pub const LV_MELPA_PIN: (&str, &str) = ("lv", "20200507.1518");
 /// `5e7714835b2289f61dad24c0b5cf98d28fc313b0`.
 pub const M_BUFFER_MELPA_PIN: (&str, &str) = ("m-buffer", "20241215.2214");
 
+/// The exact Macrostep package selected for the practical inline expansion,
+/// nested lifecycle, local environment, compiler macro, pretty-printing,
+/// separate-buffer, and failure-atomicity parity corpus. MELPA built this
+/// archive from upstream commit
+/// `d0928626b4711dcf9f8f90439d23701118724199`.
+pub const MACROSTEP_MELPA_PIN: (&str, &str) = ("macrostep", "20250202.2205");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");

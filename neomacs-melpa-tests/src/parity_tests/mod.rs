@@ -306,6 +306,7 @@ mod llama;
 mod log4e;
 mod lv;
 mod m_buffer;
+mod macrostep;
 mod magit;
 mod magit_section;
 mod package_lifecycle;
