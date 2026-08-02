@@ -1302,8 +1302,9 @@ pub const AUTO_ORG_MD_MELPA_PIN: (&str, &str) = ("auto-org-md", "20180213.2343")
 /// from upstream commit `e966c6c95de1742d867250dc15b1c6bd570b6ea5`.
 pub const AUTO_PACKAGE_UPDATE_MELPA_PIN: (&str, &str) = ("auto-package-update", "20260601.1804");
 
-/// The exact ht package selected as auto-highlight-symbol's hash-table
-/// dependency. MELPA built this archive from upstream commit
+/// The exact ht package selected by the practical configuration, nested state,
+/// job pipeline, custom-key, and snapshot parity corpus, and as
+/// auto-highlight-symbol's hash-table dependency. MELPA built this archive from upstream commit
 /// `1c49aad1c820c86f7ee35bf9fff8429502f60fef`.
 pub const HT_MELPA_PIN: (&str, &str) = ("ht", "20230703.558");
 
