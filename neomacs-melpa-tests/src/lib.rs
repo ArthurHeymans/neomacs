@@ -1326,6 +1326,13 @@ pub const INF_RUBY_MELPA_PIN: (&str, &str) = ("inf-ruby", "20251224.216");
 /// `632232b5ee627bf5d299db0b7714b3b687a0124c`.
 pub const ITER2_MELPA_PIN: (&str, &str) = ("iter2", "20250209.1516");
 
+/// The exact Ivy package selected by the practical interactive selection,
+/// action dispatch, completing-read lifecycle, search-language,
+/// completion-in-region, and resumable-session parity corpus. MELPA built
+/// this archive from upstream commit
+/// `0d02f5063d36ff4fa6138f0973c83c6d3874fba0`.
+pub const IVY_MELPA_PIN: (&str, &str) = ("ivy", "20260413.2102");
+
 /// The exact lv package required by the practical Hydra parity corpus.
 /// MELPA built this archive from upstream commit
 /// `87873d788891029d9e44fa5458321d6a05849b94`.

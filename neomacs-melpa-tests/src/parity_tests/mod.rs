@@ -296,6 +296,7 @@ mod ht;
 mod hydra;
 mod inf_ruby;
 mod iter2;
+mod ivy;
 mod magit;
 mod magit_section;
 mod package_lifecycle;
