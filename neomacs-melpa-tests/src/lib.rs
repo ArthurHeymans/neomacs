@@ -1274,6 +1274,10 @@ pub const BUI_MELPA_PIN: (&str, &str) = ("bui", "20260502.730");
 /// cross-window, dispatch action, line editing, and cancellation corpus.
 pub const AVY_MELPA_PIN: (&str, &str) = ("avy", "20241101.1357");
 
+/// The exact Avy Menu package selected by the practical rendered menu,
+/// multi-level selection, inactive item, and cancellation lifecycle corpus.
+pub const AVY_MENU_MELPA_PIN: (&str, &str) = ("avy-menu", "20230606.1519");
+
 /// The exact Compat release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const COMPAT_GNU_ELPA_PIN: (&str, &str) = ("compat", "31.0.0.2");
