@@ -202,6 +202,12 @@ pub const ELIXIR_MODE_MELPA_PIN: (&str, &str) = ("elixir-mode", "20230626.1738")
 /// from upstream commit `322d3bb112fced57d63b44863357f7a0b7eee1e3`.
 pub const EMMET_MODE_MELPA_PIN: (&str, &str) = ("emmet-mode", "20240617.45");
 
+/// The exact EPL package selected by the practical package metadata,
+/// descriptor, database, installation, deletion, and built-in discovery
+/// workflow corpus. MELPA built this archive from upstream commit
+/// `78ab7a85c08222cd15582a298a364774e3282ce6`.
+pub const EPL_MELPA_PIN: (&str, &str) = ("epl", "20180205.2049");
+
 /// The exact GNU ELPA let-alist dependency selected for the sage-shell-mode
 /// package graph.
 pub const LET_ALIST_GNU_ELPA_PIN: (&str, &str) = ("let-alist", "1.0.6");
