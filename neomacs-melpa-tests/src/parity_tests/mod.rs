@@ -253,6 +253,7 @@ mod auto_org_md;
 mod auto_package_update;
 mod auto_read_only;
 mod bind_key;
+mod company;
 mod compat;
 mod dash;
 mod evil;

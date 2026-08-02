@@ -1274,6 +1274,10 @@ pub const BUI_MELPA_PIN: (&str, &str) = ("bui", "20260502.730");
 /// parity corpus.
 pub const COMPAT_GNU_ELPA_PIN: (&str, &str) = ("compat", "31.0.0.2");
 
+/// The exact Company package selected by the practical interactive
+/// completion, CAPF, asynchronous backend, and file workflow parity corpus.
+pub const COMPANY_MELPA_PIN: (&str, &str) = ("company", "20260721.100");
+
 /// The exact f package selected by the comprehensive API parity corpus.
 pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 
