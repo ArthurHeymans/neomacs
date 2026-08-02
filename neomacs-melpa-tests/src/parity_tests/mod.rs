@@ -314,6 +314,7 @@ mod makey;
 mod markdown_mode;
 mod math_symbol_lists;
 mod maude_mode;
+mod mozc;
 mod package_lifecycle;
 mod package_vc;
 mod projectile;

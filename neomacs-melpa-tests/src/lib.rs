@@ -1427,6 +1427,13 @@ pub const MATH_SYMBOL_LISTS_MELPA_PIN: (&str, &str) = ("math-symbol-lists", "202
 /// `2e1f68a890493d964f933d6e40b0ede047f70ede`.
 pub const MAUDE_MODE_MELPA_PIN: (&str, &str) = ("maude-mode", "20230504.937");
 
+/// The exact Mozc package selected for the practical input-mode lifecycle,
+/// key translation, placeholder editing, preedit and candidate rendering,
+/// helper framing, and session protocol parity corpus. This MELPA version is
+/// pinned to upstream commit
+/// `76887c679e1e4f156102e4bc62ea9cf9174678a3`.
+pub const MOZC_MELPA_PIN: (&str, &str) = ("mozc", "20260624.1355");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
