@@ -1295,6 +1295,10 @@ pub const CSV_MODE_GNU_ELPA_PIN: (&str, &str) = ("csv-mode", "1.27");
 /// timezone, DST transition, scheduler normalization, and validation corpus.
 pub const DATETIME_FORMAT_MELPA_PIN: (&str, &str) = ("datetime-format", "20240105.1901");
 
+/// The exact DDSKK package selected by the practical Japanese input,
+/// dictionary conversion, learned-candidate, numeric, and punctuation corpus.
+pub const DDSKK_MELPA_PIN: (&str, &str) = ("ddskk", "20260329.1317");
+
 /// The exact Avy package selected by the practical keyboard-driven jump,
 /// cross-window, dispatch action, line editing, and cancellation corpus.
 pub const AVY_MELPA_PIN: (&str, &str) = ("avy", "20241101.1357");
