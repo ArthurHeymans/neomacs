@@ -1421,6 +1421,12 @@ pub const MARKDOWN_MODE_MELPA_PIN: (&str, &str) = ("markdown-mode", "20260722.40
 /// `ac3eb053d3b576fcdd192b0ac6ad5090ea3a7079`.
 pub const MATH_SYMBOL_LISTS_MELPA_PIN: (&str, &str) = ("math-symbol-lists", "20220828.2047");
 
+/// The exact Maude Mode package selected for the practical module editing,
+/// indentation, navigation, abbrev authoring, source transport, and inferior
+/// diagnostic parity corpus. MELPA built this archive from upstream commit
+/// `2e1f68a890493d964f933d6e40b0ede047f70ede`.
+pub const MAUDE_MODE_MELPA_PIN: (&str, &str) = ("maude-mode", "20230504.937");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
