@@ -1380,6 +1380,12 @@ pub const KEYFREQ_MELPA_PIN: (&str, &str) = ("keyfreq", "20231107.106");
 /// `87873d788891029d9e44fa5458321d6a05849b94`.
 pub const LV_MELPA_PIN: (&str, &str) = ("lv", "20200507.1518");
 
+/// The exact m-buffer package selected for the scoped search, marker-safe
+/// rewrite, line classification, log segmentation, annotation, and stateless
+/// location parity corpus. MELPA built this archive from upstream commit
+/// `5e7714835b2289f61dad24c0b5cf98d28fc313b0`.
+pub const M_BUFFER_MELPA_PIN: (&str, &str) = ("m-buffer", "20241215.2214");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
