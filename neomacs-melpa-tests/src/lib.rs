@@ -136,6 +136,10 @@ pub const AUTO_COMPLETE_DISTEL_MELPA_PIN: (&str, &str) = ("auto-complete-distel"
 /// The exact companion Distel completion library required by
 /// `AUTO_COMPLETE_DISTEL_MELPA_PIN`. MELPA built both archives from the same
 /// upstream commit `acc4c0a5521904203d797fe96b08e5fae4233c7e`.
+/// The exact Distel Completion Lib package selected for the practical Erlang
+/// source indexing and completion workflow corpus, and as auto-complete-distel's
+/// completion-library dependency. MELPA built this archive from upstream
+/// commit `acc4c0a5521904203d797fe96b08e5fae4233c7e`.
 pub const DISTEL_COMPLETION_LIB_MELPA_PIN: (&str, &str) =
     ("distel-completion-lib", "20180827.1344");
 

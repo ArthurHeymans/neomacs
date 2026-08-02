@@ -271,6 +271,7 @@ mod dash;
 mod datetime_format;
 mod ddskk;
 mod deferred;
+mod distel_completion_lib;
 mod evil;
 mod f;
 mod flycheck;
