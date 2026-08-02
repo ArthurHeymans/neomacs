@@ -1236,6 +1236,12 @@ pub const ES_LIB_MELPA_PIN: (&str, &str) = ("es-lib", "20141111.1830");
 /// `f0485df065bcdc8f446be3e00aa77a43629ec84e`.
 pub const KEYTAR_MELPA_PIN: (&str, &str) = ("keytar", "20251231.1727");
 
+/// The exact Llama package selected by the practical data-pipeline, callback,
+/// closure, macro-contract, completion, and fontification parity corpus.
+/// MELPA built this archive from upstream commit
+/// `4d4024048053b898a01521046e0f063ee47615b0`.
+pub const LLAMA_MELPA_PIN: (&str, &str) = ("llama", "20260601.1455");
+
 /// The exact auto-async-byte-compile package selected by the comprehensive
 /// metadata, save-hook, asynchronous process, status, display, and real
 /// byte-compilation lifecycle parity corpus. MELPA built this archive from
