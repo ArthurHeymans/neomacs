@@ -1320,6 +1320,12 @@ pub const HYDRA_MELPA_PIN: (&str, &str) = ("hydra", "20250316.1254");
 /// `274398a24288a7db430a656b580ffbf889ca02aa`.
 pub const INF_RUBY_MELPA_PIN: (&str, &str) = ("inf-ruby", "20251224.216");
 
+/// The exact iter2 package selected by the practical resumable-workflow,
+/// composition, resource-cleanup, editor-state, nonlocal-exit, and tracing
+/// parity corpus. MELPA built this archive from upstream commit
+/// `632232b5ee627bf5d299db0b7714b3b687a0124c`.
+pub const ITER2_MELPA_PIN: (&str, &str) = ("iter2", "20250209.1516");
+
 /// The exact lv package required by the practical Hydra parity corpus.
 /// MELPA built this archive from upstream commit
 /// `87873d788891029d9e44fa5458321d6a05849b94`.
