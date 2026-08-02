@@ -268,6 +268,7 @@ mod cond_let;
 mod consult;
 mod csv_mode;
 mod dash;
+mod datetime_format;
 mod evil;
 mod f;
 mod flycheck;
