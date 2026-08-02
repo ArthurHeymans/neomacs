@@ -1266,8 +1266,9 @@ pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
 
-/// The exact BUI package selected as aurel's runtime buffer-interface
-/// dependency.
+/// The exact BUI package selected by the practical service dashboard,
+/// marking, filtering, detail action, and history parity corpus, and as
+/// aurel's runtime buffer-interface dependency.
 pub const BUI_MELPA_PIN: (&str, &str) = ("bui", "20260502.730");
 
 /// The exact Avy package selected by the practical keyboard-driven jump,
