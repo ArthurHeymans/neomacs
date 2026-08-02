@@ -1407,6 +1407,13 @@ pub const MAG_MENU_MELPA_PIN: (&str, &str) = ("mag-menu", "20150505.1850");
 /// `a61781e69d3b451551e269446e1c5f624ab81137`.
 pub const MAKEY_MELPA_PIN: (&str, &str) = ("makey", "20131231.1430");
 
+/// The exact Markdown Mode package selected for the practical release-note
+/// editing, outline reorganization, task-list, reference and footnote,
+/// report-table, and fenced-code parsing parity corpus. MELPA built this
+/// archive from upstream commit
+/// `f441e8bc9951e73b12c61e9198658488dd8e86e1`.
+pub const MARKDOWN_MODE_MELPA_PIN: (&str, &str) = ("markdown-mode", "20260722.40");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
