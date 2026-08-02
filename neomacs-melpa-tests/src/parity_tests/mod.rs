@@ -310,6 +310,7 @@ mod macrostep;
 mod mag_menu;
 mod magit;
 mod magit_section;
+mod makey;
 mod package_lifecycle;
 mod package_vc;
 mod projectile;

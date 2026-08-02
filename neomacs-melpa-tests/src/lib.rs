@@ -1400,6 +1400,13 @@ pub const MACROSTEP_MELPA_PIN: (&str, &str) = ("macrostep", "20250202.2205");
 /// `9b9277021cd09fb1dba64b1d2a00705d20914bd6`.
 pub const MAG_MENU_MELPA_PIN: (&str, &str) = ("mag-menu", "20150505.1850");
 
+/// The exact Makey package selected for the practical generated-command,
+/// mixed command-line/Lisp option, rendered popup, keyboard dispatch, help,
+/// literal action, and window restoration parity corpus. MELPA built this
+/// archive from upstream commit
+/// `a61781e69d3b451551e269446e1c5f624ab81137`.
+pub const MAKEY_MELPA_PIN: (&str, &str) = ("makey", "20131231.1430");
+
 /// The exact Dash package selected by the live lifecycle and comprehensive
 /// API parity corpora.
 pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
