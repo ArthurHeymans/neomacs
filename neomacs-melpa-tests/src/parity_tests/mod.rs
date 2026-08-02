@@ -276,6 +276,7 @@ mod upstream_package_ert;
 mod use_package;
 mod which_key;
 mod with_editor;
+mod yasnippet;
 mod zero_b_layout;
 mod zero_x_c;
 mod zero_x_zero;

@@ -1306,8 +1306,8 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 
-/// The exact Yasnippet package selected as angular-snippets' manually
-/// documented runtime dependency.
+/// The exact Yasnippet package selected by the direct parity corpus and as
+/// angular-snippets' manually documented runtime dependency.
 pub const YASNIPPET_MELPA_PIN: (&str, &str) = ("yasnippet", "20250602.1342");
 
 /// The exact Transient package selected by the comprehensive API parity
