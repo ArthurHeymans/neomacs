@@ -1373,8 +1373,10 @@ pub const JS2_REFACTOR_MELPA_PIN: (&str, &str) = ("js2-refactor", "20250210.1811
 /// `c6955162307f37c2ac631d9daf118781009f8dda`.
 pub const KEYFREQ_MELPA_PIN: (&str, &str) = ("keyfreq", "20231107.106");
 
-/// The exact lv package required by the practical Hydra parity corpus.
-/// MELPA built this archive from upstream commit
+/// The exact lv package required by the practical Hydra parity corpus and
+/// selected for the hint-window lifecycle, refresh, layout, GUI separator,
+/// failure-atomicity, and pre-existing-buffer parity corpus. MELPA built this
+/// archive from upstream commit
 /// `87873d788891029d9e44fa5458321d6a05849b94`.
 pub const LV_MELPA_PIN: (&str, &str) = ("lv", "20200507.1518");
 

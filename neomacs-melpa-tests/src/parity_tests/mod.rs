@@ -304,6 +304,7 @@ mod keyfreq;
 mod keytar;
 mod llama;
 mod log4e;
+mod lv;
 mod magit;
 mod magit_section;
 mod package_lifecycle;
