@@ -191,6 +191,12 @@ pub const SAGE_SHELL_MODE_MELPA_PIN: (&str, &str) = ("sage-shell-mode", "2026052
 /// from upstream commit `2239671d94b38d92e9b28d4e12fd79814cfb9c16`.
 pub const DEFERRED_MELPA_PIN: (&str, &str) = ("deferred", "20170901.1330");
 
+/// The exact Elixir Mode package selected by the practical indentation,
+/// fontification, navigation, documentation, and formatter workflow corpus.
+/// MELPA built this archive from upstream commit
+/// `00d6580a040a750e019218f9392cf9a4c2dac23a`.
+pub const ELIXIR_MODE_MELPA_PIN: (&str, &str) = ("elixir-mode", "20230626.1738");
+
 /// The exact GNU ELPA let-alist dependency selected for the sage-shell-mode
 /// package graph.
 pub const LET_ALIST_GNU_ELPA_PIN: (&str, &str) = ("let-alist", "1.0.6");

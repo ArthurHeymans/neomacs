@@ -272,6 +272,7 @@ mod datetime_format;
 mod ddskk;
 mod deferred;
 mod distel_completion_lib;
+mod elixir_mode;
 mod evil;
 mod f;
 mod flycheck;
