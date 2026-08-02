@@ -280,6 +280,7 @@ mod es_lib;
 mod evil;
 mod f;
 mod flycheck;
+mod flycheck_dmd_dub;
 mod frozen_packages;
 mod game_2048;
 mod general;

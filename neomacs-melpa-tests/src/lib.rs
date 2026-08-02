@@ -964,6 +964,12 @@ pub const ARDUINO_MODE_MELPA_PIN: (&str, &str) = ("arduino-mode", "20240527.1603
 /// corpus and by arduino-mode's optional integration coverage.
 pub const FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260728.931");
 
+/// The exact flycheck-dmd-dub package selected by the practical DUB project
+/// discovery, metadata, subprocess, cache, and buffer-local flag parity corpus.
+/// MELPA built this archive from upstream commit
+/// c1bf54b7eca8951a38ce9f6ae12e07a011f03eb5.
+pub const FLYCHECK_DMD_DUB_MELPA_PIN: (&str, &str) = ("flycheck-dmd-dub", "20250304.1432");
+
 /// The exact arscript-mode package selected by the comprehensive mode,
 /// font-lock, indentation, and editing parity corpus. MELPA built this archive
 /// from upstream commit `797e1d0ef1312e8ff846abd0c6853358041f7691`.
