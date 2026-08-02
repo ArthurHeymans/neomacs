@@ -1501,6 +1501,39 @@ fn make_process_stderr_separate_buffer_lifecycle_matches_gnu() {
     );
 }
 
+/// GNU gives a subprocess with no explicit `:stderr` one shared output
+/// channel: both stdout and stderr reach the main process filter/buffer, and
+/// closing Emacs's copy of the channel cannot SIGPIPE the child.
+#[test]
+fn make_process_pipe_merges_stderr_into_the_main_output_channel() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((b (generate-new-buffer " *merge-stderr*"))
+                  (p (make-process
+                      :name "merge-stderr"
+                      :connection-type 'pipe
+                      :buffer b
+                      :command '("{sh}" "-c"
+                                 "printf OUT; printf ERR >&2; exit 1")
+                      :noquery t)))
+             (while (process-live-p p)
+               (accept-process-output p 0.1))
+             (accept-process-output nil 0.1)
+             (list (with-current-buffer b (buffer-string))
+                   (process-status p)
+                   (process-exit-status p)))"#
+    ));
+    assert_eq!(
+        result,
+        concat!(
+            "OK (\"OUTERR\n",
+            "Process merge-stderr exited abnormally with code 1\n",
+            "\" exit 1)",
+        )
+    );
+}
+
 #[test]
 fn make_process_stderr_pipe_name_preserves_raw_unibyte_owner_bytes() {
     crate::test_utils::init_test_tracing();

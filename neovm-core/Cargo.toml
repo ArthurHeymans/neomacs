@@ -49,6 +49,7 @@ tempfile.workspace = true
 polling.workspace = true
 socket2.workspace = true
 portable-pty.workspace = true
+os_pipe.workspace = true
 smallvec.workspace = true
 rustls.workspace = true
 webpki-roots.workspace = true

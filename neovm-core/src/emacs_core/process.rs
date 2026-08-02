@@ -829,8 +829,10 @@ struct LiveProcessIo {
     child_status_source: Option<ChildStatusSource>,
     /// The actual OS child process, if spawned (pipe mode).
     child: Option<Child>,
-    /// OS-level stdout pipe for non-blocking reads (pipe mode).
-    child_stdout: Option<std::process::ChildStdout>,
+    /// OS-level output pipe for non-blocking reads (pipe mode).  With no
+    /// explicit `:stderr`, this is one shared pipe carrying both stdout and
+    /// stderr in the child's write order, as in GNU Emacs.
+    child_stdout: Option<ChildOutputReader>,
     /// OS-level stderr pipe for non-blocking reads (pipe mode).
     child_stderr: Option<std::process::ChildStderr>,
     /// PTY master handle for resize and I/O (PTY mode).
@@ -845,6 +847,30 @@ struct LiveProcessIo {
     pending_network_connect: Option<PendingNetworkConnect>,
     /// TLS-wrapped stream for encrypted network connections.
     tls_stream: Option<TlsStream>,
+}
+
+enum ChildOutputReader {
+    Stdout(std::process::ChildStdout),
+    Shared(os_pipe::PipeReader),
+}
+
+impl std::io::Read for ChildOutputReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Stdout(stdout) => stdout.read(buffer),
+            Self::Shared(pipe) => pipe.read(buffer),
+        }
+    }
+}
+
+#[cfg(unix)]
+impl std::os::fd::AsRawFd for ChildOutputReader {
+    fn as_raw_fd(&self) -> std::os::fd::RawFd {
+        match self {
+            Self::Stdout(stdout) => stdout.as_raw_fd(),
+            Self::Shared(pipe) => pipe.as_raw_fd(),
+        }
+    }
 }
 
 impl LiveProcessIo {
@@ -3455,7 +3481,7 @@ impl ProcessManager {
     #[cfg(unix)]
     fn register_child_stdout_with_poller(
         poller: &polling::Poller,
-        stdout: &std::process::ChildStdout,
+        stdout: &ChildOutputReader,
         id: ProcessId,
     ) {
         use std::os::unix::io::AsRawFd;
@@ -3469,7 +3495,7 @@ impl ProcessManager {
     #[cfg(not(unix))]
     fn register_child_stdout_with_poller(
         _poller: &polling::Poller,
-        _stdout: &std::process::ChildStdout,
+        _stdout: &ChildOutputReader,
         _id: ProcessId,
     ) {
         // GNU Emacs does not pass Windows subprocess pipe handles to Winsock
@@ -3479,10 +3505,7 @@ impl ProcessManager {
     }
 
     #[cfg(unix)]
-    fn unregister_child_stdout_from_poller(
-        poller: &polling::Poller,
-        stdout: &std::process::ChildStdout,
-    ) {
+    fn unregister_child_stdout_from_poller(poller: &polling::Poller, stdout: &ChildOutputReader) {
         use std::os::unix::io::AsRawFd;
         let fd = stdout.as_raw_fd();
         let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
@@ -3490,10 +3513,7 @@ impl ProcessManager {
     }
 
     #[cfg(not(unix))]
-    fn unregister_child_stdout_from_poller(
-        _poller: &polling::Poller,
-        _stdout: &std::process::ChildStdout,
-    ) {
+    fn unregister_child_stdout_from_poller(_poller: &polling::Poller, _stdout: &ChildOutputReader) {
         // See `register_child_stdout_with_poller`.
     }
 
@@ -3952,12 +3972,11 @@ impl ProcessManager {
             return Ok(());
         }
 
-        // GNU's `create_process` :stderr path: a separate stderr pipe-process
-        // captures the child's stderr stream.  Its read end is parked in the
-        // stderr pipe-process's `child_stderr` slot after spawn; the main
-        // process keeps stdout on its own buffer.  When there is no stderr
-        // pipe-process the child's stderr is captured on the main process
-        // record (current behaviour — merged conceptually with stdout).
+        // GNU's `create_process` sends stdout and stderr to one pipe unless
+        // `:stderr` names a separate pipe-process.  Preserve that OS-level
+        // topology: a shared pipe keeps stdout/stderr write ordering and, more
+        // importantly, keeps a live reader so a child writing stderr cannot
+        // die from SIGPIPE.
         let stderr_pipe_id = process_value_to_id(&proc.stderrproc);
 
         let argv_os = argv
@@ -3968,8 +3987,20 @@ impl ProcessManager {
         let mut cmd = crate::emacs_core::callproc::new_child_command(&argv_os[0]);
         cmd.args(&argv_os[1..]);
         cmd.stdin(Stdio::piped());
-        cmd.stdout(Stdio::piped());
-        cmd.stderr(Stdio::piped());
+        let shared_output_reader = if stderr_pipe_id.is_none() {
+            let (reader, writer) = os_pipe::pipe()
+                .map_err(|error| format!("Failed to create child output pipe: {error}"))?;
+            let stderr_writer = writer
+                .try_clone()
+                .map_err(|error| format!("Failed to duplicate child output pipe: {error}"))?;
+            cmd.stdout(writer);
+            cmd.stderr(stderr_writer);
+            Some(reader)
+        } else {
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
+            None
+        };
         if let Some(dir) = &proc.default_directory {
             cmd.current_dir(dir);
         }
@@ -4011,7 +4042,10 @@ impl ProcessManager {
         let os_pid = Some(child.id());
         let child_status_source = os_pid.and_then(ChildStatusSource::open);
 
-        let stdout = child.stdout.take();
+        let stdout = match shared_output_reader {
+            Some(reader) => Some(ChildOutputReader::Shared(reader)),
+            None => child.stdout.take().map(ChildOutputReader::Stdout),
+        };
         let stderr = child.stderr.take();
 
         // Register stdout with the poller where the platform exposes child
@@ -4082,12 +4116,10 @@ impl ProcessManager {
                 }
             }
             None => {
-                // No separate stderr pipe-process: drop the child's stderr
-                // handle.  Parking it on the main (Real) process record would
-                // make it look like a stderr pipe-process and would also be
-                // surfaced as a readable source; neither is wanted here.  (GNU
-                // merges stderr into the same stdout pipe in this case; that
-                // pre-existing merge limitation is out of scope.)
+                // With no explicit `:stderr`, pipe-mode spawn already routed
+                // both streams through `child_stdout`; PTY mode likewise
+                // combines them on the terminal.  There is no independent
+                // stderr reader to own here.
                 drop(stderr);
             }
         }

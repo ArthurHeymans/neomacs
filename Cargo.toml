@@ -207,6 +207,7 @@ bindgen = "0.72"
 pkg-config = "0.3"
 
 # OS pipe
+os_pipe = "1.2.3"
 
 # I/O multiplexing (epoll/kqueue/wepoll)
 polling = "3"
