@@ -289,6 +289,7 @@ mod git_commit;
 mod gntp;
 mod goto_chg;
 mod harness_contract;
+mod haskell_mode;
 mod magit;
 mod magit_section;
 mod package_lifecycle;

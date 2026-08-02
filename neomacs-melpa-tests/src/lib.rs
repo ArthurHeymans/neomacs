@@ -982,6 +982,12 @@ pub const GEISER_MELPA_PIN: (&str, &str) = ("geiser", "20260718.8");
 /// 767571135e2c0985944017dc59b0be79af222ef5.
 pub const GNTP_MELPA_PIN: (&str, &str) = ("gntp", "20141025.250");
 
+/// The exact haskell-mode package selected by the practical source-editing,
+/// fontification, declaration indexing, import formatting, layout indentation,
+/// navigation, folding, and SCC annotation parity corpus. MELPA built this
+/// archive from upstream commit 2dd755a5fa11577a9388af88f385d2a8e18f7a8d.
+pub const HASKELL_MODE_MELPA_PIN: (&str, &str) = ("haskell-mode", "20260206.1050");
+
 /// The exact arscript-mode package selected by the comprehensive mode,
 /// font-lock, indentation, and editing parity corpus. MELPA built this archive
 /// from upstream commit `797e1d0ef1312e8ff846abd0c6853358041f7691`.
