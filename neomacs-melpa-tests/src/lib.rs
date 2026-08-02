@@ -1356,6 +1356,12 @@ pub const MULTIPLE_CURSORS_MELPA_PIN: (&str, &str) = ("multiple-cursors", "20260
 /// `e1177c728ae52a5e67157fb18ee1409d8e95386a`.
 pub const JS2_REFACTOR_MELPA_PIN: (&str, &str) = ("js2-refactor", "20250210.1811");
 
+/// The exact Keyfreq package selected by the practical command accounting,
+/// report generation, export, cooperative persistence, and autosave lifecycle
+/// parity corpus. MELPA built this archive from upstream commit
+/// `c6955162307f37c2ac631d9daf118781009f8dda`.
+pub const KEYFREQ_MELPA_PIN: (&str, &str) = ("keyfreq", "20231107.106");
+
 /// The exact lv package required by the practical Hydra parity corpus.
 /// MELPA built this archive from upstream commit
 /// `87873d788891029d9e44fa5458321d6a05849b94`.

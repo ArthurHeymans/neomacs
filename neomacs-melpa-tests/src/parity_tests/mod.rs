@@ -300,6 +300,7 @@ mod ivy;
 mod ivy_rich;
 mod js2_mode;
 mod js2_refactor;
+mod keyfreq;
 mod magit;
 mod magit_section;
 mod package_lifecycle;
