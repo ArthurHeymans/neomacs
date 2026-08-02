@@ -291,6 +291,7 @@ mod goto_chg;
 mod harness_contract;
 mod haskell_mode;
 mod helm;
+mod helm_core;
 mod magit;
 mod magit_section;
 mod package_lifecycle;

@@ -1401,7 +1401,9 @@ pub const GOTO_CHG_MELPA_PIN: (&str, &str) = ("goto-chg", "20240407.1110");
 /// user-interface dependency.
 pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
 
-/// The exact helm-core package required by the practical Helm parity corpus.
+/// The exact helm-core package selected by the practical source-extension,
+/// candidate-buffer, pipeline, preview, and path parity corpus, and required
+/// by the Helm parity corpus.
 pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
 
 /// The exact wfnames package required by the practical Helm parity corpus.
