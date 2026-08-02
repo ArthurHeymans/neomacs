@@ -1278,6 +1278,10 @@ pub const COMPAT_GNU_ELPA_PIN: (&str, &str) = ("compat", "31.0.0.2");
 /// completion, CAPF, asynchronous backend, and file workflow parity corpus.
 pub const COMPANY_MELPA_PIN: (&str, &str) = ("company", "20260721.100");
 
+/// The exact Consult package selected by the practical line, symbol, and
+/// buffer-navigation workflow parity corpus.
+pub const CONSULT_MELPA_PIN: (&str, &str) = ("consult", "20260716.1105");
+
 /// The exact f package selected by the comprehensive API parity corpus.
 pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 
