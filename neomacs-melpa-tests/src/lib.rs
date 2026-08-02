@@ -1333,6 +1333,12 @@ pub const ITER2_MELPA_PIN: (&str, &str) = ("iter2", "20250209.1516");
 /// `0d02f5063d36ff4fa6138f0973c83c6d3874fba0`.
 pub const IVY_MELPA_PIN: (&str, &str) = ("ivy", "20260413.2102");
 
+/// The exact Ivy Rich package selected by the practical transformer,
+/// buffer-dashboard, project-cache, file/bookmark, and package-catalog parity
+/// corpus. MELPA built this archive from upstream commit
+/// `aff9b6bd53e0fdcf350ab83c90e64e651b47dba4`.
+pub const IVY_RICH_MELPA_PIN: (&str, &str) = ("ivy-rich", "20230425.1422");
+
 /// The exact lv package required by the practical Hydra parity corpus.
 /// MELPA built this archive from upstream commit
 /// `87873d788891029d9e44fa5458321d6a05849b94`.
