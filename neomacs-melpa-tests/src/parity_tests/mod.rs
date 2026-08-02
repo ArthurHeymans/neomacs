@@ -316,6 +316,7 @@ mod math_symbol_lists;
 mod maude_mode;
 mod mozc;
 mod multiple_cursors;
+mod names;
 mod package_lifecycle;
 mod package_vc;
 mod projectile;

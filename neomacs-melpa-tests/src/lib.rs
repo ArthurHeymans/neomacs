@@ -1363,6 +1363,12 @@ pub const JS2_MODE_MELPA_PIN: (&str, &str) = ("js2-mode", "20260627.1342");
 /// `94b8b07a4bab87f803123723b68227565429dfa1`.
 pub const MULTIPLE_CURSORS_MELPA_PIN: (&str, &str) = ("multiple-cursors", "20260419.931");
 
+/// The exact Names package selected for practical collision-free modules,
+/// split declarations, macro pipelines, keyword APIs, derived modes, and
+/// customization metadata parity. This MELPA version is pinned to upstream
+/// commit `45a272fae915148d9a74d4cb3c39917b272ee9c3`.
+pub const NAMES_MELPA_PIN: (&str, &str) = ("names", "20221227.1825");
+
 /// The exact js2-refactor package selected by the practical scope rewrite,
 /// signature migration, extraction, IIFE, and structural editing parity
 /// corpus. MELPA built this archive from upstream commit
