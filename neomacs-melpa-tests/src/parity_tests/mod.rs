@@ -283,6 +283,7 @@ mod flycheck;
 mod flycheck_dmd_dub;
 mod frozen_packages;
 mod game_2048;
+mod geiser;
 mod general;
 mod git_commit;
 mod goto_chg;
