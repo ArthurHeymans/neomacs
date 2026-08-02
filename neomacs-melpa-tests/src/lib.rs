@@ -197,6 +197,11 @@ pub const DEFERRED_MELPA_PIN: (&str, &str) = ("deferred", "20170901.1330");
 /// `00d6580a040a750e019218f9392cf9a4c2dac23a`.
 pub const ELIXIR_MODE_MELPA_PIN: (&str, &str) = ("elixir-mode", "20230626.1738");
 
+/// The exact Emmet Mode package selected by the practical HTML, CSS, JSX,
+/// preview, wrapping, and edit-point workflow corpus. MELPA built this archive
+/// from upstream commit `322d3bb112fced57d63b44863357f7a0b7eee1e3`.
+pub const EMMET_MODE_MELPA_PIN: (&str, &str) = ("emmet-mode", "20240617.45");
+
 /// The exact GNU ELPA let-alist dependency selected for the sage-shell-mode
 /// package graph.
 pub const LET_ALIST_GNU_ELPA_PIN: (&str, &str) = ("let-alist", "1.0.6");

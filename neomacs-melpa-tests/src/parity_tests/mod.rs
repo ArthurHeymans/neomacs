@@ -273,6 +273,7 @@ mod ddskk;
 mod deferred;
 mod distel_completion_lib;
 mod elixir_mode;
+mod emmet_mode;
 mod evil;
 mod f;
 mod flycheck;
