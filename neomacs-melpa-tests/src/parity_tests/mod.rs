@@ -303,6 +303,7 @@ mod js2_refactor;
 mod keyfreq;
 mod keytar;
 mod llama;
+mod log4e;
 mod magit;
 mod magit_section;
 mod package_lifecycle;

@@ -162,7 +162,10 @@ pub const AUTO_COMPLETE_NXML_MELPA_PIN: (&str, &str) = ("auto-complete-nxml", "2
 /// commit `2595d3dab1ef3549271ca922f212928e9d830eec`.
 pub const AUTO_COMPLETE_PCMP_MELPA_PIN: (&str, &str) = ("auto-complete-pcmp", "20140303.255");
 
-/// The exact log4e dependency selected for the auto-complete-pcmp corpus.
+/// The exact log4e dependency selected for the auto-complete-pcmp corpus and
+/// by the practical logger lifecycle, formatting, messaging, navigation, and
+/// source-instrumentation parity corpus. MELPA built this archive from
+/// upstream commit `6d71462df9bf595d3861bfb328377346aceed422`.
 pub const LOG4E_MELPA_PIN: (&str, &str) = ("log4e", "20240123.1313");
 
 /// The exact yaxception dependency selected for the auto-complete-pcmp corpus.
