@@ -1339,6 +1339,12 @@ pub const IVY_MELPA_PIN: (&str, &str) = ("ivy", "20260413.2102");
 /// `aff9b6bd53e0fdcf350ab83c90e64e651b47dba4`.
 pub const IVY_RICH_MELPA_PIN: (&str, &str) = ("ivy-rich", "20230425.1422");
 
+/// The exact js2-mode package selected by the practical parsing, diagnostics,
+/// indentation, navigation, JSON-path, Imenu, and editor-aid parity corpus.
+/// MELPA built this archive from upstream commit
+/// `41d0e7f5ef51109c682016baa6fc6846e03e8517`.
+pub const JS2_MODE_MELPA_PIN: (&str, &str) = ("js2-mode", "20260627.1342");
+
 /// The exact lv package required by the practical Hydra parity corpus.
 /// MELPA built this archive from upstream commit
 /// `87873d788891029d9e44fa5458321d6a05849b94`.
