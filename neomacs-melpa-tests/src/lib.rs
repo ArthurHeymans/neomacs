@@ -1292,7 +1292,7 @@ pub const CHINESE_WORD_AT_POINT_MELPA_PIN: (&str, &str) = ("chinese-word-at-poin
 pub const CSV_MODE_GNU_ELPA_PIN: (&str, &str) = ("csv-mode", "1.27");
 
 /// The exact Datetime Format package selected by the practical protocol date,
-/// timezone, DST transition, frozen-clock, and validation parity corpus.
+/// timezone, DST transition, scheduler normalization, and validation corpus.
 pub const DATETIME_FORMAT_MELPA_PIN: (&str, &str) = ("datetime-format", "20240105.1901");
 
 /// The exact Avy package selected by the practical keyboard-driven jump,
