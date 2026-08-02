@@ -208,6 +208,12 @@ pub const EMMET_MODE_MELPA_PIN: (&str, &str) = ("emmet-mode", "20240617.45");
 /// `78ab7a85c08222cd15582a298a364774e3282ce6`.
 pub const EPL_MELPA_PIN: (&str, &str) = ("epl", "20180205.2049");
 
+/// The exact Erlang Mode package selected by the practical OTP module
+/// editing, semantic fontification, navigation, EDoc, skeleton, identifier,
+/// and compile-option workflow corpus. MELPA built this archive from upstream
+/// OTP commit `1259612946cb36a8bf9614b289090bb32fbcbeb2`.
+pub const ERLANG_MELPA_PIN: (&str, &str) = ("erlang", "20260724.1508");
+
 /// The exact GNU ELPA let-alist dependency selected for the sage-shell-mode
 /// package graph.
 pub const LET_ALIST_GNU_ELPA_PIN: (&str, &str) = ("let-alist", "1.0.6");

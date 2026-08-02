@@ -275,6 +275,7 @@ mod distel_completion_lib;
 mod elixir_mode;
 mod emmet_mode;
 mod epl;
+mod erlang;
 mod evil;
 mod f;
 mod flycheck;
