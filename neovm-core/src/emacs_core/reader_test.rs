@@ -1747,6 +1747,19 @@ fn completing_read_uses_dynamically_bound_keyboard_macro_events_in_batch_mode() 
 }
 
 #[test]
+fn y_or_n_p_uses_dynamically_bound_keyboard_macro_answer_in_batch_mode() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(let ((executing-kbd-macro t)
+                  (unread-command-events (list ?y)))
+              (list (y-or-n-p "Really remove download? ")
+                    unread-command-events))"#,
+    );
+
+    assert_eq!(results, vec!["OK (t nil)"]);
+}
+
+#[test]
 fn read_char_consumes_executing_keyboard_macro_event_without_input_receiver() {
     crate::test_utils::init_test_tracing();
     let mut batch = Context::new();

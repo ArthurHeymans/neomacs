@@ -7297,10 +7297,21 @@ impl Context {
     }
 
     fn executing_kbd_macro_iteration_complete_for_command_loop(&self) -> bool {
-        let macro_at_end = matches!(
+        // GNU `at_end_of_macro_p` (`src/macros.c`) treats Lisp-visible
+        // `executing-kbd-macro == t` as an explicit request to end the current
+        // macro.  In particular, batch callers can dynamically bind the
+        // variable to t, queue input in `unread-command-events`, and rely on
+        // `command_loop_1` returning as soon as that queue is exhausted.  The
+        // internal KBoard state only exists for macros started through
+        // `execute-kbd-macro`, so it cannot be the sole semantic authority.
+        let visible_macro_forces_end = self
+            .visible_variable_value_or_nil("executing-kbd-macro")
+            .is_t();
+        let runtime_macro_at_end = matches!(
             self.command_loop.keyboard.kboard.executing_kbd_macro.as_ref(),
             Some(events) if self.command_loop.keyboard.kboard.kbd_macro_index >= events.len()
         );
+        let macro_at_end = visible_macro_forces_end || runtime_macro_at_end;
         macro_at_end
             && !self.has_pending_requeued_events()
             && self
