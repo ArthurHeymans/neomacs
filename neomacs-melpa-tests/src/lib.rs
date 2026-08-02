@@ -1279,6 +1279,10 @@ pub const CASUAL_MELPA_PIN: (&str, &str) = ("casual", "20260718.1803");
 /// frame-color baseline, terminal fallback, and setup lifecycle parity corpus.
 pub const CCC_MELPA_PIN: (&str, &str) = ("ccc", "20260322.1316");
 
+/// The exact CDB package selected by the practical indexed lookup, collision,
+/// binary payload, enumeration, and cached-reader lifecycle parity corpus.
+pub const CDB_MELPA_PIN: (&str, &str) = ("cdb", "20230318.2152");
+
 /// The exact Avy package selected by the practical keyboard-driven jump,
 /// cross-window, dispatch action, line editing, and cancellation corpus.
 pub const AVY_MELPA_PIN: (&str, &str) = ("avy", "20241101.1357");
