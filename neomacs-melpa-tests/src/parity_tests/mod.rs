@@ -257,6 +257,7 @@ mod avy_menu;
 mod bert;
 mod bind_key;
 mod bui;
+mod casual;
 mod clojure_mode;
 mod company;
 mod compat;
