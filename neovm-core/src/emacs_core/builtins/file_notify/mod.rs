@@ -1,5 +1,6 @@
 use super::*;
 use std::cell::RefCell;
+use std::path::PathBuf;
 
 mod notify_rs;
 
@@ -37,7 +38,19 @@ impl FileNotifyWatchDescriptor {
 pub(super) struct FileWatch {
     pub(super) id: i64,
     pub(super) generation: i64,
-    pub(super) path: String,
+    pub(super) path: PathBuf,
+    pub(super) is_directory: bool,
+    pub(super) aspects: Vec<String>,
+    pub(super) callback: Value,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct FileNotifyEvent {
+    pub(super) descriptor: FileNotifyWatchDescriptor,
+    pub(super) aspects: Vec<&'static str>,
+    pub(super) path: PathBuf,
+    pub(super) cookie: usize,
+    pub(super) callback: Value,
 }
 
 pub(super) trait FileNotifyBackend {
@@ -45,9 +58,17 @@ pub(super) trait FileNotifyBackend {
     fn allocated_p(&self) -> bool;
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     fn watch_list(&self) -> Vec<FileWatch>;
-    fn add_watch(&mut self, path: &std::path::Path) -> Result<FileNotifyWatchDescriptor, Flow>;
+    fn add_watch(
+        &mut self,
+        path: &std::path::Path,
+        aspects: Vec<String>,
+        callback: Value,
+        notifier: Option<crate::emacs_core::process::WaitNotifier>,
+    ) -> Result<FileNotifyWatchDescriptor, Flow>;
     fn remove_watch(&mut self, descriptor: &FileNotifyWatchDescriptor) -> Result<bool, Flow>;
     fn valid_p(&self, descriptor: &FileNotifyWatchDescriptor) -> bool;
+    fn drain_events(&mut self) -> Result<Vec<FileNotifyEvent>, Flow>;
+    fn has_watches(&self) -> bool;
 }
 
 struct FileNotifyState {
@@ -153,6 +174,22 @@ fn validate_inotify_aspect(aspect: Value) -> Result<(), Flow> {
     Ok(())
 }
 
+fn inotify_aspect_names(aspect: Value) -> Vec<String> {
+    if let Some(name) = aspect.as_symbol_name() {
+        return vec![name.to_owned()];
+    }
+
+    let mut names = Vec::new();
+    let mut rest = aspect;
+    while rest.is_cons() {
+        if let Some(name) = rest.cons_car().as_symbol_name() {
+            names.push(name.to_owned());
+        }
+        rest = rest.cons_cdr();
+    }
+    names
+}
+
 fn extract_valid_watch_descriptor(value: Value) -> Option<FileNotifyWatchDescriptor> {
     if !value.is_cons() {
         return None;
@@ -170,6 +207,45 @@ pub(crate) fn reset_file_notify_thread_locals() {
     FILE_NOTIFY_STATE.with(|slot| *slot.borrow_mut() = FileNotifyState::default());
 }
 
+pub(crate) fn collect_file_notify_gc_roots(group: &mut Vec<Value>) {
+    FILE_NOTIFY_STATE.with(|slot| {
+        group.extend(
+            slot.borrow()
+                .backend
+                .watch_list()
+                .into_iter()
+                .map(|watch| watch.callback),
+        );
+    });
+}
+
+pub(crate) fn has_active_file_notify_watches() -> bool {
+    FILE_NOTIFY_STATE.with(|slot| slot.borrow().backend.has_watches())
+}
+
+pub(crate) fn drain_file_notify_events(
+    ctx: &mut crate::emacs_core::eval::Context,
+) -> Result<usize, Flow> {
+    let events = FILE_NOTIFY_STATE.with(|slot| slot.borrow_mut().backend.drain_events())?;
+    let count = events.len();
+
+    for event in events {
+        let raw_event = Value::list(vec![
+            event.descriptor.to_lisp(),
+            Value::list(event.aspects.into_iter().map(Value::symbol).collect()),
+            Value::string(event.path.display().to_string()),
+            Value::fixnum(i64::try_from(event.cookie).unwrap_or(i64::MAX)),
+        ]);
+        ctx.queue_special_event(Value::list(vec![
+            Value::symbol("file-notify"),
+            raw_event,
+            event.callback,
+        ]));
+    }
+
+    Ok(count)
+}
+
 pub(crate) fn builtin_inotify_valid_p(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-valid-p", &args, 1)?;
     let Some(descriptor) = extract_valid_watch_descriptor(args[0]) else {
@@ -181,14 +257,22 @@ pub(crate) fn builtin_inotify_valid_p(args: Vec<Value>) -> EvalResult {
     })
 }
 
-pub(crate) fn builtin_inotify_add_watch(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_inotify_add_watch(
+    ctx: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("inotify-add-watch", &args, 3)?;
     let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(expect_lisp_string(&args[0])?);
     validate_inotify_aspect(args[1])?;
+    let aspects = inotify_aspect_names(args[1]);
+    let callback = args[2];
+    let notifier = ctx.wait_notifier();
 
     FILE_NOTIFY_STATE.with(|slot| {
         let mut state = slot.borrow_mut();
-        let descriptor = state.backend.add_watch(&path)?;
+        let descriptor = state
+            .backend
+            .add_watch(&path, aspects, callback, notifier)?;
         Ok(descriptor.to_lisp())
     })
 }
@@ -211,3 +295,7 @@ pub(crate) fn builtin_inotify_rm_watch(args: Vec<Value>) -> EvalResult {
         Ok(Value::T)
     })
 }
+
+#[cfg(test)]
+#[path = "file_notify_test.rs"]
+mod tests;

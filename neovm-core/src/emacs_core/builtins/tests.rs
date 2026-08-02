@@ -10274,7 +10274,7 @@ fn dispatch_builtin_pure_handles_inotify_watch_lifecycle() {
     crate::test_utils::init_test_tracing();
     let watch = dispatch_builtin_pure(
         "inotify-add-watch",
-        vec![Value::string("/tmp"), Value::NIL, Value::symbol("ignore")],
+        vec![Value::string("."), Value::NIL, Value::symbol("ignore")],
     )
     .expect("inotify-add-watch should resolve")
     .expect("inotify-add-watch should evaluate");

@@ -2165,10 +2165,14 @@ pub(crate) trait KeyboardInputRuntime {
     fn has_pending_low_level_events(&self) -> bool {
         false
     }
+    fn has_external_command_event_source(&self) -> bool {
+        false
+    }
     fn command_event_input_source(&self) -> CommandEventInputSource {
         if self.has_input_receiver()
             || self.is_executing_keyboard_macro()
             || self.has_pending_low_level_events()
+            || self.has_external_command_event_source()
         {
             CommandEventInputSource::Runtime
         } else {
@@ -2234,6 +2238,10 @@ impl KeyboardInputRuntime for super::eval::Context {
 
     fn has_pending_low_level_events(&self) -> bool {
         super::eval::Context::has_pending_low_level_events(self)
+    }
+
+    fn has_external_command_event_source(&self) -> bool {
+        super::builtins::has_active_file_notify_watches()
     }
 
     fn read_char_blocking(&mut self) -> Result<Value, Flow> {

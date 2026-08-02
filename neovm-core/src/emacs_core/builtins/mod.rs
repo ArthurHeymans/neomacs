@@ -6424,12 +6424,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             BuiltinNoEvalPlaceholder::Nil,
         ),
     );
-    ctx.defsubr(
-        "inotify-add-watch",
-        |_ctx, args| builtin_inotify_add_watch(args),
-        3,
-        Some(3),
-    );
+    ctx.defsubr("inotify-add-watch", builtin_inotify_add_watch, 3, Some(3));
     ctx.defsubr(
         "inotify-rm-watch",
         |_ctx, args| builtin_inotify_rm_watch(args),

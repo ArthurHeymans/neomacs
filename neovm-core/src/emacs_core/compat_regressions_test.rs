@@ -926,11 +926,11 @@ fn sqlite_select_values_validation_signals_sqlite_error() {
 #[test]
 fn inotify_watch_lifecycle() {
     crate::test_utils::init_test_tracing();
-    let watch = crate::emacs_core::builtins::builtin_inotify_add_watch(vec![
-        Value::string("/tmp"),
-        Value::NIL,
-        Value::symbol("ignore"),
-    ])
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let watch = crate::emacs_core::builtins::builtin_inotify_add_watch(
+        &mut eval,
+        vec![Value::string("."), Value::NIL, Value::symbol("ignore")],
+    )
     .unwrap();
     let active = crate::emacs_core::builtins::builtin_inotify_valid_p(vec![watch]).unwrap();
     assert_eq!(active, Value::T);
@@ -1082,11 +1082,11 @@ fn unlock_file_requires_string_argument() {
 #[test]
 fn inotify_add_watch_requires_string_path_argument() {
     crate::test_utils::init_test_tracing();
-    let err = crate::emacs_core::builtins::builtin_inotify_add_watch(vec![
-        Value::NIL,
-        Value::NIL,
-        Value::NIL,
-    ])
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let err = crate::emacs_core::builtins::builtin_inotify_add_watch(
+        &mut eval,
+        vec![Value::NIL, Value::NIL, Value::NIL],
+    )
     .unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),

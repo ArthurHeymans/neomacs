@@ -3397,6 +3397,8 @@ impl crate::emacs_core::eval::Context {
         let mut outcome = SpecialInputServiceOutcome::default();
         let mut internal_effects = crate::frontend_events::InternalEventEffects::default();
 
+        crate::emacs_core::builtins::drain_file_notify_events(self)?;
+
         if self.sync_pending_resize_events() {
             outcome = outcome.merge(SpecialInputServiceOutcome::resize_with_redisplay());
         }
@@ -4581,6 +4583,7 @@ impl crate::emacs_core::eval::Context {
             // this Lisp-safe point — between forms, never mid-primitive. Runs on
             // every idle wake, so a request is handled within one iteration.
             self.drain_eval_tasks();
+            crate::emacs_core::builtins::drain_file_notify_events(self)?;
             match self.pop_queued_read_char_event()? {
                 QueuedReadCharEvent::Event(event) => return Ok(Some(event)),
                 QueuedReadCharEvent::HandledInternally => continue,
@@ -4643,7 +4646,9 @@ impl crate::emacs_core::eval::Context {
                 ));
             }
 
-            if self.input_rx.is_none() {
+            if self.input_rx.is_none()
+                && !crate::emacs_core::builtins::has_active_file_notify_watches()
+            {
                 // No host input channel means this evaluator cannot block for
                 // future keyboard input. A pending ordinary timer can still
                 // become due and throw - GNU blocks in select with the timer
