@@ -13,6 +13,7 @@ mod formatting;
 mod git;
 mod prompts;
 mod status;
+mod workflows;
 
 const MAGIT_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -53,6 +54,7 @@ fn magit_package_batch() {
         git::git_public_surface_batch_cases(),
         prompts::prompts_public_surface_batch_cases(),
         status::status_public_surface_batch_cases(),
+        workflows::workflows_public_surface_batch_cases(),
     ]
     .into_iter()
     .flatten()
