@@ -1230,8 +1230,10 @@ pub const AUTO_AUTO_INDENT_MELPA_PIN: (&str, &str) = ("auto-auto-indent", "20131
 pub const ES_LIB_MELPA_PIN: (&str, &str) = ("es-lib", "20141111.1830");
 
 /// The exact Keytar package selected as auth-source-keytar's runtime
-/// credential-provider dependency. MELPA built this archive from upstream
-/// commit `f0485df065bcdc8f446be3e00aa77a43629ec84e`.
+/// credential-provider dependency and by the practical credential lifecycle,
+/// shell-quoting, executable discovery, and npm installation parity corpus.
+/// MELPA built this archive from upstream commit
+/// `f0485df065bcdc8f446be3e00aa77a43629ec84e`.
 pub const KEYTAR_MELPA_PIN: (&str, &str) = ("keytar", "20251231.1727");
 
 /// The exact auto-async-byte-compile package selected by the comprehensive
