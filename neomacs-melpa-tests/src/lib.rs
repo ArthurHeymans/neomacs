@@ -976,6 +976,12 @@ pub const FLYCHECK_DMD_DUB_MELPA_PIN: (&str, &str) = ("flycheck-dmd-dub", "20250
 /// 3e506d06b34ccda8a50ac3e43c90d722c00065fe.
 pub const GEISER_MELPA_PIN: (&str, &str) = ("geiser", "20260718.8");
 
+/// The exact gntp package selected by the practical Growl registration,
+/// notification-wire, file-icon, network-send, and reply-handling parity
+/// corpus. MELPA built this archive from upstream commit
+/// 767571135e2c0985944017dc59b0be79af222ef5.
+pub const GNTP_MELPA_PIN: (&str, &str) = ("gntp", "20141025.250");
+
 /// The exact arscript-mode package selected by the comprehensive mode,
 /// font-lock, indentation, and editing parity corpus. MELPA built this archive
 /// from upstream commit `797e1d0ef1312e8ff846abd0c6853358041f7691`.

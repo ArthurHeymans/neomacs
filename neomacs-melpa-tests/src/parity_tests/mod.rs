@@ -286,6 +286,7 @@ mod game_2048;
 mod geiser;
 mod general;
 mod git_commit;
+mod gntp;
 mod goto_chg;
 mod harness_contract;
 mod magit;
