@@ -255,6 +255,7 @@ mod auto_read_only;
 mod bind_key;
 mod company;
 mod compat;
+mod cond_let;
 mod consult;
 mod dash;
 mod evil;
