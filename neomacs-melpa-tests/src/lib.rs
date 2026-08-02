@@ -181,9 +181,10 @@ pub const AUTO_COMPLETE_SAGE_MELPA_PIN: (&str, &str) = ("auto-complete-sage", "2
 /// upstream commit `bb59cd559a9d7639d9ef16addbb0809ea4790392`.
 pub const SAGE_SHELL_MODE_MELPA_PIN: (&str, &str) = ("sage-shell-mode", "20260523.1504");
 
-/// The exact deferred dependency selected for the sage-shell-mode package
-/// graph. MELPA built this archive from upstream commit
-/// `2239671d94b38d92e9b28d4e12fd79814cfb9c16`.
+/// The exact Deferred package selected for the practical asynchronous order,
+/// recovery, ledger, parallel aggregation, and subprocess parity corpus, and
+/// as the sage-shell-mode package graph dependency. MELPA built this archive
+/// from upstream commit `2239671d94b38d92e9b28d4e12fd79814cfb9c16`.
 pub const DEFERRED_MELPA_PIN: (&str, &str) = ("deferred", "20170901.1330");
 
 /// The exact GNU ELPA let-alist dependency selected for the sage-shell-mode

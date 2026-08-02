@@ -270,6 +270,7 @@ mod csv_mode;
 mod dash;
 mod datetime_format;
 mod ddskk;
+mod deferred;
 mod evil;
 mod f;
 mod flycheck;
