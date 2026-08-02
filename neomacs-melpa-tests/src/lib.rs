@@ -1278,6 +1278,10 @@ pub const AVY_MELPA_PIN: (&str, &str) = ("avy", "20241101.1357");
 /// multi-level selection, inactive item, and cancellation lifecycle corpus.
 pub const AVY_MENU_MELPA_PIN: (&str, &str) = ("avy-menu", "20230606.1519");
 
+/// The exact BERT package selected by the practical external-term fixture,
+/// RPC, signed metric, UTF-8 binary, and bulk tuple parity corpus.
+pub const BERT_MELPA_PIN: (&str, &str) = ("bert", "20131117.1014");
+
 /// The exact Compat release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const COMPAT_GNU_ELPA_PIN: (&str, &str) = ("compat", "31.0.0.2");

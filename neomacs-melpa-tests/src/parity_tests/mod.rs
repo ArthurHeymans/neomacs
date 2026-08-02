@@ -254,6 +254,7 @@ mod auto_package_update;
 mod auto_read_only;
 mod avy;
 mod avy_menu;
+mod bert;
 mod bind_key;
 mod clojure_mode;
 mod company;
