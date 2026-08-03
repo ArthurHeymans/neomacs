@@ -287,6 +287,15 @@ pub const PYTHONIC_MELPA_PIN: (&str, &str) = ("pythonic", "20230821.1733");
 /// corpus.
 pub const QUEUE_GNU_ELPA_PIN: (&str, &str) = ("queue", "0.2");
 
+/// The exact racer package selected by the practical subprocess, completion,
+/// protocol, documentation, navigation, placeholder, Eldoc, and diagnostics
+/// parity corpus. MELPA built this archive from upstream commit
+/// `1e63e98626737ea9b662d4a9b1ffd6842b1c648c`.
+pub const RACER_MELPA_PIN: (&str, &str) = ("racer", "20210307.243");
+
+/// The exact rust-mode dependency selected for the racer parity corpus.
+pub const RUST_MODE_MELPA_PIN: (&str, &str) = ("rust-mode", "20260725.1442");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 

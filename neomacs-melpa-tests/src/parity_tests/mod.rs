@@ -335,6 +335,7 @@ mod promise;
 mod pyim;
 mod pythonic;
 mod queue;
+mod racer;
 mod s;
 mod seven_fifty_words;
 mod transient;
