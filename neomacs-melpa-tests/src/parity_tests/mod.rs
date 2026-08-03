@@ -331,6 +331,7 @@ mod pos_tip;
 mod posframe;
 mod powerline;
 mod projectile;
+mod promise;
 mod s;
 mod seven_fifty_words;
 mod transient;

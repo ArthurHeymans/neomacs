@@ -264,6 +264,12 @@ pub const POSFRAME_MELPA_PIN: (&str, &str) = ("posframe", "20260527.857");
 /// from upstream commit c35c35bdf5ce2d992882c1f06f0f078058870d4a.
 pub const POWERLINE_MELPA_PIN: (&str, &str) = ("powerline", "20221110.1956");
 
+/// The exact promise package selected by the practical asynchronous-chain,
+/// resolver, aggregation, thenable, timer, rejection-tracking, bounded-worker,
+/// and subprocess parity corpus. MELPA built this archive from upstream commit
+/// cec51feb5f957e8febe6325335cf57dc2db6be30.
+pub const PROMISE_MELPA_PIN: (&str, &str) = ("promise", "20210307.727");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
