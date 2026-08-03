@@ -363,6 +363,7 @@ mod wfnames;
 mod which_key;
 mod with_editor;
 mod xcscope;
+mod xr;
 mod yaml;
 mod yasnippet;
 mod yaxception;

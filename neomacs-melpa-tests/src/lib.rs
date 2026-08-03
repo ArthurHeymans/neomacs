@@ -383,7 +383,11 @@ pub const TINYSEGMENTER_MELPA_PIN: (&str, &str) = ("tinysegmenter", "20141124.10
 /// `5546f36bde24a9a8c1934e0f6ce205cd41d72537`.
 pub const YAML_MELPA_PIN: (&str, &str) = ("yaml", "20260605.834");
 
-/// The exact xr dependency selected for the pyim parity corpus.
+/// The exact xr package selected for the practical regexp translation,
+/// round-trip matching, lint diagnostics, skip-set, pretty-printing, and parse
+/// failure parity corpus, and as a dependency of the pyim parity corpus. MELPA
+/// built this archive from upstream commit
+/// `694defa220113d0acaa78fd646dcff9f1a08fad9`.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
