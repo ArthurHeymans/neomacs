@@ -323,6 +323,7 @@ mod package_lifecycle;
 mod package_vc;
 mod pdf_tools;
 mod php_mode;
+mod php_runtime;
 mod projectile;
 mod s;
 mod seven_fifty_words;

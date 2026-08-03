@@ -1394,6 +1394,12 @@ pub const PDF_TOOLS_MELPA_PIN: (&str, &str) = ("pdf-tools", "20260102.1101");
 /// commit 6ebe4a618aa64db3e15f809b036c1b1a6d05c030.
 pub const PHP_MODE_MELPA_PIN: (&str, &str) = ("php-mode", "20260719.209");
 
+/// The exact PHP Runtime package selected for practical inline execution,
+/// string/buffer/file stdin, NUL-safe script fallback, output ownership,
+/// error handling, quoting, and extension-query parity. This MELPA version is
+/// pinned to upstream commit 37beef404c70d7b80dc085b1ee1e13fd9c375fe6.
+pub const PHP_RUNTIME_MELPA_PIN: (&str, &str) = ("php-runtime", "20241024.1622");
+
 /// The exact js2-refactor package selected by the practical scope rewrite,
 /// signature migration, extraction, IIFE, and structural editing parity
 /// corpus. MELPA built this archive from upstream commit
