@@ -350,6 +350,12 @@ pub const SLY_MELPA_PIN: (&str, &str) = ("sly", "20260402.2249");
 /// this archive from upstream commit `bca794fa6f6b007292cdac9b0a850a3711986db5`.
 pub const SPINNER_MELPA_PIN: (&str, &str) = ("spinner", "1.7.4");
 
+/// The exact Splitter package selected by the practical split sizing, grids,
+/// nested layouts, round trips, buffer restoration, and layout-shrinking
+/// parity corpus. MELPA built this archive from upstream commit
+/// `6bdb51e9a346907d60a9625f6180bddd06be6674`.
+pub const SPLITTER_MELPA_PIN: (&str, &str) = ("splitter", "20170809.2208");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 
