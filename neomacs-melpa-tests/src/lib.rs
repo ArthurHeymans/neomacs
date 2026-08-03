@@ -270,6 +270,15 @@ pub const POWERLINE_MELPA_PIN: (&str, &str) = ("powerline", "20221110.1956");
 /// cec51feb5f957e8febe6325335cf57dc2db6be30.
 pub const PROMISE_MELPA_PIN: (&str, &str) = ("promise", "20210307.727");
 
+/// The exact pyim package selected by the practical Chinese composition,
+/// candidate, conversion, search, punctuation, page, dictionary, and
+/// input-method lifecycle parity corpus. MELPA built this archive from
+/// upstream commit a56c8d992c872addcfc295c409a7bae70d00af87.
+pub const PYIM_MELPA_PIN: (&str, &str) = ("pyim", "20251230.809");
+
+/// The exact xr dependency selected for the pyim parity corpus.
+pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 

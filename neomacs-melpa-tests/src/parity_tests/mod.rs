@@ -332,6 +332,7 @@ mod posframe;
 mod powerline;
 mod projectile;
 mod promise;
+mod pyim;
 mod s;
 mod seven_fifty_words;
 mod transient;
