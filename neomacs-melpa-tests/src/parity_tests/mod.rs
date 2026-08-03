@@ -341,6 +341,7 @@ mod request;
 mod rtags;
 mod rust_mode;
 mod s;
+mod sage_shell_mode;
 mod seven_fifty_words;
 mod transient;
 mod two_bit;
