@@ -1739,6 +1739,12 @@ pub const WFNAMES_MELPA_PIN: (&str, &str) = ("wfnames", "20260706.903");
 /// `c272c94e8a71b779c29653a532f619acad433a4f`.
 pub const WEB_COMPLETION_DATA_MELPA_PIN: (&str, &str) = ("web-completion-data", "20160318.848");
 
+/// The exact websocket package selected for the practical loopback client and
+/// server lifecycle, fragmented text, extended binary frame, and callback
+/// recovery parity corpus. MELPA built this archive from upstream commit
+/// `2195e1247ecb04c30321702aa5f5618a51c329c5`.
+pub const WEBSOCKET_MELPA_PIN: (&str, &str) = ("websocket", "20260301.157");
+
 /// The exact Magit package selected by the comprehensive API parity corpus.
 pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
