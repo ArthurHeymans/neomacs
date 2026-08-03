@@ -318,6 +318,7 @@ mod mozc;
 mod multiple_cursors;
 mod names;
 mod navi2ch;
+mod nerd_icons;
 mod package_lifecycle;
 mod package_vc;
 mod projectile;

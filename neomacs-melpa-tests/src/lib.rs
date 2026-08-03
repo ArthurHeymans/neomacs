@@ -1376,6 +1376,12 @@ pub const NAMES_MELPA_PIN: (&str, &str) = ("names", "20221227.1825");
 /// `7811dba052f679bd920a1f648d621a6fecace10f`.
 pub const NAVI2CH_MELPA_PIN: (&str, &str) = ("navi2ch", "20200130.36");
 
+/// The exact Nerd Icons package selected for practical styled-glyph,
+/// file/mode/directory routing, dashboard, interactive insertion, and cache
+/// parity. This MELPA version is pinned to upstream commit
+/// `674909974637ff0ec2b5ebf43f9a8aefa35d93e9`.
+pub const NERD_ICONS_MELPA_PIN: (&str, &str) = ("nerd-icons", "20260710.1627");
+
 /// The exact js2-refactor package selected by the practical scope rewrite,
 /// signature migration, extraction, IIFE, and structural editing parity
 /// corpus. MELPA built this archive from upstream commit
