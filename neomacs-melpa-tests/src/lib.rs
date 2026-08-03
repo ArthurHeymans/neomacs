@@ -335,6 +335,11 @@ pub const SIMPLE_HTTPD_MELPA_PIN: (&str, &str) = ("simple-httpd", "20260623.1110
 /// `e5bed351939c92a1f788f78398583c2f83f1bb3c`.
 pub const SKEWER_MODE_MELPA_PIN: (&str, &str) = ("skewer-mode", "20200304.1142");
 
+/// The exact SLIME package selected by the practical editor and protocol
+/// parity corpus. MELPA built this archive from upstream commit
+/// `055c1c98c2b7791162b0e8c994051a7d72208dc1`.
+pub const SLIME_MELPA_PIN: (&str, &str) = ("slime", "20260719.420");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 
