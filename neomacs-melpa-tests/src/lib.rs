@@ -91,6 +91,12 @@ pub const ATOM_ONE_DARK_THEME_MELPA_PIN: (&str, &str) = ("atom-one-dark-theme", 
 /// `1a940892dcbe3e4874d2d60db92de1cb34a1b773`.
 pub const AUCTEX_CLUTTEX_MELPA_PIN: (&str, &str) = ("auctex-cluttex", "20240519.1303");
 
+/// The exact auctex-latexmk package selected by the practical LatexMk setup,
+/// command expansion, local process, sentinel, recentering, and cleanup parity
+/// corpus. MELPA built this archive from the Emacsmirror compatibility commit
+/// `b00a95e6b34c94987fda5a57c20cfe2f064b1c7a`.
+pub const AUCTEX_LATEXMK_MELPA_PIN: (&str, &str) = ("auctex-latexmk", "20221025.1219");
+
 /// The exact auto-complete package selected by the comprehensive source,
 /// candidate, completion, dictionary, history, configuration, and lifecycle
 /// parity corpus. MELPA built this archive from upstream commit
