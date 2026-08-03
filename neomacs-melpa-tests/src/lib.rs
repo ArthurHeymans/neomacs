@@ -468,6 +468,12 @@ pub const ZEN_MODE_MELPA_PIN: (&str, &str) = ("zen-mode", "20200609.822");
 /// commit `3797f3ae26b3649c99fc74a09a0bd6a31b40597f`.
 pub const ZENBURN_THEME_MELPA_PIN: (&str, &str) = ("zenburn-theme", "20260725.707");
 
+/// The exact zencoding-mode package selected by the practical nested-markup,
+/// file-filter, editable-preview, acceptance, and abort parity corpus. MELPA
+/// built this archive from upstream commit
+/// `58e42af182c98cb9941d27cd042d227fbf4e146c`.
+pub const ZENCODING_MODE_MELPA_PIN: (&str, &str) = ("zencoding-mode", "20140213.822");
+
 /// The exact GNU ELPA rainbow-mode source used to exercise Zenburn's optional
 /// public font-lock integration, acquired directly from GNU ELPA commit
 /// `ac68593018ef3555e64ea592d72334f4e3e39209`.

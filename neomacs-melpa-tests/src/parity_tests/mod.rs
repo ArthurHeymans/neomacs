@@ -380,6 +380,7 @@ mod zeal_at_point;
 mod zen_and_art_theme;
 mod zen_mode;
 mod zenburn_theme;
+mod zencoding_mode;
 mod zero_b_layout;
 mod zero_x_c;
 mod zero_x_zero;
