@@ -328,6 +328,7 @@ mod pinyinlib;
 mod pkg_info;
 mod popup;
 mod pos_tip;
+mod posframe;
 mod projectile;
 mod s;
 mod seven_fifty_words;

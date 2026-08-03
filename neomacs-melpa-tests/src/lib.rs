@@ -252,6 +252,12 @@ pub const POPUP_MELPA_PIN: (&str, &str) = ("popup", "20251231.1622");
 /// 4889e08cf9077c8589ea6fea4e2ce558614dfcde.
 pub const POS_TIP_MELPA_PIN: (&str, &str) = ("pos-tip", "20240209.837");
 
+/// The exact posframe package selected by the practical child-frame
+/// orchestration, frame-parameter, position-handler, sizing, movement, mouse,
+/// timer, and lifecycle parity corpus. MELPA built this archive from upstream
+/// commit 74c8c56131ed866db47ae4191364b72dd4852456.
+pub const POSFRAME_MELPA_PIN: (&str, &str) = ("posframe", "20260527.857");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
