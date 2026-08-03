@@ -444,6 +444,12 @@ pub const Z3_MODE_MELPA_PIN: (&str, &str) = ("z3-mode", "20211116.138");
 /// `874dadbf07e22811b6b309200cad32b4ccca0e51`.
 pub const ZATHURA_MELPA_PIN: (&str, &str) = ("zathura", "20260603.1620");
 
+/// The exact zeal-at-point package selected by the practical symbol, region,
+/// docset completion, query protocol, process launch, and failure parity
+/// corpus. MELPA built this archive from upstream commit
+/// `0fc3263f44e95acd3e9d91057677621ce4d297ee`.
+pub const ZEAL_AT_POINT_MELPA_PIN: (&str, &str) = ("zeal-at-point", "20180131.2354");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
