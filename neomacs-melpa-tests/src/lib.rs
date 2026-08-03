@@ -258,6 +258,12 @@ pub const POS_TIP_MELPA_PIN: (&str, &str) = ("pos-tip", "20240209.837");
 /// commit 74c8c56131ed866db47ae4191364b72dd4852456.
 pub const POSFRAME_MELPA_PIN: (&str, &str) = ("posframe", "20260527.857");
 
+/// The exact powerline package selected by the practical segmented mode-line,
+/// face/property, alignment, separator, scroll-HUD, memoization, selection,
+/// mouse-action, and theme lifecycle parity corpus. MELPA built this archive
+/// from upstream commit c35c35bdf5ce2d992882c1f06f0f078058870d4a.
+pub const POWERLINE_MELPA_PIN: (&str, &str) = ("powerline", "20221110.1956");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
