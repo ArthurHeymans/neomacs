@@ -401,6 +401,12 @@ pub const YOUDOTCOM_MELPA_PIN: (&str, &str) = ("youdotcom", "20240207.1853");
 /// `2a962d972d8a59fed718aec039c9c61ef3c0392d`.
 pub const YOUTUBE_MUSIC_MELPA_PIN: (&str, &str) = ("youtube-music", "20260717.1039");
 
+/// The exact youtube-sub-extractor package selected by the practical subtitle
+/// extraction, language selection, timestamp navigation, and failure parity
+/// corpus. MELPA built this archive from upstream commit
+/// `d69f732299fdf256504e15767c1d7e5de771220e`.
+pub const YOUTUBE_SUB_EXTRACTOR_MELPA_PIN: (&str, &str) = ("youtube-sub-extractor", "20221116.653");
+
 /// The exact xr package selected for the practical regexp translation,
 /// round-trip matching, lint diagnostics, skip-set, pretty-printing, and parse
 /// failure parity corpus, and as a dependency of the pyim parity corpus. MELPA
