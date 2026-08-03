@@ -480,6 +480,12 @@ pub const ZENCODING_MODE_MELPA_PIN: (&str, &str) = ("zencoding-mode", "20140213.
 /// `bdece51052ef7037e0a3481fc1f487939f57777e`.
 pub const ZENITY_COLOR_PICKER_MELPA_PIN: (&str, &str) = ("zenity-color-picker", "20160302.1154");
 
+/// The exact zeno-theme package selected by the practical editing, documented
+/// italics, built-in workflow, optional-integration, and theme lifecycle parity
+/// corpus. MELPA built this archive from upstream commit
+/// `70fa7b7442f24ea25eab538b5a22da690745fef5`.
+pub const ZENO_THEME_MELPA_PIN: (&str, &str) = ("zeno-theme", "20211205.2148");
+
 /// The exact GNU ELPA rainbow-mode source used to exercise Zenburn's optional
 /// public font-lock integration, acquired directly from GNU ELPA commit
 /// `ac68593018ef3555e64ea592d72334f4e3e39209`.

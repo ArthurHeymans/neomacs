@@ -382,6 +382,7 @@ mod zen_mode;
 mod zenburn_theme;
 mod zencoding_mode;
 mod zenity_color_picker;
+mod zeno_theme;
 mod zero_b_layout;
 mod zero_x_c;
 mod zero_x_zero;
