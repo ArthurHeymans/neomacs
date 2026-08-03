@@ -299,6 +299,12 @@ pub const RACER_MELPA_PIN: (&str, &str) = ("racer", "20210307.243");
 /// upstream commit `f2cb59466b1c3f85a8c960f7d4b7b7ead015bedc`.
 pub const REFORMATTER_MELPA_PIN: (&str, &str) = ("reformatter", "20241204.1051");
 
+/// The exact request package selected by the practical request-building,
+/// response-header, callback, redirect, curl-command, cookie, timeout/abort,
+/// and local-file transport parity corpus. MELPA built this archive from
+/// upstream commit `6f419b5cdd2dfa83675ae53f04d8463d00a533f8`.
+pub const REQUEST_MELPA_PIN: (&str, &str) = ("request", "20250219.2213");
+
 /// The exact rust-mode dependency selected for the racer parity corpus.
 pub const RUST_MODE_MELPA_PIN: (&str, &str) = ("rust-mode", "20260725.1442");
 

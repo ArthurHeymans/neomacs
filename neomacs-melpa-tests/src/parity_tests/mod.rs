@@ -337,6 +337,7 @@ mod pythonic;
 mod queue;
 mod racer;
 mod reformatter;
+mod request;
 mod s;
 mod seven_fifty_words;
 mod transient;
