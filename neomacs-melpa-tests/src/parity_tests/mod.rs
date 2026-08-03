@@ -362,6 +362,7 @@ mod websocket;
 mod wfnames;
 mod which_key;
 mod with_editor;
+mod xcscope;
 mod yaml;
 mod yasnippet;
 mod yaxception;

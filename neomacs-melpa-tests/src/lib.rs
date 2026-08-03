@@ -1745,6 +1745,12 @@ pub const WEB_COMPLETION_DATA_MELPA_PIN: (&str, &str) = ("web-completion-data", 
 /// `2195e1247ecb04c30321702aa5f5618a51c329c5`.
 pub const WEBSOCKET_MELPA_PIN: (&str, &str) = ("websocket", "20260301.157");
 
+/// The exact xcscope package selected for the practical source-search,
+/// navigation, history, rerun, and recursive indexing parity corpus. MELPA
+/// built this archive from upstream commit
+/// `2f35b26428dd82c016941744f03aad97df80c47b`.
+pub const XCSCOPE_MELPA_PIN: (&str, &str) = ("xcscope", "20230626.2109");
+
 /// The exact Magit package selected by the comprehensive API parity corpus.
 pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
