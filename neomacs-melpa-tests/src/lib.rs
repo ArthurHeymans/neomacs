@@ -456,6 +456,12 @@ pub const ZEAL_AT_POINT_MELPA_PIN: (&str, &str) = ("zeal-at-point", "20180131.23
 /// `a7226cbce0bca2501d69a620cb2aeabfc396c232`.
 pub const ZEN_AND_ART_THEME_MELPA_PIN: (&str, &str) = ("zen-and-art-theme", "20120622.1437");
 
+/// The exact zen-mode package selected by the practical file activation,
+/// fontification, indentation, commenting, live-editing, and Imenu parity
+/// corpus. MELPA built this archive from upstream commit
+/// `c1b1806358f3cce6c04b30699987d82dc7d42559`.
+pub const ZEN_MODE_MELPA_PIN: (&str, &str) = ("zen-mode", "20200609.822");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
