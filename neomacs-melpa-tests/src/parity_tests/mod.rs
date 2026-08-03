@@ -373,6 +373,7 @@ mod youtube_music;
 mod youtube_sub_extractor;
 mod ytdious;
 mod ytdl;
+mod yuck_mode;
 mod zero_b_layout;
 mod zero_x_c;
 mod zero_x_zero;

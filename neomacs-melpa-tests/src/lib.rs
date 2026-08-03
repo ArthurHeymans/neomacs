@@ -419,6 +419,12 @@ pub const YTDIOUS_MELPA_PIN: (&str, &str) = ("ytdious", "20210228.2111");
 /// `309ad5ce95368ad2e35d1c1701a1f3c0043415a3`.
 pub const YTDL_MELPA_PIN: (&str, &str) = ("ytdl", "20241025.1913");
 
+/// The exact yuck-mode package selected by the practical file activation,
+/// fontification, indentation, commenting, and structural editing parity
+/// corpus. MELPA built this archive from upstream commit
+/// `e084416fa3e7f91bb429edbf7ff1585aa5674367`.
+pub const YUCK_MODE_MELPA_PIN: (&str, &str) = ("yuck-mode", "20230113.2304");
+
 /// The exact xr package selected for the practical regexp translation,
 /// round-trip matching, lint diagnostics, skip-set, pretty-printing, and parse
 /// failure parity corpus, and as a dependency of the pyim parity corpus. MELPA
