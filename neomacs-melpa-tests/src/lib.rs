@@ -356,6 +356,12 @@ pub const SPINNER_MELPA_PIN: (&str, &str) = ("spinner", "1.7.4");
 /// `6bdb51e9a346907d60a9625f6180bddd06be6674`.
 pub const SPLITTER_MELPA_PIN: (&str, &str) = ("splitter", "20170809.2208");
 
+/// The exact svg-lib package selected by the practical themed status widgets,
+/// cached icons, composition, dates, and interactive button parity corpus.
+/// MELPA built this archive from upstream commit
+/// `f2cc9615ef3a052747135d34f31c423a26592f14`.
+pub const SVG_LIB_MELPA_PIN: (&str, &str) = ("svg-lib", "0.3");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 

@@ -350,6 +350,7 @@ mod slime;
 mod sly;
 mod spinner;
 mod splitter;
+mod svg_lib;
 mod transient;
 mod two_bit;
 mod upstream_package_ert;
