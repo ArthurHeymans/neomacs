@@ -321,6 +321,7 @@ mod navi2ch;
 mod nerd_icons;
 mod package_lifecycle;
 mod package_vc;
+mod pdf_tools;
 mod projectile;
 mod s;
 mod seven_fifty_words;

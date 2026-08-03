@@ -1382,6 +1382,12 @@ pub const NAVI2CH_MELPA_PIN: (&str, &str) = ("navi2ch", "20200130.36");
 /// `674909974637ff0ec2b5ebf43f9a8aefa35d93e9`.
 pub const NERD_ICONS_MELPA_PIN: (&str, &str) = ("nerd-icons", "20260710.1627");
 
+/// The exact PDF Tools package selected for practical document geometry,
+/// search-query, outline/link, occurrence-batching, virtual-page, annotation,
+/// sequence-alignment, and cache parity. This MELPA version is pinned to
+/// upstream commit e4b7f1f37cf59ddf025d609ffcdabe732a6e99ba.
+pub const PDF_TOOLS_MELPA_PIN: (&str, &str) = ("pdf-tools", "20260102.1101");
+
 /// The exact js2-refactor package selected by the practical scope rewrite,
 /// signature migration, extraction, IIFE, and structural editing parity
 /// corpus. MELPA built this archive from upstream commit
