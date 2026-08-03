@@ -168,7 +168,10 @@ pub const AUTO_COMPLETE_PCMP_MELPA_PIN: (&str, &str) = ("auto-complete-pcmp", "2
 /// upstream commit `6d71462df9bf595d3861bfb328377346aceed422`.
 pub const LOG4E_MELPA_PIN: (&str, &str) = ("log4e", "20240123.1313");
 
-/// The exact yaxception dependency selected for the auto-complete-pcmp corpus.
+/// The exact Yaxception package selected as an auto-complete-pcmp dependency
+/// and by the practical custom-error, catch-selection, nested rethrow, finally,
+/// error-wrapping, and stack-trace parity corpus. MELPA built this archive from
+/// upstream commit `5941de88b19752c14e0dce0d2bf562b1288055a0`.
 pub const YAXCEPTION_MELPA_PIN: (&str, &str) = ("yaxception", "20240107.504");
 
 /// The exact auto-complete-rst package selected by the comprehensive source

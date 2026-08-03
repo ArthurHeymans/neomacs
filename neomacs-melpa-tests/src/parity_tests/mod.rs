@@ -361,6 +361,7 @@ mod which_key;
 mod with_editor;
 mod yaml;
 mod yasnippet;
+mod yaxception;
 mod zero_b_layout;
 mod zero_x_c;
 mod zero_x_zero;
