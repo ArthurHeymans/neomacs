@@ -5684,8 +5684,8 @@ pub(crate) fn builtin_skip_syntax_forward(
                     .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
                 let from_char = buf.point_char_pos().get();
                 let accessible_end_char = buf.accessible_char_region().end().get();
-                let window_end_char = (from_char + SYNTAX_PROPERTIZE_WINDOW_CHARS)
-                    .min(accessible_end_char);
+                let window_end_char =
+                    (from_char + SYNTAX_PROPERTIZE_WINDOW_CHARS).min(accessible_end_char);
                 let window_end_byte = buf
                     .char_pos_to_emacs_byte_pos_clamped(crate::buffer::CharPos0::new(
                         window_end_char,

@@ -5825,6 +5825,23 @@ pub(crate) fn builtin_insert_file_contents(
     let decoded_char_count = contents.char_count();
 
     let signal_change_hooks = !visit || replace_requested;
+    // GNU Finsert_file_contents (fileio.c, the REPLACE walk): when VISITing
+    // the whole accessible buffer, bind buffer-file-name to nil around the
+    // replacement so prepare_to_modify_buffer / lock_file never runs the
+    // ask-user-about-supersession-threat prompt — "such a prompt makes no
+    // sense if we're VISITing the file, since the insertion makes the buffer
+    // *more* like the file rather than the reverse". Without this, every
+    // revert-buffer of a file that changed on disk (the normal reason to
+    // revert!) stalls on the supersession question.
+    let unnarrowed = eval
+        .buffers
+        .get(current_id)
+        .is_some_and(|buf| !buf.is_narrowed());
+    let bind_away_file_name = visit && replace_requested && unnarrowed;
+    let specpdl_count = eval.specpdl.len();
+    if bind_away_file_name {
+        eval.specbind(intern("buffer-file-name"), Value::NIL);
+    }
     // GNU's REPLACE branch reports only the *net* inserted chars (the unchanged
     // head/tail affixes are elided); a plain insert reports the full decoded
     // char count.  Re-reading byte-identical content under REPLACE therefore
@@ -5835,7 +5852,12 @@ pub(crate) fn builtin_insert_file_contents(
         contents.text(),
         replace_requested,
         signal_change_hooks,
-    )?;
+    );
+    if bind_away_file_name {
+        // Unwind the binding on success AND on error before propagating.
+        eval.unbind_to(specpdl_count);
+    }
+    let net_inserted = net_inserted?;
     let base_inserted_count = net_inserted.unwrap_or(decoded_char_count);
 
     // GNU `insert-file-contents' sets `last-coding-system-used' before
