@@ -1388,6 +1388,12 @@ pub const NERD_ICONS_MELPA_PIN: (&str, &str) = ("nerd-icons", "20260710.1627");
 /// upstream commit e4b7f1f37cf59ddf025d609ffcdabe732a6e99ba.
 pub const PDF_TOOLS_MELPA_PIN: (&str, &str) = ("pdf-tools", "20260102.1101");
 
+/// The exact PHP Mode package selected for practical PHP 8 indentation,
+/// fontification, syntax, Imenu, navigation, completion, template routing,
+/// and Composer-project parity. This MELPA version is pinned to upstream
+/// commit 6ebe4a618aa64db3e15f809b036c1b1a6d05c030.
+pub const PHP_MODE_MELPA_PIN: (&str, &str) = ("php-mode", "20260719.209");
+
 /// The exact js2-refactor package selected by the practical scope rewrite,
 /// signature migration, extraction, IIFE, and structural editing parity
 /// corpus. MELPA built this archive from upstream commit
