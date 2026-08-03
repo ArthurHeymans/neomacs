@@ -276,6 +276,12 @@ pub const PROMISE_MELPA_PIN: (&str, &str) = ("promise", "20210307.727");
 /// upstream commit a56c8d992c872addcfc295c409a7bae70d00af87.
 pub const PYIM_MELPA_PIN: (&str, &str) = ("pyim", "20251230.809");
 
+/// The exact pythonic package selected by the practical path-alias, Tramp
+/// connection, Docker Compose, synchronous/asynchronous process, and
+/// virtual-environment parity corpus. MELPA built this archive from upstream
+/// commit f6e0bec552319341f260a5c4740288799c2b3a5b.
+pub const PYTHONIC_MELPA_PIN: (&str, &str) = ("pythonic", "20230821.1733");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 
