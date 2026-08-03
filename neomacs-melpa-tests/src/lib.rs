@@ -450,6 +450,12 @@ pub const ZATHURA_MELPA_PIN: (&str, &str) = ("zathura", "20260603.1620");
 /// `0fc3263f44e95acd3e9d91057677621ce4d297ee`.
 pub const ZEAL_AT_POINT_MELPA_PIN: (&str, &str) = ("zeal-at-point", "20180131.2354");
 
+/// The exact zen-and-art-theme package selected by the practical editing,
+/// selection, theme lifecycle, precedence, and legacy-face parity corpus.
+/// MELPA built this archive from upstream commit
+/// `a7226cbce0bca2501d69a620cb2aeabfc396c232`.
+pub const ZEN_AND_ART_THEME_MELPA_PIN: (&str, &str) = ("zen-and-art-theme", "20120622.1437");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
