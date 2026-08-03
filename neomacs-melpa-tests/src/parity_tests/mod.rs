@@ -325,6 +325,7 @@ mod pdf_tools;
 mod php_mode;
 mod php_runtime;
 mod pinyinlib;
+mod pkg_info;
 mod projectile;
 mod s;
 mod seven_fifty_words;

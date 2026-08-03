@@ -1406,6 +1406,12 @@ pub const PHP_RUNTIME_MELPA_PIN: (&str, &str) = ("php-runtime", "20241024.1622")
 /// 1772c79b6f319b26b6a394a8dda065be3ea4498d.
 pub const PINYINLIB_MELPA_PIN: (&str, &str) = ("pinyinlib", "20200911.1723");
 
+/// The exact Pkg Info package selected for practical library-header,
+/// defining-function, installed-package, version-precedence, MELPA-recipe,
+/// HTTP/JSON lifecycle, and diagnostic parity. This MELPA version is pinned to
+/// upstream commit 4dbe328c9eced79e0004e3fdcd7bfb997a928be5.
+pub const PKG_INFO_MELPA_PIN: (&str, &str) = ("pkg-info", "20150517.1143");
+
 /// The exact js2-refactor package selected by the practical scope rewrite,
 /// signature migration, extraction, IIFE, and structural editing parity
 /// corpus. MELPA built this archive from upstream commit
