@@ -1733,6 +1733,12 @@ pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
 /// `d8839fa42a24f7c781cd2d8c3f40eda31faa19be`.
 pub const WFNAMES_MELPA_PIN: (&str, &str) = ("wfnames", "20260706.903");
 
+/// The exact web-completion-data package selected for the practical HTML tag,
+/// attribute, value, documentation, source-extension, and dataset-integrity
+/// parity corpus. MELPA built this archive from upstream commit
+/// `c272c94e8a71b779c29653a532f619acad433a4f`.
+pub const WEB_COMPLETION_DATA_MELPA_PIN: (&str, &str) = ("web-completion-data", "20160318.848");
+
 /// The exact Magit package selected by the comprehensive API parity corpus.
 pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
