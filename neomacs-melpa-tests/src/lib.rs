@@ -239,8 +239,10 @@ pub const AUSTRALIA_HOLIDAYS_MELPA_PIN: (&str, &str) = ("australia-holidays", "2
 /// `1e1bff2403966c3a0683ee65fb28cb8d8ff2c389`.
 pub const AUTH_SOURCE_KWALLET_MELPA_PIN: (&str, &str) = ("auth-source-kwallet", "20250419.1330");
 
-/// The exact popup dependency selected for the auto-complete parity corpus.
-/// MELPA built this archive from upstream commit
+/// The exact popup dependency selected for the auto-complete parity corpus and
+/// practical text filling, rich-item, row-layout, filtering, rendering,
+/// navigation, cascade-menu, and lifecycle parity. MELPA built this archive
+/// from upstream commit
 /// `45a0b759076ce4139aba36dde0a2904136282e73`.
 pub const POPUP_MELPA_PIN: (&str, &str) = ("popup", "20251231.1622");
 
