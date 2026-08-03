@@ -338,6 +338,7 @@ mod queue;
 mod racer;
 mod reformatter;
 mod request;
+mod rtags;
 mod s;
 mod seven_fifty_words;
 mod transient;

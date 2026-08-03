@@ -305,6 +305,12 @@ pub const REFORMATTER_MELPA_PIN: (&str, &str) = ("reformatter", "20241204.1051")
 /// upstream commit `6f419b5cdd2dfa83675ae53f04d8463d00a533f8`.
 pub const REQUEST_MELPA_PIN: (&str, &str) = ("request", "20250219.2213");
 
+/// The exact rtags package selected by the practical rc transport,
+/// navigation, source-extraction, diagnostics, result-buffer, and completion
+/// parity corpus. MELPA built this archive from upstream commit
+/// `b0bd2b276f810a291f08c05ba2860ca07285a2eb`.
+pub const RTAGS_MELPA_PIN: (&str, &str) = ("rtags", "20260727.1603");
+
 /// The exact rust-mode dependency selected for the racer parity corpus.
 pub const RUST_MODE_MELPA_PIN: (&str, &str) = ("rust-mode", "20260725.1442");
 
