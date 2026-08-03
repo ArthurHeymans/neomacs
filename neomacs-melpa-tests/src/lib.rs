@@ -432,6 +432,12 @@ pub const YUCK_MODE_MELPA_PIN: (&str, &str) = ("yuck-mode", "20230113.2304");
 /// `694defa220113d0acaa78fd646dcff9f1a08fad9`.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 
+/// The exact z3-mode package selected by the practical SMT-LIB editing,
+/// solver execution, Flycheck diagnostics, and complete command-vocabulary
+/// parity corpus. MELPA built this archive from upstream commit
+/// `0356cbe1e1e2b780ba0ddb4aaa055fa246a67931`.
+pub const Z3_MODE_MELPA_PIN: (&str, &str) = ("z3-mode", "20211116.138");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
