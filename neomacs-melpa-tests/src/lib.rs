@@ -395,6 +395,12 @@ pub const YOUDAO_DICTIONARY_MELPA_PIN: (&str, &str) = ("youdao-dictionary", "202
 /// `0b835f143e88c3321006a3e48ac5190d071b872c`.
 pub const YOUDOTCOM_MELPA_PIN: (&str, &str) = ("youdotcom", "20240207.1853");
 
+/// The exact youtube-music package selected by the practical status-buffer,
+/// playback, search, authentication, library, rating, and radio parity corpus.
+/// MELPA built this archive from upstream commit
+/// `2a962d972d8a59fed718aec039c9c61ef3c0392d`.
+pub const YOUTUBE_MUSIC_MELPA_PIN: (&str, &str) = ("youtube-music", "20260717.1039");
+
 /// The exact xr package selected for the practical regexp translation,
 /// round-trip matching, lint diagnostics, skip-set, pretty-printing, and parse
 /// failure parity corpus, and as a dependency of the pyim parity corpus. MELPA
