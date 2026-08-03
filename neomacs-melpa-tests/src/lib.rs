@@ -413,6 +413,12 @@ pub const YOUTUBE_SUB_EXTRACTOR_MELPA_PIN: (&str, &str) = ("youtube-sub-extracto
 /// 941460b51e43ef6764e15e2b9c4af54c3e56115f.
 pub const YTDIOUS_MELPA_PIN: (&str, &str) = ("ytdious", "20210228.2111");
 
+/// The exact ytdl package selected by the practical asynchronous download,
+/// playlist, format-selection, download-list, and failure parity corpus.
+/// MELPA built this archive from upstream commit
+/// `309ad5ce95368ad2e35d1c1701a1f3c0043415a3`.
+pub const YTDL_MELPA_PIN: (&str, &str) = ("ytdl", "20241025.1913");
+
 /// The exact xr package selected for the practical regexp translation,
 /// round-trip matching, lint diagnostics, skip-set, pretty-printing, and parse
 /// failure parity corpus, and as a dependency of the pyim parity corpus. MELPA
