@@ -293,6 +293,12 @@ pub const QUEUE_GNU_ELPA_PIN: (&str, &str) = ("queue", "0.2");
 /// `1e63e98626737ea9b662d4a9b1ffd6842b1c648c`.
 pub const RACER_MELPA_PIN: (&str, &str) = ("racer", "20210307.243");
 
+/// The exact reformatter package selected by the practical generated-command,
+/// region, file-backed, working-directory, exit-policy, diagnostics, save-hook,
+/// and temporary-file safety parity corpus. MELPA built this archive from
+/// upstream commit `f2cb59466b1c3f85a8c960f7d4b7b7ead015bedc`.
+pub const REFORMATTER_MELPA_PIN: (&str, &str) = ("reformatter", "20241204.1051");
+
 /// The exact rust-mode dependency selected for the racer parity corpus.
 pub const RUST_MODE_MELPA_PIN: (&str, &str) = ("rust-mode", "20260725.1442");
 
