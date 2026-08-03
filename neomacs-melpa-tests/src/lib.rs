@@ -383,6 +383,12 @@ pub const TINYSEGMENTER_MELPA_PIN: (&str, &str) = ("tinysegmenter", "20141124.10
 /// `5546f36bde24a9a8c1934e0f6ce205cd41d72537`.
 pub const YAML_MELPA_PIN: (&str, &str) = ("yaml", "20260605.834");
 
+/// The exact youdao-dictionary package selected by the practical signed API,
+/// rendered lookup, replacement, presentation, credentials, and voice parity
+/// corpus. MELPA built this archive from upstream commit
+/// `eae8efb1efd3fc82cfe87a357fe8f764116d94ef`.
+pub const YOUDAO_DICTIONARY_MELPA_PIN: (&str, &str) = ("youdao-dictionary", "20231005.1920");
+
 /// The exact xr package selected for the practical regexp translation,
 /// round-trip matching, lint diagnostics, skip-set, pretty-printing, and parse
 /// failure parity corpus, and as a dependency of the pyim parity corpus. MELPA
