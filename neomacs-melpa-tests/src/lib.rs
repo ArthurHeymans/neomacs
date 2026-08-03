@@ -323,6 +323,12 @@ pub const RUST_MODE_MELPA_PIN: (&str, &str) = ("rust-mode", "20260725.1442");
 /// `679cfbc02e206e0a702048cfd7c663eb5c9d1059`.
 pub const SHELL_MAKER_MELPA_PIN: (&str, &str) = ("shell-maker", "20260727.1508");
 
+/// The exact simple-httpd package selected by the practical request parsing,
+/// servlet routing, response generation, static-file, and live loopback server
+/// parity corpus. MELPA built this archive from upstream commit
+/// `ceb208f96601be09397fc9e64fa96014ac1c8739`.
+pub const SIMPLE_HTTPD_MELPA_PIN: (&str, &str) = ("simple-httpd", "20260623.1110");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 

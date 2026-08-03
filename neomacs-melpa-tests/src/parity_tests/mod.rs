@@ -344,6 +344,7 @@ mod s;
 mod sage_shell_mode;
 mod seven_fifty_words;
 mod shell_maker;
+mod simple_httpd;
 mod transient;
 mod two_bit;
 mod upstream_package_ert;
