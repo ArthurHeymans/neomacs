@@ -1369,6 +1369,13 @@ pub const MULTIPLE_CURSORS_MELPA_PIN: (&str, &str) = ("multiple-cursors", "20260
 /// commit `45a272fae915148d9a74d4cb3c39917b272ee9c3`.
 pub const NAMES_MELPA_PIN: (&str, &str) = ("names", "20221227.1825");
 
+/// The exact Navi2ch package selected for practical archived-post rendering,
+/// HTTP compatibility, request and cookie construction, multi-backend URL
+/// routing, local-board persistence, and image metadata parity. This MELPA
+/// version is pinned to upstream commit
+/// `7811dba052f679bd920a1f648d621a6fecace10f`.
+pub const NAVI2CH_MELPA_PIN: (&str, &str) = ("navi2ch", "20200130.36");
+
 /// The exact js2-refactor package selected by the practical scope rewrite,
 /// signature migration, extraction, IIFE, and structural editing parity
 /// corpus. MELPA built this archive from upstream commit

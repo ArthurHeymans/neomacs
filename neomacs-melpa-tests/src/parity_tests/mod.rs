@@ -317,6 +317,7 @@ mod maude_mode;
 mod mozc;
 mod multiple_cursors;
 mod names;
+mod navi2ch;
 mod package_lifecycle;
 mod package_vc;
 mod projectile;
