@@ -246,6 +246,12 @@ pub const AUTH_SOURCE_KWALLET_MELPA_PIN: (&str, &str) = ("auth-source-kwallet", 
 /// `45a0b759076ce4139aba36dde0a2904136282e73`.
 pub const POPUP_MELPA_PIN: (&str, &str) = ("popup", "20251231.1622");
 
+/// The exact pos-tip package selected by the practical text layout, pixel
+/// geometry, color selection, display-bound clamping, and tooltip dispatch
+/// parity corpus. MELPA built this archive from upstream commit
+/// 4889e08cf9077c8589ea6fea4e2ce558614dfcde.
+pub const POS_TIP_MELPA_PIN: (&str, &str) = ("pos-tip", "20240209.837");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
