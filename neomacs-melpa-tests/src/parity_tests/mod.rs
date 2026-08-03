@@ -371,6 +371,7 @@ mod youdao_dictionary;
 mod youdotcom;
 mod youtube_music;
 mod youtube_sub_extractor;
+mod ytdious;
 mod zero_b_layout;
 mod zero_x_c;
 mod zero_x_zero;
