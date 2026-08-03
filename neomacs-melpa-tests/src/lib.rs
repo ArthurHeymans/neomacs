@@ -362,6 +362,12 @@ pub const SPLITTER_MELPA_PIN: (&str, &str) = ("splitter", "20170809.2208");
 /// `f2cc9615ef3a052747135d34f31c423a26592f14`.
 pub const SVG_LIB_MELPA_PIN: (&str, &str) = ("svg-lib", "0.3");
 
+/// The exact Tablist package selected by the practical marking, filtering,
+/// sorting, resizing, editing, operations, and CSV export parity corpus.
+/// MELPA built this archive from upstream commit
+/// `01f065e387ffe6b7a41f180f257cd12551c7a9c2`.
+pub const TABLIST_MELPA_PIN: (&str, &str) = ("tablist", "20260623.1855");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 

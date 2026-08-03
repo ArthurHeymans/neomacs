@@ -351,6 +351,7 @@ mod sly;
 mod spinner;
 mod splitter;
 mod svg_lib;
+mod tablist;
 mod transient;
 mod two_bit;
 mod upstream_package_ert;
