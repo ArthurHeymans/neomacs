@@ -317,6 +317,12 @@ pub const RTAGS_MELPA_PIN: (&str, &str) = ("rtags", "20260727.1603");
 /// upstream commit `0058837c048cc031ca1a13f598a6a6604777458b`.
 pub const RUST_MODE_MELPA_PIN: (&str, &str) = ("rust-mode", "20260725.1442");
 
+/// The exact shell-maker package selected by the practical comint session,
+/// streaming, validation, interruption, history, transcript, process, and UI
+/// parity corpus. MELPA built this archive from upstream commit
+/// `679cfbc02e206e0a702048cfd7c663eb5c9d1059`.
+pub const SHELL_MAKER_MELPA_PIN: (&str, &str) = ("shell-maker", "20260727.1508");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 

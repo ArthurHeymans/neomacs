@@ -343,6 +343,7 @@ mod rust_mode;
 mod s;
 mod sage_shell_mode;
 mod seven_fifty_words;
+mod shell_maker;
 mod transient;
 mod two_bit;
 mod upstream_package_ert;
