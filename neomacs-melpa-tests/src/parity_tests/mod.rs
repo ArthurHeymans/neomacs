@@ -347,6 +347,7 @@ mod shell_maker;
 mod simple_httpd;
 mod skewer_mode;
 mod slime;
+mod sly;
 mod transient;
 mod two_bit;
 mod upstream_package_ert;

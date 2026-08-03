@@ -340,6 +340,11 @@ pub const SKEWER_MODE_MELPA_PIN: (&str, &str) = ("skewer-mode", "20200304.1142")
 /// `055c1c98c2b7791162b0e8c994051a7d72208dc1`.
 pub const SLIME_MELPA_PIN: (&str, &str) = ("slime", "20260719.420");
 
+/// The exact SLY package selected by the practical editor, Slynk protocol,
+/// MREPL, apropos, inspector, and debugger parity corpus. MELPA built this
+/// archive from upstream commit `759c0ff8741ced8793257f2b7ed95a23e13e1407`.
+pub const SLY_MELPA_PIN: (&str, &str) = ("sly", "20260402.2249");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 
