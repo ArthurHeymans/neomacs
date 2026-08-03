@@ -30,7 +30,7 @@ fn golden_state() -> FrameDisplayState {
     let mut matrix = GlyphMatrix::new(2, 16);
     let text_area = GlyphArea::Text as usize;
 
-    let row0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row0.enabled = true;
     row0.glyphs[text_area].push(Glyph::char('h', FaceId::new(0), 1));
     row0.glyphs[text_area].push(Glyph::char('i', FaceId::new(0), 2));
@@ -52,7 +52,7 @@ fn golden_state() -> FrameDisplayState {
     padding.padding = true;
     row0.glyphs[text_area].push(padding);
 
-    let row1 = std::sync::Arc::make_mut(&mut matrix.rows[1]);
+    let row1 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[1]);
     row1.enabled = true;
     row1.role = GlyphRowRole::ModeLine;
     row1.mode_line = true;
@@ -135,7 +135,8 @@ fn render_text_faces_lists_runs_with_hex_colors() {
 fn render_text_skips_disabled_rows_and_falls_back_without_window_info() {
     let mut state = golden_state();
     state.window_infos.clear();
-    std::sync::Arc::make_mut(&mut state.window_matrices[0].matrix.rows[1]).enabled = false;
+    crate::glyph_matrix::MatrixRow::make_mut(&mut state.window_matrices[0].matrix.rows[1])
+        .enabled = false;
     let out = state.render_text();
     assert!(
         out.contains("-- window 1 selected --"),
@@ -159,7 +160,8 @@ fn face_run_name_falls_back_to_basic_face_and_raw_id() {
         .faces
         .insert(FaceId::new(99), Face::new(FaceId::new(99)));
     let text_area = GlyphArea::Text as usize;
-    let row = std::sync::Arc::make_mut(&mut state.window_matrices[0].matrix.rows[1]);
+    let row =
+        crate::glyph_matrix::MatrixRow::make_mut(&mut state.window_matrices[0].matrix.rows[1]);
     row.glyphs[text_area].push(Glyph::char('m', FaceId::new(1), 10));
     row.glyphs[text_area].push(Glyph::char('d', FaceId::new(99), 11));
     let out = state.render_text_faces();

@@ -388,6 +388,64 @@ pub struct ScrollReplay {
     pub(crate) face_generation: FrameFaceGeneration,
 }
 
+/// One window's accumulated edit damage for a frame: the dirty char span in
+/// POST-EDIT (current buffer) coordinates plus the net size delta since the
+/// retained frame was committed.
+///
+/// The retained matrix's rows carry PRE-EDIT positions, so replay building
+/// constantly needs both coordinate systems. Every conversion lives here as a
+/// method — callers never do the `end - delta` arithmetic ad hoc (the exact
+/// arithmetic a raw `(i64, i64)` span made easy to get wrong).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EditDamage {
+    /// First damaged char position. The unchanged PREFIX is shared by both
+    /// coordinate systems, so this needs no conversion.
+    span_start: i64,
+    /// One past the last damaged char, in POST-EDIT coordinates.
+    span_end_new: i64,
+    /// Net buffer-size change (chars) since the retained frame.
+    delta: i64,
+    /// Newlines inside the post-edit span (the line-structure invariant's
+    /// NEW-side count).
+    span_newlines: usize,
+}
+
+impl EditDamage {
+    pub fn new(span_start: i64, span_end_new: i64, delta: i64, span_newlines: usize) -> Self {
+        Self {
+            span_start,
+            span_end_new,
+            delta,
+            span_newlines,
+        }
+    }
+
+    /// First damaged position (valid in both coordinate systems).
+    pub fn start(&self) -> i64 {
+        self.span_start
+    }
+
+    /// Span end in POST-EDIT coordinates.
+    pub fn end_new(&self) -> i64 {
+        self.span_end_new
+    }
+
+    /// Span end in PRE-EDIT (retained matrix) coordinates: the unchanged
+    /// SUFFIX is what the accumulator preserves, so the old end sits `delta`
+    /// before the new one.
+    pub fn end_old(&self) -> i64 {
+        self.span_end_new - self.delta
+    }
+
+    pub fn delta(&self) -> i64 {
+        self.delta
+    }
+
+    pub fn span_newlines(&self) -> usize {
+        self.span_newlines
+    }
+}
+
 /// What a bounded edit-replay walk must produce for the reused-below rows to
 /// remain valid. All values are in post-edit (NEW) coordinates.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -653,11 +711,12 @@ impl RetainedWindowMatrix {
     pub fn edit_replay(
         &self,
         curr: &RetainedWindowKey,
-        dirty_start: i64,
-        dirty_end_old: i64,
-        span_newlines: usize,
+        damage: EditDamage,
         allow_below_reuse: bool,
     ) -> Option<ScrollReplay> {
+        let dirty_start = damage.start();
+        let dirty_end_old = damage.end_old();
+        let span_newlines = damage.span_newlines();
         if self.validity != MatrixValidity::Valid {
             return None;
         }
@@ -789,7 +848,12 @@ impl RetainedWindowMatrix {
         // so below-reuse is the production path. Tests flip it off to isolate
         // above-only reuse.
         if allow_below_reuse {
-            let delta = curr.buffer_size - self.key.buffer_size;
+            let delta = damage.delta();
+            debug_assert_eq!(
+                delta,
+                curr.buffer_size - self.key.buffer_size,
+                "EditDamage delta must equal the retained-key size delta"
+            );
             // Every span row must be plain monospace text, and every span line
             // must PROVABLY still fit in one row after the insert (no wrap →
             // the rows below keep their pixel_y). `allow_below_reuse` already
@@ -1318,7 +1382,7 @@ mod scroll_classifier_tests {
         // allow_below_reuse = true → reuse above (0,1) AND below (3,4); below rows
         // are charpos-shifted by +1; the walk is bounded to the one edited row.
         let r = m
-            .edit_replay(&curr, 25, 25, 0, true)
+            .edit_replay(&curr, EditDamage::new(25, 26, 1, 0), true)
             .expect("below-reuse is eligible");
         assert!(r.bound_walk, "walk bounded to the edited line");
         assert_eq!(r.exposed_row_count, 1, "only the edited line is walked");
@@ -1337,7 +1401,7 @@ mod scroll_classifier_tests {
         // allow_below_reuse = false → the above-only edit replay (no below reuse,
         // walk runs to the bottom).
         let above_only = m
-            .edit_replay(&curr, 25, 25, 0, false)
+            .edit_replay(&curr, EditDamage::new(25, 26, 1, 0), false)
             .expect("above-only edit replay");
         assert!(!above_only.bound_walk);
         assert_eq!(
@@ -1379,7 +1443,7 @@ mod scroll_classifier_tests {
         curr.props_modified_tick = 6;
 
         let r = m
-            .edit_replay(&curr, 22, 35, 1, true)
+            .edit_replay(&curr, EditDamage::new(22, 35, 0, 1), true)
             .expect("props-only span replay is eligible");
         assert!(r.bound_walk);
         assert_eq!(r.exposed_row_base, 2, "span starts at row 2 (chars 20..)");
@@ -1424,7 +1488,7 @@ mod scroll_classifier_tests {
         curr.buffer_size = 1001;
 
         let r = m
-            .edit_replay(&curr, 20, 35, 1, true)
+            .edit_replay(&curr, EditDamage::new(20, 36, 1, 1), true)
             .expect("multi-row span insert replay is eligible");
         assert!(r.bound_walk);
         assert_eq!(r.exposed_row_base, 2);
@@ -1481,7 +1545,7 @@ mod scroll_classifier_tests {
         curr.buffer_size = 999;
 
         let r = m
-            .edit_replay(&curr, 25, 26, 0, true)
+            .edit_replay(&curr, EditDamage::new(25, 25, -1, 0), true)
             .expect("delete below-reuse is eligible");
         assert!(r.bound_walk);
         assert_eq!(r.exposed_row_base, 2);

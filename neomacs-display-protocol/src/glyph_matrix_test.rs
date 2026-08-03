@@ -296,7 +296,7 @@ fn frame_display_state_carries_pointer_map_into_materialized_snapshot() {
     row.glyphs[GlyphArea::Text.index()]
         .push(Glyph::char('x', FaceId::new(0), 0).with_pixel_width(8.0));
     let mut matrix = GlyphMatrix::new(1, 10);
-    matrix.rows[0] = std::sync::Arc::new(row);
+    matrix.rows[0] = crate::glyph_matrix::MatrixRow::new(row);
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
         matrix,
@@ -372,7 +372,7 @@ fn subcell_stretch_and_following_char_have_unique_materialized_pointer_slots() {
         Glyph::char('x', FaceId::new(0), 0).with_pixel_width(8.0),
     ]);
     let mut matrix = GlyphMatrix::new(1, 10);
-    matrix.rows[0] = std::sync::Arc::new(row);
+    matrix.rows[0] = crate::glyph_matrix::MatrixRow::new(row);
     state.window_matrices.push(WindowMatrixEntry {
         window_id,
         matrix,
@@ -466,7 +466,7 @@ fn face_fill_does_not_claim_the_pointer_slot_of_a_grid_glyph() {
     row.glyphs[GlyphArea::Text.index()]
         .push(Glyph::char('2', FaceId::new(0), 0).with_pixel_width(8.0));
     let mut matrix = GlyphMatrix::new(8, 10);
-    matrix.rows[7] = std::sync::Arc::new(row);
+    matrix.rows[7] = crate::glyph_matrix::MatrixRow::new(row);
     state.window_matrices.push(WindowMatrixEntry {
         window_id,
         matrix,
@@ -717,7 +717,7 @@ fn matrix_rows_are_disabled_by_default() {
 #[test]
 fn matrix_clear_resets_all_rows() {
     let mut matrix = GlyphMatrix::new(2, 10);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', FaceId::new(0), 0));
     row_0.hash = 12345;
     row_0.cursor_col = Some(5);
@@ -791,9 +791,10 @@ fn state_with_text(text: &str) -> FrameDisplayState {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, cols);
-    std::sync::Arc::make_mut(&mut matrix.rows[0]).enabled = true;
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).enabled = true;
     for (i, ch) in text.chars().enumerate() {
-        std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
+        crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).glyphs
+            [GlyphArea::Text as usize]
             .push(Glyph::char(ch, FaceId::new(0), i));
     }
 
@@ -837,13 +838,13 @@ fn materialize_emits_tab_line_row_at_window_top() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(2, cols);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.role = GlyphRowRole::TabLine;
     row_0.enabled = true;
     row_0.height_px = char_h;
     row_0.pixel_y = 0.0;
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::char('T', FaceId::new(0), 0));
-    let row_1 = std::sync::Arc::make_mut(&mut matrix.rows[1]);
+    let row_1 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[1]);
     row_1.role = GlyphRowRole::Text;
     row_1.enabled = true;
     row_1.height_px = char_h;
@@ -918,13 +919,13 @@ fn materialize_right_aligns_reversed_row() {
         .faces
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
     let mut matrix = GlyphMatrix::new(1, cols);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.reversed_p = true;
     // Two cells, no recorded pixel width -> one column (8px) each => 16px used.
-    std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
         .push(Glyph::char('\u{05d0}', FaceId::new(0), 0));
-    std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
         .push(Glyph::char('\u{05d1}', FaceId::new(0), 1));
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -1139,7 +1140,7 @@ fn right_fringe_bitmap_column_stops_at_the_scroll_bar_not_the_window_edge() {
         let mut state = FrameDisplayState::new(4, 1, 8.0, 16.0);
         let window = DisplayWindowId::new(1);
         let mut matrix = GlyphMatrix::new(1, 4);
-        let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+        let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
         row_0.enabled = true;
         row_0.height_px = 16.0;
         row_0.right_fringe_bitmap = Some(FringeBitmapInfo {
@@ -1236,7 +1237,7 @@ fn for_each_glyph_matches_materialize_glyphs() {
     // One window matrix row: two chars then a 2-col stretch
     // (emits FrameGlyph::Char x2 and FrameGlyph::Stretch).
     let mut matrix = GlyphMatrix::new(1, cols);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
@@ -1311,14 +1312,14 @@ fn materialize_pixel_positions_from_grid() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(2, cols);
-    std::sync::Arc::make_mut(&mut matrix.rows[0]).enabled = true;
-    std::sync::Arc::make_mut(&mut matrix.rows[1]).enabled = true;
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).enabled = true;
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[1]).enabled = true;
     // Row 0: "AB"
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
     // Row 1: "C"
-    std::sync::Arc::make_mut(&mut matrix.rows[1]).glyphs[GlyphArea::Text as usize]
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[1]).glyphs[GlyphArea::Text as usize]
         .push(Glyph::char('C', FaceId::new(0), 2));
 
     let win_x = 5.0f32;
@@ -1383,10 +1384,11 @@ fn materialize_preserves_char_bidi_level() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 1);
-    std::sync::Arc::make_mut(&mut matrix.rows[0]).enabled = true;
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).enabled = true;
     let mut glyph = Glyph::char('א', FaceId::new(0), 1);
     glyph.bidi_level = 1;
-    std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize].push(glyph);
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
+        .push(glyph);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -1420,10 +1422,11 @@ fn materialize_preserves_stretch_bidi_level() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 4);
-    std::sync::Arc::make_mut(&mut matrix.rows[0]).enabled = true;
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).enabled = true;
     let mut glyph = Glyph::stretch(3, FaceId::new(0));
     glyph.bidi_level = 1;
-    std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize].push(glyph);
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
+        .push(glyph);
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: DisplayWindowId::new(1),
@@ -1455,7 +1458,7 @@ fn materialize_uses_explicit_row_metrics() {
     state.faces.insert(FaceId::new(0), face);
 
     let mut matrix = GlyphMatrix::new(1, 2);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.pixel_y = 7.0;
     row_0.height_px = 18.0;
@@ -1498,7 +1501,7 @@ fn materialize_uses_explicit_row_metrics() {
 fn materialize_applies_glyph_vertical_offset_to_char_baseline() {
     let mut state = FrameDisplayState::new(2, 1, 10.0, 20.0);
     let mut matrix = GlyphMatrix::new(1, 2);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.height_px = 20.0;
     row_0.ascent_px = 15.0;
@@ -1565,11 +1568,11 @@ fn materialize_disabled_rows_are_skipped() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(2, 3);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
     // Row 1 stays disabled (default), so its glyph is filtered out.
-    std::sync::Arc::make_mut(&mut matrix.rows[1]).glyphs[GlyphArea::Text as usize]
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[1]).glyphs[GlyphArea::Text as usize]
         .push(Glyph::char('B', FaceId::new(0), 1));
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -1598,11 +1601,11 @@ fn materialize_padding_glyphs_are_skipped() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 4);
-    std::sync::Arc::make_mut(&mut matrix.rows[0]).enabled = true;
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).enabled = true;
     // Wide char 'W' followed by padding
     let mut wide_glyph = Glyph::char('W', FaceId::new(0), 0);
     wide_glyph.wide = true;
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.glyphs[GlyphArea::Text as usize].push(wide_glyph);
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::padding_for(FaceId::new(0), 0));
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', FaceId::new(0), 1));
@@ -1646,11 +1649,11 @@ fn materialize_uses_realized_pixel_width_for_text_positions() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 10);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.glyphs[GlyphArea::Text as usize]
         .push(Glyph::char('N', FaceId::new(0), 0).with_pixel_width(13.0));
-    std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
+    crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
         .push(Glyph::char('E', FaceId::new(0), 1).with_pixel_width(12.0));
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -1697,12 +1700,13 @@ fn materialize_clips_overlong_window_rows_to_pixel_bounds() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 3);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.role = GlyphRowRole::ModeLine;
     row_0.mode_line = true;
     for (idx, ch) in "abcdef".chars().enumerate() {
-        std::sync::Arc::make_mut(&mut matrix.rows[0]).glyphs[GlyphArea::Text as usize]
+        crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]).glyphs
+            [GlyphArea::Text as usize]
             .push(Glyph::char(ch, FaceId::new(0), idx));
     }
 
@@ -1746,12 +1750,12 @@ fn materialize_text_rows_from_text_area_but_chrome_from_window_area() {
     let mut state = FrameDisplayState::new(10, 2, 8.0, 16.0);
     let mut matrix = GlyphMatrix::new(2, 4);
 
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.role = GlyphRowRole::Text;
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::char('t', FaceId::new(0), 0));
 
-    let row_1 = std::sync::Arc::make_mut(&mut matrix.rows[1]);
+    let row_1 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[1]);
     row_1.enabled = true;
     row_1.role = GlyphRowRole::ModeLine;
     row_1.glyphs[GlyphArea::Text as usize].push(Glyph::char('m', FaceId::new(0), 1));
@@ -1801,18 +1805,18 @@ fn text_area_clip_rect_narrows_to_band_between_chrome_rows() {
     // bottom: the buffer-text clip band is the 60px in between.  A vscroll shifts
     // the buffer rows but NOT the chrome anchors, so the band stays put.
     let mut matrix = GlyphMatrix::new(3, 4);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.role = GlyphRowRole::HeaderLine;
     row_0.pixel_y = 0.0;
     row_0.height_px = 20.0;
     // A vscroll'd buffer row whose top pokes up into the header band.
-    let row_1 = std::sync::Arc::make_mut(&mut matrix.rows[1]);
+    let row_1 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[1]);
     row_1.enabled = true;
     row_1.role = GlyphRowRole::Text;
     row_1.pixel_y = 15.0;
     row_1.height_px = 20.0;
-    let row_2 = std::sync::Arc::make_mut(&mut matrix.rows[2]);
+    let row_2 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[2]);
     row_2.enabled = true;
     row_2.role = GlyphRowRole::ModeLine;
     row_2.pixel_y = 80.0;
@@ -1840,7 +1844,7 @@ fn text_area_clip_rect_equals_text_pixel_bounds_without_chrome() {
     // the text-area's horizontal extent -- byte-identical to the historical
     // `Some(text_pixel_bounds)` clip, so windows without chrome are unaffected.
     let mut matrix = GlyphMatrix::new(1, 4);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.role = GlyphRowRole::Text;
     row_0.pixel_y = 0.0;
@@ -1873,20 +1877,20 @@ fn materialize_clips_vscrolled_text_row_to_text_band() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(3, 4);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.role = GlyphRowRole::HeaderLine;
     row_0.pixel_y = 0.0;
     row_0.height_px = 20.0;
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::char('h', FaceId::new(0), 0));
     // vscroll'd buffer row: top at y=15, inside the header band (0..20).
-    let row_1 = std::sync::Arc::make_mut(&mut matrix.rows[1]);
+    let row_1 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[1]);
     row_1.enabled = true;
     row_1.role = GlyphRowRole::Text;
     row_1.pixel_y = 15.0;
     row_1.height_px = 20.0;
     row_1.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', FaceId::new(0), 0));
-    let row_2 = std::sync::Arc::make_mut(&mut matrix.rows[2]);
+    let row_2 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[2]);
     row_2.enabled = true;
     row_2.role = GlyphRowRole::ModeLine;
     row_2.pixel_y = 80.0;
@@ -1953,7 +1957,7 @@ fn materialize_stretch_glyph() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 10);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.glyphs[GlyphArea::Text as usize].push(Glyph::stretch(4, FaceId::new(0)));
 
@@ -1985,7 +1989,7 @@ fn materialize_stretch_paint_uses_row_geometry_after_explicit_layout_metrics() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 10);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.height_px = 30.0;
     row_0.ascent_px = 20.0;
@@ -2022,7 +2026,7 @@ fn materialize_stretch_face_paints_the_full_mixed_height_row() {
         .insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 10);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.pixel_y = 4.0;
     row_0.height_px = 20.0;
@@ -2318,7 +2322,7 @@ fn materialize_emits_left_fringe_bitmap_glyph_from_row() {
     );
 
     let mut matrix = GlyphMatrix::new(1, cols);
-    let row_0 = std::sync::Arc::make_mut(&mut matrix.rows[0]);
+    let row_0 = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
     row_0.enabled = true;
     row_0.height_px = char_h;
     row_0.pixel_y = 0.0;

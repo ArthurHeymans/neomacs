@@ -234,9 +234,10 @@ fn stamp_left_fringe_bitmap(
         bitmap_index,
         face_id,
     });
-    output
-        .builder()
-        .install_finalized_output_row(row_index, std::sync::Arc::new(row));
+    output.builder().install_finalized_output_row(
+        row_index,
+        neomacs_display_protocol::glyph_matrix::MatrixRow::new(row),
+    );
     true
 }
 
@@ -316,9 +317,10 @@ fn overwrite_leading_glyphs(
         drawn = true;
     }
     if drawn {
-        output
-            .builder()
-            .install_finalized_output_row(row_index, std::sync::Arc::new(row));
+        output.builder().install_finalized_output_row(
+            row_index,
+            neomacs_display_protocol::glyph_matrix::MatrixRow::new(row),
+        );
     }
     drawn
 }

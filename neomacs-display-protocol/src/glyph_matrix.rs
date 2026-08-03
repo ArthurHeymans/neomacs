@@ -759,15 +759,47 @@ pub struct GlyphPointerRun {
     pub width: f32,
 }
 
-/// Copy-on-write row storage. Rows under construction are uniquely owned, so
-/// `Arc::make_mut` mutates in place for free; once a frame is accepted the
-/// same rows are SHARED by refcount between the sealed presentation, the
-/// retained per-window matrix, and any replay plan built from it — the Rust
-/// equivalent of GNU's pointer-swapped current/desired matrices (dispnew.c
-/// never copies row contents either). Cloning a matrix or reusing a row costs
-/// a refcount bump, not a per-glyph deep copy; the first mutation of a shared
-/// row (e.g. re-decorating the cursor on a reused row) clones just that row.
-pub type MatrixRow = std::sync::Arc<GlyphRow>;
+/// Copy-on-write row handle. Rows under construction are uniquely owned, so
+/// [`MatrixRow::make_mut`] mutates in place for free; once a frame is
+/// accepted the same rows are SHARED by refcount between the sealed
+/// presentation, the retained per-window matrix, and any replay plan built
+/// from it — the Rust equivalent of GNU's pointer-swapped current/desired
+/// matrices (dispnew.c never copies row contents either). Cloning a matrix or
+/// reusing a row costs a refcount bump, not a per-glyph deep copy; the first
+/// mutation of a shared row (e.g. re-decorating the cursor on a reused row)
+/// clones just that row.
+///
+/// A NEWTYPE (not an `Arc` alias) so the mutation discipline is
+/// compiler-enforced: reads go through `Deref`, and the only write path is
+/// `make_mut`, which makes the cheap-verbatim vs copy-on-write distinction
+/// explicit at every call site.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct MatrixRow(std::sync::Arc<GlyphRow>);
+
+impl MatrixRow {
+    pub fn new(row: GlyphRow) -> Self {
+        Self(std::sync::Arc::new(row))
+    }
+
+    /// Mutable access: in-place when uniquely owned (rows under
+    /// construction), copy-on-write when shared (reused rows).
+    pub fn make_mut(this: &mut Self) -> &mut GlyphRow {
+        std::sync::Arc::make_mut(&mut this.0)
+    }
+
+    pub fn as_ref(&self) -> &GlyphRow {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for MatrixRow {
+    type Target = GlyphRow;
+
+    fn deref(&self) -> &GlyphRow {
+        &self.0
+    }
+}
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct GlyphMatrix {
@@ -776,10 +808,11 @@ pub struct GlyphMatrix {
     /// `rows`. Damage lives beside — not inside — the copy-on-write rows:
     /// it is per-frame transient metadata, and stamping it on a shared
     /// `MatrixRow` would force a deep copy of every reused row each frame.
-    /// The `row_damage()` / `set_row_damage()` accessors and the resize
-    /// paths keep it aligned with `rows`.
+    /// PRIVATE so alignment with `rows` is owned entirely by the accessors
+    /// (`row_damage`/`set_row_damage`) and the resize paths — external code
+    /// cannot desynchronize the two vectors.
     #[serde(default)]
-    pub row_damage: Vec<RowDamage>,
+    row_damage: Vec<RowDamage>,
     pub nrows: usize,
     pub ncols: usize,
     pub matrix_x: usize,

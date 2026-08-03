@@ -72,7 +72,7 @@ use crate::frame_face_arena::{
 };
 use crate::frame_layout_transaction::{FrameLayoutCoordinator, FrameRelayoutRequest};
 use crate::incremental_layout::{
-    CursorOnlyReplay, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
+    CursorOnlyReplay, EditDamage, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
     RetainedWindowMatrix, RowDamage, ScrollReplay,
 };
 use crate::window_layout::{
@@ -1942,11 +1942,7 @@ impl LayoutEngine {
             .pre_fontify_dirty_spans
             .get(&params.buffer_id)
             .unwrap_or(&None))?;
-        // The span end in OLD (retained-matrix) coordinates: the accumulator
-        // tracks the unchanged suffix by length, so the old end is the new end
-        // minus the size delta.
         let delta = curr_key.buffer_size - prev.key.buffer_size;
-        let dirty_end_old = dirty_end - delta;
         // Below-reuse SAFETY GATE, part 1: every char in the dirty span is
         // printable ASCII (graphic or space) or a newline — combined with
         // edit_replay's monospace + width check this proves each span line
@@ -2021,9 +2017,7 @@ impl LayoutEngine {
             });
         prev.edit_replay(
             &curr_key,
-            dirty_start,
-            dirty_end_old,
-            span_newlines,
+            EditDamage::new(dirty_start, dirty_end, delta, span_newlines),
             span_structure_safe,
         )
     }
