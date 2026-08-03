@@ -389,6 +389,12 @@ pub const YAML_MELPA_PIN: (&str, &str) = ("yaml", "20260605.834");
 /// `eae8efb1efd3fc82cfe87a357fe8f764116d94ef`.
 pub const YOUDAO_DICTIONARY_MELPA_PIN: (&str, &str) = ("youdao-dictionary", "20231005.1920");
 
+/// The exact youdotcom package selected by the practical search/RAG session,
+/// command lifecycle, request validation, and malformed-response parity
+/// corpus. MELPA built this archive from upstream commit
+/// `0b835f143e88c3321006a3e48ac5190d071b872c`.
+pub const YOUDOTCOM_MELPA_PIN: (&str, &str) = ("youdotcom", "20240207.1853");
+
 /// The exact xr package selected for the practical regexp translation,
 /// round-trip matching, lint diagnostics, skip-set, pretty-printing, and parse
 /// failure parity corpus, and as a dependency of the pyim parity corpus. MELPA

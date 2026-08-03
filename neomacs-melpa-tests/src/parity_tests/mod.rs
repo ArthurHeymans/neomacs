@@ -368,6 +368,7 @@ mod yaml;
 mod yasnippet;
 mod yaxception;
 mod youdao_dictionary;
+mod youdotcom;
 mod zero_b_layout;
 mod zero_x_c;
 mod zero_x_zero;
