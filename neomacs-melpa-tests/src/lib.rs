@@ -438,6 +438,12 @@ pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 /// `0356cbe1e1e2b780ba0ddb4aaa055fa246a67931`.
 pub const Z3_MODE_MELPA_PIN: (&str, &str) = ("z3-mode", "20211116.138");
 
+/// The exact zathura package selected by the practical PDF-link, document
+/// viewing, process-session, outline, and global integration parity corpus.
+/// MELPA built this archive from upstream commit
+/// `874dadbf07e22811b6b309200cad32b4ccca0e51`.
+pub const ZATHURA_MELPA_PIN: (&str, &str) = ("zathura", "20260603.1620");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 

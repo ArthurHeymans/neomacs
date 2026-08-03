@@ -375,6 +375,7 @@ mod ytdious;
 mod ytdl;
 mod yuck_mode;
 mod z3_mode;
+mod zathura;
 mod zero_b_layout;
 mod zero_x_c;
 mod zero_x_zero;
