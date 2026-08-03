@@ -357,6 +357,7 @@ mod transient;
 mod two_bit;
 mod upstream_package_ert;
 mod use_package;
+mod wfnames;
 mod which_key;
 mod with_editor;
 mod yaml;

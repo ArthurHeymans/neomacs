@@ -1726,7 +1726,11 @@ pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
 /// by the Helm parity corpus.
 pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
 
-/// The exact wfnames package required by the practical Helm parity corpus.
+/// The exact wfnames package selected for the practical filename-list setup,
+/// edit tracking, cross-directory rename, swap, overwrite, revert, and
+/// reordering parity corpus, and required by the Helm parity corpus. MELPA
+/// built this archive from upstream commit
+/// `d8839fa42a24f7c781cd2d8c3f40eda31faa19be`.
 pub const WFNAMES_MELPA_PIN: (&str, &str) = ("wfnames", "20260706.903");
 
 /// The exact Magit package selected by the comprehensive API parity corpus.
