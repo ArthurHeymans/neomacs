@@ -474,6 +474,12 @@ pub const ZENBURN_THEME_MELPA_PIN: (&str, &str) = ("zenburn-theme", "20260725.70
 /// `58e42af182c98cb9941d27cd042d227fbf4e146c`.
 pub const ZENCODING_MODE_MELPA_PIN: (&str, &str) = ("zencoding-mode", "20140213.822");
 
+/// The exact zenity-color-picker package selected by the practical color
+/// insertion, adjustment, DWIM, process-protocol, cancellation, and failure
+/// parity corpus. MELPA built this archive from upstream commit
+/// `bdece51052ef7037e0a3481fc1f487939f57777e`.
+pub const ZENITY_COLOR_PICKER_MELPA_PIN: (&str, &str) = ("zenity-color-picker", "20160302.1154");
+
 /// The exact GNU ELPA rainbow-mode source used to exercise Zenburn's optional
 /// public font-lock integration, acquired directly from GNU ELPA commit
 /// `ac68593018ef3555e64ea592d72334f4e3e39209`.
