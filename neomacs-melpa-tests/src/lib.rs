@@ -462,6 +462,17 @@ pub const ZEN_AND_ART_THEME_MELPA_PIN: (&str, &str) = ("zen-and-art-theme", "201
 /// `c1b1806358f3cce6c04b30699987d82dc7d42559`.
 pub const ZEN_MODE_MELPA_PIN: (&str, &str) = ("zen-mode", "20200609.822");
 
+/// The exact zenburn-theme package selected by the practical editing,
+/// palette customization, application-integration, theme lifecycle, and
+/// invalid-configuration parity corpus. MELPA built this archive from upstream
+/// commit `3797f3ae26b3649c99fc74a09a0bd6a31b40597f`.
+pub const ZENBURN_THEME_MELPA_PIN: (&str, &str) = ("zenburn-theme", "20260725.707");
+
+/// The exact GNU ELPA rainbow-mode source used to exercise Zenburn's optional
+/// public font-lock integration, acquired directly from GNU ELPA commit
+/// `ac68593018ef3555e64ea592d72334f4e3e39209`.
+pub const RAINBOW_MODE_SOURCE_PIN: (&str, &str) = ("rainbow-mode", "1.0.6");
+
 /// The exact 0blayout package selected by the comprehensive API parity corpus.
 pub const ZERO_B_LAYOUT_MELPA_PIN: (&str, &str) = ("0blayout", "20190703.527");
 
