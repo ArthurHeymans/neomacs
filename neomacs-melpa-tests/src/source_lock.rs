@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
+use sha2::{Digest, Sha256};
+
 use super::{
     CommandError, EmacsRuntime, configure_process_environment, elisp_string, output_with_timeout,
     package_preparation_run_id, publish_package_preparation_failure, workspace_root,
@@ -39,7 +41,19 @@ const SOURCE_BUILD_TOOLS: SourceBuildTools<'static> = SourceBuildTools {
 pub enum SourceBuild<'a> {
     MelpaRecipe,
     DefaultFiles,
+    AuctexRuntime,
     Files(&'a str),
+}
+
+impl SourceBuild<'_> {
+    fn identity(self) -> String {
+        match self {
+            // Bump this identity whenever the deterministic docstrip or
+            // `.elpaignore` preparation contract changes.
+            Self::AuctexRuntime => "AuctexRuntime(v3)".to_string(),
+            build => format!("{build:?}"),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -85,7 +99,7 @@ impl<'a> LockedPackageSource<'a> {
 
     fn identity(self) -> String {
         format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:?}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             self.name,
             self.version,
             self.upstream_repository,
@@ -93,7 +107,7 @@ impl<'a> LockedPackageSource<'a> {
             self.repository,
             self.revision,
             self.fallback_repository.unwrap_or_default(),
-            self.build
+            self.build.identity()
         )
     }
 }
@@ -150,6 +164,7 @@ impl LockedPackageCatalog {
             let build = match *build {
                 "melpa-recipe" => SourceBuild::MelpaRecipe,
                 "source-default" => SourceBuild::DefaultFiles,
+                "source-auctex-runtime" => SourceBuild::AuctexRuntime,
                 build => match build.strip_prefix("source-glob:") {
                     Some(path) if safe_source_path(path) => SourceBuild::Files(path),
                     _ => {
@@ -606,9 +621,372 @@ fn prepare_tool_checkout(
     Ok(checkout)
 }
 
-fn synthetic_recipe(source: LockedPackageSource<'_>) -> Result<String, String> {
+fn docstrip_selector_matches(expression: &str, options: &[&str]) -> bool {
+    expression.split('|').any(|alternative| {
+        alternative.split('&').all(|selector| {
+            let selector = selector.trim();
+            let (negated, name) = selector
+                .strip_prefix('!')
+                .map_or((false, selector), |name| (true, name));
+            !name.is_empty() && (options.contains(&name) != negated)
+        })
+    })
+}
+
+fn extract_docstrip_source(source: &str, options: &[&str]) -> Result<String, String> {
+    let mut guards = Vec::<(String, bool)>::new();
+    let mut output = String::new();
+    for line in source.split_inclusive('\n') {
+        let content = line.strip_suffix('\n').unwrap_or(line);
+        if let Some(expression) = content
+            .strip_prefix("%<*")
+            .and_then(|line| line.strip_suffix('>'))
+        {
+            guards.push((
+                expression.to_string(),
+                docstrip_selector_matches(expression, options),
+            ));
+            continue;
+        }
+        if let Some(expression) = content
+            .strip_prefix("%</")
+            .and_then(|line| line.strip_suffix('>'))
+        {
+            let Some((opened, _)) = guards.pop() else {
+                return Err(format!("docstrip closes unopened guard `{expression}`"));
+            };
+            if opened != expression {
+                return Err(format!(
+                    "docstrip closes guard `{expression}` while `{opened}` is open"
+                ));
+            }
+            continue;
+        }
+        let active = guards.iter().all(|(_, selected)| *selected);
+        if let Some(selected) = content.strip_prefix("%<") {
+            let Some((expression, selected)) = selected.split_once('>') else {
+                return Err(format!(
+                    "docstrip has an unterminated selector in `{content}`"
+                ));
+            };
+            if active && docstrip_selector_matches(expression, options) {
+                output.push_str(selected.trim_end_matches([' ', '\t']));
+                output.push('\n');
+            }
+        } else if active && !guards.is_empty() && !content.starts_with('%') {
+            output.push_str(content.trim_end_matches([' ', '\t']));
+            output.push('\n');
+        }
+    }
+    if let Some((guard, _)) = guards.last() {
+        return Err(format!("docstrip leaves guard `{guard}` open"));
+    }
+    Ok(output)
+}
+
+fn prepare_auctex_runtime_tree(checkout: &Path) -> Result<(), String> {
+    const OUTPUTS: &[(&str, &[&[&str]], &str)] = &[
+        (
+            "preview-mk.ins",
+            &[&["installer", "make"]],
+            "2e8d1f2756c65af41517187b9b3eec40f4b2bb48155a9d16e508368f8801675b",
+        ),
+        (
+            "preview.drv",
+            &[&["driver"]],
+            "f47904bed6aff6c72582c88f9fbe0c0ea6abd8ddab469582084ea9915f0e36d9",
+        ),
+        (
+            "preview.sty",
+            &[&["style"], &["style", "active"]],
+            "4854833239af46a188431bb7494cd3c2952a548a5d32661771c393b058abd016",
+        ),
+        (
+            "prauctex.def",
+            &[&["auctex"]],
+            "16ea1388906ba2689819482f77f4fe5af7dbdecdf47423c4bd2d3e59f35e4bbd",
+        ),
+        (
+            "prauctex.cfg",
+            &[&["auccfg"]],
+            "948e22505aaffa4c16339af3316af3918def3b2abb1dac3218598794d404b16e",
+        ),
+        (
+            "prshowbox.def",
+            &[&["showbox"]],
+            "069e11c8430749947158915ac5dccdf3163f0791b7ba5be050fcb46cb774508e",
+        ),
+        (
+            "prshowlabels.def",
+            &[&["showlabels"]],
+            "eb695e66f4741c6da94a6d0c2438bab57fd402e4d4166e2dea2a16d1f082f94f",
+        ),
+        (
+            "prtracingall.def",
+            &[&["tracingall"]],
+            "d24e36e7a78d02b090e835dfaff1839dd6ba2cd4712782e542464c393a29f1b0",
+        ),
+        (
+            "prtightpage.def",
+            &[&["tightpage"]],
+            "02eae9ce6a4a9899465e47dc7430074d499ad54c4c34c551af83a4b10dbaa6f7",
+        ),
+        (
+            "prlyx.def",
+            &[&["lyx"]],
+            "c4d71b8bb81ad693a73ac89d9c0ee16cc87e7962a5ea784d02480d378898d135",
+        ),
+        (
+            "prcounters.def",
+            &[&["counters"]],
+            "524d84b2a220cedf90d948e051ff2bf3c254312c93440013d5b379562275e55a",
+        ),
+        (
+            "prfootnotes.def",
+            &[&["footnotes"]],
+            "127ee999a9da11dbe70f240c601230d0e2a71bc2071d08df632e280d070291ba",
+        ),
+    ];
+
+    let latex = checkout.join("latex");
+    let source_path = latex.join("preview.dtx");
+    let source = fs::read_to_string(&source_path).map_err(|error| {
+        format!(
+            "failed to read pinned AUCTeX docstrip source {}: {error}",
+            source_path.display()
+        )
+    })?;
+    for (file, option_sets, expected_sha256) in OUTPUTS {
+        let mut generated = format!(
+            "%% Generated from pinned AUCTeX preview.dtx for {file}.\n%% The source remains in this package under the GNU GPL.\n"
+        );
+        for options in *option_sets {
+            generated.push_str(&extract_docstrip_source(&source, options)?);
+        }
+        if !generated.ends_with("\\endinput\n") {
+            generated.push_str("\\endinput\n");
+        }
+        let actual_sha256 = Sha256::digest(generated.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        if actual_sha256 != *expected_sha256 {
+            return Err(format!(
+                "generated pinned AUCTeX runtime file {file} has SHA-256 {actual_sha256}, expected {expected_sha256}"
+            ));
+        }
+        fs::write(latex.join(file), generated).map_err(|error| {
+            format!(
+                "failed to generate pinned AUCTeX runtime file {}: {error}",
+                latex.join(file).display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+const AUCTEX_RUNTIME_REQUIRED_FILES: &[&str] = &[
+    "images/execpdftex.xpm",
+    "latex/prauctex.cfg",
+    "latex/prauctex.def",
+    "latex/prcounters.def",
+    "latex/preview-mk.ins",
+    "latex/preview.drv",
+    "latex/preview.dtx",
+    "latex/preview.sty",
+    "latex/prfootnotes.def",
+    "latex/prlyx.def",
+    "latex/prshowbox.def",
+    "latex/prshowlabels.def",
+    "latex/prtightpage.def",
+    "latex/prtracingall.def",
+    "style/amsmath.el",
+    "style/article.el",
+];
+
+const AUCTEX_RUNTIME_EXCLUDED_PATHS: &[&str] = &[
+    "ChangeLog.1",
+    "README.GIT",
+    "admin",
+    "build-aux",
+    "latex/Makefile.in",
+    "lpath.el",
+    "tests",
+];
+
+fn verify_auctex_runtime_tree(checkout: &Path) -> Result<(), String> {
+    let missing = AUCTEX_RUNTIME_REQUIRED_FILES
+        .iter()
+        .filter(|relative| !checkout.join(relative).is_file())
+        .copied()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(format!(
+            "prepared pinned AUCTeX runtime tree is missing required files: {}",
+            missing.join(", ")
+        ));
+    }
+
+    let retained = AUCTEX_RUNTIME_EXCLUDED_PATHS
+        .iter()
+        .filter(|relative| checkout.join(relative).exists())
+        .copied()
+        .collect::<Vec<_>>();
+    if !retained.is_empty() {
+        return Err(format!(
+            "prepared pinned AUCTeX runtime tree retained excluded paths: {}",
+            retained.join(", ")
+        ));
+    }
+    Ok(())
+}
+
+fn auctex_elpa_ignored_name(pattern: &str, name: &str) -> Result<bool, String> {
+    if let Some(suffix) = pattern.strip_prefix('*')
+        && !suffix.contains(['*', '?', '[', ']', '/'])
+    {
+        return Ok(name.ends_with(suffix));
+    }
+    if !pattern.contains(['*', '?', '[', ']', '/']) {
+        return Ok(name == pattern);
+    }
+    Err(format!(
+        "unsupported pinned AUCTeX .elpaignore pattern `{pattern}`"
+    ))
+}
+
+fn prune_auctex_elpa_ignored(checkout: &Path) -> Result<(), String> {
+    let ignore_path = checkout.join(".elpaignore");
+    let patterns = fs::read_to_string(&ignore_path)
+        .map_err(|error| {
+            format!(
+                "failed to read pinned AUCTeX exclusions {}: {error}",
+                ignore_path.display()
+            )
+        })?
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+
+    fn prune(directory: &Path, patterns: &[String]) -> Result<(), String> {
+        for entry in fs::read_dir(directory).map_err(|error| {
+            format!(
+                "failed to enumerate pinned AUCTeX tree {}: {error}",
+                directory.display()
+            )
+        })? {
+            let entry = entry.map_err(|error| {
+                format!(
+                    "failed to inspect pinned AUCTeX tree {}: {error}",
+                    directory.display()
+                )
+            })?;
+            let path = entry.path();
+            let name = entry.file_name().into_string().map_err(|name| {
+                format!(
+                    "pinned AUCTeX tree {} contains a non-UTF-8 entry {:?}",
+                    directory.display(),
+                    name
+                )
+            })?;
+            if name == ".git" {
+                continue;
+            }
+            let ignored = patterns.iter().try_fold(false, |ignored, pattern| {
+                Ok::<_, String>(ignored || auctex_elpa_ignored_name(pattern, &name)?)
+            })?;
+            if ignored {
+                if path.is_dir() {
+                    fs::remove_dir_all(&path)
+                } else {
+                    fs::remove_file(&path)
+                }
+                .map_err(|error| {
+                    format!(
+                        "failed to exclude pinned AUCTeX development entry {}: {error}",
+                        path.display()
+                    )
+                })?;
+            } else if path.is_dir() {
+                prune(&path, patterns)?;
+            }
+        }
+        Ok(())
+    }
+
+    prune(checkout, &patterns)
+}
+
+fn runtime_tree_file_spec(checkout: &Path) -> Result<String, String> {
+    fn visit(root: &Path, directory: &Path, files: &mut Vec<String>) -> Result<(), String> {
+        for entry in fs::read_dir(directory).map_err(|error| {
+            format!(
+                "failed to enumerate source runtime tree {}: {error}",
+                directory.display()
+            )
+        })? {
+            let entry = entry.map_err(|error| {
+                format!(
+                    "failed to inspect source runtime tree {}: {error}",
+                    directory.display()
+                )
+            })?;
+            let path = entry.path();
+            if path == root.join(".git") {
+                continue;
+            }
+            if path.is_dir() {
+                visit(root, &path, files)?;
+            } else if path.is_file() {
+                let relative = path
+                    .strip_prefix(root)
+                    .expect("runtime entry is below root");
+                let relative = relative.to_str().ok_or_else(|| {
+                    format!(
+                        "source runtime tree {} contains a non-UTF-8 path {}",
+                        root.display(),
+                        relative.display()
+                    )
+                })?;
+                if !safe_source_path(relative) {
+                    return Err(format!(
+                        "source runtime tree {} contains unsafe path `{relative}`",
+                        root.display()
+                    ));
+                }
+                files.push(relative.to_string());
+            }
+        }
+        Ok(())
+    }
+
+    let mut files = Vec::new();
+    visit(checkout, checkout, &mut files)?;
+    files.sort();
+    if files.is_empty() {
+        return Err(format!(
+            "source runtime tree {} has no packageable entries",
+            checkout.display()
+        ));
+    }
+    Ok(files
+        .iter()
+        .map(|file| format!("(:rename {} {})", elisp_string(file), elisp_string(file)))
+        .collect::<Vec<_>>()
+        .join(" "))
+}
+
+fn synthetic_recipe(source: LockedPackageSource<'_>, checkout: &Path) -> Result<String, String> {
     let files = match source.build {
         SourceBuild::DefaultFiles => String::new(),
+        SourceBuild::AuctexRuntime => {
+            prepare_auctex_runtime_tree(checkout)?;
+            prune_auctex_elpa_ignored(checkout)?;
+            verify_auctex_runtime_tree(checkout)?;
+            format!(" :files ({})", runtime_tree_file_spec(checkout)?)
+        }
         SourceBuild::Files(pattern) => format!(" :files ({})", elisp_string(pattern)),
         SourceBuild::MelpaRecipe => {
             return Err(format!(
@@ -759,17 +1137,19 @@ fn prepare_cached_source_artifact_with_tools(
         let commit_time = prepare_source_checkout(source, &working, gnu_emacs.timeout)?;
         let recipes = match source.build {
             SourceBuild::MelpaRecipe => melpa.join("recipes"),
-            SourceBuild::DefaultFiles | SourceBuild::Files(_) => {
+            SourceBuild::DefaultFiles | SourceBuild::AuctexRuntime | SourceBuild::Files(_) => {
                 let recipes = root.join("recipes");
-                fs::write(recipes.join(source.name), synthetic_recipe(source)?).map_err(
-                    |error| {
-                        format!(
-                            "failed to write source recipe for {} below {}: {error}",
-                            source.name,
-                            recipes.display()
-                        )
-                    },
-                )?;
+                fs::write(
+                    recipes.join(source.name),
+                    synthetic_recipe(source, &working)?,
+                )
+                .map_err(|error| {
+                    format!(
+                        "failed to write source recipe for {} below {}: {error}",
+                        source.name,
+                        recipes.display()
+                    )
+                })?;
                 recipes
             }
         };
@@ -1100,10 +1480,84 @@ mod tests {
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     use super::{
-        LockedPackageCatalog, LockedPackageSource, SourceBuild, SourceBuildTools,
+        AUCTEX_RUNTIME_EXCLUDED_PATHS, AUCTEX_RUNTIME_REQUIRED_FILES, LockedPackageCatalog,
+        LockedPackageSource, SourceBuild, SourceBuildTools, extract_docstrip_source,
         prepare_cached_source_artifact_with_tools, prepare_source_checkout,
+        prune_auctex_elpa_ignored, runtime_tree_file_spec, verify_auctex_runtime_tree,
     };
     use crate::{EmacsRuntime, MelpaSandbox};
+
+    #[test]
+    fn docstrip_extraction_selects_positive_negative_and_combined_guards() {
+        let source = "%<*style>\nbase   \n%<*!active>\ninactive\n%</!active>\n%<*active>\nactive\n%</active>\n%</style>\n%<installer&make>make\n%<installer&!make>interactive\n";
+
+        assert_eq!(
+            extract_docstrip_source(source, &["style"]).expect("extract inactive style"),
+            "base\ninactive\n"
+        );
+        assert_eq!(
+            extract_docstrip_source(source, &["style", "active"]).expect("extract active style"),
+            "base\nactive\n"
+        );
+        assert_eq!(
+            extract_docstrip_source(source, &["installer", "make"])
+                .expect("extract combined installer selector"),
+            "make\n"
+        );
+    }
+
+    #[test]
+    fn auctex_runtime_tree_honors_elpaignore_and_keeps_recursive_payloads() {
+        let fixture = MelpaSandbox::new("runtime-tree-files").expect("create runtime-tree fixture");
+        let checkout = fixture.root().join("checkout");
+        for directory in [
+            ".git",
+            "admin",
+            "build-aux",
+            "images",
+            "latex",
+            "style",
+            "tests",
+        ] {
+            fs::create_dir_all(checkout.join(directory)).expect("create source-tree directory");
+        }
+        for file in [
+            "GNUmakefile",
+            "README",
+            "README.GIT",
+            "ChangeLog.1",
+            "auctex.el",
+            "lpath.el",
+        ] {
+            fs::write(checkout.join(file), file).expect("write source-tree file");
+        }
+        fs::write(checkout.join("latex/Makefile.in"), "development input")
+            .expect("write nested ignored source");
+        for file in AUCTEX_RUNTIME_REQUIRED_FILES {
+            let path = checkout.join(file);
+            fs::create_dir_all(path.parent().expect("required runtime file has a parent"))
+                .expect("create required runtime parent");
+            fs::write(path, "runtime payload").expect("write required runtime file");
+        }
+        fs::write(
+            checkout.join(".elpaignore"),
+            "*.in\n.elpaignore\nChangeLog.1\nREADME.GIT\nadmin\nbuild-aux\nlpath.el\ntests\n",
+        )
+        .expect("write hidden package metadata");
+
+        prune_auctex_elpa_ignored(&checkout).expect("apply pinned AUCTeX exclusions");
+        verify_auctex_runtime_tree(&checkout).expect("verify exact runtime topology");
+
+        let file_spec =
+            runtime_tree_file_spec(&checkout).expect("enumerate recursive package entries");
+        for required in AUCTEX_RUNTIME_REQUIRED_FILES {
+            assert!(file_spec.contains(&format!("(:rename \"{required}\" \"{required}\")")));
+        }
+        for excluded in AUCTEX_RUNTIME_EXCLUDED_PATHS {
+            assert!(!checkout.join(excluded).exists());
+            assert!(!file_spec.contains(excluded));
+        }
+    }
 
     #[cfg(unix)]
     fn initialize_git_repository(directory: &Path, nonce: &str) -> (String, String) {

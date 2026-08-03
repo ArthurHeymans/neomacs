@@ -85,6 +85,12 @@ pub const ATOM_DARK_THEME_MELPA_PIN: (&str, &str) = ("atom-dark-theme", "2022011
 /// `bba02fb2672a4c439d71920d8e068a3ff2ed463e`.
 pub const ATOM_ONE_DARK_THEME_MELPA_PIN: (&str, &str) = ("atom-one-dark-theme", "20260119.1824");
 
+/// The exact auctex-cluttex package selected by the practical AUCTeX mode,
+/// command expansion, local process, ANSI output, and command-default parity
+/// corpus. MELPA built this archive from upstream commit
+/// `1a940892dcbe3e4874d2d60db92de1cb34a1b773`.
+pub const AUCTEX_CLUTTEX_MELPA_PIN: (&str, &str) = ("auctex-cluttex", "20240519.1303");
+
 /// The exact auto-complete package selected by the comprehensive source,
 /// candidate, completion, dictionary, history, configuration, and lifecycle
 /// parity corpus. MELPA built this archive from upstream commit

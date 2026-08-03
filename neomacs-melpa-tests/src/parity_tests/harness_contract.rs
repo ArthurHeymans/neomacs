@@ -612,6 +612,21 @@ fn source_build_can_exclude_upstream_test_code_from_the_runtime_package() {
 }
 
 #[test]
+fn runtime_tree_dependencies_preserve_recursive_source_and_precede_the_root_package() {
+    let source = locked_melpa_source(("auctex", "14.1.2"))
+        .expect("resolve the exact AUCTeX runtime source tree");
+    assert_eq!(source.build(), SourceBuild::AuctexRuntime);
+    assert_eq!(
+        locked_melpa_install_plan(("auctex-cluttex", "20240519.1303"))
+            .expect("resolve the auctex-cluttex dependency closure")
+            .into_iter()
+            .map(|source| source.package())
+            .collect::<Vec<_>>(),
+        [("auctex", "14.1.2"), ("auctex-cluttex", "20240519.1303")]
+    );
+}
+
+#[test]
 fn exact_source_install_plan_orders_dependencies_before_the_main_package() {
     let plan = locked_melpa_install_plan(("arxiv-citation", "20230713.627"))
         .expect("resolve the source-locked arxiv-citation dependency closure");
@@ -670,7 +685,7 @@ fn every_exact_package_has_a_complete_acyclic_source_plan() {
     let sources = locked_melpa_sources().expect("parse the source lock");
     assert_eq!(
         sources.len(),
-        378,
+        380,
         "every root package, exact dependency, and legacy all-ext dependency stays pinned"
     );
 

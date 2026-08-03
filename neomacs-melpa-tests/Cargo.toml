@@ -12,6 +12,7 @@ publish = false
 # pinned fixture checksums.
 neomacs-test-oracle.workspace = true
 fs4.workspace = true
+sha2.workspace = true
 tempfile.workspace = true
 wait-timeout.workspace = true
 

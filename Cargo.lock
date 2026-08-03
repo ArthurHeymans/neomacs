@@ -3715,6 +3715,7 @@ dependencies = [
  "expect-test",
  "fs4",
  "neomacs-test-oracle",
+ "sha2",
  "tempfile",
  "wait-timeout",
 ]

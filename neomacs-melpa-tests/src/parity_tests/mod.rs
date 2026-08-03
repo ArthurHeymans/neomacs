@@ -218,6 +218,7 @@ mod atom_dark_theme;
 mod atom_one_dark_theme;
 mod atomic_chrome;
 mod attrap;
+mod auctex_cluttex;
 mod audacious;
 mod audio_notes_mode;
 mod aurel;
