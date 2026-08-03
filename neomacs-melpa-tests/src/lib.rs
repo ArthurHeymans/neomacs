@@ -1400,6 +1400,12 @@ pub const PHP_MODE_MELPA_PIN: (&str, &str) = ("php-mode", "20260719.209");
 /// pinned to upstream commit 37beef404c70d7b80dc085b1ee1e13fd9c375fe6.
 pub const PHP_RUNTIME_MELPA_PIN: (&str, &str) = ("php-runtime", "20241024.1622");
 
+/// The exact Pinyinlib package selected for practical contact, locale,
+/// punctuation, literal-metacharacter, buffer-navigation, and case-folding
+/// search parity. This MELPA version is pinned to upstream commit
+/// 1772c79b6f319b26b6a394a8dda065be3ea4498d.
+pub const PINYINLIB_MELPA_PIN: (&str, &str) = ("pinyinlib", "20200911.1723");
+
 /// The exact js2-refactor package selected by the practical scope rewrite,
 /// signature migration, extraction, IIFE, and structural editing parity
 /// corpus. MELPA built this archive from upstream commit
