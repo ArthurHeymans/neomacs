@@ -374,6 +374,12 @@ pub const TABLIST_MELPA_PIN: (&str, &str) = ("tablist", "20260623.1855");
 /// `872134704bd25c13a4c59552433da4c6881b5230`.
 pub const TINYSEGMENTER_MELPA_PIN: (&str, &str) = ("tinysegmenter", "20141124.1013");
 
+/// The exact yaml.el package selected by the practical deployment parsing,
+/// anchors, scalar policy, round-trip encoding, dialect, source-position, and
+/// validation parity corpus. MELPA built this archive from upstream commit
+/// `5546f36bde24a9a8c1934e0f6ce205cd41d72537`.
+pub const YAML_MELPA_PIN: (&str, &str) = ("yaml", "20260605.834");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 
