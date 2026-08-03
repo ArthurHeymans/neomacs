@@ -368,6 +368,12 @@ pub const SVG_LIB_MELPA_PIN: (&str, &str) = ("svg-lib", "0.3");
 /// `01f065e387ffe6b7a41f180f257cd12551c7a9c2`.
 pub const TABLIST_MELPA_PIN: (&str, &str) = ("tablist", "20260623.1855");
 
+/// The exact TinySegmenter package selected by the practical Japanese text,
+/// mixed-script release-note, document-indexing, buffer-editing, and boundary
+/// parity corpus. MELPA built this archive from upstream commit
+/// `872134704bd25c13a4c59552433da4c6881b5230`.
+pub const TINYSEGMENTER_MELPA_PIN: (&str, &str) = ("tinysegmenter", "20141124.1013");
+
 /// The exact xr dependency selected for the pyim parity corpus.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 
