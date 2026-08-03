@@ -311,7 +311,10 @@ pub const REQUEST_MELPA_PIN: (&str, &str) = ("request", "20250219.2213");
 /// `b0bd2b276f810a291f08c05ba2860ca07285a2eb`.
 pub const RTAGS_MELPA_PIN: (&str, &str) = ("rtags", "20260727.1603");
 
-/// The exact rust-mode dependency selected for the racer parity corpus.
+/// The exact rust-mode package selected by the practical syntax, indentation,
+/// font-lock, navigation, documentation, editing, Cargo, and rustfmt parity
+/// corpus, and used as a racer dependency. MELPA built this archive from
+/// upstream commit `0058837c048cc031ca1a13f598a6a6604777458b`.
 pub const RUST_MODE_MELPA_PIN: (&str, &str) = ("rust-mode", "20260725.1442");
 
 /// The exact xr dependency selected for the pyim parity corpus.
