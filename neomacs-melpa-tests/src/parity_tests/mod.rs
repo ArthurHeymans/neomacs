@@ -310,6 +310,7 @@ mod goto_chg;
 mod harness_contract;
 mod haskell_mode;
 mod helm;
+mod helm_ag;
 mod helm_core;
 mod helm_projectile;
 mod highlight_indentation;

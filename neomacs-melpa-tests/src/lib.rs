@@ -1978,6 +1978,12 @@ pub const GOTO_CHG_MELPA_PIN: (&str, &str) = ("goto-chg", "20240407.1110");
 /// user-interface dependency.
 pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
 
+/// The exact Helm Ag package selected for practical search-command, result
+/// highlighting, saved-result navigation, context-stack, multi-file edit, and
+/// project-discovery parity. The released 0.64 source is pinned at upstream
+/// commit `a7b43d9622ea5dcff3e3e0bb0b7dcc342b272171`.
+pub const HELM_AG_MELPA_PIN: (&str, &str) = ("helm-ag", "0.64");
+
 /// The exact helm-core package selected by the practical source-extension,
 /// candidate-buffer, pipeline, preview, and path parity corpus, and required
 /// by the Helm parity corpus.
