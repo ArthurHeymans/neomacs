@@ -72,7 +72,7 @@ fn register_core_load_hooks() {
         pdumper_do_now_and_after_load(
             crate::emacs_core::dispnew::pure::reset_dispnew_thread_locals,
         );
-        pdumper_do_now_and_after_load(crate::emacs_core::font::clear_font_cache_state);
+        pdumper_do_now_and_after_load(crate::emacs_core::xfaces::clear_font_cache_state);
         pdumper_do_now_and_after_load(crate::emacs_core::builtins::reset_builtins_thread_locals);
         pdumper_do_now_and_after_load(crate::emacs_core::charset::reset_charset_registry);
         pdumper_do_now_and_after_load(crate::emacs_core::timefns::reset_timefns_thread_locals);

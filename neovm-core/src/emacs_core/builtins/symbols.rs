@@ -5901,7 +5901,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute_from_resource(
     if let Some(frame) = args.get(3) {
         setter_args.push(*frame);
     }
-    crate::emacs_core::font::builtin_internal_set_lisp_face_attribute(eval, setter_args)
+    crate::emacs_core::xfaces::builtin_internal_set_lisp_face_attribute(eval, setter_args)
 }
 
 pub(crate) fn builtin_internal_stack_stats(args: Vec<Value>) -> EvalResult {

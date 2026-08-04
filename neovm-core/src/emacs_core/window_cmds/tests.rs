@@ -4662,7 +4662,7 @@ fn live_default_font_change_on_child_frame_skips_top_level_geometry_hints() {
             .unwrap_or_else(|| panic!("expected frame object, got {:?}", child)),
     );
 
-    crate::emacs_core::font::builtin_internal_set_lisp_face_attribute(
+    crate::emacs_core::xfaces::builtin_internal_set_lisp_face_attribute(
         &mut ev,
         vec![
             Value::symbol("default"),
@@ -5920,7 +5920,7 @@ fn modify_frame_parameters_after_live_font_change_defers_gui_resize_until_geomet
         frame.char_height = 16.0;
     }
 
-    crate::emacs_core::font::builtin_internal_set_lisp_face_attribute(
+    crate::emacs_core::xfaces::builtin_internal_set_lisp_face_attribute(
         &mut ev,
         vec![
             Value::symbol("default"),
@@ -6016,7 +6016,7 @@ fn live_default_font_change_updates_gui_geometry_hints() {
         frame.char_height = 16.0;
     }
 
-    crate::emacs_core::font::builtin_internal_set_lisp_face_attribute(
+    crate::emacs_core::xfaces::builtin_internal_set_lisp_face_attribute(
         &mut ev,
         vec![
             Value::symbol("default"),

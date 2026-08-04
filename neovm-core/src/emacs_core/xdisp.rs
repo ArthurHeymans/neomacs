@@ -3398,7 +3398,7 @@ fn invalid_named_face_diagnostics_in_buffer_region(
         let (face_ref, _, run_end) = buf.get_property_run_at_char_pos(pos, face);
         if let Some(face_ref) = face_ref {
             diagnostics.extend(
-                super::font::invalid_display_face_references(eval, frame_id, face_ref)
+                super::xfaces::invalid_display_face_references(eval, frame_id, face_ref)
                     .into_iter()
                     .map(|invalid| {
                         format!(

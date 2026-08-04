@@ -1256,7 +1256,7 @@ fn collect_thread_local_gc_roots(
         roots,
         "font-thread-local",
         stats,
-        super::font::collect_font_gc_roots,
+        super::xfaces::collect_font_gc_roots,
     );
     collect_group(
         roots,
@@ -9888,7 +9888,7 @@ impl Context {
         if self.materialized_face_table_source == Some(source) {
             return false;
         }
-        super::font::sync_runtime_face_table_from_frame_lisp_faces(self, frame_id);
+        super::xfaces::sync_runtime_face_table_from_frame_lisp_faces(self, frame_id);
         self.materialized_face_table_source = Some(source);
         true
     }
@@ -9904,7 +9904,7 @@ impl Context {
         // GNU Emacs stores the internal face ID as the symbol's `face`
         // property during `internal-make-lisp-face`.  Ensure this is set
         // so that `check-face`, `face-id`, `face-equal`, etc. work.
-        let _ = super::font::ensure_lisp_face_id_property(self, face_name);
+        let _ = super::xfaces::ensure_lisp_face_id_property(self, face_name);
         let changed = self.face_table.set_attribute(face_name, attr, value);
         if changed {
             self.face_change_count += 1;

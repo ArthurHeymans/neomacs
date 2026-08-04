@@ -4107,7 +4107,7 @@ fn normalize_bootstrap_runtime_surface(
         eval.obarray_mut().makunbound(name);
     }
     for name in &runtime_source_state.face_names {
-        super::font::clear_created_lisp_face(name);
+        super::xfaces::clear_created_lisp_face(name);
         // Keep the canonical existence store (face--new-frame-defaults) in sync
         // with the created-face set so internal-lisp-face-p stops reporting the
         // unloaded face (its fast path reads the table, not the created-set).
@@ -4310,7 +4310,7 @@ pub(crate) fn normalize_final_dump_runtime_surface(
         eval.obarray_mut().makunbound(name);
     }
     for name in &runtime_source_state.face_names {
-        super::font::clear_created_lisp_face(name);
+        super::xfaces::clear_created_lisp_face(name);
         // Keep the canonical existence store (face--new-frame-defaults) in sync
         // with the created-face set so internal-lisp-face-p stops reporting the
         // unloaded face (its fast path reads the table, not the created-set).
@@ -4509,7 +4509,7 @@ fn finalize_cached_bootstrap_eval(
             obarray.install_buffer_objfwd(id, fwd);
         }
     }
-    super::font::restore_created_faces_from_table(&eval.face_table.face_list());
+    super::xfaces::restore_created_faces_from_table(&eval.face_table.face_list());
     clear_runtime_loader_state(eval);
     clear_transient_runtime_features(eval);
     super::environment::install_host_environment_snapshot(eval);
