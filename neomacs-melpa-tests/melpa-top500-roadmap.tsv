@@ -73,7 +73,7 @@ rank	package	downloads	status
 72	popwin	1162225	covered
 73	ace-link	1161673	covered
 74	cider	1159900	covered
-75	google-translate	1147802	todo
+75	google-translate	1147802	covered
 76	package-lint	1135055	todo
 77	helm-swoop	1113675	todo
 78	lsp-ui	1112815	todo

@@ -309,6 +309,7 @@ mod geiser;
 mod general;
 mod git_commit;
 mod gntp;
+mod google_translate;
 mod goto_chg;
 mod harness_contract;
 mod haskell_mode;

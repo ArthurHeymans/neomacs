@@ -1928,6 +1928,12 @@ pub const CHINESE_WORD_AT_POINT_MELPA_PIN: (&str, &str) = ("chinese-word-at-poin
 /// commit `567503cec96bf463e031eef6e0d258ba87b17188`.
 pub const CIDER_MELPA_PIN: (&str, &str) = ("cider", "20260729.1056");
 
+/// The exact Google Translate package selected by the practical request,
+/// response, dictionary, suggestion, speech, language-selection, editing, and
+/// backend-dispatch parity corpus. MELPA built this archive from upstream
+/// commit `47c5719b7dd51a37a6ad270489738187a436d920`.
+pub const GOOGLE_TRANSLATE_MELPA_PIN: (&str, &str) = ("google-translate", "20260419.134");
+
 /// The exact CSV Mode release selected from GNU ELPA by the practical quoted
 /// row, column editing, sorting, alignment, and transpose parity corpus.
 pub const CSV_MODE_GNU_ELPA_PIN: (&str, &str) = ("csv-mode", "1.27");
