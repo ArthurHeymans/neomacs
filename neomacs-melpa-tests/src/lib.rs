@@ -1934,6 +1934,12 @@ pub const CIDER_MELPA_PIN: (&str, &str) = ("cider", "20260729.1056");
 /// commit `47c5719b7dd51a37a6ad270489738187a436d920`.
 pub const GOOGLE_TRANSLATE_MELPA_PIN: (&str, &str) = ("google-translate", "20260419.134");
 
+/// The exact Package Lint package selected by the practical release audit,
+/// dependency, compatibility, package-structure, interactive-report, batch,
+/// and version-maintenance parity corpus. MELPA built this archive from
+/// upstream commit `35996f478d81e51dae4fa30d051f741895d07399`.
+pub const PACKAGE_LINT_MELPA_PIN: (&str, &str) = ("package-lint", "20260619.1246");
+
 /// The exact CSV Mode release selected from GNU ELPA by the practical quoted
 /// row, column editing, sorting, alignment, and transpose parity corpus.
 pub const CSV_MODE_GNU_ELPA_PIN: (&str, &str) = ("csv-mode", "1.27");

@@ -351,6 +351,7 @@ mod navi2ch;
 mod nerd_icons;
 mod package_build;
 mod package_lifecycle;
+mod package_lint;
 mod package_vc;
 mod pcre2el;
 mod pdf_tools;
