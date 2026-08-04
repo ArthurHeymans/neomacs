@@ -1504,9 +1504,13 @@ fn buffer_slot_info_by_offset(offset: BufferSlot) -> Option<&'static BufferSlotI
     BUFFER_SLOT_INFO.iter().find(|info| info.offset == offset)
 }
 
+/// Lisp name of the undo-list variable; reads and writes route through
+/// [`SharedUndoState`], not the plain slot array (see `buffer_local_value`).
+pub(crate) const BUFFER_UNDO_LIST_NAME: &str = "buffer-undo-list";
+
 fn buffer_undo_list_sym() -> SymId {
     static SYM: OnceLock<SymId> = OnceLock::new();
-    *SYM.get_or_init(|| intern("buffer-undo-list"))
+    *SYM.get_or_init(|| intern(BUFFER_UNDO_LIST_NAME))
 }
 
 /// Look up `key` in a buffer-local alist. Returns the cdr of the
@@ -3945,7 +3949,7 @@ impl Buffer {
         if let Some(info) = lookup_buffer_slot(name) {
             return Some(self.slots[info.offset.index()]);
         }
-        if name == "buffer-undo-list" {
+        if name == BUFFER_UNDO_LIST_NAME {
             return Some(self.get_undo_list());
         }
         match self.get_buffer_local_binding(name) {
@@ -3961,11 +3965,8 @@ impl Buffer {
         if let Some(info) = lookup_buffer_slot_by_sym_id(sym_id) {
             return Some(self.slots[info.offset.index()]);
         }
-        {
-            static UNDO_LIST: OnceLock<SymId> = OnceLock::new();
-            if sym_id == *UNDO_LIST.get_or_init(|| intern("buffer-undo-list")) {
-                return Some(self.get_undo_list());
-            }
+        if sym_id == buffer_undo_list_sym() {
+            return Some(self.get_undo_list());
         }
         match self.get_buffer_local_binding_by_sym_id(sym_id) {
             Some(RuntimeBindingValue::Bound(value)) => Some(value),
@@ -4425,7 +4426,7 @@ impl BufferManager {
         // GNU buffer.c:667 — buffers whose names start with a space have
         // undo recording disabled by default.
         if name.starts_with(' ') {
-            buf.set_buffer_local("buffer-undo-list", crate::emacs_core::value::Value::T);
+            buf.set_buffer_local(BUFFER_UNDO_LIST_NAME, crate::emacs_core::value::Value::T);
         }
         self.buffers.insert(id, buf);
         self.buffer_order.push(id);
@@ -5817,14 +5818,14 @@ impl BufferManager {
             let buf = self.buffers.get_mut(&id)?;
             match value.kind() {
                 ValueKind::T => {
-                    buf.set_buffer_local("buffer-undo-list", Value::T);
+                    buf.set_buffer_local(BUFFER_UNDO_LIST_NAME, Value::T);
                 }
                 ValueKind::Nil => {
-                    buf.set_buffer_local("buffer-undo-list", Value::NIL);
+                    buf.set_buffer_local(BUFFER_UNDO_LIST_NAME, Value::NIL);
                     buf.undo_state.set_recorded_first_change(false);
                 }
                 _other => {
-                    buf.set_buffer_local("buffer-undo-list", value);
+                    buf.set_buffer_local(BUFFER_UNDO_LIST_NAME, value);
                 }
             }
         }
