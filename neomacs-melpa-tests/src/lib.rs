@@ -1854,6 +1854,12 @@ pub const ELISP_SLIME_NAV_MELPA_PIN: (&str, &str) = ("elisp-slime-nav", "2021051
 /// `cf06b4ccdce6a39346c32f05139f9ee8b77ee229`.
 pub const DUMB_JUMP_MELPA_PIN: (&str, &str) = ("dumb-jump", "20260603.1700");
 
+/// The exact Flx package selected for practical file-finder, command-palette,
+/// incremental narrowing, annotated display, and Unicode case-intent parity.
+/// MELPA built this archive from upstream commit
+/// `4b1346eb9a8a76ee9c9dede69738c63ad97ac5b6`.
+pub const FLX_MELPA_PIN: (&str, &str) = ("flx", "20240205.356");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");

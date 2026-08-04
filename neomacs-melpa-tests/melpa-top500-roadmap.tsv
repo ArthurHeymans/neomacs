@@ -63,7 +63,7 @@ rank	package	downloads	status
 62	ac-php-core	1244313	covered
 63	multiple-cursors	1233338	covered
 64	dumb-jump	1231707	covered
-65	flx	1220442	todo
+65	flx	1220442	covered
 66	volatile-highlights	1197799	todo
 67	pcre2el	1184018	todo
 68	evil-nerd-commenter	1178503	todo
