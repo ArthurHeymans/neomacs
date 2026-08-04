@@ -359,6 +359,7 @@ mod simple_httpd;
 mod skewer_mode;
 mod slime;
 mod sly;
+mod smartparens;
 mod spinner;
 mod splitter;
 mod svg_lib;

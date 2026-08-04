@@ -26,7 +26,7 @@ rank	package	downloads	status
 25	ace-window	2060935	covered
 26	bind-key	2050725	covered
 27	ht	2044450	covered
-28	smartparens	2031314	todo
+28	smartparens	2031314	covered
 29	lv	1990658	covered
 30	magit-section	1937987	covered
 31	ivy	1906870	covered

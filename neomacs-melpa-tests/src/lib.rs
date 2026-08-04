@@ -1940,6 +1940,12 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 
+/// The exact Smartparens package selected for practical balanced typing,
+/// structural refactoring, wrapping, strict editing, Python, and Markdown
+/// parity. MELPA built this archive from upstream commit
+/// `82d2cf084a19b0c2c3812e0550721f8a61996056`.
+pub const SMARTPARENS_MELPA_PIN: (&str, &str) = ("smartparens", "20260129.1214");
+
 /// The exact Yasnippet package selected by the direct parity corpus and as
 /// angular-snippets' manually documented runtime dependency.
 pub const YASNIPPET_MELPA_PIN: (&str, &str) = ("yasnippet", "20250602.1342");
