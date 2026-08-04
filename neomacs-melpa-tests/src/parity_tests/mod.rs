@@ -271,6 +271,7 @@ mod casual;
 mod ccc;
 mod cdb;
 mod chinese_word_at_point;
+mod cider;
 mod clojure_mode;
 mod commander;
 mod company;

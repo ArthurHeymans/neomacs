@@ -1922,6 +1922,12 @@ pub const CDB_MELPA_PIN: (&str, &str) = ("cdb", "20230318.2152");
 /// segmentation, mixed-language extraction, and bounds-driven editing corpus.
 pub const CHINESE_WORD_AT_POINT_MELPA_PIN: (&str, &str) = ("chinese-word-at-point", "20170811.941");
 
+/// The exact CIDER package selected by the practical nREPL transport,
+/// completion-context, compilation, stacktrace, test-report, inspector, REPL,
+/// and source-navigation parity corpus. MELPA built this archive from upstream
+/// commit `567503cec96bf463e031eef6e0d258ba87b17188`.
+pub const CIDER_MELPA_PIN: (&str, &str) = ("cider", "20260729.1056");
+
 /// The exact CSV Mode release selected from GNU ELPA by the practical quoted
 /// row, column editing, sorting, alignment, and transpose parity corpus.
 pub const CSV_MODE_GNU_ELPA_PIN: (&str, &str) = ("csv-mode", "1.27");

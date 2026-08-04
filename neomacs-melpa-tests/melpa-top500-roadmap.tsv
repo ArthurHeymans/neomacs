@@ -72,7 +72,7 @@ rank	package	downloads	status
 71	evil-matchit	1165082	covered
 72	popwin	1162225	covered
 73	ace-link	1161673	covered
-74	cider	1159900	todo
+74	cider	1159900	covered
 75	google-translate	1147802	todo
 76	package-lint	1135055	todo
 77	helm-swoop	1113675	todo
