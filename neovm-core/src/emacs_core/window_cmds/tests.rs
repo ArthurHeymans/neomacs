@@ -22,7 +22,7 @@ fn frame_scale_factor_reads_the_selected_frames_presented_device_scale() {
         .expect("selected frame")
         .device_scale_factor = 1.75;
 
-    let value = super::builtin_frame_scale_factor(&mut eval, vec![]).expect("scale factor");
+    let value = crate::emacs_core::frame::builtin_frame_scale_factor(&mut eval, vec![]).expect("scale factor");
 
     assert_eq!(value, Value::make_float(1.75));
 }
@@ -3597,19 +3597,19 @@ fn frame_query_builtins_report_pixel_sizes_for_gui_frames() {
     }
 
     assert_eq!(
-        super::builtin_frame_native_width(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_native_width(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
         Value::fixnum(800)
     );
     assert_eq!(
-        super::builtin_frame_native_height(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_native_height(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
         Value::fixnum(600)
     );
     assert_eq!(
-        super::builtin_frame_text_width(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_text_width(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
         Value::fixnum(776)
     );
     assert_eq!(
-        super::builtin_frame_text_height(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_text_height(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
         Value::fixnum(600)
     );
 }
@@ -3633,7 +3633,7 @@ fn frame_text_width_ignores_window_local_fringe_overrides_for_gui_frames() {
     );
 
     assert_eq!(
-        super::builtin_frame_text_width(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_text_width(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
         Value::fixnum(776)
     );
 }
@@ -3651,11 +3651,11 @@ fn frame_query_builtins_use_internal_window_system_state() {
     }
 
     assert_eq!(
-        super::builtin_frame_native_width(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_native_width(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
         Value::fixnum(800)
     );
     assert_eq!(
-        super::builtin_frame_native_height(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_native_height(&mut ev, vec![Value::make_frame(fid.0)]).unwrap(),
         Value::fixnum(600)
     );
 }
@@ -3979,19 +3979,19 @@ fn make_terminal_frame_creates_tty_child_frame_with_gnu_geometry_semantics() {
         Value::cons(Value::symbol("visibility"), Value::NIL),
     ]);
     let child =
-        super::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
+        crate::emacs_core::frame::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
     let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
 
     assert_eq!(
-        super::builtin_frame_parent(&mut ev, vec![child]).expect("frame-parent"),
+        crate::emacs_core::frame::builtin_frame_parent(&mut ev, vec![child]).expect("frame-parent"),
         root
     );
     assert_eq!(
-        super::builtin_frame_ancestor_p(&mut ev, vec![root, child]).expect("frame-ancestor-p"),
+        crate::emacs_core::frame::builtin_frame_ancestor_p(&mut ev, vec![root, child]).expect("frame-ancestor-p"),
         Value::T
     );
 
-    let position = super::builtin_frame_position(&mut ev, vec![child]).expect("frame-position");
+    let position = crate::emacs_core::frame::builtin_frame_position(&mut ev, vec![child]).expect("frame-position");
     assert_eq!(position.cons_car(), Value::fixnum(4));
     assert_eq!(position.cons_cdr(), Value::fixnum(2));
 
@@ -4028,7 +4028,7 @@ fn make_terminal_frame_creates_tty_child_frame_with_gnu_geometry_semantics() {
     );
 
     assert_eq!(
-        super::builtin_make_frame_visible(&mut ev, vec![child]).expect("make-frame-visible"),
+        crate::emacs_core::frame::builtin_make_frame_visible(&mut ev, vec![child]).expect("make-frame-visible"),
         child
     );
 
@@ -4086,7 +4086,7 @@ fn make_terminal_frame_accepts_tty_minibuffer_window_parameter() {
     ]);
 
     let child =
-        super::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
+        crate::emacs_core::frame::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
     let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
     let child_frame = ev.frames.get(child_id).expect("child frame");
     assert_eq!(child_frame.minibuffer_window, Some(root_minibuffer));
@@ -4130,7 +4130,7 @@ fn tty_child_frame_accepts_text_pixel_size_parameters() {
     ]);
 
     let child =
-        super::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
+        crate::emacs_core::frame::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
     let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
     let child_frame = ev.frames.get(child_id).expect("child frame");
     assert_eq!(child_frame.width, 17);
@@ -4174,7 +4174,7 @@ fn modify_frame_parameters_accepts_text_pixel_size_on_tty_child_frame() {
         Value::cons(Value::symbol("visibility"), Value::NIL),
     ]);
     let child =
-        super::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
+        crate::emacs_core::frame::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
     let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
     let text_pixels = |n| Value::cons(Value::symbol("text-pixels"), Value::fixnum(n));
     let alist = Value::list(vec![
@@ -4182,7 +4182,7 @@ fn modify_frame_parameters_accepts_text_pixel_size_on_tty_child_frame() {
         Value::cons(Value::symbol("height"), text_pixels(18)),
     ]);
 
-    super::builtin_modify_frame_parameters(&mut ev, vec![child, alist])
+    crate::emacs_core::frame::builtin_modify_frame_parameters(&mut ev, vec![child, alist])
         .expect("modify-frame-parameters");
     let child_frame = ev.frames.get(child_id).expect("child frame");
     assert_eq!(child_frame.width, 91);
@@ -4232,7 +4232,7 @@ fn window_text_pixel_size_uses_supplied_child_window_frame() {
         Value::cons(Value::symbol("visibility"), Value::NIL),
     ]);
     let child =
-        super::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
+        crate::emacs_core::frame::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
     let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
     let child_window = {
         let frame = ev.frames.get_mut(child_id).expect("child frame");
@@ -4285,7 +4285,7 @@ fn shared_tty_child_minibuffer_window_apis_use_owner_frame() {
     ]);
 
     let child =
-        super::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
+        crate::emacs_core::frame::builtin_make_terminal_frame(&mut ev, vec![params]).expect("make-terminal-frame");
     let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
     let child_frame = ev.frames.get(child_id).expect("child frame");
     assert_eq!(child_frame.minibuffer_window, Some(root_minibuffer));
@@ -4763,7 +4763,7 @@ fn modify_frame_parameters_resizes_gui_child_frame_text_pixels() {
         Value::cons(Value::symbol("height"), text_pixels(78)),
     ]);
 
-    super::builtin_modify_frame_parameters(&mut ev, vec![created, alist])
+    crate::emacs_core::frame::builtin_modify_frame_parameters(&mut ev, vec![created, alist])
         .expect("modify-frame-parameters");
 
     let child = ev.frames.get(child_id).expect("child frame");
@@ -4806,7 +4806,7 @@ fn delete_frame_removes_gui_child_overlay_from_display_host() {
     let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
     let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame id"));
 
-    super::builtin_delete_frame(&mut ev, vec![created]).expect("delete child frame");
+    crate::emacs_core::frame::builtin_delete_frame(&mut ev, vec![created]).expect("delete child frame");
 
     assert!(ev.frames.get(child_id).is_none());
     assert_eq!(*removed_child_frames.borrow(), vec![child_id]);
@@ -4842,7 +4842,7 @@ fn make_frame_invisible_removes_gui_child_overlay_from_display_host() {
     let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
     let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame id"));
 
-    super::builtin_make_frame_invisible(&mut ev, vec![created])
+    crate::emacs_core::frame::builtin_make_frame_invisible(&mut ev, vec![created])
         .expect("make child frame invisible");
 
     let child = ev.frames.get(child_id).expect("child frame remains live");
@@ -4880,9 +4880,9 @@ fn make_frame_visible_shows_gui_child_overlay_from_display_host() {
     let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
     let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame id"));
 
-    super::builtin_make_frame_invisible(&mut ev, vec![created])
+    crate::emacs_core::frame::builtin_make_frame_invisible(&mut ev, vec![created])
         .expect("make child frame invisible");
-    super::builtin_make_frame_visible(&mut ev, vec![created]).expect("make child frame visible");
+    crate::emacs_core::frame::builtin_make_frame_visible(&mut ev, vec![created]).expect("make child frame visible");
 
     let child = ev.frames.get(child_id).expect("child frame remains live");
     assert!(child.visible);
@@ -4963,7 +4963,7 @@ fn delete_frame_destroys_top_level_gui_window_from_display_host() {
     let removed_child_frames = host.removed_child_frames.clone();
     ev.set_display_host(Box::new(host));
 
-    super::builtin_delete_frame(&mut ev, vec![Value::make_frame(second_id.0)])
+    crate::emacs_core::frame::builtin_delete_frame(&mut ev, vec![Value::make_frame(second_id.0)])
         .expect("delete top-level gui frame");
 
     assert!(ev.frames.get(first_id).is_some());
@@ -5003,7 +5003,7 @@ fn delete_parent_frame_cascades_to_gui_child_overlays() {
     let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
     let child_id = crate::window::FrameId(created.as_frame_id().expect("child frame id"));
 
-    super::builtin_delete_frame(&mut ev, vec![Value::make_frame(parent_id.0)])
+    crate::emacs_core::frame::builtin_delete_frame(&mut ev, vec![Value::make_frame(parent_id.0)])
         .expect("delete parent frame");
 
     assert!(ev.frames.get(parent_id).is_none());
@@ -5269,7 +5269,7 @@ fn deleting_last_frame_on_terminal_deletes_terminal_too() {
         crate::emacs_core::terminal::pure::terminal_handle_value_for_id(7).expect("terminal 7");
 
     assert_eq!(
-        super::builtin_delete_frame(&mut ev, vec![Value::make_frame(secondary.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_delete_frame(&mut ev, vec![Value::make_frame(secondary.0)]).unwrap(),
         Value::NIL
     );
     assert!(
@@ -5300,7 +5300,7 @@ fn framep_returns_window_system_symbol_for_gui_frames() {
         .expect("selected frame")
         .set_parameter(Value::symbol("window-system"), Value::symbol("x"));
 
-    let result = super::builtin_framep(&mut ev, vec![Value::make_frame(frame_id.0)]).unwrap();
+    let result = crate::emacs_core::frame::builtin_framep(&mut ev, vec![Value::make_frame(frame_id.0)]).unwrap();
     assert_eq!(result, Value::symbol("x"));
 }
 
@@ -5333,19 +5333,19 @@ fn frame_builtins_accept_frame_handle_values() {
     let frame = Value::make_frame(fid.0);
 
     assert_eq!(
-        super::builtin_framep(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::frame::builtin_framep(&mut ev, vec![frame]).unwrap(),
         Value::T
     );
     assert_eq!(
-        super::builtin_frame_live_p(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_live_p(&mut ev, vec![frame]).unwrap(),
         Value::T
     );
     assert_eq!(
-        super::builtin_frame_visible_p(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_visible_p(&mut ev, vec![frame]).unwrap(),
         Value::T
     );
     assert_eq!(
-        super::builtin_select_frame(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::frame::builtin_select_frame(&mut ev, vec![frame]).unwrap(),
         Value::make_frame(fid.0)
     );
     assert_eq!(
@@ -5376,7 +5376,7 @@ fn select_frame_switches_active_kboard_to_frame_terminal() {
     let secondary = ev.frames.create_frame_on_terminal("F2", 7, 800, 600, buf);
 
     assert_eq!(
-        super::builtin_select_frame(&mut ev, vec![Value::make_frame(secondary.0)])
+        crate::emacs_core::frame::builtin_select_frame(&mut ev, vec![Value::make_frame(secondary.0)])
             .expect("select secondary frame"),
         Value::make_frame(secondary.0)
     );
@@ -5388,7 +5388,7 @@ fn select_frame_switches_active_kboard_to_frame_terminal() {
         .set_input_decode_map(Value::symbol("secondary-map"));
 
     assert_eq!(
-        super::builtin_select_frame(&mut ev, vec![Value::make_frame(primary.0)])
+        crate::emacs_core::frame::builtin_select_frame(&mut ev, vec![Value::make_frame(primary.0)])
             .expect("reselect primary frame"),
         Value::make_frame(primary.0)
     );
@@ -5397,7 +5397,7 @@ fn select_frame_switches_active_kboard_to_frame_terminal() {
         Value::symbol("primary-map")
     );
 
-    super::builtin_select_frame(&mut ev, vec![Value::make_frame(secondary.0)])
+    crate::emacs_core::frame::builtin_select_frame(&mut ev, vec![Value::make_frame(secondary.0)])
         .expect("reselect secondary frame");
     assert_eq!(
         ev.command_loop.keyboard.input_decode_map(),
@@ -5456,11 +5456,11 @@ fn redirect_frame_focus_tracks_frame_state_and_selection_redirects() {
     let secondary = ev.frames.create_frame("F2", 800, 600, buf);
 
     assert_eq!(
-        super::builtin_frame_focus(&mut ev, vec![Value::make_frame(primary.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_focus(&mut ev, vec![Value::make_frame(primary.0)]).unwrap(),
         Value::NIL
     );
     assert_eq!(
-        super::builtin_redirect_frame_focus(
+        crate::emacs_core::frame::builtin_redirect_frame_focus(
             &mut ev,
             vec![Value::make_frame(primary.0), Value::make_frame(primary.0)],
         )
@@ -5468,23 +5468,23 @@ fn redirect_frame_focus_tracks_frame_state_and_selection_redirects() {
         Value::NIL
     );
     assert_eq!(
-        super::builtin_frame_focus(&mut ev, vec![Value::make_frame(primary.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_focus(&mut ev, vec![Value::make_frame(primary.0)]).unwrap(),
         Value::make_frame(primary.0)
     );
 
-    super::builtin_select_frame(&mut ev, vec![Value::make_frame(secondary.0)])
+    crate::emacs_core::frame::builtin_select_frame(&mut ev, vec![Value::make_frame(secondary.0)])
         .expect("select secondary frame");
     assert_eq!(
-        super::builtin_frame_focus(&mut ev, vec![Value::make_frame(primary.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_focus(&mut ev, vec![Value::make_frame(primary.0)]).unwrap(),
         Value::make_frame(secondary.0)
     );
 
     assert_eq!(
-        super::builtin_redirect_frame_focus(&mut ev, vec![Value::make_frame(primary.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_redirect_frame_focus(&mut ev, vec![Value::make_frame(primary.0)]).unwrap(),
         Value::NIL
     );
     assert_eq!(
-        super::builtin_frame_focus(&mut ev, vec![Value::make_frame(primary.0)]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_focus(&mut ev, vec![Value::make_frame(primary.0)]).unwrap(),
         Value::NIL
     );
 }
@@ -5555,7 +5555,7 @@ fn gui_frame_font_parameter_exposes_font_name_not_font_object() {
 
     let frame_value = Value::make_frame(fid.0);
     let direct =
-        super::builtin_frame_parameter(&mut ev, vec![frame_value, FrameParam::Font.symbol()])
+        crate::emacs_core::frame::builtin_frame_parameter(&mut ev, vec![frame_value, FrameParam::Font.symbol()])
             .expect("frame-parameter");
     assert_eq!(
         direct.as_utf8_str(),
@@ -6286,12 +6286,12 @@ fn pixelwise_child_frame_resize_preserves_requested_text_pixels() {
     .expect("x-create-frame");
     let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
 
-    super::builtin_set_frame_size(
+    crate::emacs_core::frame::builtin_set_frame_size(
         &mut ev,
         vec![child, Value::fixnum(525), Value::fixnum(374), Value::T],
     )
     .expect("first pixelwise set-frame-size");
-    super::builtin_set_frame_size(
+    crate::emacs_core::frame::builtin_set_frame_size(
         &mut ev,
         vec![child, Value::fixnum(525), Value::fixnum(374), Value::T],
     )
@@ -6352,7 +6352,7 @@ fn set_frame_size_and_position_pixelwise_resizes_gui_child_frame() {
     .expect("x-create-frame");
     let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
 
-    super::builtin_set_frame_size_and_position_pixelwise(
+    crate::emacs_core::frame::builtin_set_frame_size_and_position_pixelwise(
         &mut ev,
         vec![
             child,
@@ -6384,7 +6384,7 @@ fn set_frame_size_and_position_pixelwise_updates_top_level_tty_native_totals() {
     let mut ev = runtime_startup_context();
     let frame = Value::make_frame(ev.frames.selected_frame().expect("selected frame").id.0);
 
-    super::builtin_set_frame_size_and_position_pixelwise(
+    crate::emacs_core::frame::builtin_set_frame_size_and_position_pixelwise(
         &mut ev,
         vec![
             frame,
@@ -6397,27 +6397,27 @@ fn set_frame_size_and_position_pixelwise_updates_top_level_tty_native_totals() {
     .expect("set-frame-size-and-position-pixelwise");
 
     assert_eq!(
-        super::builtin_frame_native_width(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_native_width(&mut ev, vec![frame]).unwrap(),
         Value::fixnum(123)
     );
     assert_eq!(
-        super::builtin_frame_native_height(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_native_height(&mut ev, vec![frame]).unwrap(),
         Value::fixnum(46)
     );
     assert_eq!(
-        super::builtin_frame_total_cols(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_total_cols(&mut ev, vec![frame]).unwrap(),
         Value::fixnum(123)
     );
     assert_eq!(
-        super::builtin_frame_total_lines(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_total_lines(&mut ev, vec![frame]).unwrap(),
         Value::fixnum(46)
     );
     assert_eq!(
-        super::builtin_frame_text_width(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_text_width(&mut ev, vec![frame]).unwrap(),
         Value::fixnum(123)
     );
     assert_eq!(
-        super::builtin_frame_text_height(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_text_height(&mut ev, vec![frame]).unwrap(),
         Value::fixnum(45)
     );
 

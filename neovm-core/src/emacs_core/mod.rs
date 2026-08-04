@@ -53,6 +53,7 @@ pub mod fileio;
 pub mod filelock;
 pub mod floatfns;
 pub mod fns;
+pub mod frame;
 pub mod font;
 pub mod fontset;
 pub mod format;

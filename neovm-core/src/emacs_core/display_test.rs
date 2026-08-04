@@ -3074,11 +3074,11 @@ fn eval_monitor_attributes_include_bootstrapped_frame() {
     assert!(frames.first().map_or(false, |v| v.is_frame()));
     assert!(!frames[0].is_integer());
     assert_eq!(
-        crate::emacs_core::window_cmds::builtin_framep(&mut eval, vec![frames[0]]).unwrap(),
+        crate::emacs_core::frame::builtin_framep(&mut eval, vec![frames[0]]).unwrap(),
         Value::T
     );
     assert_eq!(
-        crate::emacs_core::window_cmds::builtin_frame_live_p(&mut eval, vec![frames[0]]).unwrap(),
+        crate::emacs_core::frame::builtin_frame_live_p(&mut eval, vec![frames[0]]).unwrap(),
         Value::T
     );
 }

@@ -595,7 +595,7 @@ fn make_terminal_frame_is_eval_backed_frame_creation() {
     super::pure::mark_selected_terminal_usable_for_test(&eval);
 
     let frame =
-        crate::emacs_core::window_cmds::builtin_make_terminal_frame(&mut eval, vec![Value::NIL])
+        crate::emacs_core::frame::builtin_make_terminal_frame(&mut eval, vec![Value::NIL])
             .expect("make-terminal-frame");
 
     assert!(frame.as_frame_id().is_some());

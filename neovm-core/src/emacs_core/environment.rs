@@ -313,7 +313,7 @@ fn selected_frame_display(eval: &mut Context, frame: Value) -> EvalResult {
         return Ok(frame_x_display_value(frame).unwrap_or(Value::NIL));
     }
 
-    super::window_cmds::builtin_frame_parameter(eval, vec![frame, Value::symbol("display")])
+    super::frame::builtin_frame_parameter(eval, vec![frame, Value::symbol("display")])
 }
 
 /// Resolve `getenv-internal` through GNU's environment policy.

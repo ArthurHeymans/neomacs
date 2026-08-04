@@ -1948,7 +1948,7 @@ pub(crate) fn builtin_next_frame(eval: &mut super::eval::Context, args: Vec<Valu
             "frame-live-p",
         )?;
     }
-    super::window_cmds::builtin_selected_frame(eval, Vec::new())
+    crate::emacs_core::frame::builtin_selected_frame(eval, Vec::new())
 }
 
 pub(crate) fn builtin_previous_frame(
@@ -1966,7 +1966,7 @@ pub(crate) fn builtin_previous_frame(
             "frame-live-p",
         )?;
     }
-    super::window_cmds::builtin_selected_frame(eval, Vec::new())
+    crate::emacs_core::frame::builtin_selected_frame(eval, Vec::new())
 }
 
 pub(crate) fn builtin_raise_frame(args: Vec<Value>) -> EvalResult {
@@ -2962,7 +2962,7 @@ pub(crate) fn builtin_old_selected_frame(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("old-selected-frame", &args, 0)?;
-    super::window_cmds::builtin_selected_frame(eval, Vec::new())
+    crate::emacs_core::frame::builtin_selected_frame(eval, Vec::new())
 }
 
 pub(crate) fn builtin_menu_bar_menu_at_x_y(

@@ -2705,9 +2705,9 @@ fn frame_native_width_syncs_pending_resize_without_read_char() {
     })
     .unwrap();
 
-    let width = crate::emacs_core::window_cmds::builtin_frame_native_width(&mut ev, vec![])
+    let width = crate::emacs_core::frame::builtin_frame_native_width(&mut ev, vec![])
         .expect("frame-native-width should succeed");
-    let height = crate::emacs_core::window_cmds::builtin_frame_native_height(&mut ev, vec![])
+    let height = crate::emacs_core::frame::builtin_frame_native_height(&mut ev, vec![])
         .expect("frame-native-height should succeed");
 
     assert_eq!(width, Value::fixnum(700));
@@ -2807,9 +2807,9 @@ fn frame_native_width_syncs_pending_resize_behind_focus_event() {
     })
     .unwrap();
 
-    let width = crate::emacs_core::window_cmds::builtin_frame_native_width(&mut ev, vec![])
+    let width = crate::emacs_core::frame::builtin_frame_native_width(&mut ev, vec![])
         .expect("frame-native-width should succeed");
-    let height = crate::emacs_core::window_cmds::builtin_frame_native_height(&mut ev, vec![])
+    let height = crate::emacs_core::frame::builtin_frame_native_height(&mut ev, vec![])
         .expect("frame-native-height should succeed");
 
     assert_eq!(width, Value::fixnum(700));

@@ -1207,7 +1207,7 @@ fn builtin_error_message_string_formats_frame_and_window_handles() {
     let mut evaluator = super::super::eval::Context::new();
     init_standard_errors(&mut evaluator.obarray);
 
-    let frame = super::super::window_cmds::builtin_selected_frame(&mut evaluator, vec![])
+    let frame = super::super::frame::builtin_selected_frame(&mut evaluator, vec![])
         .expect("selected-frame should succeed");
     let frame_err = Value::list(vec![
         Value::symbol("args-out-of-range"),

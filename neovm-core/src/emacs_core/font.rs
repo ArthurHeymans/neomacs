@@ -745,7 +745,7 @@ pub(crate) fn publish_face_attribute_to_frame_parameter(
     // GNU calls Fmodify_frame_parameters directly from xfaces.c.  Preserve
     // that primitive-to-primitive seam: the parameter change is observable,
     // but Lisp advice around `modify-frame-parameters` is not invoked.
-    super::window_cmds::builtin_modify_frame_parameters(
+    super::frame::builtin_modify_frame_parameters(
         eval,
         vec![
             Value::make_frame(frame_id.0),

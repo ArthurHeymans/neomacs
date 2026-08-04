@@ -5859,9 +5859,9 @@ fn accept_process_output_services_pending_resize_from_shared_wait_request() {
         .expect("accept-process-output should service wait-request special input");
     drop(tx);
 
-    let width = crate::emacs_core::window_cmds::builtin_frame_native_width(&mut ev, vec![])
+    let width = crate::emacs_core::frame::builtin_frame_native_width(&mut ev, vec![])
         .expect("frame-native-width should succeed");
-    let height = crate::emacs_core::window_cmds::builtin_frame_native_height(&mut ev, vec![])
+    let height = crate::emacs_core::frame::builtin_frame_native_height(&mut ev, vec![])
         .expect("frame-native-height should succeed");
 
     assert_eq!(result, Value::NIL);
@@ -5901,9 +5901,9 @@ fn accept_process_output_services_resize_arriving_during_wait() {
     resize_thread.join().expect("resize sender thread");
     drop(tx);
 
-    let width = crate::emacs_core::window_cmds::builtin_frame_native_width(&mut ev, vec![])
+    let width = crate::emacs_core::frame::builtin_frame_native_width(&mut ev, vec![])
         .expect("frame-native-width should succeed");
-    let height = crate::emacs_core::window_cmds::builtin_frame_native_height(&mut ev, vec![])
+    let height = crate::emacs_core::frame::builtin_frame_native_height(&mut ev, vec![])
         .expect("frame-native-height should succeed");
 
     assert_eq!(result, Value::NIL);

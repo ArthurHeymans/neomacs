@@ -3435,7 +3435,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "selected-frame",
-        super::window_cmds::builtin_selected_frame,
+        super::frame::builtin_selected_frame,
         0,
         Some(0),
     );
@@ -3468,26 +3468,26 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr_interactive(
         "select-frame",
-        super::window_cmds::builtin_select_frame,
+        super::frame::builtin_select_frame,
         1,
         Some(2),
         super::interactive::BuiltinInteractiveSpec::String("e"),
     );
     ctx.defsubr(
         "last-nonminibuffer-frame",
-        super::window_cmds::builtin_selected_frame,
+        super::frame::builtin_selected_frame,
         0,
         None,
     );
     ctx.defsubr(
         "visible-frame-list",
-        super::window_cmds::builtin_visible_frame_list,
+        super::frame::builtin_visible_frame_list,
         0,
         None,
     );
     ctx.defsubr(
         "frame-list",
-        super::window_cmds::builtin_frame_list,
+        super::frame::builtin_frame_list,
         0,
         None,
     );
@@ -3499,7 +3499,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr_interactive(
         "make-frame-visible",
-        super::window_cmds::builtin_make_frame_visible,
+        super::frame::builtin_make_frame_visible,
         0,
         Some(1),
         super::interactive::BuiltinInteractiveSpec::String(""),
@@ -3512,125 +3512,125 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr_interactive(
         "iconify-frame",
-        super::window_cmds::builtin_iconify_frame,
+        super::frame::builtin_iconify_frame,
         0,
         Some(1),
         super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr_interactive(
         "delete-frame",
-        super::window_cmds::builtin_delete_frame,
+        super::frame::builtin_delete_frame,
         0,
         Some(2),
         super::interactive::BuiltinInteractiveSpec::String(""),
     );
     ctx.defsubr(
         "frame-char-height",
-        super::window_cmds::builtin_frame_char_height,
+        super::frame::builtin_frame_char_height,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-char-width",
-        super::window_cmds::builtin_frame_char_width,
+        super::frame::builtin_frame_char_width,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-native-height",
-        super::window_cmds::builtin_frame_native_height,
+        super::frame::builtin_frame_native_height,
         0,
         None,
     );
     ctx.defsubr(
         "frame-native-width",
-        super::window_cmds::builtin_frame_native_width,
+        super::frame::builtin_frame_native_width,
         0,
         None,
     );
     ctx.defsubr(
         "frame-text-cols",
-        super::window_cmds::builtin_frame_text_cols,
+        super::frame::builtin_frame_text_cols,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-text-height",
-        super::window_cmds::builtin_frame_text_height,
+        super::frame::builtin_frame_text_height,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-text-lines",
-        super::window_cmds::builtin_frame_text_lines,
+        super::frame::builtin_frame_text_lines,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-text-width",
-        super::window_cmds::builtin_frame_text_width,
+        super::frame::builtin_frame_text_width,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-total-cols",
-        super::window_cmds::builtin_frame_total_cols,
+        super::frame::builtin_frame_total_cols,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-total-lines",
-        super::window_cmds::builtin_frame_total_lines,
+        super::frame::builtin_frame_total_lines,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-position",
-        super::window_cmds::builtin_frame_position,
+        super::frame::builtin_frame_position,
         0,
         None,
     );
     ctx.defsubr(
         "frame-parameters",
-        super::window_cmds::builtin_frame_parameters,
+        super::frame::builtin_frame_parameters,
         0,
         Some(1),
     );
     ctx.defsubr_interactive(
         "set-frame-height",
-        super::window_cmds::builtin_set_frame_height,
+        super::frame::builtin_set_frame_height,
         2,
         Some(4),
         super::interactive::BuiltinInteractiveSpec::Form(set_frame_height_interactive_spec),
     );
     ctx.defsubr_interactive(
         "set-frame-width",
-        super::window_cmds::builtin_set_frame_width,
+        super::frame::builtin_set_frame_width,
         2,
         Some(4),
         super::interactive::BuiltinInteractiveSpec::Form(set_frame_width_interactive_spec),
     );
     ctx.defsubr(
         "set-frame-size",
-        super::window_cmds::builtin_set_frame_size,
+        super::frame::builtin_set_frame_size,
         3,
         Some(4),
     );
     ctx.defsubr(
         "set-frame-position",
-        super::window_cmds::builtin_set_frame_position,
+        super::frame::builtin_set_frame_position,
         3,
         Some(3),
     );
     ctx.defsubr(
         "frame-visible-p",
-        super::window_cmds::builtin_frame_visible_p,
+        super::frame::builtin_frame_visible_p,
         0,
         None,
     );
     ctx.defsubr(
         "frame-live-p",
-        super::window_cmds::builtin_frame_live_p,
+        super::frame::builtin_frame_live_p,
         1,
         Some(1),
     );
@@ -3659,7 +3659,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr("framep", super::window_cmds::builtin_framep, 1, Some(1));
+    ctx.defsubr("framep", super::frame::builtin_framep, 1, Some(1));
     ctx.defsubr(
         "window-frame",
         super::window_cmds::builtin_window_frame,
@@ -4529,7 +4529,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-parameter",
-        super::window_cmds::builtin_frame_parameter,
+        super::frame::builtin_frame_parameter,
         2,
         Some(2),
     );
@@ -5158,7 +5158,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "set-frame-size-and-position-pixelwise",
-        super::window_cmds::builtin_set_frame_size_and_position_pixelwise,
+        super::frame::builtin_set_frame_size_and_position_pixelwise,
         0,
         None,
     );
@@ -5319,25 +5319,25 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-ancestor-p",
-        super::window_cmds::builtin_frame_ancestor_p,
+        super::frame::builtin_frame_ancestor_p,
         0,
         None,
     );
     ctx.defsubr(
         "frame-bottom-divider-width",
-        super::window_cmds::builtin_frame_bottom_divider_width,
+        super::frame::builtin_frame_bottom_divider_width,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-child-frame-border-width",
-        super::window_cmds::builtin_frame_child_frame_border_width,
+        super::frame::builtin_frame_child_frame_border_width,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-focus",
-        super::window_cmds::builtin_frame_focus,
+        super::frame::builtin_frame_focus,
         0,
         Some(1),
     );
@@ -5355,7 +5355,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-internal-border-width",
-        super::window_cmds::builtin_frame_internal_border_width,
+        super::frame::builtin_frame_internal_border_width,
         0,
         Some(1),
     );
@@ -5367,7 +5367,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-parent",
-        super::window_cmds::builtin_frame_parent,
+        super::frame::builtin_frame_parent,
         0,
         None,
     );
@@ -5379,13 +5379,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-right-divider-width",
-        super::window_cmds::builtin_frame_right_divider_width,
+        super::frame::builtin_frame_right_divider_width,
         0,
         Some(1),
     );
     ctx.defsubr(
         "frame-scale-factor",
-        super::window_cmds::builtin_frame_scale_factor,
+        super::frame::builtin_frame_scale_factor,
         0,
         Some(1),
     );
@@ -5403,7 +5403,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-window-state-change",
-        super::window_cmds::builtin_frame_window_state_change,
+        super::frame::builtin_frame_window_state_change,
         0,
         None,
     );
@@ -5888,7 +5888,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         ctx,
         BuiltinRegistration::requires_eval_state(
             "make-frame-invisible",
-            super::window_cmds::builtin_make_frame_invisible,
+            super::frame::builtin_make_frame_invisible,
             0,
             Some(2),
         )
@@ -6098,7 +6098,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "redirect-frame-focus",
-        super::window_cmds::builtin_redirect_frame_focus,
+        super::frame::builtin_redirect_frame_focus,
         1,
         Some(2),
     );
@@ -6152,7 +6152,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "set-frame-window-state-change",
-        super::window_cmds::builtin_set_frame_window_state_change,
+        super::frame::builtin_set_frame_window_state_change,
         0,
         Some(2),
     );
@@ -7634,7 +7634,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "modify-frame-parameters",
-        super::window_cmds::builtin_modify_frame_parameters,
+        super::frame::builtin_modify_frame_parameters,
         2,
         Some(2),
     );
@@ -9292,7 +9292,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         ctx,
         BuiltinRegistration::requires_eval_state(
             "make-terminal-frame",
-            super::window_cmds::builtin_make_terminal_frame,
+            super::frame::builtin_make_terminal_frame,
             1,
             Some(1),
         ),
