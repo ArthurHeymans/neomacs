@@ -1940,6 +1940,12 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 
+/// The exact Shut Up package selected for practical output capture, cleanup,
+/// deterministic file generation, quiet loading, nested scopes, bypass, and
+/// noninteractive startup parity. MELPA built this archive from upstream
+/// commit `ed62a7fefdf04c81346061016f1bc69ca045aaf6`.
+pub const SHUT_UP_MELPA_PIN: (&str, &str) = ("shut-up", "20240429.605");
+
 /// The exact Smartparens package selected for practical balanced typing,
 /// structural refactoring, wrapping, strict editing, Python, and Markdown
 /// parity. MELPA built this archive from upstream commit
