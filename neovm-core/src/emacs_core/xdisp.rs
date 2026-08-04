@@ -132,12 +132,6 @@ pub(crate) struct RegionTextMetrics {
 
 fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> LineColumn {
     let end = end_byte.min(buf.point_max_emacs_byte_pos());
-    // Line number = newlines in [0, end) + 1. Count them by scanning the gap
-    // buffer in place (SIMD-friendly, no copy) instead of materializing the
-    // whole prefix into a Vec -- the mode line re-derives this on every
-    // redisplay, so the old O(point) allocation + memcpy dominated redisplay
-    // deep in a large buffer.
-    let line = buf.count_newlines_emacs_byte(EmacsBytePos::ZERO, end) + 1;
     // Column only needs the current line's prefix: find its start with a
     // backward newline scan (O(column) via memrchr, not O(point)) and count
     // chars over just that span.
@@ -145,6 +139,36 @@ fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> LineColumn {
         .prev_newline_emacs_byte(end, EmacsBytePos::ZERO)
         .map(|nl| nl.add_len(crate::buffer::EmacsByteLen::new(1)))
         .unwrap_or(EmacsBytePos::ZERO);
+    // Line number: GNU keeps a base_line_pos/base_line_number anchor so the
+    // newline count runs from a recently displayed line, not from the buffer
+    // start (xdisp.c:29486-29620) — O(distance moved), not O(point). The
+    // anchor (held per buffer) is valid only when no edit landed at or
+    // before it since the last accepted redisplay: the unchanged-region
+    // accumulator is the BEG_UNCHANGED analog of GNU's
+    // BASE_LINE_NUMBER_VALID_P (xdisp.c:19351). An invalid or missing
+    // anchor falls back to the full prefix scan (SIMD over the gap buffer).
+    let (anchor_byte, anchor_line) = buf.line_number_anchor.get();
+    let anchor_valid = anchor_line > 0
+        && anchor_byte <= end.get()
+        && buf.changed_char_range().is_none_or(|(dirty_start, _)| {
+            buf.char_pos_to_emacs_byte_pos_clamped(crate::buffer::CharPos0::new(
+                dirty_start.max(0) as usize
+            ))
+            .get()
+                > anchor_byte
+        });
+    let line = if anchor_valid {
+        anchor_line as usize + buf.count_newlines_emacs_byte(EmacsBytePos::new(anchor_byte), end)
+    } else {
+        buf.count_newlines_emacs_byte(EmacsBytePos::ZERO, end) + 1
+    };
+    // Re-seat the anchor at this line's start whenever it was invalid or
+    // point moved far from it (GNU re-seats near the window when the count
+    // drifts past a few window heights, xdisp.c:29544-29552).
+    const RESEAT_DISTANCE_BYTES: usize = 32 * 1024;
+    if !anchor_valid || end.get().abs_diff(anchor_byte) > RESEAT_DISTANCE_BYTES {
+        buf.line_number_anchor.set((bol.get(), line as i64));
+    }
     let mut tail = Vec::new();
     buf.copy_emacs_byte_range_to(EmacsByteRange::new(bol, end), &mut tail);
     let col = emacs_char_count(&tail, buf.get_multibyte());

@@ -3869,3 +3869,39 @@ fn write_frame_snapshot_writes_file_and_returns_t() {
     );
     let _ = std::fs::remove_file(&path);
 }
+
+#[test]
+fn line_number_anchor_counts_from_recent_line_and_survives_edits_below() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let text = "line\n".repeat(2000);
+    eval.eval_str(&format!(
+        "(progn (switch-to-buffer \"anchor-test\") (insert {:?}))",
+        text
+    ))
+    .expect("setup");
+    let point_at = |eval: &Context, charpos: usize| {
+        let buf = eval.buffers.current_buffer().expect("buffer");
+        buf.char_pos_to_emacs_byte_pos_clamped(crate::buffer::CharPos0::new(charpos))
+    };
+    let buf = eval.buffers.current_buffer().expect("buffer");
+    // First computation seeds the anchor at point's line (5000 chars / 5 = 1000 newlines).
+    let p = point_at(&eval, 5000);
+    assert_eq!(super::prefix_line_and_column(buf, p).line, 1001);
+    assert!(buf.line_number_anchor.get().1 > 0, "anchor seeded");
+    // Simulate the accepted-frame ack, then an edit BELOW the anchor: the
+    // anchor stays valid and the count stays exact.
+    buf.reset_unchanged_region();
+    eval.eval_str("(progn (goto-char 9000) (insert \"x\"))")
+        .expect("edit below");
+    let buf = eval.buffers.current_buffer().expect("buffer");
+    let p = point_at(&eval, 5000);
+    assert_eq!(super::prefix_line_and_column(buf, p).line, 1001);
+    // An edit ABOVE the anchor invalidates it: a newline inserted at the
+    // start must shift the count, never show a stale number.
+    eval.eval_str("(progn (goto-char 1) (insert \"\\n\"))")
+        .expect("edit above");
+    let buf = eval.buffers.current_buffer().expect("buffer");
+    let p = point_at(&eval, 5001);
+    assert_eq!(super::prefix_line_and_column(buf, p).line, 1002);
+}

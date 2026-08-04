@@ -1954,6 +1954,13 @@ pub(crate) struct BufferDumpParts {
 /// A single text buffer with point, mark, narrowing, markers, and local vars.
 #[derive(Clone)]
 pub struct Buffer {
+    /// Mode-line line-number anchor (GNU w->base_line_pos/base_line_number,
+    /// xdisp.c:29486-29620, held per BUFFER here): `(bol_byte, line)` of a
+    /// recently displayed point's line start, so %l counts newlines only
+    /// from the anchor instead of from the buffer start. `line == 0` means
+    /// no anchor. Validity is checked against the unchanged-region
+    /// accumulator (the BEG_UNCHANGED analog) at each use.
+    pub(crate) line_number_anchor: std::cell::Cell<(usize, i64)>,
     /// Unique identifier.
     pub(crate) id: BufferId,
     /// Buffer name (e.g. `"*scratch*"`). Mirrors GNU `struct buffer.name_`.
@@ -2118,6 +2125,7 @@ impl Buffer {
     ) -> Self {
         assert!(name.is_string(), "buffer name must be a Lisp string");
         Self {
+            line_number_anchor: std::cell::Cell::new((0, 0)),
             id,
             name,
             last_name: Value::NIL,
@@ -2162,6 +2170,7 @@ impl Buffer {
     pub(crate) fn from_dump_parts(parts: BufferDumpParts) -> Self {
         assert!(parts.name.is_string(), "buffer name must be a Lisp string");
         Self {
+            line_number_anchor: std::cell::Cell::new((0, 0)),
             id: parts.id,
             name: parts.name,
             last_name: parts.last_name,
