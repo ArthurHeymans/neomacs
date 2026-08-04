@@ -74,6 +74,24 @@ fn install_nestable_c_block_comment_syntax(eval: &mut crate::emacs_core::eval::C
     .expect("install nestable C star comment syntax");
 }
 
+fn install_haskell_nested_comment_syntax(eval: &mut crate::emacs_core::eval::Context) {
+    builtin_modify_syntax_entry(
+        eval,
+        vec![Value::fixnum('{' as i64), Value::string("(}1nb")],
+    )
+    .expect("install Haskell opening brace syntax");
+    builtin_modify_syntax_entry(
+        eval,
+        vec![Value::fixnum('}' as i64), Value::string("){4nb")],
+    )
+    .expect("install Haskell closing brace syntax");
+    builtin_modify_syntax_entry(
+        eval,
+        vec![Value::fixnum('-' as i64), Value::string("< 123")],
+    )
+    .expect("install Haskell dash comment syntax");
+}
+
 fn install_single_character_style_c_comment_syntax(eval: &mut crate::emacs_core::eval::Context) {
     builtin_modify_syntax_entry(eval, vec![Value::fixnum('@' as i64), Value::string("< c")])
         .expect("install style-c comment start");
@@ -1633,6 +1651,19 @@ fn forward_comment_two_char_end_style_uses_first_ender_char() {
 }
 
 #[test]
+fn forward_comment_closes_haskell_nested_comment_when_ender_starts_with_comment_class() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "{-# pragma #-}module");
+    install_haskell_nested_comment_syntax(&mut eval);
+
+    let moved = builtin_forward_comment(&mut eval, vec![Value::fixnum(1)]).unwrap();
+
+    assert_eq!(moved, Value::T);
+    assert_eq!(current_point_lisp_pos(&eval), 15);
+}
+
+#[test]
 fn backward_comment_two_char_end_style_uses_first_ender_char() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
@@ -2482,6 +2513,20 @@ fn parse_partial_sexp_enters_single_char_line_comment_state() {
             Value::NIL,
         ])
     );
+}
+
+#[test]
+fn parse_partial_sexp_closes_haskell_nested_comment_before_following_code() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    replace_current_buffer_text(&mut eval, "{-# pragma #-}module");
+    install_haskell_nested_comment_syntax(&mut eval);
+
+    let state =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(21)]).unwrap();
+
+    assert_eq!(nth_value(&state, 4), Value::NIL);
+    assert_eq!(nth_value(&state, 8), Value::NIL);
 }
 
 #[test]

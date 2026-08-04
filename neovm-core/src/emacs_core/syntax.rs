@@ -3795,7 +3795,7 @@ fn scan_forward_comment_body(
 
         // Nested comment start (only if nested flag is set).
         if nested {
-            if class == SyntaxClass::Comment && CommentStyle::from_main_flags(flags) == style {
+            if is_nested_single_comment_start(class, flags, style) {
                 nesting += 1;
                 buf.goto_emacs_byte_pos(unit.end);
                 continue;
@@ -3814,9 +3814,7 @@ fn scan_forward_comment_body(
                         honor_properties,
                     );
                     let flags2 = entry2.flags;
-                    if flags2.contains(SyntaxFlags::COMMENT_START_SECOND)
-                        && CommentStyle::from_start_flags(flags, flags2) == style
-                    {
+                    if is_nested_two_char_comment_start(flags, flags2, style) {
                         nesting += 1;
                         buf.goto_emacs_byte_pos(unit2.end);
                         continue;
@@ -4781,6 +4779,28 @@ impl CommentStyle {
     }
 }
 
+fn is_nested_single_comment_start(
+    class: SyntaxClass,
+    flags: SyntaxFlags,
+    style: CommentStyle,
+) -> bool {
+    class == SyntaxClass::Comment
+        && flags.contains(SyntaxFlags::COMMENT_NESTABLE)
+        && CommentStyle::from_main_flags(flags) == style
+}
+
+fn is_nested_two_char_comment_start(
+    first: SyntaxFlags,
+    second: SyntaxFlags,
+    style: CommentStyle,
+) -> bool {
+    first.contains(SyntaxFlags::COMMENT_START_FIRST)
+        && second.contains(SyntaxFlags::COMMENT_START_SECOND)
+        && (first.contains(SyntaxFlags::COMMENT_NESTABLE)
+            || second.contains(SyntaxFlags::COMMENT_NESTABLE))
+        && CommentStyle::from_start_flags(first, second) == style
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ParseCommentState {
     Syntax {
@@ -5277,9 +5297,7 @@ fn parse_state_from_range_with_options(
                     }
 
                     if nestable {
-                        if class == SyntaxClass::Comment
-                            && CommentStyle::from_main_flags(flags) == style
-                        {
+                        if is_nested_single_comment_start(class, flags, style) {
                             state.in_comment = Some(ParseCommentState::Syntax {
                                 depth: comment_depth + 1,
                                 style,
@@ -5298,9 +5316,7 @@ fn parse_state_from_range_with_options(
                                 honor_properties,
                                 &prop_cache,
                             );
-                            if next_flags.contains(SyntaxFlags::COMMENT_START_SECOND)
-                                && CommentStyle::from_start_flags(flags, next_flags) == style
-                            {
+                            if is_nested_two_char_comment_start(flags, next_flags, style) {
                                 state.in_comment = Some(ParseCommentState::Syntax {
                                     depth: comment_depth + 1,
                                     style,
