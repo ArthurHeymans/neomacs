@@ -2207,6 +2207,107 @@ pub(crate) struct OverlayFacesAtPosition {
     pub(crate) next_boundary: Option<EmacsBytePos>,
 }
 
+/// One canonical character property plus the aliases visible in the buffer
+/// being laid out. This owns GNU `lookup_char_property`'s alias-order rule so
+/// source cursors do not special-case names such as `font-lock-face` or
+/// `indent-bars-display`.
+///
+/// The lookup order is resolved once when this value is constructed.  The
+/// canonical name always wins; aliases follow in alist order and nil alias
+/// values are skipped. Category-symbol and `default-text-properties` fallback
+/// require the evaluator's symbol environment and are deliberately outside
+/// this alias-order value.
+#[derive(Clone, Debug)]
+pub(crate) struct LayoutCharPropertyLookup {
+    lookup_order: Vec<Value>,
+}
+
+impl LayoutCharPropertyLookup {
+    pub(crate) fn new<B: LayoutBufferView + ?Sized>(buffer: &B, property: Value) -> Self {
+        let mut lookup_order = vec![property];
+        let Some(mut alist) = buffer.layout_buffer_local_value(LayoutVar::CharPropertyAliasAlist)
+        else {
+            return Self { lookup_order };
+        };
+        while alist.is_cons() {
+            let entry = alist.cons_car();
+            alist = alist.cons_cdr();
+            if !entry.is_cons() || entry.cons_car().bits() != property.bits() {
+                continue;
+            }
+            let mut aliases = entry.cons_cdr();
+            while aliases.is_cons() {
+                let alias = aliases.cons_car();
+                if !lookup_order
+                    .iter()
+                    .any(|existing| existing.bits() == alias.bits())
+                {
+                    lookup_order.push(alias);
+                }
+                aliases = aliases.cons_cdr();
+            }
+            break;
+        }
+        Self { lookup_order }
+    }
+
+    pub(crate) fn text_value_at<B: LayoutBufferView + ?Sized>(
+        &self,
+        buffer: &B,
+        bytepos: EmacsBytePos,
+    ) -> Option<Value> {
+        let (canonical, aliases) = self.lookup_order.split_first()?;
+        if let Some(value) = buffer.layout_text_prop_at_emacs_byte_pos(bytepos, *canonical) {
+            return Some(value);
+        }
+        aliases.iter().find_map(|property| {
+            buffer
+                .layout_text_prop_at_emacs_byte_pos(bytepos, *property)
+                .filter(|value| !value.is_nil())
+        })
+    }
+
+    pub(crate) fn highest_overlay_value_at<B: LayoutBufferView + ?Sized>(
+        &self,
+        buffer: &B,
+        bytepos: EmacsBytePos,
+        current_window_id: Option<u64>,
+    ) -> Option<Value> {
+        buffer
+            .layout_overlays()
+            .highest_priority_overlay_effective_property_value_at_emacs_byte_pos(
+                bytepos,
+                &self.lookup_order,
+                current_window_id,
+            )
+    }
+
+    pub(crate) fn overlay_or_text_value_at<B: LayoutBufferView + ?Sized>(
+        &self,
+        buffer: &B,
+        bytepos: EmacsBytePos,
+        current_window_id: Option<u64>,
+    ) -> Option<Value> {
+        self.highest_overlay_value_at(buffer, bytepos, current_window_id)
+            .or_else(|| self.text_value_at(buffer, bytepos))
+    }
+
+    fn overlay_values_ascending_at<B: LayoutBufferView + ?Sized>(
+        &self,
+        buffer: &B,
+        bytepos: EmacsBytePos,
+        current_window_id: Option<u64>,
+    ) -> Vec<Value> {
+        buffer
+            .layout_overlays()
+            .overlay_effective_property_values_ascending_at_emacs_byte_pos(
+                bytepos,
+                &self.lookup_order,
+                current_window_id,
+            )
+    }
+}
+
 pub(crate) fn overlay_faces_at<B: LayoutBufferView + ?Sized>(
     buffer: &B,
     bytepos: EmacsBytePos,
@@ -2233,11 +2334,8 @@ pub(crate) fn overlay_faces_at<B: LayoutBufferView + ?Sized>(
     // cannot drift from the single-winner resolvers -- it previously ordered by a
     // bare `priority` integer, which reads a `(PRIMARY . SECONDARY)` priority as 0
     // and drops GNU's containment rule.
-    let faces = overlays.overlay_property_values_ascending_at_emacs_byte_pos(
-        bytepos,
-        Value::symbol("face"),
-        current_window_id,
-    );
+    let faces = LayoutCharPropertyLookup::new(buffer, Value::symbol("face"))
+        .overlay_values_ascending_at(buffer, bytepos, current_window_id);
     OverlayFacesAtPosition {
         faces,
         next_boundary,

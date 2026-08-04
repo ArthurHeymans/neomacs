@@ -1,7 +1,8 @@
 use crate::display_item::{
     BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayItem,
-    DisplayItemKind, DisplayItemLayout, DisplayPointerAppearance, DisplayPointerSourceRange,
-    DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy, DisplayPointerAppearance,
+    DisplayPointerSourceRange, DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun,
+    RenderFaceRef, SourceSpan,
 };
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
@@ -9,8 +10,7 @@ use crate::display_source::{
     DisplaySourceContext, LispStringSourceStack, TextSourceCharClassification,
     classify_text_source_char, display_item_kind_for_text_source_char,
 };
-use crate::neovm_bridge::LayoutBufferView;
-use crate::neovm_bridge::LayoutVar;
+use crate::neovm_bridge::{LayoutBufferView, LayoutCharPropertyLookup};
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
@@ -38,37 +38,6 @@ pub(crate) enum BufferTextCursorItem {
     DisplayPropertyReplacement(BufferDisplayPropertyReplacementItem),
 }
 
-/// Resolve the alias names under which a `display` text property may be
-/// recorded, from `char-property-alias-alist`. GNU `lookup_char_property`
-/// (src/intervals.c), after the direct property misses, walks
-/// `(cdr (assq prop char-property-alias-alist))` and returns the first non-nil
-/// aliased value — so a property stored under an aliased key still applies.
-/// indent-bars' character mode stores its bar glyphs under `indent-bars-display`
-/// (aliased to `display`), so without this the bars never render. The list is
-/// resolved once per source run: the layout runs on an immutable buffer
-/// snapshot, so the alist cannot change mid-walk. Empty in the common case.
-fn compute_display_property_aliases<B: LayoutBufferView + ?Sized>(buffer: &B) -> Vec<Value> {
-    let Some(alist) = buffer.layout_buffer_local_value(LayoutVar::CharPropertyAliasAlist) else {
-        return Vec::new();
-    };
-    let display = Value::symbol("display");
-    let mut names = Vec::new();
-    let mut cursor = alist;
-    while cursor.is_cons() {
-        let entry = cursor.cons_car();
-        if entry.is_cons() && entry.cons_car().bits() == display.bits() {
-            let mut aliases = entry.cons_cdr();
-            while aliases.is_cons() {
-                names.push(aliases.cons_car());
-                aliases = aliases.cons_cdr();
-            }
-            break;
-        }
-        cursor = cursor.cons_cdr();
-    }
-    names
-}
-
 /// A `DisplayItemSource` that reads plain buffer text (with face and display
 /// property boundaries) and emits `DisplayItem` values for the shared row
 /// renderer. The main buffer walk consumes this cursor through the source-walk
@@ -88,10 +57,9 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     base_face: RenderFaceRef,
     replacement_strings: LispStringSourceStack,
     mouse_face_extent: Option<CachedMouseFaceExtent>,
-    /// The alias names under which a `display` text property may be recorded,
-    /// resolved once from `char-property-alias-alist` (empty in the common
-    /// case). See `compute_display_property_aliases`.
-    display_aliases: Vec<Value>,
+    face_property: LayoutCharPropertyLookup,
+    display_property: LayoutCharPropertyLookup,
+    line_height_property: LayoutCharPropertyLookup,
 }
 
 #[derive(Clone, Copy)]
@@ -138,7 +106,12 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             base_face,
             replacement_strings: LispStringSourceStack::empty(1),
             mouse_face_extent: None,
-            display_aliases: compute_display_property_aliases(buffer),
+            face_property: LayoutCharPropertyLookup::new(buffer, Value::symbol("face")),
+            display_property: LayoutCharPropertyLookup::new(buffer, Value::symbol("display")),
+            line_height_property: LayoutCharPropertyLookup::new(
+                buffer,
+                Value::symbol("line-height"),
+            ),
         }
     }
 
@@ -235,36 +208,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         // containment, secondary priority, stable tiebreak); the previous
         // `max_by_key` on a bare `priority` integer read a `(PRIMARY . SECONDARY)`
         // priority as 0, ignored containment, and broke ties arbitrarily.
-        self.buffer
-            .layout_overlays()
-            .highest_priority_overlay_property_value_at_emacs_byte_pos(
-                bytepos,
-                Value::symbol("display"),
-                self.window_id,
-            )
-            .or_else(|| self.display_text_prop_at(bytepos))
-    }
-
-    /// The buffer `display` TEXT property at `bytepos`, resolving through
-    /// `char-property-alias-alist` exactly like GNU `lookup_char_property`
-    /// (src/intervals.c): the direct `display` value wins; otherwise the first
-    /// non-nil value found under an alias name. This is what lets indent-bars'
-    /// character mode render — it stores its bar glyphs under the aliased
-    /// `indent-bars-display` key (`-nw` and `indent-bars-prefer-character`).
-    /// Overlays are intentionally NOT alias-resolved (GNU
-    /// `get_char_property_and_overlay` reads overlays with the literal prop).
-    fn display_text_prop_at(&self, bytepos: EmacsBytePos) -> Option<Value> {
-        if let Some(value) = self
-            .buffer
-            .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("display"))
-        {
-            return Some(value);
-        }
-        self.display_aliases.iter().find_map(|alias| {
-            self.buffer
-                .layout_text_prop_at_emacs_byte_pos(bytepos, *alias)
-                .filter(|value| !value.is_nil())
-        })
+        self.display_property
+            .overlay_or_text_value_at(self.buffer, bytepos, self.window_id)
     }
 
     fn composition_prop_at(&self, char_pos: CharPos0) -> Option<Value> {
@@ -338,13 +283,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     /// so each piece carries its own overlay-merged face into the glyph.
     fn face_at(&self, char_pos: CharPos0, context: &mut DisplaySourceContext<'_>) -> RenderFaceRef {
         let bytepos = self.byte_pos(char_pos);
-        let text_face = self
-            .buffer
-            .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("face"))
-            .or_else(|| {
-                self.buffer
-                    .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("font-lock-face"))
-            });
+        let text_face = self.face_property.text_value_at(self.buffer, bytepos);
         let mut face = text_face
             .map(|value| context.resolve_face_ref(self.base_face, value))
             .unwrap_or(self.base_face);
@@ -588,7 +527,16 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             );
         }
 
-        if let Some(kind) = display_item_kind_for_text_source_char(ch) {
+        if let Some(mut kind) = display_item_kind_for_text_source_char(ch) {
+            if let DisplayItemKind::RowBreak(row_break) = &mut kind {
+                *row_break = row_break.with_line_height(DisplayLineHeightPolicy::from_property(
+                    self.line_height_property.overlay_or_text_value_at(
+                        self.buffer,
+                        self.byte_pos(start),
+                        self.window_id,
+                    ),
+                ));
+            }
             self.char_pos = start.add_len(CharLen::new(1));
             return Some(
                 DisplayItem::new(self.span(start, self.char_pos), face, kind).with_layout(layout),

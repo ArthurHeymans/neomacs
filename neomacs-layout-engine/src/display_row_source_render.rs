@@ -21,6 +21,7 @@ use crate::display_row_builder::{DisplayRowGlyphCheckpoint, DisplayRowPosition};
 use crate::display_row_face_state::{
     DisplayRowActiveFaceState, DisplayRowMeasurementPolicy, DisplayRowResolvedMeasuredFace,
 };
+pub(crate) use crate::display_row_finalizer::RowExtendFill;
 use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowScopedValue};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_render_policy::DisplayRowRenderPolicy;
@@ -122,47 +123,6 @@ struct DisplayRowNaturalSourceFragmentMutation<'a, 'request, 'metrics, 'face, 'h
     source_state: &'a mut DisplayRowSourceState,
 }
 
-/// Geometry + face payload for one trailing `:extend` fill (GNU
-/// `extend_face_to_end_of_line`). `face_id` is the extend face installed on the
-/// row; `bg` is its background pixel; `(width_px, height_px, ascent_px)` are the
-/// stretch geometry; `char_width` is the face's column advance used to size the
-/// stretch column count.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct RowExtendFill {
-    bg: Color,
-    face_id: FaceId,
-    width_px: f32,
-    height_px: f32,
-    ascent_px: f32,
-    char_width: f32,
-}
-
-impl RowExtendFill {
-    pub(crate) fn new(
-        bg: Color,
-        face_id: FaceId,
-        width_px: f32,
-        height_px: f32,
-        ascent_px: f32,
-        char_width: f32,
-    ) -> Self {
-        Self {
-            bg,
-            face_id,
-            width_px,
-            height_px,
-            ascent_px,
-            char_width,
-        }
-    }
-
-    /// Number of stretch columns (>=1) covering `width_px` at the face advance.
-    fn width_cols(self) -> u16 {
-        let cw = self.char_width.max(1.0);
-        ((self.width_px / cw).ceil() as i64).clamp(1, u16::MAX as i64) as u16
-    }
-}
-
 /// Mutation that appends the trailing extend-face stretch to the current row's
 /// TEXT area, without emitting any output span. Mirrors GNU
 /// `extend_face_to_end_of_line`: an empty row first gets a leading space glyph
@@ -177,40 +137,7 @@ impl DisplayCurrentRowMutation for RowExtendFillMutation {
     type Output = bool;
 
     fn apply(self, row: &mut GlyphRow) -> Self::Output {
-        // R2L safety: never fill a reversed row (the stretch would reorder to
-        // the visual left). The caller already guards on reversed_p, but the
-        // row is the authoritative source so we re-check here.
-        if row.reversed_p {
-            return false;
-        }
-        let text_index = GlyphArea::Text.index();
-        // Empty row: push a leading space carrying the extend face so the row
-        // displays text and has a face anchor (GNU xdisp.c:24420). It covers no
-        // buffer position, so stamp the no-position sentinel (see GNU's
-        // `glyph->charpos = -1` for the same anchor, src/xdisp.c:26021) — this
-        // keeps the blank-line cursor from latching onto the fill.
-        if row.glyphs[text_index].is_empty() {
-            row.glyphs[text_index].push(
-                Glyph::char(' ', self.fill.face_id, NO_BUFFER_POSITION_CHARPOS)
-                    .with_pixel_width(self.fill.char_width.max(1.0)),
-            );
-            row.displays_text = true;
-        }
-        push_stretch_to_area(
-            row,
-            text_index,
-            self.fill.width_cols(),
-            self.fill.face_id,
-            self.fill.width_px,
-            self.fill.height_px,
-            self.fill.ascent_px,
-        );
-        // The trailing fill stretch likewise maps to no buffer position; mark it
-        // so cursor placement excludes it (GNU set_cursor_from_row, xdisp.c:18648).
-        if let Some(last) = row.glyphs[text_index].last_mut() {
-            last.charpos = NO_BUFFER_POSITION_CHARPOS;
-        }
-        true
+        self.fill.apply_to(row)
     }
 }
 
@@ -1435,10 +1362,6 @@ fn current_text_measure_state<'emit>(
         face_ids,
     )
 }
-
-#[cfg(test)]
-#[path = "display_row_extend_fill_test.rs"]
-mod extend_fill_tests;
 
 #[cfg(test)]
 #[path = "display_row_trailing_whitespace_test.rs"]

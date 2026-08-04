@@ -995,6 +995,42 @@ fn display_replacement_ascent(value: f32) -> f32 {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct DisplayRowBreak {
     pub(crate) reason: DisplayRowBreakReason,
+    pub(crate) line_height: DisplayLineHeightPolicy,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum DisplayLineHeightPolicy {
+    /// The newline contributes its face's normal height and configured line
+    /// spacing to the display row.
+    #[default]
+    Default,
+    /// GNU `line-height t`: the newline contributes no default height or line
+    /// spacing; visible row contents alone determine the row geometry.
+    ContentOnly,
+}
+
+impl DisplayLineHeightPolicy {
+    pub(crate) fn from_property(value: Option<Value>) -> Self {
+        if value.is_some_and(|value| value.is_t()) {
+            Self::ContentOnly
+        } else {
+            Self::Default
+        }
+    }
+}
+
+impl DisplayRowBreak {
+    pub(crate) const fn explicit_newline() -> Self {
+        Self {
+            reason: DisplayRowBreakReason::ExplicitNewline,
+            line_height: DisplayLineHeightPolicy::Default,
+        }
+    }
+
+    pub(crate) const fn with_line_height(mut self, line_height: DisplayLineHeightPolicy) -> Self {
+        self.line_height = line_height;
+        self
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -9512,10 +9512,10 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         .expect("first lisp source append");
 
     assert_eq!(first.end_position(), DisplayRowPosition::new(8.0, 1));
-    assert_eq!(
+    assert!(matches!(
         first.stop(),
-        crate::display_row::DisplayRowRenderStop::RowBreak
-    );
+        crate::display_row::DisplayRowRenderStop::RowBreak(_)
+    ));
 
     let second = append_context
         .render_to_text_row_and_emit(

@@ -24,6 +24,7 @@ pub(crate) struct DisplayRowFace {
     pub(crate) face_id: FaceId,
     pub(crate) foreground: Color,
     pub(crate) background: Color,
+    pub(crate) extend: bool,
     pub(crate) use_default_foreground: bool,
     pub(crate) use_default_background: bool,
     pub(crate) font_family: String,
@@ -151,6 +152,7 @@ impl DisplayRowFace {
             face_id,
             foreground: Color::from_pixel(face.fg),
             background: Color::from_pixel(face.bg),
+            extend: face.extend,
             use_default_foreground: face.use_default_foreground,
             use_default_background: face.use_default_background,
             font_family: if face.font_family.is_empty() {

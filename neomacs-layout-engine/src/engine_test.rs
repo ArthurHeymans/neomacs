@@ -14792,6 +14792,354 @@ fn layout_frame_rust_renders_magit_blame_heading_before_string_with_trailing_new
 }
 
 #[test]
+fn layout_frame_rust_resolves_overlay_face_through_char_property_aliases() {
+    // GNU `face_at_buffer_position` reads overlay faces with `overlay-get`;
+    // `overlay-get` calls `lookup_char_property`, so the buffer-local
+    // `(face font-lock-face)` alias installed by font-lock applies to overlays
+    // as well as ordinary text properties.  Magit's blame highlight style
+    // relies on exactly this path.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("highlighted by an aliased overlay face\n");
+        buffer.set_buffer_local(
+            "char-property-alias-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("face"),
+                Value::symbol("font-lock-face"),
+            ])]),
+        );
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: buffer.point_max_emacs_byte_pos().get(),
+            front_advance: false,
+            rear_advance: false,
+        });
+        buffer.overlays_mut().insert_overlay(overlay);
+        let _ = buffer.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("font-lock-face"),
+            Value::list(vec![Value::keyword("background"), Value::string("#00ff00")]),
+        );
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-overlay-aliased-face", 640, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let glyph = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'h' }))
+        .expect("rendered source glyph");
+    let face = state
+        .faces
+        .get(&glyph.face_id)
+        .expect("resolved aliased overlay face");
+
+    assert_eq!(
+        face.background,
+        Color::from_pixel(0x0000ff00),
+        "an overlay's font-lock-face must resolve through the effective face property"
+    );
+}
+
+#[test]
+fn layout_frame_rust_canonical_nil_overlay_face_blocks_its_alias() {
+    // GNU `lookup_char_property` returns a directly present canonical value,
+    // including nil, before consulting `char-property-alias-alist`.  Thus an
+    // overlay carrying both `face nil` and a non-nil `font-lock-face` does not
+    // contribute a face through the alias.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("canonical nil blocks the aliased overlay face\n");
+        buffer.set_buffer_local(
+            "char-property-alias-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("face"),
+                Value::symbol("font-lock-face"),
+            ])]),
+        );
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: buffer.point_max_emacs_byte_pos().get(),
+            front_advance: false,
+            rear_advance: false,
+        });
+        buffer.overlays_mut().insert_overlay(overlay);
+        let _ = buffer.overlays_mut().overlay_put(
+            overlay,
+            Value::symbol("font-lock-face"),
+            Value::list(vec![Value::keyword("background"), Value::string("#00ff00")]),
+        );
+        let _ = buffer
+            .overlays_mut()
+            .overlay_put(overlay, Value::symbol("face"), Value::NIL);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-overlay-canonical-nil-face",
+        640,
+        180,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let glyph = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'c' }))
+        .expect("rendered source glyph");
+    let face = state
+        .faces
+        .get(&glyph.face_id)
+        .expect("resolved canonical face");
+
+    assert_ne!(
+        face.background,
+        Color::from_pixel(0x0000ff00),
+        "an explicitly nil canonical face must block font-lock-face fallback"
+    );
+}
+
+#[test]
+fn layout_frame_rust_line_height_t_lets_overlay_string_content_define_row_height() {
+    // Magit's blame `lines` style uses exactly this string: an absolute
+    // two-pixel display space followed by a newline whose `line-height` is t.
+    // GNU makes the newline contribute no default font height, so the visible
+    // two-pixel stretch is the complete display-row height.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let separator = eval
+        .eval_str(
+            r#"(concat
+                  (propertize " " 'display '(space :height (2)))
+                  (propertize "\n" 'line-height t))"#,
+        )
+        .expect("construct two-pixel separator");
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("source line below separator\n");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: buffer.point_max_emacs_byte_pos().get(),
+            front_advance: false,
+            rear_advance: false,
+        });
+        buffer.overlays_mut().insert_overlay(overlay);
+        let _ =
+            buffer
+                .overlays_mut()
+                .overlay_put(overlay, Value::symbol("before-string"), separator);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-overlay-line-height-content-only",
+        640,
+        180,
+        buf_id,
+    );
+    realize_test_gui_frame(&mut eval, frame_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let separator_row = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .find(|row| {
+            row.glyphs[GlyphArea::Text.index()].iter().any(|glyph| {
+                matches!(glyph.glyph_type, GlyphType::Stretch { .. }) && glyph.pixel_height == 2.0
+            })
+        })
+        .expect("separator row containing the two-pixel stretch");
+
+    assert_eq!(
+        separator_row.height_px, 2.0,
+        "line-height t must suppress the newline's default font height"
+    );
+}
+
+#[test]
+fn layout_frame_rust_extends_overlay_string_face_across_content_only_row() {
+    // Full Magit blame `lines` separator: the outer anonymous face supplies
+    // both the separator background and `:extend t`; the inner display space
+    // supplies the two visible pixels; the newline suppresses its default
+    // height. The resulting row is a two-pixel horizontal rule spanning the
+    // text area, not a one-cell vertical block.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let separator = eval
+        .eval_str(
+            r##"(propertize
+                   (concat
+                     (propertize " " 'display '(space :height (2)))
+                     (propertize "\n" 'line-height t))
+                   'font-lock-face
+                   '(:extend t :background "#00ff00"))"##,
+        )
+        .expect("construct extended two-pixel separator");
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("source line below separator\n");
+        buffer.set_buffer_local(
+            "char-property-alias-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("face"),
+                Value::symbol("font-lock-face"),
+            ])]),
+        );
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: buffer.point_max_emacs_byte_pos().get(),
+            front_advance: false,
+            rear_advance: false,
+        });
+        buffer.overlays_mut().insert_overlay(overlay);
+        let _ =
+            buffer
+                .overlays_mut()
+                .overlay_put(overlay, Value::symbol("before-string"), separator);
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-overlay-string-extended-separator",
+        640,
+        180,
+        buf_id,
+    );
+    realize_test_gui_frame(&mut eval, frame_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let separator_row = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .find(|row| {
+            row.glyphs[GlyphArea::Text.index()].iter().any(|glyph| {
+                matches!(glyph.glyph_type, GlyphType::Stretch { .. }) && glyph.pixel_height == 2.0
+            })
+        })
+        .expect("two-pixel separator row");
+    let text_glyphs = &separator_row.glyphs[GlyphArea::Text.index()];
+    let total_width: f32 = text_glyphs.iter().map(|glyph| glyph.pixel_width).sum();
+    let text_area_width = entry.text_area_clip_rect().width;
+    let fill = text_glyphs
+        .last()
+        .expect("separator row trailing extend fill");
+    let fill_face = state
+        .faces
+        .get(&fill.face_id)
+        .expect("separator extend face");
+
+    assert_eq!(separator_row.height_px, 2.0);
+    assert!(
+        total_width >= text_area_width - 1.0,
+        "the extended separator must cover the text area: width={total_width}, text_area={text_area_width}, glyphs={text_glyphs:?}"
+    );
+    assert_eq!(fill_face.background, Color::from_pixel(0x0000ff00));
+}
+
+#[test]
 fn overlay_newline_continuation_reserves_a_blank_line_number_margin() {
     // GNU `maybe_produce_line_number` emits the number on the display row that
     // contains an overlay before-string, then a width-matched blank prefix on

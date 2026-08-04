@@ -1,3 +1,4 @@
+use crate::display_item::{DisplayLineHeightPolicy, DisplayRowBreak};
 #[cfg(test)]
 use crate::display_row_builder::DisplayRowVerticalMetrics;
 use crate::display_row_builder::{
@@ -157,7 +158,7 @@ impl RenderedDisplayRow {
 pub(crate) enum DisplayRowRenderStop {
     SourceExhausted,
     Clipped,
-    RowBreak,
+    RowBreak(DisplayRowBreak),
 }
 
 pub(crate) struct DisplayRowRenderIntoRowResult {
@@ -285,7 +286,15 @@ impl CurrentTextRowRenderOutcome {
     }
 
     pub(crate) fn include_vertical_metrics(&self, geometry: &mut DisplayRowGeometryState) {
-        geometry.include_glyph_vertical_metrics(self.row_height_px, self.row_ascent_px);
+        if matches!(
+            self.stop,
+            DisplayRowRenderStop::RowBreak(row_break)
+                if row_break.line_height == DisplayLineHeightPolicy::ContentOnly
+        ) {
+            geometry.replace_current_row_metrics(self.row_height_px, self.row_ascent_px);
+        } else {
+            geometry.include_glyph_vertical_metrics(self.row_height_px, self.row_ascent_px);
+        }
     }
 
     pub(crate) fn into_append_progress(
@@ -313,7 +322,7 @@ fn display_row_append_progress_from_render_result(
         match stop {
             DisplayRowRenderStop::SourceExhausted => DisplayRowAppendStatus::Complete,
             DisplayRowRenderStop::Clipped => DisplayRowAppendStatus::Clipped,
-            DisplayRowRenderStop::RowBreak => DisplayRowAppendStatus::RowBreak,
+            DisplayRowRenderStop::RowBreak(_) => DisplayRowAppendStatus::RowBreak,
         },
         slots,
     )

@@ -634,6 +634,14 @@ impl DisplayRowGeometryState {
         self.ascent = self.ascent.max(ascent);
     }
 
+    /// Replace the current row's default-minimum geometry with authoritative
+    /// visible-content geometry. Used for GNU `line-height t`, where the
+    /// newline itself contributes no font height.
+    pub(crate) fn replace_current_row_metrics(&mut self, height: f32, ascent: f32) {
+        self.height = height.max(1.0);
+        self.ascent = ascent.max(0.0).min(self.height);
+    }
+
     pub(crate) fn record_current_row_y(&self, row_y_positions: &mut DisplayRowYPositions) {
         row_y_positions.push(self.y);
     }

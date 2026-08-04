@@ -613,6 +613,27 @@ impl OverlayList {
             .and_then(|overlay| overlay_property_named(overlay, property))
     }
 
+    /// Single-winner overlay lookup with GNU `overlay-get` alias semantics.
+    /// The canonical property is first in `property_lookup_order`, followed by
+    /// its `char-property-alias-alist` fallbacks. Property lookup happens per
+    /// overlay before the highest-precedence carrier is selected.
+    pub fn highest_priority_overlay_effective_property_value_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        property_lookup_order: &[Value],
+        window_id: Option<u64>,
+    ) -> Option<Value> {
+        self.overlays_at_emacs_byte_pos(pos)
+            .into_iter()
+            .filter(|overlay| {
+                overlay_applies_to_window(*overlay, window_id)
+                    && overlay_property_in_lookup_order(*overlay, property_lookup_order)
+                        .is_some_and(|value| !value.is_nil())
+            })
+            .max_by(|left, right| compare_overlay_precedence(*left, *right))
+            .and_then(|overlay| overlay_property_in_lookup_order(overlay, property_lookup_order))
+    }
+
     /// The overlay half of GNU `face_at_buffer_position` (src/xfaces.c): every
     /// window-visible overlay's PROPERTY value at POS in ASCENDING precedence
     /// (`sort_overlays` order), for the one policy where overlay values MERGE
@@ -629,19 +650,41 @@ impl OverlayList {
         property: Value,
         window_id: Option<u64>,
     ) -> Vec<Value> {
+        self.overlay_effective_property_values_ascending_at_emacs_byte_pos(
+            pos,
+            std::slice::from_ref(&property),
+            window_id,
+        )
+    }
+
+    /// GNU `overlay-get` property lookup composed with the ascending overlay
+    /// merge order used by `face_at_buffer_position`.
+    ///
+    /// `property_lookup_order` contains the canonical property first followed
+    /// by its `char-property-alias-alist` fallbacks.  Lookup happens WITHIN
+    /// each overlay before overlay precedence is considered: a high-priority
+    /// overlay carrying an alias must still merge after a lower-priority
+    /// overlay carrying the canonical name.  Querying each name across all
+    /// overlays separately would reverse that GNU ordering.
+    pub fn overlay_effective_property_values_ascending_at_emacs_byte_pos(
+        &self,
+        pos: EmacsBytePos,
+        property_lookup_order: &[Value],
+        window_id: Option<u64>,
+    ) -> Vec<Value> {
         let mut carriers: Vec<Value> = self
             .overlays_at_emacs_byte_pos(pos)
             .into_iter()
             .filter(|overlay| {
                 overlay_applies_to_window(*overlay, window_id)
-                    && overlay_property_named(*overlay, property)
+                    && overlay_property_in_lookup_order(*overlay, property_lookup_order)
                         .is_some_and(|value| !value.is_nil())
             })
             .collect();
         carriers.sort_by(|left, right| compare_overlay_precedence(*left, *right));
         carriers
             .into_iter()
-            .filter_map(|overlay| overlay_property_named(overlay, property))
+            .filter_map(|overlay| overlay_property_in_lookup_order(overlay, property_lookup_order))
             .collect()
     }
 
@@ -1116,6 +1159,27 @@ fn overlay_overlaps_region(
 fn overlay_property_named(overlay: Value, prop_name: Value) -> Option<Value> {
     let plist = overlay.as_overlay_data()?.plist;
     plist::plist_get(plist, &prop_name)
+}
+
+fn overlay_property_in_lookup_order(
+    overlay: Value,
+    property_lookup_order: &[Value],
+) -> Option<Value> {
+    let (canonical, aliases) = property_lookup_order.split_first()?;
+
+    // GNU `lookup_char_property` returns a directly present canonical value
+    // immediately, even when that value is nil.  A canonical nil therefore
+    // blocks alias fallback; the caller subsequently decides that this
+    // overlay is not a carrier and may continue to a lower overlay.
+    if let Some(value) = overlay_property_named(overlay, *canonical) {
+        return Some(value);
+    }
+
+    // Aliases are fallback candidates: GNU keeps scanning while their values
+    // are nil and returns the first non-nil one.
+    aliases.iter().find_map(|property| {
+        overlay_property_named(overlay, *property).filter(|value| !value.is_nil())
+    })
 }
 
 /// Whether `overlay`'s contributions apply in the window being laid out. GNU

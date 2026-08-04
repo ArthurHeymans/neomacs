@@ -1,11 +1,12 @@
 use crate::display_face_ref::render_face_ref_id;
-use crate::display_item::RenderFaceRef;
+use crate::display_item::{DisplayItemKind, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
 use crate::display_pixel_calc::PixelCalcContext;
 use crate::display_row_builder::{
     DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowLayout, DisplayRowPosition,
     DisplayRowProgressWriter, DisplayTabPolicy, new_display_row_for_role,
 };
+use crate::display_row_finalizer::DisplayRowLineEndFinalizer;
 use crate::display_row_geometry::DisplayRowGeometryState;
 pub(crate) use crate::display_row_geometry::{DisplayRowGeometry, DisplayRowMaxX};
 #[cfg(test)]
@@ -954,6 +955,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             geometry.height(),
             geometry.ascent(),
         );
+        let mut row_break_face_id = None;
         let stop = loop {
             let params = context.source_resolve_params(
                 row_face.face_id,
@@ -1078,10 +1080,27 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                     }
                 }
                 DisplayRowAppendStatus::RowBreak => {
-                    break DisplayRowRenderStop::RowBreak;
+                    let DisplayItemKind::RowBreak(row_break) = render_item.source_item().kind
+                    else {
+                        unreachable!("row-break status requires a row-break display item")
+                    };
+                    row_break_face_id = Some(item_face_id);
+                    break DisplayRowRenderStop::RowBreak(row_break);
                 }
             }
         };
+        if let (DisplayRowRenderStop::RowBreak(row_break), Some(row_break_face_id)) =
+            (stop, row_break_face_id)
+        {
+            DisplayRowLineEndFinalizer::new(
+                row_break,
+                row_break_face_id,
+                render_bounds.max_x().to_f32() - position.x_px(),
+                fallback_metrics,
+                row_face.background,
+            )
+            .finalize(row, &row_faces);
+        }
         let progress_height = if row.height_px > 0.0 {
             row.height_px
         } else {

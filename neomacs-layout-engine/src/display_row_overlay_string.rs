@@ -546,7 +546,7 @@ fn render_overlay_string<B: LayoutBufferView>(
         *state.x = end.x_px();
         *state.col = end.col();
 
-        if stop == DisplayRowRenderStop::RowBreak {
+        if matches!(stop, DisplayRowRenderStop::RowBreak(_)) {
             let continuation = row_break_context.finish_row(state);
             if continuation.should_break() {
                 return continuation;
@@ -565,7 +565,7 @@ fn render_overlay_string<B: LayoutBufferView>(
                 }
                 break;
             }
-            DisplayRowRenderStop::RowBreak => unreachable!("row break handled above"),
+            DisplayRowRenderStop::RowBreak(_) => unreachable!("row break handled above"),
         }
     }
     DisplayRowTransitionContinuation::Continue

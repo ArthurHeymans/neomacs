@@ -1,10 +1,10 @@
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayItem, DisplayItemKind,
-    DisplayItemLayout, DisplayLength, DisplayMediaReplacement, DisplayPointerAppearance,
-    DisplayPointerOccurrence, DisplayPointerSourceRange, DisplayRowBreak, DisplayRowBreakReason,
-    DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch, DisplayStretchWidth,
-    DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef, SourceSpan,
-    glyphless_method_for_char,
+    DisplayItemLayout, DisplayLength, DisplayLineHeightPolicy, DisplayMediaReplacement,
+    DisplayPointerAppearance, DisplayPointerOccurrence, DisplayPointerSourceRange, DisplayRowBreak,
+    DisplayRowBreakReason, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
+    DisplayStretchWidth, DisplayTextRun, GlyphlessJoinerPolicy, GlyphlessMethod, RenderFaceRef,
+    SourceSpan, glyphless_method_for_char,
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
@@ -2504,7 +2504,17 @@ impl LispStringSourceFrame {
                 );
             }
         }
-        if let Some(kind) = display_item_kind_for_text_source_char(ch) {
+        if let Some(mut kind) = display_item_kind_for_text_source_char(ch) {
+            if let DisplayItemKind::RowBreak(row_break) = &mut kind {
+                *row_break = row_break.with_line_height(DisplayLineHeightPolicy::from_property(
+                    self.props.as_ref().and_then(|props| {
+                        props.get_property_at_char_pos(
+                            CharPos0::new(start),
+                            Value::symbol("line-height"),
+                        )
+                    }),
+                ));
+            }
             self.char_index = start + 1;
             return LispStringAction::Emit(
                 DisplayItem::new(self.span(start, start + 1), face, kind)
@@ -2878,11 +2888,9 @@ pub(crate) fn classify_text_source_char(ch: char) -> TextSourceCharClassificatio
 pub(crate) fn display_item_kind_for_text_source_char(ch: char) -> Option<DisplayItemKind> {
     match classify_text_source_char(ch) {
         TextSourceCharClassification::Text => None,
-        TextSourceCharClassification::RowBreak => {
-            Some(DisplayItemKind::RowBreak(DisplayRowBreak {
-                reason: DisplayRowBreakReason::ExplicitNewline,
-            }))
-        }
+        TextSourceCharClassification::RowBreak => Some(DisplayItemKind::RowBreak(
+            DisplayRowBreak::explicit_newline(),
+        )),
         TextSourceCharClassification::ControlChar { ch } => {
             Some(DisplayItemKind::ControlChar { ch })
         }

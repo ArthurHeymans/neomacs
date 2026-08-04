@@ -135,15 +135,14 @@ fn display_item_row_break_is_a_typed_item() {
     let row_break = DisplayItem::new(
         span,
         RenderFaceRef::Inherit,
-        DisplayItemKind::RowBreak(DisplayRowBreak {
-            reason: DisplayRowBreakReason::ExplicitNewline,
-        }),
+        DisplayItemKind::RowBreak(DisplayRowBreak::explicit_newline()),
     );
 
     assert!(matches!(
         row_break.kind,
         DisplayItemKind::RowBreak(DisplayRowBreak {
-            reason: DisplayRowBreakReason::ExplicitNewline
+            reason: DisplayRowBreakReason::ExplicitNewline,
+            ..
         })
     ));
 }
