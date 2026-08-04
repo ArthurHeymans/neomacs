@@ -1635,6 +1635,12 @@ pub const HT_MELPA_PIN: (&str, &str) = ("ht", "20230703.558");
 /// `59a2a45a35027948476d1d7751b0f0215b1e61aa`.
 pub const HYDRA_MELPA_PIN: (&str, &str) = ("hydra", "20250316.1254");
 
+/// The exact Iedit package selected by the practical symbol-refactoring,
+/// scoped replay, visibility, buffering/undo, and rectangle-editing corpus.
+/// MELPA built this archive from upstream commit
+/// `7e513d573c6a5dd2a01aeeb1d8587d74630a2f80`.
+pub const IEDIT_MELPA_PIN: (&str, &str) = ("iedit", "20251017.410");
+
 /// The exact inf-ruby package selected by the practical comint-mode, source
 /// dispatch, completion, project-console, and debugger lifecycle parity corpus.
 /// MELPA built this archive from upstream commit

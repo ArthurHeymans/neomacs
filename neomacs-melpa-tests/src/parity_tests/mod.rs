@@ -309,6 +309,7 @@ mod helm_projectile;
 mod hl_todo;
 mod ht;
 mod hydra;
+mod iedit;
 mod inf_ruby;
 mod iter2;
 mod ivy;
