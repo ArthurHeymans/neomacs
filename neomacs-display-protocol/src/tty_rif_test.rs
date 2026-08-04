@@ -2797,3 +2797,68 @@ fn layout_reused_shifted_damage_seeds_the_region_scroll() {
         "the layout hint, not voting, must carry this scroll"
     );
 }
+
+#[test]
+fn reused_damage_rows_carry_verbatim_and_plan_nothing() {
+    // Damage-aware carry: rows the layout engine reused verbatim are copied
+    // from the previous frame's grid (no re-rasterize) and the planner skips
+    // them without a cell compare — the GNU update_window contract that rows
+    // the desired matrix left untouched never reach the terminal.
+    let cols = 20usize;
+    let rows = 8usize;
+    let build_state = |damage: Option<RowDamage>, edited_row: Option<usize>| {
+        let mut state = FrameDisplayState::new(cols, rows, 1.0, 1.0);
+        state.background = Color::BLACK;
+        let mut matrix = GlyphMatrix::new(rows, cols);
+        for r in 0..rows {
+            let mut row = GlyphRow::new(GlyphRowRole::Text);
+            let text = if edited_row == Some(r) {
+                format!("{:<20}", format!("edited-line-{r:02}"))
+            } else {
+                format!("{:<20}", format!("stable-line-{r:02}"))
+            };
+            for (i, ch) in text.chars().enumerate() {
+                row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
+            }
+            matrix.rows[r] = crate::glyph_matrix::MatrixRow::new(row);
+            if let Some(damage) = damage {
+                if edited_row != Some(r) {
+                    matrix.set_row_damage(r, damage);
+                }
+            }
+        }
+        state.window_matrices.push(WindowMatrixEntry {
+            window_id: DisplayWindowId::new(1),
+            matrix,
+            pixel_bounds: Rect::new(0.0, 0.0, cols as f32, rows as f32),
+            text_pixel_bounds: Rect::new(0.0, 0.0, cols as f32, rows as f32),
+            text_clip_bounds: None,
+            selected: true,
+        });
+        state
+    };
+
+    let mut rif = TtyRif::new(cols, rows);
+    rif.rasterize(&build_state(None, None));
+    let _ = render_output(&mut rif);
+
+    // Frame 2: identical content, all rows marked Reused → empty plan.
+    rif.rasterize(&build_state(Some(RowDamage::Reused), None));
+    assert!(
+        rif.plan_for_test().is_empty(),
+        "an all-reused frame must plan no ops"
+    );
+    let _ = render_output(&mut rif);
+
+    // Frame 3: one row relaid (damage New, changed content), rest Reused →
+    // exactly that row is rewritten, and its bytes carry the new content.
+    rif.rasterize(&build_state(Some(RowDamage::Reused), Some(3)));
+    let ops = rif.plan_for_test();
+    assert!(
+        ops.iter().all(|op| match op {
+            TermOp::WriteRun { row, .. } | TermOp::ClearThenWriteRun { row, .. } => *row == 3,
+            _ => false,
+        }) && !ops.is_empty(),
+        "only the edited row may be written: {ops:?}"
+    );
+}

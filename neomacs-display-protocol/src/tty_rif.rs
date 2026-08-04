@@ -75,6 +75,14 @@ pub struct TtyGrid {
     pub width: usize,
     pub height: usize,
     pub cells: Vec<TtyCell>,
+    /// Rows written through `set`/`set_cluster` this frame. Reset by `clear`.
+    /// Together with `row_carried` this proves a row identical to the screen:
+    /// a carried, unwritten row was copied verbatim from the current grid and
+    /// then never touched by any painter.
+    row_written: Vec<bool>,
+    /// Rows carried verbatim from the previous frame's grid (the
+    /// `RowDamage::Reused` fast path) instead of being re-rasterized.
+    row_carried: Vec<bool>,
 }
 
 impl TtyGrid {
@@ -84,6 +92,8 @@ impl TtyGrid {
             width,
             height,
             cells,
+            row_written: vec![false; height],
+            row_carried: vec![false; height],
         }
     }
 
@@ -101,11 +111,51 @@ impl TtyGrid {
         for cell in &mut self.cells {
             *cell = blank.clone();
         }
+        self.row_written.iter_mut().for_each(|w| *w = false);
+        self.row_carried.iter_mut().for_each(|c| *c = false);
+    }
+
+    /// Whether this row is PROVABLY identical to the previous frame's grid:
+    /// carried verbatim from it and never subsequently written by any
+    /// painter. The planner may skip such rows without comparing cells.
+    pub fn row_provably_unchanged(&self, row: usize) -> bool {
+        self.row_carried.get(row).copied().unwrap_or(false)
+            && !self.row_written.get(row).copied().unwrap_or(true)
+    }
+
+    /// Copy `[col, col+len)` of `row` verbatim from `source` (the previous
+    /// frame's grid) and mark the row carried. Does NOT mark it written —
+    /// carries are invisible to the write tracking so a later real painter
+    /// on the same row cancels the provably-unchanged claim, not the copy.
+    /// Returns false (copying nothing) when out of bounds or shape-mismatched.
+    pub fn carry_row_span_from(
+        &mut self,
+        source: &TtyGrid,
+        row: usize,
+        col: usize,
+        len: usize,
+    ) -> bool {
+        if self.width != source.width
+            || self.height != source.height
+            || row >= self.height
+            || col.saturating_add(len) > self.width
+        {
+            return false;
+        }
+        let start = row * self.width + col;
+        self.cells[start..start + len].clone_from_slice(&source.cells[start..start + len]);
+        if let Some(flag) = self.row_carried.get_mut(row) {
+            *flag = true;
+        }
+        true
     }
 
     /// Set a cell at (row, col). No-op if out of bounds.
     pub fn set(&mut self, row: usize, col: usize, ch: char, attrs: CellAttrs, padding: bool) {
         if row < self.height && col < self.width {
+            if let Some(written) = self.row_written.get_mut(row) {
+                *written = true;
+            }
             if !padding {
                 self.neutralize_overwrite(row, col);
             }
@@ -167,6 +217,9 @@ impl TtyGrid {
         padding: bool,
     ) {
         if row < self.height && col < self.width {
+            if let Some(written) = self.row_written.get_mut(row) {
+                *written = true;
+            }
             let idx = row * self.width + col;
             let ext = if extenders.is_empty() {
                 None
@@ -190,6 +243,8 @@ impl TtyGrid {
         self.width = width;
         self.height = height;
         self.cells.resize(width * height, TtyCell::default());
+        self.row_written = vec![false; height];
+        self.row_carried = vec![false; height];
     }
 }
 
@@ -662,11 +717,37 @@ impl TtyRif {
                 // coordinates for GUI redisplay.  TTY output is written by
                 // matrix row index, so pixel_y/height_px must not stretch or
                 // skip terminal rows.
-                self.rasterize_glyph_row(
-                    row_col,
-                    row_base.saturating_add(usize_to_i64_saturating(row_idx)),
-                    glyph_row,
-                );
+                let grid_row = row_base.saturating_add(usize_to_i64_saturating(row_idx));
+                // Damage-aware carry (GNU dispnew: update_window never touches
+                // rows the desired matrix left disabled). A row the layout
+                // engine reused VERBATIM rasterizes to exactly what the
+                // previous frame rasterized, which is exactly what the current
+                // grid holds — so copy the cells instead of re-resolving faces
+                // and re-writing glyphs, and mark the row carried so the
+                // planner can skip it without a cell compare (unless another
+                // painter writes to it afterwards). Only at 1x1 TTY metrics
+                // (grid row indices == matrix row indices) and never on a
+                // forced full render (the current grid may be stale).
+                if matches!(
+                    entry.matrix.row_damage(row_idx),
+                    crate::glyph_matrix::RowDamage::Reused
+                ) && char_h == 1.0
+                    && !self.force_full_render
+                    && glyph_row.enabled
+                    && grid_row >= 0
+                    && row_col >= 0
+                {
+                    let span_cols = (row_bounds.width / char_w).round().max(0.0) as usize;
+                    if self.desired.carry_row_span_from(
+                        &self.current,
+                        grid_row as usize,
+                        row_col as usize,
+                        span_cols,
+                    ) {
+                        continue;
+                    }
+                }
+                self.rasterize_glyph_row(row_col, grid_row, glyph_row);
             }
         }
 
@@ -986,7 +1067,25 @@ impl TtyRif {
             }
         }
 
+        // Rows the scroll replay mutated in the model: their current-grid
+        // content no longer matches what a carry copied earlier this frame.
+        let model_touched = ops
+            .iter()
+            .filter_map(|op| match op {
+                TermOp::ScrollRows { top, bottom, .. } => Some(*top as usize..=*bottom as usize),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
         for row in 0..self.desired.height {
+            // Damage-aware skip: a carried, unwritten row is byte-identical
+            // to the screen model by construction — no cell compare needed.
+            if !self.force_full_render
+                && self.desired.row_provably_unchanged(row)
+                && !model_touched.iter().any(|range| range.contains(&row))
+            {
+                continue;
+            }
             let row_start = row * self.desired.width;
             let desired_row = &self.desired.cells[row_start..row_start + self.desired.width];
             let current_row = &self.current.cells[row_start..row_start + self.desired.width];
@@ -1563,11 +1662,23 @@ fn detect_scroll(
     if w != current.width || h != current.height || h < MIN_RUN + 1 {
         return None;
     }
+    // A carried, unwritten desired row is byte-identical to the current row
+    // at the same index by construction: give BOTH sides a per-row sentinel
+    // instead of hashing 2x row cells. Row-unique sentinels keep the row
+    // stationary (old == new at r) while never colliding across rows, so the
+    // shift voting below cannot mistake two carried rows for a moved run —
+    // which is also semantically right: a carried row IS stationary evidence.
+    const CARRIED_SENTINEL: u64 = 1 << 63;
+    let sentinel = |r: usize| {
+        desired
+            .row_provably_unchanged(r)
+            .then_some(CARRIED_SENTINEL | r as u64)
+    };
     let old_hash: Vec<u64> = (0..h)
-        .map(|r| row_hash(&current.cells[r * w..(r + 1) * w]))
+        .map(|r| sentinel(r).unwrap_or_else(|| row_hash(&current.cells[r * w..(r + 1) * w])))
         .collect();
     let new_hash: Vec<u64> = (0..h)
-        .map(|r| row_hash(&desired.cells[r * w..(r + 1) * w]))
+        .map(|r| sentinel(r).unwrap_or_else(|| row_hash(&desired.cells[r * w..(r + 1) * w])))
         .collect();
 
     // Changed band: rows outside it already match in place.
