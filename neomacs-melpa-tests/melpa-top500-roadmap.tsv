@@ -52,7 +52,7 @@ rank	package	downloads	status
 51	js2-mode	1325618	covered
 52	highlight-indentation	1324219	covered
 53	all-the-icons	1312878	covered
-54	yaml-mode	1307408	todo
+54	yaml-mode	1307408	covered
 55	aggressive-indent	1296080	covered
 56	counsel	1295481	todo
 57	exec-path-from-shell	1279912	todo

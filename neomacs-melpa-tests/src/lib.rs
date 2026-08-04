@@ -1962,6 +1962,12 @@ pub const WEB_MODE_MELPA_PIN: (&str, &str) = ("web-mode", "20260623.932");
 /// `2195e1247ecb04c30321702aa5f5618a51c329c5`.
 pub const WEBSOCKET_MELPA_PIN: (&str, &str) = ("websocket", "20260301.157");
 
+/// The exact YAML Mode package selected for practical configuration,
+/// indentation, electric editing, syntax/fontification, filling, Imenu, and
+/// multi-document navigation parity. MELPA built this archive from upstream
+/// commit `62cbd80507765aa8326bd6aef3aacd8d9be2d71a`.
+pub const YAML_MODE_MELPA_PIN: (&str, &str) = ("yaml-mode", "20260420.156");
+
 /// The exact xcscope package selected for the practical source-search,
 /// navigation, history, rerun, and recursive indexing parity corpus. MELPA
 /// built this archive from upstream commit

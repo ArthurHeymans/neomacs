@@ -390,6 +390,7 @@ mod with_editor;
 mod xcscope;
 mod xr;
 mod yaml;
+mod yaml_mode;
 mod yasnippet;
 mod yaxception;
 mod youdao_dictionary;
