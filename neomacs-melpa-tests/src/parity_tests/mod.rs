@@ -399,6 +399,7 @@ mod svg_lib;
 mod swiper;
 mod tablist;
 mod tinysegmenter;
+mod toc_org;
 mod transient;
 mod treemacs;
 mod two_bit;

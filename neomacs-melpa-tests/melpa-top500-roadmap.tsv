@@ -84,7 +84,7 @@ rank	package	downloads	status
 83	helm-descbinds	1055745	covered
 84	hungry-delete	1053758	covered
 85	flx-ido	1053746	covered
-86	toc-org	1047381	todo
+86	toc-org	1047381	covered
 87	ansi	1045435	covered
 88	parent-mode	1043957	todo
 89	doom-modeline	1043813	todo

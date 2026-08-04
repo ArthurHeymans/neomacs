@@ -402,6 +402,12 @@ pub const TABLIST_MELPA_PIN: (&str, &str) = ("tablist", "20260623.1855");
 /// `872134704bd25c13a4c59552433da4c6881b5230`.
 pub const TINYSEGMENTER_MELPA_PIN: (&str, &str) = ("tinysegmenter", "20141124.1013");
 
+/// The exact Toc-Org package selected for practical Org and Markdown table of
+/// contents generation, filtering, anchor deduplication, link navigation,
+/// save-hook updates, and mode-lifecycle parity. MELPA built this archive from
+/// upstream commit `781376e9dc9a901116c0c39914aeb4d46e524e0a`.
+pub const TOC_ORG_MELPA_PIN: (&str, &str) = ("toc-org", "20260514.1415");
+
 /// The exact yaml.el package selected by the practical deployment parsing,
 /// anchors, scalar policy, round-trip encoding, dialect, source-position, and
 /// validation parity corpus. MELPA built this archive from upstream commit
