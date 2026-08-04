@@ -2025,6 +2025,12 @@ pub const HELM_AG_MELPA_PIN: (&str, &str) = ("helm-ag", "0.64");
 /// by the Helm parity corpus.
 pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
 
+/// The exact final Helm Swoop source selected for practical candidate,
+/// narrowing, query, editing, face, and buffer-selection parity. MELPA's last
+/// rolling build came from upstream commit
+/// `df90efd4476dec61186d80cace69276a95b834d2` before its recipe was retired.
+pub const HELM_SWOOP_MELPA_PIN: (&str, &str) = ("helm-swoop", "20240104.2356");
+
 /// The exact Helm-Projectile package selected for practical project file,
 /// buffer, Dired, search, switching, DWIM, and mode-lifecycle parity.
 /// This MELPA version corresponds to upstream commit

@@ -317,6 +317,7 @@ mod helm;
 mod helm_ag;
 mod helm_core;
 mod helm_projectile;
+mod helm_swoop;
 mod highlight_indentation;
 mod hl_todo;
 mod ht;
