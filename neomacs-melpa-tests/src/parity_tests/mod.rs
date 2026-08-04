@@ -372,6 +372,7 @@ mod smartparens;
 mod spinner;
 mod splitter;
 mod svg_lib;
+mod swiper;
 mod tablist;
 mod tinysegmenter;
 mod transient;

@@ -2012,6 +2012,12 @@ pub const SHUT_UP_MELPA_PIN: (&str, &str) = ("shut-up", "20240429.605");
 /// `82d2cf084a19b0c2c3812e0550721f8a61996056`.
 pub const SMARTPARENS_MELPA_PIN: (&str, &str) = ("smartparens", "20260129.1214");
 
+/// The exact Swiper package selected for practical line search, match search,
+/// query replacement, occur export, visibility, and multi-buffer parity.
+/// MELPA built this archive from upstream commit
+/// `d489b4f0d48fd215119261d92de103c5b5580895`.
+pub const SWIPER_MELPA_PIN: (&str, &str) = ("swiper", "20260101.2125");
+
 /// The exact Yasnippet package selected by the direct parity corpus and as
 /// angular-snippets' manually documented runtime dependency.
 pub const YASNIPPET_MELPA_PIN: (&str, &str) = ("yasnippet", "20250602.1342");
