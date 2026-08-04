@@ -1902,6 +1902,12 @@ pub const COND_LET_MELPA_PIN: (&str, &str) = ("cond-let", "20260701.1237");
 /// buffer-navigation workflow parity corpus.
 pub const CONSULT_MELPA_PIN: (&str, &str) = ("consult", "20260716.1105");
 
+/// The exact Counsel package selected for practical command-palette, file and
+/// Git navigation, kill-ring recovery, structural navigation, and project
+/// compilation parity. MELPA built this archive from upstream commit
+/// `ee79f68215ae7e2b8a38ba6bf7f82b3fe57dc16c`.
+pub const COUNSEL_MELPA_PIN: (&str, &str) = ("counsel", "20260214.1004");
+
 /// The exact f package selected by the comprehensive API parity corpus.
 pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 
