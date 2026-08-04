@@ -722,6 +722,47 @@ pub(crate) fn update_face_from_frame_parameter(
     Ok(())
 }
 
+/// GNU `internal-set-lisp-face-attribute` reflects a small, fixed set of
+/// frame-local face attributes back into frame parameters (xfaces.c).  Keep
+/// that relationship in one table-shaped function: face state remains the
+/// source of the change, while the frame-parameter primitive remains the
+/// single publication seam used by frame backends.
+fn frame_parameter_for_face_attribute(face_name: &str, attr: LFaceAttr) -> Option<FrameParam> {
+    match (face_name, attr) {
+        ("default", LFaceAttr::Foreground) => Some(FrameParam::ForegroundColor),
+        ("default", LFaceAttr::Background) => Some(FrameParam::BackgroundColor),
+        ("border", LFaceAttr::Background) => Some(FrameParam::BorderColor),
+        ("cursor", LFaceAttr::Background) => Some(FrameParam::CursorColor),
+        ("mouse", LFaceAttr::Background) => Some(FrameParam::MouseColor),
+        ("scroll-bar", LFaceAttr::Foreground) if !cfg!(windows) => {
+            Some(FrameParam::ScrollBarForeground)
+        }
+        ("scroll-bar", LFaceAttr::Background) if !cfg!(windows) => {
+            Some(FrameParam::ScrollBarBackground)
+        }
+        _ => None,
+    }
+}
+
+fn publish_face_attribute_to_frame_parameter(
+    eval: &mut super::eval::Context,
+    frame_id: FrameId,
+    parameter: FrameParam,
+    value: Value,
+) -> Result<(), Flow> {
+    // GNU calls Fmodify_frame_parameters directly from xfaces.c.  Preserve
+    // that primitive-to-primitive seam: the parameter change is observable,
+    // but Lisp advice around `modify-frame-parameters` is not invoked.
+    super::window_cmds::builtin_modify_frame_parameters(
+        eval,
+        vec![
+            Value::make_frame(frame_id.0),
+            Value::list(vec![Value::cons(parameter.symbol(), value)]),
+        ],
+    )?;
+    Ok(())
+}
+
 /// Seed the selected frame's authoritative `default` Lisp face specification
 /// from its `font-parameter` without mutating Lisp override state.
 ///
@@ -5724,7 +5765,6 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
         if let Ok(attr_name) = normalize_set_face_attribute_name(&args[1]) {
             let (canonical_attr, canonical_value) =
                 normalize_face_attr_for_set_with_eval(Some(eval), &face_name, attr_name, value)?;
-            let attr_name_str = canonical_attr.keyword();
             let live_frame_id = live_frame_id_for_face_update(eval, args.get(3))?;
             let font_resolution = if canonical_attr == LFaceAttr::Font {
                 live_frame_id
@@ -5776,27 +5816,17 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                 sync_live_default_face_font_state(eval, frame_id);
             }
 
-            if face_name == "default" {
-                let frame_param = match attr_name_str {
-                    ":foreground" => Some(FrameParam::ForegroundColor),
-                    ":background" => Some(FrameParam::BackgroundColor),
-                    _ => None,
-                };
-                if let Some(param) = frame_param
-                    && !canonical_value.is_symbol_named("unspecified")
-                    && !canonical_value.is_symbol_named(":ignore-defface")
-                {
-                    for frame_id in changed_live_frames.iter().copied() {
-                        if let Some(frame) = eval.frames.get_mut(frame_id) {
-                            frame.set_known_parameter(param, public_effective_value);
-                        }
-                        update_face_from_frame_parameter(
-                            eval,
-                            frame_id,
-                            param,
-                            public_effective_value,
-                        )?;
-                    }
+            if let Some(parameter) = frame_parameter_for_face_attribute(&face_name, canonical_attr)
+                && !canonical_value.is_symbol_named("unspecified")
+                && !canonical_value.is_symbol_named(":ignore-defface")
+            {
+                for frame_id in changed_live_frames.iter().copied() {
+                    publish_face_attribute_to_frame_parameter(
+                        eval,
+                        frame_id,
+                        parameter,
+                        public_effective_value,
+                    )?;
                 }
             }
         }

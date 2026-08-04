@@ -6667,6 +6667,37 @@ fn vm_default_face_color_updates_frame_parameters_like_gnu() {
 }
 
 #[test]
+fn vm_special_face_colors_update_frame_parameters_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r##"(let* ((f (selected-frame))
+                        (original (symbol-function 'modify-frame-parameters))
+                        (function-cell-calls 0))
+                  (fset 'modify-frame-parameters
+                        (lambda (&rest args)
+                          (setq function-cell-calls
+                                (1+ function-cell-calls))
+                          (apply original args)))
+                  (unwind-protect
+                      (progn
+                        (internal-set-lisp-face-attribute
+                         'cursor :background "#112233" f)
+                        (internal-set-lisp-face-attribute
+                         'border :background "#445566" f)
+                        (internal-set-lisp-face-attribute
+                         'mouse :background "#778899" f)
+                        (list (frame-parameter f 'cursor-color)
+                              (frame-parameter f 'border-color)
+                              (frame-parameter f 'mouse-color)
+                              function-cell-calls))
+                    (fset 'modify-frame-parameters original)))"##
+        ),
+        r##"OK ("#112233" "#445566" "#778899" 0)"##
+    );
+}
+
+#[test]
 fn vm_font_stub_tail_uses_direct_dispatch() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
