@@ -1731,6 +1731,13 @@ pub const NAVI2CH_MELPA_PIN: (&str, &str) = ("navi2ch", "20200130.36");
 /// `674909974637ff0ec2b5ebf43f9a8aefa35d93e9`.
 pub const NERD_ICONS_MELPA_PIN: (&str, &str) = ("nerd-icons", "20260710.1627");
 
+/// The exact Paredit package selected for practical balanced insertion,
+/// structural deletion, slurp/barf, splice/raise/convolute, split/join,
+/// string/comment editing, kill-ring, and mode-lifecycle parity. MELPA built
+/// this archive from upstream commit
+/// `89e75b4cb21f525a6f4cabcd12f1bd4204e682ab`.
+pub const PAREDIT_MELPA_PIN: (&str, &str) = ("paredit", "20241103.2046");
+
 /// The exact PDF Tools package selected for practical document geometry,
 /// search-query, outline/link, occurrence-batching, virtual-page, annotation,
 /// sequence-alignment, and cache parity. This MELPA version is pinned to

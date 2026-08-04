@@ -78,7 +78,7 @@ rank	package	downloads	status
 77	helm-swoop	1113675	covered
 78	lsp-ui	1112815	covered
 79	pfuture	1088448	covered
-80	paredit	1081462	todo
+80	paredit	1081462	covered
 81	paradox	1076624	todo
 82	auto-highlight-symbol	1057915	covered
 83	helm-descbinds	1055745	todo
