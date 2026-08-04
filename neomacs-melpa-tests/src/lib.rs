@@ -268,6 +268,12 @@ pub const AUTH_SOURCE_KWALLET_MELPA_PIN: (&str, &str) = ("auth-source-kwallet", 
 /// `45a0b759076ce4139aba36dde0a2904136282e73`.
 pub const POPUP_MELPA_PIN: (&str, &str) = ("popup", "20251231.1622");
 
+/// The exact Popwin package selected for practical multi-pane restoration,
+/// directional popup, display routing, nested context, sticky and dedicated
+/// lifecycle, tail, reuse, and killed/buried-buffer parity. MELPA built this
+/// archive from upstream commit `f7a39759180fa88f3890c3c5f35379ab086e04fa`.
+pub const POPWIN_MELPA_PIN: (&str, &str) = ("popwin", "20260103.1800");
+
 /// The exact pos-tip package selected by the practical text layout, pixel
 /// geometry, color selection, display-bound clamping, and tooltip dispatch
 /// parity corpus. MELPA built this archive from upstream commit

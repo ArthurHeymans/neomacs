@@ -357,6 +357,7 @@ mod php_runtime;
 mod pinyinlib;
 mod pkg_info;
 mod popup;
+mod popwin;
 mod pos_tip;
 mod posframe;
 mod powerline;
