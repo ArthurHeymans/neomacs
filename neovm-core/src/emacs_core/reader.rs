@@ -72,32 +72,6 @@ impl RequireMatchSymbol {
     }
 }
 
-fn empty_runtime_lisp_string(multibyte: bool) -> crate::heap_types::LispString {
-    crate::heap_types::LispString::new(String::new(), multibyte)
-}
-
-fn minibuffer_result_lisp_string(
-    buffers: &crate::buffer::BufferManager,
-    minibuf_id: crate::buffer::BufferId,
-    prompt_byte_pos: EmacsBytePos,
-    preserve_properties: bool,
-) -> crate::heap_types::LispString {
-    if let Some(buf) = buffers.get(minibuf_id) {
-        let full_end = buf.full_emacs_byte_range().end();
-        if full_end > prompt_byte_pos {
-            let range = EmacsByteRange::new(prompt_byte_pos, full_end);
-            return if preserve_properties {
-                buf.buffer_substring_lisp_string_range(range)
-            } else {
-                buf.buffer_substring_lisp_string_no_properties_range(range)
-            };
-        }
-        return empty_runtime_lisp_string(buf.get_multibyte());
-    }
-
-    empty_runtime_lisp_string(true)
-}
-
 fn minibuffer_text_properties_enabled_in_buffer(
     obarray: &Obarray,
     buffers: &crate::buffer::BufferManager,
@@ -1337,7 +1311,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
         .symbol_value("minibuffer-prompt-properties")
         .copied()
         .unwrap_or(Value::NIL);
-    let prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
+    super::minibuffer::install_minibuffer_buffer_text(
         buffers,
         minibuf_id,
         &prompt,
@@ -1392,16 +1366,16 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     // Read the minibuffer contents (everything after the prompt)
     // GNU `read_minibuf` preserves properties when the option was enabled in
     // the calling buffer or was enabled buffer-locally by minibuffer setup.
+    let _ = buffers.switch_current_unrecorded(minibuf_id);
     let preserve_text_properties = caller_allows_text_properties
         || minibuffer_text_properties_enabled_in_buffer(obarray, buffers, Some(minibuf_id));
-    let result_text = minibuffer_result_lisp_string(
+    let result_text = super::minibuffer::minibuffer_contents_lisp_string_in_state(
+        obarray,
         buffers,
-        minibuf_id,
-        prompt_byte_pos,
+        minibuffers,
         preserve_text_properties,
-    );
+    )?;
 
-    let _ = buffers.switch_current_unrecorded(minibuf_id);
     let exit_hook_result = match run_exit_hook() {
         Err(Flow::Signal(_)) => Ok(Value::NIL),
         other => other,
@@ -1870,7 +1844,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
         .symbol_value("minibuffer-prompt-properties")
         .copied()
         .unwrap_or(Value::NIL);
-    let prompt_byte_pos = super::minibuffer::install_minibuffer_buffer_text(
+    super::minibuffer::install_minibuffer_buffer_text(
         &mut shared.buffers,
         minibuf_id,
         &prompt,
@@ -1938,20 +1912,20 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     let edit_result = shared.minibuffer_command_loop_inner();
     shared.restore_specpdl_roots(gc_roots);
 
+    let _ = shared.buffers.switch_current_unrecorded(minibuf_id);
     let preserve_text_properties = caller_allows_text_properties
         || minibuffer_text_properties_enabled_in_buffer(
             &shared.obarray,
             &shared.buffers,
             Some(minibuf_id),
         );
-    let result_text = minibuffer_result_lisp_string(
+    let result_text = super::minibuffer::minibuffer_contents_lisp_string_in_state(
+        &shared.obarray,
         &shared.buffers,
-        minibuf_id,
-        prompt_byte_pos,
+        &shared.minibuffers,
         preserve_text_properties,
-    );
+    )?;
 
-    let _ = shared.buffers.switch_current_unrecorded(minibuf_id);
     let exit_hook_result = match shared.run_hook_if_bound("minibuffer-exit-hook") {
         Ok(value) => Ok(value),
         Err(Flow::Signal(_)) => Ok(Value::NIL),
@@ -2429,7 +2403,7 @@ fn input_pending_now(ctx: &crate::emacs_core::eval::Context, filter_events: bool
         return true;
     }
 
-    if ctx.command_loop.keyboard.has_pending_kboard_input() {
+    if ctx.command_loop.keyboard.has_pending_requeued_input() {
         return true;
     }
 

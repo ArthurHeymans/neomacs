@@ -496,6 +496,30 @@ fn test_execute_kbd_macro_real_key_events_use_command_loop_dispatch() {
 }
 
 #[test]
+fn execute_kbd_macro_tail_is_not_pending_input_for_while_no_input_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (setq neo-while-no-input-macro-log nil)
+                 (defun neo-while-no-input-macro-command ()
+                   (interactive)
+                   (push (while-no-input 'ran)
+                         neo-while-no-input-macro-log))
+                 (let ((map (make-sparse-keymap)))
+                   (define-key map "a" #'neo-while-no-input-macro-command)
+                   (use-local-map map)
+                   (execute-kbd-macro "aaa"))
+                 neo-while-no-input-macro-log)"#,
+        )
+        .expect("keyboard macro should execute");
+
+    assert_eq!(format!("{result}"), "(ran ran ran)");
+}
+
+#[test]
 fn execute_kbd_macro_continues_in_recursive_minibuffer_command_loop() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

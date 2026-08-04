@@ -1212,33 +1212,47 @@ pub(crate) fn builtin_minibuffer_prompt_end_ctx(
 ) -> EvalResult {
     expect_args("minibuffer-prompt-end", &args, 0)?;
 
-    let Some((current_id, point_min, point_max)) = eval.buffers.current_buffer().map(|buffer| {
+    Ok(Value::fixnum(
+        minibuffer_prompt_end_in_state(&eval.obarray, &eval.buffers, &eval.minibuffers)?.as_i64(),
+    ))
+}
+
+fn minibuffer_prompt_end_in_state(
+    obarray: &Obarray,
+    buffers: &BufferManager,
+    minibuffers: &MinibufferManager,
+) -> Result<LispCharPos1, Flow> {
+    let Some((current_id, point_min, point_max)) = buffers.current_buffer().map(|buffer| {
         (
             buffer.id,
             buffer.point_min_lisp_char_pos().as_i64(),
             buffer.point_max_lisp_char_pos().as_i64(),
         )
     }) else {
-        return Ok(Value::fixnum(1));
+        return Ok(LispCharPos1::new(1));
     };
 
-    let Some(state) = eval.minibuffers.current() else {
-        return Ok(Value::fixnum(point_min));
+    let Some(state) = minibuffers.current() else {
+        return Ok(LispCharPos1::new(point_min));
     };
     if state.buffer_id != current_id {
-        return Ok(Value::fixnum(point_min));
+        return Ok(LispCharPos1::new(point_min));
     }
 
-    let prompt_end =
-        super::builtins::dispatch_builtin(eval, "field-end", vec![Value::fixnum(point_min)])
-            .expect("field-end builtin must exist")?;
-    let prompt_end_pos = prompt_end.as_fixnum().unwrap_or(point_min);
+    let (_, prompt_end_pos) = super::builtins::buffers::find_field_bounds_in_state(
+        obarray,
+        &[],
+        buffers,
+        Some(&Value::fixnum(point_min)),
+        false,
+        None,
+        None,
+    )?;
 
     // GNU `Fminibuffer_prompt_end` falls back to point-min when the active
     // minibuffer has no prompt field at BEGV, even if `field-end` reaches ZV.
     if prompt_end_pos == point_max {
-        let buffer = eval
-            .buffers
+        let buffer = buffers
             .get(current_id)
             .expect("current minibuffer must remain available");
         let point_min_byte =
@@ -1247,11 +1261,11 @@ pub(crate) fn builtin_minibuffer_prompt_end_ctx(
             .text_props_get_property_at_emacs_byte_pos(point_min_byte, Value::symbol("field"))
             .is_none()
         {
-            return Ok(Value::fixnum(point_min));
+            return Ok(LispCharPos1::new(point_min));
         }
     }
 
-    Ok(prompt_end)
+    Ok(LispCharPos1::new(prompt_end_pos))
 }
 
 /// `(minibuffer-contents)` — returns the current minibuffer contents.
@@ -1473,30 +1487,41 @@ pub(crate) fn builtin_abort_minibuffers_ctx(
     })
 }
 
-fn minibuffer_contents_lisp_string(
-    eval: &mut super::eval::Context,
+pub(crate) fn minibuffer_contents_lisp_string_in_state(
+    obarray: &Obarray,
+    buffers: &BufferManager,
+    minibuffers: &MinibufferManager,
     preserve_properties: bool,
 ) -> Result<LispString, Flow> {
-    let Some((point_max, current_id)) = eval
-        .buffers
+    let Some((point_max, current_id)) = buffers
         .current_buffer()
         .map(|buffer| (buffer.accessible_emacs_byte_region().end(), buffer.id))
     else {
         return Ok(LispString::from_utf8(""));
     };
-    let prompt_end = builtin_minibuffer_prompt_end_ctx(eval, vec![])?;
-    let prompt_end_pos = prompt_end.as_fixnum().unwrap_or(1);
-    let buffer = eval
-        .buffers
+    let prompt_end = minibuffer_prompt_end_in_state(obarray, buffers, minibuffers)?;
+    let buffer = buffers
         .get(current_id)
         .expect("current buffer must remain available");
-    let start = buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(prompt_end_pos));
+    let start = buffer.lisp_pos_to_accessible_emacs_byte_pos(prompt_end);
     let range = EmacsByteRange::new(start, point_max);
     Ok(if preserve_properties {
         buffer.buffer_substring_lisp_string_range(range)
     } else {
         buffer.buffer_substring_lisp_string_no_properties_range(range)
     })
+}
+
+fn minibuffer_contents_lisp_string(
+    eval: &mut super::eval::Context,
+    preserve_properties: bool,
+) -> Result<LispString, Flow> {
+    minibuffer_contents_lisp_string_in_state(
+        &eval.obarray,
+        &eval.buffers,
+        &eval.minibuffers,
+        preserve_properties,
+    )
 }
 
 fn resolve_minibuffer_buffer_arg(

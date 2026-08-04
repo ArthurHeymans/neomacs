@@ -2826,7 +2826,7 @@ fn next_field_change_in_buffers(
     )
 }
 
-fn find_field_bounds_in_state(
+pub(crate) fn find_field_bounds_in_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
     buffers: &BufferManager,

@@ -1328,6 +1328,50 @@ fn read_from_minibuffer_strips_properties_by_default_and_preserves_explicit_opt_
 }
 
 #[test]
+fn read_from_minibuffer_uses_live_prompt_field_boundary_after_prompt_rewrite_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer exit key");
+    drop(tx);
+    eval.input_rx = Some(rx);
+
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (defvar neo-live-prompt-history nil)
+                 (let ((neo-live-prompt-history nil)
+                       (map (make-sparse-keymap)))
+                   (define-key map " " #'exit-minibuffer)
+                   (let ((value
+                          (minibuffer-with-setup-hook
+                              (lambda ()
+                                (let ((inhibit-read-only t))
+                                  (delete-region
+                                   (point-min) (minibuffer-prompt-end))
+                                  (goto-char (point-min))
+                                  (insert
+                                   (propertize
+                                    "(3/3) Environment: "
+                                    'front-sticky t
+                                    'rear-nonsticky t
+                                    'field t
+                                    'read-only t)))
+                                (goto-char (point-max)))
+                            (read-from-minibuffer
+                             "Environment: " "production" map nil
+                             'neo-live-prompt-history))))
+                     (list value neo-live-prompt-history))))"#,
+        )
+        .expect("minibuffer read should finish");
+
+    assert_eq!(format!("{result}"), r#"("production" ("production"))"#);
+}
+
+#[test]
 fn activate_minibuffer_window_switches_displayed_buffer_and_restores_state() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

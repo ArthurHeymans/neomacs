@@ -1731,18 +1731,17 @@ impl KeyboardRuntime {
         })
     }
 
-    pub fn has_pending_kboard_input(&self) -> bool {
+    /// Return whether keyboard-local input has been requeued for a future
+    /// read.  The unconsumed tail of an executing keyboard macro is not
+    /// pending input: GNU consumes it directly from `Vexecuting_kbd_macro`,
+    /// and `input-pending-p` must not let it preempt `while-no-input`.
+    pub fn has_pending_requeued_input(&self) -> bool {
         if self.kboard.unread_selection_event.is_some()
             || self
                 .kboard
                 .unread_events
                 .iter()
                 .any(Self::event_counts_as_pending_input)
-            || self
-                .kboard
-                .executing_kbd_macro
-                .as_ref()
-                .is_some_and(|events| self.kboard.kbd_macro_index < events.len())
         {
             return true;
         }
@@ -1752,11 +1751,25 @@ impl KeyboardRuntime {
                     .unread_events
                     .iter()
                     .any(Self::event_counts_as_pending_input)
-                || kboard
+        })
+    }
+
+    /// Return whether the next keyboard read can complete without waiting.
+    /// Unlike `input-pending-p`, a keyboard read can consume the remaining
+    /// events of an executing keyboard macro.
+    pub fn has_pending_kboard_input(&self) -> bool {
+        self.has_pending_requeued_input()
+            || self
+                .kboard
+                .executing_kbd_macro
+                .as_ref()
+                .is_some_and(|events| self.kboard.kbd_macro_index < events.len())
+            || self.parked_kboards.values().any(|kboard| {
+                kboard
                     .executing_kbd_macro
                     .as_ref()
                     .is_some_and(|events| kboard.kbd_macro_index < events.len())
-        })
+            })
     }
 
     pub fn set_terminal_translation_maps(
