@@ -369,6 +369,7 @@ mod svg_lib;
 mod tablist;
 mod tinysegmenter;
 mod transient;
+mod treemacs;
 mod two_bit;
 mod upstream_package_ert;
 mod use_package;

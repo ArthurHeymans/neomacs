@@ -1940,6 +1940,12 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 
+/// The exact Treemacs package selected for practical project admission,
+/// workspace lifecycle, persistence, selection, and terminal tree parity.
+/// MELPA built this archive from upstream commit
+/// `2ab5a3c89fa01bbbd99de9b8986908b2bc5a7b49`.
+pub const TREEMACS_MELPA_PIN: (&str, &str) = ("treemacs", "20251226.1307");
+
 /// The exact Expand Region package selected for practical progressive
 /// selection, contraction, history invalidation, register autocopy, and
 /// language-specific region parity. MELPA built this archive from upstream
