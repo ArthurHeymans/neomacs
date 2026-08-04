@@ -1731,6 +1731,12 @@ pub const NAVI2CH_MELPA_PIN: (&str, &str) = ("navi2ch", "20200130.36");
 /// `674909974637ff0ec2b5ebf43f9a8aefa35d93e9`.
 pub const NERD_ICONS_MELPA_PIN: (&str, &str) = ("nerd-icons", "20260710.1627");
 
+/// The exact Paradox package selected for practical package-menu rendering,
+/// filtering, transaction reporting, homepage, GitHub-star, commit-history,
+/// and enable/disable lifecycle parity. MELPA built this archive from upstream
+/// commit `96401577ed02f433debe7604e49afd478e9eda61`.
+pub const PARADOX_MELPA_PIN: (&str, &str) = ("paradox", "20191011.1119");
+
 /// The exact Paredit package selected for practical balanced insertion,
 /// structural deletion, slurp/barf, splice/raise/convolute, split/join,
 /// string/comment editing, kill-ring, and mode-lifecycle parity. MELPA built

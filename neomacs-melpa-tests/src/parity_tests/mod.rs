@@ -355,6 +355,7 @@ mod package_build;
 mod package_lifecycle;
 mod package_lint;
 mod package_vc;
+mod paradox;
 mod paredit;
 mod pcre2el;
 mod pdf_tools;
