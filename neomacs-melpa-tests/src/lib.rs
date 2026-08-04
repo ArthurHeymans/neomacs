@@ -1585,6 +1585,12 @@ pub const AUTO_PACKAGE_UPDATE_MELPA_PIN: (&str, &str) = ("auto-package-update", 
 /// `a4d778de774ca3895542cb559a953e0d98657338`.
 pub const AUTO_PAUSE_MELPA_PIN: (&str, &str) = ("auto-pause", "20160426.1216");
 
+/// The exact auto-rename-tag package selected by the practical HTML/XML
+/// typing, nested-pairing, protected-context, customization, undo, and mode
+/// lifecycle parity corpus. MELPA built this archive from upstream commit
+/// `ace6de8bc8200aa9c9f37c8266d0e1b51627b559`.
+pub const AUTO_RENAME_TAG_MELPA_PIN: (&str, &str) = ("auto-rename-tag", "20260101.547");
+
 /// The exact ht package selected by the practical configuration, nested state,
 /// job pipeline, custom-key, and snapshot parity corpus, and as
 /// auto-highlight-symbol's hash-table dependency. MELPA built this archive from upstream commit

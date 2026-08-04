@@ -256,6 +256,7 @@ mod auto_org_md;
 mod auto_package_update;
 mod auto_pause;
 mod auto_read_only;
+mod auto_rename_tag;
 mod avy;
 mod avy_menu;
 mod bert;
