@@ -254,6 +254,7 @@ mod auto_indent_mode;
 mod auto_minor_mode;
 mod auto_org_md;
 mod auto_package_update;
+mod auto_pause;
 mod auto_read_only;
 mod avy;
 mod avy_menu;
