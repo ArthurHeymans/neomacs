@@ -1847,6 +1847,13 @@ pub const EXEC_PATH_FROM_SHELL_MELPA_PIN: (&str, &str) = ("exec-path-from-shell"
 /// `8588d80d414aee1fafce5b9da0e913612ee0bcdd`.
 pub const ELISP_SLIME_NAV_MELPA_PIN: (&str, &str) = ("elisp-slime-nav", "20210510.528");
 
+/// The exact Dumb Jump package selected for practical ripgrep-backed xref
+/// definition and reference navigation, project configuration, contextual
+/// disambiguation, jump history, and missing-definition parity. MELPA built
+/// this archive from upstream commit
+/// `cf06b4ccdce6a39346c32f05139f9ee8b77ee229`.
+pub const DUMB_JUMP_MELPA_PIN: (&str, &str) = ("dumb-jump", "20260603.1700");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");

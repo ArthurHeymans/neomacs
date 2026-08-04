@@ -285,6 +285,7 @@ mod ddskk;
 mod deferred;
 mod diminish;
 mod distel_completion_lib;
+mod dumb_jump;
 mod elisp_slime_nav;
 mod elixir_mode;
 mod emmet_mode;
