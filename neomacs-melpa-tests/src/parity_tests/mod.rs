@@ -281,6 +281,7 @@ mod dash;
 mod datetime_format;
 mod ddskk;
 mod deferred;
+mod diminish;
 mod distel_completion_lib;
 mod elixir_mode;
 mod emmet_mode;

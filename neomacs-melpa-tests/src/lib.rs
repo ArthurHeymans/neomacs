@@ -1946,6 +1946,12 @@ pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 /// `2ab5a3c89fa01bbbd99de9b8986908b2bc5a7b49`.
 pub const TREEMACS_MELPA_PIN: (&str, &str) = ("treemacs", "20251226.1307");
 
+/// The exact Diminish package selected for practical live minor-mode,
+/// abbreviation, reporting, restoration, and configuration-order parity.
+/// MELPA built this archive from upstream commit
+/// `fbd5d846611bad828e336b25d2e131d1bc06b83d`.
+pub const DIMINISH_MELPA_PIN: (&str, &str) = ("diminish", "20220909.847");
+
 /// The exact Expand Region package selected for practical progressive
 /// selection, contraction, history invalidation, register autocopy, and
 /// language-specific region parity. MELPA built this archive from upstream
