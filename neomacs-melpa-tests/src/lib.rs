@@ -1900,6 +1900,12 @@ pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
 /// by the Helm parity corpus.
 pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
 
+/// The exact Hl-Todo package selected for practical source annotation,
+/// navigation, insertion, fontification, Flymake, and global-mode parity.
+/// This MELPA version corresponds to upstream commit
+/// `527d545b8c2f36243194cbe4a8d0e6ac9d50e6a7` (tag `v3.9.4`).
+pub const HL_TODO_MELPA_PIN: (&str, &str) = ("hl-todo", "20260601.1508");
+
 /// The exact wfnames package selected for the practical filename-list setup,
 /// edit tracking, cross-directory rename, swap, overwrite, revert, and
 /// reordering parity corpus, and required by the Helm parity corpus. MELPA

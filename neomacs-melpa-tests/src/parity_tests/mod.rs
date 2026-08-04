@@ -304,6 +304,7 @@ mod harness_contract;
 mod haskell_mode;
 mod helm;
 mod helm_core;
+mod hl_todo;
 mod ht;
 mod hydra;
 mod inf_ruby;
