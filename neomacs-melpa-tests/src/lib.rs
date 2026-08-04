@@ -1629,6 +1629,13 @@ pub const AUTO_SORT_MODE_MELPA_PIN: (&str, &str) = ("auto-sort-mode", "20230827.
 /// `1c49aad1c820c86f7ee35bf9fff8429502f60fef`.
 pub const HT_MELPA_PIN: (&str, &str) = ("ht", "20230703.558");
 
+/// The exact Htmlize package selected for practical syntax-highlighted source
+/// publishing, rich region copying, CSS/inline/font rendering, link/image and
+/// visibility transformations, and batch file conversion parity. MELPA built
+/// this archive from upstream commit
+/// `c9a8196a59973fabb3763b28069af9a4822a5260`.
+pub const HTMLIZE_MELPA_PIN: (&str, &str) = ("htmlize", "20250724.1703");
+
 /// The exact Hydra package selected by the practical command-family,
 /// transient-keymap, extension, radio, and source-editing parity corpus.
 /// MELPA built this archive from upstream commit

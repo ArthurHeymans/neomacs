@@ -312,6 +312,7 @@ mod helm_projectile;
 mod highlight_indentation;
 mod hl_todo;
 mod ht;
+mod htmlize;
 mod hydra;
 mod iedit;
 mod inf_ruby;

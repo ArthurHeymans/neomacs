@@ -59,7 +59,7 @@ rank	package	downloads	status
 58	elisp-slime-nav	1279484	covered
 59	posframe	1266405	covered
 60	auto-compile	1256115	covered
-61	htmlize	1249692	todo
+61	htmlize	1249692	covered
 62	ac-php-core	1244313	covered
 63	multiple-cursors	1233338	covered
 64	dumb-jump	1231707	todo
