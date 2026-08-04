@@ -1611,6 +1611,12 @@ pub const AUTO_SAVE_VISITED_LOCAL_MODE_MELPA_PIN: (&str, &str) =
 /// commit `a8f9213e3c773b5687b81881240e6e648f2f56ba`.
 pub const AUTO_SHELL_COMMAND_MELPA_PIN: (&str, &str) = ("auto-shell-command", "20180817.1502");
 
+/// The exact auto-space-mode package selected by the practical multilingual
+/// typing, undo, region-editing, global-mode, selection-boundary, and
+/// text-property parity corpus. MELPA built this archive from upstream commit
+/// `38cd6bc259522250c1df88f24d0a3cc3727fb982`.
+pub const AUTO_SPACE_MODE_MELPA_PIN: (&str, &str) = ("auto-space-mode", "20260204.255");
+
 /// The exact auto-sort-mode package selected by the practical manual-sort,
 /// save-hook, narrowing, delimiter-policy, mode-lifecycle, and text-property
 /// parity corpus. MELPA built this archive from upstream commit
