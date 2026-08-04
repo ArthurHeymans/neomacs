@@ -3039,12 +3039,7 @@ impl Buffer {
         &self,
         range: EmacsByteRange,
     ) -> crate::heap_types::LispString {
-        let bytes = self.buffer_substring_bytes_range(range);
-        let mut string = if self.get_multibyte() {
-            crate::heap_types::LispString::from_emacs_bytes(bytes)
-        } else {
-            crate::heap_types::LispString::from_unibyte(bytes)
-        };
+        let mut string = self.buffer_substring_lisp_string_no_properties_range(range);
         let props = self
             .text
             .text_props_slice_emacs_byte_range(self.clamped_emacs_byte_range(range));
@@ -3052,6 +3047,20 @@ impl Buffer {
             *string.intervals_mut() = props;
         }
         string
+    }
+
+    /// Return the range `[start, end)` as a Lisp string without copying the
+    /// buffer's text properties, preserving its multibyte/unibyte semantics.
+    pub fn buffer_substring_lisp_string_no_properties_range(
+        &self,
+        range: EmacsByteRange,
+    ) -> crate::heap_types::LispString {
+        let bytes = self.buffer_substring_bytes_range(range);
+        if self.get_multibyte() {
+            crate::heap_types::LispString::from_emacs_bytes(bytes)
+        } else {
+            crate::heap_types::LispString::from_unibyte(bytes)
+        }
     }
 
     /// Return the range `[start, end)` as a Lisp value string.

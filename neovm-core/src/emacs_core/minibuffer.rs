@@ -1262,20 +1262,21 @@ pub(crate) fn builtin_minibuffer_contents_ctx(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("minibuffer-contents", &args, 0)?;
-    Ok(Value::heap_string(minibuffer_contents_lisp_string(eval)?))
+    Ok(Value::heap_string(minibuffer_contents_lisp_string(
+        eval, true,
+    )?))
 }
 
 /// `(minibuffer-contents-no-properties)` — returns minibuffer contents
 /// without text properties.
-///
-/// NeoVM stores plain strings for this path, so this is equivalent to
-/// `minibuffer-contents` in batch mode.
 pub(crate) fn builtin_minibuffer_contents_no_properties_ctx(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("minibuffer-contents-no-properties", &args, 0)?;
-    Ok(Value::heap_string(minibuffer_contents_lisp_string(eval)?))
+    Ok(Value::heap_string(minibuffer_contents_lisp_string(
+        eval, false,
+    )?))
 }
 
 /// `(minibuffer-depth)` — returns the current recursive minibuffer depth.
@@ -1472,7 +1473,10 @@ pub(crate) fn builtin_abort_minibuffers_ctx(
     })
 }
 
-fn minibuffer_contents_lisp_string(eval: &mut super::eval::Context) -> Result<LispString, Flow> {
+fn minibuffer_contents_lisp_string(
+    eval: &mut super::eval::Context,
+    preserve_properties: bool,
+) -> Result<LispString, Flow> {
     let Some((point_max, current_id)) = eval
         .buffers
         .current_buffer()
@@ -1487,7 +1491,12 @@ fn minibuffer_contents_lisp_string(eval: &mut super::eval::Context) -> Result<Li
         .get(current_id)
         .expect("current buffer must remain available");
     let start = buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(prompt_end_pos));
-    Ok(buffer.buffer_substring_lisp_string_range(EmacsByteRange::new(start, point_max)))
+    let range = EmacsByteRange::new(start, point_max);
+    Ok(if preserve_properties {
+        buffer.buffer_substring_lisp_string_range(range)
+    } else {
+        buffer.buffer_substring_lisp_string_no_properties_range(range)
+    })
 }
 
 fn resolve_minibuffer_buffer_arg(

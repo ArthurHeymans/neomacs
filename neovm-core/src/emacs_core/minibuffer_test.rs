@@ -1319,15 +1319,34 @@ fn builtin_minibuffer_contents_respects_narrowing_in_current_buffer() {
 }
 
 #[test]
-fn builtin_minibuffer_contents_no_properties_returns_current_buffer_text() {
+fn builtin_minibuffer_contents_no_properties_drops_properties_from_current_buffer_text() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
+    let buffer_id = eval.buffers.current_buffer_id().expect("scratch buffer");
     eval.buffers
         .current_buffer_mut()
         .expect("scratch buffer")
         .insert("probe");
+    eval.buffers
+        .put_buffer_text_property_in_emacs_byte_range(
+            buffer_id,
+            crate::buffer::EmacsByteRange::from_usize(0, 5),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        )
+        .expect("put buffer text property");
+
+    let rich = builtin_minibuffer_contents_ctx(&mut eval, vec![]).unwrap();
+    assert!(
+        crate::emacs_core::value::get_string_text_properties_table_for_value(rich).is_some(),
+        "minibuffer-contents should retain the buffer's properties"
+    );
     let result = builtin_minibuffer_contents_no_properties_ctx(&mut eval, vec![]).unwrap();
     assert!(result.as_utf8_str().unwrap() == "probe");
+    assert!(
+        crate::emacs_core::value::get_string_text_properties_table_for_value(result).is_none(),
+        "minibuffer-contents-no-properties should return an interval-free string"
+    );
 }
 
 #[test]

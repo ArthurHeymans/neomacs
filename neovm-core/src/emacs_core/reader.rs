@@ -80,19 +80,38 @@ fn minibuffer_result_lisp_string(
     buffers: &crate::buffer::BufferManager,
     minibuf_id: crate::buffer::BufferId,
     prompt_byte_pos: EmacsBytePos,
+    preserve_properties: bool,
 ) -> crate::heap_types::LispString {
     if let Some(buf) = buffers.get(minibuf_id) {
         let full_end = buf.full_emacs_byte_range().end();
         if full_end > prompt_byte_pos {
-            return buf.buffer_substring_lisp_string_range(EmacsByteRange::new(
-                prompt_byte_pos,
-                full_end,
-            ));
+            let range = EmacsByteRange::new(prompt_byte_pos, full_end);
+            return if preserve_properties {
+                buf.buffer_substring_lisp_string_range(range)
+            } else {
+                buf.buffer_substring_lisp_string_no_properties_range(range)
+            };
         }
         return empty_runtime_lisp_string(buf.get_multibyte());
     }
 
     empty_runtime_lisp_string(true)
+}
+
+fn minibuffer_text_properties_enabled_in_buffer(
+    obarray: &Obarray,
+    buffers: &crate::buffer::BufferManager,
+    buffer_id: Option<crate::buffer::BufferId>,
+) -> bool {
+    let option = intern("minibuffer-allow-text-properties");
+    buffer_id
+        .and_then(|buffer_id| buffers.get(buffer_id))
+        .and_then(|buffer| buffer.get_buffer_local_by_sym_id(option))
+        // A localized symbol's ordinary value cell may be cached for a
+        // different buffer.  The absence of a local binding means its
+        // defcell is authoritative, just as GNU's BLV lookup specifies.
+        .or_else(|| obarray.default_value_id(option).copied())
+        .is_some_and(|value| value.is_truthy())
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1275,6 +1294,8 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     // minibuf_save_list and restores it during read_minibuf_unwind;
     // minibuffer commands may clobber it while reading input.
     let saved_buffer_id = buffers.current_buffer().map(|b| b.id);
+    let caller_allows_text_properties =
+        minibuffer_text_properties_enabled_in_buffer(obarray, buffers, saved_buffer_id);
     let saved_current_prefix_arg = obarray
         .symbol_value("current-prefix-arg")
         .copied()
@@ -1369,7 +1390,16 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     let edit_result = run_recursive_edit();
 
     // Read the minibuffer contents (everything after the prompt)
-    let result_text = minibuffer_result_lisp_string(buffers, minibuf_id, prompt_byte_pos);
+    // GNU `read_minibuf` preserves properties when the option was enabled in
+    // the calling buffer or was enabled buffer-locally by minibuffer setup.
+    let preserve_text_properties = caller_allows_text_properties
+        || minibuffer_text_properties_enabled_in_buffer(obarray, buffers, Some(minibuf_id));
+    let result_text = minibuffer_result_lisp_string(
+        buffers,
+        minibuf_id,
+        prompt_byte_pos,
+        preserve_text_properties,
+    );
 
     let _ = buffers.switch_current_unrecorded(minibuf_id);
     let exit_hook_result = match run_exit_hook() {
@@ -1779,6 +1809,11 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     // minibuf_save_list and restores it during read_minibuf_unwind;
     // minibuffer commands may clobber it while reading input.
     let saved_buffer_id = shared.buffers.current_buffer().map(|b| b.id);
+    let caller_allows_text_properties = minibuffer_text_properties_enabled_in_buffer(
+        &shared.obarray,
+        &shared.buffers,
+        saved_buffer_id,
+    );
     let saved_current_prefix_arg = shared
         .obarray
         .symbol_value("current-prefix-arg")
@@ -1903,7 +1938,18 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     let edit_result = shared.minibuffer_command_loop_inner();
     shared.restore_specpdl_roots(gc_roots);
 
-    let result_text = minibuffer_result_lisp_string(&shared.buffers, minibuf_id, prompt_byte_pos);
+    let preserve_text_properties = caller_allows_text_properties
+        || minibuffer_text_properties_enabled_in_buffer(
+            &shared.obarray,
+            &shared.buffers,
+            Some(minibuf_id),
+        );
+    let result_text = minibuffer_result_lisp_string(
+        &shared.buffers,
+        minibuf_id,
+        prompt_byte_pos,
+        preserve_text_properties,
+    );
 
     let _ = shared.buffers.switch_current_unrecorded(minibuf_id);
     let exit_hook_result = match shared.run_hook_if_bound("minibuffer-exit-hook") {

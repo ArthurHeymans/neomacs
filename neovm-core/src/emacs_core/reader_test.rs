@@ -1263,6 +1263,71 @@ fn read_from_minibuffer_custom_keymap_lambda_sees_last_command_event() {
 }
 
 #[test]
+fn read_from_minibuffer_strips_properties_by_default_and_preserves_explicit_opt_in_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    for _ in 0..4 {
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char(' '),
+        ))
+        .expect("queue minibuffer exit key");
+    }
+    drop(tx);
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r#"(progn
+                 (defvar neo-rfm-plain-history nil)
+                 (defvar neo-rfm-caller-opt-in-history nil)
+                 (defvar neo-rfm-minibuffer-opt-in-history nil)
+                 (defvar neo-rfm-reused-history nil)
+                 (let ((neo-rfm-plain-history nil)
+                       (neo-rfm-caller-opt-in-history nil)
+                       (neo-rfm-minibuffer-opt-in-history nil)
+                       (neo-rfm-reused-history nil)
+                       (map (make-sparse-keymap)))
+                   (define-key map " " #'exit-minibuffer)
+                   (let* ((source (propertize "abc" 'face 'bold))
+                          (plain
+                           (read-from-minibuffer
+                            "Plain: " source map nil 'neo-rfm-plain-history))
+                          (caller-opt-in
+                           (let ((minibuffer-allow-text-properties t))
+                             (read-from-minibuffer
+                              "Caller: " source map nil
+                              'neo-rfm-caller-opt-in-history)))
+                          (minibuffer-opt-in
+                           (minibuffer-with-setup-hook
+                               (lambda ()
+                                 (setq-local minibuffer-allow-text-properties t))
+                             (read-from-minibuffer
+                              "Local: " source map nil
+                              'neo-rfm-minibuffer-opt-in-history)))
+                          (reused
+                           (read-from-minibuffer
+                            "Reused: " source map nil 'neo-rfm-reused-history)))
+                     (list (text-properties-at 0 plain)
+                           (text-properties-at 0 (car neo-rfm-plain-history))
+                           (text-properties-at 0 caller-opt-in)
+                           (text-properties-at
+                            0 (car neo-rfm-caller-opt-in-history))
+                           (text-properties-at 0 minibuffer-opt-in)
+                           (text-properties-at
+                            0 (car neo-rfm-minibuffer-opt-in-history))
+                           (text-properties-at 0 reused)
+                           (text-properties-at 0 (car neo-rfm-reused-history))))))"#,
+        )
+        .expect("eval should return minibuffer property observations");
+
+    assert_eq!(
+        format!("{result}"),
+        "(nil nil (face bold) (face bold) (face bold) (face bold) nil nil)"
+    );
+}
+
+#[test]
 fn activate_minibuffer_window_switches_displayed_buffer_and_restores_state() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
