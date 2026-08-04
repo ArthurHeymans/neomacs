@@ -409,9 +409,9 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     prev.window_start = 11;
     prev.window_end = 81;
     let curr = window_info(&params);
-    let mut prev_infos = std::collections::HashMap::new();
+    let mut prev_infos = std::collections::HashMap::default();
     prev_infos.insert(prev.window_id, prev);
-    let mut curr_infos = std::collections::HashMap::new();
+    let mut curr_infos = std::collections::HashMap::default();
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.add_output_window_info(curr.clone());
     install_skipped_geometry(&mut builder, curr.window_id, curr.bounds);
@@ -433,9 +433,9 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
     prev.buffer_size = 200;
     let mut curr = window_info(&params);
     curr.buffer_size = 210;
-    let mut prev_infos = std::collections::HashMap::new();
+    let mut prev_infos = std::collections::HashMap::default();
     prev_infos.insert(prev.window_id, prev);
-    let mut curr_infos = std::collections::HashMap::new();
+    let mut curr_infos = std::collections::HashMap::default();
     curr_infos.insert(curr.window_id, curr);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.add_output_cursor(
@@ -525,9 +525,9 @@ fn frame_topology_transition_request_emits_frame_crossfade() {
     let prev = window_info(&params);
     let mut curr = prev.clone();
     curr.window_id = DisplayWindowId::new(42);
-    let mut prev_infos = std::collections::HashMap::new();
+    let mut prev_infos = std::collections::HashMap::default();
     prev_infos.insert(prev.window_id, prev);
-    let mut curr_infos = std::collections::HashMap::new();
+    let mut curr_infos = std::collections::HashMap::default();
     curr_infos.insert(curr.window_id, curr);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
 

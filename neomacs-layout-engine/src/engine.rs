@@ -325,7 +325,7 @@ pub struct LayoutEngine {
     /// Converts Emacs face height units into layout pixels for this display.
     font_sizing: FontSizing,
     /// Previous frame's per-window metadata for transition hint derivation.
-    prev_window_infos: std::collections::HashMap<DisplayWindowId, WindowInfo>,
+    prev_window_infos: rustc_hash::FxHashMap<DisplayWindowId, WindowInfo>,
     /// Previous selected window id for switch-fade detection.
     prev_selected_window_id: DisplayWindowId,
     /// Previous frame background for theme-transition detection.
@@ -342,35 +342,35 @@ pub struct LayoutEngine {
     /// A speculative layout gets a fresh [`FrameFaceAttempt`] from this arena;
     /// retries discard that attempt, and only a sealed presentation replaces
     /// the committed arena.
-    frame_face_arenas: std::collections::HashMap<neovm_core::window::FrameId, FrameFaceArena>,
+    frame_face_arenas: rustc_hash::FxHashMap<neovm_core::window::FrameId, FrameFaceArena>,
     /// Per-window retained layout, owned across cycles (incremental-layout
     /// Phase 0a). Committed at the accepted `break` only; NOT read yet — the
     /// engine still rebuilds every window every cycle. The container a later
     /// phase reuses rows out of.
-    retained_window_matrices: std::collections::HashMap<DisplayWindowId, RetainedWindowMatrix>,
+    retained_window_matrices: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowMatrix>,
     /// Accepted intrinsic chrome metrics, the Rust equivalent of GNU's
     /// current-matrix tab/header/mode-line heights.  They seed the next
     /// speculative layout and are replaced only by a sealed frame.
-    retained_window_chrome_metrics: std::collections::HashMap<DisplayWindowId, WindowChromeMetrics>,
+    retained_window_chrome_metrics: rustc_hash::FxHashMap<DisplayWindowId, WindowChromeMetrics>,
     /// Windows that took the Phase 1 cursor-only fast path this frame (their body
     /// rows were reused, not relaid). Populated as each window is laid out, read
     /// by the commit path to attribute rows to `reused_rows` and classify the
     /// window `CursorOnly`. Reset per frame.
-    cursor_only_window_ids: std::collections::HashSet<DisplayWindowId>,
+    cursor_only_window_ids: rustc_hash::FxHashSet<DisplayWindowId>,
     /// Windows that took the Phase 2 pure-scroll fast path this frame, mapped to
     /// `(reused_shifted_row_count, dvpos)`. Read by the commit path to attribute
     /// rows + classify `Scroll` + emit `RowDamage::ReusedShifted`.
-    scroll_window_ids: std::collections::HashMap<DisplayWindowId, (usize, f32)>,
+    scroll_window_ids: rustc_hash::FxHashMap<DisplayWindowId, (usize, f32)>,
     /// Windows that took the Phase 3 localized-edit fast path this frame, mapped
     /// to their reused (verbatim, above-the-edit) row count. Read by the commit
     /// path to attribute rows + classify `Edit`.
-    edit_window_ids: std::collections::HashMap<DisplayWindowId, usize>,
+    edit_window_ids: rustc_hash::FxHashMap<DisplayWindowId, usize>,
     /// Per-buffer dirty span snapshotted BEFORE this frame's fontification
     /// pass (GNU: the this_line decision reads BEG/END_UNCHANGED before
     /// fontification fires). Phase A edit classification consumes this so the
     /// span is the keystroke's damage, not the jit-lock chunk the
     /// fontification pass is about to rewrite. Keyed by buffer id.
-    pre_fontify_dirty_spans: std::collections::HashMap<u64, Option<(i64, i64)>>,
+    pre_fontify_dirty_spans: rustc_hash::FxHashMap<u64, Option<(i64, i64)>>,
     /// Phase 3 below-reuse switch (default true). The localized edit fast path
     /// reuses the rows BELOW the dirty span too (charpos-shifted, same pixel_y),
     /// relaying ONLY the edited line — but ONLY for a simple insert that provably
@@ -532,7 +532,7 @@ impl LayoutEngine {
 
     fn render_latest_window_output_info_effects(
         &mut self,
-        curr_window_infos: &mut std::collections::HashMap<DisplayWindowId, WindowInfo>,
+        curr_window_infos: &mut rustc_hash::FxHashMap<DisplayWindowId, WindowInfo>,
     ) {
         let prev_window_infos = &self.prev_window_infos;
         self.frame_output.render_latest_window_info_effects(
@@ -543,7 +543,7 @@ impl LayoutEngine {
 
     fn render_frame_output_hints(
         &mut self,
-        curr_window_infos: &std::collections::HashMap<DisplayWindowId, WindowInfo>,
+        curr_window_infos: &rustc_hash::FxHashMap<DisplayWindowId, WindowInfo>,
         frame_params: &FrameParams,
     ) {
         let prev_window_infos = &self.prev_window_infos;
@@ -586,19 +586,19 @@ impl LayoutEngine {
             window_snapshots: Vec::new(),
             font_metrics: Some(FontMetricsService::new()),
             font_sizing: FontSizing::xft(),
-            prev_window_infos: std::collections::HashMap::new(),
+            prev_window_infos: rustc_hash::FxHashMap::default(),
             prev_selected_window_id: DisplayWindowId::new(0),
             prev_background: None,
             frame_output: FrameOutputOwner::new(),
             pending_tab_bar_pointer: None,
             last_frame_display_state: None,
-            frame_face_arenas: std::collections::HashMap::new(),
-            retained_window_matrices: std::collections::HashMap::new(),
-            retained_window_chrome_metrics: std::collections::HashMap::new(),
-            cursor_only_window_ids: std::collections::HashSet::new(),
-            scroll_window_ids: std::collections::HashMap::new(),
-            edit_window_ids: std::collections::HashMap::new(),
-            pre_fontify_dirty_spans: std::collections::HashMap::new(),
+            frame_face_arenas: rustc_hash::FxHashMap::default(),
+            retained_window_matrices: rustc_hash::FxHashMap::default(),
+            retained_window_chrome_metrics: rustc_hash::FxHashMap::default(),
+            cursor_only_window_ids: rustc_hash::FxHashSet::default(),
+            scroll_window_ids: rustc_hash::FxHashMap::default(),
+            edit_window_ids: rustc_hash::FxHashMap::default(),
+            pre_fontify_dirty_spans: rustc_hash::FxHashMap::default(),
             allow_below_reuse: true,
             layout_stats: LayoutStats::default(),
         }
@@ -616,19 +616,19 @@ impl LayoutEngine {
             window_snapshots: Vec::new(),
             font_metrics: None,
             font_sizing: FontSizing::xft(),
-            prev_window_infos: std::collections::HashMap::new(),
+            prev_window_infos: rustc_hash::FxHashMap::default(),
             prev_selected_window_id: DisplayWindowId::new(0),
             prev_background: None,
             frame_output: FrameOutputOwner::new(),
             pending_tab_bar_pointer: None,
             last_frame_display_state: None,
-            frame_face_arenas: std::collections::HashMap::new(),
-            retained_window_matrices: std::collections::HashMap::new(),
-            retained_window_chrome_metrics: std::collections::HashMap::new(),
-            cursor_only_window_ids: std::collections::HashSet::new(),
-            scroll_window_ids: std::collections::HashMap::new(),
-            edit_window_ids: std::collections::HashMap::new(),
-            pre_fontify_dirty_spans: std::collections::HashMap::new(),
+            frame_face_arenas: rustc_hash::FxHashMap::default(),
+            retained_window_matrices: rustc_hash::FxHashMap::default(),
+            retained_window_chrome_metrics: rustc_hash::FxHashMap::default(),
+            cursor_only_window_ids: rustc_hash::FxHashSet::default(),
+            scroll_window_ids: rustc_hash::FxHashMap::default(),
+            edit_window_ids: rustc_hash::FxHashMap::default(),
+            pre_fontify_dirty_spans: rustc_hash::FxHashMap::default(),
             allow_below_reuse: true,
             layout_stats: LayoutStats::default(),
         }
@@ -922,8 +922,8 @@ impl LayoutEngine {
             let mut face_attempt = committed_face_arena.begin_attempt();
             self.frame_output.set_face_attempt(face_attempt.clone());
             self.frame_output.set_presentation_id(presentation_id);
-            let mut curr_window_infos: std::collections::HashMap<DisplayWindowId, WindowInfo> =
-                std::collections::HashMap::new();
+            let mut curr_window_infos: rustc_hash::FxHashMap<DisplayWindowId, WindowInfo> =
+                rustc_hash::FxHashMap::default();
             let default_resolved = face_resolver.default_face();
 
             // Set up frame dimensions in the builder
@@ -1544,13 +1544,13 @@ impl LayoutEngine {
         // enabled row is `relaid`, every window is classified `Full`, and the
         // retained matrices are written but NOT read (no fast path exists yet).
         let (next_layout_stats, next_retained_window_matrices, acked_buffer_ids) = {
-            let key_map: std::collections::HashMap<DisplayWindowId, RetainedWindowKey> =
+            let key_map: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowKey> =
                 retained_keys.into_iter().collect();
             let frame_state = &mut frame_display_state;
             let mut next_layout_stats = LayoutStats::default();
             let presented_cursor = frame_state.phys_cursor.clone();
-            let mut retained: std::collections::HashMap<DisplayWindowId, RetainedWindowMatrix> =
-                std::collections::HashMap::new();
+            let mut retained: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowMatrix> =
+                rustc_hash::FxHashMap::default();
             for entry in &mut frame_state.window_matrices {
                 let window_id = entry.window_id;
                 let cursor_only = self.cursor_only_window_ids.contains(&window_id);
@@ -1685,7 +1685,7 @@ impl LayoutEngine {
             // accumulator at the committed (accepted) break — NEVER on a
             // retry/`continue` (which would under-invalidate, spec §6). From here
             // the accumulated dirty span is the edits the NEXT frame must relay.
-            let acked_buffer_ids: std::collections::HashSet<u64> =
+            let acked_buffer_ids: rustc_hash::FxHashSet<u64> =
                 key_map.values().map(|key| key.buffer_id).collect();
             (next_layout_stats, retained, acked_buffer_ids)
         };

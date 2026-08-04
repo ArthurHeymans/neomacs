@@ -514,7 +514,7 @@ impl RetainedWindowMatrix {
         }
         let new_point = curr.point;
         let mut body_rows: Vec<(usize, MatrixRow)> = Vec::new();
-        let mut body_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        let mut body_indices: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
         let mut cursor_style: Option<CursorStyle> = None;
         let mut new_cursor: Option<(usize, &GlyphRow)> = None;
         for (idx, row) in self.matrix.rows.iter().enumerate() {
@@ -643,7 +643,7 @@ impl RetainedWindowMatrix {
         let dvpos = body[0].1.pixel_y - body[s].1.pixel_y;
         let dvpos_i64 = dvpos.round() as i64;
         // old matrix row index → new matrix row index for each reused row.
-        let mut remap: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+        let mut remap: rustc_hash::FxHashMap<i64, i64> = rustc_hash::FxHashMap::default();
         let mut reused_rows = Vec::with_capacity(last - s + 1);
         for p in s..=last {
             // A shift mutates placement (pixel_y), so this reuse is a real
@@ -792,7 +792,7 @@ impl RetainedWindowMatrix {
             .find_map(|(_, row)| row.cursor_type)
             .unwrap_or(CursorStyle::FilledBox);
         let mut reused_rows = Vec::with_capacity(first_dirty);
-        let mut above_indices: std::collections::HashSet<i64> = std::collections::HashSet::new();
+        let mut above_indices: rustc_hash::FxHashSet<i64> = rustc_hash::FxHashSet::default();
         for &(idx, row) in body.iter().take(first_dirty) {
             // Verbatim reuse is a refcount bump; only a row still carrying
             // cursor decoration pays a copy to strip it.
@@ -938,8 +938,8 @@ impl RetainedWindowMatrix {
                         (p.to_one_based_usize() as i64 + delta) as usize,
                     )
                 };
-                let mut below_indices: std::collections::HashSet<i64> =
-                    std::collections::HashSet::new();
+                let mut below_indices: rustc_hash::FxHashSet<i64> =
+                    rustc_hash::FxHashSet::default();
                 for &(idx, row) in body.iter().skip(span_last + 1) {
                     // A props-only frame (delta 0) shifts nothing: verbatim
                     // refcount reuse unless a stale cursor must be stripped.
