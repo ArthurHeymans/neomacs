@@ -1591,6 +1591,13 @@ pub const AUTO_PAUSE_MELPA_PIN: (&str, &str) = ("auto-pause", "20160426.1216");
 /// `ace6de8bc8200aa9c9f37c8266d0e1b51627b559`.
 pub const AUTO_RENAME_TAG_MELPA_PIN: (&str, &str) = ("auto-rename-tag", "20260101.547");
 
+/// The exact auto-save-buffers-enhanced package selected by the practical
+/// scheduled-save, filtering, quiet-save, activity, scratch-persistence, and
+/// checkout-scoping parity corpus. MELPA built this archive from upstream
+/// commit `461e8c816c1b7c650be5f209078b381fe55da8c6`.
+pub const AUTO_SAVE_BUFFERS_ENHANCED_MELPA_PIN: (&str, &str) =
+    ("auto-save-buffers-enhanced", "20161109.710");
+
 /// The exact ht package selected by the practical configuration, nested state,
 /// job pipeline, custom-key, and snapshot parity corpus, and as
 /// auto-highlight-symbol's hash-table dependency. MELPA built this archive from upstream commit
