@@ -4845,6 +4845,33 @@ fn pure_dispatch_typed_aset_string_returns_new_element_and_computes_replacement(
 }
 
 #[test]
+fn repeated_unibyte_aset_is_linear_enough_for_binary_protocol_frames() {
+    crate::test_utils::init_test_tracing();
+    const BYTE_COUNT: usize = 10_000;
+    let string = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        b'x';
+        BYTE_COUNT
+    ]));
+    let started = std::time::Instant::now();
+
+    for index in 0..BYTE_COUNT {
+        let replacement = Value::fixnum((index % 256) as i64);
+        let returned = aset_string_replacement(&string, &Value::fixnum(index as i64), &replacement)
+            .expect("replace one byte in a protocol frame");
+        assert_eq!(returned, string);
+    }
+
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < std::time::Duration::from_millis(500),
+        "GNU writes one unibyte string element in O(1); {BYTE_COUNT} replacements took {elapsed:?}"
+    );
+    let bytes = string.as_lisp_string().expect("unibyte string").as_bytes();
+    assert_eq!(bytes[0], 0);
+    assert_eq!(bytes[BYTE_COUNT - 1], ((BYTE_COUNT - 1) % 256) as u8);
+}
+
+#[test]
 fn pure_dispatch_typed_aset_string_errors_match_oracle() {
     crate::test_utils::init_test_tracing();
     let out_of_range = dispatch_builtin_pure(

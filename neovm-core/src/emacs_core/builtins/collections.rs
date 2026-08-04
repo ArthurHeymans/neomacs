@@ -102,12 +102,12 @@ pub(crate) fn aset_string_replacement(
         ));
     };
 
-    let idx = expect_fixnum(index)? as usize;
-    let multibyte = array.string_is_multibyte();
-    let mut codes = super::lisp_string_char_codes(array.as_lisp_string().expect("string"));
-    if idx >= codes.len() {
+    let idx_fixnum = expect_fixnum(index)?;
+    let string = array.as_lisp_string().expect("string");
+    if idx_fixnum < 0 || idx_fixnum as usize >= string.schars() {
         return Err(signal(LispCondition::ArgsOutOfRange, vec![*array, *index]));
     }
+    let idx = idx_fixnum as usize;
 
     let replacement_code = insert_char_code_from_value(new_element)?;
     if !(0..=0x3F_FFFF).contains(&replacement_code) {
@@ -117,7 +117,7 @@ pub(crate) fn aset_string_replacement(
         ));
     }
     let replacement_code = replacement_code as u32;
-    if !multibyte && replacement_code > 0xff {
+    if !string.is_multibyte() && replacement_code > 0xff {
         return Err(signal(
             "error",
             vec![Value::string(
@@ -125,7 +125,7 @@ pub(crate) fn aset_string_replacement(
             )],
         ));
     }
-    if multibyte {
+    if string.is_multibyte() {
         if replacement_code > 0x7f {
             return Err(signal(
                 "error",
@@ -134,7 +134,8 @@ pub(crate) fn aset_string_replacement(
                 )],
             ));
         }
-        if codes[idx] > 0x7f {
+        let byte_pos = crate::emacs_core::emacs_char::char_to_byte_pos(string.as_bytes(), idx);
+        if string.as_bytes()[byte_pos] > 0x7f {
             return Err(signal(
                 "error",
                 vec![Value::string(
@@ -142,11 +143,6 @@ pub(crate) fn aset_string_replacement(
                 )],
             ));
         }
-
-        let byte_pos = crate::emacs_core::emacs_char::char_to_byte_pos(
-            array.as_lisp_string().expect("string").as_bytes(),
-            idx,
-        );
         let _ = array.with_lisp_string_mut(|s| {
             s.mutate_bytes(|data| {
                 data[byte_pos] = replacement_code as u8;
@@ -154,30 +150,13 @@ pub(crate) fn aset_string_replacement(
         });
         return Ok(*array);
     }
-    codes[idx] = replacement_code;
 
-    use crate::emacs_core::emacs_char;
-    let mut rebuilt = Vec::new();
-    for code in codes {
-        if multibyte {
-            let mut buf = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
-            let len = emacs_char::char_string(code, &mut buf);
-            rebuilt.extend_from_slice(&buf[..len]);
-        } else {
-            if code > 0xff {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("characterp"), *new_element],
-                ));
-            }
-            rebuilt.push(code as u8);
-        }
-    }
-    // Modify the string in-place on the heap so identity (eq) is preserved.
+    // GNU's unibyte `Faset` is one bounds check plus `SSET`.  Rebuilding the
+    // complete string here made byte-at-a-time protocol transforms (for
+    // example WebSocket masking) quadratic in the frame size.
     let _ = array.with_lisp_string_mut(|s| {
         s.mutate_bytes(|data| {
-            data.clear();
-            data.extend_from_slice(&rebuilt);
+            data[idx] = replacement_code as u8;
         });
     });
     Ok(*array)
