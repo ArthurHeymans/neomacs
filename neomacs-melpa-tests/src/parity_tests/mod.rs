@@ -306,6 +306,7 @@ mod haskell_mode;
 mod helm;
 mod helm_core;
 mod helm_projectile;
+mod highlight_indentation;
 mod hl_todo;
 mod ht;
 mod hydra;

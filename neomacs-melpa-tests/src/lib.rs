@@ -1635,6 +1635,13 @@ pub const HT_MELPA_PIN: (&str, &str) = ("ht", "20230703.558");
 /// `59a2a45a35027948476d1d7751b0f0215b1e61aa`.
 pub const HYDRA_MELPA_PIN: (&str, &str) = ("hydra", "20250316.1254");
 
+/// The exact Highlight Indentation package selected for practical guide,
+/// live-edit, blank-line, current-column, and offset-selection parity.
+/// MELPA built this archive from upstream commit
+/// `d88db4248882da2d4316e76ed673b4ac1fa99ce3`.
+pub const HIGHLIGHT_INDENTATION_MELPA_PIN: (&str, &str) =
+    ("highlight-indentation", "20210221.1418");
+
 /// The exact Iedit package selected by the practical symbol-refactoring,
 /// scoped replay, visibility, buffering/undo, and rectangle-editing corpus.
 /// MELPA built this archive from upstream commit
