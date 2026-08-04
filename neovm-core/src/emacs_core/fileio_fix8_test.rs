@@ -241,6 +241,48 @@ fn insert_file_contents_replace_reports_net_inserted_matches_gnu() {
     assert_eq!(buf.buffer_string(), "hello world!");
 }
 
+#[test]
+fn insert_file_contents_replace_advances_after_insertion_markers_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let path = scratch_dir().join("replace_marker_fix8.txt");
+    std::fs::write(&path, "alpha 发布\nzeta release\nβeta publish\n")
+        .expect("write replacement fixture");
+    let path_str = path.to_string_lossy().to_string();
+
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(progn
+              (insert "zeta release\nβeta publish\nalpha 发布\n")
+              (goto-char (point-min))
+              (search-forward "publish")
+              (setq insert-file-contents-marker-probe
+                    (copy-marker (point) t)))"#,
+    )
+    .expect("prepare insertion-type marker");
+
+    builtin_insert_file_contents(
+        &mut eval,
+        vec![
+            Value::string(&path_str),
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::T,
+        ],
+    )
+    .expect("replace accessible buffer from file");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str(
+            r#"(list (buffer-string)
+                     (point)
+                     (marker-position insert-file-contents-marker-probe)
+                     (marker-insertion-type insert-file-contents-marker-probe))"#,
+        )),
+        "OK (\"alpha 发布\nzeta release\nβeta publish\n\" 26 35 t)"
+    );
+}
+
 /// Bug 9: `make-temp-name` decodes the constructed path through the file-name
 /// coding system, so a non-ASCII PREFIX (here UTF-8 "é", 2 bytes) comes back as
 /// a *multibyte* string where the 2 raw bytes collapse to 1 char — matching

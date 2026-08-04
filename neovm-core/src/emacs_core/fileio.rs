@@ -5085,7 +5085,11 @@ fn signal_and_insert_file_replace_text(
         super::editfns::signal_before_text_change(eval, change)?;
     }
     eval.buffers
-        .insert_lisp_string_into_buffer_for_replace(current_id, text)
+        // GNU's `insert-file-contents' REPLACE path performs a deletion and
+        // then an ordinary insertion (`insert_from_buffer`), not one atomic
+        // `adjust_markers_for_replace` edit.  Markers collapsed to the insert
+        // position by the deletion must therefore honor their insertion type.
+        .insert_lisp_string_into_buffer(current_id, text)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     if signal_hooks {
         super::editfns::signal_after_text_change(eval, change)?;
