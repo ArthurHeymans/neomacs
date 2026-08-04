@@ -63,6 +63,19 @@ All Rust tests are library unit-test modules loaded from the
 The GNU package-resource contracts are required CI checks. The current MELPA
 oracle runs on scheduled and explicitly dispatched CI workflows.
 
+## Package selection order
+
+New parity corpora are added in descending MELPA download-count order, not
+alphabetically. `melpa-top500-roadmap.tsv` ranks the top 500 packages by
+downloads and marks each `covered` (a corpus exists under
+`src/parity_tests/`) or `todo`; work through the highest-ranked `todo` rows
+first. Regenerate the roadmap after adding a corpus or to refresh the
+download counts:
+
+```sh
+scripts/melpa-top500-roadmap.py
+```
+
 ## Package lock
 
 `melpa-package-lock.tsv` is the single source of truth for reproducible MELPA
