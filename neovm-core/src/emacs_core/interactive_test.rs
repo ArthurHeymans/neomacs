@@ -5452,6 +5452,22 @@ fn command_modes_extracts_modes_and_preserves_arity_checks() {
 }
 
 #[test]
+fn command_modes_preserves_modes_on_interpreted_defun() {
+    assert_eq!(
+        eval_one(
+            "(progn
+               (defun command-modes-interpreted-probe ()
+                 (interactive \"p\" text-mode prog-mode)
+                 t)
+               (list
+                 (command-modes 'command-modes-interpreted-probe)
+                 (aref (symbol-function 'command-modes-interpreted-probe) 5)))",
+        ),
+        "OK ((text-mode prog-mode) [\"p\" (text-mode prog-mode)])"
+    );
+}
+
+#[test]
 fn command_remapping_nil_and_keymap_type_checks() {
     crate::test_utils::init_test_tracing();
     assert_eq!(eval_one("(command-remapping 'ignore)"), "OK nil");

@@ -6771,22 +6771,24 @@ pub(crate) fn make_interpreted_closure_from_parts_unchecked(
     // observable: nil IFORM means slot 5 is absent; `(interactive)' and
     // `(interactive nil)' mean slot 5 is present with nil.
     //
-    // GNU processes iform by CDR only:
-    //   nil                      → no slot
-    //   (interactive)            → nil slot
-    //   (interactive SPEC)       → SPEC
-    //   (interactive S1 S2 ...)  → #[S1 S2 ...]
+    // GNU processes iform by CDR only.  When modes follow the spec,
+    // eval.c constructs `(vector SPEC MODES)`, where MODES is the remaining
+    // list as one value rather than a sequence of additional vector slots:
+    //   nil                                  → no slot
+    //   (interactive)                        → nil slot
+    //   (interactive SPEC)                   → SPEC
+    //   (interactive SPEC MODE1 MODE2 ...)   → [SPEC (MODE1 MODE2 ...)]
     let interactive_spec = if iform.is_nil() {
         None
-    } else if let Some(items) = list_to_vec(&iform) {
-        let ifcdr = &items[1..];
-        if ifcdr.len() <= 1 {
-            Some(ifcdr.first().copied().unwrap_or(Value::NIL))
-        } else {
-            Some(Value::vector(ifcdr.to_vec()))
-        }
     } else {
-        unreachable!("CHECK_LIST for IFORM succeeded")
+        let ifcdr = iform.cons_cdr();
+        if ifcdr.is_nil() {
+            Some(Value::NIL)
+        } else if ifcdr.cons_cdr().is_nil() {
+            Some(ifcdr.cons_car())
+        } else {
+            Some(Value::vector(vec![ifcdr.cons_car(), ifcdr.cons_cdr()]))
+        }
     };
 
     let mut slots = vec![*params_value, *body_value, *env_value];

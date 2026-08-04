@@ -419,30 +419,6 @@ pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: Vec<Value>)
     Ok(Value::NIL)
 }
 
-fn command_modes_from_value_body(body: &[Value]) -> Option<Value> {
-    let body_index = value_body_metadata_end(body);
-    for form in &body[body_index..] {
-        if !value_is_interactive_form(form) {
-            continue;
-        }
-        let Some(items) = value_list_to_vec(form) else {
-            continue;
-        };
-        let modes = items
-            .iter()
-            .skip(2)
-            .copied()
-            .map(unquote_command_modes_value)
-            .collect::<Vec<_>>();
-        return Some(if modes.is_empty() {
-            Value::NIL
-        } else {
-            Value::list(modes)
-        });
-    }
-    None
-}
-
 fn unquote_command_modes_value(value: Value) -> Value {
     let Some(items) = value_list_to_vec(&value) else {
         return value;
@@ -452,6 +428,17 @@ fn unquote_command_modes_value(value: Value) -> Value {
     } else {
         value
     }
+}
+
+fn command_modes_from_stored_interactive_spec(spec: Value) -> Value {
+    let Some(items) = spec.as_vector_data() else {
+        return Value::NIL;
+    };
+    items
+        .get(1)
+        .copied()
+        .map(unquote_command_modes_value)
+        .unwrap_or(Value::NIL)
 }
 
 fn command_modes_from_quoted_interactive_form(form: &Value) -> Result<Option<Value>, Flow> {
@@ -546,13 +533,11 @@ pub(crate) fn builtin_command_modes_impl(obarray: &Obarray, args: &[Value]) -> E
     match function.kind() {
         ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => Ok(Value::NIL),
         ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::Macro) => {
-            let Some(body) = function
-                .closure_body_value()
-                .and_then(|body| value_list_to_vec(&body))
-            else {
-                return Ok(Value::NIL);
-            };
-            Ok(command_modes_from_value_body(&body).unwrap_or(Value::NIL))
+            Ok(function
+                .closure_interactive()
+                .flatten()
+                .map(command_modes_from_stored_interactive_spec)
+                .unwrap_or(Value::NIL))
         }
         ValueKind::Veclike(VecLikeType::ByteCode) => {
             let Some(bc) = function.get_bytecode_data() else {
@@ -561,16 +546,10 @@ pub(crate) fn builtin_command_modes_impl(obarray: &Obarray, args: &[Value]) -> E
             if bc.observable_closure_slot_count() <= 5 {
                 return Ok(Value::NIL);
             };
-            let int_val = bc.interactive.unwrap_or(Value::NIL);
-            if !int_val.is_vector() {
-                return Ok(Value::NIL);
-            }
-            let vec_data = int_val.as_vector_data().unwrap();
-            Ok(if vec_data.len() > 1 {
-                unquote_command_modes_value(vec_data[1])
-            } else {
-                Value::NIL
-            })
+            Ok(bc
+                .interactive
+                .map(command_modes_from_stored_interactive_spec)
+                .unwrap_or(Value::NIL))
         }
         ValueKind::Cons if super::autoload::is_autoload_value(&function) => {
             let Some(items) = value_list_to_vec(&function) else {
