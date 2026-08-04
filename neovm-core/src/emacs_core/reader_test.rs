@@ -203,6 +203,55 @@ fn read_from_buffer_applies_read_symbol_shorthands() {
 }
 
 #[test]
+fn read_positioning_symbols_reports_character_offsets_for_multibyte_strings() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+
+    let value = builtin_read_impl(&mut ev, vec![Value::string("(\"β\" foo)")], true)
+        .expect("read positioning symbols from string");
+    let items = list_to_vec(&value).expect("reader result is a list");
+
+    assert_eq!(items[1].as_symbol_with_pos_pos(), Some(5));
+}
+
+#[test]
+fn read_positioning_symbols_reports_absolute_lisp_positions_for_buffers() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let buf_id = ev.buffers.create_buffer("positioning-buffer-read");
+    {
+        let buf = ev.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("λβ foo");
+        let after_prefix = buf.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(2));
+        buf.goto_emacs_byte_pos(after_prefix);
+    }
+
+    let value = builtin_read_impl(&mut ev, vec![Value::make_buffer(buf_id)], true)
+        .expect("read positioning symbol from buffer");
+
+    assert_eq!(value.as_symbol_with_pos_pos(), Some(4));
+}
+
+#[test]
+fn read_positioning_symbols_reports_relative_character_offsets_for_markers() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let buf_id = ev.buffers.create_buffer("positioning-marker-read");
+    ev.buffers.get_mut(buf_id).expect("buffer").insert("β foo");
+    let marker = crate::emacs_core::marker::make_registered_buffer_marker(
+        &mut ev.buffers,
+        buf_id,
+        LispCharPos1::new(2),
+        false,
+    );
+
+    let value = builtin_read_impl(&mut ev, vec![marker], true)
+        .expect("read positioning symbol from marker");
+
+    assert_eq!(value.as_symbol_with_pos_pos(), Some(1));
+}
+
+#[test]
 fn read_from_marker_advances_marker_without_moving_buffer_point_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::test_utils::runtime_startup_context();

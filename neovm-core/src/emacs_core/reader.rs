@@ -970,6 +970,7 @@ pub fn builtin_read_impl(
                 match super::value_reader::read_one_from_buffer_with_locate_syms(
                     buf,
                     EmacsByteRange::new(start, end),
+                    super::value_reader::BufferReadcharOffsetOrigin::Zero,
                     locate_syms,
                     &ctx.obarray,
                     shorthands.as_ref(),
@@ -1026,6 +1027,7 @@ pub fn builtin_read_impl(
                 match super::value_reader::read_one_from_buffer_with_locate_syms(
                     buf,
                     EmacsByteRange::new(start, end),
+                    super::value_reader::BufferReadcharOffsetOrigin::BufferPoint,
                     locate_syms,
                     &ctx.obarray,
                     shorthands.as_ref(),

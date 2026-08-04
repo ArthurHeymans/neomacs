@@ -160,9 +160,9 @@ pub(crate) fn read_one_from_encoded_file_bytes(
     Ok(Some((value, reader.pos)))
 }
 
-/// Read a single form from `input`, optionally wrapping interned symbols
-/// in `symbol-with-pos` objects that record the byte offset where the
-/// symbol was found.  Used by `read-positioning-symbols`.
+/// Read a single form from `input`, optionally wrapping interned symbols in
+/// `symbol-with-pos` objects that record GNU's character offset from the start
+/// of this read.  Used by `read-positioning-symbols`.
 pub fn read_one_with_locate_syms(
     input: &str,
     source_multibyte: bool,
@@ -176,6 +176,7 @@ pub fn read_one_with_locate_syms(
         obarray,
     );
     reader.pos = start;
+    reader.readchar_offset_origin = ReadcharOffsetOrigin::RelativeToSourceByte(start);
     reader.locate_syms = locate_syms;
     if !reader.skip_ws_and_comments() {
         return Ok(None);
@@ -193,11 +194,12 @@ pub fn read_one_with_locate_syms(
 pub(crate) fn read_one_from_buffer_with_locate_syms(
     buffer: &Buffer,
     range: EmacsByteRange,
+    readchar_offset_origin: BufferReadcharOffsetOrigin,
     locate_syms: bool,
     obarray: &super::symbol::Obarray,
     shorthands: Option<&ReadSymbolShorthands>,
 ) -> Result<(Option<Value>, EmacsBytePos), ReadError> {
-    let mut reader = Reader::new_buffer(buffer, range, obarray);
+    let mut reader = Reader::new_buffer(buffer, range, readchar_offset_origin, obarray);
     reader.locate_syms = locate_syms;
     reader.shorthands = shorthands;
     if !reader.skip_ws_and_comments() {
@@ -205,6 +207,15 @@ pub(crate) fn read_one_from_buffer_with_locate_syms(
     }
     let value = reader.read_form()?;
     Ok((Some(value), EmacsBytePos::new(reader.pos)))
+}
+
+/// Initial value of GNU `lread.c`'s `readchar_offset` for a buffer-backed
+/// reader.  A buffer stream starts at its absolute Lisp point, whereas a
+/// marker stream starts at zero even though it reads the marker's buffer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum BufferReadcharOffsetOrigin {
+    BufferPoint,
+    Zero,
 }
 
 /// Reader source wrapper for Lisp strings.
@@ -435,6 +446,10 @@ struct Reader<'a> {
     read_labels: std::collections::HashMap<usize, Value>,
     /// When true, wrap interned symbols in symbol-with-pos objects.
     locate_syms: bool,
+    /// Coordinate origin for `symbol-with-pos-pos`.  GNU initializes its
+    /// character counter to the absolute point for buffer streams and zero
+    /// for strings, markers, functions, and files.
+    readchar_offset_origin: ReadcharOffsetOrigin,
     /// The active obarray, for resolving `#$` to the current value of
     /// `load-file-name` (matching GNU's `Vload_file_name`).
     obarray: &'a super::symbol::Obarray,
@@ -452,6 +467,12 @@ struct Reader<'a> {
     /// position up); this pos cache does not.  Safe because the source bytes at
     /// a given position are immutable for the reader's lifetime.
     step_cache: Cell<Option<(usize, u32, usize)>>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReadcharOffsetOrigin {
+    RelativeToSourceByte(usize),
+    AbsoluteBufferPosition,
 }
 
 struct ReaderToken {
@@ -569,6 +590,7 @@ impl<'a> Reader<'a> {
             limit: input.len(),
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
+            readchar_offset_origin: ReadcharOffsetOrigin::RelativeToSourceByte(0),
             obarray,
             shorthands: None,
             step_cache: Cell::new(None),
@@ -594,6 +616,7 @@ impl<'a> Reader<'a> {
             limit: end,
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
+            readchar_offset_origin: ReadcharOffsetOrigin::RelativeToSourceByte(start),
             obarray,
             shorthands: None,
             step_cache: Cell::new(None),
@@ -603,6 +626,7 @@ impl<'a> Reader<'a> {
     fn new_buffer(
         input: &'a Buffer,
         range: EmacsByteRange,
+        readchar_offset_origin: BufferReadcharOffsetOrigin,
         obarray: &'a super::symbol::Obarray,
     ) -> Self {
         let start = range.start().get();
@@ -620,6 +644,14 @@ impl<'a> Reader<'a> {
             limit: end,
             read_labels: std::collections::HashMap::new(),
             locate_syms: false,
+            readchar_offset_origin: match readchar_offset_origin {
+                BufferReadcharOffsetOrigin::BufferPoint => {
+                    ReadcharOffsetOrigin::AbsoluteBufferPosition
+                }
+                BufferReadcharOffsetOrigin::Zero => {
+                    ReadcharOffsetOrigin::RelativeToSourceByte(start)
+                }
+            },
             obarray,
             shorthands: None,
             step_cache: Cell::new(None),
@@ -742,12 +774,62 @@ impl<'a> Reader<'a> {
         // Wrap symbols with their source position when locate_syms is active.
         // Matches GNU read0: SYMBOLP(val) && !NILP(val).
         if self.locate_syms && value.is_symbol() && !value.is_nil() {
-            let pos_val = Value::fixnum(form_start as i64);
+            let pos_val = Value::fixnum(self.symbol_position(form_start) as i64);
             Ok(crate::tagged::gc::with_tagged_heap(|heap| {
                 heap.alloc_symbol_with_pos(value, pos_val)
             }))
         } else {
             Ok(value)
+        }
+    }
+
+    /// Translate the reader's internal byte cursor into GNU's source-specific
+    /// character coordinate for a symbol-with-position object.
+    fn symbol_position(&self, source_byte: usize) -> usize {
+        match self.readchar_offset_origin {
+            ReadcharOffsetOrigin::RelativeToSourceByte(origin) => {
+                self.source_character_distance(origin, source_byte)
+            }
+            ReadcharOffsetOrigin::AbsoluteBufferPosition => match self.source {
+                ReaderSource::Buffer(buffer) => buffer
+                    .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(source_byte))
+                    .as_i64() as usize,
+                _ => unreachable!("absolute readchar offsets require a buffer source"),
+            },
+        }
+    }
+
+    fn source_character_distance(&self, start: usize, end: usize) -> usize {
+        debug_assert!(start <= end);
+        match self.source {
+            ReaderSource::Runtime(_) => {
+                let mut byte = start;
+                let mut chars = 0;
+                while byte < end {
+                    byte = self
+                        .next_pos(byte)
+                        .expect("symbol position must be on a source character boundary");
+                    chars += 1;
+                }
+                debug_assert_eq!(byte, end);
+                chars
+            }
+            ReaderSource::LispString(input) => {
+                if self.source_semantics.is_multibyte() {
+                    emacs_char::byte_to_char_pos(input.as_bytes(), end)
+                        - emacs_char::byte_to_char_pos(input.as_bytes(), start)
+                } else {
+                    end - start
+                }
+            }
+            ReaderSource::Buffer(buffer) => {
+                buffer
+                    .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
+                    .as_i64() as usize
+                    - buffer
+                        .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(start))
+                        .as_i64() as usize
+            }
         }
     }
 
