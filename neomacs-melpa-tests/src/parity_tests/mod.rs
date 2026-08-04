@@ -336,6 +336,7 @@ mod multiple_cursors;
 mod names;
 mod navi2ch;
 mod nerd_icons;
+mod package_build;
 mod package_lifecycle;
 mod package_vc;
 mod pdf_tools;

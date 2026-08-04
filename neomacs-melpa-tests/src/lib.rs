@@ -1641,6 +1641,12 @@ pub const HYDRA_MELPA_PIN: (&str, &str) = ("hydra", "20250316.1254");
 /// `7e513d573c6a5dd2a01aeeb1d8587d74630a2f80`.
 pub const IEDIT_MELPA_PIN: (&str, &str) = ("iedit", "20251017.410");
 
+/// The exact Package-Build package selected by the practical recipe,
+/// file-plan, reproducible archive, archive-maintenance, and authoring corpus.
+/// MELPA built this archive from upstream commit
+/// `80206e27d7b007464e6b28e8150662ba9d14f2bc`.
+pub const PACKAGE_BUILD_MELPA_PIN: (&str, &str) = ("package-build", "20260731.2245");
+
 /// The exact inf-ruby package selected by the practical comint-mode, source
 /// dispatch, completion, project-console, and debugger lifecycle parity corpus.
 /// MELPA built this archive from upstream commit
