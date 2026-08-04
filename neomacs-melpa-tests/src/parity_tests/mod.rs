@@ -360,6 +360,7 @@ mod package_lint;
 mod package_vc;
 mod paradox;
 mod paredit;
+mod parent_mode;
 mod pcre2el;
 mod pdf_tools;
 mod pfuture;

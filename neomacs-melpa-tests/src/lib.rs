@@ -1756,6 +1756,12 @@ pub const PARADOX_MELPA_PIN: (&str, &str) = ("paradox", "20191011.1119");
 /// `89e75b4cb21f525a6f4cabcd12f1bd4204e682ab`.
 pub const PAREDIT_MELPA_PIN: (&str, &str) = ("paredit", "20241103.2046");
 
+/// The exact Parent Mode package selected for practical derived-mode feature
+/// dispatch, built-in hierarchies, aliased parents, runtime reparenting,
+/// additional-parent comparison, and failure-contract parity. MELPA built
+/// this archive from upstream commit `9fe5363b2a190619641c79b3a40d874d8c8f9f40`.
+pub const PARENT_MODE_MELPA_PIN: (&str, &str) = ("parent-mode", "20240210.1906");
+
 /// The exact PDF Tools package selected for practical document geometry,
 /// search-query, outline/link, occurrence-batching, virtual-page, annotation,
 /// sequence-alignment, and cache parity. This MELPA version is pinned to

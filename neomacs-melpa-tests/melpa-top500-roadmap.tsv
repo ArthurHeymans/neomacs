@@ -86,7 +86,7 @@ rank	package	downloads	status
 85	flx-ido	1053746	covered
 86	toc-org	1047381	covered
 87	ansi	1045435	covered
-88	parent-mode	1043957	todo
+88	parent-mode	1043957	covered
 89	doom-modeline	1043813	todo
 90	spaceline	1042316	todo
 91	helm-make	1038497	todo
