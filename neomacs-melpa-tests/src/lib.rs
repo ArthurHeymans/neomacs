@@ -1900,6 +1900,12 @@ pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
 /// by the Helm parity corpus.
 pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
 
+/// The exact Helm-Projectile package selected for practical project file,
+/// buffer, Dired, search, switching, DWIM, and mode-lifecycle parity.
+/// This MELPA version corresponds to upstream commit
+/// `4dae1d072cc2650749846cfcab1f60686471cc45`.
+pub const HELM_PROJECTILE_MELPA_PIN: (&str, &str) = ("helm-projectile", "20260724.27");
+
 /// The exact Hl-Todo package selected for practical source annotation,
 /// navigation, insertion, fontification, Flymake, and global-mode parity.
 /// This MELPA version corresponds to upstream commit
