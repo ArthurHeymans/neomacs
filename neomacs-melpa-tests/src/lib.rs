@@ -2050,6 +2050,13 @@ pub const HELM_AG_MELPA_PIN: (&str, &str) = ("helm-ag", "0.64");
 /// by the Helm parity corpus.
 pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
 
+/// The exact Helm-Descbinds package selected for practical active-keymap
+/// collection, prefix narrowing, Helm source/candidate construction, command
+/// execution and help actions, global-mode lifecycle, and launch parity.
+/// MELPA built this archive from upstream commit
+/// `0aff44badad976ebf2666a7e9b6ddf4db53e59e5`.
+pub const HELM_DESCBINDS_MELPA_PIN: (&str, &str) = ("helm-descbinds", "20250705.942");
+
 /// The exact final Helm Swoop source selected for practical candidate,
 /// narrowing, query, editing, face, and buffer-selection parity. MELPA's last
 /// rolling build came from upstream commit

@@ -316,6 +316,7 @@ mod haskell_mode;
 mod helm;
 mod helm_ag;
 mod helm_core;
+mod helm_descbinds;
 mod helm_projectile;
 mod helm_swoop;
 mod highlight_indentation;

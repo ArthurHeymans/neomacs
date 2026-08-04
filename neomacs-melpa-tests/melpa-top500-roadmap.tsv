@@ -81,7 +81,7 @@ rank	package	downloads	status
 80	paredit	1081462	covered
 81	paradox	1076624	covered
 82	auto-highlight-symbol	1057915	covered
-83	helm-descbinds	1055745	todo
+83	helm-descbinds	1055745	covered
 84	hungry-delete	1053758	todo
 85	flx-ido	1053746	todo
 86	toc-org	1047381	todo
