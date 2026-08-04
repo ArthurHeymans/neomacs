@@ -5472,7 +5472,7 @@ impl Context {
         Self::seed_c_level_defvars(&mut obarray, &mut custom);
 
         #[cfg(target_os = "windows")]
-        super::windows::register_bootstrap_symbols(&mut obarray);
+        super::w32::register_bootstrap_symbols(&mut obarray);
 
         let mut command_loop = crate::keyboard::CommandLoop::new();
         command_loop

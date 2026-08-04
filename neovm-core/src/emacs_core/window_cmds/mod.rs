@@ -9608,5 +9608,4 @@ pub(crate) fn builtin_fit_window_to_buffer(
 // Tests
 // ===========================================================================
 #[cfg(test)]
-#[path = "../window_cmds_test.rs"]
 mod tests;

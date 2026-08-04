@@ -13,14 +13,11 @@ use super::{
 };
 use strum::{EnumString, IntoStaticStr};
 
-const CHAR_META: i64 = 0x8000000;
-const CHAR_CTL: i64 = 0x4000000;
-const CHAR_SHIFT: i64 = 0x2000000;
-const CHAR_HYPER: i64 = 0x1000000;
-const CHAR_SUPER: i64 = 0x0800000;
-const CHAR_ALT: i64 = 0x0400000;
-const CHAR_MODIFIER_MASK: i64 =
-    CHAR_META | CHAR_CTL | CHAR_SHIFT | CHAR_HYPER | CHAR_SUPER | CHAR_ALT;
+use super::keyboard::pure::{
+    KEY_CHAR_ALT as CHAR_ALT, KEY_CHAR_CTRL as CHAR_CTL, KEY_CHAR_HYPER as CHAR_HYPER,
+    KEY_CHAR_META as CHAR_META, KEY_CHAR_MOD_MASK as CHAR_MODIFIER_MASK,
+    KEY_CHAR_SHIFT as CHAR_SHIFT, KEY_CHAR_SUPER as CHAR_SUPER,
+};
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyDesignatorError {

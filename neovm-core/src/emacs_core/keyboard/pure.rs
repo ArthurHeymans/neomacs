@@ -111,7 +111,7 @@ fn named_char_name(code: i64) -> Option<&'static str> {
     }
 }
 
-fn split_symbol_modifiers(mut name: &str) -> (String, &str) {
+pub(crate) fn split_symbol_modifiers(mut name: &str) -> (String, &str) {
     let mut prefix = String::new();
     let is_single_char = |s: &str| {
         let mut chars = s.chars();

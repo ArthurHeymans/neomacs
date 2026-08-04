@@ -172,33 +172,39 @@ impl Modifiers {
 
     /// Convert to Emacs modifier bitmask.
     pub fn to_bits(&self) -> u32 {
+        use crate::emacs_core::keyboard::pure::{
+            KEY_CHAR_CTRL, KEY_CHAR_HYPER, KEY_CHAR_META, KEY_CHAR_SHIFT, KEY_CHAR_SUPER,
+        };
         let mut bits = 0u32;
         if self.ctrl {
-            bits |= 1 << 26;
+            bits |= KEY_CHAR_CTRL as u32;
         }
         if self.meta {
-            bits |= 1 << 27;
+            bits |= KEY_CHAR_META as u32;
         }
         if self.shift {
-            bits |= 1 << 25;
+            bits |= KEY_CHAR_SHIFT as u32;
         }
         if self.super_ {
-            bits |= 1 << 23;
+            bits |= KEY_CHAR_SUPER as u32;
         }
         if self.hyper {
-            bits |= 1 << 24;
+            bits |= KEY_CHAR_HYPER as u32;
         }
         bits
     }
 
     /// Parse from Emacs modifier bitmask.
     pub fn from_bits(bits: u32) -> Self {
+        use crate::emacs_core::keyboard::pure::{
+            KEY_CHAR_CTRL, KEY_CHAR_HYPER, KEY_CHAR_META, KEY_CHAR_SHIFT, KEY_CHAR_SUPER,
+        };
         Self {
-            ctrl: bits & (1 << 26) != 0,
-            meta: bits & (1 << 27) != 0,
-            shift: bits & (1 << 25) != 0,
-            super_: bits & (1 << 23) != 0,
-            hyper: bits & (1 << 24) != 0,
+            ctrl: bits & KEY_CHAR_CTRL as u32 != 0,
+            meta: bits & KEY_CHAR_META as u32 != 0,
+            shift: bits & KEY_CHAR_SHIFT as u32 != 0,
+            super_: bits & KEY_CHAR_SUPER as u32 != 0,
+            hyper: bits & KEY_CHAR_HYPER as u32 != 0,
         }
     }
 
@@ -5249,68 +5255,6 @@ impl crate::emacs_core::eval::Context {
         Some(prefixed)
     }
 
-    fn split_event_symbol_modifiers(mut name: &str) -> (String, &str) {
-        let mut prefix = String::new();
-        let is_single_char = |s: &str| {
-            let mut chars = s.chars();
-            chars.next().is_some() && chars.next().is_none()
-        };
-
-        loop {
-            if let Some(rest) = name.strip_prefix("C-") {
-                if is_single_char(rest) {
-                    break;
-                }
-                prefix.push_str("C-");
-                name = rest;
-                continue;
-            }
-            if let Some(rest) = name.strip_prefix("M-") {
-                if is_single_char(rest) {
-                    break;
-                }
-                prefix.push_str("M-");
-                name = rest;
-                continue;
-            }
-            if let Some(rest) = name.strip_prefix("S-") {
-                if is_single_char(rest) {
-                    break;
-                }
-                prefix.push_str("S-");
-                name = rest;
-                continue;
-            }
-            if let Some(rest) = name.strip_prefix("s-") {
-                if is_single_char(rest) {
-                    break;
-                }
-                prefix.push_str("s-");
-                name = rest;
-                continue;
-            }
-            if let Some(rest) = name.strip_prefix("H-") {
-                if is_single_char(rest) {
-                    break;
-                }
-                prefix.push_str("H-");
-                name = rest;
-                continue;
-            }
-            if let Some(rest) = name.strip_prefix("A-") {
-                if is_single_char(rest) {
-                    break;
-                }
-                prefix.push_str("A-");
-                name = rest;
-                continue;
-            }
-            break;
-        }
-
-        (prefix, name)
-    }
-
     fn mouse_event_symbol_name(event: &Value) -> Option<String> {
         match event.kind() {
             ValueKind::Symbol(_) => event.as_symbol_name().map(str::to_owned),
@@ -5338,7 +5282,8 @@ impl crate::emacs_core::eval::Context {
 
     fn simplify_mouse_event_once(event: Value) -> Option<(MouseEventFallbackStep, Option<Value>)> {
         let symbol_name = Self::mouse_event_symbol_name(&event)?;
-        let (modifier_prefix, base) = Self::split_event_symbol_modifiers(&symbol_name);
+        let (modifier_prefix, base) =
+            crate::emacs_core::keyboard::pure::split_symbol_modifiers(&symbol_name);
         let mut rewritten_name = modifier_prefix;
 
         let rewritten_base = if let Some(rest) = base.strip_prefix("triple-") {

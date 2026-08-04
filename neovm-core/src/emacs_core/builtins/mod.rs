@@ -1232,7 +1232,7 @@ fn register_builtin(ctx: &mut super::eval::Context, builtin: BuiltinRegistration
 pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     use super::value::*;
     #[cfg(windows)]
-    super::windows::register_builtin_subrs(ctx);
+    super::w32::register_builtin_subrs(ctx);
     lcms::register_builtin_subrs(ctx);
     // Diagnostics-only VM-profiler control subrs (feature `vm-profile`).
     #[cfg(feature = "vm-profile")]
