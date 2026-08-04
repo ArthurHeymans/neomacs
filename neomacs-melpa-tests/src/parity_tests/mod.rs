@@ -323,6 +323,7 @@ mod highlight_indentation;
 mod hl_todo;
 mod ht;
 mod htmlize;
+mod hungry_delete;
 mod hydra;
 mod iedit;
 mod inf_ruby;

@@ -1642,6 +1642,12 @@ pub const HT_MELPA_PIN: (&str, &str) = ("ht", "20230703.558");
 /// `c9a8196a59973fabb3763b28069af9a4822a5260`.
 pub const HTMLIZE_MELPA_PIN: (&str, &str) = ("htmlize", "20250724.1703");
 
+/// The exact Hungry Delete package selected for practical whitespace cleanup,
+/// conservative word joining, region and prefix deletion, overwrite-mode,
+/// protected-text boundaries, and mode-lifecycle parity. MELPA built this
+/// archive from upstream commit `d919e555e5c13a2edf4570f3ceec84f0ade71657`.
+pub const HUNGRY_DELETE_MELPA_PIN: (&str, &str) = ("hungry-delete", "20210409.1643");
+
 /// The exact Hydra package selected by the practical command-family,
 /// transient-keymap, extension, radio, and source-editing parity corpus.
 /// MELPA built this archive from upstream commit
