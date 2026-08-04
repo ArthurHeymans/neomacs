@@ -1779,6 +1779,12 @@ pub const KEYFREQ_MELPA_PIN: (&str, &str) = ("keyfreq", "20231107.106");
 /// `6bfc593d7b1bc0dd656f09ffce52cc085ebced05`.
 pub const LSP_MODE_MELPA_PIN: (&str, &str) = ("lsp-mode", "20260716.755");
 
+/// The exact LSP UI package selected for practical hover-documentation,
+/// sideline, peek, Imenu, diagnostics, reference-navigation, and lifecycle
+/// parity. MELPA built this archive from upstream commit
+/// `8d888a3ab1ba9e46bd4711398c57d39d0b709a45`.
+pub const LSP_UI_MELPA_PIN: (&str, &str) = ("lsp-ui", "20260512.1516");
+
 /// The exact lv package required by the practical Hydra parity corpus and
 /// selected for the hint-window lifecycle, refresh, layout, GUI separator,
 /// failure-atomicity, and pre-existing-buffer parity corpus. MELPA built this

@@ -335,6 +335,7 @@ mod keytar;
 mod llama;
 mod log4e;
 mod lsp_mode;
+mod lsp_ui;
 mod lv;
 mod m_buffer;
 mod macrostep;
