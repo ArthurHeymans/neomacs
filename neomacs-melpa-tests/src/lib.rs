@@ -1913,6 +1913,12 @@ pub const WFNAMES_MELPA_PIN: (&str, &str) = ("wfnames", "20260706.903");
 /// `c272c94e8a71b779c29653a532f619acad433a4f`.
 pub const WEB_COMPLETION_DATA_MELPA_PIN: (&str, &str) = ("web-completion-data", "20160318.848");
 
+/// The exact Web Mode package selected for practical mixed-language editing,
+/// indentation, fontification, structural transformation, and template parity.
+/// MELPA built this archive from upstream commit
+/// `aeee2d4c82a791ff69657c1413873bf9265544df`.
+pub const WEB_MODE_MELPA_PIN: (&str, &str) = ("web-mode", "20260623.932");
+
 /// The exact websocket package selected for the practical loopback client and
 /// server lifecycle, fragmented text, extended binary frame, and callback
 /// recovery parity corpus. MELPA built this archive from upstream commit
