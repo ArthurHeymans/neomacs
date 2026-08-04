@@ -1869,6 +1869,12 @@ pub const CLOJURE_MODE_MELPA_PIN: (&str, &str) = ("clojure-mode", "20260709.952"
 /// completion, CAPF, asynchronous backend, and file workflow parity corpus.
 pub const COMPANY_MELPA_PIN: (&str, &str) = ("company", "20260721.100");
 
+/// The exact Commander package selected for practical CLI parsing,
+/// configuration, usage generation, defaults, and error parity.
+/// This MELPA version corresponds to upstream tag `v0.7.0`, commit
+/// `2c8a57b9c619e29ccbe2d5a85921b9c689e95bf9`.
+pub const COMMANDER_MELPA_PIN: (&str, &str) = ("commander", "20140120.1852");
+
 /// The exact Cond-Let package selected by the practical conditional binding,
 /// validation pipeline, authorization, and queue workflow parity corpus.
 pub const COND_LET_MELPA_PIN: (&str, &str) = ("cond-let", "20260701.1237");

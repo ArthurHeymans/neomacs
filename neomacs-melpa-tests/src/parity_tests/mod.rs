@@ -272,6 +272,7 @@ mod ccc;
 mod cdb;
 mod chinese_word_at_point;
 mod clojure_mode;
+mod commander;
 mod company;
 mod compat;
 mod cond_let;

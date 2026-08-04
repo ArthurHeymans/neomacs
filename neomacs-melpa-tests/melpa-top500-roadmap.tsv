@@ -44,7 +44,7 @@ rank	package	downloads	status
 43	hl-todo	1439138	covered
 44	helm-projectile	1419069	covered
 45	auto-complete	1415706	covered
-46	commander	1409018	todo
+46	commander	1409018	covered
 47	iedit	1397994	todo
 48	package-build	1391379	todo
 49	macrostep	1359509	covered
