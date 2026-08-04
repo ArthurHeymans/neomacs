@@ -347,6 +347,7 @@ mod pyim;
 mod pythonic;
 mod queue;
 mod racer;
+mod rainbow_delimiters;
 mod reformatter;
 mod request;
 mod rtags;

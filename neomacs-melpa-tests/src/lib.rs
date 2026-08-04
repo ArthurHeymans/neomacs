@@ -1940,6 +1940,12 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 
+/// The exact Rainbow Delimiters package selected for practical syntax depth,
+/// incremental refontification, language, diff, face cycling, customization,
+/// and mode lifecycle parity. MELPA built this archive from upstream commit
+/// `7919681b0d883502155d5b26e791fec15da6aeca`.
+pub const RAINBOW_DELIMITERS_MELPA_PIN: (&str, &str) = ("rainbow-delimiters", "20210515.1254");
+
 /// The exact Shut Up package selected for practical output capture, cleanup,
 /// deterministic file generation, quiet loading, nested scopes, bypass, and
 /// noninteractive startup parity. MELPA built this archive from upstream
