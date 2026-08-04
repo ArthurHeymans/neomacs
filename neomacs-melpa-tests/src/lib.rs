@@ -1611,6 +1611,12 @@ pub const AUTO_SAVE_VISITED_LOCAL_MODE_MELPA_PIN: (&str, &str) =
 /// commit `a8f9213e3c773b5687b81881240e6e648f2f56ba`.
 pub const AUTO_SHELL_COMMAND_MELPA_PIN: (&str, &str) = ("auto-shell-command", "20180817.1502");
 
+/// The exact auto-sort-mode package selected by the practical manual-sort,
+/// save-hook, narrowing, delimiter-policy, mode-lifecycle, and text-property
+/// parity corpus. MELPA built this archive from upstream commit
+/// `3ffa4e2a76a6dda949fdfd200f623a17c4796559`.
+pub const AUTO_SORT_MODE_MELPA_PIN: (&str, &str) = ("auto-sort-mode", "20230827.2124");
+
 /// The exact ht package selected by the practical configuration, nested state,
 /// job pipeline, custom-key, and snapshot parity corpus, and as
 /// auto-highlight-symbol's hash-table dependency. MELPA built this archive from upstream commit
