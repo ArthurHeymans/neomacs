@@ -3366,6 +3366,11 @@ impl Frame {
 /// Manages all frames and tracks the selected frame.
 pub struct FrameManager {
     frames: HashMap<FrameId, Frame>,
+    /// Called on each newly built Frame before it is inserted. The Lisp
+    /// layer injects xfaces::init_frame_lisp_faces here (GNU calls
+    /// init_frame_faces from the frame.c creation paths, not make_frame);
+    /// display-side FrameManagers leave it unset.
+    frame_init_hook: Option<fn(&mut Frame)>,
     selected: Option<FrameId>,
     next_frame_id: u64,
     next_window_id: u64,
@@ -3379,6 +3384,7 @@ impl FrameManager {
     pub fn new() -> Self {
         Self {
             frames: HashMap::new(),
+            frame_init_hook: None,
             selected: None,
             next_frame_id: FRAME_ID_BASE,
             next_window_id: 1,
@@ -3387,6 +3393,11 @@ impl FrameManager {
             deleted_window_parameters: HashMap::new(),
             window_select_count: 0,
         }
+    }
+
+    /// Install the hook run on every newly created frame.
+    pub fn set_frame_init_hook(&mut self, hook: fn(&mut Frame)) {
+        self.frame_init_hook = Some(hook);
     }
 
     /// Allocate a new window ID.
@@ -3467,7 +3478,9 @@ impl FrameManager {
             root,
             minibuffer_window_id,
         );
-        crate::emacs_core::xfaces::init_frame_lisp_faces(&mut frame);
+        if let Some(init) = self.frame_init_hook {
+            init(&mut frame);
+        }
         let selected_wid = frame.selected_window;
         self.frames.insert(frame_id, frame);
         self.note_window_selected(selected_wid);

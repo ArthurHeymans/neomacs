@@ -2844,6 +2844,16 @@ impl ModuleBoundarySnapshot {
     }
 }
 
+
+/// FrameManager wired for the Lisp runtime: every new frame gets its
+/// lface vectors seeded, mirroring GNU init_frame_faces in the frame.c
+/// creation paths.
+fn lisp_frame_manager() -> FrameManager {
+    let mut frames = FrameManager::new();
+    frames.set_frame_init_hook(super::xfaces::init_frame_lisp_faces);
+    frames
+}
+
 impl Context {
     pub(crate) fn module_boundary_snapshot(&self) -> ModuleBoundarySnapshot {
         ModuleBoundarySnapshot {
@@ -3109,7 +3119,7 @@ impl Context {
         ev.rectangle = RectangleState::new();
         ev.interactive = InteractiveRegistry::new();
         ev.input_mode_interrupt = false;
-        ev.frames = FrameManager::new();
+        ev.frames = lisp_frame_manager();
         ev.modes = ModeRegistry::new();
         ev.threads = ThreadManager::new();
         ev.kmacro = KmacroManager::new();
@@ -5559,7 +5569,7 @@ impl Context {
             input_mode_interrupt: true,
             quit_char: 7,
             waiting_for_user_input: false,
-            frames: FrameManager::new(),
+            frames: lisp_frame_manager(),
             modes: ModeRegistry::new(),
             threads: ThreadManager::new(),
             kmacro: KmacroManager::new(),
@@ -5751,7 +5761,7 @@ impl Context {
             input_mode_interrupt: true,
             quit_char: 7,
             waiting_for_user_input: false,
-            frames: FrameManager::new(),
+            frames: lisp_frame_manager(),
             modes,
             threads: ThreadManager::new(),
             kmacro,
