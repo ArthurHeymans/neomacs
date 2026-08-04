@@ -1922,6 +1922,13 @@ pub const DUMB_JUMP_MELPA_PIN: (&str, &str) = ("dumb-jump", "20260603.1700");
 /// `4b1346eb9a8a76ee9c9dede69738c63ad97ac5b6`.
 pub const FLX_MELPA_PIN: (&str, &str) = ("flx", "20240205.356");
 
+/// The exact Flx-Ido package selected for practical advised matching,
+/// incremental narrowing, merged-choice metadata, threshold fallback,
+/// highlighting, per-session cache identity, and reset lifecycle parity.
+/// MELPA built this archive from upstream commit
+/// `4b1346eb9a8a76ee9c9dede69738c63ad97ac5b6`.
+pub const FLX_IDO_MELPA_PIN: (&str, &str) = ("flx-ido", "20240205.356");
+
 /// The exact Volatile Highlights package selected for practical clipboard,
 /// replacement, transposition, undo, deletion, custom-extension, and xref
 /// feedback parity. MELPA built this archive from upstream commit

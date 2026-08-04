@@ -301,6 +301,7 @@ mod exec_path_from_shell;
 mod expand_region;
 mod f;
 mod flx;
+mod flx_ido;
 mod flycheck;
 mod flycheck_dmd_dub;
 mod frozen_packages;
