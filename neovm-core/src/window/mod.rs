@@ -2635,7 +2635,7 @@ impl Frame {
             .saturating_add(scroll_bar_width)
     }
 
-    fn window_text_area_bounds(&self) -> Rect {
+    fn window_text_area_bounds_with_chrome(&self, reserve_chrome: bool) -> Rect {
         let frame_w = self.width as f32;
         let frame_h = self.height as f32;
         // The menu / tab / tool bars reduce the window text area only when they
@@ -2647,7 +2647,7 @@ impl Frame {
         // `displays_chrome` mirrors that: it is set on interactively displayed
         // frames and left false otherwise, so window-edge coordinates match GNU
         // in batch while interactive frames place windows below the chrome.
-        let chrome_top = if self.displays_chrome {
+        let chrome_top = if reserve_chrome {
             self.chrome_top_height().min(frame_h)
         } else {
             0.0
@@ -2672,6 +2672,10 @@ impl Frame {
         )
     }
 
+    fn window_text_area_bounds(&self) -> Rect {
+        self.window_text_area_bounds_with_chrome(self.displays_chrome)
+    }
+
     pub fn sync_window_area_bounds(&mut self) {
         let root_bounds = self.window_text_area_bounds();
         resize_window_subtree(&mut self.root_window, root_bounds);
@@ -2681,6 +2685,27 @@ impl Frame {
             self.char_height,
         );
 
+        self.reposition_minibuffer_below_root();
+    }
+
+    /// Reconcile a restored window tree with the frame's current geometry.
+    ///
+    /// GNU `Fset_window_configuration` restores the saved window fields and
+    /// then calls `adjust_frame_size` (`window.c`).  That final pass realizes
+    /// the current `FRAME_TOP_MARGIN` even when the saved initial batch-frame
+    /// tree still spans the pre-menu-bar area.  Keep this transition separate
+    /// from ordinary batch-frame initialization: the latter intentionally
+    /// retains its initial `(0, 0)` root until a reconciliation point occurs.
+    pub fn reconcile_restored_window_configuration_geometry(&mut self) {
+        let root_bounds = self.window_text_area_bounds_with_chrome(true);
+        resize_window_subtree(&mut self.root_window, root_bounds);
+        self.root_window.set_left_col(0);
+        self.root_window.set_top_line(self.frame_top_margin());
+        sync_window_character_edges_from_bounds(
+            &mut self.root_window,
+            self.char_width,
+            self.char_height,
+        );
         self.reposition_minibuffer_below_root();
     }
 

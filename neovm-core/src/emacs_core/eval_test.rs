@@ -11912,6 +11912,52 @@ fn save_window_excursion_restores_window_layout_after_split() {
 }
 
 #[test]
+fn set_window_configuration_reconciles_restored_batch_frame_geometry() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buffer_id = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buffer_id);
+    let frame_id = ev.frames.create_frame("F1", 80, 25, buffer_id);
+    {
+        let frame = ev.frames.get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        if let Some(minibuffer) = frame.minibuffer_leaf.as_mut() {
+            let bounds = *minibuffer.bounds();
+            minibuffer.set_bounds(crate::window::Rect::new(
+                bounds.x,
+                bounds.y,
+                bounds.width,
+                1.0,
+            ));
+        }
+        frame.set_parameter(Value::symbol("menu-bar-lines"), Value::fixnum(1));
+        frame.sync_menu_bar_height_from_parameters();
+    }
+
+    let result = ev
+        .eval_str(
+            r#"(let ((before
+                       (list (window-total-height (frame-root-window))
+                             (window-pixel-edges (frame-root-window)))))
+                 (let ((configuration (current-window-configuration)))
+                   (unwind-protect
+                       (split-window-internal (selected-window) nil nil nil)
+                     (set-window-configuration configuration)))
+                 (list before
+                       (window-total-height (frame-root-window))
+                       (window-pixel-edges (frame-root-window))
+                       (window-edges (frame-root-window))))"#,
+        )
+        .expect("set-window-configuration should restore the frame");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&Ok(result)),
+        "OK ((24 (0 0 80 24)) 23 (0 1 80 24) (0 1 80 24))"
+    );
+}
+
+#[test]
 fn save_window_excursion_restores_current_buffer_separate_from_selected_window() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(

@@ -1084,6 +1084,15 @@ pub(crate) fn builtin_set_window_configuration(
         } else if let Some((buffer_id, _)) = selected_window_state {
             eval.set_current_buffer_unrecorded(buffer_id)?;
         }
+
+        // GNU `Fset_window_configuration` restores the saved tree first, then
+        // calls `adjust_frame_size` before returning.  The adjustment matters
+        // for the initial batch frame: its saved root may still cover all 24
+        // pre-menu-bar rows, while the live frame has a one-line top margin and
+        // therefore a 23-line root at row 1.
+        if let Some(frame) = eval.frames.get_mut(snapshot.frame_id) {
+            frame.reconcile_restored_window_configuration_geometry();
+        }
     }
 
     eval.redisplay();
