@@ -1605,6 +1605,12 @@ pub const AUTO_SAVE_BUFFERS_ENHANCED_MELPA_PIN: (&str, &str) =
 pub const AUTO_SAVE_VISITED_LOCAL_MODE_MELPA_PIN: (&str, &str) =
     ("auto-save-visited-local-mode", "20251021.1126");
 
+/// The exact auto-shell-command package selected by the practical save-hook,
+/// asynchronous shell, queueing, command-selection, failure, toggle, and
+/// settings-lifecycle parity corpus. MELPA built this archive from upstream
+/// commit `a8f9213e3c773b5687b81881240e6e648f2f56ba`.
+pub const AUTO_SHELL_COMMAND_MELPA_PIN: (&str, &str) = ("auto-shell-command", "20180817.1502");
+
 /// The exact ht package selected by the practical configuration, nested state,
 /// job pipeline, custom-key, and snapshot parity corpus, and as
 /// auto-highlight-symbol's hash-table dependency. MELPA built this archive from upstream commit
