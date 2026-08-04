@@ -81,18 +81,22 @@ struct ParsedLockInfo {
     user: String,
     host: String,
     pid: u32,
+    boot_time: i64,
 }
 
 fn parse_lock_info(contents: &str) -> Option<ParsedLockInfo> {
     let trimmed = contents.trim();
     let (user, rest) = trimmed.split_once('@')?;
     let (host, pid_and_boot) = rest.rsplit_once('.')?;
-    let pid_str = pid_and_boot.split(':').next()?;
+    let mut parts = pid_and_boot.split(':');
+    let pid_str = parts.next()?;
     let pid = pid_str.parse().ok()?;
+    let boot_time = parts.next().and_then(|boot| boot.parse().ok()).unwrap_or(0);
     Some(ParsedLockInfo {
         user: user.to_string(),
         host: host.to_string(),
         pid,
+        boot_time,
     })
 }
 
@@ -166,14 +170,49 @@ fn current_lock_owner(lock_path: &Path) -> Result<LockOwner, io::Error> {
         return Ok(LockOwner::Other(owner));
     };
 
-    let ours = info.user == current_user_name()
-        && info.host == current_host_name()
-        && info.pid == std::process::id();
-    if ours {
-        Ok(LockOwner::Current)
-    } else {
-        Ok(LockOwner::Other(info.user))
+    // GNU filelock.c current_lock_owner: staleness is decidable only for
+    // locks on THIS host. Same host + our pid = ours (GNU compares host and
+    // pid, not the user). Same host + a LIVE pid whose boot time matches (or
+    // is absent) = another live Emacs. Anything else — dead pid, unparseable
+    // pid, or a boot time from a previous boot — is a stale lock left by a
+    // crashed or killed session: zap the lockfile and report the file free,
+    // NEVER prompt (an interactive session would otherwise hang every user
+    // who reopens a file their crashed session had locked).
+    if info.host != current_host_name() {
+        return Ok(LockOwner::Other(info.user));
     }
+    if info.pid == std::process::id() {
+        return Ok(LockOwner::Current);
+    }
+    let pid_alive = info.pid > 0
+        && (unsafe { libc::kill(info.pid as libc::pid_t, 0) } == 0
+            || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM));
+    let boot_matches = info.boot_time == 0 || (info.boot_time - system_boot_time_sec()).abs() <= 1;
+    if pid_alive && boot_matches {
+        return Ok(LockOwner::Other(info.user));
+    }
+    match fs::remove_file(lock_path) {
+        Ok(()) => Ok(LockOwner::None),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(LockOwner::None),
+        Err(err) => Err(err),
+    }
+}
+
+/// Seconds since the epoch at which this system booted (Linux: the `btime`
+/// line of /proc/stat), or 0 when unknown — 0 disables the boot-time
+/// staleness comparison, exactly like a lock file without a boot suffix.
+fn system_boot_time_sec() -> i64 {
+    static BOOT: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
+    *BOOT.get_or_init(|| {
+        std::fs::read_to_string("/proc/stat")
+            .ok()
+            .and_then(|stat| {
+                stat.lines()
+                    .find_map(|line| line.strip_prefix("btime "))
+                    .and_then(|rest| rest.trim().parse().ok())
+            })
+            .unwrap_or(0)
+    })
 }
 
 fn create_lock_file(lock_path: &Path, contents: &str, force: bool) -> io::Result<()> {
@@ -580,5 +619,64 @@ mod tests {
             current_lock_owner(&lock_path).expect("read lock owner"),
             LockOwner::Current
         ));
+    }
+}
+
+#[cfg(test)]
+mod stale_lock_tests {
+    use super::*;
+
+    #[test]
+    fn dead_pid_lock_on_this_host_is_zapped_and_reported_free() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let lock_path = dir.path().join(".#stale");
+        // A pid from a crashed session: pid 1 is init (alive, but use an
+        // impossible one). Recycle-proof choice: our own pid is alive, so use
+        // a pid that cannot exist (> pid_max default of 4194304).
+        let contents = format!("someone@{}.999999999", current_host_name());
+        std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
+        match current_lock_owner(&lock_path).expect("owner check") {
+            LockOwner::None => {}
+            LockOwner::Current => panic!("stale lock cannot be ours"),
+            LockOwner::Other(user) => panic!("stale lock must be zapped, got owner {user}"),
+        }
+        assert!(
+            std::fs::symlink_metadata(&lock_path).is_err(),
+            "GNU unlinks the stale lockfile in current_lock_owner"
+        );
+    }
+
+    #[test]
+    fn live_pid_lock_on_this_host_names_the_other_owner() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let lock_path = dir.path().join(".#live");
+        // pid 1 is always alive; kill(1, 0) fails with EPERM for non-root,
+        // which GNU treats as alive.
+        let contents = format!("someone@{}.1", current_host_name());
+        std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
+        match current_lock_owner(&lock_path).expect("owner check") {
+            LockOwner::Other(user) => assert_eq!(user, "someone"),
+            _ => panic!("live-pid lock must report the other owner"),
+        }
+        assert!(
+            std::fs::symlink_metadata(&lock_path).is_ok(),
+            "live locks are never zapped"
+        );
+    }
+
+    #[test]
+    fn stale_boot_time_zaps_even_a_live_pid() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let lock_path = dir.path().join(".#reboot");
+        // pid 1 alive, but a boot time of 12 (1970) cannot match this boot.
+        let contents = format!("someone@{}.1:12", current_host_name());
+        std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
+        if system_boot_time_sec() == 0 {
+            return; // No btime on this platform: comparison disabled.
+        }
+        match current_lock_owner(&lock_path).expect("owner check") {
+            LockOwner::None => {}
+            _ => panic!("previous-boot lock must be stale"),
+        }
     }
 }
