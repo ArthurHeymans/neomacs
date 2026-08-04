@@ -293,6 +293,7 @@ mod epl;
 mod erlang;
 mod es_lib;
 mod evil;
+mod evil_nerd_commenter;
 mod exec_path_from_shell;
 mod expand_region;
 mod f;
