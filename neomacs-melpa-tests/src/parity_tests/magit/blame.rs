@@ -20,9 +20,7 @@ fn magit_blame_addition_populates_commit_details_for_a_visited_file() -> ParityB
                      (setq buffer (find-file-noselect file))
                      (switch-to-buffer buffer)
                      (magit-blame-addition nil)
-                     (let ((deadline (+ (float-time) 3.0)))
-                       (while (< (float-time) deadline)
-                         (accept-process-output nil 0.05)))
+                     (neomacs-magit-test-wait-for-blame)
                      (let ((display-text
                             (mapconcat
                              (lambda (overlay)
@@ -101,24 +99,13 @@ fn magit_blame_cycle_style_rewrites_real_blame_details_for_every_visualization()
         (setq buffer (find-file-noselect file))
         (switch-to-buffer buffer)
         (magit-blame-addition nil)
-        (let ((deadline (+ (float-time) 5.0)))
-          (while (and (< (seq-count
-                          (lambda (overlay)
-                            (overlay-get overlay 'magit-blame-heading))
-                          (overlays-in (point-min) (point-max)))
-                         3)
-                      (< (float-time) deadline))
-            (accept-process-output nil 0.05)))
+        (neomacs-magit-test-wait-for-blame)
         (unless (= (seq-count
                     (lambda (overlay)
                       (overlay-get overlay 'magit-blame-heading))
-                    (overlays-in (point-min) (point-max)))
+                   (overlays-in (point-min) (point-max)))
                    3)
-          (error "timed out waiting for deterministic blame overlays"))
-        (let ((deadline (+ (float-time) 5.0)))
-          (while (and (process-live-p magit-blame-process)
-                      (< (float-time) deadline))
-            (accept-process-output magit-blame-process 0.05)))
+          (error "blame process completed without deterministic overlays"))
         (cl-labels
             ((snapshot ()
                (let ((headings

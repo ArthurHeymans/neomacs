@@ -40,15 +40,8 @@ fn magit_stage_unstage_and_extend_preserve_partial_worktree_changes() -> ParityB
                                  (magit-untracked-files)
                                  (magit-git-lines "status" "--short"))))
                            (magit-stage-files (list notes))
-                           (let* ((process (magit-commit-extend nil t))
-                                  (deadline (+ (float-time) 10.0)))
-                             (while (and
-                                     (process-live-p process)
-                                     (< (float-time) deadline))
-                               (accept-process-output process 0.05))
-                             (accept-process-output process 0.05)
-                             (when (process-live-p process)
-                               (error "Magit extend process timed out"))
+                           (let ((process (magit-commit-extend nil t)))
+                             (neomacs-magit-test-wait-for-process process)
                              (list
                               before-unstage
                               after-unstage

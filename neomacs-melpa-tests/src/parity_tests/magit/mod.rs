@@ -21,13 +21,29 @@ fn magit_oracle() -> CachedMelpaOracle {
     CachedMelpaOracle::new(MAGIT_MELPA_PIN, "magit.el")
         .expect("prepare pinned Magit source and dependencies below ./tmp")
         .with_prelude(
-            r##"(setq magit-git-global-arguments
-                       (append
-                        '("-c" "init.defaultBranch=master"
-                          "-c" "user.name=A U Thor"
-                          "-c" "user.email=a.u.thor@example.com")
-                        (and (boundp 'magit-git-global-arguments)
-                             magit-git-global-arguments)))"##,
+            r##"(progn
+                   (setq magit-git-global-arguments
+                         (append
+                          '("-c" "init.defaultBranch=master"
+                            "-c" "user.name=A U Thor"
+                            "-c" "user.email=a.u.thor@example.com")
+                          (and (boundp 'magit-git-global-arguments)
+                               magit-git-global-arguments)))
+                   (defun neomacs-magit-test-wait-for-process (process)
+                     (while (process-live-p process)
+                       ;; Magit gives Git a separate stderr pipe.  Drain every
+                       ;; ready descriptor so its pipe closes before Magit's
+                       ;; main-process sentinel kills the stderr buffer.
+                       (accept-process-output nil 0.05)))
+                   (defun neomacs-magit-test-wait-for-blame ()
+                     ;; The quickstart sentinel replaces the initial process
+                     ;; with a full-file blame process, then the final sentinel
+                     ;; normally clears this buffer-local variable.  Test the
+                     ;; process status too: a sentinel error must not turn a
+                     ;; dead process object into a busy loop in the harness.
+                     (while (and magit-blame-process
+                                 (process-live-p magit-blame-process))
+                       (accept-process-output nil 0.05))))"##,
         )
         .with_timeout(MAGIT_TEST_TIMEOUT)
 }

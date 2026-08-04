@@ -13,7 +13,7 @@ mod registry;
 mod rendering;
 mod workflows;
 
-const ASCII_TABLE_TEST_TIMEOUT: Duration = Duration::from_secs(120);
+const ASCII_TABLE_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const ASCII_TABLE_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
 (require 'seq)

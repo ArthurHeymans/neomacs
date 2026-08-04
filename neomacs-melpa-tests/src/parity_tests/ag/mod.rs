@@ -108,13 +108,20 @@ exit 0
 
 (defun ag-test-wait-for-search ()
   "Wait until the compilation process ag started has finished."
-  (let ((deadline (+ (float-time) 10)))
-    (while (and (< (float-time) deadline)
-                (cl-find-if (lambda (p) (string-match-p "ag" (process-name p)))
-                            (process-list)))
-      (accept-process-output nil 0.02)
-      (sit-for 0.01))
-    (sit-for 0.05)))
+  ;; A workflow can retain both regexp and text result buffers, so do not pick
+  ;; whichever `*ag search' buffer happens to appear first.  Wait until every
+  ;; live process attached to an ag-mode buffer has finished, and drain all
+  ;; descriptors while doing so.  The Rust oracle's outer timeout bounds a
+  ;; genuinely stuck command.
+  (while (cl-find-if
+          (lambda (process)
+            (let ((buffer (process-buffer process)))
+              (and (process-live-p process)
+                   (buffer-live-p buffer)
+                   (with-current-buffer buffer (eq major-mode 'ag-mode)))))
+          (process-list))
+    (accept-process-output nil 0.05))
+  (sit-for 0.05))
 
 (defun ag-test-results-buffer ()
   (cl-find-if (lambda (b) (string-prefix-p "*ag search" (buffer-name b)))
