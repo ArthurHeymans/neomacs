@@ -65,7 +65,7 @@ rank	package	downloads	status
 64	dumb-jump	1231707	covered
 65	flx	1220442	covered
 66	volatile-highlights	1197799	covered
-67	pcre2el	1184018	todo
+67	pcre2el	1184018	covered
 68	evil-nerd-commenter	1178503	todo
 69	helm-ag	1172552	todo
 70	evil-surround	1166104	todo

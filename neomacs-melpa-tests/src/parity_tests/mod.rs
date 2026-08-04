@@ -346,6 +346,7 @@ mod nerd_icons;
 mod package_build;
 mod package_lifecycle;
 mod package_vc;
+mod pcre2el;
 mod pdf_tools;
 mod php_mode;
 mod php_runtime;
