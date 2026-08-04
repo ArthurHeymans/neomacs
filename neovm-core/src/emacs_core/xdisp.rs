@@ -2574,18 +2574,26 @@ fn expand_mode_line_percent_in_state(
     });
     let narrowed = buf.is_some_and(|b| b.is_narrowed());
 
-    let point_line_column = if let Some(b) = buf {
-        // Use THIS window's point (GNU sets point to `w->pointm` per window),
-        // falling back to the live buffer point when no window context.
-        let point_byte = pctx
-            .window_point
-            .unwrap_or_else(|| b.point_emacs_byte_pos());
-        prefix_line_and_column(b, point_byte)
-    } else {
-        LineColumn { line: 1, column: 0 }
+    // GNU computes %l/%c lazily inside decode_mode_spec's switch — the
+    // O(point) line count and O(column) scan run only when the format
+    // actually contains the spec. Memoize on first demand: one compute per
+    // walk even when both %l and %c appear.
+    let mut point_line_column_memo: Option<LineColumn> = None;
+    let mut point_line_column = || -> LineColumn {
+        *point_line_column_memo.get_or_insert_with(|| {
+            if let Some(b) = buf {
+                // Use THIS window's point (GNU sets point to `w->pointm` per
+                // window), falling back to the live buffer point when no
+                // window context.
+                let point_byte = pctx
+                    .window_point
+                    .unwrap_or_else(|| b.point_emacs_byte_pos());
+                prefix_line_and_column(b, point_byte)
+            } else {
+                LineColumn { line: 1, column: 0 }
+            }
+        })
     };
-    let line_num = point_line_column.line;
-    let col_num = point_line_column.column;
 
     let chars: Vec<char> = fmt_str.chars().collect();
     let mut index = 0;
@@ -2785,7 +2793,7 @@ fn expand_mode_line_percent_in_state(
             Some('l') => {
                 append_mode_line_percent_string_spec(
                     result,
-                    &line_num.to_string(),
+                    &point_line_column().line.to_string(),
                     &props_at_percent,
                     field_width,
                 );
@@ -2794,7 +2802,7 @@ fn expand_mode_line_percent_in_state(
             Some('c') => {
                 append_mode_line_percent_string_spec(
                     result,
-                    &col_num.to_string(),
+                    &point_line_column().column.to_string(),
                     &props_at_percent,
                     field_width,
                 );
@@ -2804,7 +2812,7 @@ fn expand_mode_line_percent_in_state(
                 // GNU: 1-indexed column number at point.
                 append_mode_line_percent_string_spec(
                     result,
-                    &(col_num + 1).to_string(),
+                    &(point_line_column().column + 1).to_string(),
                     &props_at_percent,
                     field_width,
                 );
