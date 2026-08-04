@@ -1833,6 +1833,13 @@ pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 /// archive from upstream commit `dae820da35ad46234cbca31626ffb6da7928694a`.
 pub const EXEC_PATH_FROM_SHELL_MELPA_PIN: (&str, &str) = ("exec-path-from-shell", "20260423.1833");
 
+/// The exact Elisp Slime Nav package selected for practical key-driven
+/// function, variable, library, and face navigation; xref return history;
+/// prompted symbol selection; help display; and stale-symbol recovery parity.
+/// MELPA built this archive from upstream commit
+/// `8588d80d414aee1fafce5b9da0e913612ee0bcdd`.
+pub const ELISP_SLIME_NAV_MELPA_PIN: (&str, &str) = ("elisp-slime-nav", "20210510.528");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
