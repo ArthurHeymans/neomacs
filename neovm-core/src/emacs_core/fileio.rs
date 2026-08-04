@@ -5102,6 +5102,7 @@ fn replace_accessible_portion_for_insert_file_contents(
     current_id: crate::buffer::BufferId,
     text: &LispString,
     signal_hooks: bool,
+    hide_visited_file_name_during_replace: bool,
 ) -> Result<i64, Flow> {
     let (
         accessible_range,
@@ -5173,23 +5174,40 @@ fn replace_accessible_portion_for_insert_file_contents(
         accessible_end_char - char_count_for_lisp_string_byte_prefix(&old_text, suffix);
     let inserted_chars = insert_text.schars();
 
-    signal_and_delete_file_replace_region(eval, current_id, delete_range, signal_hooks)?;
-    signal_and_insert_file_replace_text(
-        eval,
-        current_id,
-        delete_range.start(),
-        &insert_text,
-        signal_hooks,
-    )?;
-    restore_point_after_file_replace(
-        &mut eval.buffers,
-        current_id,
-        old_point_char,
-        same_at_start_char,
-        same_at_end_char,
-        inserted_chars,
-    )?;
-    Ok(inserted_chars as i64)
+    // GNU `Finsert_file_contents' temporarily binds `buffer-file-name' to nil
+    // while a VISIT+REPLACE mutates an unnarrowed buffer.  Change preparation
+    // otherwise treats the stale visited modtime as a user edit and asks about
+    // a supersession threat, even though this mutation is making the buffer
+    // match the file.  Keep the binding scoped to the actual replacement:
+    // byte-identical reads above remain true no-ops, including for variable
+    // watchers.
+    let specpdl_count = eval.specpdl.len();
+    if hide_visited_file_name_during_replace {
+        eval.specbind(intern("buffer-file-name"), Value::NIL);
+    }
+    let replace_result = (|| -> Result<i64, Flow> {
+        signal_and_delete_file_replace_region(eval, current_id, delete_range, signal_hooks)?;
+        signal_and_insert_file_replace_text(
+            eval,
+            current_id,
+            delete_range.start(),
+            &insert_text,
+            signal_hooks,
+        )?;
+        restore_point_after_file_replace(
+            &mut eval.buffers,
+            current_id,
+            old_point_char,
+            same_at_start_char,
+            same_at_end_char,
+            inserted_chars,
+        )?;
+        Ok(inserted_chars as i64)
+    })();
+    if hide_visited_file_name_during_replace {
+        eval.unbind_to(specpdl_count);
+    }
+    replace_result
 }
 
 /// Inserts CONTENTS into the current buffer.  For a REPLACE request this
@@ -5202,6 +5220,7 @@ fn insert_file_contents_into_current_buffer_in_state(
     contents: &LispString,
     replace_requested: bool,
     signal_hooks: bool,
+    hide_visited_file_name_during_replace: bool,
 ) -> Result<Option<i64>, Flow> {
     if replace_requested {
         replace_accessible_portion_for_insert_file_contents(
@@ -5209,6 +5228,7 @@ fn insert_file_contents_into_current_buffer_in_state(
             current_id,
             contents,
             signal_hooks,
+            hide_visited_file_name_during_replace,
         )
         .map(Some)
     } else {
@@ -5825,23 +5845,11 @@ pub(crate) fn builtin_insert_file_contents(
     let decoded_char_count = contents.char_count();
 
     let signal_change_hooks = !visit || replace_requested;
-    // GNU Finsert_file_contents (fileio.c, the REPLACE walk): when VISITing
-    // the whole accessible buffer, bind buffer-file-name to nil around the
-    // replacement so prepare_to_modify_buffer / lock_file never runs the
-    // ask-user-about-supersession-threat prompt — "such a prompt makes no
-    // sense if we're VISITing the file, since the insertion makes the buffer
-    // *more* like the file rather than the reverse". Without this, every
-    // revert-buffer of a file that changed on disk (the normal reason to
-    // revert!) stalls on the supersession question.
-    let unnarrowed = eval
-        .buffers
-        .get(current_id)
-        .is_some_and(|buf| !buf.is_narrowed());
-    let bind_away_file_name = visit && replace_requested && unnarrowed;
-    let specpdl_count = eval.specpdl.len();
-    if bind_away_file_name {
-        eval.specbind(intern("buffer-file-name"), Value::NIL);
-    }
+    let hide_visited_file_name_during_replace = visit
+        && replace_requested
+        && eval.buffers.get(current_id).is_some_and(|buffer| {
+            buffer.full_emacs_byte_range() == buffer.accessible_emacs_byte_range()
+        });
     // GNU's REPLACE branch reports only the *net* inserted chars (the unchanged
     // head/tail affixes are elided); a plain insert reports the full decoded
     // char count.  Re-reading byte-identical content under REPLACE therefore
@@ -5852,12 +5860,8 @@ pub(crate) fn builtin_insert_file_contents(
         contents.text(),
         replace_requested,
         signal_change_hooks,
-    );
-    if bind_away_file_name {
-        // Unwind the binding on success AND on error before propagating.
-        eval.unbind_to(specpdl_count);
-    }
-    let net_inserted = net_inserted?;
+        hide_visited_file_name_during_replace,
+    )?;
     let base_inserted_count = net_inserted.unwrap_or(decoded_char_count);
 
     // GNU `insert-file-contents' sets `last-coding-system-used' before

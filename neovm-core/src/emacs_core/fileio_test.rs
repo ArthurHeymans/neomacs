@@ -3754,6 +3754,62 @@ fn insert_file_contents_replace_preserves_matching_ends_and_hooks_like_gnu() {
 }
 
 #[test]
+fn insert_file_contents_visit_replace_hides_file_name_from_change_hooks_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = std::env::temp_dir().join("neovm_eval_insert_file_contents_visit_replace_name");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+
+    let path = dir.join("replace.txt");
+    let path_str = path.to_string_lossy().to_string();
+    fs::write(&path, "external contents").unwrap();
+
+    let mut eval = Context::new();
+    let current_id = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.buffers
+        .set_buffer_file_name(current_id, Value::string(&path_str))
+        .expect("set visited file name");
+    eval.eval_str(
+        r#"
+(progn
+  (erase-buffer)
+  (insert "stale contents")
+  (setq neomacs-ifc-file-names nil)
+  (setq before-change-functions
+        (list (lambda (_beg _end)
+                (setq neomacs-ifc-file-names
+                      (cons buffer-file-name neomacs-ifc-file-names))))))
+"#,
+    )
+    .expect("hook setup should evaluate");
+
+    builtin_insert_file_contents(
+        &mut eval,
+        vec![
+            Value::string(&path_str),
+            Value::T,
+            Value::NIL,
+            Value::NIL,
+            Value::T,
+        ],
+    )
+    .expect("visited replacement should succeed without a supersession check");
+
+    let rendered = format_eval_result(&eval.eval_str(
+        r#"
+(list (buffer-string) buffer-file-name (nreverse neomacs-ifc-file-names))
+"#,
+    ));
+    assert_eq!(
+        rendered,
+        format!("OK (\"external contents\" \"{path_str}\" (nil nil))")
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn insert_file_contents_visit_missing_file_completes_visit_before_error() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;
