@@ -1063,6 +1063,9 @@ fn window_edges_cols_lines(w: &Window, char_width: f32, char_height: f32) -> (i6
     (left, top, right, bottom)
 }
 
+/// Edge builtins answer from the live Window tree, like GNU window.c
+/// (never from presentation data -- see window/geometry.rs for the
+/// post-redisplay coordinate views and the layer-boundary note).
 fn window_edges_pixels(w: &Window) -> (i64, i64, i64, i64) {
     let b = w.bounds();
     (

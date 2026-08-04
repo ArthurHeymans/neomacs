@@ -3,6 +3,14 @@
 //! A `PresentationGeometry` owns one immutable frame publication and exposes typed
 //! pixel and cell views so consumers cannot silently combine body-local,
 //! window-local, frame-local, and cell-grid values.
+//!
+//! Layer boundary: this module answers "where was this window PRESENTED"
+//! from renderer publications (post-redisplay). The Lisp-facing edge
+//! builtins in emacs_core/window_cmds deliberately do NOT route through
+//! here -- window-edges and friends answer from the live Window tree
+//! (Window::bounds), matching GNU, which computes window.c edges from
+//! struct window fields without consulting the glyph matrix. The two
+//! systems are different layers, not duplication.
 
 use super::{FrameId, LispCharPos1, WindowDisplaySnapshot, WindowId};
 use neomacs_display_protocol::frame_glyphs::PresentedWindowRegions;
