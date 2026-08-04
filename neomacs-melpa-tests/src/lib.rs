@@ -1940,6 +1940,12 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 
+/// The exact Expand Region package selected for practical progressive
+/// selection, contraction, history invalidation, register autocopy, and
+/// language-specific region parity. MELPA built this archive from upstream
+/// commit `351279272330cae6cecea941b0033a8dd8bcc4e8`.
+pub const EXPAND_REGION_MELPA_PIN: (&str, &str) = ("expand-region", "20241217.1840");
+
 /// The exact Rainbow Delimiters package selected for practical syntax depth,
 /// incremental refontification, language, diff, face cycling, customization,
 /// and mode lifecycle parity. MELPA built this archive from upstream commit

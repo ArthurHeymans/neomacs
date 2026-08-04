@@ -288,6 +288,7 @@ mod epl;
 mod erlang;
 mod es_lib;
 mod evil;
+mod expand_region;
 mod f;
 mod flycheck;
 mod flycheck_dmd_dub;
