@@ -357,6 +357,7 @@ mod package_lint;
 mod package_vc;
 mod pcre2el;
 mod pdf_tools;
+mod pfuture;
 mod php_mode;
 mod php_runtime;
 mod pinyinlib;

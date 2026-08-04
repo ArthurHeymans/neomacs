@@ -1749,6 +1749,12 @@ pub const PHP_MODE_MELPA_PIN: (&str, &str) = ("php-mode", "20260719.209");
 /// pinned to upstream commit 37beef404c70d7b80dc085b1ee1e13fd9c375fe6.
 pub const PHP_RUNTIME_MELPA_PIN: (&str, &str) = ("php-runtime", "20241024.1622");
 
+/// The exact Pfuture package selected for practical asynchronous stdout/stderr,
+/// timeout, parallel-await, callback, working-directory, custom-filter,
+/// startup-failure, and cleanup parity. MELPA built this archive from upstream
+/// commit `19b53aebbc0f2da31de6326c495038901bffb73c`.
+pub const PFUTURE_MELPA_PIN: (&str, &str) = ("pfuture", "20220913.1401");
+
 /// The exact Pinyinlib package selected for practical contact, locale,
 /// punctuation, literal-metacharacter, buffer-navigation, and case-folding
 /// search parity. This MELPA version is pinned to upstream commit

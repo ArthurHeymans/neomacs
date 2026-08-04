@@ -77,7 +77,7 @@ rank	package	downloads	status
 76	package-lint	1135055	covered
 77	helm-swoop	1113675	covered
 78	lsp-ui	1112815	covered
-79	pfuture	1088448	todo
+79	pfuture	1088448	covered
 80	paredit	1081462	todo
 81	paradox	1076624	todo
 82	auto-highlight-symbol	1057915	covered
