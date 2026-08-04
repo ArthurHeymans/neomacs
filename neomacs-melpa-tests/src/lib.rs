@@ -1860,6 +1860,12 @@ pub const DUMB_JUMP_MELPA_PIN: (&str, &str) = ("dumb-jump", "20260603.1700");
 /// `4b1346eb9a8a76ee9c9dede69738c63ad97ac5b6`.
 pub const FLX_MELPA_PIN: (&str, &str) = ("flx", "20240205.356");
 
+/// The exact Volatile Highlights package selected for practical clipboard,
+/// replacement, transposition, undo, deletion, custom-extension, and xref
+/// feedback parity. MELPA built this archive from upstream commit
+/// `f68ac37451c1226d6f13c1b299ec7516f74888a1`.
+pub const VOLATILE_HIGHLIGHTS_MELPA_PIN: (&str, &str) = ("volatile-highlights", "20260315.1109");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");

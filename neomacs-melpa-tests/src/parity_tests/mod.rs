@@ -387,6 +387,7 @@ mod treemacs;
 mod two_bit;
 mod upstream_package_ert;
 mod use_package;
+mod volatile_highlights;
 mod web_completion_data;
 mod web_mode;
 mod websocket;
