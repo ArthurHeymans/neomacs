@@ -35,12 +35,11 @@ const APHELEIA_TEST_PRELUDE: &str = r##"
     (delete-directory root t)))
 
 (defun apheleia-test-await (predicate description)
-  (let ((attempts 0))
+  (let ((deadline (+ (float-time) 30.0)))
     (while
         (and
          (not (funcall predicate))
-         (< attempts 1000))
-      (setq attempts (1+ attempts))
+         (< (float-time) deadline))
       (accept-process-output nil 0.01))
     (unless
         (funcall predicate)
