@@ -2684,7 +2684,8 @@ pub(crate) fn builtin_rename_buffer(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("rename-buffer", &args, 1, 2)?;
-    let name = expect_string_lossy(&args[0])?;
+    let requested_name = args[0];
+    let name = expect_string_lossy(&requested_name)?;
 
     if name.is_empty() {
         return Err(signal(
@@ -2693,39 +2694,39 @@ pub(crate) fn builtin_rename_buffer(
         ));
     }
 
-    let current_id = match eval.buffers.current_buffer() {
-        Some(buf) => buf.id,
+    let (current_id, old_name) = match eval.buffers.current_buffer() {
+        Some(buf) => (buf.id, buf.name_value()),
         None => {
             return Err(signal("error", vec![Value::string("No current buffer")]));
         }
     };
+    let old_name_text = expect_string_lossy(&old_name)?;
 
     let unique = args.get(1).copied().unwrap_or(Value::NIL);
 
     let new_name = match eval.buffers.find_buffer_by_name(&name) {
-        Some(existing_id) if existing_id == current_id => {
-            // Already has this name, just return it
-            name
+        Some(existing_id) if existing_id == current_id && unique.is_nil() => {
+            // GNU returns the buffer's stored name object, not an equal string
+            // supplied by the caller, and performs no rename side effects.
+            return Ok(old_name);
         }
         Some(_other_id) => {
-            // Name is taken by a different buffer
             if unique.is_nil() {
                 return Err(signal(
                     "error",
                     vec![Value::string(format!("Buffer name `{}' is in use", name))],
                 ));
             }
-            eval.buffers.generate_new_buffer_name(&name)
+            super::buffers::generate_new_buffer_name_value_in_state(
+                &eval.buffers,
+                requested_name,
+                Some(&old_name_text),
+            )?
         }
-        None => {
-            // Name is free
-            name
-        }
+        None => requested_name,
     };
 
-    let _ = eval
-        .buffers
-        .rename_buffer(current_id, Value::string(new_name.clone()));
+    let _ = eval.buffers.rename_buffer(current_id, new_name);
 
     // GNU `Frename_buffer` (buffer.c:1726) runs `buffer-list-update-hook'
     // after updating the buffer's name in `Vbuffer_alist', unless the buffer
@@ -2735,7 +2736,13 @@ pub(crate) fn builtin_rename_buffer(
         super::buffers::run_buffer_list_update_hook(eval)?;
     }
 
-    Ok(Value::string(new_name))
+    // Hooks may themselves rename the buffer. GNU refetches the slot after
+    // running them rather than returning a stale local copy.
+    Ok(eval
+        .buffers
+        .get(current_id)
+        .map(|buffer| buffer.name_value())
+        .unwrap_or(Value::NIL))
 }
 
 pub(crate) fn builtin_set_buffer_major_mode(

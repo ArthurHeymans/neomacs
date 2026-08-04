@@ -5651,6 +5651,100 @@ fn pure_dispatch_buffer_placeholder_mutators_match_compat_contracts() {
 }
 
 #[test]
+fn rename_and_generate_buffer_names_preserve_lisp_string_identity_and_properties_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let current_id = eval.buffers.create_buffer("origin");
+    eval.buffers.set_current(current_id);
+
+    let free_name = Value::string("named");
+    let mut free_properties = crate::buffer::text_props::TextPropertyTable::new();
+    put_string_property(
+        &mut free_properties,
+        0,
+        5,
+        Value::symbol("face"),
+        Value::symbol("bold"),
+    );
+    crate::emacs_core::value::set_string_text_properties_table_for_value(
+        free_name,
+        free_properties,
+    );
+
+    let generated = builtin_generate_new_buffer_name(&mut eval, vec![free_name])
+        .expect("an unused buffer name should be accepted");
+    assert!(
+        crate::emacs_core::value::eq_value(&free_name, &generated),
+        "GNU returns the supplied string object when the name is unused"
+    );
+
+    let renamed = dispatch_builtin(&mut eval, "rename-buffer", vec![free_name])
+        .expect("rename-buffer should resolve")
+        .expect("rename-buffer should accept a propertized name");
+    assert!(
+        crate::emacs_core::value::eq_value(&free_name, &renamed),
+        "GNU returns the exact supplied string for a free name"
+    );
+    assert!(crate::emacs_core::value::eq_value(
+        &free_name,
+        &eval
+            .buffers
+            .get(current_id)
+            .expect("current buffer")
+            .name_value()
+    ));
+
+    let equal_but_distinct_name = Value::string("named");
+    let same = dispatch_builtin(&mut eval, "rename-buffer", vec![equal_but_distinct_name])
+        .expect("rename-buffer should resolve")
+        .expect("renaming to the current text should succeed");
+    assert!(
+        crate::emacs_core::value::eq_value(&free_name, &same),
+        "GNU returns the already-stored name object for a non-unique no-op"
+    );
+
+    let occupied_id = eval.buffers.create_buffer("taken");
+    assert_ne!(occupied_id, current_id);
+    let colliding_name = Value::string("taken");
+    let mut colliding_properties = crate::buffer::text_props::TextPropertyTable::new();
+    put_string_property(
+        &mut colliding_properties,
+        0,
+        5,
+        Value::symbol("face"),
+        Value::symbol("italic"),
+    );
+    crate::emacs_core::value::set_string_text_properties_table_for_value(
+        colliding_name,
+        colliding_properties,
+    );
+
+    let unique = dispatch_builtin(&mut eval, "rename-buffer", vec![colliding_name, Value::T])
+        .expect("rename-buffer should resolve")
+        .expect("unique rename should resolve a collision");
+    assert_eq!(unique.as_utf8_str(), Some("taken<2>"));
+    let properties = crate::emacs_core::value::get_string_text_properties_table_for_value(unique)
+        .expect("the original name span should retain its face");
+    assert_eq!(
+        properties.get_property_at_char_pos(crate::buffer::CharPos0::new(0), Value::symbol("face")),
+        Some(Value::symbol("italic"))
+    );
+    assert_eq!(
+        properties.get_property_at_char_pos(crate::buffer::CharPos0::new(5), Value::symbol("face")),
+        None,
+        "GNU does not extend the source name's property over the generated suffix"
+    );
+    assert!(crate::emacs_core::value::eq_value(
+        &unique,
+        &eval
+            .buffers
+            .get(current_id)
+            .expect("renamed buffer")
+            .name_value()
+    ));
+}
+
+#[test]
 fn eval_dispatch_set_buffer_major_mode_runs_default_mode_function() {
     crate::test_utils::init_test_tracing();
     use crate::emacs_core::load::create_bootstrap_evaluator_cached;

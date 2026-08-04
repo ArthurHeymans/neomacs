@@ -4651,12 +4651,32 @@ pub(crate) fn builtin_generate_new_buffer_name(
             vec![Value::symbol("stringp"), args[1]],
         ));
     }
-    let base = expect_string_lossy(&args[0])?;
     let ignore = args.get(1).and_then(|v| v.as_utf8_str());
-    Ok(Value::string(
-        eval.buffers
-            .generate_new_buffer_name_ignoring(&base, ignore),
-    ))
+    generate_new_buffer_name_value_in_state(&eval.buffers, args[0], ignore)
+}
+
+/// Return GNU `generate-new-buffer-name`'s Lisp string result.
+///
+/// Buffer identity is indexed by the decoded name text, but the public name is
+/// a Lisp string object whose identity and text properties are observable.
+/// Keep those two concerns separate: the manager chooses the unique text;
+/// this boundary reuses BASE when possible and appends only the generated
+/// suffix when allocation is necessary, just like GNU's `concat2` path.
+pub(crate) fn generate_new_buffer_name_value_in_state(
+    buffers: &crate::buffer::BufferManager,
+    base: Value,
+    ignore: Option<&str>,
+) -> EvalResult {
+    let base_text = expect_string_lossy(&base)?;
+    let generated = buffers.generate_new_buffer_name_ignoring(&base_text, ignore);
+    if generated == base_text {
+        return Ok(base);
+    }
+
+    let suffix = generated
+        .strip_prefix(&base_text)
+        .expect("BufferManager must generate a name by appending to its base");
+    super::strings::builtin_concat_slice(&[base, Value::string(suffix)])
 }
 
 /// (bufferp OBJECT) → t or nil
