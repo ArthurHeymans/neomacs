@@ -787,13 +787,13 @@ pub(crate) fn builtin_internal_labeled_narrow_to_region_in_buffers(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("internal--labeled-narrow-to-region", &args, 3)?;
-    let start = super::buffers::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
-    let end = super::buffers::expect_integer_or_marker_in_buffers(buffers, &args[1])?;
+    let start = super::super::buffer::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let end = super::super::buffer::expect_integer_or_marker_in_buffers(buffers, &args[1])?;
     let label = args[2];
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let byte_range = super::buffers::normalize_narrow_region_in_buffers(
+    let byte_range = super::super::buffer::normalize_narrow_region_in_buffers(
         buffers,
         current_id,
         LispCharPos1::new(start),
@@ -994,20 +994,20 @@ fn describe_vector_insert_entry(
     first: &mut bool,
 ) -> EvalResult {
     if *first {
-        super::buffers::builtin_insert(eval, vec![Value::string("\n")])?;
+        super::super::buffer::builtin_insert(eval, vec![Value::string("\n")])?;
         *first = false;
     }
 
     let key_text = describe_vector_key_name(key);
-    super::buffers::builtin_insert(eval, vec![Value::string(&key_text)])?;
+    super::super::buffer::builtin_insert(eval, vec![Value::string(&key_text)])?;
 
     // GNU keymap.c:describe_vector_princ indents to column 16 with minimum
     // one separating column before calling the element describer.
     let key_width = key_text.chars().count();
     let spaces = if key_width < 16 { 16 - key_width } else { 1 };
-    super::buffers::builtin_insert(eval, vec![Value::string(" ".repeat(spaces))])?;
+    super::super::buffer::builtin_insert(eval, vec![Value::string(" ".repeat(spaces))])?;
     eval.apply(formatter, vec![value])?;
-    super::buffers::builtin_insert(eval, vec![Value::string("\n")])?;
+    super::super::buffer::builtin_insert(eval, vec![Value::string("\n")])?;
     Ok(Value::NIL)
 }
 

@@ -12,7 +12,7 @@
 //! and the GNU `replace-buffer-contents` wrapper that delegates to the
 //! `replace-region-contents` builtin) rather than the full loadup bootstrap.
 
-use super::buffers::{ReplaceRegionChangeRun, replace_region_minimal_change_runs};
+use super::super::buffer::{ReplaceRegionChangeRun, replace_region_minimal_change_runs};
 use crate::emacs_core::Context;
 use crate::emacs_core::format_eval_result;
 use crate::test_utils::load_minimal_gnu_backquote_runtime;

@@ -7,7 +7,7 @@
 //!
 //! Variables: `tab-width`, `indent-tabs-mode`, `standard-indent`, `tab-stop-list`
 
-use super::builtins::buffers::{extract_cons_fixnums, point_char_pos};
+use super::buffer::{extract_cons_fixnums, point_char_pos};
 use super::xdisp::line_number_digit_width;
 use crate::buffer::LispCharPos1;
 use crate::window::Window;

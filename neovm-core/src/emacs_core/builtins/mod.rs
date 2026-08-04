@@ -22,7 +22,7 @@ pub(super) use super::keyboard::pure::{
     key_sequence_values,
 };
 pub(super) use super::value::*;
-pub(crate) use buffers::lisp_string_from_buffer_bytes;
+pub(crate) use super::buffer::lisp_string_from_buffer_bytes;
 pub(super) use std::cell::RefCell;
 pub(super) use std::collections::{HashMap, HashSet};
 pub(crate) use strings::downcase_char_code_emacs_compat;
@@ -421,9 +421,9 @@ pub(crate) mod collections;
 mod cons_list;
 mod effects;
 pub(crate) mod from_value;
-mod misc_pure;
-mod strings;
-mod types;
+pub(crate) mod misc_pure;
+pub(crate) mod strings;
+pub(crate) mod types;
 
 pub(crate) use arithmetic::*;
 pub(crate) use buffer_text_backend::*;
@@ -442,7 +442,6 @@ pub(crate) use types::*;
 // primitive bodies (`builtin_point_0`, `builtin_char_after`, ...) by name
 // instead of reimplementing them (matches the sibling `navigation`/`editfns`/
 // `search` modules, already crate-visible).
-pub(crate) mod buffers;
 mod file_notify;
 pub(crate) mod fringe_bitmap;
 pub(crate) mod fringe_standard_bitmaps;
@@ -457,7 +456,7 @@ mod stubs;
 pub(crate) mod symbols;
 mod treesit;
 
-pub(crate) use buffers::*;
+pub(crate) use super::buffer::*;
 pub(crate) use file_notify::*;
 pub(crate) use higher_order::*;
 pub(crate) use hooks::*;
@@ -2617,83 +2616,83 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "next-overlay-change",
-        super::textprop::builtin_next_overlay_change,
+        super::buffer::builtin_next_overlay_change,
         1,
         Some(1),
     );
     ctx.defsubr(
         "previous-overlay-change",
-        super::textprop::builtin_previous_overlay_change,
+        super::buffer::builtin_previous_overlay_change,
         1,
         Some(1),
     );
     ctx.defsubr(
         "make-overlay",
-        super::textprop::builtin_make_overlay,
+        super::buffer::builtin_make_overlay,
         2,
         Some(5),
     );
     ctx.defsubr(
         "delete-overlay",
-        super::textprop::builtin_delete_overlay,
+        super::buffer::builtin_delete_overlay,
         1,
         Some(1),
     );
     ctx.defsubr(
         "overlay-put",
-        super::textprop::builtin_overlay_put,
+        super::buffer::builtin_overlay_put,
         3,
         Some(3),
     );
     ctx.defsubr(
         "overlay-get",
-        super::textprop::builtin_overlay_get,
+        super::buffer::builtin_overlay_get,
         2,
         Some(2),
     );
     ctx.defsubr(
         "overlays-at",
-        super::textprop::builtin_overlays_at,
+        super::buffer::builtin_overlays_at,
         1,
         Some(2),
     );
     ctx.defsubr(
         "overlays-in",
-        super::textprop::builtin_overlays_in,
+        super::buffer::builtin_overlays_in,
         2,
         Some(2),
     );
     ctx.defsubr(
         "move-overlay",
-        super::textprop::builtin_move_overlay,
+        super::buffer::builtin_move_overlay,
         3,
         Some(4),
     );
     ctx.defsubr(
         "overlay-start",
-        super::textprop::builtin_overlay_start,
+        super::buffer::builtin_overlay_start,
         1,
         Some(1),
     );
     ctx.defsubr(
         "overlay-end",
-        super::textprop::builtin_overlay_end,
+        super::buffer::builtin_overlay_end,
         1,
         Some(1),
     );
     ctx.defsubr(
         "overlay-buffer",
-        super::textprop::builtin_overlay_buffer,
+        super::buffer::builtin_overlay_buffer,
         1,
         Some(1),
     );
     ctx.defsubr(
         "overlay-properties",
-        super::textprop::builtin_overlay_properties,
+        super::buffer::builtin_overlay_properties,
         1,
         Some(1),
     );
-    ctx.defsubr("overlayp", super::textprop::builtin_overlayp, 1, Some(1));
+    ctx.defsubr("overlayp", super::buffer::builtin_overlayp, 1, Some(1));
     ctx.defsubr("bobp", super::navigation::builtin_bobp, 0, Some(0));
     ctx.defsubr("eobp", super::navigation::builtin_eobp, 0, Some(0));
     ctx.defsubr("bolp", super::navigation::builtin_bolp, 0, Some(0));
@@ -5898,13 +5897,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "overlay-lists",
-        super::textprop::builtin_overlay_lists,
+        super::buffer::builtin_overlay_lists,
         0,
         Some(0),
     );
     ctx.defsubr(
         "overlay-recenter",
-        super::textprop::builtin_overlay_recenter,
+        super::buffer::builtin_overlay_recenter,
         1,
         Some(1),
     );
@@ -5997,7 +5996,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "recent-auto-save-p",
-        buffers::builtin_recent_auto_save_p,
+        super::buffer::builtin_recent_auto_save_p,
         0,
         Some(0),
     );
@@ -6055,7 +6054,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "restore-buffer-modified-p",
-        buffers::builtin_restore_buffer_modified_p,
+        super::buffer::builtin_restore_buffer_modified_p,
         1,
         Some(1),
     );
@@ -6067,7 +6066,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "set-buffer-auto-saved",
-        buffers::builtin_set_buffer_auto_saved,
+        super::buffer::builtin_set_buffer_auto_saved,
         0,
         Some(0),
     );

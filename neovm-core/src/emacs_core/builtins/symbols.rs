@@ -2748,7 +2748,7 @@ pub(crate) fn builtin_rename_buffer(
                     vec![Value::string(format!("Buffer name `{}' is in use", name))],
                 ));
             }
-            super::buffers::generate_new_buffer_name_value_in_state(
+            super::super::buffer::generate_new_buffer_name_value_in_state(
                 &eval.buffers,
                 requested_name,
                 Some(&old_name_text),
@@ -2764,7 +2764,7 @@ pub(crate) fn builtin_rename_buffer(
     // has hooks inhibited.  This also makes `set-visited-file-name' (which
     // renames the buffer via `rename-buffer') fire the hook like GNU.
     if !eval.buffers.buffer_hooks_inhibited(current_id) {
-        super::buffers::run_buffer_list_update_hook(eval)?;
+        super::super::buffer::run_buffer_list_update_hook(eval)?;
     }
 
     // Hooks may themselves rename the buffer. GNU refetches the slot after
@@ -5289,7 +5289,7 @@ pub(crate) fn builtin_internal_describe_syntax_value(
         "deeper char-table ...".to_string()
     } else if let Some((syntax_code, matching)) = syntax_descriptor_parts(syntax) {
         let Some(class) = crate::emacs_core::syntax::SyntaxClass::from_code(syntax_code) else {
-            super::buffers::builtin_insert(eval, vec![Value::string("invalid")])?;
+            super::super::buffer::builtin_insert(eval, vec![Value::string("invalid")])?;
             return Ok(syntax);
         };
         let flags = crate::emacs_core::syntax::SyntaxFlags::new(((syntax_code >> 16) & 0xff) as u8);
@@ -5300,7 +5300,7 @@ pub(crate) fn builtin_internal_describe_syntax_value(
         } else if let Some(ch) = matching.as_fixnum().and_then(|n| char::from_u32(n as u32)) {
             out.push(ch);
         } else {
-            super::buffers::builtin_insert(eval, vec![Value::string("invalid")])?;
+            super::super::buffer::builtin_insert(eval, vec![Value::string("invalid")])?;
             return Ok(syntax);
         }
         if flags.contains(crate::emacs_core::syntax::SyntaxFlags::COMMENT_START_FIRST) {
@@ -5363,7 +5363,7 @@ pub(crate) fn builtin_internal_describe_syntax_value(
     } else {
         "invalid".to_string()
     };
-    super::buffers::builtin_insert(eval, vec![Value::string(text)])?;
+    super::super::buffer::builtin_insert(eval, vec![Value::string(text)])?;
     Ok(syntax)
 }
 

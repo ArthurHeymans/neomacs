@@ -221,7 +221,7 @@ fn search_bound_in_manager(
     buf: &crate::buffer::Buffer,
     value: &Value,
 ) -> Result<SearchBound, Flow> {
-    let lisp_pos = LispCharPos1::new(super::buffers::expect_integer_or_marker_in_buffers(
+    let lisp_pos = LispCharPos1::new(super::super::buffer::expect_integer_or_marker_in_buffers(
         buffers, value,
     )?);
     Ok(SearchBound {

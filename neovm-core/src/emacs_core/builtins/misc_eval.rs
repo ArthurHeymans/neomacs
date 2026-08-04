@@ -27,7 +27,7 @@ pub(crate) fn builtin_get_pos_property_impl(
 ) -> EvalResult {
     expect_min_args("get-pos-property", &args, 2)?;
     expect_max_args("get-pos-property", &args, 3)?;
-    let pos = super::buffers::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let pos = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let prop = super::textprop::expect_property_key(&args[1])?;
 
     if let Some(str_val) = args.get(2).filter(|v| v.is_string()) {
@@ -93,12 +93,12 @@ pub(crate) fn builtin_next_char_property_change_in_buffers(
     // GNU: temp = next-overlay-change(POS); if LIMIT < temp, temp = LIMIT;
     // return next-property-change(POS, nil, temp).
     let overlay_next =
-        super::textprop::builtin_next_overlay_change_in_buffers(buffers, vec![args[0]])?;
+        crate::emacs_core::buffer::builtin_next_overlay_change_in_buffers(buffers, vec![args[0]])?;
     let mut temp = overlay_next;
     if let Some(limit) = args.get(1)
         && !limit.is_nil()
     {
-        let lim_int = super::buffers::expect_integer_or_marker_in_buffers(buffers, limit)?;
+        let lim_int = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, limit)?;
         if let Some(temp_int) = temp.as_fixnum()
             && lim_int < temp_int
         {
@@ -143,7 +143,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
     expect_min_args("previous-property-change", &args, 1)?;
     expect_max_args("previous-property-change", &args, 3)?;
 
-    let pos = super::buffers::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let pos = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
 
     // --- String OBJECT ---
     if let Some(str_val) = args.get(1).filter(|v| v.is_string()) {
@@ -154,7 +154,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
         let char_pos = textprop::validate_string_point_raw(s, pos, args[0])?;
         let (limit_pos, limit_val) = match args.get(2) {
             Some(v) if !v.is_nil() => {
-                let lim_int = super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?;
+                let lim_int = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, v)?;
                 (Some(lim_int), Some(lim_int))
             }
             _ => (None, None),
@@ -219,7 +219,7 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
 
     let (limit_pos, limit_val) = match args.get(2) {
         Some(v) if !v.is_nil() => {
-            let limit = super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?;
+            let limit = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, v)?;
             (Some(limit), Some(limit))
         }
         _ => (None, None),
@@ -275,12 +275,12 @@ pub(crate) fn builtin_previous_char_property_change_in_buffers(
     // GNU: temp = previous-overlay-change(POS); if LIMIT > temp, temp = LIMIT;
     // return previous-property-change(POS, nil, temp).
     let overlay_prev =
-        super::textprop::builtin_previous_overlay_change_in_buffers(buffers, vec![args[0]])?;
+        crate::emacs_core::buffer::builtin_previous_overlay_change_in_buffers(buffers, vec![args[0]])?;
     let mut temp = overlay_prev;
     if let Some(limit) = args.get(1)
         && !limit.is_nil()
     {
-        let lim_int = super::buffers::expect_integer_or_marker_in_buffers(buffers, limit)?;
+        let lim_int = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, limit)?;
         if let Some(temp_int) = temp.as_fixnum()
             && lim_int > temp_int
         {
@@ -395,7 +395,7 @@ pub(crate) fn builtin_next_single_char_property_change_in_buffers(
         return Ok(Value::fixnum(s.schars() as i64));
     }
 
-    let position = super::buffers::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let position = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let prop = super::textprop::expect_property_key(&args[1])?;
     let object = args.get(2);
     let buf_id = char_property_buffer_id_for_object(frames, buffers, object)?;
@@ -411,7 +411,7 @@ pub(crate) fn builtin_next_single_char_property_change_in_buffers(
     let initial_value =
         super::textprop::builtin_get_char_property_with_frames(obarray, buffers, frames, get_args)?;
     let limit = match args.get(3) {
-        Some(v) if !v.is_nil() => super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?,
+        Some(v) if !v.is_nil() => crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, v)?,
         _ => point_max,
     };
 
@@ -477,7 +477,7 @@ pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
         return Ok(Value::fixnum(0));
     }
 
-    let position = super::buffers::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let position = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let prop = super::textprop::expect_property_key(&args[1])?;
     let object = args.get(2);
     let buf_id = char_property_buffer_id_for_object(frames, buffers, object)?;
@@ -487,7 +487,7 @@ pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
     let accessible = buf.accessible_emacs_byte_region();
     let point_min = textprop::byte_to_elisp_pos(buf, accessible.start());
     let limit = match args.get(3) {
-        Some(v) if !v.is_nil() => super::buffers::expect_integer_or_marker_in_buffers(buffers, v)?,
+        Some(v) if !v.is_nil() => crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, v)?,
         _ => point_min,
     };
 
@@ -764,7 +764,7 @@ pub(crate) fn builtin_eval_2(
 /// `buffer_defaults` → obarray `find_symbol_value`. Any `Err`
 /// (void-variable) is normalized to `None` for the legacy
 /// `Option`-returning callsites.
-pub(super) fn dynamic_or_global_symbol_value(
+pub(crate) fn dynamic_or_global_symbol_value(
     eval: &super::eval::Context,
     name: &str,
 ) -> Option<Value> {
@@ -1187,7 +1187,7 @@ pub(crate) fn builtin_bury_buffer_internal(
     // `buffer-list-update-hook' after moving BUFFER to the end of the buffer
     // lists, unless that buffer has hooks inhibited.
     if moved && !eval.buffers.buffer_hooks_inhibited(id) {
-        super::buffers::run_buffer_list_update_hook(eval)?;
+        crate::emacs_core::buffer::run_buffer_list_update_hook(eval)?;
     }
     Ok(Value::NIL)
 }

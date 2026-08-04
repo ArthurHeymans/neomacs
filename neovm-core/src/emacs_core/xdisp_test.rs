@@ -2017,7 +2017,7 @@ fn test_window_text_pixel_size_measures_overlay_before_string_at_point_max() {
 
     // Zero-length overlay at point-max with the candidate `before-string`,
     // mirroring `(make-overlay (point-max) (point-max) nil t t)`.
-    let overlay = crate::emacs_core::textprop::builtin_make_overlay(
+    let overlay = crate::emacs_core::buffer::builtin_make_overlay(
         &mut eval,
         vec![
             Value::fixnum(point_max),
@@ -2028,7 +2028,7 @@ fn test_window_text_pixel_size_measures_overlay_before_string_at_point_max() {
         ],
     )
     .expect("make candidates overlay");
-    crate::emacs_core::textprop::builtin_overlay_put(
+    crate::emacs_core::buffer::builtin_overlay_put(
         &mut eval,
         vec![overlay, Value::symbol("before-string"), before_string],
     )

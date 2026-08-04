@@ -2019,12 +2019,12 @@ pub extern "C" fn neovm_jit_cbsym_read(
         // DELEGATE to the builtin body (GC-free OK path). match-beginning/end read
         // ctx.match_data through the same published-register interface, so a
         // separate register-read reimplementation could drift from Lisp.
-        use crate::emacs_core::builtins::{buffers, search};
+        use crate::emacs_core::builtins::search;
         use crate::emacs_core::{editfns, navigation};
         let res = match which {
-            CBSYM_A_POINT => buffers::builtin_point_0(ctx),
-            CBSYM_A_POINT_MIN => buffers::builtin_point_min_0(ctx),
-            CBSYM_A_POINT_MAX => buffers::builtin_point_max_0(ctx),
+            CBSYM_A_POINT => crate::emacs_core::buffer::builtin_point_0(ctx),
+            CBSYM_A_POINT_MIN => crate::emacs_core::buffer::builtin_point_min_0(ctx),
+            CBSYM_A_POINT_MAX => crate::emacs_core::buffer::builtin_point_max_0(ctx),
             CBSYM_A_BOLP => navigation::builtin_bolp(ctx, Vec::new()),
             CBSYM_A_EOLP => navigation::builtin_eolp(ctx, Vec::new()),
             CBSYM_A_BOBP => navigation::builtin_bobp(ctx, Vec::new()),
@@ -2032,7 +2032,7 @@ pub extern "C" fn neovm_jit_cbsym_read(
             CBSYM_A_FOLLOWING_CHAR => editfns::builtin_following_char_0(ctx),
             CBSYM_A_PRECEDING_CHAR => editfns::builtin_preceding_char(ctx, Vec::new()),
             // Tier-A char-after is 0-arg (nargs gated above): reads at point.
-            CBSYM_A_CHAR_AFTER => buffers::builtin_char_after(ctx, Vec::new()),
+            CBSYM_A_CHAR_AFTER => crate::emacs_core::buffer::builtin_char_after(ctx, Vec::new()),
             CBSYM_A_MATCH_BEGINNING => {
                 // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
                 let group = Value::from_bits(unsafe { *args_ptr } as usize);

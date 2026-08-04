@@ -9,7 +9,7 @@ use tree_sitter::{
 use tree_sitter_language::LanguageFn;
 
 use crate::buffer::{Buffer, BufferId, EmacsBytePos, EmacsByteRange, LispCharPos1};
-use crate::emacs_core::builtins::buffers::expect_buffer_id;
+use crate::emacs_core::buffer::expect_buffer_id;
 use crate::emacs_core::emacs_char::byte_to_char_pos;
 use crate::emacs_core::intern::{NIL_SYM_ID, SymId, resolve_sym};
 use crate::emacs_core::treesit::{

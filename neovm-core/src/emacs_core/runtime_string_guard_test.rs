@@ -5,7 +5,7 @@ fn migrated_string_subsystems_do_not_call_generic_runtime_string_adapter_directl
         ("abbrev.rs", include_str!("abbrev.rs")),
         ("autoload.rs", include_str!("autoload.rs")),
         ("bookmark.rs", include_str!("bookmark.rs")),
-        ("builtins/buffers.rs", include_str!("builtins/buffers.rs")),
+        ("buffer.rs", include_str!("buffer.rs")),
         (
             "builtins/misc_eval.rs",
             include_str!("builtins/misc_eval.rs"),

@@ -7,7 +7,7 @@ use crate::emacs_core::editfns::{
     builtin_delete_and_extract_region, builtin_delete_region, builtin_erase_buffer,
 };
 use crate::emacs_core::intern::intern_uninterned;
-use crate::emacs_core::textprop::builtin_make_overlay;
+use crate::emacs_core::buffer::builtin_make_overlay;
 use crate::emacs_core::treesit as runtime_treesit;
 use crate::emacs_core::value::{
     HashTableTest, LambdaData, LambdaParams, StringTextPropertyRun, Value, ValueKind,
@@ -17174,7 +17174,7 @@ fn overlay_put_and_move_bump_overlay_modified_tick() {
         .expect("make-overlay");
 
     let before = eval.buffers.get(buffer_id).unwrap().overlay_modified_tick();
-    crate::emacs_core::textprop::builtin_overlay_put(
+    crate::emacs_core::buffer::builtin_overlay_put(
         &mut eval,
         vec![overlay, Value::symbol("face"), Value::symbol("bold")],
     )
@@ -17185,7 +17185,7 @@ fn overlay_put_and_move_bump_overlay_modified_tick() {
         "overlay-put must bump the overlay tick ({before} -> {after_put})"
     );
 
-    crate::emacs_core::textprop::builtin_move_overlay(
+    crate::emacs_core::buffer::builtin_move_overlay(
         &mut eval,
         vec![overlay, Value::fixnum(5), Value::fixnum(8)],
     )

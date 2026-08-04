@@ -1051,7 +1051,7 @@ pub(crate) fn builtin_set_window_configuration(
                 .current_buffer_id()
                 .map(Value::make_buffer)
                 .unwrap_or(Value::NIL);
-            let substitute = super::buffers::other_buffer_impl_in_state(
+            let substitute = super::super::buffer::other_buffer_impl_in_state(
                 &mut eval.frames,
                 &mut eval.buffers,
                 vec![avoid, Value::NIL, Value::NIL],

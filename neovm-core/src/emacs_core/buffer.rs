@@ -1,5 +1,5 @@
 use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range, expect_fixnum};
-use super::*;
+use super::builtins::*;
 
 // ===========================================================================
 // Buffer operations (require evaluator for BufferManager access)
@@ -25,7 +25,7 @@ pub(crate) struct MakeIndirectBufferPlan {
     pub(crate) run_clone_hook: bool,
 }
 
-pub(super) fn expect_buffer_id(value: &Value) -> Result<BufferId, Flow> {
+pub(crate) fn expect_buffer_id(value: &Value) -> Result<BufferId, Flow> {
     match value.kind() {
         ValueKind::Veclike(VecLikeType::Buffer) => Ok(value.as_buffer_id().unwrap()),
         _other => Err(signal(
@@ -1663,7 +1663,7 @@ pub(crate) fn builtin_replace_region_contents(
     // wrapped in `save-excursion` + `save-restriction` so the narrowing and
     // point are restored afterwards.  (This SOURCE form is deprecated in GNU.)
     let mut source = args[2];
-    if super::types::builtin_functionp_1(eval, source)?.is_truthy() {
+    if super::builtins::types::builtin_functionp_1(eval, source)?.is_truthy() {
         let count = eval.specpdl.len();
         eval.record_save_excursion();
         if let Some(state) = eval.buffers.save_current_restriction_state() {
@@ -1803,7 +1803,7 @@ pub(crate) fn builtin_replace_region_contents(
         let replacement = if run.b_start == run.b_end {
             Value::string("")
         } else {
-            super::strings::builtin_substring(vec![
+            super::builtins::strings::builtin_substring(vec![
                 source_value,
                 Value::fixnum(run.b_start as i64),
                 Value::fixnum(run.b_end as i64),
@@ -2152,7 +2152,7 @@ pub(crate) fn builtin_compare_buffer_substrings(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let case_fold = super::misc_eval::dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = super::builtins::misc_eval::dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|value| !value.is_nil())
         .unwrap_or(true);
     builtin_compare_buffer_substrings_with_case_fold(case_fold, &eval.buffers, args)
@@ -2325,7 +2325,7 @@ pub(crate) fn builtin_constrain_to_field(
     // dired's font-lock calls once per line: 6 property lookups plus 4 `field`
     // symbol interns on every call, all of them thrown away.
     let inhibit_field_text_motion =
-        super::misc_eval::dynamic_or_global_symbol_value(eval, "inhibit-field-text-motion")
+        super::builtins::misc_eval::dynamic_or_global_symbol_value(eval, "inhibit-field-text-motion")
             .is_some_and(|value| !value.is_nil());
 
     let mut constrain = !inhibit_field_text_motion && new_pos != old_pos;
@@ -2908,7 +2908,7 @@ fn buffer_insert_char_codes(
     string: &crate::heap_types::LispString,
     target_multibyte: bool,
 ) -> Vec<u32> {
-    let mut codes = super::lisp_string_char_codes(string);
+    let mut codes = super::builtins::lisp_string_char_codes(string);
     if target_multibyte {
         if !string.is_multibyte() {
             for code in &mut codes {
@@ -3223,7 +3223,7 @@ pub(crate) fn apply_inherited_text_properties(
     let props = buffers
         .get(current_id)
         .map(|buf| {
-            super::misc_eval::inherited_text_properties_for_inserted_range_in_state(
+            super::builtins::misc_eval::inherited_text_properties_for_inserted_range_in_state(
                 obarray, dynamic, buf, old_pt, text_len,
             )
         })
@@ -3538,7 +3538,7 @@ pub(crate) fn insert_string_value_in_current_buffer(
     )
 }
 
-pub(super) fn insert_char_code_from_value(value: &Value) -> Result<i64, Flow> {
+pub(crate) fn insert_char_code_from_value(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
         ValueKind::Fixnum(c) => Ok(c),
         _other => Err(signal(
@@ -4042,7 +4042,7 @@ pub(crate) fn builtin_set_buffer_modified_p(
     let _ = eval
         .buffers
         .restore_buffer_modified_state(current_id, args[0]);
-    super::misc_pure::builtin_force_mode_line_update(eval, vec![Value::NIL])
+    super::builtins::misc_pure::builtin_force_mode_line_update(eval, vec![Value::NIL])
 }
 
 pub(crate) fn builtin_restore_buffer_modified_p(
@@ -4397,7 +4397,7 @@ pub(crate) fn generate_new_buffer_name_value_in_state(
     let suffix = generated
         .strip_prefix(&base_text)
         .expect("BufferManager must generate a name by appending to its base");
-    super::strings::builtin_concat_slice(&[base, Value::string(suffix)])
+    super::builtins::strings::builtin_concat_slice(&[base, Value::string(suffix)])
 }
 
 /// (bufferp OBJECT) → t or nil
@@ -4579,7 +4579,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
             return Ok(Value::fixnum(string.as_bytes()[pos] as i64));
         }
         // Use lisp_string_char_codes which handles sentinel translation
-        let codes = super::lisp_string_char_codes(string);
+        let codes = super::builtins::lisp_string_char_codes(string);
         let code = codes[pos];
         return get_byte_from_multibyte_char_code(code);
     }
@@ -4698,4 +4698,497 @@ pub(crate) fn builtin_buffer_local_value(
             .find_symbol_value(resolved_id)
             .ok_or_else(|| signal(LispCondition::VoidVariable, vec![original_arg])),
     }
+}
+
+// ===========================================================================
+// Overlay builtins (GNU buffer.c hosts the overlay DEFUN family; the
+// position-coercion helpers stay with the interval machinery in textprop.rs)
+// ===========================================================================
+use super::textprop::{
+    byte_to_elisp_pos, current_buffer_id_in_buffers, elisp_pos_to_byte_clipped_full,
+    elisp_range_to_byte_clipped_full, ensure_marker_points_into_buffer,
+    expect_overlay, lookup_overlay_property,
+    resolve_buffer_id_in_buffers, resolve_overlay_buffer_id,
+};
+
+/// (next-overlay-change POS)
+pub(crate) fn builtin_next_overlay_change(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_next_overlay_change_in_buffers(&eval.buffers, args)
+}
+
+pub(crate) fn builtin_next_overlay_change_in_buffers(
+    buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("next-overlay-change", &args, 1)?;
+    let pos = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let buf_id = current_buffer_id_in_buffers(buffers)?;
+    let buf = buffers
+        .get(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+
+    let byte_pos = elisp_pos_to_byte_clipped_full(buf, LispCharPos1::new(pos));
+    let accessible = buf.accessible_emacs_byte_region();
+    match buf
+        .overlays
+        .next_boundary_after_until_emacs_byte_pos(byte_pos, accessible.end())
+    {
+        Some(next) => Ok(Value::fixnum(byte_to_elisp_pos(buf, next))),
+        None => Ok(Value::fixnum(byte_to_elisp_pos(buf, accessible.end()))),
+    }
+}
+
+/// (previous-overlay-change POS)
+pub(crate) fn builtin_previous_overlay_change(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_previous_overlay_change_in_buffers(&eval.buffers, args)
+}
+
+pub(crate) fn builtin_previous_overlay_change_in_buffers(
+    buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("previous-overlay-change", &args, 1)?;
+    let pos = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let buf_id = current_buffer_id_in_buffers(buffers)?;
+    let buf = buffers
+        .get(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+
+    let byte_pos = elisp_pos_to_byte_clipped_full(buf, LispCharPos1::new(pos));
+    let accessible = buf.accessible_emacs_byte_region();
+    match buf
+        .overlays
+        .previous_boundary_before_since_emacs_byte_pos(byte_pos, accessible.start())
+    {
+        Some(prev) => Ok(Value::fixnum(byte_to_elisp_pos(buf, prev))),
+        None => Ok(Value::fixnum(byte_to_elisp_pos(buf, accessible.start()))),
+    }
+}
+
+/// (make-overlay BEG END &optional BUFFER FRONT-ADVANCE REAR-ADVANCE)
+pub(crate) fn builtin_make_overlay(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_make_overlay_in_buffers(&mut eval.buffers, args)
+}
+
+pub(crate) fn builtin_make_overlay_in_buffers(
+    buffers: &mut BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("make-overlay", &args, 2)?;
+    expect_max_args("make-overlay", &args, 5)?;
+    let buf_id = resolve_buffer_id_in_buffers(buffers, args.get(2))?;
+    ensure_marker_points_into_buffer(buffers, &args[0], buf_id)?;
+    ensure_marker_points_into_buffer(buffers, &args[1], buf_id)?;
+    let beg = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let end = expect_integer_or_marker_in_buffers(buffers, &args[1])?;
+    let front_advance = args.get(3).is_some_and(|v| v.is_truthy());
+    let rear_advance = args.get(4).is_some_and(|v| v.is_truthy());
+
+    let buf = buffers
+        .get_mut(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+
+    let byte_range = elisp_range_to_byte_clipped_full(buf, beg, end);
+    let overlay = Value::make_overlay(crate::heap_types::OverlayData {
+        serial: 0,
+        plist: Value::NIL,
+        buffer: Some(buf_id),
+        start: byte_range.start().get(),
+        end: byte_range.end().get(),
+        front_advance,
+        rear_advance,
+    });
+    buf.overlays.insert_overlay(overlay);
+    // Creating an overlay changes what redisplay must consider (it can carry a
+    // face/display/before-string the moment a property is attached), so bump
+    // the modification tick here — matching move/put/delete, which already do.
+    buf.increment_overlay_modified_tick();
+    Ok(overlay)
+}
+
+/// (delete-overlay OVERLAY)
+pub(crate) fn builtin_delete_overlay(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_delete_overlay_in_buffers(&mut eval.buffers, args)
+}
+
+pub(crate) fn builtin_delete_overlay_in_buffers(
+    buffers: &mut BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("delete-overlay", &args, 1)?;
+    let overlay = expect_overlay(&args[0])?;
+    if let Some(buf_id) = resolve_overlay_buffer_id(overlay) {
+        let _ = buffers.delete_buffer_overlay(buf_id, overlay);
+    }
+    Ok(Value::NIL)
+}
+
+/// (overlay-put OVERLAY PROP VAL)
+pub(crate) fn builtin_overlay_put(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    builtin_overlay_put_in_buffers(&mut eval.buffers, args)
+}
+
+pub(crate) fn builtin_overlay_put_in_buffers(
+    buffers: &mut BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("overlay-put", &args, 3)?;
+    let overlay = expect_overlay(&args[0])?;
+    let val = args[2];
+    let changed = if let Some(buf_id) = resolve_overlay_buffer_id(overlay) {
+        buffers
+            .get_mut(buf_id)
+            .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?
+            .overlays
+            .overlay_put(overlay, args[1], val)?
+    } else {
+        overlay
+            .with_overlay_data_mut(|object| {
+                let (plist, changed) = super::plist::plist_put(object.plist, args[1], val)?;
+                object.plist = plist;
+                Ok::<bool, crate::emacs_core::error::Flow>(changed)
+            })
+            .unwrap()?
+    };
+    if let Some(buf_id) = resolve_overlay_buffer_id(overlay)
+        && changed
+    {
+        if let Some(buf) = buffers.get_mut(buf_id) {
+            buf.increment_overlay_modified_tick();
+        }
+        let evaporate = args[1].is_symbol_named("evaporate") && val.is_truthy();
+        let is_empty = buffers
+            .get(buf_id)
+            .and_then(|buf| {
+                let start = buf.overlays.overlay_start_emacs_byte_pos(overlay)?;
+                let end = buf.overlays.overlay_end_emacs_byte_pos(overlay)?;
+                Some(start == end)
+            })
+            .unwrap_or(false);
+        if evaporate && is_empty {
+            let _ = buffers.delete_buffer_overlay(buf_id, overlay);
+        }
+    }
+    Ok(val)
+}
+
+/// (overlay-get OVERLAY PROP)
+pub(crate) fn builtin_overlay_get(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    expect_args("overlay-get", &args, 2)?;
+    let overlay = expect_overlay(&args[0])?;
+    Ok(lookup_overlay_property(
+        &eval.obarray,
+        &eval.buffers,
+        overlay,
+        args[1],
+    ))
+}
+
+/// (overlayp OBJ)
+pub(crate) fn builtin_overlayp(_eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    builtin_overlayp_pure(args)
+}
+
+pub(crate) fn builtin_overlayp_pure(args: Vec<Value>) -> EvalResult {
+    expect_args("overlayp", &args, 1)?;
+    if args[0].is_overlay() {
+        return Ok(Value::T);
+    }
+    Ok(Value::NIL)
+}
+
+/// (overlays-at POS &optional SORTED)
+pub(crate) fn builtin_overlays_at(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    builtin_overlays_at_in_buffers(&eval.buffers, args)
+}
+
+pub(crate) fn builtin_overlays_at_in_buffers(
+    buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("overlays-at", &args, 1)?;
+    expect_max_args("overlays-at", &args, 2)?;
+    let pos = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let buf_id = current_buffer_id_in_buffers(buffers)?;
+    let buf = buffers
+        .get(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+
+    let byte_pos = elisp_pos_to_byte_clipped_full(buf, LispCharPos1::new(pos));
+    let mut ids = buf.overlays.overlays_at_emacs_byte_pos(byte_pos);
+    if let Some(sorted) = args.get(1)
+        && sorted.is_truthy()
+    {
+        // GNU `Foverlays_at` (buffer.c:3901): when SORTED is a window value,
+        // `sort_overlays` filters via `overlay_matches_window` — overlays
+        // whose `window` property is a window distinct from W are dropped.
+        if let Some(target_window_id) = sorted.as_window_id() {
+            let window_sym = Value::symbol("window");
+            ids.retain(|ov| match buf.overlays.overlay_get_named(*ov, window_sym) {
+                Some(prop) => prop
+                    .as_window_id()
+                    .is_none_or(|wid| wid == target_window_id),
+                None => true,
+            });
+        }
+        buf.overlays.sort_overlay_ids_by_priority_desc(&mut ids);
+    }
+    Ok(Value::list(ids))
+}
+
+/// (overlays-in BEG END)
+pub(crate) fn builtin_overlays_in(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    builtin_overlays_in_in_buffers(&eval.buffers, args)
+}
+
+pub(crate) fn builtin_overlays_in_in_buffers(
+    buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("overlays-in", &args, 2)?;
+    let beg = expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let end = expect_integer_or_marker_in_buffers(buffers, &args[1])?;
+    // GNU `overlays_in` (buffer.c) treats BEG > END as an empty region: the
+    // interval-tree walk `[beg, search_end)` is empty and the very first node
+    // (whose `begin > end`) breaks the loop, so no overlays are returned.
+    // Unlike `make-overlay`/`move-overlay`, `overlays-in` must NOT swap the
+    // endpoints, so guard before the (swapping) clip helper.
+    if beg > end {
+        return Ok(Value::NIL);
+    }
+    let buf_id = current_buffer_id_in_buffers(buffers)?;
+    let buf = buffers
+        .get(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+
+    let byte_range = elisp_range_to_byte_clipped_full(buf, beg, end);
+    let accessible = buf.accessible_emacs_byte_region();
+    let ids = buf
+        .overlays
+        .overlays_in_accessible_emacs_byte_range(byte_range, accessible.end());
+    Ok(Value::list(ids))
+}
+
+/// (overlay-lists)
+///
+/// Mirrors GNU `Foverlay_lists` (buffer.c). Returns `(BEFORE . AFTER)`: the
+/// car holds every overlay of the current buffer, the cdr is always empty.
+/// GNU's docstring still describes the pair as the overlays before/after the
+/// "overlay center", but since Emacs 29.1 (commit moving overlays to the
+/// `itree` interval tree) that center no longer exists: `Foverlay_lists`
+/// conses every node of `current_buffer->overlays` (walked `BEG..Z`
+/// DESCENDING, which reverses back to ascending `begin` order) into a single
+/// list and returns `(cons overlays Qnil)`. Even for an empty buffer GNU
+/// returns `(nil)` (i.e. `(cons nil nil)`), never bare `nil`.
+pub(crate) fn builtin_overlay_lists(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_overlay_lists_in_buffers(&eval.buffers, args)
+}
+
+pub(crate) fn builtin_overlay_lists_in_buffers(
+    buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("overlay-lists", &args, 0)?;
+    let buf_id = current_buffer_id_in_buffers(buffers)?;
+    let buf = buffers
+        .get(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+    let before = Value::list(buf.overlays.overlays_in_gnu_lists_order());
+    Ok(Value::cons(before, Value::NIL))
+}
+
+/// (overlay-recenter POS)
+///
+/// Mirrors GNU `Foverlay_recenter` (buffer.c): since Emacs 29.1 this is a
+/// no-op (overlay lookup is fast at any position with the `itree` store), but
+/// it still type-checks POS as a fixnum-or-marker and returns nil.
+pub(crate) fn builtin_overlay_recenter(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("overlay-recenter", &args, 1)?;
+    let _ = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
+    Ok(Value::NIL)
+}
+
+/// (move-overlay OVERLAY BEG END &optional BUFFER)
+pub(crate) fn builtin_move_overlay(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_move_overlay_in_buffers(&mut eval.buffers, args)
+}
+
+pub(crate) fn builtin_move_overlay_in_buffers(
+    buffers: &mut BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("move-overlay", &args, 3)?;
+    expect_max_args("move-overlay", &args, 4)?;
+    let overlay = expect_overlay(&args[0])?;
+    let old_buf_id = resolve_overlay_buffer_id(overlay);
+
+    // Resolve target buffer: use BUFFER arg if given, otherwise same buffer.
+    let new_buf_id = if let Some(buf_arg) = args.get(3) {
+        if buf_arg.is_truthy() {
+            resolve_buffer_id_in_buffers(buffers, Some(buf_arg))?
+        } else {
+            old_buf_id.unwrap_or_else(|| buffers.current_buffer_id().expect("current buffer"))
+        }
+    } else {
+        old_buf_id.unwrap_or_else(|| buffers.current_buffer_id().expect("current buffer"))
+    };
+
+    ensure_marker_points_into_buffer(buffers, &args[1], new_buf_id)?;
+    ensure_marker_points_into_buffer(buffers, &args[2], new_buf_id)?;
+    let beg = expect_integer_or_marker_in_buffers(buffers, &args[1])?;
+    let end = expect_integer_or_marker_in_buffers(buffers, &args[2])?;
+
+    if old_buf_id == Some(new_buf_id) {
+        // Same buffer: just move within the buffer.
+        let buf = buffers
+            .get_mut(new_buf_id)
+            .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+        let byte_range = elisp_range_to_byte_clipped_full(buf, beg, end);
+        buf.overlays
+            .move_overlay_to_emacs_byte_range(overlay, byte_range);
+        buf.increment_overlay_modified_tick();
+        Ok(args[0])
+    } else {
+        if let Some(old_buf_id) = old_buf_id
+            && let Some(buf) = buffers.get_mut(old_buf_id)
+            && buf.overlays.detach_overlay(overlay)
+        {
+            buf.increment_overlay_modified_tick();
+        }
+
+        let new_buf = buffers
+            .get_mut(new_buf_id)
+            .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+        let byte_range = elisp_range_to_byte_clipped_full(new_buf, beg, end);
+        let _ = overlay.with_overlay_data_mut(|object| {
+            object.buffer = Some(new_buf_id);
+            object.start = byte_range.start().get();
+            object.end = byte_range.end().get();
+        });
+        new_buf.overlays.insert_overlay(overlay);
+        new_buf.increment_overlay_modified_tick();
+        if byte_range.is_empty()
+            && new_buf
+                .overlays
+                .overlay_get_named(overlay, Value::symbol("evaporate"))
+                .is_some_and(|value| value.is_truthy())
+            && new_buf.overlays.delete_overlay(overlay)
+        {
+            new_buf.increment_overlay_modified_tick();
+        }
+        Ok(args[0])
+    }
+}
+
+/// (overlay-start OVERLAY)
+pub(crate) fn builtin_overlay_start(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_overlay_start_in_buffers(&eval.buffers, args)
+}
+
+pub(crate) fn builtin_overlay_start_in_buffers(
+    buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("overlay-start", &args, 1)?;
+    let overlay = expect_overlay(&args[0])?;
+    let Some(buf_id) = resolve_overlay_buffer_id(overlay) else {
+        return Ok(Value::NIL);
+    };
+    let buf = buffers
+        .get(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+
+    match buf.overlays.overlay_start_emacs_byte_pos(overlay) {
+        Some(byte_pos) => Ok(Value::fixnum(byte_to_elisp_pos(buf, byte_pos))),
+        None => Ok(Value::NIL),
+    }
+}
+
+/// (overlay-end OVERLAY)
+pub(crate) fn builtin_overlay_end(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    builtin_overlay_end_in_buffers(&eval.buffers, args)
+}
+
+pub(crate) fn builtin_overlay_end_in_buffers(
+    buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("overlay-end", &args, 1)?;
+    let overlay = expect_overlay(&args[0])?;
+    let Some(buf_id) = resolve_overlay_buffer_id(overlay) else {
+        return Ok(Value::NIL);
+    };
+    let buf = buffers
+        .get(buf_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+
+    match buf.overlays.overlay_end_emacs_byte_pos(overlay) {
+        Some(byte_pos) => Ok(Value::fixnum(byte_to_elisp_pos(buf, byte_pos))),
+        None => Ok(Value::NIL),
+    }
+}
+
+/// (overlay-buffer OVERLAY)
+pub(crate) fn builtin_overlay_buffer(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_overlay_buffer_in_buffers(&eval.buffers, args)
+}
+
+pub(crate) fn builtin_overlay_buffer_in_buffers(
+    buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("overlay-buffer", &args, 1)?;
+    let overlay = expect_overlay(&args[0])?;
+    if let Some(buf_id) = resolve_overlay_buffer_id(overlay)
+        && buffers.get(buf_id).is_some()
+    {
+        return Ok(Value::make_buffer(buf_id));
+    }
+    Ok(Value::NIL)
+}
+
+/// (overlay-properties OVERLAY)
+pub(crate) fn builtin_overlay_properties(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    builtin_overlay_properties_in_buffers(&eval.buffers, args)
+}
+
+pub(crate) fn builtin_overlay_properties_in_buffers(
+    _buffers: &BufferManager,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("overlay-properties", &args, 1)?;
+    let overlay = expect_overlay(&args[0])?;
+    builtin_copy_sequence(vec![
+        overlay.as_overlay_data().map_or(Value::NIL, |d| d.plist),
+    ])
 }

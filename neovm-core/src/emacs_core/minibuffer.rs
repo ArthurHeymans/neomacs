@@ -1196,7 +1196,7 @@ fn minibuffer_prompt_end_in_state(
         return Ok(LispCharPos1::new(point_min));
     }
 
-    let (_, prompt_end_pos) = super::builtins::buffers::find_field_bounds_in_state(
+    let (_, prompt_end_pos) = super::buffer::find_field_bounds_in_state(
         obarray,
         &[],
         buffers,

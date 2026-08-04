@@ -15,7 +15,7 @@
 //! - `line-number-display-width` — get line number display width
 //! - `long-line-optimizations-p` — check if long-line optimizations are enabled
 
-use super::builtins::buffers::resolve_buffer_designator_allow_nil_current_in_manager;
+use super::buffer::resolve_buffer_designator_allow_nil_current_in_manager;
 use crate::emacs_core::error::{expect_args, expect_args_range};
 use super::chartable::{make_char_table_value, make_char_table_with_extra_slots};
 use super::display_spec;
