@@ -2179,6 +2179,36 @@ fn current_screen_line_start_with_truncation(
     let target = accessible.clamp(pos);
     let mut current = line_start_at_or_before(buf, target);
 
+    // GNU `vmotion` backs across invisible newline characters before it
+    // computes the current display row. A folded group of logical lines can
+    // therefore share one visual row with the text on either side of it. A
+    // scan anchored only at the target's logical BOL loses that relationship
+    // and reports the first line after a fold as a new display row.
+    while current > accessible.start() {
+        let preceding = current.saturating_sub_len(EmacsByteLen::new(1));
+        let preceding_lisp_pos = eval
+            .buffers
+            .get(buffer_id)
+            .map(|buf| buf.emacs_byte_pos_to_lisp_char_pos(preceding).as_i64())
+            .unwrap_or(1);
+        if crate::emacs_core::xdisp::invisible_status_for_value(
+            eval,
+            Value::fixnum(preceding_lisp_pos),
+        )? == 0
+        {
+            break;
+        }
+        let Some(previous) = eval
+            .buffers
+            .get(buffer_id)
+            .and_then(|buf| previous_logical_line_start(buf, current))
+        else {
+            current = accessible.start();
+            break;
+        };
+        current = previous;
+    }
+
     loop {
         let Some(step) =
             next_screen_line_start_from(eval, buffer_id, current, screen_width, truncate_lines)?

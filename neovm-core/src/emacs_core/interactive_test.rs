@@ -1888,6 +1888,24 @@ fn key_binding_prefers_minor_and_emulation_mode_maps() {
 }
 
 #[test]
+fn key_binding_activates_minor_mode_maps_keyed_by_uninterned_symbols_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(let* ((mode (make-symbol "private-minor-mode"))
+                       (map (make-sparse-keymap))
+                       (minor-mode-map-alist (list (cons mode map))))
+                  (make-variable-buffer-local mode)
+                  (set mode t)
+                  (define-key map "\x01" 'forward-char)
+                  (list (key-binding "\x01")
+                        (not (null (memq map (current-active-maps))))))"#
+        ),
+        "OK (forward-char t)"
+    );
+}
+
+#[test]
 fn key_binding_ignores_invalid_active_minor_emulation_entries() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

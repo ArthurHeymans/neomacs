@@ -9654,6 +9654,39 @@ fn vm_vertical_motion_uses_invisible_text_boundaries_like_gnu() {
 }
 
 #[test]
+fn vm_vertical_motion_zero_backs_across_invisible_newlines_to_visual_row_start_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(progn
+                 (insert
+                  "order-17\n"
+                  "  item: keyboard\n"
+                  "  item: mouse\n"
+                  "  total: 120\n"
+                  "order-23\n"
+                  "  status: shipped\n")
+                 (setq buffer-invisibility-spec '(checkout-fold))
+                 (let* ((fold-end (save-excursion
+                                    (goto-char (point-min))
+                                    (forward-line 4)
+                                    (point)))
+                        (fold (make-overlay
+                               (save-excursion
+                                 (goto-char (point-min))
+                                 (line-end-position))
+                               fold-end)))
+                   (overlay-put fold 'invisible 'checkout-fold)
+                   (goto-char fold-end)
+                   (list (vertical-motion 0)
+                         (point)
+                         (line-number-at-pos))))"#
+        ),
+        "OK (0 1 1)"
+    );
+}
+
+#[test]
 fn vm_vertical_motion_does_not_count_missing_previous_line_like_gnu() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

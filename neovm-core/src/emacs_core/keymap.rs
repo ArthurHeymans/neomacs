@@ -1835,7 +1835,7 @@ fn collect_maps_from_alist_in_state(
             let pair_cdr = entry.cons_cdr();
             (pair_car, pair_cdr)
         };
-        let Some(mode_name) = mode_var.as_symbol_name() else {
+        let Some(mode_id) = mode_var.as_symbol_id() else {
             continue;
         };
 
@@ -1845,8 +1845,12 @@ fn collect_maps_from_alist_in_state(
             continue;
         }
 
-        let mode_active = dynamic_buffer_or_global_symbol_value_in_state(
-            obarray, dynamic, buffers, buffer_id, mode_name,
+        // GNU `current_minor_maps` resolves the exact symbol stored in the
+        // alist.  Do not round-trip through its printed name: minor modes may
+        // deliberately use an uninterned symbol (for example a `cl-gensym`)
+        // whose value cell is distinct from an interned namesake.
+        let mode_active = dynamic_buffer_or_global_symbol_value_by_sym_id_in_state(
+            obarray, dynamic, buffers, buffer_id, mode_id,
         )
         .map(|value| value.is_truthy())
         .unwrap_or(false);
