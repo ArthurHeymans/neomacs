@@ -633,7 +633,7 @@ impl<'a> Reader<'a> {
             let Some(ch) = self.current_code() else {
                 return false;
             };
-            if is_ascii_whitespace_code(ch) {
+            if is_reader_whitespace_code(ch) {
                 self.bump();
                 continue;
             }
@@ -818,8 +818,7 @@ impl<'a> Reader<'a> {
         match self.peek_code_at(1) {
             None => true,
             Some(c) => {
-                is_ascii_whitespace_code(c)
-                    || c == 0xA0
+                is_reader_whitespace_code(c)
                     || c == b'"' as u32
                     || c == b'\'' as u32
                     || c == b'(' as u32
@@ -2651,7 +2650,7 @@ impl<'a> Reader<'a> {
 // ---------------------------------------------------------------------------
 
 fn is_char_literal_delimiter_code(code: u32) -> bool {
-    code <= 32
+    is_reader_whitespace_code(code)
         || matches!(
             code,
             34 | 39 | 59 | 40 | 41 | 91 | 93 | 35 | 63 | 96 | 44 | 46
@@ -2659,7 +2658,16 @@ fn is_char_literal_delimiter_code(code: u32) -> bool {
 }
 
 fn is_symbol_delimiter_code(code: u32) -> bool {
-    is_ascii_whitespace_code(code) || matches!(code, 40 | 41 | 91 | 93 | 39 | 96 | 44 | 34 | 59)
+    is_reader_whitespace_code(code) || matches!(code, 40 | 41 | 91 | 93 | 39 | 96 | 44 | 34 | 59)
+}
+
+/// GNU `read0`'s lexical whitespace predicate (`src/lread.c`) is deliberately
+/// broader than the host language's ASCII-whitespace predicate: all C0
+/// controls (character codes 0 through 32) and NO-BREAK SPACE terminate a
+/// token and are skipped between forms.  Keep that rule at the reader boundary
+/// instead of borrowing Rust's narrower `is_ascii_whitespace` semantics.
+fn is_reader_whitespace_code(code: u32) -> bool {
+    code <= 32 || code == 0xA0
 }
 
 fn is_ascii_whitespace_code(code: u32) -> bool {

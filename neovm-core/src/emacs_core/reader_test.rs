@@ -136,6 +136,24 @@ fn read_from_string_symbol() {
     }
 }
 
+#[test]
+fn read_accepts_a_nul_padded_decimal_wire_field_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let mut bytes = b"1.987500000000000e+01".to_vec();
+    bytes.resize(31, 0);
+    let field = Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes));
+
+    let value = builtin_read(&mut ev, vec![field]).expect("read fixed-width decimal field");
+    assert!(value.is_float());
+    assert_eq!(value.as_number_f64(), Some(19.875));
+
+    let pair = builtin_read_from_string(&mut ev, vec![field])
+        .expect("read-from-string fixed-width decimal field");
+    assert_eq!(pair.cons_car().as_number_f64(), Some(19.875));
+    assert_eq!(pair.cons_cdr().as_fixnum(), Some(21));
+}
+
 /// `(("ical:" . "icalendar-"))`
 fn ical_shorthands_alist() -> Value {
     Value::cons(

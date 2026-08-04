@@ -86,6 +86,23 @@ fn float_exponent() {
     assert_eq!(v.as_number_f64(), Some(1e10));
 }
 
+/// GNU `read0` (`src/lread.c`) treats every character code <= 32, plus
+/// NO-BREAK SPACE, as reader whitespace.  This matters for fixed-width wire
+/// fields such as BERT's OLD_FLOAT_EXT: the decimal token is followed by NUL
+/// padding, and `read` must stop before that padding rather than intern a
+/// float-looking symbol containing control characters.
+#[test]
+fn c0_controls_and_no_break_space_separate_atoms_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let forms = read_all_ok("19.875\0\u{1}\u{1f} \u{a0}tail");
+
+    assert_eq!(forms.len(), 2);
+    assert_eq!(forms[0].as_number_f64(), Some(19.875));
+    assert!(forms[0].is_float());
+    assert!(forms[1].is_symbol_named("tail"));
+}
+
 #[test]
 fn float_negative() {
     crate::test_utils::init_test_tracing();
