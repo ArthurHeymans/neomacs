@@ -1841,6 +1841,12 @@ pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
 /// The exact Evil package selected by the comprehensive API parity corpus.
 pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 
+/// The exact Evil Matchit package selected for practical nested-code, markup,
+/// indentation, preprocessor, Org block, diff, conflict-resolution, region,
+/// deletion, and jump-hook parity. MELPA built this archive from upstream
+/// commit `751e74ce2e29c3f32b30e6a1012a33fe81ba0700`.
+pub const EVIL_MATCHIT_MELPA_PIN: (&str, &str) = ("evil-matchit", "20260409.936");
+
 /// The exact Evil Nerd Commenter package selected for practical line, region,
 /// paragraph, copy-and-comment, kill-ring, HTML, Org source-block, and comment
 /// navigation parity. MELPA built this archive from upstream commit

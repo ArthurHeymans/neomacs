@@ -293,6 +293,7 @@ mod epl;
 mod erlang;
 mod es_lib;
 mod evil;
+mod evil_matchit;
 mod evil_nerd_commenter;
 mod evil_surround;
 mod exec_path_from_shell;

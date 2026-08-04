@@ -69,7 +69,7 @@ rank	package	downloads	status
 68	evil-nerd-commenter	1178503	covered
 69	helm-ag	1172552	covered
 70	evil-surround	1166104	covered
-71	evil-matchit	1165082	todo
+71	evil-matchit	1165082	covered
 72	popwin	1162225	todo
 73	ace-link	1161673	covered
 74	cider	1159900	todo
