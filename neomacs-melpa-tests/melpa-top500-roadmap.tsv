@@ -15,7 +15,7 @@ rank	package	downloads	status
 14	with-editor	2806425	covered
 15	popup	2602675	covered
 16	git-commit	2598233	covered
-17	lsp-mode	2570414	todo
+17	lsp-mode	2570414	covered
 18	pkg-info	2523890	covered
 19	avy	2515164	covered
 20	yasnippet	2506195	covered

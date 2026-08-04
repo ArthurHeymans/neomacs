@@ -1734,6 +1734,12 @@ pub const JS2_REFACTOR_MELPA_PIN: (&str, &str) = ("js2-refactor", "20250210.1811
 /// `c6955162307f37c2ac631d9daf118781009f8dda`.
 pub const KEYFREQ_MELPA_PIN: (&str, &str) = ("keyfreq", "20231107.106");
 
+/// The exact LSP Mode package selected for practical JSON-RPC transport,
+/// Unicode position, workspace edit, completion, diagnostics, and URI parity.
+/// MELPA built this archive from upstream commit
+/// `6bfc593d7b1bc0dd656f09ffce52cc085ebced05`.
+pub const LSP_MODE_MELPA_PIN: (&str, &str) = ("lsp-mode", "20260716.755");
+
 /// The exact lv package required by the practical Hydra parity corpus and
 /// selected for the hint-window lifecycle, refresh, layout, GUI separator,
 /// failure-atomicity, and pre-existing-buffer parity corpus. MELPA built this
