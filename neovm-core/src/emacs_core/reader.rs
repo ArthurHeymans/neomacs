@@ -904,6 +904,7 @@ fn read_from_string_impl_inner(
 /// - If STREAM is a string, read from that string (equivalent to car of read-from-string).
 /// - If STREAM is nil, read from `standard-input`.
 /// - If STREAM is a buffer, read from buffer at point.
+/// - If STREAM is a marker, read from its buffer and advance only the marker.
 pub fn builtin_read(ctx: &mut crate::emacs_core::eval::Context, args: Vec<Value>) -> EvalResult {
     builtin_read_impl(ctx, args, false)
 }
@@ -954,6 +955,64 @@ pub fn builtin_read_impl(
                 }
                 _ => Ok(result),
             }
+        }
+        ValueKind::Veclike(VecLikeType::Marker) => {
+            let Some((Some(buf_id), Some(position), _)) =
+                super::marker::marker_logical_fields(&stream)
+            else {
+                return Err(end_of_file_error_for_source(None));
+            };
+
+            let (read_result, new_position) = {
+                let buf = ctx
+                    .buffers
+                    .get(buf_id)
+                    .ok_or_else(|| end_of_file_error_for_source(None))?;
+                let start = buf.char_pos_to_emacs_byte_pos_clamped(position.to_char_pos());
+                let end = buf.accessible_emacs_byte_region().end();
+                if start >= end {
+                    return Err(end_of_file_error_for_source(None));
+                }
+
+                match super::value_reader::read_one_from_buffer_with_locate_syms(
+                    buf,
+                    EmacsByteRange::new(start, end),
+                    locate_syms,
+                    &ctx.obarray,
+                    shorthands.as_ref(),
+                ) {
+                    Ok((value, new_byte_position)) => (
+                        Ok(value),
+                        buf.emacs_byte_pos_to_lisp_char_pos(new_byte_position),
+                    ),
+                    Err(error) => {
+                        // GNU's source_marker_get/unget updates the marker as
+                        // each character is consumed, including on a reader
+                        // error.  The value reader reports that consumed byte
+                        // position, so publish it before propagating the
+                        // matching Lisp signal.
+                        let new_byte_position =
+                            crate::buffer::EmacsBytePos::new(error.position).min(end);
+                        let new_position = buf.emacs_byte_pos_to_lisp_char_pos(new_byte_position);
+                        // A marker identifies its cursor but GNU does not add
+                        // buffer line/column context to reader signals for it.
+                        // Keep marker errors source-less, like string streams.
+                        (Err(signal_reader_error_from_string(error)), new_position)
+                    }
+                }
+            };
+
+            super::marker::builtin_set_marker_in_buffers(
+                &mut ctx.buffers,
+                vec![
+                    stream,
+                    Value::fixnum(new_position.as_i64()),
+                    Value::make_buffer(buf_id),
+                ],
+            )?;
+            let value = read_result?.ok_or_else(|| end_of_file_error_for_source(None))?;
+            ctx.obarray_mut().materialize_read_symbols(value);
+            Ok(value)
         }
         ValueKind::Veclike(VecLikeType::Buffer) => {
             let buf_id = stream.as_buffer_id().unwrap();

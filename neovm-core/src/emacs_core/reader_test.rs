@@ -185,6 +185,101 @@ fn read_from_buffer_applies_read_symbol_shorthands() {
 }
 
 #[test]
+fn read_from_marker_advances_marker_without_moving_buffer_point_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let buf_id = ev.buffers.create_buffer("marker-read");
+    {
+        let buf = ev.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("(alpha β) tail");
+    }
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(buf_id, crate::buffer::EmacsBytePos::new(3));
+    let marker = crate::emacs_core::marker::make_registered_buffer_marker(
+        &mut ev.buffers,
+        buf_id,
+        LispCharPos1::new(1),
+        false,
+    );
+
+    let first = builtin_read(&mut ev, vec![marker]).expect("read list from marker stream");
+    assert_eq!(print_value(&first), "(alpha β)");
+    assert_eq!(
+        crate::emacs_core::marker::marker_position_as_int_with_buffers(&ev.buffers, &marker)
+            .expect("marker remains attached after first read"),
+        10
+    );
+    assert_eq!(
+        ev.buffers
+            .get(buf_id)
+            .expect("buffer")
+            .point_lisp_char_pos(),
+        LispCharPos1::new(4)
+    );
+
+    let second = builtin_read(&mut ev, vec![marker]).expect("read symbol from marker stream");
+    assert_eq!(second.as_symbol_name(), Some("tail"));
+    assert_eq!(
+        crate::emacs_core::marker::marker_position_as_int_with_buffers(&ev.buffers, &marker)
+            .expect("marker remains attached after second read"),
+        15
+    );
+    assert_eq!(
+        ev.buffers
+            .get(buf_id)
+            .expect("buffer")
+            .point_lisp_char_pos(),
+        LispCharPos1::new(4)
+    );
+
+    for (name, text, expected_signal, expected_data, expected_position) in [
+        ("marker-read-whitespace-eof", "  ", "end-of-file", None, 3),
+        ("marker-read-mid-form-eof", "(alpha", "end-of-file", None, 7),
+        (
+            "marker-read-invalid-syntax",
+            ")",
+            "invalid-read-syntax",
+            Some(")"),
+            2,
+        ),
+    ] {
+        let error_buf_id = ev.buffers.create_buffer(name);
+        ev.buffers
+            .get_mut(error_buf_id)
+            .expect("error buffer")
+            .insert(text);
+        let error_marker = crate::emacs_core::marker::make_registered_buffer_marker(
+            &mut ev.buffers,
+            error_buf_id,
+            LispCharPos1::new(1),
+            false,
+        );
+        let result = builtin_read(&mut ev, vec![error_marker]);
+        let signal = match &result {
+            Err(Flow::Signal(signal)) if signal.symbol_name() == expected_signal => signal,
+            _ => panic!(
+                "marker stream over {text:?} should signal {expected_signal}, got {result:?}"
+            ),
+        };
+        match expected_data {
+            Some(data) => {
+                assert_eq!(signal.data.len(), 1);
+                assert_eq!(signal.data[0].as_utf8_str(), Some(data));
+            }
+            None => assert!(signal.data.is_empty()),
+        }
+        assert_eq!(
+            crate::emacs_core::marker::marker_position_as_int_with_buffers(
+                &ev.buffers,
+                &error_marker,
+            )
+            .expect("marker remains attached after reader error"),
+            expected_position
+        );
+    }
+}
+
+#[test]
 fn read_from_string_string_value() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
