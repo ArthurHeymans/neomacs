@@ -72,15 +72,15 @@ cfg_select! {
     }
 }
 
-/// A poll-able "this child changed state (exited)" edge for one subprocess.
+/// A pollable terminal-status edge for one subprocess.
 ///
 /// GNU Emacs waits for subprocess I/O and child status in a single primitive:
 /// Unix multiplexes a SIGCHLD self-pipe into `wait_reading_process_output`,
 /// while w32 waits on subprocess handles alongside its pipe-reader events.
-/// Linux `pidfd`s give the same per-child edge as a plain readable descriptor,
-/// so the existing wait poller wakes on child exit exactly as it wakes on
-/// process output. Platforms without a native source yet degrade to the
-/// explicit periodic status poll (see the `fallback` backend).
+/// Linux `pidfd`s wake the poller on child termination. Stop/continue changes
+/// are harvested by the explicit `waitpid` scan because pidfds do not report
+/// those transitions. Platforms without a native terminal source use that
+/// scan for every status transition (see the `fallback` backend).
 pub struct ChildStatusSource(backend::Source);
 
 impl ChildStatusSource {

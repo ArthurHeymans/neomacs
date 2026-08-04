@@ -807,6 +807,80 @@ fn process_controls_accept_get_process_designators_like_gnu() {
 }
 
 #[test]
+fn continue_process_cancels_a_pending_stop_transition_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let buffers = crate::buffer::BufferManager::new();
+    let mut processes = ProcessManager::new();
+    let id = processes.create_process("stopped".into(), Value::NIL, "prog".into(), vec![]);
+    {
+        let process = processes.get_mut(id).expect("process");
+        process.status = process_status_run_value();
+        process.pending_status = process_status_stop_value(19);
+        process.status_notify_pending = true;
+    }
+
+    builtin_continue_process_impl(&mut processes, &buffers, vec![Value::make_process(id)])
+        .expect("continue-process");
+
+    let process = processes.get(id).expect("process");
+    assert_eq!(process.status, process_status_run_value());
+    assert_eq!(process.pending_status, Value::NIL);
+    assert!(!process.status_notify_pending);
+}
+
+#[cfg(unix)]
+#[test]
+fn internal_default_signal_process_targets_only_the_named_pid_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let directory = tempfile::tempdir().expect("tempdir");
+    let ready = directory.path().join("ready");
+    let descendant_finished = directory.path().join("descendant-finished");
+    let python = find_bin("python3");
+    let descendant = format!(
+        "import time; from pathlib import Path; time.sleep(0.2); Path({descendant_finished:?}).write_text('done')"
+    );
+    let parent = format!(
+        "import subprocess, time; from pathlib import Path; subprocess.Popen([{python:?}, '-c', {descendant:?}]); Path({ready:?}).write_text('ready'); time.sleep(30)"
+    );
+
+    let mut processes = ProcessManager::new();
+    let buffers = crate::buffer::BufferManager::new();
+    let id = processes.create_process(
+        "signal-one-pid".into(),
+        Value::NIL,
+        python,
+        vec!["-c".into(), parent],
+    );
+    processes.spawn_child(id, false).expect("spawn parent");
+    for _ in 0..100 {
+        if ready.exists() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(ready.exists(), "parent did not spawn its descendant");
+
+    builtin_internal_default_signal_process_impl(
+        &mut processes,
+        &buffers,
+        vec![Value::make_process(id), Value::symbol("TERM")],
+    )
+    .expect("internal-default-signal-process");
+
+    for _ in 0..100 {
+        if descendant_finished.exists() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        descendant_finished.exists(),
+        "signal-process killed the process group instead of only the named PID"
+    );
+    processes.delete_process(id);
+}
+
+#[test]
 fn delete_process_accepts_get_process_designators_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut buffers = crate::buffer::BufferManager::new();
@@ -1376,7 +1450,7 @@ fn process_status_notification_runs_default_sentinel_and_reaps() {
         .sync_process_mark(&mut ev.buffers, pid)
         .expect("sync process mark");
     ev.processes
-        .set_child_exit_status_pending(pid, process_status_exit_value(0));
+        .set_child_status_pending(pid, process_status_exit_value(0));
 
     ev.run_process_status_notification(pid, None)
         .expect("status notification");
@@ -2023,7 +2097,7 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
         if let Some(chunk) = processes.read_process_output(pid) {
             output.push_str(&process_output_runtime_string(&chunk));
         }
-        processes.check_child_exit(pid);
+        processes.check_child_status_change(pid);
         std::thread::sleep(Duration::from_millis(10));
     }
     processes.kill_process(pid);
@@ -3780,6 +3854,66 @@ fn signal_process_accepts_gnu_signal_name_symbols() {
     );
 
     assert_eq!(result, "OK (-1 -1 -1 -1 -1 error wrong-type-argument)");
+}
+
+#[cfg(unix)]
+#[test]
+fn signal_process_observes_stop_continue_output_and_exit_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let cat = find_bin("cat");
+    let result = eval_one(&format!(
+        r#"(let* ((buffer (generate-new-buffer " *signal-stop-continue*"))
+                  (events nil)
+                  (process
+                   (make-process
+                    :name "signal-stop-continue"
+                    :buffer buffer
+                    :command (list "{cat}")
+                    :connection-type 'pipe
+                    :noquery t
+                    :sentinel
+                    (lambda (proc event)
+                      (setq events
+                            (cons (list (process-status proc) event)
+                                  events))))))
+             (unwind-protect
+                 (progn
+                   (signal-process process 'SIGSTOP)
+                   (let ((attempt 0))
+                     (while (and (not (eq (process-status process) 'stop))
+                                 (< attempt 100))
+                       (setq attempt (1+ attempt))
+                       (accept-process-output nil 0.01)))
+                   (let ((stopped (eq (process-status process) 'stop)))
+                     (signal-process process 'SIGCONT)
+                     (let ((attempt 0))
+                       (while (and (not (eq (process-status process) 'run))
+                                   (< attempt 100))
+                         (setq attempt (1+ attempt))
+                         (accept-process-output nil 0.01)))
+                     (let ((continued (eq (process-status process) 'run)))
+                       (when continued
+                         (process-send-string process "resumed\n")
+                         (process-send-eof process))
+                       (let ((attempt 0))
+                         (while (and (process-live-p process)
+                                     (< attempt 100))
+                           (setq attempt (1+ attempt))
+                           (accept-process-output nil 0.01)))
+                       (list stopped
+                             continued
+                             (process-status process)
+                             (with-current-buffer buffer (buffer-string))
+                             (nreverse events)))))
+               (when (process-live-p process)
+                 (ignore-errors (delete-process process)))
+               (kill-buffer buffer)))"#
+    ));
+
+    assert_eq!(
+        result,
+        "OK (t t exit \"resumed\n\" ((stop \"stopped (signal)\n\") (run \"run\") (exit \"finished\n\")))"
+    );
 }
 
 #[test]

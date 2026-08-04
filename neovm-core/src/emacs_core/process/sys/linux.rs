@@ -1,10 +1,10 @@
 //! Linux `ChildStatusSource` backend.
 //!
 //! `pidfd_open(2)` (Linux 5.3+) returns a descriptor that becomes readable when
-//! the target process changes state, so the wait poller can wake on child exit
-//! with a plain readable registration -- the GNU SIGCHLD edge, but per-child and
-//! pollable without installing a signal handler. `open` returns `None` on older
-//! kernels, so the caller degrades to the periodic status poll.
+//! the target process terminates, so the wait poller can wake on child exit
+//! with a plain readable registration. Stop/continue transitions still come
+//! from the periodic `waitpid(WUNTRACED | WCONTINUED)` scan. `open` returns
+//! `None` on older kernels, where every transition uses that periodic scan.
 
 use std::os::fd::{FromRawFd, OwnedFd, RawFd};
 
