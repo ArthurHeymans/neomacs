@@ -1598,6 +1598,13 @@ pub const AUTO_RENAME_TAG_MELPA_PIN: (&str, &str) = ("auto-rename-tag", "2026010
 pub const AUTO_SAVE_BUFFERS_ENHANCED_MELPA_PIN: (&str, &str) =
     ("auto-save-buffers-enhanced", "20161109.710");
 
+/// The exact auto-save-visited-local-mode package selected by the practical
+/// per-buffer timer, idle-save, predicate, interval-watcher, save-hook, error,
+/// and buffer-lifecycle parity corpus. MELPA built this archive from upstream
+/// commit `78a46d8a02360b4c63e45496bd32efe351459c81`.
+pub const AUTO_SAVE_VISITED_LOCAL_MODE_MELPA_PIN: (&str, &str) =
+    ("auto-save-visited-local-mode", "20251021.1126");
+
 /// The exact ht package selected by the practical configuration, nested state,
 /// job pipeline, custom-key, and snapshot parity corpus, and as
 /// auto-highlight-symbol's hash-table dependency. MELPA built this archive from upstream commit

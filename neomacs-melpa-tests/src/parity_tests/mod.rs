@@ -258,6 +258,7 @@ mod auto_pause;
 mod auto_read_only;
 mod auto_rename_tag;
 mod auto_save_buffers_enhanced;
+mod auto_save_visited_local_mode;
 mod avy;
 mod avy_menu;
 mod bert;
