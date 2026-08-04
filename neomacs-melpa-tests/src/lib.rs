@@ -97,6 +97,13 @@ pub const AUCTEX_CLUTTEX_MELPA_PIN: (&str, &str) = ("auctex-cluttex", "20240519.
 /// `b00a95e6b34c94987fda5a57c20cfe2f064b1c7a`.
 pub const AUCTEX_LATEXMK_MELPA_PIN: (&str, &str) = ("auctex-latexmk", "20221025.1219");
 
+/// The exact auctex-lua package selected by the practical embedded-Lua edit,
+/// save, cancellation, custom-environment, shared-state, and malformed-input
+/// parity corpus.
+/// MELPA built this archive from upstream commit
+/// `799cd8ac10c96991bb63d9aa60528ae5d8c786b5`.
+pub const AUCTEX_LUA_MELPA_PIN: (&str, &str) = ("auctex-lua", "20151121.1610");
+
 /// The exact auto-complete package selected by the comprehensive source,
 /// candidate, completion, dictionary, history, configuration, and lifecycle
 /// parity corpus. MELPA built this archive from upstream commit

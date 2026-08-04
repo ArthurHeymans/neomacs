@@ -220,6 +220,7 @@ mod atomic_chrome;
 mod attrap;
 mod auctex_cluttex;
 mod auctex_latexmk;
+mod auctex_lua;
 mod audacious;
 mod audio_notes_mode;
 mod aurel;
