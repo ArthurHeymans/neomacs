@@ -533,7 +533,7 @@ pub(crate) fn builtin_sqlitep(args: Vec<Value>) -> EvalResult {
 
 /// (sqlite-open &optional FILE READONLY DISABLE-URI) → db-handle
 pub(crate) fn builtin_sqlite_open(args: Vec<Value>) -> EvalResult {
-    super::builtins::expect_range_args("sqlite-open", &args, 0, 3)?;
+    super::builtins::expect_args_range("sqlite-open", &args, 0, 3)?;
 
     let file = args
         .first()
@@ -572,7 +572,7 @@ pub(crate) fn builtin_sqlite_close(args: Vec<Value>) -> EvalResult {
 
 /// (sqlite-execute DB QUERY &optional VALUES) → affected-rows or result rows
 pub(crate) fn builtin_sqlite_execute(args: Vec<Value>) -> EvalResult {
-    super::builtins::expect_range_args("sqlite-execute", &args, 2, 3)?;
+    super::builtins::expect_args_range("sqlite-execute", &args, 2, 3)?;
     let id = expect_db(&args[0])?;
     let sql = expect_strict_string(&args[1])?;
     let values = args.get(2).copied().unwrap_or(Value::NIL);
@@ -620,7 +620,7 @@ pub(crate) fn builtin_sqlite_execute(args: Vec<Value>) -> EvalResult {
 
 /// (sqlite-select DB QUERY &optional VALUES RETURN-TYPE) → results
 pub(crate) fn builtin_sqlite_select(args: Vec<Value>) -> EvalResult {
-    super::builtins::expect_range_args("sqlite-select", &args, 2, 4)?;
+    super::builtins::expect_args_range("sqlite-select", &args, 2, 4)?;
     let id = expect_db(&args[0])?;
     let sql = expect_strict_string(&args[1])?;
     let values = args.get(2).copied().unwrap_or(Value::NIL);

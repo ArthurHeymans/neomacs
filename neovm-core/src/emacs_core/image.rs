@@ -12,6 +12,7 @@
 //!
 //! Image specs are property lists: (:type png :file "foo.png" :width 100 ...)
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
@@ -26,50 +27,6 @@ use strum::{EnumString, IntoStaticStr};
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn expect_frame_designator(_name: &str, value: &Value) -> Result<(), Flow> {
     match value.kind() {
@@ -1041,7 +998,7 @@ pub(crate) fn builtin_image_cache_size(args: Vec<Value>) -> EvalResult {
 /// Returns nil for non-image specifications. For valid image specs on
 /// non-window-system frames, this signals the same error shape as GNU Emacs.
 pub(crate) fn builtin_image_metadata(args: Vec<Value>) -> EvalResult {
-    expect_range_args("image-metadata", &args, 1, 2)?;
+    expect_args_range("image-metadata", &args, 1, 2)?;
 
     if !is_image_spec(&args[0]) {
         return Ok(Value::NIL);

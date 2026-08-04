@@ -1,11 +1,7 @@
 use super::super::eval::Context;
 use super::*;
 use crate::buffer::{CharLen, CharRange};
-use crate::emacs_core::builtins::{
-    builtin_current_buffer, builtin_get_pos_property, builtin_goto_char, builtin_insert,
-    builtin_make_indirect_buffer, builtin_next_char_property_change,
-    builtin_previous_char_property_change, builtin_previous_property_change,
-};
+use crate::emacs_core::builtins::{builtin_current_buffer, builtin_get_pos_property, builtin_goto_char, builtin_insert, builtin_make_indirect_buffer, builtin_next_char_property_change, builtin_previous_char_property_change, builtin_previous_property_change};
 use crate::emacs_core::error::Flow;
 use malachite::Integer;
 

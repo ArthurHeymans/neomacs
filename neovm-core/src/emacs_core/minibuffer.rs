@@ -6,6 +6,7 @@
 //! - `CompletionStyle` — matching strategy (prefix, substring, flex, basic)
 //! - Builtin functions for Elisp: `read-from-minibuffer`, `completing-read`, `y-or-n-p`, etc.
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 
@@ -22,50 +23,6 @@ use super::value::{Value, ValueKind, VecLikeType};
 // ---------------------------------------------------------------------------
 // Argument helpers (local copies, same pattern as builtins.rs / builtins_extra.rs)
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn expect_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
     value.as_lisp_string().cloned().ok_or_else(|| {
@@ -1346,7 +1303,7 @@ pub(crate) fn builtin_minibuffer_innermost_command_loop_p_ctx(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("minibuffer-innermost-command-loop-p", &args, 0, 1)?;
+    expect_args_range("minibuffer-innermost-command-loop-p", &args, 0, 1)?;
     let Some(buffer_id) = resolve_minibuffer_buffer_arg(&eval.buffers, args.first())? else {
         return Ok(Value::NIL);
     };
@@ -1366,7 +1323,7 @@ pub(crate) fn builtin_innermost_minibuffer_p_ctx(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("innermost-minibuffer-p", &args, 0, 1)?;
+    expect_args_range("innermost-minibuffer-p", &args, 0, 1)?;
     let Some(buffer_id) = resolve_minibuffer_buffer_arg(&eval.buffers, args.first())? else {
         return Ok(Value::NIL);
     };

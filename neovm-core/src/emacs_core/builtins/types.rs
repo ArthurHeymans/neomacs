@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use super::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
@@ -150,7 +151,7 @@ pub(crate) fn builtin_vector_or_char_table_p(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_characterp(args: Vec<Value>) -> EvalResult {
-    expect_range_args("characterp", &args, 1, 2)?;
+    expect_args_range("characterp", &args, 1, 2)?;
     // Official Emacs: characterp accepts both Char values and integers
     // in the valid Unicode range (0..MAX_CHAR).  Its obsolete second
     // argument is accepted for compatibility and ignored.

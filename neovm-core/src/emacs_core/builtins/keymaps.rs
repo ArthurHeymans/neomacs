@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range};
 use super::*;
 use crate::emacs_core::symbol::Obarray;
 
@@ -578,7 +579,7 @@ pub(super) fn builtin_describe_buffer_bindings(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("describe-buffer-bindings", &args, 1, 3)?;
+    expect_args_range("describe-buffer-bindings", &args, 1, 3)?;
     if !args[0].is_buffer() {
         return Err(signal(
             LispCondition::WrongTypeArgument,
@@ -1029,7 +1030,7 @@ pub(super) fn builtin_text_char_description(args: Vec<Value>) -> EvalResult {
 
 /// `(single-key-description KEY &optional NO-ANGLES)` -> string
 pub(super) fn builtin_single_key_description(args: Vec<Value>) -> EvalResult {
-    expect_range_args("single-key-description", &args, 1, 2)?;
+    expect_args_range("single-key-description", &args, 1, 2)?;
     let no_angles = args.get(1).is_some_and(|v| v.is_truthy());
     Ok(Value::string(describe_single_key_value(
         &args[0], no_angles,
@@ -1038,7 +1039,7 @@ pub(super) fn builtin_single_key_description(args: Vec<Value>) -> EvalResult {
 
 /// `(key-description KEYS &optional PREFIX)` -> string
 pub(crate) fn builtin_key_description(args: Vec<Value>) -> EvalResult {
-    expect_range_args("key-description", &args, 1, 2)?;
+    expect_args_range("key-description", &args, 1, 2)?;
     let mut events = if let Some(prefix) = args.get(1) {
         key_sequence_values(prefix)?
     } else {

@@ -442,29 +442,7 @@ fn parse_http_url(url: &str) -> Result<(String, u16, String), String> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
-#[cfg(test)]
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 #[cfg(test)]
 fn expect_string(value: &Value) -> Result<String, Flow> {

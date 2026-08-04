@@ -12,6 +12,7 @@
 //! - `replace-match`
 //! - `word-search-forward`, `word-search-backward`
 
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
 use super::error::{EvalResult, Flow, signal};
 use super::regex::MatchGroup;
 use super::value::*;
@@ -22,29 +23,6 @@ use crate::emacs_core::value::ValueKind;
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 #[inline]
 fn buffer_match_char_pos_to_byte_pos(
@@ -57,34 +35,12 @@ fn buffer_match_char_pos_to_byte_pos(
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_int(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(n) => Ok(n),
         _other => Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *val],
-        )),
-    }
-}
-
-fn expect_fixnum(val: &Value) -> Result<i64, Flow> {
-    match val.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _other => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("fixnump"), *val],
         )),
     }
 }
@@ -826,7 +782,7 @@ pub(crate) fn builtin_replace_regexp_in_string(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("replace-regexp-in-string", &args, 3, 7)?;
+    expect_args_range("replace-regexp-in-string", &args, 3, 7)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|value| !value.is_nil())
         .unwrap_or(false);

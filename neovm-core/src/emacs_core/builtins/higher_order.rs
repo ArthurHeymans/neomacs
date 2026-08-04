@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range};
 use super::*;
 use crate::emacs_core::eval::LispArgVec;
 use smallvec::SmallVec;
@@ -317,7 +318,7 @@ pub(crate) fn builtin_mapc_2(
 }
 
 pub(crate) fn builtin_mapconcat(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("mapconcat", &args, 2, 3)?;
+    expect_args_range("mapconcat", &args, 2, 3)?;
     let func = args[0];
     let sequence = args[1];
     // Emacs 30: separator is optional, defaults to ""

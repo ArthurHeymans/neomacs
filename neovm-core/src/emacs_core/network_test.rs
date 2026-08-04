@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_min_args};
 use super::*;
 
 // -- NetworkManager unit tests ------------------------------------------

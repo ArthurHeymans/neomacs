@@ -5,6 +5,7 @@
 //! identity, string-to-multibyte/unibyte, string-make-multibyte/unibyte,
 //! compare-strings, string-version-lessp, string-collate-lessp/equalp.
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{intern, resolve_sym};
@@ -84,40 +85,6 @@ fn collation_errno_message(errno: libc::c_int) -> String {
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn string_designator_text(eval: &mut Context, val: Value) -> Result<String, Flow> {
     let string = StringDesignator::from_value(eval, val)?.0;
@@ -458,7 +425,7 @@ fn base64_decode_bytes(
 
 /// (base64-encode-string STRING &optional NO-LINE-BREAK)
 pub(crate) fn builtin_base64_encode_string(args: Vec<Value>) -> EvalResult {
-    expect_range_args("base64-encode-string", &args, 1, 2)?;
+    expect_args_range("base64-encode-string", &args, 1, 2)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
@@ -473,7 +440,7 @@ pub(crate) fn builtin_base64_encode_string(args: Vec<Value>) -> EvalResult {
 
 /// (base64-decode-string STRING &optional BASE64URL IGNORE-INVALID)
 pub(crate) fn builtin_base64_decode_string(args: Vec<Value>) -> EvalResult {
-    expect_range_args("base64-decode-string", &args, 1, 3)?;
+    expect_args_range("base64-decode-string", &args, 1, 3)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
@@ -501,7 +468,7 @@ pub(crate) fn builtin_base64_decode_string(args: Vec<Value>) -> EvalResult {
 
 /// (base64url-encode-string STRING &optional NO-PAD)
 pub(crate) fn builtin_base64url_encode_string(args: Vec<Value>) -> EvalResult {
-    expect_range_args("base64url-encode-string", &args, 1, 2)?;
+    expect_args_range("base64url-encode-string", &args, 1, 2)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
@@ -517,7 +484,7 @@ pub(crate) fn builtin_base64url_encode_string(args: Vec<Value>) -> EvalResult {
 /// (base64url-decode-string STRING &optional IGNORE-INVALID)
 #[cfg(test)]
 pub(crate) fn builtin_base64url_decode_string(args: Vec<Value>) -> EvalResult {
-    expect_range_args("base64url-decode-string", &args, 1, 2)?;
+    expect_args_range("base64url-decode-string", &args, 1, 2)?;
     let ls = args[0].as_lisp_string().ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
@@ -692,7 +659,7 @@ pub(crate) fn builtin_base64_encode_region(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("base64-encode-region", &args, 2, 3)?;
+    expect_args_range("base64-encode-region", &args, 2, 3)?;
     let (buffer_id, byte_range) =
         normalize_current_buffer_region_bounds_in_manager(&eval.buffers, &args[0], &args[1])?;
     let raw = read_buffer_region_bytes_in_manager(&eval.buffers, buffer_id, byte_range)?;
@@ -718,7 +685,7 @@ pub(crate) fn builtin_base64url_encode_region(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("base64url-encode-region", &args, 2, 3)?;
+    expect_args_range("base64url-encode-region", &args, 2, 3)?;
     let (buffer_id, byte_range) =
         normalize_current_buffer_region_bounds_in_manager(&eval.buffers, &args[0], &args[1])?;
     let raw = read_buffer_region_bytes_in_manager(&eval.buffers, buffer_id, byte_range)?;
@@ -744,7 +711,7 @@ pub(crate) fn builtin_base64_decode_region(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("base64-decode-region", &args, 2, 4)?;
+    expect_args_range("base64-decode-region", &args, 2, 4)?;
     let (buffer_id, byte_range) =
         normalize_current_buffer_region_bounds_in_manager(&eval.buffers, &args[0], &args[1])?;
     let source = read_buffer_region_bytes_in_manager(&eval.buffers, buffer_id, byte_range)?;
@@ -790,7 +757,7 @@ pub(crate) fn builtin_base64_decode_region(
 ///
 /// Context-aware implementation that also supports buffer objects.
 pub(crate) fn builtin_md5(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("md5", &args, 1, 5)?;
+    expect_args_range("md5", &args, 1, 5)?;
     validate_md5_coding_system_arg(&args)?;
     let object = &args[0];
     match object.kind() {
@@ -1139,7 +1106,7 @@ fn secure_hash_digest_bytes(algo_name: &str, input: &[u8]) -> Result<Vec<u8>, Fl
 ///
 /// Context-aware implementation that also supports buffer objects.
 pub(crate) fn builtin_secure_hash(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("secure-hash", &args, 2, 5)?;
+    expect_args_range("secure-hash", &args, 2, 5)?;
     let algo_name = secure_hash_algorithm_name(&args[0])?;
 
     let object = &args[1];
@@ -1175,7 +1142,7 @@ pub(crate) fn builtin_secure_hash(eval: &mut super::eval::Context, args: Vec<Val
 /// (buffer-hash &optional BUFFER-OR-NAME)
 /// Context-aware implementation used at runtime.
 pub(crate) fn builtin_buffer_hash(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("buffer-hash", &args, 0, 1)?;
+    expect_args_range("buffer-hash", &args, 0, 1)?;
 
     let buffer_id = if args.is_empty() || args[0].is_nil() {
         eval.buffers
@@ -1431,7 +1398,7 @@ pub(crate) fn builtin_string_make_unibyte(args: Vec<Value>) -> EvalResult {
 /// Returns t if they are equal, or the 1-based index of the first differing
 /// character (negative if STR1 is less, positive if STR1 is greater).
 pub(crate) fn builtin_compare_strings(args: Vec<Value>) -> EvalResult {
-    expect_range_args("compare-strings", &args, 6, 7)?;
+    expect_args_range("compare-strings", &args, 6, 7)?;
 
     let s1 = require_lisp_string(&args[0])?;
     let s2 = require_lisp_string(&args[3])?;
@@ -1861,7 +1828,7 @@ fn string_collate_compare(
 
 /// (string-collate-lessp S1 S2 &optional LOCALE IGNORE-CASE)
 pub(crate) fn builtin_string_collate_lessp(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("string-collate-lessp", &args, 2, 4)?;
+    expect_args_range("string-collate-lessp", &args, 2, 4)?;
     let s1 = string_designator_text(eval, args[0])?;
     let s2 = string_designator_text(eval, args[1])?;
     let locale = require_optional_locale(args.get(2))?;
@@ -1874,7 +1841,7 @@ pub(crate) fn builtin_string_collate_lessp(eval: &mut Context, args: Vec<Value>)
 
 /// (string-collate-equalp S1 S2 &optional LOCALE IGNORE-CASE)
 pub(crate) fn builtin_string_collate_equalp(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("string-collate-equalp", &args, 2, 4)?;
+    expect_args_range("string-collate-equalp", &args, 2, 4)?;
     let s1 = string_designator_text(eval, args[0])?;
     let s2 = string_designator_text(eval, args[1])?;
     let locale = require_optional_locale(args.get(2))?;

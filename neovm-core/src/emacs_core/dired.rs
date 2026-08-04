@@ -6,6 +6,7 @@
 //! - `file-attributes`, `file-attributes-lessp`
 //! - `system-users`, `system-groups`
 
+use crate::emacs_core::error::{expect_args_range};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{intern, resolve_sym};
@@ -49,17 +50,6 @@ impl FileIdFormat {
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn expect_lisp_string(_name: &str, value: &Value) -> Result<LispString, Flow> {
     match value.kind() {
@@ -489,7 +479,7 @@ pub(crate) fn builtin_directory_files_and_attributes(
     eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("directory-files-and-attributes", &args, 1, 6)?;
+    expect_args_range("directory-files-and-attributes", &args, 1, 6)?;
     let dir = expect_lisp_string("directory-files-and-attributes", &args[0])?;
     let dir =
         super::fileio::resolve_filename_lisp_in_state(&eval.obarray, &[], &eval.buffers, &dir);
@@ -587,7 +577,7 @@ fn directory_files_and_attributes_with_dir(
 /// This supports arbitrary callable predicates and matches Emacs behavior of
 /// binding `default-directory` to DIRECTORY while predicate is invoked.
 pub(crate) fn builtin_file_name_completion(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("file-name-completion", &args, 2, 3)?;
+    expect_args_range("file-name-completion", &args, 2, 3)?;
     let file = expect_lisp_string("file-name-completion", &args[0])?;
     let directory_arg = expect_lisp_string("file-name-completion", &args[1])?;
     let directory = expand_file_completion_directory(eval, directory_arg)?;
@@ -631,7 +621,7 @@ pub(crate) fn builtin_file_name_all_completions(
     eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("file-name-all-completions", &args, 2, 2)?;
+    expect_args_range("file-name-all-completions", &args, 2, 2)?;
 
     let file = expect_lisp_string("file-name-all-completions", &args[0])?;
     let directory_arg = expect_lisp_string("file-name-all-completions", &args[1])?;
@@ -923,7 +913,7 @@ pub(crate) fn prepare_file_name_completion_in_state(
     args: &[Value],
     decode_name: impl Fn(&[u8]) -> LispString,
 ) -> Result<FileNameCompletionPlan, Flow> {
-    expect_range_args("file-name-completion", args, 2, 3)?;
+    expect_args_range("file-name-completion", args, 2, 3)?;
 
     let file = expect_lisp_string("file-name-completion", &args[0])?;
     let directory_arg = expect_lisp_string("file-name-completion", &args[1])?;
@@ -1209,7 +1199,7 @@ fn predicate_callable_name(predicate: &Value) -> Option<&str> {
 /// Context-backed variant of `file-attributes`.
 /// Expands FILENAME and dispatches file-name handlers like GNU `file-attributes`.
 pub(crate) fn builtin_file_attributes(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("file-attributes", &args, 1, 2)?;
+    expect_args_range("file-attributes", &args, 1, 2)?;
 
     // GNU dired.c:Ffile_attributes wraps expand-file-name in an all-error
     // condition handler and returns nil if expansion fails or returns non-string.
@@ -1251,7 +1241,7 @@ pub(crate) fn builtin_file_attributes_lessp(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("file-attributes-lessp", &args, 2, 2)?;
+    expect_args_range("file-attributes-lessp", &args, 2, 2)?;
 
     // GNU (src/dired.c): `return Fstring_lessp (Fcar (f1), Fcar (f2));`.
     // It performs NO type-check on the cars itself — it simply delegates to
@@ -1284,7 +1274,7 @@ fn file_attributes_lessp_car(val: &Value) -> Result<Value, Flow> {
 /// Return a list of user names on the system.
 /// Reads `/etc/passwd` and returns account names in oracle-compatible order.
 pub(crate) fn builtin_system_users(args: Vec<Value>) -> EvalResult {
-    expect_range_args("system-users", &args, 0, 0)?;
+    expect_args_range("system-users", &args, 0, 0)?;
 
     let mut users = read_colon_file_names(&system_users_passwd_path());
     if users.is_empty() {
@@ -1304,7 +1294,7 @@ pub(crate) fn builtin_system_users(args: Vec<Value>) -> EvalResult {
 /// Return a list of group names on the system.
 /// Reads `/etc/group` and returns group names in oracle-compatible order.
 pub(crate) fn builtin_system_groups(args: Vec<Value>) -> EvalResult {
-    expect_range_args("system-groups", &args, 0, 0)?;
+    expect_args_range("system-groups", &args, 0, 0)?;
     let groups = read_colon_file_names(&system_groups_path());
     if groups.is_empty() {
         return Ok(Value::NIL);

@@ -4,6 +4,7 @@
 //! character classification, width calculation, and encoding conversion
 //! APIs.
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::intern::{SymId, intern, resolve_sym};
 // encoding.rs: sentinel imports removed; using emacs_char + LispString directly
@@ -1346,48 +1347,6 @@ pub fn glyphless_char_display(c: char) -> String {
 // ---------------------------------------------------------------------------
 
 use crate::emacs_core::error::{EvalResult, signal};
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), crate::emacs_core::error::Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_range_args(
-    name: &str,
-    args: &[Value],
-    min: usize,
-    max: usize,
-) -> Result<(), crate::emacs_core::error::Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_min_args(
-    name: &str,
-    args: &[Value],
-    min: usize,
-) -> Result<(), crate::emacs_core::error::Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn known_coding_system(name: &str) -> bool {
     crate::emacs_core::coding::CodingSystemManager::new().is_known_or_derived(name)
@@ -3711,7 +3670,7 @@ fn builtin_coding_region(
     direction: CodingDirection,
 ) -> EvalResult {
     let name = direction.region_function_name();
-    expect_range_args(name, &args, 3, 4)?;
+    expect_args_range(name, &args, 3, 4)?;
 
     let coding = context_coding_name(ctx, args[2])?;
     let mut destination = coding_region_destination(args.get(3).copied())?;

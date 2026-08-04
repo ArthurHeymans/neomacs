@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range, expect_fixnum};
 use super::*;
 use crate::buffer::{
     BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1,
@@ -101,7 +102,7 @@ pub(crate) fn builtin_search_forward_with_state(
     mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
-    expect_range_args("search-forward", args, 1, 4)?;
+    expect_args_range("search-forward", args, 1, 4)?;
     let pattern = expect_lisp_string(&args[0])?;
     let (current_id, opts, start_pt, start_char) =
         current_search_context_in_manager(buffers, args, SearchKind::ForwardLiteral)?;
@@ -469,7 +470,7 @@ pub(crate) fn builtin_search_backward_with_state(
     mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
-    expect_range_args("search-backward", args, 1, 4)?;
+    expect_args_range("search-backward", args, 1, 4)?;
     let pattern = expect_lisp_string(&args[0])?;
     let (current_id, opts, start_pt, start_char) =
         current_search_context_in_manager(buffers, args, SearchKind::BackwardLiteral)?;
@@ -532,7 +533,7 @@ pub(crate) fn builtin_re_search_forward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("re-search-forward", &args, 1, 4)?;
+    expect_args_range("re-search-forward", &args, 1, 4)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
@@ -576,7 +577,7 @@ fn re_search_forward_with_state_posix_and_syntax_properties(
     } else {
         "re-search-forward"
     };
-    expect_range_args(name, args, 1, 4)?;
+    expect_args_range(name, args, 1, 4)?;
     let pattern = expect_lisp_string(&args[0])?;
     let (current_id, opts, start_pt, start_char) =
         current_search_context_in_manager(buffers, args, SearchKind::ForwardRegexp)?;
@@ -648,7 +649,7 @@ pub(crate) fn builtin_re_search_backward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("re-search-backward", &args, 1, 4)?;
+    expect_args_range("re-search-backward", &args, 1, 4)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
@@ -686,7 +687,7 @@ fn re_search_backward_with_state_posix_and_syntax_properties(
     } else {
         "re-search-backward"
     };
-    expect_range_args(name, args, 1, 4)?;
+    expect_args_range(name, args, 1, 4)?;
     let pattern = expect_lisp_string(&args[0])?;
     let (current_id, opts, start_pt, start_char) =
         current_search_context_in_manager(buffers, args, SearchKind::BackwardRegexp)?;
@@ -758,7 +759,7 @@ pub(crate) fn builtin_posix_search_forward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("posix-search-forward", &args, 1, 4)?;
+    expect_args_range("posix-search-forward", &args, 1, 4)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
@@ -781,7 +782,7 @@ pub(crate) fn builtin_posix_search_backward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("posix-search-backward", &args, 1, 4)?;
+    expect_args_range("posix-search-backward", &args, 1, 4)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
@@ -801,7 +802,7 @@ pub(crate) fn builtin_posix_search_backward(
 }
 
 pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("looking-at", &args, 1, 2)?;
+    expect_args_range("looking-at", &args, 1, 2)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
@@ -830,7 +831,7 @@ fn builtin_looking_at_with_state_and_syntax_properties(
     match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
-    expect_range_args("looking-at", args, 1, 2)?;
+    expect_args_range("looking-at", args, 1, 2)?;
     let pattern = expect_lisp_string(&args[0])?;
     let inhibit_modify = args.get(1).is_some_and(|arg| !arg.is_nil());
 
@@ -915,7 +916,7 @@ pub(crate) fn builtin_posix_looking_at(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("posix-looking-at", &args, 1, 2)?;
+    expect_args_range("posix-looking-at", &args, 1, 2)?;
     let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
         .map(|v| !v.is_nil())
         .unwrap_or(true);
@@ -946,7 +947,7 @@ fn builtin_posix_looking_at_with_state_and_syntax_properties(
     // longest-match (regex-emacs.c:4143-4344). See audit #2 in
     // `drafts/regex-search-audit.md`; this wrapper used to be a
     // silent alias for `looking-at`.
-    expect_range_args("posix-looking-at", args, 1, 2)?;
+    expect_args_range("posix-looking-at", args, 1, 2)?;
     let pattern = expect_lisp_string(&args[0])?;
     let inhibit_modify = args.get(1).is_some_and(|arg| !arg.is_nil());
 
@@ -1000,7 +1001,7 @@ pub(crate) fn builtin_string_match_with_state(
     crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::StringMatch,
         || {
-            expect_range_args("string-match", args, 2, 4)?;
+            expect_args_range("string-match", args, 2, 4)?;
             let inhibit_modify = args.get(3).is_some_and(|v| v.is_truthy());
 
             match (args[0].kind(), args[1].kind()) {
@@ -1113,7 +1114,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
     crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::StringMatch,
         || {
-            expect_range_args("posix-string-match", args, 2, 4)?;
+            expect_args_range("posix-string-match", args, 2, 4)?;
             let inhibit_modify = args.get(3).is_some_and(|v| v.is_truthy());
 
             match (args[0].kind(), args[1].kind()) {
@@ -1174,7 +1175,7 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
     args: &[Value],
 ) -> EvalResult {
-    expect_range_args("string-match-p", args, 2, 3)?;
+    expect_args_range("string-match-p", args, 2, 3)?;
     match (args[0].kind(), args[1].kind()) {
         (ValueKind::String, ValueKind::String) => {
             let pattern = expect_lisp_string(&args[0])?;
@@ -1283,7 +1284,7 @@ pub(crate) fn builtin_match_string(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("match-string", &args, 1, 2)?;
+    expect_args_range("match-string", &args, 1, 2)?;
     let group_index = expect_int(&args[0])?;
     if group_index < 0 {
         return Err(signal(

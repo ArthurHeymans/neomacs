@@ -7,6 +7,7 @@
 //! handles, while legacy integer designators are still accepted in resolver
 //! paths for compatibility.
 
+pub(crate) use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_fixnum};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, resolve_sym};
 use super::minibuffer::MinibufferManager;
@@ -31,58 +32,12 @@ pub(crate) use super::builtins::symbols::{
     builtin_resize_mini_window_internal, builtin_set_window_new_normal,
     builtin_set_window_new_pixel, builtin_set_window_new_total,
 };
-pub(crate) use super::builtins::{
-    builtin_coordinates_in_window_p, builtin_current_window_configuration,
-    builtin_run_window_scroll_functions, builtin_set_window_configuration,
-    builtin_split_window_internal, builtin_window_configuration_equal_p,
-    builtin_window_configuration_frame, builtin_window_configuration_p,
-};
-pub(crate) use super::builtins::{
-    builtin_window_lines_pixel_dimensions, builtin_window_new_normal, builtin_window_new_pixel,
-    builtin_window_new_total, builtin_window_old_body_pixel_height,
-    builtin_window_old_body_pixel_width, builtin_window_old_pixel_height,
-    builtin_window_old_pixel_width,
-};
+pub(crate) use super::builtins::{builtin_coordinates_in_window_p, builtin_current_window_configuration, builtin_run_window_scroll_functions, builtin_set_window_configuration, builtin_split_window_internal, builtin_window_configuration_equal_p, builtin_window_configuration_frame, builtin_window_configuration_p};
+pub(crate) use super::builtins::{builtin_window_lines_pixel_dimensions, builtin_window_new_normal, builtin_window_new_pixel, builtin_window_new_total, builtin_window_old_body_pixel_height, builtin_window_old_body_pixel_width, builtin_window_old_pixel_height, builtin_window_old_pixel_width};
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// Expect exactly N arguments.
-pub(crate) fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-/// Expect at least N arguments.
-pub(crate) fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-/// Expect at most N arguments.
-pub(crate) fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 /// Extract an integer from a Value.
 pub(crate) fn expect_int(value: &Value) -> Result<i64, Flow> {
@@ -289,17 +244,6 @@ fn clamped_window_position_in_state(
     Some(LispCharPos1::from_one_based_usize(
         requested.min(buffer_end.max(1)),
     ))
-}
-
-/// Extract a fixnum-like integer from a Value.
-fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _other => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("fixnump"), *value],
-        )),
-    }
 }
 
 /// Extract a number-or-marker argument as f64.
@@ -7694,6 +7638,41 @@ pub(crate) fn builtin_fit_window_to_buffer(
         let _ = resize_window_by_delta_px(frame, wid, new_pixel_height - current_height, false);
     }
 
+    Ok(Value::NIL)
+}
+
+/// (force-window-update &optional OBJECT) -> t/nil
+///
+/// GNU `Fforce_window_update` (`src/window.c:4488`):
+///
+/// - nil OBJECT: mark everything for redisplay, return t.
+/// - a live WINDOW: mark that window, return t.
+/// - a buffer/string: return t iff that buffer is shown in some window.
+///
+/// neomacs has no incremental redisplay state to mark, but the *return value*
+/// is observable (oracle test cx409): a live window must yield t, not nil.
+/// The previous stub returned nil for *every* non-nil OBJECT, which is wrong
+/// for the common `(force-window-update (selected-window))` call.
+pub(crate) fn builtin_force_window_update(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("force-window-update", &args, 1)?;
+    let Some(object) = args.first().filter(|v| !v.is_nil()) else {
+        // nil OBJECT: force all windows.
+        return Ok(Value::T);
+    };
+
+    // A live window forces just that window and returns t.
+    if let Some(id) = object.as_window_id()
+        && eval.frames.is_live_window_id(WindowId(id))
+    {
+        return Ok(Value::T);
+    }
+
+    // A buffer (or buffer name) shown in at least one window also returns t in
+    // GNU; otherwise (dead window, unshown buffer, anything else) the value is
+    // nil -- the safe default neomacs already produced for those cases.
     Ok(Value::NIL)
 }
 

@@ -4,6 +4,7 @@
 //! - Classification: `copysign`, `frexp`, `ldexp`, `logb`
 //! - Rounding (float result): `fceiling`, `ffloor`, `fround`, `ftruncate`
 
+use crate::emacs_core::error::{expect_args};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
@@ -14,17 +15,6 @@ use malachite::base::rounding_modes::RoundingMode;
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 /// Extract a numeric argument as `f64` with `numberp` contract semantics.
 ///

@@ -4,7 +4,8 @@
 //! this module so process management and Elisp builtins do not depend on
 //! rustls-specific types.
 
-use super::builtins::{EvalResult, expect_args, signal};
+use crate::emacs_core::error::{expect_args};
+use super::builtins::{EvalResult, signal};
 use super::error::Flow;
 use super::value::Value;
 use super::value::list_to_vec;

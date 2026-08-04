@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range, expect_fixnum};
 use super::*;
 use crate::buffer::text_props::PropertyPlistApplication;
 use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1};
@@ -595,7 +596,7 @@ pub(crate) fn plan_defalias_in_obarray(
     obarray: &Obarray,
     args: &[Value],
 ) -> Result<DefaliasPlan, Flow> {
-    expect_range_args("defalias", args, 2, 3)?;
+    expect_args_range("defalias", args, 2, 3)?;
     // Unwrap symbol-with-pos transparently via symbol_id, which handles
     // bare symbols, nil, t, and symbol-with-pos objects.
     let symbol = super::symbols::expect_symbol_id(&args[0])?;
@@ -639,12 +640,12 @@ pub(crate) fn plan_defalias_in_obarray(
 }
 
 pub(crate) fn builtin_provide(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("provide", &args, 1, 2)?;
+    expect_args_range("provide", &args, 1, 2)?;
     eval.provide_value(args[0], args.get(1).cloned())
 }
 
 pub(crate) fn builtin_require(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("require", &args, 1, 3)?;
+    expect_args_range("require", &args, 1, 3)?;
     eval.require_value(args[0], args.get(1).cloned(), args.get(2).cloned())
 }
 
@@ -2228,7 +2229,7 @@ pub(crate) fn finish_write_char_in_eval(
     eval: &mut super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
-    expect_range_args("write-char", args, 1, 2)?;
+    expect_args_range("write-char", args, 1, 2)?;
     let char_code = expect_fixnum(&args[0])?;
     let target = resolve_print_target(eval, args.get(1));
 
@@ -2282,7 +2283,7 @@ pub(crate) fn builtin_write_char_impl(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> Result<Option<Value>, Flow> {
-    expect_range_args("write-char", &args, 1, 2)?;
+    expect_args_range("write-char", &args, 1, 2)?;
     let char_code = expect_fixnum(&args[0])?;
     let target = resolve_print_target_in_state(ctx, args.get(1));
 

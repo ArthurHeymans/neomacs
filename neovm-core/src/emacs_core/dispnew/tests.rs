@@ -123,7 +123,7 @@ fn internal_show_cursor_rejects_non_window() {
 fn force_window_update_no_arg_returns_t() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
-    let result = builtin_force_window_update(&mut eval, vec![]).unwrap();
+    let result = crate::emacs_core::window_cmds::builtin_force_window_update(&mut eval, vec![]).unwrap();
     assert_eq!(result, Value::T);
 }
 
@@ -134,7 +134,7 @@ fn force_window_update_non_window_arg_returns_nil() {
     // buffer shown in some window).
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
-    let result = builtin_force_window_update(&mut eval, vec![Value::T]).unwrap();
+    let result = crate::emacs_core::window_cmds::builtin_force_window_update(&mut eval, vec![Value::T]).unwrap();
     assert!(result.is_nil());
 }
 
@@ -142,7 +142,7 @@ fn force_window_update_non_window_arg_returns_nil() {
 fn force_window_update_nil_arg_returns_t() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
-    let result = builtin_force_window_update(&mut eval, vec![Value::NIL]).unwrap();
+    let result = crate::emacs_core::window_cmds::builtin_force_window_update(&mut eval, vec![Value::NIL]).unwrap();
     assert_eq!(result, Value::T);
 }
 
@@ -154,7 +154,7 @@ fn force_window_update_live_window_returns_t() {
     let mut eval = crate::emacs_core::Context::new();
     let selected =
         crate::emacs_core::window_cmds::builtin_selected_window(&mut eval, vec![]).unwrap();
-    let result = builtin_force_window_update(&mut eval, vec![selected]).unwrap();
+    let result = crate::emacs_core::window_cmds::builtin_force_window_update(&mut eval, vec![selected]).unwrap();
     assert_eq!(result, Value::T);
 }
 

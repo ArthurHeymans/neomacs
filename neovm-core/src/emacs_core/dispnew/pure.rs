@@ -4,6 +4,7 @@
 //! and all dispnew-related builtins (redraw, ding, termscript,
 //! send-string-to-terminal, internal-show-cursor, force-window-update).
 
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use crate::emacs_core::display::live_frame_designator_p;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{EvalResult, Flow, signal};
@@ -21,39 +22,6 @@ pub(crate) fn reset_dispnew_thread_locals() {}
 // ---------------------------------------------------------------------------
 // Argument helpers (local copies — originals are pub(crate) in display.rs)
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Window designator helpers
@@ -122,7 +90,7 @@ pub(crate) fn builtin_redraw_frame(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("redraw-frame", &args, 0, 1)?;
+    expect_args_range("redraw-frame", &args, 0, 1)?;
     if let Some(frame) = args.first()
         && !frame.is_nil()
         && !live_frame_designator_p(eval, frame)
@@ -154,7 +122,7 @@ pub(crate) fn builtin_open_termscript(args: Vec<Value>) -> EvalResult {
 
 /// (ding &optional ARG) -> nil
 pub(crate) fn builtin_ding(args: Vec<Value>) -> EvalResult {
-    expect_range_args("ding", &args, 0, 1)?;
+    expect_args_range("ding", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
@@ -165,7 +133,7 @@ pub(crate) fn builtin_send_string_to_terminal(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("send-string-to-terminal", &args, 1, 2)?;
+    expect_args_range("send-string-to-terminal", &args, 1, 2)?;
     match args[0].kind() {
         ValueKind::String => {
             if let Some(terminal) = args.get(1) {
@@ -203,7 +171,7 @@ pub(crate) fn builtin_internal_show_cursor_p(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("internal-show-cursor-p", &args, 0, 1)?;
+    expect_args_range("internal-show-cursor-p", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_designator_eval(eval, window)?;
     }
@@ -214,41 +182,6 @@ pub(crate) fn builtin_internal_show_cursor_p(
         ));
     }
     Ok(Value::T)
-}
-
-/// (force-window-update &optional OBJECT) -> t/nil
-///
-/// GNU `Fforce_window_update` (`src/window.c:4488`):
-///
-/// - nil OBJECT: mark everything for redisplay, return t.
-/// - a live WINDOW: mark that window, return t.
-/// - a buffer/string: return t iff that buffer is shown in some window.
-///
-/// neomacs has no incremental redisplay state to mark, but the *return value*
-/// is observable (oracle test cx409): a live window must yield t, not nil.
-/// The previous stub returned nil for *every* non-nil OBJECT, which is wrong
-/// for the common `(force-window-update (selected-window))` call.
-pub(crate) fn builtin_force_window_update(
-    eval: &mut crate::emacs_core::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_max_args("force-window-update", &args, 1)?;
-    let Some(object) = args.first().filter(|v| !v.is_nil()) else {
-        // nil OBJECT: force all windows.
-        return Ok(Value::T);
-    };
-
-    // A live window forces just that window and returns t.
-    if let Some(id) = object.as_window_id()
-        && eval.frames.is_live_window_id(WindowId(id))
-    {
-        return Ok(Value::T);
-    }
-
-    // A buffer (or buffer name) shown in at least one window also returns t in
-    // GNU; otherwise (dead window, unshown buffer, anything else) the value is
-    // nil -- the safe default neomacs already produced for those cases.
-    Ok(Value::NIL)
 }
 
 /// (frame--z-order-lessp A B) -> t/nil

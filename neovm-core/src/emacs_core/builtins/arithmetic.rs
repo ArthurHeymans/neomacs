@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range};
 use super::*;
 use malachite::base::num::arithmetic::traits::{Abs, Pow};
 use malachite::base::num::conversion::traits::RoundingFrom;
@@ -1225,7 +1226,7 @@ fn rounding_with_divisor(
     round_fn: fn(f64) -> f64,
     int_div: fn(i64, i64) -> i64,
 ) -> EvalResult {
-    expect_range_args(name, args, 1, 2)?;
+    expect_args_range(name, args, 1, 2)?;
     // GNU `rounding_driver` (`src/floatfns.c`) validates the numerator
     // before doing anything else.  It then treats a nil (or omitted)
     // divisor as the single-argument form, so cl-lib may safely forward an

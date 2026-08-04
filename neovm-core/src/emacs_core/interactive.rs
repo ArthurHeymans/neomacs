@@ -11,6 +11,7 @@
 //!   `this-command-keys-vector`, `thing-at-point`, `bounds-of-thing-at-point`,
 //!   `symbol-at-point`.
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 
@@ -228,39 +229,6 @@ pub(crate) fn sync_interactive_registry_for_symbol_definition(
 // ---------------------------------------------------------------------------
 // Expect helpers (local to this module)
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn expect_optional_command_keys_vector(keys: Option<&Value>) -> Result<(), Flow> {
     if let Some(keys_value) = keys

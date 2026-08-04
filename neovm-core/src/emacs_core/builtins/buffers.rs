@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range, expect_fixnum};
 use super::*;
 
 // ===========================================================================
@@ -121,7 +122,7 @@ fn sync_current_buffer_to_selected_window(eval: &mut super::eval::Context) {
     }
 }
 
-fn point_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 {
+pub(crate) fn point_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 {
     buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
 }
 
@@ -235,7 +236,7 @@ pub(crate) fn prepare_make_indirect_buffer_in_manager(
     buffers: &mut BufferManager,
     args: Vec<Value>,
 ) -> Result<MakeIndirectBufferPlan, Flow> {
-    expect_range_args("make-indirect-buffer", &args, 2, 4)?;
+    expect_args_range("make-indirect-buffer", &args, 2, 4)?;
 
     let base_id = match args[0].kind() {
         ValueKind::Veclike(VecLikeType::Buffer) => {
@@ -1284,7 +1285,7 @@ pub(crate) fn builtin_insert_buffer_substring(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("insert-buffer-substring", &args, 1, 3)?;
+    expect_args_range("insert-buffer-substring", &args, 1, 3)?;
     let buffer_id =
         resolve_buffer_designator_allow_nil_current_in_manager(&eval.buffers, &args[0])?;
     let (default_start, default_end) = buffer_id
@@ -1323,7 +1324,7 @@ pub(crate) fn builtin_kill_all_local_variables(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("kill-all-local-variables", &args, 0, 1)?;
+    expect_args_range("kill-all-local-variables", &args, 0, 1)?;
     let current_id = eval
         .buffers
         .current_buffer_id()
@@ -1603,7 +1604,7 @@ pub(crate) fn builtin_replace_buffer_contents(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("replace-buffer-contents", &args, 1, 3)?;
+    expect_args_range("replace-buffer-contents", &args, 1, 3)?;
     // GNU 31's `replace-buffer-contents` (subr.el) is a thin wrapper:
     //   (replace-region-contents (point-min) (point-max) (get-buffer source)
     //                            max-secs max-costs)
@@ -1648,7 +1649,7 @@ pub(crate) fn builtin_replace_region_contents(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("replace-region-contents", &args, 3, 6)?;
+    expect_args_range("replace-region-contents", &args, 3, 6)?;
     let current_id = eval
         .buffers
         .current_buffer_id()
@@ -2113,7 +2114,7 @@ pub(crate) fn builtin_split_window_internal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("split-window-internal", &args, 4, 5)?;
+    expect_args_range("split-window-internal", &args, 4, 5)?;
     if !args[1].is_nil() {
         let _ = expect_fixnum(&args[1])?;
     }
@@ -2144,103 +2145,6 @@ pub(crate) fn builtin_split_window_internal(
     // `run_redisplay_window_change_hooks'.  Firing it here diverged from GNU in
     // batch (no redisplay), where the hook must not run.
     Ok(result)
-}
-
-pub(crate) fn builtin_buffer_text_pixel_size(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_range_args("buffer-text-pixel-size", &args, 0, 4)?;
-
-    // GNU `buffer-text-pixel-size` returns PIXELS: the measured column/row counts
-    // scaled by the frame's character cell size. On a TTY the cell is 1x1 (so the
-    // result equals the cell counts), on a GUI frame it is the real font
-    // width/height. This mirrors `window-text-pixel-size` (which already scales by
-    // `frame.char_width`). Without it, `string-pixel-width` returns columns, and the
-    // mode-line `(space :align-to (- right-margin (string-pixel-width …)))` produced
-    // by `mode-line-format-right-align` mis-aligns on GUI frames — the Doom dashboard
-    // "DOOM vX" right segment is pushed off-screen.
-    let (char_w, char_h) = eval
-        .frames
-        .selected_frame()
-        .map(|f| (f.char_width.max(1.0), f.char_height.max(1.0)))
-        .unwrap_or((1.0, 1.0));
-
-    let buffers = &eval.buffers;
-
-    let buffer_id = if args.is_empty() {
-        resolve_buffer_designator_allow_nil_current_in_manager(buffers, &Value::NIL)?
-    } else {
-        resolve_buffer_designator_allow_nil_current_in_manager(buffers, &args[0])?
-    };
-
-    if args.len() > 1 {
-        let window = &args[1];
-        if !window.is_nil() && !window.is_window() {
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("window-live-p"), *window],
-            ));
-        }
-    }
-
-    let limit_from_value = |value: &Value| -> Result<Option<usize>, Flow> {
-        match value.kind() {
-            ValueKind::Nil | ValueKind::T => Ok(None),
-            ValueKind::Fixnum(n) if n >= 0 => Ok(Some(n as usize)),
-            _ => Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("natnump"), *value],
-            )),
-        }
-    };
-
-    let x_limit = if args.len() > 2 {
-        limit_from_value(&args[2])?
-    } else {
-        None
-    };
-    let y_limit = if args.len() > 3 {
-        limit_from_value(&args[3])?
-    } else {
-        None
-    };
-
-    let Some(buffer_id) = buffer_id else {
-        return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
-    };
-
-    // Determine the accessible byte range to measure.  An empty buffer yields
-    // (0 . 0) just like the previous text-based implementation.
-    let range = match buffers.get(buffer_id) {
-        Some(buf) => buf.accessible_emacs_byte_range(),
-        None => return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0))),
-    };
-    if range.end().get() <= range.start().get() {
-        return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
-    }
-
-    // Measure honoring `display` text properties (e.g. `(space :align-to N)` /
-    // `(space :width N)`), shared with `window-text-pixel-size`.  Wide chars
-    // contribute their display width, preserving the previous accounting.
-    let metrics = crate::emacs_core::xdisp::region_text_metrics_with_display(
-        eval,
-        buffer_id,
-        range.start(),
-        range.end(),
-        false,
-        crate::emacs_core::xdisp::CharColumnWidth::DisplayWidth,
-        x_limit,
-        y_limit,
-    );
-
-    if metrics.lines == 0 {
-        return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
-    }
-    Ok(Value::cons(
-        Value::fixnum((metrics.max_columns as f32 * char_w).ceil() as i64),
-        Value::fixnum((metrics.lines as f32 * char_h).ceil() as i64),
-    ))
 }
 
 /// `(compare-buffer-substrings BUF1 START1 END1 BUF2 START2 END2)` -> integer
@@ -2290,191 +2194,8 @@ pub(crate) fn builtin_compare_buffer_substrings_with_case_fold(
     )))
 }
 
-pub(crate) fn builtin_compute_motion(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let obarray = &eval.obarray;
-    let buffers = &eval.buffers;
-    expect_args("compute-motion", &args, 7)?;
-
-    let from = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[0])?;
-    if !args[1].is_cons() {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("consp"), args[1]],
-        ));
-    }
-    let to = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[2])?;
-    if !args[3].is_nil() && !args[3].is_cons() {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("consp"), args[3]],
-        ));
-    }
-    if !args[4].is_nil() {
-        let _ = expect_fixnum(&args[4])?;
-    }
-    if !args[5].is_nil() && !args[5].is_cons() {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("consp"), args[5]],
-        ));
-    }
-    if !args[6].is_nil() && !args[6].is_window() {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("window-live-p"), args[6]],
-        ));
-    }
-
-    // Extract FROMPOS (HPOS . VPOS).
-    let (from_hpos, from_vpos) = extract_cons_fixnums(args[1])?;
-
-    // Extract TOPOS (HPOS . VPOS) or nil.
-    let (to_hpos, to_vpos) = if args[3].is_nil() {
-        (i64::MAX, i64::MAX)
-    } else {
-        extract_cons_fixnums(args[3])?
-    };
-
-    // Extract WIDTH.
-    let width = if args[4].is_nil() {
-        80i64 // default window width
-    } else {
-        expect_fixnum(&args[4])?
-    };
-    if !args[5].is_nil() {
-        let (hscroll, tab_offset) = extract_cons_fixnums(args[5])?;
-        if hscroll < 0 || tab_offset < 0 || tab_offset > i32::MAX as i64 {
-            return Err(signal(
-                LispCondition::ArgsOutOfRange,
-                vec![args[5].cons_car(), args[5].cons_cdr()],
-            ));
-        }
-    }
-
-    // Get buffer text.
-    let Some(buf) = buffers.current_buffer() else {
-        return Ok(Value::list(vec![
-            Value::fixnum(from),
-            Value::fixnum(from_hpos),
-            Value::fixnum(from_vpos),
-            Value::fixnum(0),
-            Value::NIL,
-        ]));
-    };
-    let text = buf.full_text_string();
-    let accessible = buf.accessible_emacs_byte_region();
-    let tab_width = crate::buffer::buffer::lookup_buffer_slot("tab-width")
-        .map(|info| buf.slots[info.offset.index()])
-        .or_else(|| buf.get_buffer_local("tab-width"))
-        .or_else(|| obarray.symbol_value("tab-width").copied())
-        .and_then(|value: Value| match value.kind() {
-            ValueKind::Fixnum(n) if n > 0 => Some(n as usize),
-            _ => None,
-        })
-        .unwrap_or(8);
-
-    // Convert 1-based char positions to byte offsets.
-    let point_min = buf.point_min_lisp_char_pos().as_i64();
-    let point_max = buf.point_max_lisp_char_pos().as_i64();
-    if from < point_min || from > point_max {
-        return Err(signal(
-            LispCondition::ArgsOutOfRange,
-            vec![
-                Value::fixnum(from),
-                Value::fixnum(point_min),
-                Value::fixnum(point_max),
-            ],
-        ));
-    }
-    if to < point_min || to > point_max {
-        return Err(signal(
-            LispCondition::ArgsOutOfRange,
-            vec![
-                Value::fixnum(to),
-                Value::fixnum(point_min),
-                Value::fixnum(point_max),
-            ],
-        ));
-    }
-
-    let from_pos = buf
-        .lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(from))
-        .get();
-    let to_pos = buf
-        .lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(to))
-        .get();
-
-    let mut hpos = from_hpos;
-    let mut vpos = from_vpos;
-    let mut prev_hpos = from_hpos;
-    let mut contin = false;
-    let mut pos = from_pos;
-
-    let bytes = text.as_bytes();
-    let tw = tab_width.max(1) as i64;
-
-    while pos < to_pos {
-        // Check TOPOS stop condition.
-        if vpos > to_vpos || (vpos == to_vpos && hpos >= to_hpos) {
-            break;
-        }
-
-        prev_hpos = hpos;
-        let ch = if pos < bytes.len() {
-            // Decode UTF-8 character.
-            let b = bytes[pos];
-            if b < 0x80 {
-                pos += 1;
-                b as char
-            } else {
-                let s = &text[pos..];
-                let c = s.chars().next().unwrap_or('\u{FFFD}');
-                pos += c.len_utf8();
-                c
-            }
-        } else {
-            break;
-        };
-
-        match ch {
-            '\n' => {
-                vpos += 1;
-                hpos = 0;
-                contin = false;
-            }
-            '\t' => {
-                hpos += tw - (hpos % tw);
-            }
-            _ => {
-                hpos += crate::encoding::char_width(ch) as i64;
-            }
-        }
-
-        // Line continuation (wrapping).
-        if hpos >= width && ch != '\n' {
-            vpos += 1;
-            contin = true;
-            hpos -= width;
-        }
-    }
-
-    // Convert byte pos back to 1-based char position.
-    let final_charpos = point_char_pos(buf, EmacsBytePos::new(pos).min(accessible.end()));
-
-    Ok(Value::list(vec![
-        Value::fixnum(final_charpos),
-        Value::fixnum(hpos),
-        Value::fixnum(vpos),
-        Value::fixnum(prev_hpos),
-        if contin { Value::T } else { Value::NIL },
-    ]))
-}
-
 /// Extract two fixnums from a cons cell (CAR . CDR).
-fn extract_cons_fixnums(val: Value) -> Result<(i64, i64), Flow> {
+pub(crate) fn extract_cons_fixnums(val: Value) -> Result<(i64, i64), Flow> {
     match val.kind() {
         ValueKind::Cons => {
             let car = val.cons_car();
@@ -2575,7 +2296,7 @@ pub(crate) fn builtin_constrain_to_field(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("constrain-to-field", &args, 2, 5)?;
+    expect_args_range("constrain-to-field", &args, 2, 5)?;
     let current = &mut eval
         .buffers
         .current_buffer()
@@ -3828,7 +3549,7 @@ pub(super) fn insert_char_code_from_value(value: &Value) -> Result<i64, Flow> {
 }
 
 pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("insert-char", &args, 1, 3)?;
+    expect_args_range("insert-char", &args, 1, 3)?;
     let char_code = insert_char_code_from_value(&args[0])?;
     let count = match args.get(1) {
         None => 1,
@@ -3903,7 +3624,7 @@ pub(crate) fn builtin_insert_char(eval: &mut super::eval::Context, args: Vec<Val
 }
 
 pub(crate) fn builtin_insert_byte(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("insert-byte", &args, 2, 3)?;
+    expect_args_range("insert-byte", &args, 2, 3)?;
     let byte = expect_fixnum(&args[0])?;
     if !(0..=255).contains(&byte) {
         return Err(signal(
@@ -3987,7 +3708,7 @@ pub(crate) fn builtin_subst_char_in_region(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("subst-char-in-region", &args, 4, 5)?;
+    expect_args_range("subst-char-in-region", &args, 4, 5)?;
 
     let start = expect_integer_or_marker_in_buffers(&eval.buffers, &args[0])?;
     let end = expect_integer_or_marker_in_buffers(&eval.buffers, &args[1])?;
@@ -4389,7 +4110,7 @@ pub(crate) fn builtin_internal_set_buffer_modified_tick(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("internal--set-buffer-modified-tick", &args, 1, 2)?;
+    expect_args_range("internal--set-buffer-modified-tick", &args, 1, 2)?;
     let tick = expect_fixnum(&args[0])?;
     let target = if let Some(buffer) = args.get(1) {
         if buffer.is_nil() {

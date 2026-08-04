@@ -21,6 +21,7 @@
 //! Mozilla root certificates are used by the default rustls backend for
 //! verification.
 
+use crate::emacs_core::error::{expect_args, expect_min_args};
 use crate::emacs_core::error::LispCondition;
 use num_enum::IntoPrimitive;
 use socket2::{Domain, Protocol, SockAddr, SockRef, Socket, Type};
@@ -6701,28 +6702,6 @@ impl super::eval::Context {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn check_keyword_arg_pairs(args: &[Value]) -> Result<(), Flow> {
     if args.len().is_multiple_of(2) {

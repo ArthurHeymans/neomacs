@@ -8447,7 +8447,7 @@ fn compute_motion_validates_positions_and_offsets_like_gnu() {
         .expect("narrow-to-region should succeed");
     let frompos = Value::cons(Value::fixnum(0), Value::fixnum(0));
 
-    let from_err = builtin_compute_motion(
+    let from_err = crate::emacs_core::indent::builtin_compute_motion(
         &mut eval,
         vec![
             Value::fixnum(1),
@@ -8471,7 +8471,7 @@ fn compute_motion_validates_positions_and_offsets_like_gnu() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let to_err = builtin_compute_motion(
+    let to_err = crate::emacs_core::indent::builtin_compute_motion(
         &mut eval,
         vec![
             Value::fixnum(2),
@@ -8496,7 +8496,7 @@ fn compute_motion_validates_positions_and_offsets_like_gnu() {
     }
 
     let positive_big = Value::bignum(Integer::from(1u64) << 100u32);
-    let bignum_err = builtin_compute_motion(
+    let bignum_err = crate::emacs_core::indent::builtin_compute_motion(
         &mut eval,
         vec![
             positive_big,
@@ -8524,7 +8524,7 @@ fn compute_motion_validates_positions_and_offsets_like_gnu() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let cons_bignum_err = builtin_compute_motion(
+    let cons_bignum_err = crate::emacs_core::indent::builtin_compute_motion(
         &mut eval,
         vec![
             Value::fixnum(2),
@@ -8545,7 +8545,7 @@ fn compute_motion_validates_positions_and_offsets_like_gnu() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let offsets_err = builtin_compute_motion(
+    let offsets_err = crate::emacs_core::indent::builtin_compute_motion(
         &mut eval,
         vec![
             Value::fixnum(2),
@@ -16980,7 +16980,7 @@ fn buffer_text_pixel_size_honors_display_align_to() {
     )
     .expect("put display align-to property");
 
-    let result = builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
     assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
     // char_width == 1.0 so pixels == columns; "XY" lands at columns 80,81 => 82.
     assert_eq!(
@@ -17027,7 +17027,7 @@ fn buffer_text_pixel_size_honors_display_space_width() {
     )
     .expect("put display :width property");
 
-    let result = builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
     assert_eq!(
         result.cons_car(),
         Value::fixnum(24),
@@ -17124,7 +17124,7 @@ fn buffer_text_pixel_size_includes_overlay_before_string_multiline() {
     )
     .expect("install overlay before-string");
 
-    let result = builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
     assert_eq!(
         result.cons_car(),
         Value::fixnum(10),
@@ -17152,7 +17152,7 @@ fn buffer_text_pixel_size_plain_text_unchanged() {
         .get_mut(buf_id)
         .expect("buffer")
         .insert("hello\nworld!");
-    let result = builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
     assert_eq!(result.cons_car(), Value::fixnum(6));
     assert_eq!(result.cons_cdr(), Value::fixnum(2));
 }

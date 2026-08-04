@@ -1,5 +1,5 @@
 use super::{
-    EvalResult, Value, ValueKind, expect_args, expect_lisp_string, expect_range_args, signal,
+    EvalResult, Value, ValueKind, expect_args, expect_lisp_string, expect_args_range, signal,
 };
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::eval::Context;
@@ -247,12 +247,12 @@ pub(crate) fn builtin_gnutls_hash_mac(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_gnutls_symmetric_decrypt(args: Vec<Value>) -> EvalResult {
-    expect_range_args("gnutls-symmetric-decrypt", &args, 4, 5)?;
+    expect_args_range("gnutls-symmetric-decrypt", &args, 4, 5)?;
     gnutls_symmetric_cipher(args, GnutlsCipherOperation::Decrypt)
 }
 
 pub(crate) fn builtin_gnutls_symmetric_encrypt(args: Vec<Value>) -> EvalResult {
-    expect_range_args("gnutls-symmetric-encrypt", &args, 4, 5)?;
+    expect_args_range("gnutls-symmetric-encrypt", &args, 4, 5)?;
     gnutls_symmetric_cipher(args, GnutlsCipherOperation::Encrypt)
 }
 

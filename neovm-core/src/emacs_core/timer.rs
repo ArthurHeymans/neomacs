@@ -17,6 +17,7 @@
 //! `sleep-for` stays native because GNU's is C (`Fsleep_for`, dispnew.c): it
 //! parses SECONDS/MILLISECONDS and enters `wait_reading_process_output`.
 
+use crate::emacs_core::error::{expect_min_args};
 use crate::emacs_core::error::LispCondition;
 use std::time::Duration;
 
@@ -280,17 +281,6 @@ impl super::eval::Context {
         self.restore_specpdl_roots(gc_roots);
 
         self.finish_callback_flow(result, "GNU Lisp timer")
-    }
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
     }
 }
 

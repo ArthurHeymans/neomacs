@@ -3,6 +3,7 @@
 //! Provides the terminal runtime owner, terminal parameter storage,
 //! and all terminal/tty query builtins.
 
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{EvalResult, Flow, signal};
 use crate::emacs_core::value::*;
@@ -684,39 +685,6 @@ pub(crate) fn make_alist(pairs: Vec<(Value, Value)>) -> Value {
 // Argument helpers (local copies — identical to display.rs)
 // ---------------------------------------------------------------------------
 
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Terminal builtins
 // ---------------------------------------------------------------------------
@@ -802,7 +770,7 @@ pub(crate) fn builtin_terminal_live_p(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("terminal-live-p", &args, 1, 1)?;
+    expect_args_range("terminal-live-p", &args, 1, 1)?;
     let Some(terminal_id) = decode_terminal_id_eval(eval, &args[0]) else {
         return Ok(Value::NIL);
     };
@@ -1190,7 +1158,7 @@ pub(crate) fn builtin_delete_terminal(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("delete-terminal", &args, 0, 2)?;
+    expect_args_range("delete-terminal", &args, 0, 2)?;
     let designator = args.first().copied().unwrap_or(Value::NIL);
     let Some(terminal_id) = decode_terminal_id_eval(eval, &designator) else {
         return Ok(Value::NIL);

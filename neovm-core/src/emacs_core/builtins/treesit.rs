@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
 use super::*;
 use libloading::Library;
 use std::path::{Path, PathBuf};
@@ -1465,7 +1466,7 @@ pub(crate) fn builtin_treesit_induce_sparse_tree(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-induce-sparse-tree", &args, 2, 4)?;
+    expect_args_range("treesit-induce-sparse-tree", &args, 2, 4)?;
     let depth = match args.get(3).copied().unwrap_or(Value::NIL) {
         value if value.is_nil() => 1000,
         value => expect_fixnum(&value)?,
@@ -1499,7 +1500,7 @@ pub(crate) fn builtin_treesit_language_abi_version(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-language-abi-version", &args, 0, 1)?;
+    expect_args_range("treesit-language-abi-version", &args, 0, 1)?;
     let Some(language_arg) = args.first() else {
         return Ok(Value::NIL);
     };
@@ -1524,7 +1525,7 @@ pub(crate) fn builtin_treesit_language_available_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-language-available-p", &args, 1, 2)?;
+    expect_args_range("treesit-language-available-p", &args, 1, 2)?;
     let language = parse_symbol_arg("treesit-language-available-p", &args[0])?;
     let detail = args.get(1).is_some_and(|value| !value.is_nil());
     match load_language(eval, language) {
@@ -1536,7 +1537,7 @@ pub(crate) fn builtin_treesit_language_available_p(
 }
 
 pub(crate) fn builtin_treesit_library_abi_version(args: Vec<Value>) -> EvalResult {
-    expect_range_args("treesit-library-abi-version", &args, 0, 1)?;
+    expect_args_range("treesit-library-abi-version", &args, 0, 1)?;
     if args.first().is_some_and(|value| !value.is_nil()) {
         Ok(Value::fixnum(MIN_COMPATIBLE_LANGUAGE_VERSION as i64))
     } else {
@@ -1605,7 +1606,7 @@ pub(crate) fn builtin_treesit_node_child(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-node-child", &args, 2, 3)?;
+    expect_args_range("treesit-node-child", &args, 2, 3)?;
     if args[0].is_nil() {
         return Ok(Value::NIL);
     }
@@ -1658,7 +1659,7 @@ pub(crate) fn builtin_treesit_node_child_count(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-node-child-count", &args, 1, 2)?;
+    expect_args_range("treesit-node-child-count", &args, 1, 2)?;
     if args[0].is_nil() {
         return Ok(Value::NIL);
     }
@@ -1676,7 +1677,7 @@ pub(crate) fn builtin_treesit_node_descendant_for_range(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-node-descendant-for-range", &args, 3, 4)?;
+    expect_args_range("treesit-node-descendant-for-range", &args, 3, 4)?;
     if args[0].is_nil() {
         return Ok(Value::NIL);
     }
@@ -1775,7 +1776,7 @@ pub(crate) fn builtin_treesit_node_first_child_for_pos(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-node-first-child-for-pos", &args, 2, 3)?;
+    expect_args_range("treesit-node-first-child-for-pos", &args, 2, 3)?;
     if args[0].is_nil() {
         return Ok(Value::NIL);
     }
@@ -1805,7 +1806,7 @@ pub(crate) fn builtin_treesit_node_match_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-node-match-p", &args, 2, 3)?;
+    expect_args_range("treesit-node-match-p", &args, 2, 3)?;
     if args[0].is_nil() {
         return Ok(Value::NIL);
     }
@@ -1832,7 +1833,7 @@ pub(crate) fn builtin_treesit_node_next_sibling(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-node-next-sibling", &args, 1, 2)?;
+    expect_args_range("treesit-node-next-sibling", &args, 1, 2)?;
     if args[0].is_nil() {
         return Ok(Value::NIL);
     }
@@ -1885,7 +1886,7 @@ pub(crate) fn builtin_treesit_node_prev_sibling(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-node-prev-sibling", &args, 1, 2)?;
+    expect_args_range("treesit-node-prev-sibling", &args, 1, 2)?;
     if args[0].is_nil() {
         return Ok(Value::NIL);
     }
@@ -1997,7 +1998,7 @@ pub(crate) fn builtin_treesit_parser_create(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-parser-create", &args, 1, 4)?;
+    expect_args_range("treesit-parser-create", &args, 1, 4)?;
     let language = parse_symbol_arg("treesit-parser-create", &args[0])?;
     let tag = expect_symbol_or_nil(
         "treesit-parser-create",
@@ -2104,7 +2105,7 @@ pub(crate) fn builtin_treesit_parser_list(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-parser-list", &args, 0, 3)?;
+    expect_args_range("treesit-parser-list", &args, 0, 3)?;
     let (orig_buffer_id, root_buffer_id, _) = resolve_buffer_ids(eval, args.first())?;
     let language = match args.get(1).copied().unwrap_or(Value::NIL) {
         value if value.is_nil() => None,
@@ -2600,7 +2601,7 @@ pub(crate) fn builtin_treesit_query_capture(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-query-capture", &args, 2, 6)?;
+    expect_args_range("treesit-query-capture", &args, 2, 6)?;
     let input = resolve_node_input(eval, args[0], "treesit-query-capture")?;
     let compiled_query = resolve_compiled_query_value(
         eval,
@@ -2752,7 +2753,7 @@ pub(crate) fn builtin_treesit_query_compile(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-query-compile", &args, 2, 3)?;
+    expect_args_range("treesit-query-compile", &args, 2, 3)?;
     let query = args[1];
     if !query_like_p(query) {
         return Err(query_type_error("treesit-query-compile", query));
@@ -2831,7 +2832,7 @@ pub(crate) fn builtin_treesit_search_forward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-search-forward", &args, 2, 4)?;
+    expect_args_range("treesit-search-forward", &args, 2, 4)?;
     let handle = ensure_current_node(eval, "treesit-search-forward", args[0])?;
     let parser_value = eval
         .treesit
@@ -2862,7 +2863,7 @@ pub(crate) fn builtin_treesit_search_subtree(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-search-subtree", &args, 2, 5)?;
+    expect_args_range("treesit-search-subtree", &args, 2, 5)?;
     let handle = ensure_current_node(eval, "treesit-search-subtree", args[0])?;
     let parser_value = eval
         .treesit
@@ -2925,7 +2926,7 @@ pub(crate) fn builtin_treesit_tracking_line_column_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("treesit-tracking-line-column-p", &args, 0, 1)?;
+    expect_args_range("treesit-tracking-line-column-p", &args, 0, 1)?;
     let buffer_id = match args.first().copied().unwrap_or(Value::NIL) {
         value if value.is_nil() => eval
             .buffers

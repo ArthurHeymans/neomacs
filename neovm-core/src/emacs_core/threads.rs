@@ -15,6 +15,7 @@
 //!   `condition-wait`, `condition-notify`
 //! - Special form: `with-mutex`
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
 use std::{collections::HashMap, time::Duration};
 
@@ -688,39 +689,6 @@ impl GcTrace for ThreadManager {
 // ===========================================================================
 // Argument helpers
 // ===========================================================================
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_args_range(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn tagged_object_value(tag: &str, id: u64) -> Value {
     Value::cons(Value::symbol(tag), Value::fixnum(id as i64))

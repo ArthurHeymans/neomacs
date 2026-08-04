@@ -3,6 +3,7 @@
 //! Provides path manipulation, file predicates, read/write operations,
 //! directory operations, and file attribute queries.
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_fixnum};
 use crate::emacs_core::error::LispCondition;
 use std::collections::{HashMap, VecDeque};
 #[cfg(unix)]
@@ -1730,39 +1731,6 @@ pub fn file_attributes(filename: &str) -> Option<FileAttributes> {
 // Builtin wrappers — pure (no evaluator needed)
 // ===========================================================================
 
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
 fn expect_lisp_string_strict(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
@@ -2179,16 +2147,6 @@ fn expect_temp_prefix(value: &Value) -> Result<crate::heap_types::LispString, Fl
         _other => Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("sequencep"), *value],
-        )),
-    }
-}
-
-fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _other => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("fixnump"), *value],
         )),
     }
 }

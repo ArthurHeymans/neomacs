@@ -5,6 +5,7 @@
 //! these implementations provide compatible arity/type/error behavior for
 //! startup code.
 
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -12,28 +13,6 @@ use std::path::{Path, PathBuf};
 use super::error::{EvalResult, Flow, signal};
 use super::value::{Value, ValueKind};
 use crate::tagged::header::VecLikeType;
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn expect_string(value: &Value) -> Result<String, Flow> {
     if value.is_string() {
@@ -135,7 +114,7 @@ pub(crate) fn builtin_comp_subr_signature(args: Vec<Value>) -> EvalResult {
 
 /// `(comp-el-to-eln-filename FILE &optional OUTPUT-DIR)` -- map .el -> .eln.
 pub(crate) fn builtin_comp_el_to_eln_filename(args: Vec<Value>) -> EvalResult {
-    expect_range_args("comp-el-to-eln-filename", &args, 1, 2)?;
+    expect_args_range("comp-el-to-eln-filename", &args, 1, 2)?;
     let file = expect_string(&args[0])?;
     let mut out = ensure_existing_file(&file)?;
     out.set_extension("eln");

@@ -15,6 +15,8 @@
 //! - `line-number-display-width` — get line number display width
 //! - `long-line-optimizations-p` — check if long-line optimizations are enabled
 
+use super::builtins::buffers::resolve_buffer_designator_allow_nil_current_in_manager;
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use super::chartable::{make_char_table_value, make_char_table_with_extra_slots};
 use super::display_spec;
 use super::error::{EvalResult, Flow, signal};
@@ -36,28 +38,6 @@ use strum::{EnumString, IntoStaticStr};
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_args_range(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn expect_integer_or_marker(arg: &Value) -> Result<(), Flow> {
     if arg.is_marker() {
@@ -4213,64 +4193,13 @@ pub(crate) fn builtin_tab_bar_height_ctx(
     }
 }
 
-/// (line-number-display-width &optional ON-DISPLAY) -> integer
-///
-/// Return the selected window's line-number width.  GNU returns the digit
-/// width without the two display padding columns when ON-DISPLAY is nil; with
-/// non-nil ON-DISPLAY it returns the actual displayed gutter width in pixels,
-/// except the symbol `columns' returns that gutter in canonical columns.
-pub(crate) fn builtin_line_number_display_width(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args_range("line-number-display-width", &args, 0, 1)?;
-    let Some(frame) = eval.frames.selected_frame() else {
-        return Ok(Value::fixnum(0));
-    };
-    let wid = frame.selected_window;
-    let Some(window) = frame.find_window(wid) else {
-        return Ok(Value::fixnum(0));
-    };
-    let Some(buffer_id) = window.buffer_id() else {
-        return Ok(Value::fixnum(0));
-    };
-    let Some(buffer) = eval.buffers.get(buffer_id) else {
-        return Ok(Value::fixnum(0));
-    };
-    let enabled = buffer
-        .buffer_local_value("display-line-numbers")
-        .is_some_and(|value| value.is_truthy());
-    if !enabled {
-        return Ok(Value::fixnum(0));
-    }
-
-    let char_width = frame.char_width.max(1.0).round() as i64;
-    let char_height = frame.char_height.max(1.0).round() as i64;
-    let visible_lines = match window {
-        Window::Leaf { bounds, .. } => {
-            ((bounds.height / char_height.max(1) as f32).floor() as i64).max(1)
-        }
-        Window::Internal { .. } => 1,
-    };
-    let digit_width = line_number_digit_width(buffer, visible_lines);
-    let displayed_columns = digit_width + 2;
-
-    match args.first() {
-        Some(value) if value == &Value::symbol("columns") => {
-            Ok(Value::make_float(displayed_columns as f64))
-        }
-        Some(value) if value.is_truthy() => Ok(Value::fixnum(displayed_columns * char_width)),
-        _ => Ok(Value::fixnum(digit_width)),
-    }
-}
-
 /// Number of digit columns a line-number gutter shows, before the two
 /// padding columns (one leading, one trailing).  Mirrors GNU
 /// `maybe_produce_line_number`'s `it->lnum_width` (`max(width, log10(max)+1)`,
 /// src/xdisp.c).  `visible_lines` is the floor of the window's visible row
 /// count; GNU widens to whichever is larger so the gutter never shrinks below
 /// what the visible rows need.
-fn line_number_digit_width(buffer: &Buffer, visible_lines: i64) -> i64 {
+pub(crate) fn line_number_digit_width(buffer: &Buffer, visible_lines: i64) -> i64 {
     let total_lines = display_line_number_total_lines(buffer)
         .max(visible_lines)
         .max(1);
@@ -5818,6 +5747,104 @@ pub(crate) fn builtin_neomacs_debug_lose_device(
 
 // Tests
 // ---------------------------------------------------------------------------
+
+pub(crate) fn builtin_buffer_text_pixel_size(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args_range("buffer-text-pixel-size", &args, 0, 4)?;
+
+    // GNU `buffer-text-pixel-size` returns PIXELS: the measured column/row counts
+    // scaled by the frame's character cell size. On a TTY the cell is 1x1 (so the
+    // result equals the cell counts), on a GUI frame it is the real font
+    // width/height. This mirrors `window-text-pixel-size` (which already scales by
+    // `frame.char_width`). Without it, `string-pixel-width` returns columns, and the
+    // mode-line `(space :align-to (- right-margin (string-pixel-width …)))` produced
+    // by `mode-line-format-right-align` mis-aligns on GUI frames — the Doom dashboard
+    // "DOOM vX" right segment is pushed off-screen.
+    let (char_w, char_h) = eval
+        .frames
+        .selected_frame()
+        .map(|f| (f.char_width.max(1.0), f.char_height.max(1.0)))
+        .unwrap_or((1.0, 1.0));
+
+    let buffers = &eval.buffers;
+
+    let buffer_id = if args.is_empty() {
+        resolve_buffer_designator_allow_nil_current_in_manager(buffers, &Value::NIL)?
+    } else {
+        resolve_buffer_designator_allow_nil_current_in_manager(buffers, &args[0])?
+    };
+
+    if args.len() > 1 {
+        let window = &args[1];
+        if !window.is_nil() && !window.is_window() {
+            return Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("window-live-p"), *window],
+            ));
+        }
+    }
+
+    let limit_from_value = |value: &Value| -> Result<Option<usize>, Flow> {
+        match value.kind() {
+            ValueKind::Nil | ValueKind::T => Ok(None),
+            ValueKind::Fixnum(n) if n >= 0 => Ok(Some(n as usize)),
+            _ => Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("natnump"), *value],
+            )),
+        }
+    };
+
+    let x_limit = if args.len() > 2 {
+        limit_from_value(&args[2])?
+    } else {
+        None
+    };
+    let y_limit = if args.len() > 3 {
+        limit_from_value(&args[3])?
+    } else {
+        None
+    };
+
+    let Some(buffer_id) = buffer_id else {
+        return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
+    };
+
+    // Determine the accessible byte range to measure.  An empty buffer yields
+    // (0 . 0) just like the previous text-based implementation.
+    let range = match buffers.get(buffer_id) {
+        Some(buf) => buf.accessible_emacs_byte_range(),
+        None => return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0))),
+    };
+    if range.end().get() <= range.start().get() {
+        return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
+    }
+
+    // Measure honoring `display` text properties (e.g. `(space :align-to N)` /
+    // `(space :width N)`), shared with `window-text-pixel-size`.  Wide chars
+    // contribute their display width, preserving the previous accounting.
+    let metrics = crate::emacs_core::xdisp::region_text_metrics_with_display(
+        eval,
+        buffer_id,
+        range.start(),
+        range.end(),
+        false,
+        crate::emacs_core::xdisp::CharColumnWidth::DisplayWidth,
+        x_limit,
+        y_limit,
+    );
+
+    if metrics.lines == 0 {
+        return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
+    }
+    Ok(Value::cons(
+        Value::fixnum((metrics.max_columns as f32 * char_w).ceil() as i64),
+        Value::fixnum((metrics.lines as f32 * char_h).ceil() as i64),
+    ))
+}
+
 #[cfg(test)]
 #[path = "xdisp_test.rs"]
 mod tests;

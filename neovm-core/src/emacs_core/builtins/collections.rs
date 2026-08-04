@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range, expect_fixnum};
 use super::*;
 use crate::emacs_core::eval::LispArgVec;
 use crate::emacs_core::hashtab::hash_key_to_visible_value;
@@ -1236,7 +1237,7 @@ pub(crate) fn builtin_plist_member(
         return plist_member_eq_swp(args, eval.symbols_with_pos_enabled);
     }
 
-    expect_range_args("plist-member", &args, 2, 3)?;
+    expect_args_range("plist-member", &args, 2, 3)?;
     let plist = args[0];
     let prop = args[1];
 
@@ -1309,7 +1310,7 @@ pub(crate) fn plist_member_eq(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn plist_member_eq_swp(args: Vec<Value>, symbols_with_pos_enabled: bool) -> EvalResult {
-    expect_range_args("plist-member", &args, 2, 3)?;
+    expect_args_range("plist-member", &args, 2, 3)?;
     let plist = args[0];
     let prop = args[1];
     if args.get(2).is_some_and(|value| !value.is_nil()) {

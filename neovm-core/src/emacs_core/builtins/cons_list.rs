@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
 use super::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType, eq_value};
 use malachite::integer::Integer;
@@ -1154,7 +1155,7 @@ pub(crate) fn builtin_assoc(eval: &mut super::eval::Context, args: Vec<Value>) -
 
 pub(crate) fn builtin_assoc_slice(eval: &mut super::eval::Context, args: &[Value]) -> EvalResult {
     crate::emacs_core::perf_trace::time_op(crate::emacs_core::perf_trace::HotpathOp::Assoc, || {
-        expect_range_args("assoc", args, 2, 3)?;
+        expect_args_range("assoc", args, 2, 3)?;
         let key = &args[0];
         let list = args[1];
         let test_fn = args

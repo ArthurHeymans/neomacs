@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use std::ffi::c_void;
 use std::sync::OnceLock;
 
@@ -379,7 +380,7 @@ pub(crate) fn builtin_lcms2_available_p(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_lcms_cie_de2000(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-cie-de2000", &args, 2, 5)?;
+    expect_args_range("lcms-cie-de2000", &args, 2, 5)?;
     let Ok(lcms) = lcms_or_nil() else {
         return Ok(Value::NIL);
     };
@@ -430,7 +431,7 @@ pub(crate) fn builtin_lcms_cie_de2000(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_lcms_xyz_to_jch(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-xyz->jch", &args, 1, 3)?;
+    expect_args_range("lcms-xyz->jch", &args, 1, 3)?;
     let Ok(lcms) = lcms_or_nil() else {
         return Ok(Value::NIL);
     };
@@ -445,7 +446,7 @@ pub(crate) fn builtin_lcms_xyz_to_jch(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_lcms_jch_to_xyz(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-jch->xyz", &args, 1, 3)?;
+    expect_args_range("lcms-jch->xyz", &args, 1, 3)?;
     let Ok(lcms) = lcms_or_nil() else {
         return Ok(Value::NIL);
     };
@@ -460,7 +461,7 @@ pub(crate) fn builtin_lcms_jch_to_xyz(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_lcms_jch_to_jab(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-jch->jab", &args, 1, 3)?;
+    expect_args_range("lcms-jch->jab", &args, 1, 3)?;
     if lcms().is_none() {
         return Ok(Value::NIL);
     }
@@ -475,7 +476,7 @@ pub(crate) fn builtin_lcms_jch_to_jab(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_lcms_jab_to_jch(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-jab->jch", &args, 1, 3)?;
+    expect_args_range("lcms-jab->jch", &args, 1, 3)?;
     if lcms().is_none() {
         return Ok(Value::NIL);
     }
@@ -490,7 +491,7 @@ pub(crate) fn builtin_lcms_jab_to_jch(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_lcms_cam02_ucs(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lcms-cam02-ucs", &args, 2, 4)?;
+    expect_args_range("lcms-cam02-ucs", &args, 2, 4)?;
     let Ok(lcms) = lcms_or_nil() else {
         return Ok(Value::NIL);
     };

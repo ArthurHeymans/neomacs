@@ -12,6 +12,7 @@
 //!   plist.
 //! - `abbrev-table-get` / `abbrev-table-put` access the header symbol's plist.
 
+use crate::emacs_core::error::{expect_args, expect_min_args};
 use crate::emacs_core::error::LispCondition;
 use std::collections::HashMap;
 
@@ -494,30 +495,6 @@ fn obarray_all_symbols(vec_val: Value) -> Vec<Value> {
 // ===========================================================================
 // Builtin helpers
 // ===========================================================================
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_string(value: &Value) -> Result<String, Flow> {

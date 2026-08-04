@@ -7,6 +7,11 @@
 //!
 //! Variables: `tab-width`, `indent-tabs-mode`, `standard-indent`, `tab-stop-list`
 
+use super::builtins::buffers::{extract_cons_fixnums, point_char_pos};
+use super::xdisp::line_number_digit_width;
+use crate::buffer::LispCharPos1;
+use crate::window::Window;
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range, expect_fixnum};
 use super::error::{EvalResult, Flow, signal};
 use super::symbol::Obarray;
 use super::value::*;
@@ -74,39 +79,6 @@ fn cached_current_column(buffer_id: u64, point: EmacsBytePos, modiff: i64) -> Op
 // ---------------------------------------------------------------------------
 // Argument helpers (local to this module)
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn expect_fixnump(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
@@ -1342,6 +1314,241 @@ pub fn init_indent_vars(obarray: &mut super::symbol::Obarray) {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+pub(crate) fn builtin_compute_motion(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let obarray = &eval.obarray;
+    let buffers = &eval.buffers;
+    expect_args("compute-motion", &args, 7)?;
+
+    let from = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[0])?;
+    if !args[1].is_cons() {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("consp"), args[1]],
+        ));
+    }
+    let to = crate::emacs_core::position::fix_position_with_buffers(buffers, &args[2])?;
+    if !args[3].is_nil() && !args[3].is_cons() {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("consp"), args[3]],
+        ));
+    }
+    if !args[4].is_nil() {
+        let _ = expect_fixnum(&args[4])?;
+    }
+    if !args[5].is_nil() && !args[5].is_cons() {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("consp"), args[5]],
+        ));
+    }
+    if !args[6].is_nil() && !args[6].is_window() {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("window-live-p"), args[6]],
+        ));
+    }
+
+    // Extract FROMPOS (HPOS . VPOS).
+    let (from_hpos, from_vpos) = extract_cons_fixnums(args[1])?;
+
+    // Extract TOPOS (HPOS . VPOS) or nil.
+    let (to_hpos, to_vpos) = if args[3].is_nil() {
+        (i64::MAX, i64::MAX)
+    } else {
+        extract_cons_fixnums(args[3])?
+    };
+
+    // Extract WIDTH.
+    let width = if args[4].is_nil() {
+        80i64 // default window width
+    } else {
+        expect_fixnum(&args[4])?
+    };
+    if !args[5].is_nil() {
+        let (hscroll, tab_offset) = extract_cons_fixnums(args[5])?;
+        if hscroll < 0 || tab_offset < 0 || tab_offset > i32::MAX as i64 {
+            return Err(signal(
+                LispCondition::ArgsOutOfRange,
+                vec![args[5].cons_car(), args[5].cons_cdr()],
+            ));
+        }
+    }
+
+    // Get buffer text.
+    let Some(buf) = buffers.current_buffer() else {
+        return Ok(Value::list(vec![
+            Value::fixnum(from),
+            Value::fixnum(from_hpos),
+            Value::fixnum(from_vpos),
+            Value::fixnum(0),
+            Value::NIL,
+        ]));
+    };
+    let text = buf.full_text_string();
+    let accessible = buf.accessible_emacs_byte_region();
+    let tab_width = crate::buffer::buffer::lookup_buffer_slot("tab-width")
+        .map(|info| buf.slots[info.offset.index()])
+        .or_else(|| buf.get_buffer_local("tab-width"))
+        .or_else(|| obarray.symbol_value("tab-width").copied())
+        .and_then(|value: Value| match value.kind() {
+            ValueKind::Fixnum(n) if n > 0 => Some(n as usize),
+            _ => None,
+        })
+        .unwrap_or(8);
+
+    // Convert 1-based char positions to byte offsets.
+    let point_min = buf.point_min_lisp_char_pos().as_i64();
+    let point_max = buf.point_max_lisp_char_pos().as_i64();
+    if from < point_min || from > point_max {
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![
+                Value::fixnum(from),
+                Value::fixnum(point_min),
+                Value::fixnum(point_max),
+            ],
+        ));
+    }
+    if to < point_min || to > point_max {
+        return Err(signal(
+            LispCondition::ArgsOutOfRange,
+            vec![
+                Value::fixnum(to),
+                Value::fixnum(point_min),
+                Value::fixnum(point_max),
+            ],
+        ));
+    }
+
+    let from_pos = buf
+        .lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(from))
+        .get();
+    let to_pos = buf
+        .lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(to))
+        .get();
+
+    let mut hpos = from_hpos;
+    let mut vpos = from_vpos;
+    let mut prev_hpos = from_hpos;
+    let mut contin = false;
+    let mut pos = from_pos;
+
+    let bytes = text.as_bytes();
+    let tw = tab_width.max(1) as i64;
+
+    while pos < to_pos {
+        // Check TOPOS stop condition.
+        if vpos > to_vpos || (vpos == to_vpos && hpos >= to_hpos) {
+            break;
+        }
+
+        prev_hpos = hpos;
+        let ch = if pos < bytes.len() {
+            // Decode UTF-8 character.
+            let b = bytes[pos];
+            if b < 0x80 {
+                pos += 1;
+                b as char
+            } else {
+                let s = &text[pos..];
+                let c = s.chars().next().unwrap_or('\u{FFFD}');
+                pos += c.len_utf8();
+                c
+            }
+        } else {
+            break;
+        };
+
+        match ch {
+            '\n' => {
+                vpos += 1;
+                hpos = 0;
+                contin = false;
+            }
+            '\t' => {
+                hpos += tw - (hpos % tw);
+            }
+            _ => {
+                hpos += crate::encoding::char_width(ch) as i64;
+            }
+        }
+
+        // Line continuation (wrapping).
+        if hpos >= width && ch != '\n' {
+            vpos += 1;
+            contin = true;
+            hpos -= width;
+        }
+    }
+
+    // Convert byte pos back to 1-based char position.
+    let final_charpos = point_char_pos(buf, EmacsBytePos::new(pos).min(accessible.end()));
+
+    Ok(Value::list(vec![
+        Value::fixnum(final_charpos),
+        Value::fixnum(hpos),
+        Value::fixnum(vpos),
+        Value::fixnum(prev_hpos),
+        if contin { Value::T } else { Value::NIL },
+    ]))
+}
+
+/// (line-number-display-width &optional ON-DISPLAY) -> integer
+///
+/// Return the selected window's line-number width.  GNU returns the digit
+/// width without the two display padding columns when ON-DISPLAY is nil; with
+/// non-nil ON-DISPLAY it returns the actual displayed gutter width in pixels,
+/// except the symbol `columns' returns that gutter in canonical columns.
+pub(crate) fn builtin_line_number_display_width(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args_range("line-number-display-width", &args, 0, 1)?;
+    let Some(frame) = eval.frames.selected_frame() else {
+        return Ok(Value::fixnum(0));
+    };
+    let wid = frame.selected_window;
+    let Some(window) = frame.find_window(wid) else {
+        return Ok(Value::fixnum(0));
+    };
+    let Some(buffer_id) = window.buffer_id() else {
+        return Ok(Value::fixnum(0));
+    };
+    let Some(buffer) = eval.buffers.get(buffer_id) else {
+        return Ok(Value::fixnum(0));
+    };
+    let enabled = buffer
+        .buffer_local_value("display-line-numbers")
+        .is_some_and(|value| value.is_truthy());
+    if !enabled {
+        return Ok(Value::fixnum(0));
+    }
+
+    let char_width = frame.char_width.max(1.0).round() as i64;
+    let char_height = frame.char_height.max(1.0).round() as i64;
+    let visible_lines = match window {
+        Window::Leaf { bounds, .. } => {
+            ((bounds.height / char_height.max(1) as f32).floor() as i64).max(1)
+        }
+        Window::Internal { .. } => 1,
+    };
+    let digit_width = line_number_digit_width(buffer, visible_lines);
+    let displayed_columns = digit_width + 2;
+
+    match args.first() {
+        Some(value) if value == &Value::symbol("columns") => {
+            Ok(Value::make_float(displayed_columns as f64))
+        }
+        Some(value) if value.is_truthy() => Ok(Value::fixnum(displayed_columns * char_width)),
+        _ => Ok(Value::fixnum(digit_width)),
+    }
+}
+
 #[cfg(test)]
 #[path = "indent_test.rs"]
 mod tests;

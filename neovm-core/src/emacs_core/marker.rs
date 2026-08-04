@@ -13,6 +13,7 @@
 //!   `set-marker`, `move-marker`, `point-marker`, `point-min-marker`,
 //!   `point-max-marker`, `mark-marker`
 
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::{BufferId, BufferManager, CharPos0, EmacsBytePos, InsertionType, LispCharPos1};
@@ -32,28 +33,6 @@ pub(crate) struct Marker {
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Marker value helpers
@@ -465,7 +444,7 @@ pub(crate) fn builtin_copy_marker_in_buffers(
     // GNU `Fcopy_marker` (marker.c:753) is `(0, 2)`: with no arguments, it
     // returns a fresh marker that points nowhere; passing nil for MARKER
     // does the same.  TYPE is also optional.
-    expect_range_args("copy-marker", &args, 0, 2)?;
+    expect_args_range("copy-marker", &args, 0, 2)?;
     let insertion_type = if args.len() > 1 {
         args[1].is_truthy()
     } else {
@@ -518,7 +497,7 @@ pub(crate) fn builtin_set_marker_in_buffers(
     buffers: &mut BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("set-marker", &args, 2, 3)?;
+    expect_args_range("set-marker", &args, 2, 3)?;
     expect_marker("set-marker", &args[0])?;
 
     let targets_current_mark = marker_targets_current_mark(&args[0]);

@@ -12,8 +12,11 @@
 //! oracle corpora.
 
 #[cfg(test)]
-use super::error::EvalResult;
+#[cfg(test)]
+use crate::emacs_core::error::{expect_max_args, expect_min_args};
 use super::error::{Flow, signal};
+#[cfg(test)]
+use super::error::EvalResult;
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
@@ -22,42 +25,6 @@ use crate::heap_types::LispString;
 // ---------------------------------------------------------------------------
 // Argument helpers (local copies — same pattern as other modules)
 // ---------------------------------------------------------------------------
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_int(value: &Value) -> Result<i64, Flow> {

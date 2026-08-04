@@ -4,6 +4,7 @@
 //! exposed for startup/runtime compatibility with expected arity and basic
 //! error contracts.
 
+use crate::emacs_core::error::{expect_args};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::resolve_sym;
@@ -38,17 +39,6 @@ impl DbusBusName {
     #[cfg(test)]
     fn name(self) -> &'static str {
         self.into()
-    }
-}
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
     }
 }
 

@@ -5,6 +5,7 @@
 //! - `string-clean-whitespace` — collapse whitespace and trim
 //! - `string-pixel-width` — batch-compatible display-column width
 
+use crate::emacs_core::error::{expect_min_args};
 use super::error::{EvalResult, Flow, signal};
 use super::timefns::zone_offset_name_for_time;
 use super::value::*;
@@ -13,17 +14,6 @@ use crate::emacs_core::error::LispCondition;
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn require_string(_name: &str, val: &Value) -> Result<String, Flow> {
     val.as_lisp_string()

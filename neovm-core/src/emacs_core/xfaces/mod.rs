@@ -9,6 +9,7 @@
 //! `Face` value type, merge core, `FaceTable` derived cache) lives in
 //! `crate::face`; font.c matching stays in `super::font`.
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use crate::emacs_core::error::EvalResult;
 use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::symbol::Obarray;
@@ -75,7 +76,7 @@ pub(crate) fn builtin_frame_face_hash_table(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    crate::emacs_core::display::expect_range_args("frame--face-hash-table", &args, 0, 1)?;
+    crate::emacs_core::display::expect_args_range("frame--face-hash-table", &args, 0, 1)?;
     let frame_id = crate::emacs_core::window_cmds::resolve_frame_id_in_state(
         &mut eval.frames,
         &mut eval.buffers,
@@ -346,9 +347,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
 use super::error::{Flow, LispCondition, signal};
-use super::font::{
-    alternative_font_family_alist, alternative_font_registry_alist, build_font_object, build_font_object_for_match, default_face_font_attr_affects_frame_font, expect_args, expect_max_args, expect_min_args, face_remapping_for_current_buffer, font_name_value, font_string_text, font_value_text, font_vector_get_flexible, frame_device_designator_p, frame_id_from_designator, frame_parameter_for_face_attribute, is_font, is_font_spec, live_frame_designator_in_state, live_frame_font_attribute_fallback, live_frame_id_for_face_update, public_live_frame_font_value, publish_face_attribute_to_frame_parameter, resolve_font_match, resolve_live_frame_font_request, sync_live_default_face_font_state, sync_live_frame_font_state,
-};
+use super::font::{alternative_font_family_alist, alternative_font_registry_alist, build_font_object, build_font_object_for_match, default_face_font_attr_affects_frame_font, face_remapping_for_current_buffer, font_name_value, font_string_text, font_value_text, font_vector_get_flexible, frame_device_designator_p, frame_id_from_designator, frame_parameter_for_face_attribute, is_font, is_font_spec, live_frame_designator_in_state, live_frame_font_attribute_fallback, live_frame_id_for_face_update, public_live_frame_font_value, publish_face_attribute_to_frame_parameter, resolve_font_match, resolve_live_frame_font_request, sync_live_default_face_font_state, sync_live_frame_font_state};
 
 use super::intern::intern;
 use crate::emacs_core::SymId;

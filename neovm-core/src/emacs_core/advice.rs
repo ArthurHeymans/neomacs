@@ -3,7 +3,7 @@
 //! Provides callbacks invoked when a watched variable changes
 //! (like Emacs `add-variable-watcher` / `remove-variable-watcher`).
 
-use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args};
 use rustc_hash::FxHashMap;
 
 use super::intern::SymId;
@@ -188,19 +188,7 @@ impl GcTrace for VariableWatcherList {
 // Builtin functions (eval-dependent)
 // ---------------------------------------------------------------------------
 
-use super::error::{EvalResult, Flow, signal};
-
-/// Expect exactly N arguments.
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
+use super::error::EvalResult;
 
 /// `(add-variable-watcher SYMBOL WATCH-FUNCTION)`
 ///

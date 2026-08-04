@@ -4,6 +4,7 @@
 //! Since Neomacs is always a GUI application, most display queries return
 //! sensible defaults for a modern graphical display.
 
+pub(crate) use crate::emacs_core::error::{expect_args, expect_max_args, expect_args_range};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::terminal::pure::{
@@ -60,44 +61,6 @@ impl WindowSystemKind {
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-pub(crate) fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-pub(crate) fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-pub(crate) fn expect_range_args(
-    name: &str,
-    args: &[Value],
-    min: usize,
-    max: usize,
-) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 pub(crate) fn expect_symbol_key(value: &Value) -> Result<Value, Flow> {
     match value.kind() {
@@ -910,7 +873,7 @@ pub(crate) fn builtin_window_system(
 /// Context-aware variant of `frame-edges`.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_edges(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-edges", &args, 0, 2)?;
+    expect_args_range("frame-edges", &args, 0, 2)?;
     if let Some(frame) = args.first()
         && !frame.is_nil()
         && !live_frame_designator_p(eval, frame)
@@ -1089,7 +1052,7 @@ pub(crate) fn builtin_display_supports_face_attributes_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("display-supports-face-attributes-p", &args, 1, 2)?;
+    expect_args_range("display-supports-face-attributes-p", &args, 1, 2)?;
     let Some(attributes) = super::value::list_to_vec(&args[0]) else {
         return Ok(Value::NIL);
     };
@@ -1218,7 +1181,7 @@ pub(crate) fn builtin_x_frame_list_z_order(args: Vec<Value>) -> EvalResult {
 /// environment, so we only expose arity/fboundp compatibility surface and a
 /// conservative batch/no-X error result.
 pub(crate) fn builtin_x_frame_restack(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-frame-restack", &args, 2, 3)?;
+    expect_args_range("x-frame-restack", &args, 2, 3)?;
     Err(x_window_system_frame_error())
 }
 
@@ -1241,7 +1204,7 @@ pub(crate) fn builtin_x_send_client_message(args: Vec<Value>) -> EvalResult {
 }
 
 fn validate_x_popup_dialog_args(args: &[Value]) -> Result<(), Flow> {
-    expect_range_args("x-popup-dialog", args, 2, 3)?;
+    expect_args_range("x-popup-dialog", args, 2, 3)?;
 
     if !args[0].is_frame() && !args[0].is_t() {
         return Err(signal(
@@ -2165,19 +2128,19 @@ pub(crate) fn builtin_x_popup_menu(ctx: &mut Context, args: Vec<Value>) -> EvalR
 
 /// (x-synchronize DISPLAY &optional NO-OP) -> error in batch/no-X context.
 pub(crate) fn builtin_x_synchronize(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-synchronize", &args, 1, 2)?;
+    expect_args_range("x-synchronize", &args, 1, 2)?;
     Err(x_windows_not_initialized_error())
 }
 
 /// (x-translate-coordinates DISPLAY X Y &optional FRAME SOURCE-FRAME) -> error in batch/no-X context.
 pub(crate) fn builtin_x_translate_coordinates(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-translate-coordinates", &args, 1, 6)?;
+    expect_args_range("x-translate-coordinates", &args, 1, 6)?;
     Err(x_display_query_first_arg_error(&args[0]))
 }
 
 /// (x-register-dnd-atom ATOM &optional OLD-ATOM) -> error in batch/no-X context.
 pub(crate) fn builtin_x_register_dnd_atom(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-register-dnd-atom", &args, 1, 2)?;
+    expect_args_range("x-register-dnd-atom", &args, 1, 2)?;
     Err(x_window_system_frame_error())
 }
 
@@ -2196,7 +2159,7 @@ pub(crate) fn builtin_x_export_frames(args: Vec<Value>) -> EvalResult {
 
 /// (x-focus-frame FRAME &optional NO-ACTIVATE) -> nil for live GUI frames.
 pub(crate) fn builtin_x_focus_frame(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-focus-frame", &args, 1, 2)?;
+    expect_args_range("x-focus-frame", &args, 1, 2)?;
     let fid = super::window_cmds::resolve_frame_id_in_state(
         &mut eval.frames,
         &mut eval.buffers,
@@ -2241,7 +2204,7 @@ pub(crate) fn builtin_x_hide_tip(args: Vec<Value>) -> EvalResult {
 
 /// (x-show-tip STRING &optional FRAME PARMS TIMEOUT DX DY) -> error in batch/no-X context.
 pub(crate) fn builtin_x_show_tip(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-show-tip", &args, 1, 6)?;
+    expect_args_range("x-show-tip", &args, 1, 6)?;
     if !args[0].is_string() {
         return Err(signal(
             LispCondition::WrongTypeArgument,
@@ -2317,7 +2280,7 @@ pub(crate) fn builtin_x_family_fonts(args: Vec<Value>) -> EvalResult {
 
 /// (x-get-atom-name ATOM &optional FRAME) -> error in batch/no-X context.
 pub(crate) fn builtin_x_get_atom_name(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-get-atom-name", &args, 1, 2)?;
+    expect_args_range("x-get-atom-name", &args, 1, 2)?;
     if let Some(frame) = args.get(1) {
         expect_optional_window_system_frame_arg(frame)?;
     }
@@ -2328,7 +2291,7 @@ pub(crate) fn builtin_x_get_resource(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("x-get-resource", &args, 2, 4)?;
+    expect_args_range("x-get-resource", &args, 2, 4)?;
     if x_window_system_active(eval) {
         return Ok(Value::NIL);
     }
@@ -2351,7 +2314,7 @@ pub(crate) fn builtin_x_list_fonts(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("x-list-fonts", &args, 1, 5)?;
+    expect_args_range("x-list-fonts", &args, 1, 5)?;
     if x_window_system_active(eval) {
         return Ok(Value::NIL);
     }
@@ -2376,7 +2339,7 @@ pub(crate) fn builtin_x_parse_geometry(args: Vec<Value>) -> EvalResult {
 /// (x-change-window-property PROPERTY VALUE &optional FRAME TYPE FORMAT OUTER-P DELETE-P)
 /// -> error in batch/no-X context.
 pub(crate) fn builtin_x_change_window_property(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-change-window-property", &args, 2, 7)?;
+    expect_args_range("x-change-window-property", &args, 2, 7)?;
     if let Some(frame) = args.get(2) {
         expect_optional_window_system_frame_arg(frame)?;
     }
@@ -2385,7 +2348,7 @@ pub(crate) fn builtin_x_change_window_property(args: Vec<Value>) -> EvalResult {
 
 /// (x-delete-window-property PROPERTY &optional FRAME TYPE) -> error in batch/no-X context.
 pub(crate) fn builtin_x_delete_window_property(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-delete-window-property", &args, 1, 3)?;
+    expect_args_range("x-delete-window-property", &args, 1, 3)?;
     if let Some(frame) = args.get(1) {
         expect_optional_window_system_frame_arg(frame)?;
     }
@@ -2394,7 +2357,7 @@ pub(crate) fn builtin_x_delete_window_property(args: Vec<Value>) -> EvalResult {
 
 /// (x-disown-selection-internal SELECTION &optional TYPE FRAME) -> nil.
 pub(crate) fn builtin_x_disown_selection_internal(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-disown-selection-internal", &args, 1, 3)?;
+    expect_args_range("x-disown-selection-internal", &args, 1, 3)?;
     Ok(Value::NIL)
 }
 
@@ -2414,14 +2377,14 @@ pub(crate) fn builtin_x_get_local_selection(args: Vec<Value>) -> EvalResult {
 /// (x-get-selection-internal SELECTION TYPE &optional DATA-TYPE FRAME)
 /// -> error in batch/no-X context.
 pub(crate) fn builtin_x_get_selection_internal(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-get-selection-internal", &args, 2, 4)?;
+    expect_args_range("x-get-selection-internal", &args, 2, 4)?;
     Err(x_selection_unavailable_error())
 }
 
 /// (x-own-selection-internal SELECTION VALUE &optional FRAME)
 /// -> error in batch/no-X context.
 pub(crate) fn builtin_x_own_selection_internal(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-own-selection-internal", &args, 2, 3)?;
+    expect_args_range("x-own-selection-internal", &args, 2, 3)?;
     Err(x_selection_unavailable_error())
 }
 
@@ -2493,7 +2456,7 @@ pub(crate) fn builtin_x_uses_old_gtk_dialog(args: Vec<Value>) -> EvalResult {
 
 /// (x-window-property PROPERTY &optional FRAME TYPE DELETE-P VECTOR-RET-P) -> error in batch/no-X context.
 pub(crate) fn builtin_x_window_property(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-window-property", &args, 1, 6)?;
+    expect_args_range("x-window-property", &args, 1, 6)?;
     if let Some(frame) = args.get(1) {
         expect_optional_window_system_frame_arg(frame)?;
     }
@@ -2502,7 +2465,7 @@ pub(crate) fn builtin_x_window_property(args: Vec<Value>) -> EvalResult {
 
 /// (x-window-property-attributes PROPERTY &optional FRAME TYPE) -> error in batch/no-X context.
 pub(crate) fn builtin_x_window_property_attributes(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-window-property-attributes", &args, 1, 3)?;
+    expect_args_range("x-window-property-attributes", &args, 1, 3)?;
     if let Some(frame) = args.get(1) {
         expect_optional_window_system_frame_arg(frame)?;
     }
@@ -2653,7 +2616,7 @@ pub(crate) fn builtin_x_display_set_last_user_time(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("x-display-set-last-user-time", &args, 1, 2)?;
+    expect_args_range("x-display-set-last-user-time", &args, 1, 2)?;
     let query_args: Vec<Value> = args.get(1).cloned().into_iter().collect();
     x_optional_display_query_error_eval(eval, "x-display-set-last-user-time", query_args)
 }
@@ -2662,7 +2625,7 @@ pub(crate) fn builtin_x_open_connection(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("x-open-connection", &args, 1, 3)?;
+    expect_args_range("x-open-connection", &args, 1, 3)?;
     if x_window_system_active(eval) {
         return Ok(Value::NIL);
     }

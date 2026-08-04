@@ -3,6 +3,7 @@
 //! All functions here take pre-evaluated `Vec<Value>` arguments and return `EvalResult`.
 //! The evaluator dispatches here after evaluating the argument expressions.
 
+pub(crate) use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum, expect_max_args, expect_min_args};
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::rounding_modes::RoundingMode;
 use std::sync::{
@@ -112,58 +113,6 @@ pub(crate) fn reset_builtins_thread_locals() {
 
 pub use stubs::{NeomacsMonitorInfo, neomacs_monitor_info_snapshot, set_neomacs_monitor_info};
 
-/// Expect exactly N arguments.
-pub(super) fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-/// Expect at least N arguments.
-pub(super) fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-/// Expect at most N arguments.
-pub(super) fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-pub(super) fn expect_range_args(
-    name: &str,
-    args: &[Value],
-    min: usize,
-    max: usize,
-) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
 /// Extract an integer, signaling wrong-type-argument if not.
 pub(super) fn expect_int(value: &Value) -> Result<i64, Flow> {
     match value.kind() {
@@ -171,16 +120,6 @@ pub(super) fn expect_int(value: &Value) -> Result<i64, Flow> {
         _other => Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("integerp"), *value],
-        )),
-    }
-}
-
-pub(super) fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _other => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("fixnump"), *value],
         )),
     }
 }
@@ -1602,7 +1541,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "buffer-text-pixel-size",
-        builtin_buffer_text_pixel_size,
+        super::xdisp::builtin_buffer_text_pixel_size,
         0,
         Some(4),
     );
@@ -4523,7 +4462,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "compute-motion",
-        super::builtins::buffers::builtin_compute_motion,
+        super::indent::builtin_compute_motion,
         7,
         Some(7),
     );
@@ -9060,7 +8999,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "force-window-update",
-        super::dispnew::pure::builtin_force_window_update,
+        super::window_cmds::builtin_force_window_update,
         0,
         Some(1),
     );
@@ -9404,7 +9343,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "line-number-display-width",
-        super::xdisp::builtin_line_number_display_width,
+        super::indent::builtin_line_number_display_width,
         0,
         None,
     );

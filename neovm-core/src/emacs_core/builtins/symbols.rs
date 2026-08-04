@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range, expect_fixnum};
 use super::*;
 use crate::buffer::{
     BufferId, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1,
@@ -359,7 +360,7 @@ pub(crate) fn builtin_internal_define_uninitialized_variable(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("internal--define-uninitialized-variable", &args, 1, 2)?;
+    expect_args_range("internal--define-uninitialized-variable", &args, 1, 2)?;
     let symbol = SymId::from_value(eval, args[0])?;
     let documentation = args.get(1).copied().unwrap_or(Value::NIL);
 
@@ -489,7 +490,7 @@ pub(crate) fn defvaralias_impl(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> Result<DefvaraliasStateChange, Flow> {
-    expect_range_args("defvaralias", &args, 2, 3)?;
+    expect_args_range("defvaralias", &args, 2, 3)?;
     let new_symbol = SymId::from_value(ctx, args[0])?;
     let old_symbol = SymId::from_value(ctx, args[1])?;
     let new_name = resolve_sym(new_symbol).to_string();
@@ -848,7 +849,7 @@ pub(crate) fn builtin_makunbound(eval: &mut super::eval::Context, args: Vec<Valu
 }
 
 pub(crate) fn builtin_defvar_1(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("defvar-1", &args, 2, 3)?;
+    expect_args_range("defvar-1", &args, 2, 3)?;
     let symbol = SymId::from_value(eval, args[0])?;
     let documentation = args.get(2).copied().unwrap_or(Value::NIL);
     let was_bound = builtin_default_boundp(eval, vec![args[0]])?.is_truthy();
@@ -867,7 +868,7 @@ pub(crate) fn builtin_defvar_1(eval: &mut super::eval::Context, args: Vec<Value>
 }
 
 pub(crate) fn builtin_defconst_1(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("defconst-1", &args, 2, 3)?;
+    expect_args_range("defconst-1", &args, 2, 3)?;
     let symbol = SymId::from_value(eval, args[0])?;
     let documentation = args.get(2).copied().unwrap_or(Value::NIL);
 
@@ -1314,7 +1315,7 @@ pub(crate) fn builtin_macroexpand_slice_with_runtime<R: MacroexpandRuntime>(
     runtime: &mut R,
     args: &[Value],
 ) -> EvalResult {
-    expect_range_args("macroexpand", args, 1, 2)?;
+    expect_args_range("macroexpand", args, 1, 2)?;
     let mut form = args[0];
     let environment = args.get(1);
     loop {
@@ -1792,7 +1793,7 @@ pub(crate) fn intern_soft_impl(eval: &super::eval::Context, args: Vec<Value>) ->
 }
 
 pub(crate) fn builtin_obarray_make(args: Vec<Value>) -> EvalResult {
-    expect_range_args("obarray-make", &args, 0, 1)?;
+    expect_args_range("obarray-make", &args, 0, 1)?;
     let size = if args.is_empty() || args[0].is_nil() {
         1511usize
     } else {
@@ -1932,12 +1933,12 @@ pub(crate) fn builtin_make_temp_file_internal(
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_minibuffer_innermost_command_loop_p(args: Vec<Value>) -> EvalResult {
-    expect_range_args("minibuffer-innermost-command-loop-p", &args, 0, 1)?;
+    expect_args_range("minibuffer-innermost-command-loop-p", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_next_frame(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("next-frame", &args, 0, 2)?;
+    expect_args_range("next-frame", &args, 0, 2)?;
     if let Some(frame) = args.first()
         && !frame.is_nil()
     {
@@ -1955,7 +1956,7 @@ pub(crate) fn builtin_previous_frame(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("previous-frame", &args, 0, 2)?;
+    expect_args_range("previous-frame", &args, 0, 2)?;
     if let Some(frame) = args.first()
         && !frame.is_nil()
     {
@@ -1970,7 +1971,7 @@ pub(crate) fn builtin_previous_frame(
 }
 
 pub(crate) fn builtin_raise_frame(args: Vec<Value>) -> EvalResult {
-    expect_range_args("raise-frame", &args, 0, 1)?;
+    expect_args_range("raise-frame", &args, 0, 1)?;
     if let Some(frame) = args.first()
         && !frame.is_nil()
         && !frame.is_frame()
@@ -1987,7 +1988,7 @@ pub(crate) fn builtin_redisplay(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("redisplay", &args, 0, 1)?;
+    expect_args_range("redisplay", &args, 0, 1)?;
     if eval
         .eval_symbol("executing-kbd-macro")
         .is_ok_and(|value| !value.is_nil())
@@ -2000,7 +2001,7 @@ pub(crate) fn builtin_redisplay(
 }
 
 pub(crate) fn builtin_suspend_emacs(args: Vec<Value>) -> EvalResult {
-    expect_range_args("suspend-emacs", &args, 0, 1)?;
+    expect_args_range("suspend-emacs", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
@@ -2549,7 +2550,7 @@ pub(crate) fn builtin_vertical_motion(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("vertical-motion", &args, 1, 3)?;
+    expect_args_range("vertical-motion", &args, 1, 3)?;
     // First arg can be LINES (integer) or (COLS . LINES) cons pair.
     // When (COLS . LINES), move LINES then position at column COLS.
     let (cols, lines): (Option<i64>, i64) = match args[0].kind() {
@@ -2713,7 +2714,7 @@ pub(crate) fn builtin_rename_buffer(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("rename-buffer", &args, 1, 2)?;
+    expect_args_range("rename-buffer", &args, 1, 2)?;
     let requested_name = args[0];
     let name = expect_string_lossy(&requested_name)?;
 
@@ -2837,7 +2838,7 @@ pub(crate) fn builtin_set_buffer_redisplay(
 }
 
 pub(crate) fn builtin_re_describe_compiled(args: Vec<Value>) -> EvalResult {
-    expect_range_args("re--describe-compiled", &args, 1, 2)?;
+    expect_args_range("re--describe-compiled", &args, 1, 2)?;
     Ok(Value::NIL)
 }
 
@@ -2845,7 +2846,7 @@ pub(crate) fn builtin_map_charset_chars(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("map-charset-chars", &args, 2, 5)?;
+    expect_args_range("map-charset-chars", &args, 2, 5)?;
     let charset = args[1].as_symbol_name().ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
@@ -2880,7 +2881,7 @@ pub(crate) fn builtin_map_charset_chars(
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_mapbacktrace(args: Vec<Value>) -> EvalResult {
-    expect_range_args("mapbacktrace", &args, 1, 2)?;
+    expect_args_range("mapbacktrace", &args, 1, 2)?;
     match args[0].kind() {
         ValueKind::Nil | ValueKind::T => {
             return Err(signal(LispCondition::VoidFunction, vec![args[0]]));
@@ -2944,7 +2945,7 @@ pub(crate) fn builtin_marker_last_position(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_newline_cache_check(args: Vec<Value>) -> EvalResult {
-    expect_range_args("newline-cache-check", &args, 0, 1)?;
+    expect_args_range("newline-cache-check", &args, 0, 1)?;
     if let Some(buffer) = args.first()
         && !buffer.is_nil()
         && !buffer.is_buffer()
@@ -2969,7 +2970,7 @@ pub(crate) fn builtin_menu_bar_menu_at_x_y(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("menu-bar-menu-at-x-y", &args, 2, 3)?;
+    expect_args_range("menu-bar-menu-at-x-y", &args, 2, 3)?;
     let x = args[0].as_fixnum().unwrap_or(0);
     let mut hpos = 0i64;
     let frame_id = args
@@ -3169,7 +3170,7 @@ pub(crate) fn builtin_native_comp_available_p(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_native_elisp_load(args: Vec<Value>) -> EvalResult {
-    expect_range_args("native-elisp-load", &args, 1, 2)?;
+    expect_args_range("native-elisp-load", &args, 1, 2)?;
     // Validate the argument is a string, then echo it back unchanged.
     let _ = expect_lisp_string(&args[0])?;
     Err(signal(
@@ -3215,7 +3216,7 @@ pub(crate) fn builtin_new_fontset(eval: &mut super::eval::Context, args: Vec<Val
 }
 
 pub(crate) fn builtin_open_font(args: Vec<Value>) -> EvalResult {
-    expect_range_args("open-font", &args, 1, 3)?;
+    expect_args_range("open-font", &args, 1, 3)?;
     let is_font_entity = match args[0].kind() {
         ValueKind::Veclike(VecLikeType::Vector) => {
             let items = args[0].as_vector_data().unwrap().clone();
@@ -3329,7 +3330,7 @@ pub(crate) fn builtin_object_intervals(
 }
 
 pub(crate) fn builtin_optimize_char_table(args: Vec<Value>) -> EvalResult {
-    expect_range_args("optimize-char-table", &args, 1, 2)?;
+    expect_args_range("optimize-char-table", &args, 1, 2)?;
     let test = match args.get(1) {
         None => super::chartable::OptimizeCharTableTest::Equal,
         Some(value) if value.is_nil() || value.is_symbol_named("equal") => {
@@ -3492,7 +3493,7 @@ pub(crate) fn builtin_query_font(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_query_fontset(args: Vec<Value>) -> EvalResult {
-    expect_range_args("query-fontset", &args, 1, 2)?;
+    expect_args_range("query-fontset", &args, 1, 2)?;
     let pattern = expect_string_lossy(&args[0])?;
     if pattern.is_empty() {
         return Ok(Value::NIL);
@@ -3537,7 +3538,7 @@ pub(crate) fn builtin_redirect_debugging_output(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("redirect-debugging-output", &args, 1, 2)?;
+    expect_args_range("redirect-debugging-output", &args, 1, 2)?;
     if args[0].is_nil() {
         eval.debugging_output_file = None;
         return Ok(Value::NIL);
@@ -3565,7 +3566,7 @@ pub(crate) fn builtin_redirect_debugging_output(
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_redirect_frame_focus(args: Vec<Value>) -> EvalResult {
-    expect_range_args("redirect-frame-focus", &args, 1, 2)?;
+    expect_args_range("redirect-frame-focus", &args, 1, 2)?;
     if !args[0].is_nil() && !args[0].is_frame() {
         return Err(signal(
             LispCondition::WrongTypeArgument,
@@ -3677,7 +3678,7 @@ pub(crate) fn builtin_set_fontset_font(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("set-fontset-font", &args, 3, 5)?;
+    expect_args_range("set-fontset-font", &args, 3, 5)?;
     let obarray = eval.obarray();
     let char_script_table =
         dynamic_or_global_symbol_value_in_state(obarray, &[], "char-script-table");
@@ -3698,7 +3699,7 @@ pub(crate) fn builtin_set_fontset_font(
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set_frame_window_state_change(args: Vec<Value>) -> EvalResult {
-    expect_range_args("set-frame-window-state-change", &args, 0, 2)?;
+    expect_args_range("set-frame-window-state-change", &args, 0, 2)?;
     if let Some(frame) = args.first()
         && !frame.is_nil()
         && !frame.is_frame()
@@ -3745,7 +3746,7 @@ pub(crate) fn builtin_set_fringe_bitmap_face(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("set-fringe-bitmap-face", &args, 1, 2)?;
+    expect_args_range("set-fringe-bitmap-face", &args, 1, 2)?;
     let bitmap = args[0].as_symbol_name();
     let has_fringe_property = symbol_property_get(ctx, args[0], Value::symbol("fringe"))?
         .1
@@ -3846,7 +3847,7 @@ pub(crate) fn builtin_set_window_new_normal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("set-window-new-normal", &args, 1, 2)?;
+    expect_args_range("set-window-new-normal", &args, 1, 2)?;
     expect_window_valid_or_nil(&args[0])?;
     Ok(super::stubs::set_window_new_normal_value(
         eval,
@@ -3859,7 +3860,7 @@ pub(crate) fn builtin_set_window_new_pixel(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("set-window-new-pixel", &args, 2, 3)?;
+    expect_args_range("set-window-new-pixel", &args, 2, 3)?;
     expect_window_valid_or_nil(&args[0])?;
     let size = expect_int(&args[1])?;
     Ok(super::stubs::set_window_new_pixel_value(
@@ -3874,7 +3875,7 @@ pub(crate) fn builtin_set_window_new_total(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("set-window-new-total", &args, 2, 3)?;
+    expect_args_range("set-window-new-total", &args, 2, 3)?;
     expect_window_valid_or_nil(&args[0])?;
     let size = expect_fixnum(&args[1])?;
     Ok(super::stubs::set_window_new_total_value(
@@ -3891,7 +3892,7 @@ pub(crate) fn builtin_sort_charsets(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_string_distance(args: Vec<Value>) -> EvalResult {
-    expect_range_args("string-distance", &args, 2, 3)?;
+    expect_args_range("string-distance", &args, 2, 3)?;
     let s1 = args[0].as_lisp_string().ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
@@ -3976,7 +3977,7 @@ pub(crate) fn builtin_tool_bar_get_system_style(args: Vec<Value>) -> EvalResult 
 }
 
 pub(crate) fn builtin_tool_bar_pixel_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("tool-bar-pixel-width", &args, 0, 1)?;
+    expect_args_range("tool-bar-pixel-width", &args, 0, 1)?;
     Ok(Value::fixnum(0))
 }
 
@@ -3984,7 +3985,7 @@ pub(crate) fn builtin_transpose_regions(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("transpose-regions", &args, 4, 5)?;
+    expect_args_range("transpose-regions", &args, 4, 5)?;
     let current_id = eval
         .buffers
         .current_buffer_id()
@@ -4079,12 +4080,12 @@ pub(crate) fn builtin_transpose_regions(
 }
 
 pub(crate) fn builtin_tty_output_buffer_size(args: Vec<Value>) -> EvalResult {
-    expect_range_args("tty--output-buffer-size", &args, 0, 1)?;
+    expect_args_range("tty--output-buffer-size", &args, 0, 1)?;
     Ok(Value::fixnum(0))
 }
 
 pub(crate) fn builtin_tty_set_output_buffer_size(args: Vec<Value>) -> EvalResult {
-    expect_range_args("tty--set-output-buffer-size", &args, 1, 2)?;
+    expect_args_range("tty--set-output-buffer-size", &args, 1, 2)?;
     Ok(Value::NIL)
 }
 
@@ -4551,17 +4552,17 @@ pub(crate) fn builtin_variable_binding_locus(
 }
 
 pub(crate) fn builtin_x_begin_drag(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-begin-drag", &args, 1, 6)?;
+    expect_args_range("x-begin-drag", &args, 1, 6)?;
     Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_x_double_buffered_p(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-double-buffered-p", &args, 0, 1)?;
+    expect_args_range("x-double-buffered-p", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_x_menu_bar_open_internal(args: Vec<Value>) -> EvalResult {
-    expect_range_args("x-menu-bar-open-internal", &args, 0, 1)?;
+    expect_args_range("x-menu-bar-open-internal", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
@@ -4569,7 +4570,7 @@ pub(crate) fn builtin_xw_display_color_p_ctx(
     ctx: &crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("xw-display-color-p", &args, 0, 1)?;
+    expect_args_range("xw-display-color-p", &args, 0, 1)?;
     if let Some(display) = args.first() {
         super::super::display::expect_display_designator_in_state(&ctx.frames, display)?;
     }
@@ -4589,7 +4590,7 @@ pub(crate) fn builtin_xw_display_color_p_ctx(
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_innermost_minibuffer_p(args: Vec<Value>) -> EvalResult {
-    expect_range_args("innermost-minibuffer-p", &args, 0, 1)?;
+    expect_args_range("innermost-minibuffer-p", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
@@ -5006,7 +5007,7 @@ pub(crate) fn builtin_local_variable_if_set_p(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("local-variable-if-set-p", &args, 1, 2)?;
+    expect_args_range("local-variable-if-set-p", &args, 1, 2)?;
     let symbol = SymId::from_value(ctx, args[0])?;
     let resolved_id = resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
     // Mirror the GNU switch on `sym->u.s.redirect` at
@@ -5052,7 +5053,7 @@ pub(crate) fn builtin_local_variable_if_set_p(
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_lock_buffer(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lock-buffer", &args, 0, 1)?;
+    expect_args_range("lock-buffer", &args, 0, 1)?;
     if let Some(filename) = args.first()
         && !filename.is_nil()
     {
@@ -5078,7 +5079,7 @@ pub(super) fn reset_symbols_thread_locals() {
 }
 
 pub(crate) fn builtin_lossage_size(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lossage-size", &args, 0, 1)?;
+    expect_args_range("lossage-size", &args, 0, 1)?;
 
     if let Some(value) = args.first()
         && !value.is_nil()
@@ -5834,7 +5835,7 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute_from_resource(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args(
+    expect_args_range(
         "internal-set-lisp-face-attribute-from-resource",
         &args,
         3,
@@ -5934,7 +5935,7 @@ pub(crate) fn builtin_malloc_info(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_malloc_trim(args: Vec<Value>) -> EvalResult {
-    expect_range_args("malloc-trim", &args, 0, 1)?;
+    expect_args_range("malloc-trim", &args, 0, 1)?;
     if let Some(pad) = args.first()
         && !pad.is_nil()
     {
@@ -6010,7 +6011,7 @@ pub(crate) fn builtin_dump_emacs_portable(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("dump-emacs-portable", &args, 1, 2)?;
+    expect_args_range("dump-emacs-portable", &args, 1, 2)?;
 
     if !ctx.noninteractive() {
         return Err(signal(
@@ -6167,13 +6168,13 @@ pub(crate) fn builtin_dump_emacs_portable_sort_predicate_copied(args: Vec<Value>
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_decode_coding_region(args: Vec<Value>) -> EvalResult {
-    expect_range_args("decode-coding-region", &args, 3, 4)?;
+    expect_args_range("decode-coding-region", &args, 3, 4)?;
     Ok(Value::NIL)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_encode_coding_region(args: Vec<Value>) -> EvalResult {
-    expect_range_args("encode-coding-region", &args, 3, 4)?;
+    expect_args_range("encode-coding-region", &args, 3, 4)?;
     Ok(Value::NIL)
 }
 
@@ -6433,7 +6434,7 @@ fn keymap_prompt_scan_at_depth(obarray: &Obarray, map: Value, depth: usize) -> V
 pub(crate) fn plan_kill_emacs_request(
     args: &[Value],
 ) -> Result<super::eval::ShutdownRequest, Flow> {
-    expect_range_args("kill-emacs", args, 0, 2)?;
+    expect_args_range("kill-emacs", args, 0, 2)?;
     let exit_code = match args.first().copied().unwrap_or(Value::NIL).kind() {
         ValueKind::Fixnum(n) => n as i32,
         ValueKind::Nil | ValueKind::T => 0,
@@ -6454,7 +6455,7 @@ pub(crate) fn builtin_kill_emacs(eval: &mut super::eval::Context, args: Vec<Valu
 }
 
 pub(crate) fn builtin_lower_frame(args: Vec<Value>) -> EvalResult {
-    expect_range_args("lower-frame", &args, 0, 1)?;
+    expect_args_range("lower-frame", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
@@ -6912,7 +6913,7 @@ fn quote_payload_value(value: Value) -> Option<Value> {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_make_char(args: Vec<Value>) -> EvalResult {
-    expect_range_args("make-char", &args, 1, 5)?;
+    expect_args_range("make-char", &args, 1, 5)?;
     let Some(charset) = args[0].as_symbol_name() else {
         return Err(signal(
             LispCondition::WrongTypeArgument,
@@ -7058,6 +7059,6 @@ pub(crate) fn builtin_make_finalizer(
 }
 
 pub(crate) fn builtin_make_interpreted_closure(args: Vec<Value>) -> EvalResult {
-    expect_range_args("make-interpreted-closure", &args, 3, 5)?;
+    expect_args_range("make-interpreted-closure", &args, 3, 5)?;
     make_interpreted_closure_from_parts(&args[0], &args[1], &args[2], args.get(3), args.get(4))
 }

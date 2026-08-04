@@ -1,5 +1,6 @@
 //! Lisp interface to the typed renderer-effect registry.
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range};
 use super::*;
 use crate::emacs_core::effect_profile::{
     EffectScope, effect_name_from_lisp, effect_operations_from_lisp, effect_set_operation_from_lisp,
@@ -103,7 +104,7 @@ pub(crate) fn builtin_neomacs_effect_names(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("neomacs-effect-names", &args, 0, 1)?;
+    expect_args_range("neomacs-effect-names", &args, 0, 1)?;
     let names = match args.first() {
         None => eval.visual_config.effect_names(),
         Some(value) if value.is_nil() => eval.visual_config.effect_names(),

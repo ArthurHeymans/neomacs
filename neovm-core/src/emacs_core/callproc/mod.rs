@@ -1,5 +1,6 @@
 //! GNU-style synchronous subprocess owner, corresponding to `callproc.c`.
 
+use crate::emacs_core::error::{expect_min_args};
 use crate::emacs_core::error::LispCondition;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
@@ -85,27 +86,6 @@ pub(crate) fn isolate_child_command(command: &mut Command) {
     {
         let _ = command;
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ));
-    }
-    Ok(())
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ));
-    }
-    Ok(())
 }
 
 fn maybe_redisplay_sync_output(

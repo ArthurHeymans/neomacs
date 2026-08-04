@@ -4,6 +4,7 @@
 //! The display engine later validates and registers those properties when it
 //! needs glyph data.  The Lisp-visible mutation semantics live here.
 
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_args_range};
 use super::chartable::make_char_table_value;
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
@@ -14,39 +15,6 @@ use crate::emacs_core::value::ValueKind;
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn expect_integer_or_marker_p(arg: &Value) -> Result<(), Flow> {
     match arg.kind() {
@@ -136,7 +104,7 @@ pub(crate) fn builtin_compose_region_internal(
     ctx: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("compose-region-internal", &args, 2, 4)?;
+    expect_args_range("compose-region-internal", &args, 2, 4)?;
     // GNU `Fcompose_region_internal` runs `validate_region (&start, &end)`
     // (buffer.c), which resolves markers, swaps so the lower bound comes first,
     // then bounds-checks against `BEGV`/`ZV`.
@@ -185,7 +153,7 @@ pub(crate) fn builtin_compose_region_internal(
 ///
 /// Compose text in STRING between indices START and END.
 pub(crate) fn builtin_compose_string_internal(args: Vec<Value>) -> EvalResult {
-    expect_range_args("compose-string-internal", &args, 3, 5)?;
+    expect_args_range("compose-string-internal", &args, 3, 5)?;
     if !args[0].is_string() {
         return Err(signal(
             LispCondition::WrongTypeArgument,

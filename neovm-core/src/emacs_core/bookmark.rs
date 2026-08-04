@@ -13,7 +13,10 @@
 //! - `bookmark-save` -- serialize bookmarks to a string
 //! - `bookmark-load` -- deserialize bookmarks from a string
 
+#[cfg(test)]
+use crate::emacs_core::error::expect_args;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_min_args;
 use std::collections::HashMap;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -342,30 +345,6 @@ fn optional_bookmark_string_to_runtime(text: Option<&LispString>) -> String {
 // ===========================================================================
 // Builtin helpers
 // ===========================================================================
-#[cfg(test)]
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn expect_lisp_string(value: &Value) -> Result<LispString, Flow> {

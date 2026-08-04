@@ -18,6 +18,7 @@
 //! No external crate (serde_json etc.) is used — the parser and serializer
 //! are implemented from scratch with simple recursive descent.
 
+use crate::emacs_core::error::{expect_min_args};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
@@ -28,17 +29,6 @@ use strum::{EnumString, IntoStaticStr};
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Keyword argument parsing

@@ -3,6 +3,7 @@
 //! All functions here take `(eval: &mut Context, args: Vec<Value>) -> EvalResult`
 //! and are dispatched from `builtins.rs` via `dispatch_builtin`.
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_fixnum};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::syntax::{SyntaxClass, SyntaxTable};
@@ -17,52 +18,10 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 // Argument helpers (duplicated from builtins.rs — they are not `pub`)
 // ---------------------------------------------------------------------------
 
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
 // GNU validates the COUNT argument of these motion commands with
 // `CHECK_FIXNUM` (see `move_point` and `Fbeginning_of_line`/`Fend_of_line`
 // in src/cmds.c), which signals `(wrong-type-argument fixnump …)` — a fixnum
 // check, not a position/marker check. Markers and bignums are rejected.
-fn expect_fixnum(value: &Value) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _ => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("fixnump"), *value],
-        )),
-    }
-}
 
 #[derive(Clone, Copy)]
 struct LineCountArg {

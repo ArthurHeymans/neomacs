@@ -16,6 +16,7 @@
 //!   where SIZE is `Value::fixnum(length)` and each subsequent element is
 //!   `Value::fixnum(0)` or `Value::fixnum(1)`.
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::{Context, push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots};
 use super::intern::{NIL_SYM_ID, SymId, T_SYM_ID, intern, resolve_sym};
@@ -373,42 +374,6 @@ fn uniprop_table_uncompress(table: Value, idx: usize) -> Option<Value> {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-/// Expect exactly N arguments, or signal `wrong-number-of-arguments`.
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-/// Expect at least N arguments.
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-/// Expect at most N arguments.
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 /// Signal `wrong-type-argument` with a predicate name.
 fn wrong_type(pred: &str, got: &Value) -> Flow {

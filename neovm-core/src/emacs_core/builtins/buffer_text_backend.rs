@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args};
 use super::*;
 use crate::buffer::BufferTextBackendKind;
 use crate::buffer::text::ImplementedBufferTextBackendKind;

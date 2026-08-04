@@ -5,10 +5,8 @@
 //! lists and builtins for that object model; native frontend/embedder state is
 //! intentionally kept out of the Lisp heap objects.
 
-use super::builtins::{
-    builtin_get_buffer, builtin_get_buffer_create, collect_proper_list_items, expect_range_args,
-    expect_wholenump,
-};
+use crate::emacs_core::error::{expect_args_range};
+use super::builtins::{builtin_get_buffer, builtin_get_buffer_create, collect_proper_list_items, expect_wholenump};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::symbol::Obarray;
@@ -243,7 +241,7 @@ fn xwidget_live_p_value(value: Value) -> bool {
 }
 
 pub(crate) fn builtin_make_xwidget(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("make-xwidget", &args, 4, 7)?;
+    expect_args_range("make-xwidget", &args, 4, 7)?;
     let type_ = expect_symbol(args[0])?;
     if !XwidgetType::Webkit.is_lisp_value(type_) {
         return Err(signal("error", vec![Value::string("Bad xwidget type")]));
@@ -271,22 +269,22 @@ pub(crate) fn builtin_make_xwidget(eval: &mut Context, args: Vec<Value>) -> Eval
 }
 
 pub(crate) fn builtin_xwidgetp(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidgetp", &args, 1, 1)?;
+    expect_args_range("xwidgetp", &args, 1, 1)?;
     Ok(Value::bool_val(args[0].is_xwidget()))
 }
 
 pub(crate) fn builtin_xwidget_view_p(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-view-p", &args, 1, 1)?;
+    expect_args_range("xwidget-view-p", &args, 1, 1)?;
     Ok(Value::bool_val(args[0].is_xwidget_view()))
 }
 
 pub(crate) fn builtin_xwidget_live_p(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-live-p", &args, 1, 1)?;
+    expect_args_range("xwidget-live-p", &args, 1, 1)?;
     Ok(Value::bool_val(xwidget_live_p_value(args[0])))
 }
 
 pub(crate) fn builtin_xwidget_info(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-info", &args, 1, 1)?;
+    expect_args_range("xwidget-info", &args, 1, 1)?;
     let value = expect_live_xwidget(args[0])?;
     let xwidget = value.as_xwidget().unwrap();
     Ok(Value::vector(vec![
@@ -298,7 +296,7 @@ pub(crate) fn builtin_xwidget_info(_eval: &mut Context, args: Vec<Value>) -> Eva
 }
 
 pub(crate) fn builtin_xwidget_view_info(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-view-info", &args, 1, 1)?;
+    expect_args_range("xwidget-view-info", &args, 1, 1)?;
     let value = expect_xwidget_view(args[0])?;
     let view = value.as_xwidget_view().unwrap();
     Ok(Value::vector(vec![
@@ -312,19 +310,19 @@ pub(crate) fn builtin_xwidget_view_info(_eval: &mut Context, args: Vec<Value>) -
 }
 
 pub(crate) fn builtin_xwidget_view_model(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-view-model", &args, 1, 1)?;
+    expect_args_range("xwidget-view-model", &args, 1, 1)?;
     let value = expect_xwidget_view(args[0])?;
     Ok(value.as_xwidget_view().unwrap().model)
 }
 
 pub(crate) fn builtin_xwidget_view_window(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-view-window", &args, 1, 1)?;
+    expect_args_range("xwidget-view-window", &args, 1, 1)?;
     let value = expect_xwidget_view(args[0])?;
     Ok(value.as_xwidget_view().unwrap().window)
 }
 
 pub(crate) fn builtin_xwidget_view_lookup(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-view-lookup", &args, 2, 2)?;
+    expect_args_range("xwidget-view-lookup", &args, 2, 2)?;
     let model = expect_live_xwidget(args[0])?;
     let window = args[1];
     let items = collect_proper_list_items(eval.xwidgets.internal_xwidget_view_list)?;
@@ -340,7 +338,7 @@ pub(crate) fn builtin_xwidget_view_lookup(eval: &mut Context, args: Vec<Value>) 
 }
 
 pub(crate) fn builtin_delete_xwidget_view(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("delete-xwidget-view", &args, 1, 1)?;
+    expect_args_range("delete-xwidget-view", &args, 1, 1)?;
     let value = expect_xwidget_view(args[0])?;
     eval.xwidgets.internal_xwidget_view_list =
         delq_from_list(eval.xwidgets.internal_xwidget_view_list, value);
@@ -349,13 +347,13 @@ pub(crate) fn builtin_delete_xwidget_view(eval: &mut Context, args: Vec<Value>) 
 }
 
 pub(crate) fn builtin_xwidget_plist(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-plist", &args, 1, 1)?;
+    expect_args_range("xwidget-plist", &args, 1, 1)?;
     let value = expect_live_xwidget(args[0])?;
     Ok(value.as_xwidget().unwrap().plist)
 }
 
 pub(crate) fn builtin_set_xwidget_plist(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("set-xwidget-plist", &args, 2, 2)?;
+    expect_args_range("set-xwidget-plist", &args, 2, 2)?;
     let value = expect_live_xwidget(args[0])?;
     let plist = args[1];
     ensure_proper_list(plist)?;
@@ -366,13 +364,13 @@ pub(crate) fn builtin_set_xwidget_plist(_eval: &mut Context, args: Vec<Value>) -
 }
 
 pub(crate) fn builtin_xwidget_buffer(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-buffer", &args, 1, 1)?;
+    expect_args_range("xwidget-buffer", &args, 1, 1)?;
     let value = expect_xwidget(args[0])?;
     Ok(value.as_xwidget().unwrap().buffer)
 }
 
 pub(crate) fn builtin_set_xwidget_buffer(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("set-xwidget-buffer", &args, 2, 2)?;
+    expect_args_range("set-xwidget-buffer", &args, 2, 2)?;
     let value = expect_live_xwidget(args[0])?;
     let buffer = expect_buffer(args[1])?;
     value.with_xwidget_mut(|xwidget| {
@@ -385,7 +383,7 @@ pub(crate) fn builtin_xwidget_query_on_exit_flag(
     _eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("xwidget-query-on-exit-flag", &args, 1, 1)?;
+    expect_args_range("xwidget-query-on-exit-flag", &args, 1, 1)?;
     let value = expect_live_xwidget(args[0])?;
     Ok(Value::bool_val(
         !value.as_xwidget().unwrap().kill_without_query,
@@ -396,7 +394,7 @@ pub(crate) fn builtin_set_xwidget_query_on_exit_flag(
     _eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("set-xwidget-query-on-exit-flag", &args, 2, 2)?;
+    expect_args_range("set-xwidget-query-on-exit-flag", &args, 2, 2)?;
     let value = expect_live_xwidget(args[0])?;
     let flag = args[1];
     value.with_xwidget_mut(|xwidget| {
@@ -406,7 +404,7 @@ pub(crate) fn builtin_set_xwidget_query_on_exit_flag(
 }
 
 pub(crate) fn builtin_get_buffer_xwidgets(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("get-buffer-xwidgets", &args, 1, 1)?;
+    expect_args_range("get-buffer-xwidgets", &args, 1, 1)?;
     if args[0].is_nil() {
         return Ok(Value::NIL);
     }
@@ -428,7 +426,7 @@ pub(crate) fn builtin_get_buffer_xwidgets(eval: &mut Context, args: Vec<Value>) 
 }
 
 pub(crate) fn builtin_kill_xwidget(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("kill-xwidget", &args, 1, 1)?;
+    expect_args_range("kill-xwidget", &args, 1, 1)?;
     let value = expect_live_xwidget(args[0])?;
     let id = value.as_xwidget().unwrap().xwidget_id;
     eval.xwidgets.internal_xwidget_list =
@@ -446,7 +444,7 @@ pub(crate) fn builtin_kill_xwidget(eval: &mut Context, args: Vec<Value>) -> Eval
 }
 
 pub(crate) fn builtin_xwidget_resize(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-resize", &args, 3, 3)?;
+    expect_args_range("xwidget-resize", &args, 3, 3)?;
     let value = expect_live_xwidget(args[0])?;
     let width = expect_i32_wholenump(args[1])?;
     let height = expect_i32_wholenump(args[2])?;
@@ -463,21 +461,21 @@ pub(crate) fn builtin_xwidget_resize(eval: &mut Context, args: Vec<Value>) -> Ev
 }
 
 pub(crate) fn builtin_xwidget_webkit_uri(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-webkit-uri", &args, 1, 1)?;
+    expect_args_range("xwidget-webkit-uri", &args, 1, 1)?;
     let value = expect_live_webkit_xwidget(args[0])?;
     let id = value.as_xwidget().unwrap().xwidget_id;
     Ok(Value::string(_eval.xwidgets.webkit_uri(id)))
 }
 
 pub(crate) fn builtin_xwidget_webkit_title(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-webkit-title", &args, 1, 1)?;
+    expect_args_range("xwidget-webkit-title", &args, 1, 1)?;
     let value = expect_live_webkit_xwidget(args[0])?;
     let id = value.as_xwidget().unwrap().xwidget_id;
     Ok(Value::string(_eval.xwidgets.webkit_title(id)))
 }
 
 pub(crate) fn builtin_xwidget_webkit_goto_uri(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-webkit-goto-uri", &args, 2, 2)?;
+    expect_args_range("xwidget-webkit-goto-uri", &args, 2, 2)?;
     let value = expect_live_webkit_xwidget(args[0])?;
     let uri = expect_string(args[1])?;
     let id = value.as_xwidget().unwrap().xwidget_id;
@@ -491,7 +489,7 @@ pub(crate) fn builtin_xwidget_webkit_goto_uri(eval: &mut Context, args: Vec<Valu
 }
 
 pub(crate) fn builtin_xwidget_size_request(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("xwidget-size-request", &args, 1, 1)?;
+    expect_args_range("xwidget-size-request", &args, 1, 1)?;
     let value = expect_live_xwidget(args[0])?;
     let xwidget = value.as_xwidget().unwrap();
     Ok(Value::list(vec![

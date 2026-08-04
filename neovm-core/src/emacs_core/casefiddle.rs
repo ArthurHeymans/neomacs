@@ -2,6 +2,7 @@
 //!
 //! Implements `capitalize`, `upcase-initials`, and `char-resolve-modifiers`.
 
+use crate::emacs_core::error::{expect_args};
 use super::casetab::{CaseMap, CaseTableOverride};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
@@ -13,17 +14,6 @@ use crate::heap_types::LispString;
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn expect_min_max_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
     if args.len() < min || args.len() > max {

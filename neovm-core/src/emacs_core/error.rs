@@ -1406,3 +1406,67 @@ pub fn format_eval_result_bytes_with_eval(
 #[cfg(test)]
 #[path = "error_test.rs"]
 mod tests;
+
+/// Signal wrong-number-of-arguments unless `args` has exactly `n` items.
+pub(crate) fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
+    if args.len() != n {
+        Err(signal(
+            LispCondition::WrongNumberOfArguments,
+            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+/// Signal wrong-number-of-arguments unless `args` has at least `min` items.
+pub(crate) fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
+    if args.len() < min {
+        Err(signal(
+            LispCondition::WrongNumberOfArguments,
+            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+/// Signal wrong-number-of-arguments unless `args` has at most `max` items.
+pub(crate) fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
+    if args.len() > max {
+        Err(signal(
+            LispCondition::WrongNumberOfArguments,
+            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+/// Signal wrong-number-of-arguments unless `min <= args.len() <= max`.
+pub(crate) fn expect_args_range(
+    name: &str,
+    args: &[Value],
+    min: usize,
+    max: usize,
+) -> Result<(), Flow> {
+    if args.len() < min || args.len() > max {
+        Err(signal(
+            LispCondition::WrongNumberOfArguments,
+            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+/// Extract a fixnum or signal wrong-type-argument (fixnump).
+pub(crate) fn expect_fixnum(val: &Value) -> Result<i64, Flow> {
+    match val.kind() {
+        ValueKind::Fixnum(n) => Ok(n),
+        _other => Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("fixnump"), *val],
+        )),
+    }
+}

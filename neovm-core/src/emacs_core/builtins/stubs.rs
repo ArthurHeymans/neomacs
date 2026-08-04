@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
 use super::*;
 use crate::buffer::{BufferManager, LispCharPos1};
 use crate::emacs_core::display;
@@ -25,24 +26,24 @@ pub(crate) fn builtin_tty_frame_at(args: Vec<Value>) -> EvalResult {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_tty_frame_geometry(args: Vec<Value>) -> EvalResult {
-    expect_range_args("tty-frame-geometry", &args, 0, 1)?;
+    expect_args_range("tty-frame-geometry", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_tty_frame_edges(args: Vec<Value>) -> EvalResult {
-    expect_range_args("tty-frame-edges", &args, 0, 2)?;
+    expect_args_range("tty-frame-edges", &args, 0, 2)?;
     Ok(Value::NIL)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_tty_frame_list_z_order(args: Vec<Value>) -> EvalResult {
-    expect_range_args("tty-frame-list-z-order", &args, 0, 1)?;
+    expect_args_range("tty-frame-list-z-order", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_tty_frame_restack(args: Vec<Value>) -> EvalResult {
-    expect_range_args("tty-frame-restack", &args, 2, 3)?;
+    expect_args_range("tty-frame-restack", &args, 2, 3)?;
     Err(signal(
         "error",
         vec![Value::string("tty-frame-restack is not implemented")],
@@ -54,7 +55,7 @@ fn tty_display_dimension(
     name: &str,
     args: &[Value],
 ) -> Result<(i64, i64), Flow> {
-    expect_range_args(name, args, 0, 1)?;
+    expect_args_range(name, args, 0, 1)?;
 
     let frame_id = match args.first().map(|value| value.kind()) {
         Some(ValueKind::Veclike(VecLikeType::Frame)) => {
@@ -175,13 +176,13 @@ fn monitor_alist_value(monitor: &NeomacsMonitorInfo, frames: Value) -> Value {
 }
 
 pub(crate) fn builtin_neomacs_frame_geometry(args: Vec<Value>) -> EvalResult {
-    expect_range_args("neomacs-frame-geometry", &args, 0, 1)?;
+    expect_args_range("neomacs-frame-geometry", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_neomacs_frame_edges(args: Vec<Value>) -> EvalResult {
-    expect_range_args("neomacs-frame-edges", &args, 0, 2)?;
+    expect_args_range("neomacs-frame-edges", &args, 0, 2)?;
     Ok(Value::NIL)
 }
 
@@ -199,7 +200,7 @@ pub(crate) fn builtin_neomacs_display_monitor_attributes_list(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("neomacs-display-monitor-attributes-list", &args, 0, 1)?;
+    expect_args_range("neomacs-display-monitor-attributes-list", &args, 0, 1)?;
     let frames = eval
         .frames
         .frame_list()
@@ -563,7 +564,7 @@ pub(crate) fn builtin_define_fringe_bitmap(
     args: Vec<Value>,
 ) -> EvalResult {
     use super::fringe_bitmap::{FringeBitmap, fit_rows_to_height, parse_bits_rows};
-    expect_range_args("define-fringe-bitmap", &args, 2, 5)?;
+    expect_args_range("define-fringe-bitmap", &args, 2, 5)?;
     let symbols_with_pos_enabled = ctx.symbols_with_pos_enabled;
     let Some(sym) = super::symbols::symbol_id_checked(&args[0], symbols_with_pos_enabled) else {
         return Err(signal(
@@ -909,7 +910,7 @@ pub(crate) fn builtin_init_image_library(args: Vec<Value>) -> EvalResult {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_describe_buffer_bindings(args: Vec<Value>) -> EvalResult {
-    expect_range_args("describe-buffer-bindings", &args, 1, 3)?;
+    expect_args_range("describe-buffer-bindings", &args, 1, 3)?;
     if !args[0].is_buffer() {
         return Err(signal(
             LispCondition::WrongTypeArgument,
@@ -935,7 +936,7 @@ pub(crate) fn builtin_describe_vector(
     eval: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("describe-vector", &args, 1, 2)?;
+    expect_args_range("describe-vector", &args, 1, 2)?;
     let is_char_table = super::chartable::is_char_table(&args[0]);
     if !is_char_table && !matches!(args[0].kind(), ValueKind::Veclike(VecLikeType::Vector)) {
         return Err(signal(
@@ -1121,7 +1122,7 @@ pub(crate) fn builtin_frame_ancestor_p(args: Vec<Value>) -> EvalResult {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_bottom_divider_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-bottom-divider-width", &args, 0, 1)?;
+    expect_args_range("frame-bottom-divider-width", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1130,7 +1131,7 @@ pub(crate) fn builtin_frame_bottom_divider_width(args: Vec<Value>) -> EvalResult
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_child_frame_border_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-child-frame-border-width", &args, 0, 1)?;
+    expect_args_range("frame-child-frame-border-width", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1139,7 +1140,7 @@ pub(crate) fn builtin_frame_child_frame_border_width(args: Vec<Value>) -> EvalRe
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_focus(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-focus", &args, 0, 1)?;
+    expect_args_range("frame-focus", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1147,7 +1148,7 @@ pub(crate) fn builtin_frame_focus(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_frame_font_cache(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-font-cache", &args, 0, 1)?;
+    expect_args_range("frame-font-cache", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1155,7 +1156,7 @@ pub(crate) fn builtin_frame_font_cache(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_frame_fringe_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-fringe-width", &args, 0, 1)?;
+    expect_args_range("frame-fringe-width", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1164,7 +1165,7 @@ pub(crate) fn builtin_frame_fringe_width(args: Vec<Value>) -> EvalResult {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_internal_border_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-internal-border-width", &args, 0, 1)?;
+    expect_args_range("frame-internal-border-width", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1172,7 +1173,7 @@ pub(crate) fn builtin_frame_internal_border_width(args: Vec<Value>) -> EvalResul
 }
 
 pub(crate) fn builtin_frame_or_buffer_changed_p(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-or-buffer-changed-p", &args, 0, 1)?;
+    expect_args_range("frame-or-buffer-changed-p", &args, 0, 1)?;
     let Some(symbol) = args.first() else {
         return Ok(Value::T);
     };
@@ -1190,7 +1191,7 @@ pub(crate) fn builtin_frame_or_buffer_changed_p(args: Vec<Value>) -> EvalResult 
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_parent(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-parent", &args, 0, 1)?;
+    expect_args_range("frame-parent", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1198,7 +1199,7 @@ pub(crate) fn builtin_frame_parent(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_frame_pointer_visible_p(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-pointer-visible-p", &args, 0, 1)?;
+    expect_args_range("frame-pointer-visible-p", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1207,7 +1208,7 @@ pub(crate) fn builtin_frame_pointer_visible_p(args: Vec<Value>) -> EvalResult {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_right_divider_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-right-divider-width", &args, 0, 1)?;
+    expect_args_range("frame-right-divider-width", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1215,7 +1216,7 @@ pub(crate) fn builtin_frame_right_divider_width(args: Vec<Value>) -> EvalResult 
 }
 
 pub(crate) fn builtin_frame_scroll_bar_height(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-scroll-bar-height", &args, 0, 1)?;
+    expect_args_range("frame-scroll-bar-height", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1223,7 +1224,7 @@ pub(crate) fn builtin_frame_scroll_bar_height(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_frame_scroll_bar_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-scroll-bar-width", &args, 0, 1)?;
+    expect_args_range("frame-scroll-bar-width", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1232,7 +1233,7 @@ pub(crate) fn builtin_frame_scroll_bar_width(args: Vec<Value>) -> EvalResult {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_frame_window_state_change(args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-window-state-change", &args, 0, 1)?;
+    expect_args_range("frame-window-state-change", &args, 0, 1)?;
     if let Some(frame) = args.first() {
         expect_frame_live_or_nil(frame)?;
     }
@@ -1243,7 +1244,7 @@ pub(crate) fn builtin_frame_window_state_change(args: Vec<Value>) -> EvalResult 
 
 /// Eval-dependent variant: defaults to selected frame.
 pub(crate) fn builtin_frame_id(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("frame-id", &args, 0, 1)?;
+    expect_args_range("frame-id", &args, 0, 1)?;
     let fid = super::window_cmds::resolve_frame_id_in_state(
         &mut eval.frames,
         &mut eval.buffers,
@@ -1263,7 +1264,7 @@ pub(crate) fn builtin_frame_root_frame(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("frame-root-frame", &args, 0, 1)?;
+    expect_args_range("frame-root-frame", &args, 0, 1)?;
     let fid = super::window_cmds::resolve_frame_id_in_state(
         &mut eval.frames,
         &mut eval.buffers,
@@ -1281,7 +1282,7 @@ pub(crate) fn builtin_mouse_position_in_root_frame(args: Vec<Value>) -> EvalResu
 }
 
 pub(crate) fn builtin_fringe_bitmaps_at_pos(args: Vec<Value>) -> EvalResult {
-    expect_range_args("fringe-bitmaps-at-pos", &args, 0, 2)?;
+    expect_args_range("fringe-bitmaps-at-pos", &args, 0, 2)?;
     if let Some(pos) = args.first()
         && !pos.is_nil()
     {
@@ -1450,7 +1451,7 @@ pub(crate) fn builtin_face_attributes_as_vector(args: Vec<Value>) -> EvalResult 
 }
 
 pub(crate) fn builtin_font_get_glyphs(args: Vec<Value>) -> EvalResult {
-    expect_range_args("font-get-glyphs", &args, 3, 4)?;
+    expect_args_range("font-get-glyphs", &args, 3, 4)?;
     if !is_font_object(&args[0]) {
         return Err(signal(
             LispCondition::WrongTypeArgument,
@@ -1463,7 +1464,7 @@ pub(crate) fn builtin_font_get_glyphs(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_font_has_char_p(args: Vec<Value>) -> EvalResult {
-    expect_range_args("font-has-char-p", &args, 2, 3)?;
+    expect_args_range("font-has-char-p", &args, 2, 3)?;
     if !is_font_object(&args[0]) && !is_font_spec(&args[0]) {
         return Err(signal(
             LispCondition::WrongTypeArgument,
@@ -1516,7 +1517,7 @@ pub(crate) fn builtin_font_variation_glyphs(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_fontset_font(args: Vec<Value>) -> EvalResult {
-    expect_range_args("fontset-font", &args, 2, 3)?;
+    expect_args_range("fontset-font", &args, 2, 3)?;
     let ch = expect_characterp_from_int(&args[1])?;
     fontset::fontset_font(
         &args[0],
@@ -1526,7 +1527,7 @@ pub(crate) fn builtin_fontset_font(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_fontset_info(args: Vec<Value>) -> EvalResult {
-    expect_range_args("fontset-info", &args, 1, 2)?;
+    expect_args_range("fontset-info", &args, 1, 2)?;
     Err(signal(
         "error",
         vec![Value::string(
@@ -1575,7 +1576,7 @@ fn expect_frame_live_or_nil(value: &Value) -> Result<(), Flow> {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_bottom_divider_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("window-bottom-divider-width", &args, 0, 1)?;
+    expect_args_range("window-bottom-divider-width", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_live_or_nil(window)?;
     }
@@ -1601,7 +1602,7 @@ pub(crate) fn builtin_window_bottom_divider_width(args: Vec<Value>) -> EvalResul
 /// which is part of the cursor audit Finding 11
 /// (`display_and_set_cursor` collapse) restructuring.
 pub(crate) fn builtin_window_lines_pixel_dimensions(args: Vec<Value>) -> EvalResult {
-    expect_range_args("window-lines-pixel-dimensions", &args, 0, 6)?;
+    expect_args_range("window-lines-pixel-dimensions", &args, 0, 6)?;
     if let Some(window) = args.first() {
         expect_window_live_or_nil(window)?;
     }
@@ -1612,7 +1613,7 @@ pub(crate) fn builtin_window_new_normal(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("window-new-normal", &args, 0, 1)?;
+    expect_args_range("window-new-normal", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_valid_or_nil(window)?;
     }
@@ -1623,7 +1624,7 @@ pub(crate) fn builtin_window_new_pixel(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("window-new-pixel", &args, 0, 1)?;
+    expect_args_range("window-new-pixel", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_valid_or_nil(window)?;
     }
@@ -1634,7 +1635,7 @@ pub(crate) fn builtin_window_new_total(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_range_args("window-new-total", &args, 0, 1)?;
+    expect_args_range("window-new-total", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_valid_or_nil(window)?;
     }
@@ -1642,7 +1643,7 @@ pub(crate) fn builtin_window_new_total(
 }
 
 pub(crate) fn builtin_window_old_body_pixel_height(args: Vec<Value>) -> EvalResult {
-    expect_range_args("window-old-body-pixel-height", &args, 0, 1)?;
+    expect_args_range("window-old-body-pixel-height", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_live_or_nil(window)?;
     }
@@ -1650,7 +1651,7 @@ pub(crate) fn builtin_window_old_body_pixel_height(args: Vec<Value>) -> EvalResu
 }
 
 pub(crate) fn builtin_window_old_body_pixel_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("window-old-body-pixel-width", &args, 0, 1)?;
+    expect_args_range("window-old-body-pixel-width", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_live_or_nil(window)?;
     }
@@ -1658,7 +1659,7 @@ pub(crate) fn builtin_window_old_body_pixel_width(args: Vec<Value>) -> EvalResul
 }
 
 pub(crate) fn builtin_window_old_pixel_height(args: Vec<Value>) -> EvalResult {
-    expect_range_args("window-old-pixel-height", &args, 0, 1)?;
+    expect_args_range("window-old-pixel-height", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_valid_or_nil(window)?;
     }
@@ -1666,7 +1667,7 @@ pub(crate) fn builtin_window_old_pixel_height(args: Vec<Value>) -> EvalResult {
 }
 
 pub(crate) fn builtin_window_old_pixel_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("window-old-pixel-width", &args, 0, 1)?;
+    expect_args_range("window-old-pixel-width", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_valid_or_nil(window)?;
     }
@@ -1675,7 +1676,7 @@ pub(crate) fn builtin_window_old_pixel_width(args: Vec<Value>) -> EvalResult {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_right_divider_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("window-right-divider-width", &args, 0, 1)?;
+    expect_args_range("window-right-divider-width", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_live_or_nil(window)?;
     }
@@ -1684,7 +1685,7 @@ pub(crate) fn builtin_window_right_divider_width(args: Vec<Value>) -> EvalResult
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_scroll_bar_height(args: Vec<Value>) -> EvalResult {
-    expect_range_args("window-scroll-bar-height", &args, 0, 1)?;
+    expect_args_range("window-scroll-bar-height", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_live_or_nil(window)?;
     }
@@ -1693,7 +1694,7 @@ pub(crate) fn builtin_window_scroll_bar_height(args: Vec<Value>) -> EvalResult {
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_scroll_bar_width(args: Vec<Value>) -> EvalResult {
-    expect_range_args("window-scroll-bar-width", &args, 0, 1)?;
+    expect_args_range("window-scroll-bar-width", &args, 0, 1)?;
     if let Some(window) = args.first() {
         expect_window_live_or_nil(window)?;
     }
@@ -1711,14 +1712,14 @@ pub(crate) fn builtin_window_scroll_bar_width(args: Vec<Value>) -> EvalResult {
 /// and is dispatched via the eval-backed path in builtins/mod.rs.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_buffer_local_toplevel_value(args: Vec<Value>) -> EvalResult {
-    expect_range_args("buffer-local-toplevel-value", &args, 1, 2)?;
+    expect_args_range("buffer-local-toplevel-value", &args, 1, 2)?;
     Ok(Value::NIL)
 }
 
 /// GNU eval.c:857 — set SYMBOL's toplevel buffer-local value in BUFFER.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_set_buffer_local_toplevel_value(args: Vec<Value>) -> EvalResult {
-    expect_range_args("set-buffer-local-toplevel-value", &args, 2, 3)?;
+    expect_args_range("set-buffer-local-toplevel-value", &args, 2, 3)?;
     Ok(args[1])
 }
 
@@ -1736,7 +1737,7 @@ pub(crate) fn builtin_debugger_trap(args: Vec<Value>) -> EvalResult {
 // =========================================================================
 
 pub(crate) fn builtin_overlay_tree(args: Vec<Value>) -> EvalResult {
-    expect_range_args("overlay-tree", &args, 0, 1)?;
+    expect_args_range("overlay-tree", &args, 0, 1)?;
     Ok(Value::NIL)
 }
 
@@ -1764,7 +1765,7 @@ pub(crate) fn builtin_thread_set_buffer_disposition(args: Vec<Value>) -> EvalRes
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_window_discard_buffer_from_window(args: Vec<Value>) -> EvalResult {
-    expect_range_args("window-discard-buffer-from-window", &args, 2, 3)?;
+    expect_args_range("window-discard-buffer-from-window", &args, 2, 3)?;
     Ok(Value::NIL)
 }
 

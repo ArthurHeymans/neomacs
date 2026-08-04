@@ -5,47 +5,14 @@
 //! GNU implements in frame.c. The Frame/FrameManager data structures
 //! live in crate::window; window.c builtins stay in super::window_cmds.
 
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, LispCondition, signal};
 use super::intern::resolve_sym;
 use super::value::{Value, ValueKind, VecLikeType};
 use super::error::Flow;
 use crate::buffer::{BufferId, BufferManager};
 use crate::window::FrameManager;
-use super::window_cmds::{
-    FRAME_TEXT_LINES_PARAM, FRAME_TOTAL_COLS_PARAM, FRAME_TOTAL_LINES_PARAM,
-    FrameSizeParam, LIVE_GUI_RESIZE_ACK_TIMEOUT, flush_pending_live_gui_resize,
-    frame_non_text_total_height_pixels, frame_non_text_total_width_pixels_in_state,
-    frame_size_param_to_pixels, stringish_value,
-    DeleteFrameMode,
-    FrameResizeRequest,
-    MIN_FRAME_TEXT_LINES,
-    delete_frame_owned,
-    ensure_selected_frame_id_in_state,
-    expect_args,
-    expect_int,
-    expect_max_args,
-    expect_min_args,
-    frame_divider_width,
-    frame_is_top_level_non_window,
-    frame_name_parameter_value,
-    frame_realized_lines,
-    frame_size_param_to_cells,
-    frame_text_height_pixels,
-    frame_text_width_pixels_in_state,
-    frame_total_cols,
-    frame_total_lines,
-    make_frame_plain,
-    other_frames_in_state,
-    parse_frame_size_param,
-    remember_selected_window_point_in_state,
-    request_live_gui_frame_resize,
-    resize_live_gui_frame,
-    resolve_frame_id,
-    resolve_frame_id_in_state,
-    selected_frame_impl,
-    set_frame_text_size,
-    sync_selected_window_buffer_in_state,
-};
+use super::window_cmds::{FRAME_TEXT_LINES_PARAM, FRAME_TOTAL_COLS_PARAM, FRAME_TOTAL_LINES_PARAM, FrameSizeParam, LIVE_GUI_RESIZE_ACK_TIMEOUT, flush_pending_live_gui_resize, frame_non_text_total_height_pixels, frame_non_text_total_width_pixels_in_state, frame_size_param_to_pixels, stringish_value, DeleteFrameMode, FrameResizeRequest, MIN_FRAME_TEXT_LINES, delete_frame_owned, ensure_selected_frame_id_in_state, expect_int, frame_divider_width, frame_is_top_level_non_window, frame_name_parameter_value, frame_realized_lines, frame_size_param_to_cells, frame_text_height_pixels, frame_text_width_pixels_in_state, frame_total_cols, frame_total_lines, make_frame_plain, other_frames_in_state, parse_frame_size_param, remember_selected_window_point_in_state, request_live_gui_frame_resize, resize_live_gui_frame, resolve_frame_id, resolve_frame_id_in_state, selected_frame_impl, set_frame_text_size, sync_selected_window_buffer_in_state};
 use crate::window::{FrameFullscreen, FrameId, FrameParam, FrameParamKey};
 
 /// `(frame-focus &optional FRAME)` -> frame receiving FRAME's keystrokes, or nil.

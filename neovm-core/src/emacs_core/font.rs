@@ -7,6 +7,7 @@
 //! The xfaces.c builtin surface (internal-*-lisp-face*, colors, face-id,
 //! face-font) lives in `super::xfaces`.
 
+pub(crate) use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use crate::emacs_core::error::LispCondition;
 use std::sync::{OnceLock, RwLock};
 
@@ -235,39 +236,6 @@ pub fn alternative_font_registries(registry: &str) -> Vec<String> {
 // ---------------------------------------------------------------------------
 // Argument helpers (local to this module)
 // ---------------------------------------------------------------------------
-
-pub(crate) fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-pub(crate) fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-pub(crate) fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 pub(crate) fn live_frame_designator_in_state(frames: &FrameManager, value: &Value) -> bool {
     match value.kind() {
@@ -3266,7 +3234,6 @@ pub(crate) fn builtin_font_info(eval: &mut super::eval::Context, args: Vec<Value
         Ok(Value::NIL)
     }
 }
-
 
 // ===========================================================================
 // Tests

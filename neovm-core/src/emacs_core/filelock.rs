@@ -4,6 +4,7 @@
 //! `restore-buffer-modified-p` when a file-visiting buffer changes between
 //! modified and unmodified states.
 
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
 use std::fs;
 use std::io;
@@ -17,28 +18,6 @@ use super::fileio::{
 use super::value::{Value, ValueKind};
 use crate::buffer::BufferId;
 use crate::heap_types::LispString;
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-fn expect_range_args(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), Flow> {
-    if args.len() < min || args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 fn file_lock_error(context: &str, filename: &LispString, err: io::Error) -> Flow {
     signal(
@@ -479,7 +458,7 @@ pub(crate) fn builtin_file_locked_p(
 }
 
 pub(crate) fn builtin_lock_buffer(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_range_args("lock-buffer", &args, 0, 1)?;
+    expect_args_range("lock-buffer", &args, 0, 1)?;
     let filename = if let Some(filename) = args.first() {
         if filename.is_nil() {
             None

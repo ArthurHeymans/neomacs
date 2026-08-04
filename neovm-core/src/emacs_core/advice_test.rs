@@ -2,6 +2,7 @@ use super::super::intern::intern;
 use super::super::value::Value;
 use super::super::value::{LambdaData, LambdaParams};
 use super::*;
+use crate::emacs_core::error::Flow;
 
 // -----------------------------------------------------------------------
 // VariableWatcherList tests

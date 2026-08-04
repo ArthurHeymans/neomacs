@@ -4,6 +4,7 @@
 //! mappings, a `CaseTableManager` with standard ASCII case tables pre-initialized,
 //! and pure builtins for case-table predicates and character case conversion.
 
+use crate::emacs_core::error::{expect_args};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
@@ -168,18 +169,6 @@ impl Default for CaseTableManager {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-/// Expect exactly N arguments, or signal `wrong-number-of-arguments`.
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 /// Signal `wrong-type-argument` with a predicate name.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

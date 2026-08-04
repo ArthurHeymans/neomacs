@@ -6,7 +6,8 @@
 //! - `interpreted-function-p`, `special-form-p`, `macrop`
 //! - `func-arity`, `indirect-function`
 
-use super::error::{EvalResult, Flow, signal};
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
+use super::error::{EvalResult, signal};
 use super::intern::{SymId, resolve_name, resolve_sym};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
@@ -17,41 +18,6 @@ use std::sync::OnceLock;
 // ---------------------------------------------------------------------------
 // Argument helpers
 // ---------------------------------------------------------------------------
-
-fn expect_args(name: &str, args: &[Value], n: usize) -> Result<(), Flow> {
-    if args.len() != n {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_min_args(name: &str, args: &[Value], min: usize) -> Result<(), Flow> {
-    if args.len() < min {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-fn expect_max_args(name: &str, args: &[Value], max: usize) -> Result<(), Flow> {
-    if args.len() > max {
-        Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol(name), Value::fixnum(args.len() as i64)],
-        ))
-    } else {
-        Ok(())
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Context/public callable classification

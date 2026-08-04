@@ -1,3 +1,4 @@
+use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_fixnum};
 use super::*;
 use crate::buffer::text_props::PropertyPlistApplication;
 use crate::buffer::{CharLen, CharPos0, CharRange};
