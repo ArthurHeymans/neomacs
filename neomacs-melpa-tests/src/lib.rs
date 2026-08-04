@@ -1847,6 +1847,12 @@ pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 /// `db5ee61a6e75db074b7d20e9dcb68e0b94b4edc7`.
 pub const EVIL_NERD_COMMENTER_MELPA_PIN: (&str, &str) = ("evil-nerd-commenter", "20260507.414");
 
+/// The exact Evil Surround package selected for practical characterwise,
+/// linewise, blockwise, nested-delimiter, markup, custom-pair, repeat, marker,
+/// text-property, and undo parity. MELPA built this archive from upstream
+/// commit `14dc693ed971053feb9596d4bc1b1de0b0006584`.
+pub const EVIL_SURROUND_MELPA_PIN: (&str, &str) = ("evil-surround", "20240325.852");
+
 /// The exact Exec Path From Shell package selected for practical exported
 /// environment import, executable-path synchronization, interactive copying,
 /// non-POSIX shell adaptation, and failure-diagnostic parity. MELPA built this

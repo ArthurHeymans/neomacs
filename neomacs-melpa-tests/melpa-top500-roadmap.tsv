@@ -68,7 +68,7 @@ rank	package	downloads	status
 67	pcre2el	1184018	covered
 68	evil-nerd-commenter	1178503	covered
 69	helm-ag	1172552	covered
-70	evil-surround	1166104	todo
+70	evil-surround	1166104	covered
 71	evil-matchit	1165082	todo
 72	popwin	1162225	todo
 73	ace-link	1161673	covered
