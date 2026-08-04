@@ -55,7 +55,7 @@ rank	package	downloads	status
 54	yaml-mode	1307408	covered
 55	aggressive-indent	1296080	covered
 56	counsel	1295481	covered
-57	exec-path-from-shell	1279912	todo
+57	exec-path-from-shell	1279912	covered
 58	elisp-slime-nav	1279484	todo
 59	posframe	1266405	covered
 60	auto-compile	1256115	covered

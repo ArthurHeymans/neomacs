@@ -1827,6 +1827,12 @@ pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
 /// The exact Evil package selected by the comprehensive API parity corpus.
 pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 
+/// The exact Exec Path From Shell package selected for practical exported
+/// environment import, executable-path synchronization, interactive copying,
+/// non-POSIX shell adaptation, and failure-diagnostic parity. MELPA built this
+/// archive from upstream commit `dae820da35ad46234cbca31626ffb6da7928694a`.
+pub const EXEC_PATH_FROM_SHELL_MELPA_PIN: (&str, &str) = ("exec-path-from-shell", "20260423.1833");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");

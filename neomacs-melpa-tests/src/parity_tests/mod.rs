@@ -291,6 +291,7 @@ mod epl;
 mod erlang;
 mod es_lib;
 mod evil;
+mod exec_path_from_shell;
 mod expand_region;
 mod f;
 mod flycheck;
