@@ -2407,6 +2407,12 @@ pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 /// `ca01d013bd575710e2cd47001ee1ef6ee41667cf`.
 pub const GIT_LINK_MELPA_PIN: (&str, &str) = ("git-link", "20260723.2213");
 
+/// The exact Git Messenger package selected for practical blame popups,
+/// commit details, uncommitted work, copy actions, revision buffers, parent
+/// navigation, repository discovery, and failure parity. MELPA built this
+/// archive from upstream commit `fb9a049ac3b5fba7369ef1f027b97881f1e377ec`.
+pub const GIT_MESSENGER_MELPA_PIN: (&str, &str) = ("git-messenger", "20201202.1637");
+
 /// The exact Git Timemachine package selected for practical revision
 /// navigation, renamed-file, branch, introduction-search, hash-copy, and
 /// validation parity. MELPA built this archive from upstream commit

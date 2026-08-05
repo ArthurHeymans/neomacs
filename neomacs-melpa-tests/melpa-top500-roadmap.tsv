@@ -182,7 +182,7 @@ rank	package	downloads	status
 181	org-pomodoro	630081	covered
 182	php-mode	629506	covered
 183	tablist	621484	covered
-184	git-messenger	619046	todo
+184	git-messenger	619046	covered
 185	pythonic	612142	covered
 186	typescript-mode	611761	todo
 187	markdown-toc	610473	todo

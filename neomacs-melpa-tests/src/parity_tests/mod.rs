@@ -344,6 +344,7 @@ mod ghub;
 mod git;
 mod git_commit;
 mod git_link;
+mod git_messenger;
 mod git_timemachine;
 mod gitconfig_mode;
 mod gitignore_mode;
