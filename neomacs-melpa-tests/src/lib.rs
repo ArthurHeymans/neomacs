@@ -2082,6 +2082,12 @@ pub const EVIL_VISUALSTAR_MELPA_PIN: (&str, &str) = ("evil-visualstar", "2016022
 /// `558bec7372b0fed4c4cb6074ab906535fae615bd`.
 pub const OPEN_JUNK_FILE_MELPA_PIN: (&str, &str) = ("open-junk-file", "20161210.1114");
 
+/// The exact Org Bullets package selected for practical outline rendering,
+/// custom bullet and face policy, subtree editing, narrowing, inline-task,
+/// keymap, and mode-lifecycle parity. MELPA built this archive from upstream
+/// commit `9ec0dbd30be7c6310804141ee952ac8c5f753557`.
+pub const ORG_BULLETS_MELPA_PIN: (&str, &str) = ("org-bullets", "20200317.1740");
+
 /// The exact Ghub package selected for practical REST and GraphQL request,
 /// JSON response, pagination, authentication, forge identity, retry, and
 /// failure parity. MELPA built this archive from upstream commit

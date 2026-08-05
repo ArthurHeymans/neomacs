@@ -393,6 +393,7 @@ mod names;
 mod navi2ch;
 mod nerd_icons;
 mod open_junk_file;
+mod org_bullets;
 mod package_build;
 mod package_lifecycle;
 mod package_lint;
