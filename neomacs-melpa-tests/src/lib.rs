@@ -1957,6 +1957,12 @@ pub const WS_BUTLER_MELPA_PIN: (&str, &str) = ("ws-butler", "20250310.205");
 /// commit `375c9f287dfad68829582c1e0a67d0c18119dab9`.
 pub const GOLDEN_RATIO_MELPA_PIN: (&str, &str) = ("golden-ratio", "20230912.1825");
 
+/// The exact Git.el package selected for practical repository lifecycle,
+/// staging, history, checkout, reset, removal, stash, remote, bare-repository,
+/// and error parity. MELPA built this archive from upstream commit
+/// `8b7f1477ef367b5b7de452589dd9a8ab30150d0a`.
+pub const GIT_MELPA_PIN: (&str, &str) = ("git", "20140128.1041");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream

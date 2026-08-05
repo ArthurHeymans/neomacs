@@ -312,6 +312,7 @@ mod frozen_packages;
 mod game_2048;
 mod geiser;
 mod general;
+mod git;
 mod git_commit;
 mod git_timemachine;
 mod gntp;
