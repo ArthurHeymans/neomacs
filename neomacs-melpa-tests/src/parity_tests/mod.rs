@@ -379,6 +379,7 @@ mod llama;
 mod log4e;
 mod lorem_ipsum;
 mod lsp_mode;
+mod lsp_treemacs;
 mod lsp_ui;
 mod lv;
 mod m_buffer;

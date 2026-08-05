@@ -1981,6 +1981,12 @@ pub const EVIL_COLLECTION_MELPA_PIN: (&str, &str) = ("evil-collection", "2026072
 /// upstream commit `c73a587d613788003986a11ffe393b46affe8322`.
 pub const DAP_MODE_MELPA_PIN: (&str, &str) = ("dap-mode", "20260616.1526");
 
+/// The exact LSP Treemacs package selected for practical generic-tree,
+/// symbols, references, call-hierarchy, diagnostics, and workspace-sync parity.
+/// MELPA built this archive from upstream commit
+/// `3519ac907ea391e18d9599375b116aeeb6f8a38a`.
+pub const LSP_TREEMACS_MELPA_PIN: (&str, &str) = ("lsp-treemacs", "20260515.746");
+
 /// The exact NeoTree package selected for practical tree rendering, keyboard
 /// traversal, file operations, root changes, and side-window lifecycle parity.
 /// MELPA built this archive from upstream commit

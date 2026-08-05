@@ -151,7 +151,7 @@ rank	package	downloads	status
 150	dap-mode	821004	covered
 151	neotree	811874	covered
 152	winum	810506	covered
-153	lsp-treemacs	808373	todo
+153	lsp-treemacs	808373	covered
 154	alert	794420	covered
 155	forge	783537	todo
 156	evil-visual-mark-mode	775570	todo
