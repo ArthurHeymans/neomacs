@@ -595,6 +595,42 @@ pub enum DiffKind {
     Both,
 }
 
+/// Face-parity comparison: return diffs for cells whose CHARACTERS already
+/// match but whose colors differ, restricted to a row/column window.
+///
+/// Char-differing cells are skipped on purpose -- text parity is asserted by
+/// the text-grid comparisons, and the mode line legitimately differs in
+/// product name, which would otherwise drown the color signal. What remains
+/// is pure face divergence: same glyph, different paint.
+pub fn color_diffs_in(
+    gnu: &vt100::Screen,
+    neo: &vt100::Screen,
+    rows: std::ops::Range<u16>,
+    cols: std::ops::Range<u16>,
+) -> Vec<CellDiff> {
+    diff_screens(gnu, neo)
+        .into_iter()
+        .filter(|d| d.kind == DiffKind::Color && rows.contains(&d.row) && cols.contains(&d.col))
+        .collect()
+}
+
+/// Render a compact human-readable report of color diffs for a panic message.
+pub fn format_color_diffs(diffs: &[CellDiff], limit: usize) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
+    for d in diffs.iter().take(limit) {
+        let _ = writeln!(
+            &mut out,
+            "  ({:>2},{:>3}) {:?}: gnu fg={:?} bg={:?} | neo fg={:?} bg={:?}",
+            d.row, d.col, d.gnu_char, d.gnu_fg, d.gnu_bg, d.neo_fg, d.neo_bg
+        );
+    }
+    if diffs.len() > limit {
+        let _ = writeln!(&mut out, "  ... and {} more", diffs.len() - limit);
+    }
+    out
+}
+
 /// Compare two screens cell by cell, returning all differences.
 pub fn diff_screens(gnu: &vt100::Screen, neo: &vt100::Screen) -> Vec<CellDiff> {
     let mut diffs = Vec::new();
