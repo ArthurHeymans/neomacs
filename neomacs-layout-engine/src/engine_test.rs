@@ -1590,6 +1590,25 @@ fn glyphs_logical_text(glyphs: &[Glyph]) -> String {
         .join("")
 }
 
+/// Drop the trailing GNU append_space_for_newline glyph (a positionless
+/// space) so a full-pipeline row can be compared against the minimal
+/// shadow producer, which renders only the text.
+fn strip_appended_newline_space(
+    glyphs: &[neomacs_display_protocol::glyph_matrix::Glyph],
+) -> Vec<neomacs_display_protocol::glyph_matrix::Glyph> {
+    let mut out = glyphs.to_vec();
+    if let Some(last) = out.last()
+        && last.charpos == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS
+        && matches!(
+            last.glyph_type,
+            neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: ' ' }
+        )
+    {
+        out.pop();
+    }
+    out
+}
+
 fn render_buffer_text_source_shadow_row(
     buf_id: BufferId,
     snapshot: &LayoutBufferSnapshot,
@@ -4217,13 +4236,14 @@ fn layout_frame_rust_display_string_newline_terminates_row() {
         })
         .collect();
 
+    // trim_end: terminal rows carry the GNU append_space_for_newline glyph.
     let x_row = row_texts
         .iter()
-        .position(|t| t == "X")
+        .position(|t| t.trim_end() == "X")
         .unwrap_or_else(|| panic!("display string row `X` must render, rows={row_texts:?}"));
     let bbb_row = row_texts
         .iter()
-        .position(|t| t == "BBB")
+        .position(|t| t.trim_end() == "BBB")
         .unwrap_or_else(|| panic!("buffer text `BBB` must render, rows={row_texts:?}"));
 
     // The empty buffer line must occupy its own blank row BETWEEN `X` and `BBB`.
@@ -4232,8 +4252,10 @@ fn layout_frame_rust_display_string_newline_terminates_row() {
         x_row + 2,
         "display-string newline must leave a blank row for the empty buffer line, rows={row_texts:?}"
     );
+    // trim_end: GNU appends the newline space on empty lines too
+    // (append_space_for_newline with the default face, xdisp.c:26016).
     assert_eq!(
-        row_texts[x_row + 1],
+        row_texts[x_row + 1].trim_end(),
         "",
         "the row between `X` and `BBB` must be the blank empty-line row, rows={row_texts:?}"
     );
@@ -4971,11 +4993,13 @@ fn line_break_extend_fill_reaches_tty_reserved_right_column() {
             _ => None,
         })
         .expect("line-break :extend fill stretch");
+    // The GNU newline space occupies one cell before the fill, so space +
+    // stretch together cover the full area including the reserved column.
     assert_eq!(
         stretch_cols,
-        u16::try_from(entry.matrix.ncols - 1).expect("matrix width fits u16"),
-        "the :extend fill must cover through the full text area, including the \
-         TTY-reserved right column"
+        u16::try_from(entry.matrix.ncols - 2).expect("matrix width fits u16"),
+        "the :extend fill plus the appended newline space must cover through \
+         the full text area, including the TTY-reserved right column"
     );
 }
 
@@ -5037,7 +5061,8 @@ fn extend_fill_does_not_bleed_onto_the_following_blank_line() {
     let extend_face = fill.face_id;
     match &fill.glyph_type {
         GlyphType::Stretch { width_cols } => assert!(
-            *width_cols >= u16::try_from(entry.matrix.ncols - 1).expect("fits u16"),
+            // -2: the GNU newline space sits between the text and the fill.
+            *width_cols >= u16::try_from(entry.matrix.ncols - 2).expect("fits u16"),
             "line 1 must fill to the window edge, got {width_cols} cols"
         ),
         other => panic!("expected a stretch fill, got {other:?}"),
@@ -5963,11 +5988,13 @@ fn assert_multiline_echo_message_resizes_minibuffer_rows(use_gui_metrics: bool) 
     let row_texts = enabled_window_row_texts(minibuffer_entry);
 
     assert!(
-        row_texts.iter().any(|row| row == "ALPHA"),
+        // trim_end: terminal rows carry the GNU append_space_for_newline
+        // glyph after the line's last character.
+        row_texts.iter().any(|row| row.trim_end() == "ALPHA"),
         "expected ALPHA in its own minibuffer row, got {row_texts:?}"
     );
     assert!(
-        row_texts.iter().any(|row| row == "BETA"),
+        row_texts.iter().any(|row| row.trim_end() == "BETA"),
         "expected BETA in its own minibuffer row, got {row_texts:?}"
     );
     assert!(
@@ -13930,9 +13957,12 @@ fn buffer_text_source_shadow_matches_main_buffer_simple_unicode_row() {
     let shadow_row =
         render_buffer_text_source_shadow_row(buf_id, &snapshot, line_end, 640.0, 16.0, 12.0, 8.0);
 
+    // Compare against the text portion: the full pipeline appends the GNU
+    // newline-space glyph, which the minimal shadow producer does not.
+    let main_text_glyphs = strip_appended_newline_space(&main_row.glyphs[1]);
     assert_eq!(
         glyphs_logical_text(&shadow_row.glyphs[1]),
-        glyphs_logical_text(&main_row.glyphs[1])
+        glyphs_logical_text(&main_text_glyphs)
     );
     assert_eq!(
         shadow_row.glyphs[1]
@@ -14012,7 +14042,11 @@ fn buffer_text_source_shadow_matches_main_buffer_tab_row() {
         frame.char_width,
     );
 
-    let main_glyphs = &main_row.glyphs[1];
+    // The full pipeline appends the GNU newline-space glyph at the line
+    // end; the minimal shadow producer stops at the text. Compare the text
+    // portion.
+    let main_glyphs = strip_appended_newline_space(&main_row.glyphs[1]);
+    let main_glyphs = &main_glyphs;
     let shadow_glyphs = &shadow_row.glyphs[1];
     let main_tab = main_glyphs
         .iter()

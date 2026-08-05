@@ -1623,6 +1623,30 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         source_render.highlight_trailing_whitespace(trailing_whitespace, face_ids);
         {
             let metrics = context.active_face_state.metrics();
+            // GNU order at a real newline (xdisp.c:26525-26533):
+            // append_space_for_newline first -- the appended glyph keeps the
+            // newline's face on a terminal frame, or becomes the fill-column
+            // indicator when the pen is exactly at the indicator column --
+            // then the indicator / `:extend` fill from the advanced pen.
+            let (appended_newline_space, indicator_in_space) = source_render
+                .append_space_for_newline(
+                    context.active_face_state.face_id(),
+                    metrics.char_width(),
+                    context.append_surface.full_text_right_edge() - progress.row_progress().x(),
+                    progress.row_progress().col() as i64,
+                    context.fill_column_indicator,
+                    context.fill_column_indicator_char,
+                    row_extend,
+                    row_geometry,
+                    context.frame_background,
+                    face_ids,
+                );
+            let eol_pen_x = progress.row_progress().x()
+                + if appended_newline_space {
+                    metrics.char_width()
+                } else {
+                    0.0
+                };
             // R2L (reversed_p) is read from the GlyphRow inside the mutation,
             // which is the authoritative source; pass `false` here. R2L rows are
             // a documented limitation (the fill is suppressed for them).
@@ -1633,26 +1657,27 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             // indicator so the highlight stays continuous — so only run the plain
             // extend fill when the indicator did NOT apply (disabled, or the row
             // text already reached/passed the column).
-            let produced_indicator = source_render.produce_fill_column_indicator(
-                context.fill_column_indicator,
-                context.fill_column_indicator_char,
-                progress.row_progress().col() as i64,
-                context.content_x,
-                metrics.char_width(),
-                progress.row_progress().x(),
-                context.append_surface.full_text_right_edge(),
-                row_extend,
-                row_geometry,
-                context.frame_background,
-                metrics.row_height(),
-                metrics.ascent(),
-                face_ids,
-            );
+            let produced_indicator = indicator_in_space
+                || source_render.produce_fill_column_indicator(
+                    context.fill_column_indicator,
+                    context.fill_column_indicator_char,
+                    progress.row_progress().col() as i64,
+                    context.content_x,
+                    metrics.char_width(),
+                    eol_pen_x,
+                    context.append_surface.full_text_right_edge(),
+                    row_extend,
+                    row_geometry,
+                    context.frame_background,
+                    metrics.row_height(),
+                    metrics.ascent(),
+                    face_ids,
+                );
             if !produced_indicator {
                 source_render.extend_face_to_end_of_line(
                     row_extend,
                     row_geometry,
-                    progress.row_progress().x(),
+                    eol_pen_x,
                     context.append_surface.full_text_right_edge(),
                     context.frame_background,
                     false,

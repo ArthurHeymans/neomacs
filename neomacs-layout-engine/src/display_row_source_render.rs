@@ -141,6 +141,36 @@ impl DisplayCurrentRowMutation for RowExtendFillMutation {
     }
 }
 
+/// GNU `append_space_for_newline` (xdisp.c:24122) for terminal rows: append
+/// one glyph at a real line end. Normally a space carrying the NEWLINE's
+/// face, so a face spanning the newline (a font-lock comment, a string)
+/// paints its foreground on the end-of-line cell exactly as GNU does. When
+/// the pen sits exactly at the `display-fill-column-indicator` column, GNU
+/// makes this same appended glyph BE the indicator character with the
+/// indicator face merged over the newline's face -- the space and the
+/// indicator are one glyph, not two.
+struct AppendNewlineGlyphMutation {
+    ch: char,
+    face_id: FaceId,
+    char_width: f32,
+}
+
+impl DisplayCurrentRowMutation for AppendNewlineGlyphMutation {
+    type Output = bool;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        if row.reversed_p {
+            return false;
+        }
+        let text_index = GlyphArea::Text.index();
+        row.glyphs[text_index].push(
+            Glyph::char(self.ch, self.face_id, NO_BUFFER_POSITION_CHARPOS)
+                .with_pixel_width(self.char_width.max(1.0)),
+        );
+        true
+    }
+}
+
 /// Re-face the current row's trailing whitespace glyphs with the
 /// `trailing-whitespace` face (GNU `highlight_trailing_whitespace`, xdisp.c).
 /// Walks the TEXT-area glyphs from the end backward over space/tab whitespace —
@@ -1026,6 +1056,66 @@ impl<'a> TextRowSourceRenderState<'a> {
     /// pushes the indicator past its column when line numbers are on).
     /// No-op when disabled or when the row text already reached/passed the column
     /// (GNU begins the trailing fill at end-of-text, so a longer line covers it).
+    /// GNU `append_space_for_newline` at a true line end; terminal frames
+    /// only. Must run after the trailing-whitespace walk (the appended glyph
+    /// has no buffer position; GNU's walk skips non-buffer glyphs) and before
+    /// the `:extend` fill, matching xdisp.c:26525-26533 order. Returns
+    /// `(appended, indicator_produced)`: when `appended`, the caller must
+    /// treat the pen as advanced one cell (GNU's PRODUCE_GLYPHS moves
+    /// current_x, so the trailing fill starts after this glyph); when
+    /// `indicator_produced`, the fill-column indicator was emitted as this
+    /// glyph and `produce_fill_column_indicator` must not run again.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn append_space_for_newline(
+        &mut self,
+        newline_face_id: FaceId,
+        char_width: f32,
+        remaining_px: f32,
+        pen_col: i64,
+        indicator_col: i32,
+        indicator_char: char,
+        row_extend: &DisplayRowScopedValue<(Color, FaceId)>,
+        row_geometry: &DisplayRowGeometryState,
+        frame_background: Color,
+        face_ids: &mut FrameFaceAttempt,
+    ) -> (bool, bool) {
+        if self.window_system || remaining_px <= 0.0 {
+            return (false, false);
+        }
+        let indicator_here =
+            indicator_col >= 0 && char_width > 0.0 && pen_col == i64::from(indicator_col);
+        let (ch, face_id) = if indicator_here {
+            // GNU: it->face_id = merge_faces (w, Qfill_column_indicator, 0,
+            // saved_face_id). With an active `:extend` face the indicator
+            // keeps that fill's background so the highlight is continuous.
+            let mut char_face = self.resolve_named_face("fill-column-indicator");
+            let extend = row_extend
+                .value_on(row_geometry)
+                .copied()
+                .filter(|(bg, _)| *bg != frame_background);
+            if let Some((extend_bg, _)) = extend {
+                char_face.bg = protocol_color_to_pixel(extend_bg);
+                char_face.use_default_background = false;
+            }
+            let face_id =
+                crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &char_face);
+            self.insert_resolved_face(face_id, &char_face);
+            (indicator_char, face_id)
+        } else {
+            (' ', newline_face_id)
+        };
+        let appended = self
+            .output_render
+            .current_row_output()
+            .apply_current_row_mutation(AppendNewlineGlyphMutation {
+                ch,
+                face_id,
+                char_width,
+            })
+            .unwrap_or(false);
+        (appended, appended && indicator_here)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn produce_fill_column_indicator(
         &mut self,

@@ -286,19 +286,17 @@ fn dired_faces_match_gnu() {
 /// Split windows: the inactive window's mode line uses mode-line-inactive,
 /// a different face from the selected window's mode-line.
 ///
-/// RED WHEN WRITTEN (2026-08-05), for a reason unrelated to mode lines:
-/// the only differing cells are the end-of-line cells of the scratch
+/// Was RED when written (2026-08-05), for a reason unrelated to mode
+/// lines: the differing cells were the end-of-line cells of the scratch
 /// comment rows. GNU appends a space glyph carrying the NEWLINE's face
 /// at every real TTY line end (append_space_for_newline, xdisp.c:24122,
 /// called at xdisp.c:26530), so the comment face's foreground rides on
-/// the EOL cell; neomacs's buffer-source row path emits nothing there.
-/// The item-renderer path (Lisp-string rows) already appends it via
-/// DisplayRowLineEndFinalizer; porting the buffer-source path requires
-/// GNU's merged handling of the newline space with the
-/// display-fill-column-indicator glyph (the indicator REPLACES the
-/// appended space when the pen sits exactly at the indicator column)
-/// and the pen advance that keeps the :extend fill from overlapping --
-/// see project memory for the continuation notes.
+/// the EOL cell; neomacs's buffer-source row path emitted nothing
+/// there. Fixed by porting the append to both row paths, including
+/// GNU's merged handling with display-fill-column-indicator (the
+/// indicator IS the appended glyph when the pen sits at the indicator
+/// column) and the pen advance that keeps the :extend fill from
+/// overlapping.
 #[test]
 fn inactive_mode_line_face_matches_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
