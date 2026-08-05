@@ -11,6 +11,7 @@ use crate::buffer_source::window_geometry::{
     BufferWindowGeometryPlan, BufferWindowGeometryRequest, BufferWindowLocalDisplayPolicy,
 };
 use crate::buffer_source::window_source::BufferWindowSourceRequest;
+use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_status_line::{
     WindowChromeRowsPlan, max_mini_window_lines, max_mini_window_lines_for_buffer,
@@ -108,7 +109,7 @@ where
                 face_resolver,
                 buffer,
                 font_metrics,
-                frame_params.window_system,
+                DisplayRowMeasurementMode::from_frame_window_system(frame_params.window_system),
                 window_metrics,
             )
         });
@@ -265,7 +266,6 @@ where
             params,
             &default_face,
             window_metrics,
-            frame_params.window_system,
             params.window_id as u64,
             &text_append_surface,
             reserve_right_special_col,

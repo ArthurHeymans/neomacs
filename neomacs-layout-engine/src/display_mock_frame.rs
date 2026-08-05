@@ -3,6 +3,7 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_row::builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
+use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::geometry::{DisplayRowGeometry, DisplayRowMaxX};
 use crate::display_row::render_state::DisplayRowRenderBounds;
 use crate::display_row::source_state::DisplayRowSourceState;
@@ -255,7 +256,13 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
                 ),
                 area,
             );
-    let mut executor = DisplayRowRenderExecutor::new(font_metrics, face_resolver, None, face_ids);
+    let mut executor = DisplayRowRenderExecutor::new(
+        font_metrics,
+        DisplayRowMeasurementMode::LogicalCells,
+        face_resolver,
+        None,
+        face_ids,
+    );
     executor.render_item_source_fragment_into_row(row_request, row, &mut source, &mut source_state);
 }
 

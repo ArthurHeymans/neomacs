@@ -5,6 +5,7 @@ use crate::display_rendered_row_output_install::{
     frame_chrome_display_row, install_measured_window_display_row,
 };
 use crate::display_row::builder::{DisplayGlyphMeasurer, DisplayRowItemMeasurement};
+use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::source_render::TextRowSourceMeasureState;
 use crate::display_text_output_install::install_display_row;
 use crate::font::metrics::FontMetrics;
@@ -608,7 +609,7 @@ fn display_row_render_context_builds_source_resolve_params() {
 fn display_row_resolved_measured_face_installs_render_and_measurement_identity() {
     let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     let mut font_metrics = None;
-    let policy = DisplayRowMeasurementPolicy::for_frame(true);
+    let policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::ConcreteFont);
     let face = base_face();
 
     let realized = policy.resolved_measured_face(
@@ -648,7 +649,7 @@ fn display_row_resolved_measured_face_installs_render_and_measurement_identity()
 #[test]
 fn display_row_resolved_measured_face_builds_active_face_state_directly() {
     let mut font_metrics = None;
-    let policy = DisplayRowMeasurementPolicy::for_frame(true);
+    let policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::ConcreteFont);
     let face = base_face();
 
     let active = policy
@@ -680,7 +681,7 @@ fn display_row_resolved_measured_face_builds_active_face_state_directly() {
 #[test]
 fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
     let mut font_metrics = None;
-    let policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let mut face = base_face();
     face.fg = 0x00112233;
     face.bg = 0x00445566;
@@ -712,7 +713,7 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
 #[test]
 fn display_row_active_face_state_exposes_render_and_measurement_accessors() {
     let mut font_metrics = None;
-    let policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let mut face = base_face();
     face.fg = 0x00112233;
     face.bg = 0x00445566;
@@ -741,7 +742,7 @@ fn display_row_active_face_state_exposes_render_and_measurement_accessors() {
 #[test]
 fn display_row_active_face_state_constructs_from_resolved_and_measured_face() {
     let mut font_metrics = None;
-    let policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let mut face = base_face();
     face.fg = 0x00112233;
     face.bg = 0x00445566;
@@ -770,7 +771,8 @@ fn display_row_active_face_state_constructs_from_resolved_and_measured_face() {
 fn display_row_renderer_renders_lisp_string_without_layout_engine() {
     let _eval = Context::new();
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
@@ -819,7 +821,8 @@ fn tty_complex_run_then_tab_lands_on_buffer_tab_stop() {
     let _eval = Context::new();
     // font_metrics = None mirrors the TTY frame's fallback measurement path.
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut test_base_face = resolver.default_face().clone();
@@ -938,7 +941,8 @@ fn display_row_source_state_reuses_face_cache_across_items() {
 fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
     let _eval = Context::new();
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut test_base_face = resolver.default_face().clone();
@@ -978,7 +982,8 @@ fn display_row_renderer_clips_lisp_string_rows_to_geometry_width() {
 fn display_row_renderer_clips_from_render_bounds_start() {
     let _eval = Context::new();
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut test_base_face = resolver.default_face().clone();
@@ -1024,7 +1029,8 @@ fn display_row_renderer_clips_from_render_bounds_start() {
 fn display_row_renderer_uses_render_bounds_start_for_tab_advance() {
     let _eval = Context::new();
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut test_base_face = resolver.default_face().clone();
@@ -1084,7 +1090,8 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
     }
 
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut test_base_face = resolver.default_face().clone();
@@ -1172,7 +1179,8 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
     }
 
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = resolver.default_face();
@@ -1324,7 +1332,8 @@ fn render_lisp_display_row_output_with_symbols_and_chrome_text_area_left(
     chrome_text_area_left_px: f32,
 ) -> RenderedDisplayRow {
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
@@ -1394,7 +1403,8 @@ fn render_buffer_display_row_with_properties(
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
@@ -1440,7 +1450,8 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
     }
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
@@ -1538,7 +1549,8 @@ fn render_lisp_string_row_records_xwidget_media_fragments() {
         }],
     );
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut base_face = resolver.default_face().clone();
@@ -1622,7 +1634,8 @@ fn render_tab_line_with_sized_media_metadata_host(
     let mut host = RecordingDisplayRowMediaHost::with_image_size(image_width, image_height);
     host.image_metadata = image_metadata;
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, default_fg, default_bg, 14.0, None);
     let mut base_face = resolver.default_face().clone();
@@ -2169,7 +2182,8 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
     }
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
@@ -2214,7 +2228,10 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
 fn render_lisp_string_row_uses_explicit_tab_policy() {
     let _eval = Context::new();
     let mut engine = crate::engine::LayoutEngine::new();
-    let mut renderer = DisplayRowRenderer::new(&mut engine.font_metrics);
+    let mut renderer = DisplayRowRenderer::new(
+        &mut engine.font_metrics,
+        DisplayRowMeasurementMode::LogicalCells,
+    );
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
@@ -2330,12 +2347,9 @@ fn display_row_glyph_measurement_face_measures_single_char_columns() {
 fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
-    let measurement_face = DisplayRowMeasurementPolicy::for_frame(false).measurement_face(
-        FaceId::new(8),
-        &base,
-        None,
-        7.2,
-    );
+    let measurement_face =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells)
+            .measurement_face(FaceId::new(8), &base, None, 7.2);
     let mut font_metrics = None;
 
     assert_eq!(
@@ -2348,8 +2362,8 @@ fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
 fn display_row_measurement_policy_builds_faces_from_frame_mode() {
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
-    let tty_policy = DisplayRowMeasurementPolicy::for_frame(false);
-    let gui_policy = DisplayRowMeasurementPolicy::for_frame(true);
+    let tty_policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
+    let gui_policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::ConcreteFont);
     let mut font_metrics = None;
 
     let tty_face = tty_policy.measurement_face(FaceId::new(8), &base, None, 7.2);
@@ -2366,12 +2380,8 @@ fn display_row_gui_measurement_preserves_narrow_proportional_glyph_advance() {
     base.font_size = 9.12871;
     base.font_weight = 400;
     base.set_measured_char_width_px(7.2);
-    let gui_face = DisplayRowMeasurementPolicy::for_frame(true).measurement_face(
-        FaceId::new(8),
-        &base,
-        None,
-        7.2,
-    );
+    let gui_face = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::ConcreteFont)
+        .measurement_face(FaceId::new(8), &base, None, 7.2);
     let mut font_metrics = Some(FontMetricsService::new());
 
     let width = gui_face.advance_for_char(&mut font_metrics, '.', 7.2);
@@ -2392,7 +2402,8 @@ fn display_row_gui_renderer_preserves_narrow_proportional_glyph_advance() {
     base.set_measured_char_width_px(7.2);
     base.font_ascent = 10.0;
     let mut font_metrics = Some(FontMetricsService::new());
-    let mut renderer = DisplayRowRenderer::new_for_frame(&mut font_metrics, true);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::ConcreteFont);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, Some("neo".into()));
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
@@ -2434,12 +2445,8 @@ fn display_row_gui_measurement_preserves_narrow_proportional_text_run_advances()
     base.font_size = 9.12871;
     base.font_weight = 400;
     base.set_measured_char_width_px(7.2);
-    let gui_face = DisplayRowMeasurementPolicy::for_frame(true).measurement_face(
-        FaceId::new(8),
-        &base,
-        None,
-        7.2,
-    );
+    let gui_face = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::ConcreteFont)
+        .measurement_face(FaceId::new(8), &base, None, 7.2);
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = gui_face.text_run_measurement(&mut font_metrics, ".agent-sh");
@@ -2474,7 +2481,7 @@ fn display_row_fallback_metrics_builds_from_default_face_extents() {
 fn display_row_measurement_policy_builds_measured_face_with_space_width() {
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
-    let policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let mut font_metrics = None;
 
     let active = DisplayRowActiveFaceState::new(
@@ -2523,7 +2530,7 @@ fn display_row_measurement_policy_builds_measured_face_with_line_metrics() {
         char_width: 9.0,
         space_width: 6.0,
     };
-    let policy = DisplayRowMeasurementPolicy::for_frame(true);
+    let policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::ConcreteFont);
     let mut font_metrics = None;
 
     let measured = policy.measured_face(
@@ -2548,7 +2555,7 @@ fn display_row_measurement_policy_builds_measured_face_with_line_metrics() {
 #[test]
 fn display_row_measured_face_exposes_face_identity() {
     let base = base_face();
-    let policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let mut font_metrics = None;
 
     let measured = policy.measured_face(
@@ -2571,7 +2578,7 @@ fn display_row_measured_face_exposes_face_identity() {
 #[test]
 fn display_row_measured_face_exposes_metrics_as_single_value() {
     let base = base_face();
-    let policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let policy = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let mut font_metrics = None;
 
     let measured = policy.measured_face(
@@ -2601,12 +2608,9 @@ fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
     base.set_measured_char_width_px(8.0);
-    let measurement_face = DisplayRowMeasurementPolicy::for_frame(true).measurement_face(
-        FaceId::new(8),
-        &base,
-        None,
-        8.0,
-    );
+    let measurement_face =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::ConcreteFont)
+            .measurement_face(FaceId::new(8), &base, None, 8.0);
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "سلام");
@@ -2726,12 +2730,9 @@ fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
     base.set_measured_char_width_px(8.0);
-    let measurement_face = DisplayRowMeasurementPolicy::for_frame(true).measurement_face(
-        FaceId::new(8),
-        &base,
-        None,
-        8.0,
-    );
+    let measurement_face =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::ConcreteFont)
+            .measurement_face(FaceId::new(8), &base, None, 8.0);
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "abc");
@@ -2754,12 +2755,9 @@ fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
 fn display_row_glyph_measurement_face_builds_fallback_text_run_measurement_plan() {
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
-    let measurement_face = DisplayRowMeasurementPolicy::for_frame(false).measurement_face(
-        FaceId::new(8),
-        &base,
-        None,
-        7.2,
-    );
+    let measurement_face =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells)
+            .measurement_face(FaceId::new(8), &base, None, 7.2);
     let mut font_metrics = None;
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "a中");
@@ -3242,7 +3240,10 @@ fn display_row_baseline_header_line_align_to_after_multibyte_prefix_uses_charact
 fn render_lisp_string_row_uses_face_specific_glyph_widths() {
     let _eval = Context::new();
     let mut engine = crate::engine::LayoutEngine::new();
-    let mut renderer = DisplayRowRenderer::new(&mut engine.font_metrics);
+    let mut renderer = DisplayRowRenderer::new(
+        &mut engine.font_metrics,
+        DisplayRowMeasurementMode::LogicalCells,
+    );
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut base_face = resolver.default_face().clone();
@@ -3296,7 +3297,8 @@ fn render_lisp_string_row_uses_face_specific_glyph_widths() {
 fn display_row_lisp_string_source_request_uses_render_context() {
     let _eval = Context::new();
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = resolver.default_face().clone();
@@ -3351,8 +3353,13 @@ fn display_row_render_executor_renders_lisp_string_source_request() {
         GlyphRowRole::TabBar,
         std::collections::HashMap::new(),
     );
-    let mut executor =
-        DisplayRowRenderExecutor::new(&mut font_metrics, &resolver, None, &mut face_ids);
+    let mut executor = DisplayRowRenderExecutor::new(
+        &mut font_metrics,
+        DisplayRowMeasurementMode::LogicalCells,
+        &resolver,
+        None,
+        &mut face_ids,
+    );
 
     let rendered = executor
         .render_lisp_string_source_request(DisplayRowLispStringSourceRenderRequest::from_value(
@@ -3459,7 +3466,8 @@ fn display_row_tab_line_rtl_text_is_logical_order_at_render() {
 fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
     let _eval = Context::new();
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
@@ -3515,7 +3523,8 @@ fn display_row_fragment_keeps_bidi_unfinalized_for_current_row_append() {
 fn display_row_renderer_can_render_source_fragment_into_existing_row() {
     let _eval = Context::new();
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);

@@ -21,6 +21,7 @@ use crate::display_origin::DisplayOrigin;
 use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
 use crate::display_row::builder::{DisplayTabPolicy, display_row_text_is_empty};
 pub(crate) use crate::display_row::face_state::DisplayRowFaceRealizer;
+use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::measured_state::{
     DisplayRowBoundsPolicy, DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
     measured_display_row_height,
@@ -128,7 +129,7 @@ impl<'a> FrameChromeOutputTarget<'a> {
 
 pub(crate) struct ChromeRowRenderServices<'emit, 'face> {
     font_metrics: &'emit mut Option<FontMetricsService>,
-    window_system: bool,
+    measurement_mode: DisplayRowMeasurementMode,
     face_resolver: &'face FaceResolver,
     face_ids: &'emit mut FrameFaceAttempt,
 }
@@ -153,7 +154,9 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
     ) -> Self {
         Self {
             font_metrics,
-            window_system: face_resolver.is_window_system(),
+            measurement_mode: DisplayRowMeasurementMode::from_frame_window_system(
+                face_resolver.is_window_system(),
+            ),
             face_resolver,
             face_ids,
         }
@@ -162,7 +165,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
     pub(crate) fn reborrow(&mut self) -> ChromeRowRenderServices<'_, 'face> {
         ChromeRowRenderServices {
             font_metrics: self.font_metrics,
-            window_system: self.window_system,
+            measurement_mode: self.measurement_mode,
             face_resolver: self.face_resolver,
             face_ids: self.face_ids,
         }
@@ -181,7 +184,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         face: &ResolvedFace,
         fallback: DisplayRowFallbackMetrics,
     ) -> DisplayRowFallbackMetrics {
-        if !self.window_system {
+        if !self.measurement_mode.uses_concrete_font_geometry() {
             return fallback;
         }
         DisplayRowFaceRealizer::new(&mut *self.font_metrics).row_metrics_for_face(face, fallback)
@@ -192,9 +195,9 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         request: DisplayRowLispStringSourceRenderRequest<'_>,
         display_host: Option<&dyn DisplayHost>,
     ) -> Option<RenderedDisplayRow> {
-        let mut render_executor = DisplayRowRenderExecutor::new_for_frame(
+        let mut render_executor = DisplayRowRenderExecutor::new(
             &mut *self.font_metrics,
-            self.window_system,
+            self.measurement_mode,
             self.face_resolver,
             display_host,
             &mut *self.face_ids,
@@ -209,9 +212,9 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         source: &mut impl DisplayItemSource,
         source_state: &mut DisplayRowSourceState,
     ) -> Option<DisplayRowRenderIntoRowResult> {
-        let mut render_executor = DisplayRowRenderExecutor::new_for_frame(
+        let mut render_executor = DisplayRowRenderExecutor::new(
             &mut *self.font_metrics,
-            self.window_system,
+            self.measurement_mode,
             self.face_resolver,
             None,
             &mut *self.face_ids,

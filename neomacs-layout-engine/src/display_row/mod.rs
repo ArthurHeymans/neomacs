@@ -739,25 +739,13 @@ pub(crate) struct DisplayRowRenderExecutor<'metrics, 'context, 'ids> {
 impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids> {
     pub(crate) fn new(
         font_metrics: &'metrics mut Option<FontMetricsService>,
+        measurement_mode: DisplayRowMeasurementMode,
         face_resolver: &'context FaceResolver,
         display_host: Option<&'context dyn DisplayHost>,
         face_ids: &'ids mut FrameFaceAttempt,
     ) -> Self {
         Self {
-            renderer: DisplayRowRenderer::new(font_metrics),
-            context: DisplayRowRenderContext::new(face_resolver, display_host, face_ids),
-        }
-    }
-
-    pub(crate) fn new_for_frame(
-        font_metrics: &'metrics mut Option<FontMetricsService>,
-        window_system: bool,
-        face_resolver: &'context FaceResolver,
-        display_host: Option<&'context dyn DisplayHost>,
-        face_ids: &'ids mut FrameFaceAttempt,
-    ) -> Self {
-        Self {
-            renderer: DisplayRowRenderer::new_for_frame(font_metrics, window_system),
+            renderer: DisplayRowRenderer::new(font_metrics, measurement_mode),
             context: DisplayRowRenderContext::new(face_resolver, display_host, face_ids),
         }
     }
@@ -790,17 +778,13 @@ impl<'metrics, 'context, 'ids> DisplayRowRenderExecutor<'metrics, 'context, 'ids
 }
 
 impl<'metrics> DisplayRowRenderer<'metrics> {
-    pub(crate) fn new(font_metrics: &'metrics mut Option<FontMetricsService>) -> Self {
-        Self::new_for_frame(font_metrics, false)
-    }
-
-    pub(crate) fn new_for_frame(
+    pub(crate) fn new(
         font_metrics: &'metrics mut Option<FontMetricsService>,
-        window_system: bool,
+        measurement_mode: DisplayRowMeasurementMode,
     ) -> Self {
         Self {
             font_metrics,
-            measurement_mode: DisplayRowMeasurementMode::from_frame_window_system(window_system),
+            measurement_mode,
         }
     }
 

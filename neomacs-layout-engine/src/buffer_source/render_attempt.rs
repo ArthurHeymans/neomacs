@@ -5,6 +5,7 @@ use crate::buffer_source::tail_render::{
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_frame_output::FrameOutputOwner;
+use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::source_render::{TextRowOutputRenderState, TextRowSourceRenderState};
 use crate::display_text_window_row_lifecycle::{
     TextWindowBeginRequest, TextWindowCursorEffectsRequest, TextWindowVisibilityRetryOutcome,
@@ -154,7 +155,7 @@ impl<'emit> BufferSourceOutputState<'emit> {
         &'output mut self,
         output_emitter: &'output mut WindowOutputEmitter,
         font_metrics: &'output mut Option<FontMetricsService>,
-        window_system: bool,
+        measurement_mode: DisplayRowMeasurementMode,
         face_resolver: &'output FaceResolver,
     ) -> TextRowSourceRenderState<'output> {
         TextRowSourceRenderState::from_output_render(
@@ -164,7 +165,7 @@ impl<'emit> BufferSourceOutputState<'emit> {
                 self.evaluator,
             ),
             font_metrics,
-            window_system,
+            measurement_mode,
             face_resolver,
         )
     }

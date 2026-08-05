@@ -737,10 +737,12 @@ pub(crate) struct DisplayRowMeasurementPolicy {
 }
 
 impl DisplayRowMeasurementPolicy {
-    pub(crate) fn for_frame(window_system: bool) -> Self {
-        Self {
-            mode: DisplayRowMeasurementMode::from_frame_window_system(window_system),
-        }
+    pub(crate) fn for_mode(mode: DisplayRowMeasurementMode) -> Self {
+        Self { mode }
+    }
+
+    pub(crate) fn uses_concrete_font_geometry(self) -> bool {
+        self.mode.uses_concrete_font_geometry()
     }
 
     pub(crate) fn measurement_face(

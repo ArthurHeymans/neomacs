@@ -33,7 +33,6 @@ pub(crate) struct BufferSourceFaceResolutionContext<'a, B: LayoutBufferView> {
     default_face_id: FaceId,
     default_face_metrics: DisplayRowFallbackMetrics,
     window_metrics: DisplayRowFallbackMetrics,
-    window_system: bool,
     image_scale_environment: ImageScaleEnvironment,
 }
 
@@ -43,7 +42,6 @@ pub(crate) struct BufferSourceItemLayoutResolutionContext<'a> {
     default_resolved: &'a ResolvedFace,
     default_face_metrics: DisplayRowFallbackMetrics,
     window_metrics: DisplayRowFallbackMetrics,
-    window_system: bool,
 }
 
 impl<'a> BufferSourceItemLayoutResolutionContext<'a> {
@@ -52,14 +50,12 @@ impl<'a> BufferSourceItemLayoutResolutionContext<'a> {
         default_resolved: &'a ResolvedFace,
         default_face_metrics: DisplayRowFallbackMetrics,
         window_metrics: DisplayRowFallbackMetrics,
-        window_system: bool,
     ) -> Self {
         Self {
             measurement_policy,
             default_resolved,
             default_face_metrics,
             window_metrics,
-            window_system,
         }
     }
 }
@@ -81,7 +77,6 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         default_face_id: FaceId,
         default_face_metrics: DisplayRowFallbackMetrics,
         window_metrics: DisplayRowFallbackMetrics,
-        window_system: bool,
         image_scale_environment: ImageScaleEnvironment,
     ) -> Self {
         Self {
@@ -92,7 +87,6 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             default_face_id,
             default_face_metrics,
             window_metrics,
-            window_system,
             image_scale_environment,
         }
     }
@@ -124,7 +118,6 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             self.measurement_policy,
             face_id,
             resolved,
-            self.window_system,
             self.window_metrics.char_width(),
             self.window_metrics,
         );
@@ -170,7 +163,6 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             self.default_resolved,
             self.default_face_metrics,
             self.window_metrics,
-            self.window_system,
         )
     }
 
@@ -202,7 +194,6 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
                 self.measurement_policy,
                 face_id,
                 resolved,
-                self.window_system,
                 self.window_metrics.char_width(),
                 self.window_metrics,
             );
@@ -368,7 +359,6 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
             self.measurement_policy,
             face_id,
             resolved,
-            self.window_system,
             self.window_metrics.char_width(),
             self.window_metrics,
         );
@@ -404,7 +394,6 @@ impl BufferSourceItemLayoutResolutionContext<'_> {
             self.measurement_policy,
             face_id,
             merged,
-            self.window_system,
             self.window_metrics.char_width(),
             self.window_metrics,
         );

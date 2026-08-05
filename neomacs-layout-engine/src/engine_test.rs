@@ -10,6 +10,7 @@ use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::builder::{
     DisplayGlyphMeasurer, DisplayRowGlyphCheckpoint, DisplayRowPosition, DisplayTabPolicy,
 };
+use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::geometry::DisplayRowMaxX;
 use crate::display_row::transition::{
     DisplayRowLineBreakTransitionPlan, DisplayRowTransitionRenderState,
@@ -869,18 +870,19 @@ fn captured_cursor_info_builds_from_active_face_state() {
     let mut face = resolver.default_face().clone();
     face.bg = 0x00445566;
     let mut font_metrics = None;
-    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        FaceId::new(9),
-        &face,
-        None,
-        7.5,
-        crate::display_row::metrics::DisplayRowFallbackMetrics {
-            char_width: 7.5,
-            row_height: 18.0,
-            ascent: 13.0,
-        },
-        &mut font_metrics,
-    );
+    let measured = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells)
+        .measured_face(
+            FaceId::new(9),
+            &face,
+            None,
+            7.5,
+            crate::display_row::metrics::DisplayRowFallbackMetrics {
+                char_width: 7.5,
+                row_height: 18.0,
+                ascent: 13.0,
+            },
+            &mut font_metrics,
+        );
     let active_face = DisplayRowActiveFaceState::new(face, measured);
 
     let cursor = CapturedCursorInfo::from_active_face_state(
@@ -922,18 +924,19 @@ fn captured_cursor_info_builds_display_box_from_active_face_state() {
     let mut face = resolver.default_face().clone();
     face.bg = 0x00445566;
     let mut font_metrics = None;
-    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        FaceId::new(9),
-        &face,
-        None,
-        7.5,
-        crate::display_row::metrics::DisplayRowFallbackMetrics {
-            char_width: 7.5,
-            row_height: 18.0,
-            ascent: 13.0,
-        },
-        &mut font_metrics,
-    );
+    let measured = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells)
+        .measured_face(
+            FaceId::new(9),
+            &face,
+            None,
+            7.5,
+            crate::display_row::metrics::DisplayRowFallbackMetrics {
+                char_width: 7.5,
+                row_height: 18.0,
+                ascent: 13.0,
+            },
+            &mut font_metrics,
+        );
     let active_face = DisplayRowActiveFaceState::new(face, measured);
 
     let cursor = CapturedCursorInfo::display_box_from_active_face_state(
@@ -977,18 +980,19 @@ fn captured_cursor_info_builds_line_break_from_active_face_state() {
     let mut face = resolver.default_face().clone();
     face.bg = 0x00445566;
     let mut font_metrics = None;
-    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        FaceId::new(9),
-        &face,
-        None,
-        7.5,
-        crate::display_row::metrics::DisplayRowFallbackMetrics {
-            char_width: 7.5,
-            row_height: 18.0,
-            ascent: 13.0,
-        },
-        &mut font_metrics,
-    );
+    let measured = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells)
+        .measured_face(
+            FaceId::new(9),
+            &face,
+            None,
+            7.5,
+            crate::display_row::metrics::DisplayRowFallbackMetrics {
+                char_width: 7.5,
+                row_height: 18.0,
+                ascent: 13.0,
+            },
+            &mut font_metrics,
+        );
     let active_face = DisplayRowActiveFaceState::new(face, measured);
 
     let cursor = CapturedCursorInfo::line_break_from_active_face_state(
@@ -1626,7 +1630,8 @@ fn render_buffer_text_source_shadow_row(
         RenderFaceRef::FaceId(FaceId::new(0)),
     );
     let mut font_metrics = None;
-    let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ff_ffff, 0x0000_0000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
@@ -12541,7 +12546,8 @@ fn display_row_measurement_face_distinguishes_semantic_font_identity() {
     regular.set_measured_char_width_px(8.0);
     let mut bold = regular.clone();
     bold.font_weight = 700;
-    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(true);
+    let measurement_policy =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::ConcreteFont);
     let regular_face = measurement_policy.measurement_face(FaceId::new(42), &regular, None, 8.0);
     let bold_face = measurement_policy.measurement_face(FaceId::new(43), &bold, None, 8.0);
 
@@ -12569,12 +12575,9 @@ fn display_row_measurement_face_preserves_fractional_gui_cell_width_without_font
     resolved.font_family = "JetBrainsMono Nerd Font".to_string();
     resolved.font_size = 12.0;
     resolved.set_measured_char_width_px(7.2);
-    let current_face = DisplayRowMeasurementPolicy::for_frame(true).measurement_face(
-        FaceId::new(42),
-        &resolved,
-        None,
-        7.2,
-    );
+    let current_face =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::ConcreteFont)
+            .measurement_face(FaceId::new(42), &resolved, None, 7.2);
     let mut font_metrics_svc = None;
 
     let width = current_face.advance_for_char(&mut font_metrics_svc, 'x', 7.2);
@@ -12605,12 +12608,9 @@ fn display_row_glyph_measurement_face_carries_engine_measurement_policy() {
     resolved.font_family = "monospace".to_string();
     resolved.font_size = 14.0;
     resolved.set_measured_char_width_px(7.2);
-    let current_face = DisplayRowMeasurementPolicy::for_frame(false).measurement_face(
-        FaceId::new(42),
-        &resolved,
-        None,
-        7.2,
-    );
+    let current_face =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells)
+            .measurement_face(FaceId::new(42), &resolved, None, 7.2);
     let mut font_metrics_svc = None;
 
     let width = current_face.glyph_advance_px(&mut font_metrics_svc, 'x', 1, 7.2);

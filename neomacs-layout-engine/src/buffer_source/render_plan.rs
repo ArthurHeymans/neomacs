@@ -16,7 +16,9 @@ use crate::buffer_source::window_geometry::{BufferWindowGeometry, BufferWindowLo
 use crate::buffer_source::window_source::BufferWindowSource;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_row::append_context::DisplayRowAppendSurface;
-use crate::display_row::face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
+use crate::display_row::face_state::{
+    DisplayRowActiveFaceState, DisplayRowMeasurementMode, DisplayRowMeasurementPolicy,
+};
 use crate::display_row::geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
@@ -85,7 +87,7 @@ mod tests {
             &resolver,
             &buffer,
             &mut None,
-            false,
+            DisplayRowMeasurementMode::LogicalCells,
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         );
 
@@ -327,11 +329,13 @@ impl BufferSourceDefaultFacePlan {
         face_resolver: &FaceResolver,
         buffer: &impl LayoutBufferView,
         font_metrics: &mut Option<FontMetricsService>,
-        window_system: bool,
+        measurement_mode: DisplayRowMeasurementMode,
         fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
         let face = face_resolver.resolve_buffer_default_face(buffer);
-        let metrics = if window_system && let Some(service) = font_metrics {
+        let metrics = if measurement_mode.uses_concrete_font_geometry()
+            && let Some(service) = font_metrics
+        {
             let metrics = service.font_metrics(
                 &face.font_family,
                 face.font_weight,
@@ -346,7 +350,7 @@ impl BufferSourceDefaultFacePlan {
         Self {
             face,
             metrics,
-            measurement_policy: DisplayRowMeasurementPolicy::for_frame(window_system),
+            measurement_policy: DisplayRowMeasurementPolicy::for_mode(measurement_mode),
         }
     }
 
@@ -436,7 +440,6 @@ impl BufferSourceOutputSetup {
         params: &'a WindowParams,
         default_face: &'a BufferSourceDefaultFacePlan,
         window_metrics: DisplayRowFallbackMetrics,
-        window_system: bool,
         output_window_id: u64,
         append_surface: &'surface DisplayRowAppendSurface,
         reserve_right_special_col: bool,
@@ -463,7 +466,6 @@ impl BufferSourceOutputSetup {
             default_face_id,
             default_face.metrics(),
             window_metrics,
-            window_system,
             params.image_scale_environment,
         );
         let row_fallback_metrics = default_face.row_metrics_for_body_width(geometry.char_width);

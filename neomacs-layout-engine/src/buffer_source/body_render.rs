@@ -17,7 +17,7 @@ use crate::buffer_source::window_geometry::{BufferWindowGeometry, BufferWindowLo
 use crate::buffer_source::window_source::BufferWindowSource;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_row::append_context::DisplayRowAppendSurface;
-use crate::display_row::face_state::DisplayRowActiveFaceState;
+use crate::display_row::face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementMode};
 use crate::display_row::geometry::{
     DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowScopedValue,
     DisplayRowYPositions,
@@ -467,7 +467,7 @@ impl BufferSourceWalkSetup {
         let source_render = output.source_render_state(
             &mut output_emitter,
             font_metrics,
-            params.window_system,
+            DisplayRowMeasurementMode::from_frame_window_system(params.window_system),
             face_resolver,
         );
         let post_loop = self.render_body_and_tail(

@@ -38,6 +38,7 @@ use crate::display_row::builder::{
     DisplayRowGlyphSlot, DisplayRowItemMeasurement, DisplayRowPosition, DisplayRowWriteMetrics,
     DisplayTabPolicy,
 };
+use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::geometry::{
     DisplayRowBoundaryTarget, DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults,
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMaxX,
@@ -144,7 +145,7 @@ fn text_row_source_render_state<'a>(
     TextRowSourceRenderState::from_output_render(
         text_row_output_render_state(builder, output_emitter, evaluator),
         font_metrics,
-        false,
+        DisplayRowMeasurementMode::LogicalCells,
         face_resolver,
     )
 }
@@ -469,18 +470,19 @@ fn display_row_append_metrics_builds_from_active_face_state() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base = resolver.default_face().clone();
     let mut font_metrics = None;
-    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        FaceId::new(7),
-        &base,
-        None,
-        7.5,
-        DisplayRowFallbackMetrics {
-            char_width: 7.5,
-            row_height: 18.0,
-            ascent: 13.0,
-        },
-        &mut font_metrics,
-    );
+    let measured = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells)
+        .measured_face(
+            FaceId::new(7),
+            &base,
+            None,
+            7.5,
+            DisplayRowFallbackMetrics {
+                char_width: 7.5,
+                row_height: 18.0,
+                ascent: 13.0,
+            },
+            &mut font_metrics,
+        );
     let active_face = DisplayRowActiveFaceState::new(base, measured);
 
     let metrics = DisplayRowAppendMetrics::from_active_face_state(
@@ -506,18 +508,19 @@ fn display_row_append_metrics_builds_display_box_from_active_face_state() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base = resolver.default_face().clone();
     let mut font_metrics = None;
-    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        FaceId::new(7),
-        &base,
-        None,
-        7.5,
-        DisplayRowFallbackMetrics {
-            char_width: 7.5,
-            row_height: 18.0,
-            ascent: 13.0,
-        },
-        &mut font_metrics,
-    );
+    let measured = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells)
+        .measured_face(
+            FaceId::new(7),
+            &base,
+            None,
+            7.5,
+            DisplayRowFallbackMetrics {
+                char_width: 7.5,
+                row_height: 18.0,
+                ascent: 13.0,
+            },
+            &mut font_metrics,
+        );
     let active_face = DisplayRowActiveFaceState::new(base, measured);
 
     let metrics = DisplayRowAppendMetrics::display_box_from_active_face_state(
@@ -552,7 +555,8 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
     let mut font_metrics = None;
-    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let measurement_policy =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let measured = measurement_policy.measured_face(
         FaceId::new(7),
         &default_face,
@@ -595,7 +599,6 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
         BasicFaceId::Default.into(),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-        false,
         neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     )
     .resolve_at_checkpoint(
@@ -630,7 +633,8 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
     let mut font_metrics = None;
-    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let measurement_policy =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let measured = measurement_policy.measured_face(
         FaceId::new(7),
         &default_face,
@@ -672,7 +676,6 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
         BasicFaceId::Default.into(),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-        false,
         neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     )
     .resolve_at_checkpoint(
@@ -4033,18 +4036,19 @@ fn test_active_face_state_with_extend(
     base.set_measured_char_width_px(char_width);
     base.extend = extend;
     let mut font_metrics = None;
-    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        face_id,
-        &base,
-        None,
-        char_width,
-        DisplayRowFallbackMetrics {
+    let measured = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells)
+        .measured_face(
+            face_id,
+            &base,
+            None,
             char_width,
-            row_height: 18.0,
-            ascent: 13.0,
-        },
-        &mut font_metrics,
-    );
+            DisplayRowFallbackMetrics {
+                char_width,
+                row_height: 18.0,
+                ascent: 13.0,
+            },
+            &mut font_metrics,
+        );
     DisplayRowActiveFaceState::new(base, measured)
 }
 
@@ -5414,7 +5418,8 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
             CharPos0::new(2),
             RenderFaceRef::FaceId(FaceId::new(7)),
         );
-        let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
+        let mut renderer =
+            DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
         let mut source_state = DisplayRowSourceState::default();
         DisplayRowSourceFragmentFrame::new(
             DisplayRowGeometry::new(0.0, 160.0, 16.0, 8.0, 12.0, DisplayTabPolicy::every(8)),
@@ -5993,18 +5998,19 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let base = resolver.default_face().clone();
     let mut font_metrics = None;
-    let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        FaceId::new(7),
-        &base,
-        None,
-        7.5,
-        DisplayRowFallbackMetrics {
-            char_width: 7.5,
-            row_height: 18.0,
-            ascent: 13.0,
-        },
-        &mut font_metrics,
-    );
+    let measured = DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells)
+        .measured_face(
+            FaceId::new(7),
+            &base,
+            None,
+            7.5,
+            DisplayRowFallbackMetrics {
+                char_width: 7.5,
+                row_height: 18.0,
+                ascent: 13.0,
+            },
+            &mut font_metrics,
+        );
     let active_face = DisplayRowActiveFaceState::new(base, measured);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(8.0, 120.0, 150.0, 10.0),
@@ -6710,7 +6716,8 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
-    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let measurement_policy =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
@@ -6753,7 +6760,6 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
         BasicFaceId::Default.into(),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-        false,
         neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     );
     let loop_context = BufferSourceLoopRequestContext::new(
@@ -6852,7 +6858,8 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
-    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let measurement_policy =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
@@ -6897,7 +6904,6 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
         BasicFaceId::Default.into(),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-        false,
         neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     );
     let loop_context = BufferSourceLoopRequestContext::new(
@@ -7005,7 +7011,8 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_word_wrap_enable
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
-    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let measurement_policy =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
@@ -7048,7 +7055,6 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_word_wrap_enable
         BasicFaceId::Default.into(),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-        false,
         neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     );
     let loop_context = BufferSourceLoopRequestContext::new(
@@ -7158,7 +7164,8 @@ fn buffer_text_source_render_request_renders_fit_prefix_before_overflow() {
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
-    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let measurement_policy =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 32.0, 32.0, 0.0),
@@ -7201,7 +7208,6 @@ fn buffer_text_source_render_request_renders_fit_prefix_before_overflow() {
         BasicFaceId::Default.into(),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-        false,
         neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
     );
     let loop_context = BufferSourceLoopRequestContext::new(
@@ -11876,7 +11882,8 @@ fn display_property_live_render_outcome(
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
-    let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
+    let measurement_policy =
+        DisplayRowMeasurementPolicy::for_mode(DisplayRowMeasurementMode::LogicalCells);
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 800.0, 800.0, 0.0),
@@ -11926,7 +11933,6 @@ fn display_property_live_render_outcome(
             BasicFaceId::Default.into(),
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
-            false,
             neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
         );
         let loop_context = BufferSourceLoopRequestContext::new(
