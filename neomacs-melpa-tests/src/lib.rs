@@ -2192,6 +2192,13 @@ pub const OPEN_JUNK_FILE_MELPA_PIN: (&str, &str) = ("open-junk-file", "20161210.
 /// commit `9ec0dbd30be7c6310804141ee952ac8c5f753557`.
 pub const ORG_BULLETS_MELPA_PIN: (&str, &str) = ("org-bullets", "20200317.1740");
 
+/// The exact Org Download package selected for practical heading-based image
+/// storage, local copy and link insertion, Org attachment, screenshot,
+/// content detection, rename/delete, and drag-and-drop parity. MELPA built
+/// this archive from upstream commit
+/// `c8be2611786d1d8d666b7b4f73582de1093f25ac`.
+pub const ORG_DOWNLOAD_MELPA_PIN: (&str, &str) = ("org-download", "20241118.1846");
+
 /// The exact Org Pomodoro package selected for practical task clocking,
 /// timer transitions, overtime, break, cancellation, notification, audio,
 /// expiry, and mode-line parity. MELPA built this archive from upstream
