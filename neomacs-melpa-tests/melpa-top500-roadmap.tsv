@@ -192,7 +192,7 @@ rank	package	downloads	status
 191	ess	594108	covered
 192	highlight	593737	covered
 193	dockerfile-mode	591028	covered
-194	vterm	585303	todo
+194	vterm	585303	covered
 195	org-download	584035	todo
 196	haml-mode	581763	todo
 197	solarized-theme	579262	todo

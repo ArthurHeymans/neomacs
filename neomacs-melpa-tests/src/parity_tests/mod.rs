@@ -489,6 +489,7 @@ mod uuidgen;
 mod vi_tilde_fringe;
 mod visual_fill_column;
 mod volatile_highlights;
+mod vterm;
 mod web_completion_data;
 mod web_mode;
 mod websocket;

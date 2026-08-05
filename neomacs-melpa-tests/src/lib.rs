@@ -2311,6 +2311,13 @@ pub const FLX_IDO_MELPA_PIN: (&str, &str) = ("flx-ido", "20240205.356");
 /// `f68ac37451c1226d6f13c1b299ec7516f74888a1`.
 pub const VOLATILE_HIGHLIGHTS_MELPA_PIN: (&str, &str) = ("volatile-highlights", "20260315.1109");
 
+/// The exact VTerm package selected for practical mode/process setup,
+/// terminal filtering, input translation, prompt copying, wrapped-line,
+/// directory, message-passing, and buffer-lifecycle parity. Its native module
+/// contract is represented by a deterministic recording seam. MELPA built this
+/// archive from upstream commit `70921114908ebb260d6686db8cbe2445a64f90a2`.
+pub const VTERM_MELPA_PIN: (&str, &str) = ("vterm", "20260730.1414");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
