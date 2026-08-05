@@ -169,7 +169,7 @@ rank	package	downloads	status
 168	org-category-capture	668156	covered
 169	symbol-overlay	665641	covered
 170	gitconfig-mode	664435	covered
-171	dotenv-mode	658187	todo
+171	dotenv-mode	658187	covered
 172	wgrep	657479	todo
 173	gitignore-mode	655075	todo
 174	string-inflection	654099	todo

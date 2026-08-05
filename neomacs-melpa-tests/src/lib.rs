@@ -2571,6 +2571,13 @@ pub const DOOM_MODELINE_MELPA_PIN: (&str, &str) = ("doom-modeline", "20260708.82
 /// archive from upstream commit `53645a905dfb3055db52f5d418d5ef612027e062`.
 pub const DOOM_THEMES_MELPA_PIN: (&str, &str) = ("doom-themes", "20260117.2323");
 
+/// The exact Dotenv Mode package selected for practical environment-file
+/// detection, mixed assignment syntax, quote-sensitive interpolation,
+/// comments, incremental refontification, and editing parity. The final
+/// upstream release is commit `e3701bf739bde44f6484eb7753deadaf691b73fb`
+/// (tag `v0.2.5`).
+pub const DOTENV_MODE_MELPA_PIN: (&str, &str) = ("dotenv-mode", "20191027.2129");
+
 /// The exact Visual Fill Column package selected for practical soft-wrapping,
 /// centered and right-to-left layouts, text scaling, multi-window resizing,
 /// hook lifecycle, and file-buffer global-mode parity. MELPA built this archive

@@ -296,6 +296,7 @@ mod diminish;
 mod distel_completion_lib;
 mod doom_modeline;
 mod doom_themes;
+mod dotenv_mode;
 mod dumb_jump;
 mod editorconfig;
 mod elisp_slime_nav;
