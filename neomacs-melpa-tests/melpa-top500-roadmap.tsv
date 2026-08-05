@@ -155,7 +155,7 @@ rank	package	downloads	status
 154	alert	794420	covered
 155	forge	783537	covered
 156	evil-visual-mark-mode	775570	covered
-157	fill-column-indicator	771237	todo
+157	fill-column-indicator	771237	covered
 158	log4e	770159	covered
 159	dash-functional	760178	todo
 160	zenburn-theme	751052	covered

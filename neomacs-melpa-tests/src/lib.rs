@@ -1975,6 +1975,14 @@ pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 /// `2bbaaae56ae53e68a8bcc7bc2cfe830a14843b4d`.
 pub const EVIL_VISUAL_MARK_MODE_MELPA_PIN: (&str, &str) = ("evil-visual-mark-mode", "20230202.318");
 
+/// The exact Fill Column Indicator package selected for practical rule
+/// placement, live editing, display-table coexistence, mode lifecycle,
+/// overlay competition, and textual/bitmap rendering parity. MELPA built
+/// this archive from upstream commit
+/// `c35f9de072c241699b57bcb46da84bed5af29cfe`.
+pub const FILL_COLUMN_INDICATOR_MELPA_PIN: (&str, &str) =
+    ("fill-column-indicator", "20200806.2239");
+
 /// The exact Evil Collection package selected for practical deferred setup,
 /// Calendar, Dired, Help, compilation, binding-policy, and button-dispatch
 /// parity. MELPA built this archive from upstream commit

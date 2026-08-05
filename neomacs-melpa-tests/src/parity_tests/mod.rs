@@ -327,6 +327,7 @@ mod expand_region;
 mod eyebrowse;
 mod f;
 mod fancy_battery;
+mod fill_column_indicator;
 mod flx;
 mod flx_ido;
 mod flycheck;
