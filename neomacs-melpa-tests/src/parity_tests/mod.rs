@@ -303,6 +303,7 @@ mod eval_sexp_fu;
 mod evil;
 mod evil_anzu;
 mod evil_args;
+mod evil_escape;
 mod evil_exchange;
 mod evil_iedit_state;
 mod evil_indent_plus;

@@ -1992,6 +1992,13 @@ pub const EVIL_ANZU_MELPA_PIN: (&str, &str) = ("evil-anzu", "20250316.1617");
 /// `a8151556f63c9d45d0c44c8a7ef9e5a542f3cdc7`.
 pub const EVIL_ARGS_MELPA_PIN: (&str, &str) = ("evil-args", "20240210.504");
 
+/// The exact Evil Escape package selected for practical timed insert, literal
+/// fallback, unordered/case-insensitive sequence, state exit, exclusion,
+/// inhibition, buffer-modification, and global-hook lifecycle parity. MELPA
+/// built this archive from upstream commit
+/// `aebd1a78a6bd33e5164e7552096b3fe1172d3012`.
+pub const EVIL_ESCAPE_MELPA_PIN: (&str, &str) = ("evil-escape", "20241212.1318");
+
 /// The exact Evil Exchange package selected for practical word, adjacent,
 /// edited-marker, line, cross-buffer, block, cancellation, and binding parity.
 /// MELPA built this archive from upstream commit

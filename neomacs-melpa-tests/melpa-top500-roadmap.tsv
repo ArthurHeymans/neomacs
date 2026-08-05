@@ -137,7 +137,7 @@ rank	package	downloads	status
 136	diff-hl	867455	covered
 137	pyvenv	864256	covered
 138	deferred	862680	covered
-139	evil-escape	857677	todo
+139	evil-escape	857677	covered
 140	cfrs	857058	todo
 141	simple-httpd	853546	covered
 142	org-bullets	845120	todo
