@@ -2649,6 +2649,12 @@ pub const DIMINISH_MELPA_PIN: (&str, &str) = ("diminish", "20220909.847");
 /// `91fcd4fa42fef895a754e80c4435ae6314be7822`.
 pub const DIFF_HL_MELPA_PIN: (&str, &str) = ("diff-hl", "20260723.238");
 
+/// The exact Dockerfile Mode package selected for practical multi-stage
+/// editing, fontification, Imenu, indentation, comments, image naming, and
+/// deterministic build-command parity. MELPA built this archive from upstream
+/// commit `97733ce074b1252c1270fd5e8a53d178b66668ed`.
+pub const DOCKERFILE_MODE_MELPA_PIN: (&str, &str) = ("dockerfile-mode", "20251221.1644");
+
 /// The exact Doom Modeline package selected for practical file-buffer,
 /// state-transition, selection, encoding, extension, layout, and global-mode
 /// lifecycle parity. MELPA built this archive from upstream commit

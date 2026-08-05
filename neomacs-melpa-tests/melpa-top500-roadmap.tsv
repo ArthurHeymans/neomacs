@@ -191,7 +191,7 @@ rank	package	downloads	status
 190	imenu-list	600086	covered
 191	ess	594108	covered
 192	highlight	593737	covered
-193	dockerfile-mode	591028	todo
+193	dockerfile-mode	591028	covered
 194	vterm	585303	todo
 195	org-download	584035	todo
 196	haml-mode	581763	todo

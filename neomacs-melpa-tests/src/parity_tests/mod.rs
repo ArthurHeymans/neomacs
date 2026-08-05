@@ -296,6 +296,7 @@ mod define_word;
 mod diff_hl;
 mod diminish;
 mod distel_completion_lib;
+mod dockerfile_mode;
 mod doom_modeline;
 mod doom_themes;
 mod dotenv_mode;
