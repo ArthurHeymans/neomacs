@@ -2075,6 +2075,12 @@ pub const VI_TILDE_FRINGE_MELPA_PIN: (&str, &str) = ("vi-tilde-fringe", "2014102
 /// commit `751e74ce2e29c3f32b30e6a1012a33fe81ba0700`.
 pub const EVIL_MATCHIT_MELPA_PIN: (&str, &str) = ("evil-matchit", "20260409.936");
 
+/// The exact Evil MC package selected for practical all-match refactoring,
+/// incremental cursor selection, visual-line insertion, pause/resume, and
+/// grouped undo parity. MELPA built this archive from upstream commit
+/// `7e363dd6b0a39751e13eb76f2e9b7b13c7054a43`.
+pub const EVIL_MC_MELPA_PIN: (&str, &str) = ("evil-mc", "20241025.2045");
+
 /// The exact Evil Nerd Commenter package selected for practical line, region,
 /// paragraph, copy-and-comment, kill-ring, HTML, Org source-block, and comment
 /// navigation parity. MELPA built this archive from upstream commit
