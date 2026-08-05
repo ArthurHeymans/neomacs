@@ -2429,6 +2429,12 @@ pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
 /// `0aff44badad976ebf2666a7e9b6ddf4db53e59e5`.
 pub const HELM_DESCBINDS_MELPA_PIN: (&str, &str) = ("helm-descbinds", "20250705.942");
 
+/// The exact Helm-Flx package selected for practical command-palette,
+/// display/real candidate, large-candidate, highlighting, find-file, locate,
+/// and global-mode lifecycle parity. MELPA built this archive from upstream
+/// commit `5220099e695a3586dba2d59640217fe378e66310`.
+pub const HELM_FLX_MELPA_PIN: (&str, &str) = ("helm-flx", "20221020.1739");
+
 /// The exact helm-make package selected for practical nested-project target
 /// discovery, source saving, cache invalidation, Ninja, Projectile, and GNU
 /// make database workflows. MELPA built this archive from upstream commit

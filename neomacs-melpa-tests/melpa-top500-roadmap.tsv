@@ -163,7 +163,7 @@ rank	package	downloads	status
 162	consult	723007	covered
 163	json-reformat	715119	covered
 164	gntp	699820	covered
-165	helm-flx	696689	todo
+165	helm-flx	696689	covered
 166	slime	689787	covered
 167	treemacs-projectile	676950	todo
 168	org-category-capture	668156	todo

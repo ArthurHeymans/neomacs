@@ -353,6 +353,7 @@ mod helm;
 mod helm_ag;
 mod helm_core;
 mod helm_descbinds;
+mod helm_flx;
 mod helm_make;
 mod helm_mode_manager;
 mod helm_projectile;
