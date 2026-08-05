@@ -359,6 +359,7 @@ mod link_hint;
 mod list_utils;
 mod llama;
 mod log4e;
+mod lorem_ipsum;
 mod lsp_mode;
 mod lsp_ui;
 mod lv;

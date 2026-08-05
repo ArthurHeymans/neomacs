@@ -2174,6 +2174,12 @@ pub const LINK_HINT_MELPA_PIN: (&str, &str) = ("link-hint", "20250911.57");
 /// `bbea0e7cc7ab7d96e7f062014bde438aa8ffcd43`.
 pub const LIST_UTILS_MELPA_PIN: (&str, &str) = ("list-utils", "20241106.1849");
 
+/// The exact Lorem-Ipsum package selected for deterministic prose, list,
+/// buffer-local formatting, SGML integration, and keybinding parity.
+/// MELPA built this archive from upstream commit
+/// `4e87a899868e908a7a9e1812831d76c8d072f885`.
+pub const LOREM_IPSUM_MELPA_PIN: (&str, &str) = ("lorem-ipsum", "20221214.1857");
+
 /// The exact Avy Menu package selected by the practical rendered menu,
 /// multi-level selection, inactive item, and cancellation lifecycle corpus.
 pub const AVY_MENU_MELPA_PIN: (&str, &str) = ("avy-menu", "20230606.1519");
