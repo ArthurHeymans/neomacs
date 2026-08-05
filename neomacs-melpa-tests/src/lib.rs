@@ -2626,6 +2626,13 @@ pub const SMARTPARENS_MELPA_PIN: (&str, &str) = ("smartparens", "20260129.1214")
 /// `d489b4f0d48fd215119261d92de103c5b5580895`.
 pub const SWIPER_MELPA_PIN: (&str, &str) = ("swiper", "20260101.2125");
 
+/// The exact String Inflection package selected for practical identifier
+/// conversion, language-specific cycling, syntax-aware symbol selection,
+/// multi-symbol region editing, and cursor/mark lifecycle parity. MELPA built
+/// this archive from upstream commit
+/// `072f7dff43140570788d64ac0ec9d930c3c2a96b` (package version 1.2.1).
+pub const STRING_INFLECTION_MELPA_PIN: (&str, &str) = ("string-inflection", "20251114.1041");
+
 /// The exact Symbol Overlay package selected for practical identifier
 /// highlighting, face allocation, navigation, scoped rename, incremental
 /// editing, temporary highlighting, and language-aware filtering parity.

@@ -459,6 +459,7 @@ mod smartparens;
 mod spaceline;
 mod spinner;
 mod splitter;
+mod string_inflection;
 mod svg_lib;
 mod swiper;
 mod symbol_overlay;

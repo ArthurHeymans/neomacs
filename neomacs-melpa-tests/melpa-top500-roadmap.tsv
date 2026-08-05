@@ -172,7 +172,7 @@ rank	package	downloads	status
 171	dotenv-mode	658187	covered
 172	wgrep	657479	covered
 173	gitignore-mode	655075	covered
-174	string-inflection	654099	todo
+174	string-inflection	654099	covered
 175	anaconda-mode	653384	covered
 176	git-link	651663	todo
 177	memoize	645865	todo
