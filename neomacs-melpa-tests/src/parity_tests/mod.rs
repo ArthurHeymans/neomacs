@@ -396,6 +396,7 @@ mod mozc;
 mod multiple_cursors;
 mod names;
 mod navi2ch;
+mod neotree;
 mod nerd_icons;
 mod open_junk_file;
 mod org_bullets;

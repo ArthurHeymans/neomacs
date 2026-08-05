@@ -1981,6 +1981,12 @@ pub const EVIL_COLLECTION_MELPA_PIN: (&str, &str) = ("evil-collection", "2026072
 /// upstream commit `c73a587d613788003986a11ffe393b46affe8322`.
 pub const DAP_MODE_MELPA_PIN: (&str, &str) = ("dap-mode", "20260616.1526");
 
+/// The exact NeoTree package selected for practical tree rendering, keyboard
+/// traversal, file operations, root changes, and side-window lifecycle parity.
+/// MELPA built this archive from upstream commit
+/// `3178805a0942696d1e5162575d9cab43d14b7970`.
+pub const NEOTREE_MELPA_PIN: (&str, &str) = ("neotree", "20250703.2202");
+
 /// The exact Evil Lisp State package selected for real Evil-state lifecycle,
 /// leader dispatch, Smartparens structural edits, insertion, navigation, and
 /// evaluation parity. MELPA built this archive from upstream commit

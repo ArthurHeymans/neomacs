@@ -149,7 +149,7 @@ rank	package	downloads	status
 148	column-enforce-mode	828446	covered
 149	evil-collection	826095	covered
 150	dap-mode	821004	covered
-151	neotree	811874	todo
+151	neotree	811874	covered
 152	winum	810506	todo
 153	lsp-treemacs	808373	todo
 154	alert	794420	covered
