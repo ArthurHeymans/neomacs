@@ -154,12 +154,13 @@ pub(crate) fn assert_oracle_batch_cases(
     let mut snapshot_mismatches = Vec::new();
     for (case, report, case_failures) in observed {
         oracle_errors.extend(case_failures);
-        for (editor, actual) in [
-            ("GNU Emacs", report.gnu_emacs.to_string()),
-            ("Neomacs", report.neomacs.to_string()),
-        ] {
+        let gnu_emacs = report.gnu_emacs.to_string();
+        let neomacs = report.neomacs.to_string();
+        for (editor, actual) in
+            snapshot_editor_outputs(&gnu_emacs, &neomacs, std::env::var("UPDATE_EXPECT").is_ok())
+        {
             if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                case.expected.assert_eq(&actual);
+                case.expected.assert_eq(actual);
             }))
             .is_err()
             {
@@ -181,6 +182,20 @@ pub(crate) fn assert_oracle_batch_cases(
             details.join("\n")
         );
     }
+}
+
+/// GNU Emacs owns snapshot generation; ordinary verification still checks
+/// both editors against that generated contract.
+fn snapshot_editor_outputs<'a>(
+    gnu_emacs: &'a str,
+    neomacs: &'a str,
+    updating: bool,
+) -> Vec<(&'static str, &'a str)> {
+    let mut outputs = vec![("GNU Emacs", gnu_emacs)];
+    if !updating {
+        outputs.push(("Neomacs", neomacs));
+    }
+    outputs
 }
 
 fn failures_for_case(failures: &[crate::OracleBatchFailure], id: &str) -> Vec<String> {
@@ -268,7 +283,7 @@ fn isolation_audit_enabled() -> bool {
 mod tests {
     use expect_test::expect;
 
-    use super::{ParityBatchCase, isolation_audit_cases};
+    use super::{ParityBatchCase, isolation_audit_cases, snapshot_editor_outputs};
 
     #[test]
     fn batch_cases_accept_forms_built_at_runtime() {
@@ -276,6 +291,18 @@ mod tests {
         let case = ParityBatchCase::value("dynamic-form", form, expect!["OK 42"]);
 
         assert_eq!(case.probe.as_ref(), "(+ 20 22)");
+    }
+
+    #[test]
+    fn snapshot_updates_use_gnu_emacs_as_the_single_source_of_truth() {
+        assert_eq!(
+            snapshot_editor_outputs("gnu", "neomacs", true),
+            [("GNU Emacs", "gnu")]
+        );
+        assert_eq!(
+            snapshot_editor_outputs("gnu", "neomacs", false),
+            [("GNU Emacs", "gnu"), ("Neomacs", "neomacs")]
+        );
     }
 
     #[test]
