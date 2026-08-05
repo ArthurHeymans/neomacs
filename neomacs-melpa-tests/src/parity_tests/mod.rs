@@ -395,6 +395,7 @@ mod skewer_mode;
 mod slime;
 mod sly;
 mod smartparens;
+mod spaceline;
 mod spinner;
 mod splitter;
 mod svg_lib;

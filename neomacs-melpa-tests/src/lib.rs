@@ -373,6 +373,12 @@ pub const SLIME_MELPA_PIN: (&str, &str) = ("slime", "20260719.420");
 /// archive from upstream commit `759c0ff8741ced8793257f2b7ed95a23e13e1407`.
 pub const SLY_MELPA_PIN: (&str, &str) = ("sly", "20260402.2249");
 
+/// The exact Spaceline package selected by the practical theme, custom
+/// segment, responsive layout, selection, and mode-line lifecycle parity
+/// corpus. MELPA built this archive from upstream commit
+/// `086420d16e526c79b67fc1edec4c2ae1e699f372`.
+pub const SPACELINE_MELPA_PIN: (&str, &str) = ("spaceline", "20230922.1127");
+
 /// The exact Spinner package selected by the practical mode-line, timer,
 /// delayed-animation, multi-buffer, and lifecycle parity corpus. MELPA built
 /// this archive from upstream commit `bca794fa6f6b007292cdac9b0a850a3711986db5`.

@@ -88,7 +88,7 @@ rank	package	downloads	status
 87	ansi	1045435	covered
 88	parent-mode	1043957	covered
 89	doom-modeline	1043813	covered
-90	spaceline	1042316	todo
+90	spaceline	1042316	covered
 91	helm-make	1038497	todo
 92	persp-mode	1038142	todo
 93	evil-numbers	1032570	todo
