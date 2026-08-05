@@ -166,7 +166,7 @@ rank	package	downloads	status
 165	helm-flx	696689	covered
 166	slime	689787	covered
 167	treemacs-projectile	676950	covered
-168	org-category-capture	668156	todo
+168	org-category-capture	668156	covered
 169	symbol-overlay	665641	todo
 170	gitconfig-mode	664435	todo
 171	dotenv-mode	658187	todo

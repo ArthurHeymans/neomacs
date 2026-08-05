@@ -2534,6 +2534,12 @@ pub const TREEMACS_MELPA_PIN: (&str, &str) = ("treemacs", "20251226.1307");
 /// Treemacs monorepo commit `f80a309319c2374585babcb3e00ea6f3314160f3`.
 pub const TREEMACS_PROJECTILE_MELPA_PIN: (&str, &str) = ("treemacs-projectile", "20250320.2206");
 
+/// The exact Org Category Capture package selected for practical category
+/// indexing, property precedence, heading creation, subtree reporting,
+/// marker navigation, template construction, and capture workflow parity.
+/// MELPA built it from commit `0521cbb6bb371cbfd9b7b5688b82ac119af1bf30`.
+pub const ORG_CATEGORY_CAPTURE_MELPA_PIN: (&str, &str) = ("org-category-capture", "20260127.711");
+
 /// The exact Diminish package selected for practical live minor-mode,
 /// abbreviation, reporting, restoration, and configuration-order parity.
 /// MELPA built this archive from upstream commit
