@@ -369,6 +369,7 @@ mod multiple_cursors;
 mod names;
 mod navi2ch;
 mod nerd_icons;
+mod open_junk_file;
 mod package_build;
 mod package_lifecycle;
 mod package_lint;

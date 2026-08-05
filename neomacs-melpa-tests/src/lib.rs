@@ -1990,6 +1990,13 @@ pub const DEFINE_WORD_MELPA_PIN: (&str, &str) = ("define-word", "20220104.1848")
 /// upstream commit `06c053d8f7381f91c53311b1234872ca96ced752`.
 pub const EVIL_VISUALSTAR_MELPA_PIN: (&str, &str) = ("evil-visualstar", "20160223.48");
 
+/// The exact Open Junk File package selected for practical dated-file
+/// creation, prompt and opener customization, real file visits, junk hooks,
+/// canonical paths, aliases, failure recovery, and bug-report metadata parity.
+/// MELPA built this archive from upstream commit
+/// `558bec7372b0fed4c4cb6074ab906535fae615bd`.
+pub const OPEN_JUNK_FILE_MELPA_PIN: (&str, &str) = ("open-junk-file", "20161210.1114");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream
