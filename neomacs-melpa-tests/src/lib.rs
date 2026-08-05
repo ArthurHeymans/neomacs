@@ -1299,6 +1299,13 @@ pub const GEISER_MELPA_PIN: (&str, &str) = ("geiser", "20260718.8");
 /// 767571135e2c0985944017dc59b0be79af222ef5.
 pub const GNTP_MELPA_PIN: (&str, &str) = ("gntp", "20141025.250");
 
+/// The exact Gnuplot package selected for practical script editing, syntax,
+/// indentation, command navigation, option toggling, parser, contextual
+/// completion, documentation, and command-dispatch parity. MELPA built this
+/// archive from upstream commit
+/// `81e3cb30297f0d12df41b865d2a76c8ba179089c`.
+pub const GNUPLOT_MELPA_PIN: (&str, &str) = ("gnuplot", "20260623.1111");
+
 /// The exact Go Mode package selected for practical source editing,
 /// indentation, semantic fontification, comment filling, signature
 /// navigation, import management, formatter, module/workspace, and coverage
