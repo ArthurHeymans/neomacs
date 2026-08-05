@@ -458,6 +458,7 @@ mod spinner;
 mod splitter;
 mod svg_lib;
 mod swiper;
+mod symbol_overlay;
 mod tablist;
 mod tinysegmenter;
 mod toc_org;

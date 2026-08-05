@@ -2606,6 +2606,13 @@ pub const SMARTPARENS_MELPA_PIN: (&str, &str) = ("smartparens", "20260129.1214")
 /// `d489b4f0d48fd215119261d92de103c5b5580895`.
 pub const SWIPER_MELPA_PIN: (&str, &str) = ("swiper", "20260101.2125");
 
+/// The exact Symbol Overlay package selected for practical identifier
+/// highlighting, face allocation, navigation, scoped rename, incremental
+/// editing, temporary highlighting, and language-aware filtering parity.
+/// MELPA built this archive from upstream commit
+/// `85d100b0cca35b70cee1b260e09af8e1fb2fcc08` (package version 4.3).
+pub const SYMBOL_OVERLAY_MELPA_PIN: (&str, &str) = ("symbol-overlay", "20260703.1437");
+
 /// The exact Yasnippet package selected by the direct parity corpus and as
 /// angular-snippets' manually documented runtime dependency.
 pub const YASNIPPET_MELPA_PIN: (&str, &str) = ("yasnippet", "20250602.1342");
