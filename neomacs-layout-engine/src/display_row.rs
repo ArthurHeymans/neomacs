@@ -1087,6 +1087,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 render_bounds.max_x().to_f32() - position.x_px(),
                 fallback_metrics,
                 row_face.background,
+                !self.allow_proportional_advances,
             )
             .finalize(row, &row_faces);
         }

@@ -187,3 +187,136 @@ fn minibuffer_prompt_face_matches_gnu() {
     // Leave the minibuffer so teardown is uniform.
     send_both(&mut gnu, &mut neo, "C-g");
 }
+
+/// show-paren-mode: paren-match highlight under the cursor.
+#[test]
+fn show_paren_highlight_matches_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (switch-to-buffer (get-buffer-create \"parens.el\")) \
+         (erase-buffer) (insert \"(defun outer ()\\n  (inner (deep 1 2) 3))\\n\") \
+         (emacs-lisp-mode) (show-paren-mode 1) \
+         (goto-char (point-min)) nil)",
+    );
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("(defun outer ()"));
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), ready);
+
+    // Sitting on the opening paren highlights its match on line 2.
+    read_both(&mut gnu, &mut neo, Duration::from_millis(700));
+    assert_color_parity("show-paren", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+}
+
+/// hl-line-mode: the current-line background wash.
+#[test]
+fn hl_line_highlight_matches_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (switch-to-buffer (get-buffer-create \"lines\")) \
+         (erase-buffer) (insert \"first line\\nsecond line\\nthird line\\n\") \
+         (goto-char (point-min)) (forward-line 1) (hl-line-mode 1) nil)",
+    );
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("second line"));
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), ready);
+
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    assert_color_parity("hl-line", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+}
+
+/// Font-lock in C mode: a different major mode exercises different
+/// font-lock faces (types, preprocessor) than the elisp scenario.
+#[test]
+fn font_lock_c_faces_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (switch-to-buffer (get-buffer-create \"probe.c\")) \
+         (erase-buffer) \
+         (insert \"#include <stdio.h>\\n\
+                  /* block comment */\\n\
+                  static int counter = 0;\\n\
+                  int main(void) {\\n\
+                  const char *msg = \\\"hello\\\";\\n\
+                  return counter;\\n}\\n\") \
+         (c-mode) (font-lock-ensure) (goto-char (point-min)) nil)",
+    );
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("static int counter"));
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(15), ready);
+
+    assert_color_parity("c font-lock", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+}
+
+/// Dired: directory-listing faces (dired-directory, dired-header,
+/// permissions). Both sessions build an identical tree in their own
+/// isolated home; path and timestamp cells differ as characters and are
+/// therefore excluded, so what remains is pure face paint.
+#[test]
+fn dired_faces_match_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        "(progn (make-directory \"~/face-probe/sub\" t) \
+         (with-temp-file \"~/face-probe/alpha.txt\" (insert \"a\\n\")) \
+         (with-temp-file \"~/face-probe/beta.el\" (insert \"b\\n\")) \
+         (dired \"~/face-probe\") nil)",
+    );
+    let ready = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("alpha.txt"))
+            && grid.iter().any(|row| row.contains("sub"))
+    };
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(10), ready);
+
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+    assert_color_parity("dired", &mut gnu, &mut neo, TEXT_ROWS, 0..COLS);
+}
+
+/// Split windows: the inactive window's mode line uses mode-line-inactive,
+/// a different face from the selected window's mode-line.
+///
+/// RED WHEN WRITTEN (2026-08-05), for a reason unrelated to mode lines:
+/// the only differing cells are the end-of-line cells of the scratch
+/// comment rows. GNU appends a space glyph carrying the NEWLINE's face
+/// at every real TTY line end (append_space_for_newline, xdisp.c:24122,
+/// called at xdisp.c:26530), so the comment face's foreground rides on
+/// the EOL cell; neomacs's buffer-source row path emits nothing there.
+/// The item-renderer path (Lisp-string rows) already appends it via
+/// DisplayRowLineEndFinalizer; porting the buffer-source path requires
+/// GNU's merged handling of the newline space with the
+/// display-fill-column-indicator glyph (the indicator REPLACES the
+/// appended space when the pen sits exactly at the indicator column)
+/// and the pen advance that keeps the :extend fill from overlapping --
+/// see project memory for the continuation notes.
+#[test]
+fn inactive_mode_line_face_matches_gnu() {
+    let (mut gnu, mut neo) = boot_pair("");
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(30), scratch_ready);
+
+    send_both(&mut gnu, &mut neo, "C-x 2");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(700));
+    send_both(&mut gnu, &mut neo, "C-x o");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(700));
+
+    // Two mode lines now exist; compare every row -- the upper (now
+    // inactive) mode line sits mid-screen, so scan the whole text area
+    // plus the bottom mode-line row.
+    assert_color_parity(
+        "split mode lines",
+        &mut gnu,
+        &mut neo,
+        0..(ROWS - 1),
+        0..COLS,
+    );
+}

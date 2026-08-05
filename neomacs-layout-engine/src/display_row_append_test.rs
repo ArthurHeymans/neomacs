@@ -9431,10 +9431,17 @@ fn append_lisp_string_to_text_row_stops_at_row_break() {
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
-            assert_eq!(text.len(), 1);
+            // 'a' plus the GNU append_space_for_newline glyph that a
+            // terminal row appends at a real line end (string-sourced
+            // newlines included -- xdisp.c:26525-26530).
+            assert_eq!(text.len(), 2);
             assert!(matches!(
                 text[0].glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'a' }
+            ));
+            assert!(matches!(
+                text[1].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: ' ' }
             ));
         })
         .expect("current row");
@@ -9532,7 +9539,10 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         )
         .expect("second lisp source append");
 
-    assert_eq!(second.end_position(), DisplayRowPosition::new(16.0, 2));
+    // One column wider than before the GNU newline-space append: the
+    // harness renders both string segments into a single row, so the
+    // EOL space occupies a cell between them.
+    assert_eq!(second.end_position(), DisplayRowPosition::new(24.0, 3));
     assert_eq!(
         second.stop(),
         crate::display_row::DisplayRowRenderStop::SourceExhausted
@@ -9540,13 +9550,19 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
-            assert_eq!(text.len(), 2);
+            // 'a', the append_space_for_newline glyph for the string
+            // newline (GNU xdisp.c:26525-26530), then 'b'.
+            assert_eq!(text.len(), 3);
             assert!(matches!(
                 text[0].glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'a' }
             ));
             assert!(matches!(
                 text[1].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: ' ' }
+            ));
+            assert!(matches!(
+                text[2].glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'b' }
             ));
         })
