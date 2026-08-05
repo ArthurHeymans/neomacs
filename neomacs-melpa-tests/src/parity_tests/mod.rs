@@ -343,6 +343,7 @@ mod git;
 mod git_commit;
 mod git_timemachine;
 mod gntp;
+mod go_mode;
 mod golden_ratio;
 mod google_translate;
 mod goto_chg;

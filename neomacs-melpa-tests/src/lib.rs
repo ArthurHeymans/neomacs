@@ -1299,6 +1299,13 @@ pub const GEISER_MELPA_PIN: (&str, &str) = ("geiser", "20260718.8");
 /// 767571135e2c0985944017dc59b0be79af222ef5.
 pub const GNTP_MELPA_PIN: (&str, &str) = ("gntp", "20141025.250");
 
+/// The exact Go Mode package selected for practical source editing,
+/// indentation, semantic fontification, comment filling, signature
+/// navigation, import management, formatter, module/workspace, and coverage
+/// parity. MELPA built this archive from upstream commit
+/// `8aaaa9d2574d7862ecbbe1ff369e88fe3796c8be`.
+pub const GO_MODE_MELPA_PIN: (&str, &str) = ("go-mode", "20260510.1707");
+
 /// The exact haskell-mode package selected by the practical source-editing,
 /// fontification, declaration indexing, import formatting, layout indentation,
 /// navigation, folding, and SCC annotation parity corpus. MELPA built this
