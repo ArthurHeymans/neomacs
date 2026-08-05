@@ -1997,6 +1997,17 @@ pub const EVIL_VISUALSTAR_MELPA_PIN: (&str, &str) = ("evil-visualstar", "2016022
 /// `558bec7372b0fed4c4cb6074ab906535fae615bd`.
 pub const OPEN_JUNK_FILE_MELPA_PIN: (&str, &str) = ("open-junk-file", "20161210.1114");
 
+/// The exact Ghub package selected for practical REST and GraphQL request,
+/// JSON response, pagination, authentication, forge identity, retry, and
+/// failure parity. MELPA built this archive from upstream commit
+/// `59d0b9b33e780d6cff5131886904ff26033dd2e6`.
+pub const GHUB_MELPA_PIN: (&str, &str) = ("ghub", "20260701.1318");
+
+/// The exact Treepy package selected as Ghub's GraphQL response traversal
+/// dependency. MELPA built this archive from upstream commit
+/// `806c000bd40153d17dfa5709c6d19546d507a416`.
+pub const TREEPY_MELPA_PIN: (&str, &str) = ("treepy", "20260531.1144");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream
