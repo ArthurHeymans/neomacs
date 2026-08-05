@@ -102,7 +102,7 @@ rank	package	downloads	status
 101	bind-map	1003049	covered
 102	evil-exchange	997878	covered
 103	restart-emacs	997060	covered
-104	ws-butler	993893	todo
+104	ws-butler	993893	covered
 105	golden-ratio	992215	todo
 106	git	991326	todo
 107	eval-sexp-fu	981211	todo

@@ -426,6 +426,7 @@ mod websocket;
 mod wfnames;
 mod which_key;
 mod with_editor;
+mod ws_butler;
 mod xcscope;
 mod xr;
 mod yaml;

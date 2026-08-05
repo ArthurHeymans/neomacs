@@ -1945,6 +1945,12 @@ pub const EVIL_EXCHANGE_MELPA_PIN: (&str, &str) = ("evil-exchange", "20200118.25
 /// `d0fca7fba014b2d0d4dedcb9744a1e73cd9a6409`.
 pub const RESTART_EMACS_MELPA_PIN: (&str, &str) = ("restart-emacs", "20201127.1425");
 
+/// The exact WS Butler package selected for practical modified-line,
+/// save-hook, virtual-space, predicate, EOF, indentation, undo, narrowing,
+/// and mode-lifecycle parity. MELPA built this archive from upstream commit
+/// `9ee5a7657a22e836618813c2e2b64a548d27d2ff`.
+pub const WS_BUTLER_MELPA_PIN: (&str, &str) = ("ws-butler", "20250310.205");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream
