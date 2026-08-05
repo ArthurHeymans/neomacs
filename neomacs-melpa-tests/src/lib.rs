@@ -1950,6 +1950,12 @@ pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
 /// The exact Evil package selected by the comprehensive API parity corpus.
 pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 
+/// The exact Evil Lisp State package selected for real Evil-state lifecycle,
+/// leader dispatch, Smartparens structural edits, insertion, navigation, and
+/// evaluation parity. MELPA built this archive from upstream commit
+/// `3c65fecd9917a41eaf6460f22187e2323821f3ce`.
+pub const EVIL_LISP_STATE_MELPA_PIN: (&str, &str) = ("evil-lisp-state", "20160404.248");
+
 /// The exact Evil-Tutor package selected for persisted tutorial sessions,
 /// resume behavior, lesson navigation, and major-mode parity. MELPA built this
 /// archive from upstream commit `909273bac88b98a565f1b89bbb13d523b7edce2b`.

@@ -129,7 +129,7 @@ rank	package	downloads	status
 128	pos-tip	902779	covered
 129	editorconfig	902377	covered
 130	move-text	900787	covered
-131	evil-lisp-state	898842	todo
+131	evil-lisp-state	898842	covered
 132	evil-mc	892644	todo
 133	evil-indent-plus	881686	todo
 134	json-snatcher	878975	todo
