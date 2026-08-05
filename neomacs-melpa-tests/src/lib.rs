@@ -1938,6 +1938,13 @@ pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 /// `3030e21ee16a42dfce7f7cf86147b778b3f5d8c1`.
 pub const EVIL_EXCHANGE_MELPA_PIN: (&str, &str) = ("evil-exchange", "20200118.252");
 
+/// The exact Restart Emacs package selected for practical restart transaction,
+/// launch strategy, command quoting, startup-directory, desktop handoff,
+/// terminal notification, and command-line restoration parity. MELPA built
+/// this archive from upstream commit
+/// `d0fca7fba014b2d0d4dedcb9744a1e73cd9a6409`.
+pub const RESTART_EMACS_MELPA_PIN: (&str, &str) = ("restart-emacs", "20201127.1425");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream

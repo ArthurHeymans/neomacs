@@ -393,6 +393,7 @@ mod racer;
 mod rainbow_delimiters;
 mod reformatter;
 mod request;
+mod restart_emacs;
 mod rtags;
 mod rust_mode;
 mod s;

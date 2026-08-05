@@ -101,7 +101,7 @@ rank	package	downloads	status
 100	clojure-mode	1004131	covered
 101	bind-map	1003049	covered
 102	evil-exchange	997878	covered
-103	restart-emacs	997060	todo
+103	restart-emacs	997060	covered
 104	ws-butler	993893	todo
 105	golden-ratio	992215	todo
 106	git	991326	todo
