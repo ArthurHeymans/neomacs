@@ -1944,6 +1944,12 @@ pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 /// `7309650425797420944075c9c1556c7c1ff960b3`.
 pub const EVIL_ANZU_MELPA_PIN: (&str, &str) = ("evil-anzu", "20250316.1617");
 
+/// The exact Evil Args package selected for practical nested and multiline
+/// argument motion, text-object deletion, custom delimiter, and enclosing
+/// context navigation parity. MELPA built this archive from upstream commit
+/// `a8151556f63c9d45d0c44c8a7ef9e5a542f3cdc7`.
+pub const EVIL_ARGS_MELPA_PIN: (&str, &str) = ("evil-args", "20240210.504");
+
 /// The exact Evil Exchange package selected for practical word, adjacent,
 /// edited-marker, line, cross-buffer, block, cancellation, and binding parity.
 /// MELPA built this archive from upstream commit

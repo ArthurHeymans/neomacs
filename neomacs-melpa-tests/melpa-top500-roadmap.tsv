@@ -115,7 +115,7 @@ rank	package	downloads	status
 114	vi-tilde-fringe	947537	covered
 115	json-mode	946343	covered
 116	evil-anzu	943837	covered
-117	evil-args	942620	todo
+117	evil-args	942620	covered
 118	link-hint	941860	todo
 119	fancy-battery	941040	todo
 120	list-utils	936045	todo
