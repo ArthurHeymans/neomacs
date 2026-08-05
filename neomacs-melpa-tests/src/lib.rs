@@ -1984,6 +1984,12 @@ pub const PACKED_MELPA_PIN: (&str, &str) = ("packed", "20221130.2228");
 /// `31a8c67405afa99d0e25e7c86a4ee7ef84a808fe`.
 pub const DEFINE_WORD_MELPA_PIN: (&str, &str) = ("define-word", "20220104.1848");
 
+/// The exact Evil Visualstar package selected for practical literal,
+/// forward/backward, multiline, persistent-selection, search-history,
+/// missing-match, and mode-binding parity. MELPA built this archive from
+/// upstream commit `06c053d8f7381f91c53311b1234872ca96ced752`.
+pub const EVIL_VISUALSTAR_MELPA_PIN: (&str, &str) = ("evil-visualstar", "20160223.48");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream

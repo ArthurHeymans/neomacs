@@ -108,7 +108,7 @@ rank	package	downloads	status
 107	eval-sexp-fu	981211	covered
 108	packed	979867	covered
 109	define-word	967708	covered
-110	evil-visualstar	966366	todo
+110	evil-visualstar	966366	covered
 111	open-junk-file	956520	todo
 112	ghub	954837	todo
 113	clean-aindent-mode	954383	todo
