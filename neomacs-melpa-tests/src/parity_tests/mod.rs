@@ -451,6 +451,7 @@ mod treemacs;
 mod two_bit;
 mod upstream_package_ert;
 mod use_package;
+mod uuidgen;
 mod vi_tilde_fringe;
 mod volatile_highlights;
 mod web_completion_data;

@@ -141,7 +141,7 @@ rank	package	downloads	status
 140	cfrs	857058	covered
 141	simple-httpd	853546	covered
 142	org-bullets	845120	covered
-143	uuidgen	839884	todo
+143	uuidgen	839884	covered
 144	ace-jump-helm-line	838691	covered
 145	emacsql	838275	todo
 146	doom-themes	835378	todo

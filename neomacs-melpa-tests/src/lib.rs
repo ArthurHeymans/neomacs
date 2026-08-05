@@ -2516,6 +2516,12 @@ pub const TRANSIENT_MELPA_PIN: (&str, &str) = ("transient", "20260725.1105");
 /// API parity corpus.
 pub const USE_PACKAGE_GNU_ELPA_PIN: (&str, &str) = ("use-package", "2.4.6");
 
+/// The exact Uuidgen package selected for practical deterministic and random
+/// UUID v1/v3/v4/v5 generation, namespace hashing, CID/URN serialization,
+/// interactive insertion, clock, network, and validation parity. MELPA built
+/// this archive from upstream commit `cebbe09d27c63abe61fe8c2e2248587d90265b59`.
+pub const UUIDGEN_MELPA_PIN: (&str, &str) = ("uuidgen", "20240201.2318");
+
 /// The exact Which-Key package selected by the comprehensive API parity corpus.
 pub const WHICH_KEY_MELPA_PIN: (&str, &str) = ("which-key", "20240620.2145");
 
