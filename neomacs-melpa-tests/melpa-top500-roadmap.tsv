@@ -100,7 +100,7 @@ rank	package	downloads	status
 99	highlight-parentheses	1005394	covered
 100	clojure-mode	1004131	covered
 101	bind-map	1003049	covered
-102	evil-exchange	997878	todo
+102	evil-exchange	997878	covered
 103	restart-emacs	997060	todo
 104	ws-butler	993893	todo
 105	golden-ratio	992215	todo
