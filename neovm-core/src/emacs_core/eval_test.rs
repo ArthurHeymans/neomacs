@@ -3286,6 +3286,7 @@ fn read_key_sequence_continues_through_pending_suffix_translation_prefix() {
 fn read_key_sequence_prefix_echo_does_not_log_to_messages_buffer() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    ev.set_variable("noninteractive", Value::NIL);
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
     install_global_map_for_test(&mut ev, global_map);
     ev.eval_str(
@@ -3335,6 +3336,7 @@ fn read_key_sequence_prefix_echo_does_not_log_to_messages_buffer() {
 fn read_key_sequence_prefix_echo_matches_gnu_dash_and_help_hint() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    ev.set_variable("noninteractive", Value::NIL);
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
     install_global_map_for_test(&mut ev, global_map);
     ev.assign("help-char", Value::fixnum(8));
@@ -3369,6 +3371,7 @@ fn read_key_sequence_prefix_echo_matches_gnu_dash_and_help_hint() {
 fn read_key_sequence_help_prefix_echo_matches_gnu_hint() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    ev.set_variable("noninteractive", Value::NIL);
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
     install_global_map_for_test(&mut ev, global_map);
     ev.assign("help-char", Value::fixnum(8));

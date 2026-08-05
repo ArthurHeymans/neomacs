@@ -5597,27 +5597,30 @@ fn vm_process_control_and_send_builtins_use_shared_runtime_state() {
         crate::emacs_core::error::format_eval_result(&Ok(result)),
         "OK (t t t t t t t t t t t t t t t t t)"
     );
-    assert_eq!(
-        crate::emacs_core::value::equal_value(
-            &eval
-                .processes
-                .get(7)
-                .expect("send target process")
-                .write_queue,
-            &Value::list(vec![
-                Value::cons(
-                    Value::heap_string(crate::heap_types::LispString::from_utf8("hello")),
-                    Value::cons(Value::fixnum(0), Value::fixnum(5)),
-                ),
-                Value::cons(
-                    Value::heap_string(crate::heap_types::LispString::from_utf8("abc")),
-                    Value::cons(Value::fixnum(0), Value::fixnum(3)),
-                ),
-            ]),
-            0,
-        ),
-        true
-    );
+    assert!(crate::emacs_core::value::equal_value(
+        &eval
+            .processes
+            .get(7)
+            .expect("send target process")
+            .write_queue,
+        &Value::list(vec![
+            Value::cons(
+                Value::heap_string(crate::heap_types::LispString::from_utf8("hello")),
+                Value::cons(Value::fixnum(0), Value::fixnum(5)),
+            ),
+            Value::cons(
+                Value::heap_string(crate::heap_types::LispString::from_utf8("abc")),
+                Value::cons(Value::fixnum(0), Value::fixnum(3)),
+            ),
+            // GNU `process-send-eof` queues an unencoded EOT after all
+            // already accepted input when the process uses a PTY.
+            Value::cons(
+                Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0x04])),
+                Value::cons(Value::fixnum(0), Value::fixnum(1)),
+            ),
+        ]),
+        0,
+    ));
     assert_eq!(
         eval.processes.get_any(1).expect("current process").status,
         Value::symbol("run")

@@ -209,16 +209,51 @@ fn create_lock_file(lock_path: &Path, contents: &str, force: bool) -> io::Result
             Ok(()) => return Ok(()),
             Err(err)
                 if matches!(
-                    err.kind(),
-                    io::ErrorKind::AlreadyExists
-                        | io::ErrorKind::Unsupported
-                        | io::ErrorKind::PermissionDenied
+                    err.raw_os_error(),
+                    Some(libc::ENOSYS) | Some(libc::EOPNOTSUPP) | Some(libc::ENAMETOOLONG)
                 ) => {}
             Err(err) => return Err(err),
         }
     }
 
-    fs::write(lock_path, contents)
+    // GNU falls back to a regular file only when symbolic links are not
+    // supported.  Preserve `lock_file_1`'s atomic EEXIST result: a plain
+    // `fs::write` would follow or overwrite an existing lock after the
+    // ownership check, reintroducing a check/create race.
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    let mut file = options.open(lock_path)?;
+    io::Write::write_all(&mut file, contents.as_bytes())
+}
+
+enum LockAttempt {
+    Acquired,
+    OtherOwner(String),
+    Unavailable,
+}
+
+/// Atomically acquire LOCK_PATH, mirroring GNU `lock_if_free`.
+///
+/// A stale lock is removed by `current_lock_owner`, after which acquisition is
+/// retried.  Native filesystem errors are represented as `Unavailable` because
+/// GNU `lock_file` deliberately ignores the errno returned by `lock_if_free`:
+/// inability to publish an advisory lock must not replace the file operation's
+/// own result.
+fn lock_if_free(lock_path: &Path, contents: &str) -> LockAttempt {
+    loop {
+        match create_lock_file(lock_path, contents, false) {
+            Ok(()) => return LockAttempt::Acquired,
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                match current_lock_owner(lock_path) {
+                    Ok(LockOwner::None) => continue,
+                    Ok(LockOwner::Current) => return LockAttempt::Acquired,
+                    Ok(LockOwner::Other(owner)) => return LockAttempt::OtherOwner(owner),
+                    Err(_) => return LockAttempt::Unavailable,
+                }
+            }
+            Err(_) => return LockAttempt::Unavailable,
+        }
+    }
 }
 
 fn lock_file_resolved(
@@ -254,34 +289,24 @@ fn lock_file_resolved(
         );
     }
 
-    match current_lock_owner(&lock_path)
-        .map_err(|err| file_lock_error("Testing file lock", filename, err))?
-    {
-        LockOwner::None => {}
-        // GNU's `lock_if_free' treats our existing lock as success.  This is
-        // important for `write-region': modifying a visiting buffer normally
-        // acquired the lock already, and the save path locks the same file
-        // again before opening it.
-        LockOwner::Current => return Ok(Value::NIL),
-        LockOwner::Other(owner) => {
+    let lock_info = current_lock_info_string();
+    match lock_if_free(&lock_path, &lock_info) {
+        LockAttempt::Acquired | LockAttempt::Unavailable => Ok(Value::NIL),
+        LockAttempt::OtherOwner(owner) => {
             let attack = eval
                 .apply(
                     Value::symbol("ask-user-about-lock"),
                     vec![Value::heap_string(filename.clone()), Value::string(owner)],
                 )
                 .unwrap_or(Value::NIL);
-            if !attack.is_truthy() {
-                return Ok(Value::NIL);
+            if attack.is_truthy() {
+                // GNU ignores the result of the forced `lock_file_1` too.  The
+                // advisory lock must never mask the operation that requested it.
+                let _ = create_lock_file(&lock_path, &lock_info, true);
             }
-            create_lock_file(&lock_path, &current_lock_info_string(), true)
-                .map_err(|err| file_lock_error("Locking file", filename, err))?;
-            return Ok(Value::NIL);
+            Ok(Value::NIL)
         }
     }
-
-    create_lock_file(&lock_path, &current_lock_info_string(), false)
-        .map_err(|err| file_lock_error("Locking file", filename, err))?;
-    Ok(Value::NIL)
 }
 
 fn unlock_file_resolved(

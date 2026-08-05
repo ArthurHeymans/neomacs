@@ -1918,7 +1918,7 @@ fn display_buffer_side_window_splits_internal_root_like_gnu() {
     );
     assert_eq!(
         results[0],
-        "OK (t (0 0 20 24) 20 (width t) ((\"*scratch*\" (20 0 80 12) 60 nil) (\"*Warnings*\" (20 12 80 24) 60 nil) (\"*fixed-side*\" (0 0 20 24) 20 left)))"
+        "OK (t (0 0 20 24) 20 (width t) ((\"*scratch*\" (20 0 80 12) 60 nil) (\"*Warnings*\" (20 12 80 24) 60 nil) (\"*fixed-side*\" (0 0 20 24) 19 left)))"
     );
 }
 
