@@ -1943,6 +1943,12 @@ pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 /// archive from upstream commit `909273bac88b98a565f1b89bbb13d523b7edce2b`.
 pub const EVIL_TUTOR_MELPA_PIN: (&str, &str) = ("evil-tutor", "20150103.653");
 
+/// The exact Eyebrowse package selected for real window-layout switching,
+/// workspace navigation, slot mutation, mode-line, and input parity. MELPA
+/// built this archive from upstream commit
+/// `473381f4f9e847eb50a40ef2306c027432789754`.
+pub const EYEBROWSE_MELPA_PIN: (&str, &str) = ("eyebrowse", "20240407.1342");
+
 /// The exact Evil Anzu package selected for practical repeated-search,
 /// regexp, no-highlight cleanup, disabled-mode, failure, and unload/reload
 /// integration parity. MELPA built this archive from upstream commit
