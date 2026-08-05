@@ -2528,6 +2528,12 @@ pub const MAGIT_POPUP_MELPA_PIN: (&str, &str) = ("magit-popup", "20200719.1015")
 /// corpus.
 pub const MAGIT_SECTION_MELPA_PIN: (&str, &str) = ("magit-section", "20260722.2131");
 
+/// The exact Memoize package selected for structured-key, expiry, function
+/// restoration, recursive computation, nil/error, and buffer-content cache
+/// parity. MELPA built version 1.1 from upstream commit
+/// `51b075935ca7070f62fae1d69fe0ff7d8fa56fdd`.
+pub const MEMOIZE_MELPA_PIN: (&str, &str) = ("memoize", "20200103.2036");
+
 /// The exact Projectile package selected by the comprehensive API parity
 /// corpus.
 pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
