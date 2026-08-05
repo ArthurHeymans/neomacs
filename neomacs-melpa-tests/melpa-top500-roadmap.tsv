@@ -135,7 +135,7 @@ rank	package	downloads	status
 134	json-snatcher	878975	covered
 135	evil-iedit-state	868329	covered
 136	diff-hl	867455	covered
-137	pyvenv	864256	todo
+137	pyvenv	864256	covered
 138	deferred	862680	covered
 139	evil-escape	857677	todo
 140	cfrs	857058	todo

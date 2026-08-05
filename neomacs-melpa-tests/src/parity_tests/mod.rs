@@ -416,6 +416,7 @@ mod projectile;
 mod promise;
 mod pyim;
 mod pythonic;
+mod pyvenv;
 mod queue;
 mod racer;
 mod rainbow_delimiters;

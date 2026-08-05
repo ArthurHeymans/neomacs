@@ -322,6 +322,13 @@ pub const PYIM_MELPA_PIN: (&str, &str) = ("pyim", "20251230.809");
 /// commit f6e0bec552319341f260a5c4740288799c2b3a5b.
 pub const PYTHONIC_MELPA_PIN: (&str, &str) = ("pythonic", "20230821.1733");
 
+/// The exact Pyvenv package selected for practical activation, executable
+/// dispatch, environment restoration, workon discovery, directory tracking,
+/// mode-line, hook ordering, switching, and failure-atomicity parity. MELPA
+/// built this archive from upstream commit
+/// `31ea715f2164dd611e7fc77b26390ef3ca93509b`.
+pub const PYVENV_MELPA_PIN: (&str, &str) = ("pyvenv", "20211014.707");
+
 /// The exact Queue release selected from GNU ELPA by the practical scheduler,
 /// priority, copy, iterator, traversal, event-loop, and live-view parity
 /// corpus.
