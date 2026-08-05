@@ -1785,6 +1785,12 @@ pub const IVY_RICH_MELPA_PIN: (&str, &str) = ("ivy-rich", "20230425.1422");
 /// `77125b01c0ddce537085201098bea9b4b8ba6be3`.
 pub const JSON_MODE_MELPA_PIN: (&str, &str) = ("json-mode", "20240427.1245");
 
+/// The exact JSON Reformat package selected for practical document, selected
+/// region, indentation, string-policy, object-order, scalar-root, and parser
+/// diagnostic parity. MELPA built this archive from upstream commit
+/// `e9999b1f1fc933c02ff44f4136602b6a45ed59c6`.
+pub const JSON_REFORMAT_MELPA_PIN: (&str, &str) = ("json-reformat", "20220905.2342");
+
 /// The exact JSON Snatcher package selected for practical nested object and
 /// array paths, Python/jq output, kill-ring, token-boundary, cache reuse, and
 /// buffer-lifecycle parity. MELPA built this archive from upstream commit

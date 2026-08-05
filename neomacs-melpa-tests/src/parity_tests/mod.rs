@@ -375,6 +375,7 @@ mod ivy_rich;
 mod js2_mode;
 mod js2_refactor;
 mod json_mode;
+mod json_reformat;
 mod json_snatcher;
 mod keyfreq;
 mod keytar;
