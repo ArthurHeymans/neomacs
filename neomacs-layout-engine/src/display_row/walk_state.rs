@@ -1,0 +1,897 @@
+use crate::coords::lisp_char_pos_to_layout_i64;
+use crate::display_row::builder::DisplayRowGlyphCheckpoint;
+#[cfg(test)]
+use crate::display_row::geometry::DisplayRowGeometryState;
+use crate::display_row::geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
+use crate::display_source::DisplaySourceTextPosition;
+use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
+use crate::types::LineWrapMode;
+use neomacs_display_protocol::types::Color;
+use neovm_core::buffer::LispCharPos1;
+use neovm_core::window::DisplayRowSnapshot;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct WordWrapBreakCandidate {
+    byte_idx: usize,
+    charpos: i64,
+    display_point_count: usize,
+    row_first_display_pos: Option<LispCharPos1>,
+    row_last_display_pos: Option<LispCharPos1>,
+    /// Glyph-row checkpoint captured when this candidate was recorded, i.e. the
+    /// row's drawn-glyph counts *before* the candidate (word-start) char was
+    /// pushed. The word-wrap break restores it so the partial word that already
+    /// fit on the current row is rolled off and re-rendered on the next row.
+    glyph_checkpoint: DisplayRowGlyphCheckpoint,
+    available: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct WordWrapRenderState {
+    enabled: bool,
+    may_wrap: bool,
+    candidate: WordWrapBreakCandidate,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct HorizontalScrollSkipState {
+    configured_columns: i32,
+    remaining_columns: i32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct LineNumberRenderState {
+    enabled: bool,
+    current_line: i64,
+    point_line: i64,
+    render_pending: bool,
+    first_row_of_line: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LineNumberMarginFace {
+    Normal,
+    CurrentLine,
+    MajorTick,
+}
+
+impl LineNumberMarginFace {
+    pub(crate) fn face_name(self) -> &'static str {
+        match self {
+            Self::Normal => "line-number",
+            Self::CurrentLine => "line-number-current-line",
+            Self::MajorTick => "line-number-major-tick",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct LineNumberMarginRenderRequest {
+    display_number: i64,
+    cols: i32,
+    face: LineNumberMarginFace,
+    blank: bool,
+}
+
+impl LineNumberMarginRenderRequest {
+    pub(crate) fn text(self) -> String {
+        if self.blank {
+            String::new()
+        } else {
+            format!("{}", self.display_number)
+        }
+    }
+
+    pub(crate) fn cols(self) -> i32 {
+        self.cols
+    }
+
+    pub(crate) fn face(self) -> LineNumberMarginFace {
+        self.face
+    }
+
+    #[cfg(test)]
+    pub(crate) fn blank(self) -> bool {
+        self.blank
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct FaceScanCheckpoint {
+    next_check: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum BoxFaceRowState {
+    Inactive,
+    Active { row: DisplayRowMarker, start_x: f32 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct TrailingWhitespaceRenderState {
+    background: Option<Color>,
+    start_marker: DisplayRowStartMarker,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct HitRowRangeTracker {
+    start_charpos: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct InvisibleTextScanCheckpoint {
+    invisible_next: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum SpecialTextRowOverflowDecision {
+    Fits,
+    Truncate,
+    Wrap,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplayRowTextOverflowDecision {
+    Fits,
+    Truncate,
+    WordWrap {
+        break_candidate: WordWrapBreakCandidate,
+    },
+    CharacterWrap,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TextRowTransitionPrefixAction {
+    Line,
+    Wrap,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TextRowTransitionWordWrapAction {
+    Keep,
+    Reset,
+    Disallow,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TextRowTransitionStatePolicy {
+    advance_line_number: bool,
+    reset_hscroll: bool,
+    word_wrap: TextRowTransitionWordWrapAction,
+    reset_trailing_whitespace: bool,
+    prefix: TextRowTransitionPrefixAction,
+}
+
+impl WordWrapBreakCandidate {
+    pub(crate) fn record(
+        &mut self,
+        byte_idx: usize,
+        charpos: i64,
+        display_point_count: usize,
+        row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
+        glyph_checkpoint: DisplayRowGlyphCheckpoint,
+    ) {
+        self.byte_idx = byte_idx;
+        self.charpos = charpos;
+        self.display_point_count = display_point_count;
+        self.row_first_display_pos = row_display_positions.0;
+        self.row_last_display_pos = row_display_positions.1;
+        self.glyph_checkpoint = glyph_checkpoint;
+        self.available = true;
+    }
+
+    pub(crate) fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    pub(crate) fn is_available(&self) -> bool {
+        self.available
+    }
+
+    pub(crate) fn byte_idx(&self) -> usize {
+        self.byte_idx
+    }
+
+    pub(crate) fn charpos(&self) -> i64 {
+        self.charpos
+    }
+
+    pub(crate) fn display_point_count(&self) -> usize {
+        self.display_point_count
+    }
+
+    pub(crate) fn row_display_positions(&self) -> (Option<LispCharPos1>, Option<LispCharPos1>) {
+        (self.row_first_display_pos, self.row_last_display_pos)
+    }
+
+    pub(crate) fn glyph_checkpoint(&self) -> DisplayRowGlyphCheckpoint {
+        self.glyph_checkpoint
+    }
+}
+
+impl SpecialTextRowOverflowDecision {
+    pub(crate) fn for_width(
+        x_px: f32,
+        width_px: f32,
+        right_edge_px: f32,
+        wrap_mode: LineWrapMode,
+    ) -> Self {
+        if x_px + width_px <= right_edge_px {
+            Self::Fits
+        } else if wrap_mode == LineWrapMode::Truncate {
+            Self::Truncate
+        } else {
+            Self::Wrap
+        }
+    }
+}
+
+impl DisplayRowTextOverflowDecision {
+    pub(crate) fn for_char(
+        ch: char,
+        x_px: f32,
+        advance_px: f32,
+        right_edge_px: f32,
+        wrap_mode: LineWrapMode,
+        word_wrap: WordWrapRenderState,
+    ) -> Self {
+        if ch == '\t' || x_px + advance_px <= right_edge_px {
+            Self::Fits
+        } else if wrap_mode == LineWrapMode::Truncate {
+            Self::Truncate
+        } else if word_wrap.has_candidate() {
+            Self::WordWrap {
+                break_candidate: word_wrap.candidate(),
+            }
+        } else {
+            Self::CharacterWrap
+        }
+    }
+}
+
+impl TextRowTransitionStatePolicy {
+    fn new(
+        advance_line_number: bool,
+        reset_hscroll: bool,
+        word_wrap: TextRowTransitionWordWrapAction,
+        reset_trailing_whitespace: bool,
+        prefix: TextRowTransitionPrefixAction,
+    ) -> Self {
+        Self {
+            advance_line_number,
+            reset_hscroll,
+            word_wrap,
+            reset_trailing_whitespace,
+            prefix,
+        }
+    }
+
+    pub(crate) fn hscroll_line_break() -> Self {
+        Self::new(
+            true,
+            true,
+            TextRowTransitionWordWrapAction::Keep,
+            true,
+            TextRowTransitionPrefixAction::Line,
+        )
+    }
+
+    pub(crate) fn line_break() -> Self {
+        Self::new(
+            true,
+            true,
+            TextRowTransitionWordWrapAction::Reset,
+            false,
+            TextRowTransitionPrefixAction::Line,
+        )
+    }
+
+    pub(crate) fn hidden_line_break() -> Self {
+        Self::new(
+            true,
+            true,
+            TextRowTransitionWordWrapAction::Reset,
+            true,
+            TextRowTransitionPrefixAction::Line,
+        )
+    }
+
+    pub(crate) fn truncation() -> Self {
+        Self::new(
+            false,
+            false,
+            TextRowTransitionWordWrapAction::Reset,
+            true,
+            TextRowTransitionPrefixAction::Line,
+        )
+    }
+
+    pub(crate) fn special_truncation() -> Self {
+        Self::new(
+            false,
+            false,
+            TextRowTransitionWordWrapAction::Disallow,
+            true,
+            TextRowTransitionPrefixAction::Line,
+        )
+    }
+
+    pub(crate) fn visual_wrap() -> Self {
+        Self::new(
+            false,
+            false,
+            TextRowTransitionWordWrapAction::Reset,
+            true,
+            TextRowTransitionPrefixAction::Wrap,
+        )
+    }
+
+    pub(crate) fn special_visual_wrap() -> Self {
+        Self::new(
+            false,
+            false,
+            TextRowTransitionWordWrapAction::Keep,
+            true,
+            TextRowTransitionPrefixAction::Wrap,
+        )
+    }
+
+    pub(crate) fn character_wrap() -> Self {
+        Self::new(
+            false,
+            false,
+            TextRowTransitionWordWrapAction::Disallow,
+            true,
+            TextRowTransitionPrefixAction::Wrap,
+        )
+    }
+
+    pub(crate) fn apply(
+        self,
+        line_numbers: &mut LineNumberRenderState,
+        hscroll_skip: &mut HorizontalScrollSkipState,
+        word_wrap: &mut WordWrapRenderState,
+        trailing_whitespace: &mut TrailingWhitespaceRenderState,
+    ) -> TextRowTransitionPrefixAction {
+        if self.advance_line_number {
+            line_numbers.advance_line();
+        }
+        if self.reset_hscroll {
+            hscroll_skip.reset_line();
+        }
+        match self.word_wrap {
+            TextRowTransitionWordWrapAction::Keep => {}
+            TextRowTransitionWordWrapAction::Reset => word_wrap.reset_after_row_transition(),
+            TextRowTransitionWordWrapAction::Disallow => word_wrap.disallow_after_current_char(),
+        }
+        if self.reset_trailing_whitespace {
+            trailing_whitespace.reset_after_row_transition();
+        }
+        self.prefix
+    }
+}
+
+impl WordWrapRenderState {
+    pub(crate) fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            may_wrap: false,
+            candidate: WordWrapBreakCandidate::default(),
+        }
+    }
+
+    pub(crate) fn is_enabled(self) -> bool {
+        self.enabled
+    }
+
+    pub(crate) fn can_record_candidate(self, ch: char) -> bool {
+        self.enabled && self.may_wrap && char_can_wrap_before_basic(ch)
+    }
+
+    pub(crate) fn record_candidate(
+        &mut self,
+        ch: char,
+        byte_idx: usize,
+        charpos: i64,
+        display_point_count: usize,
+        row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
+        glyph_checkpoint: DisplayRowGlyphCheckpoint,
+    ) {
+        if self.can_record_candidate(ch) {
+            self.candidate.record(
+                byte_idx,
+                charpos,
+                display_point_count,
+                row_display_positions,
+                glyph_checkpoint,
+            );
+        }
+    }
+
+    pub(crate) fn allow_after_current_char(&mut self, ch: char) {
+        self.may_wrap = char_can_wrap_after_basic(ch);
+    }
+
+    pub(crate) fn disallow_after_current_char(&mut self) {
+        self.may_wrap = false;
+    }
+
+    pub(crate) fn reset_after_row_transition(&mut self) {
+        self.may_wrap = false;
+        self.candidate.clear();
+    }
+
+    pub(crate) fn has_candidate(self) -> bool {
+        self.enabled && self.candidate.is_available()
+    }
+
+    pub(crate) fn candidate(self) -> WordWrapBreakCandidate {
+        self.candidate
+    }
+}
+
+impl HorizontalScrollSkipState {
+    pub(crate) fn new(wrap_mode: LineWrapMode, hscroll_columns: i32) -> Self {
+        let configured_columns = if wrap_mode == LineWrapMode::Truncate {
+            hscroll_columns.max(0)
+        } else {
+            0
+        };
+        Self {
+            configured_columns,
+            remaining_columns: configured_columns,
+        }
+    }
+
+    pub(crate) fn reset_line(&mut self) {
+        self.remaining_columns = self.configured_columns;
+    }
+
+    pub(crate) fn should_skip(self) -> bool {
+        self.remaining_columns > 0
+    }
+
+    pub(crate) fn should_show_left_truncation(self) -> bool {
+        self.configured_columns > 0
+    }
+
+    pub(crate) fn consumed_columns(self) -> i32 {
+        self.configured_columns - self.remaining_columns
+    }
+
+    pub(crate) fn consume_columns(&mut self, columns: i32) {
+        self.remaining_columns -= columns.max(0).min(self.remaining_columns);
+    }
+}
+
+impl LineNumberRenderState {
+    pub(crate) fn new(enabled: bool, current_line: i64, point_line: i64) -> Self {
+        Self {
+            enabled,
+            current_line,
+            point_line,
+            render_pending: enabled,
+            first_row_of_line: true,
+        }
+    }
+
+    pub(crate) fn should_render(self) -> bool {
+        self.enabled && self.render_pending
+    }
+
+    pub(crate) fn consume_render_request(&mut self) {
+        self.render_pending = false;
+    }
+
+    pub(crate) fn advance_line(&mut self) {
+        self.current_line += 1;
+        self.render_pending = self.enabled;
+        self.first_row_of_line = true;
+    }
+
+    /// GNU `maybe_produce_line_number` renders a blank (width-reserved, no
+    /// number) gutter on each wrapped continuation row. Re-arm the pending
+    /// render and mark the next row as a continuation so the gutter is blank.
+    pub(crate) fn mark_continuation_row(&mut self) {
+        self.render_pending = self.enabled;
+        self.first_row_of_line = false;
+    }
+
+    pub(crate) fn advance_hidden_line(&mut self) {
+        self.current_line += 1;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn current_line(self) -> i64 {
+        self.current_line
+    }
+
+    #[cfg(test)]
+    pub(crate) fn point_line(self) -> i64 {
+        self.point_line
+    }
+
+    pub(crate) fn is_current_line(self) -> bool {
+        self.current_line == self.point_line
+    }
+
+    pub(crate) fn display_number(self, mode: u8, current_absolute: bool, offset: i64) -> i64 {
+        match mode {
+            2 | 3 => {
+                if current_absolute && self.is_current_line() {
+                    (self.current_line + offset).abs()
+                } else {
+                    (self.current_line - self.point_line).abs()
+                }
+            }
+            _ => (self.current_line + offset).abs(),
+        }
+    }
+
+    pub(crate) fn margin_render_request(
+        self,
+        mode: u8,
+        current_absolute: bool,
+        offset: i64,
+        major_tick: i32,
+        cols: i32,
+    ) -> Option<LineNumberMarginRenderRequest> {
+        if !self.should_render() {
+            return None;
+        }
+
+        let blank = !self.first_row_of_line;
+        let face = if self.is_current_line() {
+            LineNumberMarginFace::CurrentLine
+        } else if major_tick > 0 && self.current_line % i64::from(major_tick) == 0 {
+            LineNumberMarginFace::MajorTick
+        } else {
+            LineNumberMarginFace::Normal
+        };
+        Some(LineNumberMarginRenderRequest {
+            display_number: self.display_number(mode, current_absolute, offset),
+            cols,
+            face,
+            blank,
+        })
+    }
+}
+
+impl FaceScanCheckpoint {
+    pub(crate) fn initial() -> Self {
+        Self { next_check: 0 }
+    }
+
+    pub(crate) fn should_resolve_at(self, charpos: usize) -> bool {
+        charpos >= self.next_check
+    }
+
+    pub(crate) fn invalidate(&mut self) {
+        self.next_check = 0;
+    }
+
+    pub(crate) fn next_check_mut(&mut self) -> &mut usize {
+        &mut self.next_check
+    }
+}
+
+impl BoxFaceRowState {
+    pub(crate) fn inactive() -> Self {
+        Self::Inactive
+    }
+
+    pub(crate) fn activate(&mut self, row: DisplayRowMarker, start_x: f32) {
+        *self = Self::Active { row, start_x };
+    }
+
+    pub(crate) fn continue_on_row(&mut self, row: DisplayRowMarker, start_x: f32) {
+        if self.is_active() {
+            self.activate(row, start_x);
+        }
+    }
+
+    pub(crate) fn clear(&mut self) {
+        *self = Self::Inactive;
+    }
+
+    pub(crate) fn is_active(&self) -> bool {
+        matches!(self, Self::Active { .. })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn start_x(&self) -> Option<f32> {
+        match self {
+            Self::Active { start_x, .. } => Some(*start_x),
+            Self::Inactive => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn row(&self) -> DisplayRowMarker {
+        match self {
+            Self::Active { row, .. } => *row,
+            Self::Inactive => DisplayRowMarker::Inactive,
+        }
+    }
+}
+
+impl TrailingWhitespaceRenderState {
+    pub(crate) fn new(enabled: bool, background_pixel: u32) -> Self {
+        Self {
+            background: enabled.then(|| Color::from_pixel(background_pixel)),
+            start_marker: DisplayRowStartMarker::Inactive,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn background(self) -> Option<Color> {
+        self.background
+    }
+
+    #[cfg(test)]
+    pub(crate) fn start_marker(self) -> DisplayRowStartMarker {
+        self.start_marker
+    }
+
+    pub(crate) fn reset_after_row_transition(&mut self) {
+        self.start_marker = DisplayRowStartMarker::Inactive;
+    }
+
+    pub(crate) fn is_enabled(&self) -> bool {
+        self.background.is_some()
+    }
+
+    pub(crate) fn track_rendered_char(&mut self, ch: char, start_marker: DisplayRowStartMarker) {
+        if self.background.is_none() {
+            return;
+        }
+
+        if ch == ' ' || ch == '\t' {
+            if !self.start_marker.is_active() {
+                self.start_marker = start_marker;
+            }
+        } else {
+            self.reset_after_row_transition();
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn highlight_start_x(
+        self,
+        geometry: &DisplayRowGeometryState,
+    ) -> Option<(Color, f32)> {
+        Some((self.background?, self.start_marker.x_on(geometry)?))
+    }
+}
+
+impl HitRowRangeTracker {
+    pub(crate) fn new(start_charpos: i64) -> Self {
+        Self { start_charpos }
+    }
+
+    pub(crate) fn start(self) -> i64 {
+        self.start_charpos
+    }
+
+    pub(crate) fn range_to(self, end_charpos: i64) -> DisplayRowHitRange {
+        DisplayRowHitRange {
+            charpos_start: self.start_charpos,
+            charpos_end: end_charpos,
+        }
+    }
+
+    pub(crate) fn advance_to(&mut self, start_charpos: i64) {
+        self.start_charpos = start_charpos;
+    }
+
+    pub(crate) fn should_finish_current_row(
+        self,
+        current_charpos: i64,
+        has_pending_row_output: bool,
+    ) -> bool {
+        current_charpos > self.start_charpos || has_pending_row_output
+    }
+}
+
+/// Sync the source text position to `synced_charpos` and advance the hit-row
+/// range to follow it after a row transition. GNU's xdisp.c keeps this as one
+/// operation; the line-break, hidden-line-break, and truncation-skip actions
+/// all perform exactly this step.
+pub(crate) fn sync_position_after_row_transition(
+    synced_charpos: i64,
+    position: &mut DisplaySourceTextPosition,
+    hit_row_range: &mut HitRowRangeTracker,
+) {
+    *position = position.with_charpos(synced_charpos);
+    hit_row_range.advance_to(position.charpos());
+}
+
+impl InvisibleTextScanCheckpoint {
+    pub(crate) fn new(start_charpos: i64) -> Self {
+        Self {
+            invisible_next: start_charpos,
+        }
+    }
+
+    pub(crate) fn should_check(self, charpos: i64) -> bool {
+        charpos >= self.invisible_next
+    }
+
+    pub(crate) fn record_next_visible(&mut self, charpos: i64) {
+        self.invisible_next = charpos;
+    }
+}
+
+/// Window start after scrolling down by `rows_to_scroll` DISPLAY rows, given the
+/// rows laid out from `current_start`.
+///
+/// This is GNU's `move_it_vertically (&it, amount_to_scroll)` from the old
+/// window start (src/xdisp.c:19526) evaluated against real display rows, so it
+/// is exact for wrapped lines, images and variable-height rows. Scrolling past
+/// the rows we have is not: those rows were never laid out, so the caller falls
+/// back to a buffer-line walk and the visibility retry converges on the rest.
+///
+/// `None` when the rows cannot produce a start further down than
+/// `current_start` — the caller must not retry, or it would loop.
+pub(crate) fn next_window_start_from_visible_rows(
+    rows: &[DisplayRowSnapshot],
+    current_start: i64,
+    rows_to_scroll: i64,
+) -> Option<i64> {
+    if rows.is_empty() || rows_to_scroll <= 0 {
+        return None;
+    }
+
+    // Row starts strictly below the current one, in display order. A row that
+    // begins where the previous one did (a continuation carrying no new buffer
+    // position) is not a distinct scroll step.
+    let mut starts = rows
+        .iter()
+        .filter_map(row_next_window_start_charpos)
+        .filter(|&pos| pos > current_start);
+    let mut chosen = starts.next()?;
+    for _ in 1..rows_to_scroll {
+        match starts.next() {
+            Some(pos) => chosen = pos,
+            // Fewer laid-out rows than the scroll amount: return the furthest
+            // start we can prove, and let the caller extend it.
+            None => break,
+        }
+    }
+    Some(chosen)
+}
+
+/// Rows the caller can still scroll through beyond `window_start_after`, i.e.
+/// how much of a requested scroll [`next_window_start_from_visible_rows`] could
+/// actually satisfy.
+pub(crate) fn visible_rows_below(rows: &[DisplayRowSnapshot], current_start: i64) -> i64 {
+    rows.iter()
+        .filter_map(row_next_window_start_charpos)
+        .filter(|&pos| pos > current_start)
+        .count() as i64
+}
+
+#[inline]
+fn row_start_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
+    row.start_buffer_pos.map(lisp_char_pos_to_layout_i64)
+}
+
+#[inline]
+fn row_end_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
+    row.end_buffer_pos.map(lisp_char_pos_to_layout_i64)
+}
+
+#[inline]
+fn row_next_window_start_charpos(row: &DisplayRowSnapshot) -> Option<i64> {
+    row.end_buffer_pos
+        .map(LispCharPos1::as_i64)
+        .or_else(|| row_start_charpos(row))
+}
+
+pub(crate) fn next_window_start_for_partially_visible_point_row(
+    rows: &[DisplayRowSnapshot],
+    point: i64,
+    text_area_top: i64,
+    text_area_bottom: i64,
+    current_start: i64,
+) -> Option<i64> {
+    let text_area_height = text_area_bottom.saturating_sub(text_area_top);
+    let point_row_index = rows.iter().position(|row| {
+        let start = row_start_charpos(row).unwrap_or(i64::MAX);
+        let end = row_end_charpos(row).unwrap_or(i64::MIN);
+        start <= point && point <= end
+    })?;
+    let point_row = &rows[point_row_index];
+    if point_row.height > text_area_height {
+        return None;
+    }
+
+    let row_top = point_row.y;
+    let row_bottom = point_row.y.saturating_add(point_row.height);
+    if row_top >= text_area_top && row_bottom <= text_area_bottom {
+        return None;
+    }
+
+    if row_bottom > text_area_bottom {
+        let overflow = row_bottom.saturating_sub(text_area_bottom);
+        let mut lifted = 0i64;
+        for row in rows.iter().take(point_row_index) {
+            lifted = lifted.saturating_add(row.height.max(1));
+            let candidate = row_next_window_start_charpos(row);
+            if lifted >= overflow
+                && let Some(pos) = candidate
+                && pos > current_start
+            {
+                return Some(pos);
+            }
+        }
+    }
+
+    None
+}
+
+pub(crate) fn next_window_start_for_point_line_continuation<B: LayoutBufferView>(
+    rows: &[DisplayRowSnapshot],
+    point: i64,
+    current_start: i64,
+    buf_access: &RustBufferAccess<'_, B>,
+    buffer_size: i64,
+) -> Option<i64> {
+    let point_row_index = rows.iter().position(|row| {
+        let start = row_start_charpos(row).unwrap_or(i64::MAX);
+        let end = row_end_charpos(row).unwrap_or(i64::MIN);
+        start <= point && point <= end
+    })?;
+    let point_row = rows.get(point_row_index)?;
+    let point_is_visible_row_start =
+        row_start_charpos(point_row).is_some_and(|start| start == point);
+
+    for row in rows.iter().skip(point_row_index) {
+        let end_pos = row.end_buffer_pos?.as_i64();
+        let end_byte = buf_access.lisp_charpos_to_bytepos(end_pos);
+        if matches!(buf_access.byte_at(end_byte), Some(b'\n')) {
+            return None;
+        }
+        let next_pos = end_pos.saturating_add(1);
+        if next_pos > buffer_size {
+            return None;
+        }
+
+        let next_byte = buf_access.lisp_charpos_to_bytepos(next_pos);
+        match buf_access.byte_at(next_byte) {
+            Some(b'\n') | None => return None,
+            Some(_) if std::ptr::eq(row, rows.last()?) => {
+                if point_is_visible_row_start {
+                    return point
+                        .checked_sub(1)
+                        .filter(|&new_start| new_start > current_start);
+                }
+                break;
+            }
+            Some(_) => {}
+        }
+    }
+
+    if point_row_index + 1 < rows.len() {
+        return None;
+    }
+
+    rows.iter()
+        .skip(1)
+        .find_map(row_next_window_start_charpos)
+        .filter(|&pos| pos > current_start)
+}
+
+#[inline]
+fn is_word_wrap_whitespace(ch: char) -> bool {
+    matches!(ch, ' ' | '\t')
+}
+
+#[inline]
+fn char_can_wrap_before_basic(ch: char) -> bool {
+    !matches!(ch, ' ' | '\t' | '\n' | '\r')
+}
+
+#[inline]
+fn char_can_wrap_after_basic(ch: char) -> bool {
+    is_word_wrap_whitespace(ch)
+}

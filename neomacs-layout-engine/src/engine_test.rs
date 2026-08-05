@@ -7,28 +7,28 @@ use crate::display_cursor::{
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
-use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_row::builder::{
+    DisplayGlyphMeasurer, DisplayRowGlyphCheckpoint, DisplayRowPosition, DisplayTabPolicy,
+};
+use crate::display_row::geometry::DisplayRowMaxX;
+use crate::display_row::transition::{
+    DisplayRowLineBreakTransitionPlan, DisplayRowTransitionRenderState,
+};
+use crate::display_row::walk_state::{
+    DisplayRowTextOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
+    next_window_start_for_partially_visible_point_row,
+    next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
+};
 use crate::display_row::{
     DisplayRowActiveFaceState, DisplayRowFace, DisplayRowGeometry, DisplayRowGlyphMeasurer,
     DisplayRowMeasurementPolicy, DisplayRowRenderBounds, DisplayRowRenderer,
     DisplayRowSourceFragmentFrame,
 };
-use crate::display_row_builder::{
-    DisplayGlyphMeasurer, DisplayRowGlyphCheckpoint, DisplayRowPosition, DisplayTabPolicy,
-};
-use crate::display_row_geometry::DisplayRowMaxX;
-use crate::display_row_transition::{
-    DisplayRowLineBreakTransitionPlan, DisplayRowTransitionRenderState,
-};
-use crate::display_row_walk_state::{
-    DisplayRowTextOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
-    next_window_start_for_partially_visible_point_row,
-    next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
-};
 use crate::display_source::DisplaySpaceGeometry;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
+use crate::output::builder::DisplayOutputBuilder;
 use crate::types::{VisualCursorSpec, WindowKind};
 use crate::window_output::{TextWindowOutputTarget, WindowOutputEmitter};
 use neomacs_display_protocol::cursor::CursorBarWidth;
@@ -305,7 +305,7 @@ fn text_row_transition_state_policy_applies_character_wrap_state_updates() {
 
     assert_eq!(
         prefix,
-        crate::display_row_walk_state::TextRowTransitionPrefixAction::Wrap
+        crate::display_row::walk_state::TextRowTransitionPrefixAction::Wrap
     );
     assert_eq!(line_numbers.current_line(), 3);
     assert_eq!(hscroll.consumed_columns(), 2);
@@ -627,7 +627,7 @@ fn display_row_prefix_request_tracks_pending_prefix_mode() {
     request.clear();
     request.apply_transition_prefix_action(
         true,
-        crate::display_row_walk_state::TextRowTransitionPrefixAction::Wrap,
+        crate::display_row::walk_state::TextRowTransitionPrefixAction::Wrap,
     );
     let transition_wrap_source = request
         .source_from_values(
@@ -646,7 +646,7 @@ fn display_row_prefix_request_tracks_pending_prefix_mode() {
     // `source_from_values` returning None, not by skipping the request.
     request.apply_transition_prefix_action(
         false,
-        crate::display_row_walk_state::TextRowTransitionPrefixAction::Line,
+        crate::display_row::walk_state::TextRowTransitionPrefixAction::Line,
     );
     assert!(request.is_requested());
     assert_eq!(request, DisplayRowPrefixRequest::Line);
@@ -874,7 +874,7 @@ fn captured_cursor_info_builds_from_active_face_state() {
         &face,
         None,
         7.5,
-        crate::display_row_metrics::DisplayRowFallbackMetrics {
+        crate::display_row::metrics::DisplayRowFallbackMetrics {
             char_width: 7.5,
             row_height: 18.0,
             ascent: 13.0,
@@ -927,7 +927,7 @@ fn captured_cursor_info_builds_display_box_from_active_face_state() {
         &face,
         None,
         7.5,
-        crate::display_row_metrics::DisplayRowFallbackMetrics {
+        crate::display_row::metrics::DisplayRowFallbackMetrics {
             char_width: 7.5,
             row_height: 18.0,
             ascent: 13.0,
@@ -982,7 +982,7 @@ fn captured_cursor_info_builds_line_break_from_active_face_state() {
         &face,
         None,
         7.5,
-        crate::display_row_metrics::DisplayRowFallbackMetrics {
+        crate::display_row::metrics::DisplayRowFallbackMetrics {
             char_width: 7.5,
             row_height: 18.0,
             ascent: 13.0,
@@ -1618,7 +1618,7 @@ fn render_buffer_text_source_shadow_row(
     ascent_px: f32,
     char_width_px: f32,
 ) -> GlyphRow {
-    let mut source = crate::display_buffer_text_source::BufferTextSourceCursor::new(
+    let mut source = crate::buffer_source::text_source::BufferTextSourceCursor::new(
         buf_id,
         snapshot,
         CharPos0::ZERO,
@@ -2021,7 +2021,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         selected_regions.text_body.y > selected_regions.outer.y,
         "fixture must contain top chrome"
     );
-    let spatial = crate::presentation_spatial::PresentationSpatialPlan::compile(
+    let spatial = crate::presentation::spatial::PresentationSpatialPlan::compile(
         &poisoned_transport,
         &snapshots,
     )
@@ -2063,7 +2063,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
         .text_body
         .width = -1.0;
     assert_eq!(
-        crate::presentation_spatial::PresentationSpatialPlan::compile(
+        crate::presentation::spatial::PresentationSpatialPlan::compile(
             renderer,
             &invalid_snapshots,
         )
@@ -2078,7 +2078,7 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
     zero.points.clear();
     zero.regions.text_body.width = 0.0;
     let zero_index =
-        crate::presentation_spatial::PresentationSpatialPlan::compile(renderer, &zero_snapshots)
+        crate::presentation::spatial::PresentationSpatialPlan::compile(renderer, &zero_snapshots)
             .unwrap();
     let zero_index = zero_index.hit_index();
     assert!(!zero_index.regions().iter().any(|region| {

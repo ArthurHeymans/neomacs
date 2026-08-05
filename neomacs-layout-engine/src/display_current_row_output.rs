@@ -1,14 +1,14 @@
 use crate::composition::last_text_cluster_tail_in_row;
-use crate::display_output_builder::DisplayOutputBuilder;
-pub(crate) use crate::display_output_row_request::DisplayCurrentRowMutation;
 #[cfg(test)]
 use crate::display_rendered_row_output_install::install_rendered_display_row_fragment_assets;
 #[cfg(test)]
-use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row::builder::DisplayRowPosition;
 #[cfg(test)]
-use crate::display_row_render_state::RenderedDisplayRow;
+use crate::display_row::render_state::RenderedDisplayRow;
 #[cfg(test)]
-use crate::display_row_text_output::TextRowOutput;
+use crate::display_row::text_output::TextRowOutput;
+use crate::output::builder::DisplayOutputBuilder;
+pub(crate) use crate::output::row_request::DisplayCurrentRowMutation;
 #[cfg(test)]
 use crate::window_output::WindowOutputEmitter;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;

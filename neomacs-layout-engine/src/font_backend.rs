@@ -1,6 +1,6 @@
 //! Platform font backend trait (render-boundary design §7).
 //!
-//! [`crate::font_resolver::FontResolver`] owns GNU-compatible fontset policy
+//! [`crate::font::resolver::FontResolver`] owns GNU-compatible fontset policy
 //! and entity scoring. This module is the deliberately smaller platform half:
 //! resolve native generic aliases, enumerate concrete candidates, report
 //! coverage/spacing/metrics, and preserve an exact identity.
@@ -38,7 +38,7 @@ pub struct PlatformFontDesignMetrics {
 }
 
 impl PlatformFontDesignMetrics {
-    pub fn at_pixel_size(self, pixel_size: f32) -> Option<crate::font_probe::FontPxMetrics> {
+    pub fn at_pixel_size(self, pixel_size: f32) -> Option<crate::font::probe::FontPxMetrics> {
         if self.units_per_em == 0 || !pixel_size.is_finite() || pixel_size <= 0.0 {
             return None;
         }
@@ -47,7 +47,7 @@ impl PlatformFontDesignMetrics {
         let ascent = scaled(self.ascent).max(0);
         let descent = scaled(self.descent).max(0);
         let line_gap = scaled(self.line_gap).max(0);
-        Some(crate::font_probe::FontPxMetrics {
+        Some(crate::font::probe::FontPxMetrics {
             pixel_size: pixel_size.round().max(1.0) as u32,
             height: (ascent + descent + line_gap).max(1),
             ascent,
@@ -81,11 +81,11 @@ pub struct PlatformFontMatch {
 }
 
 impl PlatformFontMatch {
-    fn from_fontconfig(mut matched: crate::fontconfig::FontMatch) -> Option<Self> {
+    fn from_fontconfig(mut matched: crate::font::fontconfig::FontMatch) -> Option<Self> {
         let file = matched.file.as_deref()?;
         if matched.variation_coords.is_empty() && (matched.face_index >> 16) & 0x7fff != 0 {
             matched.variation_coords =
-                crate::font_probe::named_instance_variation_coords(file, matched.face_index);
+                crate::font::probe::named_instance_variation_coords(file, matched.face_index);
         }
         let weight = matched
             .variation_coords
@@ -126,7 +126,7 @@ impl PlatformFontMatch {
         self.metadata.slant
     }
 
-    pub fn pixel_metrics(&self, pixel_size: f32) -> Option<crate::font_probe::FontPxMetrics> {
+    pub fn pixel_metrics(&self, pixel_size: f32) -> Option<crate::font::probe::FontPxMetrics> {
         self.metadata
             .design_metrics
             .and_then(|metrics| metrics.at_pixel_size(pixel_size))
@@ -217,7 +217,7 @@ pub trait FontBackend: Send {
     ///
     /// Ordering must preserve the native discovery/cascade order. The backend
     /// may filter by coverage but must not score weight/slant/spacing; that is
-    /// [`crate::font_resolver::FontResolver`]'s responsibility.
+    /// [`crate::font::resolver::FontResolver`]'s responsibility.
     fn list_candidates(&self, query: &FontCandidateQuery) -> Vec<FontCandidate>;
 
     /// Native metrics for the already selected exact candidate.
@@ -230,7 +230,7 @@ pub trait FontBackend: Send {
     }
 }
 
-/// Linux backend: fontconfig via [`crate::fontconfig`].
+/// Linux backend: fontconfig via [`crate::font::fontconfig`].
 pub struct FontconfigBackend;
 
 impl FontBackend for FontconfigBackend {
@@ -239,15 +239,15 @@ impl FontBackend for FontconfigBackend {
     }
 
     fn resolve_family(&self, family: &str) -> String {
-        crate::fontconfig::resolve_family(family).to_string()
+        crate::font::fontconfig::resolve_family(family).to_string()
     }
 
     fn family_prefers_monospace(&self, family: &str) -> bool {
-        crate::fontconfig::family_prefers_monospace(family)
+        crate::font::fontconfig::family_prefers_monospace(family)
     }
 
     fn list_candidates(&self, query: &FontCandidateQuery) -> Vec<FontCandidate> {
-        crate::fontconfig::fc_list_candidates(
+        crate::font::fontconfig::fc_list_candidates(
             query.family.as_deref(),
             &query.charset_ranges,
             query.required_char.map(u32::from),

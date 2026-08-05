@@ -1,4 +1,4 @@
-use crate::display_row_builder::DisplayRowPosition;
+use crate::display_row::builder::DisplayRowPosition;
 use crate::display_source::DisplaySourceTextPosition;
 
 pub(crate) struct DisplaySourceRowProgressState<'emit> {

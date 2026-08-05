@@ -2683,7 +2683,7 @@ fn test_realize_face_height_absolute() {
     let mut face = NeoFace::new("tall");
     face.height = Some(FaceHeight::Absolute(240)); // 24pt
     let realized = resolver.realize_face(&face);
-    let expected = crate::fontconfig::face_height_to_pixels(240);
+    let expected = crate::font::fontconfig::face_height_to_pixels(240);
     assert!((realized.font_size - expected).abs() < 0.1);
 }
 
@@ -2697,7 +2697,7 @@ fn face_resolver_absolute_height_uses_configured_font_sizing() {
         0x00000000,
         13.0,
         Some("neo".to_string()),
-        crate::fontconfig::FontSizing::logical(),
+        crate::font::fontconfig::FontSizing::logical(),
     );
 
     let mut face = NeoFace::new("tall");

@@ -1,5 +1,5 @@
-use crate::display_row_width::DisplayRowCharWidthPolicy;
-use crate::font_metrics::ShapedGlyph;
+use crate::display_row::width::DisplayRowCharWidthPolicy;
+use crate::font::metrics::ShapedGlyph;
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::unicode::{decode_utf8, is_cluster_extender};
 

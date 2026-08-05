@@ -119,8 +119,8 @@ use neomacs_display_runtime::thread_comm::{
     InputEvent as DisplayInputEvent, LifecycleCommand, MediaSource, RenderCommand, SurfaceSource,
     ThreadComms, UiCommand, WindowCommand, WindowFullscreenMode,
 };
-use neomacs_layout_engine::font_metrics::FontMetricsService;
-use neomacs_layout_engine::fontconfig::FontSizing;
+use neomacs_layout_engine::font::fontconfig::FontSizing;
+use neomacs_layout_engine::font::metrics::FontMetricsService;
 use neomacs_layout_engine::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items, compact_bar_mode_enabled,
 };
@@ -1649,7 +1649,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         &mut self,
         request: FontSpecResolveRequest,
     ) -> Result<Option<ResolvedFontSpecMatch>, String> {
-        let matched = neomacs_layout_engine::fontconfig::find_font_for_spec(
+        let matched = neomacs_layout_engine::font::fontconfig::find_font_for_spec(
             request.family.as_ref().and_then(|ls| ls.as_utf8_str()),
             request.registry.as_ref().and_then(|ls| ls.as_utf8_str()),
             request.lang.as_ref().and_then(|ls| ls.as_utf8_str()),
@@ -1677,7 +1677,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         pixel_size: u32,
         wght: Option<f32>,
     ) -> Result<Option<neovm_core::emacs_core::eval::FontPxProbeResult>, String> {
-        Ok(neomacs_layout_engine::font_probe::probe_font_px_metrics(
+        Ok(neomacs_layout_engine::font::probe::probe_font_px_metrics(
             file, face_index, pixel_size, wght,
         )
         .map(|m| neovm_core::emacs_core::eval::FontPxProbeResult {
@@ -1697,8 +1697,8 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         face_index: u32,
     ) -> Result<Option<neovm_core::emacs_core::eval::FontOtfCapability>, String> {
         Ok(
-            neomacs_layout_engine::font_probe::otf_capability(file, face_index).map(|caps| {
-                let side = |scripts: Vec<neomacs_layout_engine::font_probe::OtfScript>| {
+            neomacs_layout_engine::font::probe::otf_capability(file, face_index).map(|caps| {
+                let side = |scripts: Vec<neomacs_layout_engine::font::probe::OtfScript>| {
                     scripts
                         .into_iter()
                         .map(|script| {

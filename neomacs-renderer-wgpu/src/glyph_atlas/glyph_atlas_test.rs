@@ -187,7 +187,7 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
     use neomacs_display_protocol::font::{
         FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
     };
-    use neomacs_layout_engine::font_metrics::FontMetricsService;
+    use neomacs_layout_engine::font::metrics::FontMetricsService;
 
     let Some(resolved) = FontMetricsService::new().resolved_font_for_face(
         "Symbols Nerd Font Mono",
@@ -264,7 +264,7 @@ fn renderer_replays_named_instance_weight_on_the_exact_raw_face() {
     use neomacs_display_protocol::font::{
         FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
     };
-    use neomacs_layout_engine::font_metrics::FontMetricsService;
+    use neomacs_layout_engine::font::metrics::FontMetricsService;
 
     let Some(resolved) =
         FontMetricsService::new().resolved_font_for_face("Noto Sans", 700, false, 18.0)

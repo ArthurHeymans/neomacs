@@ -2,18 +2,18 @@ use crate::display_frame_output::FrameOutputIdentity;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::display_output_builder::DisplayOutputBuilder;
+use crate::display_row::builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
+use crate::display_row::geometry::{DisplayRowGeometry, DisplayRowMaxX};
+use crate::display_row::render_state::DisplayRowRenderBounds;
+use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_row::{DisplayRowRenderExecutor, DisplayRowSourceFragmentFrame};
-use crate::display_row_builder::{DisplayRowPosition, DisplayTabPolicy, new_display_row};
-use crate::display_row_geometry::{DisplayRowGeometry, DisplayRowMaxX};
-use crate::display_row_render_state::DisplayRowRenderBounds;
-use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::display_text_output_install::install_display_row;
-use crate::font_metrics::FontMetricsService;
+use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::{FrameFaceArena, FrameFaceAttempt};
 use crate::mock_frame::{MockDisplayProperty, MockFrameContent, MockStyledLine};
 use crate::neovm_bridge::{FaceResolver, ResolvedFace};
+use crate::output::builder::DisplayOutputBuilder;
 use crate::window_output::{
     TextWindowOutputBegin, TextWindowOutputTarget, begin_text_window_output,
     close_text_window_output,
@@ -53,7 +53,7 @@ pub(crate) fn resolved_mock_face(
         resolved.font_family = face.font_family.clone();
         resolved.font_weight = face.font_weight;
         resolved.italic = face.attributes.contains(FaceAttributes::ITALIC);
-        resolved.font_size = crate::fontconfig::points_to_pixels(face.font_size);
+        resolved.font_size = crate::font::fontconfig::points_to_pixels(face.font_size);
         resolved.underline_style = face.underline_style.gnu_code();
         resolved.underline_color = face
             .underline_color
@@ -357,13 +357,14 @@ pub(crate) fn layout_mock_frame_content(
         let mut face = face.clone();
         // Mock display faces enter in Emacs point units; frame output carries
         // physical pixels to match the measured row geometry.
-        face.font_size = crate::fontconfig::points_to_pixels(face.font_size);
+        face.font_size = crate::font::fontconfig::points_to_pixels(face.font_size);
         builder.publish_output_face(face.id, face);
     }
 
     let default_face = content.faces.first();
-    let default_size =
-        crate::fontconfig::points_to_pixels(default_face.map(|f| f.font_size).unwrap_or(12.0));
+    let default_size = crate::font::fontconfig::points_to_pixels(
+        default_face.map(|f| f.font_size).unwrap_or(12.0),
+    );
     let default_family = default_face
         .map(|f| f.font_family.as_str())
         .unwrap_or("monospace");

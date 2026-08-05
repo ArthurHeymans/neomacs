@@ -24,8 +24,8 @@ use neomacs_display_protocol::font::{
     CharFontTable, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontTable, ResolvedGlyph,
     ShapedClusterTable,
 };
-use neomacs_layout_engine::font_loader::FontFileCache;
-use neomacs_layout_engine::fontconfig::{FontconfigSubpixelOrder, default_subpixel_order};
+use neomacs_layout_engine::font::fontconfig::{FontconfigSubpixelOrder, default_subpixel_order};
+use neomacs_layout_engine::font::loader::FontFileCache;
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
 use swash::zeno::{Angle, Format, Transform, Vector};
 
@@ -1308,8 +1308,10 @@ impl WgpuGlyphAtlas {
                     "render-side per-char font fallback"
                 );
                 let prefer_monospace =
-                    neomacs_layout_engine::fontconfig::family_prefers_monospace(&effective_family);
-                if let Some(matched) = neomacs_layout_engine::fontconfig::match_font_for_char(
+                    neomacs_layout_engine::font::fontconfig::family_prefers_monospace(
+                        &effective_family,
+                    );
+                if let Some(matched) = neomacs_layout_engine::font::fontconfig::match_font_for_char(
                     &effective_family,
                     ch,
                     prefer_monospace,
@@ -1345,21 +1347,21 @@ impl WgpuGlyphAtlas {
                 self.record_emergency_font_fallback(f, "layout published no font identity");
             }
 
-            attrs = match neomacs_layout_engine::font_match::select_cosmic_family(
+            attrs = match neomacs_layout_engine::font::font_match::select_cosmic_family(
                 &self.font_system,
                 &effective_family,
             ) {
-                neomacs_layout_engine::font_match::CosmicFamilySelection::Name(family) => {
+                neomacs_layout_engine::font::font_match::CosmicFamilySelection::Name(family) => {
                     let interned = self.intern_family(family);
                     attrs.family(Family::Name(interned))
                 }
-                neomacs_layout_engine::font_match::CosmicFamilySelection::Monospace => {
+                neomacs_layout_engine::font::font_match::CosmicFamilySelection::Monospace => {
                     attrs.family(Family::Monospace)
                 }
-                neomacs_layout_engine::font_match::CosmicFamilySelection::Serif => {
+                neomacs_layout_engine::font::font_match::CosmicFamilySelection::Serif => {
                     attrs.family(Family::Serif)
                 }
-                neomacs_layout_engine::font_match::CosmicFamilySelection::SansSerif => {
+                neomacs_layout_engine::font::font_match::CosmicFamilySelection::SansSerif => {
                     attrs.family(Family::SansSerif)
                 }
             };
@@ -1367,12 +1369,13 @@ impl WgpuGlyphAtlas {
             // Font weight: clamp to the closest available weight in this family,
             // so missing weights stay within-family instead of jumping to unrelated
             // common fallback families.
-            let effective_weight = neomacs_layout_engine::font_match::resolve_weight_in_family(
-                &self.font_system,
-                &effective_family,
-                effective_weight,
-                effective_style.is_some(),
-            );
+            let effective_weight =
+                neomacs_layout_engine::font::font_match::resolve_weight_in_family(
+                    &self.font_system,
+                    &effective_family,
+                    effective_weight,
+                    effective_style.is_some(),
+                );
             if effective_weight != f.font_weight || effective_style.is_some() != requested_italic {
                 tracing::debug!(
                     "font normalize: family='{}' requested_weight={} resolved_weight={} requested_italic={} resolved_style={:?}",
@@ -1391,7 +1394,7 @@ impl WgpuGlyphAtlas {
             }
         } else {
             // No face — use default monospace, resolved through fontconfig
-            let resolved = neomacs_layout_engine::fontconfig::resolve_family("Monospace");
+            let resolved = neomacs_layout_engine::font::fontconfig::resolve_family("Monospace");
             if resolved != "Monospace" {
                 let interned = if let Some(&existing) = self.interned_families.get(resolved) {
                     existing

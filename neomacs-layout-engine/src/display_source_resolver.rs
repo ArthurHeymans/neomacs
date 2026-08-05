@@ -9,9 +9,9 @@ use crate::display_origin::DisplayOrigin;
 use crate::display_property::{
     DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
 };
-use crate::display_row_face_state::DisplayRowActiveFaceState;
-use crate::display_row_metrics::DisplayRowFallbackMetrics;
-use crate::display_row_width::DisplayRowCharWidthPolicy;
+use crate::display_row::face_state::DisplayRowActiveFaceState;
+use crate::display_row::metrics::DisplayRowFallbackMetrics;
+use crate::display_row::width::DisplayRowCharWidthPolicy;
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::display_source::{
     DisplayPropertyReplacementSourceInputs, DisplayPropertyReplacementSourceItem,
@@ -22,7 +22,7 @@ use crate::display_spec::{
     DisplaySpecHead, parse_display_image_layout, parse_display_surface_source_layout,
     parse_display_video_layout, parse_display_webkit_layout,
 };
-use crate::font_metrics::FontMetricsService;
+use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
@@ -282,7 +282,7 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
         };
         (face_id, pending_face)
     } else {
-        let face_id = crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &face);
+        let face_id = crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &face);
         let pending_face = Some(PendingDisplaySourceFace::new(face_id, face.clone()));
         (face_id, pending_face)
     };
@@ -454,7 +454,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
         }
     }
 
-    fn face_metrics(&self) -> crate::display_row_metrics::DisplayRowMeasuredFaceMetrics {
+    fn face_metrics(&self) -> crate::display_row::metrics::DisplayRowMeasuredFaceMetrics {
         self.active_face_state.metrics()
     }
 
@@ -578,7 +578,7 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
         }
 
         let face_id =
-            crate::display_row_face_state::stable_face_id_for_resolved(self.face_ids, &resolved);
+            crate::display_row::face_state::stable_face_id_for_resolved(self.face_ids, &resolved);
         self.state.height_face_cache.insert(key, face_id);
         self.state.remember_face(face_id, &resolved);
         self.pending_faces
@@ -639,7 +639,7 @@ fn resolve_source_face_ref(
         return RenderFaceRef::FaceId(base_face_id);
     }
 
-    let face_id = crate::display_row_face_state::stable_face_id_for_resolved(face_ids, &resolved);
+    let face_id = crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &resolved);
     state.cache_face(base_face_id, face_value, face_id, &resolved);
     pending_faces.push(PendingDisplaySourceFace::new(face_id, resolved));
     RenderFaceRef::FaceId(face_id)

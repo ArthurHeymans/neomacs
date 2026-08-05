@@ -1,8 +1,6 @@
 use super::*;
-use crate::display_buffer_source_consumption::{
-    BufferSourceConsumedItem, BufferSourceConsumptionState,
-};
-use crate::display_buffer_text_source::{BufferTextCursorItem, BufferTextSourceCursor};
+use crate::buffer_source::consumption::{BufferSourceConsumedItem, BufferSourceConsumptionState};
+use crate::buffer_source::text_source::{BufferTextCursorItem, BufferTextSourceCursor};
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayImageItem, DisplayItem,
     DisplayItemKind, DisplayLength, DisplayMediaReplacement, DisplayRowBreakReason,
@@ -1199,7 +1197,7 @@ fn typed_display_replacement_keeps_underlying_buffer_mouse_face() {
     let item = source
         .next_cursor_item(
             &mut context,
-            crate::display_buffer_text_source::BufferTextDisplayReplacementMode::TypedReplacementItem,
+            crate::buffer_source::text_source::BufferTextDisplayReplacementMode::TypedReplacementItem,
         )
         .unwrap();
     let BufferTextCursorItem::DisplayPropertyReplacement(replacement) = item else {

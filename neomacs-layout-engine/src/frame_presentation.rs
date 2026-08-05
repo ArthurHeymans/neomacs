@@ -59,7 +59,7 @@ pub(crate) enum PresentationComposeError {
         available: PresentationId,
     },
     Spatial(PresentedHitError),
-    Pointer(crate::presentation_pointer::PresentationPointerError),
+    Pointer(crate::presentation::pointer::PresentationPointerError),
     Seal(SealFramePresentationError),
 }
 
@@ -69,8 +69,8 @@ impl From<PresentedHitError> for PresentationComposeError {
     }
 }
 
-impl From<crate::presentation_pointer::PresentationPointerError> for PresentationComposeError {
-    fn from(error: crate::presentation_pointer::PresentationPointerError) -> Self {
+impl From<crate::presentation::pointer::PresentationPointerError> for PresentationComposeError {
+    fn from(error: crate::presentation::pointer::PresentationPointerError) -> Self {
         Self::Pointer(error)
     }
 }
@@ -114,11 +114,11 @@ impl PresentationComposer {
             revision,
             mut transport,
         } = resolved;
-        let spatial = crate::presentation_spatial::PresentationSpatialPlan::compile(
+        let spatial = crate::presentation::spatial::PresentationSpatialPlan::compile(
             &transport,
             inputs.window_snapshots,
         )?;
-        let pointer = crate::presentation_pointer::PresentationPointerPlan::compile(
+        let pointer = crate::presentation::pointer::PresentationPointerPlan::compile(
             &transport,
             inputs.tab_bar_pointer,
         )?;

@@ -11,9 +11,9 @@ use crate::display_property::{
     DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
     classify_display_property_modifiers_only,
 };
-use crate::display_row_append_context::DisplayRowAppendKind;
-use crate::display_row_append_context::DisplayRowTextNaturalAdvanceKind;
-use crate::display_row_metrics::DisplayRowFallbackMetrics;
+use crate::display_row::append_context::DisplayRowAppendKind;
+use crate::display_row::append_context::DisplayRowTextNaturalAdvanceKind;
+use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan, DisplaySourceFallbackWidth,
 };

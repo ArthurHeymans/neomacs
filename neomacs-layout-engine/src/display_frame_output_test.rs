@@ -9,12 +9,12 @@ use neomacs_display_protocol::frame_glyphs::{
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 
 fn install_skipped_geometry(
-    builder: &mut crate::display_output_builder::DisplayOutputBuilder,
+    builder: &mut crate::output::builder::DisplayOutputBuilder,
     window_id: DisplayWindowId,
     outer: Rect,
 ) {
     builder.install_window_metadata(
-        crate::display_output_install_request::OutputPresentedWindowGeometryInstallRequest {
+        crate::output::install_request::OutputPresentedWindowGeometryInstallRequest {
             window_id,
             geometry: PresentedWindowGeometry::Skipped {
                 cell_origin: PresentedCellOrigin::default(),
@@ -382,7 +382,7 @@ fn window_frame_info_request_emits_background_and_window_info() {
         buffer_file_name: "notes.org".to_string(),
         modified: true,
     };
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
 
     WindowFrameInfoRenderRequest::new(&params, metadata)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
@@ -412,7 +412,7 @@ fn window_frame_info_effects_request_emits_scroll_effect_hints() {
     let mut prev_infos = std::collections::HashMap::default();
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::default();
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     builder.add_output_window_info(curr.clone());
     install_skipped_geometry(&mut builder, curr.window_id, curr.bounds);
 
@@ -437,7 +437,7 @@ fn frame_line_animation_request_uses_cursor_y_for_buffer_size_change() {
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::default();
     curr_infos.insert(curr.window_id, curr);
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     builder.add_output_cursor(
         params.window_id,
         DisplaySlotId {
@@ -474,7 +474,7 @@ fn frame_window_switch_request_emits_fade_and_updates_selected_state() {
     let params = window_params();
     let info = window_info(&params);
     let mut prev_selected = DisplayWindowId::new(7);
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     builder.add_output_window_info(info.clone());
     install_skipped_geometry(&mut builder, info.window_id, info.bounds);
 
@@ -501,7 +501,7 @@ fn frame_theme_transition_request_uses_content_height_before_minibuffer() {
     mini.is_minibuffer = true;
     mini.bounds = Rect::new(0.0, 96.0, 180.0, 24.0);
     let mut prev_background = Some((0.0, 0.0, 0.0, 1.0));
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     builder.set_output_background_color(Color::new(0.2, 0.0, 0.0, 1.0));
     builder.add_output_window_info(info.clone());
     builder.add_output_window_info(mini.clone());
@@ -529,7 +529,7 @@ fn frame_topology_transition_request_emits_frame_crossfade() {
     prev_infos.insert(prev.window_id, prev);
     let mut curr_infos = std::collections::HashMap::default();
     curr_infos.insert(curr.window_id, curr);
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
 
     FrameTopologyTransitionHintRenderRequest::new(&prev_infos, &curr_infos, 180.0, 140.0)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
@@ -546,7 +546,7 @@ fn frame_topology_transition_request_emits_frame_crossfade() {
 #[test]
 fn window_divider_request_splits_wide_vertical_divider() {
     let frame = frame_params();
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
 
     WindowDividerRectsRenderRequest::new(
         41,
@@ -581,7 +581,7 @@ fn vertical_scroll_bar_metrics_follow_visible_buffer_span() {
 fn window_scroll_bars_request_emits_vertical_and_horizontal_items() {
     let params = window_params();
     let info = window_info(&params);
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
 
     WindowScrollBarsRenderRequest::new(&params, &info)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
@@ -622,7 +622,7 @@ fn window_scroll_bars_request_skips_empty_vertical_track() {
         params.header_line_height + params.tab_line_height + params.mode_line_height;
     params.horizontal_scroll_bar = false;
     let info = window_info(&params);
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
 
     WindowScrollBarsRenderRequest::new(&params, &info)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
@@ -637,7 +637,7 @@ fn window_scroll_bars_request_skips_empty_vertical_track() {
 )]
 fn frame_output_rejects_window_without_installed_geometry() {
     let params = window_params();
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     WindowFrameInfoRenderRequest::new(&params, WindowFrameMetadata::default())
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
     let _ = builder.finish(80, 24, 8.0, 16.0);
@@ -647,7 +647,7 @@ fn frame_output_rejects_window_without_installed_geometry() {
 #[should_panic(expected = "duplicate output window identity")]
 fn frame_output_rejects_duplicate_window_identity() {
     let params = window_params();
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
     for _ in 0..2 {
         WindowFrameInfoRenderRequest::new(&params, WindowFrameMetadata::default())
             .render_and_apply(FrameOutputTarget::from_builder(&mut builder));
@@ -665,7 +665,7 @@ fn missing_vertical_track_does_not_suppress_horizontal_scroll_bar() {
         panic!("complete presented regions");
     };
     regions.right_scroll_bar = None;
-    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    let mut builder = crate::output::builder::DisplayOutputBuilder::new();
 
     WindowScrollBarsRenderRequest::new(&params, &info)
         .render_and_apply(FrameOutputTarget::from_builder(&mut builder));

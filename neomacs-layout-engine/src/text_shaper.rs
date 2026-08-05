@@ -8,7 +8,7 @@
 //! advances); the conversion to durable resolved-font identities happens in
 //! `FontMetricsService::resolved_glyphs_for_cluster`.
 
-use crate::font_metrics::ShapedGlyph;
+use crate::font::metrics::ShapedGlyph;
 use cosmic_text::{Attrs, Buffer, FontSystem};
 
 pub trait TextShaper: Send {

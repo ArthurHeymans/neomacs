@@ -4,17 +4,17 @@
 //! reservation policy into a generic `DisplayRowAppendSurface`, then install
 //! rendered rows, cursor effects, retry metadata, and final window snapshots.
 
-use crate::display_row_append_context::{DisplayRowAppendArea, DisplayRowAppendSurface};
-use crate::display_row_builder::DisplayTabPolicy;
-use crate::display_row_geometry::{
+use crate::display_row::append_context::{DisplayRowAppendArea, DisplayRowAppendSurface};
+use crate::display_row::builder::DisplayTabPolicy;
+use crate::display_row::geometry::{
     DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
-use crate::display_row_source_render::TextRowOutputRenderState;
-use crate::display_row_special_glyphs::{
+use crate::display_row::source_render::TextRowOutputRenderState;
+use crate::display_row::special_glyphs::{
     TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
     install_text_window_terminal_right_border,
 };
-use crate::display_row_walk_state::{
+use crate::display_row::walk_state::{
     HitRowRangeTracker, next_window_start_for_partially_visible_point_row,
     next_window_start_for_point_line_continuation, next_window_start_from_visible_rows,
     visible_rows_below,

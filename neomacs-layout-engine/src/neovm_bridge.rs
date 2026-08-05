@@ -36,7 +36,7 @@ use crate::coords::{
 };
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::DisplayOrigin;
-use crate::fontconfig::FontSizing;
+use crate::font::fontconfig::FontSizing;
 use neomacs_display_protocol::EffectsConfig;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::face::BoxLineWidth;

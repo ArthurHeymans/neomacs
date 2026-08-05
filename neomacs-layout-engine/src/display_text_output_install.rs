@@ -1,9 +1,9 @@
-use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_output_row_request::OutputRowLifecycleRequest;
-use crate::display_output_window_request::OutputWindowLifecycleRequest;
-use crate::display_row_face_state::resolved_display_row_face;
-use crate::font_metrics::FontMetrics;
+use crate::display_row::face_state::resolved_display_row_face;
+use crate::font::metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
+use crate::output::builder::DisplayOutputBuilder;
+use crate::output::row_request::OutputRowLifecycleRequest;
+use crate::output::window_request::OutputWindowLifecycleRequest;
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;

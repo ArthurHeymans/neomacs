@@ -1,9 +1,9 @@
 use super::*;
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row::DisplayRowFace;
-use crate::display_row_builder::DisplayRowGlyphSlot;
-use crate::display_row_metrics::DisplayRowFallbackMetrics;
-use crate::display_row_render_state::{DisplayRowOutputProgress, RenderedDisplayRow};
+use crate::display_row::builder::DisplayRowGlyphSlot;
+use crate::display_row::metrics::DisplayRowFallbackMetrics;
+use crate::display_row::render_state::{DisplayRowOutputProgress, RenderedDisplayRow};
 use neomacs_display_protocol::frame_chrome::ChromeAction;
 use neomacs_display_protocol::frame_glyphs::{DisplaySlotId, FrameGlyph, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
@@ -126,7 +126,7 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
         output: ChromeRowOutput::new(3, 24.0),
         bounds: neomacs_display_protocol::types::Rect::new(0.0, 24.0, 96.0, 16.0),
         text_area_left_px: 0.0,
-        metrics: crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
+        metrics: crate::display_row::metrics::DisplayRowFallbackMetrics::from_default_face_extents(
             8.0, 16.0, 12.0,
         ),
         tab_policy: DisplayTabPolicy::every(4),

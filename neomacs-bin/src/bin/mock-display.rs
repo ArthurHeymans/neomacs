@@ -128,13 +128,13 @@ fn run_gui(demo: &str) {
 
     let mut engine = LayoutEngine::new();
     engine.enable_cosmic_metrics();
-    let family = neomacs_layout_engine::fontconfig::resolve_family("monospace");
+    let family = neomacs_layout_engine::font::fontconfig::resolve_family("monospace");
     // Use the same physical pixel size that layout_mock_frame will
     // derive from the default face's point size via points_to_pixels.
     // Otherwise window pixel_bounds won't match the font metrics used
     // during layout, causing mode-lines and the minibuffer to be
     // misplaced or clipped.
-    let physical_size = neomacs_layout_engine::fontconfig::points_to_pixels(10.0);
+    let physical_size = neomacs_layout_engine::font::fontconfig::points_to_pixels(10.0);
     let char_w = {
         let fm = engine.font_metrics.as_mut().unwrap();
         fm.char_width('m', family, 400, false, physical_size)

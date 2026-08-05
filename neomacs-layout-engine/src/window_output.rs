@@ -12,28 +12,21 @@ use super::display_status_line::{
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
-use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_output_install_request::{
-    OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
-    OutputRetryCheckpointRestoreRequest, OutputTextWindowDisplayRangeInstallRequest,
-};
-use crate::display_output_row_request::{
-    OutputCurrentRowDecorationRequest, OutputRowLifecycleRequest,
-};
-use crate::display_output_window_request::OutputWindowLifecycleRequest;
 use crate::display_rendered_row_output_install::{
     install_measured_window_display_row, install_rendered_display_row_fragment_assets,
 };
 #[cfg(test)]
-use crate::display_row_builder::DisplayRowAppendProgress;
-use crate::display_row_builder::{DisplayRowGlyphCheckpoint, DisplayRowPosition};
-use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
-use crate::display_row_measured_state::MeasuredDisplayRow;
-use crate::display_row_special_glyphs::{
+use crate::display_row::builder::DisplayRowAppendProgress;
+use crate::display_row::builder::{DisplayRowGlyphCheckpoint, DisplayRowPosition};
+use crate::display_row::geometry::{
+    DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
+};
+use crate::display_row::measured_state::MeasuredDisplayRow;
+use crate::display_row::special_glyphs::{
     TextWindowRightEdgeMarkers, install_text_window_right_edge_markers,
 };
-use crate::display_row_text_output::{TextOutputSpan, TextRowOutput};
-use crate::display_row_walk_state::HitRowRangeTracker;
+use crate::display_row::text_output::{TextOutputSpan, TextRowOutput};
+use crate::display_row::walk_state::HitRowRangeTracker;
 use crate::display_text_output_install::{
     DisplayOutputRowStoredMetrics, DisplayOutputTextRowMetricsInstallRequest,
     DisplayOutputTextWindowBeginInstallRequest, TextWindowRowDecorationRequest,
@@ -41,6 +34,13 @@ use crate::display_text_output_install::{
 };
 use crate::hit_test::HitRow;
 use crate::neovm_bridge::ResolvedFace;
+use crate::output::builder::DisplayOutputBuilder;
+use crate::output::install_request::{
+    OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
+    OutputRetryCheckpointRestoreRequest, OutputTextWindowDisplayRangeInstallRequest,
+};
+use crate::output::row_request::{OutputCurrentRowDecorationRequest, OutputRowLifecycleRequest};
+use crate::output::window_request::OutputWindowLifecycleRequest;
 use crate::types::LayoutCharPos0;
 use crate::window_layout::WindowChromeMetrics;
 use neomacs_display_protocol::effect_config::EffectsConfig;
@@ -291,7 +291,7 @@ impl<'a> TextWindowOutputTarget<'a> {
         &mut self,
         face_id: FaceId,
         face: &ResolvedFace,
-        metrics: Option<crate::font_metrics::FontMetrics>,
+        metrics: Option<crate::font::metrics::FontMetrics>,
     ) {
         install_output_resolved_face(self.builder(), face_id, face, metrics);
     }

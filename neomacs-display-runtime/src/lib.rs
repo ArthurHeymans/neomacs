@@ -28,7 +28,7 @@ pub mod terminal;
 
 /// Layout-facing font matching helpers (kept under the legacy module path).
 pub mod font_match {
-    pub use neomacs_layout_engine::font_match::*;
+    pub use neomacs_layout_engine::font::font_match::*;
 }
 
 /// Rust layout engine API (kept under the legacy module path).

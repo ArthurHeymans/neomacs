@@ -1,5 +1,5 @@
-use crate::display_row_metrics::DisplayRowFallbackMetrics;
-use crate::display_row_width::DisplayRowCharWidthPolicy;
+use crate::display_row::metrics::DisplayRowFallbackMetrics;
+use crate::display_row::width::DisplayRowCharWidthPolicy;
 use crate::neovm_bridge::ResolvedFace;
 
 pub(crate) struct DisplayHeightFaceBasis<'a> {

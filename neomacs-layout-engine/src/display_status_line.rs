@@ -18,27 +18,29 @@ use super::window_output::{
     WindowOutputEmitter,
 };
 use crate::display_origin::DisplayOrigin;
-use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_rendered_row_output_install::install_measured_frame_chrome_display_row;
+use crate::display_row::builder::{DisplayTabPolicy, display_row_text_is_empty};
+pub(crate) use crate::display_row::face_state::DisplayRowFaceRealizer;
+use crate::display_row::measured_state::{
+    DisplayRowBoundsPolicy, DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
+    measured_display_row_height,
+};
+use crate::display_row::metrics::DisplayRowFallbackMetrics;
+pub(crate) use crate::display_row::render_state::DisplayRowOutputProgress;
+use crate::display_row::render_state::{DisplayRowRenderIntoRowResult, RenderedDisplayRow};
+use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_row::{
     DisplayRowLispStringSourceRenderRequest, DisplayRowRenderExecutor,
     DisplayRowSourceRenderRequest,
 };
-use crate::display_row_builder::{DisplayTabPolicy, display_row_text_is_empty};
-pub(crate) use crate::display_row_face_state::DisplayRowFaceRealizer;
-use crate::display_row_measured_state::{
-    DisplayRowBoundsPolicy, DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
-    measured_display_row_height,
-};
-use crate::display_row_metrics::DisplayRowFallbackMetrics;
-pub(crate) use crate::display_row_render_state::DisplayRowOutputProgress;
-use crate::display_row_render_state::{DisplayRowRenderIntoRowResult, RenderedDisplayRow};
-use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_source::DisplayItemSource;
-use crate::font_metrics::FontMetricsService;
+use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::LayoutVar;
-use crate::presented_pointer_map::{PointerAppearanceRangeId, PresentedPointerMapBuildError};
+use crate::output::builder::DisplayOutputBuilder;
+use crate::presentation::presented_pointer_map::{
+    PointerAppearanceRangeId, PresentedPointerMapBuildError,
+};
 use crate::types::WindowParams;
 use crate::window_layout::{WindowChromeMetrics, WindowLayoutBox};
 #[cfg(test)]

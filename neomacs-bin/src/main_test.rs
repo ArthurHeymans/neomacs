@@ -25,8 +25,8 @@ use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, FrameRef, LifecycleCommand,
     MediaSource, RenderCommand, UiCommand, WindowCommand, WindowFullscreenMode,
 };
-use neomacs_layout_engine::font_metrics::FontMetricsService;
-use neomacs_layout_engine::fontconfig::face_height_to_pixels;
+use neomacs_layout_engine::font::fontconfig::face_height_to_pixels;
+use neomacs_layout_engine::font::metrics::FontMetricsService;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;

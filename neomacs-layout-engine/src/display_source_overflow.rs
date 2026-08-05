@@ -1,5 +1,5 @@
-use crate::display_row_transition::DisplayRowOverflowTransitionPlan;
-use crate::display_row_walk_state::{
+use crate::display_row::transition::DisplayRowOverflowTransitionPlan;
+use crate::display_row::walk_state::{
     DisplayRowTextOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
     WordWrapBreakCandidate,
 };

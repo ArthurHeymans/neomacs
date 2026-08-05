@@ -13,7 +13,6 @@ use super::display_status_line::{
     max_mini_window_lines_from_value, tab_bar_effective_mouse_faces, tab_bar_image_relief_styles,
     tab_bar_pointer_slot_plan, tab_bar_presented_pointer_plan,
 };
-use super::font_metrics::FontMetricsService;
 use super::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items,
     layout_gui_compact_bar_content, layout_gui_menu_bar_content, layout_gui_tool_bar_content,
@@ -21,8 +20,8 @@ use super::gui_chrome::{
 use super::types::*;
 #[cfg(test)]
 use super::window_output::RowMetricsSnapshot;
-use crate::display_buffer_source_render_attempt::WindowPositionPublication;
-use crate::display_buffer_window_render::{
+use crate::buffer_source::render_attempt::WindowPositionPublication;
+use crate::buffer_source::window_render::{
     BufferSourceRenderAttemptContext, BufferSourceRenderAttemptOutcome, BufferWindowRenderRequest,
 };
 #[cfg(test)]
@@ -47,26 +46,27 @@ use crate::display_frame_output::{
 use crate::display_mock_frame::layout_mock_frame_content;
 use crate::display_origin::DisplayOrigin;
 use crate::display_rendered_row_output_install::frame_chrome_display_row;
-use crate::display_row_face_state::DisplayRowFaceRealizer;
+use crate::display_row::face_state::DisplayRowFaceRealizer;
 #[cfg(test)]
-use crate::display_row_geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
+use crate::display_row::geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
 #[cfg(test)]
-use crate::display_row_lisp_string::DisplayRowPrefixRequest;
+use crate::display_row::lisp_string::DisplayRowPrefixRequest;
 #[cfg(test)]
-use crate::display_row_lisp_string::DisplayRowPrefixValues;
-use crate::display_row_metrics::DisplayRowFallbackMetrics;
+use crate::display_row::lisp_string::DisplayRowPrefixValues;
+use crate::display_row::metrics::DisplayRowFallbackMetrics;
 #[cfg(test)]
-use crate::display_row_overlay_string::OverlayStringRenderSource;
+use crate::display_row::overlay_string::OverlayStringRenderSource;
 #[cfg(test)]
-use crate::display_row_walk_state::FaceScanCheckpoint;
+use crate::display_row::walk_state::FaceScanCheckpoint;
 #[cfg(test)]
-use crate::display_row_walk_state::WordWrapBreakCandidate;
+use crate::display_row::walk_state::WordWrapBreakCandidate;
 #[cfg(test)]
-use crate::display_row_walk_state::{
+use crate::display_row::walk_state::{
     BoxFaceRowState, HitRowRangeTracker, HorizontalScrollSkipState, InvisibleTextScanCheckpoint,
     LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapRenderState,
 };
-use crate::fontconfig::FontSizing;
+use crate::font::fontconfig::FontSizing;
+use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::{
     FrameFaceArena, FrameFaceAttempt, FrameFaceGeneration, FrameFaceReuseError,
 };
@@ -509,7 +509,7 @@ impl LayoutEngine {
         // Publish exact resolved font identities for every realized face so
         // the render thread rasterizes the same fonts layout measured with
         // (font realization / render boundary design, Phase 1).
-        crate::font_metrics::realize_frame_fonts(&mut state, &mut self.font_metrics);
+        crate::font::metrics::realize_frame_fonts(&mut state, &mut self.font_metrics);
         Ok(state)
     }
 
@@ -2359,7 +2359,7 @@ impl LayoutEngine {
                 continue;
             };
             resolved.lisp_name = value.as_symbol_name().map(str::to_owned);
-            let face_id = crate::display_row_face_state::stable_face_id_for_resolved(
+            let face_id = crate::display_row::face_state::stable_face_id_for_resolved(
                 &mut face_ids,
                 &resolved,
             );

@@ -31,14 +31,16 @@ use super::record_text_window_display_range;
 use super::transition_text_window_row;
 use super::transition_text_window_row_with_limit;
 use crate::display_item::DisplaySourcePosition;
-use crate::display_output_builder::DisplayOutputBuilder;
-use crate::display_row_builder::{
+use crate::display_row::builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
 };
-use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions};
-use crate::display_row_text_output::TextRowOutput;
-use crate::display_row_walk_state::HitRowRangeTracker;
+use crate::display_row::geometry::{
+    DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
+};
+use crate::display_row::text_output::TextRowOutput;
+use crate::display_row::walk_state::HitRowRangeTracker;
 use crate::display_status_line::DisplayRowOutputProgress;
+use crate::output::builder::DisplayOutputBuilder;
 use crate::types::LayoutCharPos0;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
@@ -595,7 +597,7 @@ fn record_text_window_display_range_updates_matching_last_window_info() {
     let mut builder = DisplayOutputBuilder::new();
     builder.add_output_window_info(window_info(41));
     builder.install_window_metadata(
-        crate::display_output_install_request::OutputPresentedWindowGeometryInstallRequest {
+        crate::output::install_request::OutputPresentedWindowGeometryInstallRequest {
             window_id: neomacs_display_protocol::DisplayWindowId::new(41),
             geometry: neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Skipped {
                 cell_origin: neomacs_display_protocol::frame_glyphs::PresentedCellOrigin::default(),
@@ -1198,7 +1200,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     let mut builder = DisplayOutputBuilder::new();
     builder.add_output_window_info(window_info(41));
     builder.install_window_metadata(
-        crate::display_output_install_request::OutputPresentedWindowGeometryInstallRequest {
+        crate::output::install_request::OutputPresentedWindowGeometryInstallRequest {
             window_id: neomacs_display_protocol::DisplayWindowId::new(41),
             geometry: neomacs_display_protocol::frame_glyphs::PresentedWindowGeometry::Skipped {
                 cell_origin: neomacs_display_protocol::frame_glyphs::PresentedCellOrigin::default(),

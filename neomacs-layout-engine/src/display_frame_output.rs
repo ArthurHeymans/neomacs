@@ -1,13 +1,13 @@
-use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_status_line::{
     ChromeRowRenderServices, FrameChromeOutputTarget, FrameTabBarDisplayRowRender,
     FrameTabBarDisplayRowRenderState, FrameTabBarDisplayRowRequest,
 };
 use crate::display_text_output_install::install_output_resolved_face;
 use crate::display_text_window_row_lifecycle::TextWindowTerminalRightBorderRequest;
-use crate::font_metrics::FontMetrics;
+use crate::font::metrics::FontMetrics;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::ResolvedFace;
+use crate::output::builder::DisplayOutputBuilder;
 use crate::types::{FrameParams, WindowParams};
 use crate::window_output::TextWindowOutputTarget;
 use neomacs_display_protocol::frame_chrome::{
@@ -203,7 +203,7 @@ impl FrameOutputOwner {
             }
         };
         self.builder.install_window_metadata(
-            crate::display_output_install_request::OutputPresentedWindowGeometryInstallRequest {
+            crate::output::install_request::OutputPresentedWindowGeometryInstallRequest {
                 window_id: DisplayWindowId::new(window_id),
                 geometry,
             },

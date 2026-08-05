@@ -1,7 +1,7 @@
-use crate::display_output_builder::{DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID};
-use crate::display_row_measured_state::{
+use crate::display_row::measured_state::{
     DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
 };
+use crate::output::builder::{DisplayOutputBuilder, FRAME_CHROME_WINDOW_ID};
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_chrome::ChromeDisplayRow;
 
@@ -21,7 +21,7 @@ pub(crate) fn install_measured_frame_chrome_display_row(
 
 pub(crate) fn frame_chrome_display_row(measured: &MeasuredDisplayRow) -> ChromeDisplayRow {
     let mut row = measured.frame_chrome_output_row();
-    crate::display_row_finalizer::GlyphRowFinalizationContext::new(
+    crate::display_row::finalizer::GlyphRowFinalizationContext::new(
         FRAME_CHROME_WINDOW_ID as u64,
         measured.row_index() as usize,
         measured.bounds(),
@@ -59,7 +59,7 @@ impl MeasuredWindowDisplayRowInstallRequest<'_> {
         install_faces(builder, measured.rendered().faces());
         let row = measured.window_relative_output_row(builder.current_window_pixel_bounds());
         builder.install_output_row_lifecycle(
-            crate::display_output_row_request::OutputRowLifecycleRequest::complete(
+            crate::output::row_request::OutputRowLifecycleRequest::complete(
                 display_row_index,
                 row.role,
                 row.mode_line,

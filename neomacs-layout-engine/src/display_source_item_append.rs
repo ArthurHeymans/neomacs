@@ -3,13 +3,13 @@ use crate::display_cursor::{
     capture_cursor_info, update_cursor_info_for_main_char,
 };
 use crate::display_item::DisplayItem;
-use crate::display_row_append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
-use crate::display_row_builder::{DisplayRowAppendProgress, DisplayRowPosition};
-use crate::display_row_face_state::DisplayRowActiveFaceState;
-use crate::display_row_geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
-use crate::display_row_source_append::SingleDisplayItemAppendContext;
-use crate::display_row_source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
-use crate::display_row_walk_state::{
+use crate::display_row::append_context::{DisplayRowAppendFrame, DisplayRowAppendKind};
+use crate::display_row::builder::{DisplayRowAppendProgress, DisplayRowPosition};
+use crate::display_row::face_state::DisplayRowActiveFaceState;
+use crate::display_row::geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
+use crate::display_row::source_append::SingleDisplayItemAppendContext;
+use crate::display_row::source_render::{TextRowSourceMeasureState, TextRowSourceRenderState};
+use crate::display_row::walk_state::{
     DisplayRowTextOverflowDecision, FaceScanCheckpoint, SpecialTextRowOverflowDecision,
     TrailingWhitespaceRenderState, WordWrapRenderState,
 };

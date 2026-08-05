@@ -1,9 +1,9 @@
 use crate::display_item::{DisplayItem, DisplayItemKind};
-use crate::display_row_append_context::DisplayRowAppendFrame;
-use crate::display_row_builder::DisplayRowItemMeasurement;
-use crate::display_row_render_policy::DisplayRowRenderPolicy;
+use crate::display_row::append_context::DisplayRowAppendFrame;
+use crate::display_row::builder::DisplayRowItemMeasurement;
+use crate::display_row::render_policy::DisplayRowRenderPolicy;
 use crate::display_text_run_measurement::DisplayTextRunMeasurementPlan;
-use crate::font_metrics::FontMetricsService;
+use crate::font::metrics::FontMetricsService;
 use neomacs_display_protocol::types::FaceId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
