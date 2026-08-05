@@ -131,7 +131,7 @@ rank	package	downloads	status
 130	move-text	900787	covered
 131	evil-lisp-state	898842	covered
 132	evil-mc	892644	covered
-133	evil-indent-plus	881686	todo
+133	evil-indent-plus	881686	covered
 134	json-snatcher	878975	todo
 135	evil-iedit-state	868329	todo
 136	diff-hl	867455	todo

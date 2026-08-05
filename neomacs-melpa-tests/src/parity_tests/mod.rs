@@ -303,6 +303,7 @@ mod evil;
 mod evil_anzu;
 mod evil_args;
 mod evil_exchange;
+mod evil_indent_plus;
 mod evil_lisp_state;
 mod evil_matchit;
 mod evil_mc;

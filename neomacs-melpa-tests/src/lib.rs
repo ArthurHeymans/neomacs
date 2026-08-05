@@ -1985,6 +1985,12 @@ pub const EVIL_ARGS_MELPA_PIN: (&str, &str) = ("evil-args", "20240210.504");
 /// `3030e21ee16a42dfce7f7cf86147b778b3f5d8c1`.
 pub const EVIL_EXCHANGE_MELPA_PIN: (&str, &str) = ("evil-exchange", "20200118.252");
 
+/// The exact Evil Indent Plus package selected for practical indentation text
+/// object ranges, nested-block deletion, parent-context change, shifting,
+/// yanking, whitespace, and narrowing parity. MELPA built this archive from
+/// upstream commit `f392696e4813f1d3a92c7eeed333248914ba6dae`.
+pub const EVIL_INDENT_PLUS_MELPA_PIN: (&str, &str) = ("evil-indent-plus", "20230927.1513");
+
 /// The exact Restart Emacs package selected for practical restart transaction,
 /// launch strategy, command quoting, startup-directory, desktop handoff,
 /// terminal notification, and command-line restoration parity. MELPA built
