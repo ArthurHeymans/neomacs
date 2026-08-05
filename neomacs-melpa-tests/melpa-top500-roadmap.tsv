@@ -138,7 +138,7 @@ rank	package	downloads	status
 137	pyvenv	864256	covered
 138	deferred	862680	covered
 139	evil-escape	857677	covered
-140	cfrs	857058	todo
+140	cfrs	857058	covered
 141	simple-httpd	853546	covered
 142	org-bullets	845120	todo
 143	uuidgen	839884	todo

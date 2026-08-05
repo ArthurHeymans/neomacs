@@ -271,6 +271,7 @@ mod bui;
 mod casual;
 mod ccc;
 mod cdb;
+mod cfrs;
 mod chinese_word_at_point;
 mod cider;
 mod clean_aindent_mode;

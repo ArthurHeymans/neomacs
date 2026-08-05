@@ -298,6 +298,12 @@ pub const POS_TIP_MELPA_PIN: (&str, &str) = ("pos-tip", "20240209.837");
 /// commit 74c8c56131ed866db47ae4191364b72dd4852456.
 pub const POSFRAME_MELPA_PIN: (&str, &str) = ("posframe", "20260527.857");
 
+/// The exact cfrs package selected by the practical terminal fallback,
+/// child-frame prompt, editing, sizing, acceptance, cancellation, focus, and
+/// lifecycle parity corpus. MELPA built this archive from upstream commit
+/// `981bddb3fb9fd9c58aed182e352975bd10ad74c8`.
+pub const CFRS_MELPA_PIN: (&str, &str) = ("cfrs", "20250729.1422");
+
 /// The exact powerline package selected by the practical segmented mode-line,
 /// face/property, alignment, separator, scroll-HUD, memoization, selection,
 /// mouse-action, and theme lifecycle parity corpus. MELPA built this archive
