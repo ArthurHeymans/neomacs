@@ -1684,6 +1684,12 @@ pub const HIGHLIGHT_INDENTATION_MELPA_PIN: (&str, &str) =
 /// `8b4744c7f46c72b1d3d599d4fb75ef8183dee307`.
 pub const HIGHLIGHT_NUMBERS_MELPA_PIN: (&str, &str) = ("highlight-numbers", "20181013.1744");
 
+/// The exact Indent Guide package selected for practical space, tab, blank
+/// line, recursive, live-editing, mode-lifecycle, and debounce parity. MELPA
+/// built this archive from upstream commit
+/// `1332f95d6f08afee35f62621793e2622b9f86f27`.
+pub const INDENT_GUIDE_MELPA_PIN: (&str, &str) = ("indent-guide", "20260629.918");
+
 /// The exact Iedit package selected by the practical symbol-refactoring,
 /// scoped replay, visibility, buffering/undo, and rectangle-editing corpus.
 /// MELPA built this archive from upstream commit

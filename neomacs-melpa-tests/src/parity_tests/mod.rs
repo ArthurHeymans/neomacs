@@ -332,6 +332,7 @@ mod htmlize;
 mod hungry_delete;
 mod hydra;
 mod iedit;
+mod indent_guide;
 mod inf_ruby;
 mod iter2;
 mod ivy;
