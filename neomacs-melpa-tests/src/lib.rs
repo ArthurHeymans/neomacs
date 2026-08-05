@@ -1938,6 +1938,11 @@ pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
 /// The exact Evil package selected by the comprehensive API parity corpus.
 pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 
+/// The exact Evil-Tutor package selected for persisted tutorial sessions,
+/// resume behavior, lesson navigation, and major-mode parity. MELPA built this
+/// archive from upstream commit `909273bac88b98a565f1b89bbb13d523b7edce2b`.
+pub const EVIL_TUTOR_MELPA_PIN: (&str, &str) = ("evil-tutor", "20150103.653");
+
 /// The exact Evil Anzu package selected for practical repeated-search,
 /// regexp, no-highlight cleanup, disabled-mode, failure, and unload/reload
 /// integration parity. MELPA built this archive from upstream commit
