@@ -1991,6 +1991,12 @@ pub const EVIL_ARGS_MELPA_PIN: (&str, &str) = ("evil-args", "20240210.504");
 /// `3030e21ee16a42dfce7f7cf86147b778b3f5d8c1`.
 pub const EVIL_EXCHANGE_MELPA_PIN: (&str, &str) = ("evil-exchange", "20200118.252");
 
+/// The exact Evil Iedit State package selected for practical multi-occurrence
+/// edits, state transitions, selective operations, replacement, restriction,
+/// numbering, undo, and cleanup parity. MELPA built this archive from upstream
+/// commit `44c64c71692e5b2f608ad3e3c537ec0a0e0ea0f8`.
+pub const EVIL_IEDIT_STATE_MELPA_PIN: (&str, &str) = ("evil-iedit-state", "20220219.1432");
+
 /// The exact Evil Indent Plus package selected for practical indentation text
 /// object ranges, nested-block deletion, parent-context change, shifting,
 /// yanking, whitespace, and narrowing parity. MELPA built this archive from
