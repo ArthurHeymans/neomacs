@@ -1765,6 +1765,12 @@ pub const IVY_RICH_MELPA_PIN: (&str, &str) = ("ivy-rich", "20230425.1422");
 /// `77125b01c0ddce537085201098bea9b4b8ba6be3`.
 pub const JSON_MODE_MELPA_PIN: (&str, &str) = ("json-mode", "20240427.1245");
 
+/// The exact JSON Snatcher package selected for practical nested object and
+/// array paths, Python/jq output, kill-ring, token-boundary, cache reuse, and
+/// buffer-lifecycle parity. MELPA built this archive from upstream commit
+/// `b28d1c0670636da6db508d03872d96ffddbc10f2`.
+pub const JSON_SNATCHER_MELPA_PIN: (&str, &str) = ("json-snatcher", "20200916.1717");
+
 /// The exact js2-mode package selected by the practical parsing, diagnostics,
 /// indentation, navigation, JSON-path, Imenu, and editor-aid parity corpus.
 /// MELPA built this archive from upstream commit
