@@ -2158,6 +2158,12 @@ pub const OPEN_JUNK_FILE_MELPA_PIN: (&str, &str) = ("open-junk-file", "20161210.
 /// commit `9ec0dbd30be7c6310804141ee952ac8c5f753557`.
 pub const ORG_BULLETS_MELPA_PIN: (&str, &str) = ("org-bullets", "20200317.1740");
 
+/// The exact Org Pomodoro package selected for practical task clocking,
+/// timer transitions, overtime, break, cancellation, notification, audio,
+/// expiry, and mode-line parity. MELPA built this archive from upstream
+/// commit `3f5bcfb80d61556d35fc29e5ddb09750df962cc6`.
+pub const ORG_POMODORO_MELPA_PIN: (&str, &str) = ("org-pomodoro", "20220318.1618");
+
 /// The exact EmacSQL package selected for practical schema and CRUD query
 /// compilation, prepared-input escaping, reporting expressions, transaction
 /// retry and rollback, protocol parsing, authoring, and failure parity. MELPA

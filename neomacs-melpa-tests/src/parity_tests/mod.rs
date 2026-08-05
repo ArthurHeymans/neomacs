@@ -416,6 +416,7 @@ mod nerd_icons;
 mod open_junk_file;
 mod org_bullets;
 mod org_category_capture;
+mod org_pomodoro;
 mod package_build;
 mod package_lifecycle;
 mod package_lint;
