@@ -2208,6 +2208,12 @@ pub const TREEPY_MELPA_PIN: (&str, &str) = ("treepy", "20260531.1144");
 /// `a97bcae8f43a9ff64e95473e4ef0d8bafe829211`.
 pub const CLEAN_AINDENT_MODE_MELPA_PIN: (&str, &str) = ("clean-aindent-mode", "20171017.2043");
 
+/// The exact Clang-Format package selected for practical whole-buffer, region,
+/// UTF-8 cursor, configuration, save-hook, version-control diff, and failure
+/// atomicity parity. MELPA built this archive from upstream commit
+/// `a099177b5cd5060597d454e4c1ffdc96b92ba985`.
+pub const CLANG_FORMAT_MELPA_PIN: (&str, &str) = ("clang-format", "20250223.1620");
+
 /// The exact Vi Tilde Fringe package selected for practical local and global
 /// mode lifecycle, bitmap customization and registration, empty-line mapping,
 /// per-buffer isolation, minibuffer exclusion, and failure-state parity.
