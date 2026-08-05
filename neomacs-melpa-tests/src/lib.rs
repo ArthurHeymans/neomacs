@@ -1736,6 +1736,13 @@ pub const HUNGRY_DELETE_MELPA_PIN: (&str, &str) = ("hungry-delete", "20210409.16
 /// `59a2a45a35027948476d1d7751b0f0215b1e61aa`.
 pub const HYDRA_MELPA_PIN: (&str, &str) = ("hydra", "20250316.1254");
 
+/// The exact Highlight package selected for practical overlay and text
+/// property lifecycles, regexp groups, symbol navigation, property transfer,
+/// duplicate-log detection, invisibility, and semantic-property parity.
+/// MELPA built this archive from upstream commit
+/// `28557cb8d99b96eb509aaec1334c7cdda162517f`.
+pub const HIGHLIGHT_MELPA_PIN: (&str, &str) = ("highlight", "20210318.2248");
+
 /// The exact Highlight Indentation package selected for practical guide,
 /// live-edit, blank-line, current-column, and offset-selection parity.
 /// MELPA built this archive from upstream commit
