@@ -2432,6 +2432,12 @@ pub const TREEMACS_MELPA_PIN: (&str, &str) = ("treemacs", "20251226.1307");
 /// `fbd5d846611bad828e336b25d2e131d1bc06b83d`.
 pub const DIMINISH_MELPA_PIN: (&str, &str) = ("diminish", "20220909.847");
 
+/// The exact Diff HL package selected for practical working-tree hunk,
+/// navigation, selective staging, revert, unsaved flydiff, reference-revision,
+/// and mode-lifecycle parity. MELPA built this archive from upstream commit
+/// `91fcd4fa42fef895a754e80c4435ae6314be7822`.
+pub const DIFF_HL_MELPA_PIN: (&str, &str) = ("diff-hl", "20260723.238");
+
 /// The exact Doom Modeline package selected for practical file-buffer,
 /// state-transition, selection, encoding, extension, layout, and global-mode
 /// lifecycle parity. MELPA built this archive from upstream commit

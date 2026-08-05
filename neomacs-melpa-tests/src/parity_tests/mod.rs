@@ -287,6 +287,7 @@ mod datetime_format;
 mod ddskk;
 mod deferred;
 mod define_word;
+mod diff_hl;
 mod diminish;
 mod distel_completion_lib;
 mod doom_modeline;
