@@ -286,6 +286,7 @@ mod counsel;
 mod csv_mode;
 mod dap_mode;
 mod dash;
+mod dash_functional;
 mod datetime_format;
 mod ddskk;
 mod deferred;
