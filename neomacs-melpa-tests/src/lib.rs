@@ -1646,6 +1646,12 @@ pub const AUTO_SPACE_MODE_MELPA_PIN: (&str, &str) = ("auto-space-mode", "2026020
 /// `3ffa4e2a76a6dda949fdfd200f623a17c4796559`.
 pub const AUTO_SORT_MODE_MELPA_PIN: (&str, &str) = ("auto-sort-mode", "20230827.2124");
 
+/// The exact Bind Map package selected for practical global leader,
+/// major/minor-mode activation, remapping/aliasing, inherited declaration,
+/// override-precedence, and Evil-state parity. MELPA built this archive from
+/// upstream commit `75aac732c10d97bc8dc49196c6623a09faf30d37`.
+pub const BIND_MAP_MELPA_PIN: (&str, &str) = ("bind-map", "20251119.201");
+
 /// The exact ht package selected by the practical configuration, nested state,
 /// job pipeline, custom-key, and snapshot parity corpus, and as
 /// auto-highlight-symbol's hash-table dependency. MELPA built this archive from upstream commit

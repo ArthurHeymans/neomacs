@@ -99,7 +99,7 @@ rank	package	downloads	status
 98	haskell-mode	1005792	covered
 99	highlight-parentheses	1005394	covered
 100	clojure-mode	1004131	covered
-101	bind-map	1003049	todo
+101	bind-map	1003049	covered
 102	evil-exchange	997878	todo
 103	restart-emacs	997060	todo
 104	ws-butler	993893	todo

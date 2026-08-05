@@ -266,6 +266,7 @@ mod avy;
 mod avy_menu;
 mod bert;
 mod bind_key;
+mod bind_map;
 mod bui;
 mod casual;
 mod ccc;
