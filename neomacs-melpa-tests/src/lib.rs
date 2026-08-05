@@ -1678,6 +1678,12 @@ pub const HYDRA_MELPA_PIN: (&str, &str) = ("hydra", "20250316.1254");
 pub const HIGHLIGHT_INDENTATION_MELPA_PIN: (&str, &str) =
     ("highlight-indentation", "20210221.1418");
 
+/// The exact Highlight Numbers package selected for practical Emacs Lisp,
+/// Scheme, C-family, inherited customization, opt-out, editing, and mode
+/// lifecycle parity. MELPA built this archive from upstream commit
+/// `8b4744c7f46c72b1d3d599d4fb75ef8183dee307`.
+pub const HIGHLIGHT_NUMBERS_MELPA_PIN: (&str, &str) = ("highlight-numbers", "20181013.1744");
+
 /// The exact Iedit package selected by the practical symbol-refactoring,
 /// scoped replay, visibility, buffering/undo, and rectangle-editing corpus.
 /// MELPA built this archive from upstream commit

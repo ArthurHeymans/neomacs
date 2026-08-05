@@ -325,6 +325,7 @@ mod helm_make;
 mod helm_projectile;
 mod helm_swoop;
 mod highlight_indentation;
+mod highlight_numbers;
 mod hl_todo;
 mod ht;
 mod htmlize;
