@@ -138,8 +138,8 @@ pub(crate) fn plan(ctx: &LineEndContext) -> LineEndPlan {
         && at_real_newline
         && ctx.remaining_px() > 0.0;
     // Indicator merge is decided at the PRE-advance pen column.
-    let merged = append
-        && indicator.is_some_and(|indicator| ctx.pen_col == i64::from(indicator.col));
+    let merged =
+        append && indicator.is_some_and(|indicator| ctx.pen_col == i64::from(indicator.col));
     if append {
         let (ch, face) = match (merged, indicator) {
             (true, Some(indicator)) => (indicator.ch, AppendedGlyphFace::MergedIndicator),
@@ -270,8 +270,9 @@ fn resolve_step<R: LineEndFaceResolver>(
         LineEndStep::AppendGlyph { ch, face } => {
             let face_id = match face {
                 AppendedGlyphFace::NewlineFace => ctx.newline_face_id,
-                AppendedGlyphFace::MergedIndicator => resolver
-                    .fill_column_indicator_face_id(ctx.extend.map(|extend| extend.bg)),
+                AppendedGlyphFace::MergedIndicator => {
+                    resolver.fill_column_indicator_face_id(ctx.extend.map(|extend| extend.bg))
+                }
             };
             ResolvedLineEndStep::AppendGlyph {
                 ch,
@@ -320,8 +321,7 @@ fn resolve_indicator_fill<R: LineEndFaceResolver>(
     let gap_cols = (gap_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
     match ctx.extend {
         Some(extend) => {
-            let indicator_face_id =
-                resolver.fill_column_indicator_face_id(Some(extend.bg));
+            let indicator_face_id = resolver.fill_column_indicator_face_id(Some(extend.bg));
             let tail_px = (ctx.right_edge_x - (indicator_px + char_width)).max(0.0);
             let tail_cols = (tail_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
             FillColumnIndicatorFill {
@@ -437,8 +437,8 @@ impl DisplayCurrentRowMutation for AppendNewlineGlyphMutation {
 /// resolved from its `face_id`, so this paints the trailing run through the same
 /// per-glyph background path the `region` face uses. Called only at true line
 /// ends (before a real newline / at ZV), never at a visual wrap.
-struct HighlightTrailingWhitespaceMutation {
-    face_id: FaceId,
+pub(super) struct HighlightTrailingWhitespaceMutation {
+    pub(super) face_id: FaceId,
 }
 
 impl DisplayCurrentRowMutation for HighlightTrailingWhitespaceMutation {
@@ -545,6 +545,14 @@ impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
         row.displays_text = true;
     }
 }
+
+#[cfg(test)]
+#[path = "fill_column_indicator_test.rs"]
+mod fill_column_indicator_tests;
+
+#[cfg(test)]
+#[path = "trailing_whitespace_test.rs"]
+mod trailing_whitespace_tests;
 
 #[cfg(test)]
 mod tests {

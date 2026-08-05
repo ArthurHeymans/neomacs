@@ -20,6 +20,9 @@ use crate::display_row::face_state::{
 };
 pub(crate) use crate::display_row::finalizer::RowExtendFill;
 use crate::display_row::geometry::{DisplayRowGeometryState, DisplayRowScopedValue};
+use crate::display_row::line_end::{
+    self, LineEndContext, LineEndFaceResolver, LineEndFillGeometry,
+};
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::render_policy::DisplayRowRenderPolicy;
 use crate::display_row::render_state::{
@@ -28,7 +31,6 @@ use crate::display_row::render_state::{
 use crate::display_row::replacement::DisplayPropertyReplacementRowRenderRequest;
 use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_row::text_output::TextRowOutput;
-use crate::display_row::walk_state::TrailingWhitespaceRenderState;
 use crate::display_row::{
     DisplayRowRenderContext, DisplayRowRenderExecutor, DisplayRowRenderer,
     DisplayRowSourceFragmentFrame, DisplayRowSourceRenderRequest,
@@ -42,7 +44,6 @@ use crate::display_spec::DisplayFringeSide;
 use crate::display_text_output_install::TextWindowRowDecorationRequest;
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
-use crate::glyph_row_writer::push_stretch_to_area;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
 use crate::window_output::{
@@ -50,9 +51,7 @@ use crate::window_output::{
     WindowOutputEmitter, install_text_window_row_decoration_request,
     transition_text_window_row_with_limit,
 };
-use neomacs_display_protocol::glyph_matrix::{
-    FringeBitmapInfo, Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
-};
+use neomacs_display_protocol::glyph_matrix::{FringeBitmapInfo, GlyphRow};
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::Context;
@@ -139,153 +138,6 @@ impl DisplayCurrentRowMutation for RowExtendFillMutation {
 
     fn apply(self, row: &mut GlyphRow) -> Self::Output {
         self.fill.apply_to(row)
-    }
-}
-
-/// GNU `append_space_for_newline` (xdisp.c:24122) for terminal rows: append
-/// one glyph at a real line end. Normally a space carrying the NEWLINE's
-/// face, so a face spanning the newline (a font-lock comment, a string)
-/// paints its foreground on the end-of-line cell exactly as GNU does. When
-/// the pen sits exactly at the `display-fill-column-indicator` column, GNU
-/// makes this same appended glyph BE the indicator character with the
-/// indicator face merged over the newline's face -- the space and the
-/// indicator are one glyph, not two.
-struct AppendNewlineGlyphMutation {
-    ch: char,
-    face_id: FaceId,
-    char_width: f32,
-}
-
-impl DisplayCurrentRowMutation for AppendNewlineGlyphMutation {
-    type Output = bool;
-
-    fn apply(self, row: &mut GlyphRow) -> Self::Output {
-        if row.reversed_p {
-            return false;
-        }
-        let text_index = GlyphArea::Text.index();
-        row.glyphs[text_index].push(
-            Glyph::char(self.ch, self.face_id, NO_BUFFER_POSITION_CHARPOS)
-                .with_pixel_width(self.char_width.max(1.0)),
-        );
-        true
-    }
-}
-
-/// Re-face the current row's trailing whitespace glyphs with the
-/// `trailing-whitespace` face (GNU `highlight_trailing_whitespace`, xdisp.c).
-/// Walks the TEXT-area glyphs from the end backward over space/tab whitespace —
-/// space `Char` glyphs and `Stretch` glyphs (tabs) — stamping each with
-/// `face_id` until the first non-whitespace glyph. A `Glyph`'s background is
-/// resolved from its `face_id`, so this paints the trailing run through the same
-/// per-glyph background path the `region` face uses. Called only at true line
-/// ends (before a real newline / at ZV), never at a visual wrap.
-struct HighlightTrailingWhitespaceMutation {
-    face_id: FaceId,
-}
-
-impl DisplayCurrentRowMutation for HighlightTrailingWhitespaceMutation {
-    type Output = ();
-
-    fn apply(self, row: &mut GlyphRow) -> Self::Output {
-        let glyphs = &mut row.glyphs[GlyphArea::Text.index()];
-        let mut start = glyphs.len();
-        while start > 0 {
-            let is_whitespace = match glyphs[start - 1].glyph_type {
-                GlyphType::Char { ch } => ch == ' ' || ch == '\t',
-                GlyphType::Stretch { .. } => true,
-                _ => false,
-            };
-            if !is_whitespace {
-                break;
-            }
-            start -= 1;
-        }
-        for glyph in &mut glyphs[start..] {
-            glyph.face_id = self.face_id;
-        }
-    }
-}
-
-/// Geometry + faces for the `display-fill-column-indicator` glyph produced in a
-/// row's trailing region (GNU `extend_face_to_end_of_line`, xdisp.c:24752): a
-/// `gap` stretch pads from end-of-text to the indicator column, the indicator
-/// character carries the `fill-column-indicator` face, and an optional `tail`
-/// stretch continues to the right edge. On a plain row the gap is transparent
-/// and there is no tail; on an `:extend`-highlighted row (region/hl-line) the
-/// gap and tail carry the extend face so the whole trailing region stays
-/// highlighted, and the indicator char face keeps the highlight background.
-#[derive(Clone, Copy)]
-struct FillColumnIndicatorFill {
-    gap_px: f32,
-    gap_cols: u16,
-    gap_face_id: FaceId,
-    indicator_char: char,
-    indicator_face_id: FaceId,
-    tail_px: f32,
-    tail_cols: u16,
-    tail_face_id: FaceId,
-    char_width: f32,
-    height_px: f32,
-    ascent_px: f32,
-}
-
-struct FillColumnIndicatorMutation {
-    fill: FillColumnIndicatorFill,
-}
-
-impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
-    type Output = ();
-
-    fn apply(self, row: &mut GlyphRow) -> Self::Output {
-        // R2L rows reorder to the visual left; leave them alone (documented
-        // limitation, mirroring RowExtendFillMutation).
-        if row.reversed_p {
-            return;
-        }
-        let text_index = GlyphArea::Text.index();
-        let f = self.fill;
-        // Pad the trailing region up to the indicator column.
-        if f.gap_cols >= 1 && f.gap_px > 0.5 {
-            push_stretch_to_area(
-                row,
-                text_index,
-                f.gap_cols,
-                f.gap_face_id,
-                f.gap_px,
-                f.height_px,
-                f.ascent_px,
-            );
-            if let Some(last) = row.glyphs[text_index].last_mut() {
-                last.charpos = NO_BUFFER_POSITION_CHARPOS;
-            }
-        }
-        // The indicator character itself. It maps to no buffer position, so the
-        // blank-line cursor never latches onto it.
-        row.glyphs[text_index].push(
-            Glyph::char(
-                f.indicator_char,
-                f.indicator_face_id,
-                NO_BUFFER_POSITION_CHARPOS,
-            )
-            .with_pixel_width(f.char_width.max(1.0)),
-        );
-        // Continue the `:extend` highlight past the indicator to the right edge.
-        if f.tail_cols >= 1 && f.tail_px > 0.5 {
-            push_stretch_to_area(
-                row,
-                text_index,
-                f.tail_cols,
-                f.tail_face_id,
-                f.tail_px,
-                f.height_px,
-                f.ascent_px,
-            );
-            if let Some(last) = row.glyphs[text_index].last_mut() {
-                last.charpos = NO_BUFFER_POSITION_CHARPOS;
-            }
-        }
-        row.displays_text = true;
     }
 }
 
@@ -678,22 +530,6 @@ impl<'a> TextRowOutputRenderState<'a> {
             .unwrap_or(false)
     }
 
-    /// Re-face the current row's trailing whitespace run with `face_id`
-    /// (`show-trailing-whitespace`). See [`HighlightTrailingWhitespaceMutation`].
-    fn highlight_current_row_trailing_whitespace(&mut self, face_id: FaceId) {
-        self.output
-            .current_row_output()
-            .apply_current_row_mutation(HighlightTrailingWhitespaceMutation { face_id });
-    }
-
-    /// Produce the `display-fill-column-indicator` glyph in the current row's
-    /// trailing region. See [`FillColumnIndicatorMutation`].
-    fn produce_current_row_fill_column_indicator(&mut self, fill: FillColumnIndicatorFill) {
-        self.output
-            .current_row_output()
-            .apply_current_row_mutation(FillColumnIndicatorMutation { fill });
-    }
-
     fn finish_current_text_row_render(
         &mut self,
         output: TextRowOutput,
@@ -711,6 +547,43 @@ impl<'a> TextRowOutputRenderState<'a> {
         self.output_emitter
             .emit_text_output_spans(self.evaluator, output, output_spans, end);
         CurrentTextRowRenderOutcome::new(stop, source_slots, end, row_height_px, row_ascent_px)
+    }
+}
+
+/// Face-resolution services for the line-end seam: resolves the named
+/// `trailing-whitespace` / `fill-column-indicator` faces against the frame
+/// face resolver, interns a stable face id, and installs the resolved face on
+/// the output, exactly as the pre-seam inline sequence did.
+struct TextRowLineEndFaceResolver<'render, 'a, 'ids> {
+    render: &'render mut TextRowSourceRenderState<'a>,
+    face_ids: &'ids mut FrameFaceAttempt,
+}
+
+impl TextRowLineEndFaceResolver<'_, '_, '_> {
+    fn install_named_face(&mut self, face: &ResolvedFace) -> FaceId {
+        let face_id =
+            crate::display_row::face_state::stable_face_id_for_resolved(self.face_ids, face);
+        self.render.insert_resolved_face(face_id, face);
+        face_id
+    }
+}
+
+impl LineEndFaceResolver for TextRowLineEndFaceResolver<'_, '_, '_> {
+    fn trailing_whitespace_face_id(&mut self) -> FaceId {
+        let face = self.render.resolve_named_face("trailing-whitespace");
+        self.install_named_face(&face)
+    }
+
+    fn fill_column_indicator_face_id(&mut self, extend_bg: Option<Color>) -> FaceId {
+        // GNU: it->face_id = merge_faces (w, Qfill_column_indicator, 0,
+        // saved_face_id). With an active `:extend` face the indicator keeps
+        // that fill's background so the highlight is continuous.
+        let mut face = self.render.resolve_named_face("fill-column-indicator");
+        if let Some(extend_bg) = extend_bg {
+            face.bg = protocol_color_to_pixel(extend_bg);
+            face.use_default_background = false;
+        }
+        self.install_named_face(&face)
     }
 }
 
@@ -747,6 +620,10 @@ impl<'a> TextRowSourceRenderState<'a> {
 
     pub(crate) fn output_render(&mut self) -> TextRowOutputRenderState<'_> {
         self.output_render.reborrow()
+    }
+
+    pub(crate) fn measurement_mode(&self) -> DisplayRowMeasurementMode {
+        self.measurement_mode
     }
 
     pub(crate) fn measure_state(&mut self) -> TextRowSourceMeasureState<'_> {
@@ -1024,198 +901,31 @@ impl<'a> TextRowSourceRenderState<'a> {
             ))
     }
 
-    /// Highlight the current row's trailing whitespace with the
-    /// `trailing-whitespace` face when `show-trailing-whitespace` is enabled
-    /// (GNU `highlight_trailing_whitespace`, xdisp.c). No-op when disabled. Must
-    /// be called at a true line end (real newline / ZV), before the row extend
-    /// fill and the row transition — never at a visual wrap, where the
-    /// wrap-boundary whitespace is not "trailing".
-    pub(crate) fn highlight_trailing_whitespace(
+    /// Render the GNU line-end sequence for the current row through the
+    /// shared [`crate::display_row::line_end`] seam: the caller builds the
+    /// [`LineEndContext`], [`line_end::plan`] decides the ordered effects,
+    /// this method resolves their faces against the frame face services and
+    /// applies them to the current row.
+    pub(crate) fn render_line_end(
         &mut self,
-        trailing_whitespace: &TrailingWhitespaceRenderState,
+        ctx: &LineEndContext,
+        geometry: LineEndFillGeometry,
         face_ids: &mut FrameFaceAttempt,
     ) {
-        if !trailing_whitespace.is_enabled() {
+        let plan = line_end::plan(ctx);
+        if plan.steps().is_empty() {
             return;
         }
-        let face = self.resolve_named_face("trailing-whitespace");
-        let face_id = crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &face);
-        self.insert_resolved_face(face_id, &face);
-        self.output_render
-            .highlight_current_row_trailing_whitespace(face_id);
-    }
-
-    /// Produce the `display-fill-column-indicator` glyph at the indicator column
-    /// in the current row's trailing region, for every non-continuation text row
-    /// (GNU `extend_face_to_end_of_line` / `fill_column_indicator_column`,
-    /// xdisp.c). `indicator_col` is the buffer column (negative = disabled), so
-    /// the indicator pixel x is `content_x + indicator_col * char_width`. Unlike
-    /// GNU (whose `fill_column_indicator_column` adds `lnum_pixel_width` because
-    /// its origin is the text-area left edge), neomacs's `content_x` is already
-    /// the buffer-text origin — it shifts right by the line-number gutter — so
-    /// the gutter width must NOT be added again (doing so double-counts it and
-    /// pushes the indicator past its column when line numbers are on).
-    /// No-op when disabled or when the row text already reached/passed the column
-    /// (GNU begins the trailing fill at end-of-text, so a longer line covers it).
-    /// GNU `append_space_for_newline` at a true line end; terminal frames
-    /// only. Must run after the trailing-whitespace walk (the appended glyph
-    /// has no buffer position; GNU's walk skips non-buffer glyphs) and before
-    /// the `:extend` fill, matching xdisp.c:26525-26533 order. Returns
-    /// `(appended, indicator_produced)`: when `appended`, the caller must
-    /// treat the pen as advanced one cell (GNU's PRODUCE_GLYPHS moves
-    /// current_x, so the trailing fill starts after this glyph); when
-    /// `indicator_produced`, the fill-column indicator was emitted as this
-    /// glyph and `produce_fill_column_indicator` must not run again.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn append_space_for_newline(
-        &mut self,
-        newline_face_id: FaceId,
-        char_width: f32,
-        remaining_px: f32,
-        pen_col: i64,
-        indicator_col: i32,
-        indicator_char: char,
-        row_extend: &DisplayRowScopedValue<(Color, FaceId)>,
-        row_geometry: &DisplayRowGeometryState,
-        frame_background: Color,
-        face_ids: &mut FrameFaceAttempt,
-    ) -> (bool, bool) {
-        if self.measurement_mode.uses_concrete_font_geometry() || remaining_px <= 0.0 {
-            return (false, false);
-        }
-        let indicator_here =
-            indicator_col >= 0 && char_width > 0.0 && pen_col == i64::from(indicator_col);
-        let (ch, face_id) = if indicator_here {
-            // GNU: it->face_id = merge_faces (w, Qfill_column_indicator, 0,
-            // saved_face_id). With an active `:extend` face the indicator
-            // keeps that fill's background so the highlight is continuous.
-            let mut char_face = self.resolve_named_face("fill-column-indicator");
-            let extend = row_extend
-                .value_on(row_geometry)
-                .copied()
-                .filter(|(bg, _)| *bg != frame_background);
-            if let Some((extend_bg, _)) = extend {
-                char_face.bg = protocol_color_to_pixel(extend_bg);
-                char_face.use_default_background = false;
-            }
-            let face_id =
-                crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &char_face);
-            self.insert_resolved_face(face_id, &char_face);
-            (indicator_char, face_id)
-        } else {
-            (' ', newline_face_id)
+        let resolved = {
+            let mut resolver = TextRowLineEndFaceResolver {
+                render: self,
+                face_ids,
+            };
+            plan.resolve(ctx, geometry, &mut resolver)
         };
-        let appended = self
-            .output_render
+        self.output_render
             .current_row_output()
-            .apply_current_row_mutation(AppendNewlineGlyphMutation {
-                ch,
-                face_id,
-                char_width,
-            })
-            .unwrap_or(false);
-        (appended, appended && indicator_here)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn produce_fill_column_indicator(
-        &mut self,
-        indicator_col: i32,
-        indicator_char: char,
-        text_end_col: i64,
-        content_x: f32,
-        char_width: f32,
-        pen_x: f32,
-        right_edge: f32,
-        row_extend: &DisplayRowScopedValue<(Color, FaceId)>,
-        row_geometry: &DisplayRowGeometryState,
-        frame_background: Color,
-        height_px: f32,
-        ascent_px: f32,
-        face_ids: &mut FrameFaceAttempt,
-    ) -> bool {
-        if indicator_col < 0 || char_width <= 0.0 {
-            return false;
-        }
-        // Decide whether the indicator is visible by COLUMN, not pixels: GNU
-        // draws it at grid column `indicator_col`, so it shows whenever the
-        // text ends at or before that column (`text_end_col <= indicator_col`).
-        // A pixel comparison is wrong here because neomacs's nominal
-        // `char_width` differs from the measured per-glyph advance, so a line
-        // whose length is EXACTLY the fill column overshoots the nominal grid
-        // (e.g. 10 chars × 16.255 vs 10 × 16.0 ⇒ pen_x 2.5px past indicator_px)
-        // and the indicator was dropped — the divergence grows with the column.
-        if text_end_col > i64::from(indicator_col) {
-            // The row text passed the indicator column; the indicator is covered
-            // (GNU begins the trailing fill at end-of-text). Let the caller run
-            // the normal `:extend` fill instead.
-            return false;
-        }
-        let indicator_px = content_x + indicator_col as f32 * char_width;
-        // Positioning stays pixel-based: when the text ends exactly at the
-        // indicator column, `pen_x` may be a hair past `indicator_px`, so clamp
-        // the gap to 0 and place the indicator right after the text (as GNU does).
-        let gap_px = indicator_px - pen_x;
-        let gap_px = gap_px.max(0.0);
-        let gap_cols = (gap_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
-        // An `:extend` face (region / hl-line) fills the trailing region with its
-        // background; produce the indicator INSIDE that fill so the highlight is
-        // continuous, mirroring GNU's `extend_face_to_end_of_line` which merges
-        // `fill-column-indicator` over the extend face at the indicator column.
-        let extend = row_extend
-            .value_on(row_geometry)
-            .copied()
-            .filter(|(bg, _)| *bg != frame_background);
-        let fill = match extend {
-            Some((extend_bg, extend_face_id)) => {
-                let mut char_face = self.resolve_named_face("fill-column-indicator");
-                char_face.bg = protocol_color_to_pixel(extend_bg);
-                char_face.use_default_background = false;
-                let indicator_face_id = crate::display_row::face_state::stable_face_id_for_resolved(
-                    face_ids, &char_face,
-                );
-                self.insert_resolved_face(indicator_face_id, &char_face);
-                let tail_px = (right_edge - (indicator_px + char_width)).max(0.0);
-                let tail_cols = (tail_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
-                FillColumnIndicatorFill {
-                    gap_px,
-                    gap_cols,
-                    gap_face_id: extend_face_id,
-                    indicator_char,
-                    indicator_face_id,
-                    tail_px,
-                    tail_cols,
-                    tail_face_id: extend_face_id,
-                    char_width,
-                    height_px,
-                    ascent_px,
-                }
-            }
-            None => {
-                // Plain row: the gap is transparent (fill-column-indicator has no
-                // background) and there is no tail past the indicator.
-                let fci = self.resolve_named_face("fill-column-indicator");
-                let face_id =
-                    crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &fci);
-                self.insert_resolved_face(face_id, &fci);
-                FillColumnIndicatorFill {
-                    gap_px,
-                    gap_cols,
-                    gap_face_id: face_id,
-                    indicator_char,
-                    indicator_face_id: face_id,
-                    tail_px: 0.0,
-                    tail_cols: 0,
-                    tail_face_id: face_id,
-                    char_width,
-                    height_px,
-                    ascent_px,
-                }
-            }
-        };
-        self.output_render
-            .produce_current_row_fill_column_indicator(fill);
-        true
+            .apply_current_row_mutation(resolved);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1453,11 +1163,3 @@ fn current_text_measure_state<'emit>(
         face_ids,
     )
 }
-
-#[cfg(test)]
-#[path = "trailing_whitespace_test.rs"]
-mod trailing_whitespace_tests;
-
-#[cfg(test)]
-#[path = "fill_column_indicator_test.rs"]
-mod fill_column_indicator_tests;

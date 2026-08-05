@@ -1071,7 +1071,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                 render_bounds.max_x().to_f32() - position.x_px(),
                 fallback_metrics,
                 row_face.background,
-                !self.measurement_mode.uses_concrete_font_geometry(),
+                self.measurement_mode,
             )
             .finalize(row, &row_faces);
         }

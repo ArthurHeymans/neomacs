@@ -7,8 +7,11 @@
 //! one narrow destination without mixing source acquisition into row policy.
 
 use crate::display_cursor::cursor_window_matches_current;
-use crate::display_item::{DisplayLineHeightPolicy, DisplayRowBreak, DisplayRowBreakReason};
-use crate::display_row::face_state::DisplayRowFace;
+use crate::display_item::{DisplayLineHeightPolicy, DisplayRowBreak};
+use crate::display_row::face_state::{DisplayRowFace, DisplayRowMeasurementMode};
+use crate::display_row::line_end::{
+    LineEndContext, LineEndExtend, LineEndFillGeometry, NoNamedLineEndFaces, plan,
+};
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::glyph_row_writer::push_stretch_to_area;
 use neomacs_display_protocol::frame_glyphs::PhysCursor;
@@ -29,14 +32,15 @@ pub(crate) struct DisplayRowLineEndFinalizer {
     remaining_width_px: f32,
     fallback_metrics: DisplayRowFallbackMetrics,
     base_background: Color,
-    /// GNU `append_space_for_newline` (xdisp.c:24122): on terminal frames
-    /// the space glyph appended at a real line end KEEPS the newline's
-    /// face (`it->face_id`), so a face spanning the newline -- e.g. a
-    /// font-lock comment -- paints its foreground on the end-of-line
-    /// cell. Window-system frames append with the DEFAULT face instead
-    /// (invisible, cursor-hosting only), which our GUI path already
-    /// covers without a glyph; so this is set only for terminal frames.
-    append_newline_space: bool,
+    /// GNU `append_space_for_newline` (xdisp.c:24122) appends the terminal
+    /// end-of-line glyph only for [`DisplayRowMeasurementMode::LogicalCells`]
+    /// rows: on terminal frames the appended space KEEPS the newline's face
+    /// (`it->face_id`), so a face spanning the newline -- e.g. a font-lock
+    /// comment -- paints its foreground on the end-of-line cell.
+    /// Window-system frames append with the DEFAULT face instead (invisible,
+    /// cursor-hosting only), which our GUI path already covers without a
+    /// glyph. The shared line-end seam encodes that rule.
+    measurement_mode: DisplayRowMeasurementMode,
 }
 
 impl DisplayRowLineEndFinalizer {
@@ -46,7 +50,7 @@ impl DisplayRowLineEndFinalizer {
         remaining_width_px: f32,
         fallback_metrics: DisplayRowFallbackMetrics,
         base_background: Color,
-        append_newline_space: bool,
+        measurement_mode: DisplayRowMeasurementMode,
     ) -> Self {
         Self {
             row_break,
@@ -54,7 +58,7 @@ impl DisplayRowLineEndFinalizer {
             remaining_width_px,
             fallback_metrics,
             base_background,
-            append_newline_space,
+            measurement_mode,
         }
     }
 
@@ -70,40 +74,45 @@ impl DisplayRowLineEndFinalizer {
             row.ascent_px = ascent;
         }
 
-        // GNU order at a line end: append_space_for_newline first, then
-        // extend_face_to_end_of_line (xdisp.c:26530-26533).
-        if self.append_newline_space
-            && self.row_break.reason == DisplayRowBreakReason::ExplicitNewline
-            && self.remaining_width_px > 0.0
-        {
-            let text_index = GlyphArea::Text.index();
-            let char_width = self.fallback_metrics.char_width().max(1.0);
-            row.glyphs[text_index].push(
-                Glyph::char(' ', self.row_break_face_id, NO_BUFFER_POSITION_CHARPOS)
-                    .with_pixel_width(char_width),
-            );
-        }
-
-        let Some(extend_face) = faces
+        // GNU order at a line end -- append_space_for_newline first, then
+        // extend_face_to_end_of_line (xdisp.c:26530-26533) -- decided by the
+        // shared line-end seam. The item renderer's context is the degenerate
+        // one: no fill-column indicator, no trailing-whitespace highlight.
+        let extend_face = faces
             .iter()
-            .find(|face| face.face_id == self.row_break_face_id && face.extend)
-        else {
-            return;
+            .find(|face| face.face_id == self.row_break_face_id && face.extend);
+        let ctx = LineEndContext {
+            reason: self.row_break.reason,
+            newline_face_id: self.row_break_face_id,
+            measurement_mode: self.measurement_mode,
+            pen_x: 0.0,
+            pen_col: 0,
+            right_edge_x: self.remaining_width_px,
+            char_width: self.fallback_metrics.char_width().max(1.0),
+            indicator: None,
+            extend: extend_face
+                .filter(|face| face.background != self.base_background)
+                .map(|face| LineEndExtend {
+                    bg: face.background,
+                    face_id: face.face_id,
+                }),
+            trailing_whitespace_enabled: false,
         };
-        if self.remaining_width_px <= 0.0 || extend_face.background == self.base_background {
-            return;
-        }
-        RowExtendFill::new(
-            extend_face.background,
-            extend_face.face_id,
-            self.remaining_width_px,
-            row.height_px.max(1.0),
-            row.ascent_px.max(0.0).min(row.height_px.max(1.0)),
-            extend_face
-                .metrics
-                .char_width_px(self.fallback_metrics.char_width()),
-        )
-        .apply_to(row);
+        let height_px = row.height_px.max(1.0);
+        let geometry = LineEndFillGeometry {
+            content_x: 0.0,
+            height_px,
+            ascent_px: row.ascent_px.max(0.0).min(height_px),
+            fill_char_width: extend_face
+                .map(|face| {
+                    face.metrics
+                        .char_width_px(self.fallback_metrics.char_width())
+                })
+                .unwrap_or_else(|| self.fallback_metrics.char_width()),
+        };
+        plan(&ctx)
+            .resolve(&ctx, geometry, &mut NoNamedLineEndFaces)
+            .apply_to(row);
     }
 }
 

@@ -11,12 +11,16 @@ use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info,
 };
+use crate::display_item::DisplayRowBreakReason;
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::builder::DisplayRowPosition;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
     DisplayRowScopedValue, DisplayRowYPositions,
+};
+use crate::display_row::line_end::{
+    LineEndContext, LineEndExtend, LineEndFillGeometry, LineEndIndicator,
 };
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
@@ -1615,77 +1619,42 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             row_position.x_px(),
             row_position.col(),
         );
-        // Re-face this line's trailing whitespace (show-trailing-whitespace)
-        // BEFORE the `:extend` fill: the fill appends a trailing stretch that the
-        // trailing-whitespace walk would otherwise sweep up and paint red past
-        // end-of-line. This is a real line end (a newline), so the run IS
-        // trailing.
-        source_render.highlight_trailing_whitespace(trailing_whitespace, face_ids);
+        // GNU order at a real newline (xdisp.c:26525-26533), decided by the
+        // shared line-end seam: trailing-whitespace highlight first (a real
+        // line end, so the run IS trailing, and it must precede the fills
+        // that would otherwise be swept up and painted red past end-of-line),
+        // then append_space_for_newline -- the appended glyph keeps the
+        // newline's face on a terminal frame, or becomes the fill-column
+        // indicator when the pen is exactly at the indicator column -- then
+        // the indicator / `:extend` fill from the advanced pen.
         {
             let metrics = context.active_face_state.metrics();
-            // GNU order at a real newline (xdisp.c:26525-26533):
-            // append_space_for_newline first -- the appended glyph keeps the
-            // newline's face on a terminal frame, or becomes the fill-column
-            // indicator when the pen is exactly at the indicator column --
-            // then the indicator / `:extend` fill from the advanced pen.
-            let (appended_newline_space, indicator_in_space) = source_render
-                .append_space_for_newline(
-                    context.active_face_state.face_id(),
-                    metrics.char_width(),
-                    context.append_surface.full_text_right_edge() - progress.row_progress().x(),
-                    progress.row_progress().col() as i64,
-                    context.fill_column_indicator,
-                    context.fill_column_indicator_char,
-                    row_extend,
-                    row_geometry,
-                    context.frame_background,
-                    face_ids,
-                );
-            let eol_pen_x = progress.row_progress().x()
-                + if appended_newline_space {
-                    metrics.char_width()
-                } else {
-                    0.0
-                };
-            // R2L (reversed_p) is read from the GlyphRow inside the mutation,
-            // which is the authoritative source; pass `false` here. R2L rows are
-            // a documented limitation (the fill is suppressed for them).
-            // `display-fill-column-indicator`: produce the indicator glyph in the
-            // trailing region (GNU extend_face_to_end_of_line, xdisp.c:24752). It
-            // takes over the whole trailing fill when it applies — including
-            // splitting an `:extend` highlight (region / hl-line) around the
-            // indicator so the highlight stays continuous — so only run the plain
-            // extend fill when the indicator did NOT apply (disabled, or the row
-            // text already reached/passed the column).
-            let produced_indicator = indicator_in_space
-                || source_render.produce_fill_column_indicator(
-                    context.fill_column_indicator,
-                    context.fill_column_indicator_char,
-                    progress.row_progress().col() as i64,
-                    context.content_x,
-                    metrics.char_width(),
-                    eol_pen_x,
-                    context.append_surface.full_text_right_edge(),
-                    row_extend,
-                    row_geometry,
-                    context.frame_background,
-                    metrics.row_height(),
-                    metrics.ascent(),
-                    face_ids,
-                );
-            if !produced_indicator {
-                source_render.extend_face_to_end_of_line(
-                    row_extend,
-                    row_geometry,
-                    eol_pen_x,
-                    context.append_surface.full_text_right_edge(),
-                    context.frame_background,
-                    false,
-                    metrics.row_height(),
-                    metrics.ascent(),
-                    metrics.char_width(),
-                );
-            }
+            let line_end_ctx = LineEndContext {
+                reason: DisplayRowBreakReason::ExplicitNewline,
+                newline_face_id: context.active_face_state.face_id(),
+                measurement_mode: source_render.measurement_mode(),
+                pen_x: progress.row_progress().x(),
+                pen_col: progress.row_progress().col() as i64,
+                right_edge_x: context.append_surface.full_text_right_edge(),
+                char_width: metrics.char_width(),
+                indicator: (context.fill_column_indicator >= 0).then(|| LineEndIndicator {
+                    col: context.fill_column_indicator,
+                    ch: context.fill_column_indicator_char,
+                }),
+                extend: row_extend
+                    .value_on(row_geometry)
+                    .copied()
+                    .filter(|(bg, _)| *bg != context.frame_background)
+                    .map(|(bg, face_id)| LineEndExtend { bg, face_id }),
+                trailing_whitespace_enabled: trailing_whitespace.is_enabled(),
+            };
+            let line_end_geometry = LineEndFillGeometry {
+                content_x: context.content_x,
+                height_px: metrics.row_height(),
+                ascent_px: metrics.ascent(),
+                fill_char_width: metrics.char_width(),
+            };
+            source_render.render_line_end(&line_end_ctx, line_end_geometry, face_ids);
         }
         line_break_action.apply_before_row_transition(
             row_geometry,
