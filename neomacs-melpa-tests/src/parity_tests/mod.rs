@@ -371,6 +371,7 @@ mod package_build;
 mod package_lifecycle;
 mod package_lint;
 mod package_vc;
+mod packed;
 mod paradox;
 mod paredit;
 mod parent_mode;

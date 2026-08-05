@@ -1970,6 +1970,13 @@ pub const GIT_MELPA_PIN: (&str, &str) = ("git", "20140128.1041");
 /// `36d2fe3bcf602e15ca10a7f487da103515ef391a`.
 pub const EVAL_SEXP_FU_MELPA_PIN: (&str, &str) = ("eval-sexp-fu", "20191128.825");
 
+/// The exact final Packed package selected for practical library discovery,
+/// main-library inference, feature/dependency parsing, load-path management,
+/// source lookup, byte-compilation, and autoload parity. MELPA built this
+/// historical archive from upstream commit
+/// `169064f7acfe198cc7dd43d02518b773691e1314` before retiring the package.
+pub const PACKED_MELPA_PIN: (&str, &str) = ("packed", "20221130.2228");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream
