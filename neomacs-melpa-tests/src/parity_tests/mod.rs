@@ -320,6 +320,7 @@ mod evil_nerd_commenter;
 mod evil_numbers;
 mod evil_surround;
 mod evil_tutor;
+mod evil_visual_mark_mode;
 mod evil_visualstar;
 mod exec_path_from_shell;
 mod expand_region;

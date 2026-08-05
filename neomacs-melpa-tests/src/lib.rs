@@ -1969,6 +1969,12 @@ pub const DASH_MELPA_PIN: (&str, &str) = ("dash", "20260221.1346");
 /// The exact Evil package selected by the comprehensive API parity corpus.
 pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 
+/// The exact Evil Visual Mark Mode package selected for practical local and
+/// global mark rendering, live edit tracking, state visibility, deletion, and
+/// lifecycle parity. MELPA built this archive from upstream commit
+/// `2bbaaae56ae53e68a8bcc7bc2cfe830a14843b4d`.
+pub const EVIL_VISUAL_MARK_MODE_MELPA_PIN: (&str, &str) = ("evil-visual-mark-mode", "20230202.318");
+
 /// The exact Evil Collection package selected for practical deferred setup,
 /// Calendar, Dired, Help, compilation, binding-policy, and button-dispatch
 /// parity. MELPA built this archive from upstream commit
