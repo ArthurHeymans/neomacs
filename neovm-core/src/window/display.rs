@@ -615,11 +615,9 @@ impl FrameManager {
         if let Some(Window::Leaf {
             buffer_id: leaf_buffer_id,
             window_start: leaf_window_start,
-            start_marker_id,
+            position_markers,
             point: leaf_point,
-            point_marker_id,
             old_point,
-            old_point_marker_id,
             hscroll,
             min_hscroll,
             suspend_auto_hscroll,
@@ -633,12 +631,10 @@ impl FrameManager {
         {
             *leaf_buffer_id = buffer_id;
             *leaf_window_start = window_start.max(LispCharPos1::ONE);
-            *start_marker_id = None;
+            *position_markers = super::WindowPositionMarkerState::Detached;
             *leaf_point = point.max(LispCharPos1::ONE);
-            *point_marker_id = None;
             if !preserve_display_state {
                 *old_point = point.max(LispCharPos1::ONE);
-                *old_point_marker_id = None;
                 *hscroll = 0;
                 // GNU resets the auto-hscroll lower bound and clears the
                 // suspend flag on buffer switch (src/window.c:4368).

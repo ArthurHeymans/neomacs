@@ -790,17 +790,13 @@ fn ensure_selected_frame_id_in_state_with_policy(
         {
             let sel = frame.selected_window;
             if let Some(w) = frame.find_window_mut(sel) {
-                crate::window::window_markers::create_window_markers(buffers, w, buf_id);
+                crate::window::window_markers::attach_window_position_markers(buffers, w);
             }
         }
         if let Some(minibuffer_leaf) = frame.minibuffer_leaf.as_mut() {
             minibuffer_leaf.set_buffer(minibuffer_buf_id);
             minibuffer_leaf.set_bounds(Rect::new(0.0, 24.0, 80.0, 1.0));
-            crate::window::window_markers::create_window_markers(
-                buffers,
-                minibuffer_leaf,
-                minibuffer_buf_id,
-            );
+            crate::window::window_markers::attach_window_position_markers(buffers, minibuffer_leaf);
         }
         frame.recalculate_minibuffer_bounds();
     }
@@ -3913,7 +3909,7 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
     if let Some(frame) = frames.get_mut(fid)
         && let Some(new_window) = frame.find_window_mut(new_wid)
     {
-        crate::window::window_markers::create_window_markers(buffers, new_window, buf_id);
+        crate::window::window_markers::attach_window_position_markers(buffers, new_window);
     }
 
     // GNU `Fsplit_window_internal` (`src/window.c:5517-5644`)
@@ -4667,7 +4663,7 @@ pub(crate) fn builtin_set_window_buffer(
         if let Some(frame) = frames.get_mut(fid)
             && let Some(window) = frame.find_window_mut(wid)
         {
-            super::super::window::window_markers::create_window_markers(buffers, window, buf_id);
+            super::super::window::window_markers::attach_window_position_markers(buffers, window);
         }
         if selected_window == Some(wid)
             && let Some(buffer) = buffers.get_mut(buf_id)
@@ -6262,6 +6258,7 @@ pub(crate) fn make_frame_plain(
             frame.sync_menu_bar_height_from_parameters();
             frame.sync_tool_bar_height_from_parameters();
             frame.sync_window_area_bounds();
+            crate::window::window_markers::attach_frame_window_position_markers(buffers, frame);
             tracing::debug!(
                 "make_frame_plain: created tty child frame {:?} parent={:?} pos={}x{} size={}x{}",
                 fid,
@@ -6300,6 +6297,7 @@ pub(crate) fn make_frame_plain(
         frame.sync_tab_bar_height_from_parameters();
         frame.sync_menu_bar_height_from_parameters();
         frame.sync_tool_bar_height_from_parameters();
+        crate::window::window_markers::attach_frame_window_position_markers(buffers, frame);
     }
     tracing::debug!(
         "make_frame_plain: created plain frame {:?} size={}x{} name={}",
@@ -6689,6 +6687,7 @@ pub(crate) fn x_create_frame_impl(
         frame.sync_menu_bar_height_from_parameters();
         frame.sync_tool_bar_height_from_parameters();
         frame.sync_window_area_bounds();
+        crate::window::window_markers::attach_frame_window_position_markers(buffers, frame);
     }
     if let Some(font_value) = explicit_font_value {
         super::font::sync_live_frame_font_parameter_in_state(frames, display_host, fid, font_value);

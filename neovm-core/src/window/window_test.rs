@@ -1903,7 +1903,7 @@ fn window_start_marker_stays_before_insert_at_start() {
         let window = frame
             .find_window_mut(selected_window)
             .expect("selected window");
-        crate::window::window_markers::create_window_markers(&mut buffers, window, buffer_id);
+        crate::window::window_markers::attach_window_position_markers(&mut buffers, window);
     }
 
     buffers

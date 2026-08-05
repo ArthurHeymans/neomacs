@@ -9516,7 +9516,8 @@ impl Context {
         buffer_id: crate::buffer::BufferId,
     ) {
         let root = &mut self.frames.get_mut(frame_id).unwrap().root_window;
-        crate::window::window_markers::create_window_markers(&mut self.buffers, root, buffer_id);
+        debug_assert_eq!(root.buffer_id(), Some(buffer_id));
+        crate::window::window_markers::attach_window_position_markers(&mut self.buffers, root);
     }
 
     pub fn create_window_markers_for_minibuffer(
@@ -9531,11 +9532,8 @@ impl Context {
             .minibuffer_leaf
             .as_mut();
         if let Some(mini) = mini {
-            crate::window::window_markers::create_window_markers(
-                &mut self.buffers,
-                mini,
-                buffer_id,
-            );
+            debug_assert_eq!(mini.buffer_id(), Some(buffer_id));
+            crate::window::window_markers::attach_window_position_markers(&mut self.buffers, mini);
         }
     }
 
@@ -9613,10 +9611,9 @@ impl Context {
         if let Some(frame) = self.frames.get_mut(frame_id) {
             if let Some(window) = frame.find_window_mut(minibuffer_window_id) {
                 window.set_buffer(minibuf_id);
-                crate::window::window_markers::create_window_markers(
+                crate::window::window_markers::attach_window_position_markers(
                     &mut self.buffers,
                     window,
-                    minibuf_id,
                 );
             }
             let _ = frame.select_window(minibuffer_window_id);

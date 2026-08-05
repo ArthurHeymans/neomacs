@@ -14821,6 +14821,175 @@ fn layout_frame_rust_renders_row_start_before_string_at_point_min() {
     );
 }
 
+/// Regression: Vertico deliberately calls `redisplay` after an input edit but
+/// before recomputing its candidates.  A posframe therefore temporarily shows
+/// the edited minibuffer buffer together with the previous EOB candidate
+/// `before-string`.  The child-frame root is a structurally ordinary,
+/// non-selected window, but its viewport must still begin at BOB: EOB is the
+/// insertion boundary whose overlay carries the cursor, not a request to throw
+/// away the prompt row.
+#[test]
+fn child_frame_redisplay_after_eob_delete_keeps_vertico_prompt_row() {
+    let mut eval = Context::new();
+    let parent_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("parent buffer")
+        .id();
+    let minibuffer = eval
+        .buffer_manager_mut()
+        .create_buffer(" *Minibuf-vertico-child*");
+
+    let input = "M-x ifconfig";
+    let candidate = Value::string_with_text_properties(
+        " \n ▶ ifconfig │Run shell command",
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![Value::symbol("cursor"), Value::T]),
+        }],
+    );
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(minibuffer)
+            .expect("minibuffer");
+        buffer.insert(input);
+
+        let count_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(minibuffer),
+            start: 0,
+            end: 0,
+            front_advance: true,
+            rear_advance: true,
+        });
+        buffer.overlays_mut().insert_overlay(count_overlay);
+        let _ = buffer.overlays_mut().overlay_put(
+            count_overlay,
+            Value::symbol("before-string"),
+            Value::string(" 1/1     "),
+        );
+
+        let eob = buffer.point_max_emacs_byte_pos().get();
+        let candidates_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(minibuffer),
+            start: eob,
+            end: eob,
+            front_advance: true,
+            rear_advance: true,
+        });
+        buffer.overlays_mut().insert_overlay(candidates_overlay);
+        let _ = buffer.overlays_mut().overlay_put(
+            candidates_overlay,
+            Value::symbol("before-string"),
+            candidate,
+        );
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(eob));
+    }
+
+    let parent_frame =
+        eval.frame_manager_mut()
+            .create_frame("vertico-parent", 1200, 800, parent_buffer);
+    let child_frame = eval
+        .frame_manager_mut()
+        .create_frame("vertico-child", 1000, 376, minibuffer);
+    eval.create_window_markers_for_root(parent_frame, parent_buffer);
+    eval.create_window_markers_for_root(child_frame, minibuffer);
+    eval.frame_manager_mut()
+        .get_mut(child_frame)
+        .expect("child frame")
+        .parent_frame = Value::make_frame(parent_frame.0);
+    assert!(eval.frame_manager_mut().select_frame(parent_frame));
+    let child_window = eval
+        .frame_manager()
+        .get(child_frame)
+        .expect("child frame")
+        .selected_window;
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-point"),
+        Value::make_window(child_window.0),
+        Value::fixnum(input.len() as i64 + 1),
+    ]))
+    .expect("put the child window point at minibuffer EOB");
+    let child_window_start = |eval: &Context| match eval
+        .frame_manager()
+        .get(child_frame)
+        .expect("child frame")
+        .find_window(child_window)
+        .expect("child window")
+    {
+        neovm_core::window::Window::Leaf { window_start, .. } => *window_start,
+        other => panic!("expected child leaf window, got {other:?}"),
+    };
+    let initial_window_start = child_window_start(&eval);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, child_frame);
+    let warm_window_start = child_window_start(&eval);
+    let warm_rows = enabled_window_row_texts(
+        engine
+            .last_frame_display_state
+            .as_ref()
+            .expect("warm child display")
+            .window_matrices
+            .iter()
+            .find(|entry| entry.window_id.get() == child_window.0 as i64)
+            .expect("warm child matrix"),
+    );
+    assert!(
+        warm_rows.iter().any(|row| row.contains("M-x ifconfig")),
+        "the warm child frame must show the minibuffer prompt, rows={warm_rows:?}"
+    );
+
+    // The real completion session allocates enough to collect between
+    // posframe setup and a later Backspace. A live child window must keep its
+    // three position markers rooted; otherwise GC silently unchains pointm,
+    // leaving the cached pre-delete EOB for the immediate redisplay below.
+    eval.eval_str("(garbage-collect)")
+        .expect("collect while the child frame is live");
+
+    // Model Vertico's interruptible update: self-insert/delete changed the
+    // minibuffer and moved the zero-length EOB overlay, then Vertico performs
+    // an immediate redisplay while that overlay still contains the old
+    // candidate presentation.
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(minibuffer)
+            .expect("minibuffer");
+        let eob = buffer.point_max_emacs_byte_pos().get();
+        buffer.delete_emacs_byte_range(emacs_byte_range(eob - 1, eob));
+    }
+    eval.sync_window_positions(minibuffer);
+    let pre_delete_redisplay_window_start = child_window_start(&eval);
+    engine.layout_frame_rust(&mut eval, child_frame);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("post-delete child display");
+    let published_window_start = child_window_start(&eval);
+    let rows = enabled_window_row_texts(
+        state
+            .window_matrices
+            .iter()
+            .find(|entry| entry.window_id.get() == child_window.0 as i64)
+            .expect("post-delete child matrix"),
+    );
+    assert!(
+        rows.iter().any(|row| row.contains("M-x ifconfi")),
+        "an immediate child-frame redisplay must keep the edited minibuffer prompt; \
+         publishing only the EOB candidate overlay causes the visible blink, \
+         window_starts=(initial={initial_window_start:?}, warm={warm_window_start:?}, \
+         before-delete-redisplay={pre_delete_redisplay_window_start:?}, \
+         published={published_window_start:?}), rows={rows:?}"
+    );
+}
+
 #[test]
 fn layout_frame_rust_renders_magit_blame_heading_before_string_with_trailing_newline() {
     let mut eval = Context::new();

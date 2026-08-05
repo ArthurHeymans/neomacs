@@ -4533,6 +4533,167 @@ fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_windo
 }
 
 #[test]
+fn x_create_frame_root_window_positions_follow_buffer_edits() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let input = "M-x ifconfig";
+    let scratch = ev.buffers.create_buffer("*x-child-marker*");
+    ev.buffers.set_current(scratch);
+    ev.buffers.insert_into_buffer(scratch, input);
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+    }
+    ev.frames.select_frame(parent_id);
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(
+        created
+            .as_frame_id()
+            .unwrap_or_else(|| panic!("expected frame object, got {:?}", created)),
+    );
+    let old_end = LispCharPos1::from_one_based_usize(input.chars().count() + 1);
+    {
+        let child = ev.frames.get_mut(child_id).expect("child frame");
+        crate::window::window_markers::set_window_point_with_marker(
+            &mut ev.buffers,
+            &mut child.root_window,
+            old_end,
+        );
+    }
+
+    // Backspace at EOB moves GNU's w->pointm marker with the deletion.  A
+    // child frame must therefore observe the new EOB before its next
+    // redisplay, without waiting for a later `set-window-point` call.
+    ev.buffers
+        .get_mut(scratch)
+        .expect("child buffer")
+        .delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            input.len() - 1,
+            input.len(),
+        ));
+    ev.sync_window_positions(scratch);
+
+    let child = ev.frames.get(child_id).expect("child frame");
+    let crate::window::Window::Leaf {
+        point,
+        position_markers,
+        ..
+    } = &child.root_window
+    else {
+        panic!("fresh frame root must be a live leaf window");
+    };
+    assert!(
+        position_markers.is_attached(),
+        "x-create-frame must atomically attach all GNU window-position markers"
+    );
+    assert_eq!(
+        *point,
+        LispCharPos1::from_one_based_usize(input.chars().count()),
+        "the child window point must follow deletion of the character before EOB"
+    );
+}
+
+#[test]
+fn x_create_frame_root_window_position_markers_survive_garbage_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let input = "M-x ifconfig";
+    let minibuffer = ev.buffers.create_buffer(" *Minibuf-vertico-gc*");
+    ev.buffers.set_current(minibuffer);
+    ev.buffers.insert_into_buffer(minibuffer, input);
+
+    let parent_id = ev
+        .frames
+        .create_frame("vertico-parent", 960, 640, minibuffer);
+    let parent_minibuffer = ev
+        .frames
+        .get(parent_id)
+        .expect("parent frame")
+        .selected_window;
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+        parent.minibuffer_window = Some(parent_minibuffer);
+    }
+    ev.frames.select_frame(parent_id);
+
+    // This is the shape used by posframe: a child frame with no minibuffer of
+    // its own, sharing the parent's minibuffer window, whose ordinary root
+    // window displays that same minibuffer buffer.
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(
+            Value::symbol("minibuffer"),
+            Value::make_window(parent_minibuffer.0),
+        ),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(
+        created
+            .as_frame_id()
+            .unwrap_or_else(|| panic!("expected frame object, got {created:?}")),
+    );
+    let child_window = ev
+        .frames
+        .get(child_id)
+        .expect("child frame")
+        .selected_window;
+    super::builtin_set_window_buffer(
+        &mut ev,
+        vec![
+            Value::make_window(child_window.0),
+            Value::make_buffer(minibuffer),
+        ],
+    )
+    .expect("set child root buffer");
+    super::builtin_set_window_point(
+        &mut ev,
+        vec![
+            Value::make_window(child_window.0),
+            Value::fixnum(input.chars().count() as i64 + 1),
+        ],
+    )
+    .expect("set child point to minibuffer EOB");
+
+    // Completion allocates heavily between posframe creation and the next
+    // edit.  GNU's live Window roots w->start/pointm/old_pointm, so a
+    // collection cannot unlink them from the buffer marker chain.
+    ev.eval_str("(garbage-collect)")
+        .expect("collect while the child frame remains live");
+
+    ev.buffers
+        .get_mut(minibuffer)
+        .expect("minibuffer")
+        .delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(
+            input.len() - 1,
+            input.len(),
+        ));
+    ev.sync_window_positions(minibuffer);
+
+    let child = ev.frames.get(child_id).expect("child frame");
+    let crate::window::Window::Leaf { point, .. } = &child.root_window else {
+        panic!("child root must remain a live leaf window");
+    };
+    assert_eq!(
+        *point,
+        LispCharPos1::from_one_based_usize(input.chars().count()),
+        "a live child window must keep its point marker rooted across GC so a Backspace edit moves it to the new EOB"
+    );
+}
+
+#[test]
 fn x_create_frame_with_parent_frame_inherits_parent_font_state() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

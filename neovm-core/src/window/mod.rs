@@ -646,6 +646,123 @@ fn redisplay_f32_bits(value: f32) -> u32 {
 // Window
 // ---------------------------------------------------------------------------
 
+/// Marker handles have distinct roles in GNU's live-window invariant. Keeping
+/// those roles as separate types prevents accidentally moving (for example)
+/// `w->start` when a caller intended to move `w->pointm`.
+///
+/// Each handle owns both the internal chain ID and the Lisp marker value that
+/// roots its `MarkerObj` for precise GC. A numeric ID alone is not ownership:
+/// the buffer's intrusive marker chain is deliberately weak and GC unlinks
+/// unmarked entries before sweeping them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowStartMarker {
+    id: u64,
+    gc_root: Value,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowPointMarker {
+    id: u64,
+    gc_root: Value,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowOldPointMarker {
+    id: u64,
+    gc_root: Value,
+}
+
+/// The complete marker set owned by one live leaf window.
+///
+/// The fields are intentionally private: construction is atomic through the
+/// window-marker lifecycle module, so a window cannot represent a partially
+/// attached `(start, point, old-point)` marker set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AttachedWindowPositionMarkers {
+    start: WindowStartMarker,
+    point: WindowPointMarker,
+    old_point: WindowOldPointMarker,
+}
+
+/// Marker lifecycle for a leaf window.
+///
+/// Fresh structural nodes may be detached while their buffer is being chosen;
+/// every live frame/window factory must transition them to `Attached` before
+/// publishing the window.  One enum replaces three independent `Option`s and
+/// makes all partial attachment states unrepresentable.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WindowPositionMarkerState {
+    #[default]
+    Detached,
+    Attached(AttachedWindowPositionMarkers),
+}
+
+impl WindowPositionMarkerState {
+    pub const fn is_attached(self) -> bool {
+        matches!(self, Self::Attached(_))
+    }
+
+    fn attached(self) -> Option<AttachedWindowPositionMarkers> {
+        match self {
+            Self::Detached => None,
+            Self::Attached(markers) => Some(markers),
+        }
+    }
+
+    fn detach(&mut self) -> Option<AttachedWindowPositionMarkers> {
+        std::mem::take(self).attached()
+    }
+
+    fn trace_roots(self, roots: &mut Vec<Value>) {
+        if let Self::Attached(markers) = self {
+            markers.trace_roots(roots);
+        }
+    }
+}
+
+impl AttachedWindowPositionMarkers {
+    fn new(start: (u64, Value), point: (u64, Value), old_point: (u64, Value)) -> Self {
+        Self {
+            start: WindowStartMarker {
+                id: start.0,
+                gc_root: start.1,
+            },
+            point: WindowPointMarker {
+                id: point.0,
+                gc_root: point.1,
+            },
+            old_point: WindowOldPointMarker {
+                id: old_point.0,
+                gc_root: old_point.1,
+            },
+        }
+    }
+
+    fn trace_roots(self, roots: &mut Vec<Value>) {
+        roots.push(self.start.gc_root);
+        roots.push(self.point.gc_root);
+        roots.push(self.old_point.gc_root);
+    }
+}
+
+impl WindowStartMarker {
+    const fn raw(self) -> u64 {
+        self.id
+    }
+}
+
+impl WindowPointMarker {
+    const fn raw(self) -> u64 {
+        self.id
+    }
+}
+
+impl WindowOldPointMarker {
+    const fn raw(self) -> u64 {
+        self.id
+    }
+}
+
 /// A window in the window tree.
 #[derive(Clone, Debug)]
 // Window nodes own their complete leaf/split state and are cloned as snapshots;
@@ -662,35 +779,29 @@ pub enum Window {
         ///
         /// GNU Emacs stores this as a marker (`w->start`) so that buffer
         /// edits before the start position auto-shift it.  neomacs now
-        /// maintains a real marker (`start_marker_id`) alongside this
+        /// maintains a real marker in `position_markers` alongside this
         /// cached Lisp-visible position.  The cache is refreshed from the marker
         /// by `sync_window_positions_from_markers` after every text edit,
         /// and on every explicit position write.  All read sites continue
         /// to use this typed cache for zero-cost reads.
         window_start: LispCharPos1,
-        /// Marker id backing `window_start`.  `None` until the window is
-        /// attached to a buffer via `create_window_markers`.
-        start_marker_id: Option<u64>,
+        /// Atomic ownership state for GNU's `start`, `pointm`, and
+        /// `old_pointm` markers.
+        position_markers: WindowPositionMarkerState,
         /// Last atomically published window-end record and its freshness.
         window_end: WindowEndState,
         /// Cached cursor (point) position in this window.
         ///
         /// GNU Emacs stores this as a marker (`w->pointm`) so that buffer
         /// insertions before the position auto-shift it.  neomacs now
-        /// maintains a real marker (`point_marker_id`) alongside this
+        /// maintains a real marker in `position_markers` alongside this
         /// cached Lisp-visible position.  The cache is refreshed from the marker
         /// after every text edit.  For the selected window, reads should
         /// prefer `buffer.pt` directly (GNU fast path); this cached value
         /// is authoritative for non-selected windows.
         point: LispCharPos1,
-        /// Marker id backing `point`.  `None` until the window is
-        /// attached to a buffer via `create_window_markers`.
-        point_marker_id: Option<u64>,
         /// Cached previous point value mirrored from GNU `w->old_pointm`.
         old_point: LispCharPos1,
-        /// Marker id backing `old_point`.  `None` until the window is
-        /// attached to a buffer via `create_window_markers`.
-        old_point_marker_id: Option<u64>,
         /// Mirror GNU `w->dedicated`: the dedication flag value.
         /// nil = not dedicated, t = strongly dedicated,
         /// side = side-window dedication (blocks display-buffer reuse but
@@ -820,12 +931,10 @@ impl Window {
             buffer_id,
             bounds,
             window_start: LispCharPos1::ONE,
-            start_marker_id: None,
+            position_markers: WindowPositionMarkerState::Detached,
             window_end: WindowEndState::Unrecorded,
             point: LispCharPos1::ONE,
-            point_marker_id: None,
             old_point: LispCharPos1::ONE,
-            old_point_marker_id: None,
             dedicated: Value::NIL,
             parameters: Vec::new(),
             history: WindowHistoryState::default(),
@@ -1224,11 +1333,9 @@ impl Window {
         if let Window::Leaf {
             buffer_id,
             window_start,
-            start_marker_id,
+            position_markers,
             window_end,
             point,
-            point_marker_id,
-            old_point_marker_id,
             min_hscroll,
             suspend_auto_hscroll,
             ..
@@ -1236,11 +1343,9 @@ impl Window {
         {
             *buffer_id = new_id;
             *window_start = LispCharPos1::ONE;
-            *start_marker_id = None;
+            *position_markers = WindowPositionMarkerState::Detached;
             *window_end = WindowEndState::Unrecorded;
             *point = LispCharPos1::ONE;
-            *point_marker_id = None;
-            *old_point_marker_id = None;
             // GNU resets the auto-hscroll lower bound and the suspend flag on
             // every buffer switch (`unshow_buffer`, src/window.c:4368). The
             // `hscroll` reset itself is handled by the caller's normal
@@ -4303,12 +4408,10 @@ fn split_window_in_tree(
                 parameters,
                 history,
                 window_start,
-                start_marker_id,
+                position_markers,
                 window_end,
                 point,
-                point_marker_id,
                 old_point,
-                old_point_marker_id,
                 vscroll,
                 preserve_vscroll_p,
                 ..
@@ -4330,20 +4433,18 @@ fn split_window_in_tree(
                 } else {
                     LispCharPos1::ONE
                 };
-                *start_marker_id = None;
+                *position_markers = WindowPositionMarkerState::Detached;
                 *window_end = WindowEndState::Unrecorded;
                 *point = if same_buffer {
                     inherited_point
                 } else {
                     LispCharPos1::ONE
                 };
-                *point_marker_id = None;
                 *old_point = if same_buffer {
                     inherited_old_point
                 } else {
                     LispCharPos1::ONE
                 };
-                *old_point_marker_id = None;
                 *vscroll = if same_buffer { inherited_vscroll } else { 0 };
                 *preserve_vscroll_p = same_buffer && inherited_preserve_vscroll_p;
             }
@@ -4637,7 +4738,7 @@ fn split_window_in_tree(
                         bounds,
                         parameters,
                         window_start,
-                        start_marker_id,
+                        position_markers,
                         window_end,
                         ..
                     } = &mut new_leaf
@@ -4647,7 +4748,7 @@ fn split_window_in_tree(
                         *bounds = new_leaf_bounds;
                         parameters.clear();
                         *window_start = LispCharPos1::ONE;
-                        *start_marker_id = None;
+                        *position_markers = WindowPositionMarkerState::Detached;
                         *window_end = WindowEndState::Unrecorded;
                     }
 
@@ -5324,7 +5425,15 @@ impl GcTrace for FrameManager {
 impl GcTrace for Window {
     fn trace_roots(&self, roots: &mut Vec<Value>) {
         match self {
-            Window::Leaf { display, .. } => {
+            Window::Leaf {
+                position_markers,
+                display,
+                ..
+            } => {
+                // GNU's `mark_window` traces w->start, w->pointm, and
+                // w->old_pointm. The buffer marker chain is weak, so the live
+                // window itself must keep the corresponding MarkerObjs alive.
+                position_markers.trace_roots(roots);
                 for (key, value) in self.parameters() {
                     roots.push(*key);
                     roots.push(*value);

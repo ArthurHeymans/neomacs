@@ -337,7 +337,8 @@ fn activate_minibuffer_window_in_state(
     if let Some(frame) = frames.get_mut(frame_id) {
         if let Some(window) = frame.find_window_mut(minibuffer_window_id) {
             window.set_buffer(minibuf_id);
-            crate::window::window_markers::create_window_markers(buffers, window, minibuf_id);
+            debug_assert_eq!(window.buffer_id(), Some(minibuf_id));
+            crate::window::window_markers::attach_window_position_markers(buffers, window);
         }
         let _ = frame.select_window(minibuffer_window_id);
     }
@@ -373,7 +374,8 @@ fn restore_minibuffer_window_in_state(
             && let Some(prev_buffer_id) = saved.previous_minibuffer_buffer
         {
             window.set_buffer(prev_buffer_id);
-            crate::window::window_markers::create_window_markers(buffers, window, prev_buffer_id);
+            debug_assert_eq!(window.buffer_id(), Some(prev_buffer_id));
+            crate::window::window_markers::attach_window_position_markers(buffers, window);
             crate::window::window_markers::set_window_start_with_marker(
                 buffers,
                 window,
