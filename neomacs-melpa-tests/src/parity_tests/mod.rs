@@ -466,6 +466,7 @@ mod web_mode;
 mod websocket;
 mod wfnames;
 mod which_key;
+mod winum;
 mod with_editor;
 mod ws_butler;
 mod xcscope;

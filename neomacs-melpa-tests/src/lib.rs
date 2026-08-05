@@ -2572,6 +2572,12 @@ pub const WHICH_KEY_MELPA_PIN: (&str, &str) = ("which-key", "20240620.2145");
 /// corpus.
 pub const WITH_EDITOR_MELPA_PIN: (&str, &str) = ("with-editor", "20260701.1252");
 
+/// The exact Winum package selected for practical numbered-layout, selection,
+/// deletion, custom-assignment, keymap, mode-line, and live-update parity.
+/// MELPA built this archive from upstream commit
+/// `098249c65042ee0308b8236d1ee838c8da8fdf25`.
+pub const WINUM_MELPA_PIN: (&str, &str) = ("winum", "20190911.1607");
+
 /// Resolve the checkout used by a normal Cargo run or an extracted Nextest
 /// archive.
 pub fn workspace_root() -> PathBuf {
