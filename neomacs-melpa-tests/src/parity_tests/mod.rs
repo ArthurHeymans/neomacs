@@ -344,6 +344,7 @@ mod git;
 mod git_commit;
 mod git_timemachine;
 mod gitconfig_mode;
+mod gitignore_mode;
 mod gntp;
 mod go_mode;
 mod golden_ratio;
