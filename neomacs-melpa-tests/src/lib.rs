@@ -1975,6 +1975,12 @@ pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 /// `fa8da0ebba4bbf2a84a78183420d8303179ef427`.
 pub const EVIL_COLLECTION_MELPA_PIN: (&str, &str) = ("evil-collection", "20260729.1654");
 
+/// The exact DAP Mode package selected for practical wire framing, protocol
+/// messages, live breakpoints, launch templates, variable expansion,
+/// launch.json, and output-session parity. MELPA built this archive from
+/// upstream commit `c73a587d613788003986a11ffe393b46affe8322`.
+pub const DAP_MODE_MELPA_PIN: (&str, &str) = ("dap-mode", "20260616.1526");
+
 /// The exact Evil Lisp State package selected for real Evil-state lifecycle,
 /// leader dispatch, Smartparens structural edits, insertion, navigation, and
 /// evaluation parity. MELPA built this archive from upstream commit

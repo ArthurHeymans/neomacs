@@ -284,6 +284,7 @@ mod cond_let;
 mod consult;
 mod counsel;
 mod csv_mode;
+mod dap_mode;
 mod dash;
 mod datetime_format;
 mod ddskk;
