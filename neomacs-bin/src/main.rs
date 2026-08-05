@@ -88,13 +88,13 @@ cfg_select! {
 }
 
 mod args;
+pub(crate) mod frame_layout;
 mod image_catalog;
 mod input_bridge;
 mod termcap_input;
 pub(crate) mod terminal_capabilities;
 pub(crate) mod tty_frontend;
 pub(crate) mod tty_init;
-pub(crate) mod tty_layout;
 
 use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
@@ -2986,7 +2986,7 @@ fn run_gui_evaluator_worker(
     evaluator.init_input_system(input_rx);
     install_diagnostics_eval_hooks(&mut evaluator);
 
-    tty_layout::LAYOUT_ENGINE.with(|engine| {
+    frame_layout::LAYOUT_ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         engine.enable_cosmic_metrics();
         engine.set_font_sizing(bootstrap_display.font_sizing);
@@ -2997,8 +2997,8 @@ fn run_gui_evaluator_worker(
     evaluator.redisplay_fn = Some(Box::new(move |eval: &mut Context| {
         publish_gui_frame(eval, &frame_tx, Some(&redisplay_waker));
     }));
-    tty_layout::install_frame_snapshot_fn(&mut evaluator);
-    tty_layout::install_window_layout_query_fn(&mut evaluator);
+    frame_layout::install_frame_snapshot_fn(&mut evaluator);
+    frame_layout::install_window_layout_query_fn(&mut evaluator);
     publish_gui_frame(&mut evaluator, &initial_frame_tx, Some(&render_waker));
 
     if let Some(buf) = evaluator.buffer_manager_mut().current_buffer_mut() {
@@ -3510,7 +3510,7 @@ pub fn run(mode: RuntimeMode) {
     }
 
     // 8. Set up redisplay callback (layout engine + TTY RIF render).
-    tty_layout::install_tty_redisplay_callback_with_popup_redraw(
+    frame_layout::install_tty_redisplay_callback_with_popup_redraw(
         &mut evaluator,
         &startup,
         Some(tty_popup_force_full_redraw),
@@ -4421,10 +4421,10 @@ fn publish_gui_frame(
 
     let mut sent_any = false;
     for node in tree.frames_bottom_to_top {
-        let prepared = tty_layout::layout_frame_display_state(
+        let prepared = frame_layout::layout_frame_display_state(
             evaluator,
             node.frame_id,
-            tty_layout::FrameLayoutPurpose::Redisplay,
+            frame_layout::FrameLayoutPurpose::Redisplay,
         );
         let Some(prepared) = prepared else {
             continue;

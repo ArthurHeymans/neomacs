@@ -1,11 +1,11 @@
+use super::frame_layout::{
+    LAYOUT_ENGINE, current_layout_frame_id,
+    install_tty_redisplay_callback as maybe_install_tty_redisplay_callback,
+};
 use super::image_catalog::{AsyncImageCatalog, wait_for_image_metadata};
 use super::tty_frontend::{TtyPopupDisplayHost, TtyTerminalHost};
 use super::tty_init::{
     default_controlling_tty_name, detect_tty_background_mode, should_enable_live_tty_io,
-};
-use super::tty_layout::{
-    LAYOUT_ENGINE, current_layout_frame_id,
-    install_tty_redisplay_callback as maybe_install_tty_redisplay_callback,
 };
 use super::{
     BOOTSTRAP_CORE_FEATURES, BootstrapDisplayConfig, DumpImageKind, EarlyCliAction, FontSizing,
@@ -94,10 +94,10 @@ fn layout_purpose_is_the_only_owner_of_pending_scroll_consumption() {
             .create_frame("layout-purpose-scroll", 800, 320, buffer_id);
     eval.accumulate_pending_pixel_scroll(frame_id, 3.5);
 
-    let snapshot = super::tty_layout::layout_frame_display_state(
+    let snapshot = super::frame_layout::layout_frame_display_state(
         &mut eval,
         frame_id,
-        super::tty_layout::FrameLayoutPurpose::Snapshot,
+        super::frame_layout::FrameLayoutPurpose::Snapshot,
     )
     .expect("snapshot layout");
     let _ = snapshot.discard(&mut eval);
@@ -107,10 +107,10 @@ fn layout_purpose_is_the_only_owner_of_pending_scroll_consumption() {
         "snapshot and logical-query layout must preserve user input for redisplay"
     );
 
-    let redisplay = super::tty_layout::layout_frame_display_state(
+    let redisplay = super::frame_layout::layout_frame_display_state(
         &mut eval,
         frame_id,
-        super::tty_layout::FrameLayoutPurpose::Redisplay,
+        super::frame_layout::FrameLayoutPurpose::Redisplay,
     )
     .expect("redisplay layout");
     let _ = redisplay.discard(&mut eval);
@@ -4452,7 +4452,7 @@ fn frame_snapshot_subr_end_to_end_json_and_text() {
     LAYOUT_ENGINE.with(|engine| {
         engine.borrow_mut().enable_cosmic_metrics();
     });
-    super::tty_layout::install_frame_snapshot_fn(&mut eval);
+    super::frame_layout::install_frame_snapshot_fn(&mut eval);
 
     let json_value = eval
         .eval_str("(neomacs--frame-snapshot t 'json)")

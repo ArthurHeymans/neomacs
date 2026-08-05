@@ -1,4 +1,5 @@
-//! TTY layout tree construction, redisplay callback, and feature provision.
+//! Frame layout tree construction, redisplay callback, and feature
+//! provision, shared by both the GUI and TTY frontends.
 //!
 //! Mirrors the TTY child-frame compositing in GNU `src/dispnew.c`
 //! (`combine_updates_for_frame`) and the redisplay callback wiring that
