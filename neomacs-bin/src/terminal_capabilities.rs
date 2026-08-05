@@ -155,8 +155,8 @@ fn cap_is(database: &mut dyn TerminalCapabilityDatabase, cap: &str, expected: &[
 /// stays enabled unconditionally.
 pub(crate) fn resolve_term_caps(
     database: &mut dyn TerminalCapabilityDatabase,
-) -> neomacs_display_protocol::tty_rif::TermCaps {
-    use neomacs_display_protocol::tty_rif::RegionScrollMethod;
+) -> neomacs_display_runtime::backend::tty::rif::TermCaps {
+    use neomacs_display_runtime::backend::tty::rif::RegionScrollMethod;
 
     let decstbm = cap_is(database, "cs", b"\x1b[%i%d;%dr");
     let cursor_address = cap_is(database, "cm", b"\x1b[%i%d;%dH");
@@ -182,7 +182,7 @@ pub(crate) fn resolve_term_caps(
         None
     };
 
-    neomacs_display_protocol::tty_rif::TermCaps {
+    neomacs_display_runtime::backend::tty::rif::TermCaps {
         scroll_region,
         back_color_erase: database.get_flag("ut"),
         insert_delete_char: cap_is(database, "IC", b"\x1b[%d@")
@@ -198,10 +198,10 @@ pub(crate) fn resolve_term_caps(
 /// scroll or shift bytes on an unknown terminal corrupts its screen
 /// permanently, while refusing merely costs bytes).
 ///
-/// [`TermCaps::unknown_terminal`]: neomacs_display_protocol::tty_rif::TermCaps::unknown_terminal
+/// [`TermCaps::unknown_terminal`]: neomacs_display_runtime::backend::tty::rif::TermCaps::unknown_terminal
 pub(crate) fn term_caps_for_term(
     term: &str,
-) -> Option<neomacs_display_protocol::tty_rif::TermCaps> {
+) -> Option<neomacs_display_runtime::backend::tty::rif::TermCaps> {
     let mut database = open_terminal_capability_database(term)?;
     Some(resolve_term_caps(database.as_mut()))
 }

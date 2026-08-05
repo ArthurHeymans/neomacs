@@ -3660,6 +3660,7 @@ dependencies = [
  "raw-window-handle",
  "resvg",
  "rio-vt",
+ "rustc-hash 2.1.3",
  "serde_json",
  "smithay-clipboard",
  "thiserror 2.0.18",

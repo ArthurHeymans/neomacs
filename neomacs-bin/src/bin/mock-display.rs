@@ -15,9 +15,9 @@
 
 use neomacs_display_protocol::face::{Face, FaceAttributes};
 use neomacs_display_protocol::glyph_matrix::*;
-use neomacs_display_protocol::tty_rif::TtyRif;
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_runtime::backend::tty::rif::TtyRif;
 use neomacs_layout_engine::engine::LayoutEngine;
 use neomacs_layout_engine::mock_frame::{
     MockChildFrameContent, MockFrameContent, MockStyledLine, MockWindowContent,

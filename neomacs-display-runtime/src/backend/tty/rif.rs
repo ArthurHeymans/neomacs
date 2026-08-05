@@ -7,12 +7,14 @@
 //!
 //! Runs on the evaluator thread (single-threaded, no channel needed).
 
-use crate::face::{Face, FaceAttributes};
-use crate::frame_chrome::FrameChromeContent;
-use crate::frame_glyphs::CursorStyle;
-use crate::glyph_matrix::*;
-use crate::tty_capabilities::{TtyAttributeCapabilities, TtyCapability, TtyItalicRendition};
-use crate::types::{Color, FaceId};
+use neomacs_display_protocol::face::{Face, FaceAttributes};
+use neomacs_display_protocol::frame_chrome::FrameChromeContent;
+use neomacs_display_protocol::frame_glyphs::CursorStyle;
+use neomacs_display_protocol::glyph_matrix::*;
+use neomacs_display_protocol::tty_capabilities::{
+    TtyAttributeCapabilities, TtyCapability, TtyItalicRendition,
+};
+use neomacs_display_protocol::types::{Color, FaceId};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -583,8 +585,8 @@ impl TtyRif {
     /// as the GUI runtime instead of accepting mutable layout state.
     pub fn rasterize_presentations(
         &mut self,
-        root: &crate::SealedFramePresentation,
-        children_bottom_to_top: &[crate::SealedFramePresentation],
+        root: &neomacs_display_protocol::SealedFramePresentation,
+        children_bottom_to_top: &[neomacs_display_protocol::SealedFramePresentation],
     ) {
         self.rasterize_frame_tree_states(
             root.state(),
@@ -692,7 +694,7 @@ impl TtyRif {
             let char_w = state.char_width.max(1.0);
             let char_h = state.char_height.max(1.0);
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
-                if let crate::glyph_matrix::RowDamage::ReusedShifted { dvpos } =
+                if let neomacs_display_protocol::glyph_matrix::RowDamage::ReusedShifted { dvpos } =
                     entry.matrix.row_damage(row_idx)
                     && char_h == 1.0
                 {
@@ -730,7 +732,7 @@ impl TtyRif {
                 // forced full render (the current grid may be stale).
                 if matches!(
                     entry.matrix.row_damage(row_idx),
-                    crate::glyph_matrix::RowDamage::Reused
+                    neomacs_display_protocol::glyph_matrix::RowDamage::Reused
                 ) && char_h == 1.0
                     && !self.force_full_render
                     && glyph_row.enabled
@@ -829,7 +831,7 @@ impl TtyRif {
     /// * Items past the visible width are silently clipped to the band.
     fn rasterize_frame_menu_content(
         &mut self,
-        menu: &crate::frame_chrome::MenuBarContent,
+        menu: &neomacs_display_protocol::frame_chrome::MenuBarContent,
         origin_col: i64,
         origin_row: i64,
         frame_cols: usize,
@@ -2215,7 +2217,7 @@ fn surface_tty_placeholder(width_cols: usize) -> String {
 }
 
 #[cfg(test)]
-#[path = "tty_rif_test.rs"]
+#[path = "rif_test.rs"]
 mod tests;
 
 impl TtyRif {

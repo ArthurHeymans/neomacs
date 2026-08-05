@@ -6,7 +6,7 @@
 
 use neomacs_display_protocol::SealedFramePresentation;
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
-use neomacs_display_protocol::tty_rif::TtyRif;
+use neomacs_display_runtime::backend::tty::rif::TtyRif;
 use neomacs_display_runtime::layout::LayoutEngine;
 use neovm_core::emacs_core::eval::Context;
 use neovm_core::emacs_core::value::Value;

@@ -9,6 +9,8 @@
 //! - Frame diffing: maintains a previous-frame grid and only outputs changed cells
 //! - Basic text rendering from Scene and FrameGlyphBuffer data
 
+pub mod rif;
+
 use std::io::{self, Write};
 
 use crate::core::error::{DisplayError, DisplayResult};

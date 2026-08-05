@@ -10,6 +10,7 @@ description = "Rust runtime display engine for Neomacs"
 [dependencies]
 # Text rendering - Pure Rust stack
 cosmic-text.workspace = true
+rustc-hash.workspace = true
 fontdb.workspace = true
 ttf-parser.workspace = true
 

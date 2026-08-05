@@ -187,7 +187,7 @@ fn an_absent_color_count_is_monochrome_like_gnu() {
 // bytes the encoder emits, not mere capability presence.
 // ---------------------------------------------------------------------------
 
-use neomacs_display_protocol::tty_rif::RegionScrollMethod;
+use neomacs_display_runtime::backend::tty::rif::RegionScrollMethod;
 
 #[test]
 fn xterm_shaped_entry_resolves_every_planner_capability() {
