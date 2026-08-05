@@ -459,15 +459,58 @@ impl<'a> DisplayRowFaceRealizer<'a> {
     }
 }
 
+/// Selects the source of truth for display geometry.
+///
+/// Paint and face-run boundaries never participate in this choice.  GUI rows
+/// use the concrete font selected for each character, matching GNU redisplay;
+/// logical-cell rows retain column-based lower bounds.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayRowMeasurementMode {
+    ConcreteFont,
+    LogicalCells,
+}
+
+impl DisplayRowMeasurementMode {
+    pub(crate) fn from_frame_window_system(window_system: bool) -> Self {
+        if window_system {
+            Self::ConcreteFont
+        } else {
+            Self::LogicalCells
+        }
+    }
+
+    pub(crate) fn uses_concrete_font_geometry(self) -> bool {
+        matches!(self, Self::ConcreteFont)
+    }
+
+    fn minimum_glyph_advance_px(self, measured: Option<f32>, logical_advance_px: f32) -> f32 {
+        match self {
+            // GNU GUI redisplay takes an ordinary character's width from the
+            // concrete font's per-character metric.  Logical columns are only
+            // the fallback when no font measurement exists.
+            Self::ConcreteFont if measured.is_some() => 1.0,
+            Self::ConcreteFont | Self::LogicalCells => logical_advance_px,
+        }
+    }
+
+    fn quantization(self) -> GlyphAdvanceQuantization {
+        match self {
+            Self::ConcreteFont => GlyphAdvanceQuantization::PreserveLogicalPixels,
+            Self::LogicalCells => GlyphAdvanceQuantization::SnapToIntegerPixels,
+        }
+    }
+}
+
 pub(crate) struct DisplayRowGlyphMeasurer<'a> {
     faces: &'a [DisplayRowFace],
     font_metrics: Option<&'a mut FontMetricsService>,
     fallback_char_width: f32,
     quantization: GlyphAdvanceQuantization,
-    allow_proportional_advances: bool,
+    mode: DisplayRowMeasurementMode,
 }
 
 impl<'a> DisplayRowGlyphMeasurer<'a> {
+    #[cfg(test)]
     pub(crate) fn new(
         faces: &'a [DisplayRowFace],
         font_metrics: Option<&'a mut FontMetricsService>,
@@ -481,38 +524,63 @@ impl<'a> DisplayRowGlyphMeasurer<'a> {
         )
     }
 
-    pub(crate) fn with_proportional_advances(
+    pub(crate) fn with_mode(
         faces: &'a [DisplayRowFace],
         font_metrics: Option<&'a mut FontMetricsService>,
         fallback_char_width: f32,
         quantization: GlyphAdvanceQuantization,
+        mode: DisplayRowMeasurementMode,
     ) -> Self {
         Self {
             faces,
             font_metrics,
             fallback_char_width,
             quantization,
-            allow_proportional_advances: true,
+            mode,
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn with_quantization(
         faces: &'a [DisplayRowFace],
         font_metrics: Option<&'a mut FontMetricsService>,
         fallback_char_width: f32,
         quantization: GlyphAdvanceQuantization,
     ) -> Self {
-        Self {
+        Self::with_mode(
             faces,
             font_metrics,
             fallback_char_width,
             quantization,
-            allow_proportional_advances: false,
-        }
+            DisplayRowMeasurementMode::LogicalCells,
+        )
     }
 
     fn face(&self, face_id: FaceId) -> Option<&DisplayRowFace> {
         self.faces.iter().find(|face| face.face_id == face_id)
+    }
+
+    fn glyph_advance_for_face(
+        &mut self,
+        face: &DisplayRowFace,
+        ch: char,
+        columns: u8,
+        fallback_advance_px: f32,
+    ) -> f32 {
+        let face_char_width = face.char_width_px(self.fallback_char_width);
+        let column_advance = f32::from(columns) * face_char_width;
+        let measured = self.font_metrics.as_mut().map(|service| {
+            service.char_width(
+                ch,
+                &face.font_family,
+                face.font_weight,
+                face.italic,
+                face.font_size.max(1.0),
+            )
+        });
+        let minimum = self.mode.minimum_glyph_advance_px(measured, column_advance);
+        self.quantization
+            .resolve(measured, fallback_advance_px.max(column_advance), minimum)
     }
 }
 
@@ -528,32 +596,8 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             return Some(0.0);
         }
 
-        let face = self.face(face_id)?;
-        let face_char_width = face.char_width_px(self.fallback_char_width);
-        let font_family = face.font_family.clone();
-        let column_advance = f32::from(columns) * face_char_width;
-        let font_weight = face.font_weight;
-        let italic = face.italic;
-        let font_size = face.font_size.max(1.0);
-        let measured = self
-            .font_metrics
-            .as_mut()
-            .map(|svc| svc.char_width(ch, &font_family, font_weight, italic, font_size));
-        // A GUI measurement is the advance of the concrete font selected for
-        // this glyph, which may be a fontset fallback unrelated to the face's
-        // primary ASCII cell.  Do not clamp that realized advance to the
-        // requested family's cell width (e.g. "Symbols Nerd Font Mono" can
-        // resolve a Nerd Font icon through JetBrainsMono).  Logical columns
-        // remain the fallback when measurement is unavailable, and the TTY
-        // path still deliberately quantizes to cells.
-        let cell_floor = measured.is_none() || !self.allow_proportional_advances;
-        let min_advance = if cell_floor { column_advance } else { 1.0 };
-
-        Some(self.quantization.resolve(
-            measured,
-            fallback_advance_px.max(column_advance),
-            min_advance,
-        ))
+        let face = self.face(face_id)?.clone();
+        Some(self.glyph_advance_for_face(&face, ch, columns, fallback_advance_px))
     }
 
     fn glyph_vertical_metrics_px(
@@ -561,7 +605,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
         ch: char,
         face_id: FaceId,
     ) -> Option<crate::display_row_builder::DisplayRowVerticalMetrics> {
-        if !self.allow_proportional_advances {
+        if !self.mode.uses_concrete_font_geometry() {
             return None;
         }
         let face = self.face(face_id)?.clone();
@@ -582,7 +626,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
         &mut self,
         face_id: FaceId,
     ) -> Option<crate::display_row_builder::DisplayRowVerticalMetrics> {
-        if !self.allow_proportional_advances {
+        if !self.mode.uses_concrete_font_geometry() {
             return None;
         }
         let face = self.face(face_id)?.clone();
@@ -601,7 +645,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
     }
 
     fn face_space_width_px(&mut self, face_id: FaceId) -> Option<f32> {
-        if !self.allow_proportional_advances {
+        if !self.mode.uses_concrete_font_geometry() {
             return None;
         }
         let face = self.face(face_id)?.clone();
@@ -632,31 +676,6 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             return DisplayTextRunMeasurement::PerChar;
         }
 
-        // GNU resolves the concrete font range before asking the font driver
-        // for its advance.  A one-character display-string run (the common
-        // shape of Nerd Font icons) therefore must use the per-character
-        // fontset resolver rather than the requested compatibility family's
-        // cell width.
-        let mut chars = text.chars();
-        if let Some(ch) = chars.next()
-            && chars.next().is_none()
-            && !ch.is_ascii()
-            && crate::composition::complex_script(ch).is_none()
-        {
-            let font_metrics = self
-                .font_metrics
-                .as_mut()
-                .expect("font metrics availability checked above");
-            let advance = font_metrics.char_width(
-                ch,
-                &face.font_family,
-                face.font_weight,
-                face.italic,
-                face.font_size.max(1.0),
-            );
-            return DisplayTextRunMeasurementPlan::from_resolved_source_advance(text, advance);
-        }
-
         // GNU emits ordinary Latin/CJK text as individual character glyphs;
         // only an actual composition is shaped as a run.  Measure each
         // ordinary character through the same concrete-font resolver used by
@@ -668,35 +687,15 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             crate::composition::complex_script(ch).is_none()
                 && !crate::unicode::is_cluster_extender(ch)
         }) {
-            let face_char_width = face.char_width_px(self.fallback_char_width);
-            let cell_floor = !self.allow_proportional_advances
-                || crate::fontconfig::family_prefers_monospace(&face.font_family);
-            let font_metrics = self
-                .font_metrics
-                .as_mut()
-                .expect("font metrics availability checked above");
             let advances = text
                 .char_indices()
                 .enumerate()
                 .map(|(char_offset, (byte_offset, ch))| {
                     let columns = crate::composition::base_width_cols(ch).max(1);
-                    let column_advance = f32::from(columns) * face_char_width;
-                    let measured = font_metrics.char_width(
-                        ch,
-                        &face.font_family,
-                        face.font_weight,
-                        face.italic,
-                        face.font_size.max(1.0),
-                    );
-                    let minimum = if cell_floor { column_advance } else { 1.0 };
                     DisplayTextRunAdvance::new(
                         char_offset,
                         byte_offset,
-                        self.quantization.resolve(
-                            Some(measured),
-                            fallback_char_width_px.max(column_advance),
-                            minimum,
-                        ),
+                        self.glyph_advance_for_face(&face, ch, columns, fallback_char_width_px),
                     )
                 })
                 .collect();
@@ -727,36 +726,8 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
             face_char_width,
             DisplayRowCharWidthPolicy::new(fallback_char_width_px).fallback(),
             self.quantization,
-            !self.allow_proportional_advances
-                || crate::fontconfig::family_prefers_monospace(&face.font_family),
+            !self.mode.uses_concrete_font_geometry(),
         )
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum DisplayRowMeasurementMode {
-    FontMetrics,
-    FallbackMetrics,
-}
-
-impl DisplayRowMeasurementMode {
-    pub(crate) fn from_frame_window_system(window_system: bool) -> Self {
-        if window_system {
-            Self::FontMetrics
-        } else {
-            Self::FallbackMetrics
-        }
-    }
-
-    fn uses_font_metrics(self) -> bool {
-        matches!(self, Self::FontMetrics)
-    }
-
-    fn quantization(self) -> GlyphAdvanceQuantization {
-        match self {
-            Self::FontMetrics => GlyphAdvanceQuantization::PreserveLogicalPixels,
-            Self::FallbackMetrics => GlyphAdvanceQuantization::SnapToIntegerPixels,
-        }
     }
 }
 
@@ -887,26 +858,18 @@ impl DisplayRowGlyphMeasurementFace {
         fallback_advance_px: f32,
     ) -> f32 {
         let faces = [self.face.clone()];
-        let font_metrics = if self.mode.uses_font_metrics() {
+        let font_metrics = if self.mode.uses_concrete_font_geometry() {
             font_metrics.as_mut()
         } else {
             None
         };
-        let mut measurer = if self.mode.uses_font_metrics() {
-            DisplayRowGlyphMeasurer::with_proportional_advances(
-                &faces,
-                font_metrics,
-                self.fallback_char_width,
-                self.quantization,
-            )
-        } else {
-            DisplayRowGlyphMeasurer::with_quantization(
-                &faces,
-                font_metrics,
-                self.fallback_char_width,
-                self.quantization,
-            )
-        };
+        let mut measurer = DisplayRowGlyphMeasurer::with_mode(
+            &faces,
+            font_metrics,
+            self.fallback_char_width,
+            self.quantization,
+            self.mode,
+        );
         measurer
             .glyph_advance_px(ch, self.face.face_id, columns, fallback_advance_px)
             .unwrap_or(fallback_advance_px)
@@ -930,15 +893,16 @@ impl DisplayRowGlyphMeasurementFace {
         font_metrics: &mut Option<FontMetricsService>,
         text: &str,
     ) -> DisplayTextRunMeasurement {
-        if !self.mode.uses_font_metrics() {
+        if !self.mode.uses_concrete_font_geometry() {
             return DisplayTextRunMeasurement::PerChar;
         }
         let faces = [self.face.clone()];
-        let mut measurer = DisplayRowGlyphMeasurer::with_proportional_advances(
+        let mut measurer = DisplayRowGlyphMeasurer::with_mode(
             &faces,
             font_metrics.as_mut(),
             self.fallback_char_width,
             self.quantization,
+            self.mode,
         );
         measurer.text_run_advances_px(text, self.face.face_id, self.fallback_char_width)
     }

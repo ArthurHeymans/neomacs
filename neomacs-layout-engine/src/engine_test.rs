@@ -1643,10 +1643,13 @@ fn expected_gui_glyph_advance(
 ) -> f32 {
     let face_metrics = metrics.font_metrics(family, weight, italic, font_size);
     let columns = crate::composition::base_width_cols(ch);
-    let minimum = f32::from(columns) * face_metrics.char_width.max(1.0);
+    let logical_fallback = f32::from(columns) * face_metrics.char_width.max(1.0);
     let measured = metrics.char_width(ch, family, weight, italic, font_size);
 
-    GlyphAdvanceQuantization::PreserveLogicalPixels.resolve(Some(measured), minimum, minimum)
+    // GNU `gui_produce_glyphs` uses the concrete character metric directly.
+    // The face's logical cell width is a fallback, not a lower bound: CJK
+    // fontset fallbacks can legitimately be narrower than two primary cells.
+    GlyphAdvanceQuantization::PreserveLogicalPixels.resolve(Some(measured), logical_fallback, 1.0)
 }
 
 fn assert_point_width_matches_advance(
@@ -15938,6 +15941,145 @@ fn layout_frame_rust_merges_overlay_face_with_text_property_face() {
         face.background, default_bg,
         "overlay background must merge in (GNU merges overlays after the text-prop face); \
          dropping it means the named text-prop face overrode the overlay-merged checkpoint face"
+    );
+}
+
+#[test]
+fn layout_frame_rust_paint_only_overlay_preserves_cjk_glyph_geometry() {
+    // GNU `gui_produce_glyphs` takes an ordinary character's pixel width from
+    // that character's concrete font metric (`pcm->width`).  A face boundary
+    // may select different paint, but it must not change that metric when the
+    // face leaves every font attribute unspecified.  `show-paren-mode` creates
+    // exactly this shape: a one-character background-only overlay on `《`.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("《将进酒》");
+        buffer.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![
+                    Value::keyword("family"),
+                    Value::string("JetBrainsMono Nerd Font"),
+                ]),
+                Value::symbol("default"),
+            ])]),
+        );
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-paint-only-cjk-overlay", 640, 180, buf_id);
+    realize_test_gui_frame(&mut eval, frame_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    #[derive(Debug)]
+    struct GlyphGeometry {
+        advance: f32,
+        next_x: f32,
+        family: String,
+        weight: u16,
+        italic: bool,
+        size: f32,
+    }
+
+    fn geometry(
+        state: &neomacs_display_protocol::glyph_matrix::FrameDisplayState,
+        window_id: neovm_core::window::WindowId,
+    ) -> GlyphGeometry {
+        let entry = state
+            .window_matrices
+            .iter()
+            .find(|entry| entry.window_id.get() == window_id.0 as i64)
+            .expect("selected window matrix");
+        let row = entry
+            .matrix
+            .rows
+            .iter()
+            .find(|row| {
+                row.enabled
+                    && row.glyphs[GlyphArea::Text.index()]
+                        .iter()
+                        .any(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '《' }))
+            })
+            .expect("row containing the CJK text");
+        let mut x = row.pixel_x;
+        let mut opening = None;
+        let mut next_x = None;
+        for glyph in &row.glyphs[GlyphArea::Text.index()] {
+            match glyph.glyph_type {
+                GlyphType::Char { ch: '《' } => opening = Some(glyph),
+                GlyphType::Char { ch: '将' } => next_x = Some(x),
+                _ => {}
+            }
+            x += glyph.pixel_width;
+        }
+        let opening = opening.expect("opening bracket glyph");
+        let face = state
+            .faces
+            .get(&opening.face_id)
+            .expect("opening bracket face");
+        GlyphGeometry {
+            advance: opening.pixel_width,
+            next_x: next_x.expect("following CJK glyph x"),
+            family: face.font_family.clone(),
+            weight: face.font_weight,
+            italic: face.is_italic(),
+            size: face.font_size,
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let before = geometry(
+        engine
+            .last_frame_display_state
+            .as_ref()
+            .expect("baseline display state"),
+        selected_window,
+    );
+
+    eval.eval_str(
+        r##"(let ((overlay (make-overlay 1 2)))
+               (overlay-put overlay 'face '(:background "#144c9c")))"##,
+    )
+    .expect("install show-paren-shaped paint overlay");
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let highlighted = geometry(
+        engine
+            .last_frame_display_state
+            .as_ref()
+            .expect("highlighted display state"),
+        selected_window,
+    );
+    assert_eq!(
+        (
+            highlighted.family.as_str(),
+            highlighted.weight,
+            highlighted.italic
+        ),
+        (before.family.as_str(), before.weight, before.italic),
+        "a background-only overlay must preserve the concrete font selector"
+    );
+    assert_eq!(highlighted.size, before.size, "font size must be unchanged");
+    assert_eq!(
+        highlighted.advance, before.advance,
+        "splitting `《` into a one-character face run must not change its font advance: before={before:?}, highlighted={highlighted:?}"
+    );
+    assert_eq!(
+        highlighted.next_x, before.next_x,
+        "paint-only highlighting must not move the following `将`: before={before:?}, highlighted={highlighted:?}"
     );
 }
 

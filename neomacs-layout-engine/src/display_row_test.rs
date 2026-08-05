@@ -2309,7 +2309,7 @@ fn display_row_glyph_measurement_face_measures_single_char_columns() {
     let face = DisplayRowFace::from_resolved(FaceId::new(8), &base);
     let measurement_face = DisplayRowGlyphMeasurementFace::with_mode(
         face,
-        DisplayRowMeasurementMode::FallbackMetrics,
+        DisplayRowMeasurementMode::LogicalCells,
         7.2,
         GlyphAdvanceQuantization::SnapToIntegerPixels,
     );
