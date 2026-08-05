@@ -349,6 +349,7 @@ mod m_buffer;
 mod macrostep;
 mod mag_menu;
 mod magit;
+mod magit_popup;
 mod magit_section;
 mod makey;
 mod markdown_mode;

@@ -2181,6 +2181,12 @@ pub const XCSCOPE_MELPA_PIN: (&str, &str) = ("xcscope", "20230626.2109");
 /// The exact Magit package selected by the comprehensive API parity corpus.
 pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
+/// The final Magit Popup package selected for practical popup rendering,
+/// infix refresh, suffix dispatch, prefix defaults, extension, CLI argument,
+/// and sequence-mode parity. MELPA built version 2.13.3 from upstream commit
+/// `d8585fa39f88956963d877b921322530257ba9f5`.
+pub const MAGIT_POPUP_MELPA_PIN: (&str, &str) = ("magit-popup", "20200719.1015");
+
 /// The exact magit-section package selected by the comprehensive API parity
 /// corpus.
 pub const MAGIT_SECTION_MELPA_PIN: (&str, &str) = ("magit-section", "20260722.2131");

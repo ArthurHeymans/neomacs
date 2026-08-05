@@ -94,7 +94,7 @@ rank	package	downloads	status
 93	evil-numbers	1032570	covered
 94	git-timemachine	1032303	covered
 95	highlight-numbers	1025819	covered
-96	magit-popup	1008183	todo
+96	magit-popup	1008183	covered
 97	indent-guide	1007913	todo
 98	haskell-mode	1005792	covered
 99	highlight-parentheses	1005394	todo
