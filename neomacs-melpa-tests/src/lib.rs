@@ -1685,6 +1685,12 @@ pub const AUTO_SPACE_MODE_MELPA_PIN: (&str, &str) = ("auto-space-mode", "2026020
 /// `3ffa4e2a76a6dda949fdfd200f623a17c4796559`.
 pub const AUTO_SORT_MODE_MELPA_PIN: (&str, &str) = ("auto-sort-mode", "20230827.2124");
 
+/// The exact Auto-YASnippet package selected for practical disposable-snippet
+/// creation, Yasnippet expansion, mixed-case mirrors, region wrapping,
+/// history, export, and persistence parity. MELPA built version 1.0.0 from
+/// upstream commit `6a9e406d0d7f9dfd6dff7647f358cb05a0b1637e`.
+pub const AUTO_YASNIPPET_MELPA_PIN: (&str, &str) = ("auto-yasnippet", "20230208.331");
+
 /// The exact Bind Map package selected for practical global leader,
 /// major/minor-mode activation, remapping/aliasing, inherited declaration,
 /// override-precedence, and Evil-state parity. MELPA built this archive from

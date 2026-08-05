@@ -178,7 +178,7 @@ rank	package	downloads	status
 177	memoize	645865	covered
 178	writeroom-mode	644923	covered
 179	gnuplot	641163	covered
-180	auto-yasnippet	638794	todo
+180	auto-yasnippet	638794	covered
 181	org-pomodoro	630081	todo
 182	php-mode	629506	covered
 183	tablist	621484	covered

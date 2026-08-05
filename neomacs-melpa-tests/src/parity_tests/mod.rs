@@ -262,6 +262,7 @@ mod auto_save_visited_local_mode;
 mod auto_shell_command;
 mod auto_sort_mode;
 mod auto_space_mode;
+mod auto_yasnippet;
 mod avy;
 mod avy_menu;
 mod bert;
