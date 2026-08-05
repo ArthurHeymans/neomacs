@@ -1744,7 +1744,85 @@ pub(crate) fn realize_default_lisp_face_for_frame(
     }
 }
 
+/// Palette resolved through the frame terminal's Lisp tty color table,
+/// keyed by the color string exactly as it appears in the lface vector.
+pub(crate) type TtyColorMap = rustc_hash::FxHashMap<String, crate::face::Color>;
+
+/// GNU `tty_lookup_color` (xfaces.c:1083): resolve one color string through
+/// the Lisp `tty-color-desc`, which canonicalizes the name, prefers the
+/// palette registered by `xterm-register-default-colors`, and otherwise
+/// approximates. Returns None when the machinery is not loaded or cannot
+/// resolve the name -- callers then keep the context-free parse, mirroring
+/// GNU's "not resolved" fallback rather than signalling.
+fn tty_color_desc_rgb(eval: &mut super::eval::Context, name: &str) -> Option<crate::face::Color> {
+    if !eval.obarray.fboundp("tty-color-desc") {
+        return None;
+    }
+    let desc = eval
+        .funcall_general(Value::symbol("tty-color-desc"), vec![Value::string(name)])
+        .ok()?;
+    let items = list_to_vec(&desc)?;
+    if items.len() < 5 {
+        return None;
+    }
+    let (r, g, b) = (
+        items[2].as_fixnum()?,
+        items[3].as_fixnum()?,
+        items[4].as_fixnum()?,
+    );
+    // tty-color-alist stores 16-bit components (xterm-rgb-convert-to-16bit).
+    let to8 = |v: i64| (v.clamp(0, 65535) / 257) as u8;
+    Some(crate::face::Color::rgb(to8(r), to8(g), to8(b)))
+}
+
+/// Collect every foreground/background/distant-foreground color string in the
+/// frame's face vectors and resolve each through `tty-color-desc`, exactly as
+/// GNU `map_tty_color` does per attribute during `realize_tty_face`. One
+/// funcall per unique name per sync -- face sync runs on face changes, not per
+/// redisplay frame.
+fn build_tty_color_map(eval: &mut super::eval::Context, frame_id: FrameId) -> TtyColorMap {
+    let mut names: Vec<String> = Vec::new();
+    for (_face_name, vector) in frame_lisp_face_table_entries(eval, frame_id) {
+        for attr in [
+            LFaceAttr::Foreground,
+            LFaceAttr::Background,
+            LFaceAttr::DistantForeground,
+        ] {
+            let Some(value) = lisp_face_vector_attr(vector, attr) else {
+                continue;
+            };
+            let s = match value.kind() {
+                ValueKind::Cons => value.cons_car().as_utf8_str(),
+                _ => value.as_utf8_str(),
+            };
+            if let Some(s) = s
+                && !s.is_empty()
+                && s != "unspecified-fg"
+                && s != "unspecified-bg"
+                && !names.iter().any(|n| n == s)
+            {
+                names.push(s.to_owned());
+            }
+        }
+    }
+    let mut map = TtyColorMap::default();
+    for name in names {
+        if let Some(color) = tty_color_desc_rgb(eval, &name) {
+            map.insert(name, color);
+        }
+    }
+    map
+}
+
 pub(crate) fn runtime_face_from_lisp_face_vector(face_name: &str, vector: Value) -> RuntimeFace {
+    runtime_face_from_lisp_face_vector_resolved(face_name, vector, None)
+}
+
+pub(crate) fn runtime_face_from_lisp_face_vector_resolved(
+    face_name: &str,
+    vector: Value,
+    tty_colors: Option<&TtyColorMap>,
+) -> RuntimeFace {
     let mut face = RuntimeFace::new(face_name);
     for attr in LFACE_ATTRS {
         let Some(value) = lisp_face_vector_attr(vector, attr) else {
@@ -1753,7 +1831,7 @@ pub(crate) fn runtime_face_from_lisp_face_vector(face_name: &str, vector: Value)
         if runtime_unspecified_lisp_face_attr(attr, value) {
             continue;
         }
-        if let Some(face_attr) = lisp_value_to_face_attr(attr, value) {
+        if let Some(face_attr) = lisp_value_to_face_attr_resolved(attr, value, tty_colors) {
             face.set_attribute(attr, face_attr);
         }
     }
@@ -1768,6 +1846,15 @@ pub(crate) fn runtime_face_table_from_frame_lisp_faces(
     eval: &super::eval::Context,
     frame_id: FrameId,
     preserve_default_baseline: bool,
+) -> crate::face::FaceTable {
+    runtime_face_table_from_frame_lisp_faces_resolved(eval, frame_id, preserve_default_baseline, None)
+}
+
+pub(crate) fn runtime_face_table_from_frame_lisp_faces_resolved(
+    eval: &super::eval::Context,
+    frame_id: FrameId,
+    preserve_default_baseline: bool,
+    tty_colors: Option<&TtyColorMap>,
 ) -> crate::face::FaceTable {
     // Preserve the already-established default face baseline.  In particular,
     // Lisp `font-at` queries retain relative inline heights until actual font
@@ -1784,7 +1871,7 @@ pub(crate) fn runtime_face_table_from_frame_lisp_faces(
         }
         table.define(
             &face_name,
-            runtime_face_from_lisp_face_vector(&face_name, vector),
+            runtime_face_from_lisp_face_vector_resolved(&face_name, vector, tty_colors),
         );
     }
     table
@@ -1802,7 +1889,25 @@ pub(crate) fn sync_runtime_face_table_from_frame_lisp_faces(
     frame_id: FrameId,
 ) {
     realize_default_lisp_face_for_frame(eval, frame_id);
-    eval.face_table = runtime_face_table_from_frame_lisp_faces(eval, frame_id, false);
+    // GNU realize_tty_face resolves every face color name through the tty
+    // color table (map_tty_color, xfaces.c:6620); do the same for TTY frames
+    // so the renderer paints the registered palette (xterm "white" is
+    // 229,229,229, not X11 255,255,255), not rgb.txt.
+    let tty = eval
+        .frames
+        .get(frame_id)
+        .is_some_and(|f| f.window_system.is_none());
+    let tty_colors = if tty {
+        Some(build_tty_color_map(eval, frame_id))
+    } else {
+        None
+    };
+    eval.face_table = runtime_face_table_from_frame_lisp_faces_resolved(
+        eval,
+        frame_id,
+        false,
+        tty_colors.as_ref(),
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -2991,7 +3096,11 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
 }
 
 /// Convert a Lisp face attribute value to `FaceAttrValue` for `FaceTable`.
-fn lisp_value_to_face_attr(attr: LFaceAttr, value: Value) -> Option<crate::face::FaceAttrValue> {
+fn lisp_value_to_face_attr_resolved(
+    attr: LFaceAttr,
+    value: Value,
+    tty_colors: Option<&TtyColorMap>,
+) -> Option<crate::face::FaceAttrValue> {
     use crate::face::{
         BoxBorder, BoxStyle, Color, FaceAttrValue, FaceHeight, FontSlant, FontWeight, FontWidth,
         Underline, UnderlineStyle,
@@ -3009,7 +3118,10 @@ fn lisp_value_to_face_attr(attr: LFaceAttr, value: Value) -> Option<crate::face:
                 _ => value.as_utf8_str().or_else(|| value.as_symbol_name()),
             };
             let s = s?;
-            let c = Color::from_name(s).or_else(|| Color::from_hex(s))?;
+            let c = tty_colors
+                .and_then(|m| m.get(s).copied())
+                .or_else(|| Color::from_name(s))
+                .or_else(|| Color::from_hex(s))?;
             Some(FaceAttrValue::Color(c))
         }
         LFaceAttr::Weight => {

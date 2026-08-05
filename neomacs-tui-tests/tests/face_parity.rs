@@ -141,15 +141,13 @@ fn isearch_highlight_matches_gnu() {
 /// Only char-identical cells are compared, so the product-name segment
 /// (GNU Emacs vs Neomacs) is excluded automatically.
 ///
-/// RED WHEN WRITTEN (2026-08-05): mode-line fg diverges across the whole
-/// row -- GNU paints (229,229,229), the xterm palette entry for "white"
-/// registered by xterm-register-default-colors (term/xterm.el), while
-/// neomacs paints (255,255,255), the X11 rgb.txt value. Root cause:
-/// face::Color::from_name resolves via the build-time X11 table and TTY
-/// face realization never consults the tty color table, whereas GNU's
-/// realize_tty_face routes every color name through tty_lookup_color /
-/// tty-color-desc (xfaces.c). Fix = resolve TTY frame face colors
-/// through the registered tty palette at face-sync time.
+/// Was RED when written (2026-08-05): neomacs painted X11 white
+/// (255,255,255) where GNU paints the xterm palette entry (229,229,229)
+/// that xterm-register-default-colors installs, because TTY face
+/// realization resolved color names through the build-time X11 table and
+/// never consulted the tty color table. Fixed by routing TTY-frame face
+/// colors through tty-color-desc at face-sync time, mirroring GNU
+/// realize_tty_face / map_tty_color (xfaces.c:6620).
 #[test]
 fn mode_line_face_matches_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
@@ -166,9 +164,9 @@ fn mode_line_face_matches_gnu() {
 
 /// The minibuffer prompt face during M-x.
 ///
-/// RED WHEN WRITTEN (2026-08-05): same root cause as
-/// mode_line_face_matches_gnu -- GNU renders the prompt in the xterm
-/// palette "cyan" (0,205,205); neomacs in X11 cyan (0,255,255).
+/// Was RED when written (2026-08-05), same root cause and fix as
+/// mode_line_face_matches_gnu: xterm palette "cyan" (0,205,205) vs X11
+/// cyan (0,255,255).
 #[test]
 fn minibuffer_prompt_face_matches_gnu() {
     let (mut gnu, mut neo) = boot_pair("");
