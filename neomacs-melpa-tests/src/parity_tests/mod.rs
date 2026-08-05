@@ -354,6 +354,7 @@ mod js2_refactor;
 mod json_mode;
 mod keyfreq;
 mod keytar;
+mod link_hint;
 mod llama;
 mod log4e;
 mod lsp_mode;

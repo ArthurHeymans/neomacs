@@ -116,7 +116,7 @@ rank	package	downloads	status
 115	json-mode	946343	covered
 116	evil-anzu	943837	covered
 117	evil-args	942620	covered
-118	link-hint	941860	todo
+118	link-hint	941860	covered
 119	fancy-battery	941040	todo
 120	list-utils	936045	todo
 121	yasnippet-snippets	929792	todo

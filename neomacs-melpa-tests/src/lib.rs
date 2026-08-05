@@ -2162,6 +2162,12 @@ pub const DDSKK_MELPA_PIN: (&str, &str) = ("ddskk", "20260329.1317");
 /// cross-window, dispatch action, line editing, and cancellation corpus.
 pub const AVY_MELPA_PIN: (&str, &str) = ("avy", "20241101.1357");
 
+/// The exact Link Hint package selected by the practical visible-link,
+/// link-priority, custom-type, fallback, filesystem, and cross-window parity
+/// corpus. MELPA built this archive from upstream commit
+/// `8fda5dcb9caff5a3c49d22b82e570ac9e29af7dd`.
+pub const LINK_HINT_MELPA_PIN: (&str, &str) = ("link-hint", "20250911.57");
+
 /// The exact Avy Menu package selected by the practical rendered menu,
 /// multi-level selection, inactive item, and cancellation lifecycle corpus.
 pub const AVY_MENU_MELPA_PIN: (&str, &str) = ("avy-menu", "20230606.1519");
