@@ -2479,6 +2479,13 @@ pub const HL_TODO_MELPA_PIN: (&str, &str) = ("hl-todo", "20260601.1508");
 /// `d8839fa42a24f7c781cd2d8c3f40eda31faa19be`.
 pub const WFNAMES_MELPA_PIN: (&str, &str) = ("wfnames", "20260706.903");
 
+/// The exact Writeroom Mode package selected for practical focused-writing
+/// buffer state, Visual Fill Column cooperation, width adjustment, mode-line,
+/// multi-buffer, frame-effect, admission, and window-layout parity. MELPA
+/// built version 3.12 from upstream commit
+/// `cca2b4b3cfcfea1919e1870519d79ed1a69aa5e2`.
+pub const WRITEROOM_MODE_MELPA_PIN: (&str, &str) = ("writeroom-mode", "20250204.2335");
+
 /// The exact web-completion-data package selected for the practical HTML tag,
 /// attribute, value, documentation, source-extension, and dataset-integrity
 /// parity corpus. MELPA built this archive from upstream commit

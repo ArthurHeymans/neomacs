@@ -486,6 +486,7 @@ mod wgrep;
 mod which_key;
 mod winum;
 mod with_editor;
+mod writeroom_mode;
 mod ws_butler;
 mod xcscope;
 mod xr;
