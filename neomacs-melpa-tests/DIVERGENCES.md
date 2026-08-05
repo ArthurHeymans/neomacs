@@ -33,6 +33,73 @@ RUST_LOG=warn NEOMACS_BIN="$PWD/target/release/neomacs" TMPDIR="$PWD/tmp" \
 
 ---
 
+## Verification status 2026-08-05
+
+All single-form reductions re-run against GNU Emacs and a fresh
+target/release/neomacs (commit 601ef8d38 era). **33 of 43 entries no longer
+reproduce** -- the two editors now give identical output for their reductions
+-- and are presumed fixed by the July/August work (batch macro lifecycle,
+TTY separator width, filelock GNU state machine, face pipeline, and friends).
+**Still diverging: 2, 6, 9, 18, 23, 26, 33, 37, 42**, plus 15 (the SIGSEGV,
+not reducible to one form) which needs a fresh check against its package.
+Raw per-entry outputs from the sweep were captured under tmp/divsweep/.
+
+The full parity suite the same day: 600/611 passed; the 11 failing suites
+(ace_link, auctex_latexmk, counsel, dumb_jump, elisp_slime_nav, evil_numbers,
+helm_descbinds, lsp_mode, rainbow_delimiters, swiper, vi_tilde_fringe) need
+mapping to the surviving entries -- at least one (ace_link: help-buffer link
+positions offset by 8 with identical help text) looks like a NEW divergence
+not in this ledger.
+
+| # | entry | status |
+|---|-------|--------|
+| 1 | A minibuffer prompt inside a keyboard macro reads stdin | PARITY (stale?) |
+| 2 | `read-char` / `read-event` / `read-char-exclusive` ignore the macro | DIVERGES |
+| 3 | `[t]` default keymap bindings are never dispatched | PARITY (stale?) |
+| 4 | `(throw 'exit …)` with no catch silently ends batch evaluation | PARITY (stale?) |
+| 5 | `write-region` writes `?` for every legacy coding system | PARITY (stale?) |
+| 6 | `directory-files` returns undecoded bytes | DIVERGES |
+| 7 | `completing-read` forwards 7 arguments instead of 8 | PARITY (stale?) |
+| 8 | `string-search` rejects an explicit nil START | PARITY (stale?) |
+| 9 | Chained autoloads stop after one hop | DIVERGES |
+| 10 | Face aliases are not followed | PARITY (stale?) |
+| 11 | `completion-in-region-mode-map` is empty | PARITY (stale?) |
+| 12 | `x-popup-menu` rejects the documented `POSITION` value `t` | PARITY (stale?) |
+| 13 | `buffer-list` differs in order *and* contents | PARITY (stale?) |
+| 14 | `delete-other-windows` does not move the surviving window | PARITY (stale?) |
+| 15 | SIGSEGV in `%S` printing of a string nested in conses | NO-REDUCTION |
+| 16 | `real-last-command` is set one command-loop iteration too late | PARITY (stale?) |
+| 17 | An undefined face reference is never reported | PARITY (stale?) |
+| 18 | An error signalled inside a process filter is swallowed | DIVERGES |
+| 19 | Word boundaries at a script change are not honoured | PARITY (stale?) |
+| 20 | `*Messages*` does not replace a progress line with its "...done" | PARITY (stale?) |
+| 21 | A refused connection reports a different error — synchronously only | PARITY (stale?) |
+| 22 | `format` reverses the plist of a propertized string used as the FORMAT | PARITY (stale?) |
+| 23 | `write-file` leaves a stray lock file behind | DIVERGES |
+| 24 | The `default` face ignores a display-conditional theme setting | PARITY (stale?) |
+| 25 | An interpreted lambda's parameter destroys a built-in buffer-local | PARITY (stale?) |
+| 26 | No lock file is created for a modified visited buffer | DIVERGES |
+| 27 | `get-buffer-window` does not prefer the selected window | PARITY (stale?) |
+| 28 | An error signalled in `pre-command-hook` is not reported | PARITY (stale?) |
+| 29 | `function-key-map` holds a malformed translation for keypad digits | PARITY (stale?) |
+| 30 | `*Messages*` keeps a `...` progress line that GNU replaces | PARITY (stale?) |
+| 31 | `self-insert-command` never expands an abbrev | PARITY (stale?) |
+| 32 | Backward `forward-comment` ignores a comment with a two-character ender | PARITY (stale?) |
+| 33 | `call-interactively` on a non-interactive autoload never resolves it | DIVERGES |
+| 34 | A regexp using a syntax class does not trigger `syntax-propertize` | PARITY (stale?) |
+| 35 | A `:family` set beside a colour on `default` is discarded by GNU only | PARITY (stale?) |
+| 36 | Process output does not relocate markers at the process mark | PARITY (stale?) |
+| 37 | Killing a windowed buffer leaves the current buffer out of sync | DIVERGES |
+| 38 | A quantifier after the `` \` `` anchor is not treated as literal | PARITY (stale?) |
+| 39 | `easy-menu-add-item` drops a submenu that carries any property | PARITY (stale?) |
+| 40 | `window-body-width` keeps the tty vertical-bar column | PARITY (stale?) |
+| 41 | `ceiling` and friends accept a marker as the divisor | PARITY (stale?) |
+| 42 | A tree-sitter font-lock setting without its language slot fails to compile | DIVERGES |
+| 43 | `autoload` does not record its definition in `load-history` | PARITY (stale?) |
+
+
+---
+
 ## 1. A minibuffer prompt inside a keyboard macro reads stdin
 
 GNU's `read_minibuf` (src/minibuf.c) only diverts to `read_minibuf_noninteractive`
