@@ -397,7 +397,7 @@ impl BufferSlotPredicate {
                     ValueKind::Float => (0.0..=1.0).contains(&value.xfloat()),
                     ValueKind::Veclike(crate::tagged::header::VecLikeType::Bignum) => value
                         .as_bignum()
-                        .is_some_and(|number| number >= &0 && number <= &1),
+                        .is_some_and(|number| (&0..=&1).contains(&number)),
                     _ => unreachable!("numberp was checked above"),
                 };
                 if in_range {

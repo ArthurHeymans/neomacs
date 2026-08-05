@@ -503,14 +503,6 @@ impl DisplayPropertyReplacementDescriptor {
         }
     }
 
-    /// The spec that produced the replacement — what actually renders. The whole
-    /// `display` value is kept in `value` for diagnostics, but a consumer must
-    /// never render from it: for `["X"]`, `("X")` or `(when t . "X")` the value
-    /// and the spec are different objects.
-    pub(crate) fn replacement_spec(&self) -> Value {
-        self.classification.replacement_spec()
-    }
-
     pub(crate) fn classification(&self) -> &DisplayPropertyClassification {
         &self.classification
     }

@@ -787,16 +787,18 @@ impl MatrixRow {
     pub fn make_mut(this: &mut Self) -> &mut GlyphRow {
         std::sync::Arc::make_mut(&mut this.0)
     }
-
-    pub fn as_ref(&self) -> &GlyphRow {
-        &self.0
-    }
 }
 
 impl std::ops::Deref for MatrixRow {
     type Target = GlyphRow;
 
     fn deref(&self) -> &GlyphRow {
+        &self.0
+    }
+}
+
+impl AsRef<GlyphRow> for MatrixRow {
+    fn as_ref(&self) -> &GlyphRow {
         &self.0
     }
 }

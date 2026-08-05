@@ -1681,9 +1681,7 @@ pub trait DisplayHost {
     /// expressions (GNU does this inline with `lookup_image`), but the layout
     /// engine's pixel arithmetic must not hold a borrow of the host. Hosts with
     /// a catalog should return it here as well.
-    fn image_catalog_shared(
-        &self,
-    ) -> Option<std::sync::Arc<dyn super::image_catalog::ImageCatalog>> {
+    fn image_catalog_shared(&self) -> Option<std::rc::Rc<dyn super::image_catalog::ImageCatalog>> {
         None
     }
     fn request_video(

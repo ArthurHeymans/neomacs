@@ -152,9 +152,9 @@ impl ImageRotation {
         // Emacs `mod` takes the sign of the divisor, so -90 reduces to 270.
         let reduced = degrees.rem_euclid(360.0);
         match reduced {
-            r if r == 90.0 => Self::Quarter,
-            r if r == 180.0 => Self::Half,
-            r if r == 270.0 => Self::ThreeQuarter,
+            90.0 => Self::Quarter,
+            180.0 => Self::Half,
+            270.0 => Self::ThreeQuarter,
             _ => Self::None,
         }
     }

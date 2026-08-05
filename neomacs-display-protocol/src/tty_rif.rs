@@ -1698,12 +1698,12 @@ fn detect_scroll(
 
     // Vote for deltas using positions of equal hashes inside the band.
     let mut by_hash: rustc_hash::FxHashMap<u64, Vec<usize>> = rustc_hash::FxHashMap::default();
-    for r in top..=bottom {
-        by_hash.entry(old_hash[r]).or_default().push(r);
+    for (r, &hash) in old_hash.iter().enumerate().take(bottom + 1).skip(top) {
+        by_hash.entry(hash).or_default().push(r);
     }
     let mut votes: rustc_hash::FxHashMap<isize, usize> = rustc_hash::FxHashMap::default();
-    for i in top..=bottom {
-        if let Some(js) = by_hash.get(&new_hash[i]) {
+    for (i, hash) in new_hash.iter().enumerate().take(bottom + 1).skip(top) {
+        if let Some(js) = by_hash.get(hash) {
             for &j in js {
                 if i != j {
                     *votes.entry(j as isize - i as isize).or_default() += 1;
@@ -1753,11 +1753,11 @@ fn verify_delta(
     for i in top..=bottom + 1 {
         if i <= bottom && row_eq(i) {
             run_lo.get_or_insert(i);
-        } else if let Some(lo) = run_lo.take() {
-            if i - lo > best_len {
-                best_lo = lo;
-                best_len = i - lo;
-            }
+        } else if let Some(lo) = run_lo.take()
+            && i - lo > best_len
+        {
+            best_lo = lo;
+            best_len = i - lo;
         }
     }
     if best_len < MIN_RUN {

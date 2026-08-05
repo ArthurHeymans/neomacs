@@ -167,8 +167,8 @@ impl FrameFaceAttemptState {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct FrameFaceConflict {
     pub(crate) face_id: FaceId,
-    pub(crate) existing: Face,
-    pub(crate) replacement: Face,
+    pub(crate) existing: Box<Face>,
+    pub(crate) replacement: Box<Face>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -248,6 +248,7 @@ impl FrameFaceAttempt {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn reserve_dynamic_face(&mut self) -> FaceId {
         let mut state = self.state.borrow_mut();
         state.reserve_dynamic_face()
@@ -384,8 +385,8 @@ impl FrameFaceAttempt {
                 if !merge_compatible_realization(slot.get_mut(), &face) {
                     return Err(FrameFaceConflict {
                         face_id,
-                        existing: slot.get().clone(),
-                        replacement: face,
+                        existing: Box::new(slot.get().clone()),
+                        replacement: Box::new(face),
                     });
                 }
             }

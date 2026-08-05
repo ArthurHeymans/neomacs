@@ -387,9 +387,9 @@ impl Color {
     /// which converts cell colors every rasterized frame.
     pub fn linear_component_to_srgb_u8(c: f32) -> u8 {
         let bounds = &*LINEAR_TO_SRGB_U8_BOUNDARIES;
-        // `!(c > ...)` also routes NaN to 0, matching the saturating
-        // `as u8` cast of the arithmetic form.
-        if !(c > bounds[0]) {
+        // A missing ordering routes NaN to 0, matching the saturating `as u8`
+        // cast of the arithmetic form.
+        if c.partial_cmp(&bounds[0]) != Some(std::cmp::Ordering::Greater) {
             return 0;
         }
         if c >= bounds[254] {

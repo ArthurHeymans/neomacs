@@ -53,6 +53,7 @@ use neovm_core::window::{
     FrameFullscreen, FrameId, FrameParam, GuiFrameGeometryHints, default_gui_tool_bar_line_height,
 };
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -119,8 +120,8 @@ fn layout_purpose_is_the_only_owner_of_pending_scroll_consumption() {
 fn test_image_catalog(
     cmd_tx: &crossbeam_channel::Sender<RenderCommand>,
     image_metadata: SharedImageMetadata,
-) -> Arc<AsyncImageCatalog> {
-    Arc::new(AsyncImageCatalog::new(cmd_tx.clone(), None, image_metadata))
+) -> Rc<AsyncImageCatalog> {
+    Rc::new(AsyncImageCatalog::new(cmd_tx.clone(), None, image_metadata))
 }
 
 #[test]

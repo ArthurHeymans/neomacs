@@ -13,8 +13,7 @@ use std::time::{Duration, Instant};
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{AssetCommand, RenderCommand};
 use neovm_core::emacs_core::image_catalog::{
-    AxisSize, ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, ImageSizeSpec,
-    PendingImage, ReadyImage,
+    ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, PendingImage, ReadyImage,
 };
 use neovm_core::heap_types::LispString;
 
@@ -394,7 +393,7 @@ fn normalize_image_file_request_with_home(
 mod tests {
     use super::*;
     use neovm_core::emacs_core::image_catalog::{
-        ImageDefaultScale, ImageScaleEnvironment, ImageScalePolicy,
+        AxisSize, ImageDefaultScale, ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec,
     };
     use std::sync::{Arc, Condvar, Mutex};
 

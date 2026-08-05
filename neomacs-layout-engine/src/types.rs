@@ -61,7 +61,7 @@ impl WindowKind {
 /// which reproduces GNU's `FRAME_WINDOW_P` guard (the operand, and with it the
 /// whole expression, simply fails).
 #[derive(Clone)]
-pub struct SharedImageCatalog(pub std::sync::Arc<dyn ImageCatalog>);
+pub struct SharedImageCatalog(pub std::rc::Rc<dyn ImageCatalog>);
 
 impl std::fmt::Debug for SharedImageCatalog {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

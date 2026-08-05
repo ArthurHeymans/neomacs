@@ -896,9 +896,7 @@ impl<'a> BufferChars<'a> {
         // live physical segment for those logical bytes.
         let slice =
             unsafe { std::slice::from_raw_parts(base.add(pos - start), len - (pos - start)) };
-        let code = if !self.multibyte {
-            slice[0] as u32
-        } else if slice[0] < 0x80 {
+        let code = if !self.multibyte || slice[0] < 0x80 {
             slice[0] as u32
         } else {
             crate::emacs_core::emacs_char::string_char(slice).0

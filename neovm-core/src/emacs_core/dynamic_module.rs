@@ -1540,16 +1540,20 @@ unsafe extern "C" fn module_make_time(env: *mut emacs_env, time: emacs_time) -> 
         // at once:
         //   * width -- `tv_nsec` is `libc::c_long` (`i64` on Linux/macOS,
         //     `i32` on Windows MSVC under LLP64); the seam takes fixed
-        //     `i64`, so the `as i64` cast is the single FFI/domain
-        //     crossing rather than smeared across four `Value::fixnum`
-        //     calls that only compiled where `c_long == i64`.
+        //     `i64`, so the platform-specific binding below is the single
+        //     FFI/domain crossing rather than smearing conversions across four
+        //     `Value::fixnum` calls that only compiled where `c_long == i64`.
         //   * shape -- the module `make_time` API contracts the canonical
         //     `(TICKS . HZ)` form (Hz = TIMESPEC_HZ = 1_000_000_000),
         //     which `LispTimeOutput::TicksHz` produces. The inlined code
         //     instead emitted the legacy `(HIGH LOW USEC PSEC)` list.
         // `make_lisp_time` reduces, sign-safely, to exactly
         // `tv_sec*1e9 + tv_nsec` ticks -- byte-identical to `timespec_ticks`.
-        let lisp_time = make_lisp_time(time.tv_sec, time.tv_nsec as i64, LispTimeOutput::TicksHz);
+        #[cfg(target_os = "windows")]
+        let nanoseconds = i64::from(time.tv_nsec);
+        #[cfg(not(target_os = "windows"))]
+        let nanoseconds = time.tv_nsec;
+        let lisp_time = make_lisp_time(time.tv_sec, nanoseconds, LispTimeOutput::TicksHz);
         lisp_to_value(env, lisp_time)
     })
 }

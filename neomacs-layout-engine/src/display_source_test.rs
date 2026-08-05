@@ -1931,7 +1931,11 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
     assert_eq!(replacement.start_charpos(), 1);
     assert_eq!(replacement.descriptor().skip_to_charpos(), 2);
     assert_eq!(
-        replacement.descriptor().replacement_spec().as_utf8_str(),
+        replacement
+            .descriptor()
+            .classification()
+            .replacement_spec()
+            .as_utf8_str(),
         Some("YZ")
     );
 }

@@ -475,19 +475,21 @@ impl ImageCache {
                                 width,
                                 height,
                                 stride,
-                            } => Self::convert_argb32_to_rgba(
-                                &data, width, height, stride, size, rotation,
-                            )
-                            .map(DecodedPixels::from_raster_tuple),
+                            } => Self::convert_argb32_to_rgba(&data, width, height, stride)
+                                .map(DecodedPixels::from_raster_tuple)
+                                .and_then(|pixels| {
+                                    pixels.realize_bitmap(size, rotation, realization)
+                                }),
                             ImageSource::RawRgb24 {
                                 data,
                                 width,
                                 height,
                                 stride,
-                            } => Self::convert_rgb24_to_rgba(
-                                &data, width, height, stride, size, rotation,
-                            )
-                            .map(DecodedPixels::from_raster_tuple),
+                            } => Self::convert_rgb24_to_rgba(&data, width, height, stride)
+                                .map(DecodedPixels::from_raster_tuple)
+                                .and_then(|pixels| {
+                                    pixels.realize_bitmap(size, rotation, realization)
+                                }),
                         }
                     }));
 
@@ -750,8 +752,6 @@ impl ImageCache {
         width: u32,
         height: u32,
         stride: u32,
-        size: ImageSizeSpec,
-        rotation: ImageRotation,
     ) -> Option<(u32, u32, Vec<u8>)> {
         let bytes_per_pixel = 4u32;
         let expected_min_size = (height.saturating_sub(1)) * stride + width * bytes_per_pixel;
@@ -806,8 +806,6 @@ impl ImageCache {
         width: u32,
         height: u32,
         stride: u32,
-        size: ImageSizeSpec,
-        rotation: ImageRotation,
     ) -> Option<(u32, u32, Vec<u8>)> {
         let bytes_per_pixel = 3u32;
         let expected_min_size = (height.saturating_sub(1)) * stride + width * bytes_per_pixel;

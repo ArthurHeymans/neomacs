@@ -995,7 +995,7 @@ pub(crate) fn builtin_string_match_with_state(
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
-    mut match_data: Option<&mut Option<super::regex::MatchData>>,
+    match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     crate::emacs_core::perf_trace::time_op(
@@ -1032,9 +1032,7 @@ pub(crate) fn builtin_string_match_with_state(
                         case_translation.clone(),
                         syntax,
                     );
-                    let target = (!inhibit_modify)
-                        .then(|| match_data.as_deref_mut())
-                        .flatten();
+                    let target = if inhibit_modify { None } else { match_data };
                     commit_string_search_success(result, target)
                 }
                 _ => {
@@ -1044,9 +1042,7 @@ pub(crate) fn builtin_string_match_with_state(
                     let result = super::regex::string_search_full_with_case_fold_and_posix(
                         &pattern, &s, start, case_fold, false,
                     );
-                    let target = (!inhibit_modify)
-                        .then(|| match_data.as_deref_mut())
-                        .flatten();
+                    let target = if inhibit_modify { None } else { match_data };
                     commit_string_search_success(result, target)
                 }
             }
@@ -1102,7 +1098,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
-    mut match_data: Option<&mut Option<super::regex::MatchData>>,
+    match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
     // GNU `src/search.c:Fposix_string_match` calls `string_match_1`
@@ -1145,9 +1141,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
                         case_translation.clone(),
                         syntax,
                     );
-                    let target = (!inhibit_modify)
-                        .then(|| match_data.as_deref_mut())
-                        .flatten();
+                    let target = if inhibit_modify { None } else { match_data };
                     commit_string_search_success(result, target)
                 }
                 _ => {
@@ -1157,9 +1151,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
                     let result = super::regex::string_search_full_with_case_fold_and_posix(
                         &pattern, &s, start, case_fold, true,
                     );
-                    let target = (!inhibit_modify)
-                        .then(|| match_data.as_deref_mut())
-                        .flatten();
+                    let target = if inhibit_modify { None } else { match_data };
                     commit_string_search_success(result, target)
                 }
             }

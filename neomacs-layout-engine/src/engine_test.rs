@@ -10679,7 +10679,7 @@ fn display_space_relative_height_spec(factor: i64, ascent_percent: i64) -> Value
 fn issue_204_align_to_centers_image_by_its_resolved_width() {
     let _eval = Context::new();
     let mut params = test_window_params();
-    params.space_image_catalog = Some(crate::types::SharedImageCatalog(std::sync::Arc::new(
+    params.space_image_catalog = Some(crate::types::SharedImageCatalog(std::rc::Rc::new(
         FixedSizeImageCatalog {
             width: 400,
             height: 300,

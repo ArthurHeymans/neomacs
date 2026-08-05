@@ -100,6 +100,7 @@ use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -1011,7 +1012,7 @@ struct PrimaryWindowDisplayHost {
     last_window_titles: Mutex<HashMap<neovm_core::window::FrameId, LispString>>,
     font_metrics: Option<FontMetricsService>,
     primary_window_size: SharedPrimaryWindowSize,
-    image_catalog: Arc<AsyncImageCatalog>,
+    image_catalog: Rc<AsyncImageCatalog>,
     resolved_videos: Mutex<HashMap<VideoResolveRequest, ResolvedVideo>>,
     resolved_webkits: Mutex<HashMap<WebKitResolveRequest, ResolvedWebKit>>,
     resolved_surfaces: Mutex<ResolvedSurfaceMemo>,
@@ -1731,7 +1732,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         Some(&*self.image_catalog)
     }
 
-    fn image_catalog_shared(&self) -> Option<Arc<dyn ImageCatalog>> {
+    fn image_catalog_shared(&self) -> Option<Rc<dyn ImageCatalog>> {
         Some(self.image_catalog.clone())
     }
 
@@ -2925,7 +2926,7 @@ fn run_gui_evaluator_worker(
         last_window_titles: Mutex::new(HashMap::new()),
         font_metrics: None,
         primary_window_size: Arc::clone(&primary_window_size),
-        image_catalog: Arc::new(AsyncImageCatalog::new(
+        image_catalog: Rc::new(AsyncImageCatalog::new(
             emacs_comms.cmd_tx.clone(),
             Some(render_waker.clone()),
             Arc::clone(&gui_image_metadata),

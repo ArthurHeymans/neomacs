@@ -856,14 +856,7 @@ fn test_convert_argb32_to_rgba_basic() {
         0, 0, 0, 0, // Pixel (1,1): A=0, R=0, G=0, B=0 (transparent)
     ];
 
-    let result = ImageCache::convert_argb32_to_rgba(
-        &data,
-        width,
-        height,
-        stride,
-        ImageSizeSpec::default(),
-        ImageRotation::None,
-    );
+    let result = ImageCache::convert_argb32_to_rgba(&data, width, height, stride);
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -899,14 +892,7 @@ fn test_convert_argb32_with_stride_padding() {
         0, 0, 0, 0, // Padding (ignored)
     ];
 
-    let result = ImageCache::convert_argb32_to_rgba(
-        &data,
-        width,
-        height,
-        stride,
-        ImageSizeSpec::default(),
-        ImageRotation::None,
-    );
+    let result = ImageCache::convert_argb32_to_rgba(&data, width, height, stride);
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -924,14 +910,7 @@ fn test_convert_argb32_with_stride_padding() {
 fn test_convert_argb32_invalid_data_size() {
     // Data too small for 2x2 image
     let data: Vec<u8> = vec![255, 100, 150, 200]; // Only 1 pixel
-    let result = ImageCache::convert_argb32_to_rgba(
-        &data,
-        2,
-        2,
-        8,
-        ImageSizeSpec::default(),
-        ImageRotation::None,
-    );
+    let result = ImageCache::convert_argb32_to_rgba(&data, 2, 2, 8);
     assert!(result.is_none());
 }
 
@@ -951,14 +930,7 @@ fn test_convert_rgb24_to_rgba_basic() {
         0, 0, 0, // Pixel (1,1): R=0, G=0, B=0 (black)
     ];
 
-    let result = ImageCache::convert_rgb24_to_rgba(
-        &data,
-        width,
-        height,
-        stride,
-        ImageSizeSpec::default(),
-        ImageRotation::None,
-    );
+    let result = ImageCache::convert_rgb24_to_rgba(&data, width, height, stride);
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -990,14 +962,7 @@ fn test_convert_rgb24_with_stride_padding() {
         0, 0, // Padding (ignored)
     ];
 
-    let result = ImageCache::convert_rgb24_to_rgba(
-        &data,
-        width,
-        height,
-        stride,
-        ImageSizeSpec::default(),
-        ImageRotation::None,
-    );
+    let result = ImageCache::convert_rgb24_to_rgba(&data, width, height, stride);
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -1015,14 +980,7 @@ fn test_convert_rgb24_with_stride_padding() {
 fn test_convert_rgb24_invalid_data_size() {
     // Data too small for 2x2 image
     let data: Vec<u8> = vec![100, 150, 200]; // Only 1 pixel
-    let result = ImageCache::convert_rgb24_to_rgba(
-        &data,
-        2,
-        2,
-        6,
-        ImageSizeSpec::default(),
-        ImageRotation::None,
-    );
+    let result = ImageCache::convert_rgb24_to_rgba(&data, 2, 2, 6);
     assert!(result.is_none());
 }
 
@@ -1048,14 +1006,7 @@ fn constrain_dimensions_only_enforces_the_texture_limit() {
 fn test_convert_argb32_single_pixel() {
     // Single pixel image - edge case
     let data: Vec<u8> = vec![255, 128, 64, 32]; // A=255, R=128, G=64, B=32
-    let result = ImageCache::convert_argb32_to_rgba(
-        &data,
-        1,
-        1,
-        4,
-        ImageSizeSpec::default(),
-        ImageRotation::None,
-    );
+    let result = ImageCache::convert_argb32_to_rgba(&data, 1, 1, 4);
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
@@ -1068,14 +1019,7 @@ fn test_convert_argb32_single_pixel() {
 fn test_convert_rgb24_single_pixel() {
     // Single pixel image - edge case
     let data: Vec<u8> = vec![128, 64, 32]; // R=128, G=64, B=32
-    let result = ImageCache::convert_rgb24_to_rgba(
-        &data,
-        1,
-        1,
-        3,
-        ImageSizeSpec::default(),
-        ImageRotation::None,
-    );
+    let result = ImageCache::convert_rgb24_to_rgba(&data, 1, 1, 3);
     assert!(result.is_some());
 
     let (w, h, rgba) = result.unwrap();
