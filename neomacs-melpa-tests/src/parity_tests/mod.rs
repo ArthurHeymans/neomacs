@@ -404,6 +404,7 @@ mod magit_popup;
 mod magit_section;
 mod makey;
 mod markdown_mode;
+mod markdown_toc;
 mod math_symbol_lists;
 mod maude_mode;
 mod memoize;

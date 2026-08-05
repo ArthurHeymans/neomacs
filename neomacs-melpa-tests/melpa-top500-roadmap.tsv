@@ -185,7 +185,7 @@ rank	package	downloads	status
 184	git-messenger	619046	covered
 185	pythonic	612142	covered
 186	typescript-mode	611761	covered
-187	markdown-toc	610473	todo
+187	markdown-toc	610473	covered
 188	clang-format	605984	todo
 189	yaml	601895	covered
 190	imenu-list	600086	todo

@@ -1975,6 +1975,12 @@ pub const MAKEY_MELPA_PIN: (&str, &str) = ("makey", "20131231.1430");
 /// `f441e8bc9951e73b12c61e9198658488dd8e86e1`.
 pub const MARKDOWN_MODE_MELPA_PIN: (&str, &str) = ("markdown-mode", "20260722.40");
 
+/// The exact Markdown-Toc package selected for practical README generation,
+/// refresh, customization, anchor, navigation, deletion, and mode-lifecycle
+/// parity. MELPA built this archive from upstream commit
+/// `d22633b654193bcab322ec51b6dd3bb98dd5f69f`.
+pub const MARKDOWN_TOC_MELPA_PIN: (&str, &str) = ("markdown-toc", "20260131.1444");
+
 /// The exact Math Symbol Lists package selected for the practical completion,
 /// Unicode formula rendering, package-requirement, conflict-resolution,
 /// scripted-character, and full-corpus integrity parity suite. MELPA built
