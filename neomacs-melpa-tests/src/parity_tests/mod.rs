@@ -376,6 +376,7 @@ mod htmlize;
 mod hungry_delete;
 mod hydra;
 mod iedit;
+mod imenu_list;
 mod indent_guide;
 mod inf_ruby;
 mod iter2;

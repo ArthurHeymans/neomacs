@@ -1780,6 +1780,13 @@ pub const PCRE2EL_MELPA_PIN: (&str, &str) = ("pcre2el", "20240629.2322");
 /// `274398a24288a7db430a656b580ffbf889ca02aa`.
 pub const INF_RUBY_MELPA_PIN: (&str, &str) = ("inf-ruby", "20251224.216");
 
+/// The exact Imenu-List package selected for practical source indexing,
+/// sidebar rendering, navigation, folding, refresh, unavailable-index,
+/// translated-position, window, timer, and mode-lifecycle parity. MELPA built
+/// this archive from upstream commit
+/// `76f2335ee6f2f066d87fe4e4729219d70c9bc70d`.
+pub const IMENU_LIST_MELPA_PIN: (&str, &str) = ("imenu-list", "20210420.1200");
+
 /// The exact iter2 package selected by the practical resumable-workflow,
 /// composition, resource-cleanup, editor-state, nonlocal-exit, and tracing
 /// parity corpus. MELPA built this archive from upstream commit
