@@ -338,6 +338,7 @@ mod helm_make;
 mod helm_mode_manager;
 mod helm_projectile;
 mod helm_swoop;
+mod helm_themes;
 mod highlight_indentation;
 mod highlight_numbers;
 mod highlight_parentheses;

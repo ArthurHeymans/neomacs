@@ -2261,6 +2261,12 @@ pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
 /// `7df8ed3ddd46a0402838b748d317c01454346164`.
 pub const HELM_MODE_MANAGER_MELPA_PIN: (&str, &str) = ("helm-mode-manager", "20210108.2330");
 
+/// The exact archived Helm-Themes 0.05 source (normalized by Emacs to 0.5)
+/// selected for theme candidate,
+/// preview, acceptance, cancellation, and restoration parity. The final MELPA
+/// source revision was `1fc4a5d6114bc6c8c444c5ca73f22abe141a690d`.
+pub const HELM_THEMES_SOURCE_PIN: (&str, &str) = ("helm-themes", "0.5");
+
 /// The exact Helm Ag package selected for practical search-command, result
 /// highlighting, saved-result navigation, context-stack, multi-file edit, and
 /// project-discovery parity. The released 0.64 source is pinned at upstream
