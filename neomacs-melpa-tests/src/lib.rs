@@ -1963,6 +1963,13 @@ pub const GOLDEN_RATIO_MELPA_PIN: (&str, &str) = ("golden-ratio", "20230912.1825
 /// `8b7f1477ef367b5b7de452589dd9a8ab30150d0a`.
 pub const GIT_MELPA_PIN: (&str, &str) = ("git", "20140128.1041");
 
+/// The exact Eval Sexp Fu package selected for practical inner-expression
+/// evaluation, source navigation, overlay lifecycle, delimiter flashing,
+/// timer ordering, advice, error feedback, and mode-gating parity. MELPA built
+/// this archive from upstream commit
+/// `36d2fe3bcf602e15ca10a7f487da103515ef391a`.
+pub const EVAL_SEXP_FU_MELPA_PIN: (&str, &str) = ("eval-sexp-fu", "20191128.825");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream

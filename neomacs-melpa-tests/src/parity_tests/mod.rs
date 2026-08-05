@@ -295,6 +295,7 @@ mod emmet_mode;
 mod epl;
 mod erlang;
 mod es_lib;
+mod eval_sexp_fu;
 mod evil;
 mod evil_exchange;
 mod evil_matchit;
