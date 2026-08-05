@@ -2180,6 +2180,16 @@ fn test_face_resolver_with_font_lock_face() {
     let mut buf = test_buffer(2, "*fontlock*");
     set_buffer_text(&mut buf, "defun myfunction");
     buf.widen();
+    // GNU font-core.el's `font-lock-default-function' installs this alias
+    // when Font Lock is enabled.  Redisplay itself asks for the effective
+    // `face' property; it does not hard-code `font-lock-face'.
+    buf.set_buffer_local(
+        "char-property-alias-alist",
+        Value::list(vec![Value::list(vec![
+            Value::symbol("face"),
+            Value::symbol("font-lock-face"),
+        ])]),
+    );
     // Set "font-lock-face" to "font-lock-keyword-face" on "defun".
     buf.put_text_property(
         0,

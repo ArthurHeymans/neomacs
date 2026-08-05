@@ -3734,6 +3734,90 @@ fn layout_frame_rust_lays_out_face_property() {
     assert!(!trace.matrix_rows.is_empty());
 }
 
+/// Helpful's source-file link is a text button whose visible `button' face is
+/// inherited through its `category' text property.  GNU redisplay resolves
+/// that category-backed face before producing glyphs; the button must not look
+/// like ordinary buffer text merely because it has no direct `face' property.
+#[test]
+fn layout_frame_rust_renders_face_inherited_from_text_category() {
+    use neomacs_display_protocol::face::UnderlineStyle;
+    use neomacs_display_protocol::types::Color;
+
+    let mut eval = Context::new();
+    let category = eval
+        .eval_str(
+            r#"(let ((category (make-symbol "helpful-navigate-button")))
+                 (put category 'face 'button)
+                 category)"#,
+        )
+        .expect("create Helpful-style button category");
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("helpful.el\n");
+        assert!(buffer.put_text_property(
+            0,
+            "helpful.el".len(),
+            Value::symbol("category"),
+            category,
+        ));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-category-button-face", 640, 160, buf_id);
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let face_setup = eval.eval_str_each(
+        r##"(internal-set-lisp-face-attribute 'button :foreground "#2bbc8a" (selected-frame))
+            (internal-set-lisp-face-attribute 'button :underline t (selected-frame))"##,
+    );
+    assert!(
+        face_setup.iter().all(Result::is_ok),
+        "button face setup must succeed, got {face_setup:?}"
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let glyph = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .flat_map(|row| row.glyphs[GlyphArea::Text.index()].iter())
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'h' }))
+        .expect("rendered Helpful filename glyph");
+    let face = state
+        .faces
+        .get(&glyph.face_id)
+        .expect("resolved Helpful filename face");
+
+    assert_eq!(face.foreground, Color::from_pixel(0x002b_bc8a));
+    assert_ne!(face.underline_style, UnderlineStyle::None);
+}
+
 #[test]
 fn layout_frame_rust_lays_out_simple_display_property() {
     let text = "abcXYZdef\n";

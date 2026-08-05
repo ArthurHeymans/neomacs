@@ -15,9 +15,11 @@ use neovm_core::emacs_core::effect_profile::{
 };
 use neovm_core::emacs_core::image_catalog::image_scale_environment;
 use neovm_core::emacs_core::intern;
+use neovm_core::emacs_core::plist::plist_get;
 use neovm_core::emacs_core::symbol::Obarray;
+use neovm_core::emacs_core::textprop::resolve_effective_char_property;
 use neovm_core::emacs_core::value::{ValueKind, eq_value, list_to_vec};
-use neovm_core::emacs_core::{Context, Value};
+use neovm_core::emacs_core::{Context, SymId, Value};
 use neovm_core::face::{
     BoxStyle as NeoBoxStyle, Color as NeoColor, Face as NeoFace, FaceDecoration, FaceHeight,
     FaceTable, FontWeight, UnderlineStyle as NeoUnderlineStyle,
@@ -39,6 +41,7 @@ use neomacs_display_protocol::EffectsConfig;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::face::BoxLineWidth;
 use neomacs_display_protocol::types::{FaceId, Rect};
+use rustc_hash::FxHashMap;
 use strum::{EnumString, IntoStaticStr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -109,6 +112,12 @@ pub(crate) trait LayoutBufferView {
     ) -> Result<(), E>;
     fn layout_emacs_byte_at_pos(&self, pos: EmacsBytePos) -> Option<u8>;
     fn layout_text_prop_at_emacs_byte_pos(&self, pos: EmacsBytePos, name: Value) -> Option<Value>;
+    /// Return PROPERTY from CATEGORY's symbol plist as captured for this
+    /// immutable layout view. Live-buffer test adapters have no evaluator
+    /// symbol environment and therefore use the default empty implementation.
+    fn layout_category_symbol_property(&self, _category: Value, _property: Value) -> Option<Value> {
+        None
+    }
     fn layout_next_text_prop_change_after_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
@@ -149,6 +158,10 @@ pub(crate) struct LayoutBufferSnapshot {
     local_var_alist: Value,
     slots: [Value; BUFFER_SLOT_COUNT],
     overlays: OverlayList,
+    /// Symbol plists for the category symbols actually referenced by this
+    /// buffer's text and overlays. Capturing this sparse set keeps layout
+    /// immutable without cloning the evaluator's complete obarray.
+    category_symbol_plists: FxHashMap<SymId, Value>,
     /// Every [`LayoutVar`] resolved once at snapshot construction, indexed by
     /// variant. GNU redisplay reads display variables as one memory load
     /// (BVAR fields, or V-globals the buffer-local machinery keeps swapped
@@ -172,6 +185,7 @@ impl LayoutBufferSnapshot {
             local_var_alist,
             slots,
             overlays: buffer.overlays().clone(),
+            category_symbol_plists: FxHashMap::default(),
         }
     }
 
@@ -179,12 +193,58 @@ impl LayoutBufferSnapshot {
         let mut snapshot = Self::from_buffer(buffer);
         snapshot.vars =
             resolve_layout_vars(snapshot.local_var_alist, &snapshot.slots, Some(obarray));
+        snapshot.category_symbol_plists = capture_layout_category_symbol_plists(buffer, obarray);
         snapshot
     }
 
     pub(crate) fn name(&self) -> &str {
         &self.name
     }
+}
+
+fn capture_layout_category_symbol_plists(
+    buffer: &Buffer,
+    obarray: &Obarray,
+) -> FxHashMap<SymId, Value> {
+    fn remember(category: Value, obarray: &Obarray, plists: &mut FxHashMap<SymId, Value>) {
+        if let Some(category_id) = category.as_symbol_id() {
+            plists
+                .entry(category_id)
+                .or_insert_with(|| obarray.symbol_plist_id(category_id));
+        }
+    }
+
+    let category_property = Value::symbol("category");
+    let mut plists = FxHashMap::default();
+    let end = buffer.total_emacs_byte_end_pos();
+    let mut pos = EmacsBytePos::ZERO;
+    while pos < end {
+        if let Some(category) =
+            buffer.text_props_get_property_at_emacs_byte_pos(pos, category_property)
+        {
+            remember(category, obarray, &mut plists);
+        }
+        let Some(next) =
+            buffer.text_props_next_single_change_after_emacs_byte_pos(pos, category_property)
+        else {
+            break;
+        };
+        if next <= pos {
+            break;
+        }
+        pos = next.min(end);
+    }
+
+    for overlay in buffer.overlays().overlays_in_gnu_lists_order() {
+        if let Some(category) = buffer
+            .overlays()
+            .overlay_get_named(overlay, category_property)
+        {
+            remember(category, obarray, &mut plists);
+        }
+    }
+
+    plists
 }
 
 /// Resolve every [`LayoutVar`] with the same precedence the per-query path
@@ -280,6 +340,7 @@ pub(crate) enum LayoutVar {
     CharPropertyAliasAlist,
     CursorInNonSelectedWindows,
     CursorType,
+    DefaultTextProperties,
     DisplayFillColumnIndicator,
     DisplayFillColumnIndicatorCharacter,
     DisplayFillColumnIndicatorColumn,
@@ -353,6 +414,7 @@ impl LayoutVar {
                         captures_default: matches!(
                             var,
                             LayoutVar::CharPropertyAliasAlist
+                                | LayoutVar::DefaultTextProperties
                                 | LayoutVar::DisplayFillColumnIndicator
                                 | LayoutVar::DisplayFillColumnIndicatorCharacter
                                 | LayoutVar::DisplayFillColumnIndicatorColumn
@@ -519,6 +581,12 @@ impl LayoutBufferView for LayoutBufferSnapshot {
 
     fn layout_text_prop_at_emacs_byte_pos(&self, pos: EmacsBytePos, name: Value) -> Option<Value> {
         self.text_snapshot.text_prop_at_emacs_byte_pos(pos, name)
+    }
+
+    fn layout_category_symbol_property(&self, category: Value, property: Value) -> Option<Value> {
+        let category_id = category.as_symbol_id()?;
+        let plist = self.category_symbol_plists.get(&category_id).copied()?;
+        plist_get(plist, &property)
     }
 
     fn layout_next_text_prop_change_after_emacs_byte_pos(
@@ -2187,12 +2255,12 @@ pub(crate) fn overlay_applies_to_window<B: LayoutBufferView + ?Sized>(
 /// higher precedence wins by being applied last), windowed overlays filtered to
 /// `window_id`.
 ///
-/// Both the precedence order and the `window` filter come from
-/// `OverlayList::overlay_property_values_ascending_at_emacs_byte_pos`, the same
-/// core primitive family the single-winner resolvers (`display`, `invisible`,
-/// `mouse-face`) use, so the two policies cannot drift apart in ordering or in
-/// the `window` rule — which is exactly how hl-line's per-window highlight once
-/// leaked into every window.
+/// Both the precedence order and the `window` filter delegate to
+/// `OverlayList` (`sort_overlay_ids_by_priority_desc` and
+/// `overlay_applies_to_window`), the same policy owners used by the
+/// single-winner resolvers (`display`, `invisible`, `mouse-face`).  This keeps
+/// ordering and the window rule from drifting apart — which is exactly how
+/// hl-line's per-window highlight once leaked into every window.
 ///
 /// This is the single implementation of the face scan. Every face-resolution path
 /// — the per-glyph buffer face (`BufferTextSourceCursor::face_at`) and the
@@ -2207,48 +2275,51 @@ pub(crate) struct OverlayFacesAtPosition {
     pub(crate) next_boundary: Option<EmacsBytePos>,
 }
 
-/// One canonical character property plus the aliases visible in the buffer
-/// being laid out. This owns GNU `lookup_char_property`'s alias-order rule so
-/// source cursors do not special-case names such as `font-lock-face` or
-/// `indent-bars-display`.
+/// One effective GNU character-property lookup prepared for a layout buffer.
 ///
-/// The lookup order is resolved once when this value is constructed.  The
-/// canonical name always wins; aliases follow in alist order and nil alias
-/// values are skipped. Category-symbol and `default-text-properties` fallback
-/// require the evaluator's symbol environment and are deliberately outside
-/// this alias-order value.
+/// The hot source cursor resolves aliases and `default-text-properties' once
+/// at construction. Each query then delegates direct/category/alias/default
+/// precedence to neovm-core's shared `resolve_effective_char_property', so
+/// redisplay and Lisp primitives cannot quietly implement different rules.
 #[derive(Clone, Debug)]
 pub(crate) struct LayoutCharPropertyLookup {
     lookup_order: Vec<Value>,
+    default: Option<Value>,
 }
 
 impl LayoutCharPropertyLookup {
     pub(crate) fn new<B: LayoutBufferView + ?Sized>(buffer: &B, property: Value) -> Self {
         let mut lookup_order = vec![property];
-        let Some(mut alist) = buffer.layout_buffer_local_value(LayoutVar::CharPropertyAliasAlist)
-        else {
-            return Self { lookup_order };
-        };
-        while alist.is_cons() {
-            let entry = alist.cons_car();
-            alist = alist.cons_cdr();
-            if !entry.is_cons() || entry.cons_car().bits() != property.bits() {
-                continue;
-            }
-            let mut aliases = entry.cons_cdr();
-            while aliases.is_cons() {
-                let alias = aliases.cons_car();
-                if !lookup_order
-                    .iter()
-                    .any(|existing| existing.bits() == alias.bits())
-                {
-                    lookup_order.push(alias);
+        if let Some(mut alist) = buffer.layout_buffer_local_value(LayoutVar::CharPropertyAliasAlist)
+        {
+            while alist.is_cons() {
+                let entry = alist.cons_car();
+                alist = alist.cons_cdr();
+                if !entry.is_cons() || entry.cons_car().bits() != property.bits() {
+                    continue;
                 }
-                aliases = aliases.cons_cdr();
+                let mut aliases = entry.cons_cdr();
+                while aliases.is_cons() {
+                    let alias = aliases.cons_car();
+                    if !lookup_order
+                        .iter()
+                        .any(|existing| existing.bits() == alias.bits())
+                    {
+                        lookup_order.push(alias);
+                    }
+                    aliases = aliases.cons_cdr();
+                }
+                break;
             }
-            break;
         }
-        Self { lookup_order }
+        let default = buffer
+            .layout_buffer_local_value(LayoutVar::DefaultTextProperties)
+            .filter(|value| value.is_cons())
+            .and_then(|defaults| plist_get(defaults, &property));
+        Self {
+            lookup_order,
+            default,
+        }
     }
 
     pub(crate) fn text_value_at<B: LayoutBufferView + ?Sized>(
@@ -2257,14 +2328,13 @@ impl LayoutCharPropertyLookup {
         bytepos: EmacsBytePos,
     ) -> Option<Value> {
         let (canonical, aliases) = self.lookup_order.split_first()?;
-        if let Some(value) = buffer.layout_text_prop_at_emacs_byte_pos(bytepos, *canonical) {
-            return Some(value);
-        }
-        aliases.iter().find_map(|property| {
-            buffer
-                .layout_text_prop_at_emacs_byte_pos(bytepos, *property)
-                .filter(|value| !value.is_nil())
-        })
+        resolve_effective_char_property(
+            |property| buffer.layout_text_prop_at_emacs_byte_pos(bytepos, property),
+            |category, property| buffer.layout_category_symbol_property(category, property),
+            *canonical,
+            aliases.iter().copied(),
+            self.default,
+        )
     }
 
     pub(crate) fn highest_overlay_value_at<B: LayoutBufferView + ?Sized>(
@@ -2273,13 +2343,23 @@ impl LayoutCharPropertyLookup {
         bytepos: EmacsBytePos,
         current_window_id: Option<u64>,
     ) -> Option<Value> {
-        buffer
-            .layout_overlays()
-            .highest_priority_overlay_effective_property_value_at_emacs_byte_pos(
-                bytepos,
-                &self.lookup_order,
-                current_window_id,
+        let (canonical, aliases) = self.lookup_order.split_first()?;
+        let overlays = buffer.layout_overlays();
+        let mut overlay_ids = overlays.overlays_at_emacs_byte_pos(bytepos);
+        overlays.sort_overlay_ids_by_priority_desc(&mut overlay_ids);
+        overlay_ids.into_iter().find_map(|overlay| {
+            if !overlays.overlay_applies_to_window(overlay, current_window_id) {
+                return None;
+            }
+            resolve_effective_char_property(
+                |property| overlays.overlay_get_named(overlay, property),
+                |category, property| buffer.layout_category_symbol_property(category, property),
+                *canonical,
+                aliases.iter().copied(),
+                None,
             )
+            .filter(|value| !value.is_nil())
+        })
     }
 
     pub(crate) fn overlay_or_text_value_at<B: LayoutBufferView + ?Sized>(
@@ -2298,13 +2378,27 @@ impl LayoutCharPropertyLookup {
         bytepos: EmacsBytePos,
         current_window_id: Option<u64>,
     ) -> Vec<Value> {
-        buffer
-            .layout_overlays()
-            .overlay_effective_property_values_ascending_at_emacs_byte_pos(
-                bytepos,
-                &self.lookup_order,
-                current_window_id,
-            )
+        let Some((canonical, aliases)) = self.lookup_order.split_first() else {
+            return Vec::new();
+        };
+        let overlays = buffer.layout_overlays();
+        let mut overlay_ids = overlays.overlays_at_emacs_byte_pos(bytepos);
+        overlays.sort_overlay_ids_by_priority_desc(&mut overlay_ids);
+        overlay_ids.reverse();
+        overlay_ids
+            .into_iter()
+            .filter(|overlay| overlays.overlay_applies_to_window(*overlay, current_window_id))
+            .filter_map(|overlay| {
+                resolve_effective_char_property(
+                    |property| overlays.overlay_get_named(overlay, property),
+                    |category, property| buffer.layout_category_symbol_property(category, property),
+                    *canonical,
+                    aliases.iter().copied(),
+                    None,
+                )
+                .filter(|value| !value.is_nil())
+            })
+            .collect()
     }
 }
 
@@ -2330,10 +2424,10 @@ pub(crate) fn overlay_faces_at<B: LayoutBufferView + ?Sized>(
     }
     // `face` is GNU's one MERGE policy: overlay faces stack over the
     // text-property face in ascending `sort_overlays` precedence. Ordering and the
-    // `window`-property filter come from the shared core primitive, so this path
-    // cannot drift from the single-winner resolvers -- it previously ordered by a
-    // bare `priority` integer, which reads a `(PRIMARY . SECONDARY)` priority as 0
-    // and drops GNU's containment rule.
+    // `window`-property filter delegate to OverlayList's shared comparator and
+    // applicability rule, so this path cannot drift from the single-winner
+    // resolvers. It previously ordered by a bare `priority` integer, which reads
+    // a `(PRIMARY . SECONDARY)` priority as 0 and drops GNU's containment rule.
     let faces = LayoutCharPropertyLookup::new(buffer, Value::symbol("face"))
         .overlay_values_ascending_at(buffer, bytepos, current_window_id);
     OverlayFacesAtPosition {
@@ -3782,17 +3876,14 @@ impl FaceResolver {
         let mut resolved = self.resolve_buffer_default_face(buffer);
         let mut remap_stack = Vec::new();
 
-        // GNU redisplay asks for the effective `face` property.  When
-        // font-lock mode is active, `font-lock-face` acts as a fallback face,
-        // but an explicit `face` property wins.  This matters for
-        // font-locking comments that cover propertized help key strings in
-        // the initial scratch message.
-        let face_prop = buffer.layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("face"));
-        let font_lock_face_prop =
-            buffer.layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("font-lock-face"));
+        // GNU redisplay asks `Fget_text_property' for the effective `face':
+        // direct value, category fallback, configured aliases such as
+        // `font-lock-face', then `default-text-properties'.
+        let face_prop = LayoutCharPropertyLookup::new(buffer, Value::symbol("face"))
+            .text_value_at(buffer, bytepos);
 
-        // 1. Text face property, with font-lock-face fallback.
-        if let Some(val) = face_prop.or(font_lock_face_prop)
+        // 1. Effective text face property.
+        if let Some(val) = face_prop
             && let Some(next) =
                 self.resolve_buffer_face_value_over_inner(buffer, &resolved, &val, &mut remap_stack)
         {
@@ -3852,8 +3943,8 @@ impl FaceResolver {
         let mut resolved = self.resolve_buffer_default_face(buffer);
         let mut remap_stack = Vec::new();
 
-        if let Some(face_prop) =
-            buffer.layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("face"))
+        if let Some(face_prop) = LayoutCharPropertyLookup::new(buffer, Value::symbol("face"))
+            .text_value_at(buffer, bytepos)
             && let Some(next) = self.resolve_buffer_face_value_over_inner(
                 buffer,
                 &resolved,

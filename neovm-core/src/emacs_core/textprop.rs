@@ -239,6 +239,50 @@ fn symbol_id_for_property_lookup(value: Value) -> Option<SymId> {
     }
 }
 
+/// Resolve one GNU effective character property from its raw property list.
+///
+/// This is the shared implementation of `lookup_char_property' precedence
+/// from GNU `src/intervals.c`: a directly present canonical property wins even
+/// when its value is nil; otherwise a non-nil category property wins; then
+/// non-nil aliases are considered in order; finally the caller-supplied
+/// optional `default-text-properties' value is used for text properties.
+/// Overlay callers supply no default. Callers own
+/// the environment adapters because evaluator lookups and immutable layout
+/// snapshots obtain category/default values differently.
+pub fn resolve_effective_char_property<D, C, A>(
+    mut direct_get: D,
+    mut category_get: C,
+    prop: Value,
+    aliases: A,
+    default: Option<Value>,
+) -> Option<Value>
+where
+    D: FnMut(Value) -> Option<Value>,
+    C: FnMut(Value, Value) -> Option<Value>,
+    A: IntoIterator<Item = Value>,
+{
+    if let Some(value) = direct_get(prop) {
+        return Some(value);
+    }
+
+    if let Some(category) = direct_get(Value::symbol("category"))
+        && let Some(value) = category_get(category, prop)
+        && !value.is_nil()
+    {
+        return Some(value);
+    }
+
+    for alias in aliases {
+        if let Some(value) = direct_get(alias)
+            && !value.is_nil()
+        {
+            return Some(value);
+        }
+    }
+
+    default
+}
+
 fn lookup_char_property_from_direct<F>(
     obarray: &Obarray,
     buffers: &BufferManager,
@@ -249,51 +293,38 @@ fn lookup_char_property_from_direct<F>(
 where
     F: FnMut(Value) -> Option<Value>,
 {
-    if let Some(value) = direct_get(prop) {
-        return value;
-    }
-
-    let mut fallback = Value::NIL;
-
-    if let Some(category) = direct_get(Value::symbol("category"))
-        && let Some(category_id) = symbol_id_for_property_lookup(category)
-        && let Some(prop_id) = symbol_id_for_property_lookup(prop)
-        && let Some(value) = obarray.get_property_id(category_id, prop_id)
-    {
-        fallback = value;
-    }
-
-    if !fallback.is_nil() {
-        return fallback;
-    }
-
-    if let Some(aliases) =
+    let mut aliases =
         current_textprop_variable_value(obarray, buffers, char_property_alias_alist_sym_id())
             .and_then(|value| assq_rest(value, prop))
-    {
-        let mut cursor = aliases;
-        while cursor.is_cons() {
-            let pair_car = cursor.cons_car();
-            let pair_cdr = cursor.cons_cdr();
-            if let Some(value) = direct_get(pair_car)
-                && !value.is_nil()
-            {
-                return value;
-            }
-            cursor = pair_cdr;
+            .unwrap_or(Value::NIL);
+    let alias_iter = std::iter::from_fn(move || {
+        if !aliases.is_cons() {
+            return None;
         }
-    }
-
-    if textprop
-        && let Some(defaults) =
+        let alias = aliases.cons_car();
+        aliases = aliases.cons_cdr();
+        Some(alias)
+    });
+    let default = textprop
+        .then(|| {
             current_textprop_variable_value(obarray, buffers, default_text_properties_sym_id())
-        && defaults.is_cons()
-        && let Some(value) = plist_get_value(defaults, prop)
-    {
-        return value;
-    }
+                .filter(|value| value.is_cons())
+                .and_then(|defaults| plist_get_value(defaults, prop))
+        })
+        .flatten();
 
-    fallback
+    resolve_effective_char_property(
+        &mut direct_get,
+        |category, property| {
+            let category_id = symbol_id_for_property_lookup(category)?;
+            let property_id = symbol_id_for_property_lookup(property)?;
+            obarray.get_property_id(category_id, property_id)
+        },
+        prop,
+        alias_iter,
+        default,
+    )
+    .unwrap_or(Value::NIL)
 }
 
 /// Resolve a char/text property from an interval's plist (in slice form),
