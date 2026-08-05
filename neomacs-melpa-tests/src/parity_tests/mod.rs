@@ -296,6 +296,7 @@ mod dumb_jump;
 mod editorconfig;
 mod elisp_slime_nav;
 mod elixir_mode;
+mod emacsql;
 mod emmet_mode;
 mod epl;
 mod erlang;

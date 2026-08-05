@@ -143,7 +143,7 @@ rank	package	downloads	status
 142	org-bullets	845120	covered
 143	uuidgen	839884	covered
 144	ace-jump-helm-line	838691	covered
-145	emacsql	838275	todo
+145	emacsql	838275	covered
 146	doom-themes	835378	todo
 147	visual-fill-column	828945	todo
 148	column-enforce-mode	828446	todo

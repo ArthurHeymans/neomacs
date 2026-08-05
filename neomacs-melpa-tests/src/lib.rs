@@ -2088,6 +2088,13 @@ pub const OPEN_JUNK_FILE_MELPA_PIN: (&str, &str) = ("open-junk-file", "20161210.
 /// commit `9ec0dbd30be7c6310804141ee952ac8c5f753557`.
 pub const ORG_BULLETS_MELPA_PIN: (&str, &str) = ("org-bullets", "20200317.1740");
 
+/// The exact EmacSQL package selected for practical schema and CRUD query
+/// compilation, prepared-input escaping, reporting expressions, transaction
+/// retry and rollback, protocol parsing, authoring, and failure parity. MELPA
+/// built this archive from upstream commit
+/// `d811bbefcb5e27841af55cae53aa939ba720de77`.
+pub const EMACSQL_MELPA_PIN: (&str, &str) = ("emacsql", "20260601.1722");
+
 /// The exact Ghub package selected for practical REST and GraphQL request,
 /// JSON response, pagination, authentication, forge identity, retry, and
 /// failure parity. MELPA built this archive from upstream commit
