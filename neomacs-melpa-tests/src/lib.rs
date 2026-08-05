@@ -351,6 +351,11 @@ pub const RUST_MODE_MELPA_PIN: (&str, &str) = ("rust-mode", "20260725.1442");
 /// `679cfbc02e206e0a702048cfd7c663eb5c9d1059`.
 pub const SHELL_MAKER_MELPA_PIN: (&str, &str) = ("shell-maker", "20260727.1508");
 
+/// The exact Shift Number dependency used by the Evil Numbers parity corpus.
+/// MELPA built this archive from upstream commit
+/// `d5e8bece6e6ab21ad5a93330d49b2554e9eb72a9`.
+pub const SHIFT_NUMBER_MELPA_PIN: (&str, &str) = ("shift-number", "20260620.1211");
+
 /// The exact simple-httpd package selected by the practical request parsing,
 /// servlet routing, response generation, static-file, and live loopback server
 /// parity corpus. MELPA built this archive from upstream commit
@@ -1913,6 +1918,12 @@ pub const EVIL_MATCHIT_MELPA_PIN: (&str, &str) = ("evil-matchit", "20260409.936"
 /// navigation parity. MELPA built this archive from upstream commit
 /// `db5ee61a6e75db074b7d20e9dcb68e0b94b4edc7`.
 pub const EVIL_NERD_COMMENTER_MELPA_PIN: (&str, &str) = ("evil-nerd-commenter", "20260507.414");
+
+/// The exact Evil Numbers package selected for practical mixed-radix,
+/// grouped-literal, Unicode-script, linewise, blockwise, and search-policy
+/// parity. MELPA built this archive from upstream commit
+/// `616aff9e5cee012954756ed2715209fa90308cdf`.
+pub const EVIL_NUMBERS_MELPA_PIN: (&str, &str) = ("evil-numbers", "20260103.850");
 
 /// The exact Evil Surround package selected for practical characterwise,
 /// linewise, blockwise, nested-delimiter, markup, custom-pair, repeat, marker,

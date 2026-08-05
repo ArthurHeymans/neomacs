@@ -91,7 +91,7 @@ rank	package	downloads	status
 90	spaceline	1042316	covered
 91	helm-make	1038497	covered
 92	persp-mode	1038142	covered
-93	evil-numbers	1032570	todo
+93	evil-numbers	1032570	covered
 94	git-timemachine	1032303	todo
 95	highlight-numbers	1025819	todo
 96	magit-popup	1008183	todo
