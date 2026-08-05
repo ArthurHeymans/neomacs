@@ -112,7 +112,7 @@ rank	package	downloads	status
 111	open-junk-file	956520	covered
 112	ghub	954837	covered
 113	clean-aindent-mode	954383	covered
-114	vi-tilde-fringe	947537	todo
+114	vi-tilde-fringe	947537	covered
 115	json-mode	946343	todo
 116	evil-anzu	943837	todo
 117	evil-args	942620	todo

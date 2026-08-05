@@ -2015,6 +2015,13 @@ pub const TREEPY_MELPA_PIN: (&str, &str) = ("treepy", "20260531.1144");
 /// `a97bcae8f43a9ff64e95473e4ef0d8bafe829211`.
 pub const CLEAN_AINDENT_MODE_MELPA_PIN: (&str, &str) = ("clean-aindent-mode", "20171017.2043");
 
+/// The exact Vi Tilde Fringe package selected for practical local and global
+/// mode lifecycle, bitmap customization and registration, empty-line mapping,
+/// per-buffer isolation, minibuffer exclusion, and failure-state parity.
+/// MELPA built this archive from upstream commit
+/// `e6e15638e8c45a5e68d0874d5d8c9a46c4f38a54`.
+pub const VI_TILDE_FRINGE_MELPA_PIN: (&str, &str) = ("vi-tilde-fringe", "20141028.242");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream
