@@ -1977,6 +1977,13 @@ pub const EVAL_SEXP_FU_MELPA_PIN: (&str, &str) = ("eval-sexp-fu", "20191128.825"
 /// `169064f7acfe198cc7dd43d02518b773691e1314` before retiring the package.
 pub const PACKED_MELPA_PIN: (&str, &str) = ("packed", "20221130.2228");
 
+/// The exact Define Word package selected for practical service dispatch,
+/// word/region/PDF selection, URL retrieval, inflection expansion, HTML
+/// parsing and styling, result limits, and offline dictionary parity. MELPA
+/// built this archive from upstream commit
+/// `31a8c67405afa99d0e25e7c86a4ee7ef84a808fe`.
+pub const DEFINE_WORD_MELPA_PIN: (&str, &str) = ("define-word", "20220104.1848");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream
