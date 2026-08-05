@@ -1,7 +1,7 @@
-use crate::emacs_core::error::{expect_args};
 use super::*;
 use crate::buffer::BufferTextBackendKind;
 use crate::buffer::text::ImplementedBufferTextBackendKind;
+use crate::emacs_core::error::expect_args;
 
 fn value_to_buffer_text_backend_kind(
     value: Value,

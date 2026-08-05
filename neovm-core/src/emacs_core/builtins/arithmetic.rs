@@ -1,5 +1,5 @@
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range};
 use super::*;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use malachite::base::num::arithmetic::traits::{Abs, Pow};
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::num::logic::traits::SignificantBits;

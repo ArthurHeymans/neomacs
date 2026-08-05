@@ -1,8 +1,8 @@
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_fixnum};
 use super::*;
 use crate::buffer::text_props::PropertyPlistApplication;
 use crate::buffer::{CharLen, CharPos0, CharRange};
 use crate::emacs_core::coding::TextQuotingStyle;
+use crate::emacs_core::error::{expect_args, expect_fixnum, expect_max_args, expect_min_args};
 use crate::emacs_core::value::{
     ValueKind, VecLikeType, get_string_text_properties_table_for_value,
     set_string_text_properties_table_for_value,

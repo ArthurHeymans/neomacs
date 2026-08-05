@@ -3,11 +3,11 @@ use crate::buffer::{CharRange, EmacsByteRange, LispCharPos1};
 fn test_ob() -> crate::emacs_core::symbol::Obarray {
     crate::emacs_core::symbol::Obarray::new()
 }
+use crate::emacs_core::buffer::builtin_make_overlay;
 use crate::emacs_core::editfns::{
     builtin_delete_and_extract_region, builtin_delete_region, builtin_erase_buffer,
 };
 use crate::emacs_core::intern::intern_uninterned;
-use crate::emacs_core::buffer::builtin_make_overlay;
 use crate::emacs_core::treesit as runtime_treesit;
 use crate::emacs_core::value::{
     HashTableTest, LambdaData, LambdaParams, StringTextPropertyRun, Value, ValueKind,
@@ -16980,7 +16980,8 @@ fn buffer_text_pixel_size_honors_display_align_to() {
     )
     .expect("put display align-to property");
 
-    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![])
+        .expect("buffer-text-pixel-size");
     assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
     // char_width == 1.0 so pixels == columns; "XY" lands at columns 80,81 => 82.
     assert_eq!(
@@ -17027,7 +17028,8 @@ fn buffer_text_pixel_size_honors_display_space_width() {
     )
     .expect("put display :width property");
 
-    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![])
+        .expect("buffer-text-pixel-size");
     assert_eq!(
         result.cons_car(),
         Value::fixnum(24),
@@ -17124,7 +17126,8 @@ fn buffer_text_pixel_size_includes_overlay_before_string_multiline() {
     )
     .expect("install overlay before-string");
 
-    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![])
+        .expect("buffer-text-pixel-size");
     assert_eq!(
         result.cons_car(),
         Value::fixnum(10),
@@ -17152,7 +17155,8 @@ fn buffer_text_pixel_size_plain_text_unchanged() {
         .get_mut(buf_id)
         .expect("buffer")
         .insert("hello\nworld!");
-    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![]).expect("buffer-text-pixel-size");
+    let result = crate::emacs_core::xdisp::builtin_buffer_text_pixel_size(&mut eval, vec![])
+        .expect("buffer-text-pixel-size");
     assert_eq!(result.cons_car(), Value::fixnum(6));
     assert_eq!(result.cons_cdr(), Value::fixnum(2));
 }

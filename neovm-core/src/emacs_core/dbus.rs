@@ -4,12 +4,12 @@
 //! exposed for startup/runtime compatibility with expected arity and basic
 //! error contracts.
 
-use crate::emacs_core::error::{expect_args};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::resolve_sym;
 use super::value::{Value, ValueKind};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_args;
 use strum::{EnumString, IntoStaticStr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]

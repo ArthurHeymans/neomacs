@@ -3,7 +3,7 @@
 //! Provides callbacks invoked when a watched variable changes
 //! (like Emacs `add-variable-watcher` / `remove-variable-watcher`).
 
-use crate::emacs_core::error::{expect_args};
+use crate::emacs_core::error::expect_args;
 use rustc_hash::FxHashMap;
 
 use super::intern::SymId;

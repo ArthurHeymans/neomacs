@@ -3,9 +3,9 @@
 //! Provides the terminal runtime owner, terminal parameter storage,
 //! and all terminal/tty query builtins.
 
-use crate::emacs_core::error::{expect_args, expect_max_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{EvalResult, Flow, signal};
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args};
 use crate::emacs_core::value::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities;

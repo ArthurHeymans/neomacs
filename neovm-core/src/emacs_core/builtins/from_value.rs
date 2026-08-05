@@ -30,8 +30,8 @@
 //! `defsubr_N` registration, the bytecode VM fast-path delegates, and the
 //! JIT builtin table all consume it unchanged.
 
-use crate::emacs_core::error::{expect_fixnum};
 use crate::buffer::LispCharPos1;
+use crate::emacs_core::error::expect_fixnum;
 use crate::heap_types::LispString;
 
 use super::*;

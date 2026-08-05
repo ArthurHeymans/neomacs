@@ -5,8 +5,8 @@
 //! these implementations provide compatible arity/type/error behavior for
 //! startup code.
 
-use crate::emacs_core::error::{expect_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use std::env;
 use std::path::{Path, PathBuf};
 

@@ -2,12 +2,12 @@
 //!
 //! Implements `capitalize`, `upcase-initials`, and `char-resolve-modifiers`.
 
-use crate::emacs_core::error::{expect_args};
 use super::casetab::{CaseMap, CaseTableOverride};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::{EmacsBytePos, EmacsByteRange};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_args;
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 

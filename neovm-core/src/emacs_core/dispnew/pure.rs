@@ -4,10 +4,10 @@
 //! and all dispnew-related builtins (redraw, ding, termscript,
 //! send-string-to-terminal, internal-show-cursor, force-window-update).
 
-use crate::emacs_core::error::{expect_args, expect_args_range};
 use crate::emacs_core::display::live_frame_designator_p;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{EvalResult, Flow, signal};
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use crate::emacs_core::terminal::pure::expect_terminal_designator_eval;
 use crate::emacs_core::value::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType};

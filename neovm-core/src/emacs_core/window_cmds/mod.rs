@@ -7,13 +7,15 @@
 //! handles, while legacy integer designators are still accepted in resolver
 //! paths for compatibility.
 
-pub(crate) use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_fixnum};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, resolve_sym};
 use super::minibuffer::MinibufferManager;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::{BufferId, BufferManager, EmacsByteLen, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
+pub(crate) use crate::emacs_core::error::{
+    expect_args, expect_fixnum, expect_max_args, expect_min_args,
+};
 use crate::window::{
     CursorTypeSymbol, FrameFullscreen, FrameId, FrameManager, FrameParam, FrameParamKey, Rect,
     SplitDirection, SplitPlacement, Window, WindowBufferDisplayDefaults, WindowFringeDefaults,
@@ -32,8 +34,18 @@ pub(crate) use super::builtins::symbols::{
     builtin_resize_mini_window_internal, builtin_set_window_new_normal,
     builtin_set_window_new_pixel, builtin_set_window_new_total,
 };
-pub(crate) use super::builtins::{builtin_coordinates_in_window_p, builtin_current_window_configuration, builtin_run_window_scroll_functions, builtin_set_window_configuration, builtin_split_window_internal, builtin_window_configuration_equal_p, builtin_window_configuration_frame, builtin_window_configuration_p};
-pub(crate) use super::builtins::{builtin_window_lines_pixel_dimensions, builtin_window_new_normal, builtin_window_new_pixel, builtin_window_new_total, builtin_window_old_body_pixel_height, builtin_window_old_body_pixel_width, builtin_window_old_pixel_height, builtin_window_old_pixel_width};
+pub(crate) use super::builtins::{
+    builtin_coordinates_in_window_p, builtin_current_window_configuration,
+    builtin_run_window_scroll_functions, builtin_set_window_configuration,
+    builtin_split_window_internal, builtin_window_configuration_equal_p,
+    builtin_window_configuration_frame, builtin_window_configuration_p,
+};
+pub(crate) use super::builtins::{
+    builtin_window_lines_pixel_dimensions, builtin_window_new_normal, builtin_window_new_pixel,
+    builtin_window_new_total, builtin_window_old_body_pixel_height,
+    builtin_window_old_body_pixel_width, builtin_window_old_pixel_height,
+    builtin_window_old_pixel_width,
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -4972,7 +4984,8 @@ pub(crate) const MIN_FRAME_TEXT_LINES: i64 = 5;
 pub(crate) const FRAME_TEXT_LINES_PARAM: &str = "neovm--frame-text-lines";
 pub(crate) const FRAME_TOTAL_COLS_PARAM: &str = "neovm--frame-total-cols";
 pub(crate) const FRAME_TOTAL_LINES_PARAM: &str = "neovm--frame-total-lines";
-pub(crate) const LIVE_GUI_RESIZE_ACK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+pub(crate) const LIVE_GUI_RESIZE_ACK_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(1);
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum FrameSizeParam {
@@ -4996,7 +5009,11 @@ pub(crate) enum FrameResizeRequest {
 }
 
 impl FrameResizeRequest {
-    pub(crate) fn text_pixels(self, frames: &FrameManager, fid: FrameId) -> Result<(u32, u32), Flow> {
+    pub(crate) fn text_pixels(
+        self,
+        frames: &FrameManager,
+        fid: FrameId,
+    ) -> Result<(u32, u32), Flow> {
         match self {
             Self::TextPixels { width, height } => Ok((width.max(1), height.max(1))),
             Self::Cells { cols, total_lines } => {
@@ -5005,7 +5022,11 @@ impl FrameResizeRequest {
         }
     }
 
-    pub(crate) fn logical_size(self, frames: &FrameManager, fid: FrameId) -> Result<(i64, i64), Flow> {
+    pub(crate) fn logical_size(
+        self,
+        frames: &FrameManager,
+        fid: FrameId,
+    ) -> Result<(i64, i64), Flow> {
         let frame = frames
             .get(fid)
             .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
@@ -5074,7 +5095,10 @@ fn frame_internal_border_total_pixels(frame: &crate::window::Frame) -> u32 {
         .saturating_mul(2)
 }
 
-pub(crate) fn frame_non_text_total_width_pixels_in_state(frames: &FrameManager, fid: FrameId) -> u32 {
+pub(crate) fn frame_non_text_total_width_pixels_in_state(
+    frames: &FrameManager,
+    fid: FrameId,
+) -> u32 {
     let border = frames
         .get(fid)
         .map(frame_internal_border_total_pixels)

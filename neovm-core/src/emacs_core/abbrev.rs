@@ -12,8 +12,8 @@
 //!   plist.
 //! - `abbrev-table-get` / `abbrev-table-put` access the header symbol's plist.
 
-use crate::emacs_core::error::{expect_args, expect_min_args};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_min_args};
 use std::collections::HashMap;
 
 use super::error::{EvalResult, Flow, signal};

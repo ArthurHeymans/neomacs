@@ -13,9 +13,9 @@
 //! - `bookmark-save` -- serialize bookmarks to a string
 //! - `bookmark-load` -- deserialize bookmarks from a string
 
+use crate::emacs_core::error::LispCondition;
 #[cfg(test)]
 use crate::emacs_core::error::expect_args;
-use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::expect_min_args;
 use std::collections::HashMap;
 use std::fs;

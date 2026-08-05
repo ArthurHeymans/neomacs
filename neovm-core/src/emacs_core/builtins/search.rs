@@ -1,8 +1,8 @@
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range, expect_fixnum};
 use super::*;
 use crate::buffer::{
     BufferId, CharLen, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1,
 };
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum, expect_min_args};
 use crate::emacs_core::regex::{
     BufferRegexpMatchContext, BufferRegexpSyntaxProperties, MatchDataSource, MatchGroup,
     char_pos_to_byte, char_pos_to_byte_lisp_string,

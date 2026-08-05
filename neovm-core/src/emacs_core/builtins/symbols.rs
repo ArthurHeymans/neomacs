@@ -1,7 +1,9 @@
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range, expect_fixnum};
 use super::*;
 use crate::buffer::{
     BufferId, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1,
+};
+use crate::emacs_core::error::{
+    expect_args, expect_args_range, expect_fixnum, expect_max_args, expect_min_args,
 };
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,

@@ -16,7 +16,6 @@
 //!   terminal-coding-system, set-keyboard-coding-system,
 //!   set-terminal-coding-system, coding-system-priority-list
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
@@ -24,6 +23,7 @@ use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::{BufferManager, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::{HashMap, HashSet};
 use strum::{EnumString, IntoStaticStr};

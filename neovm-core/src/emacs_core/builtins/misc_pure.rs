@@ -1,5 +1,5 @@
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::*;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 
 // ===========================================================================
 // Misc

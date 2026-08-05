@@ -1,7 +1,7 @@
-use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
 use super::*;
 use crate::buffer::{BufferManager, LispCharPos1};
 use crate::emacs_core::display;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
 use crate::emacs_core::fontset;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 

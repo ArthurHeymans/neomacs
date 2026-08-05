@@ -1,5 +1,5 @@
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range};
 use super::*;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_min_args};
 use crate::emacs_core::eval::LispArgVec;
 use smallvec::SmallVec;
 

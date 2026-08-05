@@ -8,19 +8,21 @@
 //! Variables: `tab-width`, `indent-tabs-mode`, `standard-indent`, `tab-stop-list`
 
 use super::buffer::{extract_cons_fixnums, point_char_pos};
-use super::xdisp::line_number_digit_width;
-use crate::buffer::LispCharPos1;
-use crate::window::Window;
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range, expect_fixnum};
 use super::error::{EvalResult, Flow, signal};
 use super::symbol::Obarray;
 use super::value::*;
+use super::xdisp::line_number_digit_width;
+use crate::buffer::LispCharPos1;
 use crate::buffer::{
     Buffer, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent,
 };
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{
+    expect_args, expect_args_range, expect_fixnum, expect_max_args, expect_min_args,
+};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
+use crate::window::Window;
 use std::cell::Cell;
 
 // ---------------------------------------------------------------------------

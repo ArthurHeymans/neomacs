@@ -12,10 +12,10 @@
 //!
 //! Image specs are property lists: (:type png :file "foo.png" :width 100 ...)
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::image_catalog::{
     AxisSize, ImageResolveRequest, ImageResolveSource, ImageRotation, ImageScaleEnvironment,

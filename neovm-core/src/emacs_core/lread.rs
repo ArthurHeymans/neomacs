@@ -3,12 +3,12 @@
 //! get-load-suffixes, locate-file, locate-file-internal, read-coding-system,
 //! read-non-nil-coding-system.
 
-use crate::emacs_core::error::{expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::value::*;
 use crate::buffer::{EmacsByteRange, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_max_args, expect_min_args};
 use crate::heap_types::LispString;
 
 // ---------------------------------------------------------------------------

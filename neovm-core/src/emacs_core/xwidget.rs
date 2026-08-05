@@ -5,13 +5,15 @@
 //! lists and builtins for that object model; native frontend/embedder state is
 //! intentionally kept out of the Lisp heap objects.
 
-use crate::emacs_core::error::{expect_args_range};
-use super::builtins::{builtin_get_buffer, builtin_get_buffer_create, collect_proper_list_items, expect_wholenump};
+use super::builtins::{
+    builtin_get_buffer, builtin_get_buffer_create, collect_proper_list_items, expect_wholenump,
+};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::symbol::Obarray;
 use super::value::{Value, eq_value};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_args_range;
 use crate::heap_types::LispString;
 use std::collections::HashMap;
 use strum::IntoStaticStr;

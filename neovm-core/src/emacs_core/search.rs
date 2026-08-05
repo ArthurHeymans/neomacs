@@ -12,12 +12,12 @@
 //! - `replace-match`
 //! - `word-search-forward`, `word-search-backward`
 
-use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
 use super::error::{EvalResult, Flow, signal};
 use super::regex::MatchGroup;
 use super::value::*;
 use crate::buffer::{CharLen, CharPos0, EmacsBytePos};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------

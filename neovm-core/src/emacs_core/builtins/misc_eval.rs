@@ -1,7 +1,9 @@
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range, expect_fixnum};
 use super::*;
 use crate::buffer::text_props::PropertyPlistApplication;
 use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1};
+use crate::emacs_core::error::{
+    expect_args, expect_args_range, expect_fixnum, expect_max_args, expect_min_args,
+};
 use crate::emacs_core::symbol::Obarray;
 
 fn runtime_string_value(value: Value) -> String {
@@ -98,7 +100,8 @@ pub(crate) fn builtin_next_char_property_change_in_buffers(
     if let Some(limit) = args.get(1)
         && !limit.is_nil()
     {
-        let lim_int = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, limit)?;
+        let lim_int =
+            crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, limit)?;
         if let Some(temp_int) = temp.as_fixnum()
             && lim_int < temp_int
         {
@@ -154,7 +157,8 @@ pub(crate) fn builtin_previous_property_change_in_buffers(
         let char_pos = textprop::validate_string_point_raw(s, pos, args[0])?;
         let (limit_pos, limit_val) = match args.get(2) {
             Some(v) if !v.is_nil() => {
-                let lim_int = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, v)?;
+                let lim_int =
+                    crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, v)?;
                 (Some(lim_int), Some(lim_int))
             }
             _ => (None, None),
@@ -274,13 +278,16 @@ pub(crate) fn builtin_previous_char_property_change_in_buffers(
 
     // GNU: temp = previous-overlay-change(POS); if LIMIT > temp, temp = LIMIT;
     // return previous-property-change(POS, nil, temp).
-    let overlay_prev =
-        crate::emacs_core::buffer::builtin_previous_overlay_change_in_buffers(buffers, vec![args[0]])?;
+    let overlay_prev = crate::emacs_core::buffer::builtin_previous_overlay_change_in_buffers(
+        buffers,
+        vec![args[0]],
+    )?;
     let mut temp = overlay_prev;
     if let Some(limit) = args.get(1)
         && !limit.is_nil()
     {
-        let lim_int = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, limit)?;
+        let lim_int =
+            crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, limit)?;
         if let Some(temp_int) = temp.as_fixnum()
             && lim_int > temp_int
         {
@@ -395,7 +402,8 @@ pub(crate) fn builtin_next_single_char_property_change_in_buffers(
         return Ok(Value::fixnum(s.schars() as i64));
     }
 
-    let position = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let position =
+        crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let prop = super::textprop::expect_property_key(&args[1])?;
     let object = args.get(2);
     let buf_id = char_property_buffer_id_for_object(frames, buffers, object)?;
@@ -411,7 +419,9 @@ pub(crate) fn builtin_next_single_char_property_change_in_buffers(
     let initial_value =
         super::textprop::builtin_get_char_property_with_frames(obarray, buffers, frames, get_args)?;
     let limit = match args.get(3) {
-        Some(v) if !v.is_nil() => crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, v)?,
+        Some(v) if !v.is_nil() => {
+            crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, v)?
+        }
         _ => point_max,
     };
 
@@ -477,7 +487,8 @@ pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
         return Ok(Value::fixnum(0));
     }
 
-    let position = crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
+    let position =
+        crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, &args[0])?;
     let prop = super::textprop::expect_property_key(&args[1])?;
     let object = args.get(2);
     let buf_id = char_property_buffer_id_for_object(frames, buffers, object)?;
@@ -487,7 +498,9 @@ pub(crate) fn builtin_previous_single_char_property_change_in_buffers(
     let accessible = buf.accessible_emacs_byte_region();
     let point_min = textprop::byte_to_elisp_pos(buf, accessible.start());
     let limit = match args.get(3) {
-        Some(v) if !v.is_nil() => crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, v)?,
+        Some(v) if !v.is_nil() => {
+            crate::emacs_core::buffer::expect_integer_or_marker_in_buffers(buffers, v)?
+        }
         _ => point_min,
     };
 

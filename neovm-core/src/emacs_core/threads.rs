@@ -15,8 +15,8 @@
 //!   `condition-wait`, `condition-notify`
 //! - Special form: `with-mutex`
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_min_args};
 use std::{collections::HashMap, time::Duration};
 
 use super::error::{

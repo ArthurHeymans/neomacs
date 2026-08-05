@@ -6,8 +6,8 @@
 //! - `CompletionStyle` — matching strategy (prefix, substring, flex, basic)
 //! - Builtin functions for Elisp: `read-from-minibuffer`, `completing-read`, `y-or-n-p`, etc.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use std::collections::HashMap;
 
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, EmacsByteRange, LispCharPos1};

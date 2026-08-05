@@ -1,5 +1,5 @@
-use crate::emacs_core::error::{expect_args};
 use super::*;
+use crate::emacs_core::error::expect_args;
 use std::cell::RefCell;
 use std::path::PathBuf;
 

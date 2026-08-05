@@ -3,7 +3,6 @@
 //! All functions here take `(eval: &mut Context, args: Vec<Value>) -> EvalResult`
 //! and are dispatched from `builtins.rs` via `dispatch_builtin`.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_fixnum};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::syntax::{SyntaxClass, SyntaxTable};
@@ -11,6 +10,7 @@ use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_pr
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
 use crate::buffer::{BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_fixnum, expect_max_args, expect_min_args};
 use malachite::integer::Integer;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 

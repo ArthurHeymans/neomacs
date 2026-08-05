@@ -3,7 +3,9 @@
 //! All functions here take pre-evaluated `Vec<Value>` arguments and return `EvalResult`.
 //! The evaluator dispatches here after evaluating the argument expressions.
 
-pub(crate) use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum, expect_max_args, expect_min_args};
+pub(crate) use crate::emacs_core::error::{
+    expect_args, expect_args_range, expect_fixnum, expect_max_args, expect_min_args,
+};
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::rounding_modes::RoundingMode;
 use std::sync::{
@@ -15,6 +17,7 @@ use std::sync::{
 /// Activated after window-setup-hook completes during startup.
 static TRACE_ALL_BUILTINS: AtomicBool = AtomicBool::new(false);
 
+pub(crate) use super::buffer::lisp_string_from_buffer_bytes;
 pub(super) use super::error::{EvalResult, Flow, LispCondition, signal};
 pub(super) use super::intern::{SymId, intern, resolve_sym};
 pub(super) use super::keyboard::pure::{
@@ -22,7 +25,6 @@ pub(super) use super::keyboard::pure::{
     key_sequence_values,
 };
 pub(super) use super::value::*;
-pub(crate) use super::buffer::lisp_string_from_buffer_bytes;
 pub(super) use std::cell::RefCell;
 pub(super) use std::collections::{HashMap, HashSet};
 pub(crate) use strings::downcase_char_code_emacs_compat;
@@ -3423,12 +3425,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
-        "frame-list",
-        super::frame::builtin_frame_list,
-        0,
-        None,
-    );
+    ctx.defsubr("frame-list", super::frame::builtin_frame_list, 0, None);
     ctx.defsubr(
         "x-create-frame",
         super::window_cmds::builtin_x_create_frame,
@@ -5273,12 +5270,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr(
-        "frame-focus",
-        super::frame::builtin_frame_focus,
-        0,
-        Some(1),
-    );
+    ctx.defsubr("frame-focus", super::frame::builtin_frame_focus, 0, Some(1));
     ctx.defsubr(
         "frame-font-cache",
         |_ctx, args| builtin_frame_font_cache(args),
@@ -5303,12 +5295,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
-        "frame-parent",
-        super::frame::builtin_frame_parent,
-        0,
-        None,
-    );
+    ctx.defsubr("frame-parent", super::frame::builtin_frame_parent, 0, None);
     ctx.defsubr(
         "frame-pointer-visible-p",
         |_ctx, args| builtin_frame_pointer_visible_p(args),

@@ -6,11 +6,11 @@
 //! - `interpreted-function-p`, `special-form-p`, `macrop`
 //! - `func-arity`, `indirect-function`
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, signal};
 use super::intern::{SymId, resolve_name, resolve_sym};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::tagged::header::{SubrDispatchKind, SubrObj};
 use std::collections::HashMap;
 use std::sync::OnceLock;

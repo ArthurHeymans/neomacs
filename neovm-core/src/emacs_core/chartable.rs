@@ -16,12 +16,12 @@
 //!   where SIZE is `Value::fixnum(length)` and each subsequent element is
 //!   `Value::fixnum(0)` or `Value::fixnum(1)`.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::{Context, push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots};
 use super::intern::{NIL_SYM_ID, SymId, T_SYM_ID, intern, resolve_sym};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::tagged::header::store_value_atomic;
 use std::collections::{BTreeMap, BTreeSet};
 

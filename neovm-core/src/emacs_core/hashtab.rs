@@ -7,13 +7,13 @@
 //! - `copy-hash-table`
 //! - `mapatoms`, `unintern`
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, resolve_sym};
 use super::print::print_value;
 use super::value::*;
 use crate::buffer::{CharLen, CharPos0, CharRange};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::tagged::gc::with_tagged_heap;
 use std::collections::{BTreeMap, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};

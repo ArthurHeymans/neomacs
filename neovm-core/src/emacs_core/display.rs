@@ -4,7 +4,6 @@
 //! Since Neomacs is always a GUI application, most display queries return
 //! sensible defaults for a modern graphical display.
 
-pub(crate) use crate::emacs_core::error::{expect_args, expect_max_args, expect_args_range};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::intern;
 use super::terminal::pure::{
@@ -14,6 +13,7 @@ use super::terminal::pure::{
 use super::value::*;
 use super::{Context, PopupMenuEntry, PopupMenuRequest};
 use crate::emacs_core::error::LispCondition;
+pub(crate) use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args};
 use crate::window::{FrameId, WindowId};
 use strum::{EnumString, IntoStaticStr};
 

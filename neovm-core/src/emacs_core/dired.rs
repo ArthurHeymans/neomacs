@@ -6,13 +6,13 @@
 //! - `file-attributes`, `file-attributes-lessp`
 //! - `system-users`, `system-groups`
 
-use crate::emacs_core::error::{expect_args_range};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{intern, resolve_sym};
 use super::timefns::{LispTimeOutput, make_lisp_time};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_args_range;
 use crate::heap_types::LispString;
 use std::collections::VecDeque;
 #[cfg(unix)]

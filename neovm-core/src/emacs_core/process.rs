@@ -21,8 +21,8 @@
 //! Mozilla root certificates are used by the default rustls backend for
 //! verification.
 
-use crate::emacs_core::error::{expect_args, expect_min_args};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_min_args};
 use num_enum::IntoPrimitive;
 use socket2::{Domain, Protocol, SockAddr, SockRef, Socket, Type};
 use std::collections::HashMap;

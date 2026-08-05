@@ -5,11 +5,11 @@
 //! - `primitive-undo` -- undo entries from an undo list
 //! - `undo` -- undo the last change in the current buffer
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::{Buffer, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------

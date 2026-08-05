@@ -1,11 +1,9 @@
 //! Tests for the xfaces.c builtin surface (moved from font_test.rs).
 
 use super::*;
-use crate::emacs_core::font::*;
 use crate::buffer::{Buffer, CharPos0, CharRange};
-use crate::emacs_core::eval::{
-    Context, DisplayHost, GuiFrameHostRequest, ResolvedFrameFont,
-};
+use crate::emacs_core::eval::{Context, DisplayHost, GuiFrameHostRequest, ResolvedFrameFont};
+use crate::emacs_core::font::*;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use crate::face::{Color, FaceAttrValue};
 use crate::heap_types::LispString;

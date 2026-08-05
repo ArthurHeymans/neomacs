@@ -13,11 +13,11 @@
 //! - `last-kbd-macro` -- retrieve last macro value
 //! - `kmacro-p` -- predicate for macro values
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use std::collections::HashSet;

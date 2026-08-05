@@ -12,13 +12,13 @@
 //! oracle corpora.
 
 #[cfg(test)]
-#[cfg(test)]
-use crate::emacs_core::error::{expect_max_args, expect_min_args};
-use super::error::{Flow, signal};
-#[cfg(test)]
 use super::error::EvalResult;
+use super::error::{Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+#[cfg(test)]
+#[cfg(test)]
+use crate::emacs_core::error::{expect_max_args, expect_min_args};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 

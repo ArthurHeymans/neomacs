@@ -3,8 +3,8 @@
 //! Provides path manipulation, file predicates, read/write operations,
 //! directory operations, and file attribute queries.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_fixnum};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_fixnum, expect_max_args, expect_min_args};
 use std::collections::{HashMap, VecDeque};
 #[cfg(unix)]
 use std::ffi::{CStr, CString};

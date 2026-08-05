@@ -594,9 +594,8 @@ fn make_terminal_frame_is_eval_backed_frame_creation() {
     eval.buffers.set_current(scratch);
     super::pure::mark_selected_terminal_usable_for_test(&eval);
 
-    let frame =
-        crate::emacs_core::frame::builtin_make_terminal_frame(&mut eval, vec![Value::NIL])
-            .expect("make-terminal-frame");
+    let frame = crate::emacs_core::frame::builtin_make_terminal_frame(&mut eval, vec![Value::NIL])
+        .expect("make-terminal-frame");
 
     assert!(frame.as_frame_id().is_some());
     assert_eq!(eval.frames.frame_list().len(), 1);

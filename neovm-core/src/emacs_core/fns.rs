@@ -5,12 +5,12 @@
 //! identity, string-to-multibyte/unibyte, string-make-multibyte/unibyte,
 //! compare-strings, string-version-lessp, string-collate-lessp/equalp.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{intern, resolve_sym};
 use crate::emacs_core::builtins::{FromValue, StringDesignator};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_min_args};
 // bytes_to_unibyte_storage_string and encode_nonunicode_char_for_storage
 // imports removed — using emacs_char + LispString directly
 use super::value::*;

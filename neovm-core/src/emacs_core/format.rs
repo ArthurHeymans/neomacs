@@ -5,11 +5,11 @@
 //! - `string-clean-whitespace` — collapse whitespace and trim
 //! - `string-pixel-width` — batch-compatible display-column width
 
-use crate::emacs_core::error::{expect_min_args};
 use super::error::{EvalResult, Flow, signal};
 use super::timefns::zone_offset_name_for_time;
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_min_args;
 
 // ---------------------------------------------------------------------------
 // Argument helpers

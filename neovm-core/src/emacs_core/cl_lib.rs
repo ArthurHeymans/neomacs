@@ -3,15 +3,15 @@
 //! Provides Common Lisp compatibility functions, sequence operations,
 //! and JSON parsing/serialization for the Elisp interpreter.
 
-#[cfg(test)]
-use crate::emacs_core::error::expect_max_args;
-use crate::emacs_core::error::{expect_args, expect_min_args};
 use super::error::{EvalResult, Flow, signal};
 #[cfg(test)]
 use super::intern::intern_uninterned;
 use super::intern::{intern, resolve_sym};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+#[cfg(test)]
+use crate::emacs_core::error::expect_max_args;
+use crate::emacs_core::error::{expect_args, expect_min_args};
 #[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 #[cfg(test)]
@@ -20,7 +20,6 @@ use strum::{EnumString, IntoStaticStr};
 // ---------------------------------------------------------------------------
 // Argument helpers (local copies for this module)
 // ---------------------------------------------------------------------------
-
 
 #[cfg(test)]
 static CL_GENSYM_COUNTER: AtomicU64 = AtomicU64::new(0);

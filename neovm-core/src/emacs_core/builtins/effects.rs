@@ -1,10 +1,10 @@
 //! Lisp interface to the typed renderer-effect registry.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range};
 use super::*;
 use crate::emacs_core::effect_profile::{
     EffectScope, effect_name_from_lisp, effect_operations_from_lisp, effect_set_operation_from_lisp,
 };
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_min_args};
 use neomacs_display_protocol::{EffectOperation, EffectValue, VisualConfig};
 
 fn effect_error(function: &str, message: impl std::fmt::Display) -> Flow {

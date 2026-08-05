@@ -4,8 +4,8 @@
 //! `restore-buffer-modified-p` when a file-visiting buffer changes between
 //! modified and unmodified states.
 
-use crate::emacs_core::error::{expect_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};

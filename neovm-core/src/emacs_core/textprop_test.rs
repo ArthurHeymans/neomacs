@@ -1,8 +1,17 @@
 use super::super::eval::Context;
 use super::*;
-use crate::emacs_core::buffer::{builtin_delete_overlay, builtin_make_overlay, builtin_move_overlay, builtin_next_overlay_change, builtin_overlay_buffer, builtin_overlay_end, builtin_overlay_get, builtin_overlay_properties, builtin_overlay_put, builtin_overlay_start, builtin_overlayp, builtin_overlays_at, builtin_overlays_in, builtin_previous_overlay_change};
 use crate::buffer::{CharLen, CharRange};
-use crate::emacs_core::builtins::{builtin_current_buffer, builtin_get_pos_property, builtin_goto_char, builtin_insert, builtin_make_indirect_buffer, builtin_next_char_property_change, builtin_previous_char_property_change, builtin_previous_property_change};
+use crate::emacs_core::buffer::{
+    builtin_delete_overlay, builtin_make_overlay, builtin_move_overlay,
+    builtin_next_overlay_change, builtin_overlay_buffer, builtin_overlay_end, builtin_overlay_get,
+    builtin_overlay_properties, builtin_overlay_put, builtin_overlay_start, builtin_overlayp,
+    builtin_overlays_at, builtin_overlays_in, builtin_previous_overlay_change,
+};
+use crate::emacs_core::builtins::{
+    builtin_current_buffer, builtin_get_pos_property, builtin_goto_char, builtin_insert,
+    builtin_make_indirect_buffer, builtin_next_char_property_change,
+    builtin_previous_char_property_change, builtin_previous_property_change,
+};
 use crate::emacs_core::error::Flow;
 use malachite::Integer;
 

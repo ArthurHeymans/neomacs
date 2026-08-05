@@ -7,8 +7,8 @@
 //! The xfaces.c builtin surface (internal-*-lisp-face*, colors, face-id,
 //! face-font) lives in `super::xfaces`.
 
-pub(crate) use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use crate::emacs_core::error::LispCondition;
+pub(crate) use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use std::sync::{OnceLock, RwLock};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -16,7 +16,10 @@ use strum::EnumString;
 
 use super::error::{EvalResult, Flow, signal};
 use super::xfaces::{
-    FrameFaceInitial, clear_font_cache_state, derived_face_attrs_from_font_value, ensure_frame_lisp_face_vector, font_spec_size_to_face_height, lookup_frame_lisp_face_vector, realize_default_lisp_face_for_frame, runtime_face_from_lisp_face_vector, runtime_face_table_from_frame_lisp_faces, set_lisp_face_vector_attr,
+    FrameFaceInitial, clear_font_cache_state, derived_face_attrs_from_font_value,
+    ensure_frame_lisp_face_vector, font_spec_size_to_face_height, lookup_frame_lisp_face_vector,
+    realize_default_lisp_face_for_frame, runtime_face_from_lisp_face_vector,
+    runtime_face_table_from_frame_lisp_faces, set_lisp_face_vector_attr,
 };
 
 use super::intern::{intern, resolve_sym};
@@ -567,7 +570,10 @@ pub(crate) fn default_face_font_attr_affects_frame_font(attr: LFaceAttr) -> bool
     )
 }
 
-pub(crate) fn sync_live_default_face_font_state(eval: &mut super::eval::Context, frame_id: FrameId) {
+pub(crate) fn sync_live_default_face_font_state(
+    eval: &mut super::eval::Context,
+    frame_id: FrameId,
+) {
     if eval
         .frames
         .get(frame_id)
@@ -687,7 +693,10 @@ pub(crate) fn update_face_from_frame_parameter(
 /// that relationship in one table-shaped function: face state remains the
 /// source of the change, while the frame-parameter primitive remains the
 /// single publication seam used by frame backends.
-pub(crate) fn frame_parameter_for_face_attribute(face_name: &str, attr: LFaceAttr) -> Option<FrameParam> {
+pub(crate) fn frame_parameter_for_face_attribute(
+    face_name: &str,
+    attr: LFaceAttr,
+) -> Option<FrameParam> {
     match (face_name, attr) {
         ("default", LFaceAttr::Foreground) => Some(FrameParam::ForegroundColor),
         ("default", LFaceAttr::Background) => Some(FrameParam::BackgroundColor),

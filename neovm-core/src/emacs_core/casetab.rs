@@ -4,10 +4,10 @@
 //! mappings, a `CaseTableManager` with standard ASCII case tables pre-initialized,
 //! and pure builtins for case-table predicates and character case conversion.
 
-use crate::emacs_core::error::{expect_args};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_args;
 use crate::emacs_core::intern::{SymId, intern};
 use crate::tagged::header::store_value_atomic;
 use std::cell::RefCell;

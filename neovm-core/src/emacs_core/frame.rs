@@ -5,14 +5,26 @@
 //! GNU implements in frame.c. The Frame/FrameManager data structures
 //! live in crate::window; window.c builtins stay in super::window_cmds.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
+use super::error::Flow;
 use super::error::{EvalResult, LispCondition, signal};
 use super::intern::resolve_sym;
 use super::value::{Value, ValueKind, VecLikeType};
-use super::error::Flow;
+use super::window_cmds::{
+    DeleteFrameMode, FRAME_TEXT_LINES_PARAM, FRAME_TOTAL_COLS_PARAM, FRAME_TOTAL_LINES_PARAM,
+    FrameResizeRequest, FrameSizeParam, LIVE_GUI_RESIZE_ACK_TIMEOUT, MIN_FRAME_TEXT_LINES,
+    delete_frame_owned, ensure_selected_frame_id_in_state, expect_int,
+    flush_pending_live_gui_resize, frame_divider_width, frame_is_top_level_non_window,
+    frame_name_parameter_value, frame_non_text_total_height_pixels,
+    frame_non_text_total_width_pixels_in_state, frame_realized_lines, frame_size_param_to_cells,
+    frame_size_param_to_pixels, frame_text_height_pixels, frame_text_width_pixels_in_state,
+    frame_total_cols, frame_total_lines, make_frame_plain, other_frames_in_state,
+    parse_frame_size_param, remember_selected_window_point_in_state, request_live_gui_frame_resize,
+    resize_live_gui_frame, resolve_frame_id, resolve_frame_id_in_state, selected_frame_impl,
+    set_frame_text_size, stringish_value, sync_selected_window_buffer_in_state,
+};
 use crate::buffer::{BufferId, BufferManager};
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::window::FrameManager;
-use super::window_cmds::{FRAME_TEXT_LINES_PARAM, FRAME_TOTAL_COLS_PARAM, FRAME_TOTAL_LINES_PARAM, FrameSizeParam, LIVE_GUI_RESIZE_ACK_TIMEOUT, flush_pending_live_gui_resize, frame_non_text_total_height_pixels, frame_non_text_total_width_pixels_in_state, frame_size_param_to_pixels, stringish_value, DeleteFrameMode, FrameResizeRequest, MIN_FRAME_TEXT_LINES, delete_frame_owned, ensure_selected_frame_id_in_state, expect_int, frame_divider_width, frame_is_top_level_non_window, frame_name_parameter_value, frame_realized_lines, frame_size_param_to_cells, frame_text_height_pixels, frame_text_width_pixels_in_state, frame_total_cols, frame_total_lines, make_frame_plain, other_frames_in_state, parse_frame_size_param, remember_selected_window_point_in_state, request_live_gui_frame_resize, resize_live_gui_frame, resolve_frame_id, resolve_frame_id_in_state, selected_frame_impl, set_frame_text_size, sync_selected_window_buffer_in_state};
 use crate::window::{FrameFullscreen, FrameId, FrameParam, FrameParamKey};
 
 /// `(frame-focus &optional FRAME)` -> frame receiving FRAME's keystrokes, or nil.
@@ -1577,7 +1589,10 @@ pub(crate) fn builtin_frame_live_p(
     Ok(Value::bool_val(frames.get(FrameId(id)).is_some()))
 }
 
-pub(crate) fn live_frame_buffer_parameter_ids(buffers: &BufferManager, mut value: Value) -> Vec<BufferId> {
+pub(crate) fn live_frame_buffer_parameter_ids(
+    buffers: &BufferManager,
+    mut value: Value,
+) -> Vec<BufferId> {
     let mut ids = Vec::new();
     while value.is_cons() {
         let car = value.cons_car();
@@ -1610,7 +1625,11 @@ pub(crate) fn frame_uses_window_system_pixels(frame: &crate::window::Frame) -> b
     frame.effective_window_system().is_some()
 }
 
-pub(crate) fn check_frame_pixels(value: &Value, pixelwise: bool, item_size: f32) -> Result<u32, Flow> {
+pub(crate) fn check_frame_pixels(
+    value: &Value,
+    pixelwise: bool,
+    item_size: f32,
+) -> Result<u32, Flow> {
     let size = expect_int(value)?;
     if size <= 0 {
         return Err(signal(
@@ -1876,7 +1895,10 @@ pub(crate) fn frame_icon_name_parameter_value(value: &Value) -> Option<Value> {
 }
 
 /// `(frame-parameter FRAME PARAMETER)` -> value or nil.
-pub(crate) fn frame_parameter_value(frame: &crate::window::Frame, param_key: FrameParamKey) -> Value {
+pub(crate) fn frame_parameter_value(
+    frame: &crate::window::Frame,
+    param_key: FrameParamKey,
+) -> Value {
     match param_key {
         FrameParamKey::Known(FrameParam::Name) => return frame.name_value(),
         FrameParamKey::Known(FrameParam::Title) => return frame.title_value(),

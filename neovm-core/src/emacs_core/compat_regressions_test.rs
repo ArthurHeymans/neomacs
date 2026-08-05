@@ -705,8 +705,7 @@ fn frame_bottom_divider_width_rejects_non_frame_designator() {
 fn frame_scale_factor_defaults_to_one_float() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
-    let out =
-        crate::emacs_core::frame::builtin_frame_scale_factor(&mut eval, vec![]).unwrap();
+    let out = crate::emacs_core::frame::builtin_frame_scale_factor(&mut eval, vec![]).unwrap();
     assert_eq!(out, Value::make_float(1.0));
 }
 

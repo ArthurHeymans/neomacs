@@ -18,12 +18,12 @@
 //! No external crate (serde_json etc.) is used — the parser and serializer
 //! are implemented from scratch with simple recursive descent.
 
-use crate::emacs_core::error::{expect_min_args};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::value::*;
 use crate::buffer::{EmacsByteLen, EmacsBytePos, EmacsByteRange, TextExtent};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_min_args;
 use strum::{EnumString, IntoStaticStr};
 
 // ---------------------------------------------------------------------------

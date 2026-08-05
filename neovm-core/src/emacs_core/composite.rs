@@ -4,12 +4,12 @@
 //! The display engine later validates and registers those properties when it
 //! needs glyph data.  The Lisp-visible mutation semantics live here.
 
-use crate::emacs_core::error::{expect_args, expect_max_args, expect_args_range};
 use super::chartable::make_char_table_value;
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteRange};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args};
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------

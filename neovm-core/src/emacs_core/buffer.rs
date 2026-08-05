@@ -1,5 +1,7 @@
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range, expect_fixnum};
 use super::builtins::*;
+use crate::emacs_core::error::{
+    expect_args, expect_args_range, expect_fixnum, expect_max_args, expect_min_args,
+};
 
 // ===========================================================================
 // Buffer operations (require evaluator for BufferManager access)
@@ -2152,9 +2154,10 @@ pub(crate) fn builtin_compare_buffer_substrings(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let case_fold = super::builtins::misc_eval::dynamic_or_global_symbol_value(eval, "case-fold-search")
-        .map(|value| !value.is_nil())
-        .unwrap_or(true);
+    let case_fold =
+        super::builtins::misc_eval::dynamic_or_global_symbol_value(eval, "case-fold-search")
+            .map(|value| !value.is_nil())
+            .unwrap_or(true);
     builtin_compare_buffer_substrings_with_case_fold(case_fold, &eval.buffers, args)
 }
 
@@ -2324,9 +2327,11 @@ pub(crate) fn builtin_constrain_to_field(
     // Computing them eagerly cost ~5x GNU on `line-beginning-position`, which
     // dired's font-lock calls once per line: 6 property lookups plus 4 `field`
     // symbol interns on every call, all of them thrown away.
-    let inhibit_field_text_motion =
-        super::builtins::misc_eval::dynamic_or_global_symbol_value(eval, "inhibit-field-text-motion")
-            .is_some_and(|value| !value.is_nil());
+    let inhibit_field_text_motion = super::builtins::misc_eval::dynamic_or_global_symbol_value(
+        eval,
+        "inhibit-field-text-motion",
+    )
+    .is_some_and(|value| !value.is_nil());
 
     let mut constrain = !inhibit_field_text_motion && new_pos != old_pos;
 
@@ -4706,9 +4711,8 @@ pub(crate) fn builtin_buffer_local_value(
 // ===========================================================================
 use super::textprop::{
     byte_to_elisp_pos, current_buffer_id_in_buffers, elisp_pos_to_byte_clipped_full,
-    elisp_range_to_byte_clipped_full, ensure_marker_points_into_buffer,
-    expect_overlay, lookup_overlay_property,
-    resolve_buffer_id_in_buffers, resolve_overlay_buffer_id,
+    elisp_range_to_byte_clipped_full, ensure_marker_points_into_buffer, expect_overlay,
+    lookup_overlay_property, resolve_buffer_id_in_buffers, resolve_overlay_buffer_id,
 };
 
 /// (next-overlay-change POS)

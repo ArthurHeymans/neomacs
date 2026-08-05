@@ -2844,7 +2844,6 @@ impl ModuleBoundarySnapshot {
     }
 }
 
-
 /// FrameManager wired for the Lisp runtime: every new frame gets its
 /// lface vectors seeded, mirroring GNU init_frame_faces in the frame.c
 /// creation paths.

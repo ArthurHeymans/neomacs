@@ -1,5 +1,5 @@
-use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
 use super::*;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
 use libloading::Library;
 use std::path::{Path, PathBuf};
 use strum::{EnumString, IntoStaticStr};

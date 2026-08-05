@@ -1,5 +1,5 @@
-use crate::emacs_core::error::{expect_args, expect_args_range};
 use super::*;
+use crate::emacs_core::error::{expect_args, expect_args_range};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
 pub(crate) fn builtin_null_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {

@@ -9,7 +9,6 @@
 //! - Format enhancements
 //! - Variable operations
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_fixnum};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 #[cfg(test)]
@@ -20,6 +19,7 @@ use super::runtime_identity::{
     lookup_full_name_by_login, lookup_full_name_by_uid, lookup_login_by_uid,
 };
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_fixnum, expect_max_args, expect_min_args};
 // storage imports removed — now using emacs_char + LispString directly
 use super::value::{Value, ValueKind};
 use malachite::base::num::conversion::traits::RoundingFrom;

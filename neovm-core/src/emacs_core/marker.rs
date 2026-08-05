@@ -13,11 +13,11 @@
 //!   `set-marker`, `move-marker`, `point-marker`, `point-min-marker`,
 //!   `point-max-marker`, `mark-marker`
 
-use crate::emacs_core::error::{expect_args, expect_args_range};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::{BufferId, BufferManager, CharPos0, EmacsBytePos, InsertionType, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_args_range};
 
 // ---------------------------------------------------------------------------
 // Marker struct (for documentation / internal helpers)

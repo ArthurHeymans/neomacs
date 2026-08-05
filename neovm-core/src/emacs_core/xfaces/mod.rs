@@ -9,8 +9,8 @@
 //! `Face` value type, merge core, `FaceTable` derived cache) lives in
 //! `crate::face`; font.c matching stays in `super::font`.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use crate::emacs_core::error::EvalResult;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::value::{HashKey, HashTableTest, Value, ValueKind, list_to_vec};
@@ -172,10 +172,7 @@ pub(crate) fn seed_face_new_frame_defaults_table(table: Value) {
             let face_id = face_id_for_name(face_name.as_str())?;
             Some((
                 Value::symbol(face_name.as_str()),
-                Value::cons(
-                    Value::fixnum(face_id),
-                    make_lisp_face_vector(),
-                ),
+                Value::cons(Value::fixnum(face_id), make_lisp_face_vector()),
             ))
         })
         .collect();
@@ -223,10 +220,7 @@ pub(crate) fn ensure_face_new_frame_defaults_entry(
     eval.obarray_mut()
         .put_property(face_name, "face", Value::fixnum(face_id))
         .ok();
-    let entry = Value::cons(
-        Value::fixnum(face_id),
-        make_lisp_face_vector(),
-    );
+    let entry = Value::cons(Value::fixnum(face_id), make_lisp_face_vector());
     upsert_frame_face_hash_entry(table, key, entry);
     Some(entry)
 }
@@ -347,17 +341,24 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use strum::{EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
 use super::error::{Flow, LispCondition, signal};
-use super::font::{alternative_font_family_alist, alternative_font_registry_alist, build_font_object, build_font_object_for_match, default_face_font_attr_affects_frame_font, face_remapping_for_current_buffer, font_name_value, font_string_text, font_value_text, font_vector_get_flexible, frame_device_designator_p, frame_id_from_designator, frame_parameter_for_face_attribute, is_font, is_font_spec, live_frame_designator_in_state, live_frame_font_attribute_fallback, live_frame_id_for_face_update, public_live_frame_font_value, publish_face_attribute_to_frame_parameter, resolve_font_match, resolve_live_frame_font_request, sync_live_default_face_font_state, sync_live_frame_font_state};
+use super::font::{
+    alternative_font_family_alist, alternative_font_registry_alist, build_font_object,
+    build_font_object_for_match, default_face_font_attr_affects_frame_font,
+    face_remapping_for_current_buffer, font_name_value, font_string_text, font_value_text,
+    font_vector_get_flexible, frame_device_designator_p, frame_id_from_designator,
+    frame_parameter_for_face_attribute, is_font, is_font_spec, live_frame_designator_in_state,
+    live_frame_font_attribute_fallback, live_frame_id_for_face_update,
+    public_live_frame_font_value, publish_face_attribute_to_frame_parameter, resolve_font_match,
+    resolve_live_frame_font_request, sync_live_default_face_font_state, sync_live_frame_font_state,
+};
 
 use super::intern::intern;
 use crate::emacs_core::SymId;
 use crate::face::{
-    BoxStyle, Face as RuntimeFace, FontSlant, FontWeight, FontWidth, LFACE_ATTRS,
-    UnderlineStyle,
+    BoxStyle, Face as RuntimeFace, FontSlant, FontWeight, FontWidth, LFACE_ATTRS, UnderlineStyle,
 };
 use crate::tagged::header::store_value_atomic;
 use crate::window::{FrameId, FrameManager, FrameParam};
-
 
 // ===========================================================================
 // Face builtins (pure)
@@ -1650,7 +1651,10 @@ fn default_face_has_explicit_font_attr(attr: LFaceAttr) -> bool {
         || get_face_override("default", attr, true).is_some()
 }
 
-pub(crate) fn realize_default_lisp_face_for_frame(eval: &mut super::eval::Context, frame_id: FrameId) {
+pub(crate) fn realize_default_lisp_face_for_frame(
+    eval: &mut super::eval::Context,
+    frame_id: FrameId,
+) {
     let Some(vector) =
         ensure_frame_lisp_face_vector(eval, frame_id, "default", FrameFaceInitial::SelectedBase)
     else {

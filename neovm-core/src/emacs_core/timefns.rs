@@ -6,12 +6,12 @@
 //!
 //! Uses `std::time::SystemTime`/`UNIX_EPOCH` for time operations.
 
-use crate::emacs_core::error::{expect_args};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
 use super::intern::{intern, resolve_sym};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_args;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::rounding_modes::RoundingMode;

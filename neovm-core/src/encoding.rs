@@ -4,8 +4,8 @@
 //! character classification, width calculation, and encoding conversion
 //! APIs.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_args_range};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_min_args};
 use crate::emacs_core::intern::{SymId, intern, resolve_sym};
 // encoding.rs: sentinel imports removed; using emacs_char + LispString directly
 use crate::buffer::{EmacsBytePos, EmacsByteRange, LispCharPos1, TextPositionAnchor};

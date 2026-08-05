@@ -3,10 +3,10 @@
 //! Bridges the buffer's `TextPropertyTable` and `OverlayList` to Elisp
 //! functions like `put-text-property`, `make-overlay`, etc.
 
-use crate::emacs_core::error::{expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{NIL_SYM_ID, T_SYM_ID};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_max_args, expect_min_args};
 // storage imports removed — now using emacs_char directly
 use super::symbol::Obarray;
 use super::value::*;

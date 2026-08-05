@@ -17,8 +17,8 @@
 //! `sleep-for` stays native because GNU's is C (`Fsleep_for`, dispnew.c): it
 //! parses SECONDS/MILLISECONDS and enters `wait_reading_process_output`.
 
-use crate::emacs_core::error::{expect_min_args};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_min_args;
 use std::time::Duration;
 
 use super::error::{EvalResult, Flow, signal};

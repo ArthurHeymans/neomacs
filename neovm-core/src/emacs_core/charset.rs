@@ -8,12 +8,12 @@
 //! It is initialized with the standard charsets: ascii, unicode,
 //! unicode-bmp, latin-iso8859-1, emacs, and eight-bit.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, lookup_interned, resolve_sym};
 use super::value::*;
 use crate::buffer::{EmacsBytePos, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};

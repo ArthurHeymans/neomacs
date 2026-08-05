@@ -4,12 +4,12 @@
 //! The live Rust-side responsibility here is the buffer-local/default-value
 //! machinery that the evaluator still needs directly.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
 use super::value::*;
 use crate::buffer::BufferId;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::gc_trace::GcTrace;
 
 /// Rust-side registry for customization state.

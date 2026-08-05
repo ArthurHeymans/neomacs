@@ -8,7 +8,6 @@
 //! - Lisp char pos  →  byte pos:  `LispCharPos1::to_byte_pos`
 //! - byte pos       →  Lisp char: `EmacsBytePos::to_lisp`
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::eval::OverlayModificationHook;
 use super::intern::intern;
@@ -19,6 +18,7 @@ use crate::buffer::{
     TextChange, TextEditRange, TextExtent,
 };
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::emacs_core::value::ValueKind;
 use crate::heap_types::LispString;
 #[cfg(unix)]

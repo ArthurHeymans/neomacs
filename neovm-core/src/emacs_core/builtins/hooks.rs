@@ -1,6 +1,6 @@
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args, expect_args_range};
 use super::*;
 use crate::buffer::LispCharPos1;
+use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use crate::emacs_core::hook_runtime;
 use crate::gc_trace::GcTrace;
 

@@ -4,10 +4,10 @@
 //! - Classification: `copysign`, `frexp`, `ldexp`, `logb`
 //! - Rounding (float result): `fceiling`, `ffloor`, `fround`, `ftruncate`
 
-use crate::emacs_core::error::{expect_args};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_args;
 use crate::emacs_core::value::ValueKind;
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::rounding_modes::RoundingMode;

@@ -1,7 +1,7 @@
 //! GNU-style synchronous subprocess owner, corresponding to `callproc.c`.
 
-use crate::emacs_core::error::{expect_min_args};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_min_args;
 use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::Write;

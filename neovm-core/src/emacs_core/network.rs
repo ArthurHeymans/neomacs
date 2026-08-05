@@ -442,8 +442,6 @@ fn parse_http_url(url: &str) -> Result<(String, u16, String), String> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-
-
 #[cfg(test)]
 fn expect_string(value: &Value) -> Result<String, Flow> {
     match value.kind() {

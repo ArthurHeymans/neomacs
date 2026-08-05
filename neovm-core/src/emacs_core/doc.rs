@@ -5,11 +5,11 @@
 //! - `documentation-property` — retrieve documentation property
 //! - `Snarf-documentation` — internal DOC file loader compatibility shim
 
-use crate::emacs_core::error::{expect_args};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_args;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};

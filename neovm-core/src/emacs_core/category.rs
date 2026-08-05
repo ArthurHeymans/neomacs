@@ -8,8 +8,8 @@
 //! NeoVM now mirrors that ownership model instead of routing semantics
 //! through a parallel Rust-side manager.
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use std::cell::RefCell;
 
 use super::error::{EvalResult, Flow, signal};

@@ -6,10 +6,10 @@
 //!   subst-char-in-string, string/char encoding stubs, locale-info
 //! - Eval-dependent builtins: backtrace-* helpers, recursion-depth
 
-use crate::emacs_core::error::{expect_args, expect_min_args, expect_max_args};
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use strum::{EnumString, IntoStaticStr};
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

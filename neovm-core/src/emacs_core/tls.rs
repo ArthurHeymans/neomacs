@@ -4,12 +4,12 @@
 //! this module so process management and Elisp builtins do not depend on
 //! rustls-specific types.
 
-use crate::emacs_core::error::{expect_args};
 use super::builtins::{EvalResult, signal};
 use super::error::Flow;
 use super::value::Value;
 use super::value::list_to_vec;
 use crate::emacs_core::error::LispCondition;
+use crate::emacs_core::error::expect_args;
 use base64::Engine;
 use std::io::{Read, Write};
 use std::net::TcpStream;

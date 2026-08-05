@@ -1,11 +1,11 @@
 use super::*;
-use crate::emacs_core::xfaces::*;
 use crate::buffer::{Buffer, CharPos0};
 use crate::emacs_core::eval::{
     Context, DisplayHost, FontResolveRequest, FontSpecResolveRequest, GuiFrameHostRequest,
     ResolvedFontMatch, ResolvedFontSpecMatch,
 };
 use crate::emacs_core::value::ValueKind;
+use crate::emacs_core::xfaces::*;
 use crate::heap_types::LispString;
 use crate::test_utils::runtime_startup_eval_all;
 use crate::window::FrameId;
@@ -288,7 +288,6 @@ impl DisplayHost for CapturingFindFontDisplayHost {
         Ok(self.matched.clone())
     }
 }
-
 
 fn bootstrap_eval_all(src: &str) -> Vec<String> {
     runtime_startup_eval_all(src)
@@ -787,7 +786,6 @@ fn close_font_accepts_tagged_font_object_and_checks_arity() {
     assert!(builtin_close_font(vec![]).is_err());
     assert!(builtin_close_font(vec![Value::NIL, Value::NIL, Value::NIL]).is_err());
 }
-
 
 #[test]
 fn font_at_eval_returns_nil_on_terminal_frame_after_position_validation() {
