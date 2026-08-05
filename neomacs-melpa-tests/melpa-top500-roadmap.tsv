@@ -146,7 +146,7 @@ rank	package	downloads	status
 145	emacsql	838275	covered
 146	doom-themes	835378	covered
 147	visual-fill-column	828945	covered
-148	column-enforce-mode	828446	todo
+148	column-enforce-mode	828446	covered
 149	evil-collection	826095	todo
 150	dap-mode	821004	todo
 151	neotree	811874	todo

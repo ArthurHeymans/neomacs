@@ -2489,6 +2489,12 @@ pub const DOOM_THEMES_MELPA_PIN: (&str, &str) = ("doom-themes", "20260117.2323")
 /// from upstream commit `9c0ecc2af21d3024a2a838c30d574e86265a52be`.
 pub const VISUAL_FILL_COLUMN_MELPA_PIN: (&str, &str) = ("visual-fill-column", "20251110.1039");
 
+/// The exact Column Enforce Mode package selected for practical code-width,
+/// comment policy, incremental editing, contextual limits, interactive rules,
+/// overlay lifecycle, and global admission parity. MELPA built this archive
+/// from upstream commit `14a7622f2268890e33536ccd29510024d51ee96f`.
+pub const COLUMN_ENFORCE_MODE_MELPA_PIN: (&str, &str) = ("column-enforce-mode", "20200605.1933");
+
 /// The exact Expand Region package selected for practical progressive
 /// selection, contraction, history invalidation, register autocopy, and
 /// language-specific region parity. MELPA built this archive from upstream

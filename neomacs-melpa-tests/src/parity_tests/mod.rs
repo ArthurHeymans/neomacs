@@ -276,6 +276,7 @@ mod chinese_word_at_point;
 mod cider;
 mod clean_aindent_mode;
 mod clojure_mode;
+mod column_enforce_mode;
 mod commander;
 mod company;
 mod compat;
