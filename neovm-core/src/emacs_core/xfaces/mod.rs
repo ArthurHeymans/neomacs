@@ -1847,7 +1847,12 @@ pub(crate) fn runtime_face_table_from_frame_lisp_faces(
     frame_id: FrameId,
     preserve_default_baseline: bool,
 ) -> crate::face::FaceTable {
-    runtime_face_table_from_frame_lisp_faces_resolved(eval, frame_id, preserve_default_baseline, None)
+    runtime_face_table_from_frame_lisp_faces_resolved(
+        eval,
+        frame_id,
+        preserve_default_baseline,
+        None,
+    )
 }
 
 pub(crate) fn runtime_face_table_from_frame_lisp_faces_resolved(
