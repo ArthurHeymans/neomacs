@@ -1104,6 +1104,7 @@ pub(crate) mod builder;
 pub(crate) mod face_state;
 pub(crate) mod finalizer;
 pub(crate) mod geometry;
+pub(crate) mod line_end;
 pub(crate) mod line_number_margin;
 pub(crate) mod lisp_string;
 pub(crate) mod measured_state;
