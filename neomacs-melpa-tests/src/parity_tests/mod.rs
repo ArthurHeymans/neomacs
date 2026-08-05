@@ -476,6 +476,7 @@ mod transient;
 mod treemacs;
 mod treemacs_projectile;
 mod two_bit;
+mod typescript_mode;
 mod upstream_package_ert;
 mod use_package;
 mod uuidgen;

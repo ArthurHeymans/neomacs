@@ -444,6 +444,13 @@ pub const TINYSEGMENTER_MELPA_PIN: (&str, &str) = ("tinysegmenter", "20141124.10
 /// upstream commit `781376e9dc9a901116c0c39914aeb4d46e524e0a`.
 pub const TOC_ORG_MELPA_PIN: (&str, &str) = ("toc-org", "20260514.1415");
 
+/// The exact TypeScript Mode package selected for practical source editing,
+/// indentation policy, syntax, fontification, template conversion, defun
+/// navigation, comment filling, and compiler-diagnostic parity. MELPA built
+/// this archive from upstream commit
+/// `481df3ad2cdf569d8e6697679669ff6206fbd2f9`.
+pub const TYPESCRIPT_MODE_MELPA_PIN: (&str, &str) = ("typescript-mode", "20250118.2056");
+
 /// The exact yaml.el package selected by the practical deployment parsing,
 /// anchors, scalar policy, round-trip encoding, dialect, source-position, and
 /// validation parity corpus. MELPA built this archive from upstream commit
