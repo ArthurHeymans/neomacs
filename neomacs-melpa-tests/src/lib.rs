@@ -2152,6 +2152,11 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 
+/// The exact Shrink Path package selected as Doom Modeline's path-rendering
+/// dependency. MELPA built this archive from upstream commit
+/// `c14882c8599aec79a6e8ef2d06454254bb3e1e41`.
+pub const SHRINK_PATH_MELPA_PIN: (&str, &str) = ("shrink-path", "20190208.1335");
+
 /// The exact Treemacs package selected for practical project admission,
 /// workspace lifecycle, persistence, selection, and terminal tree parity.
 /// MELPA built this archive from upstream commit
@@ -2163,6 +2168,12 @@ pub const TREEMACS_MELPA_PIN: (&str, &str) = ("treemacs", "20251226.1307");
 /// MELPA built this archive from upstream commit
 /// `fbd5d846611bad828e336b25d2e131d1bc06b83d`.
 pub const DIMINISH_MELPA_PIN: (&str, &str) = ("diminish", "20220909.847");
+
+/// The exact Doom Modeline package selected for practical file-buffer,
+/// state-transition, selection, encoding, extension, layout, and global-mode
+/// lifecycle parity. MELPA built this archive from upstream commit
+/// `017854c6484dd6a38e4b039dad04ce6dbec02f08`.
+pub const DOOM_MODELINE_MELPA_PIN: (&str, &str) = ("doom-modeline", "20260708.823");
 
 /// The exact Expand Region package selected for practical progressive
 /// selection, contraction, history invalidation, register autocopy, and

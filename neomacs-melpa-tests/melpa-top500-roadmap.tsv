@@ -87,7 +87,7 @@ rank	package	downloads	status
 86	toc-org	1047381	covered
 87	ansi	1045435	covered
 88	parent-mode	1043957	covered
-89	doom-modeline	1043813	todo
+89	doom-modeline	1043813	covered
 90	spaceline	1042316	todo
 91	helm-make	1038497	todo
 92	persp-mode	1038142	todo
