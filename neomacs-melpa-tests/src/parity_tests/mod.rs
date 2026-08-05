@@ -455,6 +455,7 @@ mod upstream_package_ert;
 mod use_package;
 mod uuidgen;
 mod vi_tilde_fringe;
+mod visual_fill_column;
 mod volatile_highlights;
 mod web_completion_data;
 mod web_mode;

@@ -2483,6 +2483,12 @@ pub const DOOM_MODELINE_MELPA_PIN: (&str, &str) = ("doom-modeline", "20260708.82
 /// archive from upstream commit `53645a905dfb3055db52f5d418d5ef612027e062`.
 pub const DOOM_THEMES_MELPA_PIN: (&str, &str) = ("doom-themes", "20260117.2323");
 
+/// The exact Visual Fill Column package selected for practical soft-wrapping,
+/// centered and right-to-left layouts, text scaling, multi-window resizing,
+/// hook lifecycle, and file-buffer global-mode parity. MELPA built this archive
+/// from upstream commit `9c0ecc2af21d3024a2a838c30d574e86265a52be`.
+pub const VISUAL_FILL_COLUMN_MELPA_PIN: (&str, &str) = ("visual-fill-column", "20251110.1039");
+
 /// The exact Expand Region package selected for practical progressive
 /// selection, contraction, history invalidation, register autocopy, and
 /// language-specific region parity. MELPA built this archive from upstream
