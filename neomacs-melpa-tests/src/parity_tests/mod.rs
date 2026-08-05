@@ -356,6 +356,7 @@ mod json_mode;
 mod keyfreq;
 mod keytar;
 mod link_hint;
+mod list_utils;
 mod llama;
 mod log4e;
 mod lsp_mode;

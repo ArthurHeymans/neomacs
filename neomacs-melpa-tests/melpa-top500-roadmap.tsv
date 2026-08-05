@@ -118,7 +118,7 @@ rank	package	downloads	status
 117	evil-args	942620	covered
 118	link-hint	941860	covered
 119	fancy-battery	941040	covered
-120	list-utils	936045	todo
+120	list-utils	936045	covered
 121	yasnippet-snippets	929792	todo
 122	rust-mode	921874	covered
 123	lorem-ipsum	921523	todo
