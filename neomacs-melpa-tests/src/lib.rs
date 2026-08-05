@@ -2088,6 +2088,12 @@ pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
 /// `0aff44badad976ebf2666a7e9b6ddf4db53e59e5`.
 pub const HELM_DESCBINDS_MELPA_PIN: (&str, &str) = ("helm-descbinds", "20250705.942");
 
+/// The exact helm-make package selected for practical nested-project target
+/// discovery, source saving, cache invalidation, Ninja, Projectile, and GNU
+/// make database workflows. MELPA built this archive from upstream commit
+/// `ebd71e85046d59b37f6a96535e01993b6962c559`.
+pub const HELM_MAKE_MELPA_PIN: (&str, &str) = ("helm-make", "20200620.27");
+
 /// The exact final Helm Swoop source selected for practical candidate,
 /// narrowing, query, editing, face, and buffer-selection parity. MELPA's last
 /// rolling build came from upstream commit
