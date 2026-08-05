@@ -2076,6 +2076,12 @@ pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 /// comprehensive API parity corpus.
 pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
+/// The exact Git Timemachine package selected for practical revision
+/// navigation, renamed-file, branch, introduction-search, hash-copy, and
+/// validation parity. MELPA built this archive from upstream commit
+/// `d1346a76122595aeeb7ebb292765841c6cfd417b`.
+pub const GIT_TIMEMACHINE_MELPA_PIN: (&str, &str) = ("git-timemachine", "20250128.940");
+
 /// The exact General package selected by the comprehensive API parity corpus.
 pub const GENERAL_MELPA_PIN: (&str, &str) = ("general", "20250612.2309");
 
