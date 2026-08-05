@@ -165,7 +165,7 @@ rank	package	downloads	status
 164	gntp	699820	covered
 165	helm-flx	696689	covered
 166	slime	689787	covered
-167	treemacs-projectile	676950	todo
+167	treemacs-projectile	676950	covered
 168	org-category-capture	668156	todo
 169	symbol-overlay	665641	todo
 170	gitconfig-mode	664435	todo

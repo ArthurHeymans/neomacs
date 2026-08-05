@@ -2528,6 +2528,12 @@ pub const SHRINK_PATH_MELPA_PIN: (&str, &str) = ("shrink-path", "20190208.1335")
 /// `2ab5a3c89fa01bbbd99de9b8986908b2bc5a7b49`.
 pub const TREEMACS_MELPA_PIN: (&str, &str) = ("treemacs", "20251226.1307");
 
+/// The exact Treemacs-Projectile package selected for practical workspace
+/// admission, project discovery, startup-root, file-buffer/cache, mouse-menu,
+/// keymap, and hook-registration parity. MELPA built this archive from the
+/// Treemacs monorepo commit `f80a309319c2374585babcb3e00ea6f3314160f3`.
+pub const TREEMACS_PROJECTILE_MELPA_PIN: (&str, &str) = ("treemacs-projectile", "20250320.2206");
+
 /// The exact Diminish package selected for practical live minor-mode,
 /// abbreviation, reporting, restoration, and configuration-order parity.
 /// MELPA built this archive from upstream commit

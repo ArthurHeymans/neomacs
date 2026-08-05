@@ -462,6 +462,7 @@ mod tinysegmenter;
 mod toc_org;
 mod transient;
 mod treemacs;
+mod treemacs_projectile;
 mod two_bit;
 mod upstream_package_ert;
 mod use_package;
