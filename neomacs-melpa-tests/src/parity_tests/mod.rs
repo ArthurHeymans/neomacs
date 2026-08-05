@@ -378,6 +378,7 @@ mod makey;
 mod markdown_mode;
 mod math_symbol_lists;
 mod maude_mode;
+mod move_text;
 mod mozc;
 mod multiple_cursors;
 mod names;

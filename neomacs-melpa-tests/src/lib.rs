@@ -222,6 +222,12 @@ pub const DEFERRED_MELPA_PIN: (&str, &str) = ("deferred", "20170901.1330");
 /// commit `1e9931d5f38a8d8cb8a92cf726d64696550bfc95`.
 pub const EDITORCONFIG_MELPA_PIN: (&str, &str) = ("editorconfig", "20260118.718");
 
+/// The exact Move Text package selected for practical line and active-region
+/// reordering, boundary, narrowing, undo, point/mark, and global-key parity.
+/// MELPA built this archive from upstream commit
+/// `142890cfb46d9c374113b4b49021a4202033147b`.
+pub const MOVE_TEXT_MELPA_PIN: (&str, &str) = ("move-text", "20260508.508");
+
 /// The exact Elixir Mode package selected by the practical indentation,
 /// fontification, navigation, documentation, and formatter workflow corpus.
 /// MELPA built this archive from upstream commit
