@@ -365,6 +365,7 @@ mod paredit;
 mod parent_mode;
 mod pcre2el;
 mod pdf_tools;
+mod persp_mode;
 mod pfuture;
 mod php_mode;
 mod php_runtime;

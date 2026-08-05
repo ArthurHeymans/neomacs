@@ -1774,6 +1774,12 @@ pub const PARENT_MODE_MELPA_PIN: (&str, &str) = ("parent-mode", "20240210.1906")
 /// upstream commit e4b7f1f37cf59ddf025d609ffcdabe732a6e99ba.
 pub const PDF_TOOLS_MELPA_PIN: (&str, &str) = ("pdf-tools", "20260102.1101");
 
+/// The exact persp-mode package selected for practical workspace lifecycle,
+/// shared-buffer ownership, real window-layout, persistence, and automatic
+/// perspective parity. MELPA built this archive from upstream commit
+/// `fab4bf76927445d2e431f06e74572acba81f47d5`.
+pub const PERSP_MODE_MELPA_PIN: (&str, &str) = ("persp-mode", "20250830.955");
+
 /// The exact PHP Mode package selected for practical PHP 8 indentation,
 /// fontification, syntax, Imenu, navigation, completion, template routing,
 /// and Composer-project parity. This MELPA version is pinned to upstream
