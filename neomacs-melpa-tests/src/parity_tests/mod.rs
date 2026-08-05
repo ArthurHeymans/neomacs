@@ -310,6 +310,7 @@ mod evil_visualstar;
 mod exec_path_from_shell;
 mod expand_region;
 mod f;
+mod fancy_battery;
 mod flx;
 mod flx_ido;
 mod flycheck;

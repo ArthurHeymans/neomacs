@@ -2211,6 +2211,12 @@ pub const COUNSEL_MELPA_PIN: (&str, &str) = ("counsel", "20260214.1004");
 /// The exact f package selected by the comprehensive API parity corpus.
 pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 
+/// The exact Fancy Battery package selected by the practical cached-status,
+/// mode-line rendering, update-hook, backend, and global-mode lifecycle parity
+/// corpus. MELPA built this archive from upstream commit
+/// `bcc2d7960ba207b5b4db96fe40f7d72670fdbb68`.
+pub const FANCY_BATTERY_MELPA_PIN: (&str, &str) = ("fancy-battery", "20150101.1204");
+
 /// The exact Magit package containing the Git-Commit source selected by the
 /// comprehensive API parity corpus.
 pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
