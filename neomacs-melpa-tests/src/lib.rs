@@ -2401,6 +2401,10 @@ pub const SWIPER_MELPA_PIN: (&str, &str) = ("swiper", "20260101.2125");
 /// angular-snippets' manually documented runtime dependency.
 pub const YASNIPPET_MELPA_PIN: (&str, &str) = ("yasnippet", "20250602.1342");
 
+/// The exact Yasnippet-Snippets collection selected for practical snippet-tree
+/// loading and expansion parity across representative major modes.
+pub const YASNIPPET_SNIPPETS_MELPA_PIN: (&str, &str) = ("yasnippet-snippets", "20251215.1231");
+
 /// The exact Transient package selected by the comprehensive API parity
 /// corpus.
 pub const TRANSIENT_MELPA_PIN: (&str, &str) = ("transient", "20260725.1105");

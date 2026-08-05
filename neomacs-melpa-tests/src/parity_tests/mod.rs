@@ -448,6 +448,7 @@ mod xr;
 mod yaml;
 mod yaml_mode;
 mod yasnippet;
+mod yasnippet_snippets;
 mod yaxception;
 mod youdao_dictionary;
 mod youdotcom;
