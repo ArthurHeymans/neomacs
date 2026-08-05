@@ -326,6 +326,7 @@ mod helm_projectile;
 mod helm_swoop;
 mod highlight_indentation;
 mod highlight_numbers;
+mod highlight_parentheses;
 mod hl_todo;
 mod ht;
 mod htmlize;

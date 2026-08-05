@@ -1684,6 +1684,13 @@ pub const HIGHLIGHT_INDENTATION_MELPA_PIN: (&str, &str) =
 /// `8b4744c7f46c72b1d3d599d4fb75ef8183dee307`.
 pub const HIGHLIGHT_NUMBERS_MELPA_PIN: (&str, &str) = ("highlight-numbers", "20181013.1744");
 
+/// The exact Highlight Parentheses package selected for practical nested
+/// syntax, navigation, adjacent delimiters, unbalanced editing, live
+/// customization, mode-lifecycle, and debounce parity. MELPA built this
+/// archive from upstream commit `965b18dd69eff4457e17c9e84b3cbfdbfca2ddfb`.
+pub const HIGHLIGHT_PARENTHESES_MELPA_PIN: (&str, &str) =
+    ("highlight-parentheses", "20240408.1126");
+
 /// The exact Indent Guide package selected for practical space, tab, blank
 /// line, recursive, live-editing, mode-lifecycle, and debounce parity. MELPA
 /// built this archive from upstream commit
