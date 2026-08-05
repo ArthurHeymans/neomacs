@@ -1951,6 +1951,12 @@ pub const RESTART_EMACS_MELPA_PIN: (&str, &str) = ("restart-emacs", "20201127.14
 /// `9ee5a7657a22e836618813c2e2b64a548d27d2ff`.
 pub const WS_BUTLER_MELPA_PIN: (&str, &str) = ("ws-butler", "20250310.205");
 
+/// The exact Golden Ratio package selected for practical layout resizing,
+/// exclusions, scaling, navigation advice, recentering, timer scheduling,
+/// and global-mode lifecycle parity. MELPA built this archive from upstream
+/// commit `375c9f287dfad68829582c1e0a67d0c18119dab9`.
+pub const GOLDEN_RATIO_MELPA_PIN: (&str, &str) = ("golden-ratio", "20230912.1825");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream

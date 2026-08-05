@@ -315,6 +315,7 @@ mod general;
 mod git_commit;
 mod git_timemachine;
 mod gntp;
+mod golden_ratio;
 mod google_translate;
 mod goto_chg;
 mod harness_contract;

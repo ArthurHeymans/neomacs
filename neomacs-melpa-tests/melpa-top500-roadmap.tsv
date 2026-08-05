@@ -103,7 +103,7 @@ rank	package	downloads	status
 102	evil-exchange	997878	covered
 103	restart-emacs	997060	covered
 104	ws-butler	993893	covered
-105	golden-ratio	992215	todo
+105	golden-ratio	992215	covered
 106	git	991326	todo
 107	eval-sexp-fu	981211	todo
 108	packed	979867	todo
