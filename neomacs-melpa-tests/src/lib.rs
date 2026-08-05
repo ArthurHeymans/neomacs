@@ -2008,6 +2008,13 @@ pub const GHUB_MELPA_PIN: (&str, &str) = ("ghub", "20260701.1318");
 /// `806c000bd40153d17dfa5709c6d19546d507a416`.
 pub const TREEPY_MELPA_PIN: (&str, &str) = ("treepy", "20260531.1144");
 
+/// The exact Clean Aindent Mode package selected for practical smart and
+/// simple newline indentation, abandoned-whitespace cleanup, undo, nested and
+/// tabbed unindent, kill fallback, buffer isolation, and mode lifecycle parity.
+/// MELPA built this archive from upstream commit
+/// `a97bcae8f43a9ff64e95473e4ef0d8bafe829211`.
+pub const CLEAN_AINDENT_MODE_MELPA_PIN: (&str, &str) = ("clean-aindent-mode", "20171017.2043");
+
 /// The exact Evil Matchit package selected for practical nested-code, markup,
 /// indentation, preprocessor, Org block, diff, conflict-resolution, region,
 /// deletion, and jump-hook parity. MELPA built this archive from upstream

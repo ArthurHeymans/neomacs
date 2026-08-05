@@ -273,6 +273,7 @@ mod ccc;
 mod cdb;
 mod chinese_word_at_point;
 mod cider;
+mod clean_aindent_mode;
 mod clojure_mode;
 mod commander;
 mod company;
