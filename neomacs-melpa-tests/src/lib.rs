@@ -2382,6 +2382,12 @@ pub const FANCY_BATTERY_MELPA_PIN: (&str, &str) = ("fancy-battery", "20150101.12
 /// comprehensive API parity corpus.
 pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
+/// The exact Git Link package selected for practical repository file, region,
+/// commit, homepage, remote-resolution, hosting-provider, and error parity.
+/// MELPA built version 0.11.0 from upstream commit
+/// `ca01d013bd575710e2cd47001ee1ef6ee41667cf`.
+pub const GIT_LINK_MELPA_PIN: (&str, &str) = ("git-link", "20260723.2213");
+
 /// The exact Git Timemachine package selected for practical revision
 /// navigation, renamed-file, branch, introduction-search, hash-copy, and
 /// validation parity. MELPA built this archive from upstream commit
