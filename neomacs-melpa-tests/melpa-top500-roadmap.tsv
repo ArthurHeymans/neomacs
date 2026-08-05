@@ -153,7 +153,7 @@ rank	package	downloads	status
 152	winum	810506	covered
 153	lsp-treemacs	808373	covered
 154	alert	794420	covered
-155	forge	783537	todo
+155	forge	783537	covered
 156	evil-visual-mark-mode	775570	todo
 157	fill-column-indicator	771237	todo
 158	log4e	770159	covered

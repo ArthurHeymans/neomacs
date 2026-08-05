@@ -330,6 +330,7 @@ mod flx;
 mod flx_ido;
 mod flycheck;
 mod flycheck_dmd_dub;
+mod forge;
 mod frozen_packages;
 mod game_2048;
 mod geiser;

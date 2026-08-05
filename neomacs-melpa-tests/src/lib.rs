@@ -2125,6 +2125,12 @@ pub const EMACSQL_MELPA_PIN: (&str, &str) = ("emacsql", "20260601.1722");
 /// `59d0b9b33e780d6cff5131886904ff26033dd2e6`.
 pub const GHUB_MELPA_PIN: (&str, &str) = ("ghub", "20260701.1318");
 
+/// The exact Forge package selected for practical repository detection,
+/// persisted issue and pull-request, topic rendering, template, and Git-ref
+/// parity. MELPA built this archive from upstream commit
+/// `29f45d8f247079a1d8d2247efdacb5b50a3b1e51`.
+pub const FORGE_MELPA_PIN: (&str, &str) = ("forge", "20260731.2255");
+
 /// The exact Treepy package selected as Ghub's GraphQL response traversal
 /// dependency. MELPA built this archive from upstream commit
 /// `806c000bd40153d17dfa5709c6d19546d507a416`.
