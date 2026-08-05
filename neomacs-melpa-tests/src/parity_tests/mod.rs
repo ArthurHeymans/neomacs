@@ -308,6 +308,7 @@ mod emmet_mode;
 mod epl;
 mod erlang;
 mod es_lib;
+mod ess;
 mod eval_sexp_fu;
 mod evil;
 mod evil_anzu;

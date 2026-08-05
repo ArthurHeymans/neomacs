@@ -1567,6 +1567,13 @@ pub const AUTO_AUTO_INDENT_MELPA_PIN: (&str, &str) = ("auto-auto-indent", "20131
 /// `753b27363e39c10edc9e4e452bdbbbe4d190df4a`.
 pub const ES_LIB_MELPA_PIN: (&str, &str) = ("es-lib", "20141111.1830");
 
+/// The exact ESS package selected for practical R source editing,
+/// indentation, syntax/fontification, assignment and call filling,
+/// navigation/indexing, command generation, project discovery, package
+/// development, and inferior-mode parity. MELPA built this archive from
+/// upstream commit `c3960e09f37550d300437c46ca03fb28975378a1`.
+pub const ESS_MELPA_PIN: (&str, &str) = ("ess", "20260723.934");
+
 /// The exact Keytar package selected as auth-source-keytar's runtime
 /// credential-provider dependency and by the practical credential lifecycle,
 /// shell-quoting, executable discovery, and npm installation parity corpus.
