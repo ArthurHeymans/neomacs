@@ -2255,6 +2255,12 @@ pub const GOTO_CHG_MELPA_PIN: (&str, &str) = ("goto-chg", "20240407.1110");
 /// user-interface dependency.
 pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
 
+/// The exact Helm-Mode-Manager package selected for command discovery,
+/// major-mode switching, minor-mode toggling, and persistent-help parity.
+/// MELPA built this archive from upstream commit
+/// `7df8ed3ddd46a0402838b748d317c01454346164`.
+pub const HELM_MODE_MANAGER_MELPA_PIN: (&str, &str) = ("helm-mode-manager", "20210108.2330");
+
 /// The exact Helm Ag package selected for practical search-command, result
 /// highlighting, saved-result navigation, context-stack, multi-file edit, and
 /// project-discovery parity. The released 0.64 source is pinned at upstream

@@ -123,7 +123,7 @@ rank	package	downloads	status
 122	rust-mode	921874	covered
 123	lorem-ipsum	921523	covered
 124	evil-tutor	912967	covered
-125	helm-mode-manager	906580	todo
+125	helm-mode-manager	906580	covered
 126	helm-themes	905961	todo
 127	eyebrowse	904335	todo
 128	pos-tip	902779	covered
