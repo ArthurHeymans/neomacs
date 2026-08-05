@@ -127,7 +127,7 @@ rank	package	downloads	status
 126	helm-themes	905961	covered
 127	eyebrowse	904335	covered
 128	pos-tip	902779	covered
-129	editorconfig	902377	todo
+129	editorconfig	902377	covered
 130	move-text	900787	todo
 131	evil-lisp-state	898842	todo
 132	evil-mc	892644	todo

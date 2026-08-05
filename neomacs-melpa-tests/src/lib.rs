@@ -216,6 +216,12 @@ pub const SAGE_SHELL_MODE_MELPA_PIN: (&str, &str) = ("sage-shell-mode", "2026052
 /// from upstream commit `2239671d94b38d92e9b28d4e12fd79814cfb9c16`.
 pub const DEFERRED_MELPA_PIN: (&str, &str) = ("deferred", "20170901.1330");
 
+/// The exact EditorConfig package selected for inherited project rules,
+/// visiting and saving real files, local-variable precedence, coding-system,
+/// and configuration-cache parity. MELPA built this archive from upstream
+/// commit `1e9931d5f38a8d8cb8a92cf726d64696550bfc95`.
+pub const EDITORCONFIG_MELPA_PIN: (&str, &str) = ("editorconfig", "20260118.718");
+
 /// The exact Elixir Mode package selected by the practical indentation,
 /// fontification, navigation, documentation, and formatter workflow corpus.
 /// MELPA built this archive from upstream commit
