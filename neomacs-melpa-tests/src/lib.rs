@@ -1747,6 +1747,12 @@ pub const IVY_MELPA_PIN: (&str, &str) = ("ivy", "20260413.2102");
 /// `aff9b6bd53e0fdcf350ab83c90e64e651b47dba4`.
 pub const IVY_RICH_MELPA_PIN: (&str, &str) = ("ivy-rich", "20230425.1422");
 
+/// The exact JSON Mode package selected for practical file association,
+/// formatting, structural navigation, JSONC, value editing, and JSON-path
+/// parity. MELPA built this archive from upstream commit
+/// `77125b01c0ddce537085201098bea9b4b8ba6be3`.
+pub const JSON_MODE_MELPA_PIN: (&str, &str) = ("json-mode", "20240427.1245");
+
 /// The exact js2-mode package selected by the practical parsing, diagnostics,
 /// indentation, navigation, JSON-path, Imenu, and editor-aid parity corpus.
 /// MELPA built this archive from upstream commit

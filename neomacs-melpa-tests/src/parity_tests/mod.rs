@@ -349,6 +349,7 @@ mod ivy;
 mod ivy_rich;
 mod js2_mode;
 mod js2_refactor;
+mod json_mode;
 mod keyfreq;
 mod keytar;
 mod llama;
