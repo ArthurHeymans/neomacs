@@ -292,6 +292,7 @@ mod diff_hl;
 mod diminish;
 mod distel_completion_lib;
 mod doom_modeline;
+mod doom_themes;
 mod dumb_jump;
 mod editorconfig;
 mod elisp_slime_nav;

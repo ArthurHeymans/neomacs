@@ -2477,6 +2477,12 @@ pub const DIFF_HL_MELPA_PIN: (&str, &str) = ("diff-hl", "20260723.238");
 /// `017854c6484dd6a38e4b039dad04ce6dbec02f08`.
 pub const DOOM_MODELINE_MELPA_PIN: (&str, &str) = ("doom-modeline", "20260708.823");
 
+/// The exact Doom Themes package selected for practical full-catalog loading,
+/// dark/light switching, code fontification, typography policy, custom face
+/// composition, palette derivation, and Org extension parity. MELPA built this
+/// archive from upstream commit `53645a905dfb3055db52f5d418d5ef612027e062`.
+pub const DOOM_THEMES_MELPA_PIN: (&str, &str) = ("doom-themes", "20260117.2323");
+
 /// The exact Expand Region package selected for practical progressive
 /// selection, contraction, history invalidation, register autocopy, and
 /// language-specific region parity. MELPA built this archive from upstream
