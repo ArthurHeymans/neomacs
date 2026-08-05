@@ -478,6 +478,7 @@ mod web_completion_data;
 mod web_mode;
 mod websocket;
 mod wfnames;
+mod wgrep;
 mod which_key;
 mod winum;
 mod with_editor;

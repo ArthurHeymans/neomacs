@@ -2491,6 +2491,12 @@ pub const WEB_MODE_MELPA_PIN: (&str, &str) = ("web-mode", "20260623.932");
 /// `2195e1247ecb04c30321702aa5f5618a51c329c5`.
 pub const WEBSOCKET_MELPA_PIN: (&str, &str) = ("websocket", "20260301.157");
 
+/// The exact Wgrep package selected for practical writable grep-buffer
+/// parsing, context editing, multi-file replacement, deletion, abort, saving,
+/// and stale-source rejection parity. MELPA built version 3.0.0 from upstream
+/// commit `b4d69280d8a6a5ded1597e02afbaa811a160383b`.
+pub const WGREP_MELPA_PIN: (&str, &str) = ("wgrep", "20230203.1214");
+
 /// The exact YAML Mode package selected for practical configuration,
 /// indentation, electric editing, syntax/fontification, filling, Imenu, and
 /// multi-document navigation parity. MELPA built this archive from upstream
