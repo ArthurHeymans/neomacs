@@ -2388,6 +2388,13 @@ pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 /// `d1346a76122595aeeb7ebb292765841c6cfd417b`.
 pub const GIT_TIMEMACHINE_MELPA_PIN: (&str, &str) = ("git-timemachine", "20250128.940");
 
+/// The exact Git Modes successor selected to cover the historical standalone
+/// `gitconfig-mode` Top-500 entry through practical file detection,
+/// fontification, syntax, indentation, comments, alignment, and navigation
+/// parity. MELPA built version 1.5.0 from upstream commit
+/// `f291a4cc4a8b02a25d5cf93b4ab6af29e6f060d9`.
+pub const GIT_MODES_MELPA_PIN: (&str, &str) = ("git-modes", "20260601.1550");
+
 /// The exact General package selected by the comprehensive API parity corpus.
 pub const GENERAL_MELPA_PIN: (&str, &str) = ("general", "20250612.2309");
 
