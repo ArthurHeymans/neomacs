@@ -355,6 +355,136 @@ fn classifier_rejects_mid_line_start() {
     );
 }
 
+/// Increment 2j: the same mid-line position refuses under the default
+/// line-start entry but plans under the continuation-resume entry — the tail
+/// of a visually wrapped line classified from the resume charpos.
+#[test]
+fn continuation_resume_entry_accepts_mid_line_tail() {
+    let mut eval = Context::new();
+    let text = "abcdef\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let row = row_start(text.as_bytes(), 3, 3);
+    assert_eq!(
+        plan_ascii_row_classified(
+            buffer,
+            row,
+            wide_fit(),
+            wrap_policy(),
+            RowRouteEntry::LineStart
+        )
+        .unwrap_err(),
+        RouteRefusal::MidLineStart
+    );
+    let plan = plan_ascii_row_classified(
+        buffer,
+        row,
+        wide_fit(),
+        wrap_policy(),
+        RowRouteEntry::ContinuationResume,
+    )
+    .expect("resume tail plans");
+    assert_eq!(plan.line_char_len(), 3);
+    assert_eq!(plan.line_byte_len(), 3);
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::Newline);
+}
+
+/// The resume fit walk starts from the CARRIED pen (x, col), so a tab in the
+/// tail expands from the live pen exactly as the pipeline's own
+/// `DisplayTabPolicy::advance_from` would — the tab-after-wrap acid case:
+/// the tab's width depends on where the resumed walk actually stands.
+#[test]
+fn continuation_resume_tab_expands_from_carried_column() {
+    let mut eval = Context::new();
+    let text = "abc\txy\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let row = row_start(text.as_bytes(), 3, 3);
+    let carried = RowRouteFit {
+        start_x_px: 24.0,
+        start_col: 3,
+        char_width_px: 8.0,
+        right_edge_px: 72.0,
+        tab_policy: &TAB_EVERY_8,
+    };
+    let plan = plan_ascii_row_classified(
+        buffer,
+        row,
+        carried,
+        wrap_policy(),
+        RowRouteEntry::ContinuationResume,
+    )
+    .expect("carried tab tail plans");
+    assert!(plan.has_tab());
+    // tab (24px -> the 64px stop) + 'x' (64 -> 72, landing AT the edge) fit;
+    // 'y' (72 -> 80) crosses, so the plan covers only the fitting prefix and
+    // hands the walk back to the pipeline at 'y'.
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+    assert_eq!(plan.line_char_len(), 2);
+    // With enough slack the whole tail fits strictly inside the edge.
+    let wider = RowRouteFit {
+        right_edge_px: 96.0,
+        ..carried
+    };
+    let plan = plan_ascii_row_classified(
+        buffer,
+        row,
+        wider,
+        wrap_policy(),
+        RowRouteEntry::ContinuationResume,
+    )
+    .expect("wider carried tab tail plans");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::Newline);
+    assert_eq!(plan.line_char_len(), 3);
+}
+
+/// Cursor capture stays a buffer-pipeline responsibility on the resume entry
+/// too: point inside the resumed tail refuses.
+#[test]
+fn continuation_resume_still_refuses_point_in_tail() {
+    let mut eval = Context::new();
+    let text = "abcdef\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let policy = RowRouteWindowPolicy {
+        point_charpos: 4,
+        ..wrap_policy()
+    };
+    assert_eq!(
+        plan_ascii_row_classified(
+            buffer,
+            row_start(text.as_bytes(), 3, 3),
+            wide_fit(),
+            policy,
+            RowRouteEntry::ContinuationResume,
+        )
+        .unwrap_err(),
+        RouteRefusal::PointInRow
+    );
+}
+
+/// A wrap that lands exactly on the line end resumes AT the newline: the
+/// resume plan is the RowBreak-only empty coverage (the shared line-end plan
+/// consumes the newline), mirroring the pipeline rendering the line end on
+/// the continuation row.
+#[test]
+fn continuation_resume_at_newline_plans_row_break_only() {
+    let mut eval = Context::new();
+    let text = "abc\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row_classified(
+        buffer,
+        row_start(text.as_bytes(), 3, 3),
+        wide_fit(),
+        wrap_policy(),
+        RowRouteEntry::ContinuationResume,
+    )
+    .expect("newline resume plans");
+    assert!(plan.is_empty_line());
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::Newline);
+}
+
 #[test]
 fn classifier_rejects_line_exactly_filling_the_row() {
     let mut eval = Context::new();
@@ -2324,6 +2454,7 @@ fn classifier_refuses_empty_line_when_point_on_newline() {
             point_charpos: 2,
             ..plain_policy()
         },
+        RowRouteEntry::LineStart,
     );
     assert_eq!(refused.unwrap_err(), RouteRefusal::PointInRow);
 }
@@ -2345,6 +2476,7 @@ fn classifier_refuses_empty_line_with_hazard_prop_on_newline() {
         row_start(text.as_bytes(), 2, 2),
         wide_fit(),
         plain_policy(),
+        RowRouteEntry::LineStart,
     );
     assert_eq!(refused.unwrap_err(), RouteRefusal::Replacement);
 }
@@ -2365,6 +2497,7 @@ fn classifier_refuses_empty_line_with_string_overlay_at_newline() {
         row_start(text.as_bytes(), 2, 2),
         wide_fit(),
         plain_policy(),
+        RowRouteEntry::LineStart,
     );
     assert_eq!(refused.unwrap_err(), RouteRefusal::Overlay);
 }
@@ -2466,6 +2599,7 @@ fn classifier_refuses_eob_tail_containing_point() {
                 point_charpos: point,
                 ..plain_policy()
             },
+            RowRouteEntry::LineStart,
         );
         assert_eq!(
             refused.unwrap_err(),

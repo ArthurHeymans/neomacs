@@ -48,6 +48,11 @@ impl BufferSourceConsumptionState {
         !self.pending_render_items.is_empty()
     }
 
+    /// Telemetry-only view: how many split-run remainders are queued.
+    pub(crate) fn pending_render_items_len(&self) -> usize {
+        self.pending_render_items.len()
+    }
+
     pub(crate) fn clear_pending_render_items(&mut self) {
         self.pending_render_items.clear();
     }

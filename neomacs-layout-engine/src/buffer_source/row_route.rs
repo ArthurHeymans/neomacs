@@ -17,7 +17,14 @@
 //!   prefix, handing the walk back to the pipeline at the first char that
 //!   does not fit so the pipeline's own overflow machinery (truncation skip
 //!   / continuation transition, row flags, carry-over bookkeeping) decides
-//!   wrap-vs-truncate unchanged. Composition refuses through the
+//!   wrap-vs-truncate unchanged. Since increment 2j the route also RESUMES
+//!   mid-line on the continuation rows of a visually wrapped line
+//!   ([`RowRouteEntry::ContinuationResume`]): after the pipeline's wrap
+//!   transition and rewind (which clears the split-run queue and reseats
+//!   the cursor at the wrap char), the remaining tail classifies exactly
+//!   like a line from the resume charpos and the loop's live pen, so long
+//!   wrapped plain lines route row after row through iterated overflow
+//!   handoffs. Composition refuses through the
 //!   pipeline's OWN predicates (phase 2e): a char the shared writer would
 //!   compose into the previous glyph (`composition::continues_cluster` /
 //!   `continues_complex_run` over the scan's mirror of the row tail) and a
@@ -137,8 +144,11 @@ pub(crate) enum RouteRefusal {
     PolicyWordWrap,
     /// Window policy: trailing-whitespace highlight enabled.
     PolicyTrailingWhitespace,
-    /// The walk is mid-line (resuming after a wrap or display element) —
-    /// only whole rows starting at a buffer line start are candidates.
+    /// The walk is mid-line on a NON-continuation row (resuming after a
+    /// display element or at a mid-row run boundary). Since increment 2j
+    /// the continuation rows of visually wrapped lines enter through
+    /// [`RowRouteEntry::ContinuationResume`] instead of refusing here, so
+    /// this refusal labels only the phase-4-equivalent residue.
     MidLineStart,
     /// The line's FIRST char already crosses the right edge (no routable
     /// fitting prefix exists).
@@ -287,6 +297,92 @@ fn note_route_refusal(reason: RouteRefusal) {
     }
 }
 
+/// Increment-2j sub-cause telemetry for the two LOOP-RESUME refusal classes
+/// (`pending_items` / `mid_line_start`). These are walk mechanics, not row
+/// classes: most of their hits are per-step ECHOES inside a line the pipeline
+/// is already rendering. The sub-counters decompose them into what the
+/// migration can actually act on:
+/// * `*_rows` — DISTINCT (row, charpos) sites, i.e. how many actual candidate
+///   positions the class represents versus raw attempt echoes;
+/// * `*_cont` / `*_cont_rows` — hits (and distinct sites) on a row flagged
+///   `Continuation`, the wrapped-line resume class whose entry state is the
+///   Phase-2j routing question;
+/// * `pending_qlen1` — pending refusals with exactly ONE queued remainder
+///   (the only shape a clear-and-rewind re-plan could even consider).
+static ROUTE_STAT_PENDING_QLEN1: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+static ROUTE_STAT_PENDING_CONT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+static ROUTE_STAT_PENDING_ROWS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+static ROUTE_STAT_MIDLINE_CONT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+static ROUTE_STAT_MIDLINE_ROWS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+static ROUTE_STAT_MIDLINE_CONT_ROWS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+static ROUTE_STAT_LAST_PENDING_SITE: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(u64::MAX);
+static ROUTE_STAT_LAST_MIDLINE_SITE: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(u64::MAX);
+static ROUTE_STAT_LAST_MIDLINE_CONT_SITE: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(u64::MAX);
+
+/// A distinct-site key: the attempt stream is sequential per layout pass, so
+/// counting transitions of (row, charpos) approximates distinct candidate
+/// sites well enough for a coverage-ranking histogram.
+fn route_stats_site_key(row_index: usize, charpos: i64) -> u64 {
+    ((row_index as u64) << 40) ^ (charpos as u64 & 0xFF_FFFF_FFFF)
+}
+
+fn note_distinct_site(
+    last: &std::sync::atomic::AtomicU64,
+    counter: &std::sync::atomic::AtomicUsize,
+    key: u64,
+) {
+    if last.swap(key, std::sync::atomic::Ordering::Relaxed) != key {
+        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+fn note_route_refusal_pending(queue_len: usize, continuation_row: bool, site_key: u64) {
+    if route_stats_file().is_none() {
+        return;
+    }
+    note_route_refusal(RouteRefusal::PendingItems);
+    if queue_len == 1 {
+        ROUTE_STAT_PENDING_QLEN1.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    if continuation_row {
+        ROUTE_STAT_PENDING_CONT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    note_distinct_site(
+        &ROUTE_STAT_LAST_PENDING_SITE,
+        &ROUTE_STAT_PENDING_ROWS,
+        site_key,
+    );
+}
+
+fn note_route_refusal_midline(continuation_row: bool, site_key: u64) {
+    if route_stats_file().is_none() {
+        return;
+    }
+    note_route_refusal(RouteRefusal::MidLineStart);
+    if continuation_row {
+        ROUTE_STAT_MIDLINE_CONT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        note_distinct_site(
+            &ROUTE_STAT_LAST_MIDLINE_CONT_SITE,
+            &ROUTE_STAT_MIDLINE_CONT_ROWS,
+            site_key,
+        );
+    }
+    note_distinct_site(
+        &ROUTE_STAT_LAST_MIDLINE_SITE,
+        &ROUTE_STAT_MIDLINE_ROWS,
+        site_key,
+    );
+}
+
 /// The cumulative telemetry line for this process, or `None` when the stats
 /// file env is unset. Appended by the engine once per accepted frame.
 pub(crate) fn route_stats_append_report() {
@@ -304,6 +400,20 @@ pub(crate) fn route_stats_append_report() {
         let count = ROUTE_STAT_REFUSALS[reason.index()].load(std::sync::atomic::Ordering::Relaxed);
         line.push_str(&format!(" refuse_{}={}", reason.label(), count));
     }
+    for (label, counter) in [
+        ("routed_resume", &ROUTE_STAT_ROUTED_RESUME),
+        ("pending_qlen1", &ROUTE_STAT_PENDING_QLEN1),
+        ("pending_cont", &ROUTE_STAT_PENDING_CONT),
+        ("pending_rows", &ROUTE_STAT_PENDING_ROWS),
+        ("midline_cont", &ROUTE_STAT_MIDLINE_CONT),
+        ("midline_rows", &ROUTE_STAT_MIDLINE_ROWS),
+        ("midline_cont_rows", &ROUTE_STAT_MIDLINE_CONT_ROWS),
+    ] {
+        line.push_str(&format!(
+            " {label}={}",
+            counter.load(std::sync::atomic::Ordering::Relaxed)
+        ));
+    }
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -311,6 +421,32 @@ pub(crate) fn route_stats_append_report() {
     {
         let _ = writeln!(f, "{line}");
     }
+}
+
+/// How the walk arrived at the candidate position (increment 2j). The
+/// classifier trusts this attestation — only the dispatch site can prove it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RowRouteEntry {
+    /// The walk sits at a true buffer line start (byte 0 or just past a
+    /// newline). The only entry the route accepted through increment 2i.
+    LineStart,
+    /// The walk resumes MID-LINE on a row the visual-wrap transition flagged
+    /// `Continuation` (`DisplayRowFlagKind::Continuation`, stamped by
+    /// `DisplayRowOverflowTransitionPlan::emit_with_output` before anything
+    /// is appended to the new row), with NO pending render items — the
+    /// character-wrap rewind (`rewind_source_consumption_to`, GNU
+    /// `RESTORE_IT`) cleared the split-run queue and reseated the cursor at
+    /// the wrap candidate, so the remaining tail of the continued line is
+    /// plain buffer text again. This is the continuation-row resume class:
+    /// GNU `display_line` simply keeps calling `get_next_display_element`
+    /// across the row boundary with `it->continuation_lines_width` carried
+    /// in the iterator; here the carried state is exactly the loop's live
+    /// pen (x, col) and charpos/byte position, which the fit walk and the
+    /// commit already take as inputs. Everything position-relative in the
+    /// classifier (face boundaries, elision spans, replacement anchors,
+    /// overlay boundaries) is computed from the resume charpos, so the plan
+    /// needs no other carry-over.
+    ContinuationResume,
 }
 
 /// The buffer-walk position at the start of a candidate row.
@@ -1331,7 +1467,7 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     fit: RowRouteFit<'_>,
     policy: RowRouteWindowPolicy,
 ) -> Option<AsciiRowPlan> {
-    plan_ascii_row_classified(buffer, row, fit, policy).ok()
+    plan_ascii_row_classified(buffer, row, fit, policy, RowRouteEntry::LineStart).ok()
 }
 
 /// [`plan_ascii_row`] with the refusal reason preserved for the coverage
@@ -1341,6 +1477,7 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     row: RowRouteRowStart<'_>,
     fit: RowRouteFit<'_>,
     policy: RowRouteWindowPolicy,
+    entry: RowRouteEntry,
 ) -> Result<AsciiRowPlan, RouteRefusal> {
     if policy.hscroll_active {
         return Err(RouteRefusal::PolicyHscroll);
@@ -1354,9 +1491,19 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     if policy.show_trailing_whitespace {
         return Err(RouteRefusal::PolicyTrailingWhitespace);
     }
-    // Only whole rows are routed: the walk must be at the start of a buffer
-    // line (never resuming mid-line after a wrap or a display element).
-    if row.byte_idx > 0 && row.text.get(row.byte_idx - 1) != Some(&b'\n') {
+    // Whole rows are routed from a buffer line start; since increment 2j a
+    // CONTINUATION-ROW RESUME (the dispatch attests: no pending items, the
+    // current row is the wrap transition's flagged continuation row) may
+    // also enter mid-line — the remaining tail of a visually wrapped line
+    // is classified exactly like a line, from the resume charpos and the
+    // live pen. Every other mid-line position (a display element, an
+    // overlay string, an overflow handoff char on the FIRST row of a
+    // continued line — its row is not flagged Continuation yet, so the
+    // pipeline's own overflow machinery keeps consuming it) stays refused.
+    if row.byte_idx > 0
+        && row.text.get(row.byte_idx - 1) != Some(&b'\n')
+        && entry != RowRouteEntry::ContinuationResume
+    {
         return Err(RouteRefusal::MidLineStart);
     }
     // Cheap pre-gate BEFORE the pen walk: the refusal the steady-state edit
@@ -1963,15 +2110,34 @@ pub(crate) static ROUTED_EOB_TAIL_ROW_COUNT: std::sync::atomic::AtomicUsize =
 pub(crate) static ROUTED_REPLACEMENT_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode) {
+/// Test-only engagement proof for the increment 2j continuation-row resume
+/// extension: rows routed through the mid-line
+/// [`RowRouteEntry::ContinuationResume`] entry.
+#[cfg(test)]
+pub(crate) static ROUTED_CONTINUATION_RESUME_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Telemetry twin of the test-only resume counter: routed rows taken through
+/// the continuation-resume entry, reported on the stats line as
+/// `routed_resume` so real workloads show the increment-2j contribution.
+static ROUTE_STAT_ROUTED_RESUME: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode, entry: RowRouteEntry) {
     if route_stats_file().is_some() {
         ROUTE_STAT_ROUTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if entry == RowRouteEntry::ContinuationResume {
+            ROUTE_STAT_ROUTED_RESUME.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
     }
     #[cfg(not(test))]
     let _ = wrap_mode;
     #[cfg(test)]
     {
         ROUTED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if entry == RowRouteEntry::ContinuationResume {
+            ROUTED_CONTINUATION_RESUME_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
         if plan.is_segmented() {
             ROUTED_SEGMENTED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
@@ -2071,8 +2237,26 @@ impl<'rows, 'emit, 'surface>
         use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
 
         note_route_attempt();
+        // Increment-2j sub-cause telemetry inputs: the current row index and
+        // whether that row is a continuation row of a visually wrapped line
+        // (the flag is stamped by the wrap transition BEFORE anything is
+        // appended to the new row, so it is already visible here).
+        let route_row_index = match self.row_geometry.current_row_marker() {
+            crate::display_row::geometry::DisplayRowMarker::Row(index) => index,
+            #[cfg(test)]
+            crate::display_row::geometry::DisplayRowMarker::Inactive => 0,
+        };
+        let route_continuation_row = self.row_flags.is_set(
+            route_row_index,
+            crate::display_row::geometry::DisplayRowFlagKind::Continuation,
+        );
+        let route_site_key = route_stats_site_key(route_row_index, self.progress.charpos());
         if source_walk.has_pending_render_items() {
-            note_route_refusal(RouteRefusal::PendingItems);
+            note_route_refusal_pending(
+                source_walk.pending_render_items_len(),
+                route_continuation_row,
+                route_site_key,
+            );
             return AsciiRowRouteOutcome::NotRouted;
         }
 
@@ -2099,8 +2283,22 @@ impl<'rows, 'emit, 'surface>
                 || self.trailing_whitespace.is_enabled(),
             wrap_mode: params.wrap_mode,
         };
-        let plan = match plan_ascii_row_classified(buffer, row, fit, policy) {
+        // Increment 2j: a mid-line position qualifies for the continuation-
+        // row resume entry exactly when the current row is the wrap
+        // transition's flagged continuation row and the walk carries no
+        // pending split-run remainders (checked above — the character-wrap
+        // rewind cleared them and reseated the cursor at the wrap char).
+        let entry = if route_continuation_row {
+            RowRouteEntry::ContinuationResume
+        } else {
+            RowRouteEntry::LineStart
+        };
+        let plan = match plan_ascii_row_classified(buffer, row, fit, policy, entry) {
             Ok(plan) => plan,
+            Err(RouteRefusal::MidLineStart) => {
+                note_route_refusal_midline(route_continuation_row, route_site_key);
+                return AsciiRowRouteOutcome::NotRouted;
+            }
             Err(reason) => {
                 note_route_refusal(reason);
                 return AsciiRowRouteOutcome::NotRouted;
@@ -2120,6 +2318,7 @@ impl<'rows, 'emit, 'surface>
                 row,
                 &plan,
                 policy.wrap_mode,
+                entry,
             );
         }
 
@@ -2202,8 +2401,13 @@ impl<'rows, 'emit, 'surface>
             };
             // Box faces carry per-run edge bookkeeping (GNU
             // start_of_box_run_p / face_box_p) the routed render does not
-            // replicate; keep the multi-face class box-free.
-            if plan.is_segmented() && active.resolved_face().box_type != 0 {
+            // replicate; keep the multi-face class box-free. A continuation
+            // resume is stricter: the row may already carry glyphs the
+            // pipeline appended (a box run could be OPEN across the entry),
+            // so ANY box face refuses the resume entry.
+            if (plan.is_segmented() || entry == RowRouteEntry::ContinuationResume)
+                && active.resolved_face().box_type != 0
+            {
                 note_route_refusal(RouteRefusal::ProbeBoxFace);
                 return AsciiRowRouteOutcome::NotRouted;
             }
@@ -2631,7 +2835,7 @@ impl<'rows, 'emit, 'surface>
         self.progress.max_charpos(line_end.get() as i64);
         self.progress
             .set_byte_idx(row.byte_idx + plan.line_byte_len());
-        note_routed_row(&plan, policy.wrap_mode);
+        note_routed_row(&plan, policy.wrap_mode, entry);
         AsciiRowRouteOutcome::Rendered
     }
 
@@ -2668,6 +2872,7 @@ impl<'rows, 'emit, 'surface>
         row: RowRouteRowStart<'_>,
         plan: &AsciiRowPlan,
         wrap_mode: LineWrapMode,
+        entry: RowRouteEntry,
     ) -> AsciiRowRouteOutcome {
         use crate::display_source::DisplayItemSource as _;
 
@@ -2715,7 +2920,7 @@ impl<'rows, 'emit, 'surface>
         if continuation.should_break() {
             return AsciiRowRouteOutcome::Stopped;
         }
-        note_routed_row(plan, wrap_mode);
+        note_routed_row(plan, wrap_mode, entry);
         AsciiRowRouteOutcome::Rendered
     }
 }

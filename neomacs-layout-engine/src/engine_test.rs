@@ -14795,6 +14795,86 @@ fn ascii_route_flag_on_layout_engages_wrap_prefix_acquisition() {
     );
 }
 
+/// Engagement proof for the increment-2j continuation-resume extension
+/// (flag-on suite gate): the continuation rows of a wrapped plain line must
+/// take the mid-line resume acquisition. Trivially passes when the flag is
+/// off.
+#[test]
+fn ascii_route_flag_on_layout_engages_continuation_resume_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_CONTINUATION_RESUME_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let long_line: String = format!("{}\n", "abcdefghij".repeat(12));
+    let (_eval, _buf_id, rows, _char_width, _char_height) = layout_main_text_rows(&long_line);
+    assert!(rows.len() >= 2, "the long line must wrap");
+    let after = crate::buffer_source::row_route::ROUTED_CONTINUATION_RESUME_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after > before,
+        "expected a continuation row of the wrapped line to route through the \
+         mid-line resume entry (before={before}, after={after})"
+    );
+}
+
+/// Increment 2j shadow proof — the tab-after-wrap acid case: a wrapped line
+/// whose continuation row begins with buffer text containing a TAB. The
+/// continuation row's glyphs (whichever mode produced them: the pipeline
+/// flag-off, the resume-entry route flag-on — the dual-mode suite runs pin
+/// both against the SAME expectation here) must equal the shadow item-render
+/// of the resumed char range, including the pen-dependent tab stretch.
+#[test]
+fn continuation_resume_shadow_matches_tab_after_wrap_row() {
+    let long_line: String = format!("{}\tend\n", "x".repeat(100));
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(&long_line);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert!(rows.len() >= 2, "the long line must wrap");
+
+    let continuation_glyphs = &rows[1].glyphs[1];
+    // The resumed coverage: consecutive glyphs mapping to buffer chars,
+    // starting at the continuation row's first charpos. Stop at the first
+    // glyph past the line's content (the appended line-end space maps to the
+    // newline; a '\\' marker would be a further wrap's decoration).
+    let start = continuation_glyphs
+        .first()
+        .expect("continuation row has glyphs")
+        .charpos;
+    assert!(start > 0, "row 1 resumes mid-line");
+    // 100 x's + tab + "end": the newline sits at charpos 104.
+    let newline_charpos = 104;
+    let covered: Vec<_> = continuation_glyphs
+        .iter()
+        .take_while(|glyph| glyph.charpos < newline_charpos)
+        .cloned()
+        .collect();
+    assert!(
+        covered
+            .iter()
+            .any(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. })),
+        "the continuation row must contain the tab's stretch glyph"
+    );
+    let end = covered.last().expect("covered glyphs").charpos + 1;
+    let shadow_row = render_buffer_ascii_item_prefix_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::new(start),
+        CharPos0::new(end),
+        main_row_base_face_id(&rows[1]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_eq!(
+        shadow_row.glyphs[1][..covered.len()],
+        covered[..],
+        "continuation row must equal the shadow item-render of the resumed \
+         range glyph-for-glyph, tab stretch included"
+    );
+}
+
 /// Phase 2h rung 1 shadow proof: an EMPTY buffer line. The pipeline's row is
 /// the appended newline space (plus line-end plan effects) only; the routed
 /// RowBreak-only production must reproduce it glyph-for-glyph, and the main

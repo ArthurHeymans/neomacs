@@ -164,6 +164,11 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         self.source_consumption.has_pending_render_items()
     }
 
+    /// Telemetry-only view: how many split-run remainders are queued.
+    pub(crate) fn pending_render_items_len(&self) -> usize {
+        self.source_consumption.pending_render_items_len()
+    }
+
     pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
     where
         I: IntoIterator<Item = DisplaySourceStepItem>,
