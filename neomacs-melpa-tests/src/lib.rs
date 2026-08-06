@@ -2776,6 +2776,12 @@ pub const SHRINK_PATH_MELPA_PIN: (&str, &str) = ("shrink-path", "20190208.1335")
 /// `cf58dbec5394280503eb5502938f3b5445d1b53d`.
 pub const SCSS_MODE_MELPA_PIN: (&str, &str) = ("scss-mode", "20180123.1708");
 
+/// The exact Sass Mode package selected for practical project activation,
+/// nested stylesheet indentation and navigation, fontification, and compiler
+/// success/error parity. MELPA built this archive from upstream commit
+/// `247a0d4b509f10b28e4687cd8763492bca03599b`.
+pub const SASS_MODE_MELPA_PIN: (&str, &str) = ("sass-mode", "20190502.53");
+
 /// The exact Treemacs package selected for practical project admission,
 /// workspace lifecycle, persistence, selection, and terminal tree parity.
 /// MELPA built this archive from upstream commit

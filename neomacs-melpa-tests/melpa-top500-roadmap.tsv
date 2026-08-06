@@ -224,7 +224,7 @@ rank	package	downloads	status
 223	treemacs-icons-dired	511256	covered
 224	helm-company	511189	covered
 225	evil-cleverparens	510735	covered
-226	sass-mode	508057	todo
+226	sass-mode	508057	covered
 227	password-generator	506737	todo
 228	annalist	506268	covered
 229	orgit	505756	todo
