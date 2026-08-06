@@ -15027,6 +15027,171 @@ fn ascii_item_source_shadow_matches_wide_char_row() {
     assert_eq!(padding[1].charpos, 3);
 }
 
+/// Phase 2g audit scenario (permanent guard): an RTL-only Hebrew line ALREADY
+/// routes — Hebrew is non-shaping (not a `complex_script`) and width 1 — and
+/// that admission is SOUND because neomacs reorders bidi text at ROW INSTALL
+/// (`GlyphRowFinalizer::finalize` -> `reorder_row_bidi`,
+/// display_row/finalizer.rs), DOWNSTREAM of the acquisition seam: both
+/// producers emit the same LOGICAL-order glyphs and the same pure function
+/// permutes the finished row to visual order. (GNU instead reorders in the
+/// iterator — `bidi_move_to_visually_next`, xdisp.c — and appends in visual
+/// order; the neomacs row-level model is producer-agnostic, which is exactly
+/// what keeps this route safe.) The shadow row therefore finalizes through
+/// the SAME reorder before comparing against the installed main-pipeline row:
+/// equality covers visual glyph order, per-glyph bidi levels, charpos
+/// provenance, and `reversed_p`.
+#[test]
+fn ascii_item_source_shadow_matches_hebrew_rtl_row() {
+    let text = "\u{05D0}\u{05D1}\u{05D2}\nnext\n";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer,
+        "an RTL Hebrew line routes (non-shaping, width 1)"
+    );
+
+    let line_end = CharPos0::new("\u{05D0}\u{05D1}\u{05D2}".chars().count());
+    let mut shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    // Finalize the shadow row exactly the way install does; the main row in
+    // the matrix is already post-install (visual order).
+    crate::glyph_row_writer::reorder_row_bidi(&mut shadow_row, None);
+    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+
+    // The equality is meaningful: the installed row IS reordered — an R2L
+    // paragraph flags `reversed_p` and reads visually right-to-left
+    // ("אבג" logical -> "גבא" on screen), at odd bidi levels.
+    assert!(rows[0].reversed_p, "R2L paragraph row must flag reversed_p");
+    assert!(shadow_row.reversed_p);
+    let chars: Vec<char> = rows[0].glyphs[1]
+        .iter()
+        .filter_map(|glyph| match glyph.glyph_type {
+            neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch } => Some(ch),
+            _ => None,
+        })
+        .collect();
+    // The appended newline space (base-level trailing whitespace, UBA L1)
+    // lands visually LEFTMOST in a reversed row — the R2L mirror of GNU's
+    // newline cell sitting at the row's trailing edge.
+    assert_eq!(
+        chars,
+        vec![' ', '\u{05D2}', '\u{05D1}', '\u{05D0}'],
+        "visual order must be the bidi reversal with the newline space at the left edge"
+    );
+    assert!(
+        rows[0].glyphs[1]
+            .iter()
+            .skip(1)
+            .take(3)
+            .all(|glyph| glyph.bidi_level & 1 == 1),
+        "Hebrew glyphs resolve to odd (RTL) levels"
+    );
+}
+
+/// Phase 2g audit scenario (permanent guard): a mixed L2R/RTL line routes and
+/// stays glyph-identical with the pipeline through the shared install
+/// reorder — the L2R base direction keeps `reversed_p` off while the embedded
+/// Hebrew run is reversed in place.
+#[test]
+fn ascii_item_source_shadow_matches_mixed_l2r_rtl_row() {
+    let text = "abc \u{05D0}\u{05D1}\u{05D2} def\nnext\n";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+
+    let line_end = CharPos0::new("abc \u{05D0}\u{05D1}\u{05D2} def".chars().count());
+    let mut shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    crate::glyph_row_writer::reorder_row_bidi(&mut shadow_row, None);
+    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+
+    // L2R paragraph: not reversed, but the Hebrew segment is reversed in
+    // place ("abc גבא def").
+    assert!(!rows[0].reversed_p);
+    let chars: Vec<char> = rows[0].glyphs[1]
+        .iter()
+        .filter_map(|glyph| match glyph.glyph_type {
+            neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch } => Some(ch),
+            _ => None,
+        })
+        .collect();
+    let visual: String = chars.iter().collect();
+    assert!(
+        visual.starts_with("abc \u{05D2}\u{05D1}\u{05D0} def"),
+        "embedded RTL run must reverse in place, got {visual:?}"
+    );
+}
+
+/// Phase 2g pin: a line carrying directional formatting marks (LRM/RLM here)
+/// stays on the buffer pipeline whole. The marks classify as Glyphless
+/// ZeroWidth (`glyphless_method_for_char`'s 0x200B..=0x200F arm), i.e.
+/// non-Text, so `classify_routed_row_char`'s non-Text arm refuses — the 2e
+/// zero-width composed-extender routing never sees them (that arm only
+/// admits Text-class cluster extenders).
+#[test]
+fn directional_marks_row_stays_on_buffer_pipeline() {
+    let text = "ab\u{200F}\u{05D0}\u{05D1}\u{200E}cd\nnext\n";
+    let (eval, buf_id, _rows, char_width, _char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "directional formatting marks refuse the route"
+    );
+}
+
 #[test]
 fn ascii_item_source_shadow_matches_mixed_tab_wide_multiface_row() {
     // Mixed tab + wide + multi-face: bold "a", base tab, italic CJK + "b".

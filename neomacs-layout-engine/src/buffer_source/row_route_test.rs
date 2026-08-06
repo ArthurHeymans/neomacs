@@ -1731,6 +1731,81 @@ fn classifier_plans_wrap_prefix_for_overwide_line() {
 }
 
 #[test]
+fn classifier_routes_hebrew_rtl_rows() {
+    // Phase 2g audit pin: Hebrew is NON-shaping (not a `complex_script`) and
+    // unambiguous width 1, so RTL Hebrew lines route. This is sound because
+    // bidi reordering in neomacs is a row-level INSTALL step
+    // (`GlyphRowFinalizer::finalize` -> `reorder_row_bidi`), downstream of
+    // the acquisition seam: both producers emit identical logical-order rows
+    // and the same pure function permutes them to visual order (proven
+    // glyph-for-glyph by the hebrew/mixed shadow tests in engine_test.rs).
+    let mut eval = Context::new();
+    for text in [
+        "\u{05D0}\u{05D1}\u{05D2}\n",
+        "abc \u{05D0}\u{05D1}\u{05D2} def\n",
+        "\u{05E9}\u{05DC}\u{05D5}\u{05DD} world\n",
+    ] {
+        let buf_id = buffer_with_text(&mut eval, text);
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                wide_fit(),
+                plain_policy()
+            ),
+            RowAcquisitionRoute::ItemRenderer,
+            "RTL/mixed content {text:?} must route to the item renderer"
+        );
+    }
+}
+
+#[test]
+fn classifier_refuses_directional_formatting_chars() {
+    // Phase 2g pin: every directional formatting char — the implicit marks
+    // LRM/RLM, the explicit embeddings/overrides LRE/RLE/PDF/LRO/RLO, and
+    // the isolates LRI/RLI/FSI/PDI — refuses the route. They classify as
+    // Glyphless ZeroWidth (`glyphless_method_for_char`: the 0x200B..=0x200F
+    // fast path and the Cf + Default_Ignorable arm), i.e. non-Text, so the
+    // ladder's non-Text arm refuses; the 2e composed-extender arm cannot
+    // swallow them (it only admits Text-class cluster extenders). NOTE the
+    // honest gap this pin sits on: the pipeline drops these marks before the
+    // row (ZeroWidth glyphless emits no glyph), so the install-time UBA
+    // never sees them and they cannot steer resolution as they do in GNU —
+    // a pipeline-wide parity gap on BOTH paths, recorded for the divergence
+    // backlog, not a routing divergence.
+    let mut eval = Context::new();
+    for mark in [
+        '\u{200E}', // LRM
+        '\u{200F}', // RLM
+        '\u{202A}', // LRE
+        '\u{202B}', // RLE
+        '\u{202C}', // PDF
+        '\u{202D}', // LRO
+        '\u{202E}', // RLO
+        '\u{2066}', // LRI
+        '\u{2067}', // RLI
+        '\u{2068}', // FSI
+        '\u{2069}', // PDI
+    ] {
+        let text = format!("ab{mark}cd\n");
+        let buf_id = buffer_with_text(&mut eval, &text);
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                wide_fit(),
+                plain_policy()
+            ),
+            RowAcquisitionRoute::BufferPipeline,
+            "directional formatting char U+{:04X} must refuse the route",
+            mark as u32
+        );
+    }
+}
+
+#[test]
 fn classifier_refuses_overwide_line_under_word_wrap() {
     // Phase 2f rung 3 pin: WORD wrap stays refused whole. The pipeline's
     // word-wrap machinery records a break candidate PER RENDERED CHAR while
