@@ -210,7 +210,7 @@ rank	package	downloads	status
 209	linum-relative	538437	covered
 210	xterm-color	538036	covered
 211	window-purpose	535438	covered
-212	helm-c-yasnippet	531027	todo
+212	helm-c-yasnippet	531027	covered
 213	skewer-mode	528437	covered
 214	evil-goggles	527887	todo
 215	nameless	526341	todo

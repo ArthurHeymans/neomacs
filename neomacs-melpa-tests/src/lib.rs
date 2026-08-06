@@ -2587,6 +2587,12 @@ pub const HELM_THEMES_SOURCE_PIN: (&str, &str) = ("helm-themes", "0.5");
 /// commit `a7b43d9622ea5dcff3e3e0bb0b7dcc342b272171`.
 pub const HELM_AG_MELPA_PIN: (&str, &str) = ("helm-ag", "0.64");
 
+/// The exact Helm C Yasnippet package selected for practical snippet
+/// discovery, completion, insertion, authoring, navigation, rename, delete,
+/// and failure parity. MELPA built version 20230911.444 from upstream commit
+/// `c6c9a14a65d11de967be593e5bead3196c1f4ecf`.
+pub const HELM_C_YASNIPPET_MELPA_PIN: (&str, &str) = ("helm-c-yasnippet", "20230911.444");
+
 /// The exact helm-core package selected by the practical source-extension,
 /// candidate-buffer, pipeline, preview, and path parity corpus, and required
 /// by the Helm parity corpus.
