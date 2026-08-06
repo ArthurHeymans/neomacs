@@ -2601,6 +2601,12 @@ pub const GOTO_CHG_MELPA_PIN: (&str, &str) = ("goto-chg", "20240407.1110");
 /// user-interface dependency.
 pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
 
+/// The exact Helm Company package selected for practical Company-backed
+/// candidate presentation, completion, cancellation, documentation, and
+/// source-location parity. MELPA built version 0.2.8 from upstream commit
+/// `4622b82353220ee6cc33468f710fa5b6b253b7f1`.
+pub const HELM_COMPANY_MELPA_PIN: (&str, &str) = ("helm-company", "20231113.701");
+
 /// The exact Helm-Mode-Manager package selected for command discovery,
 /// major-mode switching, minor-mode toggling, and persistent-help parity.
 /// MELPA built this archive from upstream commit

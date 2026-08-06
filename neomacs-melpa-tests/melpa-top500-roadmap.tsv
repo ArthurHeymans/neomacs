@@ -222,7 +222,7 @@ rank	package	downloads	status
 221	scss-mode	512554	covered
 222	pdf-tools	511525	covered
 223	treemacs-icons-dired	511256	covered
-224	helm-company	511189	todo
+224	helm-company	511189	covered
 225	evil-cleverparens	510735	todo
 226	sass-mode	508057	todo
 227	password-generator	506737	todo
