@@ -470,6 +470,7 @@ mod skewer_mode;
 mod slime;
 mod sly;
 mod smartparens;
+mod solarized_theme;
 mod spaceline;
 mod spinner;
 mod splitter;

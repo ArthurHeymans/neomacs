@@ -2332,6 +2332,12 @@ pub const VTERM_MELPA_PIN: (&str, &str) = ("vterm", "20260730.1414");
 /// `3bb4a96535eb5c81dbe6a43bfa8d67a778d449c0`.
 pub const HAML_MODE_MELPA_PIN: (&str, &str) = ("haml-mode", "20250714.1441");
 
+/// The exact Solarized Theme package selected for practical palette,
+/// face-spec, option, variant, and enable/disable lifecycle parity. MELPA
+/// built this archive from upstream commit
+/// `1443d6dce378ad2d65a8a8c45d5279481a79dfab`.
+pub const SOLARIZED_THEME_MELPA_PIN: (&str, &str) = ("solarized-theme", "20260728.833");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
