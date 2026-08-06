@@ -2462,6 +2462,16 @@ pub const COMPAT_GNU_ELPA_PIN: (&str, &str) = ("compat", "31.0.0.2");
 /// formatting, structural refactoring, and source-navigation parity corpus.
 pub const CLOJURE_MODE_MELPA_PIN: (&str, &str) = ("clojure-mode", "20260709.952");
 
+/// The exact Closql package selected for practical SQLite-backed object,
+/// relation, query, transaction, and schema-lifecycle parity. MELPA built
+/// version 2.4.1 from upstream commit
+/// `d382e7427f5d375ffc872851b049e9f9c4a43dfc`.
+pub const CLOSQL_MELPA_PIN: (&str, &str) = ("closql", "20260601.1540");
+
+/// The exact SQLite3 module package used as the Closql parity backend because
+/// the local GNU Emacs and Neomacs builds do not provide builtin SQLite.
+pub const SQLITE3_MELPA_PIN: (&str, &str) = ("sqlite3", "20251014.536");
+
 /// The exact Company package selected by the practical interactive
 /// completion, CAPF, asynchronous backend, and file workflow parity corpus.
 pub const COMPANY_MELPA_PIN: (&str, &str) = ("company", "20260721.100");

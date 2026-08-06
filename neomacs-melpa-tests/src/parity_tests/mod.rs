@@ -278,6 +278,7 @@ mod cider;
 mod clang_format;
 mod clean_aindent_mode;
 mod clojure_mode;
+mod closql;
 mod column_enforce_mode;
 mod commander;
 mod company;
