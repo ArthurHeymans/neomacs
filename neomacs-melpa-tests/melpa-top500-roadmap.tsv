@@ -225,7 +225,7 @@ rank	package	downloads	status
 224	helm-company	511189	covered
 225	evil-cleverparens	510735	covered
 226	sass-mode	508057	covered
-227	password-generator	506737	todo
+227	password-generator	506737	covered
 228	annalist	506268	covered
 229	orgit	505756	todo
 230	websocket	502708	covered

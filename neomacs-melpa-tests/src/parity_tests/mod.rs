@@ -450,6 +450,7 @@ mod page_break_lines;
 mod paradox;
 mod paredit;
 mod parent_mode;
+mod password_generator;
 mod pcache;
 mod pcre2el;
 mod pdf_tools;

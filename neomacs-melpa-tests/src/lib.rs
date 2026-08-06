@@ -2754,6 +2754,12 @@ pub const MAGIT_SECTION_MELPA_PIN: (&str, &str) = ("magit-section", "20260722.21
 /// `51b075935ca7070f62fae1d69fe0ff7d8fa56fdd`.
 pub const MEMOIZE_MELPA_PIN: (&str, &str) = ("memoize", "20200103.2036");
 
+/// The exact Password Generator package selected for practical interactive,
+/// returned-value, phonetic, word-list, custom-alphabet, and invalid-setting
+/// parity. MELPA built this version from upstream commit
+/// `2d0deb52f2fd978bff9001e155e36ac5bd287d52`.
+pub const PASSWORD_GENERATOR_MELPA_PIN: (&str, &str) = ("password-generator", "20250615.2300");
+
 /// The exact Projectile package selected by the comprehensive API parity
 /// corpus.
 pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
