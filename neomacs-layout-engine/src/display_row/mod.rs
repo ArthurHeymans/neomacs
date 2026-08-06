@@ -1119,6 +1119,7 @@ pub(crate) mod source_render;
 pub(crate) mod source_state;
 pub(crate) mod special_glyphs;
 pub(crate) mod text_output;
+pub(crate) mod trailing_whitespace;
 pub(crate) mod transition;
 pub(crate) mod walk_state;
 pub(crate) mod width;

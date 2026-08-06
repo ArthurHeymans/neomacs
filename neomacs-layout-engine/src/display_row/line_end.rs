@@ -29,9 +29,10 @@ use crate::display_current_row_output::DisplayCurrentRowMutation;
 use crate::display_item::DisplayRowBreakReason;
 use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::finalizer::RowExtendFill;
+use crate::display_row::trailing_whitespace::HighlightTrailingWhitespaceMutation;
 use crate::glyph_row_writer::push_stretch_to_area;
 use neomacs_display_protocol::glyph_matrix::{
-    Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
+    Glyph, GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
 };
 use neomacs_display_protocol::types::{Color, FaceId};
 
@@ -429,41 +430,6 @@ impl DisplayCurrentRowMutation for AppendNewlineGlyphMutation {
     }
 }
 
-/// Re-face the current row's trailing whitespace glyphs with the
-/// `trailing-whitespace` face (GNU `highlight_trailing_whitespace`, xdisp.c).
-/// Walks the TEXT-area glyphs from the end backward over space/tab whitespace —
-/// space `Char` glyphs and `Stretch` glyphs (tabs) — stamping each with
-/// `face_id` until the first non-whitespace glyph. A `Glyph`'s background is
-/// resolved from its `face_id`, so this paints the trailing run through the same
-/// per-glyph background path the `region` face uses. Called only at true line
-/// ends (before a real newline / at ZV), never at a visual wrap.
-pub(super) struct HighlightTrailingWhitespaceMutation {
-    pub(super) face_id: FaceId,
-}
-
-impl DisplayCurrentRowMutation for HighlightTrailingWhitespaceMutation {
-    type Output = ();
-
-    fn apply(self, row: &mut GlyphRow) -> Self::Output {
-        let glyphs = &mut row.glyphs[GlyphArea::Text.index()];
-        let mut start = glyphs.len();
-        while start > 0 {
-            let is_whitespace = match glyphs[start - 1].glyph_type {
-                GlyphType::Char { ch } => ch == ' ' || ch == '\t',
-                GlyphType::Stretch { .. } => true,
-                _ => false,
-            };
-            if !is_whitespace {
-                break;
-            }
-            start -= 1;
-        }
-        for glyph in &mut glyphs[start..] {
-            glyph.face_id = self.face_id;
-        }
-    }
-}
-
 /// Geometry + faces for the `display-fill-column-indicator` glyph produced in a
 /// row's trailing region (GNU `extend_face_to_end_of_line`, xdisp.c:24752): a
 /// `gap` stretch pads from end-of-text to the indicator column, the indicator
@@ -549,10 +515,6 @@ impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
 #[cfg(test)]
 #[path = "fill_column_indicator_test.rs"]
 mod fill_column_indicator_tests;
-
-#[cfg(test)]
-#[path = "trailing_whitespace_test.rs"]
-mod trailing_whitespace_tests;
 
 #[cfg(test)]
 mod tests {
