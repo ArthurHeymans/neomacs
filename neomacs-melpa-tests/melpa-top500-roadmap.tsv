@@ -233,7 +233,7 @@ rank	package	downloads	status
 232	org-superstar	500161	covered
 233	ctable	497356	covered
 234	inf-ruby	497335	covered
-235	symon	497250	todo
+235	symon	497250	covered
 236	org-mime	497028	todo
 237	pip-requirements	496540	todo
 238	undo-tree	495073	todo

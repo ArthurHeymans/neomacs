@@ -2932,6 +2932,13 @@ pub const STRING_INFLECTION_MELPA_PIN: (&str, &str) = ("string-inflection", "202
 /// `85d100b0cca35b70cee1b260e09af8e1fb2fcc08` (package version 4.3).
 pub const SYMBOL_OVERLAY_MELPA_PIN: (&str, &str) = ("symbol-overlay", "20260703.1437");
 
+/// The exact symon package selected for practical custom-monitor generation,
+/// history and display formatting, sparkline bitmap and XPM rendering,
+/// multipage echo-area updates, redisplay, and global mode lifecycle parity.
+/// MELPA built version 1.2.3 from upstream commit
+/// `294668d63da642276a0003cb4e9d6f8b40a13788`.
+pub const SYMON_MELPA_PIN: (&str, &str) = ("symon", "20260411.1454");
+
 /// The exact Yasnippet package selected by the direct parity corpus and as
 /// angular-snippets' manually documented runtime dependency.
 pub const YASNIPPET_MELPA_PIN: (&str, &str) = ("yasnippet", "20250602.1342");

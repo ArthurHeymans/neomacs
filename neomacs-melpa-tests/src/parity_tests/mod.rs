@@ -504,6 +504,7 @@ mod string_inflection;
 mod svg_lib;
 mod swiper;
 mod symbol_overlay;
+mod symon;
 mod tablist;
 mod tinysegmenter;
 mod toc_org;
