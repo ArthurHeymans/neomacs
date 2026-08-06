@@ -477,6 +477,7 @@ mod rtags;
 mod rust_mode;
 mod s;
 mod sage_shell_mode;
+mod scss_mode;
 mod seven_fifty_words;
 mod shell_maker;
 mod shrink_path;

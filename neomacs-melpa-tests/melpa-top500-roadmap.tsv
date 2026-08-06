@@ -219,7 +219,7 @@ rank	package	downloads	status
 218	shrink-path	514742	covered
 219	elpy	514727	covered
 220	centered-cursor-mode	512668	covered
-221	scss-mode	512554	todo
+221	scss-mode	512554	covered
 222	pdf-tools	511525	covered
 223	treemacs-icons-dired	511256	todo
 224	helm-company	511189	todo

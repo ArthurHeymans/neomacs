@@ -2757,6 +2757,13 @@ pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 /// `c14882c8599aec79a6e8ef2d06454254bb3e1e41`.
 pub const SHRINK_PATH_MELPA_PIN: (&str, &str) = ("shrink-path", "20190208.1335");
 
+/// The exact SCSS Mode package selected for practical project activation,
+/// nested stylesheet authoring, syntax/fontification, compilation,
+/// compile-on-save, legacy Flymake, and diagnostic-navigation parity. MELPA
+/// built this version from upstream commit
+/// `cf58dbec5394280503eb5502938f3b5445d1b53d`.
+pub const SCSS_MODE_MELPA_PIN: (&str, &str) = ("scss-mode", "20180123.1708");
+
 /// The exact Treemacs package selected for practical project admission,
 /// workspace lifecycle, persistence, selection, and terminal tree parity.
 /// MELPA built this archive from upstream commit
