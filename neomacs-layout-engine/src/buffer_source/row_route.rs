@@ -9,10 +9,17 @@
 //! * [`RowAcquisitionRoute`] + [`classify_row_acquisition`] decide, at the
 //!   start of a buffer line, whether the row is plain enough for the item
 //!   renderer. "Plain" mirrors what makes GNU `get_next_display_element`
-//!   trivial: single-byte printable ASCII only, no display/composition/
-//!   invisible/mouse-face/line-height properties in range, no
-//!   display table, L2R (guaranteed by ASCII-only content), the row fits
-//!   without continuation or truncation, and it ends in a real newline.
+//!   trivial: single-byte printable ASCII only, no display/mouse-face/
+//!   line-height properties in range, no display table, L2R (guaranteed by
+//!   ASCII-only content), the row fits without continuation or truncation,
+//!   and it ends in a real newline. Composition refuses through the
+//!   pipeline's OWN predicates (phase 2e): a char the shared writer would
+//!   compose into the previous glyph (`composition::continues_cluster` /
+//!   `continues_complex_run` over the scan's mirror of the row tail) and a
+//!   static `composition` text property the pipeline's replacement
+//!   predicate parses (`composition_display_text_for_property`) both keep
+//!   the buffer pipeline; an inert composition prop renders literally and
+//!   routes.
 //!   FACE-affecting properties (`face`, `font-lock-face`, `fontified`
 //!   boundaries) are allowed: they segment the row at property-change
 //!   positions exactly like GNU `compute_stop_pos` bounds the iterator's
@@ -48,7 +55,7 @@
 //! `row_lifecycle.rs`), mirroring GNU `set_cursor_from_row` operating on
 //! buffer positions only.
 
-use crate::composition::needs_complex_shaping;
+use crate::composition::{continues_cluster, continues_complex_run, needs_complex_shaping};
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy, DisplayRowBreak,
     DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
@@ -61,10 +68,11 @@ use crate::display_source::{
 };
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, LayoutCharPropertyLookup, ResolvedFace};
-use crate::unicode::{decode_utf8, is_cluster_extender, is_regional_indicator};
+use crate::unicode::{decode_utf8, is_regional_indicator};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
+use neovm_core::emacs_core::composite::composition_display_text_for_property;
 
 /// Which pipeline acquires and renders a buffer row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -244,22 +252,31 @@ enum RoutedRowCharAdvance {
     Cols(u8),
 }
 
-/// Classify one char for the routed row class. Accepted: TAB, printable
-/// ASCII, and printable non-ASCII chars whose display width is unambiguously
-/// 1 or 2 columns per the SAME width source the buffer pipeline advances by
+/// Classify one STANDALONE char for the routed row class (the scan resolves
+/// composition first: a char the pipeline would compose into the previous
+/// glyph never reaches this ladder). Accepted: TAB, printable ASCII, and
+/// printable non-ASCII chars whose display width is unambiguously 1 or 2
+/// columns per the SAME width source the buffer pipeline advances by
 /// (`neovm_core::encoding::char_width`, the GNU default `char-width-table`,
 /// via `base_width_cols`). Refused (each has pipeline machinery the routed
 /// render does not replicate):
 /// * control chars other than TAB, and every non-Text classification
-///   (`^X` caret runs, `\`+octal escapes, glyphless boxes);
-/// * cluster extenders (combining marks, zero-width chars, ZWJ, keycap,
-///   skin tones) and regional indicators — grapheme clustering composes them
-///   with neighbors into `Composite` glyphs;
-/// * contextual-shaping scripts (Arabic, Indic, …) — run shaping measures
-///   advances per shaped run;
+///   (`^X` caret runs, `\`+octal escapes, glyphless boxes — this arm also
+///   catches the zero-width chars the glyphless policy does NOT preserve
+///   for composition, e.g. ZWSP);
+/// * regional indicators — the shared writer's width model
+///   (`composition::base_width_cols`) forces them to 2 columns in
+///   anticipation of flag-pair composition, diverging from the plain
+///   `char_width` cell model this classifier fits with;
+/// * contextual-shaping script chars (Arabic, Indic, …) — every such char
+///   can START a run the pipeline shapes as a unit
+///   (`composition::continues_complex_run` decides membership only at the
+///   NEXT char), so run entry refuses here;
 /// * nobreak spaces/hyphens — their display consults the
 ///   `nobreak-char-display` setting per char (GNU xdisp.c:8594);
-/// * anything the shared width table does not size at exactly 1 or 2 cols.
+/// * anything the shared width table does not size at exactly 1 or 2 cols
+///   (which also refuses zero-width cluster extenders defensively — the
+///   scan's compose branch normally intercepts them first).
 fn classify_routed_row_char(ch: char) -> Option<RoutedRowCharAdvance> {
     if ch == '\t' {
         return Some(RoutedRowCharAdvance::Tab);
@@ -273,8 +290,7 @@ fn classify_routed_row_char(ch: char) -> Option<RoutedRowCharAdvance> {
     if classify_text_source_char(ch) != TextSourceCharClassification::Text {
         return None;
     }
-    if is_cluster_extender(ch)
-        || is_regional_indicator(ch as u32)
+    if is_regional_indicator(ch as u32)
         || needs_complex_shaping(ch)
         || nonascii_space_p(ch)
         || nonascii_hyphen_p(ch)
@@ -288,8 +304,21 @@ fn classify_routed_row_char(ch: char) -> Option<RoutedRowCharAdvance> {
     }
 }
 
+/// Whether the pipeline's shared writer would COMPOSE `ch` into the
+/// previously produced glyph instead of appending a standalone one. This is
+/// the actual seam predicate, not a parallel heuristic: the writer's advance
+/// ladder (`DisplayRowTextNaturalAdvanceKind::for_tail`, display_row/
+/// append_context.rs) routes a text char to `ClusterContinuation` /
+/// `ComplexRunMember` — merging it into a `Composite` glyph — on exactly
+/// these two checks, fed by the row's `last_text_cluster_tail_in_glyphs`
+/// view, which the scan mirrors as `tail`.
+fn routed_char_would_compose(ch: char, tail: Option<(char, bool)>) -> bool {
+    continues_cluster(ch, tail) || continues_complex_run(ch, tail)
+}
+
 /// A scanned routable line: `byte_len` bytes / `char_len` chars of routed
-/// chars terminated by a real `\n` inside `text`.
+/// chars terminated by a real `\n` inside `text`, fitting strictly inside
+/// the row.
 #[derive(Clone, Copy, Debug)]
 struct RoutedLineScan {
     byte_len: usize,
@@ -299,15 +328,37 @@ struct RoutedLineScan {
 }
 
 /// Scan for a routable line at `byte_idx`: at least one char accepted by
-/// [`classify_routed_row_char`] terminated by a real `\n` inside `text`.
-fn routed_line_scan(text: &[u8], byte_idx: usize) -> Option<RoutedLineScan> {
+/// the routed ladder, terminated by a real `\n` inside `text`, whose pen
+/// walk ends STRICTLY inside the right edge.
+///
+/// The walk advances the pen exactly as the pipeline's natural advance does
+/// for uniform `char_width_px` cells — tabs through the append surface's
+/// `DisplayTabPolicy::advance_from` (GNU `next_tab_x`), wide chars by two
+/// cells — and mirrors the writer's composition ladder in decision order:
+/// a Text-class char is first tested against the SAME compose predicate the
+/// writer applies ([`routed_char_would_compose`] over the running `tail`,
+/// the scan's mirror of `last_text_cluster_tail_in_glyphs`); any char the
+/// pipeline would compose refuses the route, keeping composed grapheme
+/// clusters and shaped runs on the buffer pipeline deliberately. A line
+/// exactly filling the row keeps the buffer pipeline too
+/// (continuation/truncation policy owns that edge); the routed render
+/// re-verifies with the pipeline's own per-face natural measurement before
+/// committing. `tail` evolves as the writer's row view would: a pushed char
+/// becomes `(ch, lone-regional-indicator)`, a tab's stretch glyph clears it.
+fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Option<RoutedLineScan> {
     let mut idx = byte_idx;
     let mut char_len = 0usize;
     let mut has_tab = false;
     let mut has_wide = false;
+    let mut x_px = fit.start_x_px;
+    let mut col = fit.start_col;
+    let mut tail: Option<(char, bool)> = None;
     while idx < text.len() {
         if text[idx] == b'\n' {
-            return (char_len > 0).then_some(RoutedLineScan {
+            if char_len == 0 || x_px >= fit.right_edge_px {
+                return None;
+            }
+            return Some(RoutedLineScan {
                 byte_len: idx - byte_idx,
                 char_len,
                 has_tab,
@@ -320,10 +371,33 @@ fn routed_line_scan(text: &[u8], byte_idx: usize) -> Option<RoutedLineScan> {
         if consumed == 0 || ch.len_utf8() != consumed {
             return None;
         }
+        // Pipeline decision order: non-Text chars break the text run into
+        // their own items BEFORE any composition (the classify arm below
+        // refuses those), while a Text-class char consults the writer's
+        // compose ladder first.
+        if classify_text_source_char(ch) == TextSourceCharClassification::Text
+            && routed_char_would_compose(ch, tail)
+        {
+            return None;
+        }
         match classify_routed_row_char(ch)? {
-            RoutedRowCharAdvance::Tab => has_tab = true,
-            RoutedRowCharAdvance::Cols(2) => has_wide = true,
-            RoutedRowCharAdvance::Cols(_) => {}
+            RoutedRowCharAdvance::Tab => {
+                has_tab = true;
+                let tab = fit
+                    .tab_policy
+                    .advance_from(DisplayRowPosition::new(x_px, col), fit.char_width_px);
+                x_px += tab.pixel_width;
+                col += tab.width_cols;
+                // A tab renders a Stretch glyph: the writer's cluster-tail
+                // view yields None over it.
+                tail = None;
+            }
+            RoutedRowCharAdvance::Cols(cols) => {
+                has_wide |= cols == 2;
+                x_px += f32::from(cols) * fit.char_width_px;
+                col += usize::from(cols);
+                tail = Some((ch, is_regional_indicator(ch as u32)));
+            }
         }
         char_len += 1;
         idx += consumed;
@@ -331,41 +405,6 @@ fn routed_line_scan(text: &[u8], byte_idx: usize) -> Option<RoutedLineScan> {
     // End of buffer without a newline: the end-of-buffer tail has its own
     // buffer-pipeline lifecycle (cursor at EOB, empty-line indicators).
     None
-}
-
-/// The classifier's strict logical-cell fit for a scanned line: walk the
-/// line's chars advancing the pen exactly as the pipeline's natural advance
-/// does for uniform `char_width_px` cells — tabs through the append surface's
-/// `DisplayTabPolicy::advance_from` (GNU `next_tab_x`), wide chars by two
-/// cells — and require the end to land STRICTLY inside the right edge. A line
-/// exactly filling the row keeps the buffer pipeline (continuation/truncation
-/// policy owns that edge). The routed render re-verifies with the pipeline's
-/// own per-face natural measurement before committing.
-fn routed_line_fits(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> bool {
-    let mut x_px = fit.start_x_px;
-    let mut col = fit.start_col;
-    let mut idx = byte_idx;
-    while idx < text.len() && text[idx] != b'\n' {
-        let (ch, consumed) = decode_utf8(&text[idx..]);
-        let Some(advance) = classify_routed_row_char(ch) else {
-            return false;
-        };
-        match advance {
-            RoutedRowCharAdvance::Tab => {
-                let tab = fit
-                    .tab_policy
-                    .advance_from(DisplayRowPosition::new(x_px, col), fit.char_width_px);
-                x_px += tab.pixel_width;
-                col += tab.width_cols;
-            }
-            RoutedRowCharAdvance::Cols(cols) => {
-                x_px += f32::from(cols) * fit.char_width_px;
-                col += usize::from(cols);
-            }
-        }
-        idx += consumed;
-    }
-    x_px < fit.right_edge_px
 }
 
 /// Overlay properties the routed row class accepts on an intersecting
@@ -466,8 +505,27 @@ fn routed_row_overlay_scan<B: LayoutBufferView + ?Sized>(
 /// overlay-sourced) refuse through [`routed_row_elision_scan`]. `display`
 /// stays a hazard EVERYWHERE, including inside hidden spans, mirroring GNU's
 /// handler order where a replacing `display` spec beats `invisible`
-/// (it_props: display before invisible + HANDLED_RETURN).
-const ROUTE_HAZARD_TEXT_PROPS: [&str; 4] = ["display", "composition", "mouse-face", "line-height"];
+/// (it_props: display before invisible + HANDLED_RETURN). `composition` is
+/// not on this list since phase 2e: its refusal is grounded in the
+/// pipeline's own replacement predicate ([`routed_composition_prop_replaces`]),
+/// so an inert (unparseable) prop no longer refuses.
+const ROUTE_HAZARD_TEXT_PROPS: [&str; 3] = ["display", "mouse-face", "line-height"];
+
+/// Whether a static `composition` text property at `probe` would REPLACE its
+/// covered chars in the pipeline. This is the same predicate the pipeline's
+/// item production applies (`BufferTextSourceCursor::next_text_item_with_layout`
+/// -> `composition_display_text_for_property`, the neomacs stand-in for GNU
+/// `handle_composition_prop`'s `composition_valid_p` gate): a prop that
+/// parses to display text composes — the row refuses; a prop the predicate
+/// rejects renders its chars literally through the ordinary text run and
+/// stays routable. Refusal here is deliberately extent-agnostic (the
+/// pipeline additionally requires the composition to fit inside the run and
+/// walk bounds); refusing the superset is always safe.
+fn routed_composition_prop_replaces<B: LayoutBufferView>(buffer: &B, probe: EmacsBytePos) -> bool {
+    buffer
+        .layout_text_prop_at_emacs_byte_pos(probe, Value::symbol("composition"))
+        .is_some_and(|prop| composition_display_text_for_property(prop).is_some())
+}
 
 /// Scan the `[row_charpos, newline_charpos)` line for invisible text through
 /// the SAME semantics the pipeline's invisible checkpoint consumes
@@ -558,14 +616,11 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     if row.byte_idx > 0 && row.text.get(row.byte_idx - 1) != Some(&b'\n') {
         return None;
     }
-    let scan = routed_line_scan(row.text, row.byte_idx)?;
-
-    // Strict logical-cell fit (tab expansion + 2-col chars included): a line
-    // exactly filling the row keeps the buffer pipeline
-    // (continuation/truncation policy owns that edge).
-    if !routed_line_fits(row.text, row.byte_idx, fit) {
-        return None;
-    }
+    // One pass scans the chars (refusing anything the pipeline would
+    // compose) AND applies the strict logical-cell fit: a line exactly
+    // filling the row keeps the buffer pipeline (continuation/truncation
+    // policy owns that edge).
+    let scan = routed_line_scan(row.text, row.byte_idx, fit)?;
 
     // Cursor capture stays on the buffer pipeline: exclude any row that
     // contains point, including point sitting on the line's newline.
@@ -612,6 +667,12 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
             {
                 return None;
             }
+        }
+        // Static composition: refuse exactly when the pipeline's replacement
+        // predicate would fire (an inert prop still segments below, like any
+        // other property change).
+        if routed_composition_prop_replaces(buffer, probe) {
+            return None;
         }
         let Some(change) = buffer.layout_next_text_prop_change_after_emacs_byte_pos(probe) else {
             break;

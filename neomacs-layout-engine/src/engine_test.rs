@@ -15661,6 +15661,155 @@ fn ascii_item_source_shadow_matches_elision_between_face_spans() {
     assert_ne!(segments[0].face_id, segments[1].face_id);
 }
 
+// ---- Phase 2e rung 1: composition rows (pin refusal + pipeline shape) ----
+
+#[test]
+fn ascii_route_refuses_zwj_emoji_row_and_pipeline_composes() {
+    // A ZWJ emoji sequence composes into ONE Composite glyph in the
+    // pipeline's shared writer (composition.rs continues_cluster); the
+    // classifier refuses the row on the same predicate, so flag-on and
+    // flag-off render identically through the pipeline (this test runs in
+    // both suite modes).
+    let text = "a\u{1F468}\u{200D}\u{1F469}b\n";
+    let (eval, buf_id, rows, char_width, _char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "a ZWJ emoji row must refuse the item route"
+    );
+    let composite = rows[0].glyphs[1]
+        .iter()
+        .find_map(|glyph| match &glyph.glyph_type {
+            GlyphType::Composite { text } => Some((text.to_string(), glyph.charpos)),
+            _ => None,
+        })
+        .expect("the pipeline must compose the ZWJ sequence into a Composite glyph");
+    assert_eq!(composite.0, "\u{1F468}\u{200D}\u{1F469}");
+    assert_eq!(
+        composite.1, 1,
+        "the Composite carries the cluster-start charpos"
+    );
+}
+
+#[test]
+fn ascii_route_refuses_combining_mark_row_and_pipeline_composes() {
+    // A combining mark merges into its base char (Char -> Composite in the
+    // shared writer); the classifier refuses on the same continues_cluster
+    // predicate. Pinned pipeline shape: Composite payload text and the
+    // charpos jump over the absorbed mark.
+    let text = "ae\u{0301}bc\n";
+    let (eval, buf_id, rows, char_width, _char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "a combining-mark row must refuse the item route in rung 1"
+    );
+    let glyphs = &rows[0].glyphs[1];
+    let composite_at = glyphs
+        .iter()
+        .position(|glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.as_ref() == "e\u{0301}"))
+        .expect("the pipeline must merge the mark into a Composite glyph");
+    assert_eq!(glyphs[composite_at].charpos, 1);
+    assert_eq!(
+        glyphs[composite_at + 1].charpos,
+        3,
+        "the glyph after the cluster jumps the absorbed mark's charpos"
+    );
+}
+
+#[test]
+fn ascii_route_refuses_static_composition_row_and_pipeline_replaces() {
+    // A parseable static `composition` text property replaces the covered
+    // chars with the composition's display text
+    // (BufferTextSourceCursor::next_text_item_with_layout ->
+    // composition_display_text_for_property). The classifier refuses on the
+    // SAME predicate, so both flag modes render the replacement through the
+    // pipeline.
+    let text = "hello\nnext\n";
+    let (eval, buf_id, _frame_id, rows, char_width, _char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(put-text-property 3 5 'composition '((2 . ?x)))")
+                .expect("static composition prop");
+        });
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "a valid static-composition row must refuse the item route"
+    );
+    assert_eq!(
+        glyphs_logical_text(&rows[0].glyphs[1]),
+        "hexo ",
+        "chars 2..4 (\"ll\") must render as the composition's display text \"x\" \
+         (plus the appended newline space)"
+    );
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_inert_composition_prop_row() {
+    // A `composition` prop the pipeline's replacement predicate does NOT
+    // parse renders literally: the row routes and must match glyph-for-glyph.
+    // The prop's change positions segment the row like any other property
+    // boundary (same face on both sides).
+    let text = "hello\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(put-text-property 3 5 'composition '((0 . 1)))")
+                .expect("inert composition prop");
+        });
+    assert_eq!(glyphs_logical_text(&rows[0].glyphs[1]), "hello ");
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(
+        segments.len(),
+        3,
+        "the prop change positions segment the row"
+    );
+    assert_eq!(
+        segments[0].face_id, segments[1].face_id,
+        "an inert composition prop changes no face"
+    );
+}
+
 /// Engagement proof for the invisible-elision extension (flag-on suite
 /// gate): an elided row must actually take the routed acquisition.
 /// Trivially passes when the flag is off.

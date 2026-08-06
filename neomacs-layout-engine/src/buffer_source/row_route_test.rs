@@ -497,9 +497,11 @@ fn classifier_rejects_hazard_properties_anywhere_on_the_line() {
     // `invisible` left this list in phase 2d: the plain-elision sub-case is
     // routed (see the elision tests below); ellipsis / newline-spanning /
     // row-start invisibility still refuse through the elision scan.
+    // `composition` left this list in phase 2e: the refusal is now grounded
+    // in the pipeline's own replacement predicate (see the composition tests
+    // below).
     for (prop, value) in [
         ("display", "\"X\""),
-        ("composition", "'((0 . 1))"),
         ("mouse-face", "'highlight"),
         ("line-height", "2.0"),
     ] {
@@ -1348,6 +1350,90 @@ fn classifier_rejects_display_string_replacement() {
         ),
         RowAcquisitionRoute::BufferPipeline
     );
+}
+
+// ---- Phase 2e rung 1: composition refusals grounded in the pipeline seam ----
+
+#[test]
+fn classifier_rejects_valid_static_composition_prop() {
+    // The pipeline replaces the covered chars when (and only when) the
+    // `composition` text property parses to display text
+    // (BufferTextSourceCursor::next_text_item_with_layout ->
+    // composition_display_text_for_property). The classifier refuses on the
+    // SAME predicate. Both the fixnum-component and string-component Form-A
+    // shapes (prettify-symbols / compose-region) refuse.
+    for value in ["'((2 . ?x))", "'((2 . \"ab\"))"] {
+        let mut eval = Context::new();
+        let buf_id = buffer_with_text(&mut eval, "hello\n");
+        eval.buffer_manager_mut().set_current(buf_id);
+        eval.eval_str(&format!("(put-text-property 3 5 'composition {value})"))
+            .expect("put-text-property");
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(b"hello\n", 0, 0),
+                wide_fit(),
+                plain_policy()
+            ),
+            RowAcquisitionRoute::BufferPipeline,
+            "a parseable composition prop ({value}) must stay on the buffer pipeline"
+        );
+    }
+}
+
+#[test]
+fn classifier_routes_inert_composition_prop() {
+    // A `composition` prop the pipeline's replacement predicate does NOT
+    // parse (zero length, or garbage) renders its chars literally through
+    // the ordinary text run — the row routes, and the property change
+    // positions segment it exactly like any other property boundary.
+    for value in ["'((0 . 1))", "'garbage"] {
+        let mut eval = Context::new();
+        let buf_id = buffer_with_text(&mut eval, "hello\n");
+        eval.buffer_manager_mut().set_current(buf_id);
+        eval.eval_str(&format!("(put-text-property 3 5 'composition {value})"))
+            .expect("put-text-property");
+        let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+        let plan = plan_ascii_row(
+            buffer,
+            row_start(b"hello\n", 0, 0),
+            wide_fit(),
+            plain_policy(),
+        )
+        .unwrap_or_else(|| panic!("an inert composition prop ({value}) must route"));
+        assert_eq!(plan.face_boundaries(), &[2, 4]);
+    }
+}
+
+#[test]
+fn classifier_rejects_rows_the_pipeline_would_compose() {
+    // Each row contains a char the shared writer would COMPOSE into the
+    // previous glyph (composition.rs continues_cluster /
+    // continues_complex_run — the same predicate the classifier now
+    // consults): combining mark, ZWJ emoji sequence, variation-selector
+    // keycap, skin-tone modifier, and a same-script contextual-shaping run.
+    for text in [
+        "ae\u{0301}b\n",                  // combining acute merges into 'e'
+        "a\u{1F468}\u{200D}\u{1F469}b\n", // ZWJ emoji sequence
+        "1\u{FE0F}\u{20E3}x\n",           // keycap sequence (VS16 + U+20E3)
+        "a\u{1F44D}\u{1F3FB}b\n",         // thumbs-up + skin-tone modifier
+        "\u{0E01}\u{0E49}\n",             // Thai consonant + tone mark run
+    ] {
+        let mut eval = Context::new();
+        let buf_id = buffer_with_text(&mut eval, text);
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                wide_fit(),
+                plain_policy()
+            ),
+            RowAcquisitionRoute::BufferPipeline,
+            "content {text:?} composes in the pipeline and must refuse the route"
+        );
+    }
 }
 
 #[test]
