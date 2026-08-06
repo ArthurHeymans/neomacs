@@ -1321,3 +1321,31 @@ fn classifier_routes_non_hiding_invisible_value() {
     assert!(!plan.has_elision());
     assert_eq!(plan.face_boundaries(), &[2, 4]);
 }
+
+// ---- Phase 2d rungs 2+3: display-prop refusals (string / space specs) ----
+
+#[test]
+fn classifier_rejects_display_string_replacement() {
+    let mut eval = Context::new();
+    // Rung 2 decision pin: a string-valued `display` property replaces the
+    // covered span via the pipeline's Lisp-string session (string faces,
+    // covered-charpos glyph provenance, cursor slot at the replacement edge)
+    // which the single-row TextRun probe/commit cannot express — a TextRun
+    // advances charpos per char, a replacement stamps every string glyph
+    // with the covered START and skips M buffer chars for N string chars.
+    let text = "abXXcd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 5 'display \"STR\")")
+        .expect("display string replacement");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline
+    );
+}

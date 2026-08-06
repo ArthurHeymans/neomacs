@@ -15836,6 +15836,51 @@ fn overlay_invisible_rows_stay_on_buffer_pipeline_under_item_route() {
     );
 }
 
+/// Phase 2d rung 2 decision pin: string-valued `display` properties are
+/// REFUSED by the route classifier, not expressed on the item path. The
+/// pipeline renders them through the display-property replacement request
+/// riding the Lisp-string session (GNU handle_single_display_spec pushing
+/// GET_FROM_STRING): the string's own faces resolve over it, every
+/// replacement glyph is stamped with the COVERED span's start position, and
+/// the walk skips M covered buffer chars for N string chars — provenance a
+/// single-row TextRun (charpos advancing one per char) cannot express.
+/// Identical output whether the route flag is on or off; if the classifier
+/// ever routed the row, the replacement would vanish under
+/// NEOMACS_ROW_ITEM_ROUTE=ascii.
+#[test]
+fn display_string_replacement_rows_stay_on_buffer_pipeline_under_item_route() {
+    let text = "abXXcd\nnext\n";
+    let (eval, buf_id, rows, char_width, _char_height) = {
+        let (eval, buf_id, _frame_id, rows, char_width, char_height) =
+            layout_main_text_rows_with(text, |eval, buf_id| {
+                eval.buffer_manager_mut().set_current(buf_id);
+                eval.eval_str("(put-text-property 3 5 'display \"STR\")")
+                    .expect("display string replacement");
+            });
+        (eval, buf_id, rows, char_width, char_height)
+    };
+    assert_eq!(
+        glyphs_logical_text(&rows[0].glyphs[1]),
+        "abSTRcd ",
+        "the display string must replace the covered span"
+    );
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "display-string rows must refuse the item route"
+    );
+}
+
 #[test]
 fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
     let mut eval = Context::new();
