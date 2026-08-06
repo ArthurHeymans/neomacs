@@ -402,6 +402,7 @@ mod lorem_ipsum;
 mod lsp_mode;
 mod lsp_treemacs;
 mod lsp_ui;
+mod lua_mode;
 mod lv;
 mod m_buffer;
 mod macrostep;

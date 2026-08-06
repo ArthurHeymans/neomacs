@@ -2242,6 +2242,12 @@ pub const FORGE_MELPA_PIN: (&str, &str) = ("forge", "20260731.2255");
 /// `806c000bd40153d17dfa5709c6d19546d507a416`.
 pub const TREEPY_MELPA_PIN: (&str, &str) = ("treepy", "20260531.1144");
 
+/// The exact Lua Mode package selected for practical Lua authoring,
+/// navigation, evaluation, documentation, and tooling parity. MELPA built
+/// this archive from upstream commit
+/// `2f6b8d7a6317e42c953c5119b0119ddb337e0a5f`.
+pub const LUA_MODE_MELPA_PIN: (&str, &str) = ("lua-mode", "20250310.1150");
+
 /// The exact Clean Aindent Mode package selected for practical smart and
 /// simple newline indentation, abandoned-whitespace cleanup, undo, nested and
 /// tabbed unindent, kill fallback, buffer isolation, and mode lifecycle parity.

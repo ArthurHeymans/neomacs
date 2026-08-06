@@ -201,7 +201,7 @@ rank	package	downloads	status
 200	bui	569120	covered
 201	overseer	567596	covered
 202	treepy	559118	covered
-203	lua-mode	556909	todo
+203	lua-mode	556909	covered
 204	flycheck-package	550828	todo
 205	helm-xref	543173	todo
 206	closql	540858	todo
