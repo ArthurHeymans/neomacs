@@ -234,6 +234,12 @@ pub const MOVE_TEXT_MELPA_PIN: (&str, &str) = ("move-text", "20260508.508");
 /// `00d6580a040a750e019218f9392cf9a4c2dac23a`.
 pub const ELIXIR_MODE_MELPA_PIN: (&str, &str) = ("elixir-mode", "20230626.1738");
 
+/// The exact Elpy package selected for practical Python project discovery,
+/// editing, multi-edit, test command, module navigation, and mode-lifecycle
+/// parity. MELPA built this version from upstream commit
+/// `9cdf26dfea1cb044b3cf1dfa9755b6479bfd9a1c`.
+pub const ELPY_MELPA_PIN: (&str, &str) = ("elpy", "20260715.1747");
+
 /// The exact Emmet Mode package selected by the practical HTML, CSS, JSX,
 /// preview, wrapping, and edit-point workflow corpus. MELPA built this archive
 /// from upstream commit `322d3bb112fced57d63b44863357f7a0b7eee1e3`.
