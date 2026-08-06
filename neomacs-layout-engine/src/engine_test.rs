@@ -15469,6 +15469,61 @@ fn ascii_item_source_shadow_matches_zero_length_overlay_row() {
     );
 }
 
+/// Phase 2c step 2 decision pin: overlay before/after-strings are REFUSED by
+/// the route classifier, not expressed on the item path. They are
+/// Lisp-string-sourced runs with their own append session (GNU
+/// load_overlay_strings feeding push_it/GET_FROM_STRING; neomacs
+/// OverlayStringRenderRequest -> LispStringSourceRowAppendSession) whose face
+/// policy (face_for_overlay_string: buffer TEXT props only, overlay faces
+/// disregarded), cursor capture, and possible row transitions the single-row
+/// probe/commit item route cannot express. This test proves the refused
+/// class renders through the buffer pipeline IDENTICALLY whether the route
+/// flag is on or off: the interleaved string glyphs must be present in GNU
+/// order (before-string at overlay start, after-string at its end). If the
+/// classifier ever mistakenly routed the row, the strings would vanish and
+/// this fails under NEOMACS_ROW_ITEM_ROUTE=ascii.
+#[test]
+fn overlay_string_rows_stay_on_buffer_pipeline_under_item_route() {
+    let text = "hello world\nnext\n";
+    let (eval, buf_id, rows, char_width, _char_height) = {
+        let (eval, buf_id, _frame_id, rows, char_width, char_height) =
+            layout_main_text_rows_with(text, |eval, buf_id| {
+                eval.buffer_manager_mut().set_current(buf_id);
+                eval.eval_str(
+                    "(let ((ov (make-overlay 4 9))) \
+                       (overlay-put ov 'face 'bold) \
+                       (overlay-put ov 'before-string \"[\") \
+                       (overlay-put ov 'after-string \"]\"))",
+                )
+                .expect("string-carrying overlay");
+            });
+        (eval, buf_id, rows, char_width, char_height)
+    };
+    assert_eq!(
+        glyphs_logical_text(&rows[0].glyphs[1]),
+        "hel[lo wo]rld ",
+        "overlay strings must interleave at the overlay's start and end \
+         (plus the appended newline space)"
+    );
+
+    // And the classifier itself refuses the row.
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "string-carrying overlay rows must refuse the item route"
+    );
+}
+
 /// Engagement proof for the overlay-face extension (flag-on suite gate): an
 /// overlay-faced row must actually take the routed acquisition. Trivially
 /// passes when the flag is off.
