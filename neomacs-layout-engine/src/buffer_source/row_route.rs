@@ -10,13 +10,22 @@
 //!   start of a buffer line, whether the row is plain enough for the item
 //!   renderer. "Plain" mirrors what makes GNU `get_next_display_element`
 //!   trivial: single-byte printable ASCII only, no display/composition/
-//!   invisible/mouse-face/line-height properties in range, no overlays, no
+//!   invisible/mouse-face/line-height properties in range, no
 //!   display table, L2R (guaranteed by ASCII-only content), the row fits
 //!   without continuation or truncation, and it ends in a real newline.
 //!   FACE-affecting properties (`face`, `font-lock-face`, `fontified`
 //!   boundaries) are allowed: they segment the row at property-change
 //!   positions exactly like GNU `compute_stop_pos` bounds the iterator's
 //!   text runs and `handle_face_prop` re-resolves the face at each stop.
+//!   Overlays intersecting the row are allowed when they carry ONLY
+//!   face-affecting properties ([`ROUTE_SAFE_OVERLAY_PROPS`]): their faces
+//!   merge through the same checkpoint resolver seam (GNU
+//!   `face_at_buffer_position`'s ascending-priority overlay loop) and their
+//!   starts/ends segment the row like GNU `next_overlay_change` folded into
+//!   `compute_stop_pos`. Overlay before/after-strings are NOT expressible on
+//!   this path (they are Lisp-string-sourced runs with their own row
+//!   lifecycle, GNU `load_overlay_strings`/`push_it`); any intersecting
+//!   overlay carrying one refuses the route.
 //! * [`BufferAsciiItemSource`] is the `DisplayItemSource` for such a row: it
 //!   produces exactly the items `BufferTextSourceCursor` would — one plain
 //!   `TextRun` per face segment (one for the whole line when no property
@@ -119,6 +128,7 @@ pub(crate) struct AsciiRowPlan {
     line_char_len: usize,
     has_tab: bool,
     has_wide: bool,
+    has_overlay: bool,
     face_boundaries: Vec<usize>,
 }
 
@@ -144,6 +154,11 @@ impl AsciiRowPlan {
     #[cfg(test)]
     pub(crate) fn face_boundaries(&self) -> &[usize] {
         &self.face_boundaries
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_overlay(&self) -> bool {
+        self.has_overlay
     }
 
     /// Whether the row renders as more than one face segment.
@@ -300,6 +315,92 @@ fn routed_line_fits(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> bool 
     x_px < fit.right_edge_px
 }
 
+/// Overlay properties the routed row class accepts on an intersecting
+/// overlay. `face` merges through the SAME resolver seam the pipeline's
+/// checkpoint uses (GNU `face_at_buffer_position`'s ascending-priority
+/// overlay loop), `priority` orders that merge, and `evaporate` is
+/// buffer-maintenance-only. EVERYTHING else refuses the route: before/
+/// after-strings inject Lisp-string runs (GNU `load_overlay_strings`),
+/// `display`/`invisible` rewrite content, `mouse-face`/`line-prefix`/
+/// `line-height` and friends have pipeline machinery, `window` restricts
+/// applicability per window, and `category` indirects to arbitrary props.
+/// Unknown properties are conservatively refused (allow-list, not
+/// deny-list).
+const ROUTE_SAFE_OVERLAY_PROPS: [&str; 3] = ["face", "priority", "evaporate"];
+
+/// The overlay facts of a candidate row: whether any overlay intersects it
+/// and the overlay start/end CHAR boundaries strictly inside the line.
+struct RoutedRowOverlayScan {
+    has_overlay: bool,
+    boundaries: Vec<usize>,
+}
+
+/// Scan the overlays intersecting `[start_byte, newline_byte]` (touching
+/// endpoints included: an overlay ending at the row start or starting at the
+/// newline can anchor strings there). Returns `None` — refusing the route —
+/// when any intersecting overlay carries a property outside
+/// [`ROUTE_SAFE_OVERLAY_PROPS`]. Boundary positions mirror GNU
+/// `next_overlay_change` feeding `compute_stop_pos`: every overlay start or
+/// end strictly inside the line becomes a face-segment boundary (an empty
+/// overlay contributes its single position).
+fn routed_row_overlay_scan<B: LayoutBufferView + ?Sized>(
+    buffer: &B,
+    row_charpos: i64,
+    start_byte: usize,
+    newline_byte: usize,
+) -> Option<RoutedRowOverlayScan> {
+    let overlays = buffer.layout_overlays();
+    let mut scan = RoutedRowOverlayScan {
+        has_overlay: false,
+        boundaries: Vec::new(),
+    };
+    if overlays.is_empty() {
+        return Some(scan);
+    }
+    for overlay in overlays.overlays_in_gnu_lists_order() {
+        let (Some(ov_start), Some(ov_end)) = (
+            overlays.overlay_start_emacs_byte_pos(overlay),
+            overlays.overlay_end_emacs_byte_pos(overlay),
+        ) else {
+            continue;
+        };
+        let (ov_start, ov_end) = (ov_start.get(), ov_end.get());
+        if ov_start > newline_byte || ov_end < start_byte {
+            continue;
+        }
+        // Every property of an intersecting overlay must be on the
+        // allow-list; a non-symbol key or malformed plist refuses too.
+        let plist = overlays.overlay_plist(overlay)?;
+        let mut tail = plist;
+        while tail.is_cons() {
+            let prop = tail.cons_car();
+            let rest = tail.cons_cdr();
+            if !rest.is_cons() {
+                return None;
+            }
+            let name = prop.as_symbol_name()?;
+            if !ROUTE_SAFE_OVERLAY_PROPS
+                .iter()
+                .any(|allowed| *allowed == name)
+            {
+                return None;
+            }
+            tail = rest.cons_cdr();
+        }
+        scan.has_overlay = true;
+        for boundary in [ov_start, ov_end] {
+            if boundary > start_byte && boundary < newline_byte {
+                let char_offset = buffer
+                    .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(boundary))
+                    .get()
+                    .checked_sub(row_charpos.max(0) as usize)?;
+                scan.boundaries.push(char_offset);
+            }
+        }
+    }
+    Some(scan)
+}
+
 /// Text properties that influence acquisition or the line end beyond faces.
 /// Any of these present anywhere on the line (or its newline) sends the row
 /// to the buffer pipeline. Face-affecting properties (`face`,
@@ -365,11 +466,13 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
         return None;
     }
 
-    // The simplest row class has no overlays at all in the buffer (faces,
-    // display specs, before/after strings, mouse-face all arrive by overlay).
-    if !buffer.layout_overlays().is_empty() {
-        return None;
-    }
+    // Overlays intersecting the row (touching endpoints included) may carry
+    // ONLY face-affecting properties; their in-line boundaries become face
+    // segment boundaries below. Anything else — strings, display, invisible,
+    // window restriction, category indirection — keeps the buffer pipeline.
+    let start_byte = row.text_start_byte + row.byte_idx;
+    let newline_byte = start_byte + scan.byte_len;
+    let overlay_scan = routed_row_overlay_scan(buffer, row.charpos, start_byte, newline_byte)?;
 
     // An active display table can remap any char (including the newline).
     if crate::neovm_bridge::buffer_has_active_display_table(buffer) {
@@ -383,8 +486,6 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
     // a display/invisible property on the newline would replace it). The row
     // may be multibyte, so boundary BYTE positions convert to CHAR offsets
     // through the buffer's own mapping.
-    let start_byte = row.text_start_byte + row.byte_idx;
-    let newline_byte = start_byte + scan.byte_len;
     let mut face_boundaries = Vec::new();
     let mut probe_byte = start_byte;
     loop {
@@ -418,11 +519,25 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
         probe_byte = change;
     }
 
+    // Overlay starts/ends are face-change stops exactly like text-property
+    // changes (GNU compute_stop_pos takes the MIN of the two); merge, sort,
+    // and dedupe into one ascending boundary list.
+    for char_offset in overlay_scan.boundaries {
+        debug_assert!(
+            char_offset > 0 && char_offset < scan.char_len,
+            "an in-line overlay boundary must land strictly inside the line"
+        );
+        face_boundaries.push(char_offset);
+    }
+    face_boundaries.sort_unstable();
+    face_boundaries.dedup();
+
     Some(AsciiRowPlan {
         line_byte_len: scan.byte_len,
         line_char_len: scan.char_len,
         has_tab: scan.has_tab,
         has_wide: scan.has_wide,
+        has_overlay: overlay_scan.has_overlay,
         face_boundaries,
     })
 }
@@ -505,26 +620,46 @@ pub(crate) fn routed_segment_item_face_diverges<B: LayoutBufferView>(
     expected_face_id: FaceId,
 ) -> bool {
     let bytepos = buffer.layout_char_pos_to_emacs_byte_pos(pos);
-    let Some(value) =
-        LayoutCharPropertyLookup::new(buffer, Value::symbol("face")).text_value_at(buffer, bytepos)
-    else {
-        // No face property: the run resolves `Inherit` -> the active
+    let text_face =
+        LayoutCharPropertyLookup::new(buffer, Value::symbol("face")).text_value_at(buffer, bytepos);
+    // Overlay faces merge AFTER the text face, ascending priority, via the
+    // SAME shared collector the run resolution uses
+    // (`BufferTextSourceCursor::face_at` -> `overlay_faces_at`).
+    let overlay_faces =
+        crate::neovm_bridge::overlay_faces_at(buffer, bytepos, face_resolver.current_window_id())
+            .faces;
+    if text_face.is_none() && overlay_faces.is_empty() {
+        // No face sources: the run resolves `Inherit` -> the active
         // (checkpoint) face id, which IS `expected_face_id`.
         return false;
-    };
-    let Some(resolved) =
-        face_resolver.resolve_buffer_face_value_over(buffer, default_resolved, &value)
-    else {
-        // The value contributes nothing: the ref stays `Inherit` -> active.
-        return false;
-    };
-    let item_face_id =
-        if crate::display_source_resolver::same_resolved_face(&resolved, default_resolved) {
-            default_face_id
-        } else {
-            stable_face_id_for_resolved(face_ids, &resolved)
+    }
+    // Replay the run's `resolve_face_ref` chain: each merge that changes
+    // nothing keeps the current id (the window base id at the start), each
+    // effective merge mints the content-addressed stable id.
+    let mut current_id = default_face_id;
+    let mut current = std::borrow::Cow::Borrowed(default_resolved);
+    // A merge that resolves but changes nothing still pins the ref to the
+    // base id (`resolve_source_face_ref` returns `FaceId(base_face_id)`); a
+    // value that contributes nothing leaves the ref alone.
+    let mut pinned = false;
+    for value in text_face.iter().chain(overlay_faces.iter()) {
+        let Some(resolved) = face_resolver.resolve_buffer_face_value_over(buffer, &current, value)
+        else {
+            continue;
         };
-    item_face_id != expected_face_id
+        pinned = true;
+        if crate::display_source_resolver::same_resolved_face(&resolved, &current) {
+            continue;
+        }
+        current_id = stable_face_id_for_resolved(face_ids, &resolved);
+        current = std::borrow::Cow::Owned(resolved);
+    }
+    if !pinned {
+        // Every source contributed nothing: the ref stays `Inherit` ->
+        // active (checkpoint) face id.
+        return false;
+    }
+    current_id != expected_face_id
 }
 
 /// One text segment of a routed row: `[start, end)` rendered with `face`.
@@ -733,6 +868,12 @@ pub(crate) static ROUTED_TAB_ROW_COUNT: std::sync::atomic::AtomicUsize =
 pub(crate) static ROUTED_WIDE_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+/// Test-only engagement proof for the overlay-face extension: routed rows
+/// intersected by at least one (face-only) overlay.
+#[cfg(test)]
+pub(crate) static ROUTED_OVERLAY_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 fn note_routed_row(plan: &AsciiRowPlan) {
     #[cfg(test)]
     {
@@ -745,6 +886,9 @@ fn note_routed_row(plan: &AsciiRowPlan) {
         }
         if plan.has_wide {
             ROUTED_WIDE_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if plan.has_overlay {
+            ROUTED_OVERLAY_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
     #[cfg(not(test))]
@@ -785,7 +929,9 @@ impl<'rows, 'emit, 'surface>
     /// active-face row-extend scope, resolved-face memo) or provably idle
     /// for a classified row: cursor capture (point excluded),
     /// trailing-whitespace tracking and word-wrap candidates (both disabled
-    /// by the classifier), overlay-string splits (no overlays).
+    /// by the classifier), overlay-string splits (no intersecting overlay
+    /// carries a before/after-string — the classifier's overlay allow-list
+    /// admits only face-affecting properties).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_render_ascii_row_via_item_renderer<B: LayoutBufferView>(
         &mut self,

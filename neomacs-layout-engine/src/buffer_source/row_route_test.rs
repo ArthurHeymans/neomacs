@@ -542,28 +542,191 @@ fn classifier_rejects_hazard_property_on_the_newline() {
 }
 
 #[test]
-fn classifier_rejects_overlays_even_on_face_segmented_rows() {
+fn classifier_accepts_face_only_overlay_and_plans_boundaries() {
     let mut eval = Context::new();
-    let buf_id = buffer_with_text(&mut eval, "hello\nworld\n");
+    let buf_id = buffer_with_text(&mut eval, "hello\n");
     eval.buffer_manager_mut().set_current(buf_id);
-    eval.eval_str("(put-text-property 1 3 'face 'bold)")
-        .expect("put-text-property");
-    eval.eval_str("(overlay-put (make-overlay 8 10) 'face 'highlight)")
-        .expect("make-overlay");
-    let text = b"hello\nworld\n";
-    for (byte_idx, charpos) in [(0usize, 0i64), (6, 6)] {
+    // Overlay over "el" (elisp 2..4) carrying only face-affecting props.
+    eval.eval_str(
+        "(let ((ov (make-overlay 2 4))) \
+           (overlay-put ov 'face 'bold) \
+           (overlay-put ov 'priority 5) \
+           (overlay-put ov 'evaporate t))",
+    )
+    .expect("face-only overlay");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(b"hello\n", 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("face-only overlay row routes");
+    // The overlay's start and end are face-segment boundaries, the neomacs
+    // mirror of GNU compute_stop_pos folding next_overlay_change into
+    // stop_charpos.
+    assert_eq!(plan.face_boundaries(), &[1, 3]);
+    assert!(plan.is_segmented());
+}
+
+#[test]
+fn classifier_merges_overlay_and_text_prop_boundaries() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "hello\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    // Text face over "he" plus overlapping overlays: boundaries merge,
+    // sort, and dedupe into one ascending char-offset list.
+    eval.eval_str(
+        "(progn (put-text-property 1 3 'face 'bold) \
+                (overlay-put (make-overlay 3 5) 'face 'highlight) \
+                (overlay-put (make-overlay 2 5) 'face 'underline))",
+    )
+    .expect("overlapping overlays over a text span");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(b"hello\n", 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("face-only overlays route");
+    assert_eq!(plan.face_boundaries(), &[1, 2, 4]);
+}
+
+#[test]
+fn classifier_accepts_zero_length_face_only_overlay() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "hello\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    // GNU next_overlay_change: an empty overlay contributes exactly one
+    // stop, at its position; face merging paints nothing for it in either
+    // path (the shadow suite proves glyph identity).
+    eval.eval_str("(overlay-put (make-overlay 3 3) 'face 'bold)")
+        .expect("zero-length overlay");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(b"hello\n", 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("zero-length face-only overlay routes");
+    assert_eq!(plan.face_boundaries(), &[2]);
+}
+
+#[test]
+fn classifier_rejects_overlay_hazard_properties() {
+    // Any intersecting overlay carrying a property beyond the face-affecting
+    // allow-list keeps the buffer pipeline: strings and display/invisible
+    // rewrite content, window restricts applicability, category indirects to
+    // arbitrary props, and unknown props are conservatively refused.
+    for (prop, value) in [
+        ("before-string", "\"B\""),
+        ("after-string", "\"A\""),
+        ("display", "\"X\""),
+        ("invisible", "t"),
+        ("mouse-face", "'highlight"),
+        ("window", "t"),
+        ("category", "'some-category"),
+        ("line-prefix", "\"> \""),
+        ("help-echo", "\"tip\""),
+    ] {
+        let mut eval = Context::new();
+        let buf_id = buffer_with_text(&mut eval, "hello\n");
+        eval.buffer_manager_mut().set_current(buf_id);
+        eval.eval_str(&format!(
+            "(let ((ov (make-overlay 2 4))) \
+               (overlay-put ov 'face 'bold) \
+               (overlay-put ov '{prop} {value}))"
+        ))
+        .expect("hazard overlay");
         assert_eq!(
             classify_in_buffer(
                 &eval,
                 buf_id,
-                row_start(text, byte_idx, charpos),
+                row_start(b"hello\n", 0, 0),
                 wide_fit(),
                 plain_policy()
             ),
             RowAcquisitionRoute::BufferPipeline,
-            "any overlay in the buffer disqualifies the item route"
+            "an intersecting overlay with {prop} must stay on the buffer pipeline"
         );
     }
+}
+
+#[test]
+fn classifier_rejects_string_overlay_touching_row_endpoints() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "ab\ncd\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    // Overlay ends exactly at the second row's start: its after-string fires
+    // there (GNU load_overlay_strings collects at end == charpos), so the
+    // row must refuse.
+    eval.eval_str("(overlay-put (make-overlay 1 4) 'after-string \"A\")")
+        .expect("after-string overlay");
+    let text = b"ab\ncd\n";
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text, 3, 3),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "an overlay ending at the row start with an after-string must refuse"
+    );
+    // Overlay starting exactly at the row's newline: its before-string fires
+    // at the newline position; conservatively refused too.
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "ab\ncd\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(overlay-put (make-overlay 3 5) 'before-string \"B\")")
+        .expect("before-string overlay");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text, 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "an overlay starting at the row's newline with a before-string must refuse"
+    );
+}
+
+#[test]
+fn classifier_ignores_overlays_on_other_rows() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "hello\nworld\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    // A string-carrying overlay entirely on the SECOND row: the first row
+    // does not intersect it and still routes; the second refuses.
+    eval.eval_str("(overlay-put (make-overlay 8 10) 'before-string \"B\")")
+        .expect("second-row overlay");
+    let text = b"hello\nworld\n";
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text, 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::ItemRenderer,
+        "an overlay on another row must not disqualify this row"
+    );
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text, 6, 6),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline
+    );
 }
 
 #[test]

@@ -15018,7 +15018,8 @@ fn assert_segmented_ascii_shadow_row(
     );
     // Mirror the engine's stable-id minting order: the frame pass resolves
     // the checkpoint face at the window start and at every property-change
-    // position, in walk order, minting content-addressed ids as it goes.
+    // AND overlay-boundary position (GNU compute_stop_pos takes the min of
+    // both), in walk order, minting content-addressed ids as it goes.
     let line_end = line_start_chars + plan.line_char_len();
     let mut warm_pos = 0usize;
     while warm_pos <= line_end {
@@ -15029,10 +15030,19 @@ fn assert_segmented_ascii_shadow_row(
             CharPos0::new(warm_pos),
         );
         let byte = snapshot.layout_char_pos_to_emacs_byte_pos(CharPos0::new(warm_pos));
-        let Some(change) = snapshot.layout_next_text_prop_change_after_emacs_byte_pos(byte) else {
-            break;
+        let prop_change = snapshot
+            .layout_next_text_prop_change_after_emacs_byte_pos(byte)
+            .map(|change| snapshot.layout_emacs_byte_pos_to_char_pos(change).get());
+        let overlay_change = snapshot
+            .layout_overlays()
+            .next_boundary_after_emacs_byte_pos(byte)
+            .map(|change| snapshot.layout_emacs_byte_pos_to_char_pos(change).get());
+        let next = match (prop_change, overlay_change) {
+            (Some(prop), Some(overlay)) => prop.min(overlay),
+            (Some(prop), None) => prop,
+            (None, Some(overlay)) => overlay,
+            (None, None) => break,
         };
-        let next = snapshot.layout_emacs_byte_pos_to_char_pos(change).get();
         if next <= warm_pos {
             break;
         }
@@ -15302,6 +15312,186 @@ fn ascii_item_source_shadow_matches_adjacent_same_face_spans() {
     assert_eq!(
         segments[0].face_id, segments[1].face_id,
         "adjacent same-face segments content-address to one id"
+    );
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_overlay_face_span_row() {
+    // A face-only overlay mid-line: its face merges through the same
+    // checkpoint resolver seam and its start/end segment the row exactly
+    // like GNU next_overlay_change folded into compute_stop_pos.
+    let text = "hello world\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(overlay-put (make-overlay 4 9) 'face 'bold)")
+                .expect("mid-line overlay face span");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 3);
+    assert_eq!(segments[0].face_id, segments[2].face_id);
+    assert_ne!(segments[0].face_id, segments[1].face_id);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_overlapping_priority_overlays_row() {
+    // Two overlapping overlays with conflicting foregrounds: GNU
+    // face_at_buffer_position merges overlay faces in ASCENDING priority
+    // order, so the higher-priority foreground wins on the overlap.
+    let text = "abcdefgh\nrest\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(
+                "(progn (let ((low (make-overlay 2 6))) \
+                          (overlay-put low 'face '(:foreground \"red\")) \
+                          (overlay-put low 'priority 1)) \
+                        (let ((high (make-overlay 4 8))) \
+                          (overlay-put high 'face '(:foreground \"blue\")) \
+                          (overlay-put high 'priority 2)))",
+            )
+            .expect("overlapping priority overlays");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    // base / red / OVERLAP / blue / base.
+    assert_eq!(segments.len(), 5);
+    assert_eq!(
+        segments[2].resolved.fg, segments[3].resolved.fg,
+        "the higher-priority overlay's foreground must win on the overlap"
+    );
+    assert_ne!(segments[2].resolved.fg, segments[1].resolved.fg);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_overlay_ending_at_newline() {
+    // The overlay covers "cd" and ends EXACTLY at the newline: the appended
+    // newline space stays on the base face.
+    let text = "abcd\nrest\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(overlay-put (make-overlay 3 5) 'face 'bold)")
+                .expect("overlay to newline");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 2);
+    let appended = rows[0].glyphs[1].last().expect("appended newline space");
+    assert_eq!(
+        appended.face_id, segments[0].face_id,
+        "an overlay ending at the newline leaves the newline space on the base face"
+    );
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_overlay_covering_newline() {
+    // The overlay covers "cd" AND the newline (hl-line's [bol, next-bol)
+    // shape): its face must ride the appended newline space through the
+    // line-end plan exactly as the buffer pipeline's row-break face does.
+    let text = "abcd\nrest\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(overlay-put (make-overlay 3 6) 'face 'bold)")
+                .expect("overlay covering newline");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 2);
+    let appended = rows[0].glyphs[1].last().expect("appended newline space");
+    assert_eq!(
+        appended.face_id, segments[1].face_id,
+        "an overlay covering the newline rides its face onto the appended newline space"
+    );
+    assert_ne!(segments[0].face_id, segments[1].face_id);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_zero_length_overlay_row() {
+    // A zero-length face-only overlay: GNU next_overlay_change gives it one
+    // stop at its position and face_at_buffer_position's GET_OVERLAYS_AT
+    // never sees it covering any char, so it paints nothing — in BOTH paths.
+    let text = "hello\nrest\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(overlay-put (make-overlay 3 3) 'face 'bold)")
+                .expect("zero-length overlay");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 2, "the empty overlay is one stop");
+    assert_eq!(
+        segments[0].face_id, segments[1].face_id,
+        "a zero-length overlay's face covers no char in either path"
+    );
+}
+
+/// Engagement proof for the overlay-face extension (flag-on suite gate): an
+/// overlay-faced row must actually take the routed acquisition. Trivially
+/// passes when the flag is off.
+#[test]
+fn ascii_route_flag_on_layout_engages_overlay_face_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_OVERLAY_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("hello world\nnext\n", |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(overlay-put (make-overlay 4 9) 'face 'bold)")
+                .expect("overlay face span");
+        });
+    assert!(rows.len() >= 2);
+    let after = crate::buffer_source::row_route::ROUTED_OVERLAY_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after >= before + 1,
+        "expected the overlay-faced row to route through the item renderer \
+         (before={before}, after={after})"
     );
 }
 

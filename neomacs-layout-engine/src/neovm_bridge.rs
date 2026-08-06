@@ -3342,6 +3342,13 @@ impl FaceResolver {
         self.current_window_id.set(window_id);
     }
 
+    /// The window whose faces are currently being resolved (see
+    /// [`set_current_window_id`](Self::set_current_window_id)); `None` for
+    /// frame chrome / TTY / non-window contexts.
+    pub(crate) fn current_window_id(&self) -> Option<u64> {
+        self.current_window_id.get()
+    }
+
     /// Return a reference to the resolved default face.
     pub fn default_face(&self) -> &ResolvedFace {
         &self.default_face
