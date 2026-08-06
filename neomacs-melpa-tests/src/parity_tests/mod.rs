@@ -315,6 +315,7 @@ mod evil;
 mod evil_anzu;
 mod evil_args;
 mod evil_collection;
+mod evil_ediff;
 mod evil_escape;
 mod evil_exchange;
 mod evil_iedit_state;

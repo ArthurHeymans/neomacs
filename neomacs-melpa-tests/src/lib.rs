@@ -2055,6 +2055,13 @@ pub const FILL_COLUMN_INDICATOR_MELPA_PIN: (&str, &str) =
 /// `fa8da0ebba4bbf2a84a78183420d8303179ef427`.
 pub const EVIL_COLLECTION_MELPA_PIN: (&str, &str) = ("evil-collection", "20260729.1654");
 
+/// The final Evil Ediff package published by MELPA before the recipe was
+/// removed in favor of Evil Collection. The historical single-file package is
+/// reconstructed from upstream commit
+/// `67b0e69f65c196eff5b39dacb7a9ec05bb919c74` instead of relying on MELPA's
+/// deleted rolling artifact.
+pub const EVIL_EDIFF_MELPA_PIN: (&str, &str) = ("evil-ediff", "20170724.1223");
+
 /// The exact DAP Mode package selected for practical wire framing, protocol
 /// messages, live breakpoints, launch templates, variable expansion,
 /// launch.json, and output-session parity. MELPA built this archive from
