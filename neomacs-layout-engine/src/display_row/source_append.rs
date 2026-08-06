@@ -631,14 +631,14 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         self.render_with_policy(state, face_ids, item, position, kind, &mut render_policy)
     }
 
-    pub(crate) fn measure_width_with_policy<P: DisplayRowRenderPolicy>(
+    fn measure_progress_with_policy<P: DisplayRowRenderPolicy>(
         &self,
         state: &mut TextRowSourceMeasureState<'_>,
         item: DisplayItem,
         position: DisplayRowPosition,
         kind: DisplayRowAppendKind,
         render_policy: &mut P,
-    ) -> Option<f32> {
+    ) -> Option<DisplayRowAppendProgress> {
         let prepared = self.prepare_item(item, position, kind);
         let (item, face_id, kind, position) = prepared.into_parts();
         // Measurement identities never escape into frame output. Keep them in
@@ -657,7 +657,19 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
             render_policy,
             face_id,
         )?;
-        Some(outcome.into_append_progress(position).metrics().width_px())
+        Some(outcome.into_append_progress(position))
+    }
+
+    pub(crate) fn measure_width_with_policy<P: DisplayRowRenderPolicy>(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+        render_policy: &mut P,
+    ) -> Option<f32> {
+        self.measure_progress_with_policy(state, item, position, kind, render_policy)
+            .map(|progress| progress.metrics().width_px())
     }
 
     pub(crate) fn measure_width_naturally(
@@ -669,6 +681,22 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
     ) -> Option<f32> {
         let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
         self.measure_width_with_policy(state, item, position, kind, &mut render_policy)
+    }
+
+    /// Natural measurement returning the END position (x AND col) the append
+    /// would reach — what a position-dependent advance (tab stops, 2-col
+    /// chars) needs to seed a following measurement at the exact pen the
+    /// pipeline's own walk would use.
+    pub(crate) fn measure_advance_naturally(
+        &self,
+        state: &mut TextRowSourceMeasureState<'_>,
+        item: DisplayItem,
+        position: DisplayRowPosition,
+        kind: DisplayRowAppendKind,
+    ) -> Option<DisplayRowPosition> {
+        let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
+        self.measure_progress_with_policy(state, item, position, kind, &mut render_policy)
+            .map(|progress| progress.end())
     }
 
     pub(crate) fn measure_width_with_source_fallback(

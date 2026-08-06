@@ -33,11 +33,20 @@ fn row_start(text: &[u8], byte_idx: usize, charpos: i64) -> RowRouteRowStart<'_>
     }
 }
 
-fn wide_fit() -> RowRouteFit {
+static TAB_EVERY_8: std::sync::LazyLock<DisplayTabPolicy> =
+    std::sync::LazyLock::new(|| DisplayTabPolicy::every(8));
+
+fn wide_fit() -> RowRouteFit<'static> {
+    fit_to(640.0)
+}
+
+fn fit_to(right_edge_px: f32) -> RowRouteFit<'static> {
     RowRouteFit {
         start_x_px: 0.0,
+        start_col: 0,
         char_width_px: 8.0,
-        right_edge_px: 640.0,
+        right_edge_px,
+        tab_policy: &TAB_EVERY_8,
     }
 }
 
@@ -45,7 +54,7 @@ fn classify_in_buffer(
     eval: &Context,
     buf_id: BufferId,
     row: RowRouteRowStart<'_>,
-    fit: RowRouteFit,
+    fit: RowRouteFit<'_>,
     policy: RowRouteWindowPolicy,
 ) -> RowAcquisitionRoute {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -86,16 +95,164 @@ fn classifier_routes_trailing_whitespace_row_when_highlight_off() {
 }
 
 #[test]
+fn classifier_routes_tab_and_wide_char_rows() {
+    let mut eval = Context::new();
+    // Tabs, narrow non-ASCII (e-acute), and wide CJK chars all route since
+    // the phase 2b extension.
+    for text in [
+        "a\tb\n",
+        "\t\tindent\n",
+        "h\u{00e9}llo\n",
+        "ab\u{4E2D}\u{6587}cd\n",
+        "a\t\u{4E2D}b\n",
+    ] {
+        let buf_id = buffer_with_text(&mut eval, text);
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                wide_fit(),
+                plain_policy()
+            ),
+            RowAcquisitionRoute::ItemRenderer,
+            "content {text:?} must route to the item renderer"
+        );
+    }
+}
+
+#[test]
+fn plan_reports_tab_wide_flags_and_char_byte_lengths() {
+    let mut eval = Context::new();
+    let text = "a\t\u{4E2D}b\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("tab+wide row routes");
+    assert_eq!(plan.line_char_len(), 4);
+    assert_eq!(plan.line_byte_len(), 6, "one 3-byte CJK char");
+    assert!(plan.has_tab());
+    assert!(plan.has_wide());
+
+    // A plain ASCII row classifies without either flag.
+    let buf_id = buffer_with_text(&mut eval, "ab\n");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let ascii = plan_ascii_row(buffer, row_start(b"ab\n", 0, 0), wide_fit(), plain_policy())
+        .expect("ascii row routes");
+    assert!(!ascii.has_tab());
+    assert!(!ascii.has_wide());
+}
+
+#[test]
+fn plan_face_boundaries_are_char_offsets_on_multibyte_rows() {
+    let mut eval = Context::new();
+    // "a e-acute CJK b": 4 chars, 7 bytes. A face span over chars 2..4
+    // (1-based [2, 4) = e-acute + CJK) must split at CHAR offsets 1 and 3.
+    let text = "a\u{00E9}\u{4E2D}b\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 2 4 'face 'bold)")
+        .expect("put-text-property");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("multibyte faced row routes");
+    assert_eq!(plan.line_char_len(), 4);
+    assert_eq!(plan.line_byte_len(), 7);
+    assert_eq!(plan.face_boundaries(), &[1, 3]);
+    assert_eq!(
+        plan.segment_ranges(CharPos0::ZERO),
+        vec![
+            (CharPos0::ZERO, CharPos0::new(1)),
+            (CharPos0::new(1), CharPos0::new(3)),
+            (CharPos0::new(3), CharPos0::new(4)),
+        ]
+    );
+}
+
+#[test]
+fn classifier_rejects_tab_line_exactly_filling_the_row() {
+    let mut eval = Context::new();
+    // "ab\t": the tab expands from col 2 to the col-8 stop, 64px at 8px
+    // cells. A 64px row is exact fill — refused; one cell of slack routes.
+    let buf_id = buffer_with_text(&mut eval, "ab\t\n");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(b"ab\t\n", 0, 0),
+            fit_to(64.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "tab expansion landing exactly on the right edge must refuse"
+    );
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(b"ab\t\n", 0, 0),
+            fit_to(72.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::ItemRenderer
+    );
+}
+
+#[test]
+fn classifier_rejects_wide_char_exact_fill_and_straddle() {
+    let mut eval = Context::new();
+    // "abc" + CJK = 5 cols = 40px at 8px cells.
+    let text = "abc\u{4E2D}\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    for (edge, expected) in [
+        (40.0, RowAcquisitionRoute::BufferPipeline), // exact fill
+        (36.0, RowAcquisitionRoute::BufferPipeline), // wide char straddles the edge
+        (48.0, RowAcquisitionRoute::ItemRenderer),   // one cell of slack
+    ] {
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                fit_to(edge),
+                plain_policy()
+            ),
+            expected,
+            "edge {edge}px"
+        );
+    }
+}
+
+#[test]
 fn classifier_rejects_content_the_item_route_does_not_cover() {
     let mut eval = Context::new();
-    // Non-ASCII, tab, control char, missing final newline, empty line: all
+    // Control chars, missing final newline, empty line, combining marks,
+    // zero-width chars, complex scripts, regional-indicator pairs, and
+    // nobreak space/hyphen (nobreak-char-display consults a setting): all
     // stay on the buffer pipeline.
     for text in [
-        "h\u{00e9}llo\n".as_bytes(),
-        b"a\tb\n".as_slice(),
         b"a\x01b\n".as_slice(),
+        b"a\rb\n".as_slice(),
         b"hello".as_slice(),
         b"\nx\n".as_slice(),
+        "e\u{0301}llo\n".as_bytes(), // combining acute
+        "a\u{200B}b\n".as_bytes(),   // zero-width space
+        "a\u{200D}b\n".as_bytes(),   // ZWJ
+        "\u{0633}\u{0644}\u{0627}\u{0645}\n".as_bytes(), // Arabic (shaped run)
+        "\u{1F1E6}\u{1F1E9}\n".as_bytes(), // regional-indicator flag pair
+        "a\u{00A0}b\n".as_bytes(),   // no-break space
+        "a\u{00AD}b\n".as_bytes(),   // soft hyphen
+        "a\u{0080}b\n".as_bytes(),   // C1 control (octal escape)
     ] {
         let buf_id = buffer_with_text(&mut eval, std::str::from_utf8(text).unwrap());
         assert_eq!(
@@ -134,11 +291,7 @@ fn classifier_rejects_line_exactly_filling_the_row() {
     let mut eval = Context::new();
     let buf_id = buffer_with_text(&mut eval, "abcd\n");
     // 4 chars * 8px == the full 32px row: exact fill is NOT eligible.
-    let exact = RowRouteFit {
-        start_x_px: 0.0,
-        char_width_px: 8.0,
-        right_edge_px: 32.0,
-    };
+    let exact = fit_to(32.0);
     assert_eq!(
         classify_in_buffer(
             &eval,
@@ -150,11 +303,7 @@ fn classifier_rejects_line_exactly_filling_the_row() {
         RowAcquisitionRoute::BufferPipeline
     );
     // One cell of slack routes.
-    let slack = RowRouteFit {
-        start_x_px: 0.0,
-        char_width_px: 8.0,
-        right_edge_px: 40.0,
-    };
+    let slack = fit_to(40.0);
     assert_eq!(
         classify_in_buffer(
             &eval,
@@ -239,7 +388,8 @@ fn classifier_accepts_face_property_span_and_plans_boundaries() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let plan = plan_ascii_row(buffer, row_start(text, 0, 0), wide_fit(), plain_policy())
         .expect("face-propped row routes");
-    assert_eq!(plan.line_len(), 5);
+    assert_eq!(plan.line_char_len(), 5);
+    assert_eq!(plan.line_byte_len(), 5);
     assert_eq!(plan.face_boundaries(), &[2, 4]);
     assert!(plan.is_segmented());
     assert_eq!(
@@ -430,6 +580,52 @@ fn ascii_source_matches_buffer_text_source_cursor_items() {
 
     assert_eq!(ascii_items, cursor_items);
     assert_eq!(ascii_items.len(), 2, "one text run, then the row break");
+}
+
+#[test]
+fn routed_source_matches_buffer_text_source_cursor_items_for_tab_and_wide() {
+    let mut eval = Context::new();
+    // Tab and a wide CJK char inside the run: the cursor keeps both in ONE
+    // plain TextRun (tab and CJK classify as Text), and the routed source
+    // must produce the identical item — same UTF-8 text, same char/byte
+    // spans — followed by the identical row break.
+    let text = "a\t\u{4E2D} b\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let start = CharPos0::ZERO;
+    let line_end = CharPos0::new(text.chars().count() - 1);
+
+    let mut cursor = BufferTextSourceCursor::new(
+        buf_id,
+        buffer,
+        start,
+        line_end.add_len(CharLen::new(1)),
+        RenderFaceRef::Inherit,
+    );
+    let mut cursor_items = Vec::new();
+    let mut context = DisplaySourceContext::empty();
+    while let Some(item) = cursor.next_item(&mut context) {
+        cursor_items.push(item);
+    }
+
+    let mut routed = BufferAsciiItemSource::with_row_break(
+        buf_id,
+        buffer,
+        start,
+        line_end,
+        RenderFaceRef::Inherit,
+    );
+    let mut routed_items = Vec::new();
+    while let Some(item) = routed.next_item(&mut context) {
+        routed_items.push(item);
+    }
+
+    assert_eq!(routed_items, cursor_items);
+    assert_eq!(routed_items.len(), 2, "one text run, then the row break");
+    let DisplayItemKind::TextRun(run) = &routed_items[0].kind else {
+        panic!("expected text run, got {:?}", routed_items[0].kind);
+    };
+    assert_eq!(run.text.as_ref(), "a\t\u{4E2D} b");
 }
 
 fn face_resolver_for(eval: &Context) -> FaceResolver {

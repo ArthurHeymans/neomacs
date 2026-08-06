@@ -27,14 +27,20 @@
 //! `row_lifecycle.rs`), mirroring GNU `set_cursor_from_row` operating on
 //! buffer positions only.
 
+use crate::composition::needs_complex_shaping;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy, DisplayRowBreak,
     DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_origin::DisplayOrigin;
+use crate::display_row::builder::{DisplayRowPosition, DisplayTabPolicy};
 use crate::display_row::face_state::stable_face_id_for_resolved;
+use crate::display_source::{
+    TextSourceCharClassification, classify_text_source_char, nonascii_hyphen_p, nonascii_space_p,
+};
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, LayoutCharPropertyLookup, ResolvedFace};
+use crate::unicode::{decode_utf8, is_cluster_extender, is_regional_indicator};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
@@ -87,28 +93,52 @@ pub(crate) struct RowRouteRowStart<'a> {
 /// truncation. The classifier applies the logical-cell bound strictly (a line
 /// exactly filling the row is NOT eligible — its line end interacts with
 /// continuation policy), and the routed render re-verifies with the same
-/// natural measurement the buffer pipeline uses before committing.
+/// natural measurement the buffer pipeline uses before committing. The tab
+/// policy is the append surface's (buffer `tab-width` / `tab-stop-list`), so
+/// the classifier's tab expansion is the SAME `DisplayTabPolicy::advance_from`
+/// the pipeline's per-char advance resolves (GNU `gui_produce_glyphs`
+/// `next_tab_x`); `start_col` is the walk column the first tab expands from.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct RowRouteFit {
+pub(crate) struct RowRouteFit<'a> {
     pub(crate) start_x_px: f32,
+    pub(crate) start_col: usize,
     pub(crate) char_width_px: f32,
     pub(crate) right_edge_px: f32,
+    pub(crate) tab_policy: &'a DisplayTabPolicy,
 }
 
-/// A classified plain-ASCII row: `line_len` single-byte chars followed by a
-/// real newline. `face_boundaries` are the char offsets strictly inside the
-/// line where text properties change — each starts a new face segment, the
-/// neomacs mirror of GNU `compute_stop_pos` stops re-resolved by
-/// `handle_face_prop`. Empty for a property-constant line.
+/// A classified plain row: `line_char_len` routable chars (`line_byte_len`
+/// bytes — the row may be multibyte) followed by a real newline.
+/// `face_boundaries` are the CHAR offsets strictly inside the line where text
+/// properties change — each starts a new face segment, the neomacs mirror of
+/// GNU `compute_stop_pos` stops re-resolved by `handle_face_prop`. Empty for
+/// a property-constant line.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AsciiRowPlan {
-    line_len: usize,
+    line_byte_len: usize,
+    line_char_len: usize,
+    has_tab: bool,
+    has_wide: bool,
     face_boundaries: Vec<usize>,
 }
 
 impl AsciiRowPlan {
-    pub(crate) fn line_len(&self) -> usize {
-        self.line_len
+    pub(crate) fn line_byte_len(&self) -> usize {
+        self.line_byte_len
+    }
+
+    pub(crate) fn line_char_len(&self) -> usize {
+        self.line_char_len
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_tab(&self) -> bool {
+        self.has_tab
+    }
+
+    #[cfg(test)]
+    pub(crate) fn has_wide(&self) -> bool {
+        self.has_wide
     }
 
     #[cfg(test)]
@@ -131,29 +161,143 @@ impl AsciiRowPlan {
             ranges.push((seg_start, seg_end));
             seg_start = seg_end;
         }
-        ranges.push((seg_start, start.add_len(CharLen::new(self.line_len))));
+        ranges.push((seg_start, start.add_len(CharLen::new(self.line_char_len))));
         ranges
     }
 }
 
-/// Scan for a plain printable-ASCII line at `byte_idx`: at least one char in
-/// `0x20..=0x7E` (no tab, no control chars, no non-ASCII bytes) terminated by
-/// a real `\n` inside `text`. Returns the line length in chars (== bytes).
-fn ascii_plain_line_len(text: &[u8], byte_idx: usize) -> Option<usize> {
+/// How a routed row char advances the pen. Only chars this classification
+/// accepts may appear in a routed row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RoutedRowCharAdvance {
+    /// TAB: expands to the next stop of the append surface's tab policy.
+    Tab,
+    /// A plain char occupying `1` or `2` unambiguous columns.
+    Cols(u8),
+}
+
+/// Classify one char for the routed row class. Accepted: TAB, printable
+/// ASCII, and printable non-ASCII chars whose display width is unambiguously
+/// 1 or 2 columns per the SAME width source the buffer pipeline advances by
+/// (`neovm_core::encoding::char_width`, the GNU default `char-width-table`,
+/// via `base_width_cols`). Refused (each has pipeline machinery the routed
+/// render does not replicate):
+/// * control chars other than TAB, and every non-Text classification
+///   (`^X` caret runs, `\`+octal escapes, glyphless boxes);
+/// * cluster extenders (combining marks, zero-width chars, ZWJ, keycap,
+///   skin tones) and regional indicators — grapheme clustering composes them
+///   with neighbors into `Composite` glyphs;
+/// * contextual-shaping scripts (Arabic, Indic, …) — run shaping measures
+///   advances per shaped run;
+/// * nobreak spaces/hyphens — their display consults the
+///   `nobreak-char-display` setting per char (GNU xdisp.c:8594);
+/// * anything the shared width table does not size at exactly 1 or 2 cols.
+fn classify_routed_row_char(ch: char) -> Option<RoutedRowCharAdvance> {
+    if ch == '\t' {
+        return Some(RoutedRowCharAdvance::Tab);
+    }
+    if matches!(ch, '\x20'..='\x7E') {
+        return Some(RoutedRowCharAdvance::Cols(1));
+    }
+    if ch.is_ascii() {
+        return None;
+    }
+    if classify_text_source_char(ch) != TextSourceCharClassification::Text {
+        return None;
+    }
+    if is_cluster_extender(ch)
+        || is_regional_indicator(ch as u32)
+        || needs_complex_shaping(ch)
+        || nonascii_space_p(ch)
+        || nonascii_hyphen_p(ch)
+    {
+        return None;
+    }
+    match neovm_core::encoding::char_width(ch) {
+        1 => Some(RoutedRowCharAdvance::Cols(1)),
+        2 => Some(RoutedRowCharAdvance::Cols(2)),
+        _ => None,
+    }
+}
+
+/// A scanned routable line: `byte_len` bytes / `char_len` chars of routed
+/// chars terminated by a real `\n` inside `text`.
+#[derive(Clone, Copy, Debug)]
+struct RoutedLineScan {
+    byte_len: usize,
+    char_len: usize,
+    has_tab: bool,
+    has_wide: bool,
+}
+
+/// Scan for a routable line at `byte_idx`: at least one char accepted by
+/// [`classify_routed_row_char`] terminated by a real `\n` inside `text`.
+fn routed_line_scan(text: &[u8], byte_idx: usize) -> Option<RoutedLineScan> {
     let mut idx = byte_idx;
+    let mut char_len = 0usize;
+    let mut has_tab = false;
+    let mut has_wide = false;
     while idx < text.len() {
-        match text[idx] {
-            b'\n' => {
-                let len = idx - byte_idx;
-                return (len > 0).then_some(len);
-            }
-            0x20..=0x7E => idx += 1,
-            _ => return None,
+        if text[idx] == b'\n' {
+            return (char_len > 0).then_some(RoutedLineScan {
+                byte_len: idx - byte_idx,
+                char_len,
+                has_tab,
+                has_wide,
+            });
         }
+        let (ch, consumed) = decode_utf8(&text[idx..]);
+        // Reject malformed UTF-8 (decode yields U+FFFD over fewer bytes than
+        // the char re-encodes to): raw bytes have their own display path.
+        if consumed == 0 || ch.len_utf8() != consumed {
+            return None;
+        }
+        match classify_routed_row_char(ch)? {
+            RoutedRowCharAdvance::Tab => has_tab = true,
+            RoutedRowCharAdvance::Cols(2) => has_wide = true,
+            RoutedRowCharAdvance::Cols(_) => {}
+        }
+        char_len += 1;
+        idx += consumed;
     }
     // End of buffer without a newline: the end-of-buffer tail has its own
     // buffer-pipeline lifecycle (cursor at EOB, empty-line indicators).
     None
+}
+
+/// The classifier's strict logical-cell fit for a scanned line: walk the
+/// line's chars advancing the pen exactly as the pipeline's natural advance
+/// does for uniform `char_width_px` cells — tabs through the append surface's
+/// `DisplayTabPolicy::advance_from` (GNU `next_tab_x`), wide chars by two
+/// cells — and require the end to land STRICTLY inside the right edge. A line
+/// exactly filling the row keeps the buffer pipeline (continuation/truncation
+/// policy owns that edge). The routed render re-verifies with the pipeline's
+/// own per-face natural measurement before committing.
+fn routed_line_fits(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> bool {
+    let mut x_px = fit.start_x_px;
+    let mut col = fit.start_col;
+    let mut idx = byte_idx;
+    while idx < text.len() && text[idx] != b'\n' {
+        let (ch, consumed) = decode_utf8(&text[idx..]);
+        let Some(advance) = classify_routed_row_char(ch) else {
+            return false;
+        };
+        match advance {
+            RoutedRowCharAdvance::Tab => {
+                let tab = fit
+                    .tab_policy
+                    .advance_from(DisplayRowPosition::new(x_px, col), fit.char_width_px);
+                x_px += tab.pixel_width;
+                col += tab.width_cols;
+            }
+            RoutedRowCharAdvance::Cols(cols) => {
+                x_px += f32::from(cols) * fit.char_width_px;
+                col += usize::from(cols);
+            }
+        }
+        idx += consumed;
+    }
+    x_px < fit.right_edge_px
 }
 
 /// Text properties that influence acquisition or the line end beyond faces.
@@ -179,7 +323,7 @@ const ROUTE_HAZARD_TEXT_PROPS: [&str; 5] = [
 pub(crate) fn classify_row_acquisition<B: LayoutBufferView + ?Sized>(
     buffer: &B,
     row: RowRouteRowStart<'_>,
-    fit: RowRouteFit,
+    fit: RowRouteFit<'_>,
     policy: RowRouteWindowPolicy,
 ) -> RowAcquisitionRoute {
     if plan_ascii_row(buffer, row, fit, policy).is_some() {
@@ -194,7 +338,7 @@ pub(crate) fn classify_row_acquisition<B: LayoutBufferView + ?Sized>(
 pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
     buffer: &B,
     row: RowRouteRowStart<'_>,
-    fit: RowRouteFit,
+    fit: RowRouteFit<'_>,
     policy: RowRouteWindowPolicy,
 ) -> Option<AsciiRowPlan> {
     if policy.disqualifies() {
@@ -205,18 +349,18 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
     if row.byte_idx > 0 && row.text.get(row.byte_idx - 1) != Some(&b'\n') {
         return None;
     }
-    let line_len = ascii_plain_line_len(row.text, row.byte_idx)?;
+    let scan = routed_line_scan(row.text, row.byte_idx)?;
 
-    // Strict logical-cell fit: a line exactly filling the row keeps the
-    // buffer pipeline (continuation/truncation policy owns that edge).
-    let line_width_px = line_len as f32 * fit.char_width_px;
-    if !(fit.start_x_px + line_width_px < fit.right_edge_px) {
+    // Strict logical-cell fit (tab expansion + 2-col chars included): a line
+    // exactly filling the row keeps the buffer pipeline
+    // (continuation/truncation policy owns that edge).
+    if !routed_line_fits(row.text, row.byte_idx, fit) {
         return None;
     }
 
     // Cursor capture stays on the buffer pipeline: exclude any row that
     // contains point, including point sitting on the line's newline.
-    let newline_charpos = row.charpos + line_len as i64;
+    let newline_charpos = row.charpos + scan.char_len as i64;
     if policy.point_charpos >= row.charpos && policy.point_charpos <= newline_charpos {
         return None;
     }
@@ -236,9 +380,11 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
     // Hazard properties anywhere in that range refuse the route; changes
     // strictly inside the line become face-segment boundaries (a change ON
     // the newline byte does not split the text but is still hazard-probed —
-    // a display/invisible property on the newline would replace it).
+    // a display/invisible property on the newline would replace it). The row
+    // may be multibyte, so boundary BYTE positions convert to CHAR offsets
+    // through the buffer's own mapping.
     let start_byte = row.text_start_byte + row.byte_idx;
-    let newline_byte = start_byte + line_len;
+    let newline_byte = start_byte + scan.byte_len;
     let mut face_boundaries = Vec::new();
     let mut probe_byte = start_byte;
     loop {
@@ -259,14 +405,24 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
             break;
         }
         if change < newline_byte {
-            // ASCII line: byte offsets are char offsets.
-            face_boundaries.push(change - start_byte);
+            let change_charpos = buffer
+                .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(change))
+                .get();
+            let char_offset = change_charpos.checked_sub(row.charpos.max(0) as usize)?;
+            debug_assert!(
+                char_offset > 0 && char_offset < scan.char_len,
+                "a mid-line property change must land strictly inside the line"
+            );
+            face_boundaries.push(char_offset);
         }
         probe_byte = change;
     }
 
     Some(AsciiRowPlan {
-        line_len,
+        line_byte_len: scan.byte_len,
+        line_char_len: scan.char_len,
+        has_tab: scan.has_tab,
+        has_wide: scan.has_wide,
         face_boundaries,
     })
 }
@@ -472,11 +628,24 @@ impl BufferAsciiItemSource {
                 EmacsByteRange::new(byte_at(segment.start), byte_at(segment.end)),
                 &mut bytes,
             );
-            debug_assert!(
-                bytes.iter().all(|byte| (0x20..=0x7E).contains(byte)),
-                "BufferAsciiItemSource requires a classified printable-ASCII row"
-            );
-            let text: String = bytes.iter().map(|&byte| byte as char).collect();
+            let mut text = String::with_capacity(bytes.len());
+            let mut offset = 0usize;
+            while offset < bytes.len() {
+                let (ch, len) = decode_utf8(&bytes[offset..]);
+                debug_assert!(
+                    len > 0 && ch.len_utf8() == len,
+                    "BufferAsciiItemSource requires well-formed UTF-8 row text"
+                );
+                if len == 0 {
+                    break;
+                }
+                debug_assert!(
+                    classify_routed_row_char(ch).is_some(),
+                    "BufferAsciiItemSource requires a classified routable row (got {ch:?})"
+                );
+                text.push(ch);
+                offset += len;
+            }
             items.push_back(
                 DisplayItem::new(
                     span(segment.start, segment.end),
@@ -552,16 +721,34 @@ pub(crate) static ROUTED_ROW_COUNT: std::sync::atomic::AtomicUsize =
 pub(crate) static ROUTED_SEGMENTED_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-fn note_routed_row(segmented: bool) {
+/// Test-only engagement proof for the tab extension: routed rows containing
+/// at least one TAB.
+#[cfg(test)]
+pub(crate) static ROUTED_TAB_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Test-only engagement proof for the wide-char extension: routed rows
+/// containing at least one 2-column char.
+#[cfg(test)]
+pub(crate) static ROUTED_WIDE_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+fn note_routed_row(plan: &AsciiRowPlan) {
     #[cfg(test)]
     {
         ROUTED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        if segmented {
+        if plan.is_segmented() {
             ROUTED_SEGMENTED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if plan.has_tab {
+            ROUTED_TAB_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if plan.has_wide {
+            ROUTED_WIDE_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
     #[cfg(not(test))]
-    let _ = segmented;
+    let _ = plan;
 }
 
 /// Outcome of an attempted item-renderer row acquisition.
@@ -612,7 +799,6 @@ impl<'rows, 'emit, 'surface>
     ) -> AsciiRowRouteOutcome {
         use crate::buffer_source::item_append::BufferSourceRowAppendContext;
         use crate::display_row::append_context::DisplayRowAppendKind;
-        use crate::display_row::builder::DisplayRowPosition;
         use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
 
         if source_walk.has_pending_render_items() {
@@ -628,8 +814,10 @@ impl<'rows, 'emit, 'surface>
         };
         let fit = RowRouteFit {
             start_x_px: position.x_px(),
+            start_col: position.col(),
             char_width_px: params.char_width,
             right_edge_px: self.append_surface.right_edge(),
+            tab_policy: self.append_surface.tab_policy(),
         };
         let policy = RowRouteWindowPolicy {
             point_charpos: loop_context.point_charpos(),
@@ -642,7 +830,6 @@ impl<'rows, 'emit, 'surface>
         let Some(plan) = plan_ascii_row(buffer, row, fit, policy) else {
             return AsciiRowRouteOutcome::NotRouted;
         };
-        let segmented = plan.is_segmented();
 
         let start = CharPos0::new(row.charpos.max(0) as usize);
         let ranges = plan.segment_ranges(start);
@@ -678,7 +865,7 @@ impl<'rows, 'emit, 'surface>
             // Box faces carry per-run edge bookkeeping (GNU
             // start_of_box_run_p / face_box_p) the routed render does not
             // replicate; keep the multi-face class box-free.
-            if segmented && active.resolved_face().box_type != 0 {
+            if plan.is_segmented() && active.resolved_face().box_type != 0 {
                 return AsciiRowRouteOutcome::NotRouted;
             }
             // The pipeline stamps glyphs with the PER-RUN face chain; refuse
@@ -703,8 +890,7 @@ impl<'rows, 'emit, 'surface>
         }
 
         let geometry = *self.row_geometry;
-        let mut probe_x = position.x_px();
-        let mut probe_col = position.col();
+        let mut probe_position = position;
         for segment in &probed {
             let mut source = BufferAsciiItemSource::text_only(
                 loop_context.buffer_id(),
@@ -725,24 +911,27 @@ impl<'rows, 'emit, 'surface>
                 loop_context.char_height(),
                 self.face_ids.clone(),
             );
+            // Advance-based measurement: tab expansion depends on the pen x
+            // and 2-col chars advance two cells, so the measured END position
+            // (x AND col) seeds the next segment's probe exactly as the
+            // pipeline's own natural walk would.
             let measured = {
                 let mut measure = self.source_render.measure_state();
-                append_context.measure_source_display_item_width_naturally(
+                append_context.measure_source_display_item_advance_naturally(
                     &geometry,
                     &mut measure,
                     &text_item,
-                    DisplayRowPosition::new(probe_x, probe_col),
+                    probe_position,
                     DisplayRowAppendKind::SourceText,
                 )
             };
-            let Some(width_px) = measured else {
+            let Some(end_position) = measured else {
                 return AsciiRowRouteOutcome::NotRouted;
             };
-            probe_x += width_px;
-            probe_col += segment.end.get().saturating_sub(segment.start.get());
+            probe_position = end_position;
             // Strict fit at every segment boundary: any borderline row
             // (exact fill) keeps the buffer pipeline.
-            if !(probe_x < self.append_surface.right_edge()) {
+            if !(probe_position.x_px() < self.append_surface.right_edge()) {
                 return AsciiRowRouteOutcome::NotRouted;
             }
         }
@@ -823,8 +1012,9 @@ impl<'rows, 'emit, 'surface>
         }
 
         self.progress.max_charpos(line_end.get() as i64);
-        self.progress.set_byte_idx(row.byte_idx + plan.line_len());
-        note_routed_row(segmented);
+        self.progress
+            .set_byte_idx(row.byte_idx + plan.line_byte_len());
+        note_routed_row(&plan);
         AsciiRowRouteOutcome::Rendered
     }
 }

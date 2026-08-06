@@ -117,6 +117,12 @@ impl DisplayRowAppendSurface {
         self.area.right_edge()
     }
 
+    /// The surface's tab policy (buffer `tab-width` / `tab-stop-list`), the
+    /// one every append frame built from this surface expands tabs with.
+    pub(crate) fn tab_policy(&self) -> &DisplayTabPolicy {
+        &self.tab_policy
+    }
+
     pub(crate) fn full_text_right_edge(&self) -> f32 {
         self.area.full_text_width().right_edge()
     }

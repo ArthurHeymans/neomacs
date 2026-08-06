@@ -14406,8 +14406,10 @@ fn ascii_route_classification<B: crate::neovm_bridge::LayoutBufferView + ?Sized>
         },
         crate::buffer_source::row_route::RowRouteFit {
             start_x_px: 0.0,
+            start_col: 0,
             char_width_px: char_width,
             right_edge_px,
+            tab_policy: &DisplayTabPolicy::every(8),
         },
         crate::buffer_source::row_route::RowRouteWindowPolicy {
             point_charpos,
@@ -14672,18 +14674,23 @@ fn assert_segmented_ascii_shadow_row(
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     let point = text.chars().count() as i64;
+    // `line_start` is a byte offset; row positions and segment ranges are
+    // CHAR positions (the row may be multibyte since phase 2b).
+    let line_start_chars = text[..line_start].chars().count();
     let plan = rr::plan_ascii_row(
         &snapshot,
         rr::RowRouteRowStart {
             text: text.as_bytes(),
             byte_idx: line_start,
-            charpos: line_start as i64,
+            charpos: line_start_chars as i64,
             text_start_byte: 0,
         },
         rr::RowRouteFit {
             start_x_px: 0.0,
+            start_col: 0,
             char_width_px: char_width,
             right_edge_px: 640.0,
+            tab_policy: &DisplayTabPolicy::every(8),
         },
         rr::RowRouteWindowPolicy {
             point_charpos: point,
@@ -14702,7 +14709,7 @@ fn assert_segmented_ascii_shadow_row(
     // Mirror the engine's stable-id minting order: the frame pass resolves
     // the checkpoint face at the window start and at every property-change
     // position, in walk order, minting content-addressed ids as it goes.
-    let line_end = line_start + plan.line_len();
+    let line_end = line_start_chars + plan.line_char_len();
     let mut warm_pos = 0usize;
     while warm_pos <= line_end {
         rr::resolve_routed_position_face(
@@ -14722,27 +14729,34 @@ fn assert_segmented_ascii_shadow_row(
         warm_pos = next;
     }
 
-    let start = CharPos0::new(line_start);
+    let start = CharPos0::new(line_start_chars);
     let segments = rr::plan_row_face_segments(&snapshot, &resolver, &mut face_ids, start, &plan);
 
     // Diagnostic gate before full glyph equality: the producer's realized
-    // per-segment ids must equal the buffer pipeline's glyph face ids.
+    // per-segment ids must equal the buffer pipeline's glyph face ids. Match
+    // by each glyph's source char position — a tab renders ONE stretch glyph
+    // and a wide char renders base + padding glyphs, so glyph count is not
+    // char count.
     let main_glyphs = &main_row.glyphs[1];
-    let mut expected_ids = Vec::new();
-    for segment in &segments {
-        for _ in segment.start.get()..segment.end.get() {
-            expected_ids.push(segment.face_id);
-        }
+    for glyph in main_glyphs.iter().filter(|glyph| {
+        // A tab's stretch glyph does not carry the tab's char position
+        // (both paths leave it unset, proven by the full-equality shadow
+        // rows); char glyphs and wide-char padding glyphs do.
+        !matches!(glyph.glyph_type, GlyphType::Stretch { .. })
+            && (line_start_chars..line_end).contains(&glyph.charpos)
+    }) {
+        let expected = segments
+            .iter()
+            .find(|segment| {
+                segment.start.get() <= glyph.charpos && glyph.charpos < segment.end.get()
+            })
+            .unwrap_or_else(|| panic!("no planned segment covers charpos {}", glyph.charpos));
+        assert_eq!(
+            glyph.face_id, expected.face_id,
+            "routed segment face id must equal the buffer-pipeline glyph face id at charpos {}",
+            glyph.charpos
+        );
     }
-    let main_ids: Vec<_> = main_glyphs
-        .iter()
-        .take(expected_ids.len())
-        .map(|glyph| glyph.face_id)
-        .collect();
-    assert_eq!(
-        main_ids, expected_ids,
-        "routed segment face ids must equal the buffer-pipeline glyph face ids"
-    );
 
     // The newline's face (a span covering the newline rides onto the
     // appended newline space through the line-end plan).
