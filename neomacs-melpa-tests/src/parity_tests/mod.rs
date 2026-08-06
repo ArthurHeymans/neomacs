@@ -441,6 +441,7 @@ mod org_bullets;
 mod org_category_capture;
 mod org_download;
 mod org_pomodoro;
+mod org_superstar;
 mod orgit;
 mod overseer;
 mod package_build;

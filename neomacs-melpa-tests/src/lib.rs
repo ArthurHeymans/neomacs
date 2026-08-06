@@ -2274,6 +2274,12 @@ pub const ORG_DOWNLOAD_MELPA_PIN: (&str, &str) = ("org-download", "20241118.1846
 /// commit `3f5bcfb80d61556d35fc29e5ddb09750df962cc6`.
 pub const ORG_POMODORO_MELPA_PIN: (&str, &str) = ("org-pomodoro", "20220318.1618");
 
+/// The exact Org Superstar package selected for practical headline, TODO,
+/// plain-list, ordered-list, source-block, hook, accessor, restart, and
+/// mode-lifecycle parity. MELPA built version 1.7.0 from upstream commit
+/// `ce6f7f421f995893f72d75ffdfa92964b9bea2e3`.
+pub const ORG_SUPERSTAR_MELPA_PIN: (&str, &str) = ("org-superstar", "20250914.1308");
+
 /// The exact Orgit package selected for practical Org links to Magit status,
 /// log, revision, and blob buffers, repository-id lookup, web export, and
 /// broken-link parity. MELPA built version 2.2.0 from upstream commit
