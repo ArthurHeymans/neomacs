@@ -341,6 +341,7 @@ mod flx_ido;
 mod flycheck;
 mod flycheck_dmd_dub;
 mod flycheck_package;
+mod flycheck_pos_tip;
 mod forge;
 mod frozen_packages;
 mod game_2048;

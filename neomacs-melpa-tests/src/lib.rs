@@ -1300,6 +1300,12 @@ pub const FLYCHECK_DMD_DUB_MELPA_PIN: (&str, &str) = ("flycheck-dmd-dub", "20250
 /// `ecd03f83790611888d693c684d719e033f69cb40`.
 pub const FLYCHECK_PACKAGE_MELPA_PIN: (&str, &str) = ("flycheck-package", "20210509.2325");
 
+/// The exact flycheck-pos-tip package selected by the practical graphical
+/// diagnostic, TTY fallback, hook-driven hiding, and global-mode lifecycle
+/// parity corpus. MELPA built this archive from upstream commit
+/// `dc57beac0e59669926ad720c7af38b27c3a30467`.
+pub const FLYCHECK_POS_TIP_MELPA_PIN: (&str, &str) = ("flycheck-pos-tip", "20200516.1600");
+
 /// The exact Geiser package selected by the practical Scheme editing,
 /// implementation, completion, evaluation-protocol, and source-navigation
 /// parity corpus. MELPA built this archive from upstream commit
