@@ -487,6 +487,7 @@ mod toc_org;
 mod transient;
 mod treemacs;
 mod treemacs_projectile;
+mod treepy;
 mod two_bit;
 mod typescript_mode;
 mod upstream_package_ert;
