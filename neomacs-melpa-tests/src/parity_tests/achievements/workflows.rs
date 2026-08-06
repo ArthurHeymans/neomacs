@@ -79,7 +79,12 @@ fn an_achievement_needing_several_commands_stays_locked_until_all_have_run() -> 
  (let ((achievements-file (ach-test-path "achievements.eld"))
        ;; Help commands change the selected buffer.  A dynamically scoped copy
        ;; keeps the real global lookup behavior without leaking test bindings.
-       (global-map (copy-keymap global-map)))
+       (global-map (copy-keymap global-map))
+       ;; `describe-gnu-project' intentionally opens the GNU Project page.
+       ;; Exercise that real command and GNU Emacs's real `browse-url' routing,
+       ;; but replace its configurable external-browser boundary so repeated
+       ;; batch and isolation runs cannot leave desktop processes behind.
+       (browse-url-browser-function #'ach-test-capture-browser-launch))
    (global-set-key (kbd "C-c 1") 'about-emacs)
    (global-set-key (kbd "C-c 2") 'describe-copying)
    (global-set-key (kbd "C-c 3") 'describe-distribution)
@@ -94,6 +99,7 @@ fn an_achievement_needing_several_commands_stays_locked_until_all_have_run() -> 
                              (ach-test-record "Top o' the morning")
                              achievements-score
                              (ach-test-earned)
+                             (nreverse ach-test-opened-urls)
                              (with-current-buffer "*achievements-workflow*" (buffer-string)))))
      (execute-kbd-macro (kbd "C-c 5 C-x o"))
      (achievements-update-score)
@@ -106,7 +112,7 @@ fn an_achievement_needing_several_commands_stays_locked_until_all_have_run() -> 
                  #'string<)
            (car (last (ach-test-unlock-messages)))))))"##,
         expect![[
-            r#"OK ((("Free Software Zealot" "You've read the sales pitch." :pending 5 nil nil) ("Short Story" "You've written the equivalent of a short story." :pending 5 nil nil) ("Top o' the morning" "You've used Emacs as a replacement for top." :pending 5 nil nil) 60 ("Achiever" "Clean Desk" "Green Glowing faces" "Loyalist" "Modernist" "Package Neophyte" "Post Modernist" "Purest Vanilla" "Streamlined" "Tainted Love" "Traditionalist" "Tux's Friend" "Unlocker") "hello world") ("Free Software Zealot" "You've read the sales pitch." t 5 nil t) ("Short Story" "You've written the equivalent of a short story." :pending 5 nil nil) ("Top o' the morning" "You've used Emacs as a replacement for top." :pending 5 nil nil) 70 ("Free Software Zealot") "ACHIEVEMENT UNLOCKED: You’ve earned the ‘Free Software Zealot’ achievement!")"#
+            r#"OK ((("Free Software Zealot" "You've read the sales pitch." :pending 5 nil nil) ("Short Story" "You've written the equivalent of a short story." :pending 5 nil nil) ("Top o' the morning" "You've used Emacs as a replacement for top." :pending 5 nil nil) 60 ("Achiever" "Clean Desk" "Green Glowing faces" "Loyalist" "Modernist" "Package Neophyte" "Post Modernist" "Purest Vanilla" "Streamlined" "Tainted Love" "Traditionalist" "Tux's Friend" "Unlocker") ("https://www.gnu.org/gnu/thegnuproject.html") "hello world") ("Free Software Zealot" "You've read the sales pitch." t 5 nil t) ("Short Story" "You've written the equivalent of a short story." :pending 5 nil nil) ("Top o' the morning" "You've used Emacs as a replacement for top." :pending 5 nil nil) 70 ("Free Software Zealot") "ACHIEVEMENT UNLOCKED: You’ve earned the ‘Free Software Zealot’ achievement!")"#
         ]],
     )
 }

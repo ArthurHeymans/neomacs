@@ -18,7 +18,11 @@ const ACHIEVEMENTS_TEST_TIMEOUT: Duration = Duration::from_secs(120);
 /// them, and then use the package's own commands.  `keyfreq' counts the
 /// *previous* command from `pre-command-hook', so each key sequence ends with
 /// one extra command to flush the one before it.  The achievements file is
-/// redirected into the per-case sandbox; nothing else is stubbed.
+/// redirected into the per-case sandbox.  Workflows which deliberately invoke
+/// an external browser bind GNU Emacs's documented
+/// `browse-url-browser-function' boundary to
+/// `ach-test-capture-browser-launch', keeping the real command path while
+/// preventing a desktop process from escaping the sandbox.
 const ACHIEVEMENTS_TEST_PRELUDE: &str = r##"
 (require 'cl-lib)
 
@@ -29,6 +33,13 @@ const ACHIEVEMENTS_TEST_PRELUDE: &str = r##"
 ;; reuses one editor process.
 (defvar ach-test-pristine-basic-achievements nil)
 (defvar ach-test-pristine-buffers nil)
+(defvar ach-test-opened-urls nil)
+
+(defun ach-test-capture-browser-launch (url &rest _args)
+  "Record URL instead of launching a browser outside the test sandbox."
+  (push url ach-test-opened-urls))
+
+(function-put 'ach-test-capture-browser-launch 'browse-url-browser-kind 'external)
 
 (defun ach-test-path (name)
   (expand-file-name name (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
@@ -50,6 +61,7 @@ const ACHIEVEMENTS_TEST_PRELUDE: &str = r##"
         achievements-post-command-list nil
         achievements-score 0
         achievements-total 0
+        ach-test-opened-urls nil
         achievements-list
         (mapcar #'copy-sequence ach-test-pristine-basic-achievements)
         command-history nil
