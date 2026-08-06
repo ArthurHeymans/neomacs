@@ -282,23 +282,23 @@ fn classifier_rejects_wide_char_exact_fill_and_straddle() {
 #[test]
 fn classifier_rejects_content_the_item_route_does_not_cover() {
     let mut eval = Context::new();
-    // Control chars, missing final newline, empty line, combining marks,
-    // zero-width chars, complex scripts, regional-indicator pairs, and
-    // nobreak space/hyphen (nobreak-char-display consults a setting): all
-    // stay on the buffer pipeline.
+    // Control chars, missing final newline, empty line, zero-width chars,
+    // complex scripts, regional-indicator pairs, and nobreak space/hyphen
+    // (nobreak-char-display consults a setting): all stay on the buffer
+    // pipeline. (Combining marks on a simple base left this list in phase
+    // 2e rung 2 — see the composed-cluster tests.)
     for text in [
         b"a\x01b\n".as_slice(),
         b"a\rb\n".as_slice(),
         b"hello".as_slice(),
         b"\nx\n".as_slice(),
-        "e\u{0301}llo\n".as_bytes(), // combining acute
-        "a\u{200B}b\n".as_bytes(),   // zero-width space
-        "a\u{200D}b\n".as_bytes(),   // ZWJ
+        "a\u{200B}b\n".as_bytes(),                       // zero-width space
+        "a\u{200D}b\n".as_bytes(),                       // ZWJ
         "\u{0633}\u{0644}\u{0627}\u{0645}\n".as_bytes(), // Arabic (shaped run)
-        "\u{1F1E6}\u{1F1E9}\n".as_bytes(), // regional-indicator flag pair
-        "a\u{00A0}b\n".as_bytes(),   // no-break space
-        "a\u{00AD}b\n".as_bytes(),   // soft hyphen
-        "a\u{0080}b\n".as_bytes(),   // C1 control (octal escape)
+        "\u{1F1E6}\u{1F1E9}\n".as_bytes(),               // regional-indicator flag pair
+        "a\u{00A0}b\n".as_bytes(),                       // no-break space
+        "a\u{00AD}b\n".as_bytes(),                       // soft hyphen
+        "a\u{0080}b\n".as_bytes(),                       // C1 control (octal escape)
     ] {
         let buf_id = buffer_with_text(&mut eval, std::str::from_utf8(text).unwrap());
         assert_eq!(
@@ -1410,15 +1410,22 @@ fn classifier_routes_inert_composition_prop() {
 fn classifier_rejects_rows_the_pipeline_would_compose() {
     // Each row contains a char the shared writer would COMPOSE into the
     // previous glyph (composition.rs continues_cluster /
-    // continues_complex_run — the same predicate the classifier now
-    // consults): combining mark, ZWJ emoji sequence, variation-selector
-    // keycap, skin-tone modifier, and a same-script contextual-shaping run.
+    // continues_complex_run — the same predicate the classifier consults)
+    // in a shape OUTSIDE the rung-2 routed class (zero-width extender on a
+    // simple 1-col base): ZWJ/ZWNJ joiners (open-ended sequences), a
+    // 2-col skin-tone extender, a same-script contextual-shaping run, an
+    // extender on a WIDE base (merges into the padding-cell shape), and
+    // extenders with no in-row base (row start / after a tab's stretch
+    // glyph, where the writer pushes a standalone orphan glyph instead).
     for text in [
-        "ae\u{0301}b\n",                  // combining acute merges into 'e'
         "a\u{1F468}\u{200D}\u{1F469}b\n", // ZWJ emoji sequence
-        "1\u{FE0F}\u{20E3}x\n",           // keycap sequence (VS16 + U+20E3)
+        "a\u{200D}b\n",                   // bare ZWJ joiner
+        "a\u{200C}b\n",                   // bare ZWNJ joiner
         "a\u{1F44D}\u{1F3FB}b\n",         // thumbs-up + skin-tone modifier
         "\u{0E01}\u{0E49}\n",             // Thai consonant + tone mark run
+        "a\u{4E2D}\u{0301}b\n",           // combining mark on a wide base
+        "\u{0301}x\n",                    // combining mark at row start
+        "a\t\u{0301}b\n",                 // combining mark after a tab
     ] {
         let mut eval = Context::new();
         let buf_id = buffer_with_text(&mut eval, text);
@@ -1459,4 +1466,185 @@ fn classifier_rejects_display_space_width_spec() {
         ),
         RowAcquisitionRoute::BufferPipeline
     );
+}
+
+// ---- Phase 2e rung 2: routed composed clusters (zero-width extenders) ----
+
+#[test]
+fn classifier_routes_combining_mark_cluster_and_plans_composed() {
+    let mut eval = Context::new();
+    // "ae\u{301}b": the combining acute is a zero-width extender the shared
+    // writer merges into the 'e' Char glyph (Char -> Composite). The row
+    // routes with the extender recorded as a composed offset.
+    let text = "ae\u{0301}b\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("combining-mark cluster row routes");
+    assert_eq!(plan.line_char_len(), 4);
+    assert_eq!(plan.line_byte_len(), 5, "one 2-byte combining mark");
+    assert!(plan.has_composed());
+    assert_eq!(plan.composed(), &[2]);
+    assert!(!plan.has_wide());
+}
+
+#[test]
+fn classifier_routes_keycap_cluster() {
+    let mut eval = Context::new();
+    // "1\u{FE0F}\u{20E3}x": VS16 and the combining enclosing keycap are both
+    // zero-width extenders on the '1' base — the same Composite merge.
+    let text = "1\u{FE0F}\u{20E3}x\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("keycap cluster row routes");
+    assert_eq!(plan.line_char_len(), 4);
+    assert_eq!(plan.composed(), &[1, 2]);
+}
+
+#[test]
+fn classifier_fit_counts_composed_extenders_as_zero_cols() {
+    let mut eval = Context::new();
+    // "ae\u{301}b" occupies 3 columns (the mark contributes 0, exactly like
+    // GNU cmp->width / string-width): a 3-cell row is exact fill (refused),
+    // 4 cells route.
+    let text = "ae\u{0301}b\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    for (edge, expected) in [
+        (24.0, RowAcquisitionRoute::BufferPipeline),
+        (32.0, RowAcquisitionRoute::ItemRenderer),
+    ] {
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                fit_to(edge),
+                plain_policy()
+            ),
+            expected,
+            "edge {edge}px"
+        );
+    }
+}
+
+#[test]
+fn classifier_rejects_composed_cluster_straddling_face_boundary() {
+    let mut eval = Context::new();
+    // A face change lands exactly ON the extender: the segment split would
+    // put the mark at a segment start, but the writer still merges it into
+    // the PREVIOUS segment's base glyph (keeping that base's face) — a
+    // cross-segment shape the per-segment routed render does not replicate.
+    let text = "ae\u{0301}b\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    // 1-based char [3, 4) is the combining mark.
+    eval.eval_str("(put-text-property 3 4 'face 'bold)")
+        .expect("face on the mark");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "a face boundary on the extender must refuse"
+    );
+}
+
+#[test]
+fn classifier_rejects_composed_cluster_with_hidden_base() {
+    let mut eval = Context::new();
+    // The base 'e' is elided but the mark stays visible: the pipeline's
+    // walk then merges the mark into the PRECEDING visible glyph ('a'),
+    // while the routed segments would render the mark at a segment start —
+    // refuse. Hiding the MARK itself is fine (nothing composes: the elided
+    // span simply drops it), so that row routes.
+    let text = "ae\u{0301}b\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 2 3 'invisible t)")
+        .expect("hide the base");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "a visible extender whose base is hidden must refuse"
+    );
+
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 4 'invisible t)")
+        .expect("hide the mark");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("a hidden extender elides and routes");
+    assert_eq!(plan.elided(), &[(2, 3)]);
+}
+
+#[test]
+fn routed_source_matches_cursor_items_for_combining_mark() {
+    let mut eval = Context::new();
+    // The cursor keeps the mark inside ONE plain TextRun (it classifies as
+    // Text); the routed source must produce the identical item.
+    let text = "ae\u{0301}b\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let start = CharPos0::ZERO;
+    let line_end = CharPos0::new(text.chars().count() - 1);
+
+    let mut cursor = BufferTextSourceCursor::new(
+        buf_id,
+        buffer,
+        start,
+        line_end.add_len(CharLen::new(1)),
+        RenderFaceRef::Inherit,
+    );
+    let mut cursor_items = Vec::new();
+    let mut context = DisplaySourceContext::empty();
+    while let Some(item) = cursor.next_item(&mut context) {
+        cursor_items.push(item);
+    }
+
+    let mut routed = BufferAsciiItemSource::with_row_break(
+        buf_id,
+        buffer,
+        start,
+        line_end,
+        RenderFaceRef::Inherit,
+    );
+    let mut routed_items = Vec::new();
+    while let Some(item) = routed.next_item(&mut context) {
+        routed_items.push(item);
+    }
+
+    assert_eq!(routed_items, cursor_items);
+    assert_eq!(routed_items.len(), 2, "one text run, then the row break");
+    let DisplayItemKind::TextRun(run) = &routed_items[0].kind else {
+        panic!("expected text run, got {:?}", routed_items[0].kind);
+    };
+    assert_eq!(run.text.as_ref(), "ae\u{0301}b");
 }

@@ -15702,13 +15702,15 @@ fn ascii_route_refuses_zwj_emoji_row_and_pipeline_composes() {
 }
 
 #[test]
-fn ascii_route_refuses_combining_mark_row_and_pipeline_composes() {
-    // A combining mark merges into its base char (Char -> Composite in the
-    // shared writer); the classifier refuses on the same continues_cluster
-    // predicate. Pinned pipeline shape: Composite payload text and the
-    // charpos jump over the absorbed mark.
+fn ascii_item_source_shadow_matches_combining_mark_cluster_row() {
+    // Phase 2e rung 2: a zero-width combining mark on a simple 1-col base is
+    // the routed composite class. The shared writer merges the mark into the
+    // base Char glyph (Char -> Composite) identically on both paths; the
+    // shadow proves FULL glyph equality, and the explicit asserts pin the
+    // Composite payload, its non-wide no-padding shape, and the charpos
+    // coverage jump over the absorbed mark.
     let text = "ae\u{0301}bc\n";
-    let (eval, buf_id, rows, char_width, _char_height) = layout_main_text_rows(text);
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
@@ -15721,8 +15723,8 @@ fn ascii_route_refuses_combining_mark_row_and_pipeline_composes() {
             640.0,
             text.chars().count() as i64
         ),
-        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
-        "a combining-mark row must refuse the item route in rung 1"
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer,
+        "a combining-mark cluster row routes in rung 2"
     );
     let glyphs = &rows[0].glyphs[1];
     let composite_at = glyphs
@@ -15730,10 +15732,119 @@ fn ascii_route_refuses_combining_mark_row_and_pipeline_composes() {
         .position(|glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.as_ref() == "e\u{0301}"))
         .expect("the pipeline must merge the mark into a Composite glyph");
     assert_eq!(glyphs[composite_at].charpos, 1);
+    assert!(
+        !glyphs[composite_at].wide && !glyphs[composite_at].padding,
+        "the composed cluster keeps its base's 1-col non-padding shape"
+    );
     assert_eq!(
         glyphs[composite_at + 1].charpos,
         3,
         "the glyph after the cluster jumps the absorbed mark's charpos"
+    );
+
+    let line_end = CharPos0::new(text.chars().count() - 1);
+    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_keycap_cluster_row() {
+    // VS16 + combining enclosing keycap on a digit base: two zero-width
+    // extenders merging into one Composite through the same writer seam.
+    let text = "1\u{FE0F}\u{20E3}x\n";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+    assert!(
+        rows[0].glyphs[1].iter().any(|glyph| matches!(
+            &glyph.glyph_type,
+            GlyphType::Composite { text } if text.as_ref() == "1\u{FE0F}\u{20E3}"
+        )),
+        "the pipeline composes the keycap sequence into one Composite"
+    );
+    let line_end = CharPos0::new(text.chars().count() - 1);
+    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_mark_cluster_beside_face_span() {
+    // The composed cluster coexists with face segmentation as long as no
+    // boundary lands ON the extender: bold over "cd" (boundaries 3 and 5)
+    // leaves the cluster whole inside segment 0.
+    let text = "ae\u{0301}bcd\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            // 1-based chars [4, 6) = "bc".
+            eval.eval_str("(put-text-property 4 6 'face 'bold)")
+                .expect("face span beside the cluster");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 3, "base / bold / base segments");
+    assert_ne!(segments[0].face_id, segments[1].face_id);
+}
+
+/// Engagement proof for the composed-cluster extension (flag-on suite gate):
+/// a combining-mark row must actually take the routed acquisition.
+/// Trivially passes when the flag is off.
+#[test]
+fn ascii_route_flag_on_layout_engages_composed_cluster_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_COMPOSED_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, rows, _char_width, _char_height) =
+        layout_main_text_rows("ae\u{0301}bc\nnext\n");
+    assert!(rows.len() >= 2);
+    let after = crate::buffer_source::row_route::ROUTED_COMPOSED_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after >= before + 1,
+        "expected the combining-mark row to route through the item renderer \
+         (before={before}, after={after})"
     );
 }
 

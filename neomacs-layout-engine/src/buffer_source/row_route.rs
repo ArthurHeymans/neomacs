@@ -145,7 +145,10 @@ pub(crate) struct RowRouteFit<'a> {
 /// ranges hidden by plain (no-ellipsis) `invisible` text properties, in
 /// ascending disjoint order — the routed render skips them entirely, exactly
 /// as the pipeline's invisible checkpoint `skip_chars_until` does (GNU
-/// `handle_invisible_prop` advancing `IT_CHARPOS` past the run).
+/// `handle_invisible_prop` advancing `IT_CHARPOS` past the run). `composed`
+/// are the CHAR offsets of zero-width extenders the shared writer merges
+/// into their preceding base glyph (phase 2e rung 2) — they occupy no
+/// column and produce no glyph of their own.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AsciiRowPlan {
     line_byte_len: usize,
@@ -155,6 +158,7 @@ pub(crate) struct AsciiRowPlan {
     has_overlay: bool,
     face_boundaries: Vec<usize>,
     elided: Vec<(usize, usize)>,
+    composed: Vec<usize>,
 }
 
 impl AsciiRowPlan {
@@ -194,6 +198,17 @@ impl AsciiRowPlan {
     /// Whether the row elides invisible spans.
     pub(crate) fn has_elision(&self) -> bool {
         !self.elided.is_empty()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn composed(&self) -> &[usize] {
+        &self.composed
+    }
+
+    /// Whether the row contains a composed grapheme cluster (a zero-width
+    /// extender merged into its base glyph).
+    pub(crate) fn has_composed(&self) -> bool {
+        !self.composed.is_empty()
     }
 
     /// Whether the row renders as more than one run (face segments or
@@ -316,15 +331,45 @@ fn routed_char_would_compose(ch: char, tail: Option<(char, bool)>) -> bool {
     continues_cluster(ch, tail) || continues_complex_run(ch, tail)
 }
 
+/// Whether `ch` is an extender the routed composite class accepts: a
+/// zero-width cluster extender (combining marks, variation selectors, the
+/// enclosing keycap) that the shared writer merges into the previous glyph
+/// WITHOUT advancing the pen. Grounded in the same width source the writer's
+/// composed-cluster metric sums (`composed_cluster_cols` = `string_width`,
+/// GNU `cmp->width`): a zero-width extender leaves the cluster at its base's
+/// columns, so the scan's fit walk and the writer agree exactly. ZWJ/ZWNJ
+/// are excluded — a joiner makes the FOLLOWING char compose too
+/// (`continues_cluster`'s prev-is-ZWJ arm), an open-ended sequence shape
+/// (emoji ZWJ sequences) that stays refused.
+fn routed_composable_extender(ch: char) -> bool {
+    !matches!(ch as u32, 0x200C | 0x200D) && neovm_core::encoding::char_width(ch) == 0
+}
+
+/// What the last scanned char left in the row for a following extender to
+/// merge into, mirroring the writer's merge targets: `Simple` is a 1-column
+/// non-padding Char glyph (or a Composite already grown from one) — the ONLY
+/// shape the routed class lets an extender merge into. A tab's stretch glyph
+/// and a wide char's base+padding pair are not routable merge targets (the
+/// writer would push an orphan glyph or merge into the padding cell), and at
+/// the row start there is nothing to merge into.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RoutedScanMergeTarget {
+    None,
+    Simple,
+    Wide,
+}
+
 /// A scanned routable line: `byte_len` bytes / `char_len` chars of routed
 /// chars terminated by a real `\n` inside `text`, fitting strictly inside
-/// the row.
-#[derive(Clone, Copy, Debug)]
+/// the row. `composed` are the CHAR offsets of extenders the shared writer
+/// merges into their preceding base glyph (ascending).
+#[derive(Clone, Debug)]
 struct RoutedLineScan {
     byte_len: usize,
     char_len: usize,
     has_tab: bool,
     has_wide: bool,
+    composed: Vec<usize>,
 }
 
 /// Scan for a routable line at `byte_idx`: at least one char accepted by
@@ -337,22 +382,30 @@ struct RoutedLineScan {
 /// cells — and mirrors the writer's composition ladder in decision order:
 /// a Text-class char is first tested against the SAME compose predicate the
 /// writer applies ([`routed_char_would_compose`] over the running `tail`,
-/// the scan's mirror of `last_text_cluster_tail_in_glyphs`); any char the
-/// pipeline would compose refuses the route, keeping composed grapheme
-/// clusters and shaped runs on the buffer pipeline deliberately. A line
-/// exactly filling the row keeps the buffer pipeline too
-/// (continuation/truncation policy owns that edge); the routed render
-/// re-verifies with the pipeline's own per-face natural measurement before
-/// committing. `tail` evolves as the writer's row view would: a pushed char
-/// becomes `(ch, lone-regional-indicator)`, a tab's stretch glyph clears it.
+/// the scan's mirror of `last_text_cluster_tail_in_glyphs`). A composing
+/// char is accepted only in the rung-2 routed class — a zero-width extender
+/// ([`routed_composable_extender`]) merging into a simple 1-col base in this
+/// row ([`RoutedScanMergeTarget::Simple`]); it advances the pen by ZERO
+/// (the writer's merge appends no glyph and the composed-cluster metric
+/// `composed_cluster_cols` counts its width as 0). Every other composing
+/// shape — joiners, 2-col extenders, shaped-script runs, extenders on
+/// wide/tab/row-start tails — refuses, keeping those clusters on the buffer
+/// pipeline deliberately. A line exactly filling the row keeps the buffer
+/// pipeline too (continuation/truncation policy owns that edge); the routed
+/// render re-verifies with the pipeline's own per-face natural measurement
+/// before committing. `tail` evolves as the writer's row view would: a
+/// pushed char becomes `(ch, lone-regional-indicator)`, a merged extender
+/// becomes the cluster's last char, a tab's stretch glyph clears it.
 fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Option<RoutedLineScan> {
     let mut idx = byte_idx;
     let mut char_len = 0usize;
     let mut has_tab = false;
     let mut has_wide = false;
+    let mut composed = Vec::new();
     let mut x_px = fit.start_x_px;
     let mut col = fit.start_col;
     let mut tail: Option<(char, bool)> = None;
+    let mut merge_target = RoutedScanMergeTarget::None;
     while idx < text.len() {
         if text[idx] == b'\n' {
             if char_len == 0 || x_px >= fit.right_edge_px {
@@ -363,6 +416,7 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
                 char_len,
                 has_tab,
                 has_wide,
+                composed,
             });
         }
         let (ch, consumed) = decode_utf8(&text[idx..]);
@@ -378,7 +432,16 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
         if classify_text_source_char(ch) == TextSourceCharClassification::Text
             && routed_char_would_compose(ch, tail)
         {
-            return None;
+            if !(routed_composable_extender(ch) && merge_target == RoutedScanMergeTarget::Simple) {
+                return None;
+            }
+            // The merge appends no glyph and advances nothing; the cluster's
+            // tail becomes the extender (writer: the Composite's last char).
+            composed.push(char_len);
+            tail = Some((ch, false));
+            char_len += 1;
+            idx += consumed;
+            continue;
         }
         match classify_routed_row_char(ch)? {
             RoutedRowCharAdvance::Tab => {
@@ -391,12 +454,18 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
                 // A tab renders a Stretch glyph: the writer's cluster-tail
                 // view yields None over it.
                 tail = None;
+                merge_target = RoutedScanMergeTarget::None;
             }
             RoutedRowCharAdvance::Cols(cols) => {
                 has_wide |= cols == 2;
                 x_px += f32::from(cols) * fit.char_width_px;
                 col += usize::from(cols);
                 tail = Some((ch, is_regional_indicator(ch as u32)));
+                merge_target = if cols == 1 {
+                    RoutedScanMergeTarget::Simple
+                } else {
+                    RoutedScanMergeTarget::Wide
+                };
             }
         }
         char_len += 1;
@@ -708,6 +777,29 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     face_boundaries.sort_unstable();
     face_boundaries.dedup();
 
+    // A VISIBLE composed extender must merge into a base rendered
+    // immediately before it in the SAME routed segment. If a face boundary
+    // lands ON the extender, or its base is hidden (the extender sits
+    // exactly at a hidden span's end), the pipeline's writer still merges it
+    // across that seam — into the previous segment's glyph, keeping that
+    // glyph's face — a cross-segment shape the per-segment routed render
+    // does not replicate. An extender INSIDE a hidden span is fine: it is
+    // simply dropped (its property-change boundaries coincide with the gap
+    // and split nothing).
+    for &offset in &scan.composed {
+        let hidden = elided
+            .iter()
+            .any(|&(hidden_start, hidden_end)| offset >= hidden_start && offset < hidden_end);
+        if hidden {
+            continue;
+        }
+        if face_boundaries.binary_search(&offset).is_ok()
+            || elided.iter().any(|&(_, hidden_end)| offset == hidden_end)
+        {
+            return None;
+        }
+    }
+
     Some(AsciiRowPlan {
         line_byte_len: scan.byte_len,
         line_char_len: scan.char_len,
@@ -716,6 +808,7 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
         has_overlay: overlay_scan.has_overlay,
         face_boundaries,
         elided,
+        composed: scan.composed,
     })
 }
 
@@ -960,7 +1053,7 @@ impl BufferAsciiItemSource {
                     break;
                 }
                 debug_assert!(
-                    classify_routed_row_char(ch).is_some(),
+                    classify_routed_row_char(ch).is_some() || routed_composable_extender(ch),
                     "BufferAsciiItemSource requires a classified routable row (got {ch:?})"
                 );
                 text.push(ch);
@@ -1061,6 +1154,12 @@ pub(crate) static ROUTED_OVERLAY_ROW_COUNT: std::sync::atomic::AtomicUsize =
 pub(crate) static ROUTED_ELIDED_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+/// Test-only engagement proof for the composed-cluster extension: routed
+/// rows containing at least one merged zero-width extender.
+#[cfg(test)]
+pub(crate) static ROUTED_COMPOSED_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 fn note_routed_row(plan: &AsciiRowPlan) {
     #[cfg(test)]
     {
@@ -1079,6 +1178,9 @@ fn note_routed_row(plan: &AsciiRowPlan) {
         }
         if plan.has_elision() {
             ROUTED_ELIDED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if plan.has_composed() {
+            ROUTED_COMPOSED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
     #[cfg(not(test))]
