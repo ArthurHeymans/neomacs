@@ -405,7 +405,12 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
         let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
 
         let display_string = DisplayPropertySourcePlan::new(Value::string("displayed"));
-        match display_string.source_action(&mut context, base_face) {
+        match display_string.source_action(
+            &mut context,
+            DisplayPropertySourceFaces::Buffer {
+                effective: base_face,
+            },
+        ) {
             DisplayPropertySourceAction::PushReplacement { value, base_face } => {
                 assert_eq!(
                     value.as_runtime_string_owned().as_deref(),
@@ -422,7 +427,12 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
             Value::fixnum(2),
         ]);
         let space_plan = DisplayPropertySourcePlan::new(space_spec);
-        match space_plan.source_action(&mut context, base_face) {
+        match space_plan.source_action(
+            &mut context,
+            DisplayPropertySourceFaces::Buffer {
+                effective: base_face,
+            },
+        ) {
             DisplayPropertySourceAction::Emit {
                 kind:
                     DisplayItemKind::Stretch(DisplayStretch {
@@ -436,7 +446,12 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
         }
 
         let image_plan = DisplayPropertySourcePlan::new(Value::list(vec![Value::symbol("image")]));
-        match image_plan.source_action(&mut context, base_face) {
+        match image_plan.source_action(
+            &mut context,
+            DisplayPropertySourceFaces::Buffer {
+                effective: base_face,
+            },
+        ) {
             DisplayPropertySourceAction::Emit {
                 kind:
                     DisplayItemKind::MediaReplacement(DisplayMediaReplacement {
@@ -451,6 +466,42 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
     }
 
     assert_eq!(resolver.seen_face, Some(base_face));
+}
+
+#[test]
+fn display_property_string_base_face_is_explicit_for_buffer_and_string_sources() {
+    let _eval = Context::new();
+    let effective = RenderFaceRef::FaceId(FaceId::new(7));
+    let underlying = RenderFaceRef::FaceId(FaceId::new(3));
+    let plan = DisplayPropertySourcePlan::new(Value::string("displayed"));
+    let mut context = DisplaySourceContext::empty();
+
+    let buffer_action = plan.source_action(
+        &mut context,
+        DisplayPropertySourceFaces::Buffer { effective },
+    );
+    assert!(matches!(
+        buffer_action,
+        DisplayPropertySourceAction::PushReplacement {
+            base_face,
+            ..
+        } if base_face == effective
+    ));
+
+    let string_action = plan.source_action(
+        &mut context,
+        DisplayPropertySourceFaces::LispString {
+            effective,
+            underlying,
+        },
+    );
+    assert!(matches!(
+        string_action,
+        DisplayPropertySourceAction::PushReplacement {
+            base_face,
+            ..
+        } if base_face == underlying
+    ));
 }
 
 #[test]

@@ -2457,7 +2457,14 @@ impl LispStringSourceFrame {
                 } else {
                     self.span(start, display_end)
                 };
-                match display_property.cursor_action(context, display_span, face) {
+                match display_property.cursor_action(
+                    context,
+                    display_span,
+                    DisplayPropertySourceFaces::LispString {
+                        effective: face,
+                        underlying: self.base_face,
+                    },
+                ) {
                     DisplayPropertySourceCursorAction::PushReplacement { value, base_face } => {
                         self.char_index = display_end;
                         return LispStringAction::PushReplacement { value, base_face };
@@ -2713,6 +2720,40 @@ pub(crate) struct DisplayPropertySourcePlan {
     classification: DisplayPropertyClassification,
 }
 
+/// The two faces GNU's display-property machinery keeps distinct.
+///
+/// A non-string replacement (image, stretch, etc.) uses the effective face at
+/// the source position.  A replacement string uses that same face for buffer
+/// text, but when the source itself is a Lisp string GNU's `underlying_face_id'
+/// deliberately bypasses that string's face properties.  Encoding the source
+/// kind in an enum makes callers choose the inheritance rule explicitly instead
+/// of passing one untyped face that can silently leak across a source boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayPropertySourceFaces {
+    Buffer {
+        effective: RenderFaceRef,
+    },
+    LispString {
+        effective: RenderFaceRef,
+        underlying: RenderFaceRef,
+    },
+}
+
+impl DisplayPropertySourceFaces {
+    const fn effective(self) -> RenderFaceRef {
+        match self {
+            Self::Buffer { effective } | Self::LispString { effective, .. } => effective,
+        }
+    }
+
+    const fn replacement_string_base(self) -> RenderFaceRef {
+        match self {
+            Self::Buffer { effective } => effective,
+            Self::LispString { underlying, .. } => underlying,
+        }
+    }
+}
+
 impl DisplayPropertySourcePlan {
     pub(crate) fn new(value: Value) -> Self {
         Self {
@@ -2732,18 +2773,19 @@ impl DisplayPropertySourcePlan {
     pub(crate) fn source_action(
         &self,
         context: &mut DisplaySourceContext<'_>,
-        face: RenderFaceRef,
+        faces: DisplayPropertySourceFaces,
     ) -> DisplayPropertySourceAction {
+        let effective_face = faces.effective();
         match DisplayPropertySourceReplacement::resolve(
             context,
             self.value,
             &self.classification,
-            face,
+            effective_face,
         ) {
             DisplayPropertySourceReplacement::String(value) => {
                 DisplayPropertySourceAction::PushReplacement {
                     value,
-                    base_face: face,
+                    base_face: faces.replacement_string_base(),
                 }
             }
             DisplayPropertySourceReplacement::Item(kind) => DisplayPropertySourceAction::Emit {
@@ -2761,10 +2803,10 @@ impl DisplayPropertySourcePlan {
         &self,
         context: &mut DisplaySourceContext<'_>,
         span: SourceSpan,
-        face: RenderFaceRef,
+        faces: DisplayPropertySourceFaces,
     ) -> DisplayPropertySourceCursorAction {
-        self.source_action(context, face)
-            .into_cursor_action(span, face)
+        self.source_action(context, faces)
+            .into_cursor_action(span, faces.effective())
     }
 }
 

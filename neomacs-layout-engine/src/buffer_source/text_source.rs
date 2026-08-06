@@ -6,9 +6,10 @@ use crate::display_item::{
 };
 use crate::display_property::DisplayPropertyClassification;
 use crate::display_source::{
-    DisplayItemSource, DisplayPropertySourceCursorAction, DisplayPropertySourcePlan,
-    DisplaySourceContext, LispStringSourceStack, TextSourceCharClassification,
-    classify_text_source_char, display_item_kind_for_text_source_char,
+    DisplayItemSource, DisplayPropertySourceCursorAction, DisplayPropertySourceFaces,
+    DisplayPropertySourcePlan, DisplaySourceContext, LispStringSourceStack,
+    TextSourceCharClassification, classify_text_source_char,
+    display_item_kind_for_text_source_char,
 };
 use crate::neovm_bridge::{LayoutBufferView, LayoutCharPropertyLookup};
 use crate::unicode::decode_utf8;
@@ -438,7 +439,11 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         face: RenderFaceRef,
         span: SourceSpan,
     ) -> DisplayPropertySourceCursorAction {
-        display_property.cursor_action(context, span, face)
+        display_property.cursor_action(
+            context,
+            span,
+            DisplayPropertySourceFaces::Buffer { effective: face },
+        )
     }
 
     fn push_display_replacement_string(

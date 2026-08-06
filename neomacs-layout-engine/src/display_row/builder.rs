@@ -17,7 +17,7 @@ use crate::glyph_row_writer;
 use crate::output::builder::DisplayOutputBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
-use neomacs_display_protocol::types::{FaceId, LayoutUnit};
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
 use crate::display_text_run_measurement::DisplayTextRunMeasurement;
@@ -276,10 +276,9 @@ impl DisplayTabPolicy {
         position: DisplayRowPosition,
         char_width_px: f32,
     ) -> DisplayTabAdvance {
-        let char_width = LayoutUnit::from_px(char_width_px.max(1.0));
+        let char_width = TabGridPixel::from_renderer_px(char_width_px.max(1.0));
         let tab_width = char_width * i64::from(self.width_cols.max(1));
-        let origin_x = LayoutUnit::from_px(self.origin_x_px);
-        let tab_x = (LayoutUnit::from_px(position.x_px) - origin_x).max(LayoutUnit::ZERO);
+        let tab_x = TabGridPixel::from_renderer_px((position.x_px - self.origin_x_px).max(0.0));
         let next_tab_x = if !self.stop_cols.is_empty() {
             self.stop_cols
                 .iter()
@@ -290,28 +289,29 @@ impl DisplayTabPolicy {
                     let last = char_width
                         * i64::try_from(self.stop_cols.last().copied().unwrap_or_default())
                             .unwrap_or(i64::MAX);
-                    if tab_x >= last && tab_width > LayoutUnit::ZERO {
+                    if tab_x >= last && tab_width > TabGridPixel::ZERO {
                         let repeated_stops = (tab_x - last).raw() / tab_width.raw() + 1;
                         last + tab_width * repeated_stops
                     } else {
                         last
                     }
                 })
-        } else if tab_width > LayoutUnit::ZERO {
+        } else if tab_width > TabGridPixel::ZERO {
             tab_width * (tab_x.raw() / tab_width.raw() + 1)
         } else {
             tab_x + char_width
         };
         // GNU's minimum-one-space guard (gui_produce_glyphs: a tab landing
-        // exactly on a stop advances a full stop) works in integer layout
-        // units. Inputs are quantized once above, so this comparison has no
-        // epsilon policy and cannot change with f32 noise.
+        // exactly on a stop advances a full stop) works in integer pixels.
+        // `TabGridPixel' makes that domain distinct from both renderer f32
+        // coordinates and the protocol's subpixel `LayoutUnit'.
         let next_tab_x = if next_tab_x - tab_x < char_width {
             next_tab_x + tab_width
         } else {
             next_tab_x
         };
-        let pixel_width = (next_tab_x - tab_x).max(char_width).to_px();
+        let target_x_px = self.origin_x_px + next_tab_x.to_renderer_px();
+        let pixel_width = (target_x_px - position.x_px).max(0.0);
         let next_col =
             usize::try_from((next_tab_x.raw() + char_width.raw() / 2) / char_width.raw())
                 .unwrap_or(usize::MAX)
@@ -320,6 +320,55 @@ impl DisplayTabPolicy {
             pixel_width,
             width_cols: next_col.saturating_sub(position.col).max(1),
         }
+    }
+}
+
+/// An integer pixel in GNU Emacs's tab-stop coordinate system.
+///
+/// Glyph shaping and GPU placement remain subpixel, but GNU xdisp computes
+/// TAB stops with integer `current_x' and integer `font->space_width'.  Keeping
+/// this as a separate type prevents a deterministic fixed-point coordinate
+/// from being mistaken for GNU's integer-pixel domain.
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+struct TabGridPixel(i64);
+
+impl TabGridPixel {
+    const ZERO: Self = Self(0);
+
+    fn from_renderer_px(px: f32) -> Self {
+        Self(px.round() as i64)
+    }
+
+    const fn raw(self) -> i64 {
+        self.0
+    }
+
+    fn to_renderer_px(self) -> f32 {
+        self.0 as f32
+    }
+}
+
+impl std::ops::Add for TabGridPixel {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+    }
+}
+
+impl std::ops::Sub for TabGridPixel {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        Self(self.0.saturating_sub(other.0))
+    }
+}
+
+impl std::ops::Mul<i64> for TabGridPixel {
+    type Output = Self;
+
+    fn mul(self, factor: i64) -> Self {
+        Self(self.0.saturating_mul(factor))
     }
 }
 

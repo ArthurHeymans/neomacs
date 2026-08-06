@@ -14726,6 +14726,174 @@ fn layout_frame_rust_renders_overlay_string_tabs_as_stretches() {
 }
 
 #[test]
+fn layout_frame_rust_aligns_dired_filenames_after_nerd_icon_tabs() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let text = concat!(
+        "  -rw-r--r-- 1 exec users 142286 Jul 28 00:11 main.rs\n",
+        "  -rw-r--r-- 1 exec users  63333 Aug  3 16:37 main_test.rs\n",
+    );
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(text);
+        // nerd-icons-dired makes this buffer-local so the icon suffix TAB is
+        // only one logical tab column wide.
+        buf.set_buffer_local("tab-width", Value::fixnum(1));
+        buf.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![
+                    Value::keyword("family"),
+                    Value::string("JetBrainsMono Nerd Font"),
+                ]),
+                Value::symbol("default"),
+            ])]),
+        );
+
+        for (serial, filename) in ["main.rs", "main_test.rs"].into_iter().enumerate() {
+            let filename_start = text.find(filename).expect("fixture filename");
+            let icon_and_tab = Value::string_with_text_properties(
+                "\u{e7a8}\t",
+                vec![StringTextPropertyRun {
+                    start: 0,
+                    end: 1,
+                    plist: Value::list(vec![
+                        Value::symbol("face"),
+                        Value::list(vec![
+                            Value::keyword("family"),
+                            Value::string("Symbols Nerd Font Mono"),
+                        ]),
+                    ]),
+                }],
+            );
+            // nerd-icons-dired wraps the icon string in a `display' property
+            // before installing it as an overlay after-string.
+            let icon_face = Value::list(vec![
+                Value::keyword("family"),
+                Value::string("Symbols Nerd Font Mono"),
+            ]);
+            let after_string = Value::string_with_text_properties(
+                "\u{e7a8}\t",
+                vec![
+                    // `propertize' preserves the icon's existing face while
+                    // adding the replacement `display' property.
+                    StringTextPropertyRun {
+                        start: 0,
+                        end: 1,
+                        plist: Value::list(vec![
+                            Value::symbol("face"),
+                            icon_face,
+                            Value::symbol("display"),
+                            icon_and_tab,
+                        ]),
+                    },
+                    StringTextPropertyRun {
+                        start: 1,
+                        end: 2,
+                        plist: Value::list(vec![Value::symbol("display"), icon_and_tab]),
+                    },
+                ],
+            );
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+                serial: serial as u64,
+                plist: Value::NIL,
+                buffer: Some(buf_id),
+                start: filename_start - 1,
+                end: filename_start,
+                front_advance: false,
+                rear_advance: false,
+            });
+            buf.overlays_mut().insert_overlay(overlay);
+            let _ = buf.overlays_mut().overlay_put(
+                overlay,
+                Value::symbol("after-string"),
+                after_string,
+            );
+        }
+    }
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-dired-nerd-icon-tab-alignment",
+        1600,
+        180,
+        buf_id,
+    );
+    realize_test_gui_frame(&mut eval, frame_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let filename_x = |filename: &str| {
+        let row = entry
+            .matrix
+            .rows
+            .iter()
+            .find(|row| {
+                glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).contains(filename)
+            })
+            .expect("Dired fixture row");
+        let glyphs = &row.glyphs[GlyphArea::Text.index()];
+        let icon = glyphs
+            .iter()
+            .position(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '\u{e7a8}' }))
+            .expect("nerd icon glyph");
+        let icon_glyph = &glyphs[icon];
+        let tab_glyph = glyphs
+            .get(icon + 1)
+            .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+            .expect("tab stretch after nerd icon");
+        let icon_face = state
+            .faces
+            .get(&icon_glyph.face_id)
+            .expect("published nerd icon face");
+        let tab_face = state
+            .faces
+            .get(&tab_glyph.face_id)
+            .expect("published tab face");
+        assert_eq!(
+            icon_face.font_family, "Symbols Nerd Font Mono",
+            "fixture must exercise the nerd-icons face"
+        );
+        assert_eq!(
+            tab_face.font_family, "JetBrainsMono Nerd Font",
+            "GNU ends the icon's one-character face run before the unpropertized TAB"
+        );
+        row.pixel_x
+            + glyphs[..=icon + 1]
+                .iter()
+                .map(|glyph| glyph.pixel_width)
+                .sum::<f32>()
+    };
+
+    let main_x = filename_x("main.rs");
+    let main_test_x = filename_x("main_test.rs");
+    assert!(
+        (main_x - main_test_x).abs() < 0.01,
+        "GNU xdisp expands overlay-string TABs from the live row pen, keeping Dired filenames at one pixel x; main.rs={main_x} main_test.rs={main_test_x} rows={:?}",
+        entry.matrix.rows,
+    );
+}
+
+#[test]
 fn layout_frame_rust_nerd_font_alias_icon_uses_resolved_monospace_cell_width() {
     let mut eval = Context::new();
     eval.eval_str(r#"(set-fontset-font t '(#xe6ad . #xe6ad) "JetBrainsMono Nerd Font")"#)

@@ -866,15 +866,41 @@ fn display_row_builder_tabs_use_realized_face_space_width_after_nerd_icon() {
 }
 
 #[test]
-fn tab_advance_quantizes_inputs_before_comparing_the_minimum_space() {
-    let advance =
-        DisplayTabPolicy::every(1).advance_from(DisplayRowPosition::new(12.150_001, 1), 12.15);
+fn tab_advance_targets_gnu_pixel_grid_without_rounding_the_renderer_pen() {
+    let position = DisplayRowPosition::new(12.150_001, 1);
+    let advance = DisplayTabPolicy::every(1).advance_from(position, 12.15);
 
-    assert_eq!(
-        advance.pixel_width,
-        neomacs_display_protocol::LayoutUnit::from_px(12.15).to_px()
+    assert!(
+        (position.x_px + advance.pixel_width - 24.0).abs() < 0.001,
+        "GNU rounds the 12.15px pen and space advance to integer pixel 12, then targets pixel 24"
     );
     assert_eq!(advance.width_cols, 1);
+}
+
+#[test]
+fn tab_advance_keeps_dired_filenames_on_one_stop_across_subpixel_pen_drift() {
+    // Captured from two adjacent nerd-icons-dired rows.  GNU xdisp stores
+    // `current_x' and `font->space_width' as integer pixels, so both source
+    // positions are pixel 336 relative to the text origin and advance to the
+    // same tab stop at absolute x=510.
+    let policy = DisplayTabPolicy::from_tab_width_and_stops(167.0, 1, &[]);
+    let main_position = DisplayRowPosition::new(503.400_3, 47);
+    let main_test_position = DisplayRowPosition::new(503.000_27, 47);
+
+    let main = policy.advance_from(main_position, 7.0);
+    let main_test = policy.advance_from(main_test_position, 7.0);
+    let main_filename_x = main_position.x_px + main.pixel_width;
+    let main_test_filename_x = main_test_position.x_px + main_test.pixel_width;
+
+    assert!(
+        (main_filename_x - 510.0).abs() < 0.01,
+        "main.rs must land on GNU's integer-pixel tab stop; got {main_filename_x}"
+    );
+    assert!(
+        (main_test_filename_x - 510.0).abs() < 0.01,
+        "main_test.rs must land on GNU's integer-pixel tab stop; got {main_test_filename_x}"
+    );
+    assert_eq!(main.width_cols, main_test.width_cols);
 }
 
 #[test]
