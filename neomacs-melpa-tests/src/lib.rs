@@ -2738,8 +2738,10 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
 /// parity corpora.
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 
-/// The exact Shrink Path package selected as Doom Modeline's path-rendering
-/// dependency. MELPA built this archive from upstream commit
+/// The exact Shrink Path package selected for practical eshell/modeline
+/// rendering, file labels, real filesystem expansion, ambiguity, and mixed
+/// project-relative path parity, as well as Doom Modeline's path-rendering
+/// dependency. MELPA assigned this version to upstream commit
 /// `c14882c8599aec79a6e8ef2d06454254bb3e1e41`.
 pub const SHRINK_PATH_MELPA_PIN: (&str, &str) = ("shrink-path", "20190208.1335");
 
