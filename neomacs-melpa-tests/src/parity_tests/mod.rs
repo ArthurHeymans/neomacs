@@ -372,6 +372,7 @@ mod helm_mode_manager;
 mod helm_projectile;
 mod helm_swoop;
 mod helm_themes;
+mod helm_xref;
 mod highlight;
 mod highlight_indentation;
 mod highlight_numbers;

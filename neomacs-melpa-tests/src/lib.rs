@@ -2589,6 +2589,12 @@ pub const HELM_SWOOP_MELPA_PIN: (&str, &str) = ("helm-swoop", "20240104.2356");
 /// `4dae1d072cc2650749846cfcab1f60686471cc45`.
 pub const HELM_PROJECTILE_MELPA_PIN: (&str, &str) = ("helm-projectile", "20260724.27");
 
+/// The exact helm-xref package selected for practical Xref definition,
+/// reference, candidate-formatting, preview, window-action, history, and
+/// failure parity. MELPA built this archive from upstream commit
+/// `ea0e4ed8a9baf236e4085cbc7178241f109a53fa`.
+pub const HELM_XREF_MELPA_PIN: (&str, &str) = ("helm-xref", "20211017.1334");
+
 /// The exact Hl-Todo package selected for practical source annotation,
 /// navigation, insertion, fontification, Flymake, and global-mode parity.
 /// This MELPA version corresponds to upstream commit

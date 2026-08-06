@@ -203,7 +203,7 @@ rank	package	downloads	status
 202	treepy	559118	covered
 203	lua-mode	556909	covered
 204	flycheck-package	550828	covered
-205	helm-xref	543173	todo
+205	helm-xref	543173	covered
 206	closql	540858	todo
 207	page-break-lines	540048	todo
 208	flycheck-pos-tip	539964	todo
