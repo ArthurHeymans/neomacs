@@ -115,16 +115,25 @@ pub(crate) const LFACE_ATTRS: [LFaceAttr; LFACE_VECTOR_SIZE - 1] = [
 // Color
 // ---------------------------------------------------------------------------
 
-/// RGBA color in sRGB space (0-255 per channel).
+/// A REALIZED face color: RGBA in sRGB space (0-255 per channel), the
+/// render-layer output of realizing a [`SpecifiedColor`] under a stated
+/// frame-class policy (`FaceColorResolver::realize` in xfaces) — GNU's
+/// realized-face pixel, as opposed to the lface-vector spec.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Color {
+pub struct RealizedColor {
     pub r: u8,
     pub g: u8,
     pub b: u8,
     pub a: u8,
 }
 
-impl Color {
+/// Compatibility alias for [`RealizedColor`]: the pre-split name used
+/// throughout the face-table path and external crates. New code on the
+/// render side should say `RealizedColor`; spec-side code should carry
+/// [`SpecifiedColor`] instead.
+pub type Color = RealizedColor;
+
+impl RealizedColor {
     pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b, a: 255 }
     }
@@ -246,12 +255,6 @@ impl SpecifiedColor {
         }
     }
 }
-
-/// A REALIZED color: concrete sRGB pixels, the render-layer output of
-/// realizing a [`SpecifiedColor`] under a stated frame-class policy.
-/// Currently the same representation as [`Color`]; the alias marks which
-/// side of the spec/realized boundary a value lives on.
-pub type RealizedColor = Color;
 
 // ---------------------------------------------------------------------------
 // Underline style
