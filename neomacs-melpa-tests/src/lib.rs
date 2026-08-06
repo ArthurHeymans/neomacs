@@ -2274,6 +2274,12 @@ pub const ORG_DOWNLOAD_MELPA_PIN: (&str, &str) = ("org-download", "20241118.1846
 /// commit `3f5bcfb80d61556d35fc29e5ddb09750df962cc6`.
 pub const ORG_POMODORO_MELPA_PIN: (&str, &str) = ("org-pomodoro", "20220318.1618");
 
+/// The exact Orgit package selected for practical Org links to Magit status,
+/// log, revision, and blob buffers, repository-id lookup, web export, and
+/// broken-link parity. MELPA built version 2.2.0 from upstream commit
+/// `47b3568fce775c756fb5bb3545c2edd48b8e2fc1`.
+pub const ORGIT_MELPA_PIN: (&str, &str) = ("orgit", "20260717.1740");
+
 /// The exact Overseer package selected for practical project discovery,
 /// automatic test-file activation, ERT selection, command dispatch, and real
 /// compilation-process parity. MELPA built this archive from upstream commit
