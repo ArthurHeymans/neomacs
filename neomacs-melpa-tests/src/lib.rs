@@ -2280,6 +2280,14 @@ pub const ORG_POMODORO_MELPA_PIN: (&str, &str) = ("org-pomodoro", "20220318.1618
 /// `47b3568fce775c756fb5bb3545c2edd48b8e2fc1`.
 pub const ORGIT_MELPA_PIN: (&str, &str) = ("orgit", "20260717.1740");
 
+/// The exact Marginalia package selected for practical completion-annotation
+/// parity: symbol/function/variable/command class and documentation fields,
+/// character and environment-variable annotators, field truncation and
+/// formatting, censored variable values, prompt/command classifiers, and the
+/// global minor-mode advice lifecycle. MELPA built version 2.11 from upstream
+/// commit `10b170ad8006bad535599e5b3e007e643e34345a`.
+pub const MARGINALIA_MELPA_PIN: (&str, &str) = ("marginalia", "20260724.810");
+
 /// The exact Overseer package selected for practical project discovery,
 /// automatic test-file activation, ERT selection, command dispatch, and real
 /// compilation-process parity. MELPA built this archive from upstream commit

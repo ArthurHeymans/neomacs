@@ -422,6 +422,7 @@ mod magit;
 mod magit_popup;
 mod magit_section;
 mod makey;
+mod marginalia;
 mod markdown_mode;
 mod markdown_toc;
 mod math_symbol_lists;
