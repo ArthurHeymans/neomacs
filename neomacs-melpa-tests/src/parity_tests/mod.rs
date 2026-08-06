@@ -272,6 +272,7 @@ mod bui;
 mod casual;
 mod ccc;
 mod cdb;
+mod centered_cursor_mode;
 mod cfrs;
 mod chinese_word_at_point;
 mod cider;

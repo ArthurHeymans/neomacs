@@ -2440,6 +2440,12 @@ pub const CCC_MELPA_PIN: (&str, &str) = ("ccc", "20260322.1316");
 /// binary payload, enumeration, and cached-reader lifecycle parity corpus.
 pub const CDB_MELPA_PIN: (&str, &str) = ("cdb", "20230318.2152");
 
+/// The exact Centered Cursor Mode package selected for practical local and
+/// global mode lifecycle, real-window recentering, ignored-command, EOF,
+/// viewport adjustment, paging, and multi-window parity. MELPA built this
+/// version from upstream commit `67ef719e685407dbc455c7430765e4e685fd95a9`.
+pub const CENTERED_CURSOR_MODE_MELPA_PIN: (&str, &str) = ("centered-cursor-mode", "20230914.1358");
+
 /// The exact Chinese Word at Point package selected by the practical external
 /// segmentation, mixed-language extraction, and bounds-driven editing corpus.
 pub const CHINESE_WORD_AT_POINT_MELPA_PIN: (&str, &str) = ("chinese-word-at-point", "20170811.941");
