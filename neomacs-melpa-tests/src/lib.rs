@@ -1294,6 +1294,12 @@ pub const FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260728.931");
 /// c1bf54b7eca8951a38ce9f6ae12e07a011f03eb5.
 pub const FLYCHECK_DMD_DUB_MELPA_PIN: (&str, &str) = ("flycheck-dmd-dub", "20250304.1432");
 
+/// The exact flycheck-package package selected by the practical package
+/// detection, checker-chain, diagnostic, navigation, recheck, and multi-file
+/// parity corpus. MELPA built this archive from upstream commit
+/// `ecd03f83790611888d693c684d719e033f69cb40`.
+pub const FLYCHECK_PACKAGE_MELPA_PIN: (&str, &str) = ("flycheck-package", "20210509.2325");
+
 /// The exact Geiser package selected by the practical Scheme editing,
 /// implementation, completion, evaluation-protocol, and source-navigation
 /// parity corpus. MELPA built this archive from upstream commit
