@@ -14302,6 +14302,25 @@ fn layout_main_text_rows(
     f32,
     f32,
 ) {
+    let (eval, buf_id, _frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |_, _| {});
+    (eval, buf_id, rows, char_width, char_height)
+}
+
+/// [`layout_main_text_rows`] with a setup hook (text properties, variables)
+/// run between buffer fill and layout, also returning the frame id so shadow
+/// helpers can reconstruct the engine's face-resolver inputs.
+fn layout_main_text_rows_with(
+    text: &str,
+    setup: impl FnOnce(&mut Context, BufferId),
+) -> (
+    Context,
+    BufferId,
+    neovm_core::window::FrameId,
+    Vec<neomacs_display_protocol::glyph_matrix::MatrixRow>,
+    f32,
+    f32,
+) {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -14312,6 +14331,7 @@ fn layout_main_text_rows(
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(text);
     }
+    setup(&mut eval, buf_id);
     let frame_id =
         eval.frame_manager_mut()
             .create_frame("layout-ascii-route-shadow", 640, 160, buf_id);
@@ -14342,7 +14362,7 @@ fn layout_main_text_rows(
         .collect();
     let frame = eval.frame_manager().get(frame_id).expect("frame");
     let (char_width, char_height) = (frame.char_width, frame.char_height);
-    (eval, buf_id, rows, char_width, char_height)
+    (eval, buf_id, frame_id, rows, char_width, char_height)
 }
 
 /// Glyph-for-glyph shadow assertion: the item-renderer row must equal the
@@ -14578,6 +14598,360 @@ fn ascii_route_classifies_exactly_filling_line_to_buffer_pipeline() {
             point
         ),
         crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+}
+
+/// The SAME face resolver the engine constructs for `frame_id`
+/// (`layout_frame_rust`), so shadow face realization content-addresses to
+/// the engine's stable ids.
+fn engine_face_resolver_for_frame(
+    eval: &Context,
+    frame_id: neovm_core::window::FrameId,
+) -> FaceResolver {
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let bootstrap =
+        crate::neovm_bridge::frame_params_from_neovm(frame, eval.face_table(), eval.obarray());
+    let window_system = frame
+        .effective_window_system()
+        .and_then(|v| v.as_symbol_name().map(|s| s.to_string()));
+    FaceResolver::new(
+        eval.face_table(),
+        0x00FF_FFFF,
+        bootstrap.background,
+        frame.font_pixel_size,
+        window_system,
+    )
+}
+
+/// Shadow-prove a face-segmented classified row: plan its face segments with
+/// the routed producer (same resolver seam as the buffer pipeline
+/// checkpoint), assert the realized per-segment stable ids equal the main
+/// row's glyph ids, render the segments + newline row break through the
+/// unified item renderer, and require FULL `Vec<Glyph>` equality with the
+/// buffer-pipeline row (including the appended newline space and its face).
+/// Returns the planned segments for scenario-specific assertions.
+fn assert_segmented_ascii_shadow_row(
+    eval: &Context,
+    frame_id: neovm_core::window::FrameId,
+    buf_id: BufferId,
+    text: &str,
+    line_start: usize,
+    main_row: &neomacs_display_protocol::glyph_matrix::MatrixRow,
+    char_width: f32,
+    char_height: f32,
+) -> Vec<crate::buffer_source::row_route::RoutedRowFaceSegment> {
+    use crate::buffer_source::row_route as rr;
+    use crate::neovm_bridge::LayoutBufferView as _;
+
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let point = text.chars().count() as i64;
+    let plan = rr::plan_ascii_row(
+        &snapshot,
+        rr::RowRouteRowStart {
+            text: text.as_bytes(),
+            byte_idx: line_start,
+            charpos: line_start as i64,
+            text_start_byte: 0,
+        },
+        rr::RowRouteFit {
+            start_x_px: 0.0,
+            char_width_px: char_width,
+            right_edge_px: 640.0,
+        },
+        rr::RowRouteWindowPolicy {
+            point_charpos: point,
+            hscroll_active: false,
+            selective_display: 0,
+            word_wrap: false,
+            show_trailing_whitespace: false,
+        },
+    )
+    .expect("scenario row must classify for the item route");
+
+    let resolver = engine_face_resolver_for_frame(eval, frame_id);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(
+        neomacs_display_protocol::face::BasicFaceId::SENTINEL,
+    );
+    // Mirror the engine's stable-id minting order: the frame pass resolves
+    // the checkpoint face at the window start and at every property-change
+    // position, in walk order, minting content-addressed ids as it goes.
+    let line_end = line_start + plan.line_len();
+    let mut warm_pos = 0usize;
+    while warm_pos <= line_end {
+        rr::resolve_routed_position_face(
+            &snapshot,
+            &resolver,
+            &mut face_ids,
+            CharPos0::new(warm_pos),
+        );
+        let byte = snapshot.layout_char_pos_to_emacs_byte_pos(CharPos0::new(warm_pos));
+        let Some(change) = snapshot.layout_next_text_prop_change_after_emacs_byte_pos(byte) else {
+            break;
+        };
+        let next = snapshot.layout_emacs_byte_pos_to_char_pos(change).get();
+        if next <= warm_pos {
+            break;
+        }
+        warm_pos = next;
+    }
+
+    let start = CharPos0::new(line_start);
+    let segments = rr::plan_row_face_segments(&snapshot, &resolver, &mut face_ids, start, &plan);
+
+    // Diagnostic gate before full glyph equality: the producer's realized
+    // per-segment ids must equal the buffer pipeline's glyph face ids.
+    let main_glyphs = &main_row.glyphs[1];
+    let mut expected_ids = Vec::new();
+    for segment in &segments {
+        for _ in segment.start.get()..segment.end.get() {
+            expected_ids.push(segment.face_id);
+        }
+    }
+    let main_ids: Vec<_> = main_glyphs
+        .iter()
+        .take(expected_ids.len())
+        .map(|glyph| glyph.face_id)
+        .collect();
+    assert_eq!(
+        main_ids, expected_ids,
+        "routed segment face ids must equal the buffer-pipeline glyph face ids"
+    );
+
+    // The newline's face (a span covering the newline rides onto the
+    // appended newline space through the line-end plan).
+    let (break_face_id, _) = rr::resolve_routed_position_face(
+        &snapshot,
+        &resolver,
+        &mut face_ids,
+        CharPos0::new(line_end),
+    );
+
+    let item_segments: Vec<_> = segments
+        .iter()
+        .map(|segment| rr::AsciiRowItemSegment {
+            start: segment.start,
+            end: segment.end,
+            face: RenderFaceRef::FaceId(segment.face_id),
+        })
+        .collect();
+    let mut source = rr::BufferAsciiItemSource::with_row_break_segments(
+        buf_id,
+        &snapshot,
+        &item_segments,
+        RenderFaceRef::FaceId(break_face_id),
+    );
+    let base_resolved = resolver.resolve_buffer_default_face(&snapshot);
+    let base_face_id =
+        crate::display_row::face_state::stable_face_id_for_resolved(&mut face_ids, &base_resolved);
+    let mut font_metrics = None;
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
+    let shadow_row = DisplayRowSourceFragmentFrame::new(
+        DisplayRowGeometry::new(
+            0.0,
+            640.0,
+            char_height,
+            char_width,
+            char_height,
+            DisplayTabPolicy::every(8),
+        ),
+        GlyphRowRole::Text,
+        base_face_id,
+        resolver.default_face(),
+    )
+    .render_request(DisplayRowRenderBounds::new(
+        DisplayRowPosition::new(0.0, 0),
+        DisplayRowMaxX::Bounded(640.0),
+    ))
+    .render(&mut renderer, &mut source, &resolver, &mut face_ids)
+    .expect("segmented ascii item source row")
+    .into_row();
+
+    assert_eq!(
+        shadow_row.glyphs[1], main_row.glyphs[1],
+        "item-renderer segmented row must equal the buffer-pipeline row glyph-for-glyph"
+    );
+    segments
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_font_locked_multi_span_row() {
+    // A font-lock style line with three distinct face spans plus plain
+    // stretches between them: "def foo (bar)".
+    let text = "def foo (bar)\nrest\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(
+                "(progn (put-text-property 1 4 'face 'bold) \
+                        (put-text-property 5 8 'face 'italic) \
+                        (put-text-property 10 13 'face 'underline))",
+            )
+            .expect("font-lock style faces");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(
+        segments.len(),
+        6,
+        "bold / plain / italic / plain / underline / plain"
+    );
+    let distinct: std::collections::BTreeSet<_> = segments
+        .iter()
+        .map(|segment| segment.face_id.get())
+        .collect();
+    assert_eq!(distinct.len(), 4, "three span faces plus the base face");
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_font_lock_face_property_row() {
+    // The `font-lock-face` alias must feed the same segmentation and face
+    // realization as `face`.
+    let text = "keyword rest\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(put-text-property 1 8 'font-lock-face 'bold)")
+                .expect("font-lock-face");
+        });
+    assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_mid_line_face_span_row() {
+    let text = "hello world\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(put-text-property 3 8 'face 'bold)")
+                .expect("mid-line face span");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 3);
+    assert_eq!(segments[0].face_id, segments[2].face_id);
+    assert_ne!(segments[0].face_id, segments[1].face_id);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_face_span_ending_at_newline() {
+    // The span covers "world" and ends EXACTLY at the newline: the appended
+    // newline space stays on the base face.
+    let text = "hello world\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(put-text-property 7 12 'face 'bold)")
+                .expect("span to newline");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 2);
+    let appended = rows[0].glyphs[1].last().expect("appended newline space");
+    assert_eq!(
+        appended.face_id, segments[0].face_id,
+        "a span ending at the newline leaves the newline space on the base face"
+    );
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_face_span_covering_newline() {
+    // The span covers "cd" AND the newline: its face must ride the appended
+    // newline space through the line-end plan (buffer pipeline
+    // row_break_face_id behavior).
+    let text = "abcd\nrest\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(put-text-property 3 6 'face 'bold)")
+                .expect("span covering newline");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 2);
+    let appended = rows[0].glyphs[1].last().expect("appended newline space");
+    assert_eq!(
+        appended.face_id, segments[1].face_id,
+        "a span covering the newline rides its face onto the appended newline space"
+    );
+    assert_ne!(segments[0].face_id, segments[1].face_id);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_adjacent_same_face_spans() {
+    // Two adjacent spans with the SAME face but a property boundary between
+    // them (fontified flips): the producer emits two items with one face id
+    // and the glyph output must still be identical.
+    let text = "aabb\nrest\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(
+                "(progn (put-text-property 1 5 'face 'bold) \
+                        (put-text-property 3 5 'fontified t))",
+            )
+            .expect("adjacent same-face spans");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(
+        segments.len(),
+        2,
+        "the fontified boundary must split the run"
+    );
+    assert_eq!(
+        segments[0].face_id, segments[1].face_id,
+        "adjacent same-face segments content-address to one id"
     );
 }
 
