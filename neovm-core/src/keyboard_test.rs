@@ -1067,12 +1067,53 @@ fn keysym_unicode_scalar_maps_to_character_event() {
 }
 
 #[test]
-fn keysym_ctrl_shift_x_drops_shift_modifier() {
+fn keysym_ctrl_shift_letter_preserves_shift_for_command_chord() {
     crate::test_utils::init_test_tracing();
-    let event = keysym_to_key_event(0x18, RENDER_CTRL_MASK | RENDER_SHIFT_MASK).unwrap();
-    assert_eq!(event.key, Key::Char('x'));
+    let event = keysym_to_key_event('f' as u32, RENDER_CTRL_MASK | RENDER_SHIFT_MASK).unwrap();
+    assert_eq!(event.key, Key::Char('f'));
+    assert!(event.modifiers.ctrl);
+    assert!(event.modifiers.shift);
+    assert_eq!(event.to_description(), "C-S-f");
+    assert_eq!(event.to_emacs_event_value(), Value::fixnum((1 << 25) | 6));
+}
+
+#[test]
+fn keysym_ctrl_shift_control_text_preserves_shift_for_command_chord() {
+    crate::test_utils::init_test_tracing();
+    let event = keysym_to_key_event(0x06, RENDER_CTRL_MASK | RENDER_SHIFT_MASK).unwrap();
+    assert_eq!(event.key, Key::Char('f'));
+    assert!(event.modifiers.ctrl);
+    assert!(event.modifiers.shift);
+    assert_eq!(event.to_description(), "C-S-f");
+}
+
+#[test]
+fn keysym_meta_shift_letter_consumes_shift_into_uppercase() {
+    crate::test_utils::init_test_tracing();
+    let event = keysym_to_key_event('f' as u32, RENDER_META_MASK | RENDER_SHIFT_MASK).unwrap();
+    assert_eq!(event.key, Key::Char('F'));
+    assert!(event.modifiers.meta);
+    assert!(!event.modifiers.shift);
+    assert_eq!(event.to_description(), "M-F");
+}
+
+#[test]
+fn keysym_ctrl_uppercase_without_shift_treats_caps_lock_as_unshifted() {
+    crate::test_utils::init_test_tracing();
+    let event = keysym_to_key_event('F' as u32, RENDER_CTRL_MASK).unwrap();
+    assert_eq!(event.key, Key::Char('f'));
     assert!(event.modifiers.ctrl);
     assert!(!event.modifiers.shift);
+    assert_eq!(event.to_description(), "C-f");
+}
+
+#[test]
+fn keysym_shift_space_preserves_gnu_distinction() {
+    crate::test_utils::init_test_tracing();
+    let event = keysym_to_key_event(' ' as u32, RENDER_SHIFT_MASK).unwrap();
+    assert_eq!(event.key, Key::Char(' '));
+    assert!(event.modifiers.shift);
+    assert_eq!(event.to_description(), "S-SPC");
 }
 
 #[test]

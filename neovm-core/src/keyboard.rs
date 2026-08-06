@@ -807,6 +807,115 @@ pub const RENDER_CTRL_MASK: u32 = 1 << 1;
 pub const RENDER_META_MASK: u32 = 1 << 2;
 pub const RENDER_SUPER_MASK: u32 = 1 << 3;
 
+/// Meaning of a character-shaped frontend event before it enters Emacs's
+/// command loop.
+///
+/// A produced text character has already consumed Shift (for example,
+/// `Shift+a` produced `A`).  A command chord still needs GNU's
+/// `make_lispy_event` case/modifier cooking.  Control chords are distinct
+/// because `make_ctrl_char` must retain Shift for letters: `C-S-f` and `C-f`
+/// are different Emacs events even though both have control code 6.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FrontendCharacterInput {
+    Text {
+        produced: char,
+        shift_pressed: bool,
+    },
+    NonControlChord {
+        produced: char,
+        modifiers: NonControlChordModifiers,
+    },
+    ControlChord {
+        produced: char,
+        modifiers: ControlChordModifiers,
+    },
+}
+
+/// Modifier state whose construction proves that Control is not active but
+/// another command modifier is.  Keeping this separate from a control chord
+/// makes Shift cooking exhaustive at compile time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct NonControlChordModifiers(Modifiers);
+
+/// Modifier state whose construction proves that Control is active.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ControlChordModifiers(Modifiers);
+
+impl FrontendCharacterInput {
+    fn classify(produced: char, modifiers: Modifiers) -> Self {
+        if modifiers.ctrl {
+            Self::ControlChord {
+                produced,
+                modifiers: ControlChordModifiers(modifiers),
+            }
+        } else if modifiers.meta || modifiers.super_ || modifiers.hyper {
+            Self::NonControlChord {
+                produced,
+                modifiers: NonControlChordModifiers(modifiers),
+            }
+        } else {
+            Self::Text {
+                produced,
+                shift_pressed: modifiers.shift,
+            }
+        }
+    }
+
+    fn into_key_event(self) -> KeyEvent {
+        match self {
+            Self::Text {
+                produced,
+                shift_pressed,
+            } => KeyEvent::char_with_mods(
+                produced,
+                Modifiers {
+                    // GNU distinguishes S-SPC even though ordinary shifted
+                    // text consumes Shift into the produced character.
+                    shift: shift_pressed && produced == ' ',
+                    ..Modifiers::none()
+                },
+            ),
+            Self::NonControlChord {
+                produced,
+                modifiers: NonControlChordModifiers(mut modifiers),
+            } => {
+                let produced = normalize_command_character_case(produced, modifiers.shift);
+                // For non-control chords the character's case/punctuation
+                // carries Shift.  Space is GNU's explicit exception.
+                modifiers.shift = modifiers.shift && produced == ' ';
+                KeyEvent::char_with_mods(produced, modifiers)
+            }
+            Self::ControlChord {
+                produced,
+                modifiers: ControlChordModifiers(mut modifiers),
+            } => {
+                let mut produced = normalize_command_character_case(produced, modifiers.shift);
+                // GNU make_ctrl_char converts an uppercase ASCII letter to
+                // the same control code as its lowercase form and records
+                // the lost case information in CHAR_SHIFT.
+                let shifted_control_letter = produced.is_ascii_uppercase();
+                if shifted_control_letter {
+                    produced = produced.to_ascii_lowercase();
+                }
+                modifiers.shift = modifiers.shift && (shifted_control_letter || produced == ' ');
+                KeyEvent::char_with_mods(produced, modifiers)
+            }
+        }
+    }
+}
+
+/// Apply GNU's Caps-Lock-safe command-chord case rule from
+/// `src/keyboard.c:make_lispy_event`.
+fn normalize_command_character_case(character: char, shift_pressed: bool) -> char {
+    if character.is_ascii_uppercase() && !shift_pressed {
+        character.to_ascii_lowercase()
+    } else if character.is_ascii_lowercase() && shift_pressed {
+        character.to_ascii_uppercase()
+    } else {
+        character
+    }
+}
+
 /// Convert frontend render/TTY modifier bits into the core modifier model.
 pub fn render_modifiers_to_modifiers(bits: u32) -> Modifiers {
     Modifiers {
@@ -842,7 +951,7 @@ pub fn render_key_transport_to_input_event(
 /// Returns `None` for keysyms that should be ignored (modifier-only keys,
 /// unknown keysyms, etc.).
 pub fn keysym_to_key_event(keysym: u32, modifiers: u32) -> Option<KeyEvent> {
-    let mods = render_modifiers_to_modifiers(modifiers);
+    let mut mods = render_modifiers_to_modifiers(modifiers);
 
     let key = match keysym {
         // Raw TTY ESC is GNU's `meta-prefix-char` character, not the named
@@ -856,14 +965,8 @@ pub fn keysym_to_key_event(keysym: u32, modifiers: u32) -> Option<KeyEvent> {
         // back to the corresponding letter and force the ctrl modifier.
         0x01..=0x1A => {
             let ch = (keysym + 0x60) as u8 as char; // 0x18 → 'x'
-            return Some(KeyEvent {
-                key: Key::Char(ch),
-                modifiers: Modifiers {
-                    ctrl: true,
-                    shift: false,
-                    ..mods
-                },
-            });
+            mods.ctrl = true;
+            Key::Char(ch)
         }
         // Printable ASCII
         0x20..=0x7E => Key::Char(keysym as u8 as char),
@@ -898,15 +1001,10 @@ pub fn keysym_to_key_event(keysym: u32, modifiers: u32) -> Option<KeyEvent> {
         _ => return None,
     };
 
-    let modifiers = match key {
-        Key::Char(_) => Modifiers {
-            shift: false,
-            ..mods
-        },
-        Key::Named(_) => mods,
-    };
-
-    Some(KeyEvent { key, modifiers })
+    Some(match key {
+        Key::Char(character) => FrontendCharacterInput::classify(character, mods).into_key_event(),
+        Key::Named(named) => KeyEvent::named_with_mods(named, mods),
+    })
 }
 
 // ---------------------------------------------------------------------------
