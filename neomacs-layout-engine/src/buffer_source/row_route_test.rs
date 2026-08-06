@@ -209,6 +209,52 @@ fn classifier_rejects_tab_line_exactly_filling_the_row() {
 }
 
 #[test]
+fn classifier_fit_advances_a_full_stop_for_tab_exactly_on_a_stop() {
+    let mut eval = Context::new();
+    // GNU next_tab_x (xdisp.c gui_produce_glyphs): the +1 in
+    // ((1 + x + tab_width - 1) / tab_width) * tab_width forces a tab landing
+    // EXACTLY on a stop to advance a FULL stop. "abcdefgh\t": the tab starts
+    // exactly on the col-8 stop, so the line ends at col 16 (128px at 8px
+    // cells) — a 16-cell row is exact fill (refused), 17 cells route.
+    let buf_id = buffer_with_text(&mut eval, "abcdefgh\t\n");
+    let text = b"abcdefgh\t\n";
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text, 0, 0),
+            fit_to(128.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "a tab exactly on a stop must expand a full stop (to col 16), exact fill refuses"
+    );
+    // If the +1 rule were broken (tab advancing zero or one cell), the line
+    // would end well inside 12 cells and wrongly route.
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text, 0, 0),
+            fit_to(96.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "the full-stop expansion crosses a 12-cell row: refuse"
+    );
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text, 0, 0),
+            fit_to(136.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::ItemRenderer
+    );
+}
+
+#[test]
 fn classifier_rejects_wide_char_exact_fill_and_straddle() {
     let mut eval = Context::new();
     // "abc" + CJK = 5 cols = 40px at 8px cells.
