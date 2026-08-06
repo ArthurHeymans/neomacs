@@ -14149,6 +14149,97 @@ fn buffer_text_source_shadow_matches_main_buffer_tab_row() {
     assert_eq!(main_tab.pixel_width, shadow_tab.pixel_width);
 }
 
+/// Widens the buffer-source A/B net to a row class the acquisition migration
+/// touches: trailing whitespace followed by the appended GNU newline space.
+/// The shadow producer must agree with the main pipeline on the text glyphs
+/// (including their buffer positions), and the appended newline space — a
+/// positionless glyph the trailing-whitespace highlight must skip — must sit
+/// AFTER the trailing spaces on the main row only.
+#[test]
+fn buffer_text_source_shadow_matches_main_buffer_trailing_whitespace_row() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("ab  \n");
+    }
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-buffer-source-trailing-ws-shadow",
+        640,
+        160,
+        buf_id,
+    );
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let main_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("main buffer text row");
+
+    // The full pipeline must have appended the GNU newline space (a
+    // positionless glyph) after the trailing spaces.
+    let raw_main = &main_row.glyphs[1];
+    let last = raw_main.last().expect("main row glyphs");
+    assert!(
+        matches!(last.glyph_type, GlyphType::Char { ch: ' ' })
+            && last.charpos == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS,
+        "expected the appended positionless newline space last, got {last:?}"
+    );
+
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let line_end = CharPos0::new("ab  ".chars().count());
+    let shadow_row =
+        render_buffer_text_source_shadow_row(buf_id, &snapshot, line_end, 640.0, 16.0, 12.0, 8.0);
+
+    let main_glyphs = strip_appended_newline_space(raw_main);
+    let shadow_glyphs = &shadow_row.glyphs[1];
+    assert_eq!(
+        glyphs_logical_text(&main_glyphs),
+        glyphs_logical_text(shadow_glyphs)
+    );
+    // The trailing spaces are ordinary buffer glyphs on both paths: same
+    // glyph types and same buffer positions, all positioned (the highlight
+    // seam distinguishes them from appended glyphs by exactly this).
+    assert_eq!(
+        main_glyphs
+            .iter()
+            .map(|glyph| (glyph.glyph_type.clone(), glyph.charpos))
+            .collect::<Vec<_>>(),
+        shadow_glyphs
+            .iter()
+            .map(|glyph| (glyph.glyph_type.clone(), glyph.charpos))
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        main_glyphs.iter().all(|glyph| glyph.charpos
+            != neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS),
+        "text glyphs of the trailing-whitespace row must all carry buffer positions"
+    );
+}
+
 #[test]
 fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
     let mut eval = Context::new();
