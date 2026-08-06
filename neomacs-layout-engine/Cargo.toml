@@ -13,6 +13,7 @@ neo-term = ["neomacs-display-protocol/neo-term"]
 freetype-bundled = ["freetype-rs/bundled"]
 
 [dependencies]
+memchr.workspace = true
 rustc-hash.workspace = true
 neomacs-display-protocol = { workspace = true }
 neovm-core.workspace = true

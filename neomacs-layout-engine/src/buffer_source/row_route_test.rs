@@ -1864,15 +1864,17 @@ fn classifier_refuses_prefix_when_first_char_overflows() {
 }
 
 #[test]
-fn classifier_prefix_point_refusal_ends_at_handoff() {
+fn classifier_prefix_point_refusal_covers_the_whole_cursor_line() {
     let mut eval = Context::new();
     let text = "abcdefgh\n";
     let buf_id = buffer_with_text(&mut eval, text);
-    // Point anywhere in the routed coverage [0, 5] (including the handoff
-    // char itself, conservatively) refuses; point in the UNROUTED remainder
-    // routes — the pipeline resumes there and captures the cursor exactly as
-    // with the flag off.
-    for point in 0..=5 {
+    // Point ANYWHERE on the line (through the newline) refuses, including
+    // the unrouted remainder of an over-wide line: the cursor row is the row
+    // the steady-state edit path re-lays every keystroke, so its refusal is
+    // decided by the cheap pre-gate (memchr + arithmetic) BEFORE any pen
+    // walk — the phase-3 probe-cost fix. Refusing the conservative superset
+    // is always safe; the buffer pipeline owns cursor rows.
+    for point in 0..=8 {
         let policy = RowRouteWindowPolicy {
             point_charpos: point,
             ..plain_policy()
@@ -1886,26 +1888,25 @@ fn classifier_prefix_point_refusal_ends_at_handoff() {
                 policy
             ),
             RowAcquisitionRoute::BufferPipeline,
-            "point {point} inside the routed prefix"
+            "point {point} on the cursor line"
         );
     }
-    for point in 6..=8 {
-        let policy = RowRouteWindowPolicy {
-            point_charpos: point,
-            ..plain_policy()
-        };
-        assert_eq!(
-            classify_in_buffer(
-                &eval,
-                buf_id,
-                row_start(text.as_bytes(), 0, 0),
-                fit_to(40.0),
-                policy
-            ),
-            RowAcquisitionRoute::ItemRenderer,
-            "point {point} beyond the handoff"
-        );
-    }
+    // Point past the line's newline routes: the cursor is on a later row.
+    let policy = RowRouteWindowPolicy {
+        point_charpos: 9,
+        ..plain_policy()
+    };
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(40.0),
+            policy
+        ),
+        RowAcquisitionRoute::ItemRenderer,
+        "point on the next line"
+    );
 }
 
 #[test]

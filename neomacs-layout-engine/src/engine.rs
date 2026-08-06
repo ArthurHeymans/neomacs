@@ -1747,6 +1747,10 @@ impl LayoutEngine {
                 );
             }
         }
+        // Row-route coverage telemetry (NEOMACS_ROW_ROUTE_STATS_FILE): one
+        // CUMULATIVE counters line per accepted frame; aggregation takes the
+        // last line per pid.
+        crate::buffer_source::row_route::route_stats_append_report();
         self.retained_window_matrices = next_retained_window_matrices;
         self.frame_face_arenas.insert(frame_id, sealed_face_arena);
         for buffer_id in acked_buffer_ids {

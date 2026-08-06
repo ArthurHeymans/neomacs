@@ -110,12 +110,189 @@ pub(crate) struct RowRouteWindowPolicy {
     pub(crate) wrap_mode: LineWrapMode,
 }
 
-impl RowRouteWindowPolicy {
-    fn disqualifies(&self) -> bool {
-        self.hscroll_active
-            || self.selective_display != 0
-            || self.word_wrap
-            || self.show_trailing_whitespace
+/// Why a candidate row stayed on the buffer pipeline. Every refusal point in
+/// the classifier and the render probe maps to exactly one variant; the
+/// route-coverage telemetry ([`route_stats_report_line`]) histograms them so
+/// real workloads can show WHICH refusal dominates (the input that ranks the
+/// next migration increment).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RouteRefusal {
+    /// The walk has pending render items (mid display-element session).
+    PendingItems,
+    /// Window policy: horizontal scroll active.
+    PolicyHscroll,
+    /// Window policy: selective display active.
+    PolicySelectiveDisplay,
+    /// Window policy: word wrap enabled.
+    PolicyWordWrap,
+    /// Window policy: trailing-whitespace highlight enabled.
+    PolicyTrailingWhitespace,
+    /// The walk is mid-line (resuming after a wrap or display element) —
+    /// only whole rows starting at a buffer line start are candidates.
+    MidLineStart,
+    /// The line is empty (newline immediately at the row start).
+    ScanEmptyLine,
+    /// The line's FIRST char already crosses the right edge (no routable
+    /// fitting prefix exists).
+    ScanNoFitFirstChar,
+    /// The line exactly fills the row (the line-end/continuation edge stays
+    /// on the buffer pipeline).
+    ScanExactFill,
+    /// A char outside the routable ladder (control/glyphless/shaped-script/
+    /// nobreak/odd-width chars, malformed UTF-8).
+    ScanChar,
+    /// A composing char outside the routable composite class (joiners,
+    /// extenders on wide/tab/row-start tails, shaped runs).
+    ScanCompose,
+    /// End of buffer reached without a newline.
+    ScanEob,
+    /// Point sits inside the routed coverage (cursor capture stays on the
+    /// buffer pipeline).
+    PointInRow,
+    /// An intersecting overlay carries a property outside the face-only
+    /// allow-list (or its plist/boundaries are unmappable).
+    Overlay,
+    /// The buffer has an active display table.
+    DisplayTable,
+    /// Invisible text outside the plain-elision class (ellipsis,
+    /// newline-spanning, row-start, non-advancing).
+    Elision,
+    /// An overflow-prefix plan intersected an elided span.
+    OverflowElision,
+    /// A hazard text property (display/mouse-face/line-height, or a
+    /// replacing composition) in range.
+    HazardProp,
+    /// A property-change boundary failed to convert to a row char offset.
+    Boundary,
+    /// A visible composed extender sits on a face-segment or elision seam.
+    ComposedSeam,
+    /// Probe: a multi-face row segment carries a box face.
+    ProbeBoxFace,
+    /// Probe: the per-run face chain diverges from the checkpoint chain.
+    ProbeFaceDiverges,
+    /// Probe: natural measurement refused or the measured end missed the
+    /// classifier's fit.
+    ProbeMeasure,
+}
+
+impl RouteRefusal {
+    const COUNT: usize = 23;
+
+    const ALL: [RouteRefusal; Self::COUNT] = [
+        RouteRefusal::PendingItems,
+        RouteRefusal::PolicyHscroll,
+        RouteRefusal::PolicySelectiveDisplay,
+        RouteRefusal::PolicyWordWrap,
+        RouteRefusal::PolicyTrailingWhitespace,
+        RouteRefusal::MidLineStart,
+        RouteRefusal::ScanEmptyLine,
+        RouteRefusal::ScanNoFitFirstChar,
+        RouteRefusal::ScanExactFill,
+        RouteRefusal::ScanChar,
+        RouteRefusal::ScanCompose,
+        RouteRefusal::ScanEob,
+        RouteRefusal::PointInRow,
+        RouteRefusal::Overlay,
+        RouteRefusal::DisplayTable,
+        RouteRefusal::Elision,
+        RouteRefusal::OverflowElision,
+        RouteRefusal::HazardProp,
+        RouteRefusal::Boundary,
+        RouteRefusal::ComposedSeam,
+        RouteRefusal::ProbeBoxFace,
+        RouteRefusal::ProbeFaceDiverges,
+        RouteRefusal::ProbeMeasure,
+    ];
+
+    fn index(self) -> usize {
+        Self::ALL
+            .iter()
+            .position(|reason| *reason == self)
+            .expect("every refusal variant is listed in ALL")
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            RouteRefusal::PendingItems => "pending_items",
+            RouteRefusal::PolicyHscroll => "policy_hscroll",
+            RouteRefusal::PolicySelectiveDisplay => "policy_selective_display",
+            RouteRefusal::PolicyWordWrap => "policy_word_wrap",
+            RouteRefusal::PolicyTrailingWhitespace => "policy_trailing_ws",
+            RouteRefusal::MidLineStart => "mid_line_start",
+            RouteRefusal::ScanEmptyLine => "scan_empty_line",
+            RouteRefusal::ScanNoFitFirstChar => "scan_no_fit_first_char",
+            RouteRefusal::ScanExactFill => "scan_exact_fill",
+            RouteRefusal::ScanChar => "scan_char",
+            RouteRefusal::ScanCompose => "scan_compose",
+            RouteRefusal::ScanEob => "scan_eob",
+            RouteRefusal::PointInRow => "point_in_row",
+            RouteRefusal::Overlay => "overlay",
+            RouteRefusal::DisplayTable => "display_table",
+            RouteRefusal::Elision => "elision",
+            RouteRefusal::OverflowElision => "overflow_elision",
+            RouteRefusal::HazardProp => "hazard_prop",
+            RouteRefusal::Boundary => "boundary",
+            RouteRefusal::ComposedSeam => "composed_seam",
+            RouteRefusal::ProbeBoxFace => "probe_box_face",
+            RouteRefusal::ProbeFaceDiverges => "probe_face_diverges",
+            RouteRefusal::ProbeMeasure => "probe_measure",
+        }
+    }
+}
+
+/// Route-coverage telemetry, mirroring the NEOMACS_LAYOUT_STATS_FILE
+/// pattern: when `NEOMACS_ROW_ROUTE_STATS_FILE` names a path, the counters
+/// below accumulate (relaxed atomics, only touched when the file env is set
+/// — a single cached-bool branch otherwise) and `engine.rs` appends one
+/// CUMULATIVE line per accepted frame. Aggregation takes the LAST line per
+/// pid, so multi-process suite runs sum cleanly.
+fn route_stats_file() -> Option<&'static str> {
+    static FILE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    FILE.get_or_init(|| std::env::var("NEOMACS_ROW_ROUTE_STATS_FILE").ok())
+        .as_deref()
+        .filter(|path| !path.is_empty())
+}
+
+static ROUTE_STAT_ATTEMPTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static ROUTE_STAT_ROUTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static ROUTE_STAT_REFUSALS: [std::sync::atomic::AtomicUsize; RouteRefusal::COUNT] =
+    [const { std::sync::atomic::AtomicUsize::new(0) }; RouteRefusal::COUNT];
+
+fn note_route_attempt() {
+    if route_stats_file().is_some() {
+        ROUTE_STAT_ATTEMPTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+fn note_route_refusal(reason: RouteRefusal) {
+    if route_stats_file().is_some() {
+        ROUTE_STAT_REFUSALS[reason.index()].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// The cumulative telemetry line for this process, or `None` when the stats
+/// file env is unset. Appended by the engine once per accepted frame.
+pub(crate) fn route_stats_append_report() {
+    use std::io::Write as _;
+    let Some(path) = route_stats_file() else {
+        return;
+    };
+    let mut line = format!(
+        "row_route pid={} attempts={} routed={}",
+        std::process::id(),
+        ROUTE_STAT_ATTEMPTS.load(std::sync::atomic::Ordering::Relaxed),
+        ROUTE_STAT_ROUTED.load(std::sync::atomic::Ordering::Relaxed),
+    );
+    for reason in RouteRefusal::ALL {
+        let count = ROUTE_STAT_REFUSALS[reason.index()].load(std::sync::atomic::Ordering::Relaxed);
+        line.push_str(&format!(" refuse_{}={}", reason.label(), count));
+    }
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = writeln!(f, "{line}");
     }
 }
 
@@ -453,7 +630,11 @@ struct RoutedLineScan {
 /// before committing. `tail` evolves as the writer's row view would: a
 /// pushed char becomes `(ch, lone-regional-indicator)`, a merged extender
 /// becomes the cluster's last char, a tab's stretch glyph clears it.
-fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Option<RoutedLineScan> {
+fn routed_line_scan(
+    text: &[u8],
+    byte_idx: usize,
+    fit: RowRouteFit<'_>,
+) -> Result<RoutedLineScan, RouteRefusal> {
     let mut idx = byte_idx;
     let mut char_len = 0usize;
     let mut has_tab = false;
@@ -469,9 +650,9 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
     let overflow_prefix =
         |idx: usize, char_len: usize, has_tab: bool, has_wide: bool, composed: Vec<usize>| {
             if char_len == 0 {
-                return None;
+                return Err(RouteRefusal::ScanNoFitFirstChar);
             }
-            Some(RoutedLineScan {
+            Ok(RoutedLineScan {
                 byte_len: idx - byte_idx,
                 char_len,
                 has_tab,
@@ -482,10 +663,13 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
         };
     while idx < text.len() {
         if text[idx] == b'\n' {
-            if char_len == 0 || x_px >= fit.right_edge_px {
-                return None;
+            if char_len == 0 {
+                return Err(RouteRefusal::ScanEmptyLine);
             }
-            return Some(RoutedLineScan {
+            if x_px >= fit.right_edge_px {
+                return Err(RouteRefusal::ScanExactFill);
+            }
+            return Ok(RoutedLineScan {
                 byte_len: idx - byte_idx,
                 char_len,
                 has_tab,
@@ -498,7 +682,7 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
         // Reject malformed UTF-8 (decode yields U+FFFD over fewer bytes than
         // the char re-encodes to): raw bytes have their own display path.
         if consumed == 0 || ch.len_utf8() != consumed {
-            return None;
+            return Err(RouteRefusal::ScanChar);
         }
         // Pipeline decision order: non-Text chars break the text run into
         // their own items BEFORE any composition (the classify arm below
@@ -508,7 +692,7 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
             && routed_char_would_compose(ch, tail)
         {
             if !(routed_composable_extender(ch) && merge_target == RoutedScanMergeTarget::Simple) {
-                return None;
+                return Err(RouteRefusal::ScanCompose);
             }
             // The merge appends no glyph and advances nothing; the cluster's
             // tail becomes the extender (writer: the Composite's last char).
@@ -518,7 +702,7 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
             idx += consumed;
             continue;
         }
-        match classify_routed_row_char(ch)? {
+        match classify_routed_row_char(ch).ok_or(RouteRefusal::ScanChar)? {
             RoutedRowCharAdvance::Tab => {
                 let tab = fit
                     .tab_policy
@@ -563,7 +747,7 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
     }
     // End of buffer without a newline: the end-of-buffer tail has its own
     // buffer-pipeline lifecycle (cursor at EOB, empty-line indicators).
-    None
+    Err(RouteRefusal::ScanEob)
 }
 
 /// Overlay properties the routed row class accepts on an intersecting
@@ -767,13 +951,65 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     fit: RowRouteFit<'_>,
     policy: RowRouteWindowPolicy,
 ) -> Option<AsciiRowPlan> {
-    if policy.disqualifies() {
-        return None;
+    plan_ascii_row_classified(buffer, row, fit, policy).ok()
+}
+
+/// [`plan_ascii_row`] with the refusal reason preserved for the coverage
+/// telemetry histogram.
+pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
+    buffer: &B,
+    row: RowRouteRowStart<'_>,
+    fit: RowRouteFit<'_>,
+    policy: RowRouteWindowPolicy,
+) -> Result<AsciiRowPlan, RouteRefusal> {
+    if policy.hscroll_active {
+        return Err(RouteRefusal::PolicyHscroll);
+    }
+    if policy.selective_display != 0 {
+        return Err(RouteRefusal::PolicySelectiveDisplay);
+    }
+    if policy.word_wrap {
+        return Err(RouteRefusal::PolicyWordWrap);
+    }
+    if policy.show_trailing_whitespace {
+        return Err(RouteRefusal::PolicyTrailingWhitespace);
     }
     // Only whole rows are routed: the walk must be at the start of a buffer
     // line (never resuming mid-line after a wrap or a display element).
     if row.byte_idx > 0 && row.text.get(row.byte_idx - 1) != Some(&b'\n') {
-        return None;
+        return Err(RouteRefusal::MidLineStart);
+    }
+    // Cheap pre-gate BEFORE the pen walk: the two refusals the steady-state
+    // edit path hits every keystroke (the cursor row and the bounded window
+    // read's end-of-text tail row) are decidable from a newline search plus
+    // arithmetic, so the per-row probe cost on those rows is one memchr, not
+    // a full classifier walk.
+    // * No newline in the remaining text: the scan would refuse at text end
+    //   ([`RouteRefusal::ScanEob`]) after walking the whole tail — refuse
+    //   now. (This also covers the bounded window read, whose text ends
+    //   mid-buffer without a trailing newline.)
+    // * Point on this line (through its newline): refuse. Byte length bounds
+    //   char length from above, so `point > charpos + line_byte_len` proves
+    //   point is past this line with no further work; inside that ambiguous
+    //   byte range, one branch-light non-continuation-byte count gives the
+    //   EXACT char length, deciding line membership without the pen walk.
+    //   This deliberately refuses point in the unrouted tail of an over-wide
+    //   line too (which phase 2f used to route): the cursor row is the row
+    //   the steady-state edit path re-lays every keystroke, and its refusal
+    //   must cost a memchr, not a classifier walk.
+    let Some(line_byte_len) = memchr::memchr(b'\n', &row.text[row.byte_idx..]) else {
+        return Err(RouteRefusal::ScanEob);
+    };
+    if policy.point_charpos >= row.charpos
+        && policy.point_charpos <= row.charpos + line_byte_len as i64
+    {
+        let line_char_len = row.text[row.byte_idx..row.byte_idx + line_byte_len]
+            .iter()
+            .filter(|&&byte| (byte & 0xC0) != 0x80)
+            .count();
+        if policy.point_charpos <= row.charpos + line_char_len as i64 {
+            return Err(RouteRefusal::PointInRow);
+        }
     }
     // One pass scans the chars (refusing anything the pipeline would
     // compose) AND applies the strict logical-cell fit: a line exactly
@@ -782,13 +1018,12 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     let scan = routed_line_scan(row.text, row.byte_idx, fit)?;
 
     // Cursor capture stays on the buffer pipeline: exclude any row whose
-    // ROUTED coverage contains point — through the line's newline for a
-    // whole-line plan, through the handoff position for an overflow-prefix
-    // plan (point in the unrouted remainder is fine: the pipeline resumes
-    // there and captures it exactly as with the flag off).
+    // ROUTED coverage contains point. The pre-gate above already refused the
+    // byte-superset (point anywhere on the line), so this precise check is
+    // defense-in-depth for the coverage interval itself.
     let routed_end_charpos = row.charpos + scan.char_len as i64;
     if policy.point_charpos >= row.charpos && policy.point_charpos <= routed_end_charpos {
-        return None;
+        return Err(RouteRefusal::PointInRow);
     }
 
     // Overlays intersecting the row (touching endpoints included) may carry
@@ -797,11 +1032,12 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     // window restriction, category indirection — keeps the buffer pipeline.
     let start_byte = row.text_start_byte + row.byte_idx;
     let routed_end_byte = start_byte + scan.byte_len;
-    let overlay_scan = routed_row_overlay_scan(buffer, row.charpos, start_byte, routed_end_byte)?;
+    let overlay_scan = routed_row_overlay_scan(buffer, row.charpos, start_byte, routed_end_byte)
+        .ok_or(RouteRefusal::Overlay)?;
 
     // An active display table can remap any char (including the newline).
     if crate::neovm_bridge::buffer_has_active_display_table(buffer) {
-        return None;
+        return Err(RouteRefusal::DisplayTable);
     }
 
     // Invisible text: accept only the plain-elision class (hidden spans that
@@ -809,7 +1045,8 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     // row-start runs, and non-advancing skips refuse. Overlay-sourced
     // invisibility never reaches this scan — any intersecting overlay
     // carrying `invisible` already refused through the overlay allow-list.
-    let elided = routed_row_elision_scan(buffer, row.charpos, routed_end_charpos)?;
+    let elided = routed_row_elision_scan(buffer, row.charpos, routed_end_charpos)
+        .ok_or(RouteRefusal::Elision)?;
 
     // An overflow-prefix plan refuses ANY elision inside its coverage: the
     // scan's fit walk advanced the pen for every char including hidden ones,
@@ -817,7 +1054,7 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     // hidden run beyond the handoff is unrouted remainder — the elision scan
     // above never sees it, and the pipeline handles it at resume.)
     if scan.line_end == RoutedRowLineEnd::OverflowHandoff && !elided.is_empty() {
-        return None;
+        return Err(RouteRefusal::OverflowElision);
     }
 
     // Walk the property-change positions over the routed coverage AND its
@@ -837,14 +1074,14 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
                 .layout_text_prop_at_emacs_byte_pos(probe, Value::symbol(prop))
                 .is_some()
             {
-                return None;
+                return Err(RouteRefusal::HazardProp);
             }
         }
         // Static composition: refuse exactly when the pipeline's replacement
         // predicate would fire (an inert prop still segments below, like any
         // other property change).
         if routed_composition_prop_replaces(buffer, probe) {
-            return None;
+            return Err(RouteRefusal::HazardProp);
         }
         let Some(change) = buffer.layout_next_text_prop_change_after_emacs_byte_pos(probe) else {
             break;
@@ -857,7 +1094,9 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
             let change_charpos = buffer
                 .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(change))
                 .get();
-            let char_offset = change_charpos.checked_sub(row.charpos.max(0) as usize)?;
+            let char_offset = change_charpos
+                .checked_sub(row.charpos.max(0) as usize)
+                .ok_or(RouteRefusal::Boundary)?;
             debug_assert!(
                 char_offset > 0 && char_offset < scan.char_len,
                 "a mid-line property change must land strictly inside the line"
@@ -899,11 +1138,11 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
         if face_boundaries.binary_search(&offset).is_ok()
             || elided.iter().any(|&(_, hidden_end)| offset == hidden_end)
         {
-            return None;
+            return Err(RouteRefusal::ComposedSeam);
         }
     }
 
-    Some(AsciiRowPlan {
+    Ok(AsciiRowPlan {
         line_byte_len: scan.byte_len,
         line_char_len: scan.char_len,
         has_tab: scan.has_tab,
@@ -1279,6 +1518,9 @@ pub(crate) static ROUTED_WRAP_PREFIX_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
 fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode) {
+    if route_stats_file().is_some() {
+        ROUTE_STAT_ROUTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
     #[cfg(not(test))]
     let _ = wrap_mode;
     #[cfg(test)]
@@ -1373,7 +1615,9 @@ impl<'rows, 'emit, 'surface>
         use crate::display_row::append_context::DisplayRowAppendKind;
         use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
 
+        note_route_attempt();
         if source_walk.has_pending_render_items() {
+            note_route_refusal(RouteRefusal::PendingItems);
             return AsciiRowRouteOutcome::NotRouted;
         }
 
@@ -1400,8 +1644,12 @@ impl<'rows, 'emit, 'surface>
                 || self.trailing_whitespace.is_enabled(),
             wrap_mode: params.wrap_mode,
         };
-        let Some(plan) = plan_ascii_row(buffer, row, fit, policy) else {
-            return AsciiRowRouteOutcome::NotRouted;
+        let plan = match plan_ascii_row_classified(buffer, row, fit, policy) {
+            Ok(plan) => plan,
+            Err(reason) => {
+                note_route_refusal(reason);
+                return AsciiRowRouteOutcome::NotRouted;
+            }
         };
 
         let start = CharPos0::new(row.charpos.max(0) as usize);
@@ -1446,6 +1694,7 @@ impl<'rows, 'emit, 'surface>
             // start_of_box_run_p / face_box_p) the routed render does not
             // replicate; keep the multi-face class box-free.
             if plan.is_segmented() && active.resolved_face().box_type != 0 {
+                note_route_refusal(RouteRefusal::ProbeBoxFace);
                 return AsciiRowRouteOutcome::NotRouted;
             }
             // The pipeline stamps glyphs with the PER-RUN face chain; refuse
@@ -1460,6 +1709,7 @@ impl<'rows, 'emit, 'surface>
                 *seg_start,
                 active.face_id(),
             ) {
+                note_route_refusal(RouteRefusal::ProbeFaceDiverges);
                 return AsciiRowRouteOutcome::NotRouted;
             }
             probed.push(ProbedSegment {
@@ -1480,6 +1730,7 @@ impl<'rows, 'emit, 'surface>
                 RenderFaceRef::FaceId(segment.active.face_id()),
             );
             let Some(text_item) = source.text_item().cloned() else {
+                note_route_refusal(RouteRefusal::ProbeMeasure);
                 return AsciiRowRouteOutcome::NotRouted;
             };
             let append_context = BufferSourceRowAppendContext::from_active_face_row(
@@ -1506,6 +1757,7 @@ impl<'rows, 'emit, 'surface>
                 )
             };
             let Some(end_position) = measured else {
+                note_route_refusal(RouteRefusal::ProbeMeasure);
                 return AsciiRowRouteOutcome::NotRouted;
             };
             probe_position = end_position;
@@ -1524,6 +1776,7 @@ impl<'rows, 'emit, 'surface>
                 probe_position.x_px() < self.append_surface.right_edge()
             };
             if !fits {
+                note_route_refusal(RouteRefusal::ProbeMeasure);
                 return AsciiRowRouteOutcome::NotRouted;
             }
         }
