@@ -1605,13 +1605,73 @@ fn classifier_rejects_rows_the_pipeline_would_compose() {
 }
 
 #[test]
-fn classifier_rejects_display_space_width_spec() {
+fn classifier_routes_plain_space_width_spec() {
     let mut eval = Context::new();
-    // Rung 3 decision pin: `(space :width N)` is a REPLACING spec producing
-    // one stretch glyph with covered-charpos provenance over an arbitrary
-    // buffer span. The routed tab/stretch machinery (2b) only expands real
-    // TAB chars through the append surface's tab policy — it cannot express
-    // replacement semantics, so the spec refuses like any display prop.
+    // Increment 2i rung 3 (flipping the former 2d rung-3 refusal pin): a
+    // plain `(space :width N)` spec with a positive fixnum N now ROUTES.
+    // Production renders it through the pipeline's replacement session
+    // (one stretch glyph with covered-charpos provenance — GNU stamps the
+    // covered buffer position on stretch glyphs, xdisp.c 6604+32684); the
+    // plan credits the covered span with N columns for the fit walk.
+    let text = "ab cd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 4 'display '(space :width 3))")
+        .expect("space width spec");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("plain space :width spec routes");
+    assert!(plan.has_replacement());
+    assert_eq!(plan.replacement_ranges(), &[(2, 3)]);
+}
+
+#[test]
+fn classifier_rejects_space_specs_outside_the_plain_width_form() {
+    // Rung 3 keeps every other `(space …)` shape refused: their widths are
+    // pen/metric/expression-dependent in ways the plan's logical-cell fit
+    // pre-filter cannot predict (`:align-to` targets a column, relative
+    // widths consult the covered char's font, extra keys add vertical
+    // geometry, floats and expressions ride calc_pixel_width_or_height).
+    for (spec, label) in [
+        ("'(space :align-to 5)", "align-to"),
+        ("'(space :relative-width 2)", "relative-width"),
+        ("'(space :width 3 :height 2)", "extra height key"),
+        ("'(space :width 2.5)", "float width"),
+        ("'(space :width (+ 1 2))", "expression width"),
+        ("'(space :width 0)", "zero width"),
+        ("'(space)", "bare space"),
+    ] {
+        let mut eval = Context::new();
+        let text = "ab cd\n";
+        let buf_id = buffer_with_text(&mut eval, text);
+        eval.buffer_manager_mut().set_current(buf_id);
+        eval.eval_str(&format!("(put-text-property 3 4 'display {spec})"))
+            .expect(label);
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                wide_fit(),
+                plain_policy()
+            ),
+            RowAcquisitionRoute::BufferPipeline,
+            "{label} must keep the buffer pipeline"
+        );
+    }
+}
+
+#[test]
+fn classifier_fits_space_spec_by_stretch_width() {
+    let mut eval = Context::new();
+    // "ab cd" with (space :width 3) over the blank displays as 7 cols
+    // (ab + 3-col stretch + cd): a 7-col row exactly fills (refuse), an
+    // 8-col row routes.
     let text = "ab cd\n";
     let buf_id = buffer_with_text(&mut eval, text);
     eval.buffer_manager_mut().set_current(buf_id);
@@ -1622,10 +1682,20 @@ fn classifier_rejects_display_space_width_spec() {
             &eval,
             buf_id,
             row_start(text.as_bytes(), 0, 0),
-            wide_fit(),
+            fit_to(7.0 * 8.0),
             plain_policy()
         ),
         RowAcquisitionRoute::BufferPipeline
+    );
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(8.0 * 8.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::ItemRenderer
     );
 }
 

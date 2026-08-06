@@ -379,10 +379,22 @@ pub(crate) struct RoutedRowReplacement {
     end: usize,
     /// The full `display` property value (what the pipeline's walk consumes).
     value: Value,
-    /// The replacement string (the classification's replacement spec).
-    text: Box<str>,
-    /// The string's logical-cell width for the classifier's fit walk.
+    /// What the routed class recognized inside the display value.
+    content: RoutedReplacementContent,
+    /// The replacement's logical-cell width for the classifier's fit walk.
     advance_cols: usize,
+}
+
+/// The routable display-replacement content kinds (increment 2i).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RoutedReplacementContent {
+    /// Rung 2: a plain, property-less, single-line string.
+    String { text: Box<str> },
+    /// Rung 3: a plain `(space :width N)` spec, N a positive fixnum — one
+    /// stretch glyph of N columns with covered-charpos provenance (GNU
+    /// stamps the covered buffer position on stretch glyphs; xdisp.c
+    /// handle_single_display_spec 6604 + append_stretch_glyph 32684).
+    SpaceWidth,
 }
 
 /// How a routed row's coverage ends (phase 2f).
@@ -994,6 +1006,37 @@ fn routed_row_overlay_scan<B: LayoutBufferView + ?Sized>(
 /// refuses any intersecting overlay carrying `display`, so the text-property
 /// read here resolves the same winner as the pipeline's
 /// `get_char_property`-style overlay-or-text read.
+/// Parse the rung-3 routable space shape: exactly `(space :width N)` with a
+/// positive fixnum N, nothing else. Every other `(space …)` form —
+/// `:align-to` (targets a column), `:relative-width` (consults the covered
+/// char's font), extra vertical keys, float widths, expression operands
+/// riding `calc_pixel_width_or_height` — keeps the buffer pipeline: their
+/// widths are pen/metric-dependent in ways the classifier's logical-cell
+/// pre-filter cannot predict. For the plain form GNU's width is N times the
+/// canonical column width (xdisp.c calc_pixel_width_or_height, bare numbers
+/// scale by FRAME_COLUMN_WIDTH on the horizontal axis), which is exactly N
+/// advance columns for the fit walk; the probe re-verifies with the
+/// session's own resolved stretch width.
+fn routed_space_width_cols(spec: Value) -> Option<usize> {
+    use crate::display_spec::DisplaySpaceKey;
+    if !crate::display_spec::is_display_space_spec(&spec) {
+        return None;
+    }
+    let rest = spec.cons_cdr();
+    if !rest.is_cons() {
+        return None;
+    }
+    if DisplaySpaceKey::from_lisp_value(rest.cons_car()) != Some(DisplaySpaceKey::Width) {
+        return None;
+    }
+    let tail = rest.cons_cdr();
+    if !tail.is_cons() || !tail.cons_cdr().is_nil() {
+        return None;
+    }
+    let cols = tail.cons_car().as_fixnum()?;
+    (1..=512).contains(&cols).then_some(cols as usize)
+}
+
 /// Outcome of the display-property line scan: the routable replacement
 /// candidates in ascending order, plus the CHAR offsets (with refusal
 /// reasons) of unroutable `display` props. The classifier refuses only when
@@ -1047,29 +1090,56 @@ fn routed_row_replacement_scan<B: LayoutBufferView>(
             // historical HazardProp refusal, unroutable string shapes the
             // Replacement refusal.
             let classification = classify_display_property(value);
-            let routable_string = matches!(
-                classification.replacement(),
-                Some(DisplayReplacementProperty::String)
-            )
-            .then(|| classification.replacement_spec().as_utf8_str())
-            .flatten()
-            .filter(|text| !text.is_empty())
-            .filter(|_| {
-                neovm_core::emacs_core::value::get_string_text_properties_table_for_value(
-                    classification.replacement_spec(),
-                )
-                .is_none()
-            })
-            .filter(|_| probe_byte > start_byte && probe_byte < line_end_byte);
-            let hazard_reason = if matches!(
-                classification.replacement(),
-                Some(DisplayReplacementProperty::String)
-            ) {
+            let spec = classification.replacement_spec();
+            // Parse the routable content shape, independent of anchoring:
+            // rung 2 — a plain, property-less string whose chars are all
+            // single-line unambiguous-width (a newline emits a row break, a
+            // tab expands pen-dependently in the session's full-text-width
+            // frame); rung 3 — a plain `(space :width N)` spec.
+            let content: Option<(RoutedReplacementContent, usize)> =
+                match classification.replacement() {
+                    Some(DisplayReplacementProperty::String) => spec
+                        .as_utf8_str()
+                        .filter(|text| !text.is_empty())
+                        .filter(|_| {
+                            neovm_core::emacs_core::value::
+                                get_string_text_properties_table_for_value(spec)
+                            .is_none()
+                        })
+                        .and_then(|text| {
+                            let mut advance_cols = 0usize;
+                            for ch in text.chars() {
+                                match classify_routed_row_char(ch) {
+                                    Some(RoutedRowCharAdvance::Cols(cols)) => {
+                                        advance_cols += usize::from(cols);
+                                    }
+                                    Some(RoutedRowCharAdvance::Tab) | None => return None,
+                                }
+                            }
+                            Some((
+                                RoutedReplacementContent::String { text: text.into() },
+                                advance_cols,
+                            ))
+                        }),
+                    Some(DisplayReplacementProperty::Stretch(_)) => routed_space_width_cols(spec)
+                        .map(|cols| (RoutedReplacementContent::SpaceWidth, cols)),
+                    _ => None,
+                };
+            // Hazard reasons keep their historic split: string display
+            // values (and recognized space shapes) report Replacement;
+            // everything else keeps HazardProp.
+            let hazard_reason = if content.is_some()
+                || matches!(
+                    classification.replacement(),
+                    Some(DisplayReplacementProperty::String)
+                ) {
                 RouteRefusal::Replacement
             } else {
                 RouteRefusal::HazardProp
             };
-            let Some(text) = routable_string else {
+            let candidate =
+                content.filter(|_| probe_byte > start_byte && probe_byte < line_end_byte);
+            let Some((content, advance_cols)) = candidate else {
                 scan.hazards.push((probe_offset, hazard_reason));
                 let Some(change) = next_change_after(probe_byte) else {
                     break;
@@ -1077,20 +1147,6 @@ fn routed_row_replacement_scan<B: LayoutBufferView>(
                 probe_byte = change;
                 continue;
             };
-            // Single-line, unambiguous-width string content only: a newline
-            // emits a row break (multi-row), a tab expands pen-dependently
-            // inside the session's full-text-width frame.
-            let mut advance_cols = 0usize;
-            let mut unroutable_content = false;
-            for ch in text.chars() {
-                match classify_routed_row_char(ch) {
-                    Some(RoutedRowCharAdvance::Cols(cols)) => advance_cols += usize::from(cols),
-                    Some(RoutedRowCharAdvance::Tab) | None => {
-                        unroutable_content = true;
-                        break;
-                    }
-                }
-            }
             // Covered extent: walk property changes while the display value
             // stays the SAME object (the pipeline's display_value_extent /
             // GNU next_single_char_property_change on Qdisplay).
@@ -1120,19 +1176,15 @@ fn routed_row_replacement_scan<B: LayoutBufferView>(
             {
                 extent_ok = false;
             }
-            if unroutable_content || !extent_ok {
+            if !extent_ok {
                 scan.hazards.push((probe_offset, RouteRefusal::Replacement));
-                if !extent_ok {
-                    break;
-                }
-                probe_byte = end_byte;
-                continue;
+                break;
             }
             scan.replacements.push(RoutedRowReplacement {
                 start: probe_offset,
                 end: char_offset_at(end_byte)?,
                 value,
-                text: text.into(),
+                content,
                 advance_cols,
             });
             probe_byte = end_byte;
@@ -2210,6 +2262,69 @@ impl<'rows, 'emit, 'surface>
                         DisplayRowAppendKind::SourceText,
                     )
                 }
+                RoutedRowPartKind::Replacement(replacement)
+                    if matches!(replacement.content, RoutedReplacementContent::SpaceWidth) =>
+                {
+                    // Rung 3 probe: resolve the spec through the SAME request
+                    // the session renders (resolution only — metric queries,
+                    // no append) and take its stretch width; the commit's
+                    // append advances by exactly this width, with the column
+                    // advance mirroring the builder's rounding.
+                    let start_byte_pos = buffer.layout_char_pos_to_emacs_byte_pos(segment.start);
+                    let end_byte_pos = buffer.layout_char_pos_to_emacs_byte_pos(segment.end);
+                    let replacement_item =
+                        crate::display_item::BufferDisplayPropertyReplacementItem::new(
+                            replacement.value,
+                            crate::display_property::classify_display_property(replacement.value),
+                            crate::display_item::BufferDisplayReplacementSource::spanning(
+                                loop_context.buffer_id(),
+                                segment.start,
+                                start_byte_pos,
+                                segment.end,
+                                end_byte_pos,
+                            ),
+                            start_byte_pos,
+                            end_byte_pos,
+                            segment.start,
+                            segment.end,
+                        );
+                    let fallback_metrics =
+                        crate::buffer_source::item_append::BufferSourceActiveFaceRowMetrics::from_active_face_row(
+                            &segment.active,
+                            loop_context.char_height(),
+                        )
+                        .fallback_metrics();
+                    replacement_item
+                        .source_text(loop_context.text_start_byte(), text)
+                        .and_then(|source_text| {
+                            self.source_render
+                                .resolve_display_property_replacement_row_request(
+                                    replacement_item.descriptor(),
+                                    source_text,
+                                    &segment.active,
+                                    probe_position.x_px(),
+                                    loop_context.content_x(),
+                                    params,
+                                    0.0,
+                                    fallback_metrics,
+                                    probe_position,
+                                )
+                        })
+                        .and_then(|request| request.stretch_width_px())
+                        .map(|width_px| {
+                            if width_px <= 0.0 {
+                                // A non-positive stretch appends nothing
+                                // (the session's from_stretch Empty arm).
+                                probe_position
+                            } else {
+                                DisplayRowPosition::new(
+                                    probe_position.x_px() + width_px,
+                                    probe_position.col()
+                                        + (width_px / params.char_width.max(1.0)).round() as usize,
+                                )
+                            }
+                        })
+                }
                 RoutedRowPartKind::Replacement(replacement) => {
                     let base_face = crate::display_source_resolver::resolve_display_string_base_face(
                         buffer,
@@ -2246,7 +2361,12 @@ impl<'rows, 'emit, 'surface>
                         RenderFaceRef::FaceId(base_face.face_id()),
                         DisplayItemKind::SourceMappedText(
                             crate::display_item::DisplaySourceMappedText::new(
-                                replacement.text.as_ref(),
+                                match &replacement.content {
+                                    RoutedReplacementContent::String { text } => text.as_ref(),
+                                    RoutedReplacementContent::SpaceWidth => unreachable!(
+                                        "space replacements probe through the resolved request"
+                                    ),
+                                },
                             ),
                         ),
                     );

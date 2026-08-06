@@ -756,6 +756,17 @@ impl DisplayPropertyReplacementRowRenderRequest {
         self.append_request.cursor_policy()
     }
 
+    /// The resolved stretch width of a `(space …)` replacement, for the
+    /// routed acquisition's fit probe (increment 2i rung 3): the exact pixel
+    /// width the session's append will advance by. `None` for non-stretch
+    /// replacement kinds.
+    pub(crate) fn stretch_width_px(&self) -> Option<f32> {
+        match &self.append_request.item {
+            DisplayPropertyReplacementSourceItem::Stretch(item) => Some(item.width_px()),
+            _ => None,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn start_position(&self) -> DisplayRowPosition {
         self.append_request.start_position()

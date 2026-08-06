@@ -16759,26 +16759,29 @@ fn propertized_display_string_rows_stay_on_buffer_pipeline_under_item_route() {
     );
 }
 
-/// Phase 2d rung 3 decision pin: `(space :width N)` display specs are
-/// REFUSED, not expressed via the 2b tab/stretch machinery. The spec is a
-/// REPLACING display property: one stretch glyph of arbitrary width covers
-/// an arbitrary buffer span with covered-charpos provenance and the walk
-/// skips the covered text — replacement semantics, not tab expansion (which
-/// only advances a real TAB char to the append surface's next tab stop).
-/// Identical output whether the route flag is on or off.
+/// Increment 2i rung 3 shadow proof (flipping the former 2d rung-3 refusal
+/// pin): a plain `(space :width N)` display spec now ROUTES, rendering
+/// through the pipeline's replacement session — one stretch glyph of exactly
+/// N canonical char widths with covered-charpos provenance (GNU stamps the
+/// covered buffer position on stretch glyphs, xdisp.c 6604 + 32684). The
+/// routed row is glyph-for-glyph identical to the buffer-pipeline row (same
+/// process, point placement toggles the route).
 #[test]
-fn space_width_spec_rows_stay_on_buffer_pipeline_under_item_route() {
+fn space_width_spec_row_routes_and_matches_pipeline() {
     let text = "ab cd\nnext\n";
-    let (eval, buf_id, rows, char_width, _char_height) = {
-        let (eval, buf_id, _frame_id, rows, char_width, char_height) =
-            layout_main_text_rows_with(text, |eval, buf_id| {
-                eval.buffer_manager_mut().set_current(buf_id);
-                eval.eval_str("(put-text-property 3 4 'display '(space :width 3))")
-                    .expect("space width spec");
-            });
-        (eval, buf_id, rows, char_width, char_height)
+    let put_spec = |eval: &mut Context, buf_id: BufferId| {
+        eval.buffer_manager_mut().set_current(buf_id);
+        eval.eval_str("(put-text-property 3 4 'display '(space :width 3))")
+            .expect("space width spec");
     };
-    let stretch = rows[0].glyphs[1]
+
+    // Pipeline side: point inside row 0 refuses the route.
+    let (_e_p, _b_p, _f_p, rows_pipeline, char_width, _c_p) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            put_spec(eval, buf_id);
+            eval.eval_str("(goto-char 2)").expect("point on row 0");
+        });
+    let stretch = rows_pipeline[0].glyphs[1]
         .iter()
         .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
         .expect("the space spec must render a stretch glyph");
@@ -16786,6 +16789,39 @@ fn space_width_spec_rows_stay_on_buffer_pipeline_under_item_route() {
         stretch.pixel_width,
         3.0 * char_width,
         "(space :width 3) must stretch exactly three canonical char widths"
+    );
+
+    // Routed side: point at end-of-buffer (row 1).
+    let routed_before = crate::buffer_source::row_route::ROUTED_REPLACEMENT_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (eval, buf_id, _f_r, rows_routed, _cw_r, _c_r) = layout_main_text_rows_with(text, put_spec);
+    if crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        assert!(
+            crate::buffer_source::row_route::ROUTED_REPLACEMENT_ROW_COUNT
+                .load(std::sync::atomic::Ordering::Relaxed)
+                > routed_before,
+            "the space-spec row must render through the routed acquisition"
+        );
+    }
+    assert_eq!(
+        rows_routed[0].glyphs[1], rows_pipeline[0].glyphs[1],
+        "routed space-spec row must equal the pipeline row glyph-for-glyph"
+    );
+    // Provenance note: GNU stamps the covered buffer position on a
+    // spec-produced stretch glyph (xdisp.c 6604 + append_stretch_glyph
+    // 32684); the neomacs pipeline's stretch push currently leaves the
+    // stretch sentinel charpos 0 (Glyph::stretch), and the routed render —
+    // driving the SAME session — reproduces it exactly. The gate here is
+    // pipeline identity; the glyph-for-glyph assertion above already proves
+    // it, and this pin documents the shared (GNU-divergent) stamp so a
+    // future provenance fix updates both paths together.
+    let routed_stretch = rows_routed[0].glyphs[1]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("routed stretch glyph");
+    assert_eq!(
+        routed_stretch.charpos, 0,
+        "both paths currently stamp the stretch sentinel charpos"
     );
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
@@ -16799,8 +16835,8 @@ fn space_width_spec_rows_stay_on_buffer_pipeline_under_item_route() {
             640.0,
             text.chars().count() as i64
         ),
-        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
-        "space-spec rows must refuse the item route"
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer,
+        "plain space-spec rows in the routed class must route"
     );
 }
 
