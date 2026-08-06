@@ -1767,11 +1767,30 @@ pub(crate) enum FaceColorResolver<'a> {
 
 impl FaceColorResolver<'_> {
     fn resolve(self, spec: &str) -> Option<crate::face::Color> {
-        use crate::face::Color;
-        let standard = || Color::from_name(spec).or_else(|| Color::from_hex(spec));
-        match self {
-            Self::Standard => standard(),
-            Self::TtyPalette(palette) => palette.get(spec).copied().or_else(standard),
+        self.realize(&crate::face::SpecifiedColor::parse(spec))
+    }
+
+    /// Realize a color SPEC into render-layer pixels under this frame-class
+    /// policy — the sole bridge from [`crate::face::SpecifiedColor`] to
+    /// [`crate::face::RealizedColor`], mirroring GNU's realize_*_face step.
+    fn realize(self, spec: &crate::face::SpecifiedColor) -> Option<crate::face::RealizedColor> {
+        use crate::face::{Color, SpecifiedColor};
+        match spec {
+            SpecifiedColor::Named(s) => {
+                let standard = || Color::from_name(s).or_else(|| Color::from_hex(s));
+                match self {
+                    Self::Standard => standard(),
+                    Self::TtyPalette(palette) => palette.get(s.as_str()).copied().or_else(standard),
+                }
+            }
+            SpecifiedColor::Rgb(r, g, b) => Some(Color::rgb(*r, *g, *b)),
+            // Frame-default substitution happens before this boundary
+            // (realize_default_lisp_face_for_frame rewrites the default
+            // face's vector), so these realize to no color and downstream
+            // frame defaults apply.
+            SpecifiedColor::Unspecified
+            | SpecifiedColor::FrameForeground
+            | SpecifiedColor::FrameBackground => None,
         }
     }
 }

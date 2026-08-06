@@ -192,6 +192,68 @@ impl Color {
 }
 
 // ---------------------------------------------------------------------------
+// Specified vs realized colors (GNU xfaces staging)
+// ---------------------------------------------------------------------------
+
+/// A face color SPECIFICATION, the form colors take inside lface vectors
+/// before realization — GNU's lface slots store strings/`unspecified`, and
+/// only `realize_gui_face`/`realize_tty_face` produce pixels (xfaces.c).
+///
+/// Deliberately NO `From<SpecifiedColor>` for a realized color and no
+/// name-to-pixel shortcut here: `FaceColorResolver::realize` (xfaces) is the
+/// only bridge, so every realization states its frame-class policy.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SpecifiedColor {
+    /// A color string, e.g. `"white"` or `"#ff0000"` — meaning depends on
+    /// the frame class. This covers HEX strings too: GNU routes every lface
+    /// color string through realization (`map_tty_color` ->
+    /// `tty-color-desc`), which approximates hex through the terminal
+    /// palette on ttys without 24-bit color, so hex is not
+    /// frame-independent and the exact spec string must survive to
+    /// realization (the tty palette is keyed by it).
+    Named(String),
+    /// Frame-independent RGB, for programmatically constructed colors that
+    /// never had a spec string. `parse` never produces this.
+    Rgb(u8, u8, u8),
+    /// The `unspecified` token: attribute carries no color.
+    Unspecified,
+    /// `"unspecified-fg"` — the frame's default foreground.
+    FrameForeground,
+    /// `"unspecified-bg"` — the frame's default background.
+    FrameBackground,
+}
+
+impl SpecifiedColor {
+    /// Classify a color spec string. Total: unknown names stay `Named` —
+    /// realization is where lookup failure surfaces.
+    pub fn parse(spec: &str) -> Self {
+        match spec {
+            "unspecified" => Self::Unspecified,
+            "unspecified-fg" => Self::FrameForeground,
+            "unspecified-bg" => Self::FrameBackground,
+            _ => Self::Named(spec.to_owned()),
+        }
+    }
+
+    /// The lface-vector string form of this spec, when it has one.
+    pub fn spec_string(&self) -> Option<&str> {
+        match self {
+            Self::Named(s) => Some(s),
+            Self::Rgb(..) => None,
+            Self::Unspecified => Some("unspecified"),
+            Self::FrameForeground => Some("unspecified-fg"),
+            Self::FrameBackground => Some("unspecified-bg"),
+        }
+    }
+}
+
+/// A REALIZED color: concrete sRGB pixels, the render-layer output of
+/// realizing a [`SpecifiedColor`] under a stated frame-class policy.
+/// Currently the same representation as [`Color`]; the alias marks which
+/// side of the spec/realized boundary a value lives on.
+pub type RealizedColor = Color;
+
+// ---------------------------------------------------------------------------
 // Underline style
 // ---------------------------------------------------------------------------
 

@@ -451,6 +451,71 @@ fn color_parse_hex_and_named() {
     assert_eq!(Color::parse("#xyz"), None);
 }
 
+// --- SpecifiedColor (lface-vector spec layer, GNU xfaces staging) ---
+
+#[test]
+fn specified_color_parse_special_tokens() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        SpecifiedColor::parse("unspecified"),
+        SpecifiedColor::Unspecified
+    );
+    assert_eq!(
+        SpecifiedColor::parse("unspecified-fg"),
+        SpecifiedColor::FrameForeground
+    );
+    assert_eq!(
+        SpecifiedColor::parse("unspecified-bg"),
+        SpecifiedColor::FrameBackground
+    );
+}
+
+#[test]
+fn specified_color_parse_keeps_strings_as_specs() {
+    crate::test_utils::init_test_tracing();
+    // Names stay names: "white" means X11 white on GUI but the terminal
+    // palette's white on a TTY — realization decides, not parsing.
+    assert_eq!(
+        SpecifiedColor::parse("white"),
+        SpecifiedColor::Named("white".to_owned())
+    );
+    // Hex strings ALSO stay specs. GNU routes every lface color string —
+    // hex included — through the frame-class realization step
+    // (map_tty_color -> tty-color-desc approximates "#ff0000" through the
+    // terminal palette when the tty lacks 24-bit color), so hex is not
+    // frame-independent and must not collapse to RGB at parse time.
+    assert_eq!(
+        SpecifiedColor::parse("#ff0000"),
+        SpecifiedColor::Named("#ff0000".to_owned())
+    );
+    // Unknown junk is still a spec; realization is where it fails.
+    assert_eq!(
+        SpecifiedColor::parse("no-such-color"),
+        SpecifiedColor::Named("no-such-color".to_owned())
+    );
+}
+
+#[test]
+fn specified_color_spec_string_round_trip() {
+    crate::test_utils::init_test_tracing();
+    for spec in ["unspecified", "unspecified-fg", "unspecified-bg", "gold"] {
+        assert_eq!(
+            SpecifiedColor::parse(spec).spec_string().as_deref(),
+            Some(spec),
+            "{spec}"
+        );
+    }
+    assert_eq!(SpecifiedColor::Rgb(1, 2, 3).spec_string(), None);
+}
+
+#[test]
+fn realized_color_is_the_render_layer_color() {
+    crate::test_utils::init_test_tracing();
+    // The render-layer type carries alpha, exactly as Color does today.
+    let c: RealizedColor = Color::rgb(1, 2, 3);
+    assert_eq!((c.r, c.g, c.b, c.a), (1, 2, 3, 255));
+}
+
 #[test]
 fn color_from_name_case_insensitive() {
     crate::test_utils::init_test_tracing();
