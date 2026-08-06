@@ -1451,13 +1451,18 @@ impl crate::display_source::DisplayItemSource for BufferAsciiItemSource {
     }
 }
 
-/// Opt-in gate for the routed acquisition: `NEOMACS_ROW_ITEM_ROUTE=ascii`.
-/// Default OFF — with the flag unset the buffer pipeline is untouched and the
-/// classifier never runs (a single lazy boolean check per row).
+/// Gate for the routed acquisition. Default ON since phase 3 (2026-08-06):
+/// the flip was justified by measured coverage (TUI suite: 37.8% of
+/// line-start row attempts routed) at neutral protected-workload cost
+/// (TTY keystroke instruction count +0.035% flag-on after the cursor/EOB
+/// pre-gate, word-wrap refused-heavy +0.016% — both within run noise).
+/// `NEOMACS_ROW_ITEM_ROUTE=off` opts OUT, restoring the pure buffer
+/// pipeline (kept for soak time; removal is phase 4 business). Any other
+/// value (including the historical opt-in `ascii`) leaves the route on.
 pub(crate) fn row_item_route_ascii_enabled() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ENABLED
-        .get_or_init(|| std::env::var("NEOMACS_ROW_ITEM_ROUTE").is_ok_and(|value| value == "ascii"))
+        .get_or_init(|| !std::env::var("NEOMACS_ROW_ITEM_ROUTE").is_ok_and(|value| value == "off"))
 }
 
 /// Test-only engagement proof: rows actually rendered through the routed
