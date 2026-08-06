@@ -213,3 +213,91 @@ fn glyphless_method_keeps_non_ignorable_format_controls_visible() {
     // ARABIC LETTER MARK (a bidi control), so the narrowing is exact.
     assert_eq!(m('\u{061c}'), Some(GlyphlessMethod::ZeroWidth));
 }
+
+// ---- Increment 2i rung 1: covered-provenance vocabulary (string-glyph
+// provenance). The pipeline expresses "N glyphs standing for M covered buffer
+// chars" as a `SourceMappedText` item whose span is the COVERED buffer range:
+// every produced glyph is stamped with the covered START charpos (the
+// `DisplayTextSourceMapping::SourceMapped` stamping in builder.rs), which is
+// neomacs's simpler mirror of GNU's charpos+object pair (neomacs glyphs carry
+// one `charpos` field; the pipeline stamps the covered BUFFER position where
+// GNU stamps a string index plus the string object -- see
+// tmp/gnu-study-string-provenance.md section 0). These pins prove the item
+// producer surface: `item_from_replacement_string_item` is the exact seam the
+// display-replacement session uses to convert the string's own items into
+// covered-provenance runs.
+
+#[test]
+fn replacement_source_converts_string_text_run_to_covered_provenance_run() {
+    // The session's string items carry LispString spans (string indices); the
+    // replacement source rewrites them to ONE covered buffer span [B, E) with
+    // kind SourceMappedText, preserving face, layout, and pointer appearance.
+    let covered = BufferDisplayReplacementSource::spanning(
+        BufferId(7),
+        CharPos0::new(2),
+        EmacsBytePos::new(3),
+        CharPos0::new(4),
+        EmacsBytePos::new(5),
+    );
+    let string_item = DisplayItem::new(
+        SourceSpan::new(
+            DisplaySourcePosition::lisp_string(11, 0, 0),
+            DisplaySourcePosition::lisp_string(11, 3, 3),
+        ),
+        RenderFaceRef::FaceId(FaceId::new(12)),
+        DisplayItemKind::TextRun(DisplayTextRun::new("STR")),
+    )
+    .with_layout(DisplayItemLayout {
+        raise: Some(0.5),
+        ..DisplayItemLayout::default()
+    });
+
+    let item = covered.item_from_replacement_string_item(string_item);
+
+    assert_eq!(
+        item.kind,
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("STR")),
+        "a replacement string's TextRun becomes a covered-provenance run"
+    );
+    assert_eq!(
+        item.span,
+        SourceSpan::new(
+            DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(2), EmacsBytePos::new(3)),
+            DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(4), EmacsBytePos::new(5)),
+        ),
+        "the run's span is the COVERED buffer range, not the string's indices"
+    );
+    assert_eq!(item.face, RenderFaceRef::FaceId(FaceId::new(12)));
+    assert_eq!(item.layout.raise, Some(0.5));
+}
+
+#[test]
+fn replacement_source_keeps_non_text_kinds_with_covered_span() {
+    // Non-text items from inside a display string (e.g. a nested stretch) keep
+    // their kind; only the span is rewritten to the covered range.
+    let covered = BufferDisplayReplacementSource::spanning(
+        BufferId(3),
+        CharPos0::new(5),
+        EmacsBytePos::new(6),
+        CharPos0::new(6),
+        EmacsBytePos::new(7),
+    );
+    let stretch = DisplayItem::new(
+        SourceSpan::synthetic(9, 0, 1),
+        RenderFaceRef::FaceId(FaceId::new(4)),
+        DisplayItemKind::Stretch(DisplayStretch {
+            width: DisplayStretchWidth::Length(DisplayLength::Pixels(24.0)),
+            height: None,
+            ascent: None,
+        }),
+    );
+
+    let item = covered.item_from_replacement_string_item(stretch);
+
+    assert!(matches!(item.kind, DisplayItemKind::Stretch(_)));
+    assert_eq!(
+        item.span.buffer_end_charpos(),
+        Some(CharPos0::new(6)),
+        "covered provenance applies to every item kind the string yields"
+    );
+}

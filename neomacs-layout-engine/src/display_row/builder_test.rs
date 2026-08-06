@@ -1574,3 +1574,155 @@ fn display_row_builder_ceil_pixel_stretch_columns() {
     assert_eq!(glyph.glyph_type, GlyphType::Stretch { width_cols: 2 });
     assert_eq!(glyph.pixel_width, 9.0);
 }
+
+// ---- Increment 2i rung 1: covered-provenance stamping on the append path.
+// The renderer's stamping rule (`DisplayTextSourceMapping`): a `TextRun`
+// advances the glyph charpos per char (NaturalText); a `SourceMappedText`
+// stamps EVERY glyph -- and every slot source -- with the span START
+// (SourceMapped). A display-property replacement string therefore produces N
+// glyphs for M covered buffer chars, all carrying the covered start position,
+// which is the shape `set_cursor_from_row`-style consumers rely on (neomacs's
+// one-field mirror of GNU's charpos+object pair; the pipeline stamps the
+// covered BUFFER position where GNU stamps a string index plus the string).
+
+fn covered_buffer_span(start_char: usize, end_char: usize) -> SourceSpan {
+    SourceSpan::new(
+        DisplaySourcePosition::buffer(
+            neovm_core::buffer::BufferId(1),
+            neovm_core::buffer::CharPos0::new(start_char),
+            neovm_core::buffer::EmacsBytePos::new(start_char + 1),
+        ),
+        DisplaySourcePosition::buffer(
+            neovm_core::buffer::BufferId(1),
+            neovm_core::buffer::CharPos0::new(end_char),
+            neovm_core::buffer::EmacsBytePos::new(end_char + 1),
+        ),
+    )
+}
+
+#[test]
+fn covered_provenance_run_stamps_every_glyph_with_covered_start() {
+    // "STR" replacing covered buffer chars [5, 7): 3 glyphs for 2 covered
+    // chars, every glyph charpos == 5, every slot source == the span start.
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 80.0);
+
+    let progress = writer.push_item(DisplayItem::new(
+        covered_buffer_span(5, 7),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("STR")),
+    ));
+
+    assert_eq!(progress.status(), DisplayRowAppendStatus::Complete);
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(glyphs.len(), 3, "N string glyphs for M covered chars");
+    for glyph in glyphs {
+        assert_eq!(
+            glyph.charpos, 5,
+            "every replacement glyph carries the covered START charpos"
+        );
+    }
+    assert_eq!(row_text(&row), "STR");
+}
+
+#[test]
+fn covered_provenance_run_slots_all_carry_the_span_start() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 80.0);
+
+    let progress = writer.push_item(DisplayItem::new(
+        covered_buffer_span(5, 7),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("STR")),
+    ));
+
+    let expected = DisplaySourcePosition::buffer(
+        neovm_core::buffer::BufferId(1),
+        neovm_core::buffer::CharPos0::new(5),
+        neovm_core::buffer::EmacsBytePos::new(6),
+    );
+    assert_eq!(progress.slots().len(), 3);
+    for slot in progress.slots() {
+        assert_eq!(
+            slot.source(),
+            expected,
+            "covered-provenance slots do not advance per char"
+        );
+    }
+}
+
+#[test]
+fn natural_text_run_stamps_glyphs_per_char_by_contrast() {
+    // The contrast pin: the SAME span rendered as a TextRun advances charpos
+    // per char -- the exact limitation that forced the display-string refusals
+    // before this increment.
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 80.0);
+
+    writer.push_item(DisplayItem::new(
+        covered_buffer_span(5, 8),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+        DisplayItemKind::TextRun(DisplayTextRun::new("abc")),
+    ));
+
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(
+        glyphs.iter().map(|glyph| glyph.charpos).collect::<Vec<_>>(),
+        vec![5, 6, 7]
+    );
+}
+
+#[test]
+fn replacement_string_session_source_emits_covered_provenance_runs() {
+    // The producer seam the display-replacement session drives
+    // (`BufferDisplayReplacementStringRequest` -> `LispStringSourceCursor`
+    // wrapped in the covered rewrite): for string "STR" covering buffer
+    // [2, 4), the produced item IS the covered-provenance run, and appending
+    // it stamps the covered start on every glyph -- the stamped shape equals
+    // what the pipeline's replacement session appends for the same content.
+    let _eval = Context::new();
+    let covered = crate::display_item::BufferDisplayReplacementSource::spanning(
+        neovm_core::buffer::BufferId(1),
+        neovm_core::buffer::CharPos0::new(2),
+        neovm_core::buffer::EmacsBytePos::new(3),
+        neovm_core::buffer::CharPos0::new(4),
+        neovm_core::buffer::EmacsBytePos::new(5),
+    );
+    let mut source = crate::display_source::BufferDisplayReplacementStringRequest::new(
+        7,
+        Value::string("STR"),
+        covered,
+    )
+    .into_source(FaceId::new(2))
+    .expect("replacement string source");
+    let mut context = DisplaySourceContext::empty();
+
+    let item = source.next_item(&mut context).expect("covered run");
+    assert!(
+        source.next_item(&mut context).is_none(),
+        "a plain (property-less) string yields exactly one covered run"
+    );
+    assert_eq!(
+        item.kind,
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("STR"))
+    );
+    assert_eq!(
+        item.span.buffer_end_charpos(),
+        Some(neovm_core::buffer::CharPos0::new(4))
+    );
+
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 80.0);
+    writer.push_item(item);
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(glyphs.len(), 3);
+    assert!(glyphs.iter().all(|glyph| glyph.charpos == 2));
+}
