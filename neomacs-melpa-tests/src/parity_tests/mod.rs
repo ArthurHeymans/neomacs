@@ -288,6 +288,7 @@ mod cond_let;
 mod consult;
 mod counsel;
 mod csv_mode;
+mod ctable;
 mod dap_mode;
 mod dash;
 mod dash_functional;

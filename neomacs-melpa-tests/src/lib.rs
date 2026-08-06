@@ -2578,6 +2578,13 @@ pub const CONSULT_MELPA_PIN: (&str, &str) = ("consult", "20260716.1105");
 /// `ee79f68215ae7e2b8a38ba6bf7f82b3fe57dc16c`.
 pub const COUNSEL_MELPA_PIN: (&str, &str) = ("counsel", "20260214.1004");
 
+/// The exact ctable package selected for practical model construction, text,
+/// buffer, and embedded-region rendering, sorting, navigation, selection,
+/// event hooks, model replacement, formatting, and async-wrapper parity.
+/// MELPA built version 0.1.3 from upstream commit
+/// `48b73742757a3ae5736d825fe49e00034cc453b5`.
+pub const CTABLE_MELPA_PIN: (&str, &str) = ("ctable", "20210128.629");
+
 /// The exact f package selected by the comprehensive API parity corpus.
 pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 
