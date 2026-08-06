@@ -95,6 +95,37 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         self.buffer
     }
 
+    pub(crate) fn face_resolver(&self) -> &'a FaceResolver {
+        self.face_resolver
+    }
+
+    pub(crate) fn default_resolved(&self) -> &'a ResolvedFace {
+        self.default_resolved
+    }
+
+    pub(crate) fn default_face_id(&self) -> FaceId {
+        self.default_face_id
+    }
+
+    /// Measured-face PROBE for the routed row acquisition: the active-face
+    /// state `resolve_at_checkpoint` would install for `face_id`/`resolved`,
+    /// WITHOUT installing it or touching row geometry — the route decision
+    /// must measure candidate segments before mutating any loop state.
+    pub(crate) fn probe_measured_active_face(
+        &self,
+        source_render: &mut TextRowSourceRenderState<'_>,
+        face_id: FaceId,
+        resolved: ResolvedFace,
+    ) -> DisplayRowActiveFaceState {
+        source_render.resolve_measured_face_without_install(
+            self.measurement_policy,
+            face_id,
+            resolved,
+            self.window_metrics.char_width(),
+            self.window_metrics,
+        )
+    }
+
     pub(crate) fn resolve_at_checkpoint(
         &self,
         state: &mut BufferSourceFaceResolutionState<'_, '_>,

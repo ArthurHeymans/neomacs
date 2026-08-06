@@ -14564,6 +14564,32 @@ fn ascii_route_flag_on_layout_engages_item_renderer_acquisition() {
     );
 }
 
+/// Engagement proof for the multi-face extension (flag-on suite gate): a
+/// face-segmented row must actually take the routed segmented acquisition.
+/// Trivially passes when the flag is off.
+#[test]
+fn ascii_route_flag_on_layout_engages_segmented_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_SEGMENTED_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("hello world\nnext\n", |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(put-text-property 3 8 'face 'bold)")
+                .expect("face span");
+        });
+    assert!(rows.len() >= 2);
+    let after = crate::buffer_source::row_route::ROUTED_SEGMENTED_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after >= before + 1,
+        "expected the face-segmented row to route through the item renderer \
+         (before={before}, after={after})"
+    );
+}
+
 #[test]
 fn ascii_route_classifies_exactly_filling_line_to_buffer_pipeline() {
     let text = "abcdefgh\n";

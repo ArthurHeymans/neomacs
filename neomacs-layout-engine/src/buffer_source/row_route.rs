@@ -546,9 +546,22 @@ pub(crate) fn row_item_route_ascii_enabled() -> bool {
 pub(crate) static ROUTED_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-fn note_routed_row() {
+/// Test-only engagement proof for the multi-face extension: routed rows that
+/// rendered as MORE than one face segment.
+#[cfg(test)]
+pub(crate) static ROUTED_SEGMENTED_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+fn note_routed_row(segmented: bool) {
     #[cfg(test)]
-    ROUTED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    {
+        ROUTED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if segmented {
+            ROUTED_SEGMENTED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    #[cfg(not(test))]
+    let _ = segmented;
 }
 
 /// Outcome of an attempted item-renderer row acquisition.
@@ -572,28 +585,35 @@ impl<'rows, 'emit, 'surface>
     /// Attempt to acquire and render the row starting at the current walk
     /// position through the unified item renderer (`NEOMACS_ROW_ITEM_ROUTE=
     /// ascii` route). Only rows [`classify_row_acquisition`] approves are
-    /// taken, and the natural-measurement fit is re-verified with the same
-    /// measurement the buffer pipeline's whole-run decision uses; everything
-    /// else falls back to the buffer pipeline with no state touched.
+    /// taken; every candidate face segment is probed (checkpoint face,
+    /// per-run face-chain agreement, box-free, natural-measurement fit — the
+    /// same measurement the buffer pipeline's whole-run decision uses)
+    /// BEFORE any loop state is mutated; everything else falls back to the
+    /// buffer pipeline. The only probe-side effects are content-addressed
+    /// stable-id mints, which the pipeline performs identically for the same
+    /// row.
     ///
     /// The bookkeeping the buffer pipeline performs per item is either
-    /// replicated (active-face row-extend scope, resolved-face memo) or
-    /// provably idle for a classified row: cursor capture (point excluded),
+    /// replicated (per-segment face checkpoint via `resolve_at_checkpoint`,
+    /// active-face row-extend scope, resolved-face memo) or provably idle
+    /// for a classified row: cursor capture (point excluded),
     /// trailing-whitespace tracking and word-wrap candidates (both disabled
     /// by the classifier), overlay-string splits (no overlays).
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_render_ascii_row_via_item_renderer<B: LayoutBufferView>(
         &mut self,
         loop_context: crate::buffer_source::loop_context::BufferSourceLoopRequestContext,
+        face_resolution_context: crate::buffer_source::face_resolution::BufferSourceFaceResolutionContext<'_, B>,
         source_walk: &mut crate::buffer_source::walk::BufferSourceWalk<'_, B>,
         text: &[u8],
         params: &crate::types::WindowParams,
-        active_face_state: &crate::display_row::face_state::DisplayRowActiveFaceState,
+        active_face_state: &mut crate::display_row::face_state::DisplayRowActiveFaceState,
         buffer: &B,
     ) -> AsciiRowRouteOutcome {
         use crate::buffer_source::item_append::BufferSourceRowAppendContext;
         use crate::display_row::append_context::DisplayRowAppendKind;
+        use crate::display_row::builder::DisplayRowPosition;
         use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
-        use neovm_core::buffer::CharLen;
 
         if source_walk.has_pending_render_items() {
             return AsciiRowRouteOutcome::NotRouted;
@@ -622,104 +642,189 @@ impl<'rows, 'emit, 'surface>
         let Some(plan) = plan_ascii_row(buffer, row, fit, policy) else {
             return AsciiRowRouteOutcome::NotRouted;
         };
-        // TEMPORARY (removed by the multi-face routing increment): the
-        // classifier already plans face-segmented rows, but this render still
-        // binds ONE active face over the whole line; keep face-affected rows
-        // on the buffer pipeline until the segmented render lands.
-        if plan.is_segmented() {
-            return AsciiRowRouteOutcome::NotRouted;
+        let segmented = plan.is_segmented();
+
+        let start = CharPos0::new(row.charpos.max(0) as usize);
+        let ranges = plan.segment_ranges(start);
+        let line_end = ranges.last().map(|(_, end)| *end).unwrap_or(start);
+
+        // ---- Probe phase: no loop-state mutation. Resolve every segment's
+        // checkpoint face (the loop already resolved segment 0's), refuse
+        // divergent per-run face chains and box faces on the NEW multi-face
+        // class, and verify the strict natural-measurement fit segment by
+        // segment at its running position.
+        struct ProbedSegment {
+            start: CharPos0,
+            end: CharPos0,
+            active: crate::display_row::face_state::DisplayRowActiveFaceState,
         }
-        let start_byte = EmacsBytePos::new(row.text_start_byte + row.byte_idx);
-        for prop in ["face", "font-lock-face"] {
-            if buffer
-                .layout_text_prop_at_emacs_byte_pos(start_byte, Value::symbol(prop))
-                .is_some()
-            {
+        let mut probed: Vec<ProbedSegment> = Vec::with_capacity(ranges.len());
+        for (index, (seg_start, seg_end)) in ranges.iter().enumerate() {
+            let active = if index == 0 {
+                active_face_state.clone()
+            } else {
+                let (face_id, resolved) = resolve_routed_position_face(
+                    buffer,
+                    face_resolution_context.face_resolver(),
+                    self.face_ids,
+                    *seg_start,
+                );
+                face_resolution_context.probe_measured_active_face(
+                    &mut self.source_render.reborrow(),
+                    face_id,
+                    resolved,
+                )
+            };
+            // Box faces carry per-run edge bookkeeping (GNU
+            // start_of_box_run_p / face_box_p) the routed render does not
+            // replicate; keep the multi-face class box-free.
+            if segmented && active.resolved_face().box_type != 0 {
+                return AsciiRowRouteOutcome::NotRouted;
+            }
+            // The pipeline stamps glyphs with the PER-RUN face chain; refuse
+            // the row when it would diverge from the checkpoint chain (e.g.
+            // buffer face remapping of default).
+            if routed_segment_item_face_diverges(
+                buffer,
+                face_resolution_context.face_resolver(),
+                self.face_ids,
+                face_resolution_context.default_resolved(),
+                face_resolution_context.default_face_id(),
+                *seg_start,
+                active.face_id(),
+            ) {
+                return AsciiRowRouteOutcome::NotRouted;
+            }
+            probed.push(ProbedSegment {
+                start: *seg_start,
+                end: *seg_end,
+                active,
+            });
+        }
+
+        let geometry = *self.row_geometry;
+        let mut probe_x = position.x_px();
+        let mut probe_col = position.col();
+        for segment in &probed {
+            let mut source = BufferAsciiItemSource::text_only(
+                loop_context.buffer_id(),
+                buffer,
+                segment.start,
+                segment.end,
+                RenderFaceRef::FaceId(segment.active.face_id()),
+            );
+            let Some(text_item) = source.text_item().cloned() else {
+                return AsciiRowRouteOutcome::NotRouted;
+            };
+            let append_context = BufferSourceRowAppendContext::from_active_face_row(
+                buffer,
+                loop_context.buffer_id(),
+                self.append_surface,
+                &segment.active,
+                0.0,
+                loop_context.char_height(),
+                self.face_ids.clone(),
+            );
+            let measured = {
+                let mut measure = self.source_render.measure_state();
+                append_context.measure_source_display_item_width_naturally(
+                    &geometry,
+                    &mut measure,
+                    &text_item,
+                    DisplayRowPosition::new(probe_x, probe_col),
+                    DisplayRowAppendKind::SourceText,
+                )
+            };
+            let Some(width_px) = measured else {
+                return AsciiRowRouteOutcome::NotRouted;
+            };
+            probe_x += width_px;
+            probe_col += segment.end.get().saturating_sub(segment.start.get());
+            // Strict fit at every segment boundary: any borderline row
+            // (exact fill) keeps the buffer pipeline.
+            if !(probe_x < self.append_surface.right_edge()) {
                 return AsciiRowRouteOutcome::NotRouted;
             }
         }
 
-        let start = CharPos0::new(row.charpos.max(0) as usize);
-        let line_end = start.add_len(CharLen::new(plan.line_len()));
-        // The routed item carries the realized active face id — exactly what
-        // the buffer pipeline's append context binds for an Inherit-faced
-        // plain run.
-        let mut source = BufferAsciiItemSource::text_only(
-            loop_context.buffer_id(),
-            buffer,
-            start,
-            line_end,
-            RenderFaceRef::FaceId(active_face_state.face_id()),
-        );
-        let Some(text_item) = source.text_item().cloned() else {
-            return AsciiRowRouteOutcome::NotRouted;
-        };
+        // ---- Commit phase: render segment by segment, replaying the
+        // pipeline's per-iteration bookkeeping. Segment 0's face checkpoint
+        // already ran in the visible loop; each later segment start IS the
+        // next property change, so `resolve_at_checkpoint` fires there
+        // exactly as the pipeline's next iteration would (installing the
+        // measured face, including row extents, scoping row-extend/box).
+        let mut render_position = position;
+        for (index, segment) in probed.iter().enumerate() {
+            if index > 0 {
+                face_resolution_context.resolve_at_checkpoint_with_source_state(
+                    &mut self.source_render.reborrow(),
+                    self.face_scan,
+                    self.face_ids,
+                    active_face_state,
+                    self.row_geometry,
+                    self.row_extend,
+                    self.box_face,
+                    render_position.x_px(),
+                    segment.start.get() as i64,
+                );
+                debug_assert_eq!(
+                    active_face_state.face_id(),
+                    segment.active.face_id(),
+                    "probe and checkpoint face resolution must agree"
+                );
+            }
+            // Per-item bookkeeping the buffer pipeline would perform for
+            // this run (item_render.rs): remember the resolved active face
+            // for later splits, and scope the row-extend fill to the row.
+            source_walk.remember_resolved_source_face_if_absent(
+                active_face_state.face_id(),
+                active_face_state.resolved_face(),
+            );
+            if let Some(fill) = active_face_state.row_extend_fill() {
+                self.row_extend
+                    .activate(self.row_geometry.current_row_marker(), fill);
+            } else {
+                self.row_extend.clear();
+            }
 
-        let append_context = BufferSourceRowAppendContext::from_active_face_row(
-            buffer,
-            loop_context.buffer_id(),
-            self.append_surface,
-            active_face_state,
-            0.0,
-            loop_context.char_height(),
-            self.face_ids.clone(),
-        );
-        let geometry = *self.row_geometry;
-
-        // Strict natural-measurement fit before committing to the route: the
-        // same measurement the buffer pipeline's whole-run decision performs,
-        // strict so any borderline row (exact fill) keeps the buffer
-        // pipeline. Nothing has been mutated yet.
-        let measured = {
-            let mut measure = self.source_render.measure_state();
-            append_context.measure_source_display_item_width_naturally(
+            let mut source = BufferAsciiItemSource::text_only(
+                loop_context.buffer_id(),
+                buffer,
+                segment.start,
+                segment.end,
+                RenderFaceRef::FaceId(active_face_state.face_id()),
+            );
+            let append_context = BufferSourceRowAppendContext::from_active_face_row(
+                buffer,
+                loop_context.buffer_id(),
+                self.append_surface,
+                active_face_state,
+                0.0,
+                loop_context.char_height(),
+                self.face_ids.clone(),
+            );
+            let geometry = *self.row_geometry;
+            let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
+            let mut source_state =
+                crate::display_row::source_state::DisplayRowSourceState::default();
+            let Some(append_progress) = append_context.render_display_item_source_to_text_row(
                 &geometry,
-                &mut measure,
-                &text_item,
-                position,
+                &mut self.source_render.reborrow(),
+                &mut source,
+                &mut source_state,
+                render_position,
                 DisplayRowAppendKind::SourceText,
-            )
-        };
-        let Some(width_px) = measured else {
-            return AsciiRowRouteOutcome::NotRouted;
-        };
-        if !(position.x_px() + width_px < self.append_surface.right_edge()) {
-            return AsciiRowRouteOutcome::NotRouted;
+                &mut render_policy,
+            ) else {
+                return AsciiRowRouteOutcome::Stopped;
+            };
+            render_position = append_progress.end();
+            self.progress.apply_row_position(render_position);
         }
 
-        // Per-item bookkeeping the buffer pipeline would perform for this run
-        // (item_render.rs): remember the resolved active face for later
-        // splits, and scope the row-extend fill to the current row.
-        source_walk.remember_resolved_source_face_if_absent(
-            active_face_state.face_id(),
-            active_face_state.resolved_face(),
-        );
-        if let Some(fill) = active_face_state.row_extend_fill() {
-            self.row_extend
-                .activate(self.row_geometry.current_row_marker(), fill);
-        } else {
-            self.row_extend.clear();
-        }
-
-        // Render through the unified item renderer seam.
-        let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
-        let mut source_state = crate::display_row::source_state::DisplayRowSourceState::default();
-        let Some(append_progress) = append_context.render_display_item_source_to_text_row(
-            &geometry,
-            &mut self.source_render.reborrow(),
-            &mut source,
-            &mut source_state,
-            position,
-            DisplayRowAppendKind::SourceText,
-            &mut render_policy,
-        ) else {
-            return AsciiRowRouteOutcome::Stopped;
-        };
-
-        self.progress.apply_row_position(append_progress.end());
         self.progress.max_charpos(line_end.get() as i64);
         self.progress.set_byte_idx(row.byte_idx + plan.line_len());
-        note_routed_row();
+        note_routed_row(segmented);
         AsciiRowRouteOutcome::Rendered
     }
 }

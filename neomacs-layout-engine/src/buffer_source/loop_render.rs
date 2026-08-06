@@ -75,6 +75,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 use crate::buffer_source::row_route::AsciiRowRouteOutcome;
                 match self.try_render_ascii_row_via_item_renderer(
                     loop_context,
+                    face_resolution_context,
                     source_walk,
                     text,
                     params,

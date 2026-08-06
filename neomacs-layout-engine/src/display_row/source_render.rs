@@ -674,6 +674,28 @@ impl<'a> TextRowSourceRenderState<'a> {
         )
     }
 
+    /// [`Self::resolve_and_install_measured_face`] WITHOUT the install: a
+    /// probe for the routed row acquisition, which must measure candidate
+    /// segments against their measured faces before deciding whether to
+    /// commit (and only then installs, through the checkpoint seam).
+    pub(crate) fn resolve_measured_face_without_install(
+        &mut self,
+        measurement_policy: DisplayRowMeasurementPolicy,
+        face_id: FaceId,
+        face: ResolvedFace,
+        fallback_char_width: f32,
+        fallback_metrics: DisplayRowFallbackMetrics,
+    ) -> DisplayRowActiveFaceState {
+        self.resolved_measured_face(
+            measurement_policy,
+            face_id,
+            face,
+            fallback_char_width,
+            fallback_metrics,
+        )
+        .into_active_face_state()
+    }
+
     pub(crate) fn resolve_and_install_measured_face(
         &mut self,
         measurement_policy: DisplayRowMeasurementPolicy,
