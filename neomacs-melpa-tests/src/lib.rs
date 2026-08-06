@@ -506,6 +506,12 @@ pub const YUCK_MODE_MELPA_PIN: (&str, &str) = ("yuck-mode", "20230113.2304");
 /// `694defa220113d0acaa78fd646dcff9f1a08fad9`.
 pub const XR_MELPA_PIN: (&str, &str) = ("xr", "2.2");
 
+/// The exact xterm-color package selected for practical process-stream,
+/// property-preservation, whole-buffer, overlay, and palette-cache parity.
+/// MELPA built this archive from upstream commit
+/// `0b0d808f8bc5007037341dc5f63149cc32cf2c5b`.
+pub const XTERM_COLOR_MELPA_PIN: (&str, &str) = ("xterm-color", "20260531.1854");
+
 /// The exact z3-mode package selected by the practical SMT-LIB editing,
 /// solver execution, Flycheck diagnostics, and complete command-vocabulary
 /// parity corpus. MELPA built this archive from upstream commit

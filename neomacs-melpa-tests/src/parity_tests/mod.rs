@@ -516,6 +516,7 @@ mod writeroom_mode;
 mod ws_butler;
 mod xcscope;
 mod xr;
+mod xterm_color;
 mod yaml;
 mod yaml_mode;
 mod yasnippet;
