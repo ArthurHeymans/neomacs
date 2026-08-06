@@ -199,7 +199,7 @@ rank	package	downloads	status
 198	smex	577347	covered
 199	evil-ediff	575343	covered
 200	bui	569120	covered
-201	overseer	567596	todo
+201	overseer	567596	covered
 202	treepy	559118	todo
 203	lua-mode	556909	todo
 204	flycheck-package	550828	todo

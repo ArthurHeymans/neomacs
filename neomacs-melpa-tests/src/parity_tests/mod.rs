@@ -427,6 +427,7 @@ mod org_bullets;
 mod org_category_capture;
 mod org_download;
 mod org_pomodoro;
+mod overseer;
 mod package_build;
 mod package_lifecycle;
 mod package_lint;

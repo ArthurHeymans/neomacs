@@ -2212,6 +2212,12 @@ pub const ORG_DOWNLOAD_MELPA_PIN: (&str, &str) = ("org-download", "20241118.1846
 /// commit `3f5bcfb80d61556d35fc29e5ddb09750df962cc6`.
 pub const ORG_POMODORO_MELPA_PIN: (&str, &str) = ("org-pomodoro", "20220318.1618");
 
+/// The exact Overseer package selected for practical project discovery,
+/// automatic test-file activation, ERT selection, command dispatch, and real
+/// compilation-process parity. MELPA built this archive from upstream commit
+/// `7fdcf1a6fba6b1569a09c1666b4e51bcde266ed9`.
+pub const OVERSEER_MELPA_PIN: (&str, &str) = ("overseer", "20240109.800");
+
 /// The exact EmacSQL package selected for practical schema and CRUD query
 /// compilation, prepared-input escaping, reporting expressions, transaction
 /// retry and rollback, protocol parsing, authoring, and failure parity. MELPA
