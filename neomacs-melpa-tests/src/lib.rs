@@ -1961,6 +1961,12 @@ pub const JS2_REFACTOR_MELPA_PIN: (&str, &str) = ("js2-refactor", "20250210.1811
 /// `c6955162307f37c2ac631d9daf118781009f8dda`.
 pub const KEYFREQ_MELPA_PIN: (&str, &str) = ("keyfreq", "20231107.106");
 
+/// The exact linum-relative package selected for practical relative-number
+/// rendering, customization, backend ownership, and global-mode lifecycle
+/// parity. MELPA built this archive from upstream commit
+/// `8fbe89ad897921849665a3e8da18cee7d0721441`.
+pub const LINUM_RELATIVE_MELPA_PIN: (&str, &str) = ("linum-relative", "20221025.517");
+
 /// The exact LSP Mode package selected for practical JSON-RPC transport,
 /// Unicode position, workspace edit, completion, diagnostics, and URI parity.
 /// MELPA built this archive from upstream commit

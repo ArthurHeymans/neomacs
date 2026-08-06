@@ -399,6 +399,7 @@ mod json_snatcher;
 mod keyfreq;
 mod keytar;
 mod link_hint;
+mod linum_relative;
 mod list_utils;
 mod llama;
 mod log4e;
