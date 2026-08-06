@@ -317,6 +317,7 @@ mod eval_sexp_fu;
 mod evil;
 mod evil_anzu;
 mod evil_args;
+mod evil_cleverparens;
 mod evil_collection;
 mod evil_ediff;
 mod evil_escape;

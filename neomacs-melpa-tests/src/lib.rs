@@ -2085,6 +2085,12 @@ pub const DASH_FUNCTIONAL_MELPA_PIN: (&str, &str) = ("dash-functional", "2025031
 /// The exact Evil package selected by the comprehensive API parity corpus.
 pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 
+/// The exact Evil Cleverparens package selected for practical modal structural
+/// editing, navigation, form transformation, and lifecycle parity. MELPA built
+/// this archive from upstream commit
+/// `4c413a132934695b975004d429b0b0a6e3d8ca38`.
+pub const EVIL_CLEVERPARENS_MELPA_PIN: (&str, &str) = ("evil-cleverparens", "20250518.1741");
+
 /// The exact Evil Visual Mark Mode package selected for practical local and
 /// global mark rendering, live edit tracking, state visibility, deletion, and
 /// lifecycle parity. MELPA built this archive from upstream commit
