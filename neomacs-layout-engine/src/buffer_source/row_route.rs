@@ -26,6 +26,18 @@
 //!   this path (they are Lisp-string-sourced runs with their own row
 //!   lifecycle, GNU `load_overlay_strings`/`push_it`); any intersecting
 //!   overlay carrying one refuses the route.
+//!   Plain-elision `invisible` text (phase 2d) is expressible: hidden spans
+//!   simply drop chars, so the routed source emits visible-segment TextRuns
+//!   whose charpos bookkeeping jumps the gap, exactly like the pipeline's
+//!   invisible checkpoint `skip_chars_until` (GNU `handle_invisible_prop`
+//!   advancing `IT_CHARPOS`). The inexpressible invisible sub-cases refuse:
+//!   ellipsis (inserts `...` glyphs with their own face/provenance rules),
+//!   runs covering the newline (line-structure change), row-start runs
+//!   (consumed by the loop checkpoint before the route), overlay-sourced
+//!   invisibility (2c allow-list). `display` properties and `(space …)`
+//!   specs stay refused whole (rungs 2-3 decision): replacement rendering
+//!   rides the Lisp-string session with covered-charpos glyph provenance the
+//!   single-row TextRun probe/commit cannot express.
 //! * [`BufferAsciiItemSource`] is the `DisplayItemSource` for such a row: it
 //!   produces exactly the items `BufferTextSourceCursor` would — one plain
 //!   `TextRun` per face segment (one for the whole line when no property
@@ -121,7 +133,11 @@ pub(crate) struct RowRouteFit<'a> {
 /// `face_boundaries` are the CHAR offsets strictly inside the line where text
 /// properties change — each starts a new face segment, the neomacs mirror of
 /// GNU `compute_stop_pos` stops re-resolved by `handle_face_prop`. Empty for
-/// a property-constant line.
+/// a property-constant line. `elided` are the CHAR-offset `[start, end)`
+/// ranges hidden by plain (no-ellipsis) `invisible` text properties, in
+/// ascending disjoint order — the routed render skips them entirely, exactly
+/// as the pipeline's invisible checkpoint `skip_chars_until` does (GNU
+/// `handle_invisible_prop` advancing `IT_CHARPOS` past the run).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AsciiRowPlan {
     line_byte_len: usize,
@@ -130,6 +146,7 @@ pub(crate) struct AsciiRowPlan {
     has_wide: bool,
     has_overlay: bool,
     face_boundaries: Vec<usize>,
+    elided: Vec<(usize, usize)>,
 }
 
 impl AsciiRowPlan {
@@ -161,22 +178,58 @@ impl AsciiRowPlan {
         self.has_overlay
     }
 
-    /// Whether the row renders as more than one face segment.
-    pub(crate) fn is_segmented(&self) -> bool {
-        !self.face_boundaries.is_empty()
+    #[cfg(test)]
+    pub(crate) fn elided(&self) -> &[(usize, usize)] {
+        &self.elided
     }
 
-    /// The `[start, end)` char ranges of the row's face segments, in row
-    /// order. A property-constant line yields one range covering the line.
+    /// Whether the row elides invisible spans.
+    pub(crate) fn has_elision(&self) -> bool {
+        !self.elided.is_empty()
+    }
+
+    /// Whether the row renders as more than one run (face segments or
+    /// elision gaps splitting the line).
+    pub(crate) fn is_segmented(&self) -> bool {
+        !self.face_boundaries.is_empty() || !self.elided.is_empty()
+    }
+
+    /// The `[start, end)` char ranges of the row's VISIBLE face segments, in
+    /// row order: the line minus the elided spans, split at each face
+    /// boundary that falls strictly inside a visible stretch (boundaries at
+    /// an elided edge coincide with the gap and split nothing; boundaries
+    /// inside a hidden span never render). A property-constant fully-visible
+    /// line yields one range covering the line.
     pub(crate) fn segment_ranges(&self, start: CharPos0) -> Vec<(CharPos0, CharPos0)> {
-        let mut ranges = Vec::with_capacity(self.face_boundaries.len() + 1);
-        let mut seg_start = start;
-        for boundary in &self.face_boundaries {
-            let seg_end = start.add_len(CharLen::new(*boundary));
-            ranges.push((seg_start, seg_end));
-            seg_start = seg_end;
+        let mut visible: Vec<(usize, usize)> = Vec::with_capacity(self.elided.len() + 1);
+        let mut cursor = 0usize;
+        for &(hidden_start, hidden_end) in &self.elided {
+            if hidden_start > cursor {
+                visible.push((cursor, hidden_start));
+            }
+            cursor = cursor.max(hidden_end);
         }
-        ranges.push((seg_start, start.add_len(CharLen::new(self.line_char_len))));
+        if cursor < self.line_char_len {
+            visible.push((cursor, self.line_char_len));
+        }
+
+        let mut ranges = Vec::with_capacity(visible.len() + self.face_boundaries.len());
+        for (visible_start, visible_end) in visible {
+            let mut seg_start = visible_start;
+            for &boundary in &self.face_boundaries {
+                if boundary > seg_start && boundary < visible_end {
+                    ranges.push((
+                        start.add_len(CharLen::new(seg_start)),
+                        start.add_len(CharLen::new(boundary)),
+                    ));
+                    seg_start = boundary;
+                }
+            }
+            ranges.push((
+                start.add_len(CharLen::new(seg_start)),
+                start.add_len(CharLen::new(visible_end)),
+            ));
+        }
         ranges
     }
 }
@@ -407,21 +460,76 @@ fn routed_row_overlay_scan<B: LayoutBufferView + ?Sized>(
 /// `font-lock-face`, `fontified` boundaries) are NOT hazards: they only
 /// segment the row and are handled by the routed face resolution. Properties
 /// are constant between change positions, so probing each segment start (and
-/// the newline, when a change lands on it) covers the whole row.
-const ROUTE_HAZARD_TEXT_PROPS: [&str; 5] = [
-    "display",
-    "composition",
-    "invisible",
-    "mouse-face",
-    "line-height",
-];
+/// the newline, when a change lands on it) covers the whole row. `invisible`
+/// is not on this list since phase 2d: the plain-elision sub-case is routed
+/// and the inexpressible sub-cases (ellipsis, newline-spanning, row-start,
+/// overlay-sourced) refuse through [`routed_row_elision_scan`]. `display`
+/// stays a hazard EVERYWHERE, including inside hidden spans, mirroring GNU's
+/// handler order where a replacing `display` spec beats `invisible`
+/// (it_props: display before invisible + HANDLED_RETURN).
+const ROUTE_HAZARD_TEXT_PROPS: [&str; 4] = ["display", "composition", "mouse-face", "line-height"];
+
+/// Scan the `[row_charpos, newline_charpos)` line for invisible text through
+/// the SAME semantics the pipeline's invisible checkpoint consumes
+/// (`RustTextPropAccess::check_invisible`: overlay value shadows the text
+/// property, values judged against `buffer-invisibility-spec`, adjacent
+/// hidden runs collapsed with the ENTRY run's ellipsis flag). Returns the
+/// hidden CHAR-offset ranges — the expressible plain-elision class — or
+/// `None`, refusing the route, when a hidden run:
+/// * shows an ellipsis (the pipeline appends `...` glyphs with their own
+///   face/provenance rules, GNU `setup_for_ellipsis`);
+/// * starts AT the row start (the visible loop's invisible checkpoint
+///   consumes it BEFORE the route attempt; the walk then resumes mid-line —
+///   classifying it here keeps direct classification aligned with the
+///   production ordering);
+/// * covers the newline (hiding the line end joins buffer lines into one
+///   display row — a line-structure change; a run ending exactly AT the
+///   newline keeps it visible and is fine);
+/// * fails to advance (defensive: a skip that does not move would loop).
+///
+/// The scan walks exactly the checkpoint cadence: probe, jump to the
+/// returned `next_visible`, re-probe — the same positions the pipeline's
+/// `InvisibleTextScanCheckpoint` re-checks at.
+fn routed_row_elision_scan<B: LayoutBufferView>(
+    buffer: &B,
+    row_charpos: i64,
+    newline_charpos: i64,
+) -> Option<Vec<(usize, usize)>> {
+    let text_props = crate::neovm_bridge::RustTextPropAccess::new(buffer);
+    let mut elided = Vec::new();
+    let mut pos = row_charpos;
+    // Probe through the newline INCLUSIVE: a hidden run starting at the
+    // newline itself covers the line end just as one running into it does.
+    while pos <= newline_charpos {
+        let (status, next_visible) = text_props.check_invisible(pos);
+        if status.hidden {
+            if status.ellipsis
+                || pos == row_charpos
+                || pos >= newline_charpos
+                || next_visible > newline_charpos
+                || next_visible <= pos
+            {
+                return None;
+            }
+            elided.push((
+                (pos - row_charpos) as usize,
+                (next_visible - row_charpos) as usize,
+            ));
+        }
+        if next_visible <= pos {
+            break;
+        }
+        pos = next_visible;
+    }
+    Some(elided)
+}
 
 /// Classify the row starting at `row` for acquisition routing. Returns
 /// [`RowAcquisitionRoute::ItemRenderer`] only for the plain row class
 /// described in the module docs; everything else stays on the buffer
 /// pipeline. Cheap checks run first; the property/overlay probes only run for
 /// content that already passed the ASCII scan.
-pub(crate) fn classify_row_acquisition<B: LayoutBufferView + ?Sized>(
+pub(crate) fn classify_row_acquisition<B: LayoutBufferView>(
     buffer: &B,
     row: RowRouteRowStart<'_>,
     fit: RowRouteFit<'_>,
@@ -436,7 +544,7 @@ pub(crate) fn classify_row_acquisition<B: LayoutBufferView + ?Sized>(
 
 /// The classifier behind [`classify_row_acquisition`], returning the routed
 /// row's plan so the render path does not rescan.
-pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
+pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     buffer: &B,
     row: RowRouteRowStart<'_>,
     fit: RowRouteFit<'_>,
@@ -478,6 +586,13 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
     if crate::neovm_bridge::buffer_has_active_display_table(buffer) {
         return None;
     }
+
+    // Invisible text: accept only the plain-elision class (hidden spans that
+    // simply drop chars from the row); ellipsis, newline-spanning folds,
+    // row-start runs, and non-advancing skips refuse. Overlay-sourced
+    // invisibility never reaches this scan — any intersecting overlay
+    // carrying `invisible` already refused through the overlay allow-list.
+    let elided = routed_row_elision_scan(buffer, row.charpos, newline_charpos)?;
 
     // Walk the property-change positions over the line AND its newline.
     // Hazard properties anywhere in that range refuse the route; changes
@@ -539,6 +654,7 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
         has_wide: scan.has_wide,
         has_overlay: overlay_scan.has_overlay,
         face_boundaries,
+        elided,
     })
 }
 
@@ -699,21 +815,29 @@ impl BufferAsciiItemSource {
                 end: line_end,
                 face,
             }],
-            Some(face),
+            Some((line_end, face)),
         )
     }
 
-    /// Source over the row's face segments plus the newline row break, the
-    /// break carrying the face resolved AT the newline (a face span covering
-    /// the newline rides onto the appended newline space through the line-end
-    /// plan, mirroring the buffer pipeline's row-break face).
+    /// Source over the row's face segments plus the newline row break at
+    /// `line_end` (the newline's OWN char position — with a trailing elision
+    /// the last visible segment ends before it), the break carrying the face
+    /// resolved AT the newline (a face span covering the newline rides onto
+    /// the appended newline space through the line-end plan, mirroring the
+    /// buffer pipeline's row-break face).
     pub(crate) fn with_row_break_segments<B: LayoutBufferView + ?Sized>(
         buffer_id: BufferId,
         buffer: &B,
         segments: &[AsciiRowItemSegment],
+        line_end: CharPos0,
         row_break_face: RenderFaceRef,
     ) -> Self {
-        Self::from_segments(buffer_id, buffer, segments, Some(row_break_face))
+        Self::from_segments(
+            buffer_id,
+            buffer,
+            segments,
+            Some((line_end, row_break_face)),
+        )
     }
 
     /// Source over the line text only; the buffer pipeline's own line-break
@@ -743,7 +867,7 @@ impl BufferAsciiItemSource {
         buffer_id: BufferId,
         buffer: &B,
         segments: &[AsciiRowItemSegment],
-        row_break_face: Option<RenderFaceRef>,
+        row_break: Option<(CharPos0, RenderFaceRef)>,
     ) -> Self {
         let byte_at = |pos: CharPos0| buffer.layout_char_pos_to_emacs_byte_pos(pos);
         let span = |from: CharPos0, to: CharPos0| {
@@ -792,11 +916,7 @@ impl BufferAsciiItemSource {
             );
         }
 
-        if let Some(break_face) = row_break_face {
-            let line_end = segments
-                .last()
-                .map(|segment| segment.end)
-                .unwrap_or(CharPos0::ZERO);
+        if let Some((line_end, break_face)) = row_break {
             // Mirrors `BufferTextSourceCursor::next_text_item_with_layout`:
             // the newline's row break carries the line-height policy resolved
             // from the (absent, for a classified row) `line-height` property.
@@ -874,6 +994,12 @@ pub(crate) static ROUTED_WIDE_ROW_COUNT: std::sync::atomic::AtomicUsize =
 pub(crate) static ROUTED_OVERLAY_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+/// Test-only engagement proof for the invisible-elision extension: routed
+/// rows that elide at least one plain-invisible span.
+#[cfg(test)]
+pub(crate) static ROUTED_ELIDED_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 fn note_routed_row(plan: &AsciiRowPlan) {
     #[cfg(test)]
     {
@@ -889,6 +1015,9 @@ fn note_routed_row(plan: &AsciiRowPlan) {
         }
         if plan.has_overlay {
             ROUTED_OVERLAY_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if plan.has_elision() {
+            ROUTED_ELIDED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
     #[cfg(not(test))]
@@ -979,7 +1108,11 @@ impl<'rows, 'emit, 'surface>
 
         let start = CharPos0::new(row.charpos.max(0) as usize);
         let ranges = plan.segment_ranges(start);
-        let line_end = ranges.last().map(|(_, end)| *end).unwrap_or(start);
+        // The walk resumes at the NEWLINE, not at the last visible segment's
+        // end: with a trailing elision they differ (the hidden span sits
+        // between them and produces nothing, exactly like the pipeline's
+        // invisible skip).
+        let line_end = start.add_len(CharLen::new(plan.line_char_len()));
 
         // ---- Probe phase: no loop-state mutation. Resolve every segment's
         // checkpoint face (the loop already resolved segment 0's), refuse

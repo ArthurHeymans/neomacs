@@ -14387,7 +14387,7 @@ fn main_row_base_face_id(row: &neomacs_display_protocol::glyph_matrix::MatrixRow
     row.glyphs[1].first().expect("main row glyph").face_id
 }
 
-fn ascii_route_classification<B: crate::neovm_bridge::LayoutBufferView + ?Sized>(
+fn ascii_route_classification<B: crate::neovm_bridge::LayoutBufferView>(
     buffer: &B,
     text: &[u8],
     byte_idx: usize,
@@ -15099,6 +15099,7 @@ fn assert_segmented_ascii_shadow_row(
         buf_id,
         &snapshot,
         &item_segments,
+        CharPos0::new(line_end),
         RenderFaceRef::FaceId(break_face_id),
     );
     let base_resolved = resolver.resolve_buffer_default_face(&snapshot);
@@ -15547,6 +15548,291 @@ fn ascii_route_flag_on_layout_engages_overlay_face_acquisition() {
         after >= before + 1,
         "expected the overlay-faced row to route through the item renderer \
          (before={before}, after={after})"
+    );
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_mid_line_elision_row() {
+    // Phase 2d rung 1: a mid-line plain-invisible span (no ellipsis) simply
+    // elides its chars. The routed source emits visible-segment TextRuns
+    // whose charpos bookkeeping jumps the hidden gap exactly like the
+    // pipeline's invisible checkpoint skip.
+    let text = "abXXcd\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(put-text-property 3 5 'invisible t)")
+                .expect("mid-line invisible span");
+        });
+    assert_eq!(
+        glyphs_logical_text(&rows[0].glyphs[1]),
+        "abcd ",
+        "the hidden span must elide (plus the appended newline space)"
+    );
+    // Charpos bookkeeping: the visible glyphs jump the gap (0,1 then 4,5).
+    let charposes: Vec<usize> = rows[0].glyphs[1]
+        .iter()
+        .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Char { .. }))
+        .map(|glyph| glyph.charpos)
+        .collect();
+    assert_eq!(
+        charposes,
+        vec![0, 1, 4, 5, usize::MAX],
+        "visible glyph charpos must jump the elided span (the appended newline \
+         space is GNU's positionless append_space_for_newline glyph)"
+    );
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 2, "two visible segments around the gap");
+    assert_eq!(segments[0].start.get(), 0);
+    assert_eq!(segments[0].end.get(), 2);
+    assert_eq!(segments[1].start.get(), 4);
+    assert_eq!(segments[1].end.get(), 6);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_trailing_elision_row() {
+    // The hidden run ends exactly AT the newline: only the visible prefix
+    // renders, and the appended newline space still carries the NEWLINE's
+    // char position (not the last visible segment's end).
+    let text = "abcXX\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(put-text-property 4 6 'invisible t)")
+                .expect("trailing invisible span");
+        });
+    assert_eq!(glyphs_logical_text(&rows[0].glyphs[1]), "abc ");
+    let appended = rows[0].glyphs[1].last().expect("appended newline space");
+    assert_eq!(
+        appended.charpos,
+        usize::MAX,
+        "the appended newline space stays GNU's positionless append_space_for_newline glyph"
+    );
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 1, "one visible prefix segment");
+    assert_eq!(segments[0].end.get(), 3);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_elision_between_face_spans() {
+    // Elision interleaved with face segmentation: bold prefix, hidden gap,
+    // base suffix. Segment faces resolve at each visible segment start and
+    // the glyph identity must match the pipeline completely.
+    let text = "abXXcd\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(
+                "(progn (put-text-property 1 3 'face 'bold) \
+                        (put-text-property 3 5 'invisible t))",
+            )
+            .expect("face + invisible spans");
+        });
+    assert_eq!(glyphs_logical_text(&rows[0].glyphs[1]), "abcd ");
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 2, "bold prefix / base suffix");
+    assert_ne!(segments[0].face_id, segments[1].face_id);
+}
+
+/// Engagement proof for the invisible-elision extension (flag-on suite
+/// gate): an elided row must actually take the routed acquisition.
+/// Trivially passes when the flag is off.
+#[test]
+fn ascii_route_flag_on_layout_engages_elided_row_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_ELIDED_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("abXXcd\nnext\n", |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(put-text-property 3 5 'invisible t)")
+                .expect("invisible span");
+        });
+    assert!(rows.len() >= 2);
+    let after = crate::buffer_source::row_route::ROUTED_ELIDED_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after >= before + 1,
+        "expected the elided row to route through the item renderer \
+         (before={before}, after={after})"
+    );
+}
+
+/// Phase 2d refusal pin: ellipsis-invisible rows stay on the buffer
+/// pipeline, which appends the `...` glyphs with their own rules (GNU
+/// setup_for_ellipsis: saved face, newpos-1 provenance). Identical output
+/// whether the route flag is on or off; if the classifier ever routed the
+/// row, the ellipsis would vanish under NEOMACS_ROW_ITEM_ROUTE=ascii.
+#[test]
+fn ellipsis_invisible_rows_stay_on_buffer_pipeline_under_item_route() {
+    let text = "abXXcd\nnext\n";
+    let (eval, buf_id, rows, char_width, _char_height) = {
+        let (eval, buf_id, _frame_id, rows, char_width, char_height) =
+            layout_main_text_rows_with(text, |eval, buf_id| {
+                eval.buffer_manager_mut().set_current(buf_id);
+                eval.eval_str(
+                    "(progn (setq buffer-invisibility-spec '((org . t))) \
+                            (put-text-property 3 5 'invisible 'org))",
+                )
+                .expect("ellipsis invisible span");
+            });
+        (eval, buf_id, rows, char_width, char_height)
+    };
+    assert_eq!(
+        glyphs_logical_text(&rows[0].glyphs[1]),
+        "ab...cd ",
+        "the ellipsis-invisible span must render the ellipsis"
+    );
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "ellipsis-invisible rows must refuse the item route"
+    );
+}
+
+/// Phase 2d refusal pin: a fold whose hidden run covers the newline joins
+/// buffer lines into ONE display row — a line-structure change the
+/// single-row item route cannot express. Identical flag-on/off.
+#[test]
+fn newline_spanning_fold_rows_stay_on_buffer_pipeline_under_item_route() {
+    let text = "ab CD\nEF gh\nnext\n";
+    let (eval, buf_id, rows, char_width, _char_height) = {
+        let (eval, buf_id, _frame_id, rows, char_width, char_height) =
+            layout_main_text_rows_with(text, |eval, buf_id| {
+                eval.buffer_manager_mut().set_current(buf_id);
+                // Hide "CD\nEF " (1-based [4, 10)): the fold joins the two
+                // buffer lines into the single display row "ab gh".
+                eval.eval_str("(put-text-property 4 10 'invisible t)")
+                    .expect("newline-spanning fold");
+            });
+        (eval, buf_id, rows, char_width, char_height)
+    };
+    assert_eq!(
+        glyphs_logical_text(&rows[0].glyphs[1]),
+        "ab gh ",
+        "the fold must join the two buffer lines into one display row"
+    );
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "newline-spanning folds must refuse the item route"
+    );
+}
+
+/// Phase 2d refusal pin: a hidden run AT the row start is consumed by the
+/// visible loop's invisible checkpoint BEFORE the route attempt; the walk
+/// then resumes mid-line, which the route refuses. The classifier mirrors
+/// that ordering. Identical flag-on/off.
+#[test]
+fn row_start_invisible_rows_stay_on_buffer_pipeline_under_item_route() {
+    let text = "XXab\nnext\n";
+    let (eval, buf_id, rows, char_width, _char_height) = {
+        let (eval, buf_id, _frame_id, rows, char_width, char_height) =
+            layout_main_text_rows_with(text, |eval, buf_id| {
+                eval.buffer_manager_mut().set_current(buf_id);
+                eval.eval_str("(put-text-property 1 3 'invisible t)")
+                    .expect("row-start invisible span");
+            });
+        (eval, buf_id, rows, char_width, char_height)
+    };
+    assert_eq!(glyphs_logical_text(&rows[0].glyphs[1]), "ab ");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "row-start invisible runs must refuse the item route"
+    );
+}
+
+/// Phase 2d refusal pin: overlay-sourced invisibility stays refused (the 2c
+/// overlay allow-list): overlay `invisible` shadows the text property
+/// outright in the pipeline's precedence and interacts with overlay-string
+/// emission at both endpoints. Identical flag-on/off.
+#[test]
+fn overlay_invisible_rows_stay_on_buffer_pipeline_under_item_route() {
+    let text = "abXXcd\nnext\n";
+    let (eval, buf_id, rows, char_width, _char_height) = {
+        let (eval, buf_id, _frame_id, rows, char_width, char_height) =
+            layout_main_text_rows_with(text, |eval, buf_id| {
+                eval.buffer_manager_mut().set_current(buf_id);
+                eval.eval_str("(overlay-put (make-overlay 3 5) 'invisible t)")
+                    .expect("invisible overlay");
+            });
+        (eval, buf_id, rows, char_width, char_height)
+    };
+    assert_eq!(glyphs_logical_text(&rows[0].glyphs[1]), "abcd ");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "overlay-sourced invisibility must refuse the item route"
     );
 }
 

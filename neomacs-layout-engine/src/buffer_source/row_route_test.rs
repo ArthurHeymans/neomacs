@@ -494,10 +494,12 @@ fn classifier_accepts_fontified_boundary_as_segment_split() {
 
 #[test]
 fn classifier_rejects_hazard_properties_anywhere_on_the_line() {
+    // `invisible` left this list in phase 2d: the plain-elision sub-case is
+    // routed (see the elision tests below); ellipsis / newline-spanning /
+    // row-start invisibility still refuse through the elision scan.
     for (prop, value) in [
         ("display", "\"X\""),
         ("composition", "'((0 . 1))"),
-        ("invisible", "t"),
         ("mouse-face", "'highlight"),
         ("line-height", "2.0"),
     ] {
@@ -1021,6 +1023,7 @@ fn ascii_source_segments_produce_per_face_text_runs_and_break_face() {
                 face: base,
             },
         ],
+        CharPos0::new(5),
         bold,
     );
     let mut context = DisplaySourceContext::empty();
@@ -1064,4 +1067,257 @@ fn ascii_source_text_only_omits_the_row_break() {
     let first = source.next_item(&mut context).expect("text run item");
     assert!(matches!(first.kind, DisplayItemKind::TextRun(_)));
     assert_eq!(source.next_item(&mut context), None);
+}
+
+// ---- Phase 2d rung 1: invisible text (plain elision, no ellipsis) ----
+
+#[test]
+fn classifier_routes_mid_line_plain_elision_and_plans_segments() {
+    let mut eval = Context::new();
+    // "abXXcd": chars 2..4 invisible (default buffer-invisibility-spec is t,
+    // so any non-nil `invisible` value hides without an ellipsis). The row
+    // routes with the hidden span elided; the visible segments skip it and
+    // the charpos bookkeeping jumps across the gap.
+    let text = "abXXcd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 5 'invisible t)")
+        .expect("invisible span");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("plain-elision row routes");
+    assert_eq!(plan.line_char_len(), 6);
+    assert!(plan.has_elision());
+    assert_eq!(plan.elided(), &[(2, 4)]);
+    assert!(plan.is_segmented());
+    assert_eq!(
+        plan.segment_ranges(CharPos0::ZERO),
+        vec![
+            (CharPos0::ZERO, CharPos0::new(2)),
+            (CharPos0::new(4), CharPos0::new(6)),
+        ],
+        "visible segments must skip the elided span"
+    );
+}
+
+#[test]
+fn classifier_routes_trailing_elision_ending_at_newline() {
+    let mut eval = Context::new();
+    // "abcXX" with "XX" invisible: the hidden run ends exactly AT the
+    // newline, which stays visible — the line structure is unchanged.
+    let text = "abcXX\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 4 6 'invisible t)")
+        .expect("trailing invisible span");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("trailing-elision row routes");
+    assert_eq!(plan.elided(), &[(3, 5)]);
+    assert_eq!(
+        plan.segment_ranges(CharPos0::ZERO),
+        vec![(CharPos0::ZERO, CharPos0::new(3))],
+        "only the visible prefix renders; the newline stays with the line-break lifecycle"
+    );
+}
+
+#[test]
+fn classifier_rejects_ellipsis_invisible() {
+    let mut eval = Context::new();
+    // buffer-invisibility-spec entry (org . t) means "hidden WITH ellipsis":
+    // the pipeline appends the `...` glyphs with their own rules (GNU
+    // setup_for_ellipsis: saved face, newpos-1 provenance) — refused.
+    let text = "abXXcd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str(
+        "(progn (setq buffer-invisibility-spec '((org . t))) \
+                (put-text-property 3 5 'invisible 'org))",
+    )
+    .expect("ellipsis invisible span");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "ellipsis-invisible rows must stay on the buffer pipeline"
+    );
+}
+
+#[test]
+fn classifier_elision_uses_entry_run_ellipsis_flag_for_adjacent_runs() {
+    // Adjacent invisible runs collapse into ONE region whose ellipsis flag is
+    // the ENTRY run's (the pipeline's check_invisible contract): a
+    // no-ellipsis run followed by an ellipsis run still elides plainly and
+    // routes; entering ON the ellipsis run refuses.
+    let mut eval = Context::new();
+    let text = "aXYb\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str(
+        "(progn (setq buffer-invisibility-spec '(i1 (i2 . t))) \
+                (put-text-property 2 3 'invisible 'i1) \
+                (put-text-property 3 4 'invisible 'i2))",
+    )
+    .expect("adjacent invisible runs");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("entry run without ellipsis routes");
+    assert_eq!(plan.elided(), &[(1, 3)], "adjacent runs collapse into one");
+
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str(
+        "(progn (setq buffer-invisibility-spec '(i1 (i2 . t))) \
+                (put-text-property 2 3 'invisible 'i2) \
+                (put-text-property 3 4 'invisible 'i1))",
+    )
+    .expect("adjacent invisible runs, ellipsis entry");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "an ellipsis ENTRY run must refuse"
+    );
+}
+
+#[test]
+fn classifier_rejects_invisible_spanning_the_newline() {
+    let mut eval = Context::new();
+    // The hidden region swallows the newline (org-fold shape): the fold joins
+    // buffer lines into one display row — a line-structure change the
+    // single-row item route cannot express.
+    let text = "abXX\ncd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 7 'invisible t)")
+        .expect("newline-spanning invisible");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline
+    );
+
+    // The invisible run covering ONLY the newline refuses too.
+    let mut eval = Context::new();
+    let text = "abc\nx\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 4 5 'invisible t)")
+        .expect("invisible newline");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "hiding the newline changes the line structure"
+    );
+}
+
+#[test]
+fn classifier_rejects_row_start_invisible() {
+    let mut eval = Context::new();
+    // A hidden run AT the row start is consumed by the visible loop's
+    // invisible checkpoint BEFORE the route attempt (the walk then resumes
+    // mid-line, which refuses); the classifier mirrors that ordering so a
+    // direct classification agrees with production.
+    let text = "XXab\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 1 3 'invisible t)")
+        .expect("row-start invisible");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline
+    );
+}
+
+#[test]
+fn classifier_rejects_invisible_from_overlay() {
+    let mut eval = Context::new();
+    // Overlay-sourced invisibility stays refused (2c allow-list): overlay
+    // `invisible` shadows the text property outright in the pipeline's
+    // precedence (GNU get_char_property_and_overlay) and interacts with
+    // overlay-string emission at both endpoints.
+    let text = "abXXcd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(overlay-put (make-overlay 3 5) 'invisible t)")
+        .expect("invisible overlay");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline
+    );
+}
+
+#[test]
+fn classifier_routes_non_hiding_invisible_value() {
+    let mut eval = Context::new();
+    // An `invisible` value NOT in buffer-invisibility-spec hides nothing:
+    // the row routes with no elision (the property change still segments,
+    // exactly like any other property boundary).
+    let text = "abXXcd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str(
+        "(progn (setq buffer-invisibility-spec '(org)) \
+                (put-text-property 3 5 'invisible 'other))",
+    )
+    .expect("non-hiding invisible value");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("non-hiding invisible value routes");
+    assert!(!plan.has_elision());
+    assert_eq!(plan.face_boundaries(), &[2, 4]);
 }
