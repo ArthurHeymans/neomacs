@@ -2770,6 +2770,12 @@ pub const SCSS_MODE_MELPA_PIN: (&str, &str) = ("scss-mode", "20180123.1708");
 /// `2ab5a3c89fa01bbbd99de9b8986908b2bc5a7b49`.
 pub const TREEMACS_MELPA_PIN: (&str, &str) = ("treemacs", "20251226.1307");
 
+/// The exact Treemacs Icons Dired package selected for practical graphical
+/// Dired activation, entry insertion, subdirectory, revert, teardown, and
+/// one-shot enablement parity. MELPA built this version from the Treemacs
+/// monorepo commit `55079b017fb821a34ace398cd3d8c5b556a22f6d`.
+pub const TREEMACS_ICONS_DIRED_MELPA_PIN: (&str, &str) = ("treemacs-icons-dired", "20250320.2145");
+
 /// The exact Treemacs-Projectile package selected for practical workspace
 /// admission, project discovery, startup-root, file-buffer/cache, mouse-menu,
 /// keymap, and hook-registration parity. MELPA built this archive from the

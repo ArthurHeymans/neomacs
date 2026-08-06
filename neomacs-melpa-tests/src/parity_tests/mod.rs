@@ -501,6 +501,7 @@ mod tinysegmenter;
 mod toc_org;
 mod transient;
 mod treemacs;
+mod treemacs_icons_dired;
 mod treemacs_projectile;
 mod treepy;
 mod two_bit;
