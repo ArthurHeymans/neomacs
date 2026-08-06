@@ -157,6 +157,13 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         }
     }
 
+    /// Whether split-run remainders are queued for re-consumption. The routed
+    /// ascii-row acquisition path refuses to bypass the walk while any are
+    /// pending (they always describe an in-progress, non-plain row anyway).
+    pub(crate) fn has_pending_render_items(&self) -> bool {
+        self.source_consumption.has_pending_render_items()
+    }
+
     pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
     where
         I: IntoIterator<Item = DisplaySourceStepItem>,

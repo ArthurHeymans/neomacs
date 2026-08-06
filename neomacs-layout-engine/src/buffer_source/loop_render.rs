@@ -67,6 +67,26 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
 
             self.render_face_checkpoint_for_context(face_resolution_context, active_face_state);
 
+            // Opt-in buffer-source acquisition migration
+            // (NEOMACS_ROW_ITEM_ROUTE=ascii): a classified plain-ASCII row is
+            // acquired and rendered through the unified item renderer; its
+            // newline stays with the buffer pipeline's line-break lifecycle.
+            if crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+                use crate::buffer_source::row_route::AsciiRowRouteOutcome;
+                match self.try_render_ascii_row_via_item_renderer(
+                    loop_context,
+                    source_walk,
+                    text,
+                    params,
+                    active_face_state,
+                    buffer,
+                ) {
+                    AsciiRowRouteOutcome::Rendered => continue,
+                    AsciiRowRouteOutcome::Stopped => break,
+                    AsciiRowRouteOutcome::NotRouted => {}
+                }
+            }
+
             if !BufferSourceRenderRequest::new(
                 loop_context,
                 text,

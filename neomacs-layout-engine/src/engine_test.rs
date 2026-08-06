@@ -14521,6 +14521,28 @@ fn ascii_item_source_shadow_matches_row_after_empty_line() {
     assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
 }
 
+/// Engagement proof for the flag-on suite gate (NEOMACS_ROW_ITEM_ROUTE=ascii):
+/// laying out plain ASCII rows must actually take the routed item-renderer
+/// acquisition, not silently fall back. Trivially passes when the flag is off
+/// (the routed path is deliberately unreachable then).
+#[test]
+fn ascii_route_flag_on_layout_engages_item_renderer_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, rows, _char_width, _char_height) =
+        layout_main_text_rows("plain ascii row\nsecond row\n");
+    assert!(rows.len() >= 2);
+    let after = crate::buffer_source::row_route::ROUTED_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after >= before + 2,
+        "expected both plain rows to route through the item renderer (before={before}, after={after})"
+    );
+}
+
 #[test]
 fn ascii_route_classifies_exactly_filling_line_to_buffer_pipeline() {
     let text = "abcdefgh\n";

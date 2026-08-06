@@ -472,6 +472,47 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             )
     }
 
+    /// Render every item a `DisplayItemSource` yields into the current text
+    /// row through the unified item renderer — the same
+    /// `SingleDisplayItemAppendContext` seam every other source consumer
+    /// (Lisp strings, overlay strings, display strings) uses. The routed
+    /// ascii-row acquisition path drives this with a
+    /// [`crate::buffer_source::row_route::BufferAsciiItemSource`]; items are
+    /// expected to carry their realized `FaceId` (the active face for a
+    /// classified row).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_display_item_source_to_text_row<
+        S: crate::display_source::DisplayItemSource,
+        P: crate::display_row::render_policy::DisplayRowRenderPolicy,
+    >(
+        &self,
+        geometry: &DisplayRowGeometryState,
+        state: &mut TextRowSourceRenderState<'_>,
+        source: &mut S,
+        source_state: &mut crate::display_row::source_state::DisplayRowSourceState,
+        position: DisplayRowPosition,
+        fallback_kind: DisplayRowAppendKind,
+        render_policy: &mut P,
+    ) -> Option<DisplayRowAppendProgress> {
+        let frame = self.active_face_context(geometry).active_face_frame();
+        let face_id = self.active_face.face_id();
+        let mut face_ids = self.face_attempt.clone();
+        face_ids.reserve_after(face_id);
+        let outcome =
+            SingleDisplayItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
+                .render_source_with_policy(
+                state,
+                &mut face_ids,
+                source,
+                source_state,
+                position,
+                fallback_kind,
+                render_policy,
+                face_id,
+            )?;
+        Some(outcome.into_append_progress(position))
+    }
+
     pub(crate) fn measure_source_display_item_width_naturally(
         &self,
         geometry: &DisplayRowGeometryState,

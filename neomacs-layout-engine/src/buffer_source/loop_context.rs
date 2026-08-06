@@ -252,7 +252,6 @@ impl BufferSourceLoopRequestContext {
         self.row_limit
     }
 
-    #[cfg(test)]
     pub(crate) fn selective_display(self) -> i32 {
         self.selective_display
     }

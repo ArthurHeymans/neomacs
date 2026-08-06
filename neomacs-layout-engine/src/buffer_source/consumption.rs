@@ -44,6 +44,10 @@ impl BufferSourceConsumptionState {
         }
     }
 
+    pub(crate) fn has_pending_render_items(&self) -> bool {
+        !self.pending_render_items.is_empty()
+    }
+
     pub(crate) fn clear_pending_render_items(&mut self) {
         self.pending_render_items.clear();
     }

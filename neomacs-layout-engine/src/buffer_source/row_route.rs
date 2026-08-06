@@ -327,6 +327,184 @@ impl crate::display_source::DisplayItemSource for BufferAsciiItemSource {
     }
 }
 
+/// Opt-in gate for the routed acquisition: `NEOMACS_ROW_ITEM_ROUTE=ascii`.
+/// Default OFF — with the flag unset the buffer pipeline is untouched and the
+/// classifier never runs (a single lazy boolean check per row).
+pub(crate) fn row_item_route_ascii_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED
+        .get_or_init(|| std::env::var("NEOMACS_ROW_ITEM_ROUTE").is_ok_and(|value| value == "ascii"))
+}
+
+/// Test-only engagement proof: rows actually rendered through the routed
+/// item-renderer acquisition in this process. Lets the flag-on suite run
+/// assert the route is exercised rather than silently unreachable.
+#[cfg(test)]
+pub(crate) static ROUTED_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+fn note_routed_row() {
+    #[cfg(test)]
+    ROUTED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Outcome of an attempted item-renderer row acquisition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AsciiRowRouteOutcome {
+    /// The row is not eligible (or measurement rejected it); the buffer
+    /// pipeline proceeds unchanged.
+    NotRouted,
+    /// The row's text was rendered through the unified item renderer; the
+    /// walk resumes at the line's newline, which the buffer pipeline's own
+    /// line-break lifecycle consumes.
+    Rendered,
+    /// The renderer reported a stop; the visible loop must end (mirrors the
+    /// buffer pipeline mapping a failed append to Stop).
+    Stopped,
+}
+
+impl<'rows, 'emit, 'surface>
+    crate::buffer_source::loop_state::BufferSourceLoopMutableState<'rows, 'emit, 'surface>
+{
+    /// Attempt to acquire and render the row starting at the current walk
+    /// position through the unified item renderer (`NEOMACS_ROW_ITEM_ROUTE=
+    /// ascii` route). Only rows [`classify_row_acquisition`] approves are
+    /// taken, and the natural-measurement fit is re-verified with the same
+    /// measurement the buffer pipeline's whole-run decision uses; everything
+    /// else falls back to the buffer pipeline with no state touched.
+    ///
+    /// The bookkeeping the buffer pipeline performs per item is either
+    /// replicated (active-face row-extend scope, resolved-face memo) or
+    /// provably idle for a classified row: cursor capture (point excluded),
+    /// trailing-whitespace tracking and word-wrap candidates (both disabled
+    /// by the classifier), overlay-string splits (no overlays).
+    pub(crate) fn try_render_ascii_row_via_item_renderer<B: LayoutBufferView>(
+        &mut self,
+        loop_context: crate::buffer_source::loop_context::BufferSourceLoopRequestContext,
+        source_walk: &mut crate::buffer_source::walk::BufferSourceWalk<'_, B>,
+        text: &[u8],
+        params: &crate::types::WindowParams,
+        active_face_state: &crate::display_row::face_state::DisplayRowActiveFaceState,
+        buffer: &B,
+    ) -> AsciiRowRouteOutcome {
+        use crate::buffer_source::item_append::BufferSourceRowAppendContext;
+        use crate::display_row::append_context::DisplayRowAppendKind;
+        use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
+        use neovm_core::buffer::CharLen;
+
+        if source_walk.has_pending_render_items() {
+            return AsciiRowRouteOutcome::NotRouted;
+        }
+
+        let position = self.progress.row_position();
+        let row = RowRouteRowStart {
+            text,
+            byte_idx: self.progress.byte_idx(),
+            charpos: self.progress.charpos(),
+            text_start_byte: loop_context.text_start_byte(),
+        };
+        let fit = RowRouteFit {
+            start_x_px: position.x_px(),
+            char_width_px: params.char_width,
+            right_edge_px: self.append_surface.right_edge(),
+        };
+        let policy = RowRouteWindowPolicy {
+            point_charpos: loop_context.point_charpos(),
+            hscroll_active: params.hscroll != 0 || self.hscroll_skip.should_skip(),
+            selective_display: loop_context.selective_display(),
+            word_wrap: params.word_wrap || self.word_wrap.is_enabled(),
+            show_trailing_whitespace: params.show_trailing_whitespace
+                || self.trailing_whitespace.is_enabled(),
+        };
+        let Some(plan) = plan_ascii_row(buffer, row, fit, policy) else {
+            return AsciiRowRouteOutcome::NotRouted;
+        };
+
+        let start = CharPos0::new(row.charpos.max(0) as usize);
+        let line_end = start.add_len(CharLen::new(plan.line_len()));
+        // The routed item carries the realized active face id — exactly what
+        // the buffer pipeline's append context binds for an Inherit-faced
+        // plain run.
+        let mut source = BufferAsciiItemSource::text_only(
+            loop_context.buffer_id(),
+            buffer,
+            start,
+            line_end,
+            RenderFaceRef::FaceId(active_face_state.face_id()),
+        );
+        let Some(text_item) = source.text_item().cloned() else {
+            return AsciiRowRouteOutcome::NotRouted;
+        };
+
+        let append_context = BufferSourceRowAppendContext::from_active_face_row(
+            buffer,
+            loop_context.buffer_id(),
+            self.append_surface,
+            active_face_state,
+            0.0,
+            loop_context.char_height(),
+            self.face_ids.clone(),
+        );
+        let geometry = *self.row_geometry;
+
+        // Strict natural-measurement fit before committing to the route: the
+        // same measurement the buffer pipeline's whole-run decision performs,
+        // strict so any borderline row (exact fill) keeps the buffer
+        // pipeline. Nothing has been mutated yet.
+        let measured = {
+            let mut measure = self.source_render.measure_state();
+            append_context.measure_source_display_item_width_naturally(
+                &geometry,
+                &mut measure,
+                &text_item,
+                position,
+                DisplayRowAppendKind::SourceText,
+            )
+        };
+        let Some(width_px) = measured else {
+            return AsciiRowRouteOutcome::NotRouted;
+        };
+        if !(position.x_px() + width_px < self.append_surface.right_edge()) {
+            return AsciiRowRouteOutcome::NotRouted;
+        }
+
+        // Per-item bookkeeping the buffer pipeline would perform for this run
+        // (item_render.rs): remember the resolved active face for later
+        // splits, and scope the row-extend fill to the current row.
+        source_walk.remember_resolved_source_face_if_absent(
+            active_face_state.face_id(),
+            active_face_state.resolved_face(),
+        );
+        if let Some(fill) = active_face_state.row_extend_fill() {
+            self.row_extend
+                .activate(self.row_geometry.current_row_marker(), fill);
+        } else {
+            self.row_extend.clear();
+        }
+
+        // Render through the unified item renderer seam.
+        let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
+        let mut source_state = crate::display_row::source_state::DisplayRowSourceState::default();
+        let Some(append_progress) = append_context.render_display_item_source_to_text_row(
+            &geometry,
+            &mut self.source_render.reborrow(),
+            &mut source,
+            &mut source_state,
+            position,
+            DisplayRowAppendKind::SourceText,
+            &mut render_policy,
+        ) else {
+            return AsciiRowRouteOutcome::Stopped;
+        };
+
+        self.progress.apply_row_position(append_progress.end());
+        self.progress.max_charpos(line_end.get() as i64);
+        self.progress.set_byte_idx(row.byte_idx + plan.line_len());
+        note_routed_row();
+        AsciiRowRouteOutcome::Rendered
+    }
+}
+
 #[cfg(test)]
 #[path = "row_route_test.rs"]
 mod tests;
