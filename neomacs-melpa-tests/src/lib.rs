@@ -457,6 +457,14 @@ pub const TOC_ORG_MELPA_PIN: (&str, &str) = ("toc-org", "20260514.1415");
 /// `481df3ad2cdf569d8e6697679669ff6206fbd2f9`.
 pub const TYPESCRIPT_MODE_MELPA_PIN: (&str, &str) = ("typescript-mode", "20250118.2056");
 
+/// The exact Undo Tree package selected for practical linear undo/redo,
+/// branching history, register restoration, persistent history, visualizer,
+/// and mode lifecycle parity. MELPA removed its recipe on March 24, 2018
+/// after the package moved to GNU ELPA, so this historical top-500 roadmap
+/// entry uses the maintained upstream version 0.8.2 source at commit
+/// `2bf5e230f1d11df7bbd9d8c722749e34482bc458`.
+pub const UNDO_TREE_SOURCE_PIN: (&str, &str) = ("undo-tree", "0.8.2");
+
 /// The exact yaml.el package selected by the practical deployment parsing,
 /// anchors, scalar policy, round-trip encoding, dialect, source-position, and
 /// validation parity corpus. MELPA built this archive from upstream commit

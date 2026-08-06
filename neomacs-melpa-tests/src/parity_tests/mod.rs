@@ -517,6 +517,7 @@ mod treemacs_projectile;
 mod treepy;
 mod two_bit;
 mod typescript_mode;
+mod undo_tree;
 mod upstream_package_ert;
 mod use_package;
 mod uuidgen;

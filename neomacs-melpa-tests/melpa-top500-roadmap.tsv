@@ -236,7 +236,7 @@ rank	package	downloads	status
 235	symon	497250	covered
 236	org-mime	497028	covered
 237	pip-requirements	496540	covered
-238	undo-tree	495073	todo
+238	undo-tree	495073	covered
 239	treemacs-evil	493143	todo
 240	org-roam	489699	todo
 241	smeargle	488113	todo
