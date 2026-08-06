@@ -2857,6 +2857,12 @@ pub const WHICH_KEY_MELPA_PIN: (&str, &str) = ("which-key", "20240620.2145");
 /// corpus.
 pub const WITH_EDITOR_MELPA_PIN: (&str, &str) = ("with-editor", "20260701.1252");
 
+/// The exact Window Purpose package selected for practical buffer
+/// classification, purpose-aware display routing, dedication, edge-window,
+/// layout persistence, and mode-lifecycle parity. MELPA built this archive
+/// from upstream commit `c827f45cd9b278b3eb9c2f4bcb55ef2fca5d3048`.
+pub const WINDOW_PURPOSE_MELPA_PIN: (&str, &str) = ("window-purpose", "20241207.148");
+
 /// The exact Winum package selected for practical numbered-layout, selection,
 /// deletion, custom-assignment, keymap, mode-line, and live-update parity.
 /// MELPA built this archive from upstream commit

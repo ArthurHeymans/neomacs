@@ -209,7 +209,7 @@ rank	package	downloads	status
 208	flycheck-pos-tip	539964	covered
 209	linum-relative	538437	covered
 210	xterm-color	538036	covered
-211	window-purpose	535438	todo
+211	window-purpose	535438	covered
 212	helm-c-yasnippet	531027	todo
 213	skewer-mode	528437	covered
 214	evil-goggles	527887	todo
