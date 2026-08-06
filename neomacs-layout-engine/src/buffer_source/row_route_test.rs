@@ -21,6 +21,14 @@ fn plain_policy() -> RowRouteWindowPolicy {
         selective_display: 0,
         word_wrap: false,
         show_trailing_whitespace: false,
+        wrap_mode: LineWrapMode::Truncate,
+    }
+}
+
+fn wrap_policy() -> RowRouteWindowPolicy {
+    RowRouteWindowPolicy {
+        wrap_mode: LineWrapMode::Wrap,
+        ..plain_policy()
     }
 }
 
@@ -230,18 +238,18 @@ fn classifier_fit_advances_a_full_stop_for_tab_exactly_on_a_stop() {
         "a tab exactly on a stop must expand a full stop (to col 16), exact fill refuses"
     );
     // If the +1 rule were broken (tab advancing zero or one cell), the line
-    // would end well inside 12 cells and wrongly route.
-    assert_eq!(
-        classify_in_buffer(
-            &eval,
-            buf_id,
-            row_start(text, 0, 0),
-            fit_to(96.0),
-            plain_policy()
-        ),
-        RowAcquisitionRoute::BufferPipeline,
-        "the full-stop expansion crosses a 12-cell row: refuse"
-    );
+    // would end well inside 12 cells and wrongly plan as a whole-line route.
+    // With the correct rule the full-stop expansion crosses the 12-cell row,
+    // so phase 2f plans the 8-char prefix and hands the edge-crossing tab
+    // back to the pipeline (which clips it, GNU xdisp.c:26390).
+    {
+        let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+        let plan = plan_ascii_row(buffer, row_start(text, 0, 0), fit_to(96.0), plain_policy())
+            .expect("overflow prefix plan");
+        assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+        assert_eq!(plan.line_char_len(), 8, "prefix ends BEFORE the tab");
+        assert!(!plan.has_tab(), "the edge-crossing tab is not routed");
+    }
     assert_eq!(
         classify_in_buffer(
             &eval,
@@ -262,7 +270,6 @@ fn classifier_rejects_wide_char_exact_fill_and_straddle() {
     let buf_id = buffer_with_text(&mut eval, text);
     for (edge, expected) in [
         (40.0, RowAcquisitionRoute::BufferPipeline), // exact fill
-        (36.0, RowAcquisitionRoute::BufferPipeline), // wide char straddles the edge
         (48.0, RowAcquisitionRoute::ItemRenderer),   // one cell of slack
     ] {
         assert_eq!(
@@ -277,6 +284,22 @@ fn classifier_rejects_wide_char_exact_fill_and_straddle() {
             "edge {edge}px"
         );
     }
+    // Phase 2f: the wide char STRADDLING the edge (x=24, +16 crosses a 36px
+    // row) no longer refuses the whole row — the fitting "abc" prefix routes
+    // and the straddling char hands off to the pipeline's overflow machinery
+    // (GNU consumes it into the truncation skip / pushes it to the next row).
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        fit_to(36.0),
+        plain_policy(),
+    )
+    .expect("straddle prefix plan");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+    assert_eq!(plan.line_char_len(), 3);
+    assert_eq!(plan.line_byte_len(), 3);
+    assert!(!plan.has_wide(), "the straddling wide char is not routed");
 }
 
 #[test]
@@ -1647,4 +1670,311 @@ fn routed_source_matches_cursor_items_for_combining_mark() {
         panic!("expected text run, got {:?}", routed_items[0].kind);
     };
     assert_eq!(run.text.as_ref(), "ae\u{0301}b");
+}
+
+// ---- Phase 2f: overflow-prefix routing (truncation / character wrap) ----
+
+#[test]
+fn classifier_plans_truncation_prefix_for_overwide_line() {
+    let mut eval = Context::new();
+    // 8 chars in a 5-cell row (40px at 8px cells): "abcde" fits — the 5th
+    // char ends exactly AT the edge, which the pipeline's fit rule accepts
+    // (x + advance <= right_edge) — and "f" would cross, so the plan covers
+    // the 5-char prefix and hands the walk back at "f". The pipeline's own
+    // truncation machinery (consume_truncation_skip, Truncated row flag,
+    // row transition) then runs unchanged.
+    let text = "abcdefgh\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        fit_to(40.0),
+        plain_policy(),
+    )
+    .expect("truncation prefix plan");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+    assert!(plan.is_overflow_handoff());
+    assert_eq!(plan.line_char_len(), 5);
+    assert_eq!(plan.line_byte_len(), 5);
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(40.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::ItemRenderer
+    );
+}
+
+#[test]
+fn classifier_plans_wrap_prefix_for_overwide_line() {
+    let mut eval = Context::new();
+    // Same prefix cut under character wrap (WINDOW_WRAP): the plan is
+    // identical — the wrap-vs-truncate decision is the PIPELINE's, made at
+    // the handoff char by its own overflow action (CharacterWrap emits the
+    // continuation transition, carry-over bookkeeping and all).
+    let text = "abcdefgh\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        fit_to(40.0),
+        wrap_policy(),
+    )
+    .expect("wrap prefix plan");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+    assert_eq!(plan.line_char_len(), 5);
+}
+
+#[test]
+fn classifier_refuses_overwide_line_under_word_wrap() {
+    // Phase 2f rung 3 pin: WORD wrap stays refused whole. The pipeline's
+    // word-wrap machinery records a break candidate PER RENDERED CHAR while
+    // the row is still filling (WordWrapRenderState::record_candidate: byte
+    // and char position, the row's display-point count, the row's first/last
+    // display positions, and a glyph checkpoint — GNU SAVE_IT of wrap_it
+    // plus the wrap_row_* metric snapshot, xdisp.c:26071-26105), so the
+    // overflow action can roll the row BACK to the candidate
+    // (restore_glyph_checkpoint + truncate_display_points, GNU
+    // back_to_wrap's unproduce_glyphs + RESTORE_IT). A routed run appends
+    // whole TextRuns without recording those per-char snapshots, so the
+    // rollback state would be missing at the overflow point. Gap analysis
+    // for phase 4: the item flow would need the writer to expose a
+    // per-appended-char candidate hook (char, glyph checkpoint,
+    // display-point count) so WordWrapRenderState can be fed during run
+    // appends — or the word-wrap candidate search must move behind the
+    // append seam entirely.
+    let mut eval = Context::new();
+    let text = "aaa bbb ccc\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let policy = RowRouteWindowPolicy {
+        word_wrap: true,
+        wrap_mode: LineWrapMode::Wrap,
+        ..plain_policy()
+    };
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(40.0),
+            policy
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "word wrap keeps the whole row on the buffer pipeline"
+    );
+}
+
+#[test]
+fn classifier_refuses_prefix_when_first_char_overflows() {
+    let mut eval = Context::new();
+    // A sub-cell row: even the first char crosses the edge, so there is no
+    // fitting prefix to route; the pipeline owns the whole line.
+    let text = "abc\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(4.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline
+    );
+}
+
+#[test]
+fn classifier_prefix_point_refusal_ends_at_handoff() {
+    let mut eval = Context::new();
+    let text = "abcdefgh\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    // Point anywhere in the routed coverage [0, 5] (including the handoff
+    // char itself, conservatively) refuses; point in the UNROUTED remainder
+    // routes — the pipeline resumes there and captures the cursor exactly as
+    // with the flag off.
+    for point in 0..=5 {
+        let policy = RowRouteWindowPolicy {
+            point_charpos: point,
+            ..plain_policy()
+        };
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                fit_to(40.0),
+                policy
+            ),
+            RowAcquisitionRoute::BufferPipeline,
+            "point {point} inside the routed prefix"
+        );
+    }
+    for point in 6..=8 {
+        let policy = RowRouteWindowPolicy {
+            point_charpos: point,
+            ..plain_policy()
+        };
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                fit_to(40.0),
+                policy
+            ),
+            RowAcquisitionRoute::ItemRenderer,
+            "point {point} beyond the handoff"
+        );
+    }
+}
+
+#[test]
+fn classifier_prefix_plans_face_boundaries_inside_prefix_only() {
+    let mut eval = Context::new();
+    let text = "abcdefgh\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    // 1-based [2, 4) = chars 1..3: a face span crossing nothing — boundaries
+    // at char offsets 1 and 3, both strictly inside the 5-char prefix.
+    eval.eval_str("(put-text-property 2 4 'face 'bold)")
+        .expect("face span");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        fit_to(40.0),
+        plain_policy(),
+    )
+    .expect("prefix plan with face span");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+    assert_eq!(plan.face_boundaries(), &[1, 3]);
+    assert_eq!(
+        plan.segment_ranges(CharPos0::ZERO),
+        vec![
+            (CharPos0::ZERO, CharPos0::new(1)),
+            (CharPos0::new(1), CharPos0::new(3)),
+            (CharPos0::new(3), CharPos0::new(5)),
+        ]
+    );
+}
+
+#[test]
+fn classifier_prefix_face_span_crossing_the_clip_splits_at_its_start_only() {
+    let mut eval = Context::new();
+    let text = "abcdefgh\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    // 1-based [4, 8) = chars 3..7: the span CROSSES the handoff (prefix ends
+    // at char 5). Only its start boundary lands inside the prefix; the
+    // remainder of the span is unrouted and the pipeline re-resolves it at
+    // resume.
+    eval.eval_str("(put-text-property 4 8 'face 'bold)")
+        .expect("face span crossing the clip");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        fit_to(40.0),
+        plain_policy(),
+    )
+    .expect("prefix plan with clip-crossing face span");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+    assert_eq!(plan.face_boundaries(), &[3]);
+    assert_eq!(
+        plan.segment_ranges(CharPos0::ZERO),
+        vec![
+            (CharPos0::ZERO, CharPos0::new(3)),
+            (CharPos0::new(3), CharPos0::new(5)),
+        ]
+    );
+}
+
+#[test]
+fn classifier_prefix_ignores_hazards_beyond_the_handoff() {
+    let mut eval = Context::new();
+    let text = "abcdefgh\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    // A display replacement entirely BEYOND the handoff (1-based [7, 9) =
+    // chars 6..8, prefix ends at 5): unrouted remainder, pipeline handles it
+    // at resume identically flag-on and flag-off.
+    eval.eval_str("(put-text-property 7 9 'display \"XX\")")
+        .expect("display prop beyond the prefix");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        fit_to(40.0),
+        plain_policy(),
+    )
+    .expect("hazard beyond the handoff must not refuse the prefix");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+    assert_eq!(plan.line_char_len(), 5);
+}
+
+#[test]
+fn classifier_prefix_refuses_hazard_inside_the_prefix() {
+    let mut eval = Context::new();
+    let text = "abcdefgh\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 2 4 'display \"XX\")")
+        .expect("display prop inside the prefix");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(40.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline
+    );
+}
+
+#[test]
+fn classifier_prefix_refuses_elision_inside_the_prefix() {
+    let mut eval = Context::new();
+    // An invisible span inside the prefix would make the scan's fit walk
+    // overcount (it advances the pen for hidden chars too), so the handoff
+    // cut would not be the pipeline's overflow point: refuse.
+    let text = "abcdefgh\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 2 4 'invisible t)")
+        .expect("invisible span inside the prefix");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(40.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline
+    );
+}
+
+#[test]
+fn classifier_prefix_byte_len_tracks_multibyte_chars() {
+    let mut eval = Context::new();
+    // Five 1-column 2-byte chars in a 3-cell row: prefix is 3 chars, 6 bytes.
+    let text = "ééééé\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        fit_to(24.0),
+        plain_policy(),
+    )
+    .expect("multibyte prefix plan");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+    assert_eq!(plan.line_char_len(), 3);
+    assert_eq!(plan.line_byte_len(), 6);
 }

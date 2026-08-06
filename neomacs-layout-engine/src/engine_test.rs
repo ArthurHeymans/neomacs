@@ -14291,6 +14291,58 @@ fn render_buffer_ascii_item_source_shadow_row(
     .into_row()
 }
 
+/// Like [`render_buffer_ascii_item_source_shadow_row`] but rendering the
+/// TEXT ONLY over `[start, end)` — no row-break item — mirroring the routed
+/// production render of a phase-2f overflow-prefix plan, where the walk
+/// hands back to the pipeline at the first non-fitting char instead of
+/// consuming a newline.
+#[allow(clippy::too_many_arguments)]
+fn render_buffer_ascii_item_prefix_shadow_row(
+    buf_id: BufferId,
+    snapshot: &LayoutBufferSnapshot,
+    start: CharPos0,
+    end: CharPos0,
+    base_face_id: FaceId,
+    width_px: f32,
+    height_px: f32,
+    ascent_px: f32,
+    char_width_px: f32,
+) -> GlyphRow {
+    let mut source = crate::buffer_source::row_route::BufferAsciiItemSource::text_only(
+        buf_id,
+        snapshot,
+        start,
+        end,
+        RenderFaceRef::FaceId(base_face_id),
+    );
+    let mut font_metrics = None;
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ff_ffff, 0x0000_0000, 14.0, None);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(base_face_id.get() + 1);
+    DisplayRowSourceFragmentFrame::new(
+        DisplayRowGeometry::new(
+            0.0,
+            width_px,
+            height_px,
+            char_width_px,
+            ascent_px,
+            DisplayTabPolicy::every(8),
+        ),
+        GlyphRowRole::Text,
+        base_face_id,
+        resolver.default_face(),
+    )
+    .render_request(DisplayRowRenderBounds::new(
+        DisplayRowPosition::new(0.0, 0),
+        DisplayRowMaxX::Bounded(width_px),
+    ))
+    .render(&mut renderer, &mut source, &resolver, &mut face_ids)
+    .expect("ascii item prefix shadow row")
+    .into_row()
+}
+
 /// Lay out `text` in a fresh frame and return the enabled text rows of the
 /// selected window plus the frame char metrics, for ascii-route shadow tests.
 fn layout_main_text_rows(
@@ -14417,6 +14469,7 @@ fn ascii_route_classification<B: crate::neovm_bridge::LayoutBufferView>(
             selective_display: 0,
             word_wrap: false,
             show_trailing_whitespace: false,
+            wrap_mode: crate::types::LineWrapMode::Truncate,
         },
     )
 }
@@ -14589,6 +14642,156 @@ fn ascii_route_flag_on_layout_engages_segmented_acquisition() {
         after >= before + 1,
         "expected the face-segmented row to route through the item renderer \
          (before={before}, after={after})"
+    );
+}
+
+/// Phase 2f rung 1 shadow proof: an over-wide line under truncate-lines. The
+/// flag-off pipeline row holds exactly the fitting prefix (its overflow
+/// action consumes the rest of the line into the truncation skip and marks
+/// the row Truncated; the indicator is a fringe bitmap, not a text glyph).
+/// The routed prefix render must equal it glyph-for-glyph.
+#[test]
+fn ascii_item_prefix_shadow_matches_truncated_row() {
+    let long_line: String = format!("{}\nshort\n", "abcdefghij".repeat(12));
+    let (eval, buf_id, _frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(&long_line, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(setq truncate-lines t)").expect("truncate");
+        });
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    let main_glyphs = &rows[0].glyphs[1];
+    assert!(
+        main_glyphs.len() < 120,
+        "the 120-char line must be truncated (got {} glyphs)",
+        main_glyphs.len()
+    );
+    // The truncation shape: the last cell is the '$' truncation marker, a
+    // POST-PASS decoration driven by the Truncated row flag
+    // (special_glyphs.rs text_window_right_edge_marker_decorations, GNU
+    // produce_special_glyphs IT_TRUNCATION) that trims the finished row and
+    // installs the marker — a shared seam identical for both routes. The
+    // routed coverage is the full fitting prefix; the marker pass later
+    // replaces its final cell.
+    let n = main_glyphs.len();
+    assert!(
+        matches!(main_glyphs[n - 1].glyph_type, GlyphType::Char { ch: '$' }),
+        "truncated row must end in the '$' marker cell, got {:?}",
+        main_glyphs[n - 1].glyph_type
+    );
+    let shadow_row = render_buffer_ascii_item_prefix_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        CharPos0::new(n),
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_eq!(
+        shadow_row.glyphs[1][..n - 1],
+        main_glyphs[..n - 1],
+        "routed prefix must equal the truncated pipeline row glyph-for-glyph \
+         up to the shared marker cell"
+    );
+}
+
+/// Phase 2f rung 2 shadow proof: an over-wide line under character wrap
+/// (truncate-lines nil, the engine default). Row 1 of the continued line is
+/// the fitting prefix; the wrap transition and the continuation rows stay
+/// wholly on the pipeline (flag-on and flag-off alike), preserving the
+/// carry-over bookkeeping by construction.
+#[test]
+fn ascii_item_prefix_shadow_matches_first_row_of_wrapped_line() {
+    let long_line: String = format!("{}\nshort\n", "abcdefghij".repeat(12));
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(&long_line);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    assert!(
+        rows.len() >= 3,
+        "the 120-char line must wrap to at least two rows (got {})",
+        rows.len()
+    );
+    let main_glyphs = &rows[0].glyphs[1];
+    let n = main_glyphs.len();
+    assert!(n < 120, "row 0 holds only the fitting prefix");
+    // Continued rows end in the '\\' continuation marker — the same
+    // post-pass row-flag decoration seam as truncation ('$'), shared by both
+    // routes (GNU produce_special_glyphs IT_CONTINUATION, TTY column).
+    assert!(
+        matches!(main_glyphs[n - 1].glyph_type, GlyphType::Char { ch: '\\' }),
+        "continued row must end in the continuation marker cell, got {:?}",
+        main_glyphs[n - 1].glyph_type
+    );
+    let shadow_row = render_buffer_ascii_item_prefix_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        CharPos0::new(n),
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_eq!(
+        shadow_row.glyphs[1][..n - 1],
+        main_glyphs[..n - 1],
+        "routed prefix must equal row 1 of the continued pipeline line \
+         glyph-for-glyph up to the shared marker cell"
+    );
+}
+
+/// Engagement proof for the phase-2f truncation extension (flag-on suite
+/// gate): laying out an over-wide line under truncate-lines must take the
+/// routed overflow-prefix acquisition. Trivially passes when the flag is
+/// off.
+#[test]
+fn ascii_route_flag_on_layout_engages_truncation_prefix_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_TRUNCATION_PREFIX_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let long_line: String = format!("{}\n", "abcdefghij".repeat(12));
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with(&long_line, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(setq truncate-lines t)").expect("truncate");
+        });
+    assert!(!rows.is_empty());
+    let after = crate::buffer_source::row_route::ROUTED_TRUNCATION_PREFIX_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after > before,
+        "expected the truncated row's prefix to route through the item renderer \
+         (before={before}, after={after})"
+    );
+}
+
+/// Engagement proof for the phase-2f continuation extension (flag-on suite
+/// gate): laying out an over-wide line under character wrap must route row 1's
+/// fitting prefix. Trivially passes when the flag is off.
+#[test]
+fn ascii_route_flag_on_layout_engages_wrap_prefix_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_WRAP_PREFIX_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let long_line: String = format!("{}\n", "abcdefghij".repeat(12));
+    let (_eval, _buf_id, rows, _char_width, _char_height) = layout_main_text_rows(&long_line);
+    assert!(rows.len() >= 2, "the long line must wrap");
+    let after = crate::buffer_source::row_route::ROUTED_WRAP_PREFIX_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after > before,
+        "expected the wrapped line's first-row prefix to route through the item \
+         renderer (before={before}, after={after})"
     );
 }
 
@@ -14858,17 +15061,19 @@ fn ascii_item_source_shadow_matches_mixed_tab_wide_multiface_row() {
 }
 
 #[test]
-fn ascii_route_classifies_wide_char_straddling_right_edge_to_buffer_pipeline() {
-    // A wide char that would straddle the right edge: the pipeline continues
-    // the line onto a second row (continuation), which the routed class
-    // cannot express — the classifier must refuse, leaving the pipeline
-    // behavior byte-identical.
+fn ascii_route_classifies_wide_char_straddle_prefix_and_exact_fill() {
+    // A wide char that would straddle the right edge. Phase 2b refused the
+    // whole row; since phase 2f the fitting "abc" prefix routes and the
+    // straddling char hands off to the pipeline's own overflow machinery
+    // (which continues or truncates the line, byte-identically to flag-off).
+    // Only the EXACT-FILL line (wide char ending exactly at the edge with
+    // its newline at the boundary) still refuses whole.
     let text = "abc\u{4E2D}\n";
     let (eval, buf_id, _rows, char_width, _char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     let point = text.chars().count() as i64;
-    for edge_cells in [4.0, 4.5, 5.0] {
+    for edge_cells in [4.0, 4.5] {
         assert_eq!(
             ascii_route_classification(
                 &snapshot,
@@ -14879,10 +15084,23 @@ fn ascii_route_classifies_wide_char_straddling_right_edge_to_buffer_pipeline() {
                 edge_cells * char_width,
                 point
             ),
-            crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
-            "a wide char straddling or exactly filling the {edge_cells}-cell row must refuse"
+            crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer,
+            "a wide char straddling the {edge_cells}-cell row routes the fitting prefix"
         );
     }
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            5.0 * char_width,
+            point
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "exact fill still refuses whole"
+    );
     assert_eq!(
         ascii_route_classification(
             &snapshot,
@@ -15008,6 +15226,7 @@ fn assert_segmented_ascii_shadow_row(
             selective_display: 0,
             word_wrap: false,
             show_trailing_whitespace: false,
+            wrap_mode: crate::types::LineWrapMode::Truncate,
         },
     )
     .expect("scenario row must classify for the item route");

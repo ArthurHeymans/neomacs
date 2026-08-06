@@ -11,8 +11,13 @@
 //!   renderer. "Plain" mirrors what makes GNU `get_next_display_element`
 //!   trivial: single-byte printable ASCII only, no display/mouse-face/
 //!   line-height properties in range, no display table, L2R (guaranteed by
-//!   ASCII-only content), the row fits without continuation or truncation,
-//!   and it ends in a real newline. Composition refuses through the
+//!   ASCII-only content), and either the whole line fits without
+//!   continuation or truncation and ends in a real newline, or — phase 2f —
+//!   the line overflows and the route covers only its maximal fitting
+//!   prefix, handing the walk back to the pipeline at the first char that
+//!   does not fit so the pipeline's own overflow machinery (truncation skip
+//!   / continuation transition, row flags, carry-over bookkeeping) decides
+//!   wrap-vs-truncate unchanged. Composition refuses through the
 //!   pipeline's OWN predicates (phase 2e): a char the shared writer would
 //!   compose into the previous glyph (`composition::continues_cluster` /
 //!   `continues_complex_run` over the scan's mirror of the row tail) and a
@@ -68,6 +73,7 @@ use crate::display_source::{
 };
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, LayoutCharPropertyLookup, ResolvedFace};
+use crate::types::LineWrapMode;
 use crate::unicode::{decode_utf8, is_regional_indicator};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
@@ -94,6 +100,14 @@ pub(crate) struct RowRouteWindowPolicy {
     pub(crate) selective_display: i32,
     pub(crate) word_wrap: bool,
     pub(crate) show_trailing_whitespace: bool,
+    /// The window's effective wrap mode (GNU `it->line_wrap`, minus
+    /// WORD_WRAP which the `word_wrap` flag above refuses outright). It does
+    /// not change WHAT the route renders — an over-wide line always routes
+    /// only its fitting prefix and hands the walk back BEFORE the first char
+    /// that does not fit, so the pipeline's own truncation/continuation
+    /// machinery makes the wrap-vs-truncate decision — but it labels the
+    /// routed class for engagement accounting.
+    pub(crate) wrap_mode: LineWrapMode,
 }
 
 impl RowRouteWindowPolicy {
@@ -118,11 +132,13 @@ pub(crate) struct RowRouteRowStart<'a> {
     pub(crate) text_start_byte: usize,
 }
 
-/// Pixel-fit inputs: the row must hold the whole line WITHOUT continuation or
-/// truncation. The classifier applies the logical-cell bound strictly (a line
-/// exactly filling the row is NOT eligible — its line end interacts with
-/// continuation policy), and the routed render re-verifies with the same
-/// natural measurement the buffer pipeline uses before committing. The tab
+/// Pixel-fit inputs. A whole-line plan must hold the line WITHOUT
+/// continuation or truncation, applied strictly (a line exactly filling the
+/// row is NOT eligible — its line end interacts with continuation policy);
+/// an overflow-prefix plan (phase 2f) covers the maximal fitting prefix of
+/// an over-wide line instead. Either way the routed render re-verifies with
+/// the same natural measurement the buffer pipeline uses before committing.
+/// The tab
 /// policy is the append surface's (buffer `tab-width` / `tab-stop-list`), so
 /// the classifier's tab expansion is the SAME `DisplayTabPolicy::advance_from`
 /// the pipeline's per-char advance resolves (GNU `gui_produce_glyphs`
@@ -159,6 +175,27 @@ pub(crate) struct AsciiRowPlan {
     face_boundaries: Vec<usize>,
     elided: Vec<(usize, usize)>,
     composed: Vec<usize>,
+    line_end: RoutedRowLineEnd,
+}
+
+/// How a routed row's coverage ends (phase 2f).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RoutedRowLineEnd {
+    /// The line's real newline: the plan covers the whole line, strictly
+    /// fitting inside the row; the buffer pipeline's line-break lifecycle
+    /// consumes the newline afterwards.
+    Newline,
+    /// The line overflows the row (GNU `display_line`'s "glyph doesn't fit"
+    /// branch, xdisp.c:26221): the plan covers only the MAXIMAL FITTING
+    /// PREFIX — every covered char satisfies the pipeline's own fit rule
+    /// (`DisplayRowTextOverflowDecision::for_char`: `x + advance <=
+    /// right_edge`) — and the routed render hands the walk back to the
+    /// buffer pipeline AT the first char that does not fit, BEFORE any
+    /// wrap-vs-truncate decision. The pipeline's own overflow machinery
+    /// (`overflow.rs` truncation skip / continuation transition, row flags,
+    /// continuation rows, fringe indicators) then runs unchanged, which is
+    /// what keeps the multi-row carry-over bookkeeping byte-identical.
+    OverflowHandoff,
 }
 
 impl AsciiRowPlan {
@@ -209,6 +246,17 @@ impl AsciiRowPlan {
     /// extender merged into its base glyph).
     pub(crate) fn has_composed(&self) -> bool {
         !self.composed.is_empty()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn line_end(&self) -> RoutedRowLineEnd {
+        self.line_end
+    }
+
+    /// Whether this plan covers only the fitting prefix of an over-wide line
+    /// and hands the walk back to the pipeline at the first non-fitting char.
+    pub(crate) fn is_overflow_handoff(&self) -> bool {
+        self.line_end == RoutedRowLineEnd::OverflowHandoff
     }
 
     /// Whether the row renders as more than one run (face segments or
@@ -370,11 +418,20 @@ struct RoutedLineScan {
     has_tab: bool,
     has_wide: bool,
     composed: Vec<usize>,
+    line_end: RoutedRowLineEnd,
 }
 
 /// Scan for a routable line at `byte_idx`: at least one char accepted by
-/// the routed ladder, terminated by a real `\n` inside `text`, whose pen
-/// walk ends STRICTLY inside the right edge.
+/// the routed ladder, either terminated by a real `\n` inside `text` with
+/// the pen walk ending STRICTLY inside the right edge
+/// ([`RoutedRowLineEnd::Newline`]), or — phase 2f — overflowing the row, in
+/// which case the scan covers the maximal fitting prefix and stops at the
+/// first char whose advance would cross the right edge
+/// ([`RoutedRowLineEnd::OverflowHandoff`]). The prefix cut mirrors the
+/// pipeline's fit rule (`x + advance <= right_edge` fits), with one
+/// deliberate conservatism: a TAB whose expansion crosses the edge ends the
+/// prefix too (the pipeline treats a tab as always fitting and clips it;
+/// handing the tab back keeps that clip on the pipeline's own append).
 ///
 /// The walk advances the pen exactly as the pipeline's natural advance does
 /// for uniform `char_width_px` cells — tabs through the append surface's
@@ -406,6 +463,23 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
     let mut col = fit.start_col;
     let mut tail: Option<(char, bool)> = None;
     let mut merge_target = RoutedScanMergeTarget::None;
+    // The maximal-fitting-prefix cut for an over-wide line: every scanned
+    // char so far fits; the char at `idx` would cross the right edge, so the
+    // routed coverage ends here and the pipeline resumes at `idx`.
+    let overflow_prefix =
+        |idx: usize, char_len: usize, has_tab: bool, has_wide: bool, composed: Vec<usize>| {
+            if char_len == 0 {
+                return None;
+            }
+            Some(RoutedLineScan {
+                byte_len: idx - byte_idx,
+                char_len,
+                has_tab,
+                has_wide,
+                composed,
+                line_end: RoutedRowLineEnd::OverflowHandoff,
+            })
+        };
     while idx < text.len() {
         if text[idx] == b'\n' {
             if char_len == 0 || x_px >= fit.right_edge_px {
@@ -417,6 +491,7 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
                 has_tab,
                 has_wide,
                 composed,
+                line_end: RoutedRowLineEnd::Newline,
             });
         }
         let (ch, consumed) = decode_utf8(&text[idx..]);
@@ -445,10 +520,16 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
         }
         match classify_routed_row_char(ch)? {
             RoutedRowCharAdvance::Tab => {
-                has_tab = true;
                 let tab = fit
                     .tab_policy
                     .advance_from(DisplayRowPosition::new(x_px, col), fit.char_width_px);
+                // A tab crossing the right edge is clipped in place by the
+                // pipeline (GNU xdisp.c:26390, tab never split): end the
+                // routed prefix BEFORE it and let the pipeline append it.
+                if x_px + tab.pixel_width > fit.right_edge_px {
+                    return overflow_prefix(idx, char_len, has_tab, has_wide, composed);
+                }
+                has_tab = true;
                 x_px += tab.pixel_width;
                 col += tab.width_cols;
                 // A tab renders a Stretch glyph: the writer's cluster-tail
@@ -457,6 +538,15 @@ fn routed_line_scan(text: &[u8], byte_idx: usize, fit: RowRouteFit<'_>) -> Optio
                 merge_target = RoutedScanMergeTarget::None;
             }
             RoutedRowCharAdvance::Cols(cols) => {
+                // The pipeline's fit rule: a char fits when its END lands at
+                // or inside the right edge (`x + advance <= right_edge`,
+                // DisplayRowTextOverflowDecision::for_char). The first char
+                // crossing the edge — including a 2-col char straddling it —
+                // ends the routed prefix; the pipeline's overflow machinery
+                // consumes it (truncation skip / continuation transition).
+                if x_px + f32::from(cols) * fit.char_width_px > fit.right_edge_px {
+                    return overflow_prefix(idx, char_len, has_tab, has_wide, composed);
+                }
                 has_wide |= cols == 2;
                 x_px += f32::from(cols) * fit.char_width_px;
                 col += usize::from(cols);
@@ -691,10 +781,13 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     // policy owns that edge).
     let scan = routed_line_scan(row.text, row.byte_idx, fit)?;
 
-    // Cursor capture stays on the buffer pipeline: exclude any row that
-    // contains point, including point sitting on the line's newline.
-    let newline_charpos = row.charpos + scan.char_len as i64;
-    if policy.point_charpos >= row.charpos && policy.point_charpos <= newline_charpos {
+    // Cursor capture stays on the buffer pipeline: exclude any row whose
+    // ROUTED coverage contains point — through the line's newline for a
+    // whole-line plan, through the handoff position for an overflow-prefix
+    // plan (point in the unrouted remainder is fine: the pipeline resumes
+    // there and captures it exactly as with the flag off).
+    let routed_end_charpos = row.charpos + scan.char_len as i64;
+    if policy.point_charpos >= row.charpos && policy.point_charpos <= routed_end_charpos {
         return None;
     }
 
@@ -703,8 +796,8 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     // segment boundaries below. Anything else — strings, display, invisible,
     // window restriction, category indirection — keeps the buffer pipeline.
     let start_byte = row.text_start_byte + row.byte_idx;
-    let newline_byte = start_byte + scan.byte_len;
-    let overlay_scan = routed_row_overlay_scan(buffer, row.charpos, start_byte, newline_byte)?;
+    let routed_end_byte = start_byte + scan.byte_len;
+    let overlay_scan = routed_row_overlay_scan(buffer, row.charpos, start_byte, routed_end_byte)?;
 
     // An active display table can remap any char (including the newline).
     if crate::neovm_bridge::buffer_has_active_display_table(buffer) {
@@ -716,15 +809,25 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
     // row-start runs, and non-advancing skips refuse. Overlay-sourced
     // invisibility never reaches this scan — any intersecting overlay
     // carrying `invisible` already refused through the overlay allow-list.
-    let elided = routed_row_elision_scan(buffer, row.charpos, newline_charpos)?;
+    let elided = routed_row_elision_scan(buffer, row.charpos, routed_end_charpos)?;
 
-    // Walk the property-change positions over the line AND its newline.
-    // Hazard properties anywhere in that range refuse the route; changes
-    // strictly inside the line become face-segment boundaries (a change ON
-    // the newline byte does not split the text but is still hazard-probed —
-    // a display/invisible property on the newline would replace it). The row
-    // may be multibyte, so boundary BYTE positions convert to CHAR offsets
-    // through the buffer's own mapping.
+    // An overflow-prefix plan refuses ANY elision inside its coverage: the
+    // scan's fit walk advanced the pen for every char including hidden ones,
+    // so its handoff cut would not be the pipeline's overflow point. (A
+    // hidden run beyond the handoff is unrouted remainder — the elision scan
+    // above never sees it, and the pipeline handles it at resume.)
+    if scan.line_end == RoutedRowLineEnd::OverflowHandoff && !elided.is_empty() {
+        return None;
+    }
+
+    // Walk the property-change positions over the routed coverage AND its
+    // end position (the newline for a whole-line plan — a display/invisible
+    // property on the newline would replace it; the handoff char for an
+    // overflow-prefix plan — probing it too is conservative, the pipeline
+    // could handle a hazard there). Hazard properties anywhere in that range
+    // refuse the route; changes strictly inside the coverage become
+    // face-segment boundaries. The row may be multibyte, so boundary BYTE
+    // positions convert to CHAR offsets through the buffer's own mapping.
     let mut face_boundaries = Vec::new();
     let mut probe_byte = start_byte;
     loop {
@@ -747,10 +850,10 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
             break;
         };
         let change = change.get();
-        if change <= probe_byte || change > newline_byte {
+        if change <= probe_byte || change > routed_end_byte {
             break;
         }
-        if change < newline_byte {
+        if change < routed_end_byte {
             let change_charpos = buffer
                 .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(change))
                 .get();
@@ -809,6 +912,7 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
         face_boundaries,
         elided,
         composed: scan.composed,
+        line_end: scan.line_end,
     })
 }
 
@@ -1160,7 +1264,23 @@ pub(crate) static ROUTED_ELIDED_ROW_COUNT: std::sync::atomic::AtomicUsize =
 pub(crate) static ROUTED_COMPOSED_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-fn note_routed_row(plan: &AsciiRowPlan) {
+/// Test-only engagement proof for the phase-2f truncation extension: routed
+/// overflow-prefix rows in a truncating window (the pipeline truncates at
+/// the handoff).
+#[cfg(test)]
+pub(crate) static ROUTED_TRUNCATION_PREFIX_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Test-only engagement proof for the phase-2f continuation extension:
+/// routed overflow-prefix rows in a wrapping window (the pipeline continues
+/// the line at the handoff).
+#[cfg(test)]
+pub(crate) static ROUTED_WRAP_PREFIX_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode) {
+    #[cfg(not(test))]
+    let _ = wrap_mode;
     #[cfg(test)]
     {
         ROUTED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1182,6 +1302,17 @@ fn note_routed_row(plan: &AsciiRowPlan) {
         if plan.has_composed() {
             ROUTED_COMPOSED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
+        if plan.is_overflow_handoff() {
+            match wrap_mode {
+                LineWrapMode::Truncate => {
+                    ROUTED_TRUNCATION_PREFIX_ROW_COUNT
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+                LineWrapMode::Wrap => {
+                    ROUTED_WRAP_PREFIX_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+        }
     }
     #[cfg(not(test))]
     let _ = plan;
@@ -1194,8 +1325,11 @@ pub(crate) enum AsciiRowRouteOutcome {
     /// pipeline proceeds unchanged.
     NotRouted,
     /// The row's text was rendered through the unified item renderer; the
-    /// walk resumes at the line's newline, which the buffer pipeline's own
-    /// line-break lifecycle consumes.
+    /// walk resumes at the end of the routed coverage — the line's newline
+    /// (consumed by the buffer pipeline's own line-break lifecycle) for a
+    /// whole-line plan, or the first non-fitting char (consumed by the
+    /// pipeline's own overflow machinery: truncation skip or continuation
+    /// transition) for an overflow-prefix plan.
     Rendered,
     /// The renderer reported a stop; the visible loop must end (mirrors the
     /// buffer pipeline mapping a failed append to Stop).
@@ -1264,6 +1398,7 @@ impl<'rows, 'emit, 'surface>
             word_wrap: params.word_wrap || self.word_wrap.is_enabled(),
             show_trailing_whitespace: params.show_trailing_whitespace
                 || self.trailing_whitespace.is_enabled(),
+            wrap_mode: params.wrap_mode,
         };
         let Some(plan) = plan_ascii_row(buffer, row, fit, policy) else {
             return AsciiRowRouteOutcome::NotRouted;
@@ -1271,10 +1406,13 @@ impl<'rows, 'emit, 'surface>
 
         let start = CharPos0::new(row.charpos.max(0) as usize);
         let ranges = plan.segment_ranges(start);
-        // The walk resumes at the NEWLINE, not at the last visible segment's
-        // end: with a trailing elision they differ (the hidden span sits
-        // between them and produces nothing, exactly like the pipeline's
-        // invisible skip).
+        // The walk resumes at the end of the ROUTED COVERAGE — the newline
+        // for a whole-line plan (not the last visible segment's end: with a
+        // trailing elision they differ, the hidden span sits between them
+        // and produces nothing, exactly like the pipeline's invisible skip),
+        // or the first non-fitting char for an overflow-prefix plan (the
+        // pipeline's own overflow machinery consumes it and everything
+        // after).
         let line_end = start.add_len(CharLen::new(plan.line_char_len()));
 
         // ---- Probe phase: no loop-state mutation. Resolve every segment's
@@ -1371,9 +1509,21 @@ impl<'rows, 'emit, 'surface>
                 return AsciiRowRouteOutcome::NotRouted;
             };
             probe_position = end_position;
-            // Strict fit at every segment boundary: any borderline row
-            // (exact fill) keeps the buffer pipeline.
-            if !(probe_position.x_px() < self.append_surface.right_edge()) {
+            // Fit re-verification with the pipeline's OWN natural
+            // measurement. Whole-line plans stay strict (any borderline row
+            // — exact fill — keeps the buffer pipeline). Overflow-prefix
+            // plans allow the prefix to end exactly AT the right edge: the
+            // pipeline's fit rule is `x + advance <= right_edge`, and pen x
+            // is monotonic over the run, so a measured end at or inside the
+            // edge proves every routed char individually fits — the same
+            // chars the flag-off pipeline would append before its overflow
+            // decision fires at the handoff char.
+            let fits = if plan.is_overflow_handoff() {
+                probe_position.x_px() <= self.append_surface.right_edge()
+            } else {
+                probe_position.x_px() < self.append_surface.right_edge()
+            };
+            if !fits {
                 return AsciiRowRouteOutcome::NotRouted;
             }
         }
@@ -1456,7 +1606,7 @@ impl<'rows, 'emit, 'surface>
         self.progress.max_charpos(line_end.get() as i64);
         self.progress
             .set_byte_idx(row.byte_idx + plan.line_byte_len());
-        note_routed_row(&plan);
+        note_routed_row(&plan, policy.wrap_mode);
         AsciiRowRouteOutcome::Rendered
     }
 }
