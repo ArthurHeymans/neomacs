@@ -2338,6 +2338,12 @@ pub const HAML_MODE_MELPA_PIN: (&str, &str) = ("haml-mode", "20250714.1441");
 /// `1443d6dce378ad2d65a8a8c45d5279481a79dfab`.
 pub const SOLARIZED_THEME_MELPA_PIN: (&str, &str) = ("solarized-theme", "20260728.833");
 
+/// The exact Smex package selected for practical command discovery,
+/// execution, ranking, history, persistence, major-mode filtering, and
+/// maintenance parity. MELPA built this archive from upstream commit
+/// `55aaebe3d793c2c990b39a302eb26c184281c42c`.
+pub const SMEX_MELPA_PIN: (&str, &str) = ("smex", "20151212.2209");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
