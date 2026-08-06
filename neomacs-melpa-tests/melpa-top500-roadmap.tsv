@@ -212,7 +212,7 @@ rank	package	downloads	status
 211	window-purpose	535438	covered
 212	helm-c-yasnippet	531027	covered
 213	skewer-mode	528437	covered
-214	evil-goggles	527887	todo
+214	evil-goggles	527887	covered
 215	nameless	526341	todo
 216	emmet-mode	522237	covered
 217	pcache	518173	todo

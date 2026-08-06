@@ -2152,6 +2152,12 @@ pub const EVIL_ESCAPE_MELPA_PIN: (&str, &str) = ("evil-escape", "20241212.1318")
 /// `3030e21ee16a42dfce7f7cf86147b778b3f5d8c1`.
 pub const EVIL_EXCHANGE_MELPA_PIN: (&str, &str) = ("evil-exchange", "20200118.252");
 
+/// The exact Evil Goggles package selected for practical yank, paste, delete,
+/// change, shift, join, marker, visual-gating, face-preset, and hint-lifecycle
+/// parity. MELPA built this archive from upstream commit
+/// `34ca276a85f615d2b45e714c9f8b5875bcb676f3`.
+pub const EVIL_GOGGLES_MELPA_PIN: (&str, &str) = ("evil-goggles", "20231021.738");
+
 /// The exact Evil Iedit State package selected for practical multi-occurrence
 /// edits, state transitions, selective operations, replacement, restriction,
 /// numbering, undo, and cleanup parity. MELPA built this archive from upstream

@@ -319,6 +319,7 @@ mod evil_collection;
 mod evil_ediff;
 mod evil_escape;
 mod evil_exchange;
+mod evil_goggles;
 mod evil_iedit_state;
 mod evil_indent_plus;
 mod evil_lisp_state;
