@@ -14240,6 +14240,324 @@ fn buffer_text_source_shadow_matches_main_buffer_trailing_whitespace_row() {
     );
 }
 
+/// Render one buffer row through the unified item renderer fed by the
+/// classified-row source ([`crate::buffer_source::row_route::BufferAsciiItemSource`]),
+/// for shadow comparison against the buffer-pipeline row.
+#[allow(clippy::too_many_arguments)]
+fn render_buffer_ascii_item_source_shadow_row(
+    buf_id: BufferId,
+    snapshot: &LayoutBufferSnapshot,
+    start: CharPos0,
+    line_end: CharPos0,
+    base_face_id: FaceId,
+    width_px: f32,
+    height_px: f32,
+    ascent_px: f32,
+    char_width_px: f32,
+) -> GlyphRow {
+    let mut source = crate::buffer_source::row_route::BufferAsciiItemSource::with_row_break(
+        buf_id,
+        snapshot,
+        start,
+        line_end,
+        RenderFaceRef::FaceId(base_face_id),
+    );
+    let mut font_metrics = None;
+    let mut renderer =
+        DisplayRowRenderer::new(&mut font_metrics, DisplayRowMeasurementMode::LogicalCells);
+    let table = FaceTable::new();
+    let resolver = FaceResolver::new(&table, 0x00ff_ffff, 0x0000_0000, 14.0, None);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(base_face_id.get() + 1);
+    DisplayRowSourceFragmentFrame::new(
+        DisplayRowGeometry::new(
+            0.0,
+            width_px,
+            height_px,
+            char_width_px,
+            ascent_px,
+            DisplayTabPolicy::every(8),
+        ),
+        GlyphRowRole::Text,
+        base_face_id,
+        resolver.default_face(),
+    )
+    .render_request(DisplayRowRenderBounds::new(
+        DisplayRowPosition::new(0.0, 0),
+        DisplayRowMaxX::Bounded(width_px),
+    ))
+    .render(&mut renderer, &mut source, &resolver, &mut face_ids)
+    .expect("ascii item source row")
+    .into_row()
+}
+
+/// Lay out `text` in a fresh frame and return the enabled text rows of the
+/// selected window plus the frame char metrics, for ascii-route shadow tests.
+fn layout_main_text_rows(
+    text: &str,
+) -> (
+    Context,
+    BufferId,
+    Vec<neomacs_display_protocol::glyph_matrix::MatrixRow>,
+    f32,
+    f32,
+) {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(text);
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-ascii-route-shadow", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let rows: Vec<_> = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .cloned()
+        .collect();
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let (char_width, char_height) = (frame.char_width, frame.char_height);
+    (eval, buf_id, rows, char_width, char_height)
+}
+
+/// Glyph-for-glyph shadow assertion: the item-renderer row must equal the
+/// buffer-pipeline row COMPLETELY (glyph type, buffer position, face id,
+/// pixel geometry, wide/padding flags) — including the appended GNU newline
+/// space, which the routed source produces through the shared line-end seam
+/// when it emits the row-break item.
+fn assert_ascii_shadow_row_matches(
+    main_row: &neomacs_display_protocol::glyph_matrix::MatrixRow,
+    shadow_row: &GlyphRow,
+) {
+    assert_eq!(
+        shadow_row.glyphs[1], main_row.glyphs[1],
+        "item-renderer row must equal the buffer-pipeline row glyph-for-glyph"
+    );
+}
+
+/// The realized face id of the first text glyph on a main-pipeline row: the
+/// window's base text face, fed to the shadow renderer so both paths realize
+/// glyphs against the same face identity.
+fn main_row_base_face_id(row: &neomacs_display_protocol::glyph_matrix::MatrixRow) -> FaceId {
+    row.glyphs[1].first().expect("main row glyph").face_id
+}
+
+fn ascii_route_classification<B: crate::neovm_bridge::LayoutBufferView + ?Sized>(
+    buffer: &B,
+    text: &[u8],
+    byte_idx: usize,
+    charpos: i64,
+    char_width: f32,
+    right_edge_px: f32,
+    point_charpos: i64,
+) -> crate::buffer_source::row_route::RowAcquisitionRoute {
+    crate::buffer_source::row_route::classify_row_acquisition(
+        buffer,
+        crate::buffer_source::row_route::RowRouteRowStart {
+            text,
+            byte_idx,
+            charpos,
+            text_start_byte: 0,
+        },
+        crate::buffer_source::row_route::RowRouteFit {
+            start_x_px: 0.0,
+            char_width_px: char_width,
+            right_edge_px,
+        },
+        crate::buffer_source::row_route::RowRouteWindowPolicy {
+            point_charpos,
+            hscroll_active: false,
+            selective_display: 0,
+            word_wrap: false,
+            show_trailing_whitespace: false,
+        },
+    )
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_main_buffer_plain_row() {
+    let text = "hello world\n";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+
+    let line_end = CharPos0::new("hello world".chars().count());
+    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_main_buffer_trailing_whitespace_row() {
+    let text = "ab  \n";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+
+    let line_end = CharPos0::new("ab  ".chars().count());
+    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_row_after_empty_line() {
+    // "x", an empty line, then "y": the empty line itself stays on the buffer
+    // pipeline (no text to acquire); its neighbors route and must match.
+    let text = "x\n\ny\n";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert!(rows.len() >= 3, "expected x / empty / y rows");
+
+    let point = text.chars().count() as i64;
+    assert_eq!(
+        ascii_route_classification(&snapshot, text.as_bytes(), 2, 2, char_width, 640.0, point),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "the empty line stays on the buffer pipeline"
+    );
+    assert_eq!(
+        ascii_route_classification(&snapshot, text.as_bytes(), 3, 3, char_width, 640.0, point),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+
+    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::new(3),
+        CharPos0::new(4),
+        main_row_base_face_id(&rows[2]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_ascii_shadow_row_matches(&rows[2], &shadow_row);
+
+    // The row BEFORE the empty line routes and matches too.
+    assert_eq!(
+        ascii_route_classification(&snapshot, text.as_bytes(), 0, 0, char_width, 640.0, point),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        CharPos0::new(1),
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+}
+
+#[test]
+fn ascii_route_classifies_exactly_filling_line_to_buffer_pipeline() {
+    let text = "abcdefgh\n";
+    let (eval, buf_id, _rows, char_width, _char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let point = text.chars().count() as i64;
+
+    // A row exactly as wide as the line: the classifier must keep the buffer
+    // pipeline (continuation policy owns the exact-fill edge).
+    let exact_edge = 8.0 * char_width;
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            exact_edge,
+            point
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline
+    );
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            exact_edge + char_width,
+            point
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+}
+
 #[test]
 fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
     let mut eval = Context::new();
