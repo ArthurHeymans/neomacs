@@ -305,16 +305,16 @@ fn classifier_rejects_wide_char_exact_fill_and_straddle() {
 #[test]
 fn classifier_rejects_content_the_item_route_does_not_cover() {
     let mut eval = Context::new();
-    // Control chars, missing final newline, empty line, zero-width chars,
-    // complex scripts, regional-indicator pairs, and nobreak space/hyphen
-    // (nobreak-char-display consults a setting): all stay on the buffer
-    // pipeline. (Combining marks on a simple base left this list in phase
-    // 2e rung 2 — see the composed-cluster tests.)
+    // Control chars, zero-width chars, complex scripts, regional-indicator
+    // pairs, and nobreak space/hyphen (nobreak-char-display consults a
+    // setting): all stay on the buffer pipeline. (Combining marks on a
+    // simple base left this list in phase 2e rung 2 — see the
+    // composed-cluster tests; the missing-final-newline EOB tail and the
+    // empty line left it in phase 2h — see the end-of-source and
+    // empty-line tests.)
     for text in [
         b"a\x01b\n".as_slice(),
         b"a\rb\n".as_slice(),
-        b"hello".as_slice(),
-        b"\nx\n".as_slice(),
         "a\u{200B}b\n".as_bytes(),                       // zero-width space
         "a\u{200D}b\n".as_bytes(),                       // ZWJ
         "\u{0633}\u{0644}\u{0627}\u{0645}\n".as_bytes(), // Arabic (shaped run)
@@ -2053,4 +2053,268 @@ fn classifier_prefix_byte_len_tracks_multibyte_chars() {
     assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
     assert_eq!(plan.line_char_len(), 3);
     assert_eq!(plan.line_byte_len(), 6);
+}
+
+// ---- Phase 2h rung 1: empty lines (bare-newline rows) ----
+
+#[test]
+fn classifier_routes_empty_line_and_plans_row_break_only() {
+    let mut eval = Context::new();
+    // "x", an empty line, then "y": the empty line (a bare newline at
+    // charpos 2) routes with a RowBreak-only plan — zero covered chars, the
+    // shared line-end plan consumes the newline (GNU display_line's
+    // at_end_of_line branch, xdisp.c:26517).
+    let text = "x\n\ny\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 2, 2),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::ItemRenderer
+    );
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 2, 2),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("empty-line plan");
+    assert_eq!(plan.line_char_len(), 0);
+    assert_eq!(plan.line_byte_len(), 0);
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::Newline);
+    assert!(plan.is_empty_line());
+    assert!(plan.segment_ranges(CharPos0::new(2)).is_empty());
+}
+
+#[test]
+fn classifier_refuses_empty_line_when_point_on_newline() {
+    let mut eval = Context::new();
+    // Point ON the empty line's newline: the cursor rides the appended
+    // newline space (GNU set_cursor_from_row's empty_line_p glyph), a
+    // documented buffer-pipeline responsibility.
+    let text = "x\n\ny\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let refused = plan_ascii_row_classified(
+        buffer,
+        row_start(text.as_bytes(), 2, 2),
+        wide_fit(),
+        RowRouteWindowPolicy {
+            point_charpos: 2,
+            ..plain_policy()
+        },
+    );
+    assert_eq!(refused.unwrap_err(), RouteRefusal::PointInRow);
+}
+
+#[test]
+fn classifier_refuses_empty_line_with_hazard_prop_on_newline() {
+    let mut eval = Context::new();
+    let text = "x\n\ny\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    // A display prop covering the newline replaces the line end.
+    eval.eval_str("(put-text-property 3 4 'display \"D\")")
+        .expect("display prop on the empty line's newline");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let refused = plan_ascii_row_classified(
+        buffer,
+        row_start(text.as_bytes(), 2, 2),
+        wide_fit(),
+        plain_policy(),
+    );
+    assert_eq!(refused.unwrap_err(), RouteRefusal::HazardProp);
+}
+
+#[test]
+fn classifier_refuses_empty_line_with_string_overlay_at_newline() {
+    let mut eval = Context::new();
+    let text = "x\n\ny\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    // An overlay with a before-string anchored on the empty line injects a
+    // Lisp-string run; the overlay allow-list refuses it.
+    eval.eval_str("(overlay-put (make-overlay 3 4) 'before-string \"S\")")
+        .expect("string overlay at the empty line");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let refused = plan_ascii_row_classified(
+        buffer,
+        row_start(text.as_bytes(), 2, 2),
+        wide_fit(),
+        plain_policy(),
+    );
+    assert_eq!(refused.unwrap_err(), RouteRefusal::Overlay);
+}
+
+#[test]
+fn ascii_source_row_break_only_produces_single_row_break_item() {
+    let mut eval = Context::new();
+    let text = "x\n\ny\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let mut source = BufferAsciiItemSource::with_row_break_segments(
+        buf_id,
+        buffer,
+        &[],
+        CharPos0::new(2),
+        RenderFaceRef::FaceId(FaceId::new(7)),
+    );
+    let mut context = DisplaySourceContext::empty();
+    let mut items = Vec::new();
+    while let Some(item) = source.next_item(&mut context) {
+        items.push(item);
+    }
+    assert_eq!(items.len(), 1, "RowBreak-only production: {items:?}");
+    let DisplayItemKind::RowBreak(row_break) = items[0].kind else {
+        panic!("expected a row break, got {:?}", items[0].kind);
+    };
+    assert_eq!(
+        row_break,
+        DisplayRowBreak::explicit_newline()
+            .with_line_height(DisplayLineHeightPolicy::from_property(None))
+    );
+    let byte_at = |pos: CharPos0| buffer.layout_char_pos_to_emacs_byte_pos(pos);
+    assert_eq!(
+        items[0].span.start,
+        DisplaySourcePosition::buffer(buf_id, CharPos0::new(2), byte_at(CharPos0::new(2)))
+    );
+    assert_eq!(
+        items[0].span.end,
+        DisplaySourcePosition::buffer(buf_id, CharPos0::new(3), byte_at(CharPos0::new(3)))
+    );
+    assert_eq!(items[0].face, RenderFaceRef::FaceId(FaceId::new(7)));
+}
+
+// ---- Phase 2h rung 2: the EOB tail row (line ending at the source end) ----
+
+#[test]
+fn classifier_routes_eob_tail_row_without_newline() {
+    let mut eval = Context::new();
+    // The buffer ends without a trailing newline: the last line ends at the
+    // window read's end, which the bounded read guarantees is the accessible
+    // end (the read bound always cuts AFTER a newline, never mid-line). The
+    // row routes as TextRun-only coverage; the pipeline's post-loop EOB
+    // machinery (appended default-face space, ends_at_zv, ZV placeholder)
+    // runs unchanged after the walk exits (GNU xdisp.c:26007 EOB path).
+    let text = "abc\nxyz";
+    let buf_id = buffer_with_text(&mut eval, text);
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 4, 4),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::ItemRenderer
+    );
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 4, 4),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("EOB tail plan");
+    assert_eq!(plan.line_char_len(), 3);
+    assert_eq!(plan.line_byte_len(), 3);
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::EndOfSource);
+    assert!(plan.is_end_of_source());
+    assert_eq!(
+        plan.segment_ranges(CharPos0::new(4)),
+        vec![(CharPos0::new(4), CharPos0::new(7))]
+    );
+}
+
+#[test]
+fn classifier_refuses_eob_tail_containing_point() {
+    let mut eval = Context::new();
+    let text = "abc\nxyz";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    // Point inside the tail AND point at EOB (one past the last char — the
+    // cursor-at-EOB row) both refuse: cursor capture is pipeline-owned.
+    for point in [4, 5, 7] {
+        let refused = plan_ascii_row_classified(
+            buffer,
+            row_start(text.as_bytes(), 4, 4),
+            wide_fit(),
+            RowRouteWindowPolicy {
+                point_charpos: point,
+                ..plain_policy()
+            },
+        );
+        assert_eq!(
+            refused.unwrap_err(),
+            RouteRefusal::PointInRow,
+            "point {point} sits on the EOB tail row"
+        );
+    }
+}
+
+#[test]
+fn classifier_plans_overflow_prefix_for_overwide_eob_tail() {
+    let mut eval = Context::new();
+    // An over-wide tail line: the routed coverage is the fitting prefix and
+    // the pipeline's own overflow machinery consumes the rest, exactly like
+    // a phase 2f over-wide newline line.
+    let text = "abcdefgh";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        fit_to(40.0),
+        plain_policy(),
+    )
+    .expect("over-wide EOB tail prefix plan");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+    assert_eq!(plan.line_char_len(), 5);
+}
+
+#[test]
+fn classifier_routes_exactly_filling_eob_tail() {
+    let mut eval = Context::new();
+    // A tail line exactly filling the row routes: with no following char
+    // there is no continuation/truncation edge to interact with — the
+    // pipeline appends the same chars (each satisfying x + advance <=
+    // right_edge) and the walk simply ends at the source end.
+    let text = "abcde";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        fit_to(40.0),
+        plain_policy(),
+    )
+    .expect("exact-fill EOB tail plan");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::EndOfSource);
+    assert_eq!(plan.line_char_len(), 5);
+}
+
+#[test]
+fn classifier_eob_tail_plans_face_boundaries() {
+    let mut eval = Context::new();
+    let text = "abc\nxyz";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    // Face span over "y" (1-based buffer positions 6..7): segments the tail.
+    eval.eval_str("(put-text-property 6 7 'face 'bold)")
+        .expect("face span in the EOB tail");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 4, 4),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("segmented EOB tail plan");
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::EndOfSource);
+    assert_eq!(plan.face_boundaries(), &[1, 2]);
 }

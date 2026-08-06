@@ -14546,8 +14546,8 @@ fn ascii_item_source_shadow_matches_main_buffer_trailing_whitespace_row() {
 
 #[test]
 fn ascii_item_source_shadow_matches_row_after_empty_line() {
-    // "x", an empty line, then "y": the empty line itself stays on the buffer
-    // pipeline (no text to acquire); its neighbors route and must match.
+    // "x", an empty line, then "y": since phase 2h the empty line routes too
+    // (RowBreak-only production); its neighbors route and must match.
     let text = "x\n\ny\n";
     let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -14557,8 +14557,8 @@ fn ascii_item_source_shadow_matches_row_after_empty_line() {
     let point = text.chars().count() as i64;
     assert_eq!(
         ascii_route_classification(&snapshot, text.as_bytes(), 2, 2, char_width, 640.0, point),
-        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
-        "the empty line stays on the buffer pipeline"
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer,
+        "the empty line routes RowBreak-only since phase 2h"
     );
     assert_eq!(
         ascii_route_classification(&snapshot, text.as_bytes(), 3, 3, char_width, 640.0, point),
@@ -14792,6 +14792,164 @@ fn ascii_route_flag_on_layout_engages_wrap_prefix_acquisition() {
         after > before,
         "expected the wrapped line's first-row prefix to route through the item \
          renderer (before={before}, after={after})"
+    );
+}
+
+/// Phase 2h rung 1 shadow proof: an EMPTY buffer line. The pipeline's row is
+/// the appended newline space (plus line-end plan effects) only; the routed
+/// RowBreak-only production must reproduce it glyph-for-glyph, and the main
+/// row must carry the empty-row flags/charpos the redesign goldens pin
+/// (start == end == the newline's charpos, displays_text = false).
+#[test]
+fn ascii_item_row_break_only_shadow_matches_empty_line_row() {
+    let text = "x\n\ny\n";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert!(rows.len() >= 3, "expected x / empty / y rows");
+
+    let empty_row = &rows[1];
+    assert!(
+        !empty_row.displays_text,
+        "the empty line displays no text: {empty_row:?}"
+    );
+    assert_eq!(
+        (empty_row.start_charpos, empty_row.end_charpos),
+        (2, 2),
+        "the empty line carries its newline's real charpos"
+    );
+
+    // start == line_end: the shadow source degenerates to RowBreak-only.
+    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::new(2),
+        CharPos0::new(2),
+        main_row_base_face_id(empty_row),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_ascii_shadow_row_matches(empty_row, &shadow_row);
+}
+
+/// Phase 2h rung 2 shadow proof: the EOB tail row (buffer ends without a
+/// trailing newline). The routed coverage is TextRun-only: the appended
+/// end-of-buffer glyphs (GNU append_space_for_newline on the EOB path) are
+/// post-loop pipeline machinery on BOTH modes, so the shadow compares the
+/// text prefix and pins the pipeline-owned row flags separately.
+#[test]
+fn ascii_item_prefix_shadow_matches_eob_tail_row() {
+    let text = "first\nlast";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert!(rows.len() >= 2, "expected first / last rows");
+
+    let tail_row = &rows[1];
+    assert!(
+        tail_row.ends_at_zv,
+        "the newline-less tail row reaches ZV: {tail_row:?}"
+    );
+    assert!(
+        tail_row.displays_text,
+        "a content row at ZV keeps displays_text: {tail_row:?}"
+    );
+
+    let shadow_row = render_buffer_ascii_item_prefix_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::new(6),
+        CharPos0::new(10),
+        main_row_base_face_id(tail_row),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    let shadow_glyphs = &shadow_row.glyphs[1];
+    assert_eq!(shadow_glyphs.len(), "last".len());
+    assert_eq!(
+        &tail_row.glyphs[1][..shadow_glyphs.len()],
+        &shadow_glyphs[..],
+        "routed tail text must equal the pipeline row's text glyphs"
+    );
+}
+
+/// Engagement proof for the phase-2h empty-line extension (flag-on suite
+/// gate): laying out a buffer with an empty line must route it RowBreak-only.
+/// Trivially passes when the flag is off.
+#[test]
+fn ascii_route_flag_on_layout_engages_empty_row_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_EMPTY_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, rows, _char_width, _char_height) = layout_main_text_rows("x\n\ny\n");
+    assert!(rows.len() >= 3);
+    let after = crate::buffer_source::row_route::ROUTED_EMPTY_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after > before,
+        "expected the empty line to route through the item renderer \
+         (before={before}, after={after})"
+    );
+}
+
+/// Engagement proof for the phase-2h EOB-tail extension (flag-on suite gate):
+/// a buffer ending without a trailing newline must route its final line when
+/// point is elsewhere. Trivially passes when the flag is off.
+#[test]
+fn ascii_route_flag_on_layout_engages_eob_tail_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_EOB_TAIL_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("first\nlast", |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            // Point at BOB: the EOB tail row is not the cursor row.
+            eval.eval_str("(goto-char 1)").expect("move point off EOB");
+        });
+    assert!(rows.len() >= 2);
+    let after = crate::buffer_source::row_route::ROUTED_EOB_TAIL_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after > before,
+        "expected the EOB tail row to route through the item renderer \
+         (before={before}, after={after})"
+    );
+}
+
+/// Phase 2h pin: the EOB tail row containing point (the common typing-at-EOB
+/// shape) stays on the buffer pipeline — cursor capture at EOB is
+/// pipeline-owned.
+#[test]
+fn ascii_route_classifies_eob_tail_cursor_row_to_buffer_pipeline() {
+    let text = "first\nlast";
+    let (eval, buf_id, _rows, char_width, _char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    // Point at EOB (one past the last char).
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            6,
+            6,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline
+    );
+    // Point elsewhere: the tail row routes.
+    assert_eq!(
+        ascii_route_classification(&snapshot, text.as_bytes(), 6, 6, char_width, 640.0, 0),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
     );
 }
 

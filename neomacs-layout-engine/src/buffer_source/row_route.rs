@@ -130,8 +130,6 @@ pub(crate) enum RouteRefusal {
     /// The walk is mid-line (resuming after a wrap or display element) —
     /// only whole rows starting at a buffer line start are candidates.
     MidLineStart,
-    /// The line is empty (newline immediately at the row start).
-    ScanEmptyLine,
     /// The line's FIRST char already crosses the right edge (no routable
     /// fitting prefix exists).
     ScanNoFitFirstChar,
@@ -144,7 +142,11 @@ pub(crate) enum RouteRefusal {
     /// A composing char outside the routable composite class (joiners,
     /// extenders on wide/tab/row-start tails, shaped runs).
     ScanCompose,
-    /// End of buffer reached without a newline.
+    /// Defensive: the source text ended with ZERO scanned chars (an empty
+    /// end-of-source tail — unreachable from the visible loop, which never
+    /// attempts a row at `byte_idx == text.len()`). Since phase 2h the
+    /// newline-less tail line itself ROUTES ([`RoutedRowLineEnd::EndOfSource`]);
+    /// the bare-newline empty line routes RowBreak-only.
     ScanEob,
     /// Point sits inside the routed coverage (cursor capture stays on the
     /// buffer pipeline).
@@ -176,7 +178,7 @@ pub(crate) enum RouteRefusal {
 }
 
 impl RouteRefusal {
-    const COUNT: usize = 23;
+    const COUNT: usize = 22;
 
     const ALL: [RouteRefusal; Self::COUNT] = [
         RouteRefusal::PendingItems,
@@ -185,7 +187,6 @@ impl RouteRefusal {
         RouteRefusal::PolicyWordWrap,
         RouteRefusal::PolicyTrailingWhitespace,
         RouteRefusal::MidLineStart,
-        RouteRefusal::ScanEmptyLine,
         RouteRefusal::ScanNoFitFirstChar,
         RouteRefusal::ScanExactFill,
         RouteRefusal::ScanChar,
@@ -219,7 +220,6 @@ impl RouteRefusal {
             RouteRefusal::PolicyWordWrap => "policy_word_wrap",
             RouteRefusal::PolicyTrailingWhitespace => "policy_trailing_ws",
             RouteRefusal::MidLineStart => "mid_line_start",
-            RouteRefusal::ScanEmptyLine => "scan_empty_line",
             RouteRefusal::ScanNoFitFirstChar => "scan_no_fit_first_char",
             RouteRefusal::ScanExactFill => "scan_exact_fill",
             RouteRefusal::ScanChar => "scan_char",
@@ -373,6 +373,22 @@ pub(crate) enum RoutedRowLineEnd {
     /// continuation rows, fringe indicators) then runs unchanged, which is
     /// what keeps the multi-row carry-over bookkeeping byte-identical.
     OverflowHandoff,
+    /// Phase 2h rung 2: the line ends AT the end of the source text with no
+    /// newline. The window read bound always cuts AFTER a complete line's
+    /// newline (`find_nth_newline_after` returns newline+1) or at the
+    /// accessible end, so a newline-less tail line is never a mid-line
+    /// artifact of the bound — it is the buffer's (or narrowed region's)
+    /// last line, GNU's `IT_EOB` exit (xdisp.c:26007, `row->ends_at_zv_p`).
+    /// The plan covers the whole tail; the routed render leaves the walk at
+    /// the source end and the visible loop exits, after which the pipeline's
+    /// post-loop end-of-buffer machinery (EOB cursor/tail request, appended
+    /// space, `ends_at_zv` marking in `finish_pending_text_window_row`, the
+    /// trailing ZV placeholder row) runs unchanged on both modes. GNU has NO
+    /// analogue of a bounded read (its iterator is lazy and stops only on
+    /// pixels or ZV), so the faithful semantics here are the pipeline's own:
+    /// route only WHO renders the tail's text, never the row's EOB
+    /// finalization.
+    EndOfSource,
 }
 
 impl AsciiRowPlan {
@@ -434,6 +450,18 @@ impl AsciiRowPlan {
     /// and hands the walk back to the pipeline at the first non-fitting char.
     pub(crate) fn is_overflow_handoff(&self) -> bool {
         self.line_end == RoutedRowLineEnd::OverflowHandoff
+    }
+
+    /// Phase 2h rung 1: a bare-newline empty line — zero covered chars, the
+    /// production is RowBreak-only (the shared line-end plan consumes the
+    /// newline).
+    pub(crate) fn is_empty_line(&self) -> bool {
+        self.line_char_len == 0
+    }
+
+    /// Phase 2h rung 2: the newline-less tail line ending at the source end.
+    pub(crate) fn is_end_of_source(&self) -> bool {
+        self.line_end == RoutedRowLineEnd::EndOfSource
     }
 
     /// Whether the row renders as more than one run (face segments or
@@ -663,10 +691,12 @@ fn routed_line_scan(
         };
     while idx < text.len() {
         if text[idx] == b'\n' {
-            if char_len == 0 {
-                return Err(RouteRefusal::ScanEmptyLine);
-            }
-            if x_px >= fit.right_edge_px {
+            // A bare-newline empty line routes with ZERO covered chars
+            // (phase 2h rung 1): the production is RowBreak-only, driving
+            // the shared line-end plan. A non-empty line exactly filling the
+            // row keeps the pipeline (the line end interacts with
+            // continuation policy); an empty line's pen never moved.
+            if char_len > 0 && x_px >= fit.right_edge_px {
                 return Err(RouteRefusal::ScanExactFill);
             }
             return Ok(RoutedLineScan {
@@ -745,9 +775,25 @@ fn routed_line_scan(
         char_len += 1;
         idx += consumed;
     }
-    // End of buffer without a newline: the end-of-buffer tail has its own
-    // buffer-pipeline lifecycle (cursor at EOB, empty-line indicators).
-    Err(RouteRefusal::ScanEob)
+    // End of the source text without a newline (phase 2h rung 2): the tail
+    // line ends at the accessible end — the read bound never cuts mid-line —
+    // and routes as [`RoutedRowLineEnd::EndOfSource`]. Its end-of-buffer
+    // finalization (appended default-face space, ends_at_zv, the ZV
+    // placeholder) is post-loop pipeline machinery on both modes. The pen
+    // may end exactly AT the right edge: with no following char there is no
+    // continuation/truncation edge to interact with (every scanned char
+    // individually satisfied the fit rule).
+    if char_len == 0 {
+        return Err(RouteRefusal::ScanEob);
+    }
+    Ok(RoutedLineScan {
+        byte_len: idx - byte_idx,
+        char_len,
+        has_tab,
+        has_wide,
+        composed,
+        line_end: RoutedRowLineEnd::EndOfSource,
+    })
 }
 
 /// Overlay properties the routed row class accepts on an intersecting
@@ -979,27 +1025,29 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     if row.byte_idx > 0 && row.text.get(row.byte_idx - 1) != Some(&b'\n') {
         return Err(RouteRefusal::MidLineStart);
     }
-    // Cheap pre-gate BEFORE the pen walk: the two refusals the steady-state
-    // edit path hits every keystroke (the cursor row and the bounded window
-    // read's end-of-text tail row) are decidable from a newline search plus
-    // arithmetic, so the per-row probe cost on those rows is one memchr, not
-    // a full classifier walk.
-    // * No newline in the remaining text: the scan would refuse at text end
-    //   ([`RouteRefusal::ScanEob`]) after walking the whole tail — refuse
-    //   now. (This also covers the bounded window read, whose text ends
-    //   mid-buffer without a trailing newline.)
-    // * Point on this line (through its newline): refuse. Byte length bounds
-    //   char length from above, so `point > charpos + line_byte_len` proves
-    //   point is past this line with no further work; inside that ambiguous
-    //   byte range, one branch-light non-continuation-byte count gives the
-    //   EXACT char length, deciding line membership without the pen walk.
-    //   This deliberately refuses point in the unrouted tail of an over-wide
-    //   line too (which phase 2f used to route): the cursor row is the row
-    //   the steady-state edit path re-lays every keystroke, and its refusal
-    //   must cost a memchr, not a classifier walk.
-    let Some(line_byte_len) = memchr::memchr(b'\n', &row.text[row.byte_idx..]) else {
-        return Err(RouteRefusal::ScanEob);
-    };
+    // Cheap pre-gate BEFORE the pen walk: the refusal the steady-state edit
+    // path hits every keystroke — the cursor row, including the common
+    // typing-at-EOB shape where the cursor row IS the newline-less tail row
+    // — is decidable from a newline search plus arithmetic, so the per-row
+    // probe cost on it is one memchr (plus, inside the ambiguous byte range,
+    // one branch-light count), not a full classifier walk.
+    // * Line extent: up to the newline, or — phase 2h rung 2 — the whole
+    //   remaining text when no newline exists (the end-of-source tail line;
+    //   the read bound never cuts mid-line).
+    // * Point on this line (through its newline, or through the tail's
+    //   end-of-buffer position): refuse. Byte length bounds char length from
+    //   above, so `point > charpos + line_byte_len` proves point is past
+    //   this line with no further work; inside that ambiguous byte range,
+    //   one branch-light non-continuation-byte count gives the EXACT char
+    //   length, deciding line membership without the pen walk. This
+    //   deliberately refuses point in the unrouted tail of an over-wide line
+    //   too (which phase 2f used to route): the cursor row is the row the
+    //   steady-state edit path re-lays every keystroke, and its refusal must
+    //   cost a memchr, not a classifier walk. For the end-of-source tail the
+    //   inclusive upper bound is one past the last char — GNU places the EOB
+    //   cursor on that row (xdisp.c:26811, first ends_at_zv row wins).
+    let line_byte_len =
+        memchr::memchr(b'\n', &row.text[row.byte_idx..]).unwrap_or(row.text.len() - row.byte_idx);
     if policy.point_charpos >= row.charpos
         && policy.point_charpos <= row.charpos + line_byte_len as i64
     {
@@ -1522,6 +1570,18 @@ pub(crate) static ROUTED_TRUNCATION_PREFIX_ROW_COUNT: std::sync::atomic::AtomicU
 pub(crate) static ROUTED_WRAP_PREFIX_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+/// Test-only engagement proof for the phase-2h empty-line extension: routed
+/// bare-newline rows rendered RowBreak-only.
+#[cfg(test)]
+pub(crate) static ROUTED_EMPTY_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Test-only engagement proof for the phase-2h EOB-tail extension: routed
+/// newline-less tail rows ending at the source end.
+#[cfg(test)]
+pub(crate) static ROUTED_EOB_TAIL_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode) {
     if route_stats_file().is_some() {
         ROUTE_STAT_ROUTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1559,6 +1619,12 @@ fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode) {
                     ROUTED_WRAP_PREFIX_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
             }
+        }
+        if plan.is_empty_line() {
+            ROUTED_EMPTY_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if plan.is_end_of_source() {
+            ROUTED_EOB_TAIL_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
     #[cfg(not(test))]
@@ -1656,6 +1722,22 @@ impl<'rows, 'emit, 'surface>
                 return AsciiRowRouteOutcome::NotRouted;
             }
         };
+
+        // Phase 2h rung 1: a bare-newline empty line renders RowBreak-only —
+        // no text probe/commit; the row break drives the shared line-end
+        // plan and row transition directly.
+        if plan.is_empty_line() {
+            return self.render_routed_empty_row_break(
+                loop_context,
+                source_walk,
+                text,
+                active_face_state,
+                buffer,
+                row,
+                &plan,
+                policy.wrap_mode,
+            );
+        }
 
         let start = CharPos0::new(row.charpos.max(0) as usize);
         let ranges = plan.segment_ranges(start);
@@ -1774,8 +1856,11 @@ impl<'rows, 'emit, 'surface>
             // is monotonic over the run, so a measured end at or inside the
             // edge proves every routed char individually fits — the same
             // chars the flag-off pipeline would append before its overflow
-            // decision fires at the handoff char.
-            let fits = if plan.is_overflow_handoff() {
+            // decision fires at the handoff char. End-of-source tail plans
+            // (phase 2h rung 2) share the `<=` bound: with no char after
+            // the tail there is no continuation/truncation edge, the walk
+            // simply ends at the source end.
+            let fits = if plan.is_overflow_handoff() || plan.is_end_of_source() {
                 probe_position.x_px() <= self.append_surface.right_edge()
             } else {
                 probe_position.x_px() < self.append_surface.right_edge()
@@ -1865,6 +1950,90 @@ impl<'rows, 'emit, 'surface>
         self.progress
             .set_byte_idx(row.byte_idx + plan.line_byte_len());
         note_routed_row(&plan, policy.wrap_mode);
+        AsciiRowRouteOutcome::Rendered
+    }
+
+    /// Phase 2h rung 1 production: render a classified EMPTY line (a bare
+    /// newline) through the item vocabulary's RowBreak-only shape. The
+    /// [`BufferAsciiItemSource`] yields exactly one explicit-newline
+    /// `RowBreak` at the newline's charpos (shadow-proven glyph-identical to
+    /// the pipeline's empty row in engine_test), and that break drives the
+    /// SAME shared line-end plan + row-transition lifecycle the pipeline's
+    /// newline dispatch uses (`BufferSourceLineBreakRenderRequest` ->
+    /// `LineEndContext` -> `line_end::plan` -> `emit_line_break_then_row_start`),
+    /// so the finished row carries the pinned empty-row semantics unchanged:
+    /// start == end == the newline's charpos, `displays_text` false, the
+    /// appended newline space in the line's own face (GNU display_line's
+    /// at_end_of_line branch, xdisp.c:26517, with `default_face_p = false`).
+    ///
+    /// The per-char consumption bookkeeping the pipeline would run before
+    /// its dispatch is provably idle for a classified empty row: the
+    /// selective-display tail probe (policy refused selective display),
+    /// cursor capture (point-on-newline refused by the pre-gate), overlay
+    /// strings at eol (the overlay allow-list refused string-bearing
+    /// overlays touching the newline; face-only overlays merge through the
+    /// shared eol collector inside the line-break render), and pending
+    /// source-face installation (the loop's face checkpoint already resolved
+    /// and installed the face AT the newline's charpos this iteration).
+    #[allow(clippy::too_many_arguments)]
+    fn render_routed_empty_row_break<B: LayoutBufferView>(
+        &mut self,
+        loop_context: crate::buffer_source::loop_context::BufferSourceLoopRequestContext,
+        source_walk: &mut crate::buffer_source::walk::BufferSourceWalk<'_, B>,
+        text: &[u8],
+        active_face_state: &crate::display_row::face_state::DisplayRowActiveFaceState,
+        buffer: &B,
+        row: RowRouteRowStart<'_>,
+        plan: &AsciiRowPlan,
+        wrap_mode: LineWrapMode,
+    ) -> AsciiRowRouteOutcome {
+        use crate::display_source::DisplayItemSource as _;
+
+        debug_assert_eq!(plan.line_char_len(), 0);
+        debug_assert_eq!(text.get(row.byte_idx), Some(&b'\n'));
+
+        let line_end = CharPos0::new(row.charpos.max(0) as usize);
+        let mut source = BufferAsciiItemSource::with_row_break_segments(
+            loop_context.buffer_id(),
+            buffer,
+            &[],
+            line_end,
+            RenderFaceRef::FaceId(active_face_state.face_id()),
+        );
+        let mut item_context = crate::display_source::DisplaySourceContext::empty();
+        let row_break_item = source
+            .next_item(&mut item_context)
+            .expect("RowBreak-only source yields exactly the row break");
+        debug_assert!(
+            matches!(
+                row_break_item.kind,
+                DisplayItemKind::RowBreak(row_break)
+                    if row_break == DisplayRowBreak::explicit_newline()
+                        .with_line_height(DisplayLineHeightPolicy::from_property(None))
+            ),
+            "empty-row production must be the explicit-newline row break"
+        );
+        debug_assert!(source.next_item(&mut item_context).is_none());
+
+        // Mirror the pipeline's explicit-line-break dispatch
+        // (item_render.rs): byte_idx advances past the newline BEFORE the
+        // line-break render; charpos is advanced/re-synced inside it.
+        let source_char =
+            crate::display_source::DisplaySourceStepChar::new('\n', row.byte_idx, row.charpos);
+        self.progress.set_byte_idx(row.byte_idx + 1);
+        let continuation = loop_context
+            .line_break_request(
+                source_char,
+                text,
+                self.append_surface,
+                self.overlay_context,
+                active_face_state,
+            )
+            .render_and_apply(source_walk, buffer, self.reborrow());
+        if continuation.should_break() {
+            return AsciiRowRouteOutcome::Stopped;
+        }
+        note_routed_row(plan, wrap_mode);
         AsciiRowRouteOutcome::Rendered
     }
 }
