@@ -14629,6 +14629,316 @@ fn ascii_route_classifies_exactly_filling_line_to_buffer_pipeline() {
     );
 }
 
+#[test]
+fn ascii_item_source_shadow_matches_leading_tab_indent_row() {
+    // Leading tabs (indentation): the routed source keeps the tabs inside its
+    // TextRun and the unified renderer expands each to the same stretch glyph
+    // the buffer pipeline produces (GNU gui_produce_glyphs next_tab_x).
+    let text = "\t\tindented\nnext\n";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+
+    let line_end = CharPos0::new("\t\tindented".chars().count());
+    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    // The row really renders its tabs as stretch glyphs.
+    let stretches = rows[0].glyphs[1]
+        .iter()
+        .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .count();
+    assert_eq!(stretches, 2, "two leading tabs, two stretch glyphs");
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_mid_line_tab_row() {
+    let text = "ab\tcd\nnext\n";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+
+    let line_end = CharPos0::new("ab\tcd".chars().count());
+    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_tab_between_face_spans() {
+    // A tab BETWEEN two face spans: the tab sits in its own base-face
+    // stretch between the bold and italic segments, and the stretch face,
+    // pen positions, and charpos bookkeeping must all match the pipeline.
+    let text = "ab\tcd\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(
+                "(progn (put-text-property 1 3 'face 'bold) \
+                        (put-text-property 4 6 'face 'italic))",
+            )
+            .expect("faces around the tab");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 3, "bold / base tab / italic");
+}
+
+#[test]
+fn ascii_route_classifies_tab_exact_fill_to_buffer_pipeline() {
+    // "ab\t": the tab expands to the col-8 stop. A row exactly 8 cells wide
+    // is exact fill — the classifier must refuse it (continuation policy
+    // owns that edge); one extra cell routes.
+    let text = "ab\t\n";
+    let (eval, buf_id, _rows, char_width, _char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let point = text.chars().count() as i64;
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            8.0 * char_width,
+            point
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "tab expansion landing exactly on the right edge must refuse"
+    );
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            9.0 * char_width,
+            point
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_wide_char_row() {
+    // CJK wide chars mid-line: base glyph with the wide flag plus its padding
+    // glyph, both carrying the char's buffer position — full glyph equality
+    // with the pipeline (which the simple_unicode shadow proves for the
+    // text-source cursor; this is the ROUTED source).
+    let text = "ab\u{4E2D}\u{6587}cd\nnext\n";
+    let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+
+    let line_end = CharPos0::new("ab\u{4E2D}\u{6587}cd".chars().count());
+    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+        buf_id,
+        &snapshot,
+        CharPos0::ZERO,
+        line_end,
+        main_row_base_face_id(&rows[0]),
+        640.0,
+        char_height,
+        char_height,
+        char_width,
+    );
+    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+
+    // The equality is meaningful: the row carries wide and padding glyphs
+    // with the wide chars' buffer positions.
+    let glyphs = &rows[0].glyphs[1];
+    let wide: Vec<_> = glyphs.iter().filter(|glyph| glyph.wide).collect();
+    assert_eq!(wide.len(), 2, "two wide base glyphs");
+    assert_eq!(wide[0].charpos, 2);
+    assert_eq!(wide[1].charpos, 3);
+    let padding: Vec<_> = glyphs.iter().filter(|glyph| glyph.padding).collect();
+    assert_eq!(padding.len(), 2, "one padding glyph per wide char");
+    assert_eq!(padding[0].charpos, 2);
+    assert_eq!(padding[1].charpos, 3);
+}
+
+#[test]
+fn ascii_item_source_shadow_matches_mixed_tab_wide_multiface_row() {
+    // Mixed tab + wide + multi-face: bold "a", base tab, italic CJK + "b".
+    let text = "a\t\u{4E2D}b\nnext\n";
+    let (eval, buf_id, frame_id, rows, char_width, char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(
+                "(progn (put-text-property 1 2 'face 'bold) \
+                        (put-text-property 3 5 'face 'italic))",
+            )
+            .expect("mixed row faces");
+        });
+    let segments = assert_segmented_ascii_shadow_row(
+        &eval,
+        frame_id,
+        buf_id,
+        text,
+        0,
+        &rows[0],
+        char_width,
+        char_height,
+    );
+    assert_eq!(segments.len(), 3, "bold / base tab / italic wide span");
+    // The wide char really renders wide through the routed row.
+    assert!(
+        rows[0].glyphs[1]
+            .iter()
+            .any(|glyph| glyph.wide && glyph.charpos == 2),
+        "expected the CJK char to render as a wide glyph"
+    );
+}
+
+#[test]
+fn ascii_route_classifies_wide_char_straddling_right_edge_to_buffer_pipeline() {
+    // A wide char that would straddle the right edge: the pipeline continues
+    // the line onto a second row (continuation), which the routed class
+    // cannot express — the classifier must refuse, leaving the pipeline
+    // behavior byte-identical.
+    let text = "abc\u{4E2D}\n";
+    let (eval, buf_id, _rows, char_width, _char_height) = layout_main_text_rows(text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let point = text.chars().count() as i64;
+    for edge_cells in [4.0, 4.5, 5.0] {
+        assert_eq!(
+            ascii_route_classification(
+                &snapshot,
+                text.as_bytes(),
+                0,
+                0,
+                char_width,
+                edge_cells * char_width,
+                point
+            ),
+            crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+            "a wide char straddling or exactly filling the {edge_cells}-cell row must refuse"
+        );
+    }
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            6.0 * char_width,
+            point
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
+    );
+}
+
+/// Engagement proof for the tab extension (flag-on suite gate): a tab row
+/// must actually take the routed acquisition. Trivially passes flag-off.
+#[test]
+fn ascii_route_flag_on_layout_engages_tab_row_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_TAB_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, rows, _char_width, _char_height) =
+        layout_main_text_rows("\tindented tab row\nnext\n");
+    assert!(rows.len() >= 2);
+    let after = crate::buffer_source::row_route::ROUTED_TAB_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after > before,
+        "expected the tab row to route through the item renderer (before={before}, after={after})"
+    );
+}
+
+/// Engagement proof for the wide-char extension (flag-on suite gate): a
+/// wide-char row must actually take the routed acquisition. Trivially passes
+/// flag-off.
+#[test]
+fn ascii_route_flag_on_layout_engages_wide_char_row_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_WIDE_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, rows, _char_width, _char_height) =
+        layout_main_text_rows("wide \u{4E2D}\u{6587} row\nnext\n");
+    assert!(rows.len() >= 2);
+    let after = crate::buffer_source::row_route::ROUTED_WIDE_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after > before,
+        "expected the wide-char row to route through the item renderer \
+         (before={before}, after={after})"
+    );
+}
+
 /// The SAME face resolver the engine constructs for `frame_id`
 /// (`layout_frame_rust`), so shadow face realization content-addresses to
 /// the engine's stable ids.
