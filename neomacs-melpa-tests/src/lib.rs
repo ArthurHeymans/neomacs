@@ -2325,6 +2325,13 @@ pub const VOLATILE_HIGHLIGHTS_MELPA_PIN: (&str, &str) = ("volatile-highlights", 
 /// archive from upstream commit `70921114908ebb260d6686db8cbe2445a64f90a2`.
 pub const VTERM_MELPA_PIN: (&str, &str) = ("vterm", "20260730.1414");
 
+/// The exact Haml Mode package selected for practical mode setup,
+/// mixed Haml/Ruby/filter fontification, indentation, attribute parsing,
+/// structural navigation and editing, tolerant sexp scanning, and compiler
+/// integration parity. MELPA built this archive from upstream commit
+/// `3bb4a96535eb5c81dbe6a43bfa8d67a778d449c0`.
+pub const HAML_MODE_MELPA_PIN: (&str, &str) = ("haml-mode", "20250714.1441");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");

@@ -357,6 +357,7 @@ mod go_mode;
 mod golden_ratio;
 mod google_translate;
 mod goto_chg;
+mod haml_mode;
 mod harness_contract;
 mod haskell_mode;
 mod helm;
