@@ -16638,34 +16638,110 @@ fn overlay_invisible_rows_stay_on_buffer_pipeline_under_item_route() {
     );
 }
 
-/// Phase 2d rung 2 decision pin: string-valued `display` properties are
-/// REFUSED by the route classifier, not expressed on the item path. The
-/// pipeline renders them through the display-property replacement request
-/// riding the Lisp-string session (GNU handle_single_display_spec pushing
-/// GET_FROM_STRING): the string's own faces resolve over it, every
-/// replacement glyph is stamped with the COVERED span's start position, and
-/// the walk skips M covered buffer chars for N string chars — provenance a
-/// single-row TextRun (charpos advancing one per char) cannot express.
-/// Identical output whether the route flag is on or off; if the classifier
-/// ever routed the row, the replacement would vanish under
-/// NEOMACS_ROW_ITEM_ROUTE=ascii.
+/// Increment 2i rung 2 shadow proof (flipping the former 2d rung-2 refusal
+/// pin): a plain single-line string-valued `display` property now ROUTES,
+/// and the routed row is glyph-for-glyph identical to the buffer pipeline's
+/// — including the covered-charpos provenance (every replacement glyph
+/// stamped with the covered span's START, GNU-style N string glyphs for M
+/// covered chars) and the string session's base-face resolution, because the
+/// routed commit drives the pipeline's OWN replacement session. The
+/// pipeline side is produced in the same process by putting point on the
+/// row (the PointInRow refusal), which changes cursor capture only, never
+/// row glyphs.
 #[test]
-fn display_string_replacement_rows_stay_on_buffer_pipeline_under_item_route() {
+fn display_string_replacement_row_routes_and_matches_pipeline() {
+    let text = "abXXcd\nnext\n";
+    let put_replacement = |eval: &mut Context, buf_id: BufferId| {
+        eval.buffer_manager_mut().set_current(buf_id);
+        eval.eval_str("(put-text-property 3 5 'display \"STR\")")
+            .expect("display string replacement");
+    };
+
+    // Pipeline side: point inside row 0 refuses the route (PointInRow), so
+    // the buffer pipeline renders the replacement row.
+    let (_eval_pipeline, _buf_pipeline, _fid_p, rows_pipeline, _cw_p, _ch_p) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            put_replacement(eval, buf_id);
+            eval.eval_str("(goto-char 2)").expect("point on row 0");
+        });
+    assert_eq!(
+        glyphs_logical_text(&rows_pipeline[0].glyphs[1]),
+        "abSTRcd ",
+        "the pipeline must replace the covered span"
+    );
+
+    // Routed side: point stays at end-of-buffer (row 1), so the classifier
+    // accepts row 0 and the routed commit renders it via the replacement
+    // session. The engagement counter proves the route actually fired.
+    let routed_before = crate::buffer_source::row_route::ROUTED_REPLACEMENT_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (eval, buf_id, _fid_r, rows_routed, char_width, _ch_r) =
+        layout_main_text_rows_with(text, put_replacement);
+    // Under NEOMACS_ROW_ITEM_ROUTE=off both sides render through the
+    // pipeline; the engagement proof applies only when the route is on (the
+    // glyph-identity assertions below hold either way).
+    if crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        assert!(
+            crate::buffer_source::row_route::ROUTED_REPLACEMENT_ROW_COUNT
+                .load(std::sync::atomic::Ordering::Relaxed)
+                > routed_before,
+            "the replacement row must render through the routed acquisition"
+        );
+    }
+
+    // Glyph-for-glyph identity: type, charpos provenance, face id, pixel
+    // geometry, wide/padding flags.
+    assert_eq!(
+        rows_routed[0].glyphs[1], rows_pipeline[0].glyphs[1],
+        "routed replacement row must equal the pipeline row glyph-for-glyph"
+    );
+    // The covered-provenance shape explicitly: glyphs 'S','T','R' all carry
+    // the covered START (0-based charpos 2 = buffer char 3).
+    for glyph in &rows_routed[0].glyphs[1][2..5] {
+        assert_eq!(
+            glyph.charpos, 2,
+            "every replacement glyph carries the covered start"
+        );
+    }
+    // Direct classification agrees with production (point on row 1's text).
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer,
+        "display-string rows in the routed class must route"
+    );
+}
+
+/// Increment 2i rung 2: the shapes that STAY refused after the flip, pinned
+/// at engine level with identical output either way: a display string
+/// carrying its own text properties (per-run string faces) and a display
+/// string containing a newline (multi-row session). Provenance now EXISTS
+/// (the covered-provenance vocabulary + session reuse); these remain outside
+/// the routed class because the plan's single-run width prediction does not
+/// model per-run string faces, and a mid-string row break hands mid-line
+/// state back to the walk.
+#[test]
+fn propertized_display_string_rows_stay_on_buffer_pipeline_under_item_route() {
     let text = "abXXcd\nnext\n";
     let (eval, buf_id, rows, char_width, _char_height) = {
         let (eval, buf_id, _frame_id, rows, char_width, char_height) =
             layout_main_text_rows_with(text, |eval, buf_id| {
                 eval.buffer_manager_mut().set_current(buf_id);
-                eval.eval_str("(put-text-property 3 5 'display \"STR\")")
-                    .expect("display string replacement");
+                eval.eval_str("(put-text-property 3 5 'display (propertize \"STR\" 'face 'bold))")
+                    .expect("propertized display string");
             });
         (eval, buf_id, rows, char_width, char_height)
     };
-    assert_eq!(
-        glyphs_logical_text(&rows[0].glyphs[1]),
-        "abSTRcd ",
-        "the display string must replace the covered span"
-    );
+    assert_eq!(glyphs_logical_text(&rows[0].glyphs[1]), "abSTRcd ");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
@@ -16679,7 +16755,7 @@ fn display_string_replacement_rows_stay_on_buffer_pipeline_under_item_route() {
             text.chars().count() as i64
         ),
         crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
-        "display-string rows must refuse the item route"
+        "a propertized display string must keep the buffer pipeline"
     );
 }
 

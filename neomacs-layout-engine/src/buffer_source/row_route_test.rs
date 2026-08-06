@@ -522,12 +522,10 @@ fn classifier_rejects_hazard_properties_anywhere_on_the_line() {
     // row-start invisibility still refuse through the elision scan.
     // `composition` left this list in phase 2e: the refusal is now grounded
     // in the pipeline's own replacement predicate (see the composition tests
-    // below).
-    for (prop, value) in [
-        ("display", "\"X\""),
-        ("mouse-face", "'highlight"),
-        ("line-height", "2.0"),
-    ] {
+    // below). `display` left this list in increment 2i: routable string
+    // replacements route (see the replacement tests below) and every other
+    // display shape refuses through the dedicated replacement scan.
+    for (prop, value) in [("mouse-face", "'highlight"), ("line-height", "2.0")] {
         let mut eval = Context::new();
         let buf_id = buffer_with_text(&mut eval, "hello\n");
         eval.buffer_manager_mut().set_current(buf_id);
@@ -1350,19 +1348,140 @@ fn classifier_routes_non_hiding_invisible_value() {
 // ---- Phase 2d rungs 2+3: display-prop refusals (string / space specs) ----
 
 #[test]
-fn classifier_rejects_display_string_replacement() {
+fn classifier_routes_display_string_replacement() {
     let mut eval = Context::new();
-    // Rung 2 decision pin: a string-valued `display` property replaces the
-    // covered span via the pipeline's Lisp-string session (string faces,
-    // covered-charpos glyph provenance, cursor slot at the replacement edge)
-    // which the single-row TextRun probe/commit cannot express — a TextRun
-    // advances charpos per char, a replacement stamps every string glyph
-    // with the covered START and skips M buffer chars for N string chars.
+    // Increment 2i rung 2 (flipping the former 2d refusal pin): a plain
+    // property-less single-line string-valued `display` property is now
+    // ROUTED. The plan records the covered span; production renders it
+    // through the pipeline's OWN replacement session (covered-charpos glyph
+    // provenance, string base-face policy), so the vocabulary limitation
+    // that forced the 2d refusal — TextRun's per-char charpos advance — no
+    // longer applies: the session emits covered-provenance SourceMappedText
+    // runs (see the rung 1 pins in builder_test.rs).
     let text = "abXXcd\n";
     let buf_id = buffer_with_text(&mut eval, text);
     eval.buffer_manager_mut().set_current(buf_id);
     eval.eval_str("(put-text-property 3 5 'display \"STR\")")
         .expect("display string replacement");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("display string replacement routes");
+    assert!(plan.has_replacement());
+    assert_eq!(plan.replacement_ranges(), &[(2, 4)]);
+    assert_eq!(plan.line_char_len(), 6);
+}
+
+#[test]
+fn classifier_fits_replacement_by_string_width_not_covered_width() {
+    let mut eval = Context::new();
+    // The fit walk advances by the REPLACEMENT's width (5 cols for "WIDER"),
+    // not the covered chars' width (2 cols): "abXXcd" displays as
+    // "abWIDERcd" = 9 cols. A 9-col row exactly fills (refuse, the line-end
+    // edge interacts with continuation policy); a 10-col row routes.
+    let text = "abXXcd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 5 'display \"WIDER\")")
+        .expect("display string replacement");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(9.0 * 8.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "a replacement row exactly filling the row keeps the pipeline"
+    );
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(10.0 * 8.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::ItemRenderer
+    );
+}
+
+#[test]
+fn classifier_rejects_unroutable_display_string_shapes() {
+    // The routed replacement class is deliberately narrow; each shape below
+    // has session machinery the routed plan does not predict, so it keeps
+    // the buffer pipeline (provenance EXISTS now — these are fit/production
+    // scope refusals, not vocabulary gaps):
+    // - a string containing a newline (multi-row: the session emits a row
+    //   break, GNU display_line ends the row on a display-string '\n');
+    // - a string carrying its own text properties (per-run string faces:
+    //   the plan's single-run width prediction does not model them);
+    // - an empty string (zero-glyph elision-like shape);
+    // - a replacement starting AT the row start (the routed commit replays
+    //   the loop's segment-0 checkpoint for buffer text);
+    // - a covered range extending over the line's newline (line-structure
+    //   change, hidden line join);
+    // - a string containing a TAB (pen-dependent expansion inside the
+    //   session's full-text-width frame).
+    for (setup, label) in [
+        (
+            "(put-text-property 3 5 'display \"S\\nT\")",
+            "newline in string",
+        ),
+        (
+            "(put-text-property 3 5 'display (propertize \"STR\" 'face 'bold))",
+            "string with own props",
+        ),
+        ("(put-text-property 3 5 'display \"\")", "empty string"),
+        ("(put-text-property 1 3 'display \"STR\")", "row-start"),
+        (
+            "(put-text-property 5 8 'display \"STR\")",
+            "covers the newline",
+        ),
+        (
+            "(put-text-property 3 5 'display \"S\\tT\")",
+            "tab in string",
+        ),
+    ] {
+        let mut eval = Context::new();
+        let text = "abXXcd\n";
+        let buf_id = buffer_with_text(&mut eval, text);
+        eval.buffer_manager_mut().set_current(buf_id);
+        eval.eval_str(setup).expect(label);
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                wide_fit(),
+                plain_policy()
+            ),
+            RowAcquisitionRoute::BufferPipeline,
+            "{label} must keep the buffer pipeline"
+        );
+    }
+}
+
+#[test]
+fn classifier_rejects_replacement_combined_with_elision_or_overflow() {
+    // Conservative composition refusals: a routed row carries EITHER plain
+    // elision OR a replacement, never both (their skip bookkeeping would
+    // interleave), and a replacement row never routes as an overflow prefix
+    // (the scan's handoff cut would not be the pipeline's overflow point).
+    let mut eval = Context::new();
+    let text = "abXXcdEFGH\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str(
+        "(progn (put-text-property 3 5 'display \"STR\") \
+                (put-text-property 7 9 'invisible t))",
+    )
+    .expect("replacement + invisible");
     assert_eq!(
         classify_in_buffer(
             &eval,
@@ -1371,7 +1490,26 @@ fn classifier_rejects_display_string_replacement() {
             wide_fit(),
             plain_policy()
         ),
-        RowAcquisitionRoute::BufferPipeline
+        RowAcquisitionRoute::BufferPipeline,
+        "replacement + elision must keep the buffer pipeline"
+    );
+
+    let mut eval = Context::new();
+    let text = "abXXcdefghij\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 5 'display \"STR\")")
+        .expect("replacement");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(6.0 * 8.0),
+            wrap_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "an over-wide replacement row must not route an overflow prefix"
     );
 }
 
@@ -2118,7 +2256,9 @@ fn classifier_refuses_empty_line_with_hazard_prop_on_newline() {
     let text = "x\n\ny\n";
     let buf_id = buffer_with_text(&mut eval, text);
     eval.buffer_manager_mut().set_current(buf_id);
-    // A display prop covering the newline replaces the line end.
+    // A display prop covering the newline replaces the line end. Since
+    // increment 2i the dedicated replacement scan reports it: a string
+    // display value outside the routed class refuses as Replacement.
     eval.eval_str("(put-text-property 3 4 'display \"D\")")
         .expect("display prop on the empty line's newline");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -2128,7 +2268,7 @@ fn classifier_refuses_empty_line_with_hazard_prop_on_newline() {
         wide_fit(),
         plain_policy(),
     );
-    assert_eq!(refused.unwrap_err(), RouteRefusal::HazardProp);
+    assert_eq!(refused.unwrap_err(), RouteRefusal::Replacement);
 }
 
 #[test]

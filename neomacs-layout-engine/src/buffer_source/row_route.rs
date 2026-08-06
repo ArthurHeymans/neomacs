@@ -164,6 +164,11 @@ pub(crate) enum RouteRefusal {
     /// A hazard text property (display/mouse-face/line-height, or a
     /// replacing composition) in range.
     HazardProp,
+    /// A `display` replacement outside the routed class (increment 2i):
+    /// row-start anchor, newline/tab/props in the string, empty string,
+    /// covered range reaching the newline, fit overflow, or a combination
+    /// with elision/overflow the plan refuses conservatively.
+    Replacement,
     /// A property-change boundary failed to convert to a row char offset.
     Boundary,
     /// A visible composed extender sits on a face-segment or elision seam.
@@ -178,7 +183,7 @@ pub(crate) enum RouteRefusal {
 }
 
 impl RouteRefusal {
-    const COUNT: usize = 22;
+    const COUNT: usize = 23;
 
     const ALL: [RouteRefusal; Self::COUNT] = [
         RouteRefusal::PendingItems,
@@ -198,6 +203,7 @@ impl RouteRefusal {
         RouteRefusal::Elision,
         RouteRefusal::OverflowElision,
         RouteRefusal::HazardProp,
+        RouteRefusal::Replacement,
         RouteRefusal::Boundary,
         RouteRefusal::ComposedSeam,
         RouteRefusal::ProbeBoxFace,
@@ -231,6 +237,7 @@ impl RouteRefusal {
             RouteRefusal::Elision => "elision",
             RouteRefusal::OverflowElision => "overflow_elision",
             RouteRefusal::HazardProp => "hazard_prop",
+            RouteRefusal::Replacement => "replacement",
             RouteRefusal::Boundary => "boundary",
             RouteRefusal::ComposedSeam => "composed_seam",
             RouteRefusal::ProbeBoxFace => "probe_box_face",
@@ -352,7 +359,30 @@ pub(crate) struct AsciiRowPlan {
     face_boundaries: Vec<usize>,
     elided: Vec<(usize, usize)>,
     composed: Vec<usize>,
+    replacements: Vec<RoutedRowReplacement>,
     line_end: RoutedRowLineEnd,
+}
+
+/// A routed `display` replacement (increment 2i rung 2): the covered CHAR
+/// range `[start, end)` of the line renders as the display value through the
+/// pipeline's OWN replacement session (`display_property_render.rs` ->
+/// `replacement.rs`), producing covered-provenance glyphs (every glyph
+/// stamped with the covered start — the rung 1 vocabulary pins). The routed
+/// class accepts only single-line property-less strings whose chars have
+/// unambiguous column widths, so `advance_cols` is the exact logical-cell
+/// advance the classifier's fit walk credits in place of the covered chars.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RoutedRowReplacement {
+    /// CHAR offset of the covered range start within the line.
+    start: usize,
+    /// CHAR offset of the covered range end (exclusive).
+    end: usize,
+    /// The full `display` property value (what the pipeline's walk consumes).
+    value: Value,
+    /// The replacement string (the classification's replacement spec).
+    text: Box<str>,
+    /// The string's logical-cell width for the classifier's fit walk.
+    advance_cols: usize,
 }
 
 /// How a routed row's coverage ends (phase 2f).
@@ -464,10 +494,27 @@ impl AsciiRowPlan {
         self.line_end == RoutedRowLineEnd::EndOfSource
     }
 
-    /// Whether the row renders as more than one run (face segments or
-    /// elision gaps splitting the line).
+    /// Whether the row contains a routed `display` replacement.
+    pub(crate) fn has_replacement(&self) -> bool {
+        !self.replacements.is_empty()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn replacement_ranges(&self) -> Vec<(usize, usize)> {
+        self.replacements
+            .iter()
+            .map(|replacement| (replacement.start, replacement.end))
+            .collect()
+    }
+
+    pub(crate) fn replacements(&self) -> &[RoutedRowReplacement] {
+        &self.replacements
+    }
+
+    /// Whether the row renders as more than one run (face segments, elision
+    /// gaps, or replacement spans splitting the line).
     pub(crate) fn is_segmented(&self) -> bool {
-        !self.face_boundaries.is_empty() || !self.elided.is_empty()
+        !self.face_boundaries.is_empty() || !self.elided.is_empty() || !self.replacements.is_empty()
     }
 
     /// The `[start, end)` char ranges of the row's VISIBLE face segments, in
@@ -477,9 +524,21 @@ impl AsciiRowPlan {
     /// inside a hidden span never render). A property-constant fully-visible
     /// line yields one range covering the line.
     pub(crate) fn segment_ranges(&self, start: CharPos0) -> Vec<(CharPos0, CharPos0)> {
-        let mut visible: Vec<(usize, usize)> = Vec::with_capacity(self.elided.len() + 1);
+        // Gaps the text segments skip: elided spans and replacement-covered
+        // spans (mutually exclusive by the classifier's composition refusal;
+        // each list is ascending and disjoint, so a simple merge sorts them).
+        let mut gaps: Vec<(usize, usize)> =
+            Vec::with_capacity(self.elided.len() + self.replacements.len());
+        gaps.extend(self.elided.iter().copied());
+        gaps.extend(
+            self.replacements
+                .iter()
+                .map(|replacement| (replacement.start, replacement.end)),
+        );
+        gaps.sort_unstable();
+        let mut visible: Vec<(usize, usize)> = Vec::with_capacity(gaps.len() + 1);
         let mut cursor = 0usize;
-        for &(hidden_start, hidden_end) in &self.elided {
+        for &(hidden_start, hidden_end) in &gaps {
             if hidden_start > cursor {
                 visible.push((cursor, hidden_start));
             }
@@ -662,6 +721,7 @@ fn routed_line_scan(
     text: &[u8],
     byte_idx: usize,
     fit: RowRouteFit<'_>,
+    replacements: &[RoutedRowReplacement],
 ) -> Result<RoutedLineScan, RouteRefusal> {
     let mut idx = byte_idx;
     let mut char_len = 0usize;
@@ -672,6 +732,7 @@ fn routed_line_scan(
     let mut col = fit.start_col;
     let mut tail: Option<(char, bool)> = None;
     let mut merge_target = RoutedScanMergeTarget::None;
+    let mut next_replacement = replacements.iter().peekable();
     // The maximal-fitting-prefix cut for an over-wide line: every scanned
     // char so far fits; the char at `idx` would cross the right edge, so the
     // routed coverage ends here and the pipeline resumes at `idx`.
@@ -690,6 +751,42 @@ fn routed_line_scan(
             })
         };
     while idx < text.len() {
+        // A replacement-covered span (increment 2i rung 2): the pen advances
+        // by the REPLACEMENT string's predicted columns, not the covered
+        // chars', and the covered chars are consumed without classification
+        // (they are never rendered — any well-formed UTF-8 content is fine,
+        // exactly like the pipeline's skip_chars_until over the covered
+        // range). The session renders into the row, so a following extender
+        // finds no routable merge target (tail = None) and refuses through
+        // the ordinary ladder. A replacement whose advance crosses the right
+        // edge refuses outright: replacement rows never route as overflow
+        // prefixes (the handoff cut would not be the pipeline's overflow
+        // point mid-replacement).
+        if let Some(replacement) = next_replacement.peek()
+            && char_len == replacement.start
+        {
+            let advance_px = replacement.advance_cols as f32 * fit.char_width_px;
+            if x_px + advance_px > fit.right_edge_px {
+                return Err(RouteRefusal::Replacement);
+            }
+            x_px += advance_px;
+            col += replacement.advance_cols;
+            tail = None;
+            merge_target = RoutedScanMergeTarget::None;
+            while char_len < replacement.end {
+                if idx >= text.len() || text[idx] == b'\n' {
+                    return Err(RouteRefusal::Replacement);
+                }
+                let (ch, consumed) = decode_utf8(&text[idx..]);
+                if consumed == 0 || ch.len_utf8() != consumed {
+                    return Err(RouteRefusal::ScanChar);
+                }
+                char_len += 1;
+                idx += consumed;
+            }
+            next_replacement.next();
+            continue;
+        }
         if text[idx] == b'\n' {
             // A bare-newline empty line routes with ZERO covered chars
             // (phase 2h rung 1): the production is RowBreak-only, driving
@@ -882,6 +979,176 @@ fn routed_row_overlay_scan<B: LayoutBufferView + ?Sized>(
     Some(scan)
 }
 
+/// Scan the line `[start_byte, line_end_byte]` for `display` text properties
+/// (increment 2i rung 2), walking property-change positions exactly like the
+/// hazard walk. Every `display` value found must be a routable replacement
+/// (a plain, property-less, single-line string of unambiguous-width chars,
+/// anchored strictly inside the line and covering chars strictly before the
+/// newline) or the row refuses. The covered extent mirrors the pipeline's
+/// `display_value_extent` (GNU `next_single_char_property_change(pos,
+/// Qdisplay)`): the range over which the resolved value stays the SAME
+/// object. `line_end_byte` is the newline's byte (or the source end for the
+/// tail line); a value present AT it would replace the line end and refuses.
+///
+/// Overlay-supplied `display` never reaches this scan: the overlay allow-list
+/// refuses any intersecting overlay carrying `display`, so the text-property
+/// read here resolves the same winner as the pipeline's
+/// `get_char_property`-style overlay-or-text read.
+/// Outcome of the display-property line scan: the routable replacement
+/// candidates in ascending order, plus the CHAR offsets (with refusal
+/// reasons) of unroutable `display` props. The classifier refuses only when
+/// an unroutable prop falls inside (or at the end of) the ROUTED coverage —
+/// a prop in the unreached tail of an overflow-prefix plan stays with the
+/// pipeline at resume, preserving the phase-2f class exactly.
+struct RoutedRowDisplayScan {
+    replacements: Vec<RoutedRowReplacement>,
+    hazards: Vec<(usize, RouteRefusal)>,
+}
+
+fn routed_row_replacement_scan<B: LayoutBufferView>(
+    buffer: &B,
+    row_charpos: i64,
+    start_byte: usize,
+    line_end_byte: usize,
+) -> Result<RoutedRowDisplayScan, RouteRefusal> {
+    use crate::display_property::{DisplayReplacementProperty, classify_display_property};
+
+    let display_prop_at = |byte: usize| {
+        buffer.layout_text_prop_at_emacs_byte_pos(EmacsBytePos::new(byte), Value::symbol("display"))
+    };
+    let char_offset_at = |byte: usize| -> Result<usize, RouteRefusal> {
+        buffer
+            .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(byte))
+            .get()
+            .checked_sub(row_charpos.max(0) as usize)
+            .ok_or(RouteRefusal::Boundary)
+    };
+    let next_change_after = |byte: usize| {
+        buffer
+            .layout_next_text_prop_change_after_emacs_byte_pos(EmacsBytePos::new(byte))
+            .map(|change| change.get())
+            .filter(|&change| change > byte)
+    };
+
+    let mut scan = RoutedRowDisplayScan {
+        replacements: Vec::new(),
+        hazards: Vec::new(),
+    };
+    let mut probe_byte = start_byte;
+    loop {
+        if let Some(value) = display_prop_at(probe_byte) {
+            let probe_offset = char_offset_at(probe_byte)?;
+            // The routable class: a plain, property-less, single-line string
+            // of unambiguous-width chars, anchored strictly inside the line
+            // (a row-start anchor replays into the loop's segment-0
+            // checkpoint; a line-end anchor replaces the newline), covering
+            // chars strictly before the line end. Everything else records a
+            // hazard at its position: non-string display shapes keep the
+            // historical HazardProp refusal, unroutable string shapes the
+            // Replacement refusal.
+            let classification = classify_display_property(value);
+            let routable_string = matches!(
+                classification.replacement(),
+                Some(DisplayReplacementProperty::String)
+            )
+            .then(|| classification.replacement_spec().as_utf8_str())
+            .flatten()
+            .filter(|text| !text.is_empty())
+            .filter(|_| {
+                neovm_core::emacs_core::value::get_string_text_properties_table_for_value(
+                    classification.replacement_spec(),
+                )
+                .is_none()
+            })
+            .filter(|_| probe_byte > start_byte && probe_byte < line_end_byte);
+            let hazard_reason = if matches!(
+                classification.replacement(),
+                Some(DisplayReplacementProperty::String)
+            ) {
+                RouteRefusal::Replacement
+            } else {
+                RouteRefusal::HazardProp
+            };
+            let Some(text) = routable_string else {
+                scan.hazards.push((probe_offset, hazard_reason));
+                let Some(change) = next_change_after(probe_byte) else {
+                    break;
+                };
+                probe_byte = change;
+                continue;
+            };
+            // Single-line, unambiguous-width string content only: a newline
+            // emits a row break (multi-row), a tab expands pen-dependently
+            // inside the session's full-text-width frame.
+            let mut advance_cols = 0usize;
+            let mut unroutable_content = false;
+            for ch in text.chars() {
+                match classify_routed_row_char(ch) {
+                    Some(RoutedRowCharAdvance::Cols(cols)) => advance_cols += usize::from(cols),
+                    Some(RoutedRowCharAdvance::Tab) | None => {
+                        unroutable_content = true;
+                        break;
+                    }
+                }
+            }
+            // Covered extent: walk property changes while the display value
+            // stays the SAME object (the pipeline's display_value_extent /
+            // GNU next_single_char_property_change on Qdisplay).
+            let mut end_byte = probe_byte;
+            let mut extent_ok = true;
+            loop {
+                let Some(change) = next_change_after(end_byte) else {
+                    extent_ok = false;
+                    break;
+                };
+                end_byte = change;
+                if end_byte >= line_end_byte {
+                    break;
+                }
+                match display_prop_at(end_byte) {
+                    Some(next) if next.bits() == value.bits() => {}
+                    _ => break,
+                }
+            }
+            // The covered range must end strictly before the line end: the
+            // extent running past the newline byte (or continuing AT it)
+            // hides the line end — a line-structure change.
+            if end_byte > line_end_byte
+                || (end_byte == line_end_byte
+                    && display_prop_at(line_end_byte)
+                        .is_some_and(|next| next.bits() == value.bits()))
+            {
+                extent_ok = false;
+            }
+            if unroutable_content || !extent_ok {
+                scan.hazards.push((probe_offset, RouteRefusal::Replacement));
+                if !extent_ok {
+                    break;
+                }
+                probe_byte = end_byte;
+                continue;
+            }
+            scan.replacements.push(RoutedRowReplacement {
+                start: probe_offset,
+                end: char_offset_at(end_byte)?,
+                value,
+                text: text.into(),
+                advance_cols,
+            });
+            probe_byte = end_byte;
+            continue;
+        }
+        let Some(change) = next_change_after(probe_byte) else {
+            break;
+        };
+        if change > line_end_byte {
+            break;
+        }
+        probe_byte = change;
+    }
+    Ok(scan)
+}
+
 /// Text properties that influence acquisition or the line end beyond faces.
 /// Any of these present anywhere on the line (or its newline) sends the row
 /// to the buffer pipeline. Face-affecting properties (`face`,
@@ -891,14 +1158,15 @@ fn routed_row_overlay_scan<B: LayoutBufferView + ?Sized>(
 /// the newline, when a change lands on it) covers the whole row. `invisible`
 /// is not on this list since phase 2d: the plain-elision sub-case is routed
 /// and the inexpressible sub-cases (ellipsis, newline-spanning, row-start,
-/// overlay-sourced) refuse through [`routed_row_elision_scan`]. `display`
-/// stays a hazard EVERYWHERE, including inside hidden spans, mirroring GNU's
-/// handler order where a replacing `display` spec beats `invisible`
-/// (it_props: display before invisible + HANDLED_RETURN). `composition` is
+/// overlay-sourced) refuse through [`routed_row_elision_scan`]. `composition` is
 /// not on this list since phase 2e: its refusal is grounded in the
 /// pipeline's own replacement predicate ([`routed_composition_prop_replaces`]),
 /// so an inert (unparseable) prop no longer refuses.
-const ROUTE_HAZARD_TEXT_PROPS: [&str; 3] = ["display", "mouse-face", "line-height"];
+/// `display` is NOT probed here since increment 2i: the dedicated
+/// [`routed_row_replacement_scan`] owns every display-prop decision (routable
+/// string replacements become plan spans; everything else records a
+/// positioned hazard the classifier applies against the routed coverage).
+const ROUTE_HAZARD_TEXT_PROPS: [&str; 2] = ["mouse-face", "line-height"];
 
 /// Whether a static `composition` text property at `probe` would REPLACE its
 /// covered chars in the pipeline. This is the same predicate the pipeline's
@@ -1059,11 +1327,42 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
             return Err(RouteRefusal::PointInRow);
         }
     }
+    // Display-property scan over the whole line FIRST (increment 2i rung 2):
+    // routable string replacements become plan spans the fit walk credits
+    // with the STRING's width; unroutable display shapes are recorded with
+    // their positions and refuse below only when they fall inside the routed
+    // coverage (a prop in an over-wide line's unreached tail stays with the
+    // pipeline at resume, preserving the phase-2f class).
+    let start_byte = row.text_start_byte + row.byte_idx;
+    let display_scan =
+        routed_row_replacement_scan(buffer, row.charpos, start_byte, start_byte + line_byte_len)?;
+
     // One pass scans the chars (refusing anything the pipeline would
     // compose) AND applies the strict logical-cell fit: a line exactly
     // filling the row keeps the buffer pipeline (continuation/truncation
     // policy owns that edge).
-    let scan = routed_line_scan(row.text, row.byte_idx, fit)?;
+    let scan = routed_line_scan(row.text, row.byte_idx, fit, &display_scan.replacements)?;
+
+    // Unroutable display props refuse when they touch the routed coverage
+    // (inclusive of the end position, mirroring the historical hazard walk
+    // which probed the newline / handoff char too).
+    if let Some(&(_, reason)) = display_scan
+        .hazards
+        .iter()
+        .find(|&&(offset, _)| offset <= scan.char_len)
+    {
+        return Err(reason);
+    }
+    // Keep only the replacements the routed coverage actually consumed; a
+    // candidate at or beyond an overflow handoff is unrouted remainder.
+    let mut replacements = display_scan.replacements;
+    replacements.retain(|replacement| replacement.end <= scan.char_len);
+    // A replacement row never routes as an overflow prefix: the scan's
+    // handoff cut is not the pipeline's overflow point once the covered
+    // span's width substitution is in play.
+    if scan.line_end == RoutedRowLineEnd::OverflowHandoff && !replacements.is_empty() {
+        return Err(RouteRefusal::Replacement);
+    }
 
     // Cursor capture stays on the buffer pipeline: exclude any row whose
     // ROUTED coverage contains point. The pre-gate above already refused the
@@ -1078,7 +1377,6 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     // ONLY face-affecting properties; their in-line boundaries become face
     // segment boundaries below. Anything else — strings, display, invisible,
     // window restriction, category indirection — keeps the buffer pipeline.
-    let start_byte = row.text_start_byte + row.byte_idx;
     let routed_end_byte = start_byte + scan.byte_len;
     let overlay_scan = routed_row_overlay_scan(buffer, row.charpos, start_byte, routed_end_byte)
         .ok_or(RouteRefusal::Overlay)?;
@@ -1095,6 +1393,15 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     // carrying `invisible` already refused through the overlay allow-list.
     let elided = routed_row_elision_scan(buffer, row.charpos, routed_end_charpos)
         .ok_or(RouteRefusal::Elision)?;
+
+    // Conservative composition refusal: a routed row carries EITHER plain
+    // elision OR a replacement, never both — their skip bookkeeping would
+    // interleave (and GNU's handler order makes a replacing display beat
+    // invisible inside the covered range, a precedence the plan's disjoint
+    // gap model does not encode).
+    if !replacements.is_empty() && !elided.is_empty() {
+        return Err(RouteRefusal::Replacement);
+    }
 
     // An overflow-prefix plan refuses ANY elision inside its coverage: the
     // scan's fit walk advanced the pen for every char including hidden ones,
@@ -1199,6 +1506,7 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
         face_boundaries,
         elided,
         composed: scan.composed,
+        replacements,
         line_end: scan.line_end,
     })
 }
@@ -1582,6 +1890,13 @@ pub(crate) static ROUTED_EMPTY_ROW_COUNT: std::sync::atomic::AtomicUsize =
 pub(crate) static ROUTED_EOB_TAIL_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+/// Test-only engagement proof for the increment 2i display-replacement
+/// extension: routed rows containing at least one display-string replacement
+/// rendered through the pipeline's replacement session.
+#[cfg(test)]
+pub(crate) static ROUTED_REPLACEMENT_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode) {
     if route_stats_file().is_some() {
         ROUTE_STAT_ROUTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1625,6 +1940,9 @@ fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode) {
         }
         if plan.is_end_of_source() {
             ROUTED_EOB_TAIL_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if plan.has_replacement() {
+            ROUTED_REPLACEMENT_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
     }
     #[cfg(not(test))]
@@ -1740,7 +2058,44 @@ impl<'rows, 'emit, 'surface>
         }
 
         let start = CharPos0::new(row.charpos.max(0) as usize);
-        let ranges = plan.segment_ranges(start);
+        // The routed row renders as an ordered sequence of PARTS: visible
+        // text segments and (increment 2i) display-replacement spans, merged
+        // by char position. A replacement part renders through the
+        // pipeline's OWN replacement session at commit; the probe phase
+        // predicts its advance with the session's base-face resolution.
+        enum RoutedRowPartKind<'plan> {
+            Text,
+            Replacement(&'plan RoutedRowReplacement),
+        }
+        struct RoutedRowPart<'plan> {
+            start: CharPos0,
+            end: CharPos0,
+            kind: RoutedRowPartKind<'plan>,
+        }
+        let mut parts: Vec<RoutedRowPart> = plan
+            .segment_ranges(start)
+            .into_iter()
+            .map(|(seg_start, seg_end)| RoutedRowPart {
+                start: seg_start,
+                end: seg_end,
+                kind: RoutedRowPartKind::Text,
+            })
+            .collect();
+        parts.extend(plan.replacements().iter().map(|replacement| RoutedRowPart {
+            start: start.add_len(CharLen::new(replacement.start)),
+            end: start.add_len(CharLen::new(replacement.end)),
+            kind: RoutedRowPartKind::Replacement(replacement),
+        }));
+        parts.sort_by_key(|part| part.start.get());
+        debug_assert!(
+            parts
+                .first()
+                .is_none_or(|part| matches!(part.kind, RoutedRowPartKind::Text)),
+            "a routed row never starts with a replacement (row-start anchors refuse)"
+        );
+        let ranges: Vec<(CharPos0, CharPos0)> =
+            parts.iter().map(|part| (part.start, part.end)).collect();
+        let _ = &ranges;
         // The walk resumes at the end of the ROUTED COVERAGE — the newline
         // for a whole-line plan (not the last visible segment's end: with a
         // trailing elision they differ, the hidden span sits between them
@@ -1755,13 +2110,15 @@ impl<'rows, 'emit, 'surface>
         // divergent per-run face chains and box faces on the NEW multi-face
         // class, and verify the strict natural-measurement fit segment by
         // segment at its running position.
-        struct ProbedSegment {
+        struct ProbedSegment<'plan> {
             start: CharPos0,
             end: CharPos0,
+            kind: RoutedRowPartKind<'plan>,
             active: crate::display_row::face_state::DisplayRowActiveFaceState,
         }
         let mut probed: Vec<ProbedSegment> = Vec::with_capacity(ranges.len());
-        for (index, (seg_start, seg_end)) in ranges.iter().enumerate() {
+        for (index, part) in parts.into_iter().enumerate() {
+            let (seg_start, seg_end) = (&part.start, &part.end);
             let active = if index == 0 {
                 active_face_state.clone()
             } else {
@@ -1786,22 +2143,27 @@ impl<'rows, 'emit, 'surface>
             }
             // The pipeline stamps glyphs with the PER-RUN face chain; refuse
             // the row when it would diverge from the checkpoint chain (e.g.
-            // buffer face remapping of default).
-            if routed_segment_item_face_diverges(
-                buffer,
-                face_resolution_context.face_resolver(),
-                self.face_ids,
-                face_resolution_context.default_resolved(),
-                face_resolution_context.default_face_id(),
-                *seg_start,
-                active.face_id(),
-            ) {
+            // buffer face remapping of default). A replacement part's glyphs
+            // take the SESSION's base-face resolution instead — the run
+            // chain never applies there.
+            if matches!(part.kind, RoutedRowPartKind::Text)
+                && routed_segment_item_face_diverges(
+                    buffer,
+                    face_resolution_context.face_resolver(),
+                    self.face_ids,
+                    face_resolution_context.default_resolved(),
+                    face_resolution_context.default_face_id(),
+                    *seg_start,
+                    active.face_id(),
+                )
+            {
                 note_route_refusal(RouteRefusal::ProbeFaceDiverges);
                 return AsciiRowRouteOutcome::NotRouted;
             }
             probed.push(ProbedSegment {
                 start: *seg_start,
                 end: *seg_end,
+                kind: part.kind,
                 active,
             });
         }
@@ -1809,39 +2171,104 @@ impl<'rows, 'emit, 'surface>
         let geometry = *self.row_geometry;
         let mut probe_position = position;
         for segment in &probed {
-            let mut source = BufferAsciiItemSource::text_only(
-                loop_context.buffer_id(),
-                buffer,
-                segment.start,
-                segment.end,
-                RenderFaceRef::FaceId(segment.active.face_id()),
-            );
-            let Some(text_item) = source.text_item().cloned() else {
-                note_route_refusal(RouteRefusal::ProbeMeasure);
-                return AsciiRowRouteOutcome::NotRouted;
-            };
-            let append_context = BufferSourceRowAppendContext::from_active_face_row(
-                buffer,
-                loop_context.buffer_id(),
-                self.append_surface,
-                &segment.active,
-                0.0,
-                loop_context.char_height(),
-                self.face_ids.clone(),
-            );
             // Advance-based measurement: tab expansion depends on the pen x
             // and 2-col chars advance two cells, so the measured END position
             // (x AND col) seeds the next segment's probe exactly as the
-            // pipeline's own natural walk would.
-            let measured = {
-                let mut measure = self.source_render.measure_state();
-                append_context.measure_source_display_item_advance_naturally(
-                    &geometry,
-                    &mut measure,
-                    &text_item,
-                    probe_position,
-                    DisplayRowAppendKind::SourceText,
-                )
+            // pipeline's own natural walk would. A replacement part measures
+            // the SESSION's shape: the string's chars as one covered
+            // SourceMappedText run in the session's base face (the same
+            // resolution `DisplayPropertyReplacementAppendPlanItemRequest`
+            // performs at commit; content-addressed mints only).
+            let measured = match &segment.kind {
+                RoutedRowPartKind::Text => {
+                    let mut source = BufferAsciiItemSource::text_only(
+                        loop_context.buffer_id(),
+                        buffer,
+                        segment.start,
+                        segment.end,
+                        RenderFaceRef::FaceId(segment.active.face_id()),
+                    );
+                    let Some(text_item) = source.text_item().cloned() else {
+                        note_route_refusal(RouteRefusal::ProbeMeasure);
+                        return AsciiRowRouteOutcome::NotRouted;
+                    };
+                    let append_context = BufferSourceRowAppendContext::from_active_face_row(
+                        buffer,
+                        loop_context.buffer_id(),
+                        self.append_surface,
+                        &segment.active,
+                        0.0,
+                        loop_context.char_height(),
+                        self.face_ids.clone(),
+                    );
+                    let mut measure = self.source_render.measure_state();
+                    append_context.measure_source_display_item_advance_naturally(
+                        &geometry,
+                        &mut measure,
+                        &text_item,
+                        probe_position,
+                        DisplayRowAppendKind::SourceText,
+                    )
+                }
+                RoutedRowPartKind::Replacement(replacement) => {
+                    let base_face = crate::display_source_resolver::resolve_display_string_base_face(
+                        buffer,
+                        face_resolution_context.face_resolver(),
+                        DisplayOrigin::DisplayPropertyString {
+                            anchor_charpos: segment.start,
+                            source: crate::display_origin::DisplayPropertySource::TextProperty,
+                        },
+                        DisplayOrigin::DisplayPropertyString {
+                            anchor_charpos: segment.start,
+                            source: crate::display_origin::DisplayPropertySource::TextProperty,
+                        }
+                        .default_base_face_policy(),
+                        Some(crate::display_source_resolver::ActiveDisplayStringBaseFace::new(
+                            segment.active.face_id(),
+                            segment.active.resolved_face(),
+                        )),
+                        crate::display_source_resolver::DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
+                        self.face_ids,
+                    );
+                    let item = DisplayItem::new(
+                        SourceSpan::new(
+                            DisplaySourcePosition::buffer(
+                                loop_context.buffer_id(),
+                                segment.start,
+                                buffer.layout_char_pos_to_emacs_byte_pos(segment.start),
+                            ),
+                            DisplaySourcePosition::buffer(
+                                loop_context.buffer_id(),
+                                segment.end,
+                                buffer.layout_char_pos_to_emacs_byte_pos(segment.end),
+                            ),
+                        ),
+                        RenderFaceRef::FaceId(base_face.face_id()),
+                        DisplayItemKind::SourceMappedText(
+                            crate::display_item::DisplaySourceMappedText::new(
+                                replacement.text.as_ref(),
+                            ),
+                        ),
+                    );
+                    let append_context = BufferSourceRowAppendContext::from_active_face_row(
+                        buffer,
+                        loop_context.buffer_id(),
+                        self.append_surface,
+                        &segment.active,
+                        0.0,
+                        loop_context.char_height(),
+                        self.face_ids.clone(),
+                    )
+                    .with_resolved_item_face(base_face.face_id(), base_face.face().clone());
+                    let mut measure = self.source_render.measure_state();
+                    append_context.measure_source_display_item_advance_naturally(
+                        &geometry,
+                        &mut measure,
+                        &item,
+                        probe_position,
+                        DisplayRowAppendKind::SourceText,
+                    )
+                }
             };
             let Some(end_position) = measured else {
                 note_route_refusal(RouteRefusal::ProbeMeasure);
@@ -1897,6 +2324,127 @@ impl<'rows, 'emit, 'surface>
                     "probe and checkpoint face resolution must agree"
                 );
             }
+
+            // A replacement part (increment 2i): render through the
+            // pipeline's OWN replacement session — the same context
+            // `render.rs` consume_replacement builds — so glyph provenance
+            // (covered-start charpos), string base-face policy, and the
+            // walk/progress bookkeeping are the session's, verbatim. The
+            // pipeline performs no remember-face/row-extend bookkeeping for
+            // a consumed replacement, so neither does the routed commit.
+            if let RoutedRowPartKind::Replacement(replacement) = &segment.kind {
+                use crate::buffer_source::display_property_render::{
+                    BufferDisplayPropertyTextReplacementApplyOutcome,
+                    BufferDisplayPropertyTextReplacementRenderContext,
+                    BufferDisplayPropertyTextReplacementRenderState,
+                };
+                let start_byte_pos = buffer.layout_char_pos_to_emacs_byte_pos(segment.start);
+                let end_byte_pos = buffer.layout_char_pos_to_emacs_byte_pos(segment.end);
+                let replacement_item =
+                    crate::display_item::BufferDisplayPropertyReplacementItem::new(
+                        replacement.value,
+                        crate::display_property::classify_display_property(replacement.value),
+                        crate::display_item::BufferDisplayReplacementSource::spanning(
+                            loop_context.buffer_id(),
+                            segment.start,
+                            start_byte_pos,
+                            segment.end,
+                            end_byte_pos,
+                        ),
+                        start_byte_pos,
+                        end_byte_pos,
+                        segment.start,
+                        segment.end,
+                    );
+                self.progress.apply_row_position(render_position);
+                let replacement_context = BufferDisplayPropertyTextReplacementRenderContext::new(
+                    replacement_item,
+                    loop_context.text_start_byte(),
+                    text,
+                    loop_context.content_x(),
+                    params,
+                    0.0,
+                    loop_context.char_height(),
+                    active_face_state,
+                    self.progress.row_progress().x(),
+                    self.progress.row_position(),
+                );
+                match replacement_context.render_and_apply(
+                    buffer,
+                    BufferDisplayPropertyTextReplacementRenderState::new(
+                        self.source_render.reborrow(),
+                        self.face_ids,
+                        self.append_surface,
+                        self.row_geometry,
+                        active_face_state,
+                    ),
+                    &mut self.progress,
+                    self.cursor_info,
+                    loop_context.point_charpos(),
+                ) {
+                    BufferDisplayPropertyTextReplacementApplyOutcome::Applied {
+                        produced_row_break,
+                    } => {
+                        // A routed replacement string contains no newline
+                        // (classifier), so the session never breaks the row.
+                        debug_assert!(
+                            !produced_row_break,
+                            "routed replacement strings are single-line"
+                        );
+                        if produced_row_break {
+                            return AsciiRowRouteOutcome::Stopped;
+                        }
+                        render_position = self.progress.row_position();
+                    }
+                    BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(_) => {
+                        // Unreachable for a classified plain string (the
+                        // resolver only falls back when the spec is not a
+                        // utf8 string). Render the covered text literally —
+                        // the same glyphs the pipeline's fallback appends.
+                        debug_assert!(false, "a classified replacement string must resolve");
+                        let mut source = BufferAsciiItemSource::text_only(
+                            loop_context.buffer_id(),
+                            buffer,
+                            segment.start,
+                            segment.end,
+                            RenderFaceRef::FaceId(active_face_state.face_id()),
+                        );
+                        let append_context = BufferSourceRowAppendContext::from_active_face_row(
+                            buffer,
+                            loop_context.buffer_id(),
+                            self.append_surface,
+                            active_face_state,
+                            0.0,
+                            loop_context.char_height(),
+                            self.face_ids.clone(),
+                        );
+                        let geometry = *self.row_geometry;
+                        let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
+                        let mut source_state =
+                            crate::display_row::source_state::DisplayRowSourceState::default();
+                        let Some(append_progress) = append_context
+                            .render_display_item_source_to_text_row(
+                                &geometry,
+                                &mut self.source_render.reborrow(),
+                                &mut source,
+                                &mut source_state,
+                                render_position,
+                                DisplayRowAppendKind::SourceText,
+                                &mut render_policy,
+                            )
+                        else {
+                            return AsciiRowRouteOutcome::Stopped;
+                        };
+                        render_position = append_progress.end();
+                        self.progress.apply_row_position(render_position);
+                    }
+                    BufferDisplayPropertyTextReplacementApplyOutcome::Stop => {
+                        return AsciiRowRouteOutcome::Stopped;
+                    }
+                }
+                continue;
+            }
+
             // Per-item bookkeeping the buffer pipeline would perform for
             // this run (item_render.rs): remember the resolved active face
             // for later splits, and scope the row-extend fill to the row.
