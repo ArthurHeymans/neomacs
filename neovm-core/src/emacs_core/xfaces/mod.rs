@@ -1766,10 +1766,6 @@ pub(crate) enum FaceColorResolver<'a> {
 }
 
 impl FaceColorResolver<'_> {
-    fn resolve(self, spec: &str) -> Option<crate::face::Color> {
-        self.realize(&crate::face::SpecifiedColor::parse(spec))
-    }
-
     /// Realize a color SPEC into render-layer pixels under this frame-class
     /// policy — the sole bridge from [`crate::face::SpecifiedColor`] to
     /// [`crate::face::RealizedColor`], mirroring GNU's realize_*_face step.
@@ -3173,8 +3169,8 @@ fn lisp_value_to_face_attr_resolved(
     resolver: FaceColorResolver<'_>,
 ) -> Option<crate::face::FaceAttrValue> {
     use crate::face::{
-        BoxBorder, BoxStyle, Color, FaceAttrValue, FaceHeight, FontSlant, FontWeight, FontWidth,
-        Underline, UnderlineStyle,
+        BoxBorder, BoxStyle, FaceAttrValue, FaceHeight, FontSlant, FontWeight, FontWidth,
+        SpecifiedColor, Underline, UnderlineStyle,
     };
 
     // "unspecified" symbol = reset the attribute
@@ -3189,7 +3185,12 @@ fn lisp_value_to_face_attr_resolved(
                 _ => value.as_utf8_str().or_else(|| value.as_symbol_name()),
             };
             let s = s?;
-            Some(FaceAttrValue::Color(resolver.resolve(s)?))
+            // Parse the lface string to a spec exactly once; realization —
+            // the only spec-to-pixel bridge — happens here, at the boundary
+            // where the runtime face table is built for a known frame class.
+            Some(FaceAttrValue::Color(
+                resolver.realize(&SpecifiedColor::parse(s))?,
+            ))
         }
         LFaceAttr::Weight => {
             let name = value.as_symbol_name()?;
@@ -3223,7 +3224,7 @@ fn lisp_value_to_face_attr_resolved(
                 return Some(FaceAttrValue::Bool(true));
             }
             if let Some(s) = value.as_utf8_str() {
-                let color = resolver.resolve(s);
+                let color = resolver.realize(&SpecifiedColor::parse(s));
                 return Some(FaceAttrValue::Underline(Underline {
                     style: UnderlineStyle::Line,
                     color,
@@ -3248,7 +3249,7 @@ fn lisp_value_to_face_attr_resolved(
                         }
                         ":color" => {
                             if let Some(s) = val.as_utf8_str().or_else(|| val.as_symbol_name()) {
-                                color = resolver.resolve(s);
+                                color = resolver.realize(&SpecifiedColor::parse(s));
                             }
                         }
                         ":position" => {
@@ -3276,7 +3277,9 @@ fn lisp_value_to_face_attr_resolved(
                 return Some(FaceAttrValue::Bool(true));
             }
             if let Some(s) = value.as_utf8_str() {
-                let c = Color::from_name(s).or_else(|| Color::from_hex(s))?;
+                // GNU map_tty_color covers only fg/bg/underline; overline
+                // and strike-through colors keep the context-free parse.
+                let c = FaceColorResolver::Standard.realize(&SpecifiedColor::parse(s))?;
                 return Some(FaceAttrValue::Color(c));
             }
             Some(FaceAttrValue::Bool(value.is_truthy()))
@@ -3299,9 +3302,10 @@ fn lisp_value_to_face_attr_resolved(
                     style: BoxStyle::Flat,
                 }));
             }
-            // Color string shorthand
+            // Color string shorthand. Box colors are not tty-mapped in GNU
+            // (map_tty_color covers only fg/bg/underline).
             if let Some(s) = value.as_utf8_str() {
-                let color = Color::from_name(s).or_else(|| Color::from_hex(s));
+                let color = FaceColorResolver::Standard.realize(&SpecifiedColor::parse(s));
                 return Some(FaceAttrValue::Box(BoxBorder {
                     color,
                     width: 1,
@@ -3327,7 +3331,8 @@ fn lisp_value_to_face_attr_resolved(
                         }
                         ":color" => {
                             if let Some(s) = val.as_utf8_str().or_else(|| val.as_symbol_name()) {
-                                border.color = Color::from_name(s).or_else(|| Color::from_hex(s));
+                                border.color =
+                                    FaceColorResolver::Standard.realize(&SpecifiedColor::parse(s));
                             }
                         }
                         ":style" => {

@@ -75,6 +75,69 @@ fn realize_tty_palette_wins_over_standard_parse() {
 }
 
 #[test]
+fn lisp_value_to_face_attr_realizes_at_the_boundary() {
+    crate::test_utils::init_test_tracing();
+    use crate::face::{Color, FaceAttrValue};
+    let mut palette = TtyColorMap::default();
+    palette.insert("white".to_owned(), Color::rgb(229, 229, 229));
+    let tty = FaceColorResolver::TtyPalette(&palette);
+
+    // fg/bg/distant-fg and underline colors realize through the stated
+    // frame-class policy (GNU map_tty_color covers exactly fg, bg, and
+    // underline).
+    let expect_color = |got: Option<FaceAttrValue>, want: Color| match got {
+        Some(FaceAttrValue::Color(c)) => assert_eq!(c, want),
+        other => panic!("expected color, got {other:?}"),
+    };
+    for attr in [
+        LFaceAttr::Foreground,
+        LFaceAttr::Background,
+        LFaceAttr::DistantForeground,
+    ] {
+        expect_color(
+            lisp_value_to_face_attr_resolved(attr, Value::string("white"), tty),
+            Color::rgb(229, 229, 229),
+        );
+    }
+    match lisp_value_to_face_attr_resolved(LFaceAttr::Underline, Value::string("white"), tty) {
+        Some(FaceAttrValue::Underline(u)) => {
+            assert_eq!(u.color, Some(Color::rgb(229, 229, 229)))
+        }
+        other => panic!("expected underline, got {other:?}"),
+    }
+    // Overline/strike-through/box color shorthands are NOT tty-mapped in
+    // GNU; they keep the context-free standard parse.
+    for attr in [LFaceAttr::Overline, LFaceAttr::StrikeThrough] {
+        expect_color(
+            lisp_value_to_face_attr_resolved(attr, Value::string("white"), tty),
+            Color::rgb(255, 255, 255),
+        );
+    }
+    match lisp_value_to_face_attr_resolved(LFaceAttr::Box, Value::string("white"), tty) {
+        Some(FaceAttrValue::Box(b)) => assert_eq!(b.color, Some(Color::rgb(255, 255, 255))),
+        other => panic!("expected box, got {other:?}"),
+    }
+    // The unspecified-fg/-bg frame-default tokens stay unrealized at this
+    // boundary (the attribute is skipped; frame defaults apply downstream).
+    assert!(
+        lisp_value_to_face_attr_resolved(
+            LFaceAttr::Foreground,
+            Value::string("unspecified-fg"),
+            tty
+        )
+        .is_none()
+    );
+    assert!(
+        lisp_value_to_face_attr_resolved(
+            LFaceAttr::Background,
+            Value::string("unspecified-bg"),
+            FaceColorResolver::Standard
+        )
+        .is_none()
+    );
+}
+
+#[test]
 fn register_bootstrap_vars_matches_gnu_defaults() {
     crate::test_utils::init_test_tracing();
     let mut obarray = Obarray::new();
