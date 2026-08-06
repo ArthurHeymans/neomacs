@@ -1869,6 +1869,13 @@ pub const JS2_MODE_MELPA_PIN: (&str, &str) = ("js2-mode", "20260627.1342");
 /// `94b8b07a4bab87f803123723b68227565429dfa1`.
 pub const MULTIPLE_CURSORS_MELPA_PIN: (&str, &str) = ("multiple-cursors", "20260419.931");
 
+/// The exact Nameless package selected for practical namespace discovery,
+/// font-lock presentation, filtered copying, alias insertion, private and
+/// non-hyphen namespaces, file-local refresh, and mode-lifecycle parity.
+/// MELPA built this archive from upstream commit
+/// `e468f3eea4518b9827419611868c897dce20453f`.
+pub const NAMELESS_MELPA_PIN: (&str, &str) = ("nameless", "20230112.1259");
+
 /// The exact Names package selected for practical collision-free modules,
 /// split declarations, macro pipelines, keyword APIs, derived modes, and
 /// customization metadata parity. This MELPA version is pinned to upstream
