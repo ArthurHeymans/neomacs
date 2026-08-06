@@ -441,6 +441,7 @@ mod open_junk_file;
 mod org_bullets;
 mod org_category_capture;
 mod org_download;
+mod org_mime;
 mod org_pomodoro;
 mod org_superstar;
 mod orgit;

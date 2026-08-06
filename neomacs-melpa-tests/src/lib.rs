@@ -2268,6 +2268,13 @@ pub const ORG_BULLETS_MELPA_PIN: (&str, &str) = ("org-bullets", "20200317.1740")
 /// `c8be2611786d1d8d666b7b4f73582de1093f25ac`.
 pub const ORG_DOWNLOAD_MELPA_PIN: (&str, &str) = ("org-download", "20241118.1846");
 
+/// The exact Org MIME package selected for practical Org-to-HTML export,
+/// multipart mail, quoted replies, inline images, message conversion and
+/// reversion, mail properties, hooks, and dedicated Org editing parity.
+/// MELPA built version 0.3.4 from upstream commit
+/// `ffaad784a8597ee52842a578c01bd347d3e0281d`.
+pub const ORG_MIME_MELPA_PIN: (&str, &str) = ("org-mime", "20251201.245");
+
 /// The exact Org Pomodoro package selected for practical task clocking,
 /// timer transitions, overtime, break, cancellation, notification, audio,
 /// expiry, and mode-line parity. MELPA built this archive from upstream
