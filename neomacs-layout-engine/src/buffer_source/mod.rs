@@ -18,6 +18,7 @@ pub(crate) mod render_attempt;
 pub(crate) mod render_plan;
 pub(crate) mod row_lifecycle;
 pub(crate) mod row_prelude;
+pub(crate) mod row_route;
 pub(crate) mod tail_render;
 pub(crate) mod text_run;
 pub(crate) mod text_source;

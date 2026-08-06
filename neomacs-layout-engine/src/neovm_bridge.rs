@@ -1154,6 +1154,13 @@ fn active_buffer_display_table<B: LayoutBufferView + ?Sized>(buffer: &B) -> Opti
         .filter(|v| !v.is_nil())
 }
 
+/// Whether an active display table (buffer-local or standard) exists for
+/// `buffer`. The row-acquisition classifier uses this: any active table can
+/// remap arbitrary chars, so such buffers stay on the buffer pipeline.
+pub(crate) fn buffer_has_active_display_table<B: LayoutBufferView + ?Sized>(buffer: &B) -> bool {
+    active_buffer_display_table(buffer).is_some()
+}
+
 /// Resolve the ellipsis string GNU renders for invisible/selective-display
 /// folds from the active display table's `DISP_INVIS_VECTOR` slot.
 ///
