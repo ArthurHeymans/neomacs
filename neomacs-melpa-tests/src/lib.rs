@@ -1969,6 +1969,12 @@ pub const PFUTURE_MELPA_PIN: (&str, &str) = ("pfuture", "20220913.1401");
 /// 1772c79b6f319b26b6a394a8dda065be3ea4498d.
 pub const PINYINLIB_MELPA_PIN: (&str, &str) = ("pinyinlib", "20200911.1723");
 
+/// The exact Pip Requirements package selected for practical file detection,
+/// PEP 440 fontification, comments, built-in CAPF completion, PyPI simple-index
+/// parsing, and optional Auto Complete integration parity. MELPA built version
+/// 0.7 from upstream commit `31e0dc62abb2d88fa765e0ea88b919d756cc0e4f`.
+pub const PIP_REQUIREMENTS_MELPA_PIN: (&str, &str) = ("pip-requirements", "20240621.2151");
+
 /// The exact Pkg Info package selected for practical library-header,
 /// defining-function, installed-package, version-precedence, MELPA-recipe,
 /// HTTP/JSON lifecycle, and diagnostic parity. This MELPA version is pinned to

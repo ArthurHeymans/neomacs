@@ -464,6 +464,7 @@ mod pfuture;
 mod php_mode;
 mod php_runtime;
 mod pinyinlib;
+mod pip_requirements;
 mod pkg_info;
 mod popup;
 mod popwin;
