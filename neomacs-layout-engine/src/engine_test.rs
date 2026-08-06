@@ -15881,6 +15881,51 @@ fn display_string_replacement_rows_stay_on_buffer_pipeline_under_item_route() {
     );
 }
 
+/// Phase 2d rung 3 decision pin: `(space :width N)` display specs are
+/// REFUSED, not expressed via the 2b tab/stretch machinery. The spec is a
+/// REPLACING display property: one stretch glyph of arbitrary width covers
+/// an arbitrary buffer span with covered-charpos provenance and the walk
+/// skips the covered text — replacement semantics, not tab expansion (which
+/// only advances a real TAB char to the append surface's next tab stop).
+/// Identical output whether the route flag is on or off.
+#[test]
+fn space_width_spec_rows_stay_on_buffer_pipeline_under_item_route() {
+    let text = "ab cd\nnext\n";
+    let (eval, buf_id, rows, char_width, _char_height) = {
+        let (eval, buf_id, _frame_id, rows, char_width, char_height) =
+            layout_main_text_rows_with(text, |eval, buf_id| {
+                eval.buffer_manager_mut().set_current(buf_id);
+                eval.eval_str("(put-text-property 3 4 'display '(space :width 3))")
+                    .expect("space width spec");
+            });
+        (eval, buf_id, rows, char_width, char_height)
+    };
+    let stretch = rows[0].glyphs[1]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("the space spec must render a stretch glyph");
+    assert_eq!(
+        stretch.pixel_width,
+        3.0 * char_width,
+        "(space :width 3) must stretch exactly three canonical char widths"
+    );
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    assert_eq!(
+        ascii_route_classification(
+            &snapshot,
+            text.as_bytes(),
+            0,
+            0,
+            char_width,
+            640.0,
+            text.chars().count() as i64
+        ),
+        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
+        "space-spec rows must refuse the item route"
+    );
+}
+
 #[test]
 fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
     let mut eval = Context::new();

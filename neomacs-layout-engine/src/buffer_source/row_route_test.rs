@@ -1349,3 +1349,28 @@ fn classifier_rejects_display_string_replacement() {
         RowAcquisitionRoute::BufferPipeline
     );
 }
+
+#[test]
+fn classifier_rejects_display_space_width_spec() {
+    let mut eval = Context::new();
+    // Rung 3 decision pin: `(space :width N)` is a REPLACING spec producing
+    // one stretch glyph with covered-charpos provenance over an arbitrary
+    // buffer span. The routed tab/stretch machinery (2b) only expands real
+    // TAB chars through the append surface's tab policy — it cannot express
+    // replacement semantics, so the spec refuses like any display prop.
+    let text = "ab cd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 4 'display '(space :width 3))")
+        .expect("space width spec");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline
+    );
+}
