@@ -437,6 +437,7 @@ mod package_lifecycle;
 mod package_lint;
 mod package_vc;
 mod packed;
+mod page_break_lines;
 mod paradox;
 mod paredit;
 mod parent_mode;

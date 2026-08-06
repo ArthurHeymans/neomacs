@@ -1876,6 +1876,12 @@ pub const NAVI2CH_MELPA_PIN: (&str, &str) = ("navi2ch", "20200130.36");
 /// `674909974637ff0ec2b5ebf43f9a8aefa35d93e9`.
 pub const NERD_ICONS_MELPA_PIN: (&str, &str) = ("nerd-icons", "20260710.1627");
 
+/// The exact Page-Break-Lines package selected for practical page navigation,
+/// display-table ownership, live window refresh, customization, and global
+/// mode parity. MELPA version `20250218.1607` packages upstream source version
+/// 0.15 at commit `982571749c8fe2b5e2997dd043003a1b9fe87b38`.
+pub const PAGE_BREAK_LINES_MELPA_PIN: (&str, &str) = ("page-break-lines", "20250218.1607");
+
 /// The exact Paradox package selected for practical package-menu rendering,
 /// filtering, transaction reporting, homepage, GitHub-star, commit-history,
 /// and enable/disable lifecycle parity. MELPA built this archive from upstream
