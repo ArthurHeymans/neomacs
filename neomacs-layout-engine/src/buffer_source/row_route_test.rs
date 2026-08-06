@@ -645,6 +645,14 @@ fn classifier_rejects_overlay_hazard_properties() {
     // allow-list keeps the buffer pipeline: strings and display/invisible
     // rewrite content, window restricts applicability, category indirects to
     // arbitrary props, and unknown props are conservatively refused.
+    // Increment 2i rung 4 DELIBERATELY kept before/after-strings here: the
+    // covered-provenance vocabulary (rung 1) and session-reuse pattern
+    // (rungs 2-3) exist, but overlay strings are walk-driven INSERTIONS
+    // (BufferOverlayStringTextRowRenderContext: per-position load, GNU
+    // load_overlay_strings ordering, before/after interleave, own row
+    // transitions) with no single typed request the routed commit can drive
+    // without replicating that walk state — routing them would have to
+    // shadow-prove against machinery the routed path cannot reach.
     for (prop, value) in [
         ("before-string", "\"B\""),
         ("after-string", "\"A\""),

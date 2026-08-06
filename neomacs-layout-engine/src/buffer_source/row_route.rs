@@ -34,10 +34,17 @@
 //!   merge through the same checkpoint resolver seam (GNU
 //!   `face_at_buffer_position`'s ascending-priority overlay loop) and their
 //!   starts/ends segment the row like GNU `next_overlay_change` folded into
-//!   `compute_stop_pos`. Overlay before/after-strings are NOT expressible on
-//!   this path (they are Lisp-string-sourced runs with their own row
-//!   lifecycle, GNU `load_overlay_strings`/`push_it`); any intersecting
-//!   overlay carrying one refuses the route.
+//!   `compute_stop_pos`. Overlay before/after-strings stay refused
+//!   (increment 2i rung 4 decision): the covered-provenance VOCABULARY now
+//!   exists (rung 1) and the display-replacement session is reused verbatim
+//!   (rungs 2-3), but overlay strings are INSERTIONS driven by the walk's
+//!   own overlay machinery — `BufferOverlayStringTextRowRenderContext`
+//!   loads/orders strings per position (GNU `load_overlay_strings` sorting,
+//!   before/after interleaving, window filtering, `push_it (it, NULL)`
+//!   insertion semantics) interleaved with per-char emission and its own
+//!   row transitions. Unlike the replacement session there is no single
+//!   typed request the routed commit can drive without replicating that
+//!   walk state, so any intersecting overlay carrying a string refuses.
 //!   Plain-elision `invisible` text (phase 2d) is expressible: hidden spans
 //!   simply drop chars, so the routed source emits visible-segment TextRuns
 //!   whose charpos bookkeeping jumps the gap, exactly like the pipeline's
@@ -46,10 +53,13 @@
 //!   ellipsis (inserts `...` glyphs with their own face/provenance rules),
 //!   runs covering the newline (line-structure change), row-start runs
 //!   (consumed by the loop checkpoint before the route), overlay-sourced
-//!   invisibility (2c allow-list). `display` properties and `(space …)`
-//!   specs stay refused whole (rungs 2-3 decision): replacement rendering
-//!   rides the Lisp-string session with covered-charpos glyph provenance the
-//!   single-row TextRun probe/commit cannot express.
+//!   invisibility (2c allow-list). `display` replacements route since
+//!   increment 2i for the narrow routable class — a plain property-less
+//!   single-line string (rung 2) or a plain `(space :width N)` spec
+//!   (rung 3) anchored strictly inside the line — by rendering through the
+//!   pipeline's OWN replacement session at commit (covered-charpos glyph
+//!   provenance, string base-face policy, session walk bookkeeping); every
+//!   other display shape refuses through [`routed_row_replacement_scan`].
 //! * [`BufferAsciiItemSource`] is the `DisplayItemSource` for such a row: it
 //!   produces exactly the items `BufferTextSourceCursor` would — one plain
 //!   `TextRun` per face segment (one for the whole line when no property
@@ -910,12 +920,16 @@ fn routed_line_scan(
 /// checkpoint uses (GNU `face_at_buffer_position`'s ascending-priority
 /// overlay loop), `priority` orders that merge, and `evaporate` is
 /// buffer-maintenance-only. EVERYTHING else refuses the route: before/
-/// after-strings inject Lisp-string runs (GNU `load_overlay_strings`),
-/// `display`/`invisible` rewrite content, `mouse-face`/`line-prefix`/
-/// `line-height` and friends have pipeline machinery, `window` restricts
-/// applicability per window, and `category` indirects to arbitrary props.
-/// Unknown properties are conservatively refused (allow-list, not
-/// deny-list).
+/// after-strings inject Lisp-string INSERTIONS through the walk's overlay
+/// machinery (GNU `load_overlay_strings` ordering + `push_it (it, NULL)`;
+/// increment 2i rung 4 kept them refused — the covered-provenance
+/// vocabulary exists, but there is no single typed session request the
+/// routed commit can reuse without replicating the walk's per-position
+/// load/order/interleave state), `display`/`invisible` rewrite content,
+/// `mouse-face`/`line-prefix`/`line-height` and friends have pipeline
+/// machinery, `window` restricts applicability per window, and `category`
+/// indirects to arbitrary props. Unknown properties are conservatively
+/// refused (allow-list, not deny-list).
 const ROUTE_SAFE_OVERLAY_PROPS: [&str; 3] = ["face", "priority", "evaporate"];
 
 /// The overlay facts of a candidate row: whether any overlay intersects it
