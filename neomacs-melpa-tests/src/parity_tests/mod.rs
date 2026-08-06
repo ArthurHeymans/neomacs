@@ -446,6 +446,7 @@ mod page_break_lines;
 mod paradox;
 mod paredit;
 mod parent_mode;
+mod pcache;
 mod pcre2el;
 mod pdf_tools;
 mod persp_mode;

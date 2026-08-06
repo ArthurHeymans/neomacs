@@ -1920,6 +1920,13 @@ pub const PAREDIT_MELPA_PIN: (&str, &str) = ("paredit", "20241103.2046");
 /// this archive from upstream commit `9fe5363b2a190619641c79b3a40d874d8c8f9f40`.
 pub const PARENT_MODE_MELPA_PIN: (&str, &str) = ("parent-mode", "20240210.1906");
 
+/// The exact Pcache package selected for practical repository lifecycle,
+/// nested-path persistence, mixed Lisp and EIEIO values, deterministic
+/// expiration, delayed saves, malformed-file recovery, and stale-version
+/// acceptance parity. MELPA built this archive from upstream commit
+/// `17d785afa4532043afa8b2dc9ae3d9733528e758`.
+pub const PCACHE_MELPA_PIN: (&str, &str) = ("pcache", "20260728.1657");
+
 /// The exact PDF Tools package selected for practical document geometry,
 /// search-query, outline/link, occurrence-batching, virtual-page, annotation,
 /// sequence-alignment, and cache parity. This MELPA version is pinned to

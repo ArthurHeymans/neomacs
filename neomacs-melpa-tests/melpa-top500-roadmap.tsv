@@ -215,7 +215,7 @@ rank	package	downloads	status
 214	evil-goggles	527887	covered
 215	nameless	526341	covered
 216	emmet-mode	522237	covered
-217	pcache	518173	todo
+217	pcache	518173	covered
 218	shrink-path	514742	todo
 219	elpy	514727	todo
 220	centered-cursor-mode	512668	todo
