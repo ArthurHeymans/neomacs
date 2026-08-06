@@ -178,6 +178,14 @@ impl DisplaySourceTextCharPreparedAppend {
         update_cursor_info_for_main_char(target, byte_idx, self.advance_px());
     }
 
+    /// THE shared point->cursor capture for an ordinary text character: the
+    /// buffer path (`buffer_source/char_render.rs`) and the item renderer
+    /// both funnel through this method, with the row/col computation in
+    /// `display_cursor.rs`. Buffer-only cursor cases with no item-renderer
+    /// counterpart (line break at point, end-of-buffer, invisible region,
+    /// hscroll truncation) keep their gates in
+    /// `buffer_source/row_lifecycle.rs` — see the note on
+    /// `BufferSourceLineBreakSourceAction`.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn capture_cursor_info_for_main_char_if_point(
         &self,

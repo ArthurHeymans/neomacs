@@ -1458,6 +1458,20 @@ impl<'a> BufferSourceSelectiveDisplayContext<'a> {
     }
 }
 
+/// NOTE(cursor capture, buffer vs item renderer): the point->cursor-info
+/// COMPUTATION is already shared — every capture site builds a
+/// `CapturedCursorInfo` through `display_cursor.rs`
+/// (`CapturedCursorPlacement::from_row_text_position` +
+/// `CapturedCursorInfo::from_active_face_state`, first-capture-wins via
+/// `capture_once`), and the ordinary main-character capture goes through the
+/// one shared seam
+/// `DisplaySourceTextCharPreparedAppend::capture_cursor_info_for_main_char_if_point`
+/// (display_source_item_append.rs) from `buffer_source/char_render.rs`. The
+/// capture wrappers that remain in this file — line break at point (below),
+/// end-of-buffer, invisible-region, and hscroll-truncated text — are gates on
+/// BUFFER-POINT cases that a Lisp-string row cannot have (a string has no
+/// point), mirroring GNU `set_cursor_from_row` operating on buffer positions
+/// only. They are deliberately NOT merged into the item renderer.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferSourceLineBreakSourceAction {
     ch_start_byte_idx: usize,

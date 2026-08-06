@@ -78,6 +78,12 @@ impl DisplayRowLineEndFinalizer {
         // extend_face_to_end_of_line (xdisp.c:26530-26533) -- decided by the
         // shared line-end seam. The item renderer's context is the degenerate
         // one: no fill-column indicator, no trailing-whitespace highlight.
+        // The trailing-whitespace step stays UNWIRED here on purpose: GNU's
+        // highlight_trailing_whitespace re-faces only glyphs whose object is
+        // the buffer, and the rows this finalizer completes are produced from
+        // Lisp strings, whose glyphs can never satisfy that test — the step
+        // could not fire. NoNamedLineEndFaces relies on both flags staying
+        // off (its lookups are unreachable!()).
         let extend_face = faces
             .iter()
             .find(|face| face.face_id == self.row_break_face_id && face.extend);
