@@ -10,12 +10,17 @@
 //!   start of a buffer line, whether the row is plain enough for the item
 //!   renderer. "Plain" mirrors what makes GNU `get_next_display_element`
 //!   trivial: single-byte printable ASCII only, no display/composition/
-//!   invisible/face properties in range, no overlays, no display table, L2R
-//!   (guaranteed by ASCII-only content), the row fits without continuation or
-//!   truncation, and it ends in a real newline.
+//!   invisible/mouse-face/line-height properties in range, no overlays, no
+//!   display table, L2R (guaranteed by ASCII-only content), the row fits
+//!   without continuation or truncation, and it ends in a real newline.
+//!   FACE-affecting properties (`face`, `font-lock-face`, `fontified`
+//!   boundaries) are allowed: they segment the row at property-change
+//!   positions exactly like GNU `compute_stop_pos` bounds the iterator's
+//!   text runs and `handle_face_prop` re-resolves the face at each stop.
 //! * [`BufferAsciiItemSource`] is the `DisplayItemSource` for such a row: it
 //!   produces exactly the items `BufferTextSourceCursor` would — one plain
-//!   `TextRun` over the line, then the explicit-newline row break.
+//!   `TextRun` per face segment (one for the whole line when no property
+//!   changes in range), then the explicit-newline row break.
 //!
 //! Rows carrying point are deliberately excluded: cursor capture is a
 //! documented buffer-pipeline responsibility (see the cursor-capture note in
@@ -26,8 +31,12 @@ use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy, DisplayRowBreak,
     DisplaySourcePosition, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
-use crate::neovm_bridge::LayoutBufferView;
-use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
+use crate::display_origin::DisplayOrigin;
+use crate::display_row::face_state::stable_face_id_for_resolved;
+use crate::frame_face_arena::FrameFaceAttempt;
+use crate::neovm_bridge::{FaceResolver, LayoutBufferView, LayoutCharPropertyLookup, ResolvedFace};
+use neomacs_display_protocol::types::FaceId;
+use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
 
 /// Which pipeline acquires and renders a buffer row.
@@ -87,15 +96,43 @@ pub(crate) struct RowRouteFit {
 }
 
 /// A classified plain-ASCII row: `line_len` single-byte chars followed by a
-/// real newline.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// real newline. `face_boundaries` are the char offsets strictly inside the
+/// line where text properties change — each starts a new face segment, the
+/// neomacs mirror of GNU `compute_stop_pos` stops re-resolved by
+/// `handle_face_prop`. Empty for a property-constant line.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AsciiRowPlan {
     line_len: usize,
+    face_boundaries: Vec<usize>,
 }
 
 impl AsciiRowPlan {
-    pub(crate) fn line_len(self) -> usize {
+    pub(crate) fn line_len(&self) -> usize {
         self.line_len
+    }
+
+    #[cfg(test)]
+    pub(crate) fn face_boundaries(&self) -> &[usize] {
+        &self.face_boundaries
+    }
+
+    /// Whether the row renders as more than one face segment.
+    pub(crate) fn is_segmented(&self) -> bool {
+        !self.face_boundaries.is_empty()
+    }
+
+    /// The `[start, end)` char ranges of the row's face segments, in row
+    /// order. A property-constant line yields one range covering the line.
+    pub(crate) fn segment_ranges(&self, start: CharPos0) -> Vec<(CharPos0, CharPos0)> {
+        let mut ranges = Vec::with_capacity(self.face_boundaries.len() + 1);
+        let mut seg_start = start;
+        for boundary in &self.face_boundaries {
+            let seg_end = start.add_len(CharLen::new(*boundary));
+            ranges.push((seg_start, seg_end));
+            seg_start = seg_end;
+        }
+        ranges.push((seg_start, start.add_len(CharLen::new(self.line_len))));
+        ranges
     }
 }
 
@@ -119,13 +156,14 @@ fn ascii_plain_line_len(text: &[u8], byte_idx: usize) -> Option<usize> {
     None
 }
 
-/// Text properties that influence acquisition, faces, or the line end. Any of
-/// these present at the row start sends the row to the buffer pipeline. The
-/// property-CHANGE check in the classifier guarantees they are constant over
-/// the whole line including its newline, so probing the start byte suffices.
-const ROUTE_BLOCKING_TEXT_PROPS: [&str; 7] = [
-    "face",
-    "font-lock-face",
+/// Text properties that influence acquisition or the line end beyond faces.
+/// Any of these present anywhere on the line (or its newline) sends the row
+/// to the buffer pipeline. Face-affecting properties (`face`,
+/// `font-lock-face`, `fontified` boundaries) are NOT hazards: they only
+/// segment the row and are handled by the routed face resolution. Properties
+/// are constant between change positions, so probing each segment start (and
+/// the newline, when a change lands on it) covers the whole row.
+const ROUTE_HAZARD_TEXT_PROPS: [&str; 5] = [
     "display",
     "composition",
     "invisible",
@@ -194,35 +232,162 @@ pub(crate) fn plan_ascii_row<B: LayoutBufferView + ?Sized>(
         return None;
     }
 
-    // Properties must be constant over the line AND its newline; then probing
-    // the start byte covers the whole row.
-    let start_byte = EmacsBytePos::new(row.text_start_byte + row.byte_idx);
-    let newline_byte = row.text_start_byte + row.byte_idx + line_len;
-    if let Some(change) = buffer.layout_next_text_prop_change_after_emacs_byte_pos(start_byte)
-        && change.get() <= newline_byte
-    {
-        return None;
-    }
-    for prop in ROUTE_BLOCKING_TEXT_PROPS {
-        if buffer
-            .layout_text_prop_at_emacs_byte_pos(start_byte, Value::symbol(prop))
-            .is_some()
-        {
-            return None;
+    // Walk the property-change positions over the line AND its newline.
+    // Hazard properties anywhere in that range refuse the route; changes
+    // strictly inside the line become face-segment boundaries (a change ON
+    // the newline byte does not split the text but is still hazard-probed —
+    // a display/invisible property on the newline would replace it).
+    let start_byte = row.text_start_byte + row.byte_idx;
+    let newline_byte = start_byte + line_len;
+    let mut face_boundaries = Vec::new();
+    let mut probe_byte = start_byte;
+    loop {
+        let probe = EmacsBytePos::new(probe_byte);
+        for prop in ROUTE_HAZARD_TEXT_PROPS {
+            if buffer
+                .layout_text_prop_at_emacs_byte_pos(probe, Value::symbol(prop))
+                .is_some()
+            {
+                return None;
+            }
         }
+        let Some(change) = buffer.layout_next_text_prop_change_after_emacs_byte_pos(probe) else {
+            break;
+        };
+        let change = change.get();
+        if change <= probe_byte || change > newline_byte {
+            break;
+        }
+        if change < newline_byte {
+            // ASCII line: byte offsets are char offsets.
+            face_boundaries.push(change - start_byte);
+        }
+        probe_byte = change;
     }
 
-    Some(AsciiRowPlan { line_len })
+    Some(AsciiRowPlan {
+        line_len,
+        face_boundaries,
+    })
+}
+
+/// The realized face of a routed row position, resolved through the SAME
+/// seam the buffer pipeline's face checkpoint uses
+/// ([`crate::buffer_source::face_resolution::BufferSourceFaceResolutionContext::resolve_at_checkpoint`]
+/// drives `FaceResolver::default_base_face_for_origin`, GNU `face_at_pos` in
+/// `handle_face_prop`), stamped with the same content-addressed stable id the
+/// checkpoint would produce.
+pub(crate) fn resolve_routed_position_face<B: LayoutBufferView>(
+    buffer: &B,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceAttempt,
+    pos: CharPos0,
+) -> (FaceId, ResolvedFace) {
+    let mut next_check = 0usize;
+    let resolved = face_resolver.default_base_face_for_origin(
+        Some(buffer),
+        &DisplayOrigin::BufferText { charpos: pos },
+        &mut next_check,
+    );
+    let face_id = stable_face_id_for_resolved(face_ids, &resolved);
+    (face_id, resolved)
+}
+
+/// A routed row face segment: `[start, end)` rendered with `face_id`.
+#[derive(Clone, Debug)]
+pub(crate) struct RoutedRowFaceSegment {
+    pub(crate) start: CharPos0,
+    pub(crate) end: CharPos0,
+    pub(crate) face_id: FaceId,
+    pub(crate) resolved: ResolvedFace,
+}
+
+/// Resolve the face segments of a classified row via
+/// [`resolve_routed_position_face`] — one segment per property-change stretch,
+/// each carrying the realized face id the buffer pipeline's checkpoint
+/// resolution produces for that span.
+pub(crate) fn plan_row_face_segments<B: LayoutBufferView>(
+    buffer: &B,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceAttempt,
+    start: CharPos0,
+    plan: &AsciiRowPlan,
+) -> Vec<RoutedRowFaceSegment> {
+    plan.segment_ranges(start)
+        .into_iter()
+        .map(|(seg_start, seg_end)| {
+            let (face_id, resolved) =
+                resolve_routed_position_face(buffer, face_resolver, face_ids, seg_start);
+            RoutedRowFaceSegment {
+                start: seg_start,
+                end: seg_end,
+                face_id,
+                resolved,
+            }
+        })
+        .collect()
+}
+
+/// Whether the buffer pipeline's PER-RUN face chain would stamp a different
+/// face id on glyphs at `pos` than the checkpoint chain (`expected_face_id`).
+///
+/// The pipeline resolves each run's face twice: `BufferTextSourceCursor::
+/// face_at` merges the effective `face` property over the DEFAULT face
+/// (`resolve_face_ref`, keeping the window base id when the merge lands on
+/// base content), while the loop checkpoint merges it over the BUFFER default
+/// face (`face_at_pos`). The results content-address to the same stable id
+/// except when the two default chains diverge (e.g. buffer face remapping of
+/// `default`); such rows must stay on the buffer pipeline, whose machinery
+/// expresses the divergent item face.
+pub(crate) fn routed_segment_item_face_diverges<B: LayoutBufferView>(
+    buffer: &B,
+    face_resolver: &FaceResolver,
+    face_ids: &mut FrameFaceAttempt,
+    default_resolved: &ResolvedFace,
+    default_face_id: FaceId,
+    pos: CharPos0,
+    expected_face_id: FaceId,
+) -> bool {
+    let bytepos = buffer.layout_char_pos_to_emacs_byte_pos(pos);
+    let Some(value) =
+        LayoutCharPropertyLookup::new(buffer, Value::symbol("face")).text_value_at(buffer, bytepos)
+    else {
+        // No face property: the run resolves `Inherit` -> the active
+        // (checkpoint) face id, which IS `expected_face_id`.
+        return false;
+    };
+    let Some(resolved) =
+        face_resolver.resolve_buffer_face_value_over(buffer, default_resolved, &value)
+    else {
+        // The value contributes nothing: the ref stays `Inherit` -> active.
+        return false;
+    };
+    let item_face_id =
+        if crate::display_source_resolver::same_resolved_face(&resolved, default_resolved) {
+            default_face_id
+        } else {
+            stable_face_id_for_resolved(face_ids, &resolved)
+        };
+    item_face_id != expected_face_id
+}
+
+/// One text segment of a routed row: `[start, end)` rendered with `face`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct AsciiRowItemSegment {
+    pub(crate) start: CharPos0,
+    pub(crate) end: CharPos0,
+    pub(crate) face: RenderFaceRef,
 }
 
 /// A `DisplayItemSource` over one classified plain-ASCII buffer row. Produces
 /// exactly the items `BufferTextSourceCursor` would for the same row — one
-/// plain `TextRun` covering the line, then (when the row break is included)
-/// the explicit-newline `RowBreak` — mirroring GNU `next_element_from_buffer`
-/// yielding the line's characters and then the newline element.
+/// plain `TextRun` per face segment (one for the whole line when properties
+/// are constant), then (when the row break is included) the explicit-newline
+/// `RowBreak` — mirroring GNU `next_element_from_buffer` yielding the line's
+/// characters, re-segmented at each `compute_stop_pos` stop, and then the
+/// newline element.
 pub(crate) struct BufferAsciiItemSource {
-    text_item: Option<DisplayItem>,
-    row_break_item: Option<DisplayItem>,
+    items: std::collections::VecDeque<DisplayItem>,
 }
 
 impl BufferAsciiItemSource {
@@ -235,12 +400,35 @@ impl BufferAsciiItemSource {
         line_end: CharPos0,
         face: RenderFaceRef,
     ) -> Self {
-        Self::new(buffer_id, buffer, start, line_end, face, true)
+        Self::from_segments(
+            buffer_id,
+            buffer,
+            &[AsciiRowItemSegment {
+                start,
+                end: line_end,
+                face,
+            }],
+            Some(face),
+        )
+    }
+
+    /// Source over the row's face segments plus the newline row break, the
+    /// break carrying the face resolved AT the newline (a face span covering
+    /// the newline rides onto the appended newline space through the line-end
+    /// plan, mirroring the buffer pipeline's row-break face).
+    pub(crate) fn with_row_break_segments<B: LayoutBufferView + ?Sized>(
+        buffer_id: BufferId,
+        buffer: &B,
+        segments: &[AsciiRowItemSegment],
+        row_break_face: RenderFaceRef,
+    ) -> Self {
+        Self::from_segments(buffer_id, buffer, segments, Some(row_break_face))
     }
 
     /// Source over the line text only; the buffer pipeline's own line-break
     /// lifecycle (line-end plan, appended newline space, row transition)
-    /// consumes the newline. Used by the routed production render.
+    /// consumes the newline. Used by the routed production render, one
+    /// segment per call so each renders under its own active face.
     pub(crate) fn text_only<B: LayoutBufferView + ?Sized>(
         buffer_id: BufferId,
         buffer: &B,
@@ -248,16 +436,23 @@ impl BufferAsciiItemSource {
         line_end: CharPos0,
         face: RenderFaceRef,
     ) -> Self {
-        Self::new(buffer_id, buffer, start, line_end, face, false)
+        Self::from_segments(
+            buffer_id,
+            buffer,
+            &[AsciiRowItemSegment {
+                start,
+                end: line_end,
+                face,
+            }],
+            None,
+        )
     }
 
-    fn new<B: LayoutBufferView + ?Sized>(
+    fn from_segments<B: LayoutBufferView + ?Sized>(
         buffer_id: BufferId,
         buffer: &B,
-        start: CharPos0,
-        line_end: CharPos0,
-        face: RenderFaceRef,
-        include_row_break: bool,
+        segments: &[AsciiRowItemSegment],
+        row_break_face: Option<RenderFaceRef>,
     ) -> Self {
         let byte_at = |pos: CharPos0| buffer.layout_char_pos_to_emacs_byte_pos(pos);
         let span = |from: CharPos0, to: CharPos0| {
@@ -267,10 +462,14 @@ impl BufferAsciiItemSource {
             )
         };
 
-        let text_item = (line_end > start).then(|| {
+        let mut items = std::collections::VecDeque::with_capacity(segments.len() + 1);
+        for segment in segments {
+            if segment.end <= segment.start {
+                continue;
+            }
             let mut bytes = Vec::new();
             buffer.layout_copy_emacs_byte_range_to(
-                EmacsByteRange::new(byte_at(start), byte_at(line_end)),
+                EmacsByteRange::new(byte_at(segment.start), byte_at(segment.end)),
                 &mut bytes,
             );
             debug_assert!(
@@ -278,43 +477,47 @@ impl BufferAsciiItemSource {
                 "BufferAsciiItemSource requires a classified printable-ASCII row"
             );
             let text: String = bytes.iter().map(|&byte| byte as char).collect();
-            DisplayItem::new(
-                span(start, line_end),
-                face,
-                DisplayItemKind::TextRun(DisplayTextRun::new(text)),
-            )
-            .with_layout(DisplayItemLayout::default())
-            .with_pointer_appearance(None)
-        });
+            items.push_back(
+                DisplayItem::new(
+                    span(segment.start, segment.end),
+                    segment.face,
+                    DisplayItemKind::TextRun(DisplayTextRun::new(text)),
+                )
+                .with_layout(DisplayItemLayout::default())
+                .with_pointer_appearance(None),
+            );
+        }
 
-        let row_break_item = include_row_break.then(|| {
+        if let Some(break_face) = row_break_face {
+            let line_end = segments
+                .last()
+                .map(|segment| segment.end)
+                .unwrap_or(CharPos0::ZERO);
             // Mirrors `BufferTextSourceCursor::next_text_item_with_layout`:
             // the newline's row break carries the line-height policy resolved
             // from the (absent, for a classified row) `line-height` property.
             let row_break = DisplayRowBreak::explicit_newline()
                 .with_line_height(DisplayLineHeightPolicy::from_property(None));
-            DisplayItem::new(
-                span(
-                    line_end,
-                    line_end.add_len(neovm_core::buffer::CharLen::new(1)),
-                ),
-                face,
-                DisplayItemKind::RowBreak(row_break),
-            )
-            .with_layout(DisplayItemLayout::default())
-            .with_pointer_appearance(None)
-        });
-
-        Self {
-            text_item,
-            row_break_item,
+            items.push_back(
+                DisplayItem::new(
+                    span(line_end, line_end.add_len(CharLen::new(1))),
+                    break_face,
+                    DisplayItemKind::RowBreak(row_break),
+                )
+                .with_layout(DisplayItemLayout::default())
+                .with_pointer_appearance(None),
+            );
         }
+
+        Self { items }
     }
 
-    /// The line's `TextRun` item without consuming the source (the routed
+    /// The next `TextRun` item without consuming the source (the routed
     /// production render measures the run before committing to the route).
     pub(crate) fn text_item(&self) -> Option<&DisplayItem> {
-        self.text_item.as_ref()
+        self.items
+            .front()
+            .filter(|item| matches!(item.kind, DisplayItemKind::TextRun(_)))
     }
 }
 
@@ -323,7 +526,7 @@ impl crate::display_source::DisplayItemSource for BufferAsciiItemSource {
         &mut self,
         _context: &mut crate::display_source::DisplaySourceContext<'_>,
     ) -> Option<DisplayItem> {
-        self.text_item.take().or_else(|| self.row_break_item.take())
+        self.items.pop_front()
     }
 }
 
@@ -419,6 +622,22 @@ impl<'rows, 'emit, 'surface>
         let Some(plan) = plan_ascii_row(buffer, row, fit, policy) else {
             return AsciiRowRouteOutcome::NotRouted;
         };
+        // TEMPORARY (removed by the multi-face routing increment): the
+        // classifier already plans face-segmented rows, but this render still
+        // binds ONE active face over the whole line; keep face-affected rows
+        // on the buffer pipeline until the segmented render lands.
+        if plan.is_segmented() {
+            return AsciiRowRouteOutcome::NotRouted;
+        }
+        let start_byte = EmacsBytePos::new(row.text_start_byte + row.byte_idx);
+        for prop in ["face", "font-lock-face"] {
+            if buffer
+                .layout_text_prop_at_emacs_byte_pos(start_byte, Value::symbol(prop))
+                .is_some()
+            {
+                return AsciiRowRouteOutcome::NotRouted;
+            }
+        }
 
         let start = CharPos0::new(row.charpos.max(0) as usize);
         let line_end = start.add_len(CharLen::new(plan.line_len()));

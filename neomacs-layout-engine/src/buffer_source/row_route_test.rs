@@ -227,50 +227,147 @@ fn classifier_rejects_window_policy_features() {
 }
 
 #[test]
-fn classifier_rejects_text_properties_and_overlays() {
+fn classifier_accepts_face_property_span_and_plans_boundaries() {
     let mut eval = Context::new();
     let buf_id = buffer_with_text(&mut eval, "hello\nworld\n");
     eval.buffer_manager_mut().set_current(buf_id);
-    eval.eval_str("(put-text-property 1 3 'face 'bold)")
+    eval.eval_str("(put-text-property 3 5 'face 'bold)")
         .expect("put-text-property");
     let text = b"hello\nworld\n";
-    // Faced first row rejected; the property also bounds the change scan so
-    // probing exercises both arms.
+    // A face span mid-line routes and segments the row at each property
+    // change ("he" / "ll" bold / "o").
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(buffer, row_start(text, 0, 0), wide_fit(), plain_policy())
+        .expect("face-propped row routes");
+    assert_eq!(plan.line_len(), 5);
+    assert_eq!(plan.face_boundaries(), &[2, 4]);
+    assert!(plan.is_segmented());
+    assert_eq!(
+        plan.segment_ranges(CharPos0::ZERO),
+        vec![
+            (CharPos0::ZERO, CharPos0::new(2)),
+            (CharPos0::new(2), CharPos0::new(4)),
+            (CharPos0::new(4), CharPos0::new(5)),
+        ]
+    );
+    // The second, unfaced row routes unsegmented.
+    let plan = plan_ascii_row(buffer, row_start(text, 6, 6), wide_fit(), plain_policy())
+        .expect("unfaced row routes");
+    assert!(!plan.is_segmented());
+}
+
+#[test]
+fn classifier_accepts_font_lock_face_and_whole_line_span() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "keyword\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 1 8 'font-lock-face 'bold)")
+        .expect("put-text-property");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(b"keyword\n", 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("font-lock-faced row routes");
+    // The property covers the whole line but ends before the newline: the
+    // change on the newline byte is not a text-segment boundary.
+    assert_eq!(plan.face_boundaries(), &[] as &[usize]);
+}
+
+#[test]
+fn classifier_accepts_fontified_boundary_as_segment_split() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "abcd\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    // A non-face property change (fontified) still splits the run, exactly
+    // like GNU compute_stop_pos stops at EVERY property change.
+    eval.eval_str("(put-text-property 1 3 'fontified t)")
+        .expect("put-text-property");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(b"abcd\n", 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("fontified-bounded row routes");
+    assert_eq!(plan.face_boundaries(), &[2]);
+}
+
+#[test]
+fn classifier_rejects_hazard_properties_anywhere_on_the_line() {
+    for (prop, value) in [
+        ("display", "\"X\""),
+        ("composition", "'((0 . 1))"),
+        ("invisible", "t"),
+        ("mouse-face", "'highlight"),
+        ("line-height", "2.0"),
+    ] {
+        let mut eval = Context::new();
+        let buf_id = buffer_with_text(&mut eval, "hello\n");
+        eval.buffer_manager_mut().set_current(buf_id);
+        eval.eval_str(&format!("(put-text-property 3 5 '{prop} {value})"))
+            .expect("put-text-property");
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(b"hello\n", 0, 0),
+                wide_fit(),
+                plain_policy()
+            ),
+            RowAcquisitionRoute::BufferPipeline,
+            "mid-line {prop} must stay on the buffer pipeline"
+        );
+    }
+}
+
+#[test]
+fn classifier_rejects_hazard_property_on_the_newline() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "hello\nx\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    // A display property covering ONLY the newline would replace the line
+    // end; the hazard probe must reach it.
+    eval.eval_str("(put-text-property 6 7 'display \"|\")")
+        .expect("put-text-property");
     assert_eq!(
         classify_in_buffer(
             &eval,
             buf_id,
-            row_start(text, 0, 0),
+            row_start(b"hello\nx\n", 0, 0),
             wide_fit(),
             plain_policy()
         ),
         RowAcquisitionRoute::BufferPipeline
     );
-    // The second, unfaced row still routes.
-    assert_eq!(
-        classify_in_buffer(
-            &eval,
-            buf_id,
-            row_start(text, 6, 6),
-            wide_fit(),
-            plain_policy()
-        ),
-        RowAcquisitionRoute::ItemRenderer
-    );
+}
 
+#[test]
+fn classifier_rejects_overlays_even_on_face_segmented_rows() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "hello\nworld\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 1 3 'face 'bold)")
+        .expect("put-text-property");
     eval.eval_str("(overlay-put (make-overlay 8 10) 'face 'highlight)")
         .expect("make-overlay");
-    assert_eq!(
-        classify_in_buffer(
-            &eval,
-            buf_id,
-            row_start(text, 6, 6),
-            wide_fit(),
-            plain_policy()
-        ),
-        RowAcquisitionRoute::BufferPipeline,
-        "any overlay in the buffer disqualifies the item route"
-    );
+    let text = b"hello\nworld\n";
+    for (byte_idx, charpos) in [(0usize, 0i64), (6, 6)] {
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text, byte_idx, charpos),
+                wide_fit(),
+                plain_policy()
+            ),
+            RowAcquisitionRoute::BufferPipeline,
+            "any overlay in the buffer disqualifies the item route"
+        );
+    }
 }
 
 #[test]
@@ -333,6 +430,217 @@ fn ascii_source_matches_buffer_text_source_cursor_items() {
 
     assert_eq!(ascii_items, cursor_items);
     assert_eq!(ascii_items.len(), 2, "one text run, then the row break");
+}
+
+fn face_resolver_for(eval: &Context) -> FaceResolver {
+    FaceResolver::new(eval.face_table(), 0x00FF_FFFF, 0x0000_0000, 14.0, None)
+}
+
+#[test]
+fn plan_row_face_segments_resolves_per_segment_stable_ids() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "hello\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 5 'face 'bold)")
+        .expect("put-text-property");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(b"hello\n", 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("plan");
+    let resolver = face_resolver_for(&eval);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(0);
+    let segments = plan_row_face_segments(buffer, &resolver, &mut face_ids, CharPos0::ZERO, &plan);
+    assert_eq!(segments.len(), 3);
+    assert_eq!(
+        segments
+            .iter()
+            .map(|segment| (segment.start.get(), segment.end.get()))
+            .collect::<Vec<_>>(),
+        vec![(0, 2), (2, 4), (4, 5)]
+    );
+    // The outer (unfaced) segments content-address to the SAME stable id;
+    // the bold span gets its own.
+    assert_eq!(segments[0].face_id, segments[2].face_id);
+    assert_ne!(segments[0].face_id, segments[1].face_id);
+    assert_ne!(
+        segments[0].resolved.font_weight,
+        segments[1].resolved.font_weight
+    );
+}
+
+#[test]
+fn resolve_routed_position_face_covers_the_newline_span() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "abcd\nnext\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    // Face span covering the newline (1-based [3, 6) covers chars "cd\n").
+    eval.eval_str("(put-text-property 3 6 'face 'bold)")
+        .expect("put-text-property");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let resolver = face_resolver_for(&eval);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(0);
+    let (span_id, _) =
+        resolve_routed_position_face(buffer, &resolver, &mut face_ids, CharPos0::new(2));
+    let (newline_id, _) =
+        resolve_routed_position_face(buffer, &resolver, &mut face_ids, CharPos0::new(4));
+    let (base_id, _) =
+        resolve_routed_position_face(buffer, &resolver, &mut face_ids, CharPos0::new(5));
+    assert_eq!(
+        span_id, newline_id,
+        "a span covering the newline keeps its face at the newline position"
+    );
+    assert_ne!(newline_id, base_id);
+
+    // A span ending exactly at the newline leaves the newline on the base
+    // face.
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "abcd\nnext\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 5 'face 'bold)")
+        .expect("put-text-property");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let resolver = face_resolver_for(&eval);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(0);
+    let (span_id, _) =
+        resolve_routed_position_face(buffer, &resolver, &mut face_ids, CharPos0::new(2));
+    let (newline_id, _) =
+        resolve_routed_position_face(buffer, &resolver, &mut face_ids, CharPos0::new(4));
+    let (base_id, _) =
+        resolve_routed_position_face(buffer, &resolver, &mut face_ids, CharPos0::new(5));
+    assert_ne!(span_id, newline_id);
+    assert_eq!(newline_id, base_id);
+}
+
+#[test]
+fn routed_segment_item_face_agrees_for_plain_face_spans() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "hello\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 3 5 'face 'bold)")
+        .expect("put-text-property");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let resolver = face_resolver_for(&eval);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(0);
+    let default_resolved = resolver.default_face().clone();
+    let default_face_id = crate::display_row::face_state::stable_face_id_for_resolved(
+        &mut face_ids,
+        &default_resolved,
+    );
+    for pos in [0usize, 2, 4] {
+        let (expected_id, _) =
+            resolve_routed_position_face(buffer, &resolver, &mut face_ids, CharPos0::new(pos));
+        assert!(
+            !routed_segment_item_face_diverges(
+                buffer,
+                &resolver,
+                &mut face_ids,
+                &default_resolved,
+                default_face_id,
+                CharPos0::new(pos),
+                expected_id,
+            ),
+            "checkpoint and per-run face chains must agree at {pos}"
+        );
+    }
+}
+
+#[test]
+fn routed_segment_item_face_diverges_under_default_remapping() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "hello\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(put-text-property 1 6 'face 'italic)")
+        .expect("put-text-property");
+    eval.eval_str(
+        "(progn (make-local-variable 'face-remapping-alist) \
+                (setq face-remapping-alist '((default . bold))))",
+    )
+    .expect("face remapping");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let resolver = face_resolver_for(&eval);
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(0);
+    let default_resolved = resolver.default_face().clone();
+    let default_face_id = crate::display_row::face_state::stable_face_id_for_resolved(
+        &mut face_ids,
+        &default_resolved,
+    );
+    let (checkpoint_id, checkpoint_resolved) =
+        resolve_routed_position_face(buffer, &resolver, &mut face_ids, CharPos0::ZERO);
+    if checkpoint_resolved.font_weight == resolver.default_face().font_weight {
+        // The engine's face remapping is not applied through this seam in
+        // this build; the guard then has nothing to diverge on.
+        return;
+    }
+    assert!(
+        routed_segment_item_face_diverges(
+            buffer,
+            &resolver,
+            &mut face_ids,
+            &default_resolved,
+            default_face_id,
+            CharPos0::ZERO,
+            checkpoint_id,
+        ),
+        "remapped default must force the row off the item route"
+    );
+}
+
+#[test]
+fn ascii_source_segments_produce_per_face_text_runs_and_break_face() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "hello\n");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let bold = RenderFaceRef::FaceId(neomacs_display_protocol::types::FaceId::new(40));
+    let base = RenderFaceRef::FaceId(neomacs_display_protocol::types::FaceId::new(33));
+    let mut source = BufferAsciiItemSource::with_row_break_segments(
+        buf_id,
+        buffer,
+        &[
+            AsciiRowItemSegment {
+                start: CharPos0::ZERO,
+                end: CharPos0::new(2),
+                face: base,
+            },
+            AsciiRowItemSegment {
+                start: CharPos0::new(2),
+                end: CharPos0::new(4),
+                face: bold,
+            },
+            AsciiRowItemSegment {
+                start: CharPos0::new(4),
+                end: CharPos0::new(5),
+                face: base,
+            },
+        ],
+        bold,
+    );
+    let mut context = DisplaySourceContext::empty();
+    let mut items = Vec::new();
+    while let Some(item) = source.next_item(&mut context) {
+        items.push(item);
+    }
+    assert_eq!(items.len(), 4, "three text runs then the row break");
+    let texts: Vec<_> = items[..3]
+        .iter()
+        .map(|item| match &item.kind {
+            DisplayItemKind::TextRun(run) => run.text.to_string(),
+            other => panic!("expected text run, got {other:?}"),
+        })
+        .collect();
+    assert_eq!(texts, vec!["he", "ll", "o"]);
+    assert_eq!(
+        items.iter().map(|item| item.face).collect::<Vec<_>>(),
+        vec![base, bold, base, bold]
+    );
+    assert!(matches!(items[3].kind, DisplayItemKind::RowBreak(_)));
+    // Spans stay contiguous over the row.
+    assert_eq!(items[0].span.end, items[1].span.start);
+    assert_eq!(items[1].span.end, items[2].span.start);
+    assert_eq!(items[2].span.end, items[3].span.start);
 }
 
 #[test]
