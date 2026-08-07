@@ -23460,3 +23460,232 @@ fn overlay_string_shadow_anchor_at_the_truncate_boundary() {
         "the string takes the last fitting cell and the marker still terminates the row"
     );
 }
+
+// ---------------------------------------------------------------------------
+// P4.5: glyph-level shadows for the PER-CHAR path.
+//
+// The per-char split feeder is not a measurement shortcut (unlike P4.3's fit
+// split): deleting it changes how many append calls a row sees, and three
+// pieces of renderer state are driven by those calls — cursor capture
+// (char_render.rs), the word-wrap candidate hook (record_word_wrap_candidate),
+// and trailing-whitespace tracking. This family aims at exactly those three,
+// not at row content, which the existing shadow families already cover.
+//
+// Geometry goldens used below, established once and stated here rather than
+// derived from the row under test: a 640px frame lays out 79 buffer cells per
+// row (the 80th column carries the wrap indicator), and an 88px frame lays out
+// 10 cells per row. Both corpora wrap, so every row after the first is produced
+// through the overflow path the per-char feeder drives.
+// ---------------------------------------------------------------------------
+
+/// The first buffer charpos of each text row that displays text — where the
+/// renderer decided to break.
+fn row_break_charposes(trace: &BackendLayoutTrace) -> Vec<usize> {
+    trace
+        .matrix_rows
+        .iter()
+        .filter(|row| !row.mode_line && row.role == GlyphRowRole::Text && row.displays_text)
+        .filter_map(|row| {
+            row.glyph_areas[1]
+                .iter()
+                .find_map(|glyph| match glyph.kind {
+                    GlyphKindTrace::Char(_) => Some(glyph.charpos),
+                    _ => None,
+                })
+        })
+        .collect()
+}
+
+/// The characters of each text row that displays text.
+fn row_texts(trace: &BackendLayoutTrace) -> Vec<String> {
+    trace
+        .matrix_rows
+        .iter()
+        .filter(|row| !row.mode_line && row.role == GlyphRowRole::Text && row.displays_text)
+        .map(|row| {
+            row.glyph_areas[1]
+                .iter()
+                .filter_map(|glyph| match glyph.kind {
+                    GlyphKindTrace::Char(ch) => Some(ch),
+                    _ => None,
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn char_wrap_cursor_at(text: &str, point_byte: usize) -> (i64, i64) {
+    let trace = layout_trace_with_buffer_setup(text, 640, 240, move |buffer, _, _| {
+        buffer.set_buffer_local("truncate-lines", Value::NIL);
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point_byte));
+    });
+    let cursor = trace.phys_cursor.as_ref().expect("phys cursor");
+    (cursor.row, cursor.col)
+}
+
+/// Cursor placement across a CHARACTER-WRAPPED line. Every row here is assembled
+/// through the per-char path (the line's single run never fits), so the cursor
+/// slot comes from `capture_cursor_info_for_main_char_if_point` on the exact
+/// append call that carries point. Goldens are stated, not derived: 79 cells per
+/// row means point 79 is the first character of the continuation row.
+#[test]
+fn p45_cursor_shadow_tracks_point_across_a_char_wrapped_line() {
+    let text = format!("{}\n", "a".repeat(100));
+
+    assert_eq!(char_wrap_cursor_at(&text, 0), (0, 0), "line start");
+    assert_eq!(char_wrap_cursor_at(&text, 1), (0, 1), "second character");
+    assert_eq!(
+        char_wrap_cursor_at(&text, 78),
+        (0, 78),
+        "the last character that fits on the first row"
+    );
+    assert_eq!(
+        char_wrap_cursor_at(&text, 79),
+        (1, 0),
+        "the wrap character opens the continuation row"
+    );
+    assert_eq!(
+        char_wrap_cursor_at(&text, 80),
+        (1, 1),
+        "the character after the wrap"
+    );
+    assert_eq!(
+        char_wrap_cursor_at(&text, 100),
+        (1, 21),
+        "end of line: 100 chars = 79 on the first row plus 21 on the second"
+    );
+
+    // The break itself is pinned separately so a cursor golden cannot silently
+    // absorb a break that moved.
+    let trace = layout_trace_with_buffer_setup(&text, 640, 240, |buffer, _, _| {
+        buffer.set_buffer_local("truncate-lines", Value::NIL);
+    });
+    assert_eq!(row_break_charposes(&trace), vec![0, 79]);
+}
+
+/// Word-wrap break positions on the C9 corpora from tmp/p4-test-inventory.md.
+/// The candidate hook fires per rendered character on the per-char path, so
+/// these break positions are the direct observable of the feeder this rung
+/// deletes. 10 cells per row at 88px.
+#[test]
+fn p45_word_wrap_break_shadow_pins_the_c9_corpora() {
+    fn word_wrap_trace(text: &'static str) -> BackendLayoutTrace {
+        layout_trace_with_buffer_setup(text, 88, 240, |buffer, _, _| {
+            buffer.set_buffer_local("truncate-lines", Value::NIL);
+            buffer.set_buffer_local("word-wrap", Value::T);
+        })
+    }
+
+    // C9a candidate-at-space: the break takes the whole word to the next row,
+    // which resumes at the 'b' (charpos 5), and the row that broke keeps the
+    // trailing space of the word boundary.
+    let c9a = word_wrap_trace("aaaa bbbbbb\n");
+    assert_eq!(row_break_charposes(&c9a), vec![0, 5]);
+    assert_eq!(row_texts(&c9a), vec!["aaaa      \\", "bbbbbb "]);
+
+    // C9b candidate-mid-run: the b-word is itself longer than the row, so after
+    // the space break it CHARACTER-wraps with no candidate inside it.
+    let c9b = word_wrap_trace("aaaa bbbbbbbbbbbb\n");
+    assert_eq!(row_break_charposes(&c9b), vec![0, 5, 15]);
+    assert_eq!(row_texts(&c9b), vec!["aaaa      \\", "bbbbbbbbbb\\", "bb "]);
+
+    // C9c no candidate at all: word wrap degrades to character wrap at the row
+    // edge.
+    let c9c = word_wrap_trace("aaaaaaaaaaaa\n");
+    assert_eq!(row_break_charposes(&c9c), vec![0, 10]);
+    assert_eq!(row_texts(&c9c), vec!["aaaaaaaaaa\\", "aa "]);
+
+    // C9d candidate before a tab: the tab expands from column 5 to the next stop
+    // (column 8), so the line ends at exactly the row edge and never breaks —
+    // the case that pins tab expansion and the candidate hook interacting.
+    let c9d = word_wrap_trace("aaaa \tbb\n");
+    assert_eq!(row_break_charposes(&c9d), vec![0]);
+    assert_eq!(row_texts(&c9d), vec!["aaaa bb "]);
+}
+
+/// Cursor placement inside a WORD-WRAPPED row: the candidate space stays on the
+/// row that broke, and the word that moved down opens the continuation row.
+#[test]
+fn p45_cursor_shadow_tracks_point_across_a_word_wrap_break() {
+    fn cursor_at(point_byte: usize) -> (i64, i64) {
+        let trace =
+            layout_trace_with_buffer_setup("aaaa bbbbbb\n", 88, 240, move |buffer, _, _| {
+                buffer.set_buffer_local("truncate-lines", Value::NIL);
+                buffer.set_buffer_local("word-wrap", Value::T);
+                buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point_byte));
+            });
+        let cursor = trace.phys_cursor.as_ref().expect("phys cursor");
+        (cursor.row, cursor.col)
+    }
+
+    assert_eq!(cursor_at(3), (0, 3), "inside the first word");
+    assert_eq!(cursor_at(4), (0, 4), "the candidate space itself");
+    // CURRENT BEHAVIOUR, pinned as-is: point on the word that moved down is
+    // placed in the broken row's filler column rather than at the start of the
+    // continuation row. GNU puts it at the continuation row's first column, so
+    // this is an open parity question — recorded here rather than "fixed" mid
+    // rung, because the shadow's job is to detect a CHANGE in what the per-char
+    // feeder's removal does to cursor capture.
+    assert_eq!(cursor_at(5), (0, 5), "the word that moved to the next row");
+    assert_eq!(cursor_at(10), (1, 5), "the last character of the word");
+}
+
+/// Trailing-whitespace highlighting across a WRAPPED boundary.
+///
+/// Measured, not assumed: the highlight is NOT produced by the per-char
+/// `TrailingWhitespaceRenderState` tracker at all — it is a row-finalization
+/// pass over finished glyphs (`HighlightTrailingWhitespaceMutation`, GNU
+/// highlight_trailing_whitespace), ordered by line_end::plan at true line ends
+/// only. Mutating either tracker (per-char or whole-run) leaves this test green;
+/// perturbing the finalization pass reds it. So what this case guards is the
+/// glyph-level input that pass consumes — which row each buffer space lands on,
+/// and which glyphs carry buffer positions — exactly what changes if the
+/// per-char rewiring moves a character between rows.
+#[test]
+fn p45_trailing_whitespace_shadow_survives_a_wrapped_row_boundary() {
+    // The line is 11 characters wide in a 10-cell row, so its single run never
+    // fits and EVERY glyph on both rows — the trailing spaces included — is
+    // appended through the per-char path this rung rewires.
+    let trace = layout_trace_with_buffer_setup("aaaaaaaa   \n", 88, 240, |buffer, _, _| {
+        buffer.set_buffer_local("truncate-lines", Value::NIL);
+        buffer.set_buffer_local("show-trailing-whitespace", Value::T);
+    });
+    assert_eq!(row_break_charposes(&trace), vec![0, 10]);
+    assert_eq!(row_texts(&trace), vec!["aaaaaaaa  \\", "  "]);
+
+    let continuation = trace
+        .matrix_rows
+        .iter()
+        .filter(|row| !row.mode_line && row.role == GlyphRowRole::Text && row.displays_text)
+        .nth(1)
+        .expect("continuation row");
+    let highlighted: Vec<usize> = continuation.glyph_areas[1]
+        .iter()
+        .filter(|glyph| glyph.face.contains("trailing-whitespace"))
+        .map(|glyph| glyph.charpos)
+        .collect();
+    // Charpos 10 is the third trailing space, the only buffer glyph on the
+    // continuation row; the row's other glyph is the appended positionless
+    // newline space, which GNU never highlights.
+    assert_eq!(highlighted, vec![10]);
+
+    // The spaces that stayed on the CONTINUED row are NOT highlighted: the
+    // highlight is row-scoped and fires only on the row where the line actually
+    // ends (GNU highlights trailing whitespace on the row that reaches the
+    // newline, not on a continued row). Pinning both halves is what makes this
+    // a statement about the tracker rather than about one row.
+    let first = trace
+        .matrix_rows
+        .iter()
+        .find(|row| !row.mode_line && row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("first row");
+    let highlighted_first: Vec<usize> = first.glyph_areas[1]
+        .iter()
+        .filter(|glyph| glyph.face.contains("trailing-whitespace"))
+        .map(|glyph| glyph.charpos)
+        .collect();
+    assert!(
+        highlighted_first.is_empty(),
+        "a continued row must not highlight trailing whitespace, got {highlighted_first:?}"
+    );
+}
