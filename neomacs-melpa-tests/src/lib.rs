@@ -2625,6 +2625,12 @@ pub const COUNSEL_MELPA_PIN: (&str, &str) = ("counsel", "20260214.1004");
 /// `48b73742757a3ae5736d825fe49e00034cc453b5`.
 pub const CTABLE_MELPA_PIN: (&str, &str) = ("ctable", "20210128.629");
 
+/// The exact DevDocs package selected for installed-document rendering,
+/// entry/page/history navigation, lookup, hyperlinks, bookmarks, document
+/// management, and error parity. MELPA built this archive from upstream commit
+/// `25c746024ddf73570195bf42b841f761a2fee10c`.
+pub const DEVDOCS_MELPA_PIN: (&str, &str) = ("devdocs", "20251022.1255");
+
 /// The exact f package selected by the comprehensive API parity corpus.
 pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 
