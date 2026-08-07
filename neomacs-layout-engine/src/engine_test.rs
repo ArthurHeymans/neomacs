@@ -24332,6 +24332,94 @@ fn an_unloadable_image_replacement_still_covers_its_range() {
     );
 }
 
+/// A `display` spec the renderer cannot resolve DECLINES the replacement: the
+/// covered text displays normally, exactly once, and the walk resumes at the
+/// covered range's end E exactly once.
+///
+/// This is the render-time fallback branch
+/// (`BufferDisplayPropertyTextReplacementRenderOutcome::Fallback`,
+/// display_property_render.rs), which had NO coverage of any kind before this
+/// pin. It is GNU-shaped rather than a compromise: `handle_display_prop`
+/// returning 0 for a spec `handle_single_display_spec` will not take means the
+/// covered text is simply displayed, i.e. the frame was never pushed.
+///
+/// Reaching it needs a degenerate spec. Every well-formed media spec resolves
+/// (an image falls back to the `[img]` placeholder, see
+/// [`an_unloadable_image_replacement_still_covers_its_range`]; xwidget and
+/// surface specs are self-contained and take the `direct_replacement`
+/// short-circuit), so the reachable case is a spec that CLASSIFIES as a string
+/// replacement and then cannot be read as one: a unibyte string whose bytes are
+/// not valid UTF-8, which `as_utf8_str` rejects.
+///
+/// TRIPWIRE — do not weaken this to "renders something". The resume is the
+/// whole point: this branch is where a future producer-owned exit breaks FIRST,
+/// because the producer cannot know at production time that resolution will
+/// decline, so a producer that popped past the covered range on its own would
+/// double-advance here (the fallback item spans the covered range and publishes
+/// its own end). Asserting the covered text appears once and `g` follows once
+/// is what catches that.
+#[test]
+fn an_unresolvable_display_replacement_declines_and_resumes_at_the_covered_end() {
+    // The spec covers 1-based [4,7) — "def". Resolution declines, so the row is
+    // the untouched line: "def" appears once (not dropped, not doubled) and "g"
+    // follows it once (the walk resumed at E, not at the covered start).
+    assert_eq!(
+        display_prop_first_row_text(
+            "abcdefghij\n",
+            "(put-text-property 4 7 'display (unibyte-string 200 201))",
+        ),
+        "abcdefghij ",
+        "a display spec that cannot be resolved is not a replacement: the \
+         covered text displays once and the walk resumes at the covered end"
+    );
+}
+
+/// A replacing `display` spec inside an OVERLAY string is honored; one inside a
+/// DISPLAY string is not, however deeply the display string was reached.
+///
+/// GNU draws the line at `it->string_from_display_prop_p`, not at "is this a
+/// string": `handle_display_prop` refuses to recurse only when the string it is
+/// walking came from a `display` property (xdisp.c:5934-5942, 6334-6335), so an
+/// overlay string is ordinary displayable text whose own `display` properties
+/// apply, while a display string's are inert.
+///
+/// This engine mirrors the distinction with
+/// `LispStringSourceFrame::from_display_property`, derived from
+/// `LispStringSourceOrigin` — false for `OverlayString`, true for
+/// `BufferDisplayReplacement` — and, crucially, hardcoded true for any frame
+/// PUSHED by a replacement (`push_with_replacement_source`, display_source.rs).
+/// That last part is what makes the ban transitive rather than one level deep,
+/// and it is the half a reader is most likely to assume rather than check.
+#[test]
+fn a_replacing_display_spec_is_honored_in_an_overlay_string_but_not_below_it() {
+    // Level 1: the overlay's before-string carries a `display` property whose
+    // value replaces it. The overlay string is NOT from a display property, so
+    // the spec applies and "S" renders as "R".
+    assert_eq!(
+        display_prop_first_row_text(
+            "ab\n",
+            "(overlay-put (make-overlay 2 3) 'before-string \
+               (propertize \"S\" 'display \"R\"))",
+        ),
+        "aRb ",
+        "an overlay string is ordinary text: its own display property applies"
+    );
+
+    // Level 2: that replacement string in turn carries a `display` property.
+    // It came from a display property, so its own is inert — "R" renders as
+    // itself, NOT as "Q".
+    assert_eq!(
+        display_prop_first_row_text(
+            "ab\n",
+            "(overlay-put (make-overlay 2 3) 'before-string \
+               (propertize \"S\" 'display (propertize \"R\" 'display \"Q\")))",
+        ),
+        "aRb ",
+        "a display property inside a display string is inert, even when the \
+         display string was reached from an overlay string"
+    );
+}
+
 /// R6: a REPLACING `display` spec beats `invisible`; a non-replacing one does
 /// not.
 ///
