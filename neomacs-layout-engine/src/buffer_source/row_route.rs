@@ -906,29 +906,6 @@ fn routed_line_scan(
             })
         };
     while idx < text.len() {
-        // An overlay-string ANCHOR (P4.6): the producer surfaces its strings
-        // BEFORE the buffer char at this position and does not advance (GNU
-        // `push_it (it, NULL)` insertion semantics), so the pen gains the
-        // strings' columns and no char is consumed. Strings that would cross
-        // the right edge refuse outright rather than cutting a prefix here:
-        // the append session clips and breaks rows on its own, so a cut
-        // taken mid-anchor is not the pipeline's overflow point. The strings
-        // append real glyphs, so a following extender finds no routable
-        // merge target.
-        if let Some(anchor) = next_anchor.peek()
-            && char_len == anchor.at
-        {
-            let advance_px = anchor.advance_cols as f32 * fit.char_width_px;
-            if x_px + advance_px > fit.right_edge_px {
-                return Err(RouteRefusal::Overlay);
-            }
-            x_px += advance_px;
-            col += anchor.advance_cols;
-            tail = None;
-            merge_target = RoutedScanMergeTarget::None;
-            next_anchor.next();
-            continue;
-        }
         // A replacement-covered span (increment 2i rung 2): the pen advances
         // by the REPLACEMENT string's predicted columns, not the covered
         // chars', and the covered chars are consumed without classification
@@ -982,6 +959,29 @@ fn routed_line_scan(
                 composed,
                 line_end: RoutedRowLineEnd::Newline,
             });
+        }
+        // An overlay-string ANCHOR (P4.6): the producer surfaces its strings
+        // BEFORE the buffer char at this position and does not advance (GNU
+        // `push_it (it, NULL)` insertion semantics), so the pen gains the
+        // strings' columns and no char is consumed. Strings that would cross
+        // the right edge refuse outright rather than cutting a prefix here:
+        // the append session clips and breaks rows on its own, so a cut
+        // taken mid-anchor is not the pipeline's overflow point. The strings
+        // append real glyphs, so a following extender finds no routable
+        // merge target.
+        if let Some(anchor) = next_anchor.peek()
+            && char_len == anchor.at
+        {
+            let advance_px = anchor.advance_cols as f32 * fit.char_width_px;
+            if x_px + advance_px > fit.right_edge_px {
+                return Err(RouteRefusal::Overlay);
+            }
+            x_px += advance_px;
+            col += anchor.advance_cols;
+            tail = None;
+            merge_target = RoutedScanMergeTarget::None;
+            next_anchor.next();
+            continue;
         }
         let (ch, consumed) = decode_utf8(&text[idx..]);
         // Reject malformed UTF-8 (decode yields U+FFFD over fewer bytes than
@@ -1256,13 +1256,16 @@ fn routed_lisp_string_advance_cols(value: Value) -> Option<usize> {
 /// * an anchor lands ON the row start. The visible loop attempts the route
 ///   BEFORE the pipeline step that would emit the strings (loop_render.rs),
 ///   so a routed row start would DROP them — this is a correctness bound,
-///   not conservatism;
-/// * an anchor lands ON the line end, where it precedes (or replaces) the
-///   line end the pipeline's own line-break lifecycle owns.
+///   not conservatism.
 ///
-/// Anchors OUTSIDE `[start_byte, line_end_byte]` are simply not this row's:
-/// one before the row start was emitted on an earlier row, and the line end
-/// bound is inclusive of neither.
+/// Every other anchor POSITION question is settled by the caller AFTER the
+/// fit walk, because it turns on where the routed coverage ends and this scan
+/// runs before that is known. Deciding it here instead refused every
+/// continuation row of a wrapped line carrying an anchor at its line end —
+/// an anchor the row's coverage never reaches.
+///
+/// Anchors before `start_byte` are simply not this row's: they were emitted
+/// on an earlier row.
 fn routed_row_overlay_string_scan<B: LayoutBufferView>(
     buffer: &B,
     window_id: Option<u64>,
@@ -1321,7 +1324,7 @@ fn routed_row_overlay_string_scan<B: LayoutBufferView>(
         if strings.is_empty() {
             continue;
         }
-        if anchor_byte == start_byte || anchor_byte == line_end_byte {
+        if anchor_byte == start_byte {
             return Err(RouteRefusal::Overlay);
         }
         let mut advance_cols = 0usize;
@@ -1767,14 +1770,18 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
         &overlay_strings,
     )?;
 
-    // An overflow-prefix plan refuses ANY anchor it reaches: the append
-    // session clips at the right edge and can break the row on its own, so a
-    // handoff cut taken mid-anchor is not the pipeline's overflow point. An
-    // anchor BEYOND the cut is unrouted remainder the pipeline emits at
-    // resume, which is also what keeps the producer's once-per-anchor marker
-    // honest — the routed prefix never emits a string the resumed walk would
-    // emit again.
+    // Anchor POSITION against the routed coverage, now that the fit walk has
+    // found where that coverage ends.
     if scan.line_end == RoutedRowLineEnd::OverflowHandoff {
+        // An overflow-prefix plan refuses ANY anchor it reaches: the append
+        // session clips at the right edge and can break the row on its own,
+        // so a handoff cut taken mid-anchor is not the pipeline's overflow
+        // point. Anchors BEYOND the cut are unrouted remainder the pipeline
+        // emits at resume, and DROPPING those rather than refusing the row is
+        // what lets the continuation rows of a long wrapped line keep routing
+        // when the line carries an anchor further down it. It is also what
+        // keeps the producer's once-per-anchor marker honest: the routed
+        // prefix never emits a string the resumed walk would emit again.
         if overlay_strings
             .iter()
             .any(|anchor| anchor.at <= scan.char_len)
@@ -1782,6 +1789,16 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
             return Err(RouteRefusal::Overlay);
         }
         overlay_strings.clear();
+    } else if overlay_strings
+        .iter()
+        .any(|anchor| anchor.at >= scan.char_len)
+    {
+        // A whole-line or end-of-source plan covers the line, so its coverage
+        // end IS the line end (or the end-of-buffer position). An anchor
+        // there precedes a line end the pipeline's own line-break lifecycle
+        // owns, or sits at the EOB position whose strings the post-loop tail
+        // collects for itself.
+        return Err(RouteRefusal::Overlay);
     }
 
     // Unroutable display props refuse when they touch the routed coverage

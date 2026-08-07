@@ -972,6 +972,59 @@ fn classifier_rejects_unroutable_overlay_string_shapes() {
     }
 }
 
+/// An anchor at the LINE end is only this row's business when the row's
+/// coverage reaches it. Deciding that during the anchor scan - before the fit
+/// walk knows where the coverage ends - refused every row of a long wrapped
+/// line carrying an anchor at its end, which cost the TUI child-frame
+/// minibuffer session three routed continuation resumes and ~480 refusals.
+#[test]
+fn classifier_routes_a_prefix_whose_line_end_anchor_it_never_reaches() {
+    let line = "x".repeat(40);
+    let text = format!("{line}\n");
+    let overlay_at_line_end = |eval: &mut Context| {
+        // Overlay ENDING at the line's newline position: its after-string
+        // anchors there, at char offset 40.
+        eval.eval_str("(overlay-put (make-overlay 39 41) 'after-string \"A\")")
+            .expect("line-end overlay");
+    };
+
+    // Whole-line plan (the coverage IS the line): the anchor sits on the line
+    // end the pipeline's line-break lifecycle owns, so the row refuses.
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, &text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    overlay_at_line_end(&mut eval);
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "a whole-line plan reaches its line-end anchor"
+    );
+
+    // Overflow-prefix plan holding 10 columns: the coverage stops 30 chars
+    // short of the anchor, so the prefix still routes.
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, &text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    overlay_at_line_end(&mut eval);
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(80.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::ItemRenderer,
+        "a prefix that never reaches the line-end anchor must still route"
+    );
+}
+
 /// An overlay-string anchor never routes on an OVERFLOW-PREFIX plan: the
 /// append session clips at the right edge and can break the row itself, so a
 /// handoff cut taken mid-anchor would not be the pipeline's overflow point.
