@@ -3040,6 +3040,13 @@ pub const DIMINISH_MELPA_PIN: (&str, &str) = ("diminish", "20220909.847");
 /// navigation, selective staging, revert, unsaved flydiff, reference-revision,
 /// and mode-lifecycle parity. MELPA built this archive from upstream commit
 /// `91fcd4fa42fef895a754e80c4435ae6314be7822`.
+
+/// The exact dired-quick-sort package selected for practical persistent Dired
+/// listing switch formatting, sort criteria, reverse/group toggles, and setup
+/// wiring. MELPA built this archive from upstream commit
+/// `3c9b41799b0424eb78f54caba56e4de1d7224e8b`.
+pub const DIRED_QUICK_SORT_MELPA_PIN: (&str, &str) = ("dired-quick-sort", "20260331.2219");
+
 pub const DIFF_HL_MELPA_PIN: (&str, &str) = ("diff-hl", "20260723.238");
 
 /// The exact Dockerfile Mode package selected for practical multi-stage
@@ -3076,6 +3083,13 @@ pub const DOTENV_MODE_MELPA_PIN: (&str, &str) = ("dotenv-mode", "20191027.2129")
 /// The exact Visual Fill Column package selected for practical soft-wrapping,
 /// centered and right-to-left layouts, text scaling, multi-window resizing,
 /// hook lifecycle, and file-buffer global-mode parity. MELPA built this archive
+
+/// The exact Vertico package selected for practical vertical completion UI
+/// mode, candidate cycling/navigation helpers, sorting, and minibuffer
+/// integration. MELPA built this archive from upstream commit
+/// `be96000c2b0b3501723291b3721ceba12f784dcd`.
+pub const VERTICO_MELPA_PIN: (&str, &str) = ("vertico", "20260805.1129");
+
 /// from upstream commit `9c0ecc2af21d3024a2a838c30d574e86265a52be`.
 pub const VISUAL_FILL_COLUMN_MELPA_PIN: (&str, &str) = ("visual-fill-column", "20251110.1039");
 

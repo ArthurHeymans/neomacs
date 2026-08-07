@@ -272,12 +272,12 @@ rank	package	downloads	status
 271	ert-runner	421361	todo
 272	fuzzy	420610	covered
 273	drag-stuff	420059	covered
-274	vertico	419955	todo
+274	vertico	419955	covered
 275	helm-ls-git	416327	todo
 276	nerd-icons	415047	covered
 277	pyenv-mode	413980	covered
 278	flycheck-elsa	412980	todo
-279	dired-quick-sort	410816	todo
+279	dired-quick-sort	410816	covered
 280	gitattributes-mode	410338	todo
 281	emr	408990	todo
 282	cython-mode	401416	todo
