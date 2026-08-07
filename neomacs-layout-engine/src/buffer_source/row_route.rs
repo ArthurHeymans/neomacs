@@ -1125,6 +1125,19 @@ pub(crate) struct RoutedRowOverlayStrings {
     advance_cols: usize,
 }
 
+/// What [`routed_row_overlay_string_scan`] found on the line: the routable
+/// anchors, and the offsets of the anchors whose strings are not routable.
+/// Both are reported rather than decided, because whether either matters
+/// depends on where the routed coverage ends.
+#[derive(Default)]
+struct RoutedRowOverlayStringScan {
+    anchors: Vec<RoutedRowOverlayStrings>,
+    /// CHAR offsets of anchors outside the routable string class. The caller
+    /// refuses only for the ones the coverage reaches, mirroring how
+    /// [`RoutedRowDisplayScan`] treats an unroutable `display` value.
+    hazards: Vec<usize>,
+}
+
 impl RoutedRowOverlayStrings {
     pub(crate) fn at(&self) -> usize {
         self.at
@@ -1251,18 +1264,21 @@ fn routed_lisp_string_advance_cols(value: Value) -> Option<usize> {
 /// `STRINGP && SCHARS`, xdisp.c:7171-7182 — so an overlay whose only string
 /// is `""` anchors nothing and must not refuse).
 ///
-/// Refuses when:
-/// * a string is outside the routable class above;
-/// * an anchor lands ON the row start. The visible loop attempts the route
-///   BEFORE the pipeline step that would emit the strings (loop_render.rs),
-///   so a routed row start would DROP them — this is a correctness bound,
-///   not conservatism.
+/// Refuses outright only for an anchor ON the row start: the visible loop
+/// attempts the route BEFORE the pipeline step that would emit the strings
+/// (loop_render.rs), so a routed row start would DROP them. That is a
+/// correctness bound, and it needs no coverage knowledge — offset 0 is inside
+/// every coverage.
 ///
-/// Every other anchor POSITION question is settled by the caller AFTER the
-/// fit walk, because it turns on where the routed coverage ends and this scan
-/// runs before that is known. Deciding it here instead refused every
-/// continuation row of a wrapped line carrying an anchor at its line end —
-/// an anchor the row's coverage never reaches.
+/// Everything else this scan finds is REPORTED, not decided, because both
+/// remaining questions turn on where the routed coverage ends and the fit
+/// walk has not run yet. An anchor whose strings are outside the routable
+/// class is recorded as a HAZARD at its offset, exactly as
+/// [`routed_row_replacement_scan`] records an unroutable `display` value, and
+/// the caller refuses only if the coverage reaches it. Deciding either here
+/// instead cost real routing: refusing a line-end anchor lost every prefix
+/// row of a long wrapped line, and refusing an unroutable string lost the
+/// prefix rows of a line whose unroutable string sits in the unreached tail.
 ///
 /// Anchors before `start_byte` are simply not this row's: they were emitted
 /// on an earlier row.
@@ -1272,15 +1288,16 @@ fn routed_row_overlay_string_scan<B: LayoutBufferView>(
     row_charpos: i64,
     start_byte: usize,
     line_end_byte: usize,
-) -> Result<Vec<RoutedRowOverlayStrings>, RouteRefusal> {
+) -> Result<RoutedRowOverlayStringScan, RouteRefusal> {
+    let mut scan = RoutedRowOverlayStringScan::default();
     // No window means this row renders no overlay strings at all, so no
     // position on it is an anchor (the append is a no-op either way).
     let Some(window_id) = window_id else {
-        return Ok(Vec::new());
+        return Ok(scan);
     };
     let overlays = buffer.layout_overlays();
     if overlays.is_empty() {
-        return Ok(Vec::new());
+        return Ok(scan);
     }
 
     // Candidate positions first, content second: reading the plists of the
@@ -1312,7 +1329,6 @@ fn routed_row_overlay_string_scan<B: LayoutBufferView>(
     anchor_bytes.dedup();
 
     let props = crate::neovm_bridge::RustTextPropAccess::new_for_window(buffer, window_id);
-    let mut anchors = Vec::new();
     for anchor_byte in anchor_bytes {
         if anchor_byte < start_byte || anchor_byte > line_end_byte {
             continue;
@@ -1327,21 +1343,31 @@ fn routed_row_overlay_string_scan<B: LayoutBufferView>(
         if anchor_byte == start_byte {
             return Err(RouteRefusal::Overlay);
         }
-        let mut advance_cols = 0usize;
-        for string in &strings {
-            advance_cols +=
-                routed_lisp_string_advance_cols(string.string).ok_or(RouteRefusal::Overlay)?;
-        }
         let at = anchor_charpos
             .checked_sub(row_charpos.max(0) as usize)
             .ok_or(RouteRefusal::Boundary)?;
-        anchors.push(RoutedRowOverlayStrings {
+        let mut advance_cols = 0usize;
+        let routable =
+            strings.iter().all(
+                |string| match routed_lisp_string_advance_cols(string.string) {
+                    Some(cols) => {
+                        advance_cols += cols;
+                        true
+                    }
+                    None => false,
+                },
+            );
+        if !routable {
+            scan.hazards.push(at);
+            continue;
+        }
+        scan.anchors.push(RoutedRowOverlayStrings {
             at,
             strings,
             advance_cols,
         });
     }
-    Ok(anchors)
+    Ok(scan)
 }
 
 /// Scan the line `[start_byte, line_end_byte]` for `display` text properties
@@ -1743,13 +1769,14 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     // Overlay-string anchors over the whole line, for the same reason the
     // display scan runs first: their strings widen the pen, so the fit walk
     // below cannot find the coverage end without them.
-    let mut overlay_strings = routed_row_overlay_string_scan(
+    let overlay_scan_strings = routed_row_overlay_string_scan(
         buffer,
         policy.overlay_string_window,
         row.charpos,
         start_byte,
         start_byte + line_byte_len,
     )?;
+    let mut overlay_strings = overlay_scan_strings.anchors;
     // A row carries EITHER anchors OR replacements, never both: their pen
     // bookkeeping would have to interleave (an anchor exactly at a covered
     // range's start has no defined order against it), and neither the plan's
@@ -1769,6 +1796,19 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
         &display_scan.replacements,
         &overlay_strings,
     )?;
+
+    // An anchor whose strings are not routable refuses only when the routed
+    // coverage reaches it (inclusive of the end position, like the display
+    // hazard walk below). One in an over-wide line's unreached tail stays
+    // with the pipeline at resume, exactly as an unroutable display prop
+    // there does.
+    if overlay_scan_strings
+        .hazards
+        .iter()
+        .any(|&offset| offset <= scan.char_len)
+    {
+        return Err(RouteRefusal::Overlay);
+    }
 
     // Anchor POSITION against the routed coverage, now that the fit walk has
     // found where that coverage ends.

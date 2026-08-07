@@ -972,6 +972,53 @@ fn classifier_rejects_unroutable_overlay_string_shapes() {
     }
 }
 
+/// An UNROUTABLE string is likewise only this row's business when the row's
+/// coverage reaches it. Refusing it at scan time cost the TUI child-frame
+/// minibuffer session all three of its routed continuation resumes: its
+/// wrapped line carries a propertized string far down the line, which no
+/// prefix row ever reaches.
+#[test]
+fn classifier_routes_a_prefix_whose_unroutable_string_it_never_reaches() {
+    let line = "x".repeat(40);
+    let text = format!("{line}\n");
+    // A propertized string is outside the routable class, anchored at char
+    // offset 30 - past a 10-column prefix, inside a whole-line plan.
+    let overlay = "(overlay-put (make-overlay 31 33) 'before-string \
+                   (propertize \"S\" 'face 'bold))";
+
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, &text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str(overlay).expect("overlay");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::BufferPipeline,
+        "a whole-line plan reaches the unroutable string"
+    );
+
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, &text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str(overlay).expect("overlay");
+    assert_eq!(
+        classify_in_buffer(
+            &eval,
+            buf_id,
+            row_start(text.as_bytes(), 0, 0),
+            fit_to(80.0),
+            plain_policy()
+        ),
+        RowAcquisitionRoute::ItemRenderer,
+        "a prefix that never reaches the unroutable string must still route"
+    );
+}
+
 /// An anchor at the LINE end is only this row's business when the row's
 /// coverage reaches it. Deciding that during the anchor scan - before the fit
 /// walk knows where the coverage ends - refused every row of a long wrapped
