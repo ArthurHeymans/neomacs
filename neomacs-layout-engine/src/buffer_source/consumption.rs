@@ -53,6 +53,15 @@ impl BufferSourceConsumptionState {
         self.pending_render_items.len()
     }
 
+    /// The same consumption state with no queued remainders: the state a retry
+    /// at an earlier position resumes from.
+    pub(crate) fn without_pending_render_items(&self) -> Self {
+        Self {
+            text_start_byte: self.text_start_byte,
+            pending_render_items: VecDeque::new(),
+        }
+    }
+
     pub(crate) fn clear_pending_render_items(&mut self) {
         self.pending_render_items.clear();
     }
