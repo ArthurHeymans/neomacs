@@ -2629,6 +2629,13 @@ pub const SQLITE3_MELPA_PIN: (&str, &str) = ("sqlite3", "20251014.536");
 /// completion, CAPF, asynchronous backend, and file workflow parity corpus.
 pub const COMPANY_MELPA_PIN: (&str, &str) = ("company", "20260721.100");
 
+/// The exact Company Anaconda package selected for Python prefix eligibility,
+/// asynchronous candidate metadata, real Company selection/insertion,
+/// annotation customization, docs, locations, empty results, and policy parity.
+/// MELPA built this archive from upstream commit
+/// `14867265e474f7a919120bbac74870c3256cbacf`.
+pub const COMPANY_ANACONDA_MELPA_PIN: (&str, &str) = ("company-anaconda", "20230821.2126");
+
 /// The exact Commander package selected for practical CLI parsing,
 /// configuration, usage generation, defaults, and error parity.
 /// This MELPA version corresponds to upstream tag `v0.7.0`, commit

@@ -284,6 +284,7 @@ mod color_theme_sanityinc_tomorrow;
 mod column_enforce_mode;
 mod commander;
 mod company;
+mod company_anaconda;
 mod compat;
 mod concurrent;
 mod cond_let;
