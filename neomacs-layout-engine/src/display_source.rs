@@ -2261,9 +2261,34 @@ pub(crate) enum LispStringSourceOrigin {
     },
 }
 
+/// Whether a string frame's OWN `display` properties are handled.
+///
+/// GNU draws this line at `it->string_from_display_prop_p`, not at "is this a
+/// string": `handle_display_prop` declines to recurse only when the string it
+/// is walking came from a `display` property (xdisp.c:5934-5942, 6334-6335).
+/// So an overlay string is ordinary displayable text whose own `display`
+/// properties apply, while a display string's are inert.
+///
+/// Pinned by
+/// `a_replacing_display_spec_is_honored_in_an_overlay_string_but_not_below_it`
+/// (engine_test.rs), including the transitive half — see
+/// [`LispStringSourceStack::push_with_replacement_source`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NestedDisplayPolicy {
+    /// Ordinary displayable text: handle a `display` property here, including a
+    /// replacing one.
+    Handle,
+    /// Reached FROM a `display` property: this string's own `display`
+    /// properties contribute modifiers only and can never replace.
+    ModifiersOnly,
+}
+
 impl LispStringSourceOrigin {
-    const fn is_from_display_property(self) -> bool {
-        matches!(self, Self::BufferDisplayReplacement(_))
+    const fn nested_display_policy(self) -> NestedDisplayPolicy {
+        match self {
+            Self::BufferDisplayReplacement(_) => NestedDisplayPolicy::ModifiersOnly,
+            Self::Normal | Self::OverlayString { .. } => NestedDisplayPolicy::Handle,
+        }
     }
 
     const fn pointer_occurrence(self) -> DisplayPointerOccurrence {
@@ -2358,12 +2383,16 @@ impl LispStringSourceStack {
             .map(BufferDisplayReplacementSource::pointer_occurrence)
             .or_else(|| self.frames.last().map(|frame| frame.pointer_occurrence))
             .unwrap_or_default();
+        // TRANSITIVE by construction: whatever string we were walking, the one
+        // we are pushing was reached THROUGH a `display` property, so its own
+        // display properties are inert. This is what makes GNU's ban hold at
+        // every depth rather than only one level below the buffer.
         if let Some(frame) = LispStringSourceFrame::new_with_occurrence(
             source_id,
             value,
             base_face,
             replacement_source,
-            true,
+            NestedDisplayPolicy::ModifiersOnly,
             occurrence,
         ) {
             self.frames.push(frame);
@@ -2426,7 +2455,7 @@ struct LispStringSourceFrame {
     char_index: usize,
     base_face: RenderFaceRef,
     replacement_source: Option<BufferDisplayReplacementSource>,
-    from_display_property: bool,
+    nested_display_policy: NestedDisplayPolicy,
     pointer_occurrence: DisplayPointerOccurrence,
 }
 
@@ -2452,7 +2481,7 @@ impl LispStringSourceFrame {
             value,
             base_face,
             replacement_source,
-            origin.is_from_display_property(),
+            origin.nested_display_policy(),
             origin.pointer_occurrence(),
         )
     }
@@ -2462,7 +2491,7 @@ impl LispStringSourceFrame {
         value: Value,
         base_face: RenderFaceRef,
         replacement_source: Option<BufferDisplayReplacementSource>,
-        from_display_property: bool,
+        nested_display_policy: NestedDisplayPolicy,
         pointer_occurrence: DisplayPointerOccurrence,
     ) -> Option<Self> {
         let text = value.as_runtime_string_owned()?;
@@ -2479,7 +2508,7 @@ impl LispStringSourceFrame {
             char_index: 0,
             base_face,
             replacement_source,
-            from_display_property,
+            nested_display_policy,
             pointer_occurrence,
         })
     }
@@ -2497,7 +2526,7 @@ impl LispStringSourceFrame {
 
         let mut item_layout = DisplayItemLayout::default();
         if let Some(display_prop) = self.display_prop_at(start) {
-            if self.from_display_property {
+            if self.nested_display_policy == NestedDisplayPolicy::ModifiersOnly {
                 self.char_index = property_end;
                 item_layout = classify_display_property_modifiers_only(display_prop);
             } else {
