@@ -2341,6 +2341,13 @@ pub const ORG_PRESENT_MELPA_PIN: (&str, &str) = ("org-present", "20220806.1847")
 /// synchronization, node metadata and lookup, links and backlinks, node
 /// editing, dedicated buffers, and autosync lifecycle parity. MELPA built
 /// version 2.3.1 from upstream commit
+
+/// The exact orderless package selected for practical multi-component
+/// completion styles, filtering, try-completion, match highlighting, and
+/// affix dispatch. MELPA built this archive from upstream commit
+/// `cebe19e3cf0f30604d1ed1bfaa74fff21a4e89a5`.
+pub const ORDERLESS_MELPA_PIN: (&str, &str) = ("orderless", "20260519.1029");
+
 /// `c54c523dec175695645399705606ea19056a3053`.
 pub const ORG_ROAM_MELPA_PIN: (&str, &str) = ("org-roam", "20260425.1623");
 

@@ -266,7 +266,7 @@ rank	package	downloads	status
 265	fringe-helper	442016	covered
 266	multi-term	436266	todo
 267	tagedit	435012	todo
-268	orderless	432786	todo
+268	orderless	432786	covered
 269	evil-magit	429726	todo
 270	sesman	422681	todo
 271	ert-runner	421361	todo
