@@ -1,4 +1,5 @@
 use super::*;
+use crate::buffer_source::producer::vocabulary::GlyphProvenance;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplaySourceMappedText,
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod,
@@ -1625,6 +1626,65 @@ fn covered_provenance_run_stamps_every_glyph_with_covered_start() {
         );
     }
     assert_eq!(row_text(&row), "STR");
+}
+
+/// P4.1 vocabulary pin: the typed provenance agrees with what the append path
+/// actually stamps. `GlyphProvenance::covered_text_glyph` is the covered rule,
+/// `natural_text_glyph` the per-char one -- the same two arms as the private
+/// `DisplayTextSourceMapping`, now nameable outside the builder.
+#[test]
+fn covered_provenance_glyph_stamps_match_the_typed_vocabulary() {
+    let span = covered_buffer_span(5, 7);
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 80.0);
+
+    writer.push_item(DisplayItem::new(
+        span.clone(),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("STR")),
+    ));
+
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(glyphs.len(), 3);
+    for glyph in glyphs {
+        assert_eq!(
+            glyph.charpos,
+            GlyphProvenance::covered_text_glyph(&span.start).glyph_charpos(),
+            "the covered rule is what the append path stamps"
+        );
+    }
+    assert_eq!(
+        GlyphProvenance::covered_text_glyph(&span.start),
+        GlyphProvenance::buffer(neovm_core::buffer::CharPos0::new(5))
+    );
+}
+
+/// The natural-text contrast, against the same append path: an ordinary
+/// `TextRun` advances the stamp per character.
+#[test]
+fn natural_text_glyph_stamps_match_the_typed_vocabulary() {
+    let span = covered_buffer_span(5, 8);
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let mut writer =
+        DisplayRowProgressWriter::new(&row_layout, &mut row, DisplayRowPosition::new(0.0, 0), 80.0);
+
+    writer.push_item(DisplayItem::new(
+        span.clone(),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+        DisplayItemKind::TextRun(DisplayTextRun::new("abc")),
+    ));
+
+    let glyphs = &row.glyphs[GlyphArea::Text.index()];
+    assert_eq!(glyphs.len(), 3);
+    for (offset, glyph) in glyphs.iter().enumerate() {
+        assert_eq!(
+            glyph.charpos,
+            GlyphProvenance::natural_text_glyph(&span.start, offset).glyph_charpos()
+        );
+    }
 }
 
 #[test]

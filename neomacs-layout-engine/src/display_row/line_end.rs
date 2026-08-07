@@ -568,6 +568,30 @@ mod tests {
         );
     }
 
+    /// P4.1 vocabulary pin: the glyph `append_space_for_newline` appends is
+    /// redisplay's own, and its stamp is exactly what
+    /// `GlyphProvenance::line_end()` says it is -- not a buffer position, and
+    /// (per the vocabulary) a different THING from a truncation mark even
+    /// though the glyph field cannot tell them apart.
+    #[test]
+    fn appended_newline_glyph_carries_line_end_provenance() {
+        use crate::buffer_source::producer::vocabulary::GlyphProvenance;
+        use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+
+        let mut row = GlyphRow::new(GlyphRowRole::Text);
+        let appended = AppendNewlineGlyphMutation {
+            ch: ' ',
+            face_id: NEWLINE_FACE,
+            char_width: 8.0,
+        }
+        .apply(&mut row);
+
+        assert!(appended);
+        let glyph = &row.glyphs[GlyphArea::Text.index()][0];
+        assert_eq!(glyph.charpos, GlyphProvenance::line_end().glyph_charpos());
+        assert_eq!(GlyphProvenance::line_end().buffer_charpos(), None);
+    }
+
     #[test]
     fn terminal_newline_without_extend_appends_only() {
         let plan = plan(&terminal_ctx());

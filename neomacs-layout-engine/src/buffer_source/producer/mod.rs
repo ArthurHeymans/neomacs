@@ -10,6 +10,8 @@
 //! mirroring GNU's `SAVE_IT` / `RESTORE_IT`: the wrap retry does not merely
 //! rewind a published buffer position, it reseats the whole producer.
 
+pub(crate) mod vocabulary;
+
 use crate::buffer_source::consumption::{BufferSourceConsumedItem, BufferSourceConsumptionState};
 use crate::buffer_source::face_resolution::BufferSourceFaceResolutionContext;
 use crate::buffer_source::text_source::BufferTextSourceCursor;
