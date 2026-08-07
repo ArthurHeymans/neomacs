@@ -57,19 +57,42 @@ pub struct TuiSession {
 }
 
 impl TuiSession {
-    fn unique_home_dir(name: &str) -> PathBuf {
+    fn unique_session_dir(kind: &str, name: &str) -> PathBuf {
         static NEXT_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 
         let session_id = NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
-        let home = std::env::temp_dir().join(format!(
-            "neomacs-tui-test-home-{}-{}-{}",
+        std::env::temp_dir().join(format!(
+            "neomacs-tui-test-{kind}-{}-{}-{}",
             std::process::id(),
             name.to_ascii_lowercase(),
             session_id
-        ));
+        ))
+    }
+
+    fn unique_home_dir(name: &str) -> PathBuf {
+        let home = Self::unique_session_dir("home", name);
         let emacs_d = home.join(".emacs.d");
         std::fs::create_dir_all(&emacs_d).expect("create isolated tui test HOME");
         home
+    }
+
+    /// A per-session `TMPDIR`, isolated even for the sessions that keep the
+    /// real `HOME`.
+    ///
+    /// Emacs takes `temporary-file-directory` from `TMPDIR`, and some Lisp
+    /// claims a name there from a FIXED pool and never releases it: org's
+    /// `org-babel-temporary-stable-directory` (ob-core.el) draws
+    /// `(random 1000)`, retries while `babel-stable-N` exists, and leaves the
+    /// directory behind. With one shared `TMPDIR` the suite exhausts that
+    /// 1000-name pool over enough runs, and from then on the retry loop
+    /// cannot terminate: every interactive org buffer hangs until the test's
+    /// readiness deadline expires. (It is guarded by `unless noninteractive`,
+    /// so a batch probe of the same Emacs loads org fine and clears it
+    /// wrongly.) A per-session directory keeps the pool fresh.
+    fn unique_tmp_dir(name: &str) -> PathBuf {
+        let tmp = Self::unique_session_dir("tmp", name);
+        std::fs::create_dir_all(&tmp).expect("create isolated tui test TMPDIR");
+        tmp
     }
 
     /// Spawn `cmd` (e.g. `"emacs -nw -Q"`) in a new PTY.
@@ -90,7 +113,8 @@ impl TuiSession {
             .env("LINES", ROWS.to_string())
             // Prevent user config from interfering while also isolating
             // concurrent TUI tests from one another.
-            .env("HOME", &home);
+            .env("HOME", &home)
+            .env("TMPDIR", Self::unique_tmp_dir(name));
         for var in [
             "RUST_LOG",
             "NEOMACS_LOG_FILE",
@@ -149,6 +173,7 @@ impl TuiSession {
         command = command.env("COLUMNS", COLS.to_string());
         command = command.env("LINES", ROWS.to_string());
         command = command.env("HOME", &real_home);
+        command = command.env("TMPDIR", Self::unique_tmp_dir("GNU"));
         let child = command.spawn(pts).expect("spawn");
         let parser = vt100::Parser::new(ROWS, COLS, 0);
         TuiSession {
@@ -188,6 +213,7 @@ impl TuiSession {
         command = command.env("COLUMNS", COLS.to_string());
         command = command.env("LINES", ROWS.to_string());
         command = command.env("HOME", &real_home);
+        command = command.env("TMPDIR", Self::unique_tmp_dir("NEO"));
         let child = command.spawn(pts).expect("spawn");
         let parser = vt100::Parser::new(ROWS, COLS, 0);
         TuiSession {
