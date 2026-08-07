@@ -2473,6 +2473,12 @@ pub const SOLARIZED_THEME_MELPA_PIN: (&str, &str) = ("solarized-theme", "2026072
 /// `55aaebe3d793c2c990b39a302eb26c184281c42c`.
 pub const SMEX_MELPA_PIN: (&str, &str) = ("smex", "20151212.2209");
 
+/// The exact Smeargle package selected for practical real-Git blame,
+/// last-update-time and commit-age highlighting, rerender/clear behavior, and
+/// non-repository failure parity. MELPA built version 0.03 from upstream
+/// commit `1c5c1e1d66aa96b818fbfcdf9fbec84e509b87be`.
+pub const SMEARGLE_MELPA_PIN: (&str, &str) = ("smeargle", "20200323.533");
+
 /// The exact Bind-Key release selected from GNU ELPA by the comprehensive API
 /// parity corpus.
 pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");

@@ -498,6 +498,7 @@ mod skewer_mode;
 mod slime;
 mod sly;
 mod smartparens;
+mod smeargle;
 mod smex;
 mod solarized_theme;
 mod spaceline;
