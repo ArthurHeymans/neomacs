@@ -23461,6 +23461,73 @@ fn overlay_string_shadow_anchor_at_the_truncate_boundary() {
     );
 }
 
+/// The glyph sibling of the O5 collection pin, and the case that catches a
+/// wrong base-face ORIGIN: an overlay carrying BOTH a `face` and a
+/// `before-string`. GNU `face_for_overlay_string` (xfaces.c:7034-7092)
+/// "simply disregards the `face' properties of all overlays", so the string
+/// is realized against the buffer text's face at the anchor — NOT the face
+/// the overlay paints on the text it covers. Resolving the string through
+/// `DisplayOrigin::DisplayPropertyString` instead of `OverlayString` would
+/// tint it with the overlay's face and red this test.
+#[test]
+fn overlay_string_shadow_base_face_ignores_the_overlays_own_face() {
+    // An ANONYMOUS face (attribute plist): a named face resolves or not
+    // depending on what Lisp the build dumped.
+    let glyphs = overlay_string_first_row_glyphs(
+        "hello world\nnext\n",
+        "(let ((ov (make-overlay 4 9))) \
+           (overlay-put ov 'face '(:foreground \"#ff0000\")) \
+           (overlay-put ov 'before-string \"[\"))",
+        false,
+    );
+    assert_eq!(glyphs_logical_text(&glyphs), "hel[lo world ");
+    assert_eq!(glyphs.len(), 13);
+    // Cell 0..=2 are the un-overlaid "hel", cell 3 is the string, cells
+    // 4..=8 are the overlay-faced "lo wo".
+    let plain_face = glyphs[0].face_id;
+    let overlay_face = glyphs[4].face_id;
+    assert_ne!(
+        overlay_face, plain_face,
+        "the corpus must actually realize a distinct overlay face, else the \
+         assertions below are vacuous"
+    );
+    // The string resolves its OWN base face from the buffer text at the
+    // anchor, which carries no `face` property here, so it lands on the
+    // engine's Default face id rather than on the window's realized base
+    // text face (the resolver reuses the installed default instead of
+    // minting a window-specific id for it).
+    assert_eq!(
+        glyphs[3].face_id,
+        FaceId::from(neomacs_display_protocol::face::BasicFaceId::Default),
+        "an overlay string is realized against the buffer text at its anchor"
+    );
+    assert_ne!(
+        glyphs[3].face_id, overlay_face,
+        "the overlay's own face must never tint its string (GNU \
+         face_for_overlay_string disregards overlay faces)"
+    );
+}
+
+/// Two anchors on one row: the strings must land at their OWN anchors, in
+/// row order. An insertion that sorted after the text segment starting at the
+/// same position would put each string one character late.
+#[test]
+fn overlay_string_shadow_two_anchors_on_one_row() {
+    let glyphs = overlay_string_first_row_glyphs(
+        "hello world\nnext\n",
+        "(progn \
+           (overlay-put (make-overlay 3 4) 'before-string \"<\") \
+           (overlay-put (make-overlay 9 10) 'before-string \">\"))",
+        false,
+    );
+    assert_eq!(glyphs_logical_text(&glyphs), "he<llo wo>rld ");
+    assert_eq!(
+        glyphs.len(),
+        14,
+        "11 text cells + two string cells + the appended newline space"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // P4.5: glyph-level shadows for the PER-CHAR path.
 //
