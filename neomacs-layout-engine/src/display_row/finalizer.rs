@@ -228,6 +228,9 @@ impl RowExtendFill {
             self.width_px,
             self.height_px,
             self.ascent_px,
+            // Redisplay's own extend-to-end-of-line fill: it stands for no
+            // buffer character, so the blank-line cursor never latches to it.
+            NO_BUFFER_POSITION_CHARPOS,
         );
         if let Some(last) = row.glyphs[text_index].last_mut() {
             last.charpos = NO_BUFFER_POSITION_CHARPOS;

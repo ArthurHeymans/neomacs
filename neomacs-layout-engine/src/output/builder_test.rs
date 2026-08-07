@@ -139,7 +139,15 @@ fn write_stretch_to_current_row(
 ) {
     builder
         .edit_current_row_for_test(|row| {
-            crate::glyph_row_writer::push_stretch_to_row(row, width_cols, face_id, 0.0, 0.0, 0.0);
+            crate::glyph_row_writer::push_stretch_to_row(
+                row,
+                width_cols,
+                face_id,
+                0.0,
+                0.0,
+                0.0,
+                NO_BUFFER_POSITION_CHARPOS,
+            );
         })
         .expect("current row");
 }

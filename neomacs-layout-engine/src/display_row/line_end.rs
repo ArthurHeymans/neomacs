@@ -478,10 +478,8 @@ impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
                 f.gap_px,
                 f.height_px,
                 f.ascent_px,
+                NO_BUFFER_POSITION_CHARPOS,
             );
-            if let Some(last) = row.glyphs[text_index].last_mut() {
-                last.charpos = NO_BUFFER_POSITION_CHARPOS;
-            }
         }
         // The indicator character itself. It maps to no buffer position, so the
         // blank-line cursor never latches onto it.
@@ -503,10 +501,8 @@ impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
                 f.tail_px,
                 f.height_px,
                 f.ascent_px,
+                NO_BUFFER_POSITION_CHARPOS,
             );
-            if let Some(last) = row.glyphs[text_index].last_mut() {
-                last.charpos = NO_BUFFER_POSITION_CHARPOS;
-            }
         }
         row.displays_text = true;
     }

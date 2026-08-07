@@ -394,6 +394,7 @@ pub(crate) fn push_stretch_to_row(
     pixel_width: f32,
     pixel_height: f32,
     pixel_ascent: f32,
+    charpos: usize,
 ) {
     push_stretch_to_area(
         row,
@@ -403,9 +404,11 @@ pub(crate) fn push_stretch_to_row(
         pixel_width,
         pixel_height,
         pixel_ascent,
+        charpos,
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn push_stretch_to_area(
     row: &mut GlyphRow,
     area_index: usize,
@@ -414,12 +417,14 @@ pub(crate) fn push_stretch_to_area(
     pixel_width: f32,
     pixel_height: f32,
     pixel_ascent: f32,
+    charpos: usize,
 ) {
-    let glyph = Glyph::stretch(width_cols, face_id).with_pixel_geometry(
+    let mut glyph = Glyph::stretch(width_cols, face_id).with_pixel_geometry(
         pixel_width,
         pixel_height,
         pixel_ascent,
     );
+    glyph.charpos = charpos;
     row.glyphs[area_index].push(glyph);
     mark_displays_text_if_text_area(row, area_index);
 }

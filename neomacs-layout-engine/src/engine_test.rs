@@ -16921,21 +16921,20 @@ fn space_width_spec_row_routes_and_matches_pipeline() {
         rows_routed[0].glyphs[1], rows_pipeline[0].glyphs[1],
         "routed space-spec row must equal the pipeline row glyph-for-glyph"
     );
-    // Provenance note: GNU stamps the covered buffer position on a
-    // spec-produced stretch glyph (xdisp.c 6604 + append_stretch_glyph
-    // 32684); the neomacs pipeline's stretch push currently leaves the
-    // stretch sentinel charpos 0 (Glyph::stretch), and the routed render —
-    // driving the SAME session — reproduces it exactly. The gate here is
-    // pipeline identity; the glyph-for-glyph assertion above already proves
-    // it, and this pin documents the shared (GNU-divergent) stamp so a
-    // future provenance fix updates both paths together.
+    // Provenance: GNU stamps the COVERED buffer position on a spec-produced
+    // stretch glyph (xdisp.c:6600-6606 sets it->position = start_pos, and
+    // append_stretch_glyph stamps CHARPOS of it, xdisp.c:32684). This pin
+    // used to record the shared divergence - both paths left Glyph::stretch's
+    // charpos 0 - and asked that a future provenance fix update them
+    // together. It did: the stamp is now the covered start on both, which is
+    // what the glyph-for-glyph assertion above keeps honest.
     let routed_stretch = rows_routed[0].glyphs[1]
         .iter()
         .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
         .expect("routed stretch glyph");
     assert_eq!(
-        routed_stretch.charpos, 0,
-        "both paths currently stamp the stretch sentinel charpos"
+        routed_stretch.charpos, 2,
+        "the stretch stamps the covered range's start on both paths"
     );
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
@@ -24330,5 +24329,96 @@ fn a_replacing_display_spec_beats_invisible_and_a_non_replacing_one_does_not() {
         "abcghij ",
         "a non-replacing spec leaves the chain running, so the text stays \
          hidden"
+    );
+}
+
+/// The first body row's glyphs, laid out with `setup` run against the
+/// fixture's own Context.
+fn display_prop_first_row_glyphs(
+    text: &str,
+    setup: &str,
+) -> Vec<neomacs_display_protocol::glyph_matrix::Glyph> {
+    let setup = setup.to_owned();
+    let (_eval, _buf_id, _frame_id, rows, _cw, _ch) =
+        layout_main_text_rows_with(text, move |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(&setup).expect("display property setup");
+        });
+    rows[0].glyphs[1].clone()
+}
+
+/// R3: a `(space …)` spec stamps the COVERED BUFFER POSITION.
+///
+/// This is the exception that breaks the naive "replacements are string-like"
+/// rule: `handle_single_display_spec` sets `it->position = start_pos` for the
+/// space arm (xdisp.c:6600-6606), and `produce_stretch_glyph` recovers the
+/// object from the STACK - the buffer when nothing is nested
+/// (xdisp.c:32935-32943) - so the glyph carries a genuine buffer position B,
+/// unlike its string sibling. The SAME `display` property is string-stamped
+/// when its value is a string and buffer-stamped when it is `(space …)`.
+#[test]
+fn a_space_display_spec_stamps_the_covered_buffer_position() {
+    let glyphs = display_prop_first_row_glyphs(
+        "abcdefghij\n",
+        "(put-text-property 4 6 'display '(space :width 4))",
+    );
+    assert_eq!(
+        glyphs_logical_text(&glyphs),
+        "abc    fghij ",
+        "the covered [3,5) renders as 4 columns of stretch"
+    );
+    // One stretch glyph of 4 columns sits at index 3, between "abc" and the
+    // resumed buffer text.
+    assert!(
+        matches!(
+            glyphs[3].glyph_type,
+            GlyphType::Stretch { width_cols: 4, .. }
+        ),
+        "expected a 4-column stretch, got {:?}",
+        glyphs[3].glyph_type
+    );
+    assert_eq!(
+        glyphs[3].charpos, 3,
+        "the stretch stamps the COVERED START - a genuine buffer position \
+         (GNU append_stretch_glyph charpos = B), not a redisplay sentinel"
+    );
+    assert_eq!(
+        glyphs[4].charpos, 5,
+        "the character after the stretch is the covered range's end"
+    );
+}
+
+/// R7: an EMPTY display string still consumes its covered range.
+///
+/// GNU pushes the string and pops it in `handle_stop` rather than discarding
+/// it at creation (xdisp.c:4265-4275), so the covered text is replaced by
+/// nothing rather than displayed.
+#[test]
+fn an_empty_display_string_consumes_its_covered_range() {
+    assert_eq!(
+        display_prop_first_row_text("abcdefghij\n", "(put-text-property 4 7 'display \"\")"),
+        "abcghij ",
+        "the covered [3,6) is replaced by nothing, not rendered literally"
+    );
+}
+
+/// A TAB renders as a stretch glyph, and that glyph stands for a real buffer
+/// character, so it must carry that character's position.
+///
+/// GNU produces the tab through the same stretch machinery as a `(space …)`
+/// spec and stamps `CHARPOS (it->position)` on it like any other buffer
+/// glyph; a tab whose glyph reported position 0 would send every click on an
+/// indented line's leading whitespace to the top of the buffer.
+#[test]
+fn a_tab_stretch_carries_its_own_buffer_position() {
+    let glyphs = display_prop_first_row_glyphs("ab\tcd\n", "(ignore)");
+    assert!(
+        matches!(glyphs[2].glyph_type, GlyphType::Stretch { .. }),
+        "expected the tab to render as a stretch, got {:?}",
+        glyphs[2].glyph_type
+    );
+    assert_eq!(
+        glyphs[2].charpos, 2,
+        "the tab's stretch glyph carries the tab character's own position"
     );
 }

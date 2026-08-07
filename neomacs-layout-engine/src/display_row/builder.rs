@@ -1452,7 +1452,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     DisplayTextSourceMapping::SourceMapped,
                 );
             }
-            DisplayItemKind::Stretch(stretch) => self.push_stretch(stretch, face_id),
+            DisplayItemKind::Stretch(stretch) => {
+                self.push_stretch(stretch, face_id, source_span_start_char(&item.span))
+            }
             DisplayItemKind::MediaReplacement(media) => {
                 self.push_media(media, face_id, source_span_start_char(&item.span))
             }
@@ -1572,7 +1574,11 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let before_len = self.row.glyphs[self.area_index].len();
         match advance_request.kind() {
             DisplayRowTextNaturalAdvanceKind::Tab => {
-                self.push_tab_at_position(advance_request.face_id, advance_request.position);
+                self.push_tab_at_position(
+                    advance_request.face_id,
+                    advance_request.position,
+                    charpos,
+                );
             }
             DisplayRowTextNaturalAdvanceKind::ClusterContinuation => {
                 glyph_row_writer::push_cluster_continuation_to_area(
@@ -1716,7 +1722,12 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .unwrap_or(DisplayTextRunMeasurement::PerChar)
     }
 
-    fn push_tab_at_position(&mut self, face_id: FaceId, position: DisplayRowPosition) {
+    fn push_tab_at_position(
+        &mut self,
+        face_id: FaceId,
+        position: DisplayRowPosition,
+        charpos: usize,
+    ) {
         // GNU's gui_produce_glyphs uses the TAB face's primary font
         // `space_width`, not character fallback selection for U+0020.
         let space_width_px = self
@@ -1738,6 +1749,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             advance.pixel_width,
             0.0,
             0.0,
+            // A TAB is a buffer character that happens to render as a
+            // stretch; its glyph addresses the tab itself.
+            charpos,
         );
     }
 
@@ -1785,7 +1799,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .unwrap_or(fallback)
     }
 
-    fn push_stretch(&mut self, stretch: DisplayStretch, face_id: FaceId) {
+    fn push_stretch(&mut self, stretch: DisplayStretch, face_id: FaceId, charpos: usize) {
         let Some((width_cols, pixel_width)) = self.stretch_width(&stretch.width) else {
             return;
         };
@@ -1812,6 +1826,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             pixel_width,
             pixel_height,
             pixel_ascent,
+            charpos,
         );
         self.promote_row_metrics_for_explicit_stretch();
     }
