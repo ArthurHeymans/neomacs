@@ -2414,6 +2414,13 @@ pub const EVIL_NERD_COMMENTER_MELPA_PIN: (&str, &str) = ("evil-nerd-commenter", 
 /// `616aff9e5cee012954756ed2715209fa90308cdf`.
 pub const EVIL_NUMBERS_MELPA_PIN: (&str, &str) = ("evil-numbers", "20260103.850");
 
+/// The exact Evil Search Highlight Persist package selected for literal and
+/// regexp searches, minimum-length policy, multi-window behavior, clear/mode
+/// lifecycle, global activation, and advised isearch-exit parity. MELPA built
+/// this archive from upstream commit `6e04a8c075f5fd62526d222447048faab8bfa187`.
+pub const EVIL_SEARCH_HIGHLIGHT_PERSIST_MELPA_PIN: (&str, &str) =
+    ("evil-search-highlight-persist", "20170523.334");
+
 /// The exact Evil Surround package selected for practical characterwise,
 /// linewise, blockwise, nested-delimiter, markup, custom-pair, repeat, marker,
 /// text-property, and undo parity. MELPA built this archive from upstream

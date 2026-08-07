@@ -246,7 +246,7 @@ rank	package	downloads	status
 245	gh-md	480487	covered
 246	color-theme-sanityinc-tomorrow	479999	covered
 247	org-present	475597	covered
-248	evil-search-highlight-persist	475566	todo
+248	evil-search-highlight-persist	475566	covered
 249	concurrent	471871	todo
 250	quickrun	470621	todo
 251	live-py-mode	469320	todo

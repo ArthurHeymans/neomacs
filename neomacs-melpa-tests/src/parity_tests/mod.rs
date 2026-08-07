@@ -334,6 +334,7 @@ mod evil_matchit;
 mod evil_mc;
 mod evil_nerd_commenter;
 mod evil_numbers;
+mod evil_search_highlight_persist;
 mod evil_surround;
 mod evil_tutor;
 mod evil_visual_mark_mode;
