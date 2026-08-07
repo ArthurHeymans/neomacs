@@ -1358,6 +1358,12 @@ pub const ARDUINO_MODE_MELPA_PIN: (&str, &str) = ("arduino-mode", "20240527.1603
 /// corpus and by arduino-mode's optional integration coverage.
 pub const FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260728.931");
 
+/// The exact flyspell-correct package selected for practical correction
+/// interface defaults, completing-read candidate actions, highlight overlays,
+/// and direction-aware move wrappers. MELPA built this archive from upstream
+/// commit `a5a41c0f3a7881bd3eba07bee424ecb7c7d5061e`.
+pub const FLYSPELL_CORRECT_MELPA_PIN: (&str, &str) = ("flyspell-correct", "20260106.955");
+
 /// The exact flycheck-dmd-dub package selected by the practical DUB project
 /// discovery, metadata, subprocess, cache, and buffer-local flag parity corpus.
 /// MELPA built this archive from upstream commit
@@ -2569,6 +2575,12 @@ pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
 /// aurel's runtime buffer-interface dependency.
 pub const BUI_MELPA_PIN: (&str, &str) = ("bui", "20260502.730");
 
+/// The exact browse-kill-ring package selected for practical kill-ring browser
+/// display, elision, insertion helpers, and default keybinding setup. MELPA
+/// built this archive from upstream commit
+/// `39d65a830b93530c9bd68a7dc14353cbffd1d01f`.
+pub const BROWSE_KILL_RING_MELPA_PIN: (&str, &str) = ("browse-kill-ring", "20260503.1620");
+
 /// The exact Casual package selected by the practical EditKit, Elisp, CSV,
 /// Dired, and Ibuffer menu-command parity corpus.
 pub const CASUAL_MELPA_PIN: (&str, &str) = ("casual", "20260718.1803");
@@ -3029,6 +3041,12 @@ pub const SCSS_MODE_MELPA_PIN: (&str, &str) = ("scss-mode", "20180123.1708");
 /// success/error parity. MELPA built this archive from upstream commit
 /// `247a0d4b509f10b28e4687cd8763492bca03599b`.
 pub const SASS_MODE_MELPA_PIN: (&str, &str) = ("sass-mode", "20190502.53");
+
+/// The exact slim-mode package selected for practical Slim major-mode
+/// indentation, nested sexp navigation, comment blocks, and .slim auto-mode
+/// association. MELPA built this archive from upstream commit
+/// `8c92169817f2fa59255f547f0a9fb4fbb8309db9`.
+pub const SLIM_MODE_MELPA_PIN: (&str, &str) = ("slim-mode", "20240513.211");
 
 /// The exact Treemacs package selected for practical project admission,
 /// workspace lifecycle, persistence, selection, and terminal tree parity.
