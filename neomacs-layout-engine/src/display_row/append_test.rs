@@ -10,6 +10,7 @@ use crate::buffer_source::item_append::*;
 use crate::buffer_source::loop_context::*;
 use crate::buffer_source::loop_state::BufferSourceLoopMutableState;
 use crate::buffer_source::overflow::*;
+use crate::buffer_source::producer::frame::ReplacementCoveredSpan;
 use crate::buffer_source::render::*;
 use crate::buffer_source::row_lifecycle::*;
 use crate::buffer_source::text_source::*;
@@ -10070,8 +10071,7 @@ fn display_property_replacement_row_render_request_builds_append_plan() {
             CharPos0::new(4),
             EmacsBytePos::new(13),
         ),
-        CharPos0::new(3),
-        CharPos0::new(4),
+        ReplacementCoveredSpan::from_routed_scan_range(CharPos0::new(3), CharPos0::new(4)),
     );
     let request = DisplayPropertyReplacementRowRenderRequest::from_typed_replacement_descriptor(
         &descriptor,
@@ -10237,8 +10237,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
             CharPos0::new(4),
             EmacsBytePos::new(13),
         ),
-        CharPos0::new(3),
-        CharPos0::new(4),
+        ReplacementCoveredSpan::from_routed_scan_range(CharPos0::new(3), CharPos0::new(4)),
     );
     let request = DisplayPropertyReplacementRowRenderRequest::from_typed_replacement_descriptor(
         &descriptor,
@@ -10346,8 +10345,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
         ),
         EmacsBytePos::new(12),
         EmacsBytePos::new(13),
-        CharPos0::new(3),
-        CharPos0::new(4),
+        ReplacementCoveredSpan::from_routed_scan_range(CharPos0::new(3), CharPos0::new(4)),
     );
     let mut cursor_info = CursorCaptureState::new();
     let mut byte_idx = 0usize;

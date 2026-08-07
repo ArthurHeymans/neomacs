@@ -1,3 +1,4 @@
+use crate::buffer_source::producer::frame::ReplacementCoveredSpan;
 use crate::display_property::DisplayPropertyClassification;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
@@ -480,8 +481,12 @@ pub(crate) struct DisplayPropertyReplacementDescriptor {
     value: Value,
     classification: DisplayPropertyClassification,
     replacement_source: BufferDisplayReplacementSource,
-    anchor_charpos: CharPos0,
-    skip_to_charpos: CharPos0,
+    /// The buffer range this replacement stands for, derived once by the
+    /// producer. `covered.start()` is GNU's B (what the glyphs are stamped
+    /// with) and `covered.resume()` is GNU's E (where the walk continues).
+    /// Consumers READ the resume; nobody outside
+    /// [`ReplacementCoveredSpan`] derives one.
+    covered: ReplacementCoveredSpan,
     pointer_appearance: Option<DisplayPointerAppearance>,
 }
 
@@ -490,15 +495,13 @@ impl DisplayPropertyReplacementDescriptor {
         value: Value,
         classification: DisplayPropertyClassification,
         replacement_source: BufferDisplayReplacementSource,
-        anchor_charpos: CharPos0,
-        skip_to_charpos: CharPos0,
+        covered: ReplacementCoveredSpan,
     ) -> Self {
         Self {
             value,
             classification,
             replacement_source,
-            anchor_charpos,
-            skip_to_charpos,
+            covered,
             pointer_appearance: None,
         }
     }
@@ -512,11 +515,13 @@ impl DisplayPropertyReplacementDescriptor {
     }
 
     pub(crate) fn anchor_charpos(&self) -> CharPos0 {
-        self.anchor_charpos
+        self.covered.start()
     }
 
-    pub(crate) fn skip_to_charpos(&self) -> i64 {
-        self.skip_to_charpos.get() as i64
+    /// GNU's E. The renderer APPLIES this to the walk once the replacement is
+    /// appended; it is the producer's answer, not the renderer's.
+    pub(crate) fn resume_charpos(&self) -> i64 {
+        self.covered.resume().get() as i64
     }
 
     pub(crate) fn pointer_appearance(&self) -> Option<&DisplayPointerAppearance> {
@@ -529,8 +534,7 @@ pub(crate) struct BufferDisplayPropertyReplacementItem {
     descriptor: DisplayPropertyReplacementDescriptor,
     start_byte_pos: EmacsBytePos,
     end_byte_pos: EmacsBytePos,
-    start_charpos: CharPos0,
-    end_charpos: CharPos0,
+    covered: ReplacementCoveredSpan,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -554,21 +558,18 @@ impl BufferDisplayPropertyReplacementItem {
         replacement_source: BufferDisplayReplacementSource,
         start_byte_pos: EmacsBytePos,
         end_byte_pos: EmacsBytePos,
-        start_charpos: CharPos0,
-        end_charpos: CharPos0,
+        covered: ReplacementCoveredSpan,
     ) -> Self {
         Self {
             descriptor: DisplayPropertyReplacementDescriptor::new(
                 value,
                 classification,
                 replacement_source,
-                start_charpos,
-                end_charpos,
+                covered,
             ),
             start_byte_pos,
             end_byte_pos,
-            start_charpos,
-            end_charpos,
+            covered,
         }
     }
 
@@ -599,7 +600,7 @@ impl BufferDisplayPropertyReplacementItem {
     }
 
     pub(crate) fn start_charpos(&self) -> i64 {
-        self.start_charpos.get() as i64
+        self.covered.start().get() as i64
     }
 
     pub(crate) fn source_text<'a>(
@@ -628,12 +629,12 @@ impl BufferDisplayPropertyReplacementItem {
             SourceSpan::new(
                 DisplaySourcePosition::buffer(
                     replacement_source.buffer_id(),
-                    self.start_charpos,
+                    self.covered.start(),
                     self.start_byte_pos,
                 ),
                 DisplaySourcePosition::buffer(
                     replacement_source.buffer_id(),
-                    self.end_charpos,
+                    self.covered.resume(),
                     self.end_byte_pos,
                 ),
             ),

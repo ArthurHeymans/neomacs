@@ -1,3 +1,6 @@
+use crate::buffer_source::producer::frame::{
+    DisplayReplacementExtentLookup, ReplacementCoveredSpan,
+};
 use crate::display_item::{
     BufferDisplayPropertyReplacementItem, BufferDisplayReplacementSource, DisplayItem,
     DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy, DisplayPointerAppearance,
@@ -349,7 +352,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     }
 
     /// The winning `display` value AND its source, which decides how far the
-    /// replacement reaches — see [`Self::display_value_extent`].
+    /// replacement reaches — see [`ReplacementCoveredSpan::for_property_source`].
     fn display_prop_source_at(
         &self,
         char_pos: CharPos0,
@@ -366,59 +369,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             self.byte_pos(char_pos),
             Value::symbol("composition"),
         )
-    }
-
-    /// How far a display REPLACEMENT starting here reaches, so it renders once
-    /// over the whole property rather than replaying per sub-run.
-    ///
-    /// GNU takes one of two answers depending on where the property came from
-    /// (`handle_single_display_spec`, xdisp.c:6337-6363), and the difference is
-    /// load-bearing in both directions.
-    ///
-    /// An OVERLAY-sourced property always ends at the OVERLAY's end. GNU's
-    /// comment is explicit that the same-value scan is WRONG here, because it
-    /// "will happily find another `display' property coming from some other
-    /// overlay or text property on buffer positions before this overlay's end,
-    /// or overlays not specific to this window", so using it means "we risk
-    /// displaying this overlay's display string/image twice, or fail to display
-    /// text that should be". Both are reachable: a higher-priority overlay
-    /// interrupting the value mid-range makes the scan stop early and re-enter
-    /// the overlay later, emitting its string twice; the same string object
-    /// continuing past the overlay as a text property makes the scan run on and
-    /// swallow text that is its own, separate replacement.
-    ///
-    /// A TEXT-property one ends at the next `display` change, which is the
-    /// same-object scan below (GNU `display_prop_end` ->
-    /// `Fnext_single_char_property_change`).
-    fn display_value_extent(
-        &self,
-        source: crate::neovm_bridge::CharPropertySource,
-        mut extent: CharPos0,
-    ) -> CharPos0 {
-        if let Some(overlay) = source.overlay {
-            // GNU clips the overlay end to the accessible portion before using
-            // it; `self.end` is this walk's equivalent bound.
-            return self
-                .buffer
-                .layout_overlays()
-                .overlay_end_emacs_byte_pos(overlay)
-                .map(|end| self.buffer.layout_emacs_byte_pos_to_char_pos(end))
-                .unwrap_or(extent)
-                .max(extent)
-                .min(self.end);
-        }
-        while extent < self.end {
-            match self.display_prop_at(extent) {
-                Some(next) if next.bits() == source.value.bits() => {
-                    extent = self
-                        .next_property_change(extent)
-                        .max(extent.add_len(CharLen::new(1)))
-                        .min(self.end);
-                }
-                _ => break,
-            }
-        }
-        extent
     }
 
     fn display_replacement_source(
@@ -439,17 +389,16 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         &self,
         value: Value,
         classification: DisplayPropertyClassification,
-        start: CharPos0,
-        end: CharPos0,
+        covered: ReplacementCoveredSpan,
     ) -> BufferDisplayPropertyReplacementItem {
+        let (start, end) = (covered.start(), covered.resume());
         BufferDisplayPropertyReplacementItem::new(
             value,
             classification,
             self.display_replacement_source(start, end),
             self.byte_pos(start),
             self.byte_pos(end),
-            start,
-            end,
+            covered,
         )
     }
 
@@ -811,14 +760,18 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                     // boundary, so an overlay `display` (e.g. an org inline image)
                     // covering text with internal face/invisible changes would
                     // otherwise replay the replacement once per sub-run.
-                    let display_end = self.display_value_extent(display_source, property_end);
-                    self.char_pos = display_end;
+                    let covered = ReplacementCoveredSpan::for_property_source(
+                        display_source,
+                        start,
+                        property_end,
+                        self,
+                    );
+                    self.char_pos = covered.resume();
                     return Some(BufferTextCursorItem::DisplayPropertyReplacement(
                         self.display_replacement_item(
                             display_prop,
                             display_property.into_classification(),
-                            start,
-                            display_end,
+                            covered,
                         )
                         .with_pointer_appearance(pointer_appearance),
                     ));
@@ -844,8 +797,10 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                             self.display_replacement_item(
                                 value,
                                 display_property.into_classification(),
-                                start,
-                                property_end,
+                                ReplacementCoveredSpan::for_single_property_run(
+                                    start,
+                                    property_end,
+                                ),
                             )
                             .with_pointer_appearance(pointer_appearance),
                         ));
@@ -897,5 +852,31 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
 impl<B: LayoutBufferView + ?Sized> DisplayItemSource for BufferTextSourceCursor<'_, B> {
     fn next_item(&mut self, context: &mut DisplaySourceContext<'_>) -> Option<DisplayItem> {
         self.next_display_item(context, BufferTextDisplayReplacementMode::InlineSourceItems)
+    }
+}
+
+/// The producer's cursor is what [`ReplacementCoveredSpan::for_property_source`]
+/// asks about the buffer; the rule itself lives with the span, so the covered
+/// end cannot be derived anywhere else.
+impl<B: LayoutBufferView + ?Sized> DisplayReplacementExtentLookup
+    for BufferTextSourceCursor<'_, B>
+{
+    fn extent_scan_end(&self) -> CharPos0 {
+        self.end
+    }
+
+    fn extent_overlay_end(&self, overlay: Value) -> Option<CharPos0> {
+        self.buffer
+            .layout_overlays()
+            .overlay_end_emacs_byte_pos(overlay)
+            .map(|end| self.buffer.layout_emacs_byte_pos_to_char_pos(end))
+    }
+
+    fn extent_display_prop_at(&self, at: CharPos0) -> Option<Value> {
+        self.display_prop_at(at)
+    }
+
+    fn extent_next_property_change(&self, at: CharPos0) -> CharPos0 {
+        self.next_property_change(at)
     }
 }

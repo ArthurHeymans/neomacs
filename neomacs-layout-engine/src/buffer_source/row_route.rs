@@ -2933,8 +2933,10 @@ impl<'rows, 'emit, 'surface>
                             ),
                             start_byte_pos,
                             end_byte_pos,
-                            segment.start,
-                            segment.end,
+                            crate::buffer_source::producer::frame::ReplacementCoveredSpan::from_routed_scan_range(
+                                segment.start,
+                                segment.end,
+                            ),
                         );
                     let fallback_metrics =
                         crate::buffer_source::item_append::BufferSourceActiveFaceRowMetrics::from_active_face_row(
@@ -3172,8 +3174,10 @@ impl<'rows, 'emit, 'surface>
                         ),
                         start_byte_pos,
                         end_byte_pos,
-                        segment.start,
-                        segment.end,
+                        crate::buffer_source::producer::frame::ReplacementCoveredSpan::from_routed_scan_range(
+                            segment.start,
+                            segment.end,
+                        ),
                     );
                 self.progress.apply_row_position(render_position);
                 let replacement_context = BufferDisplayPropertyTextReplacementRenderContext::new(

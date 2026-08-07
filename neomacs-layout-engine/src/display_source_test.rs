@@ -1978,7 +1978,7 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
 
     assert_eq!(replacement.start_byte_idx(0), Some(1));
     assert_eq!(replacement.start_charpos(), 1);
-    assert_eq!(replacement.descriptor().skip_to_charpos(), 2);
+    assert_eq!(replacement.descriptor().resume_charpos(), 2);
     assert_eq!(
         replacement
             .descriptor()
@@ -2052,7 +2052,7 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
 
     assert_eq!(replacement.start_byte_idx(0), Some(1));
     assert_eq!(replacement.start_charpos(), 1);
-    assert_eq!(replacement.descriptor().skip_to_charpos(), 2);
+    assert_eq!(replacement.descriptor().resume_charpos(), 2);
     assert!(matches!(
         replacement.descriptor().classification().replacement(),
         Some(DisplayReplacementProperty::Stretch(_))

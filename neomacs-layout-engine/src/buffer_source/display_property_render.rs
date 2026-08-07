@@ -236,7 +236,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
         );
         BufferDisplayPropertyTextReplacementOutcome {
             replacement: outcome,
-            skip_to: self.replacement.descriptor().skip_to_charpos(),
+            skip_to: self.replacement.descriptor().resume_charpos(),
             produced_row_break: outcome.produced_row_break(),
         }
     }
