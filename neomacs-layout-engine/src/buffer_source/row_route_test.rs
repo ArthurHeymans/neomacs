@@ -22,6 +22,7 @@ fn plain_policy() -> RowRouteWindowPolicy {
         word_wrap: false,
         show_trailing_whitespace: false,
         wrap_mode: LineWrapMode::Truncate,
+        overlay_string_window: Some(0),
     }
 }
 
@@ -771,21 +772,17 @@ fn classifier_accepts_zero_length_face_only_overlay() {
 
 #[test]
 fn classifier_rejects_overlay_hazard_properties() {
-    // Any intersecting overlay carrying a property beyond the face-affecting
-    // allow-list keeps the buffer pipeline: strings and display/invisible
-    // rewrite content, window restricts applicability, category indirects to
-    // arbitrary props, and unknown props are conservatively refused.
-    // Increment 2i rung 4 DELIBERATELY kept before/after-strings here: the
-    // covered-provenance vocabulary (rung 1) and session-reuse pattern
-    // (rungs 2-3) exist, but overlay strings are walk-driven INSERTIONS
-    // (BufferOverlayStringTextRowRenderContext: per-position load, GNU
-    // load_overlay_strings ordering, before/after interleave, own row
-    // transitions) with no single typed request the routed commit can drive
-    // without replicating that walk state — routing them would have to
-    // shadow-prove against machinery the routed path cannot reach.
+    // Any intersecting overlay carrying a property beyond the allow-list keeps
+    // the buffer pipeline: display/invisible rewrite content, window restricts
+    // applicability, category indirects to arbitrary props, and unknown props
+    // are conservatively refused.
+    //
+    // before-string/after-string are NOT here since P4.6 sub-step 3b: the
+    // producer owns their collection and GNU ordering, and the routed commit
+    // delegates the append to the pipeline's own session, so they route (see
+    // classifier_routes_a_mid_line_overlay_string_anchor). What still refuses
+    // is the anchor POSITION and the string SHAPE, not the property.
     for (prop, value) in [
-        ("before-string", "\"B\""),
-        ("after-string", "\"A\""),
         ("display", "\"X\""),
         ("invisible", "t"),
         ("mouse-face", "'highlight"),
@@ -823,8 +820,10 @@ fn classifier_rejects_string_overlay_touching_row_endpoints() {
     let buf_id = buffer_with_text(&mut eval, "ab\ncd\n");
     eval.buffer_manager_mut().set_current(buf_id);
     // Overlay ends exactly at the second row's start: its after-string fires
-    // there (GNU load_overlay_strings collects at end == charpos), so the
-    // row must refuse.
+    // there (GNU load_overlay_strings collects at end == charpos), so the row
+    // must refuse. This bound is CORRECTNESS, not conservatism: the visible
+    // loop attempts the route BEFORE the pipeline step that emits the strings,
+    // so a routed row start would drop them entirely.
     eval.eval_str("(overlay-put (make-overlay 1 4) 'after-string \"A\")")
         .expect("after-string overlay");
     let text = b"ab\ncd\n";
@@ -840,7 +839,7 @@ fn classifier_rejects_string_overlay_touching_row_endpoints() {
         "an overlay ending at the row start with an after-string must refuse"
     );
     // Overlay starting exactly at the row's newline: its before-string fires
-    // at the newline position; conservatively refused too.
+    // at the newline position, which the pipeline's line-break lifecycle owns.
     let mut eval = Context::new();
     let buf_id = buffer_with_text(&mut eval, "ab\ncd\n");
     eval.buffer_manager_mut().set_current(buf_id);
@@ -864,8 +863,9 @@ fn classifier_ignores_overlays_on_other_rows() {
     let mut eval = Context::new();
     let buf_id = buffer_with_text(&mut eval, "hello\nworld\n");
     eval.buffer_manager_mut().set_current(buf_id);
-    // A string-carrying overlay entirely on the SECOND row: the first row
-    // does not intersect it and still routes; the second refuses.
+    // A string-carrying overlay entirely on the SECOND row. Neither row is
+    // disqualified by it: the first does not intersect it at all, and the
+    // second carries the anchor strictly inside itself, which routes.
     eval.eval_str("(overlay-put (make-overlay 8 10) 'before-string \"B\")")
         .expect("second-row overlay");
     let text = b"hello\nworld\n";
@@ -888,8 +888,126 @@ fn classifier_ignores_overlays_on_other_rows() {
             wide_fit(),
             plain_policy()
         ),
-        RowAcquisitionRoute::BufferPipeline
+        RowAcquisitionRoute::ItemRenderer,
+        "the anchor's own row routes: it sits strictly inside the line"
     );
+}
+
+/// The rung-4 un-refusal, at the classifier: a mid-line anchor routes, and
+/// the plan carries the producer's collection so the commit can delegate it.
+#[test]
+fn classifier_routes_a_mid_line_overlay_string_anchor() {
+    let mut eval = Context::new();
+    let buf_id = buffer_with_text(&mut eval, "hello\n");
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str(
+        "(let ((ov (make-overlay 3 5))) \
+           (overlay-put ov 'face 'bold) \
+           (overlay-put ov 'before-string \"[\") \
+           (overlay-put ov 'after-string \"]\"))",
+    )
+    .expect("string overlay");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(b"hello\n", 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("a mid-line overlay-string anchor routes");
+    // Anchors at the overlay's start (before-string) and end (after-string),
+    // 0-based char offsets 2 and 4; each contributes one column.
+    let anchors: Vec<(usize, usize)> = plan
+        .overlay_strings()
+        .iter()
+        .map(|anchor| (anchor.at(), anchor.strings().len()))
+        .collect();
+    assert_eq!(anchors, vec![(2, 1), (4, 1)]);
+    assert_eq!(
+        plan.overlay_strings()[0].advance_cols(),
+        1,
+        "a one-character string advances one column"
+    );
+    // Both endpoints are also face-segment boundaries, which is what gives
+    // each insertion a text segment to sort ahead of.
+    assert_eq!(plan.face_boundaries(), &[2, 4]);
+}
+
+/// Anchor POSITION and string SHAPE are what refuse now, not the property.
+#[test]
+fn classifier_rejects_unroutable_overlay_string_shapes() {
+    for (value, why) in [
+        ("\"a\\nb\"", "a newline in the string would end the row"),
+        ("\"a\\tb\"", "a tab expands pen-dependently in the session"),
+        (
+            "(propertize \"x\" 'face 'bold)",
+            "text properties re-face the string mid-flight",
+        ),
+        ("'not-a-string", "a non-string value is not displayable"),
+    ] {
+        let mut eval = Context::new();
+        let buf_id = buffer_with_text(&mut eval, "hello\n");
+        eval.buffer_manager_mut().set_current(buf_id);
+        eval.eval_str(&format!(
+            "(overlay-put (make-overlay 3 5) 'before-string {value})"
+        ))
+        .expect("string overlay");
+        let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+        let plan = plan_ascii_row(
+            buffer,
+            row_start(b"hello\n", 0, 0),
+            wide_fit(),
+            plain_policy(),
+        );
+        match plan {
+            // A non-string value is dropped at collection (GNU STRINGP), so
+            // the position is not an anchor at all and the row routes with no
+            // insertion — the same outcome as an empty string.
+            Some(plan) if value == "'not-a-string" => {
+                assert!(plan.overlay_strings().is_empty(), "{why}");
+            }
+            Some(_) => panic!("expected a refusal: {why}"),
+            None => {}
+        }
+    }
+}
+
+/// An overlay-string anchor never routes on an OVERFLOW-PREFIX plan: the
+/// append session clips at the right edge and can break the row itself, so a
+/// handoff cut taken mid-anchor would not be the pipeline's overflow point.
+/// An anchor BEYOND the cut is simply not this row's business.
+#[test]
+fn classifier_rejects_overlay_string_anchors_in_an_overflow_prefix() {
+    let line = "x".repeat(40);
+    let text = format!("{line}\n");
+    for (anchor_charpos, expected_route) in [
+        // Inside the fitting prefix (the fit below holds 10 columns).
+        (4usize, RowAcquisitionRoute::BufferPipeline),
+        // Well past the handoff cut: unrouted remainder the pipeline emits at
+        // resume, so the prefix still routes.
+        (30, RowAcquisitionRoute::ItemRenderer),
+    ] {
+        let mut eval = Context::new();
+        let buf_id = buffer_with_text(&mut eval, &text);
+        eval.buffer_manager_mut().set_current(buf_id);
+        eval.eval_str(&format!(
+            "(overlay-put (make-overlay {} {}) 'before-string \"S\")",
+            anchor_charpos + 1,
+            anchor_charpos + 2
+        ))
+        .expect("string overlay");
+        assert_eq!(
+            classify_in_buffer(
+                &eval,
+                buf_id,
+                row_start(text.as_bytes(), 0, 0),
+                fit_to(80.0),
+                plain_policy()
+            ),
+            expected_route,
+            "anchor at {anchor_charpos}"
+        );
+    }
 }
 
 #[test]

@@ -41,17 +41,26 @@
 //!   merge through the same checkpoint resolver seam (GNU
 //!   `face_at_buffer_position`'s ascending-priority overlay loop) and their
 //!   starts/ends segment the row like GNU `next_overlay_change` folded into
-//!   `compute_stop_pos`. Overlay before/after-strings stay refused
-//!   (increment 2i rung 4 decision): the covered-provenance VOCABULARY now
-//!   exists (rung 1) and the display-replacement session is reused verbatim
-//!   (rungs 2-3), but overlay strings are INSERTIONS driven by the walk's
-//!   own overlay machinery — `BufferOverlayStringTextRowRenderContext`
-//!   loads/orders strings per position (GNU `load_overlay_strings` sorting,
-//!   before/after interleaving, window filtering, `push_it (it, NULL)`
-//!   insertion semantics) interleaved with per-char emission and its own
-//!   row transitions. Unlike the replacement session there is no single
-//!   typed request the routed commit can drive without replicating that
-//!   walk state, so any intersecting overlay carrying a string refuses.
+//!   `compute_stop_pos`. Overlay before/after-strings ROUTE since P4.6
+//!   sub-step 3b (the increment 2i rung 4 refusal is retired). Its recorded
+//!   reason — "overlay strings are INSERTIONS driven by the walk's own
+//!   overlay machinery, and unlike the replacement session there is no
+//!   single typed request the routed commit can drive without replicating
+//!   that walk state" — stopped being true in two independent ways.
+//!   Loading and GNU ordering moved OUT of the walk and into the producer
+//!   (P4.6 sub-step 1), which surfaces them as one typed insertion element;
+//!   and `render_produced_strings_at_text_row` takes exactly the loop state
+//!   the routed commit already owns, `overlay_context` included. So the
+//!   routed commit DELEGATES — the same call `render.rs`'s loop-level arm
+//!   makes — and what stays refused is only what the routed row shape
+//!   genuinely cannot express: an anchor at the row start (the loop's route
+//!   attempt runs BEFORE the pipeline step that would emit it, so routing
+//!   would drop the string), an anchor at the coverage end (the line end and
+//!   the overflow handoff char belong to the pipeline's own lifecycle), a
+//!   string outside the routable Lisp-string class, and any anchor on an
+//!   overflow-prefix plan (the append session clips and breaks rows itself,
+//!   so the scan's handoff cut is not the pipeline's overflow point — the
+//!   same reason replacement rows never route as overflow prefixes).
 //!   Plain-elision `invisible` text (phase 2d) is expressible: hidden spans
 //!   simply drop chars, so the routed source emits visible-segment TextRuns
 //!   whose charpos bookkeeping jumps the gap, exactly like the pipeline's
@@ -89,7 +98,9 @@ use crate::display_source::{
     TextSourceCharClassification, classify_text_source_char, nonascii_hyphen_p, nonascii_space_p,
 };
 use crate::frame_face_arena::FrameFaceAttempt;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferView, LayoutCharPropertyLookup, ResolvedFace};
+use crate::neovm_bridge::{
+    FaceResolver, LayoutBufferView, LayoutCharPropertyLookup, OverlayDisplayString, ResolvedFace,
+};
 use crate::types::LineWrapMode;
 use crate::unicode::{decode_utf8, is_regional_indicator};
 use neomacs_display_protocol::types::FaceId;
@@ -125,6 +136,12 @@ pub(crate) struct RowRouteWindowPolicy {
     /// machinery makes the wrap-vs-truncate decision — but it labels the
     /// routed class for engagement accounting.
     pub(crate) wrap_mode: LineWrapMode,
+    /// The window overlay strings are collected FOR (GNU's `window` overlay-
+    /// property filter), or `None` when this row renders none at all. Taken
+    /// from the loop's own `BufferOverlayStringTextRowRenderContext`, so the
+    /// classifier and the commit's session agree by construction about which
+    /// overlays apply.
+    pub(crate) overlay_string_window: Option<u64>,
 }
 
 /// Why a candidate row stayed on the buffer pipeline. Every refusal point in
@@ -471,6 +488,10 @@ pub(crate) struct AsciiRowPlan {
     elided: Vec<(usize, usize)>,
     composed: Vec<usize>,
     replacements: Vec<RoutedRowReplacement>,
+    /// The overlay-string anchors inside the routed coverage, ascending. Each
+    /// is an INSERTION: it consumes no chars, so it is not a gap in
+    /// [`AsciiRowPlan::segment_ranges`] the way a replacement is.
+    overlay_strings: Vec<RoutedRowOverlayStrings>,
     line_end: RoutedRowLineEnd,
 }
 
@@ -632,6 +653,15 @@ impl AsciiRowPlan {
 
     pub(crate) fn replacements(&self) -> &[RoutedRowReplacement] {
         &self.replacements
+    }
+
+    /// Whether the row carries an overlay-string anchor.
+    pub(crate) fn has_overlay_strings(&self) -> bool {
+        !self.overlay_strings.is_empty()
+    }
+
+    pub(crate) fn overlay_strings(&self) -> &[RoutedRowOverlayStrings] {
+        &self.overlay_strings
     }
 
     /// Whether the row renders as more than one run (face segments, elision
@@ -845,6 +875,7 @@ fn routed_line_scan(
     byte_idx: usize,
     fit: RowRouteFit<'_>,
     replacements: &[RoutedRowReplacement],
+    overlay_strings: &[RoutedRowOverlayStrings],
 ) -> Result<RoutedLineScan, RouteRefusal> {
     let mut idx = byte_idx;
     let mut char_len = 0usize;
@@ -856,6 +887,7 @@ fn routed_line_scan(
     let mut tail: Option<(char, bool)> = None;
     let mut merge_target = RoutedScanMergeTarget::None;
     let mut next_replacement = replacements.iter().peekable();
+    let mut next_anchor = overlay_strings.iter().peekable();
     // The maximal-fitting-prefix cut for an over-wide line: every scanned
     // char so far fits; the char at `idx` would cross the right edge, so the
     // routed coverage ends here and the pipeline resumes at `idx`.
@@ -874,6 +906,29 @@ fn routed_line_scan(
             })
         };
     while idx < text.len() {
+        // An overlay-string ANCHOR (P4.6): the producer surfaces its strings
+        // BEFORE the buffer char at this position and does not advance (GNU
+        // `push_it (it, NULL)` insertion semantics), so the pen gains the
+        // strings' columns and no char is consumed. Strings that would cross
+        // the right edge refuse outright rather than cutting a prefix here:
+        // the append session clips and breaks rows on its own, so a cut
+        // taken mid-anchor is not the pipeline's overflow point. The strings
+        // append real glyphs, so a following extender finds no routable
+        // merge target.
+        if let Some(anchor) = next_anchor.peek()
+            && char_len == anchor.at
+        {
+            let advance_px = anchor.advance_cols as f32 * fit.char_width_px;
+            if x_px + advance_px > fit.right_edge_px {
+                return Err(RouteRefusal::Overlay);
+            }
+            x_px += advance_px;
+            col += anchor.advance_cols;
+            tail = None;
+            merge_target = RoutedScanMergeTarget::None;
+            next_anchor.next();
+            continue;
+        }
         // A replacement-covered span (increment 2i rung 2): the pen advances
         // by the REPLACEMENT string's predicted columns, not the covered
         // chars', and the covered chars are consumed without classification
@@ -1020,18 +1075,27 @@ fn routed_line_scan(
 /// overlay. `face` merges through the SAME resolver seam the pipeline's
 /// checkpoint uses (GNU `face_at_buffer_position`'s ascending-priority
 /// overlay loop), `priority` orders that merge, and `evaporate` is
-/// buffer-maintenance-only. EVERYTHING else refuses the route: before/
-/// after-strings inject Lisp-string INSERTIONS through the walk's overlay
-/// machinery (GNU `load_overlay_strings` ordering + `push_it (it, NULL)`;
-/// increment 2i rung 4 kept them refused — the covered-provenance
-/// vocabulary exists, but there is no single typed session request the
-/// routed commit can reuse without replicating the walk's per-position
-/// load/order/interleave state), `display`/`invisible` rewrite content,
-/// `mouse-face`/`line-prefix`/`line-height` and friends have pipeline
-/// machinery, `window` restricts applicability per window, and `category`
-/// indirects to arbitrary props. Unknown properties are conservatively
-/// refused (allow-list, not deny-list).
-const ROUTE_SAFE_OVERLAY_PROPS: [&str; 3] = ["face", "priority", "evaporate"];
+/// buffer-maintenance-only. `before-string`/`after-string` joined the list at
+/// P4.6 sub-step 3b: the producer owns their collection and GNU ordering, and
+/// the routed commit delegates the append to the pipeline's OWN session
+/// through [`RoutedRowOverlayStrings`] — the routable-shape and anchor-
+/// position conditions are enforced by [`routed_row_overlay_string_scan`],
+/// not by keeping the properties off this list. EVERYTHING else refuses the
+/// route: `display`/`invisible` rewrite content, `mouse-face`/`line-prefix`/
+/// `line-height` and friends have pipeline machinery, `window` restricts
+/// applicability per window, and `category` indirects to arbitrary props.
+/// Unknown properties are conservatively refused (allow-list, not deny-list).
+const ROUTE_SAFE_OVERLAY_PROPS: [&str; 5] = [
+    "face",
+    "priority",
+    "evaporate",
+    "before-string",
+    "after-string",
+];
+
+/// The overlay properties that anchor a Lisp-string INSERTION at an overlay
+/// endpoint (before-string at its start, after-string at its end).
+const OVERLAY_STRING_PROPS: [&str; 2] = ["before-string", "after-string"];
 
 /// The overlay facts of a candidate row: whether any overlay intersects it
 /// and the overlay start/end CHAR boundaries strictly inside the line.
@@ -1040,19 +1104,59 @@ struct RoutedRowOverlayScan {
     boundaries: Vec<usize>,
 }
 
-/// Scan the overlays intersecting `[start_byte, newline_byte]` (touching
+/// One overlay-string ANCHOR inside a routed row: the CHAR offset where the
+/// producer surfaces its typed insertion element, and the strings collected
+/// there in GNU `compare_overlay_entries` order.
+///
+/// An insertion consumes no buffer characters (GNU `push_it (it, NULL)`
+/// resumes at the same position), so `at` is both the start and the end of
+/// the part this becomes — which is exactly why the parts of a routed row
+/// cannot be ordered by position alone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RoutedRowOverlayStrings {
+    /// CHAR offset of the anchor within the line.
+    at: usize,
+    /// The producer's collection at `at`, already GNU-ordered. The routed
+    /// commit hands this slice to the SAME session `render.rs` drives, so
+    /// content and order are the producer's, not a second derivation.
+    strings: Vec<OverlayDisplayString>,
+    /// The strings' combined logical-cell advance for the classifier's fit
+    /// walk. The probe re-verifies it with the session's own base face.
+    advance_cols: usize,
+}
+
+impl RoutedRowOverlayStrings {
+    pub(crate) fn at(&self) -> usize {
+        self.at
+    }
+
+    pub(crate) fn strings(&self) -> &[OverlayDisplayString] {
+        &self.strings
+    }
+
+    pub(crate) fn advance_cols(&self) -> usize {
+        self.advance_cols
+    }
+}
+
+/// Scan the overlays intersecting `[start_byte, coverage_end_byte]` (touching
 /// endpoints included: an overlay ending at the row start or starting at the
-/// newline can anchor strings there). Returns `None` — refusing the route —
-/// when any intersecting overlay carries a property outside
+/// coverage end can anchor strings there). Returns `None` — refusing the
+/// route — when any intersecting overlay carries a property outside
 /// [`ROUTE_SAFE_OVERLAY_PROPS`]. Boundary positions mirror GNU
 /// `next_overlay_change` feeding `compute_stop_pos`: every overlay start or
-/// end strictly inside the line becomes a face-segment boundary (an empty
+/// end strictly inside the coverage becomes a face-segment boundary (an empty
 /// overlay contributes its single position).
+///
+/// `coverage_end_byte` is the ROUTED coverage end — the newline for a
+/// whole-line plan, the handoff char for an overflow-prefix plan — so an
+/// overlay living entirely in an over-wide line's unreached tail neither
+/// refuses the route nor segments the row.
 fn routed_row_overlay_scan<B: LayoutBufferView + ?Sized>(
     buffer: &B,
     row_charpos: i64,
     start_byte: usize,
-    newline_byte: usize,
+    coverage_end_byte: usize,
 ) -> Option<RoutedRowOverlayScan> {
     let overlays = buffer.layout_overlays();
     let mut scan = RoutedRowOverlayScan {
@@ -1070,7 +1174,7 @@ fn routed_row_overlay_scan<B: LayoutBufferView + ?Sized>(
             continue;
         };
         let (ov_start, ov_end) = (ov_start.get(), ov_end.get());
-        if ov_start > newline_byte || ov_end < start_byte {
+        if ov_start > coverage_end_byte || ov_end < start_byte {
             continue;
         }
         // Every property of an intersecting overlay must be on the
@@ -1094,7 +1198,7 @@ fn routed_row_overlay_scan<B: LayoutBufferView + ?Sized>(
         }
         scan.has_overlay = true;
         for boundary in [ov_start, ov_end] {
-            if boundary > start_byte && boundary < newline_byte {
+            if boundary > start_byte && boundary < coverage_end_byte {
                 let char_offset = buffer
                     .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(boundary))
                     .get()
@@ -1104,6 +1208,137 @@ fn routed_row_overlay_scan<B: LayoutBufferView + ?Sized>(
         }
     }
     Some(scan)
+}
+
+/// The routable Lisp-string class, shared by `display` replacements and
+/// overlay strings: a plain, property-less string whose every char has an
+/// unambiguous column width. Returns its total advance in columns.
+///
+/// A newline would end the row, a tab expands pen-dependently in the
+/// session's own frame, and text properties re-face (or re-shape) the string
+/// mid-flight — none of which the classifier's logical-cell fit walk can
+/// predict, so all three refuse. This is ONE predicate deliberately: the two
+/// callers must agree about what "plain enough to route" means, and a second
+/// copy would drift.
+fn routed_lisp_string_advance_cols(value: Value) -> Option<usize> {
+    let text = value.as_utf8_str()?;
+    if text.is_empty() {
+        return None;
+    }
+    if neovm_core::emacs_core::value::get_string_text_properties_table_for_value(value).is_some() {
+        return None;
+    }
+    let mut advance_cols = 0usize;
+    for ch in text.chars() {
+        match classify_routed_row_char(ch) {
+            Some(RoutedRowCharAdvance::Cols(cols)) => advance_cols += usize::from(cols),
+            Some(RoutedRowCharAdvance::Tab) | None => return None,
+        }
+    }
+    Some(advance_cols)
+}
+
+/// Find the overlay-string anchors on the line `[start_byte, line_end_byte]`
+/// and collect the strings at each, refusing the route for anything the
+/// routed row shape cannot express.
+///
+/// Anchor positions are the endpoints of the intersecting overlays that carry
+/// a string property (before-string at the start, after-string at the end);
+/// the CONTENT at each position comes from `overlay_strings_at`, the same
+/// producer-side collection the pipeline renders, so the two can never
+/// disagree about which strings are there, in which order, or whether a
+/// position is an anchor at all (GNU drops empty strings at collection —
+/// `STRINGP && SCHARS`, xdisp.c:7171-7182 — so an overlay whose only string
+/// is `""` anchors nothing and must not refuse).
+///
+/// Refuses when:
+/// * a string is outside the routable class above;
+/// * an anchor lands ON the row start. The visible loop attempts the route
+///   BEFORE the pipeline step that would emit the strings (loop_render.rs),
+///   so a routed row start would DROP them — this is a correctness bound,
+///   not conservatism;
+/// * an anchor lands ON the line end, where it precedes (or replaces) the
+///   line end the pipeline's own line-break lifecycle owns.
+///
+/// Anchors OUTSIDE `[start_byte, line_end_byte]` are simply not this row's:
+/// one before the row start was emitted on an earlier row, and the line end
+/// bound is inclusive of neither.
+fn routed_row_overlay_string_scan<B: LayoutBufferView>(
+    buffer: &B,
+    window_id: Option<u64>,
+    row_charpos: i64,
+    start_byte: usize,
+    line_end_byte: usize,
+) -> Result<Vec<RoutedRowOverlayStrings>, RouteRefusal> {
+    // No window means this row renders no overlay strings at all, so no
+    // position on it is an anchor (the append is a no-op either way).
+    let Some(window_id) = window_id else {
+        return Ok(Vec::new());
+    };
+    let overlays = buffer.layout_overlays();
+    if overlays.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Candidate positions first, content second: reading the plists of the
+    // overlays that intersect the line is cheap, and it keeps the per-anchor
+    // collection (which walks a byte range and sorts) off every row that has
+    // face-only overlays.
+    let mut anchor_bytes: Vec<usize> = Vec::new();
+    for overlay in overlays.overlays_in_gnu_lists_order() {
+        let (Some(ov_start), Some(ov_end)) = (
+            overlays.overlay_start_emacs_byte_pos(overlay),
+            overlays.overlay_end_emacs_byte_pos(overlay),
+        ) else {
+            continue;
+        };
+        let (ov_start, ov_end) = (ov_start.get(), ov_end.get());
+        if ov_start > line_end_byte || ov_end < start_byte {
+            continue;
+        }
+        if OVERLAY_STRING_PROPS.iter().any(|prop| {
+            overlays
+                .overlay_get_named(overlay, Value::symbol(prop))
+                .is_some()
+        }) {
+            anchor_bytes.push(ov_start);
+            anchor_bytes.push(ov_end);
+        }
+    }
+    anchor_bytes.sort_unstable();
+    anchor_bytes.dedup();
+
+    let props = crate::neovm_bridge::RustTextPropAccess::new_for_window(buffer, window_id);
+    let mut anchors = Vec::new();
+    for anchor_byte in anchor_bytes {
+        if anchor_byte < start_byte || anchor_byte > line_end_byte {
+            continue;
+        }
+        let anchor_charpos = buffer
+            .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(anchor_byte))
+            .get();
+        let strings = props.overlay_strings_at(anchor_charpos as i64);
+        if strings.is_empty() {
+            continue;
+        }
+        if anchor_byte == start_byte || anchor_byte == line_end_byte {
+            return Err(RouteRefusal::Overlay);
+        }
+        let mut advance_cols = 0usize;
+        for string in &strings {
+            advance_cols +=
+                routed_lisp_string_advance_cols(string.string).ok_or(RouteRefusal::Overlay)?;
+        }
+        let at = anchor_charpos
+            .checked_sub(row_charpos.max(0) as usize)
+            .ok_or(RouteRefusal::Boundary)?;
+        anchors.push(RoutedRowOverlayStrings {
+            at,
+            strings,
+            advance_cols,
+        });
+    }
+    Ok(anchors)
 }
 
 /// Scan the line `[start_byte, line_end_byte]` for `display` text properties
@@ -1211,35 +1446,22 @@ fn routed_row_replacement_scan<B: LayoutBufferView>(
             // single-line unambiguous-width (a newline emits a row break, a
             // tab expands pen-dependently in the session's full-text-width
             // frame); rung 3 — a plain `(space :width N)` spec.
-            let content: Option<(RoutedReplacementContent, usize)> =
-                match classification.replacement() {
-                    Some(DisplayReplacementProperty::String) => spec
-                        .as_utf8_str()
-                        .filter(|text| !text.is_empty())
-                        .filter(|_| {
-                            neovm_core::emacs_core::value::
-                                get_string_text_properties_table_for_value(spec)
-                            .is_none()
-                        })
-                        .and_then(|text| {
-                            let mut advance_cols = 0usize;
-                            for ch in text.chars() {
-                                match classify_routed_row_char(ch) {
-                                    Some(RoutedRowCharAdvance::Cols(cols)) => {
-                                        advance_cols += usize::from(cols);
-                                    }
-                                    Some(RoutedRowCharAdvance::Tab) | None => return None,
-                                }
-                            }
-                            Some((
+            let content: Option<(RoutedReplacementContent, usize)> = match classification
+                .replacement()
+            {
+                Some(DisplayReplacementProperty::String) => routed_lisp_string_advance_cols(spec)
+                    .and_then(|advance_cols| {
+                        spec.as_utf8_str().map(|text| {
+                            (
                                 RoutedReplacementContent::String { text: text.into() },
                                 advance_cols,
-                            ))
-                        }),
-                    Some(DisplayReplacementProperty::Stretch(_)) => routed_space_width_cols(spec)
-                        .map(|cols| (RoutedReplacementContent::SpaceWidth, cols)),
-                    _ => None,
-                };
+                            )
+                        })
+                    }),
+                Some(DisplayReplacementProperty::Stretch(_)) => routed_space_width_cols(spec)
+                    .map(|cols| (RoutedReplacementContent::SpaceWidth, cols)),
+                _ => None,
+            };
             // Hazard reasons keep their historic split: string display
             // values (and recognized space shapes) report Replacement;
             // everything else keeps HazardProp.
@@ -1515,11 +1737,52 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     let display_scan =
         routed_row_replacement_scan(buffer, row.charpos, start_byte, start_byte + line_byte_len)?;
 
+    // Overlay-string anchors over the whole line, for the same reason the
+    // display scan runs first: their strings widen the pen, so the fit walk
+    // below cannot find the coverage end without them.
+    let mut overlay_strings = routed_row_overlay_string_scan(
+        buffer,
+        policy.overlay_string_window,
+        row.charpos,
+        start_byte,
+        start_byte + line_byte_len,
+    )?;
+    // A row carries EITHER anchors OR replacements, never both: their pen
+    // bookkeeping would have to interleave (an anchor exactly at a covered
+    // range's start has no defined order against it), and neither the plan's
+    // parts nor the fit walk encode that precedence.
+    if !overlay_strings.is_empty() && !display_scan.replacements.is_empty() {
+        return Err(RouteRefusal::Overlay);
+    }
+
     // One pass scans the chars (refusing anything the pipeline would
     // compose) AND applies the strict logical-cell fit: a line exactly
     // filling the row keeps the buffer pipeline (continuation/truncation
     // policy owns that edge).
-    let scan = routed_line_scan(row.text, row.byte_idx, fit, &display_scan.replacements)?;
+    let scan = routed_line_scan(
+        row.text,
+        row.byte_idx,
+        fit,
+        &display_scan.replacements,
+        &overlay_strings,
+    )?;
+
+    // An overflow-prefix plan refuses ANY anchor it reaches: the append
+    // session clips at the right edge and can break the row on its own, so a
+    // handoff cut taken mid-anchor is not the pipeline's overflow point. An
+    // anchor BEYOND the cut is unrouted remainder the pipeline emits at
+    // resume, which is also what keeps the producer's once-per-anchor marker
+    // honest — the routed prefix never emits a string the resumed walk would
+    // emit again.
+    if scan.line_end == RoutedRowLineEnd::OverflowHandoff {
+        if overlay_strings
+            .iter()
+            .any(|anchor| anchor.at <= scan.char_len)
+        {
+            return Err(RouteRefusal::Overlay);
+        }
+        overlay_strings.clear();
+    }
 
     // Unroutable display props refuse when they touch the routed coverage
     // (inclusive of the end position, mirroring the historical hazard walk
@@ -1579,6 +1842,14 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     // gap model does not encode).
     if !replacements.is_empty() && !elided.is_empty() {
         return Err(RouteRefusal::Replacement);
+    }
+
+    // Same conservatism for an anchor meeting a hidden span: an insertion at
+    // a gap edge has no defined order against the skip, and GNU's handler
+    // order (invisible before overlay strings at the same stop) is not
+    // something the plan's disjoint-gap model encodes.
+    if !overlay_strings.is_empty() && !elided.is_empty() {
+        return Err(RouteRefusal::Overlay);
     }
 
     // An overflow-prefix plan refuses ANY elision inside its coverage: the
@@ -1651,6 +1922,16 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     }
     face_boundaries.sort_unstable();
     face_boundaries.dedup();
+    // An anchor IS an overlay endpoint, so the boundary merge above already
+    // cut a text segment there. The routed commit relies on it: an insertion
+    // part is ordered ahead of the text segment that STARTS at its position,
+    // which only exists because of this cut.
+    debug_assert!(
+        overlay_strings
+            .iter()
+            .all(|anchor| face_boundaries.binary_search(&anchor.at).is_ok()),
+        "every overlay-string anchor must have cut a face segment"
+    );
 
     // A VISIBLE composed extender must merge into a base rendered
     // immediately before it in the SAME routed segment. If a face boundary
@@ -1685,6 +1966,7 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
         elided,
         composed: scan.composed,
         replacements,
+        overlay_strings,
         line_end: scan.line_end,
     })
 }
@@ -2024,6 +2306,12 @@ pub(crate) static ROUTED_TAB_ROW_COUNT: std::sync::atomic::AtomicUsize =
 pub(crate) static ROUTED_WIDE_ROW_COUNT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
+/// Test-only engagement proof for the P4.6 rung-4 un-refusal: routed rows
+/// that carried at least one overlay-string anchor.
+#[cfg(test)]
+pub(crate) static ROUTED_OVERLAY_STRING_ROW_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 /// Test-only engagement proof for the overlay-face extension: routed rows
 /// intersected by at least one (face-only) overlay.
 #[cfg(test)]
@@ -2114,6 +2402,9 @@ fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode, entry: RowRoute
         }
         if plan.has_overlay {
             ROUTED_OVERLAY_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        if plan.has_overlay_strings() {
+            ROUTED_OVERLAY_STRING_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         if plan.has_elision() {
             ROUTED_ELIDED_ROW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -2238,6 +2529,7 @@ impl<'rows, 'emit, 'surface>
             show_trailing_whitespace: params.show_trailing_whitespace
                 || self.trailing_whitespace.is_enabled(),
             wrap_mode: params.wrap_mode,
+            overlay_string_window: self.overlay_context.string_window_id(),
         };
         // Increment 2j: a mid-line position qualifies for the continuation-
         // row resume entry exactly when the current row is the wrap
@@ -2287,6 +2579,25 @@ impl<'rows, 'emit, 'surface>
         enum RoutedRowPartKind<'plan> {
             Text,
             Replacement(&'plan RoutedRowReplacement),
+            /// P4.6: an INSERTION — `start == end`, no chars consumed.
+            OverlayStrings(&'plan RoutedRowOverlayStrings),
+        }
+        impl RoutedRowPartKind<'_> {
+            /// Tie-break for parts sharing a start position. An insertion
+            /// belongs BEFORE the text segment that starts where it sits —
+            /// GNU's `handle_stop` order, and the same insertion semantics
+            /// the producer gives the element. Sorting by position alone
+            /// would land every string one character late.
+            fn order_rank(&self) -> u8 {
+                match self {
+                    Self::OverlayStrings(_) => 0,
+                    Self::Text | Self::Replacement(_) => 1,
+                }
+            }
+
+            fn is_insertion(&self) -> bool {
+                matches!(self, Self::OverlayStrings(_))
+            }
         }
         struct RoutedRowPart<'plan> {
             start: CharPos0,
@@ -2307,12 +2618,21 @@ impl<'rows, 'emit, 'surface>
             end: start.add_len(CharLen::new(replacement.end)),
             kind: RoutedRowPartKind::Replacement(replacement),
         }));
-        parts.sort_by_key(|part| part.start.get());
+        parts.extend(plan.overlay_strings().iter().map(|anchor| {
+            let at = start.add_len(CharLen::new(anchor.at()));
+            RoutedRowPart {
+                start: at,
+                end: at,
+                kind: RoutedRowPartKind::OverlayStrings(anchor),
+            }
+        }));
+        parts.sort_by_key(|part| (part.start.get(), part.kind.order_rank()));
         debug_assert!(
             parts
                 .first()
                 .is_none_or(|part| matches!(part.kind, RoutedRowPartKind::Text)),
-            "a routed row never starts with a replacement (row-start anchors refuse)"
+            "a routed row never starts with a replacement or an insertion \
+             (row-start anchors refuse)"
         );
         let ranges: Vec<(CharPos0, CharPos0)> =
             parts.iter().map(|part| (part.start, part.end)).collect();
@@ -2338,10 +2658,21 @@ impl<'rows, 'emit, 'surface>
             active: crate::display_row::face_state::DisplayRowActiveFaceState,
         }
         let mut probed: Vec<ProbedSegment> = Vec::with_capacity(ranges.len());
+        let mut carried_active: Option<crate::display_row::face_state::DisplayRowActiveFaceState> =
+            None;
         for (index, part) in parts.into_iter().enumerate() {
             let (seg_start, seg_end) = (&part.start, &part.end);
             let active = if index == 0 {
                 active_face_state.clone()
+            } else if part.kind.is_insertion() {
+                // An insertion resolves its OWN base face per string (GNU
+                // face_for_overlay_string ignores the surrounding run), so
+                // resolving a segment face here would mint an id nothing
+                // uses. Carry the previous part's face through instead — the
+                // box-face check below still sees the row's real faces.
+                carried_active
+                    .clone()
+                    .unwrap_or_else(|| active_face_state.clone())
             } else {
                 let (face_id, resolved) = resolve_routed_position_face(
                     buffer,
@@ -2386,6 +2717,7 @@ impl<'rows, 'emit, 'surface>
                 note_route_refusal(RouteRefusal::ProbeFaceDiverges);
                 return AsciiRowRouteOutcome::NotRouted;
             }
+            carried_active = Some(active.clone());
             probed.push(ProbedSegment {
                 start: *seg_start,
                 end: *seg_end,
@@ -2406,6 +2738,91 @@ impl<'rows, 'emit, 'surface>
             // resolution `DisplayPropertyReplacementAppendPlanItemRequest`
             // performs at commit; content-addressed mints only).
             let measured = match &segment.kind {
+                // P4.6: the strings the retained session will append at this
+                // anchor, measured one after another from the running pen.
+                // The base face is resolved through
+                // `DisplayOrigin::OverlayString` — GNU
+                // `face_for_overlay_string` (xfaces.c:7034-7092) "simply
+                // disregards the `face' properties of all overlays", so
+                // resolving through `DisplayPropertyString` here would tint
+                // the string with the overlay's own face and mis-measure a
+                // box or a different font. Resolution only (no pending-face
+                // install): the session performs its own at commit.
+                RoutedRowPartKind::OverlayStrings(anchor) => {
+                    let mut position = Some(probe_position);
+                    for overlay_string in anchor.strings() {
+                        let Some(at) = position else {
+                            break;
+                        };
+                        let Some(text) = overlay_string.string.as_utf8_str() else {
+                            position = None;
+                            break;
+                        };
+                        let origin = DisplayOrigin::OverlayString {
+                            overlay_id: overlay_string.overlay_id,
+                            anchor_charpos: segment.start,
+                            kind: if overlay_string.after_string_p {
+                                crate::display_origin::OverlayStringKind::After
+                            } else {
+                                crate::display_origin::OverlayStringKind::Before
+                            },
+                        };
+                        let base_face = crate::display_source_resolver::resolve_display_string_base_face(
+                            buffer,
+                            face_resolution_context.face_resolver(),
+                            origin,
+                            origin.default_base_face_policy(),
+                            None,
+                            crate::display_source_resolver::DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
+                            self.face_ids,
+                        );
+                        // The session appends the string's chars one by one
+                        // through the Lisp-string source; measuring them as
+                        // one text item in the same face gives the same pen
+                        // advance for the routable class (no tabs, no
+                        // newlines, no per-char property changes), and the
+                        // commit re-reads the session's OWN end position, so
+                        // this prediction only has to keep the fit check
+                        // honest.
+                        let item = DisplayItem::new(
+                            SourceSpan::new(
+                                DisplaySourcePosition::buffer(
+                                    loop_context.buffer_id(),
+                                    segment.start,
+                                    buffer.layout_char_pos_to_emacs_byte_pos(segment.start),
+                                ),
+                                DisplaySourcePosition::buffer(
+                                    loop_context.buffer_id(),
+                                    segment.start,
+                                    buffer.layout_char_pos_to_emacs_byte_pos(segment.start),
+                                ),
+                            ),
+                            RenderFaceRef::FaceId(base_face.face_id()),
+                            DisplayItemKind::SourceMappedText(
+                                crate::display_item::DisplaySourceMappedText::new(text),
+                            ),
+                        );
+                        let append_context = BufferSourceRowAppendContext::from_active_face_row(
+                            buffer,
+                            loop_context.buffer_id(),
+                            self.append_surface,
+                            &segment.active,
+                            0.0,
+                            loop_context.char_height(),
+                            self.face_ids.clone(),
+                        )
+                        .with_resolved_item_face(base_face.face_id(), base_face.face().clone());
+                        let mut measure = self.source_render.measure_state();
+                        position = append_context.measure_source_display_item_advance_naturally(
+                            &geometry,
+                            &mut measure,
+                            &item,
+                            at,
+                            DisplayRowAppendKind::SourceText,
+                        );
+                    }
+                    position
+                }
                 RoutedRowPartKind::Text => {
                     let mut source = BufferAsciiItemSource::text_only(
                         loop_context.buffer_id(),
@@ -2600,6 +3017,57 @@ impl<'rows, 'emit, 'surface>
         // measured face, including row extents, scoping row-extend/box).
         let mut render_position = position;
         for (index, segment) in probed.iter().enumerate() {
+            // P4.6: DELEGATE the anchor's strings to the pipeline's own
+            // session — the identical call `render.rs`'s loop-level element
+            // arm makes, with the loop state this commit already owns. The
+            // producer decided WHERE and in WHICH order (its collection is
+            // what the plan carries); this side owns only the append.
+            //
+            // No face checkpoint runs first: an insertion consumes no chars,
+            // so the position's checkpoint belongs to the text segment that
+            // starts here, and it fires on the next iteration. The strings
+            // resolve their own base face regardless.
+            if let RoutedRowPartKind::OverlayStrings(anchor) = &segment.kind {
+                self.progress.apply_row_position(render_position);
+                let anchor_charpos = segment.start.get() as i64;
+                let (x, col) = self.progress.row_progress_mut().coordinates_mut();
+                let continuation = self.overlay_context.render_produced_strings_at_text_row(
+                    buffer,
+                    anchor_charpos,
+                    anchor.strings(),
+                    self.source_render.reborrow(),
+                    x,
+                    col,
+                    self.row_geometry,
+                    self.cursor_info,
+                    self.hit_rows,
+                    self.hit_row_range,
+                    self.row_y_positions,
+                    self.face_ids,
+                    self.line_numbers,
+                    self.face_scan,
+                );
+                // A routable overlay string holds no newline and the plan
+                // refused every anchor an overflow prefix reaches, so the
+                // session has neither a row break nor a clip to report.
+                debug_assert!(
+                    !continuation.should_break(),
+                    "routed overlay strings are single-line and fit the row"
+                );
+                if continuation.should_break() {
+                    return AsciiRowRouteOutcome::Stopped;
+                }
+                let committed = self.progress.row_position();
+                debug_assert_eq!(
+                    committed.col(),
+                    render_position.col() + anchor.advance_cols(),
+                    "the classifier's fit walk credited a different advance than \
+                     the session appended"
+                );
+                render_position = committed;
+                continue;
+            }
+
             if index > 0 {
                 face_resolution_context.resolve_at_checkpoint_with_source_state(
                     &mut self.source_render.reborrow(),

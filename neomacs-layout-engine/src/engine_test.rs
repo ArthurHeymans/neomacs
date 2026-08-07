@@ -14470,6 +14470,7 @@ fn ascii_route_classification<B: crate::neovm_bridge::LayoutBufferView>(
             word_wrap: false,
             show_trailing_whitespace: false,
             wrap_mode: crate::types::LineWrapMode::Truncate,
+            overlay_string_window: Some(0),
         },
     )
 }
@@ -15630,6 +15631,7 @@ fn assert_segmented_ascii_shadow_row(
             word_wrap: false,
             show_trailing_whitespace: false,
             wrap_mode: crate::types::LineWrapMode::Truncate,
+            overlay_string_window: Some(0),
         },
     )
     .expect("scenario row must classify for the item route");
@@ -16092,21 +16094,25 @@ fn ascii_item_source_shadow_matches_zero_length_overlay_row() {
     );
 }
 
-/// Phase 2c step 2 decision pin: overlay before/after-strings are REFUSED by
-/// the route classifier, not expressed on the item path. They are
-/// Lisp-string-sourced runs with their own append session (GNU
-/// load_overlay_strings feeding push_it/GET_FROM_STRING; neomacs
-/// OverlayStringRenderRequest -> LispStringSourceRowAppendSession) whose face
-/// policy (face_for_overlay_string: buffer TEXT props only, overlay faces
-/// disregarded), cursor capture, and possible row transitions the single-row
-/// probe/commit item route cannot express. This test proves the refused
-/// class renders through the buffer pipeline IDENTICALLY whether the route
-/// flag is on or off: the interleaved string glyphs must be present in GNU
-/// order (before-string at overlay start, after-string at its end). If the
-/// classifier ever mistakenly routed the row, the strings would vanish and
-/// this fails under NEOMACS_ROW_ITEM_ROUTE=ascii.
+/// P4.6 sub-step 3b: a mid-line overlay-string row ROUTES, and renders
+/// glyph-identically to the pipeline while doing so.
+///
+/// The phase-2c decision this replaces refused the class because overlay
+/// strings are Lisp-string-sourced INSERTIONS with their own append session,
+/// and the routed commit had no typed request to drive it with. Both halves
+/// of that reason are gone: the producer owns collection and GNU ordering
+/// (sub-step 1) and the commit delegates to the very same session through
+/// `render_produced_strings_at_text_row`, so the strings are appended by the
+/// pipeline's own machinery either way.
+///
+/// The glyph half below is the load-bearing one and is deliberately
+/// unchanged from the refusal-era test: the interleaved strings must be
+/// present in GNU order (before-string at the overlay's start, after-string
+/// at its end). It runs on both suite legs, so it is the route-on/route-off
+/// equality proof — if the routed commit ever dropped, duplicated or
+/// misplaced a string, the default-on leg reds while the off leg stays green.
 #[test]
-fn overlay_string_rows_stay_on_buffer_pipeline_under_item_route() {
+fn overlay_string_rows_route_and_render_identically() {
     let text = "hello world\nnext\n";
     let (eval, buf_id, rows, char_width, _char_height) = {
         let (eval, buf_id, _frame_id, rows, char_width, char_height) =
@@ -16129,7 +16135,7 @@ fn overlay_string_rows_stay_on_buffer_pipeline_under_item_route() {
          (plus the appended newline space)"
     );
 
-    // And the classifier itself refuses the row.
+    // And the classifier now ACCEPTS the row.
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
@@ -16142,8 +16148,36 @@ fn overlay_string_rows_stay_on_buffer_pipeline_under_item_route() {
             640.0,
             text.chars().count() as i64
         ),
-        crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline,
-        "string-carrying overlay rows must refuse the item route"
+        crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer,
+        "a mid-line overlay-string row routes since P4.6 sub-step 3b"
+    );
+}
+
+/// Engagement proof for the rung-4 un-refusal (flag-on suite gate): an
+/// overlay-string row must actually take the routed acquisition, not silently
+/// refuse for some unrelated reason and leave the delegation unreached.
+/// Trivially passes when the flag is off.
+#[test]
+fn ascii_route_flag_on_layout_engages_overlay_string_acquisition() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTED_OVERLAY_STRING_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("hello world\nnext\n", |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(overlay-put (make-overlay 4 9) 'before-string \"[\")")
+                .expect("overlay string");
+        });
+    assert!(rows.len() >= 2);
+    assert_eq!(glyphs_logical_text(&rows[0].glyphs[1]), "hel[lo world ");
+    let after = crate::buffer_source::row_route::ROUTED_OVERLAY_STRING_ROW_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after >= before + 1,
+        "expected the overlay-string row to route through the item renderer \
+         (before={before}, after={after})"
     );
 }
 

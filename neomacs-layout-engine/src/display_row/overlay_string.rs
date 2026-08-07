@@ -305,6 +305,18 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         self
     }
 
+    /// The window overlay strings are collected FOR, or `None` when this row
+    /// renders no overlay strings at all (the buffer carries no overlays).
+    ///
+    /// The routed row classifier needs both facts to decide a row: it collects
+    /// through `RustTextPropAccess::new_for_window` with this window id, so the
+    /// route and the pipeline can never disagree about which overlays apply
+    /// (GNU's `window` overlay-property filter), and a `None` window means the
+    /// append below is a no-op, so no position on the row is an anchor.
+    pub(crate) fn string_window_id(self) -> Option<u64> {
+        self.enabled.then_some(self.window_id)
+    }
+
     fn row_context(self) -> OverlayStringRenderRowContext<'a> {
         OverlayStringRenderRowContext::new(
             self.append_surface,

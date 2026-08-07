@@ -2453,7 +2453,7 @@ pub(crate) struct RustTextPropAccess<'a, B: LayoutBufferView + ?Sized> {
     window_id: Option<u64>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct OverlayDisplayString {
     pub(crate) string: Value,
     pub(crate) overlay_id: Value,
