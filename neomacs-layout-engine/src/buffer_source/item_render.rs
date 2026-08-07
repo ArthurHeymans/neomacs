@@ -368,14 +368,20 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             return outcome;
         }
 
-        if let Some((prefix, suffix)) = text_run_request.split_prefix_to_fit(
+        if let Some(prefix) = text_run_request.prefix_to_fit(
             &source_item,
             buffer,
             self.params.wrap_mode,
             &buffer_row_append_context,
             &mut source_render,
         ) {
-            source_walk.prepend_pending_render_items(vec![suffix]);
+            // Consume only this prefix: the producer is reseated at the first
+            // unfitting character, so the next element is produced from there.
+            // The tail used to be queued purely for the next iteration to pop
+            // it, find it does not fit, and have the truncation skip discard it.
+            if let Some(resume_charpos) = prefix.source_end_charpos() {
+                source_walk.consume_prefix_to(resume_charpos);
+            }
             return text_run_request.render_and_apply(
                 prefix,
                 &active_face_state,

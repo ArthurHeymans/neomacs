@@ -281,9 +281,12 @@ enum SplitPolicy {
     /// split, the first character is consumed now and the remainder goes back
     /// on the pending queue.
     PerChar,
-    /// The fit split (item_render.rs:371-389): a run crossing `charpos` is cut
-    /// there and the tail is queued for the continuation row.
+    /// The fit split as it was before P4.3: a run crossing `charpos` is cut
+    /// there and the tail is queued for a later iteration to pop.
     FitAt(i64),
+    /// P4.3's replacement: cut the run at `charpos`, consume only the prefix,
+    /// and reseat the producer there instead of queueing the tail.
+    PrefixAt(i64),
 }
 
 /// Buffer plus face machinery for one corpus case. Owns its `FaceResolver`
@@ -424,6 +427,19 @@ impl<'a> StreamDriver<'a> {
                     return BufferSourceConsumedItem::Renderable(step);
                 };
                 self.producer.prepend_pending_render_items(vec![suffix]);
+                BufferSourceConsumedItem::Renderable(prefix)
+            }
+            SplitPolicy::PrefixAt(at_charpos) => {
+                let crosses = scan_before.charpos() < at_charpos
+                    && step.end_charpos() > at_charpos
+                    && step.is_multi_char_text_run();
+                let Some((prefix, _tail)) = crosses
+                    .then(|| step.clone().split_text_run_at_charpos(at_charpos, 0))
+                    .flatten()
+                else {
+                    return BufferSourceConsumedItem::Renderable(step);
+                };
+                self.producer.consume_prefix_to(at_charpos);
                 BufferSourceConsumedItem::Renderable(prefix)
             }
         }
@@ -981,4 +997,54 @@ fn c12_overlay_face_seam_terminates_runs() {
     // runs "abc", "def", "gh" rather than one run.
     let first = driver.next_observations().expect("first run");
     assert_eq!(CharObservation::chars(&first), "abc");
+}
+
+// ---------------------------------------------------------------------------
+// P4.3: the fit split is replaced by a prefix consume
+// ---------------------------------------------------------------------------
+
+#[test]
+fn p43_prefix_consume_leaves_nothing_pending_and_resumes_at_the_prefix_end() {
+    // The rung's contract: after the renderer takes a fitting prefix the
+    // producer sits at the first unfitting character with an EMPTY pending
+    // queue — no tail is pushed back for a later iteration to pop.
+    let case = StreamCase::new("P4.3 fit consume", "aaaaaaaaaaaaaaaaaaaaaaaa\n");
+    let fixture = Fixture::new(&case);
+    let mut driver = fixture.driver(SplitPolicy::PrefixAt(20));
+
+    let prefix = driver.drain_until_charpos(20);
+    assert_eq!(prefix.len(), 20);
+    assert_eq!(
+        driver.producer.pending_render_items_len(),
+        0,
+        "the prefix consume must not queue a remainder"
+    );
+
+    let remainder = driver.drain(DRAIN_LIMIT);
+    assert_eq!(remainder[0].scan_before, BufferScanPos::new(20, 20));
+    assert_eq!(CharObservation::chars(&remainder), "aaaa\n");
+}
+
+#[test]
+fn p43_prefix_consume_is_stream_identical_to_the_queueing_fit_split() {
+    // The deletion proof, including a property seam inside the discarded tail
+    // and a multibyte boundary: the old mechanism (queue the tail) and the new
+    // one (reseat the producer) yield the same element stream.
+    for case in [
+        StreamCase::new("P4.3 plain", "aaaaaaaaaaaaaaaaaaaaaaaa\n"),
+        StreamCase::new("P4.3 multibyte", "aaaaaaaaaaaaaaaaaaa漢tail\n"),
+        StreamCase::new("P4.3 tab in tail", "aaaaaaaaaaaaaaaaaa\tZ\n"),
+        StreamCase::new("P4.3 face seam in tail", "aaaaaaaaaaaaaaaaaaaaaaaa\n")
+            .with(CaseProperty::face(18, 21, ":weight", "bold")),
+    ] {
+        let fixture = Fixture::new(&case);
+        let queued = fixture.driver(SplitPolicy::FitAt(16)).drain(DRAIN_LIMIT);
+        let consumed = fixture.driver(SplitPolicy::PrefixAt(16)).drain(DRAIN_LIMIT);
+        assert!(!queued.is_empty(), "{}: nothing produced", case.name);
+        assert_eq!(
+            queued, consumed,
+            "{}: the prefix consume changed the element stream",
+            case.name
+        );
+    }
 }

@@ -83,14 +83,22 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
             .split_text_run_at_charpos(first_overlay_charpos, self.text_start_byte)
     }
 
-    pub(crate) fn split_prefix_to_fit<B: LayoutBufferView>(
+    /// The largest prefix of `source_item` that fits the row, or `None` when no
+    /// proper prefix does.
+    ///
+    /// TRUNCATE MODE ONLY — the wrap modes reach their overflow machinery
+    /// instead, so this never builds a continuation row. The unrendered tail is
+    /// neither returned nor queued: the renderer reseats the producer at the
+    /// prefix end with `BufferElementProducer::consume_prefix_to`, so the next
+    /// element is produced from the first unfitting character.
+    pub(crate) fn prefix_to_fit<B: LayoutBufferView>(
         self,
         source_item: &DisplaySourceStepItem,
         buffer: &B,
         wrap_mode: LineWrapMode,
         append_context: &BufferSourceRowAppendContext<'_, '_, B>,
         source_render: &mut TextRowSourceRenderState<'_>,
-    ) -> Option<(DisplaySourceStepItem, DisplaySourceStepItem)> {
+    ) -> Option<DisplaySourceStepItem> {
         if wrap_mode != LineWrapMode::Truncate {
             return None;
         }
@@ -151,6 +159,7 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
         source_item
             .clone()
             .split_text_run_at_charpos(start_charpos.saturating_add(lo), self.text_start_byte)
+            .map(|(prefix, _tail)| prefix)
     }
 
     pub(crate) fn render_if_fits_and_apply<B: LayoutBufferView>(

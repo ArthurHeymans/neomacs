@@ -152,6 +152,12 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         self.producer.prepend_pending_render_items(items);
     }
 
+    /// Consume only a prefix of the element just produced: the producer resumes
+    /// at `resume_charpos`. See [`BufferElementProducer::consume_prefix_to`].
+    pub(crate) fn consume_prefix_to(&mut self, resume_charpos: i64) {
+        self.producer.consume_prefix_to(resume_charpos);
+    }
+
     /// Rewind source consumption and its cursor to a row-wrap retry position so
     /// the current character is re-produced on the continuation row. See
     /// [`BufferElementProducer::rewind_to`] for why the whole producer — not

@@ -136,6 +136,22 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
         self.restore(seating);
     }
 
+    /// Consume only a PREFIX of the element just produced: reseat the cursor at
+    /// `resume_charpos` so the next element begins there.
+    ///
+    /// The producer-side of GNU's `set_iterator_to_next` — the cursor position
+    /// IS the resume state, so nothing is queued. It replaces the fit split,
+    /// which rendered a fitting prefix and pushed the unrendered tail back into
+    /// `pending_render_items` for the next loop iteration to pop.
+    pub(crate) fn consume_prefix_to(&mut self, resume_charpos: i64) {
+        debug_assert!(
+            !self.has_pending_render_items(),
+            "a prefix consume must not race queued remainders"
+        );
+        self.source_cursor
+            .reset_to(CharPos0::new(resume_charpos.max(0) as usize));
+    }
+
     /// Drop queued remainders without moving the cursor (the truncation skip,
     /// which advances the position itself).
     pub(crate) fn clear_pending_render_items(&mut self) {
