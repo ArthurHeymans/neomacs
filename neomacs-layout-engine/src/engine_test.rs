@@ -23689,3 +23689,150 @@ fn p45_trailing_whitespace_shadow_survives_a_wrapped_row_boundary() {
         "a continued row must not highlight trailing whitespace, got {highlighted_first:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// P4.6: the overlay-string ORDERING and CURSOR net.
+//
+// P4.6 moves collection and ordering of overlay strings from the renderer-side
+// session into the producer. These cases pin what the finished row shows for
+// the ordering rules the dossier calls the minefield (tmp/p4-test-inventory.md
+// section 2), so the move is glyph-for-glyph observable. Deliberately NOT
+// pinned, per the inventory: equal-priority same-kind order (GNU's qsort is
+// unstable there) and anything about GNU's 16-chunk re-collection (this engine
+// walks a snapshot).
+// ---------------------------------------------------------------------------
+
+/// Lay out `text` with several overlays and return the first body row's text.
+fn overlay_string_row_text(text: &str, overlay_forms: &[&str]) -> String {
+    let forms = overlay_forms
+        .iter()
+        .map(|form| (*form).to_owned())
+        .collect::<Vec<_>>();
+    let (_eval, _buf_id, _frame_id, rows, _cw, _ch) =
+        layout_main_text_rows_with(text, move |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            for form in forms {
+                eval.eval_str(&form).expect("overlay form");
+            }
+        });
+    glyphs_logical_text(&rows[0].glyphs[1])
+}
+
+/// O1: an after-string and a before-string from DIFFERENT overlays at the same
+/// position — the after-string comes first (GNU compare_overlay_entries: "let
+/// after-strings appear in front of before-strings if they come from different
+/// overlays").
+#[test]
+fn overlay_string_shadow_after_string_precedes_before_string_at_one_anchor() {
+    let text = overlay_string_row_text(
+        "hello world\n",
+        &[
+            "(overlay-put (make-overlay 1 4) 'after-string \"A\")",
+            "(overlay-put (make-overlay 4 9) 'before-string \"B\")",
+        ],
+    );
+    assert_eq!(text, "helAB'lo world ".replace('\'', ""));
+}
+
+/// O3: within a group the priority sort direction REVERSES — before-strings
+/// ascend by priority, after-strings descend.
+#[test]
+fn overlay_string_shadow_before_strings_ascend_and_after_strings_descend_by_priority() {
+    let before = overlay_string_row_text(
+        "hello world\n",
+        &[
+            "(let ((ov (make-overlay 4 9))) (overlay-put ov 'priority 5) \
+               (overlay-put ov 'before-string \"5\"))",
+            "(let ((ov (make-overlay 4 9))) (overlay-put ov 'priority 1) \
+               (overlay-put ov 'before-string \"1\"))",
+        ],
+    );
+    assert_eq!(before, "hel15lo world ");
+
+    let after = overlay_string_row_text(
+        "hello world\n",
+        &[
+            "(let ((ov (make-overlay 1 4))) (overlay-put ov 'priority 5) \
+               (overlay-put ov 'after-string \"5\"))",
+            "(let ((ov (make-overlay 1 4))) (overlay-put ov 'priority 1) \
+               (overlay-put ov 'after-string \"1\"))",
+        ],
+    );
+    assert_eq!(after, "hel51lo world ");
+}
+
+/// O4: a CONS priority degrades to 0 for STRING ordering (GNU
+/// load_overlay_strings: FIXNUMP (priority) ? XFIXNUM : 0), so the cons-priority
+/// string sorts as priority 0 among before-strings and lands first.
+#[test]
+fn overlay_string_shadow_cons_priority_degrades_to_zero_for_string_order() {
+    let text = overlay_string_row_text(
+        "hello world\n",
+        &[
+            "(let ((ov (make-overlay 4 9))) (overlay-put ov 'priority '(7 . 1)) \
+               (overlay-put ov 'before-string \"C\"))",
+            "(let ((ov (make-overlay 4 9))) (overlay-put ov 'priority 3) \
+               (overlay-put ov 'before-string \"3\"))",
+        ],
+    );
+    assert_eq!(text, "helC3lo world ");
+}
+
+/// O6: an empty string produces nothing and a non-string value is ignored —
+/// neither may leave a glyph or perturb the row.
+#[test]
+fn overlay_string_shadow_empty_and_non_string_values_are_dropped() {
+    let baseline = overlay_string_row_text("hello world\n", &[]);
+    assert_eq!(baseline, "hello world ");
+
+    let dropped = overlay_string_row_text(
+        "hello world\n",
+        &[
+            "(overlay-put (make-overlay 4 9) 'before-string \"\")",
+            "(overlay-put (make-overlay 4 9) 'after-string 42)",
+        ],
+    );
+    assert_eq!(dropped, baseline);
+}
+
+/// Cursor placement AROUND an anchor. Overlay strings are not cursor targets
+/// unless they carry a `cursor` text property, so point on the anchor character
+/// must land on the buffer character, at the column AFTER the inserted string.
+#[test]
+fn overlay_string_shadow_cursor_lands_on_the_buffer_char_after_an_inserted_string() {
+    fn cursor_at(point_byte: usize) -> (i64, i64) {
+        let trace =
+            layout_trace_with_buffer_setup("hello world\n", 640, 240, move |buffer, buf_id, _| {
+                // The overlay is built directly rather than through eval so the
+                // setup closure keeps its `&mut Buffer` shape.
+                let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(3));
+                let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(8));
+                let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+                    serial: 0,
+                    plist: Value::NIL,
+                    buffer: Some(buf_id),
+                    start: start.get(),
+                    end: end.get(),
+                    front_advance: false,
+                    rear_advance: false,
+                });
+                buffer.overlays_mut().insert_overlay(overlay);
+                buffer
+                    .overlays_mut()
+                    .overlay_put(overlay, Value::symbol("before-string"), Value::string("[["))
+                    .expect("before-string");
+                buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point_byte));
+            });
+        let cursor = trace.phys_cursor.as_ref().expect("phys cursor");
+        (cursor.row, cursor.col)
+    }
+
+    // charpos 2 is before the anchor: unshifted.
+    assert_eq!(cursor_at(2), (0, 2));
+    // charpos 3 is the anchor character itself ('l', where the overlay starts).
+    // The two string cells are inserted BEFORE it, so the cursor sits at column
+    // 3 + 2.
+    assert_eq!(cursor_at(3), (0, 5));
+    // A character after the anchor keeps the same shift.
+    assert_eq!(cursor_at(6), (0, 8));
+}
