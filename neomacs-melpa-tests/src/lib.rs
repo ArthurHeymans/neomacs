@@ -357,6 +357,12 @@ pub const PYIM_MELPA_PIN: (&str, &str) = ("pyim", "20251230.809");
 /// The exact pythonic package selected by the practical path-alias, Tramp
 /// connection, Docker Compose, synchronous/asynchronous process, and
 /// virtual-environment parity corpus. MELPA built this archive from upstream
+
+/// The exact pyenv-mode package selected for practical version set/unset,
+/// mode-line indication, keymap, and pythonic activation parity. MELPA built
+/// this archive from upstream commit `6820aa6673e6a51ace88611a58b423b5b1effb19`.
+pub const PYENV_MODE_MELPA_PIN: (&str, &str) = ("pyenv-mode", "20230821.1645");
+
 /// commit f6e0bec552319341f260a5c4740288799c2b3a5b.
 pub const PYTHONIC_MELPA_PIN: (&str, &str) = ("pythonic", "20230821.1733");
 
@@ -2959,6 +2965,13 @@ pub const PROJECTILE_MELPA_PIN: (&str, &str) = ("projectile", "20260728.945");
 
 /// The exact s package selected by the live lifecycle and comprehensive API
 /// parity corpora.
+
+/// The exact sesman package selected for practical generic session lifecycle,
+/// linking (buffer/directory/project), and multi-system registration parity.
+/// MELPA built this archive from upstream commit
+/// `7eb733acb33e610a53979fa7fc13393eeda3cc53`.
+pub const SESMAN_MELPA_PIN: (&str, &str) = ("sesman", "20260616.1239");
+
 pub const S_MELPA_PIN: (&str, &str) = ("s", "20220902.1511");
 
 /// The exact Shrink Path package selected for practical eshell/modeline
