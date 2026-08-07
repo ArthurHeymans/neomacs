@@ -23795,6 +23795,36 @@ fn overlay_string_shadow_empty_and_non_string_values_are_dropped() {
     assert_eq!(dropped, baseline);
 }
 
+/// O7: an overlay whose own text is invisible shows BOTH of its strings, once,
+/// where the elided text was. GNU reaches that by collecting both strings at
+/// both endpoints (xdisp.c:7157-7173) while the iterator only ever stops at the
+/// end of the invisible run; this engine reaches the same row the same way, and
+/// this is the assertion that says so in glyphs rather than in collection.
+#[test]
+fn overlay_string_shadow_invisible_overlay_shows_both_strings_once() {
+    let text = overlay_string_row_text(
+        "abcdefgh\n",
+        &[
+            "(let ((ov (make-overlay 4 7))) (overlay-put ov 'invisible t) \
+               (overlay-put ov 'before-string \"B\") \
+               (overlay-put ov 'after-string \"A\"))",
+        ],
+    );
+    // "def" is hidden; the overlay's before-string leads its after-string
+    // (the same-overlay rule) in the single place they appear.
+    assert_eq!(text, "abcBAgh ");
+
+    // The control that makes the elision half load-bearing: the same overlay
+    // WITHOUT `invisible` keeps its text and puts each string at its own end.
+    let visible = overlay_string_row_text(
+        "abcdefgh\n",
+        &["(let ((ov (make-overlay 4 7))) \
+               (overlay-put ov 'before-string \"B\") \
+               (overlay-put ov 'after-string \"A\"))"],
+    );
+    assert_eq!(visible, "abcBdefAgh ");
+}
+
 /// Cursor placement AROUND an anchor. Overlay strings are not cursor targets
 /// unless they carry a `cursor` text property, so point on the anchor character
 /// must land on the buffer character, at the column AFTER the inserted string.

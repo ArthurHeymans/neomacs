@@ -2803,12 +2803,33 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
             if !self.overlay_applies_to_window(oid) {
                 continue;
             }
-            let priority = overlay_string_priority(oid);
-            if self
+            let starts_here = self
                 .buffer
                 .layout_overlays()
                 .overlay_start_emacs_byte_pos(oid)
-                == Some(bytepos)
+                == Some(bytepos);
+            let ends_here = self
+                .buffer
+                .layout_overlays()
+                .overlay_end_emacs_byte_pos(oid)
+                == Some(bytepos);
+            // "Skip this overlay if it doesn't start or end at IT's current
+            // position" (xdisp.c:7152-7155). The scan range is a window AROUND
+            // the position, so most of what it returns anchors nothing and must
+            // not pay for the property reads below.
+            if !starts_here && !ends_here {
+                continue;
+            }
+            let priority = overlay_string_priority(oid);
+            // GNU: "If the text ``under'' the overlay is invisible, both before-
+            // and after-strings from this overlay are visible; start and end
+            // position are indistinguishable" (xdisp.c:7157-7173). The iterator
+            // never stops inside the hidden text, so this is what carries an
+            // invisible overlay's before-string to the one position that is
+            // still displayed.
+            let hides_its_text = self.overlay_hides_its_own_text(oid);
+
+            if (starts_here || (ends_here && hides_its_text))
                 && let Some(string) = self.displayable_overlay_string(oid, "before-string")
             {
                 entries.push(OverlayDisplayString {
@@ -2819,11 +2840,7 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
                 });
             }
 
-            if self
-                .buffer
-                .layout_overlays()
-                .overlay_end_emacs_byte_pos(oid)
-                == Some(bytepos)
+            if (ends_here || (starts_here && hides_its_text))
                 && let Some(string) = self.displayable_overlay_string(oid, "after-string")
             {
                 entries.push(OverlayDisplayString {
@@ -2852,6 +2869,30 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
             }
         }
         entries
+    }
+
+    /// GNU `TEXT_PROP_MEANS_INVISIBLE` applied to the overlay's OWN `invisible`
+    /// property (xdisp.c:7168-7169): does this overlay hide the text it covers?
+    ///
+    /// The overlay's own value is read directly, exactly as GNU's
+    /// `Foverlay_get (overlay, Qinvisible)` does — this is not the resolved
+    /// "is the text at this position invisible" question that
+    /// [`invisible_status_at`](Self::invisible_status_at) answers by letting the
+    /// highest-priority overlay win, because the rule is about THIS overlay's
+    /// own endpoints collapsing.
+    fn overlay_hides_its_own_text(&self, overlay_id: Value) -> bool {
+        let Some(invisible) = self
+            .buffer
+            .layout_overlays()
+            .overlay_get_named(overlay_id, Value::symbol("invisible"))
+        else {
+            return false;
+        };
+        let spec = self
+            .buffer
+            .layout_buffer_local_value(LayoutVar::BufferInvisibilitySpec)
+            .unwrap_or(Value::T);
+        invisible_prop_status(Some(invisible), spec).hidden
     }
 
     /// The overlay's `before-string` / `after-string` if it is something GNU

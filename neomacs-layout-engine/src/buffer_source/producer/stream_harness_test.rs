@@ -1740,6 +1740,62 @@ fn o6_empty_and_non_string_values_are_dropped_at_collection() {
 }
 
 #[test]
+fn o7_an_invisible_overlay_contributes_both_strings_at_both_ends() {
+    // "If the text ``under'' the overlay is invisible, both before- and
+    // after-strings from this overlay are visible; start and end position are
+    // indistinguishable" (xdisp.c:7157-7173). Same-overlay order applies at each
+    // end, so both lists read before-then-after (O2).
+    //
+    // The producer's stream visits BOTH endpoints here because elision is still
+    // renderer-owned at this rung (see c7a): the harness therefore sees the
+    // collection rule twice, once per endpoint. In a real row the invisible
+    // checkpoint skips the producer from the start endpoint to the end one
+    // before the start is ever visited, so the strings render ONCE - which is
+    // GNU's observable, and which
+    // overlay_string_shadow_invisible_overlay_shows_both_strings_once pins at
+    // glyph level. When P4.8 moves elision into producer stop state this case's
+    // first element disappears with it.
+    let case = StreamCase::new("O7 invisible overlay", O_TEXT).with_overlay(
+        CaseOverlay::at(3, 6)
+            .invisible()
+            .with_before_string("B")
+            .with_after_string("A"),
+    );
+    assert_eq!(
+        producer_overlay_string_elements(&case),
+        vec![
+            (3, vec![before("B"), after("A")]),
+            (6, vec![before("B"), after("A")]),
+        ]
+    );
+
+    // Without `invisible` the same overlay contributes each string at its own
+    // end only — the rule above is the invisibility's doing.
+    let visible = StreamCase::new("O7 visible overlay", O_TEXT).with_overlay(
+        CaseOverlay::at(3, 6)
+            .with_before_string("B")
+            .with_after_string("A"),
+    );
+    assert_eq!(
+        producer_overlay_string_elements(&visible),
+        vec![(3, vec![before("B")]), (6, vec![after("A")])]
+    );
+
+    // The zero-length invisible overlay: both strings fire at the single
+    // position, which is the shape completion UIs build.
+    let zero_length = StreamCase::new("O7 zero-length invisible", O_TEXT).with_overlay(
+        CaseOverlay::at(4, 4)
+            .invisible()
+            .with_before_string("B")
+            .with_after_string("A"),
+    );
+    assert_eq!(
+        producer_overlay_string_elements(&zero_length),
+        vec![(4, vec![before("B"), after("A")])]
+    );
+}
+
+#[test]
 fn o8_an_overlay_scoped_to_another_window_contributes_no_strings() {
     // GNU skips an overlay whose `window` property names a different window
     // (xdisp.c:7147-7156). The harness producer is seated in HARNESS_WINDOW_ID.
