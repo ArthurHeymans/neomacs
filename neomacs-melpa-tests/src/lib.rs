@@ -2295,6 +2295,13 @@ pub const ORG_MIME_MELPA_PIN: (&str, &str) = ("org-mime", "20251201.245");
 /// commit `3f5bcfb80d61556d35fc29e5ddb09750df962cc6`.
 pub const ORG_POMODORO_MELPA_PIN: (&str, &str) = ("org-pomodoro", "20220318.1618");
 
+/// The exact Org-roam package selected for practical plain-text knowledge-base
+/// synchronization, node metadata and lookup, links and backlinks, node
+/// editing, dedicated buffers, and autosync lifecycle parity. MELPA built
+/// version 2.3.1 from upstream commit
+/// `c54c523dec175695645399705606ea19056a3053`.
+pub const ORG_ROAM_MELPA_PIN: (&str, &str) = ("org-roam", "20260425.1623");
+
 /// The exact Org Superstar package selected for practical headline, TODO,
 /// plain-list, ordered-list, source-block, hook, accessor, restart, and
 /// mode-lifecycle parity. MELPA built version 1.7.0 from upstream commit
