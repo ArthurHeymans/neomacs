@@ -382,6 +382,23 @@ pub fn write_home_file(session: &TuiSession, name: &str, contents: &str) {
     fs::write(path, contents).expect("write test file in isolated HOME");
 }
 
+/// Boot a pair that will EDIT a file both sessions have open.
+///
+/// [`write_shared_temp_file`] deliberately points both editors at the SAME
+/// path so their diff headers and echoed paths match on screen. Real Emacs
+/// correctly objects to that: whichever editor modifies the buffer first
+/// writes a .#lock beside the file, and the second one stops at
+/// ask-user-about-lock ("locked by user@host (pid N)") instead of editing.
+///
+/// Which editor gets there first is a RACE, so a shared-file editing test is
+/// only coherent with locking off. It passed for a long time on the ordering
+/// happening to favour GNU, and any change to how fast either side lays out a
+/// row can flip it. The test is about diff-buffer-with-file, not about lock
+/// arbitration between two editors that are really the same user.
+pub fn boot_pair_editing_a_shared_file() -> (TuiSession, TuiSession) {
+    boot_pair("--eval=(set-default'create-lockfiles())")
+}
+
 /// Write a file to a shared temp location and return its absolute path.
 /// Both GNU and Neo can open this same path, so diff headers etc. match.
 /// Uses a short directory name to avoid line-wrapping differences.

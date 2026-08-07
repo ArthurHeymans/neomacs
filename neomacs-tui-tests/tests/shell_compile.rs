@@ -606,7 +606,7 @@ fn grep_empty_prompt_multiple_del_keeps_prompt() {
 
 #[test]
 fn diff_buffer_with_file_via_mx_shows_unsaved_changes() {
-    let (mut gnu, mut neo) = boot_pair("");
+    let (mut gnu, mut neo) = boot_pair_editing_a_shared_file();
     let shared_path = write_shared_temp_file("diff-buffer-file.txt", "alpha\nbeta\n");
     open_shared_file(&mut gnu, &mut neo, &shared_path, "C-x C-f");
 
@@ -660,7 +660,7 @@ fn diff_buffer_with_file_via_mx_shows_unsaved_changes() {
 
 #[test]
 fn diff_buffer_with_file_empty_prompt_multiple_del_keeps_prompt() {
-    let (mut gnu, mut neo) = boot_pair("");
+    let (mut gnu, mut neo) = boot_pair_editing_a_shared_file();
     let shared_path = write_shared_temp_file("diff-buffer-empty-del.txt", "alpha\nbeta\n");
     open_shared_file(&mut gnu, &mut neo, &shared_path, "C-x C-f");
 
