@@ -23946,3 +23946,183 @@ fn overlay_string_shadow_emits_once_across_a_word_wrap_break() {
     assert_eq!(texts[0].matches('S').count(), 2, "one two-character string");
     assert_eq!(texts[1], "bbbbbbbbbb ");
 }
+
+// ---------------------------------------------------------------------------
+// P4.6 sub-step 3a: a NEWLINE INSIDE an overlay string.
+//
+// Verified before anything was added, and nothing needed adding: the retained
+// session already meets DisplayRowRenderStop::RowBreak inside the string and
+// runs OverlayStringRowBreakRenderContext::finish_row, which drives the ordinary
+// DisplayRowLineBreakTransitionRequest and re-emits the continuation-row
+// prelude. What follows pins what that path already establishes - row flags,
+// end-of-buffer marking and row bounds - so a later rung cannot quietly change
+// any of it, and records the one place the engine deliberately parts company
+// with GNU's find_row_edges table.
+// ---------------------------------------------------------------------------
+
+/// The rows a newline-bearing before-string produces, as
+/// (text, continued, ends_at_zv).
+fn newline_string_rows(
+    text: &'static str,
+    anchor_charpos0: usize,
+    truncate: bool,
+) -> Vec<(String, bool, bool)> {
+    let form = format!(
+        "(overlay-put (make-overlay {} {}) 'before-string \"X\\nY\")",
+        anchor_charpos0 + 1,
+        anchor_charpos0 + 2
+    );
+    let (_eval, _buf_id, _frame_id, rows, _cw, _ch) =
+        layout_main_text_rows_with(text, move |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(if truncate {
+                "(setq truncate-lines t)"
+            } else {
+                "(setq truncate-lines nil)"
+            })
+            .expect("wrap mode");
+            eval.eval_str(&form).expect("overlay");
+        });
+    rows.iter()
+        .map(|row| {
+            (
+                glyphs_logical_text(&row.glyphs[1]),
+                row.continued,
+                row.ends_at_zv,
+            )
+        })
+        .filter(|(text, _, ends_at_zv)| !text.is_empty() || *ends_at_zv)
+        .collect()
+}
+
+/// A newline inside an overlay string breaks the row where it appears, and the
+/// buffer character the string was anchored to opens the next row.
+///
+/// The row is NOT marked `continued`: GNU distinguishes "line ends in a newline
+/// from string" from "line is continued from string" (find_row_edges,
+/// xdisp.c:25248-25263), and a newline ENDS the line. Only the overflow
+/// transition marks Continued/Continuation in this engine, so the distinction
+/// falls out of which transition the break runs.
+#[test]
+fn overlay_string_newline_breaks_the_row_without_marking_it_continued() {
+    let mid_row = newline_string_rows("hello world\nsecond\n", 3, false);
+    assert_eq!(
+        mid_row,
+        vec![
+            ("helX ".to_owned(), false, false),
+            ("Ylo world ".to_owned(), false, false),
+            ("second ".to_owned(), false, false),
+            (String::new(), false, true),
+        ]
+    );
+
+    // At a row start the string owns the whole first row and the buffer line
+    // begins on the next one.
+    let row_start = newline_string_rows("hello world\nsecond\n", 0, false);
+    assert_eq!(
+        row_start,
+        vec![
+            ("X ".to_owned(), false, false),
+            ("Yhello world ".to_owned(), false, false),
+            ("second ".to_owned(), false, false),
+            (String::new(), false, true),
+        ]
+    );
+}
+
+/// The same in a TRUNCATE window. A string newline is not an overflow, so the
+/// wrap policy has nothing to say about it and both windows agree row for row.
+#[test]
+fn overlay_string_newline_behaves_identically_under_truncation() {
+    for anchor in [3, 0] {
+        assert_eq!(
+            newline_string_rows("hello world\nsecond\n", anchor, true),
+            newline_string_rows("hello world\nsecond\n", anchor, false),
+            "a newline inside a string is not an overflow, so wrap policy \
+             cannot change it (anchor {anchor})"
+        );
+    }
+}
+
+/// Row BOUNDS across a string newline, and the deliberate divergence.
+///
+/// A row's published bounds are built by `note_display_buffer_pos`, which only
+/// BUFFER characters call: overlay-string glyphs contribute none, so the row
+/// that ends in the string's newline is bounded by the last buffer character
+/// before the anchor and the next row starts at the anchor itself. (Verified by
+/// mutation, and worth stating because the intuitive guess is wrong - the
+/// anchor-boundary hit range that `finish_row` maintains is a separate,
+/// hit-testing observable and does NOT feed these numbers.)
+///
+/// GNU instead fabricates one past the end for such a row ("Line ends in a
+/// newline from string: max_pos + 1", xdisp.c:25248-25263), because its rows
+/// carry the string's own positions. This engine stamps covered/anchor BUFFER
+/// positions (the rung-1 scope decision), so the +1 has nothing to compensate
+/// for and is not adopted; changing it belongs with adopting GNU string-index
+/// stamps, not with this rung.
+#[test]
+fn overlay_string_newline_leaves_row_bounds_on_the_anchor_boundary() {
+    fn bounds(anchor_charpos0: usize) -> Vec<(Option<usize>, Option<usize>)> {
+        let trace = layout_trace_with_buffer_setup(
+            "hello world\nsecond\n",
+            640,
+            240,
+            move |buffer, buf_id, _| {
+                let start =
+                    buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(anchor_charpos0));
+                let end =
+                    buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(anchor_charpos0 + 1));
+                let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+                    serial: 0,
+                    plist: Value::NIL,
+                    buffer: Some(buf_id),
+                    start: start.get(),
+                    end: end.get(),
+                    front_advance: false,
+                    rear_advance: false,
+                });
+                buffer.overlays_mut().insert_overlay(overlay);
+                buffer
+                    .overlays_mut()
+                    .overlay_put(
+                        overlay,
+                        Value::symbol("before-string"),
+                        Value::string("X\nY"),
+                    )
+                    .expect("before-string");
+            },
+        );
+        trace
+            .output_rows
+            .iter()
+            .take(3)
+            .map(|row| {
+                (
+                    row.start_buffer_pos.map(|pos| pos.to_one_based_usize()),
+                    row.end_buffer_pos.map(|pos| pos.to_one_based_usize()),
+                )
+            })
+            .collect()
+    }
+
+    // Anchor on the 4th character (1-based 4). The first row displays chars 1-3
+    // plus the string's "X"; the string's newline ends it there, and the
+    // anchor character opens the next row.
+    assert_eq!(
+        bounds(3),
+        vec![
+            (Some(1), Some(3)),
+            (Some(4), Some(12)),
+            (Some(13), Some(19)),
+        ]
+    );
+
+    // A row made ENTIRELY of string glyphs carries no buffer bounds at all.
+    // GNU's degenerate answer is min_pos == max_pos; this engine's Option says
+    // the same thing without inventing a position, and a consumer that needs
+    // one falls back to the following row's start.
+    assert_eq!(
+        bounds(0),
+        vec![(None, None), (Some(1), Some(12)), (Some(13), Some(19))]
+    );
+}
