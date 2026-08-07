@@ -283,6 +283,12 @@ pub const EPC_MELPA_PIN: (&str, &str) = ("epc", "20140610.534");
 /// `78ab7a85c08222cd15582a298a364774e3282ce6`.
 pub const EPL_MELPA_PIN: (&str, &str) = ("epl", "20180205.2049");
 
+/// The exact ert-runner package selected for practical test path expansion,
+/// selector composition, project scaffolding, reporter loading, and batch
+/// runner hooks. MELPA built this archive from upstream commit
+/// `98a5a6f683663f9f0357459d75ce1dc36c987e4a`.
+pub const ERT_RUNNER_MELPA_PIN: (&str, &str) = ("ert-runner", "20231110.1358");
+
 /// The exact Erlang Mode package selected by the practical OTP module
 /// editing, semantic fontification, navigation, EDoc, skeleton, identifier,
 /// and compile-option workflow corpus. MELPA built this archive from upstream
@@ -2865,6 +2871,12 @@ pub const HELM_MAKE_MELPA_PIN: (&str, &str) = ("helm-make", "20200620.27");
 /// construction. MELPA built this archive from upstream commit
 /// `4744ca7f8b35e17bafce9cb0093deb87a232699d`.
 pub const HELM_ORG_MELPA_PIN: (&str, &str) = ("helm-org", "20250405.1720");
+
+/// The exact helm-ls-git package selected for practical git-root discovery,
+/// ls-files listing, branch normalization, status/source defaults, and project
+/// manager command surface. MELPA built this archive from upstream commit
+/// `dd0ed5847d4bf1b27e767cf194475ada88ee8898`.
+pub const HELM_LS_GIT_MELPA_PIN: (&str, &str) = ("helm-ls-git", "20260105.455");
 
 /// The exact final Helm Swoop source selected for practical candidate,
 /// narrowing, query, editing, face, and buffer-selection parity. MELPA's last
