@@ -315,6 +315,7 @@ mod elixir_mode;
 mod elpy;
 mod emacsql;
 mod emmet_mode;
+mod epc;
 mod epl;
 mod erlang;
 mod es_lib;

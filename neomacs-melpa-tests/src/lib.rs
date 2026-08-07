@@ -257,6 +257,13 @@ pub const ELPY_MELPA_PIN: (&str, &str) = ("elpy", "20260715.1747");
 /// from upstream commit `322d3bb112fced57d63b44863357f7a0b7eee1e3`.
 pub const EMMET_MODE_MELPA_PIN: (&str, &str) = ("emmet-mode", "20240617.45");
 
+/// The exact EPC package selected for practical local RPC framing, method
+/// registration, synchronous and deferred calls, method discovery, application
+/// and protocol errors, Unicode payloads, and connection lifecycle parity.
+/// MELPA built this archive from upstream commit
+/// `94cd36a3bec752263ac9b1b3a9dd2def329d2af7`.
+pub const EPC_MELPA_PIN: (&str, &str) = ("epc", "20140610.534");
+
 /// The exact EPL package selected by the practical package metadata,
 /// descriptor, database, installation, deletion, and built-in discovery
 /// workflow corpus. MELPA built this archive from upstream commit
