@@ -24300,3 +24300,35 @@ fn overlay_sourced_display_property_is_not_re_entered_mid_overlay() {
          overlay; resuming inside it would emit the string twice"
     );
 }
+
+/// R6: a REPLACING `display` spec beats `invisible`; a non-replacing one does
+/// not.
+///
+/// GNU's handler order is face then display then invisible
+/// (`it_props`, xdisp.c:1012-1021), and `handle_display_prop` returns
+/// HANDLED_RETURN for a replacing spec (xdisp.c:5974), short-circuiting the
+/// rest of the chain so `handle_invisible_prop` never runs. A non-replacing
+/// spec returns HANDLED_NORMALLY, so invisibility still applies.
+#[test]
+fn a_replacing_display_spec_beats_invisible_and_a_non_replacing_one_does_not() {
+    assert_eq!(
+        display_prop_first_row_text(
+            "abcdefghij\n",
+            "(progn (put-text-property 4 7 'invisible t) \
+                    (put-text-property 4 7 'display \"S\"))",
+        ),
+        "abcSghij ",
+        "a replacing display spec short-circuits the handler chain before \
+         handle_invisible_prop runs"
+    );
+    assert_eq!(
+        display_prop_first_row_text(
+            "abcdefghij\n",
+            "(progn (put-text-property 4 7 'invisible t) \
+                    (put-text-property 4 7 'display '(space-width 2)))",
+        ),
+        "abcghij ",
+        "a non-replacing spec leaves the chain running, so the text stays \
+         hidden"
+    );
+}

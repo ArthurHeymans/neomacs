@@ -2706,6 +2706,39 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
         (status, next_change)
     }
 
+    /// Whether a REPLACING `display` spec applies at `charpos`.
+    ///
+    /// GNU's handler chain runs `handle_display_prop` BEFORE
+    /// `handle_invisible_prop` (`it_props`, xdisp.c:1012-1021), and a replacing
+    /// spec returns HANDLED_RETURN (xdisp.c:5974), which makes `handle_stop`
+    /// "return immediately to the caller, to continue iteration without calling
+    /// any further handlers" - so invisibility is never consulted at a position
+    /// whose text a display string or image has already replaced.
+    ///
+    /// Resolution mirrors [`Self::invisible_status_at`] deliberately: the
+    /// highest-precedence overlay carrying `display` wins outright and shadows
+    /// the text property. The two questions are decided at the same position by
+    /// the same chain, so they must not resolve their properties differently.
+    pub fn replacing_display_at(&self, charpos: i64) -> bool {
+        let bytepos = buffer_i64_charpos_to_emacs_byte_pos(self.buffer, charpos);
+        self.buffer
+            .layout_overlays()
+            .highest_priority_overlay_property_value_at_emacs_byte_pos(
+                bytepos,
+                Value::symbol("display"),
+                self.window_id,
+            )
+            .or_else(|| {
+                self.buffer
+                    .layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("display"))
+            })
+            .is_some_and(|value| {
+                crate::display_property::classify_display_property(value)
+                    .replacement()
+                    .is_some()
+            })
+    }
+
     /// Combined `invisible` status at `charpos` from the `invisible` text
     /// property and the highest-priority overlay (GNU `invisible_p`).
     fn invisible_status_at(&self, charpos: i64) -> InvisibleStatus {

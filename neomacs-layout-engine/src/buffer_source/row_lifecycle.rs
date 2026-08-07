@@ -1196,6 +1196,21 @@ impl<'a> BufferSourceInvisibleTextScanContext<'a> {
             return BufferSourceInvisibleTextScanAction::Visible { next_visible };
         }
 
+        // GNU runs handle_display_prop BEFORE handle_invisible_prop, and a
+        // REPLACING spec returns HANDLED_RETURN, so handle_stop never reaches
+        // the invisible handler at this position: the display string or image
+        // wins and the text it covers is replaced rather than hidden
+        // (xdisp.c:1012-1021, :5974). The replacement consumes its own range,
+        // and this checkpoint runs again at the position past it - where, if
+        // the text there is still invisible, it hides from there.
+        //
+        // Asked only on the hidden branch: when the text is visible the answer
+        // cannot change the outcome, and this keeps the check off the path
+        // every ordinary character takes.
+        if text_props.replacing_display_at(start_charpos) {
+            return BufferSourceInvisibleTextScanAction::Visible { next_visible };
+        }
+
         let skip_to = next_visible.min(self.accessible_end);
         let point_in_hidden_region = self.cursor_missing
             && self.point_charpos >= start_charpos
