@@ -227,8 +227,48 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
             position,
         )
     }
+
+    /// Produce the next element with face resolution wired to `face_basis`,
+    /// without the renderer-side context [`produce_step`](Self::produce_step)
+    /// needs. The stream-equivalence harness drives the producer this way.
+    #[cfg(test)]
+    pub(crate) fn next_consumed_item_with_face_basis(
+        &mut self,
+        buffer: &B,
+        face_basis: crate::display_source_resolver::DisplaySourceFaceBasis<'_>,
+        face_ids: &mut FrameFaceAttempt,
+        position: &mut DisplaySourceTextPosition,
+    ) -> Option<BufferSourceConsumedItem> {
+        let mut pending_faces = Vec::new();
+        let mut pending_fringes = Vec::new();
+        let params = crate::display_source_resolver::DisplaySourceResolveParams::new(
+            face_basis,
+            None,
+            Default::default(),
+        );
+        let mut resolver = BufferDisplaySourcePropertyResolver::new(
+            buffer,
+            params,
+            &mut self.source_resolve_state,
+            face_ids,
+            &mut pending_faces,
+        );
+        let mut context = DisplaySourceContext::with_face_resolver_and_fringe_sink(
+            &mut resolver,
+            &mut pending_fringes,
+        );
+        self.source_consumption.next_source_consumption_item(
+            &mut self.source_cursor,
+            &mut context,
+            position,
+        )
+    }
 }
 
 #[cfg(test)]
 #[path = "producer_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "stream_harness_test.rs"]
+mod stream_harness_tests;
