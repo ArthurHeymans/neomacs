@@ -371,6 +371,7 @@ mod when_unless_comprehensive;
 mod r#while;
 mod window_operations_comprehensive;
 mod window_tree_primitive_semantics;
+mod window_tree_shape_semantics;
 mod windowp_framep_semantics;
 mod with;
 mod wrapper_hook_semantics;

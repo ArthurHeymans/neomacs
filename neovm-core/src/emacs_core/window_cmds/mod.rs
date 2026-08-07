@@ -17,9 +17,10 @@ pub(crate) use crate::emacs_core::error::{
     expect_args, expect_fixnum, expect_max_args, expect_min_args,
 };
 use crate::window::{
-    CursorTypeSymbol, FrameFullscreen, FrameId, FrameManager, FrameParam, FrameParamKey, Rect,
-    SplitDirection, SplitPlacement, Window, WindowBufferDisplayDefaults, WindowFringeDefaults,
-    WindowId, WindowMargins, WindowScrollBarDefaults, is_valid_horizontal_scroll_bar_value,
+    CombinationLimit, CursorTypeSymbol, DeleteResize, FrameFullscreen, FrameId, FrameManager,
+    FrameParam, FrameParamKey, Rect, SplitDirection, SplitPlacement, Window,
+    WindowBufferDisplayDefaults, WindowFringeDefaults, WindowId, WindowMargins,
+    WindowScrollBarDefaults, is_valid_horizontal_scroll_bar_value,
     is_valid_vertical_scroll_bar_value, window_first_child_id, window_next_sibling_id,
     window_parent_id, window_prev_sibling_id,
 };
@@ -3836,8 +3837,17 @@ pub(crate) fn split_window_internal_impl_in_state(
     window: Value,
     size: Value,
     side: Value,
+    combination_limit: CombinationLimit,
 ) -> EvalResult {
-    split_window_internal_impl_in_state_with_normal(frames, buffers, window, size, side, Value::NIL)
+    split_window_internal_impl_in_state_with_normal(
+        frames,
+        buffers,
+        window,
+        size,
+        side,
+        Value::NIL,
+        combination_limit,
+    )
 }
 
 /// Variant of [`split_window_internal_impl_in_state`] that also
@@ -3856,6 +3866,7 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
     size: Value,
     side: Value,
     normal_size: Value,
+    combination_limit: CombinationLimit,
 ) -> EvalResult {
     let (fid, wid) = resolve_window_id_or_error_in_state(frames, buffers, Some(&window))?;
 
@@ -3899,7 +3910,15 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
     };
 
     let new_wid = frames
-        .split_window(fid, wid, direction, buf_id, size_opt, placement)
+        .split_window_with_combination_limit(
+            fid,
+            wid,
+            direction,
+            buf_id,
+            size_opt,
+            placement,
+            combination_limit,
+        )
         .ok_or_else(|| signal("error", vec![Value::string("Cannot split window")]))?;
 
     // GNU allocates independent start/point/old-point markers for the new
@@ -4063,7 +4082,11 @@ pub(crate) fn builtin_delete_window_internal(
         ));
     }
 
-    if frames.delete_window(fid, wid) {
+    // GNU `Fdelete_window_internal` commits the sizes `lisp/window.el`'s
+    // `delete-window` staged in `new_pixel` (`window_resize_apply`), rather
+    // than laying the surviving windows out afresh.  The Lisp layer is what
+    // decides which sibling absorbs the deleted window's space.
+    if frames.delete_window_with_resize(fid, wid, DeleteResize::ApplyStaged) {
         Ok(Value::NIL)
     } else {
         Err(signal("error", vec![Value::string("Deletion failed")]))

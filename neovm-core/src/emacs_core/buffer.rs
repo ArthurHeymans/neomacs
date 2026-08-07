@@ -2134,12 +2134,25 @@ pub(crate) fn builtin_split_window_internal(
     if let Some(refer) = args.get(4) {
         let _ = refer;
     }
+    // GNU `Fsplit_window_internal` reads the dynamic variable
+    // `window-combination-limit' to decide whether to interpose a new parent
+    // window (`src/window.c:5426').  Only the symbol `t' forces one; `lisp/window.el'
+    // binds it to t for, among others, a split whose target has a side-window
+    // sibling, which is what keeps a frame's main area in its own combination.
+    let combination_limit = crate::window::CombinationLimit::from_is_t(
+        super::builtins::misc_eval::dynamic_or_global_symbol_value(
+            eval,
+            "window-combination-limit",
+        )
+        .is_some_and(|value| value.is_t()),
+    );
     let result = super::window_cmds::split_window_internal_impl_in_state(
         &mut eval.frames,
         &mut eval.buffers,
         args[0],
         args[1],
         args[2],
+        combination_limit,
     )?;
     // GNU does NOT run `window-configuration-change-hook' eagerly from
     // `split-window-internal'.  It is deferred to `run_window_change_functions'

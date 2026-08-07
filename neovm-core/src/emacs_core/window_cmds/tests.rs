@@ -8210,3 +8210,235 @@ fn split_window_below_keeps_frame_selected_window_on_top_leaf() {
          (the other gets mode-line-inactive face); got {selected_count}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// `window-combination-limit` / side-window placement parity with GNU.
+//
+// GNU `Fsplit_window_internal` (src/window.c:5423-5431) decides whether a
+// split wraps the target in a fresh parent from THREE inputs:
+//
+//     combination_limit = (Vwindow_combination_limit == Qt)   // dynamic var
+//                        || NILP (o->parent)                  // splitting root
+//                        || parent is ortho-combined;
+//
+// The per-window stored slot `w->combination_limit` is NOT consulted here; it
+// only guards `recombine_windows` on the delete path (src/window.c:2616).
+// ---------------------------------------------------------------------------
+
+/// Renders the frame's window tree as a structure of combination direction,
+/// buffer names and column spans.  Column spans (not full edges) keep the
+/// assertion comparable with GNU `--batch`, whose root window sits at a
+/// different y origin than this harness's frame.
+const WINDOW_TREE_RENDERER: &str = r#"
+(defun neo--wt (node)
+  (cond
+   ((windowp node)
+    (list (buffer-name (window-buffer node))
+          (nth 0 (window-edges node))
+          (nth 2 (window-edges node))))
+   ((consp node)
+    (cons (if (car node) 'v 'h) (mapcar #'neo--wt (cddr node))))))
+(defun neo--tree () (neo--wt (car (window-tree))))
+"#;
+
+fn eval_window_tree(body: &str) -> String {
+    crate::test_utils::init_test_tracing();
+    let src = format!("{WINDOW_TREE_RENDERER}\n{body}");
+    bootstrap_eval_with_frame(&src)
+        .pop()
+        .expect("at least one result")
+}
+
+/// The reported bug: with a `left` side window present, a new `right` side
+/// window must land at the frame's far right as the LAST child of the root
+/// combination -- not between the main windows.
+///
+/// GNU Emacs 31 `--batch`, 80-column frame:
+///   (h ("*left-side*" 0 20) (h ("*scratch*" 20 40) ("*scratch*" 40 60))
+///      ("*right-side*" 60 80))
+#[test]
+fn right_side_window_attaches_at_frame_far_right_when_left_side_window_exists() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (setq display-buffer-alist
+                   '(("\\*left-side\\*"  (display-buffer-in-side-window)
+                      (side . left)  (window-width . 20))
+                     ("\\*right-side\\*" (display-buffer-in-side-window)
+                      (side . right) (window-width . 20))))
+             (display-buffer (get-buffer-create "*left-side*"))
+             (split-window (selected-window) nil 'right)
+             (display-buffer (get-buffer-create "*right-side*"))
+             (neo--tree))"#,
+    );
+    assert_eq!(
+        tree,
+        "OK (h (\"*left-side*\" 0 20) \
+         (h (\"*scratch*\" 20 40) (\"*scratch*\" 40 60)) \
+         (\"*right-side*\" 60 80))"
+    );
+}
+
+/// The intermediate step of the same scenario: `split-window` binds
+/// `window-combination-limit` to t when the split target has a side-window
+/// sibling (lisp/window.el, "If `window-combination-resize' is 'side and
+/// window has a side window sibling"), so the main area must be wrapped in
+/// its own internal node rather than flattened into the root.
+#[test]
+fn splitting_next_to_a_side_window_wraps_the_main_area_in_a_new_parent() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (setq display-buffer-alist
+                   '(("\\*left-side\\*" (display-buffer-in-side-window)
+                      (side . left) (window-width . 20))))
+             (display-buffer (get-buffer-create "*left-side*"))
+             (split-window (selected-window) nil 'right)
+             (neo--tree))"#,
+    );
+    assert_eq!(
+        tree,
+        "OK (h (\"*left-side*\" 0 20) \
+         (h (\"*scratch*\" 20 50) (\"*scratch*\" 50 80)))"
+    );
+}
+
+/// `window-combination-limit` is a DYNAMIC variable read by
+/// `split-window-internal`; binding it to t must force a fresh parent even
+/// though the target's parent is iso-combined.
+#[test]
+fn split_window_honors_dynamic_window_combination_limit() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (let ((window-combination-limit t))
+               (split-window (selected-window) nil 'right)
+               (split-window (selected-window) nil 'right))
+             (neo--tree))"#,
+    );
+    assert_eq!(
+        tree,
+        "OK (h (h (\"*scratch*\" 0 20) (\"*scratch*\" 20 40)) (\"*scratch*\" 40 80))"
+    );
+}
+
+/// The control case: with the variable nil, an iso-combined parent is reused
+/// and the tree stays flat.  (This already passed before the fix; it guards
+/// against over-correcting into always making a new parent.)
+#[test]
+fn split_window_reuses_iso_combined_parent_when_limit_is_nil() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (let ((window-combination-limit nil))
+               (split-window (selected-window) nil 'right)
+               (split-window (selected-window) nil 'right))
+             (neo--tree))"#,
+    );
+    assert_eq!(
+        tree,
+        "OK (h (\"*scratch*\" 0 20) (\"*scratch*\" 20 40) (\"*scratch*\" 40 80))"
+    );
+}
+
+/// Reusing the parent must not be gated on the split target being a LEAF.
+/// GNU splices a new sibling next to an internal node just the same, which is
+/// exactly how a side window is attached beside the main-window group.
+#[test]
+fn split_window_reuses_iso_combined_parent_when_target_is_internal() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (split-window (selected-window) nil 'right)
+             (let ((window-combination-limit t))
+               (split-window (selected-window) nil 'right))
+             (let ((window-combination-limit nil)
+                   (ignore-window-parameters t))
+               (split-window (window-parent (selected-window)) nil 'right))
+             (neo--tree))"#,
+    );
+    assert_eq!(
+        tree,
+        "OK (h (h (\"*scratch*\" 0 10) (\"*scratch*\" 10 20)) \
+         (\"*scratch*\" 20 40) (\"*scratch*\" 40 80))"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// `delete-window` space reclamation.
+//
+// `lisp/window.el`'s `delete-window` picks ONE sibling to absorb the deleted
+// window's space -- `(or (window-left window) (window-right window))`, i.e. the
+// previous sibling when there is one, else the next -- and stages the new size
+// with `window--resize-this-window`.  GNU's `Fdelete_window_internal` then
+// commits the staged `new_pixel` values with `window_resize_apply`.
+//
+// neomacs stages the same values (verified identical to GNU via an advice
+// probe on `delete-window-internal`), so the primitive must apply them rather
+// than invent a layout of its own.
+// ---------------------------------------------------------------------------
+
+/// Deleting the MIDDLE of three siblings gives its columns to the window on
+/// its left.  GNU Emacs 31 `--batch`, 80-column frame: `(h 0-40 40-80)`.
+#[test]
+fn deleting_a_middle_window_gives_its_space_to_the_previous_sibling() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (let ((window-combination-limit nil))
+               (split-window nil nil 'right)
+               (split-window nil nil 'right))
+             (delete-window (nth 1 (window-list nil 'no-minibuf nil)))
+             (neo--tree))"#,
+    );
+    assert_eq!(tree, "OK (h (\"*scratch*\" 0 40) (\"*scratch*\" 40 80))");
+}
+
+/// Deleting the LAST of three siblings gives its columns to the one before it;
+/// the first window must not move.  GNU: `(h 0-20 20-80)`.
+#[test]
+fn deleting_the_last_window_gives_its_space_to_the_previous_sibling() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (let ((window-combination-limit nil))
+               (split-window nil nil 'right)
+               (split-window nil nil 'right))
+             (delete-window (nth 2 (window-list nil 'no-minibuf nil)))
+             (neo--tree))"#,
+    );
+    assert_eq!(tree, "OK (h (\"*scratch*\" 0 20) (\"*scratch*\" 20 80))");
+}
+
+/// Deleting the FIRST sibling has no previous sibling, so the NEXT one absorbs
+/// the space and slides left; the third window must not move.  GNU:
+/// `(h 0-40 40-80)`.
+#[test]
+fn deleting_the_first_window_gives_its_space_to_the_next_sibling() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (let ((window-combination-limit nil))
+               (split-window nil nil 'right)
+               (split-window nil nil 'right))
+             (delete-window (nth 0 (window-list nil 'no-minibuf nil)))
+             (neo--tree))"#,
+    );
+    assert_eq!(tree, "OK (h (\"*scratch*\" 0 40) (\"*scratch*\" 40 80))");
+}
+
+/// A side window keeps its width when an unrelated window is deleted: the
+/// freed columns belong to the main group's sibling, not to every child of the
+/// root.  GNU: `(h ("*L*" 0 20) (h 20-50 50-80))`.
+#[test]
+fn deleting_a_right_side_window_leaves_the_left_side_window_width_intact() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (setq display-buffer-alist
+                   '(("\\*L\\*" (display-buffer-in-side-window)
+                      (side . left) (window-width . 20))
+                     ("\\*R\\*" (display-buffer-in-side-window)
+                      (side . right) (window-width . 20))))
+             (display-buffer (get-buffer-create "*L*"))
+             (split-window (window-main-window) nil 'right)
+             (display-buffer (get-buffer-create "*R*"))
+             (delete-window (get-buffer-window "*R*"))
+             (neo--tree))"#,
+    );
+    assert_eq!(
+        tree,
+        "OK (h (\"*L*\" 0 20) (h (\"*scratch*\" 20 50) (\"*scratch*\" 50 80)))"
+    );
+}
