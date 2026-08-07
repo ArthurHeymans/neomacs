@@ -99,25 +99,22 @@ fn toggle_ls_switches_adds_and_removes_others_flag() -> ParityBatchCase {
     ParityBatchCase::value(
         "toggle_ls_switches_adds_and_removes_others_flag",
         r####"
-(let ((helm-ls-git-ls-switches '("ls-files" "--full-name" "--")))
-  (cl-letf (((symbol-function 'helm-force-update) (lambda (&rest _) nil))
-            ((symbol-function 'with-helm-alive-p)
-             (lambda (&rest body) (mapc #'eval body) t)))
-    ;; Directly exercise the switch mutation used by the toggle command.
-    (setq helm-ls-git-ls-switches
-          (if (member "-o" helm-ls-git-ls-switches)
-              (remove "-o" helm-ls-git-ls-switches)
-            (helm-append-at-nth helm-ls-git-ls-switches "-o" 1)))
+(let ((helm-ls-git-ls-switches '("ls-files" "--full-name" "--"))
+      (helm-alive-p t)
+      (updates 0))
+  ;; with-helm-alive-p expands to (if helm-alive-p ...); bind the session
+  ;; flag and stub force-update so the real toggle mutates ls-switches.
+  (cl-letf (((symbol-function 'helm-force-update)
+             (lambda (&rest _) (cl-incf updates) nil)))
+    (call-interactively #'helm-ls-git-ls-files-show-others)
     (let ((with-o (copy-sequence helm-ls-git-ls-switches)))
-      (setq helm-ls-git-ls-switches
-            (if (member "-o" helm-ls-git-ls-switches)
-                (remove "-o" helm-ls-git-ls-switches)
-              (helm-append-at-nth helm-ls-git-ls-switches "-o" 1)))
+      (call-interactively #'helm-ls-git-ls-files-show-others)
       (list :with-o with-o
-            :without (copy-sequence helm-ls-git-ls-switches)))))
+            :without (copy-sequence helm-ls-git-ls-switches)
+            :updates updates))))
 "####,
         expect![[
-            r#"OK (:with-o ("ls-files" "-o" "--full-name" "--") :without ("ls-files" "--full-name" "--"))"#
+            r#"OK (:with-o ("ls-files" "-o" "--full-name" "--") :without ("ls-files" "--full-name" "--") :updates 2)"#
         ]],
     )
 }

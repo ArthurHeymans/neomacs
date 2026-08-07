@@ -99,16 +99,39 @@ fn insert_and_highlight_copies_string_into_target_buffer() -> ParityBatchCase {
     )
 }
 
-fn default_keybindings_install_yank_pop_binding() -> ParityBatchCase {
+fn default_keybindings_advise_yank_pop_to_open_browser() -> ParityBatchCase {
     ParityBatchCase::value(
-        "default_keybindings_install_yank_pop_binding",
+        "default_keybindings_advise_yank_pop_to_open_browser",
         r####"
-(let ((browse-kill-ring-replace-yank t))
+(let ((browse-kill-ring-replace-yank t)
+      (opened nil)
+      (before (advice-member-p #'browse-kill-ring--yank-pop-advice 'yank-pop)))
+  (when before
+    (advice-remove 'yank-pop #'browse-kill-ring--yank-pop-advice))
   (browse-kill-ring-default-keybindings)
-  (list :m-y (lookup-key (current-global-map) (kbd "M-y"))
-        :command (commandp 'browse-kill-ring)))
+  (let ((advised (and (advice-member-p #'browse-kill-ring--yank-pop-advice
+                                       'yank-pop)
+                      t)))
+    (cl-letf (((symbol-function 'browse-kill-ring)
+               (lambda (&rest _)
+                 (setq opened t)
+                 nil)))
+      ;; When there is no prior yank, advice should open browse-kill-ring.
+      (let ((last-command 'self-insert-command)
+            (this-command 'yank-pop))
+        (condition-case nil
+            (yank-pop)
+          (error nil)))
+      (list :advised advised
+            :opened opened
+            :idempotent
+            (progn
+              (browse-kill-ring-default-keybindings)
+              (and (advice-member-p #'browse-kill-ring--yank-pop-advice
+                                    'yank-pop)
+                   t))))))
 "####,
-        expect!["OK (:m-y yank-pop :command t)"],
+        expect!["OK (:advised t :opened t :idempotent t)"],
     )
 }
 
@@ -118,6 +141,6 @@ pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
         elide_truncates_long_items_when_maximum_set(),
         setup_populates_browser_buffer_with_kill_ring_items(),
         insert_and_highlight_copies_string_into_target_buffer(),
-        default_keybindings_install_yank_pop_binding(),
+        default_keybindings_advise_yank_pop_to_open_browser(),
     ]
 }

@@ -71,31 +71,32 @@ fn highlight_overlay_tracks_word_bounds() -> ParityBatchCase {
   (insert "hello misspeled world")
   (goto-char (point-min))
   (search-forward "misspeled")
-  (forward-word -1)
-  (let ((flyspell-correct-highlight t)
-        (flyspell-correct-overlay nil))
-    (cl-letf (((symbol-function 'flyspell-get-word)
-               (lambda (&rest _)
-                 (list "misspeled"
-                       (match-beginning 0)
-                       (match-end 0)))))
-      (search-forward "misspeled")
-      (let* ((start (match-beginning 0))
-             (end (match-end 0)))
-        (cl-letf (((symbol-function 'flyspell-get-word)
-                   (lambda (&rest _) (list "misspeled" start end))))
-          (flyspell-correct--highlight-add)
-          (let ((ov flyspell-correct-overlay))
-            (list :overlayp (overlayp ov)
-                  :start (and ov (overlay-start ov))
-                  :end (and ov (overlay-end ov))
-                  :face (and ov (overlay-get ov 'face))
-                  :after
-                  (progn
-                    (flyspell-correct--highlight-remove)
-                    flyspell-correct-overlay))))))))
+  (let* ((start (match-beginning 0))
+         (end (match-end 0))
+         ;; flyspell-correct highlights only when a flyspell overlay is at point.
+         (spell-ov (make-flyspell-overlay start end 'flyspell-incorrect 'highlight))
+         (flyspell-correct-highlight t)
+         (flyspell-correct-overlay nil))
+    (goto-char start)
+    (flyspell-correct--highlight-add)
+    (let ((ov flyspell-correct-overlay))
+      (list :overlayp (overlayp ov)
+            :start (and ov (overlay-start ov))
+            :end (and ov (overlay-end ov))
+            :face (and ov (overlay-get ov 'face))
+            :priority (and ov (overlay-get ov 'priority))
+            :matches-word (and ov (= (overlay-start ov) start)
+                               (= (overlay-end ov) end))
+            :after
+            (progn
+              (flyspell-correct--highlight-remove)
+              (list :overlay flyspell-correct-overlay
+                    :spell-still-live
+                    (and (overlay-buffer spell-ov) t)))))))
 "####,
-        expect!["OK (:overlayp nil :start nil :end nil :face nil :after nil)"],
+        expect![
+            "OK (:overlayp t :start 7 :end 16 :face flyspell-correct-highlight-face :priority 1001 :matches-word t :after (:overlay nil :spell-still-live t))"
+        ],
     )
 }
 
