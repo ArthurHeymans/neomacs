@@ -40,7 +40,7 @@ use crate::display_source::DisplaySourceStepItem;
 use crate::display_source::DisplaySourceTextPosition;
 use crate::display_source_resolver::DisplaySourceFaceBasis;
 use crate::frame_face_arena::FrameFaceAttempt;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, ResolvedFace};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, OverlayDisplayString, ResolvedFace};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::{Context, Value};
@@ -126,59 +126,108 @@ impl CaseProperty {
 /// Overlays are a SECOND seam source next to text properties: GNU folds
 /// `next_overlay_change` into `compute_stop_pos` (xdisp.c:4356-4365), and
 /// overlay before/after-strings anchor exactly at an overlay's start and end.
+///
+/// One overlay carries a BAG of properties rather than a single kind, because
+/// the ordering rules the O-pins state are about combinations: an overlay with
+/// both strings (O2), a string plus the overlay's own face (O5), a string plus
+/// `invisible` (O7), a string plus a `priority` (O3/O4).
 struct CaseOverlay {
     start_char: usize,
     end_char: usize,
-    kind: CaseOverlayKind,
+    before_string: Option<CaseOverlayString>,
+    after_string: Option<CaseOverlayString>,
+    face: Option<(&'static str, &'static str)>,
+    /// An `invisible` property on the overlay itself, which makes GNU emit
+    /// BOTH strings at BOTH endpoints (xdisp.c:7157-7173).
+    invisible: bool,
+    priority: Option<CaseOverlayPriority>,
     /// The overlay's `window` property. `Some(id)` scopes it to that window
     /// (GNU `overlay_applies_to_window`), so an overlay belonging to another
     /// window must be invisible to this harness's producer.
     window: Option<u64>,
 }
 
-enum CaseOverlayKind {
-    /// A face-only overlay: no string anchor, but still a stop boundary.
-    Face {
-        attribute: &'static str,
-        value: &'static str,
-    },
-    /// A `before-string`: an overlay-string anchor at the overlay's START.
-    BeforeString(&'static str),
-    /// An `after-string`: an overlay-string anchor at the overlay's END.
-    AfterString(&'static str),
+/// The value of a `before-string` / `after-string` property. GNU's collection
+/// guards are `STRINGP (str) && SCHARS (str)`, so a non-string and an empty
+/// string are both dropped — and both must be constructible here to pin it.
+enum CaseOverlayString {
+    Text(&'static str),
+    NonString(i64),
+}
+
+/// GNU reads overlay-string priority as a PLAIN fixnum
+/// (`FIXNUMP (priority) ? XFIXNUM (priority) : 0`, xdisp.c:7132-7134); the
+/// `(PRIORITY . SPRIORITY)` cons form that face merging understands
+/// (buffer.c:3840-3858) degrades to 0 here.
+enum CaseOverlayPriority {
+    Plain(i64),
+    Cons(i64, i64),
 }
 
 impl CaseOverlay {
+    fn at(start_char: usize, end_char: usize) -> Self {
+        Self {
+            start_char,
+            end_char,
+            before_string: None,
+            after_string: None,
+            face: None,
+            invisible: false,
+            priority: None,
+            window: None,
+        }
+    }
+
     fn face(
         start_char: usize,
         end_char: usize,
         attribute: &'static str,
         value: &'static str,
     ) -> Self {
-        Self {
-            start_char,
-            end_char,
-            kind: CaseOverlayKind::Face { attribute, value },
-            window: None,
-        }
+        Self::at(start_char, end_char).with_face(attribute, value)
     }
 
     fn before_string(start_char: usize, end_char: usize, text: &'static str) -> Self {
-        Self {
-            start_char,
-            end_char,
-            kind: CaseOverlayKind::BeforeString(text),
-            window: None,
-        }
+        Self::at(start_char, end_char).with_before_string(text)
     }
 
     fn after_string(start_char: usize, end_char: usize, text: &'static str) -> Self {
-        Self {
-            start_char,
-            end_char,
-            kind: CaseOverlayKind::AfterString(text),
-            window: None,
-        }
+        Self::at(start_char, end_char).with_after_string(text)
+    }
+
+    fn with_before_string(mut self, text: &'static str) -> Self {
+        self.before_string = Some(CaseOverlayString::Text(text));
+        self
+    }
+
+    fn with_after_string(mut self, text: &'static str) -> Self {
+        self.after_string = Some(CaseOverlayString::Text(text));
+        self
+    }
+
+    fn with_non_string_before_string(mut self, value: i64) -> Self {
+        self.before_string = Some(CaseOverlayString::NonString(value));
+        self
+    }
+
+    fn with_face(mut self, attribute: &'static str, value: &'static str) -> Self {
+        self.face = Some((attribute, value));
+        self
+    }
+
+    fn invisible(mut self) -> Self {
+        self.invisible = true;
+        self
+    }
+
+    fn with_priority(mut self, priority: i64) -> Self {
+        self.priority = Some(CaseOverlayPriority::Plain(priority));
+        self
+    }
+
+    fn with_cons_priority(mut self, priority: i64, secondary: i64) -> Self {
+        self.priority = Some(CaseOverlayPriority::Cons(priority, secondary));
+        self
     }
 
     fn in_window(mut self, window_id: u64) -> Self {
@@ -186,23 +235,47 @@ impl CaseOverlay {
         self
     }
 
-    fn name(&self) -> &'static str {
-        match self.kind {
-            CaseOverlayKind::Face { .. } => "face",
-            CaseOverlayKind::BeforeString(_) => "before-string",
-            CaseOverlayKind::AfterString(_) => "after-string",
+    /// The overlay's property plist as (name, value) pairs. Values are built
+    /// here so they allocate inside the fixture's `Context`.
+    fn properties(&self) -> Vec<(&'static str, Value)> {
+        let mut properties = Vec::new();
+        if let Some((attribute, value)) = self.face {
+            properties.push((
+                "face",
+                Value::list(vec![Value::symbol(attribute), Value::symbol(value)]),
+            ));
         }
-    }
-
-    fn value(&self) -> Value {
-        match self.kind {
-            CaseOverlayKind::Face { attribute, value } => {
-                Value::list(vec![Value::symbol(attribute), Value::symbol(value)])
-            }
-            CaseOverlayKind::BeforeString(text) | CaseOverlayKind::AfterString(text) => {
-                Value::string(text)
+        for (name, string) in [
+            ("before-string", self.before_string.as_ref()),
+            ("after-string", self.after_string.as_ref()),
+        ] {
+            match string {
+                Some(CaseOverlayString::Text(text)) => {
+                    properties.push((name, Value::string(*text)))
+                }
+                Some(CaseOverlayString::NonString(value)) => {
+                    properties.push((name, Value::fixnum(*value)))
+                }
+                None => {}
             }
         }
+        if self.invisible {
+            properties.push(("invisible", Value::t()));
+        }
+        match self.priority {
+            Some(CaseOverlayPriority::Plain(priority)) => {
+                properties.push(("priority", Value::fixnum(priority)))
+            }
+            Some(CaseOverlayPriority::Cons(priority, secondary)) => properties.push((
+                "priority",
+                Value::cons(Value::fixnum(priority), Value::fixnum(secondary)),
+            )),
+            None => {}
+        }
+        if let Some(window_id) = self.window {
+            properties.push(("window", Value::make_window(window_id)));
+        }
+        properties
     }
 }
 
@@ -460,19 +533,11 @@ impl Fixture {
                     rear_advance: false,
                 });
                 buffer.overlays_mut().insert_overlay(value);
-                buffer
-                    .overlays_mut()
-                    .overlay_put(value, Value::symbol(overlay.name()), overlay.value())
-                    .expect("overlay property");
-                if let Some(window_id) = overlay.window {
+                for (name, property) in overlay.properties() {
                     buffer
                         .overlays_mut()
-                        .overlay_put(
-                            value,
-                            Value::symbol("window"),
-                            Value::make_window(window_id),
-                        )
-                        .expect("overlay window property");
+                        .overlay_put(value, Value::symbol(name), property)
+                        .expect("overlay property");
                 }
             }
         }
@@ -533,6 +598,13 @@ impl<'a> StreamDriver<'a> {
     /// Consume one element, applying this leg's split feeder, and return the
     /// per-character observations it contributes.
     fn next_observations(&mut self) -> Option<Vec<CharObservation>> {
+        self.next_step().map(|(_item, observations)| observations)
+    }
+
+    /// Consume one element and return it alongside its observations. The
+    /// overlay-string pins read the ELEMENT (its string list is not expressible
+    /// as per-character observations); everything else reads the observations.
+    fn next_step(&mut self) -> Option<(BufferSourceConsumedItem, Vec<CharObservation>)> {
         let scan_before = self.position;
         let basis = DisplaySourceFaceBasis::new(
             &self.fixture.resolver,
@@ -561,7 +633,8 @@ impl<'a> StreamDriver<'a> {
                 step.end_charpos(),
             );
         }
-        Some(observe(&item, scan_before))
+        let observations = observe(&item, scan_before);
+        Some((item, observations))
     }
 
     fn apply_split(
@@ -1409,3 +1482,288 @@ fn p45_char_granularity_yields_single_characters_and_expires_by_position() {
     }
     assert_eq!(runs, vec!["a", "b", "c", "d", "efgh", "\n"]);
 }
+
+// ---------------------------------------------------------------------------
+// P4.6: the ORDER and CONTENT of the producer's overlay-strings element
+//
+// Since P4.6 sub-step 1 the DECISION, COLLECTION and GNU ORDERING of overlay
+// strings are the producer's, so this is where the ordering rules from
+// tmp/p4-test-inventory.md section 2 (O1-O8) belong. The glyph-level siblings in
+// engine_test.rs (overlay_string_shadow_*) prove the same rules survive
+// rendering; these prove the producer computes them, which is the half that can
+// be pinned without a row.
+//
+// TWO THINGS ARE DELIBERATELY NOT PINNED (the inventory's do-not-pin list):
+//
+// * Equal-priority strings of the SAME kind from DIFFERENT overlays. GNU feeds
+//   a comparator that returns 0 for that pair to plain `qsort`
+//   (xdisp.c:7180) — unstable, so any order asserted here would invent a
+//   contract GNU does not offer. Every case below gives its overlays DISTINCT
+//   priorities where the order matters.
+// * Anything observable about GNU's 16-string chunked re-collection
+//   (OVERLAY_STRING_CHUNK_SIZE, dispextern.h:2559): GNU re-runs collection
+//   against live buffer state at each chunk boundary, while this engine walks a
+//   buffer SNAPSHOT and collects once. That is a deliberate, documented
+//   divergence (design section 4.2), so the only thing worth pinning about a
+//   many-string anchor is that ALL of them arrive in one correctly ordered list
+//   — which o_many_strings_arrive_in_one_ordered_list does.
+// ---------------------------------------------------------------------------
+
+/// One overlay string as the producer surfaced it. The KIND is asserted next to
+/// the text because a pin that reads text alone cannot tell a correctly ordered
+/// list from one whose before/after discriminator is inverted.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ObservedOverlayString {
+    text: String,
+    kind: ObservedOverlayStringKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ObservedOverlayStringKind {
+    Before,
+    After,
+}
+
+fn before(text: &str) -> ObservedOverlayString {
+    ObservedOverlayString {
+        text: text.to_owned(),
+        kind: ObservedOverlayStringKind::Before,
+    }
+}
+
+fn after(text: &str) -> ObservedOverlayString {
+    ObservedOverlayString {
+        text: text.to_owned(),
+        kind: ObservedOverlayStringKind::After,
+    }
+}
+
+/// Every overlay-strings element the producer emits while draining `case`, as
+/// (anchor charpos, the element's strings in production order).
+fn producer_overlay_string_elements(case: &StreamCase) -> Vec<(i64, Vec<ObservedOverlayString>)> {
+    let fixture = Fixture::new(case);
+    let mut driver = fixture.driver(SplitPolicy::None);
+    let mut elements = Vec::new();
+    for _ in 0..DRAIN_LIMIT {
+        let Some((item, _observations)) = driver.next_step() else {
+            break;
+        };
+        let BufferSourceConsumedItem::OverlayStrings(strings) = item else {
+            continue;
+        };
+        elements.push((
+            strings.anchor_charpos().get() as i64,
+            strings
+                .strings()
+                .iter()
+                .copied()
+                .map(observed_overlay_string)
+                .collect(),
+        ));
+    }
+    elements
+}
+
+/// The strings of the single element anchored at `anchor`, or an empty list if
+/// the producer surfaced no element there. Both outcomes are assertable, which
+/// is what O6 (nothing collected) needs.
+fn producer_overlay_strings_at(case: &StreamCase, anchor: i64) -> Vec<ObservedOverlayString> {
+    producer_overlay_string_elements(case)
+        .into_iter()
+        .find(|(charpos, _)| *charpos == anchor)
+        .map(|(_, strings)| strings)
+        .unwrap_or_default()
+}
+
+fn observed_overlay_string(string: OverlayDisplayString) -> ObservedOverlayString {
+    ObservedOverlayString {
+        text: String::from_utf8(
+            string
+                .bytes()
+                .expect("an overlay string element holds Lisp strings")
+                .to_vec(),
+        )
+        .expect("corpus overlay strings are utf-8"),
+        kind: if string.after_string_p {
+            ObservedOverlayStringKind::After
+        } else {
+            ObservedOverlayStringKind::Before
+        },
+    }
+}
+
+/// The corpus text every O-case uses: long enough that each anchor sits
+/// mid-line, short enough to read.
+const O_TEXT: &str = "abcdefgh\n";
+
+#[test]
+fn o1_after_strings_precede_before_strings_from_different_overlays() {
+    // GNU compare_overlay_entries, xdisp.c:7020-7076: "Let after-strings appear
+    // in front of before-strings if they come from different overlays."
+    let case = StreamCase::new("O1 after before", O_TEXT)
+        .with_overlay(CaseOverlay::after_string(1, 3, "A"))
+        .with_overlay(CaseOverlay::before_string(3, 5, "B"));
+    assert_eq!(
+        producer_overlay_strings_at(&case, 3),
+        vec![after("A"), before("B")]
+    );
+}
+
+#[test]
+fn o2_the_same_overlay_puts_its_before_string_first() {
+    // The same-overlay exception (xdisp.c:7044-7051): within ONE overlay the
+    // before-string comes first, which reverses O1's rule. A zero-length overlay
+    // is the position where both of one overlay's strings are collected at once.
+    let case = StreamCase::new("O2 same overlay", O_TEXT).with_overlay(
+        CaseOverlay::at(4, 4)
+            .with_before_string("B")
+            .with_after_string("A"),
+    );
+    assert_eq!(
+        producer_overlay_strings_at(&case, 4),
+        vec![before("B"), after("A")]
+    );
+
+    // The contrast that makes the exception load-bearing: the same two strings
+    // on two DIFFERENT zero-length overlays at the same position order the
+    // other way round (O1's rule).
+    let split = StreamCase::new("O2 different overlays", O_TEXT)
+        .with_overlay(CaseOverlay::at(4, 4).with_before_string("B"))
+        .with_overlay(CaseOverlay::at(4, 4).with_after_string("A"));
+    assert_eq!(
+        producer_overlay_strings_at(&split, 4),
+        vec![after("A"), before("B")]
+    );
+}
+
+#[test]
+fn o3_priority_sorts_before_strings_up_and_after_strings_down() {
+    // The direction REVERSES between the two groups (xdisp.c:7061-7072):
+    // after-strings high to low, before-strings low to high. Asserted on one
+    // anchor carrying all four so the combined order is pinned too.
+    let case = StreamCase::new("O3 priority reversal", O_TEXT)
+        .with_overlay(CaseOverlay::after_string(1, 3, "a1").with_priority(1))
+        .with_overlay(CaseOverlay::after_string(1, 3, "a5").with_priority(5))
+        .with_overlay(CaseOverlay::before_string(3, 5, "b1").with_priority(1))
+        .with_overlay(CaseOverlay::before_string(3, 5, "b5").with_priority(5));
+    assert_eq!(
+        producer_overlay_strings_at(&case, 3),
+        vec![after("a5"), after("a1"), before("b1"), before("b5")]
+    );
+}
+
+#[test]
+fn o4_a_cons_priority_orders_strings_as_priority_zero() {
+    // load_overlay_strings reads the priority as a PLAIN fixnum
+    // (FIXNUMP (priority) ? XFIXNUM (priority) : 0, xdisp.c:7132-7134), so the
+    // cons form sorts as 0 and leads the ascending before-string group — even
+    // though face merging DOES understand the cons (buffer.c:3840-3858, pinned
+    // glyph-side by overlay_string_shadow_cons_priority_degrades_to_zero_for_
+    // string_order and the face half below).
+    let case = StreamCase::new("O4 cons priority", O_TEXT)
+        .with_overlay(CaseOverlay::before_string(3, 5, "C").with_cons_priority(7, 1))
+        .with_overlay(CaseOverlay::before_string(3, 5, "3").with_priority(3));
+    assert_eq!(
+        producer_overlay_strings_at(&case, 3),
+        vec![before("C"), before("3")]
+    );
+
+    // Control: with the SAME overlay carrying a plain priority 7 the order
+    // flips, so the case above is pinning the cons degradation and not the
+    // collection order of the corpus.
+    let plain = StreamCase::new("O4 plain priority", O_TEXT)
+        .with_overlay(CaseOverlay::before_string(3, 5, "C").with_priority(7))
+        .with_overlay(CaseOverlay::before_string(3, 5, "3").with_priority(3));
+    assert_eq!(
+        producer_overlay_strings_at(&plain, 3),
+        vec![before("3"), before("C")]
+    );
+}
+
+#[test]
+fn o5_an_overlays_own_face_does_not_reach_its_own_strings() {
+    // The producer half of O5: an overlay carrying BOTH a face and a string
+    // contributes the string to the element and the face to the covered buffer
+    // characters, and the two never meet — the element carries no face at all,
+    // because GNU resolves an overlay string's base face through
+    // face_for_overlay_string, which "simply disregards the `face' properties of
+    // all overlays" (xfaces.c:7034-7092). The glyph-level half is
+    // overlay_string_shadow_overlay_face_does_not_tint_its_own_string.
+    let case = StreamCase::new("O5 face and string", O_TEXT).with_overlay(
+        CaseOverlay::at(3, 6)
+            .with_face(":weight", "bold")
+            .with_before_string("S"),
+    );
+    assert_eq!(producer_overlay_strings_at(&case, 3), vec![before("S")]);
+
+    // The face still reaches the buffer text it covers. Observations are
+    // indexed by CHARPOS, not by position in the stream: the overlay-strings
+    // element contributes a character-less observation of its own, so stream
+    // indices past an anchor no longer equal charpos.
+    let stream = producer_stream(&case);
+    let face_at = |charpos: i64| {
+        stream
+            .iter()
+            .find(|observation| {
+                observation.ch.is_some() && observation.scan_before.charpos() == charpos
+            })
+            .expect("a buffer character at this charpos")
+            .face
+    };
+    assert_ne!(
+        face_at(3),
+        face_at(0),
+        "the overlay face must reach the characters it covers"
+    );
+    assert_eq!(face_at(6), face_at(0));
+}
+
+#[test]
+fn o8_an_overlay_scoped_to_another_window_contributes_no_strings() {
+    // GNU skips an overlay whose `window` property names a different window
+    // (xdisp.c:7147-7156). The harness producer is seated in HARNESS_WINDOW_ID.
+    let foreign = StreamCase::new("O8 foreign window", O_TEXT)
+        .with_overlay(CaseOverlay::before_string(3, 5, "S").in_window(HARNESS_WINDOW_ID + 1));
+    assert_eq!(producer_overlay_string_elements(&foreign), Vec::new());
+
+    // The same overlay scoped to THIS window does contribute.
+    let local = StreamCase::new("O8 local window", O_TEXT)
+        .with_overlay(CaseOverlay::before_string(3, 5, "S").in_window(HARNESS_WINDOW_ID));
+    assert_eq!(
+        producer_overlay_string_elements(&local),
+        vec![(3, vec![before("S")])]
+    );
+}
+
+#[test]
+fn o_many_strings_arrive_in_one_ordered_list() {
+    // The only thing worth pinning about a position carrying more strings than
+    // GNU's 16-string chunk: this engine collects once against a snapshot, so
+    // ALL of them arrive in one element, ordered. Nothing about chunking is
+    // asserted — see the module note above.
+    let mut case = StreamCase::new("O many strings", O_TEXT);
+    for priority in 0..20 {
+        case = case.with_overlay(
+            CaseOverlay::at(3, 5)
+                .with_before_string(O_MANY_STRINGS[priority as usize])
+                .with_priority(priority),
+        );
+    }
+    let strings = producer_overlay_strings_at(&case, 3);
+    assert_eq!(strings.len(), 20, "every string arrives in one element");
+    assert_eq!(
+        strings,
+        O_MANY_STRINGS
+            .iter()
+            .map(|text| before(text))
+            .collect::<Vec<_>>(),
+        "ascending priority orders all 20 before-strings, chunk size or not"
+    );
+}
+
+/// Twenty distinguishable one-character strings, more than GNU's 16-string
+/// chunk, each given a distinct priority by its index.
+const O_MANY_STRINGS: [&str; 20] = [
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s",
+    "t",
+];
