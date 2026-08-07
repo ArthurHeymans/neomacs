@@ -1719,6 +1719,27 @@ fn o5_an_overlays_own_face_does_not_reach_its_own_strings() {
 }
 
 #[test]
+fn o6_empty_and_non_string_values_are_dropped_at_collection() {
+    // GNU's guards are STRINGP (str) && SCHARS (str) (xdisp.c:7171-7182): both
+    // rejections happen at COLLECTION, so neither value may reach the element —
+    // an element carrying an empty string would push an empty string frame the
+    // renderer then has to no-op away.
+    let case = StreamCase::new("O6 dropped values", O_TEXT)
+        .with_overlay(CaseOverlay::before_string(3, 5, ""))
+        .with_overlay(CaseOverlay::at(3, 5).with_non_string_before_string(42));
+    assert_eq!(producer_overlay_string_elements(&case), Vec::new());
+
+    // The same corpus with a real string does produce one, so the assertion
+    // above is not passing because the anchors are wrong.
+    let kept = StreamCase::new("O6 kept value", O_TEXT)
+        .with_overlay(CaseOverlay::before_string(3, 5, "S"));
+    assert_eq!(
+        producer_overlay_string_elements(&kept),
+        vec![(3, vec![before("S")])]
+    );
+}
+
+#[test]
 fn o8_an_overlay_scoped_to_another_window_contributes_no_strings() {
     // GNU skips an overlay whose `window` property names a different window
     // (xdisp.c:7147-7156). The harness producer is seated in HARNESS_WINDOW_ID.

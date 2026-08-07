@@ -2809,14 +2809,10 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
                 .layout_overlays()
                 .overlay_start_emacs_byte_pos(oid)
                 == Some(bytepos)
-                && let Some(val) = self
-                    .buffer
-                    .layout_overlays()
-                    .overlay_get_named(oid, Value::symbol("before-string"))
-                && val.is_string()
+                && let Some(string) = self.displayable_overlay_string(oid, "before-string")
             {
                 entries.push(OverlayDisplayString {
-                    string: val,
+                    string,
                     overlay_id: oid,
                     after_string_p: false,
                     priority,
@@ -2828,14 +2824,10 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
                 .layout_overlays()
                 .overlay_end_emacs_byte_pos(oid)
                 == Some(bytepos)
-                && let Some(val) = self
-                    .buffer
-                    .layout_overlays()
-                    .overlay_get_named(oid, Value::symbol("after-string"))
-                && val.is_string()
+                && let Some(string) = self.displayable_overlay_string(oid, "after-string")
             {
                 entries.push(OverlayDisplayString {
-                    string: val,
+                    string,
                     overlay_id: oid,
                     after_string_p: true,
                     priority,
@@ -2860,6 +2852,22 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
             }
         }
         entries
+    }
+
+    /// The overlay's `before-string` / `after-string` if it is something GNU
+    /// would display: `STRINGP (str) && SCHARS (str)` (xdisp.c:7171-7182).
+    ///
+    /// Both rejections belong HERE rather than downstream. A position whose only
+    /// contribution is an empty string is not an anchor at all, and treating it
+    /// as one costs a run boundary, a produced element and a route refusal for a
+    /// string that will render nothing.
+    fn displayable_overlay_string(&self, overlay_id: Value, property: &str) -> Option<Value> {
+        let value = self
+            .buffer
+            .layout_overlays()
+            .overlay_get_named(overlay_id, Value::symbol(property))?;
+        let string = value.as_lisp_string()?;
+        (!string.as_bytes().is_empty()).then_some(value)
     }
 
     /// Test-only helper: split the interleaved `overlay_strings_at` list back
