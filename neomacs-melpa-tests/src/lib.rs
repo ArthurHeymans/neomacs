@@ -352,6 +352,12 @@ pub const PYVENV_MELPA_PIN: (&str, &str) = ("pyvenv", "20211014.707");
 /// corpus.
 pub const QUEUE_GNU_ELPA_PIN: (&str, &str) = ("queue", "0.2");
 
+/// The exact Quickrun package selected for current-buffer and region execution,
+/// replacement, arguments, working directory, stdin sidecars, multi-outputters,
+/// cleanup, hooks, process failures, and registration errors. MELPA built this
+/// archive from upstream commit `9199e222f95104ee83e115a9d5ac159d86816706`.
+pub const QUICKRUN_MELPA_PIN: (&str, &str) = ("quickrun", "20260103.1800");
+
 /// The exact racer package selected by the practical subprocess, completion,
 /// protocol, documentation, navigation, placeholder, Eldoc, and diagnostics
 /// parity corpus. MELPA built this archive from upstream commit

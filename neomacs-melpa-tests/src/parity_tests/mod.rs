@@ -486,6 +486,7 @@ mod pyim;
 mod pythonic;
 mod pyvenv;
 mod queue;
+mod quickrun;
 mod racer;
 mod rainbow_delimiters;
 mod reformatter;
