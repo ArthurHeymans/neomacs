@@ -14,11 +14,10 @@ fn mode_registers_indent_and_auto_mode() -> ParityBatchCase {
          :offset slim-indent-offset
          :comment-start comment-start
          :tabs indent-tabs-mode
-         :auto (cdr (assoc "\\.slim\\'" auto-mode-alist))
-         :feature (featurep 'slim-mode))))
+         :auto (cdr (assoc "\\.slim\\'" auto-mode-alist)))))
 "####,
         expect![[
-            r#"OK (:mode slim-mode :indent-line slim-indent-line :indent-region slim-indent-region :offset 2 :comment-start "/" :tabs nil :auto slim-mode :feature t)"#
+            r#"OK (:mode slim-mode :indent-line slim-indent-line :indent-region slim-indent-region :offset 2 :comment-start "/" :tabs nil :auto slim-mode)"#
         ]],
     )
 }

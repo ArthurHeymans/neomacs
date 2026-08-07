@@ -2,29 +2,6 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
-fn defaults_and_commands_are_registered() -> ParityBatchCase {
-    ParityBatchCase::value(
-        "defaults_and_commands_are_registered",
-        r####"
-(list :interface flyspell-correct-interface
-      :highlight flyspell-correct-highlight
-      :direction flyspell-correct-default-direction
-      :abort-on-quit flyspell-correct-abort-on-quit
-      :auto-delay flyspell-correct-auto-delay
-      :at-point (commandp 'flyspell-correct-at-point)
-      :previous (commandp 'flyspell-correct-previous)
-      :next (commandp 'flyspell-correct-next)
-      :wrapper (commandp 'flyspell-correct-wrapper)
-      :region (commandp 'flyspell-correct-region)
-      :auto-mode (commandp 'flyspell-correct-auto-mode)
-      :feature (featurep 'flyspell-correct))
-"####,
-        expect![
-            "OK (:interface flyspell-correct-completing-read :highlight t :direction backward :abort-on-quit t :auto-delay 1.6 :at-point t :previous t :next t :wrapper t :region t :auto-mode t :feature t)"
-        ],
-    )
-}
-
 fn completing_read_actions_include_candidates_and_control_ops() -> ParityBatchCase {
     ParityBatchCase::value(
         "completing_read_actions_include_candidates_and_control_ops",
@@ -134,15 +111,20 @@ fn auto_mode_timer_helpers_cancel_cleanly() -> ParityBatchCase {
             ;; Without flyspell-mode, auto-soon should leave no timer.
             (flyspell-correct-auto-soon)
             (null flyspell-correct--auto-timer))
-          :auto-mode (commandp 'flyspell-correct-auto-mode))))
+          :soon-with-flyspell
+          (progn
+            (flyspell-mode 1)
+            (flyspell-correct-auto-soon)
+            (prog1 (timerp flyspell-correct--auto-timer)
+              (flyspell-correct-auto-cancel-timer)
+              (flyspell-mode -1))))))
 "####,
-        expect!["OK (:timer-cancelled t :soon-without-flyspell t :auto-mode t)"],
+        expect!["OK (:timer-cancelled t :soon-without-flyspell t :soon-with-flyspell nil)"],
     )
 }
 
 pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
     vec![
-        defaults_and_commands_are_registered(),
         completing_read_actions_include_candidates_and_control_ops(),
         highlight_overlay_tracks_word_bounds(),
         wrapper_dispatches_to_next_or_previous_by_direction(),

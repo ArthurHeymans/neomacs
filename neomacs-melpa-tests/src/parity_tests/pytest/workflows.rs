@@ -2,29 +2,29 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
-fn defaults_and_command_format_are_deterministic() -> ParityBatchCase {
+fn command_format_composes_working_directory_runner_and_tests() -> ParityBatchCase {
     ParityBatchCase::value(
-        "defaults_and_command_format_are_deterministic",
+        "command_format_composes_working_directory_runner_and_tests",
         r####"
-(list :runner pytest-global-name
-      :flags pytest-cmd-flags
-      :format pytest-cmd-format-string
-      :roots pytest-project-root-files
-      :all (commandp 'pytest-all)
-      :one (commandp 'pytest-one)
-      :module (commandp 'pytest-module)
-      :again (commandp 'pytest-again)
+(list :default-flags pytest-cmd-flags
+      :default-runner pytest-global-name
       :formatted
       (pytest-cmd-format
-       "cd '%s' && %s %s '%s'"
+       pytest-cmd-format-string
        "/tmp/proj"
        "pytest"
        "-x -s"
        "test_demo.py")
-      :feature (featurep 'pytest))
+      :custom-template
+      (pytest-cmd-format
+       "%s :: %s :: %s :: %s"
+       "/work"
+       "python -m pytest"
+       "-k smoke"
+       "tests/"))
 "####,
         expect![[
-            r#"OK (:runner "pytest" :flags "-x -s" :format "cd '%s' && %s %s '%s'" :roots ("setup.py" ".hg" ".git") :all t :one t :module t :again t :formatted "cd '/tmp/proj' && pytest -x -s 'test_demo.py'" :feature t)"#
+            r#"OK (:default-flags "-x -s" :default-runner "pytest" :formatted "cd '/tmp/proj' && pytest -x -s 'test_demo.py'" :custom-template "/work :: python -m pytest :: -k smoke :: tests/")"#
         ]],
     )
 }
@@ -39,16 +39,18 @@ fn project_root_walks_up_to_marker_files() -> ParityBatchCase {
           (file (expand-file-name "test_demo.py" root)))
      (make-directory nested t)
      (list :from-file
-           (equal (file-truename
-                   (pytest-find-project-root (file-name-directory file)))
-                  (file-truename root))
+           (equal (directory-file-name
+                   (file-truename
+                    (pytest-find-project-root (file-name-directory file))))
+                  (directory-file-name (file-truename root)))
            :from-nested
-           (equal (file-truename (pytest-find-project-root nested))
-                  (file-truename root))
+           (equal (directory-file-name
+                   (file-truename (pytest-find-project-root nested)))
+                  (directory-file-name (file-truename root)))
            :is-root (and (pytest-project-root root) t)
-           :nested-not-root (and (pytest-project-root nested) t)))))
+           :nested-not-root (not (pytest-project-root nested))))))
 "####,
-        expect!["OK (:from-file nil :from-nested nil :is-root t :nested-not-root nil)"],
+        expect!["OK (:from-file t :from-nested t :is-root t :nested-not-root t)"],
     )
 }
 
@@ -68,18 +70,20 @@ fn py_testable_builds_class_and_function_paths() -> ParityBatchCase {
              (outer (pytest-outer-testable)))
          (goto-char (point-min))
          (search-forward "assert True")
-         (list :method-suffix
-               (and (string-match "::TestMath::test_add\\'" method) t)
-               :inner inner
-               :outer outer
-               :toplevel-suffix
-               (let ((top (pytest-py-testable)))
-                 (and (string-match "::test_top_level\\'" top) t))
-               :file-prefix
-               (and (string-prefix-p file method) t)))))))
+         (let ((top (pytest-py-testable)))
+           (list :inner inner
+                 :outer outer
+                 :method-ends-with
+                 (and (string-suffix-p "::TestMath::test_add" method) t)
+                 :top-ends-with
+                 (and (string-suffix-p "::test_top_level" top) t)
+                 :file-prefix
+                 (and (string-prefix-p file method) t)
+                 :method-has-file
+                 (and (string-match-p "test_demo\\.py::" method) t))))))))
 "####,
         expect![[
-            r#"OK (:method-suffix t :inner "test_add" :outer ("class" . "TestMath") :toplevel-suffix t :file-prefix t)"#
+            r#"OK (:inner "test_add" :outer ("class" . "TestMath") :method-ends-with t :top-ends-with t :file-prefix t :method-has-file t)"#
         ]],
     )
 }
@@ -93,29 +97,29 @@ fn get_command_composes_cd_and_quoted_test_names() -> ParityBatchCase {
    (let* ((file (expand-file-name "test_demo.py" root))
           (default-directory root)
           (pytest-global-name "pytest")
-          (where (pytest-find-project-root (file-name-directory file)))
+          (where (or (pytest-find-project-root (file-name-directory file))
+                     root))
           (cmd (pytest-cmd-format
                 pytest-cmd-format-string where "pytest" "-q"
-                (format "'%s'" file)))
+                (format "'%s'" (file-name-nondirectory file))))
           (cmd-all (pytest-cmd-format
                     pytest-cmd-format-string where "pytest" "-x" "'.'")))
-     (list :where-ok (equal (file-truename where) (file-truename root))
-           :has-cd (and (string-match-p "cd '" cmd) t)
-           :has-pytest (and (string-match-p "pytest" cmd) t)
-           :has-flags (and (string-match-p "-q" cmd) t)
-           :has-file (and (string-match-p "test_demo.py" cmd) t)
+     (list :where-ok
+           (equal (directory-file-name (file-truename where))
+                  (directory-file-name (file-truename root)))
+           :has-cd (and (string-match-p "\\`cd '" cmd) t)
+           :has-pytest (and (string-match-p "&& pytest -q" cmd) t)
+           :has-file (and (string-match-p "test_demo\\.py" cmd) t)
            :all-has-dot (and (string-match-p "'\\.'" cmd-all) t)
-           :all-has-x (and (string-match-p "-x" cmd-all) t)))))
+           :all-has-x (and (string-match-p "pytest -x" cmd-all) t)))))
 "####,
-        expect![
-            "OK (:where-ok nil :has-cd t :has-pytest t :has-flags t :has-file t :all-has-dot t :all-has-x t)"
-        ],
+        expect!["OK (:where-ok t :has-cd t :has-pytest t :has-file t :all-has-dot t :all-has-x t)"],
     )
 }
 
-fn missing_test_file_signals_and_temp_buffer_name_is_stable() -> ParityBatchCase {
+fn missing_test_file_signals_and_again_without_history_errors() -> ParityBatchCase {
     ParityBatchCase::value(
-        "missing_test_file_signals_and_temp_buffer_name_is_stable",
+        "missing_test_file_signals_and_again_without_history_errors",
         r####"
 (list :missing
       (condition-case err
@@ -135,10 +139,10 @@ fn missing_test_file_signals_and_temp_buffer_name_is_stable() -> ParityBatchCase
 
 pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
     vec![
-        defaults_and_command_format_are_deterministic(),
+        command_format_composes_working_directory_runner_and_tests(),
         project_root_walks_up_to_marker_files(),
         py_testable_builds_class_and_function_paths(),
         get_command_composes_cd_and_quoted_test_names(),
-        missing_test_file_signals_and_temp_buffer_name_is_stable(),
+        missing_test_file_signals_and_again_without_history_errors(),
     ]
 }

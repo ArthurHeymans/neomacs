@@ -2,31 +2,6 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
-fn defaults_and_commands_are_registered() -> ParityBatchCase {
-    ParityBatchCase::value(
-        "defaults_and_commands_are_registered",
-        r####"
-(list :style browse-kill-ring-display-style
-      :quit browse-kill-ring-quit-action
-      :separator browse-kill-ring-separator
-      :duplicates browse-kill-ring-display-duplicates
-      :replace-yank browse-kill-ring-replace-yank
-      :preview browse-kill-ring-show-preview
-      :browse (commandp 'browse-kill-ring)
-      :insert (commandp 'browse-kill-ring-insert)
-      :forward (commandp 'browse-kill-ring-forward)
-      :previous (commandp 'browse-kill-ring-previous)
-      :delete (commandp 'browse-kill-ring-delete)
-      :keys (fboundp 'browse-kill-ring-default-keybindings)
-      :elide (fboundp 'browse-kill-ring-elide)
-      :feature (featurep 'browse-kill-ring))
-"####,
-        expect![[
-            r#"OK (:style separated :quit save-and-restore :separator "-------" :duplicates t :replace-yank t :preview t :browse t :insert t :forward t :previous t :delete t :keys t :elide t :feature t)"#
-        ]],
-    )
-}
-
 fn elide_truncates_long_items_when_maximum_set() -> ParityBatchCase {
     ParityBatchCase::value(
         "elide_truncates_long_items_when_maximum_set",
@@ -137,7 +112,6 @@ fn default_keybindings_advise_yank_pop_to_open_browser() -> ParityBatchCase {
 
 pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
     vec![
-        defaults_and_commands_are_registered(),
         elide_truncates_long_items_when_maximum_set(),
         setup_populates_browser_buffer_with_kill_ring_items(),
         insert_and_highlight_copies_string_into_target_buffer(),

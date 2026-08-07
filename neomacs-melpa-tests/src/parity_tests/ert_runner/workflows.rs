@@ -2,29 +2,24 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
-fn defaults_and_selector_helpers_are_registered() -> ParityBatchCase {
+fn reporter_path_lists_bundled_reporters() -> ParityBatchCase {
     ParityBatchCase::value(
-        "defaults_and_selector_helpers_are_registered",
+        "reporter_path_lists_bundled_reporters",
         r####"
-(list :selector ert-runner-selector
-      :load-files ert-runner-load-files
-      :verbose ert-runner-verbose
-      :profile ert-runner-profile
-      :reporter ert-runner-reporter-name
-      :output-buffer ert-runner-output-buffer
-      :reporters-dir (and (f-dir? ert-runner-reporters-path) t)
-      :add-selector (fboundp 'ert-runner/add-selector)
-      :tags (fboundp 'ert-runner/tags)
-      :pattern (fboundp 'ert-runner/pattern)
-      :expand (fboundp 'ert-runner--expand-test-path)
-      :test-files (fboundp 'ert-runner--test-files)
-      :init (fboundp 'ert-runner/init)
-      :use-reporter (fboundp 'ert-runner/use-reporter)
-      :run-batch (fboundp 'ert-runner/run-tests-batch)
-      :loaded (fboundp 'ert-runner/run))
+(let* ((files (f-files ert-runner-reporters-path
+                       (lambda (file) (equal (f-ext file) "el"))))
+       (names (sort (mapcar (lambda (f)
+                              (s-chop-prefix "ert-runner-reporter-"
+                                            (f-no-ext (f-filename f))))
+                            files)
+                    #'string-lessp)))
+  (list :dir (and (f-dir? ert-runner-reporters-path) t)
+        :names names
+        :default-reporter ert-runner-reporter-name
+        :selector ert-runner-selector))
 "####,
         expect![[
-            r#"OK (:selector (and t) :load-files nil :verbose t :profile nil :reporter "dot" :output-buffer "*ert-runner outout*" :reporters-dir t :add-selector t :tags t :pattern t :expand t :test-files t :init t :use-reporter t :run-batch t :loaded t)"#
+            r#"OK (:dir t :names ("dot" "ert" "ert+duration") :default-reporter "dot" :selector (and t))"#
         ]],
     )
 }
@@ -147,7 +142,7 @@ fn use_reporter_loads_bundled_dot_reporter() -> ParityBatchCase {
 
 pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
     vec![
-        defaults_and_selector_helpers_are_registered(),
+        reporter_path_lists_bundled_reporters(),
         tag_and_pattern_selectors_compose_on_runner_state(),
         expand_test_path_finds_files_and_rejects_missing_paths(),
         init_scaffolds_test_project_layout(),

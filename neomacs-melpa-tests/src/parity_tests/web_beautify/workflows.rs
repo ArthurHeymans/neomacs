@@ -2,30 +2,6 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
-fn programs_commands_and_args_are_registered() -> ParityBatchCase {
-    ParityBatchCase::value(
-        "programs_commands_and_args_are_registered",
-        r####"
-(list :html-program web-beautify-html-program
-      :css-program web-beautify-css-program
-      :js-program web-beautify-js-program
-      :args web-beautify-args
-      :html (commandp 'web-beautify-html)
-      :css (commandp 'web-beautify-css)
-      :js (commandp 'web-beautify-js)
-      :html-buffer (fboundp 'web-beautify-html-buffer)
-      :css-buffer (fboundp 'web-beautify-css-buffer)
-      :js-buffer (fboundp 'web-beautify-js-buffer)
-      :format-region (fboundp 'web-beautify-format-region)
-      :format-buffer (fboundp 'web-beautify-format-buffer)
-      :feature (featurep 'web-beautify))
-"####,
-        expect![[
-            r#"OK (:html-program "html-beautify" :css-program "css-beautify" :js-program "js-beautify" :args ("-f" "-") :html t :css t :js t :html-buffer t :css-buffer t :js-buffer t :format-region t :format-buffer t :feature t)"#
-        ]],
-    )
-}
-
 fn shell_command_and_messages_are_deterministic() -> ParityBatchCase {
     ParityBatchCase::value(
         "shell_command_and_messages_are_deterministic",
@@ -121,7 +97,6 @@ fn buffer_helpers_forward_configured_programs() -> ParityBatchCase {
 
 pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
     vec![
-        programs_commands_and_args_are_registered(),
         shell_command_and_messages_are_deterministic(),
         missing_program_path_messages_without_mutating_buffer(),
         region_command_dispatches_to_region_or_buffer(),

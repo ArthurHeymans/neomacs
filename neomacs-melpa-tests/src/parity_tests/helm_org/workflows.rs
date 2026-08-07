@@ -2,29 +2,19 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
-fn commands_and_policy_defaults_are_registered() -> ParityBatchCase {
+fn headings_policy_and_action_map_are_wired() -> ParityBatchCase {
     ParityBatchCase::value(
-        "commands_and_policy_defaults_are_registered",
+        "headings_policy_and_action_map_are_wired",
         r####"
-(list :in-buffer (commandp 'helm-org-in-buffer-headings)
-      :agenda (commandp 'helm-org-agenda-files-headings)
-      :parent (commandp 'helm-org-parent-headings)
-      :capture (commandp 'helm-org-capture-templates)
-      :fontify helm-org-headings-fontify
-      :outline-path helm-org-format-outline-path
-      :min-depth helm-org-headings-min-depth
+(list :min-depth helm-org-headings-min-depth
       :max-depth helm-org-headings-max-depth
-      :truncate helm-org-truncate-lines
-      :ignore-autosaves helm-org-ignore-autosaves
-      :completion-styles helm-org-completion-styles
       :actions (mapcar #'car helm-org-headings-actions)
       :map-indirect (lookup-key helm-org-headings-map (kbd "C-c i"))
       :map-refile (lookup-key helm-org-headings-map (kbd "C-c w"))
-      :map-link (lookup-key helm-org-headings-map (kbd "C-c l"))
-      :feature (featurep 'helm-org))
+      :map-link (lookup-key helm-org-headings-map (kbd "C-c l")))
 "####,
         expect![[
-            r#"OK (:in-buffer t :agenda t :parent t :capture t :fontify nil :outline-path nil :min-depth 1 :max-depth 8 :truncate t :ignore-autosaves nil :completion-styles (helm) :actions ("Go to heading" "Open in indirect buffer `C-c i'" "Refile heading(s) (marked-to-selected|current-to-selected) `C-c w`" "Insert link to this heading `C-c l`") :map-indirect helm-org-run-open-heading-in-indirect-buffer :map-refile helm-org-run-refile-heading-to :map-link helm-org-run-insert-link-to-heading-at-marker :feature t)"#
+            r#"OK (:min-depth 1 :max-depth 8 :actions ("Go to heading" "Open in indirect buffer `C-c i'" "Refile heading(s) (marked-to-selected|current-to-selected) `C-c w`" "Insert link to this heading `C-c l`") :map-indirect helm-org-run-open-heading-in-indirect-buffer :map-refile helm-org-run-refile-heading-to :map-link helm-org-run-insert-link-to-heading-at-marker)"#
         ]],
     )
 }
@@ -156,7 +146,7 @@ fn indent_helper_preserves_heading_text_without_fontify() -> ParityBatchCase {
 
 pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
     vec![
-        commands_and_policy_defaults_are_registered(),
+        headings_policy_and_action_map_are_wired(),
         candidates_collect_headings_with_markers_and_respect_depth(),
         preselect_and_goto_marker_move_point_to_headings(),
         in_buffer_command_builds_helm_source_with_heading_candidates(),

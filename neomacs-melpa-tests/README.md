@@ -76,6 +76,21 @@ download counts:
 scripts/melpa-top500-roadmap.py
 ```
 
+## Practical workflow quality (no weak tests)
+
+Parity cases must exercise package behavior, not merely prove symbols exist.
+
+**Do not** add cases whose main assertion is:
+
+- `(commandp …)` / `(fboundp …)` / `(featurep …)` catalogs
+- “defaults registered” lists with no driven workflow
+- reimplemented copies of package logic (call the package instead)
+- inverted or accidental-pass fixtures
+
+Every case should call a public or documented entry point and assert
+non-trivial state (buffer text, point, overlays, trees, command lines, errors,
+keymap bindings of real commands, file layout, and so on).
+
 ## Package lock
 
 `melpa-package-lock.tsv` is the single source of truth for reproducible MELPA

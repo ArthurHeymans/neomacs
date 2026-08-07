@@ -15,15 +15,10 @@ fn catalog_and_policy_defaults_are_registered() -> ParityBatchCase {
       :mixed-fonts modus-themes-mixed-fonts
       :known-operandi (and (modus-themes-known-p 'modus-operandi) t)
       :known-vivendi (and (modus-themes-known-p 'modus-vivendi) t)
-      :load (fboundp 'modus-themes-load-theme)
-      :toggle-cmd (commandp 'modus-themes-toggle)
-      :rotate (commandp 'modus-themes-rotate)
-      :select (commandp 'modus-themes-select)
-      :list-colors (commandp 'modus-themes-list-colors)
-      :feature (featurep 'modus-themes))
+      :unknown (modus-themes-known-p 'not-a-modus-theme))
 "####,
         expect![
-            "OK (:items (modus-operandi modus-operandi-tinted modus-operandi-deuteranopia modus-operandi-tritanopia modus-vivendi modus-vivendi-tinted modus-vivendi-deuteranopia modus-vivendi-tritanopia) :toggle (modus-operandi modus-vivendi) :disable-other t :italic nil :bold nil :variable-pitch nil :mixed-fonts nil :known-operandi t :known-vivendi t :load t :toggle-cmd t :rotate t :select t :list-colors t :feature t)"
+            "OK (:items (modus-operandi modus-operandi-tinted modus-operandi-deuteranopia modus-operandi-tritanopia modus-vivendi modus-vivendi-tinted modus-vivendi-deuteranopia modus-vivendi-tritanopia) :toggle (modus-operandi modus-vivendi) :disable-other t :italic nil :bold nil :variable-pitch nil :mixed-fonts nil :known-operandi t :known-vivendi t :unknown nil)"
         ],
     )
 }

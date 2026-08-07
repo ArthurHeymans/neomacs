@@ -2,30 +2,19 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
-fn defaults_and_commands_are_registered() -> ParityBatchCase {
+fn default_sources_and_map_bindings_are_wired() -> ParityBatchCase {
     ParityBatchCase::value(
-        "defaults_and_commands_are_registered",
+        "default_sources_and_map_bindings_are_wired",
         r####"
-(list :show helm-ls-git-show-abs-or-relative
-      :status-cmd helm-ls-git-status-command
-      :fuzzy helm-ls-git-fuzzy-match
-      :sources helm-ls-git-default-sources
+(list :sources helm-ls-git-default-sources
       :ls-switches helm-ls-git-ls-switches
-      :auto-checkout helm-ls-git-auto-checkout
-      :log-max helm-ls-git-log-max-commits
-      :fill-column helm-ls-git-with-editor-fill-column
-      :root-fn (fboundp 'helm-ls-git-root-dir)
-      :list-files (fboundp 'helm-ls-git-list-files)
-      :not-inside (fboundp 'helm-ls-git-not-inside-git-repo)
-      :branch (fboundp 'helm-ls-git--branch)
-      :normalize (fboundp 'helm-ls-git-normalize-branch-name)
-      :command (commandp 'helm-ls-git)
-      :feature (featurep 'helm-ls-git)
+      :show helm-ls-git-show-abs-or-relative
       :map-grep (lookup-key helm-ls-git-map (kbd "M-g g"))
-      :map-others (lookup-key helm-ls-git-map (kbd "C-c i")))
+      :map-others (lookup-key helm-ls-git-map (kbd "C-c i"))
+      :map-log (lookup-key helm-ls-git-map (kbd "M-L")))
 "####,
         expect![[
-            r#"OK (:show relative :status-cmd nil :fuzzy nil :sources (helm-source-ls-git-status helm-ls-git-branches-source helm-source-ls-git-buffers helm-source-ls-git helm-ls-git-stashes-source helm-ls-git-create-branch-source) :ls-switches ("ls-files" "--full-name" "--") :auto-checkout nil :log-max "100" :fill-column 70 :root-fn t :list-files t :not-inside t :branch t :normalize t :command t :feature t :map-grep helm-ls-git-run-grep :map-others helm-ls-git-ls-files-show-others)"#
+            r#"OK (:sources (helm-source-ls-git-status helm-ls-git-branches-source helm-source-ls-git-buffers helm-source-ls-git helm-ls-git-stashes-source helm-ls-git-create-branch-source) :ls-switches ("ls-files" "--full-name" "--") :show relative :map-grep helm-ls-git-run-grep :map-others helm-ls-git-ls-files-show-others :map-log helm-ls-git-run-file-log)"#
         ]],
     )
 }
@@ -121,7 +110,7 @@ fn toggle_ls_switches_adds_and_removes_others_flag() -> ParityBatchCase {
 
 pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
     vec![
-        defaults_and_commands_are_registered(),
+        default_sources_and_map_bindings_are_wired(),
         root_dir_and_repo_membership_detect_git_trees(),
         list_files_and_branch_report_repository_contents(),
         normalize_branch_names_strip_markers_and_remotes(),

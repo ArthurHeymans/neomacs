@@ -20,11 +20,10 @@ fn mode_registers_compile_and_navigation_hooks() -> ParityBatchCase {
          :which-func (and (memq 'cython-current-defun which-func-functions) t)
          :finish (and (memq 'cython-compilation-finish
                             compilation-finish-functions)
-                      t)
-         :feature (featurep 'cython-mode))))
+                      t))))
 "####,
         expect![[
-            r#"OK (:mode cython-mode :parent python-mode :compile-prefix t :default-format "cython -a %s" :bod cython-beginning-of-defun :eod cython-end-of-defun :add-log cython-current-defun :which-func t :finish t :feature t)"#
+            r#"OK (:mode cython-mode :parent python-mode :compile-prefix t :default-format "cython -a %s" :bod cython-beginning-of-defun :eod cython-end-of-defun :add-log cython-current-defun :which-func t :finish t)"#
         ]],
     )
 }
