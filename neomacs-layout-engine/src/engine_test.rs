@@ -14796,26 +14796,25 @@ fn ascii_route_flag_on_layout_engages_wrap_prefix_acquisition() {
     );
 }
 
-/// Engagement proof for the increment-2j continuation-resume extension
-/// (flag-on suite gate): the continuation rows of a wrapped plain line must
-/// take the mid-line resume acquisition. Trivially passes when the flag is
-/// off.
+/// Engagement proof for the P4.8(a) entry unification (flag-on suite gate):
+/// the continuation rows of a wrapped plain line must route from their
+/// mid-line position. Trivially passes when the flag is off.
 #[test]
-fn ascii_route_flag_on_layout_engages_continuation_resume_acquisition() {
+fn ascii_route_flag_on_layout_engages_mid_line_start_acquisition() {
     if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
         return;
     }
-    let before = crate::buffer_source::row_route::ROUTED_CONTINUATION_RESUME_ROW_COUNT
+    let before = crate::buffer_source::row_route::ROUTED_MID_LINE_START_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let long_line: String = format!("{}\n", "abcdefghij".repeat(12));
     let (_eval, _buf_id, rows, _char_width, _char_height) = layout_main_text_rows(&long_line);
     assert!(rows.len() >= 2, "the long line must wrap");
-    let after = crate::buffer_source::row_route::ROUTED_CONTINUATION_RESUME_ROW_COUNT
+    let after = crate::buffer_source::row_route::ROUTED_MID_LINE_START_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     assert!(
         after > before,
-        "expected a continuation row of the wrapped line to route through the \
-         mid-line resume entry (before={before}, after={after})"
+        "expected a continuation row of the wrapped line to route from its \
+         mid-line position (before={before}, after={after})"
     );
 }
 

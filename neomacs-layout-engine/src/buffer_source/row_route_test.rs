@@ -340,8 +340,12 @@ fn classifier_rejects_content_the_item_route_does_not_cover() {
     }
 }
 
+/// P4.8(a): a mid-line start is classified like any other position. The
+/// entry taxonomy is gone, so a position the walk reaches in the middle of a
+/// line is planned from its own charpos and the live pen — there is nothing
+/// about being mid-line that the classifier needs to refuse.
 #[test]
-fn classifier_rejects_mid_line_start() {
+fn classifier_routes_mid_line_start() {
     let mut eval = Context::new();
     let buf_id = buffer_with_text(&mut eval, "abc\n");
     assert_eq!(
@@ -352,39 +356,54 @@ fn classifier_rejects_mid_line_start() {
             wide_fit(),
             plain_policy()
         ),
-        RowAcquisitionRoute::BufferPipeline
+        RowAcquisitionRoute::ItemRenderer
     );
 }
 
-/// Increment 2j: the same mid-line position refuses under the default
-/// line-start entry but plans under the continuation-resume entry — the tail
-/// of a visually wrapped line classified from the resume charpos.
+/// P4.8(a) hazard pin, and it is a PREDICTION that had to be verified rather
+/// than reasoned about: the entry gate used to refuse the overflow handoff
+/// char on the FIRST row of a continued line, whose row is not flagged
+/// Continuation yet, so that the pipeline's own overflow machinery would keep
+/// consuming it. With the gate gone that position attempts the route, and
+/// what must keep it out is the FIT walk, not the entry taxonomy — the pen
+/// already sits at the right edge, so no fitting prefix exists.
+///
+/// The refusal reason changes (MidLineStart to ScanNoFitFirstChar); the
+/// behaviour must not.
 #[test]
-fn continuation_resume_entry_accepts_mid_line_tail() {
+fn classifier_refuses_a_mid_line_start_whose_first_char_does_not_fit() {
+    let mut eval = Context::new();
+    let text = "abcdef\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    // The pen stands ON the right edge: the handoff char cannot fit.
+    let fit = RowRouteFit {
+        start_x_px: 24.0,
+        start_col: 3,
+        char_width_px: 8.0,
+        right_edge_px: 24.0,
+        tab_policy: &TAB_EVERY_8,
+    };
+    assert_eq!(
+        plan_ascii_row_classified(buffer, row_start(text.as_bytes(), 3, 3), fit, wrap_policy())
+            .unwrap_err(),
+        RouteRefusal::ScanNoFitFirstChar
+    );
+}
+
+/// P4.8(a): a mid-line tail — the remainder of a visually wrapped line —
+/// plans from its own charpos with no attestation from the walk. Before the
+/// entry unification this position needed the continuation-resume entry to
+/// be classified at all.
+#[test]
+fn mid_line_tail_plans_from_its_own_charpos() {
     let mut eval = Context::new();
     let text = "abcdef\n";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let row = row_start(text.as_bytes(), 3, 3);
-    assert_eq!(
-        plan_ascii_row_classified(
-            buffer,
-            row,
-            wide_fit(),
-            wrap_policy(),
-            RowRouteEntry::LineStart
-        )
-        .unwrap_err(),
-        RouteRefusal::MidLineStart
-    );
-    let plan = plan_ascii_row_classified(
-        buffer,
-        row,
-        wide_fit(),
-        wrap_policy(),
-        RowRouteEntry::ContinuationResume,
-    )
-    .expect("resume tail plans");
+    let plan = plan_ascii_row_classified(buffer, row, wide_fit(), wrap_policy())
+        .expect("mid-line tail plans");
     assert_eq!(plan.line_char_len(), 3);
     assert_eq!(plan.line_byte_len(), 3);
     assert_eq!(plan.line_end(), RoutedRowLineEnd::Newline);
@@ -408,14 +427,8 @@ fn continuation_resume_tab_expands_from_carried_column() {
         right_edge_px: 72.0,
         tab_policy: &TAB_EVERY_8,
     };
-    let plan = plan_ascii_row_classified(
-        buffer,
-        row,
-        carried,
-        wrap_policy(),
-        RowRouteEntry::ContinuationResume,
-    )
-    .expect("carried tab tail plans");
+    let plan = plan_ascii_row_classified(buffer, row, carried, wrap_policy())
+        .expect("carried tab tail plans");
     assert!(plan.has_tab());
     // tab (24px -> the 64px stop) + 'x' (64 -> 72, landing AT the edge) fit;
     // 'y' (72 -> 80) crosses, so the plan covers only the fitting prefix and
@@ -427,14 +440,8 @@ fn continuation_resume_tab_expands_from_carried_column() {
         right_edge_px: 96.0,
         ..carried
     };
-    let plan = plan_ascii_row_classified(
-        buffer,
-        row,
-        wider,
-        wrap_policy(),
-        RowRouteEntry::ContinuationResume,
-    )
-    .expect("wider carried tab tail plans");
+    let plan = plan_ascii_row_classified(buffer, row, wider, wrap_policy())
+        .expect("wider carried tab tail plans");
     assert_eq!(plan.line_end(), RoutedRowLineEnd::Newline);
     assert_eq!(plan.line_char_len(), 3);
 }
@@ -452,14 +459,8 @@ fn continuation_resume_still_refuses_point_in_tail() {
         ..wrap_policy()
     };
     assert_eq!(
-        plan_ascii_row_classified(
-            buffer,
-            row_start(text.as_bytes(), 3, 3),
-            wide_fit(),
-            policy,
-            RowRouteEntry::ContinuationResume,
-        )
-        .unwrap_err(),
+        plan_ascii_row_classified(buffer, row_start(text.as_bytes(), 3, 3), wide_fit(), policy,)
+            .unwrap_err(),
         RouteRefusal::PointInRow
     );
 }
@@ -479,7 +480,6 @@ fn continuation_resume_at_newline_plans_row_break_only() {
         row_start(text.as_bytes(), 3, 3),
         wide_fit(),
         wrap_policy(),
-        RowRouteEntry::ContinuationResume,
     )
     .expect("newline resume plans");
     assert!(plan.is_empty_line());
@@ -2733,7 +2733,6 @@ fn classifier_refuses_empty_line_when_point_on_newline() {
             point_charpos: 2,
             ..plain_policy()
         },
-        RowRouteEntry::LineStart,
     );
     assert_eq!(refused.unwrap_err(), RouteRefusal::PointInRow);
 }
@@ -2755,7 +2754,6 @@ fn classifier_refuses_empty_line_with_hazard_prop_on_newline() {
         row_start(text.as_bytes(), 2, 2),
         wide_fit(),
         plain_policy(),
-        RowRouteEntry::LineStart,
     );
     assert_eq!(refused.unwrap_err(), RouteRefusal::Replacement);
 }
@@ -2776,7 +2774,6 @@ fn classifier_refuses_empty_line_with_string_overlay_at_newline() {
         row_start(text.as_bytes(), 2, 2),
         wide_fit(),
         plain_policy(),
-        RowRouteEntry::LineStart,
     );
     assert_eq!(refused.unwrap_err(), RouteRefusal::Overlay);
 }
@@ -2878,7 +2875,6 @@ fn classifier_refuses_eob_tail_containing_point() {
                 point_charpos: point,
                 ..plain_policy()
             },
-            RowRouteEntry::LineStart,
         );
         assert_eq!(
             refused.unwrap_err(),
