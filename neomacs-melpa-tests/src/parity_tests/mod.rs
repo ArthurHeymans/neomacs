@@ -326,6 +326,7 @@ mod evil_exchange;
 mod evil_goggles;
 mod evil_iedit_state;
 mod evil_indent_plus;
+mod evil_lion;
 mod evil_lisp_state;
 mod evil_matchit;
 mod evil_mc;

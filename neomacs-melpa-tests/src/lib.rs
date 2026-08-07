@@ -2156,6 +2156,12 @@ pub const NEOTREE_MELPA_PIN: (&str, &str) = ("neotree", "20250703.2202");
 /// `3c65fecd9917a41eaf6460f22187e2323821f3ce`.
 pub const EVIL_LISP_STATE_MELPA_PIN: (&str, &str) = ("evil-lisp-state", "20160404.248");
 
+/// The exact Evil Lion package selected for practical left and right
+/// alignment, regex prompting, major-mode rules, whitespace policy, range,
+/// failure, and global key-binding parity. MELPA built this archive from
+/// upstream commit `5a0bca151466960e090d1803c4c5ded88875f90a`.
+pub const EVIL_LION_MELPA_PIN: (&str, &str) = ("evil-lion", "20241120.1351");
+
 /// The exact Evil-Tutor package selected for persisted tutorial sessions,
 /// resume behavior, lesson navigation, and major-mode parity. MELPA built this
 /// archive from upstream commit `909273bac88b98a565f1b89bbb13d523b7edce2b`.
