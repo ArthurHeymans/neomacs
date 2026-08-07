@@ -216,6 +216,12 @@ pub const SAGE_SHELL_MODE_MELPA_PIN: (&str, &str) = ("sage-shell-mode", "2026052
 /// from upstream commit `2239671d94b38d92e9b28d4e12fd79814cfb9c16`.
 pub const DEFERRED_MELPA_PIN: (&str, &str) = ("deferred", "20170901.1330");
 
+/// The exact Concurrent package selected for generator, pseud-thread,
+/// semaphore, dataflow, parent-environment, signal routing, disconnect, and
+/// failure parity. MELPA built this archive from upstream commit
+/// `d012a1ab50edcc2c44e3e49006f054dbff47cb6c`.
+pub const CONCURRENT_MELPA_PIN: (&str, &str) = ("concurrent", "20170601.435");
+
 /// The exact EditorConfig package selected for inherited project rules,
 /// visiting and saving real files, local-variable precedence, coding-system,
 /// and configuration-cache parity. MELPA built this archive from upstream

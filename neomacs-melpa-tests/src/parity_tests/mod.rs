@@ -285,6 +285,7 @@ mod column_enforce_mode;
 mod commander;
 mod company;
 mod compat;
+mod concurrent;
 mod cond_let;
 mod consult;
 mod counsel;
