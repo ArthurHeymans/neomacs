@@ -244,7 +244,7 @@ rank	package	downloads	status
 243	git-gutter	486872	covered
 244	devdocs	482279	covered
 245	gh-md	480487	covered
-246	color-theme-sanityinc-tomorrow	479999	todo
+246	color-theme-sanityinc-tomorrow	479999	covered
 247	org-present	475597	todo
 248	evil-search-highlight-persist	475566	todo
 249	concurrent	471871	todo

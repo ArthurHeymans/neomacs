@@ -2625,6 +2625,13 @@ pub const COUNSEL_MELPA_PIN: (&str, &str) = ("counsel", "20260214.1004");
 /// `48b73742757a3ae5736d825fe49e00034cc453b5`.
 pub const CTABLE_MELPA_PIN: (&str, &str) = ("ctable", "20210128.629");
 
+/// The exact Sanityinc Tomorrow theme package selected for five-variant palette,
+/// wrapper-command, source fontification, diff/ANSI integration, lifecycle,
+/// registry, and color-helper parity. MELPA built this archive from upstream
+/// commit `d32469ec6529e3a7f84b45277f233497b74f5bab`.
+pub const COLOR_THEME_SANITYINC_TOMORROW_MELPA_PIN: (&str, &str) =
+    ("color-theme-sanityinc-tomorrow", "20260710.1606");
+
 /// The exact DevDocs package selected for installed-document rendering,
 /// entry/page/history navigation, lookup, hyperlinks, bookmarks, document
 /// management, and error parity. MELPA built this archive from upstream commit
