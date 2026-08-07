@@ -24300,6 +24300,38 @@ fn overlay_sourced_display_property_is_not_re_entered_mid_overlay() {
     );
 }
 
+/// An image whose file cannot be loaded still REPLACES its covered range: the
+/// covered text does not reappear, and the walk resumes past that range exactly
+/// once.
+///
+/// GNU renders an image it cannot load as its own placeholder rather than
+/// revealing the text underneath (`lookup_image` hands back a "broken image"
+/// glyph); the covered range was already taken over by
+/// `handle_single_display_spec`. This engine reaches the same answer through
+/// `media_fallback_placeholder` (display_property.rs) — `[img]` for an image —
+/// so the replacement resolves and only its CONTENT is a stand-in.
+///
+/// Pinned for P4.7 because it is the observable the frame semantics turn on:
+/// whatever a replacement resolves to, the resume is the covered range's end E
+/// and "g" follows the placeholder once. Nothing at this level covered a media
+/// replacement's resume before.
+#[test]
+fn an_unloadable_image_replacement_still_covers_its_range() {
+    // The spec covers 1-based [4,7) — "def" — and resolves to the placeholder,
+    // so the row reads abc[img]ghij: the covered chars are gone and "g"
+    // follows exactly once.
+    assert_eq!(
+        display_prop_first_row_text(
+            "abcdefghij\n",
+            "(put-text-property 4 7 'display \
+               '(image :type png :file \"/nonexistent-neomacs-p47-pin.png\"))",
+        ),
+        "abc[img]ghij ",
+        "an unloadable image is still a replacement over its whole covered \
+         range; the covered text must not reappear and must not be re-walked"
+    );
+}
+
 /// R6: a REPLACING `display` spec beats `invisible`; a non-replacing one does
 /// not.
 ///
