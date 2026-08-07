@@ -3171,6 +3171,23 @@ pub const RAINBOW_DELIMITERS_MELPA_PIN: (&str, &str) = ("rainbow-delimiters", "2
 /// commit `ed62a7fefdf04c81346061016f1bc69ca045aaf6`.
 pub const SHUT_UP_MELPA_PIN: (&str, &str) = ("shut-up", "20240429.605");
 
+/// The exact shell-pop package selected for practical shell buffer naming,
+/// window size calculation, position translation, and pop-up/out lifecycle.
+/// MELPA built this archive from upstream commit
+/// `446b1691454e65be648dcb7e316639aa7dd73be2`.
+pub const SHELL_POP_MELPA_PIN: (&str, &str) = ("shell-pop", "20260610.223");
+
+/// The exact origami package selected for practical fold-tree construction,
+/// overlay hide/show, history undo/redo, and parser-driven folding. MELPA
+/// built this archive from upstream commit
+/// `e558710a975e8511b9386edc81cd6bdd0a5bda74`.
+pub const ORIGAMI_MELPA_PIN: (&str, &str) = ("origami", "20200331.1019");
+
+/// The exact pytest package selected for practical command formatting, project
+/// root discovery, and testable-name extraction. MELPA built this archive from
+/// upstream commit `8692f965bf4ddf3d755cf1fbf77a7a768e22460e`.
+pub const PYTEST_MELPA_PIN: (&str, &str) = ("pytest", "20230810.1218");
+
 /// The exact Smartparens package selected for practical balanced typing,
 /// structural refactoring, wrapping, strict editing, Python, and Markdown
 /// parity. MELPA built this archive from upstream commit

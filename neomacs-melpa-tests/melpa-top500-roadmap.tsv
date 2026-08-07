@@ -290,12 +290,12 @@ rank	package	downloads	status
 289	flyspell-correct	393598	covered
 290	evil-org	392905	todo
 291	lsp-docker	390685	todo
-292	shell-pop	384908	todo
+292	shell-pop	384908	covered
 293	magit-gitflow	383108	todo
 294	browse-kill-ring	375948	covered
-295	pytest	375779	todo
+295	pytest	375779	covered
 296	slim-mode	375747	covered
-297	origami	375001	todo
+297	origami	375001	covered
 298	company-quickhelp	374966	todo
 299	helpful	373927	todo
 300	dashboard	373542	todo
