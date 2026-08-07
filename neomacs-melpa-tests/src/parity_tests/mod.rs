@@ -447,6 +447,7 @@ mod memoize;
 mod mmm_mode;
 mod move_text;
 mod mozc;
+mod multi_term;
 mod multiple_cursors;
 mod nameless;
 mod names;

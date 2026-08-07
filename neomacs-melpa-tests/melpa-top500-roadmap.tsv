@@ -264,7 +264,7 @@ rank	package	downloads	status
 263	evil-textobj-line	446608	covered
 264	helm-org	445059	todo
 265	fringe-helper	442016	covered
-266	multi-term	436266	todo
+266	multi-term	436266	covered
 267	tagedit	435012	covered
 268	orderless	432786	covered
 269	evil-magit	429726	todo

@@ -237,6 +237,13 @@ pub const MOVE_TEXT_MELPA_PIN: (&str, &str) = ("move-text", "20260508.508");
 /// The exact MMM Mode package selected for ERB parsing, submode transitions,
 /// fontification, regexp/region management, narrowing, indentation dispatch,
 /// mode-extension activation, cleanup, and invalid-class errors. MELPA built
+
+/// The exact multi-term package selected for practical terminal buffer list
+/// management, next/prev switching, dedicated window open/close/toggle, and
+/// buffer naming. MELPA built this archive from upstream commit
+/// `017c77c550115936860e2ea71b88e585371475d5`.
+pub const MULTI_TERM_MELPA_PIN: (&str, &str) = ("multi-term", "20200514.428");
+
 /// this archive from upstream commit `b1f5c7dbdc405e6e10d9ddd99a43a6b2ad61b176`.
 pub const MMM_MODE_MELPA_PIN: (&str, &str) = ("mmm-mode", "20240222.428");
 
