@@ -24227,3 +24227,76 @@ fn overlay_string_newline_leaves_row_bounds_on_the_anchor_boundary() {
         vec![(None, None), (Some(1), Some(12)), (Some(13), Some(19))]
     );
 }
+
+// ---------------------------------------------------------------------------
+// P4.7 step 0: pre-existing-divergence detectors for the replacement rung.
+//
+// R1 and R6 from the phase-4 inventory describe GNU rules the engine is
+// believed to already follow. They are written BEFORE the rung so that if
+// either is red, the divergence is fixed on its own commit rather than being
+// absorbed into a refactor that would then be blamed for it.
+// ---------------------------------------------------------------------------
+
+/// The first body row's logical text, laid out with `setup` run against the
+/// fixture's own Context.
+fn display_prop_first_row_text(text: &str, setup: &str) -> String {
+    let setup = setup.to_owned();
+    let (_eval, _buf_id, _frame_id, rows, _cw, _ch) =
+        layout_main_text_rows_with(text, move |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(&setup).expect("display property setup");
+        });
+    glyphs_logical_text(&rows[0].glyphs[1])
+}
+
+/// R1: an OVERLAY-sourced `display` property covers exactly the overlay, not
+/// the extent over which the resolved value happens to stay the same.
+///
+/// GNU xdisp.c:6337-6363 sets the covered range's end to `OVERLAY_END
+/// (overlay)` unconditionally, and its comment names both failure directions
+/// that the alternative - `display_prop_end`, which finds another `display`
+/// property "coming from some other overlay or text property on buffer
+/// positions before this overlay's end" - would cause: "we risk displaying
+/// this overlay's display string/image twice, or fail to display text that
+/// should be".
+#[test]
+fn overlay_sourced_display_property_covers_exactly_the_overlay() {
+    // Direction 1, "fail to display text that should be": the SAME string
+    // object continues past the overlay end as a text property. The overlay
+    // covers [3,9); the text property covers [9,10) and is its own, second
+    // replacement. Swallowing "j" into one replacement renders one "S".
+    assert_eq!(
+        display_prop_first_row_text(
+            "abcdefghij\n",
+            "(let ((s \"S\")) \
+               (overlay-put (make-overlay 4 10) 'display s) \
+               (put-text-property 10 11 'display s))",
+        ),
+        "abcSS ",
+        "the overlay's range and the text property's range are two separate \
+         replacements, even sharing one string object"
+    );
+}
+
+/// R1, second direction: see
+/// [`overlay_sourced_display_property_covers_exactly_the_overlay`].
+#[test]
+fn overlay_sourced_display_property_is_not_re_entered_mid_overlay() {
+    // Direction 2, "displaying this overlay's display string twice": a
+    // higher-priority overlay interrupts the resolved value mid-range. The
+    // outer overlay still covers [3,9) in one replacement, so its "S" is
+    // emitted once and the inner "T" is never reached.
+    assert_eq!(
+        display_prop_first_row_text(
+            "abcdefghij\n",
+            "(let ((outer (make-overlay 4 10)) (inner (make-overlay 6 8))) \
+               (overlay-put outer 'display \"S\") \
+               (overlay-put outer 'priority 0) \
+               (overlay-put inner 'display \"T\") \
+               (overlay-put inner 'priority 10))",
+        ),
+        "abcSj ",
+        "an overlay display property is one replacement over the whole \
+         overlay; resuming inside it would emit the string twice"
+    );
+}

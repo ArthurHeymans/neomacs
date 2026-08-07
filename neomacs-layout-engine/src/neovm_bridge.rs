@@ -2350,6 +2350,17 @@ impl LayoutCharPropertyLookup {
         bytepos: EmacsBytePos,
         current_window_id: Option<u64>,
     ) -> Option<Value> {
+        self.highest_overlay_entry_at(buffer, bytepos, current_window_id)
+            .map(|(_, value)| value)
+    }
+
+    /// The winning overlay and its value, in GNU `compare_overlays` order.
+    fn highest_overlay_entry_at<B: LayoutBufferView + ?Sized>(
+        &self,
+        buffer: &B,
+        bytepos: EmacsBytePos,
+        current_window_id: Option<u64>,
+    ) -> Option<(Value, Value)> {
         let (canonical, aliases) = self.lookup_order.split_first()?;
         let overlays = buffer.layout_overlays();
         let mut overlay_ids = overlays.overlays_at_emacs_byte_pos(bytepos);
@@ -2366,6 +2377,7 @@ impl LayoutCharPropertyLookup {
                 None,
             )
             .filter(|value| !value.is_nil())
+            .map(|value| (overlay, value))
         })
     }
 
@@ -2375,8 +2387,35 @@ impl LayoutCharPropertyLookup {
         bytepos: EmacsBytePos,
         current_window_id: Option<u64>,
     ) -> Option<Value> {
-        self.highest_overlay_value_at(buffer, bytepos, current_window_id)
-            .or_else(|| self.text_value_at(buffer, bytepos))
+        self.overlay_or_text_source_at(buffer, bytepos, current_window_id)
+            .map(|source| source.value)
+    }
+
+    /// The winning value AND where it came from.
+    ///
+    /// Which overlay won is not bookkeeping: GNU's `display` handling bounds an
+    /// OVERLAY-sourced property by that overlay's end rather than by the next
+    /// property change (xdisp.c:6337-6363), so a consumer that only sees the
+    /// value cannot compute the covered range correctly.
+    pub(crate) fn overlay_or_text_source_at<B: LayoutBufferView + ?Sized>(
+        &self,
+        buffer: &B,
+        bytepos: EmacsBytePos,
+        current_window_id: Option<u64>,
+    ) -> Option<CharPropertySource> {
+        if let Some((overlay, value)) =
+            self.highest_overlay_entry_at(buffer, bytepos, current_window_id)
+        {
+            return Some(CharPropertySource {
+                value,
+                overlay: Some(overlay),
+            });
+        }
+        self.text_value_at(buffer, bytepos)
+            .map(|value| CharPropertySource {
+                value,
+                overlay: None,
+            })
     }
 
     fn overlay_values_ascending_at<B: LayoutBufferView + ?Sized>(
@@ -2407,6 +2446,14 @@ impl LayoutCharPropertyLookup {
             })
             .collect()
     }
+}
+
+/// A resolved char-property value together with the overlay that supplied it,
+/// or `None` for a text property.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CharPropertySource {
+    pub(crate) value: Value,
+    pub(crate) overlay: Option<Value>,
 }
 
 pub(crate) fn overlay_faces_at<B: LayoutBufferView + ?Sized>(

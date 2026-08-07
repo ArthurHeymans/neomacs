@@ -344,8 +344,21 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         // containment, secondary priority, stable tiebreak); the previous
         // `max_by_key` on a bare `priority` integer read a `(PRIMARY . SECONDARY)`
         // priority as 0, ignored containment, and broke ties arbitrarily.
-        self.display_property
-            .overlay_or_text_value_at(self.buffer, bytepos, self.window_id)
+        self.display_prop_source_at(char_pos)
+            .map(|source| source.value)
+    }
+
+    /// The winning `display` value AND its source, which decides how far the
+    /// replacement reaches — see [`Self::display_value_extent`].
+    fn display_prop_source_at(
+        &self,
+        char_pos: CharPos0,
+    ) -> Option<crate::neovm_bridge::CharPropertySource> {
+        self.display_property.overlay_or_text_source_at(
+            self.buffer,
+            self.byte_pos(char_pos),
+            self.window_id,
+        )
     }
 
     fn composition_prop_at(&self, char_pos: CharPos0) -> Option<Value> {
@@ -355,16 +368,48 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         )
     }
 
-    /// The extent over which the resolved `display` value stays the same object,
-    /// starting from `extent` (the first run end). Mirrors GNU
-    /// `next_single_char_property_change(pos, Qdisplay)` so a display REPLACEMENT
-    /// renders once over the whole property: an overlay `display` covers text
-    /// whose internal `face`/`invisible` changes would otherwise break the run
-    /// (and replay the replacement per sub-run).
-    fn display_value_extent(&self, value: Value, mut extent: CharPos0) -> CharPos0 {
+    /// How far a display REPLACEMENT starting here reaches, so it renders once
+    /// over the whole property rather than replaying per sub-run.
+    ///
+    /// GNU takes one of two answers depending on where the property came from
+    /// (`handle_single_display_spec`, xdisp.c:6337-6363), and the difference is
+    /// load-bearing in both directions.
+    ///
+    /// An OVERLAY-sourced property always ends at the OVERLAY's end. GNU's
+    /// comment is explicit that the same-value scan is WRONG here, because it
+    /// "will happily find another `display' property coming from some other
+    /// overlay or text property on buffer positions before this overlay's end,
+    /// or overlays not specific to this window", so using it means "we risk
+    /// displaying this overlay's display string/image twice, or fail to display
+    /// text that should be". Both are reachable: a higher-priority overlay
+    /// interrupting the value mid-range makes the scan stop early and re-enter
+    /// the overlay later, emitting its string twice; the same string object
+    /// continuing past the overlay as a text property makes the scan run on and
+    /// swallow text that is its own, separate replacement.
+    ///
+    /// A TEXT-property one ends at the next `display` change, which is the
+    /// same-object scan below (GNU `display_prop_end` ->
+    /// `Fnext_single_char_property_change`).
+    fn display_value_extent(
+        &self,
+        source: crate::neovm_bridge::CharPropertySource,
+        mut extent: CharPos0,
+    ) -> CharPos0 {
+        if let Some(overlay) = source.overlay {
+            // GNU clips the overlay end to the accessible portion before using
+            // it; `self.end` is this walk's equivalent bound.
+            return self
+                .buffer
+                .layout_overlays()
+                .overlay_end_emacs_byte_pos(overlay)
+                .map(|end| self.buffer.layout_emacs_byte_pos_to_char_pos(end))
+                .unwrap_or(extent)
+                .max(extent)
+                .min(self.end);
+        }
         while extent < self.end {
             match self.display_prop_at(extent) {
-                Some(next) if next.bits() == value.bits() => {
+                Some(next) if next.bits() == source.value.bits() => {
                     extent = self
                         .next_property_change(extent)
                         .max(extent.add_len(CharLen::new(1)))
@@ -754,7 +799,8 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             let pointer_appearance = self.pointer_appearance_at(start, property_end, face, context);
             let span = self.span(start, property_end);
 
-            if let Some(display_prop) = self.display_prop_at(start) {
+            if let Some(display_source) = self.display_prop_source_at(start) {
+                let display_prop = display_source.value;
                 let display_property = DisplayPropertySourcePlan::new(display_prop);
                 if replacement_mode.consumes_typed_replacements()
                     && display_property.replacement().is_some()
@@ -765,7 +811,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                     // boundary, so an overlay `display` (e.g. an org inline image)
                     // covering text with internal face/invisible changes would
                     // otherwise replay the replacement once per sub-run.
-                    let display_end = self.display_value_extent(display_prop, property_end);
+                    let display_end = self.display_value_extent(display_source, property_end);
                     self.char_pos = display_end;
                     return Some(BufferTextCursorItem::DisplayPropertyReplacement(
                         self.display_replacement_item(
