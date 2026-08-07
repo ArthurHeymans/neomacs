@@ -234,6 +234,12 @@ pub const EDITORCONFIG_MELPA_PIN: (&str, &str) = ("editorconfig", "20260118.718"
 /// `142890cfb46d9c374113b4b49021a4202033147b`.
 pub const MOVE_TEXT_MELPA_PIN: (&str, &str) = ("move-text", "20260508.508");
 
+/// The exact MMM Mode package selected for ERB parsing, submode transitions,
+/// fontification, regexp/region management, narrowing, indentation dispatch,
+/// mode-extension activation, cleanup, and invalid-class errors. MELPA built
+/// this archive from upstream commit `b1f5c7dbdc405e6e10d9ddd99a43a6b2ad61b176`.
+pub const MMM_MODE_MELPA_PIN: (&str, &str) = ("mmm-mode", "20240222.428");
+
 /// The exact Elixir Mode package selected by the practical indentation,
 /// fontification, navigation, documentation, and formatter workflow corpus.
 /// MELPA built this archive from upstream commit

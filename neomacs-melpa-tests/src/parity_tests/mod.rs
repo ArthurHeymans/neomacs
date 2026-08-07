@@ -438,6 +438,7 @@ mod markdown_toc;
 mod math_symbol_lists;
 mod maude_mode;
 mod memoize;
+mod mmm_mode;
 mod move_text;
 mod mozc;
 mod multiple_cursors;

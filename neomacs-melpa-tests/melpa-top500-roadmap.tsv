@@ -252,7 +252,7 @@ rank	package	downloads	status
 251	live-py-mode	469320	covered
 252	ac-ispell	466372	covered
 253	company-anaconda	463797	covered
-254	mmm-mode	462001	todo
+254	mmm-mode	462001	covered
 255	llama	456538	covered
 256	helm-purpose	456457	todo
 257	treemacs-persp	456042	todo
