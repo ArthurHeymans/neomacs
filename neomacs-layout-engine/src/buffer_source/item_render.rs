@@ -387,6 +387,15 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             );
         }
 
+        // Neither whole-run path could take this run, so it is rendered one
+        // character at a time from here on. Tell the producer to stop batching
+        // for the rest of it: otherwise every character re-reads and re-measures
+        // the whole remaining run, which measured 79x the run measurements on a
+        // 2000-character wrapped line. The hint expires by position.
+        if let Some(end_charpos) = source_item.source_end_charpos() {
+            source_walk.request_char_granularity_until(end_charpos);
+        }
+
         BufferSourceCharRenderRequest::new(
             self.text,
             self.text_start_byte,

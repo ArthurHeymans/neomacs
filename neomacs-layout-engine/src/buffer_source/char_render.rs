@@ -108,12 +108,17 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
         } = state;
         let mut source_render = source_render;
 
-        if source_item.is_multi_char_text_run()
-            && let Some((first, pending)) = source_item
-                .clone()
-                .split_text_run_items(self.text_start_byte)
+        // Element granularity: this path renders exactly ONE character, so take
+        // the run's first character and leave the rest to the producer. The walk
+        // position advances by that one character (the append does it), and the
+        // next iteration reads the remainder straight from the cursor — the
+        // producer's position IS the resume state. The remainder used to be
+        // split into N single-character items and pushed back through a pending
+        // queue for later iterations to pop.
+        if let Some(first) = source_item
+            .clone()
+            .first_text_run_char(self.text_start_byte)
         {
-            source_walk.prepend_pending_render_items(pending);
             source_item = first;
         }
 

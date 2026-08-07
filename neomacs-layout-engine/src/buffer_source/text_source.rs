@@ -55,6 +55,23 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     window_id: Option<u64>,
     char_pos: CharPos0,
     end: CharPos0,
+    /// While the cursor sits before this position, plain text runs are produced
+    /// ONE CHARACTER AT A TIME.
+    ///
+    /// The multi-character `TextRun` is a batching optimization over GNU's
+    /// strictly one-element-at-a-time producer; the renderer declines it for the
+    /// rest of a run it has already refused, because it will render that run
+    /// character by character anyway (overflow, cursor capture and the word-wrap
+    /// candidate hook are all per character). Without this the renderer re-reads
+    /// — and re-measures — the whole remaining run once per character: measured
+    /// at 79x the run measurements and 77x the measured characters on a
+    /// 2000-character wrapped line.
+    ///
+    /// It is a HINT, not state the output depends on: losing it costs run
+    /// batching and nothing else, which is what separates it from the pending
+    /// queue it replaces. It expires by position, so a skip past `end` (the
+    /// truncation or invisible skip) self-heals.
+    char_granularity_end: Option<CharPos0>,
     base_face: RenderFaceRef,
     replacement_strings: LispStringSourceStack,
     mouse_face_extent: Option<CachedMouseFaceExtent>,
@@ -104,6 +121,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             window_id,
             char_pos: start,
             end,
+            char_granularity_end: None,
             base_face,
             replacement_strings: LispStringSourceStack::empty(1),
             mouse_face_extent: None,
@@ -118,6 +136,31 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
 
     pub(crate) fn current_char_pos(&self) -> CharPos0 {
         self.char_pos
+    }
+
+    /// Decline run batching until `end_charpos`: see
+    /// [`char_granularity_end`](Self::char_granularity_end).
+    pub(crate) fn request_char_granularity_until(&mut self, end_charpos: CharPos0) {
+        self.char_granularity_end = Some(match self.char_granularity_end {
+            Some(current) => current.max(end_charpos),
+            None => end_charpos,
+        });
+    }
+
+    /// The live batching-decline extent, for the producer's snapshot.
+    pub(crate) fn char_granularity_end(&self) -> Option<CharPos0> {
+        self.char_granularity_end
+    }
+
+    /// Reinstate (or drop) the batching decline — used by the producer's
+    /// snapshot/restore and by the row-transition retry, which resumes with runs
+    /// batched again because the continuation row re-measures from a fresh pen.
+    pub(crate) fn set_char_granularity_end(&mut self, end_charpos: Option<CharPos0>) {
+        self.char_granularity_end = end_charpos;
+    }
+
+    fn produces_single_chars_at(&self, char_pos: CharPos0) -> bool {
+        self.char_granularity_end.is_some_and(|end| char_pos < end)
     }
 
     pub(crate) fn reset_to(&mut self, char_pos: CharPos0) {
@@ -548,7 +591,11 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             );
         }
 
-        let end = self.next_text_run_end(start, property_end);
+        let end = if self.produces_single_chars_at(start) {
+            start.add_len(CharLen::new(1)).min(property_end)
+        } else {
+            self.next_text_run_end(start, property_end)
+        };
         self.char_pos = end;
         Some(
             DisplayItem::new(

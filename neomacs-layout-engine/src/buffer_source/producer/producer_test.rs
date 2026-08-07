@@ -61,9 +61,10 @@ fn drain<B: LayoutBufferView>(
     steps
 }
 
-/// Drive a producer to the wrap candidate `candidate`, consume past it (the
-/// overflow attempt), queue a split remainder the way the renderer does, and
-/// then hand the seated producer back for the wrap retry.
+/// Drive a producer to the wrap candidate `candidate` and consume past it (the
+/// overflow attempt), then hand the seated producer back for the wrap retry.
+/// The attempt leaves the producer's cursor past the candidate — the state the
+/// retry has to undo.
 fn walk_to_wrap_candidate<'a>(
     buffer_id: BufferId,
     snapshot: &'a LayoutBufferSnapshot,
@@ -75,33 +76,19 @@ fn walk_to_wrap_candidate<'a>(
     let mut producer = producer(buffer_id, snapshot);
     let mut position = candidate;
     let overflow_attempt = drain(&mut producer, &mut position, 2);
-    // The renderer's per-char / fit split: the tail of the consumed run goes
-    // back into the producer's pending queue at a position past the candidate.
-    let remainder: Vec<_> = overflow_attempt
-        .iter()
-        .filter_map(|(item, _)| match item {
-            BufferSourceConsumedItem::Renderable(step) => Some(step.clone()),
-            BufferSourceConsumedItem::DisplayPropertyReplacement(_) => None,
-        })
-        .collect();
     assert!(
-        !remainder.is_empty(),
+        !overflow_attempt.is_empty(),
         "wrap corpus must produce renderable items before the retry"
     );
-    producer.prepend_pending_render_items(remainder);
-    assert!(producer.has_pending_render_items());
     (producer, candidate)
 }
 
-/// The pre-extraction `rewind_source_consumption_to`, verbatim: clear the
-/// pending queue, reseat the cursor at the retry position. The reference the
-/// snapshot/restore round trip is characterized against, written out here so
-/// the comparison does not run through `restore` itself.
+/// `rewind_source_consumption_to` written out directly against the cursor, so
+/// the snapshot/restore comparison below does not run through `restore` itself.
 fn legacy_rewind<B: LayoutBufferView>(
     producer: &mut BufferElementProducer<'_, B>,
     source_position: DisplaySourceTextPosition,
 ) {
-    producer.source_consumption.clear_pending_render_items();
     producer
         .source_cursor
         .reset_to(CharPos0::new(source_position.charpos().max(0) as usize));
@@ -160,44 +147,4 @@ fn producer_snapshot_restore_matches_rewind_on_a_word_wrap_candidate() {
         "hello world wrapping line of text\ntail\n",
         DisplaySourceTextPosition::new(11, 11),
     );
-}
-
-#[test]
-fn producer_snapshot_preserves_a_pending_queue_the_rewind_would_drop() {
-    // Snapshot/restore is state-faithful where the rewind is position-only:
-    // restoring a snapshot taken with queued remainders brings them back,
-    // which is what lets P4.3 delete the fit split.
-    let (buffer_id, snapshot) = buffer_snapshot("abcdef\nghi\n");
-    let mut producer = producer(buffer_id, &snapshot);
-    let mut position = DisplaySourceTextPosition::new(0, 0);
-    let first = consume_one(&mut producer, &mut position).expect("leading run");
-    let BufferSourceConsumedItem::Renderable(step) = first else {
-        panic!("plain text must produce a renderable run");
-    };
-
-    producer.prepend_pending_render_items(vec![step]);
-    let saved = producer.snapshot();
-    assert_eq!(producer.pending_render_items_len(), 1);
-
-    legacy_rewind(&mut producer, DisplaySourceTextPosition::new(0, 0));
-    assert!(!producer.has_pending_render_items());
-
-    producer.restore(saved);
-    assert_eq!(producer.pending_render_items_len(), 1);
-}
-
-#[test]
-fn producer_rewind_matches_the_pre_extraction_rewind() {
-    // `rewind_to` is `restore` of a synthesized seating; it must still be the
-    // old clear-queue-and-reseat, byte for byte.
-    let (buffer_id, snapshot) = buffer_snapshot("abcdef\nghi\n");
-    let candidate = DisplaySourceTextPosition::new(3, 3);
-
-    let (mut rewound, _) = walk_to_wrap_candidate(buffer_id, &snapshot, candidate);
-    rewound.rewind_to(candidate);
-
-    let (mut legacy, _) = walk_to_wrap_candidate(buffer_id, &snapshot, candidate);
-    legacy_rewind(&mut legacy, candidate);
-
-    assert_eq!(rewound.snapshot(), legacy.snapshot());
 }

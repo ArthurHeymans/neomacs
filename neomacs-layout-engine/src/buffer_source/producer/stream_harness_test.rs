@@ -36,6 +36,7 @@ use super::*;
 use crate::buffer_source::consumption::BufferSourceConsumedItem;
 use crate::display_item::RenderFaceRef;
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
+use crate::display_source::DisplaySourceStepItem;
 use crate::display_source::DisplaySourceTextPosition;
 use crate::display_source_resolver::DisplaySourceFaceBasis;
 use crate::frame_face_arena::FrameFaceAttempt;
@@ -374,6 +375,10 @@ fn observe(item: &BufferSourceConsumedItem, scan_before: BufferScanPos) -> Vec<C
 enum SplitPolicy {
     /// Producer leg: whole runs, no feeders.
     None,
+    /// P4.5's replacement for the per-char feeder: the renderer DECLINES run
+    /// batching from `charpos` on, and the producer yields single characters
+    /// itself. Nothing is queued.
+    CharGranularityFrom(i64),
     /// The per-char feeder (char_render.rs:111-117): every multi-char run is
     /// split, the first character is consumed now and the remainder goes back
     /// on the pending queue.
@@ -482,6 +487,7 @@ impl Fixture {
                 0,
                 0,
             ),
+            pending: std::collections::VecDeque::new(),
             position: DisplaySourceTextPosition::new(0, 0),
             face_ids: FrameFaceAttempt::for_test_with_next_id(BASE_FACE.get() + 1),
             split,
@@ -494,6 +500,7 @@ impl Fixture {
 struct DriverSnapshot {
     producer: ProducerSnapshot,
     position: DisplaySourceTextPosition,
+    pending: std::collections::VecDeque<DisplaySourceStepItem>,
 }
 
 struct StreamDriver<'a> {
@@ -502,6 +509,11 @@ struct StreamDriver<'a> {
     position: DisplaySourceTextPosition,
     face_ids: FrameFaceAttempt,
     split: SplitPolicy,
+    /// The renderer's pending queue, kept HERE and only here: P4.5 deleted it
+    /// from the producer, and the replay legs still need it to reproduce the
+    /// old mechanism they are the differential proof against. A test-only
+    /// VecDeque is the honest home for a mechanism production no longer has.
+    pending: std::collections::VecDeque<DisplaySourceStepItem>,
 }
 
 impl<'a> StreamDriver<'a> {
@@ -515,12 +527,15 @@ impl<'a> StreamDriver<'a> {
             &self.fixture.base_face,
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         );
-        let item = self.producer.next_consumed_item_with_face_basis(
-            &self.fixture.snapshot,
-            basis,
-            &mut self.face_ids,
-            &mut self.position,
-        )?;
+        let item = match self.pending.pop_front() {
+            Some(step) => BufferSourceConsumedItem::Renderable(step),
+            None => self.producer.next_consumed_item_with_face_basis(
+                &self.fixture.snapshot,
+                basis,
+                &mut self.face_ids,
+                &mut self.position,
+            )?,
+        };
         let item = self.apply_split(item, scan_before);
         if let BufferSourceConsumedItem::Renderable(step) = &item {
             // Publish the position of the item actually consumed. A split leg
@@ -546,6 +561,14 @@ impl<'a> StreamDriver<'a> {
         };
         match self.split {
             SplitPolicy::None => BufferSourceConsumedItem::Renderable(step),
+            SplitPolicy::CharGranularityFrom(from_charpos) => {
+                if scan_before.charpos() >= from_charpos
+                    && let Some(end_charpos) = step.source_end_charpos()
+                {
+                    self.producer.request_char_granularity_until(end_charpos);
+                }
+                BufferSourceConsumedItem::Renderable(step)
+            }
             SplitPolicy::PerChar => {
                 let Some((first, pending)) = step
                     .is_multi_char_text_run()
@@ -554,7 +577,7 @@ impl<'a> StreamDriver<'a> {
                 else {
                     return BufferSourceConsumedItem::Renderable(step);
                 };
-                self.producer.prepend_pending_render_items(pending);
+                self.queue_pending(pending);
                 BufferSourceConsumedItem::Renderable(first)
             }
             SplitPolicy::FitAt(at_charpos) => {
@@ -567,7 +590,7 @@ impl<'a> StreamDriver<'a> {
                 else {
                     return BufferSourceConsumedItem::Renderable(step);
                 };
-                self.producer.prepend_pending_render_items(vec![suffix]);
+                self.queue_pending(vec![suffix]);
                 BufferSourceConsumedItem::Renderable(prefix)
             }
             SplitPolicy::PrefixAt(at_charpos) => {
@@ -583,6 +606,12 @@ impl<'a> StreamDriver<'a> {
                 self.producer.consume_prefix_to(at_charpos);
                 BufferSourceConsumedItem::Renderable(prefix)
             }
+        }
+    }
+
+    fn queue_pending<I: IntoIterator<Item = DisplaySourceStepItem>>(&mut self, items: I) {
+        for item in items.into_iter().collect::<Vec<_>>().into_iter().rev() {
+            self.pending.push_front(item);
         }
     }
 
@@ -613,12 +642,14 @@ impl<'a> StreamDriver<'a> {
         DriverSnapshot {
             producer: self.producer.snapshot(),
             position: self.position,
+            pending: self.pending.clone(),
         }
     }
 
     fn restore(&mut self, snapshot: DriverSnapshot) {
         self.producer.restore(snapshot.producer);
         self.position = snapshot.position;
+        self.pending = snapshot.pending;
     }
 }
 
@@ -1256,7 +1287,7 @@ fn p43_prefix_consume_leaves_nothing_pending_and_resumes_at_the_prefix_end() {
     let prefix = driver.drain_until_charpos(20);
     assert_eq!(prefix.len(), 20);
     assert_eq!(
-        driver.producer.pending_render_items_len(),
+        driver.pending.len(),
         0,
         "the prefix consume must not queue a remainder"
     );
@@ -1288,4 +1319,63 @@ fn p43_prefix_consume_is_stream_identical_to_the_queueing_fit_split() {
             case.name
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// P4.5: the per-char feeder becomes producer-side char granularity
+// ---------------------------------------------------------------------------
+
+#[test]
+fn p45_char_granularity_is_stream_identical_to_the_queueing_per_char_split() {
+    // The deletion proof: asking the producer for single characters and
+    // splitting a whole run into queued single-character items must yield the
+    // same element stream, over corpora whose runs carry the seams the renderer
+    // cares about (a face boundary, multibyte, a tab).
+    for case in [
+        StreamCase::new("P4.5 plain", "hello world\n"),
+        StreamCase::new("P4.5 multibyte", "a漢字b tail\n"),
+        StreamCase::new("P4.5 tab", "ab\tcd efgh\n"),
+        StreamCase::new("P4.5 face seam", "abcdefgh\n")
+            .with(CaseProperty::face(3, 6, ":weight", "bold")),
+        StreamCase::new("P4.5 overlay seam", "abcdefgh\n")
+            .with_overlay(CaseOverlay::face(3, 6, ":weight", "bold")),
+    ] {
+        let fixture = Fixture::new(&case);
+        let queued = fixture.driver(SplitPolicy::PerChar).drain(DRAIN_LIMIT);
+        let granular = fixture
+            .driver(SplitPolicy::CharGranularityFrom(0))
+            .drain(DRAIN_LIMIT);
+        assert!(!queued.is_empty(), "{}: nothing produced", case.name);
+        assert_eq!(
+            queued, granular,
+            "{}: producer-side char granularity changed the element stream",
+            case.name
+        );
+    }
+}
+
+#[test]
+fn p45_char_granularity_yields_single_characters_and_expires_by_position() {
+    // The mechanism's two contracts: while the hint is live the producer stops
+    // batching, and it expires at the requested end so the next run batches
+    // again. Element texts are the observable, pinned explicitly.
+    let case = StreamCase::new("P4.5 granularity extent", "abcdefgh\n")
+        .with(CaseProperty::face(4, 8, ":weight", "bold"));
+    let fixture = Fixture::new(&case);
+
+    // Baseline: two runs, cut at the face boundary.
+    assert_eq!(producer_run_texts(&case), vec!["abcd", "efgh", "\n"]);
+
+    // Decline batching for the first run only: it arrives one character at a
+    // time, and the run AFTER the hint's end is whole again.
+    let mut driver = fixture.driver(SplitPolicy::None);
+    driver.producer.request_char_granularity_until(4);
+    let mut runs = Vec::new();
+    for _ in 0..DRAIN_LIMIT {
+        let Some(observations) = driver.next_observations() else {
+            break;
+        };
+        runs.push(CharObservation::chars(&observations));
+    }
+    assert_eq!(runs, vec!["a", "b", "c", "d", "efgh", "\n"]);
 }

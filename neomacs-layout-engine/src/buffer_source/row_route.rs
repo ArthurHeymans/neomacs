@@ -134,8 +134,6 @@ pub(crate) struct RowRouteWindowPolicy {
 /// next migration increment).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RouteRefusal {
-    /// The walk has pending render items (mid display-element session).
-    PendingItems,
     /// Window policy: horizontal scroll active.
     PolicyHscroll,
     /// Window policy: selective display active.
@@ -203,10 +201,9 @@ pub(crate) enum RouteRefusal {
 }
 
 impl RouteRefusal {
-    const COUNT: usize = 23;
+    const COUNT: usize = 22;
 
     const ALL: [RouteRefusal; Self::COUNT] = [
-        RouteRefusal::PendingItems,
         RouteRefusal::PolicyHscroll,
         RouteRefusal::PolicySelectiveDisplay,
         RouteRefusal::PolicyWordWrap,
@@ -240,7 +237,6 @@ impl RouteRefusal {
 
     fn label(self) -> &'static str {
         match self {
-            RouteRefusal::PendingItems => "pending_items",
             RouteRefusal::PolicyHscroll => "policy_hscroll",
             RouteRefusal::PolicySelectiveDisplay => "policy_selective_display",
             RouteRefusal::PolicyWordWrap => "policy_word_wrap",
@@ -297,9 +293,9 @@ fn note_route_refusal(reason: RouteRefusal) {
     }
 }
 
-/// Increment-2j sub-cause telemetry for the two LOOP-RESUME refusal classes
-/// (`pending_items` / `mid_line_start`). These are walk mechanics, not row
-/// classes: most of their hits are per-step ECHOES inside a line the pipeline
+/// Increment-2j sub-cause telemetry for the `mid_line_start` LOOP-RESUME
+/// refusal class (its `pending_items` sibling retired with the pending queue at
+/// P4.5). These are walk mechanics, not row classes: most of their hits are per-step ECHOES inside a line the pipeline
 /// is already rendering. The sub-counters decompose them into what the
 /// migration can actually act on:
 /// * `*_rows` — DISTINCT (row, charpos) sites, i.e. how many actual candidate
@@ -307,22 +303,12 @@ fn note_route_refusal(reason: RouteRefusal) {
 /// * `*_cont` / `*_cont_rows` — hits (and distinct sites) on a row flagged
 ///   `Continuation`, the wrapped-line resume class whose entry state is the
 ///   Phase-2j routing question;
-/// * `pending_qlen1` — pending refusals with exactly ONE queued remainder
-///   (the only shape a clear-and-rewind re-plan could even consider).
-static ROUTE_STAT_PENDING_QLEN1: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-static ROUTE_STAT_PENDING_CONT: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
-static ROUTE_STAT_PENDING_ROWS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
 static ROUTE_STAT_MIDLINE_CONT: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 static ROUTE_STAT_MIDLINE_ROWS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 static ROUTE_STAT_MIDLINE_CONT_ROWS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
-static ROUTE_STAT_LAST_PENDING_SITE: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(u64::MAX);
 static ROUTE_STAT_LAST_MIDLINE_SITE: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(u64::MAX);
 static ROUTE_STAT_LAST_MIDLINE_CONT_SITE: std::sync::atomic::AtomicU64 =
@@ -343,24 +329,6 @@ fn note_distinct_site(
     if last.swap(key, std::sync::atomic::Ordering::Relaxed) != key {
         counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
-}
-
-fn note_route_refusal_pending(queue_len: usize, continuation_row: bool, site_key: u64) {
-    if route_stats_file().is_none() {
-        return;
-    }
-    note_route_refusal(RouteRefusal::PendingItems);
-    if queue_len == 1 {
-        ROUTE_STAT_PENDING_QLEN1.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
-    if continuation_row {
-        ROUTE_STAT_PENDING_CONT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
-    note_distinct_site(
-        &ROUTE_STAT_LAST_PENDING_SITE,
-        &ROUTE_STAT_PENDING_ROWS,
-        site_key,
-    );
 }
 
 fn note_route_refusal_midline(continuation_row: bool, site_key: u64) {
@@ -402,9 +370,6 @@ pub(crate) fn route_stats_append_report() {
     }
     for (label, counter) in [
         ("routed_resume", &ROUTE_STAT_ROUTED_RESUME),
-        ("pending_qlen1", &ROUTE_STAT_PENDING_QLEN1),
-        ("pending_cont", &ROUTE_STAT_PENDING_CONT),
-        ("pending_rows", &ROUTE_STAT_PENDING_ROWS),
         ("midline_cont", &ROUTE_STAT_MIDLINE_CONT),
         ("midline_rows", &ROUTE_STAT_MIDLINE_ROWS),
         ("midline_cont_rows", &ROUTE_STAT_MIDLINE_CONT_ROWS),
@@ -2251,15 +2216,6 @@ impl<'rows, 'emit, 'surface>
             crate::display_row::geometry::DisplayRowFlagKind::Continuation,
         );
         let route_site_key = route_stats_site_key(route_row_index, self.progress.charpos());
-        if source_walk.has_pending_render_items() {
-            note_route_refusal_pending(
-                source_walk.pending_render_items_len(),
-                route_continuation_row,
-                route_site_key,
-            );
-            return AsciiRowRouteOutcome::NotRouted;
-        }
-
         let position = self.progress.row_position();
         let row = RowRouteRowStart {
             text,

@@ -246,14 +246,12 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 );
                 // `apply_before_row_transition` rewound `source_position` (and,
                 // above, the row's drawn glyphs + display points) back to the word
-                // boundary. Rewind the source consumption + cursor state to the
-                // SAME boundary so the candidate char is RE-produced on the
-                // continuation row. Without this the stale pending text-run
-                // remainder (candidate + 1, queued when this run was split
-                // per-char during the overflow attempt) is replayed first,
-                // skipping the candidate char: it stays drawn once on the previous
-                // row (now truncated away by the glyph checkpoint) and never
-                // appears on the continuation row, splitting/dropping the word.
+                // boundary; reseat the producer at the SAME boundary so the
+                // candidate char is RE-produced on the continuation row. The
+                // producer's position IS its resume state, so this is a plain
+                // reseat — it used to also have to drop a stale queued run
+                // remainder (candidate + 1) that would otherwise replay first and
+                // drop the candidate char from the layout.
                 source_walk.rewind_source_consumption_to(source_position);
                 source_walk
                     .source_position_update(source_position)
@@ -360,15 +358,9 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     context.row_visibility_limit,
                 );
                 if !matches!(continuation, DisplayRowTransitionContinuation::Exhausted) {
-                    // Same stale-pending-remainder hazard as the word-wrap
-                    // branch above: when the overflowing char's text run was
-                    // split per-char at the window edge, the run remainder
-                    // (char + 1) is already queued. `source_position` was just
-                    // rewound to the char's start by the transition; without
-                    // clearing the queue and reseating the cursor to the same
-                    // position, the stale remainder replays first and the
-                    // overflowing char never appears on the continuation row
-                    // (it is silently dropped from the layout output).
+                    // `source_position` was just rewound to the overflowing
+                    // char's start by the transition; reseat the producer to the
+                    // same position so that char opens the continuation row.
                     source_walk.rewind_source_consumption_to(source_position);
                 }
                 // GNU `maybe_produce_line_number`: each wrapped continuation row

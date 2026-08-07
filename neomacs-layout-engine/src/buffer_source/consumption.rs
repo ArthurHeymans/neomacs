@@ -1,7 +1,5 @@
 //! Buffer source typed item consumption.
 
-use std::collections::VecDeque;
-
 use crate::buffer_source::text_source::{
     BufferTextCursorItem, BufferTextDisplayReplacementMode, BufferTextSourceCursor,
 };
@@ -33,47 +31,11 @@ impl BufferSourceConsumedItem {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BufferSourceConsumptionState {
     text_start_byte: usize,
-    pending_render_items: VecDeque<DisplaySourceStepItem>,
 }
 
 impl BufferSourceConsumptionState {
     pub(crate) fn new(text_start_byte: usize) -> Self {
-        Self {
-            text_start_byte,
-            pending_render_items: VecDeque::new(),
-        }
-    }
-
-    pub(crate) fn has_pending_render_items(&self) -> bool {
-        !self.pending_render_items.is_empty()
-    }
-
-    /// Telemetry-only view: how many split-run remainders are queued.
-    pub(crate) fn pending_render_items_len(&self) -> usize {
-        self.pending_render_items.len()
-    }
-
-    /// The same consumption state with no queued remainders: the state a retry
-    /// at an earlier position resumes from.
-    pub(crate) fn without_pending_render_items(&self) -> Self {
-        Self {
-            text_start_byte: self.text_start_byte,
-            pending_render_items: VecDeque::new(),
-        }
-    }
-
-    pub(crate) fn clear_pending_render_items(&mut self) {
-        self.pending_render_items.clear();
-    }
-
-    pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
-    where
-        I: IntoIterator<Item = DisplaySourceStepItem>,
-    {
-        let items: Vec<_> = items.into_iter().collect();
-        for item in items.into_iter().rev() {
-            self.pending_render_items.push_front(item);
-        }
+        Self { text_start_byte }
     }
 
     fn prepare_render_source_item(
@@ -206,10 +168,6 @@ impl BufferSourceConsumptionState {
         context: &mut DisplaySourceContext<'_>,
         position: &mut DisplaySourceTextPosition,
     ) -> Option<BufferSourceConsumedItem> {
-        if let Some(source_item) = self.pending_render_items.pop_front() {
-            return Some(BufferSourceConsumedItem::Renderable(source_item));
-        }
-
         let item = self.read_source_cursor(
             source,
             context,

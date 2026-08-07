@@ -521,6 +521,20 @@ impl DisplaySourceStepItem {
         Some(&run.text)
     }
 
+    /// The first character of a multi-character text run as its own step item.
+    /// See [`DisplaySourceItem::first_text_run_char`].
+    pub(crate) fn first_text_run_char(self, text_start_byte: usize) -> Option<Self> {
+        let source_step_char = self.source_step_char;
+        let source_item = DisplaySourceItem::new(
+            self.item,
+            source_step_char.start_byte_idx(),
+            source_step_char.start_charpos(),
+            Some(source_step_char.ch()),
+        );
+        let first = source_item.first_text_run_char(text_start_byte)?;
+        DisplaySourceStepItem::new(first, text_start_byte)
+    }
+
     pub(crate) fn split_text_run_items(
         self,
         text_start_byte: usize,
@@ -702,6 +716,47 @@ impl DisplaySourceItem {
         };
         let mut chars = run.text.chars();
         chars.next().is_some() && chars.next().is_some()
+    }
+
+    /// The FIRST character of a multi-character text run, as its own item.
+    ///
+    /// The renderer takes one character and the producer's position carries the
+    /// rest: the next production reads the remainder straight from the cursor,
+    /// so no remainder is materialized here (the whole-run split into N items
+    /// existed only to feed them back through a queue).
+    pub(crate) fn first_text_run_char(self, text_start_byte: usize) -> Option<Self> {
+        if !self.is_multi_char_text_run() {
+            return None;
+        }
+        let DisplayItem {
+            span,
+            face,
+            kind,
+            layout,
+            pointer_appearance,
+        } = self.item;
+        let DisplayItemKind::TextRun(run) = kind else {
+            return None;
+        };
+        let DisplaySourcePosition::Buffer { buffer_id, .. } = span.start else {
+            return None;
+        };
+        let ch = run.text.chars().next()?;
+        let item = direct_text_run_char_item(
+            buffer_id,
+            face,
+            layout,
+            text_start_byte,
+            self.start_byte_idx,
+            self.start_charpos,
+            ch,
+        );
+        Some(DisplaySourceItem::new(
+            item.with_pointer_appearance(pointer_appearance),
+            self.start_byte_idx,
+            self.start_charpos,
+            Some(ch),
+        ))
     }
 
     pub(crate) fn split_text_run_items(

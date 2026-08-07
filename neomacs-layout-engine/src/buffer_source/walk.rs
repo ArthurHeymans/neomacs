@@ -19,7 +19,6 @@ use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::walk_state::{
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
 };
-use crate::display_source::DisplaySourceStepItem;
 use crate::display_source::DisplaySourceTextPosition;
 use crate::display_source_item_append::DisplaySourceRowAppendState;
 use crate::display_source_progress::DisplaySourceProgressState;
@@ -133,23 +132,10 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
             .remember_resolved_source_face_if_absent(face_id, face);
     }
 
-    /// Whether split-run remainders are queued for re-consumption. The routed
-    /// ascii-row acquisition path refuses to bypass the walk while any are
-    /// pending (they always describe an in-progress, non-plain row anyway).
-    pub(crate) fn has_pending_render_items(&self) -> bool {
-        self.producer.has_pending_render_items()
-    }
-
-    /// Telemetry-only view: how many split-run remainders are queued.
-    pub(crate) fn pending_render_items_len(&self) -> usize {
-        self.producer.pending_render_items_len()
-    }
-
-    pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
-    where
-        I: IntoIterator<Item = DisplaySourceStepItem>,
-    {
-        self.producer.prepend_pending_render_items(items);
+    /// Decline run batching until `end_charpos`. See
+    /// [`BufferElementProducer::request_char_granularity_until`].
+    pub(crate) fn request_char_granularity_until(&mut self, end_charpos: i64) {
+        self.producer.request_char_granularity_until(end_charpos);
     }
 
     /// Consume only a prefix of the element just produced: the producer resumes
@@ -158,10 +144,8 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         self.producer.consume_prefix_to(resume_charpos);
     }
 
-    /// Rewind source consumption and its cursor to a row-wrap retry position so
-    /// the current character is re-produced on the continuation row. See
-    /// [`BufferElementProducer::rewind_to`] for why the whole producer — not
-    /// just its published position — is reseated.
+    /// Reseat the producer at a row-wrap retry position so the current character
+    /// is re-produced on the continuation row.
     pub(crate) fn rewind_source_consumption_to(
         &mut self,
         source_position: DisplaySourceTextPosition,
@@ -245,7 +229,6 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         text: &[u8],
         source_position: DisplaySourceTextPosition,
     ) -> DisplaySourcePositionConsumption<BufferSourceTruncationSkipAction> {
-        self.producer.clear_pending_render_items();
         let mut source_position = source_position;
         let action = BufferSourceTruncationSkipAction::consume_source_step_char_and_rest_of_line(
             text,
