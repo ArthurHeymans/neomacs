@@ -2301,6 +2301,12 @@ pub const ORG_MIME_MELPA_PIN: (&str, &str) = ("org-mime", "20251201.245");
 /// commit `3f5bcfb80d61556d35fc29e5ddb09750df962cc6`.
 pub const ORG_POMODORO_MELPA_PIN: (&str, &str) = ("org-pomodoro", "20220318.1618");
 
+/// The exact Org Present package selected for title/slide narrowing,
+/// navigation, overlays, scale, one-page, cursor, read-only, hooks, folded
+/// startup, and quit-lifecycle parity. MELPA built this archive from upstream
+/// commit `4ec04e1b77dea76d7c30066ccf3200d2e0b7bee9`.
+pub const ORG_PRESENT_MELPA_PIN: (&str, &str) = ("org-present", "20220806.1847");
+
 /// The exact Org-roam package selected for practical plain-text knowledge-base
 /// synchronization, node metadata and lookup, links and backlinks, node
 /// editing, dedicated buffers, and autosync lifecycle parity. MELPA built
