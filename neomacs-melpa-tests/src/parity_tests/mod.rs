@@ -529,6 +529,7 @@ mod swiper;
 mod symbol_overlay;
 mod symon;
 mod tablist;
+mod tagedit;
 mod tinysegmenter;
 mod toc_org;
 mod transient;

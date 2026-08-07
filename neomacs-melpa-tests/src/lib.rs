@@ -3113,6 +3113,13 @@ pub const YASNIPPET_MELPA_PIN: (&str, &str) = ("yasnippet", "20250602.1342");
 pub const YASNIPPET_SNIPPETS_MELPA_PIN: (&str, &str) = ("yasnippet-snippets", "20251215.1231");
 
 /// The exact Transient package selected by the comprehensive API parity
+
+/// The exact tagedit package selected for practical HTML tag insertion,
+/// attribute editing, slurp/barf, raise/splice/split/join, and multiline
+/// toggle parity. MELPA built this archive from upstream commit
+/// `b3a70101a0dcf85498c92b7fcfa7fdbac869746c`.
+pub const TAGEDIT_MELPA_PIN: (&str, &str) = ("tagedit", "20161121.855");
+
 /// corpus.
 pub const TRANSIENT_MELPA_PIN: (&str, &str) = ("transient", "20260725.1105");
 
