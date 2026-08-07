@@ -249,7 +249,7 @@ rank	package	downloads	status
 248	evil-search-highlight-persist	475566	covered
 249	concurrent	471871	covered
 250	quickrun	470621	covered
-251	live-py-mode	469320	todo
+251	live-py-mode	469320	covered
 252	ac-ispell	466372	covered
 253	company-anaconda	463797	todo
 254	mmm-mode	462001	todo

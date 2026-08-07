@@ -2587,6 +2587,12 @@ pub const LINK_HINT_MELPA_PIN: (&str, &str) = ("link-hint", "20250911.57");
 /// `bbea0e7cc7ab7d96e7f062014bde438aa8ffcd43`.
 pub const LIST_UTILS_MELPA_PIN: (&str, &str) = ("list-utils", "20241106.1849");
 
+/// The exact Live Py Mode package selected for real bundled Space Tracer
+/// execution, live edits, scroll/narrow alignment, driver/path/args, directory
+/// module calculation, lifecycle cleanup, and missing-file errors. MELPA built
+/// this archive from upstream commit `7655ee7a7294cd486fd02603d76061c1c773e058`.
+pub const LIVE_PY_MODE_MELPA_PIN: (&str, &str) = ("live-py-mode", "20260227.509");
+
 /// The exact Lorem-Ipsum package selected for deterministic prose, list,
 /// buffer-local formatting, SGML integration, and keybinding parity.
 /// MELPA built this archive from upstream commit
