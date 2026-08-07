@@ -2721,6 +2721,12 @@ pub const COLOR_THEME_SANITYINC_TOMORROW_MELPA_PIN: (&str, &str) =
 pub const DEVDOCS_MELPA_PIN: (&str, &str) = ("devdocs", "20251022.1255");
 
 /// The exact f package selected by the comprehensive API parity corpus.
+
+/// The exact fuzzy package selected for practical Jaro-Winkler scoring,
+/// fuzzy completions, search regexps, and isearch activation. MELPA built
+/// this archive from upstream commit `3dc04f0a037d53d1174a1f38dce8a4b3498fa947`.
+pub const FUZZY_MELPA_PIN: (&str, &str) = ("fuzzy", "20251231.1622");
+
 pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 
 /// The exact fringe-helper package selected for practical fringe bitmap
@@ -3038,6 +3044,12 @@ pub const DOOM_MODELINE_MELPA_PIN: (&str, &str) = ("doom-modeline", "20260708.82
 /// The exact Doom Themes package selected for practical full-catalog loading,
 /// dark/light switching, code fontification, typography policy, custom face
 /// composition, palette derivation, and Org extension parity. MELPA built this
+
+/// The exact drag-stuff package selected for practical line/word/region
+/// dragging vertically and horizontally with minor-mode bindings. MELPA built
+/// this archive from upstream commit `d49fe376d24f0f8ac5ade67b6d7fccc2487c81db`.
+pub const DRAG_STUFF_MELPA_PIN: (&str, &str) = ("drag-stuff", "20161108.749");
+
 /// archive from upstream commit `53645a905dfb3055db52f5d418d5ef612027e062`.
 pub const DOOM_THEMES_MELPA_PIN: (&str, &str) = ("doom-themes", "20260117.2323");
 
