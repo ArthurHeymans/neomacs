@@ -2650,6 +2650,12 @@ pub const GIT_LINK_MELPA_PIN: (&str, &str) = ("git-link", "20260723.2213");
 /// archive from upstream commit `fb9a049ac3b5fba7369ef1f027b97881f1e377ec`.
 pub const GIT_MESSENGER_MELPA_PIN: (&str, &str) = ("git-messenger", "20201202.1637");
 
+/// The exact Git Gutter package selected for real repository hunk detection,
+/// gutter rendering, navigation, staging, reverting, customization, and mode
+/// lifecycle parity. MELPA built this archive from upstream commit
+/// `3bdead17db7b84270c00e5a6b5ad02fa87ddd52e`.
+pub const GIT_GUTTER_MELPA_PIN: (&str, &str) = ("git-gutter", "20241212.1415");
+
 /// The exact Git Timemachine package selected for practical revision
 /// navigation, renamed-file, branch, introduction-search, hash-copy, and
 /// validation parity. MELPA built this archive from upstream commit

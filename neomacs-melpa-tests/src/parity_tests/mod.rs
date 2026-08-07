@@ -356,6 +356,7 @@ mod general;
 mod ghub;
 mod git;
 mod git_commit;
+mod git_gutter;
 mod git_link;
 mod git_messenger;
 mod git_timemachine;
