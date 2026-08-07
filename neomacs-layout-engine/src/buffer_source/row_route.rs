@@ -86,6 +86,9 @@
 //! `row_lifecycle.rs`), mirroring GNU `set_cursor_from_row` operating on
 //! buffer positions only.
 
+use crate::buffer_source::producer::frame::{
+    DisplayReplacementExtentLookup, ReplacementCoveredSpan,
+};
 use crate::composition::{continues_cluster, continues_complex_run, needs_complex_shaping};
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayItemLayout, DisplayLineHeightPolicy, DisplayRowBreak,
@@ -99,7 +102,8 @@ use crate::display_source::{
 };
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{
-    FaceResolver, LayoutBufferView, LayoutCharPropertyLookup, OverlayDisplayString, ResolvedFace,
+    CharPropertySource, FaceResolver, LayoutBufferView, LayoutCharPropertyLookup,
+    OverlayDisplayString, ResolvedFace,
 };
 use crate::types::LineWrapMode;
 use crate::unicode::{decode_utf8, is_regional_indicator};
@@ -507,14 +511,24 @@ pub(crate) struct AsciiRowPlan {
 pub(crate) struct RoutedRowReplacement {
     /// CHAR offset of the covered range start within the line.
     start: usize,
-    /// CHAR offset of the covered range end (exclusive).
-    end: usize,
+    /// The covered range in absolute positions, as the producer's rule
+    /// derived it. The plan carries the span itself rather than a second end
+    /// offset so the commit hands the session the range the SCAN resolved,
+    /// with no chance of a third party re-deriving E.
+    covered: ReplacementCoveredSpan,
     /// The full `display` property value (what the pipeline's walk consumes).
     value: Value,
     /// What the routed class recognized inside the display value.
     content: RoutedReplacementContent,
     /// The replacement's logical-cell width for the classifier's fit walk.
     advance_cols: usize,
+}
+
+impl RoutedRowReplacement {
+    /// CHAR offset of the covered range end (exclusive) within the line.
+    fn end(&self) -> usize {
+        self.start + self.covered.covered_char_len()
+    }
 }
 
 /// The routable display-replacement content kinds (increment 2i).
@@ -647,7 +661,7 @@ impl AsciiRowPlan {
     pub(crate) fn replacement_ranges(&self) -> Vec<(usize, usize)> {
         self.replacements
             .iter()
-            .map(|replacement| (replacement.start, replacement.end))
+            .map(|replacement| (replacement.start, replacement.end()))
             .collect()
     }
 
@@ -686,7 +700,7 @@ impl AsciiRowPlan {
         gaps.extend(
             self.replacements
                 .iter()
-                .map(|replacement| (replacement.start, replacement.end)),
+                .map(|replacement| (replacement.start, replacement.end())),
         );
         gaps.sort_unstable();
         let mut visible: Vec<(usize, usize)> = Vec::with_capacity(gaps.len() + 1);
@@ -928,7 +942,7 @@ fn routed_line_scan(
             col += replacement.advance_cols;
             tail = None;
             merge_target = RoutedScanMergeTarget::None;
-            while char_len < replacement.end {
+            while char_len < replacement.end() {
                 if idx >= text.len() || text[idx] == b'\n' {
                     return Err(RouteRefusal::Replacement);
                 }
@@ -1375,11 +1389,14 @@ fn routed_row_overlay_string_scan<B: LayoutBufferView>(
 /// hazard walk. Every `display` value found must be a routable replacement
 /// (a plain, property-less, single-line string of unambiguous-width chars,
 /// anchored strictly inside the line and covering chars strictly before the
-/// newline) or the row refuses. The covered extent mirrors the pipeline's
-/// `display_value_extent` (GNU `next_single_char_property_change(pos,
-/// Qdisplay)`): the range over which the resolved value stays the SAME
-/// object. `line_end_byte` is the newline's byte (or the source end for the
-/// tail line); a value present AT it would replace the line end and refuses.
+/// newline) or the row refuses. The covered extent is not mirrored from the
+/// pipeline — it IS the pipeline's, taken from
+/// [`ReplacementCoveredSpan::for_property_source`] through
+/// [`RoutedScanExtentLookup`] (GNU `display_prop_end` /
+/// `next_single_char_property_change(pos, Qdisplay)`: the range over which the
+/// resolved value stays the SAME object). `line_end_byte` is the newline's
+/// byte (or the source end for the tail line); a value covering it would
+/// replace the line end and refuses.
 ///
 /// Overlay-supplied `display` never reaches this scan: the overlay allow-list
 /// refuses any intersecting overlay carrying `display`, so the text-property
@@ -1427,6 +1444,64 @@ struct RoutedRowDisplayScan {
     hazards: Vec<(usize, RouteRefusal)>,
 }
 
+/// The four lookups [`ReplacementCoveredSpan::for_property_source`] needs, as
+/// the routed line scan can answer them: over the buffer view's TEXT
+/// properties, bounded by the line end.
+///
+/// The scan reads only text properties, and that is sound rather than lucky:
+/// `display` is not in [`ROUTE_SAFE_OVERLAY_PROPS`], so an overlay carrying one
+/// refuses the route outright, well before this scan runs. The source reaching
+/// the constructor from here is therefore always `overlay: None`.
+struct RoutedScanExtentLookup<'a, B: ?Sized> {
+    buffer: &'a B,
+    /// The line end (the newline's position, or the source end for the tail
+    /// line). Clipping the extent here rather than letting it run past is what
+    /// lets the caller ask its one routability question — does the covered
+    /// range reach the line end? — as a comparison instead of a second walk.
+    line_end: CharPos0,
+}
+
+impl<B: LayoutBufferView + ?Sized> DisplayReplacementExtentLookup
+    for RoutedScanExtentLookup<'_, B>
+{
+    fn extent_scan_end(&self) -> CharPos0 {
+        self.line_end
+    }
+
+    fn extent_overlay_end(&self, _overlay: Value) -> Option<CharPos0> {
+        // Unreachable by construction (see the struct doc): an overlay-sourced
+        // `display` refuses the route before the scan runs. `None` is the
+        // conservative answer if that ever stops holding — the constructor
+        // falls back to the property run's own end, which cannot over-cover.
+        debug_assert!(false, "the routed scan never resolves an overlay source");
+        None
+    }
+
+    fn extent_display_prop_at(&self, at: CharPos0) -> Option<Value> {
+        self.buffer.layout_text_prop_at_emacs_byte_pos(
+            self.buffer.layout_char_pos_to_emacs_byte_pos(at),
+            Value::symbol("display"),
+        )
+    }
+
+    fn extent_next_property_change(&self, at: CharPos0) -> CharPos0 {
+        let byte = self.buffer.layout_char_pos_to_emacs_byte_pos(at);
+        self.buffer
+            .layout_next_text_prop_change_after_emacs_byte_pos(byte)
+            .map(|change| change.get())
+            .filter(|&change| change > byte.get())
+            .map(|change| {
+                self.buffer
+                    .layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(change))
+            })
+            // No further change means the properties hold to the end of the
+            // buffer, so the covered range reaches the line end and past it.
+            // Reporting the bound says exactly that, and the caller's line-end
+            // test then refuses — which is what the inline walk did directly.
+            .unwrap_or(self.line_end)
+    }
+}
+
 fn routed_row_replacement_scan<B: LayoutBufferView>(
     buffer: &B,
     row_charpos: i64,
@@ -1451,6 +1526,8 @@ fn routed_row_replacement_scan<B: LayoutBufferView>(
             .map(|change| change.get())
             .filter(|&change| change > byte)
     };
+
+    let line_end = buffer.layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(line_end_byte));
 
     let mut scan = RoutedRowDisplayScan {
         replacements: Vec::new(),
@@ -1513,47 +1590,48 @@ fn routed_row_replacement_scan<B: LayoutBufferView>(
                 probe_byte = change;
                 continue;
             };
-            // Covered extent: walk property changes while the display value
-            // stays the SAME object (the pipeline's display_value_extent /
-            // GNU next_single_char_property_change on Qdisplay).
-            let mut end_byte = probe_byte;
-            let mut extent_ok = true;
-            loop {
-                let Some(change) = next_change_after(end_byte) else {
-                    extent_ok = false;
-                    break;
-                };
-                end_byte = change;
-                if end_byte >= line_end_byte {
-                    break;
-                }
-                match display_prop_at(end_byte) {
-                    Some(next) if next.bits() == value.bits() => {}
-                    _ => break,
-                }
-            }
-            // The covered range must end strictly before the line end: the
-            // extent running past the newline byte (or continuing AT it)
-            // hides the line end — a line-structure change.
-            if end_byte > line_end_byte
-                || (end_byte == line_end_byte
-                    && display_prop_at(line_end_byte)
-                        .is_some_and(|next| next.bits() == value.bits()))
-            {
-                extent_ok = false;
-            }
-            if !extent_ok {
+            // Covered extent: the producer's rule, not a second copy of it.
+            // `ReplacementCoveredSpan` owns "how far does one display property
+            // reach", and it takes the SOURCE so the overlay-vs-text branch
+            // cannot be skipped; here the source is always a text property
+            // (see `RoutedScanExtentLookup`), which is GNU's
+            // `display_prop_end` — the run over which the value stays the same
+            // object.
+            let span = ReplacementCoveredSpan::for_property_source(
+                CharPropertySource {
+                    value,
+                    overlay: None,
+                },
+                buffer.layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(probe_byte)),
+                next_change_after(probe_byte)
+                    .map(|change| {
+                        buffer.layout_emacs_byte_pos_to_char_pos(EmacsBytePos::new(change))
+                    })
+                    .unwrap_or(line_end),
+                &RoutedScanExtentLookup { buffer, line_end },
+            );
+            // The one question the shared rule does not answer: routability.
+            // The covered range must end strictly BEFORE the line end, since
+            // an extent reaching the newline hides it — a line-structure
+            // change. Reaching the bound is not itself disqualifying: a range
+            // that merely ends there while some other value holds at the line
+            // end covers no newline.
+            let covers_line_end = span.resume() >= line_end
+                && display_prop_at(line_end_byte).is_some_and(|next| next.bits() == value.bits());
+            if covers_line_end {
                 scan.hazards.push((probe_offset, RouteRefusal::Replacement));
                 break;
             }
             scan.replacements.push(RoutedRowReplacement {
                 start: probe_offset,
-                end: char_offset_at(end_byte)?,
+                covered: span,
                 value,
                 content,
                 advance_cols,
             });
-            probe_byte = end_byte;
+            probe_byte = buffer
+                .layout_char_pos_to_emacs_byte_pos(span.resume())
+                .get();
             continue;
         }
         let Some(change) = next_change_after(probe_byte) else {
@@ -1854,7 +1932,7 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     // Keep only the replacements the routed coverage actually consumed; a
     // candidate at or beyond an overflow handoff is unrouted remainder.
     let mut replacements = display_scan.replacements;
-    replacements.retain(|replacement| replacement.end <= scan.char_len);
+    replacements.retain(|replacement| replacement.end() <= scan.char_len);
     // A replacement row never routes as an overflow prefix: the scan's
     // handoff cut is not the pipeline's overflow point once the covered
     // span's width substitution is in play.
@@ -2672,7 +2750,7 @@ impl<'rows, 'emit, 'surface>
             .collect();
         parts.extend(plan.replacements().iter().map(|replacement| RoutedRowPart {
             start: start.add_len(CharLen::new(replacement.start)),
-            end: start.add_len(CharLen::new(replacement.end)),
+            end: start.add_len(CharLen::new(replacement.end())),
             kind: RoutedRowPartKind::Replacement(replacement),
         }));
         parts.extend(plan.overlay_strings().iter().map(|anchor| {
@@ -2933,10 +3011,7 @@ impl<'rows, 'emit, 'surface>
                             ),
                             start_byte_pos,
                             end_byte_pos,
-                            crate::buffer_source::producer::frame::ReplacementCoveredSpan::from_routed_scan_range(
-                                segment.start,
-                                segment.end,
-                            ),
+                            replacement.covered,
                         );
                     let fallback_metrics =
                         crate::buffer_source::item_append::BufferSourceActiveFaceRowMetrics::from_active_face_row(
@@ -3174,10 +3249,7 @@ impl<'rows, 'emit, 'surface>
                         ),
                         start_byte_pos,
                         end_byte_pos,
-                        crate::buffer_source::producer::frame::ReplacementCoveredSpan::from_routed_scan_range(
-                            segment.start,
-                            segment.end,
-                        ),
+                        replacement.covered,
                     );
                 self.progress.apply_row_position(render_position);
                 let replacement_context = BufferDisplayPropertyTextReplacementRenderContext::new(

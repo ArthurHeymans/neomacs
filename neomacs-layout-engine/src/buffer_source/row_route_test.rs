@@ -1733,6 +1733,67 @@ fn classifier_routes_display_string_replacement() {
 }
 
 #[test]
+fn routed_replacement_extent_follows_the_same_display_object_across_a_property_change() {
+    // The covered range of a text-property `display` is GNU's
+    // `display_prop_end`: the run over which the RESOLVED VALUE stays the same
+    // OBJECT, not the run over which no property changes. Here `face` changes
+    // at 5 while the very same string object is the `display` value from 3 to
+    // 7, so one replacement covers chars 2..6 — the walk must step over the
+    // face boundary rather than stop at it.
+    //
+    // Explicit goldens, not values read back off the plan: one span, exactly
+    // (2, 6), and a line of 8 chars.
+    let mut eval = Context::new();
+    let text = "abXXYYcd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str(
+        "(let ((s \"STR\")) \
+           (put-text-property 3 7 'display s) \
+           (put-text-property 5 7 'face 'bold))",
+    )
+    .expect("same display object across a face change");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("same-object replacement routes");
+    assert_eq!(plan.replacement_ranges(), &[(2, 6)]);
+    assert_eq!(plan.line_char_len(), 8);
+}
+
+#[test]
+fn routed_replacement_extent_stops_at_a_different_display_object_with_equal_text() {
+    // The mirror of the pin above, and the reason the rule is stated over
+    // object identity rather than string contents: two DISTINCT string
+    // objects that happen to spell the same thing are two replacements, each
+    // covering its own run. `eq`-ness is the whole rule, so a fold that
+    // compared text would pass the pin above and red here.
+    let mut eval = Context::new();
+    let text = "abXXYYcd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str(
+        "(progn (put-text-property 3 5 'display (copy-sequence \"STR\")) \
+                (put-text-property 5 7 'display (copy-sequence \"STR\")))",
+    )
+    .expect("two distinct display objects");
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let plan = plan_ascii_row(
+        buffer,
+        row_start(text.as_bytes(), 0, 0),
+        wide_fit(),
+        plain_policy(),
+    )
+    .expect("two replacements route");
+    assert_eq!(plan.replacement_ranges(), &[(2, 4), (4, 6)]);
+    assert_eq!(plan.line_char_len(), 8);
+}
+
+#[test]
 fn classifier_fits_replacement_by_string_width_not_covered_width() {
     let mut eval = Context::new();
     // The fit walk advances by the REPLACEMENT's width (5 cols for "WIDER"),

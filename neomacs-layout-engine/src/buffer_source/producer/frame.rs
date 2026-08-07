@@ -14,6 +14,13 @@
 //! value, so the caller cannot reach a resume position without having said
 //! which source won. That is the whole point of the type: before it, the
 //! resolver discarded the winning overlay and no caller COULD branch correctly.
+//!
+//! Since P4.8 that is literally true: the routed row planner used to walk the
+//! same-object scan inline in byte space and hand the result over through a
+//! second constructor. It now calls [`ReplacementCoveredSpan::for_property_source`]
+//! through its own [`DisplayReplacementExtentLookup`] and CARRIES the span into
+//! its plan, so there is exactly one statement of the rule and no way to
+//! assemble a span out of two loose positions.
 
 use crate::neovm_bridge::CharPropertySource;
 use neovm_core::buffer::CharPos0;
@@ -114,19 +121,9 @@ impl ReplacementCoveredSpan {
         }
     }
 
-    /// The covered range a ROUTED row plan already resolved.
-    ///
-    /// Deliberately separate from [`Self::for_property_source`] and not a way
-    /// around it: `routed_row_replacement_scan` (row_route.rs) works in byte
-    /// space over TEXT properties only — it never consults overlays — and
-    /// re-implements the same-object scan inline because it must also decide
-    /// routability while walking. The two rules agreeing is enforced today by
-    /// the routed classes asserting glyph-for-glyph identity with the pipeline,
-    /// not by sharing this code. Folding the scan onto this constructor is a
-    /// P4.8 unification item; naming the duplication here is what keeps it from
-    /// being forgotten.
-    pub(crate) fn from_routed_scan_range(start: CharPos0, resume: CharPos0) -> Self {
-        Self { start, resume }
+    /// How many buffer chars the replacement stands for.
+    pub(crate) fn covered_char_len(self) -> usize {
+        self.resume.get().saturating_sub(self.start.get())
     }
 
     /// GNU's B: the position the replacement's glyphs are attributed to.

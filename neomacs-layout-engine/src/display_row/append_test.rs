@@ -10071,7 +10071,7 @@ fn display_property_replacement_row_render_request_builds_append_plan() {
             CharPos0::new(4),
             EmacsBytePos::new(13),
         ),
-        ReplacementCoveredSpan::from_routed_scan_range(CharPos0::new(3), CharPos0::new(4)),
+        ReplacementCoveredSpan::for_single_property_run(CharPos0::new(3), CharPos0::new(4)),
     );
     let request = DisplayPropertyReplacementRowRenderRequest::from_typed_replacement_descriptor(
         &descriptor,
@@ -10237,7 +10237,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
             CharPos0::new(4),
             EmacsBytePos::new(13),
         ),
-        ReplacementCoveredSpan::from_routed_scan_range(CharPos0::new(3), CharPos0::new(4)),
+        ReplacementCoveredSpan::for_single_property_run(CharPos0::new(3), CharPos0::new(4)),
     );
     let request = DisplayPropertyReplacementRowRenderRequest::from_typed_replacement_descriptor(
         &descriptor,
@@ -10345,7 +10345,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
         ),
         EmacsBytePos::new(12),
         EmacsBytePos::new(13),
-        ReplacementCoveredSpan::from_routed_scan_range(CharPos0::new(3), CharPos0::new(4)),
+        ReplacementCoveredSpan::for_single_property_run(CharPos0::new(3), CharPos0::new(4)),
     );
     let mut cursor_info = CursorCaptureState::new();
     let mut byte_idx = 0usize;
