@@ -1,7 +1,8 @@
 //! Buffer source typed item consumption.
 
 use crate::buffer_source::text_source::{
-    BufferTextCursorItem, BufferTextDisplayReplacementMode, BufferTextSourceCursor,
+    BufferOverlayStringsItem, BufferTextCursorItem, BufferTextDisplayReplacementMode,
+    BufferTextSourceCursor,
 };
 use crate::display_item::{
     BufferDisplayPropertyReplacementItem, DisplayItem, DisplaySourcePosition,
@@ -16,6 +17,10 @@ use neovm_core::buffer::CharPos0;
 pub(crate) enum BufferSourceConsumedItem {
     Renderable(DisplaySourceStepItem),
     DisplayPropertyReplacement(BufferDisplayPropertyReplacementItem),
+    /// Overlay strings anchored at the current position, collected and ordered
+    /// by the producer. Consuming one does NOT advance the walk position
+    /// (insertion semantics), so the buffer character at the anchor follows.
+    OverlayStrings(BufferOverlayStringsItem),
 }
 
 impl BufferSourceConsumedItem {
@@ -23,7 +28,7 @@ impl BufferSourceConsumedItem {
     pub(crate) fn into_renderable(self) -> Option<DisplaySourceStepItem> {
         match self {
             Self::Renderable(item) => Some(item),
-            Self::DisplayPropertyReplacement(_) => None,
+            Self::DisplayPropertyReplacement(_) | Self::OverlayStrings(_) => None,
         }
     }
 }
@@ -178,6 +183,9 @@ impl BufferSourceConsumptionState {
             return Some(BufferSourceConsumedItem::DisplayPropertyReplacement(
                 replacement,
             ));
+        }
+        if let BufferTextCursorItem::OverlayStrings(strings) = item.0 {
+            return Some(BufferSourceConsumedItem::OverlayStrings(strings));
         }
         let BufferTextCursorItem::Item(display_item) = item.0 else {
             unreachable!("replacement cursor item handled above");

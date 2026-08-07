@@ -426,9 +426,13 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
             );
         }
 
+        // The END-OF-BUFFER anchor keeps its own call: the producer stops at
+        // point-max, so an overlay string anchored there (the shape completion
+        // UIs use) has no element to ride on. Folding it in needs the producer
+        // to emit at its end position, which is P4.7/P4.8 territory.
         if self.overlay_context.should_render(row_geometry) {
             let (x, col) = row_progress.coordinates_mut();
-            self.overlay_context.render_at_text_row(
+            self.overlay_context.render_eob_anchor_strings_at_text_row(
                 buffer,
                 self.charpos,
                 source_render.reborrow(),
@@ -1096,12 +1100,8 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             source_render,
             row_geometry,
             cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
             face_ids,
             line_numbers,
-            face_scan,
             ..
         } = state;
         let mut source_render = source_render;
@@ -1146,26 +1146,10 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             ellipsis_text.as_deref(),
         );
 
-        let overlay_charpos = progress.charpos();
-        let (x, col) = progress.row_progress_mut().coordinates_mut();
-        let overlay_continuation = context.overlay_context.render_at_text_row(
-            buffer,
-            overlay_charpos,
-            source_render.reborrow(),
-            x,
-            col,
-            row_geometry,
-            cursor_info,
-            hit_rows,
-            hit_row_range,
-            row_y_positions,
-            face_ids,
-            line_numbers,
-            face_scan,
-        );
-        if overlay_continuation.should_break() {
-            return BufferSourceInvisibleTextRenderOutcome::Stop;
-        }
+        // The strings anchored at the post-skip position are NOT rendered here
+        // since P4.6: the producer surfaces them as an element when it produces
+        // at that position, which is the very next step and appends nothing in
+        // between.
         BufferSourceInvisibleTextRenderOutcome::ContinueBufferWalk
     }
 }
@@ -1590,7 +1574,6 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             hit_row_range,
             row_y_positions,
             face_ids,
-            face_scan,
             ..
         } = state;
         let mut source_render = source_render;
@@ -1602,28 +1585,9 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             context.char_h,
             context.extra_line_spacing,
         );
-        let overlay_continuation = {
-            let overlay_charpos = progress.charpos();
-            let (x, col) = progress.row_progress_mut().coordinates_mut();
-            context.overlay_context.render_at_text_row(
-                buffer,
-                overlay_charpos,
-                source_render.reborrow(),
-                x,
-                col,
-                row_geometry,
-                cursor_info,
-                hit_rows,
-                hit_row_range,
-                row_y_positions,
-                face_ids,
-                line_numbers,
-                face_scan,
-            )
-        };
-        if overlay_continuation.should_break() {
-            return DisplayRowTransitionContinuation::Exhausted;
-        }
+        // Strings anchored at the newline position are emitted by the producer's
+        // element arm before this line-break step runs (P4.6), in the same order
+        // this call used to produce them.
         let row_position = progress.row_position();
         line_break_action.capture_cursor_if_point(
             cursor_info,

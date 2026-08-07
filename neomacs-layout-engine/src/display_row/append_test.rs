@@ -5102,7 +5102,8 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
             &mut ctx.row_y_positions,
             &mut face_ids,
         );
-        render_context.render_at(&buffer, 5, &mut state);
+        let strings = crate::neovm_bridge::RustTextPropAccess::new(&buffer).overlay_strings_at(5);
+        render_context.render_produced_strings(&buffer, 5, &strings, &mut state);
     }
 
     assert_eq!(x, 24.0);

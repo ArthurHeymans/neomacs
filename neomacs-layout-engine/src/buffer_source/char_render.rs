@@ -126,34 +126,11 @@ impl<'a> BufferSourceCharRenderRequest<'a> {
             source_item.into_render_parts();
         let ch = source_step_char.ch();
 
-        // GNU's display iterator consumes an overlay before-string before it
-        // prepares the buffer character at the same position.  That ordering
-        // is load-bearing: an overlay string can contain a newline and advance
-        // the live row.  Keep every row-dependent source-char value below this
-        // boundary so a prepared append can never retain pre-overlay geometry.
-        let overlay_continuation = {
-            let overlay_charpos = progress.charpos();
-            let (x, col) = progress.row_progress_mut().coordinates_mut();
-            self.overlay_context.render_at_text_row(
-                buffer,
-                overlay_charpos,
-                source_render.reborrow(),
-                x,
-                col,
-                row_geometry,
-                cursor_info,
-                hit_rows,
-                hit_row_range,
-                row_y_positions,
-                face_ids,
-                line_numbers,
-                face_scan,
-            )
-        };
-        if overlay_continuation.should_break() {
-            return BufferSourceItemRenderOutcome::Stop;
-        }
-
+        // Overlay strings are no longer emitted here. Since P4.6 the PRODUCER
+        // surfaces them as a typed element at the anchor, with insertion
+        // semantics, and the loop-level arm in render.rs appends them before the
+        // buffer character at the same position — the GNU handle_stop order this
+        // call used to implement by probing every character.
         let append_position = progress.row_position();
         let append_geometry = *row_geometry;
         source_step_char.record_word_wrap_candidate(word_wrap, &source_render);

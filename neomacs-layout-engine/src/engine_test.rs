@@ -23836,3 +23836,83 @@ fn overlay_string_shadow_cursor_lands_on_the_buffer_char_after_an_inserted_strin
     // A character after the anchor keeps the same shift.
     assert_eq!(cursor_at(6), (0, 8));
 }
+
+/// An overlay string is emitted EXACTLY ONCE per anchor, including when its
+/// anchor character is the one that wraps.
+///
+/// Before P4.6 the renderer re-ran the overlay-string session on every char
+/// step, and a wrap re-steps the anchor character, so the string was drawn twice
+/// — once at the end of the row that broke and again at the start of the
+/// continuation row (both the character-wrap and the word-wrap paths did this).
+/// Producer-owned emission with insertion semantics fixes it: the anchor is
+/// surfaced once and the marker survives the row-transition retry, which is
+/// GNU's model (an overlay string is consumed once, its overlay_string_index
+/// advancing past it).
+///
+/// What this case does NOT claim: that the string travels with its anchor
+/// character across the break. It stays on the row it was appended to while the
+/// character moves down, which is a separate divergence from GNU and predates
+/// this rung.
+#[test]
+fn overlay_string_shadow_emits_once_across_a_wrap_at_its_own_anchor() {
+    let line = format!("{}Xbbb\n", "a".repeat(78));
+    let anchored = |anchor_char: usize| -> Vec<String> {
+        let text = line.clone();
+        let (_eval, _buf_id, _frame_id, rows, _cw, _ch) =
+            layout_main_text_rows_with(&text, move |eval, buf_id| {
+                eval.buffer_manager_mut().set_current(buf_id);
+                eval.eval_str("(setq truncate-lines nil)").expect("wrap");
+                eval.eval_str(&format!(
+                    "(overlay-put (make-overlay {} {}) 'before-string \"S\")",
+                    anchor_char + 1,
+                    anchor_char + 2
+                ))
+                .expect("overlay");
+            });
+        rows.iter()
+            .map(|row| glyphs_logical_text(&row.glyphs[1]))
+            .filter(|text| !text.is_empty())
+            .collect()
+    };
+
+    // Anchor ON the wrap edge: the string takes the last cell of the broken row
+    // and the continuation row starts at the buffer character, unrepeated.
+    let at_edge = anchored(78);
+    assert_eq!(at_edge.len(), 2);
+    assert!(
+        at_edge[0].ends_with("aaaaS\\"),
+        "the broken row must end with the string then the wrap indicator, got {:?}",
+        at_edge[0]
+    );
+    assert_eq!(at_edge[1], "Xbbb ");
+
+    // Anchor mid-row, for contrast: also exactly once.
+    let mid_row = anchored(4);
+    assert_eq!(mid_row.len(), 2);
+    assert_eq!(mid_row[0].matches('S').count(), 1);
+    assert_eq!(mid_row[1], "Xbbb ");
+}
+
+/// The same single-emission contract on the WORD-WRAP path, which had the same
+/// duplicate: the anchor sits on the word that the break moves down.
+#[test]
+fn overlay_string_shadow_emits_once_across_a_word_wrap_break() {
+    let (_eval, _buf_id, _frame_id, rows, _cw, _ch) = layout_main_text_rows_with(
+        &format!("{} bbbbbbbbbb\n", "a".repeat(70)),
+        |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(setq truncate-lines nil)").expect("wrap");
+            eval.eval_str("(setq word-wrap t)").expect("word-wrap");
+            eval.eval_str("(overlay-put (make-overlay 72 74) 'before-string \"SS\")")
+                .expect("overlay");
+        },
+    );
+    let texts: Vec<String> = rows
+        .iter()
+        .map(|row| glyphs_logical_text(&row.glyphs[1]))
+        .filter(|text| !text.is_empty())
+        .collect();
+    assert_eq!(texts.len(), 2);
+    assert_eq!(texts[0].matches('S').count(), 2, "one two-character string");
+    assert_eq!(texts[1], "bbbbbbbbbb ");
+}

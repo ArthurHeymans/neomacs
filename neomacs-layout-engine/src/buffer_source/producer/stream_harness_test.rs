@@ -259,6 +259,9 @@ enum ElementClass {
     RowBreak,
     Stretch,
     Replacement,
+    /// The overlay strings anchored at a position (P4.6): produced with
+    /// INSERTION semantics, so the scan track does not advance across it.
+    OverlayStrings,
 }
 
 /// One character's worth of the element stream. A run contributes one of these
@@ -293,6 +296,16 @@ fn char_class(ch: char) -> ElementClass {
 
 /// Expand one consumed item into per-character observations.
 fn observe(item: &BufferSourceConsumedItem, scan_before: BufferScanPos) -> Vec<CharObservation> {
+    if let BufferSourceConsumedItem::OverlayStrings(strings) = item {
+        return vec![CharObservation {
+            class: ElementClass::OverlayStrings,
+            ch: None,
+            provenance: GlyphProvenance::buffer(strings.anchor_charpos()),
+            scan_before,
+            scan_after: scan_before,
+            face: RenderFaceRef::Inherit,
+        }];
+    }
     let BufferSourceConsumedItem::Renderable(step) = item else {
         // A display-property replacement is one opaque element at this rung;
         // decomposing its covered range is P4.7's business.
@@ -1224,25 +1237,42 @@ fn c12_overlay_string_anchors_terminate_runs() {
     // so the renderer always meets an anchor at an element boundary. A
     // before-string anchors at the overlay's start (charpos 3), an after-string
     // at its end (charpos 6). Goldens, not derived.
+    // Since P4.6 the anchor ALSO produces an overlay-strings element (empty
+    // string here, since it carries no characters of its own), which is why an
+    // empty entry appears at the anchor: the run boundaries around it are what
+    // this case pins.
     let before = StreamCase::new("C12 before-string anchor", "abcdefgh\n")
         .with_overlay(CaseOverlay::before_string(3, 6, "B"));
-    assert_eq!(producer_run_texts(&before), vec!["abc", "def", "gh", "\n"]);
+    // The strings element (empty text, it carries no buffer characters) appears
+    // at charpos 3 only — a before-string anchors at the overlay START, and the
+    // boundary at 6 still cuts the run without anchoring anything.
+    assert_eq!(
+        producer_run_texts(&before),
+        vec!["abc", "", "def", "gh", "\n"]
+    );
 
     let after = StreamCase::new("C12 after-string anchor", "abcdefgh\n")
         .with_overlay(CaseOverlay::after_string(3, 6, "A"));
-    assert_eq!(producer_run_texts(&after), vec!["abc", "def", "gh", "\n"]);
+    // Mirror image: an after-string anchors at the overlay END, charpos 6.
+    assert_eq!(
+        producer_run_texts(&after),
+        vec!["abc", "def", "", "gh", "\n"]
+    );
 
     // An anchor at a zero-length overlay: start and end coincide, so the single
     // boundary still cuts the run there.
     let point = StreamCase::new("C12 zero-length anchor", "abcdefgh\n")
         .with_overlay(CaseOverlay::before_string(4, 4, "P"));
-    assert_eq!(producer_run_texts(&point), vec!["abcd", "efgh", "\n"]);
+    assert_eq!(producer_run_texts(&point), vec!["abcd", "", "efgh", "\n"]);
 
     // At a row start the anchor coincides with the run start, so there is
     // nothing to cut: the row's first run is whole.
     let row_start = StreamCase::new("C12 anchor at row start", "abcdefgh\n")
         .with_overlay(CaseOverlay::before_string(0, 2, "S"));
-    assert_eq!(producer_run_texts(&row_start), vec!["ab", "cdefgh", "\n"]);
+    assert_eq!(
+        producer_run_texts(&row_start),
+        vec!["", "ab", "cdefgh", "\n"]
+    );
 }
 
 #[test]

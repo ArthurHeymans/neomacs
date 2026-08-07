@@ -316,73 +316,24 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         .with_continuation_row_prelude(self.continuation_row_prelude)
     }
 
-    /// Whether an overlay before/after-string anchors exactly at `charpos`.
+    /// Render the strings the PRODUCER collected for `anchor_charpos`.
     ///
-    /// Anchors are overlay start and end positions (`overlay_strings_at` tests
-    /// boundary equality), and the producer already ends every text run at every
-    /// overlay boundary — `BufferTextSourceCursor::next_property_change`, this
-    /// engine's `compute_stop_pos` (GNU src/xdisp.c:4356-4365), folds
-    /// `next_overlay_change` into the run bound. So an anchor can only ever meet
-    /// a run at the run's own START, which is the single position this probes.
-    /// [`assert_no_overlay_string_anchor_inside`] pins that invariant where it
-    /// is relied on.
-    pub(crate) fn starts_at_overlay_string_anchor<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        charpos: i64,
-    ) -> bool {
-        self.enabled
-            && !RustTextPropAccess::new_for_window(buffer, self.window_id)
-                .overlay_strings_at(charpos)
-                .is_empty()
-    }
-
-    /// Debug-only enforcement of the never-crosses-an-anchor invariant: no
-    /// overlay-string anchor may fall STRICTLY inside `(start_charpos,
-    /// end_charpos)`. A violation would mean a run swallowed an anchor, and the
-    /// whole-run fast path would drop the overlay string (only the char path
-    /// emits them), so it is worth a walk of the overlay boundary index in debug
-    /// builds.
-    pub(crate) fn assert_no_overlay_string_anchor_inside<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        start_charpos: i64,
-        end_charpos: i64,
-    ) {
-        if !cfg!(debug_assertions) || !self.enabled {
-            return;
-        }
-        let text_props = RustTextPropAccess::new_for_window(buffer, self.window_id);
-        let mut charpos = start_charpos;
-        while let Some(next) = text_props.next_overlay_boundary_charpos_after(charpos) {
-            if next <= charpos || next >= end_charpos {
-                // Boundary conversion clamps to point-max; never loop in place
-                // if a boundary maps back onto the current position.
-                return;
-            }
-            debug_assert!(
-                text_props.overlay_strings_at(next).is_empty(),
-                "a produced run crossed the overlay-string anchor at {next} \
-                 (run {start_charpos}..{end_charpos}); the producer's overlay \
-                 stop state has regressed and the whole-run path would drop the \
-                 overlay string"
-            );
-            charpos = next;
-        }
-    }
-
-    pub(crate) fn render_at<B: LayoutBufferView>(
+    /// Collection and GNU ordering live in the producer since P4.6 (it surfaces
+    /// them as a typed element with insertion semantics); this side owns only
+    /// the append, which is a session per string because a string can break
+    /// rows, clip, and carry its own `cursor` property.
+    pub(crate) fn render_produced_strings<B: LayoutBufferView>(
         self,
         buffer: &B,
         anchor_charpos: i64,
+        strings: &[OverlayDisplayString],
         state: &mut OverlayStringRenderState<'_>,
     ) -> DisplayRowTransitionContinuation {
         if !self.enabled {
             return DisplayRowTransitionContinuation::Continue;
         }
-        let text_props = RustTextPropAccess::new_for_window(buffer, self.window_id);
         let row_context = self.row_context();
-        for overlay_string in text_props.overlay_strings_at(anchor_charpos) {
+        for overlay_string in strings.iter().copied() {
             let kind = if overlay_string.after_string_p {
                 OverlayStringKind::After
             } else {
@@ -404,11 +355,54 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         DisplayRowTransitionContinuation::Continue
     }
 
+    /// The end-of-buffer anchor path: collect and render here, because the
+    /// producer stops at point-max and cannot surface an element for it.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn render_at_text_row<B: LayoutBufferView>(
+    pub(crate) fn render_eob_anchor_strings_at_text_row<B: LayoutBufferView>(
         self,
         buffer: &B,
         anchor_charpos: i64,
+        source_render: TextRowSourceRenderState<'_>,
+        x: &mut f32,
+        col: &mut usize,
+        geometry: &mut DisplayRowGeometryState,
+        cursor_info: &mut CursorCaptureState,
+        hit_rows: &mut Vec<HitRow>,
+        hit_row_range: &mut HitRowRangeTracker,
+        row_y_positions: &mut DisplayRowYPositions,
+        face_ids: &mut FrameFaceAttempt,
+        line_numbers: &mut LineNumberRenderState,
+        face_scan: &mut FaceScanCheckpoint,
+    ) -> DisplayRowTransitionContinuation {
+        if !self.enabled {
+            return DisplayRowTransitionContinuation::Continue;
+        }
+        let strings = RustTextPropAccess::new_for_window(buffer, self.window_id)
+            .overlay_strings_at(anchor_charpos);
+        self.render_produced_strings_at_text_row(
+            buffer,
+            anchor_charpos,
+            &strings,
+            source_render,
+            x,
+            col,
+            geometry,
+            cursor_info,
+            hit_rows,
+            hit_row_range,
+            row_y_positions,
+            face_ids,
+            line_numbers,
+            face_scan,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn render_produced_strings_at_text_row<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        anchor_charpos: i64,
+        strings: &[OverlayDisplayString],
         source_render: TextRowSourceRenderState<'_>,
         x: &mut f32,
         col: &mut usize,
@@ -433,7 +427,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             face_ids,
         )
         .with_buffer_source_continuation_row_prelude(line_numbers, face_scan);
-        self.render_at(buffer, anchor_charpos, &mut overlay_state)
+        self.render_produced_strings(buffer, anchor_charpos, strings, &mut overlay_state)
     }
 
     pub(crate) fn should_render(self, row_geometry: &DisplayRowGeometryState) -> bool {

@@ -34,7 +34,6 @@ enum WholeTextRunRenderDecision {
 enum WholeTextRunFallbackReason {
     NotTextRun,
     MissingSourceEnd,
-    OverlayString,
     DoesNotFit,
 }
 
@@ -67,37 +66,6 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
         }
     }
 
-    /// Whether this item must go to the char render path because an overlay
-    /// before/after-string anchors at its first character.
-    ///
-    /// THE CONTRACT: overlay strings are emitted by exactly one path,
-    /// `BufferOverlayStringTextRowRenderContext::render_at` called from
-    /// `BufferSourceCharRenderRequest` (char_render.rs) — the whole-run and
-    /// fitting-prefix paths append glyphs without ever consulting the overlay
-    /// context, so routing a run that starts on an anchor through them drops the
-    /// string silently. Anchors can only meet a run at its start, because the
-    /// producer ends runs at every overlay boundary (text_source.rs
-    /// `next_property_change`, this engine's compute_stop_pos); the debug
-    /// assertion states that where it is relied on.
-    ///
-    /// P4.6 DELETES THIS GUARD: once overlay strings are produced elements
-    /// (`ProducerFrame::OverlayStrings`), every path emits them and no render
-    /// path needs to refuse anything.
-    fn starts_at_overlay_string<B: LayoutBufferView>(
-        self,
-        start_charpos: i64,
-        end_charpos: i64,
-        buffer: &B,
-    ) -> bool {
-        self.overlay_context.assert_no_overlay_string_anchor_inside(
-            buffer,
-            start_charpos,
-            end_charpos,
-        );
-        self.overlay_context
-            .starts_at_overlay_string_anchor(buffer, start_charpos)
-    }
-
     /// The largest prefix of `source_item` that fits the row, or `None` when no
     /// proper prefix does.
     ///
@@ -109,7 +77,6 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
     pub(crate) fn prefix_to_fit<B: LayoutBufferView>(
         self,
         source_item: &DisplaySourceStepItem,
-        buffer: &B,
         wrap_mode: LineWrapMode,
         append_context: &BufferSourceRowAppendContext<'_, '_, B>,
         source_render: &mut TextRowSourceRenderState<'_>,
@@ -120,14 +87,6 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
         let text = source_item.text_run()?;
         let start_charpos = source_item.source_step_char().start_charpos();
         let end_charpos = source_item.source_end_charpos()?;
-        // A run anchoring an overlay before/after-string must go to the char
-        // render path (see `starts_at_overlay_string`). GNU renders overlay
-        // strings regardless of `truncate-lines` (xdisp.c `next_overlay_string`
-        // is orthogonal to truncation), so bail and let
-        // `BufferSourceCharRenderRequest` handle both truncation and the string.
-        if self.starts_at_overlay_string(start_charpos, end_charpos, buffer) {
-            return None;
-        }
         // Valid split offsets are 1..hi (exclusive): within the run's chars
         // and strictly before its end charpos, exactly the range the former
         // one-char-at-a-time loop probed.
@@ -174,7 +133,6 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
     pub(crate) fn render_if_fits_and_apply<B: LayoutBufferView>(
         self,
         source_item: DisplaySourceStepItem,
-        buffer: &B,
         active_face_state: &DisplayRowActiveFaceState,
         append_context: &BufferSourceRowAppendContext<'_, '_, B>,
         cursor_info: &mut CursorCaptureState,
@@ -183,7 +141,7 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
         source_render: &mut TextRowSourceRenderState<'_>,
         progress: &mut DisplaySourceProgressState<'_>,
     ) -> Option<BufferSourceItemRenderOutcome> {
-        if self.render_decision(&source_item, buffer, append_context, source_render)
+        if self.render_decision(&source_item, append_context, source_render)
             != WholeTextRunRenderDecision::Render
         {
             return None;
@@ -271,31 +229,18 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
     fn render_decision<B: LayoutBufferView>(
         self,
         source_item: &DisplaySourceStepItem,
-        buffer: &B,
         append_context: &BufferSourceRowAppendContext<'_, '_, B>,
         source_render: &mut TextRowSourceRenderState<'_>,
     ) -> WholeTextRunRenderDecision {
         if source_item.text_run().is_none() {
             return WholeTextRunRenderDecision::Fallback(WholeTextRunFallbackReason::NotTextRun);
         }
-        let Some(source_end_charpos) = source_item.source_end_charpos() else {
-            return WholeTextRunRenderDecision::Fallback(
-                WholeTextRunFallbackReason::MissingSourceEnd,
-            );
-        };
-        if source_item.source_end_byte_idx().is_none() {
+        if source_item.source_end_charpos().is_none() || source_item.source_end_byte_idx().is_none()
+        {
             return WholeTextRunRenderDecision::Fallback(
                 WholeTextRunFallbackReason::MissingSourceEnd,
             );
         }
-        if self.starts_at_overlay_string(
-            source_item.source_step_char().start_charpos(),
-            source_end_charpos,
-            buffer,
-        ) {
-            return WholeTextRunRenderDecision::Fallback(WholeTextRunFallbackReason::OverlayString);
-        }
-
         if self.source_display_item_fits_text_row(source_item, append_context, source_render) {
             WholeTextRunRenderDecision::Render
         } else {

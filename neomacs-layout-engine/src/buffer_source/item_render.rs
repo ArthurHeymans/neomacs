@@ -349,7 +349,6 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
 
         if let Some(outcome) = text_run_request.render_if_fits_and_apply(
             source_item.clone(),
-            buffer,
             &active_face_state,
             &buffer_row_append_context,
             cursor_info,
@@ -363,7 +362,6 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
 
         if let Some(prefix) = text_run_request.prefix_to_fit(
             &source_item,
-            buffer,
             self.params.wrap_mode,
             &buffer_row_append_context,
             &mut source_render,

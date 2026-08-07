@@ -11,7 +11,9 @@ use crate::display_source::{
     TextSourceCharClassification, classify_text_source_char,
     display_item_kind_for_text_source_char,
 };
-use crate::neovm_bridge::{LayoutBufferView, LayoutCharPropertyLookup};
+use crate::neovm_bridge::{
+    LayoutBufferView, LayoutCharPropertyLookup, OverlayDisplayString, RustTextPropAccess,
+};
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
@@ -37,6 +39,29 @@ impl BufferTextDisplayReplacementMode {
 pub(crate) enum BufferTextCursorItem {
     Item(DisplayItem),
     DisplayPropertyReplacement(BufferDisplayPropertyReplacementItem),
+    /// Overlay before/after-strings anchored at a buffer position, collected and
+    /// GNU-ordered by the producer. INSERTION semantics (GNU `push_it (it,
+    /// NULL)`): the buffer position does not advance, so the character at the
+    /// anchor is produced next and the strings render in front of it.
+    OverlayStrings(BufferOverlayStringsItem),
+}
+
+/// The overlay strings anchored at one buffer position, in GNU
+/// `compare_overlay_entries` order.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct BufferOverlayStringsItem {
+    anchor_charpos: CharPos0,
+    strings: Vec<OverlayDisplayString>,
+}
+
+impl BufferOverlayStringsItem {
+    pub(crate) fn anchor_charpos(&self) -> CharPos0 {
+        self.anchor_charpos
+    }
+
+    pub(crate) fn strings(&self) -> &[OverlayDisplayString] {
+        &self.strings
+    }
 }
 
 /// A `DisplayItemSource` that reads plain buffer text (with face and display
@@ -72,6 +97,19 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     /// queue it replaces. It expires by position, so a skip past `end` (the
     /// truncation or invisible skip) self-heals.
     char_granularity_end: Option<CharPos0>,
+    /// The position whose overlay strings have already been produced.
+    ///
+    /// The overlay-strings element carries INSERTION semantics, so producing it
+    /// does not advance the cursor: without this marker the same anchor would be
+    /// surfaced again on the very next production and the strings would repeat
+    /// forever. It is the minimal form of GNU's `push_it (it, NULL)` frame —
+    /// pushed at a position, popped when its content is exhausted, resuming at
+    /// exactly the position it was pushed at.
+    ///
+    /// Cleared by a row-transition retry (`clear_overlay_strings_marker`), which
+    /// reproduces today's renderer behaviour of re-running the string session
+    /// when the wrap re-steps the anchor character.
+    overlay_strings_produced_at: Option<CharPos0>,
     base_face: RenderFaceRef,
     replacement_strings: LispStringSourceStack,
     mouse_face_extent: Option<CachedMouseFaceExtent>,
@@ -122,6 +160,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             char_pos: start,
             end,
             char_granularity_end: None,
+            overlay_strings_produced_at: None,
             base_face,
             replacement_strings: LispStringSourceStack::empty(1),
             mouse_face_extent: None,
@@ -136,6 +175,59 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
 
     pub(crate) fn current_char_pos(&self) -> CharPos0 {
         self.char_pos
+    }
+
+    /// Forget which anchor's overlay strings were already produced, so a
+    /// row-transition retry at that anchor produces them again. See
+    /// [`overlay_strings_produced_at`](Self::overlay_strings_produced_at).
+    pub(crate) fn clear_overlay_strings_marker(&mut self) {
+        self.overlay_strings_produced_at = None;
+    }
+
+    /// The overlay strings anchored at `char_pos`, GNU-ordered and filtered to
+    /// this cursor's window, or `None` when the position anchors none.
+    ///
+    /// GNU collects overlay strings in `handle_stop` before the buffer character
+    /// at the same position, which is why this runs ahead of every other handler
+    /// in [`next_cursor_item`](Self::next_cursor_item).
+    fn overlay_strings_at(&self, char_pos: CharPos0) -> Option<Vec<OverlayDisplayString>> {
+        if self.buffer.layout_overlays().is_empty() {
+            return None;
+        }
+        let strings = RustTextPropAccess::new_for_optional_window(self.buffer, self.window_id)
+            .overlay_strings_at(char_pos.get() as i64);
+        (!strings.is_empty()).then_some(strings)
+    }
+
+    /// A produced run must never CROSS an overlay-string anchor: anchors are
+    /// surfaced as their own element at the position they anchor, and the
+    /// producer only looks for them at a run's START, so a run that swallowed
+    /// one would drop its strings entirely.
+    ///
+    /// The invariant holds structurally — `next_property_change` bounds every
+    /// run at every overlay boundary (this engine's compute_stop_pos) and an
+    /// anchor IS an overlay boundary — so this is the debug-build statement of
+    /// the property the frame entry relies on. It moved here from the renderer's
+    /// whole-run guard when P4.6 made the producer emit the strings.
+    fn debug_assert_no_overlay_string_anchor_inside(&self, start: CharPos0, end: CharPos0) {
+        if !cfg!(debug_assertions) || self.buffer.layout_overlays().is_empty() {
+            return;
+        }
+        let text_props = RustTextPropAccess::new_for_optional_window(self.buffer, self.window_id);
+        let mut charpos = start.get() as i64;
+        let end_charpos = end.get() as i64;
+        while let Some(next) = text_props.next_overlay_boundary_charpos_after(charpos) {
+            if next <= charpos || next >= end_charpos {
+                return;
+            }
+            debug_assert!(
+                text_props.overlay_strings_at(next).is_empty(),
+                "a produced run crossed the overlay-string anchor at {next} \
+                 (run {start:?}..{end:?}); the anchor's strings would never be \
+                 emitted"
+            );
+            charpos = next;
+        }
     }
 
     /// Decline run batching until `end_charpos`: see
@@ -596,6 +688,7 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         } else {
             self.next_text_run_end(start, property_end)
         };
+        self.debug_assert_no_overlay_string_anchor_inside(start, end);
         self.char_pos = end;
         Some(
             DisplayItem::new(
@@ -639,6 +732,20 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             }
 
             let start = self.char_pos;
+            if self.overlay_strings_produced_at != Some(start)
+                && let Some(strings) = self.overlay_strings_at(start)
+            {
+                // INSERTION: the cursor stays put, so the buffer character at
+                // this position is produced next and the strings render ahead of
+                // it (GNU handle_stop order).
+                self.overlay_strings_produced_at = Some(start);
+                return Some(BufferTextCursorItem::OverlayStrings(
+                    BufferOverlayStringsItem {
+                        anchor_charpos: start,
+                        strings,
+                    },
+                ));
+            }
             let property_end = self
                 .next_property_change(start)
                 .max(start.add_len(CharLen::new(1)))
@@ -731,6 +838,10 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             BufferTextCursorItem::Item(item) => Some(item),
             BufferTextCursorItem::DisplayPropertyReplacement(_) => {
                 debug_assert!(false, "display item cursor surfaced a buffer replacement");
+                None
+            }
+            BufferTextCursorItem::OverlayStrings(_) => {
+                debug_assert!(false, "display item cursor surfaced overlay strings");
                 None
             }
         }

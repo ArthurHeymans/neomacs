@@ -2448,12 +2448,12 @@ pub(crate) fn overlay_faces_at<B: LayoutBufferView + ?Sized>(
 /// Wraps a reference to a neovm-core `Buffer` and provides query methods
 /// for invisible text, display properties, overlay strings, and other
 /// text property-based features.
-pub(crate) struct RustTextPropAccess<'a, B: LayoutBufferView> {
+pub(crate) struct RustTextPropAccess<'a, B: LayoutBufferView + ?Sized> {
     buffer: &'a B,
     window_id: Option<u64>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct OverlayDisplayString {
     pub(crate) string: Value,
     pub(crate) overlay_id: Value,
@@ -2499,27 +2499,27 @@ fn layout_total_emacs_byte_end_pos<B: LayoutBufferView>(buffer: &B) -> EmacsByte
     EmacsBytePos::ZERO.add_len(buffer.layout_total_emacs_byte_len())
 }
 
-fn clamped_layout_char_pos<B: LayoutBufferView>(buffer: &B, charpos: i64) -> CharPos0 {
+fn clamped_layout_char_pos<B: LayoutBufferView + ?Sized>(buffer: &B, charpos: i64) -> CharPos0 {
     layout_char_pos_from_i64(charpos)
         .unwrap_or(CharPos0::ZERO)
         .min(buffer.layout_point_max_char_pos())
 }
 
-fn buffer_charpos_to_emacs_byte_pos<B: LayoutBufferView>(
+fn buffer_charpos_to_emacs_byte_pos<B: LayoutBufferView + ?Sized>(
     buffer: &B,
     charpos: CharPos0,
 ) -> EmacsBytePos {
     buffer.layout_char_pos_to_emacs_byte_pos(charpos.min(buffer.layout_point_max_char_pos()))
 }
 
-fn buffer_i64_charpos_to_emacs_byte_pos<B: LayoutBufferView>(
+fn buffer_i64_charpos_to_emacs_byte_pos<B: LayoutBufferView + ?Sized>(
     buffer: &B,
     charpos: i64,
 ) -> EmacsBytePos {
     buffer_charpos_to_emacs_byte_pos(buffer, clamped_layout_char_pos(buffer, charpos))
 }
 
-fn buffer_emacs_byte_pos_to_charpos<B: LayoutBufferView>(
+fn buffer_emacs_byte_pos_to_charpos<B: LayoutBufferView + ?Sized>(
     buffer: &B,
     bytepos: EmacsBytePos,
 ) -> usize {
@@ -2608,7 +2608,7 @@ fn invisible_prop_status(prop: Option<Value>, spec: Value) -> InvisibleStatus {
     }
 }
 
-impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
+impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
     /// Create a new text property accessor.
     pub fn new(buffer: &'a B) -> Self {
         Self {
@@ -2618,6 +2618,12 @@ impl<'a, B: LayoutBufferView> RustTextPropAccess<'a, B> {
     }
 
     /// Create a text property accessor scoped to the redisplay window.
+    /// Accessor for a caller that already carries an optional window scope (the
+    /// producer's cursor), so it need not branch on `Some`/`None` itself.
+    pub fn new_for_optional_window(buffer: &'a B, window_id: Option<u64>) -> Self {
+        Self { buffer, window_id }
+    }
+
     pub fn new_for_window(buffer: &'a B, window_id: u64) -> Self {
         Self {
             buffer,

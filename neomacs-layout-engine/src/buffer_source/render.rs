@@ -11,6 +11,7 @@ use crate::buffer_source::face_resolution::BufferSourceItemLayoutResolutionConte
 use crate::buffer_source::item_render::BufferSourceItemRenderRequest;
 use crate::buffer_source::loop_context::BufferSourceLoopRequestContext;
 use crate::buffer_source::loop_state::BufferSourceLoopMutableState;
+use crate::buffer_source::text_source::BufferOverlayStringsItem;
 use crate::buffer_source::walk::BufferSourceWalk;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
@@ -73,7 +74,47 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             BufferSourceConsumedItem::Renderable(source_item) => {
                 self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
             }
+            BufferSourceConsumedItem::OverlayStrings(strings) => {
+                self.render_overlay_strings(strings, buffer)
+            }
         }
+    }
+
+    /// Append the overlay strings the producer anchored at this position.
+    ///
+    /// The producer decided WHERE they belong and in WHICH order (GNU
+    /// `compare_overlay_entries`); this arm owns only the append, which stays a
+    /// per-string session because a string can break rows, clip against the
+    /// right edge and carry its own `cursor` property. The element has insertion
+    /// semantics, so the walk position is untouched and the next production is
+    /// the buffer character at the same anchor.
+    fn render_overlay_strings<B: LayoutBufferView>(
+        &mut self,
+        strings: BufferOverlayStringsItem,
+        buffer: &B,
+    ) -> bool {
+        let anchor_charpos = strings.anchor_charpos().get() as i64;
+        let (x, col) = self.state.progress.row_progress_mut().coordinates_mut();
+        let continuation = self
+            .state
+            .overlay_context
+            .render_produced_strings_at_text_row(
+                buffer,
+                anchor_charpos,
+                strings.strings(),
+                self.state.source_render.reborrow(),
+                x,
+                col,
+                self.state.row_geometry,
+                self.state.cursor_info,
+                self.state.hit_rows,
+                self.state.hit_row_range,
+                self.state.row_y_positions,
+                self.state.face_ids,
+                self.state.line_numbers,
+                self.state.face_scan,
+            );
+        !continuation.should_break()
     }
 
     fn consume_replacement<B: LayoutBufferView>(
