@@ -1358,6 +1358,12 @@ pub const ARDUINO_MODE_MELPA_PIN: (&str, &str) = ("arduino-mode", "20240527.1603
 /// corpus and by arduino-mode's optional integration coverage.
 pub const FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260728.931");
 
+/// The exact flycheck-elsa package selected for practical Elsa checker setup,
+/// Cask/Eask backend command selection, enable predicates, and config-dir
+/// discovery. MELPA built this archive from upstream commit
+/// `d60db9544d0c4213f2478bcea0fd0e668e31cf34`.
+pub const FLYCHECK_ELSA_MELPA_PIN: (&str, &str) = ("flycheck-elsa", "20230217.1640");
+
 /// The exact flyspell-correct package selected for practical correction
 /// interface defaults, completing-read candidate actions, highlight overlays,
 /// and direction-aware move wrappers. MELPA built this archive from upstream
@@ -2691,6 +2697,12 @@ pub const SQLITE3_MELPA_PIN: (&str, &str) = ("sqlite3", "20251014.536");
 /// completion, CAPF, asynchronous backend, and file workflow parity corpus.
 pub const COMPANY_MELPA_PIN: (&str, &str) = ("company", "20260721.100");
 
+/// The exact company-quickhelp package selected for practical frontend enable,
+/// docstring truncation, timer arm/cancel, and doc-buffer extraction. MELPA
+/// built this archive from upstream commit
+/// `5bda859577582cc42d16fc0eaf5f7c8bedfd9e69`.
+pub const COMPANY_QUICKHELP_MELPA_PIN: (&str, &str) = ("company-quickhelp", "20231026.1714");
+
 /// The exact Company Anaconda package selected for Python prefix eligibility,
 /// asynchronous candidate metadata, real Company selection/insertion,
 /// annotation customization, docs, locations, empty results, and policy parity.
@@ -2729,6 +2741,11 @@ pub const CONSULT_MELPA_PIN: (&str, &str) = ("consult", "20260716.1105");
 /// compilation parity. MELPA built this archive from upstream commit
 /// `ee79f68215ae7e2b8a38ba6bf7f82b3fe57dc16c`.
 pub const COUNSEL_MELPA_PIN: (&str, &str) = ("counsel", "20260214.1004");
+
+/// The exact counsel-projectile package selected for practical action-list
+/// mutation, file matchers, and project buffer/file helpers. MELPA built this
+/// archive from upstream commit `e30150792a96968f55f34638cbfe63eaa30839cc`.
+pub const COUNSEL_PROJECTILE_MELPA_PIN: (&str, &str) = ("counsel-projectile", "20211004.2003");
 
 /// The exact ctable package selected for practical model construction, text,
 /// buffer, and embedded-region rendering, sorting, navigation, selection,

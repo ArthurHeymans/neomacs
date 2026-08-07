@@ -276,7 +276,7 @@ rank	package	downloads	status
 275	helm-ls-git	416327	covered
 276	nerd-icons	415047	covered
 277	pyenv-mode	413980	covered
-278	flycheck-elsa	412980	todo
+278	flycheck-elsa	412980	covered
 279	dired-quick-sort	410816	covered
 280	gitattributes-mode	410338	todo
 281	emr	408990	todo
@@ -284,7 +284,7 @@ rank	package	downloads	status
 283	web-beautify	397871	covered
 284	docker	397489	todo
 285	treemacs-magit	396302	todo
-286	counsel-projectile	395372	todo
+286	counsel-projectile	395372	covered
 287	org-projectile	394527	todo
 288	gh	394503	todo
 289	flyspell-correct	393598	covered
@@ -296,7 +296,7 @@ rank	package	downloads	status
 295	pytest	375779	covered
 296	slim-mode	375747	covered
 297	origami	375001	covered
-298	company-quickhelp	374966	todo
+298	company-quickhelp	374966	covered
 299	helpful	373927	todo
 300	dashboard	373542	todo
 301	unfill	367210	todo
