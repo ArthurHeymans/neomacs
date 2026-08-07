@@ -67,20 +67,35 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn split_at_first_overlay<B: LayoutBufferView>(
+    /// Whether this item must go to the char render path because an overlay
+    /// before/after-string anchors at its first character.
+    ///
+    /// THE CONTRACT: overlay strings are emitted by exactly one path,
+    /// `BufferOverlayStringTextRowRenderContext::render_at` called from
+    /// `BufferSourceCharRenderRequest` (char_render.rs) — the whole-run and
+    /// fitting-prefix paths append glyphs without ever consulting the overlay
+    /// context, so routing a run that starts on an anchor through them drops the
+    /// string silently. Anchors can only meet a run at its start, because the
+    /// producer ends runs at every overlay boundary (text_source.rs
+    /// `next_property_change`, this engine's compute_stop_pos); the debug
+    /// assertion states that where it is relied on.
+    ///
+    /// P4.6 DELETES THIS GUARD: once overlay strings are produced elements
+    /// (`ProducerFrame::OverlayStrings`), every path emits them and no render
+    /// path needs to refuse anything.
+    fn starts_at_overlay_string<B: LayoutBufferView>(
         self,
-        source_item: &DisplaySourceStepItem,
+        start_charpos: i64,
+        end_charpos: i64,
         buffer: &B,
-    ) -> Option<(DisplaySourceStepItem, DisplaySourceStepItem)> {
-        let source_end_charpos = source_item.source_end_charpos()?;
-        let first_overlay_charpos = self.overlay_context.first_overlay_string_charpos_in_range(
+    ) -> bool {
+        self.overlay_context.assert_no_overlay_string_anchor_inside(
             buffer,
-            source_item.source_step_char().start_charpos(),
-            source_end_charpos,
-        )?;
-        source_item
-            .clone()
-            .split_text_run_at_charpos(first_overlay_charpos, self.text_start_byte)
+            start_charpos,
+            end_charpos,
+        );
+        self.overlay_context
+            .starts_at_overlay_string_anchor(buffer, start_charpos)
     }
 
     /// The largest prefix of `source_item` that fits the row, or `None` when no
@@ -105,18 +120,12 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
         let text = source_item.text_run()?;
         let start_charpos = source_item.source_step_char().start_charpos();
         let end_charpos = source_item.source_end_charpos()?;
-        // A run carrying an overlay before/after-string must go to the char
-        // render path -- the only path that emits overlay strings. GNU renders
-        // overlay strings regardless of `truncate-lines` (xdisp.c
-        // `next_overlay_string` is orthogonal to truncation); splitting a
-        // fitting prefix here in truncate mode would render via
-        // `render_and_apply`, which drops the anchored string, so bail and let
+        // A run anchoring an overlay before/after-string must go to the char
+        // render path (see `starts_at_overlay_string`). GNU renders overlay
+        // strings regardless of `truncate-lines` (xdisp.c `next_overlay_string`
+        // is orthogonal to truncation), so bail and let
         // `BufferSourceCharRenderRequest` handle both truncation and the string.
-        if self
-            .overlay_context
-            .first_overlay_string_charpos_in_range(buffer, start_charpos, end_charpos)
-            .is_some()
-        {
+        if self.starts_at_overlay_string(start_charpos, end_charpos, buffer) {
             return None;
         }
         // Valid split offsets are 1..hi (exclusive): within the run's chars
@@ -279,15 +288,11 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
                 WholeTextRunFallbackReason::MissingSourceEnd,
             );
         }
-        if self
-            .overlay_context
-            .first_overlay_string_charpos_in_range(
-                buffer,
-                source_item.source_step_char().start_charpos(),
-                source_end_charpos,
-            )
-            .is_some()
-        {
+        if self.starts_at_overlay_string(
+            source_item.source_step_char().start_charpos(),
+            source_end_charpos,
+            buffer,
+        ) {
             return WholeTextRunRenderDecision::Fallback(WholeTextRunFallbackReason::OverlayString);
         }
 

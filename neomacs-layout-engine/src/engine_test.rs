@@ -23317,3 +23317,146 @@ fn truncate_shadow_multibyte_at_the_fit_boundary() {
 // returns (the laid-out row still measures the full 80 cells), so the case
 // asserted nothing. Reinstating it needs a harness that lays out the SPLIT
 // window, not the original one.
+
+// ---------------------------------------------------------------------------
+// P4.4: glyph-level shadows for rows whose seam is an OVERLAY-STRING ANCHOR.
+//
+// The producer ends every run at every overlay boundary (text_source.rs
+// `next_property_change`, this engine's compute_stop_pos), so an overlay-string
+// anchor always meets a run at the run's START. That makes exactly one
+// renderer decision load-bearing: the whole-run and fitting-prefix paths must
+// REFUSE a run that starts on an anchor, because only the char path emits
+// overlay strings (`starts_at_overlay_string`, text_run.rs). If that refusal
+// ever stops firing the string vanishes from the row — invisible to the stream
+// harness, which measures producer emission, and visible here.
+//
+// Every case pins the row's full text AND its cell count as explicit goldens
+// derived from the corpus, never from the row under test.
+// ---------------------------------------------------------------------------
+
+/// Lay out `text` with an overlay created by `overlay_form` and return the
+/// first body row's glyphs.
+fn overlay_string_first_row_glyphs(
+    text: &str,
+    overlay_form: &str,
+    truncate: bool,
+) -> Vec<neomacs_display_protocol::glyph_matrix::Glyph> {
+    let overlay_form = overlay_form.to_owned();
+    let (_eval, _buf_id, _frame_id, rows, _cw, _ch) =
+        layout_main_text_rows_with(text, move |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            if truncate {
+                eval.eval_str("(setq truncate-lines t)").expect("truncate");
+            }
+            eval.eval_str(&overlay_form).expect("overlay");
+        });
+    rows[0].glyphs[1].clone()
+}
+
+#[test]
+fn overlay_string_shadow_before_string_at_a_mid_run_anchor() {
+    // The anchor sits inside what would otherwise be one whole run of "hello
+    // world": the run must be refused so the "[" is emitted. Golden row text
+    // and cell count are read off the corpus: 11 buffer chars + 1 string char
+    // + the appended newline space.
+    let glyphs = overlay_string_first_row_glyphs(
+        "hello world\nnext\n",
+        "(overlay-put (make-overlay 4 9) 'before-string \"[\")",
+        false,
+    );
+    assert_eq!(glyphs_logical_text(&glyphs), "hel[lo world ");
+    assert_eq!(
+        glyphs.len(),
+        13,
+        "11 text cells + the string cell + the \
+         appended newline space"
+    );
+}
+
+#[test]
+fn overlay_string_shadow_after_string_at_a_mid_run_anchor() {
+    // The after-string anchors at the overlay's END, which is likewise a
+    // mid-run position on the unanchored row.
+    let glyphs = overlay_string_first_row_glyphs(
+        "hello world\nnext\n",
+        "(overlay-put (make-overlay 4 9) 'after-string \"]\")",
+        false,
+    );
+    assert_eq!(glyphs_logical_text(&glyphs), "hello wo]rld ");
+    assert_eq!(glyphs.len(), 13);
+}
+
+#[test]
+fn overlay_string_shadow_both_strings_at_one_overlay() {
+    let glyphs = overlay_string_first_row_glyphs(
+        "hello world\nnext\n",
+        "(let ((ov (make-overlay 4 9))) \
+           (overlay-put ov 'before-string \"[\") \
+           (overlay-put ov 'after-string \"]\"))",
+        false,
+    );
+    assert_eq!(glyphs_logical_text(&glyphs), "hel[lo wo]rld ");
+    assert_eq!(glyphs.len(), 14);
+}
+
+#[test]
+fn overlay_string_shadow_anchor_at_row_start() {
+    // The degenerate position: the anchor coincides with the row's first
+    // character, so there is no run to cut — the string still has to render
+    // ahead of the buffer text.
+    let glyphs = overlay_string_first_row_glyphs(
+        "hello world\nnext\n",
+        "(overlay-put (make-overlay 1 3) 'before-string \"<\")",
+        false,
+    );
+    assert_eq!(glyphs_logical_text(&glyphs), "<hello world ");
+    assert_eq!(glyphs.len(), 13);
+}
+
+#[test]
+fn overlay_string_shadow_anchor_inside_a_truncated_row() {
+    // The compound case: an anchor inside the FITTING prefix of a truncated
+    // row. Here `prefix_to_fit` must bail (it cannot emit the string) and the
+    // char path must both render the string and reach the truncation marker.
+    // The row still holds the pinned 80 cells: 78 buffer chars, the string
+    // cell, and the '$'.
+    let line = "abcdefghij".repeat(12);
+    let glyphs = overlay_string_first_row_glyphs(
+        &format!("{line}\nshort\n"),
+        "(overlay-put (make-overlay 11 13) 'before-string \"|\")",
+        true,
+    );
+    assert_eq!(
+        glyphs.len(),
+        TRUNCATED_ROW_CELLS,
+        "an overlay string inside the fitting prefix must not change the row width"
+    );
+    let expected: String = format!("{}|{}$", &line[..10], &line[10..TRUNCATED_ROW_CELLS - 2]);
+    assert_eq!(glyphs_logical_text(&glyphs), expected);
+}
+
+#[test]
+fn overlay_string_shadow_anchor_at_the_truncate_boundary() {
+    // The anchor sits on the LAST character that would fit. The string takes
+    // that cell, the character it anchors is pushed past the edge, and the row
+    // is still marker-terminated at the pinned width: the case where a fit
+    // decision and a string emission meet in the same cell.
+    let line = "abcdefghij".repeat(12);
+    let anchor_charpos = TRUNCATED_ROW_CELLS - 2; // 0-based; make-overlay is 1-based
+    let glyphs = overlay_string_first_row_glyphs(
+        &format!("{line}\nshort\n"),
+        &format!(
+            "(overlay-put (make-overlay {} {}) 'before-string \"|\")",
+            anchor_charpos + 1,
+            anchor_charpos + 3
+        ),
+        true,
+    );
+    assert_eq!(glyphs.len(), TRUNCATED_ROW_CELLS);
+    let expected: String = format!("{}|$", &line[..TRUNCATED_ROW_CELLS - 2]);
+    assert_eq!(
+        glyphs_logical_text(&glyphs),
+        expected,
+        "the string takes the last fitting cell and the marker still terminates the row"
+    );
+}

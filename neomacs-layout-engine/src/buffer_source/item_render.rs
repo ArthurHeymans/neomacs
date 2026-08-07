@@ -148,7 +148,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
 
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
         mut self,
-        source_item: DisplaySourceStepItem,
+        mut source_item: DisplaySourceStepItem,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
         state: BufferSourceLoopMutableState<'_, '_, '_>,
@@ -189,7 +189,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
 
     fn render_text_item_and_apply<B: LayoutBufferView>(
         self,
-        source_item: DisplaySourceStepItem,
+        mut source_item: DisplaySourceStepItem,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
         state: BufferSourceLoopMutableState<'_, '_, '_>,
@@ -346,13 +346,6 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             append_position,
             append_geometry,
         );
-
-        if let Some((prefix, suffix)) =
-            text_run_request.split_at_first_overlay(&source_item, buffer)
-        {
-            source_walk.prepend_pending_render_items(vec![suffix]);
-            source_item = prefix;
-        }
 
         if let Some(outcome) = text_run_request.render_if_fits_and_apply(
             source_item.clone(),

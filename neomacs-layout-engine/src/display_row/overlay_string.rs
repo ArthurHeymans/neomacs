@@ -316,35 +316,57 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         .with_continuation_row_prelude(self.continuation_row_prelude)
     }
 
-    pub(crate) fn first_overlay_string_charpos_in_range<B: LayoutBufferView>(
+    /// Whether an overlay before/after-string anchors exactly at `charpos`.
+    ///
+    /// Anchors are overlay start and end positions (`overlay_strings_at` tests
+    /// boundary equality), and the producer already ends every text run at every
+    /// overlay boundary — `BufferTextSourceCursor::next_property_change`, this
+    /// engine's `compute_stop_pos` (GNU src/xdisp.c:4356-4365), folds
+    /// `next_overlay_change` into the run bound. So an anchor can only ever meet
+    /// a run at the run's own START, which is the single position this probes.
+    /// [`assert_no_overlay_string_anchor_inside`] pins that invariant where it
+    /// is relied on.
+    pub(crate) fn starts_at_overlay_string_anchor<B: LayoutBufferView>(
+        self,
+        buffer: &B,
+        charpos: i64,
+    ) -> bool {
+        self.enabled
+            && !RustTextPropAccess::new_for_window(buffer, self.window_id)
+                .overlay_strings_at(charpos)
+                .is_empty()
+    }
+
+    /// Debug-only enforcement of the never-crosses-an-anchor invariant: no
+    /// overlay-string anchor may fall STRICTLY inside `(start_charpos,
+    /// end_charpos)`. A violation would mean a run swallowed an anchor, and the
+    /// whole-run fast path would drop the overlay string (only the char path
+    /// emits them), so it is worth a walk of the overlay boundary index in debug
+    /// builds.
+    pub(crate) fn assert_no_overlay_string_anchor_inside<B: LayoutBufferView>(
         self,
         buffer: &B,
         start_charpos: i64,
         end_charpos: i64,
-    ) -> Option<i64> {
-        if !self.enabled || end_charpos <= start_charpos {
-            return None;
+    ) {
+        if !cfg!(debug_assertions) || !self.enabled {
+            return;
         }
         let text_props = RustTextPropAccess::new_for_window(buffer, self.window_id);
-        // Overlay strings anchor exactly at overlay start/end positions
-        // (overlay_strings_at checks boundary equality), so walk the indexed
-        // overlay boundaries instead of probing every character in the
-        // range - the per-character scan queried the interval tree and
-        // allocated a candidate vector once per charpos.
         let mut charpos = start_charpos;
-        loop {
-            if charpos >= end_charpos {
-                return None;
+        while let Some(next) = text_props.next_overlay_boundary_charpos_after(charpos) {
+            if next <= charpos || next >= end_charpos {
+                // Boundary conversion clamps to point-max; never loop in place
+                // if a boundary maps back onto the current position.
+                return;
             }
-            if !text_props.overlay_strings_at(charpos).is_empty() {
-                return Some(charpos);
-            }
-            let next = text_props.next_overlay_boundary_charpos_after(charpos)?;
-            if next <= charpos {
-                // Boundary conversion clamps to point-max; never loop in
-                // place if a boundary maps back onto the current position.
-                return None;
-            }
+            debug_assert!(
+                text_props.overlay_strings_at(next).is_empty(),
+                "a produced run crossed the overlay-string anchor at {next} \
+                 (run {start_charpos}..{end_charpos}); the producer's overlay \
+                 stop state has regressed and the whole-run path would drop the \
+                 overlay string"
+            );
             charpos = next;
         }
     }

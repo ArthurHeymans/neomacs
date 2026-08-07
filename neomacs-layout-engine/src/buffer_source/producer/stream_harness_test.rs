@@ -44,8 +44,14 @@ use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
+use neovm_core::heap_types::OverlayData;
 
 const BASE_FACE: FaceId = FaceId::new(1);
+
+/// The window the harness lays out for. Overlays carrying a `window` property
+/// apply only in their own window (GNU `overlay_applies_to_window`), so the
+/// corpus can state both "scoped to this window" and "scoped to another one".
+const HARNESS_WINDOW_ID: u64 = 7;
 
 /// Enough elements to drain every corpus case to end of text.
 const DRAIN_LIMIT: usize = 128;
@@ -115,11 +121,96 @@ impl CaseProperty {
     }
 }
 
+/// An overlay applied to a half-open character range of a corpus buffer.
+/// Overlays are a SECOND seam source next to text properties: GNU folds
+/// `next_overlay_change` into `compute_stop_pos` (xdisp.c:4356-4365), and
+/// overlay before/after-strings anchor exactly at an overlay's start and end.
+struct CaseOverlay {
+    start_char: usize,
+    end_char: usize,
+    kind: CaseOverlayKind,
+    /// The overlay's `window` property. `Some(id)` scopes it to that window
+    /// (GNU `overlay_applies_to_window`), so an overlay belonging to another
+    /// window must be invisible to this harness's producer.
+    window: Option<u64>,
+}
+
+enum CaseOverlayKind {
+    /// A face-only overlay: no string anchor, but still a stop boundary.
+    Face {
+        attribute: &'static str,
+        value: &'static str,
+    },
+    /// A `before-string`: an overlay-string anchor at the overlay's START.
+    BeforeString(&'static str),
+    /// An `after-string`: an overlay-string anchor at the overlay's END.
+    AfterString(&'static str),
+}
+
+impl CaseOverlay {
+    fn face(
+        start_char: usize,
+        end_char: usize,
+        attribute: &'static str,
+        value: &'static str,
+    ) -> Self {
+        Self {
+            start_char,
+            end_char,
+            kind: CaseOverlayKind::Face { attribute, value },
+            window: None,
+        }
+    }
+
+    fn before_string(start_char: usize, end_char: usize, text: &'static str) -> Self {
+        Self {
+            start_char,
+            end_char,
+            kind: CaseOverlayKind::BeforeString(text),
+            window: None,
+        }
+    }
+
+    fn after_string(start_char: usize, end_char: usize, text: &'static str) -> Self {
+        Self {
+            start_char,
+            end_char,
+            kind: CaseOverlayKind::AfterString(text),
+            window: None,
+        }
+    }
+
+    fn in_window(mut self, window_id: u64) -> Self {
+        self.window = Some(window_id);
+        self
+    }
+
+    fn name(&self) -> &'static str {
+        match self.kind {
+            CaseOverlayKind::Face { .. } => "face",
+            CaseOverlayKind::BeforeString(_) => "before-string",
+            CaseOverlayKind::AfterString(_) => "after-string",
+        }
+    }
+
+    fn value(&self) -> Value {
+        match self.kind {
+            CaseOverlayKind::Face { attribute, value } => {
+                Value::list(vec![Value::symbol(attribute), Value::symbol(value)])
+            }
+            CaseOverlayKind::BeforeString(text) | CaseOverlayKind::AfterString(text) => {
+                Value::string(text)
+            }
+        }
+    }
+}
+
 /// A corpus row: buffer content plus the properties that create its seam.
 struct StreamCase {
     name: &'static str,
     text: &'static str,
     properties: Vec<CaseProperty>,
+    overlays: Vec<CaseOverlay>,
 }
 
 impl StreamCase {
@@ -128,11 +219,17 @@ impl StreamCase {
             name,
             text,
             properties: Vec::new(),
+            overlays: Vec::new(),
         }
     }
 
     fn with(mut self, property: CaseProperty) -> Self {
         self.properties.push(property);
+        self
+    }
+
+    fn with_overlay(mut self, overlay: CaseOverlay) -> Self {
+        self.overlays.push(overlay);
         self
     }
 
@@ -292,6 +389,13 @@ enum SplitPolicy {
 /// Buffer plus face machinery for one corpus case. Owns its `FaceResolver`
 /// (which copies the face table), so a driver can borrow it for a whole run.
 struct Fixture {
+    /// The evaluator is kept ALIVE for the fixture's whole lifetime: every Lisp
+    /// value the corpus builds (face plists, overlay plists, overlay strings)
+    /// lives on this context's heap, and an overlay's property plist is read
+    /// back through its heap object at layout time. Dropping the context after
+    /// snapshotting left those reads returning nothing, so a face-carrying
+    /// overlay silently contributed no face.
+    _eval: Context,
     buffer_id: BufferId,
     snapshot: LayoutBufferSnapshot,
     resolver: FaceResolver,
@@ -323,6 +427,36 @@ impl Fixture {
                     property.value(),
                 );
             }
+            for overlay in &case.overlays {
+                let start =
+                    buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(overlay.start_char));
+                let end =
+                    buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(overlay.end_char));
+                let value = Value::make_overlay(OverlayData {
+                    serial: 0,
+                    plist: Value::NIL,
+                    buffer: Some(buffer_id),
+                    start: start.get(),
+                    end: end.get(),
+                    front_advance: false,
+                    rear_advance: false,
+                });
+                buffer.overlays_mut().insert_overlay(value);
+                buffer
+                    .overlays_mut()
+                    .overlay_put(value, Value::symbol(overlay.name()), overlay.value())
+                    .expect("overlay property");
+                if let Some(window_id) = overlay.window {
+                    buffer
+                        .overlays_mut()
+                        .overlay_put(
+                            value,
+                            Value::symbol("window"),
+                            Value::make_window(window_id),
+                        )
+                        .expect("overlay window property");
+                }
+            }
         }
         let buffer = eval.buffer_manager().get(buffer_id).expect("buffer");
         let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
@@ -330,6 +464,7 @@ impl Fixture {
         let resolver = FaceResolver::new(&table, 0x00ff_ffff, 0x0000_0000, 14.0, None);
         let base_face = resolver.default_face().clone();
         Self {
+            _eval: eval,
             buffer_id,
             snapshot,
             resolver,
@@ -340,7 +475,13 @@ impl Fixture {
     fn driver(&self, split: SplitPolicy) -> StreamDriver<'_> {
         StreamDriver {
             fixture: self,
-            producer: BufferElementProducer::new(self.buffer_id, &self.snapshot, 0, 0),
+            producer: BufferElementProducer::new_for_window(
+                self.buffer_id,
+                &self.snapshot,
+                Some(HARNESS_WINDOW_ID),
+                0,
+                0,
+            ),
             position: DisplaySourceTextPosition::new(0, 0),
             face_ids: FrameFaceAttempt::for_test_with_next_id(BASE_FACE.get() + 1),
             split,
@@ -987,16 +1128,116 @@ fn c15_empty_lines_produce_row_breaks_and_no_empty_line_glyph() {
 // C12: overlay seams
 // ---------------------------------------------------------------------------
 
-#[test]
-#[ignore = "un-ignored by P4.4: the producer folds next_overlay_change into its stop state so a run never crosses an overlay seam (GNU compute_stop_pos, xdisp.c:4356-4365)"]
-fn c12_overlay_face_seam_terminates_runs() {
-    let case = StreamCase::new("C12 overlay seam", "abcdefgh\n");
-    let fixture = Fixture::new(&case);
+/// The run boundaries a case produces, as the strings of each element: the
+/// char-exact statement of where the producer's stop state fires.
+fn producer_run_texts(case: &StreamCase) -> Vec<String> {
+    let fixture = Fixture::new(case);
     let mut driver = fixture.driver(SplitPolicy::None);
-    // With an overlay carrying only a face over [3,6), the producer must yield
-    // runs "abc", "def", "gh" rather than one run.
-    let first = driver.next_observations().expect("first run");
-    assert_eq!(CharObservation::chars(&first), "abc");
+    let mut runs = Vec::new();
+    for _ in 0..DRAIN_LIMIT {
+        let Some(observations) = driver.next_observations() else {
+            break;
+        };
+        runs.push(CharObservation::chars(&observations));
+    }
+    runs
+}
+
+#[test]
+fn c12_overlay_face_seam_terminates_runs() {
+    // A face-only overlay over [3,6) is a stop boundary even though it carries
+    // no string: GNU folds `next_overlay_change` into `compute_stop_pos`
+    // (xdisp.c:4356-4365) and this engine mirrors it in
+    // `BufferTextSourceCursor::next_property_change`. Runs are pinned as
+    // EXPLICIT goldens, not derived from the stream under test.
+    let case = StreamCase::new("C12 overlay face seam", "abcdefgh\n")
+        .with_overlay(CaseOverlay::face(3, 6, ":weight", "bold"));
+    assert_streams_agree(&case);
+    assert_eq!(producer_run_texts(&case), vec!["abc", "def", "gh", "\n"]);
+
+    // Same text with no overlay: one run, so the boundaries above are the
+    // overlay's doing and not an artifact of run production.
+    let plain = StreamCase::new("C12 baseline", "abcdefgh\n");
+    assert_eq!(producer_run_texts(&plain), vec!["abcdefgh", "\n"]);
+}
+
+#[test]
+fn c12_overlay_face_seam_keeps_the_char_stream_continuous() {
+    // The seam changes where runs END and which face they carry; it must not
+    // change the characters, provenance or scan track underneath.
+    let case = StreamCase::new("C12 overlay face seam", "abcdefgh\n")
+        .with_overlay(CaseOverlay::face(3, 6, ":weight", "bold"));
+    let plain = producer_stream(&StreamCase::new("C12 baseline", "abcdefgh\n"));
+    let overlaid = producer_stream(&case);
+
+    assert_eq!(plain.len(), overlaid.len());
+    for (plain, overlaid) in plain.iter().zip(overlaid.iter()) {
+        assert_eq!(plain.ch, overlaid.ch);
+        assert_eq!(plain.provenance, overlaid.provenance);
+        assert_eq!(plain.scan_before, overlaid.scan_before);
+        assert_eq!(plain.scan_after, overlaid.scan_after);
+        assert_eq!(plain.class, overlaid.class);
+    }
+    // The overlaid span carries a DIFFERENT face than the text around it —
+    // otherwise the seam above would be pinning nothing.
+    assert_ne!(
+        overlaid[3].face, overlaid[0].face,
+        "the overlay face must actually reach the covered characters"
+    );
+    assert_eq!(overlaid[6].face, overlaid[0].face);
+}
+
+#[test]
+fn c12_overlay_string_anchors_terminate_runs() {
+    // The P4.4 contract: a produced run never CROSSES an overlay-string anchor,
+    // so the renderer always meets an anchor at an element boundary. A
+    // before-string anchors at the overlay's start (charpos 3), an after-string
+    // at its end (charpos 6). Goldens, not derived.
+    let before = StreamCase::new("C12 before-string anchor", "abcdefgh\n")
+        .with_overlay(CaseOverlay::before_string(3, 6, "B"));
+    assert_eq!(producer_run_texts(&before), vec!["abc", "def", "gh", "\n"]);
+
+    let after = StreamCase::new("C12 after-string anchor", "abcdefgh\n")
+        .with_overlay(CaseOverlay::after_string(3, 6, "A"));
+    assert_eq!(producer_run_texts(&after), vec!["abc", "def", "gh", "\n"]);
+
+    // An anchor at a zero-length overlay: start and end coincide, so the single
+    // boundary still cuts the run there.
+    let point = StreamCase::new("C12 zero-length anchor", "abcdefgh\n")
+        .with_overlay(CaseOverlay::before_string(4, 4, "P"));
+    assert_eq!(producer_run_texts(&point), vec!["abcd", "efgh", "\n"]);
+
+    // At a row start the anchor coincides with the run start, so there is
+    // nothing to cut: the row's first run is whole.
+    let row_start = StreamCase::new("C12 anchor at row start", "abcdefgh\n")
+        .with_overlay(CaseOverlay::before_string(0, 2, "S"));
+    assert_eq!(producer_run_texts(&row_start), vec!["ab", "cdefgh", "\n"]);
+}
+
+#[test]
+fn c12_overlay_scoped_to_another_window_is_not_a_seam() {
+    // `window`-scoped overlays apply only in their own window
+    // (GNU overlay_applies_to_window). The stop state is deliberately COARSER
+    // than the string collection: it stops at every overlay boundary, windowed
+    // or not, because a superset of stops is always safe and cheaper than
+    // filtering the boundary index. What must NOT happen is a foreign window's
+    // overlay reaching the glyphs.
+    let foreign = StreamCase::new("C12 foreign window overlay", "abcdefgh\n")
+        .with_overlay(CaseOverlay::face(3, 6, ":weight", "bold").in_window(HARNESS_WINDOW_ID + 1));
+    let stream = producer_stream(&foreign);
+    assert_eq!(CharObservation::chars(&stream), "abcdefgh\n");
+    for observation in &stream {
+        assert_eq!(
+            observation.face, stream[0].face,
+            "another window's overlay face must not reach this window's glyphs"
+        );
+    }
+
+    // The same overlay scoped to THIS window does reach them.
+    let local = StreamCase::new("C12 local window overlay", "abcdefgh\n")
+        .with_overlay(CaseOverlay::face(3, 6, ":weight", "bold").in_window(HARNESS_WINDOW_ID));
+    let stream = producer_stream(&local);
+    assert_ne!(stream[3].face, stream[0].face);
 }
 
 // ---------------------------------------------------------------------------
