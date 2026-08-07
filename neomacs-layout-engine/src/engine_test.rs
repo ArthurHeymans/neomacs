@@ -23105,3 +23105,215 @@ fn gui_overlay_arrow_draws_left_fringe_bitmap_not_text() {
         "GUI overlay arrow must not overwrite the text; got {text:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// P4.3g: glyph-level shadows for TRUNCATED rows.
+//
+// The P4.2 stream harness proves what the PRODUCER emits. It is blind to row
+// ASSEMBLY — fit decisions, overlay emission points, width accounting, cursor
+// capture — because those happen after the element leaves the producer. Rungs
+// that change what the RENDERER RECEIVES (P4.3's fit split, P4.5's per-char
+// feeder, P4.6's overlay strings, P4.7's replacements) therefore need
+// finished-GlyphRow proofs, and this is that net.
+//
+// Each case lays out a real frame with truncate-lines and pins the finished
+// truncated row: how many cells it holds, that it ends in the shared '$'
+// marker, that its visible text is exactly the fitting prefix, and that its
+// glyph charpos stamps advance monotonically from the line start. Those four
+// together move if any assembly decision at the fit boundary moves.
+// ---------------------------------------------------------------------------
+
+/// Lay out `text` with truncate-lines and return the first body row's glyphs.
+fn truncated_first_row_glyphs(
+    text: &str,
+    setup: impl FnOnce(&mut Context, BufferId),
+) -> Vec<neomacs_display_protocol::glyph_matrix::Glyph> {
+    let (mut eval, buf_id, _frame_id, rows, _cw, _ch) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(setq truncate-lines t)").expect("truncate");
+            setup(eval, buf_id);
+        });
+    let _ = &mut eval;
+    rows[0].glyphs[1].clone()
+}
+
+fn row_text(glyphs: &[neomacs_display_protocol::glyph_matrix::Glyph]) -> String {
+    glyphs
+        .iter()
+        .filter_map(|glyph| match glyph.glyph_type {
+            GlyphType::Char { ch } => Some(ch),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The invariants every truncated row must satisfy, whatever the content.
+fn assert_truncated_row_shape(
+    label: &str,
+    glyphs: &[neomacs_display_protocol::glyph_matrix::Glyph],
+    expected_prefix: &str,
+) {
+    assert!(
+        !glyphs.is_empty(),
+        "{label}: the truncated row produced no glyphs"
+    );
+    let n = glyphs.len();
+    assert!(
+        matches!(glyphs[n - 1].glyph_type, GlyphType::Char { ch: '$' }),
+        "{label}: a truncated row must end in the '$' marker, got {:?}",
+        glyphs[n - 1].glyph_type
+    );
+    let text = row_text(&glyphs[..n - 1]);
+    assert_eq!(
+        text, expected_prefix,
+        "{label}: the truncated row's visible text must be the fitting prefix"
+    );
+    // Buffer-stamped cells must advance monotonically: a fit-boundary change
+    // that re-produced or skipped a character shows up here even when the
+    // visible text happens to survive.
+    let mut previous: Option<usize> = None;
+    for glyph in &glyphs[..n - 1] {
+        if glyph.charpos == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS {
+            continue;
+        }
+        if let Some(previous) = previous {
+            assert!(
+                glyph.charpos >= previous,
+                "{label}: glyph charpos stamps must not go backwards ({previous} then {})",
+                glyph.charpos
+            );
+        }
+        previous = Some(glyph.charpos);
+    }
+}
+
+/// The baseline: a plain over-wide line. The cell count is a GOLDEN, not
+/// derived from the row — deriving the expectation from the row under test is
+/// a tautology that cannot catch a fit-boundary shift, which is exactly the
+/// failure this family exists to catch.
+const TRUNCATED_ROW_CELLS: usize = 80;
+
+#[test]
+fn truncate_shadow_plain_over_wide_line() {
+    let glyphs =
+        truncated_first_row_glyphs(&format!("{}\nshort\n", "abcdefghij".repeat(12)), |_, _| {});
+    assert_eq!(
+        glyphs.len(),
+        TRUNCATED_ROW_CELLS,
+        "the fitting prefix width is a pinned golden"
+    );
+    let expected: String = "abcdefghij"
+        .repeat(12)
+        .chars()
+        .take(TRUNCATED_ROW_CELLS - 1)
+        .collect();
+    assert_truncated_row_shape("plain", &glyphs, &expected);
+}
+
+/// A face seam inside the DISCARDED tail: the seam is past the fit boundary,
+/// so it must not perturb the row at all.
+#[test]
+fn truncate_shadow_face_seam_in_the_discarded_tail() {
+    let baseline =
+        truncated_first_row_glyphs(&format!("{}\nshort\n", "abcdefghij".repeat(12)), |_, _| {});
+    let fit = baseline.len() - 1;
+    let seamed = truncated_first_row_glyphs(
+        &format!("{}\nshort\n", "abcdefghij".repeat(12)),
+        move |eval, _| {
+            let start = fit + 5;
+            eval.eval_str(&format!(
+                "(put-text-property {} {} 'face '(:weight bold))",
+                start + 1,
+                start + 4
+            ))
+            .expect("face property in the tail");
+        },
+    );
+    assert_eq!(
+        baseline, seamed,
+        "a face seam beyond the fit boundary must not change the truncated row"
+    );
+}
+
+/// A face seam STRADDLING the fit boundary: the row must still be the same
+/// fitting prefix, with the seam's cells carrying their own face.
+#[test]
+fn truncate_shadow_face_seam_straddling_the_fit_boundary() {
+    let baseline =
+        truncated_first_row_glyphs(&format!("{}\nshort\n", "abcdefghij".repeat(12)), |_, _| {});
+    let fit = baseline.len() - 1;
+    let glyphs = truncated_first_row_glyphs(
+        &format!("{}\nshort\n", "abcdefghij".repeat(12)),
+        move |eval, _| {
+            eval.eval_str(&format!(
+                "(put-text-property {} {} 'face '(:weight bold))",
+                fit - 2,
+                fit + 4
+            ))
+            .expect("face property across the boundary");
+        },
+    );
+    assert_eq!(glyphs.len(), TRUNCATED_ROW_CELLS);
+    let expected: String = "abcdefghij"
+        .repeat(12)
+        .chars()
+        .take(TRUNCATED_ROW_CELLS - 1)
+        .collect();
+    assert_truncated_row_shape("straddling face seam", &glyphs, &expected);
+    assert_eq!(
+        glyphs.len(),
+        baseline.len(),
+        "a face seam must not change how much of the line fits"
+    );
+}
+
+/// Multibyte at the fit boundary: the byte/char reseat is the part most likely
+/// to go wrong when the resume position is recomputed rather than carried.
+#[test]
+fn truncate_shadow_multibyte_at_the_fit_boundary() {
+    let line: String = format!("{}漢字漢字漢字{}\nshort\n", "a".repeat(60), "b".repeat(40));
+    let glyphs = truncated_first_row_glyphs(&line, |_, _| {});
+    let n = glyphs.len();
+    assert!(
+        matches!(glyphs[n - 1].glyph_type, GlyphType::Char { ch: '$' }),
+        "multibyte truncated row must end in the marker"
+    );
+    // A double-width char occupies two cells; the trailing cell repeats the
+    // base's charpos, so collapse by charpos to recover the character text.
+    let mut text = String::new();
+    let mut previous_charpos: Option<usize> = None;
+    for glyph in &glyphs[..n - 1] {
+        if previous_charpos == Some(glyph.charpos) {
+            continue;
+        }
+        previous_charpos = Some(glyph.charpos);
+        if let GlyphType::Char { ch } = glyph.glyph_type {
+            text.push(ch);
+        }
+    }
+    assert!(
+        line.starts_with(&text),
+        "the truncated row's text must be a prefix of the line, got {text:?}"
+    );
+    assert!(
+        text.contains('漢'),
+        "the corpus must reach the multibyte span, got {text:?}"
+    );
+    let mut previous: Option<usize> = None;
+    for glyph in &glyphs[..n - 1] {
+        if glyph.charpos == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS {
+            continue;
+        }
+        if let Some(previous) = previous {
+            assert!(glyph.charpos >= previous, "charpos stamps must not regress");
+        }
+        previous = Some(glyph.charpos);
+    }
+}
+
+// A narrow-window case was attempted here and removed: `(split-window-right)`
+// in this harness does not narrow the row that `layout_main_text_rows_with`
+// returns (the laid-out row still measures the full 80 cells), so the case
+// asserted nothing. Reinstating it needs a harness that lays out the SPLIT
+// window, not the original one.
