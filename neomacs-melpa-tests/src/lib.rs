@@ -2661,6 +2661,12 @@ pub const COMMANDER_MELPA_PIN: (&str, &str) = ("commander", "20140120.1852");
 /// CMake commit `c162d6852d09a82cf87ff0cda6a23abc775dfdb6`.
 pub const CMAKE_MODE_MELPA_PIN: (&str, &str) = ("cmake-mode", "20260731.1301");
 
+/// The exact coffee-mode package selected for practical CoffeeScript
+/// major-mode activation, indentation, fontification, comment/fat-arrow
+/// editing, and compile-command orchestration. MELPA built this archive from
+/// upstream commit `35a41c7d8233eac0b267d9593e67fb8b6235e134`.
+pub const COFFEE_MODE_MELPA_PIN: (&str, &str) = ("coffee-mode", "20200315.1133");
+
 /// The exact Cond-Let package selected by the practical conditional binding,
 /// validation pipeline, authorization, and queue workflow parity corpus.
 pub const COND_LET_MELPA_PIN: (&str, &str) = ("cond-let", "20260701.1237");
