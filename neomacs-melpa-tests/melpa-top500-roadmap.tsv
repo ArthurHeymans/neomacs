@@ -254,7 +254,7 @@ rank	package	downloads	status
 253	company-anaconda	463797	covered
 254	mmm-mode	462001	covered
 255	llama	456538	covered
-256	helm-purpose	456457	todo
+256	helm-purpose	456457	covered
 257	treemacs-persp	456042	todo
 258	cmake-mode	454835	todo
 259	js2-refactor	454486	covered

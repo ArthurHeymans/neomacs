@@ -2810,6 +2810,12 @@ pub const HELM_SWOOP_MELPA_PIN: (&str, &str) = ("helm-swoop", "20240104.2356");
 /// `4dae1d072cc2650749846cfcab1f60686471cc45`.
 pub const HELM_PROJECTILE_MELPA_PIN: (&str, &str) = ("helm-projectile", "20260724.27");
 
+/// The exact Helm Purpose package selected for practical Purpose-filtered
+/// Helm buffer switching, purpose selection, preferred-prompt setup, and
+/// Purpose-ignoring mini sessions. MELPA built this archive from upstream
+/// commit `9ff4c21c1e9ebc7afb851b738f815df7343bb287`.
+pub const HELM_PURPOSE_MELPA_PIN: (&str, &str) = ("helm-purpose", "20170114.1636");
+
 /// The exact helm-xref package selected for practical Xref definition,
 /// reference, candidate-formatting, preview, window-action, history, and
 /// failure parity. MELPA built this archive from upstream commit

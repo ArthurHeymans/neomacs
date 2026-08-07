@@ -387,6 +387,7 @@ mod helm_flx;
 mod helm_make;
 mod helm_mode_manager;
 mod helm_projectile;
+mod helm_purpose;
 mod helm_swoop;
 mod helm_themes;
 mod helm_xref;
