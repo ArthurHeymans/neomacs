@@ -2725,6 +2725,12 @@ pub const COUNSEL_MELPA_PIN: (&str, &str) = ("counsel", "20260214.1004");
 /// `48b73742757a3ae5736d825fe49e00034cc453b5`.
 pub const CTABLE_MELPA_PIN: (&str, &str) = ("ctable", "20210128.629");
 
+/// The exact cython-mode package selected for practical Cython major-mode
+/// derivation from python-mode, defun navigation, block detection, and compile
+/// command setup. MELPA built this archive from upstream commit
+/// `3e4790559d3168fe992cf2aa62f01423038cedb5`.
+pub const CYTHON_MODE_MELPA_PIN: (&str, &str) = ("cython-mode", "20221130.1257");
+
 /// The exact Sanityinc Tomorrow theme package selected for five-variant palette,
 /// wrapper-command, source fontification, diff/ANSI integration, lifecycle,
 /// registry, and color-helper parity. MELPA built this archive from upstream
@@ -2932,6 +2938,12 @@ pub const WEB_COMPLETION_DATA_MELPA_PIN: (&str, &str) = ("web-completion-data", 
 /// indentation, fontification, structural transformation, and template parity.
 /// MELPA built this archive from upstream commit
 /// `aeee2d4c82a791ff69657c1413873bf9265544df`.
+/// The exact web-beautify package selected for practical HTML/CSS/JS formatter
+/// command wiring, shell-command construction, and missing-program messaging.
+/// MELPA built this archive from upstream commit
+/// `e1b45321d8c11b404b12c8e55afe55eaa7c84ee9`.
+pub const WEB_BEAUTIFY_MELPA_PIN: (&str, &str) = ("web-beautify", "20161115.2247");
+
 pub const WEB_MODE_MELPA_PIN: (&str, &str) = ("web-mode", "20260623.932");
 
 /// The exact websocket package selected for the practical loopback client and

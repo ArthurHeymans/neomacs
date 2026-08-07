@@ -280,8 +280,8 @@ rank	package	downloads	status
 279	dired-quick-sort	410816	covered
 280	gitattributes-mode	410338	todo
 281	emr	408990	todo
-282	cython-mode	401416	todo
-283	web-beautify	397871	todo
+282	cython-mode	401416	covered
+283	web-beautify	397871	covered
 284	docker	397489	todo
 285	treemacs-magit	396302	todo
 286	counsel-projectile	395372	todo
