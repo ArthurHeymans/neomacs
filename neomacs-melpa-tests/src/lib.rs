@@ -2640,6 +2640,13 @@ pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
 /// `bcc2d7960ba207b5b4db96fe40f7d72670fdbb68`.
 pub const FANCY_BATTERY_MELPA_PIN: (&str, &str) = ("fancy-battery", "20150101.1204");
 
+/// The exact gh-md package selected for practical GitHub Markdown API
+/// rendering, region/buffer conversion, GFM context payloads, HTML export
+/// customization, Unicode request encoding, and transport-error parity.
+/// MELPA built this archive from upstream commit
+/// `e721fd5e41e682f47f2dd4ce26ef2ba28c7fa0b5`.
+pub const GH_MD_MELPA_PIN: (&str, &str) = ("gh-md", "20220316.1432");
+
 /// The exact Magit package containing the Git-Commit source selected by the
 /// comprehensive API parity corpus.
 pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");

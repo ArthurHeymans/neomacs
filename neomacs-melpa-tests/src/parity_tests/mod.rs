@@ -354,6 +354,7 @@ mod frozen_packages;
 mod game_2048;
 mod geiser;
 mod general;
+mod gh_md;
 mod ghub;
 mod git;
 mod git_commit;
