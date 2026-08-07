@@ -2648,6 +2648,12 @@ pub const COMPANY_ANACONDA_MELPA_PIN: (&str, &str) = ("company-anaconda", "20230
 /// `2c8a57b9c619e29ccbe2d5a85921b9c689e95bf9`.
 pub const COMMANDER_MELPA_PIN: (&str, &str) = ("commander", "20140120.1852");
 
+/// The exact cmake-mode package selected for practical CMake major-mode
+/// activation, indentation, fontification, function navigation, command
+/// lowercasing, and help-command orchestration. MELPA built this archive from
+/// CMake commit `c162d6852d09a82cf87ff0cda6a23abc775dfdb6`.
+pub const CMAKE_MODE_MELPA_PIN: (&str, &str) = ("cmake-mode", "20260731.1301");
+
 /// The exact Cond-Let package selected by the practical conditional binding,
 /// validation pipeline, authorization, and queue workflow parity corpus.
 pub const COND_LET_MELPA_PIN: (&str, &str) = ("cond-let", "20260701.1237");
