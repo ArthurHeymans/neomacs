@@ -66,6 +66,7 @@ pub(crate) mod hook_runtime;
 pub mod hscroll;
 pub mod image;
 pub mod image_catalog;
+pub mod image_path;
 pub mod indent;
 pub mod interactive;
 pub mod intern;

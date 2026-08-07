@@ -15,6 +15,8 @@ use neomacs_display_runtime::thread_comm::{AssetCommand, RenderCommand};
 use neovm_core::emacs_core::image_catalog::{
     ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, PendingImage, ReadyImage,
 };
+use neovm_core::emacs_core::image_path::ImageFileRequest;
+use neovm_core::emacs_core::load::image_data_directory;
 use neovm_core::heap_types::LispString;
 
 use super::GuiEventLoopWaker;
@@ -34,6 +36,9 @@ pub(super) struct AsyncImageCatalog {
     image_metadata: SharedImageMetadata,
     entries: RefCell<HashMap<ImageResolveRequest, ImageLookup>>,
     home_directory: Option<String>,
+    /// GNU `image_find_image_fd` search path (`data-directory/images`, then
+    /// `x-bitmap-file-path`), used to resolve relative image `:file`s.
+    search_path: Vec<String>,
 }
 
 impl AsyncImageCatalog {
@@ -48,7 +53,32 @@ impl AsyncImageCatalog {
             image_metadata,
             entries: RefCell::new(HashMap::new()),
             home_directory: home_directory_from_environment(),
+            search_path: vec![image_data_directory().to_string_lossy().into_owned()],
         }
+    }
+
+    /// One decode of an image `:file`: classify it into an [`ImageFileRequest`]
+    /// and rewrite the request's source to its [`ImageFileRequest::cache_key`]
+    /// (the stable string entries dedup on). Returns the classification so the
+    /// caller can route [`ImageFileRequest::needs_off_thread`] requests to the
+    /// submission worker. `Data` sources carry no path and return `None`.
+    fn classify_request(
+        &self,
+        mut request: ImageResolveRequest,
+    ) -> (ImageResolveRequest, Option<ImageFileRequest>) {
+        if let ImageResolveSource::File(path) = &request.source
+            && let Some(path_str) = path.as_utf8_str()
+        {
+            let resolution = ImageFileRequest::classify(
+                path_str,
+                self.home_directory.as_deref(),
+                self.search_path.clone(),
+            );
+            request.source =
+                ImageResolveSource::File(LispString::from_utf8(resolution.cache_key()));
+            return (request, Some(resolution));
+        }
+        (request, None)
     }
 
     /// Re-queue every known entry for decode + upload after the renderer's
@@ -67,10 +97,14 @@ impl AsyncImageCatalog {
         let entries = self.entries.borrow();
         for (request, state) in entries.iter() {
             let image_id = state.placement().image_id();
-            let command = image_load_command(request, image_id);
-            if let Err(error) =
-                schedule_image_command(&self.cmd_tx, self.render_waker.as_ref(), command)
-            {
+            let (request, resolution) = self.classify_request(request.clone());
+            let command = image_load_command(&request, image_id);
+            if let Err(error) = schedule_image_command(
+                &self.cmd_tx,
+                self.render_waker.as_ref(),
+                command,
+                resolution.as_ref(),
+            ) {
                 tracing::warn!(
                     image_id,
                     %error,
@@ -84,8 +118,6 @@ impl AsyncImageCatalog {
         &self,
         request: ImageResolveRequest,
     ) -> Result<Option<ReadyImage>, String> {
-        let request =
-            normalize_image_file_request_with_home(request, self.home_directory.as_deref());
         let pending = match self.lookup(request.clone()) {
             ImageLookup::Ready(image) => return Ok(Some(image)),
             ImageLookup::Pending(image) => image,
@@ -113,19 +145,22 @@ impl AsyncImageCatalog {
 
 impl ImageCatalog for AsyncImageCatalog {
     fn lookup(&self, request: ImageResolveRequest) -> ImageLookup {
-        let request =
-            normalize_image_file_request_with_home(request, self.home_directory.as_deref());
+        let (request, resolution) = self.classify_request(request);
         let mut entries = self.entries.borrow_mut();
         if !entries.contains_key(&request) {
             let image_id = next_host_image_id();
             let (width, height) = placeholder_image_dimensions(&request);
             let pending = PendingImage::new(image_id, width, height);
             let command = image_load_command(&request, image_id);
-            let state =
-                match schedule_image_command(&self.cmd_tx, self.render_waker.as_ref(), command) {
-                    Ok(()) => ImageLookup::Pending(pending),
-                    Err(error) => ImageLookup::Failed(pending.failed(error)),
-                };
+            let state = match schedule_image_command(
+                &self.cmd_tx,
+                self.render_waker.as_ref(),
+                command,
+                resolution.as_ref(),
+            ) {
+                Ok(()) => ImageLookup::Pending(pending),
+                Err(error) => ImageLookup::Failed(pending.failed(error)),
+            };
             entries.insert(request.clone(), state);
         }
 
@@ -152,18 +187,17 @@ impl ImageCatalog for AsyncImageCatalog {
     }
 
     fn invalidate(&self, source: &ImageResolveSource) {
-        let normalized_source = normalize_image_file_request_with_home(
-            ImageResolveRequest {
+        let normalized_source = self
+            .classify_request(ImageResolveRequest {
                 source: source.clone(),
                 size: Default::default(),
                 rotation: Default::default(),
                 fg_color: 0,
                 bg_color: 0,
                 realization: Default::default(),
-            },
-            self.home_directory.as_deref(),
-        )
-        .source;
+            })
+            .0
+            .source;
         let removed = {
             let mut entries = self.entries.borrow_mut();
             let requests = entries
@@ -181,7 +215,7 @@ impl ImageCatalog for AsyncImageCatalog {
         for id in removed {
             let command = RenderCommand::Asset(AssetCommand::ImageFree { id });
             if let Err(error) =
-                schedule_image_command(&self.cmd_tx, self.render_waker.as_ref(), command)
+                schedule_image_command(&self.cmd_tx, self.render_waker.as_ref(), command, None)
             {
                 tracing::warn!(id, %error, "failed to schedule invalidated image release");
             }
@@ -234,6 +268,9 @@ struct DeferredRenderCommand {
     target: crossbeam_channel::Sender<RenderCommand>,
     waker: Option<GuiEventLoopWaker>,
     command: RenderCommand,
+    /// How to turn the command's raw `:file` into an absolute path off-thread,
+    /// or `None` for `:data` loads and inline-resolved absolute paths.
+    resolution: Option<ImageFileRequest>,
 }
 
 fn deferred_render_command_sender() -> &'static crossbeam_channel::Sender<DeferredRenderCommand> {
@@ -244,7 +281,8 @@ fn deferred_render_command_sender() -> &'static crossbeam_channel::Sender<Deferr
             .name("neomacs-image-command-submit".to_owned())
             .spawn(move || {
                 while let Ok(deferred) = rx.recv() {
-                    let command = expand_deferred_image_path(deferred.command);
+                    let command =
+                        resolve_deferred_image_path(deferred.command, deferred.resolution.as_ref());
                     if deferred.target.send(command).is_ok()
                         && let Some(waker) = deferred.waker
                     {
@@ -256,13 +294,17 @@ fn deferred_render_command_sender() -> &'static crossbeam_channel::Sender<Deferr
     })
 }
 
+/// Hand a load command to the renderer, deferring to the submission worker when
+/// the `:file` needs off-thread resolution (relative search, `~user` NSS) or
+/// when the renderer channel is full.
 fn schedule_image_command(
     target: &crossbeam_channel::Sender<RenderCommand>,
     waker: Option<&GuiEventLoopWaker>,
     command: RenderCommand,
+    resolution: Option<&ImageFileRequest>,
 ) -> Result<(), String> {
-    if requires_deferred_path_expansion(&command) {
-        return defer_render_command(target, waker, command);
+    if resolution.is_some_and(ImageFileRequest::needs_off_thread) {
+        return defer_render_command(target, waker, command, resolution.cloned());
     }
     match target.try_send(command) {
         Ok(()) => {
@@ -272,7 +314,7 @@ fn schedule_image_command(
             Ok(())
         }
         Err(crossbeam_channel::TrySendError::Full(command)) => {
-            defer_render_command(target, waker, command)
+            defer_render_command(target, waker, command, resolution.cloned())
         }
         Err(crossbeam_channel::TrySendError::Disconnected(_)) => {
             Err("failed to queue image load: channel disconnected".to_owned())
@@ -284,29 +326,32 @@ fn defer_render_command(
     target: &crossbeam_channel::Sender<RenderCommand>,
     waker: Option<&GuiEventLoopWaker>,
     command: RenderCommand,
+    resolution: Option<ImageFileRequest>,
 ) -> Result<(), String> {
     deferred_render_command_sender()
         .send(DeferredRenderCommand {
             target: target.clone(),
             waker: waker.cloned(),
             command,
+            resolution,
         })
         .map_err(|error| format!("failed to defer image load command: {error}"))
 }
 
-fn requires_deferred_path_expansion(command: &RenderCommand) -> bool {
-    matches!(
-        command,
-        RenderCommand::Asset(AssetCommand::ImageLoadFile { path, .. })
-            if path.starts_with('~')
-    )
-}
-
-fn expand_deferred_image_path(mut command: RenderCommand) -> RenderCommand {
-    if let RenderCommand::Asset(AssetCommand::ImageLoadFile { path, .. }) = &mut command
-        && path.starts_with('~')
+/// The single off-thread resolution step: resolve the [`ImageFileRequest`] and
+/// patch the load command's path with the result. `Direct` (including commands
+/// deferred only by backpressure) resolves to the same path; a `Search` that
+/// finds nothing leaves the path untouched and the renderer reports the decode
+/// failure, matching GNU's "Cannot open image file".
+fn resolve_deferred_image_path(
+    mut command: RenderCommand,
+    resolution: Option<&ImageFileRequest>,
+) -> RenderCommand {
+    if let Some(resolution) = resolution
+        && let RenderCommand::Asset(AssetCommand::ImageLoadFile { path, .. }) = &mut command
+        && let Some(resolved) = resolution.resolve()
     {
-        *path = neovm_core::emacs_core::fileio::expand_file_name(path, None);
+        *path = resolved;
     }
     command
 }
@@ -357,38 +402,6 @@ fn home_directory_from_environment() -> Option<String> {
         .map(|home| home.to_string_lossy().into_owned())
 }
 
-fn normalize_image_file_request_with_home(
-    mut request: ImageResolveRequest,
-    home_directory: Option<&str>,
-) -> ImageResolveRequest {
-    let ImageResolveSource::File(path) = &request.source else {
-        return request;
-    };
-    let Some(path) = path.as_utf8_str() else {
-        return request;
-    };
-    let Some(home_directory) = home_directory else {
-        return request;
-    };
-    let expanded = if path == "~" {
-        home_directory.to_owned()
-    } else if let Some(rest) = path.strip_prefix("~/") {
-        format!("{}/{rest}", home_directory.trim_end_matches('/'))
-    } else {
-        // Named-user lookup can involve NSS/LDAP. Preserve it for expansion
-        // by the submission worker instead of performing I/O in redisplay.
-        return request;
-    };
-    let expanded = if neovm_core::emacs_core::fileio::file_name_absolute_p(&expanded) {
-        // Absolute-path cleanup is lexical and cannot consult cwd or NSS.
-        neovm_core::emacs_core::fileio::expand_file_name(&expanded, None)
-    } else {
-        expanded
-    };
-    request.source = ImageResolveSource::File(LispString::from_utf8(&expanded));
-    request
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -408,34 +421,50 @@ mod tests {
         }
     }
 
-    #[test]
-    fn evaluator_normalization_uses_cached_home_without_user_lookup() {
-        let request = normalize_image_file_request_with_home(
-            file_request("~/Pictures/icon.png"),
-            Some("/cached/home"),
-        );
-
-        assert!(matches!(
-            request.source,
-            ImageResolveSource::File(path)
-                if path.as_utf8_str() == Some("/cached/home/Pictures/icon.png")
-        ));
+    fn classify(file: &str) -> (ImageResolveRequest, Option<ImageFileRequest>) {
+        let (cmd_tx, _cmd_rx) = crossbeam_channel::unbounded();
+        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
+        catalog.classify_request(file_request(file))
     }
 
     #[test]
-    fn named_user_expansion_is_deferred_off_the_evaluator_thread() {
-        let request = normalize_image_file_request_with_home(
-            file_request("~some-user/Pictures/icon.png"),
-            Some("/cached/home"),
-        );
-        let command = image_load_command(&request, 7);
-
+    fn relative_file_is_classified_for_off_thread_search() {
+        // The #242 fix: a bare relative `:file` must be searched against
+        // data-directory/images off-thread, not opened verbatim from the cwd.
+        let (request, resolution) = classify("splash.svg");
         assert!(matches!(
             &request.source,
-            ImageResolveSource::File(path)
-                if path.as_utf8_str() == Some("~some-user/Pictures/icon.png")
+            ImageResolveSource::File(p) if p.as_utf8_str() == Some("splash.svg")
         ));
-        assert!(requires_deferred_path_expansion(&command));
+        let resolution = resolution.expect("file source is classified");
+        assert!(matches!(resolution, ImageFileRequest::Search { .. }));
+        assert!(resolution.needs_off_thread());
+    }
+
+    #[test]
+    fn absolute_file_is_resolved_inline_and_keys_on_itself() {
+        let (request, resolution) = classify("/abs/icon.png");
+        assert!(matches!(
+            &request.source,
+            ImageResolveSource::File(p) if p.as_utf8_str() == Some("/abs/icon.png")
+        ));
+        let resolution = resolution.expect("file source is classified");
+        assert!(matches!(resolution, ImageFileRequest::Direct(_)));
+        assert!(!resolution.needs_off_thread());
+    }
+
+    #[test]
+    fn named_user_file_is_deferred_off_thread() {
+        // `~user` may consult NSS/LDAP; keep resolution off the evaluator thread.
+        let (request, resolution) = classify("~some-user/x.png");
+        assert!(matches!(
+            &request.source,
+            ImageResolveSource::File(p) if p.as_utf8_str() == Some("~some-user/x.png")
+        ));
+        let resolution = resolution.expect("file source is classified");
+        assert!(matches!(resolution, ImageFileRequest::ExpandHome(_)));
+        assert!(resolution.needs_off_thread());
     }
 
     #[test]

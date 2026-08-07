@@ -41,7 +41,7 @@ pub fn expand_file_name(name: &str, default_dir: Option<&str>) -> String {
     expand_file_name_with_home(name, default_dir, None)
 }
 
-fn expand_file_name_with_home(
+pub(crate) fn expand_file_name_with_home(
     name: &str,
     default_dir: Option<&str>,
     home_override: Option<&str>,

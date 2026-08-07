@@ -2725,6 +2725,15 @@ pub(crate) fn charset_map_directory() -> PathBuf {
     runtime_project_root().join("etc").join("charsets")
 }
 
+/// `<runtime-root>/etc/images` -- the `data-directory/images` entry of GNU's
+/// image file search path (`image_find_image_fd` -> `openp`), backing relative
+/// image `:file` resolution. Resolved at RUNTIME via `runtime_project_root()`,
+/// never `env!("CARGO_MANIFEST_DIR")`, for the same release-correctness reason
+/// as [`charset_map_directory`].
+pub fn image_data_directory() -> PathBuf {
+    runtime_project_root().join("etc").join("images")
+}
+
 fn bootstrap_cache_dir(runtime_root: &Path) -> PathBuf {
     if let Ok(dir) = std::env::var(BOOTSTRAP_CACHE_DIR_ENV)
         && !dir.is_empty()
