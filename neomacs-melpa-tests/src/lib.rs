@@ -247,6 +247,12 @@ pub const MULTI_TERM_MELPA_PIN: (&str, &str) = ("multi-term", "20200514.428");
 /// this archive from upstream commit `b1f5c7dbdc405e6e10d9ddd99a43a6b2ad61b176`.
 pub const MMM_MODE_MELPA_PIN: (&str, &str) = ("mmm-mode", "20240222.428");
 
+/// The exact modus-themes package selected for practical theme catalog loading,
+/// light/dark toggle, palette lookup, contrast measurement, and background-mode
+/// sorting. MELPA built this archive from upstream commit
+/// `75aa3fa79efd04ddf7980a1d3ec0cef6e4f4af90`.
+pub const MODUS_THEMES_MELPA_PIN: (&str, &str) = ("modus-themes", "20260730.719");
+
 /// The exact Elixir Mode package selected by the practical indentation,
 /// fontification, navigation, documentation, and formatter workflow corpus.
 /// MELPA built this archive from upstream commit
@@ -2853,6 +2859,12 @@ pub const HELM_FLX_MELPA_PIN: (&str, &str) = ("helm-flx", "20221020.1739");
 /// make database workflows. MELPA built this archive from upstream commit
 /// `ebd71e85046d59b37f6a96535e01993b6962c559`.
 pub const HELM_MAKE_MELPA_PIN: (&str, &str) = ("helm-make", "20200620.27");
+
+/// The exact helm-org package selected for practical Org heading candidate
+/// collection, depth filtering, preselect, marker navigation, and Helm source
+/// construction. MELPA built this archive from upstream commit
+/// `4744ca7f8b35e17bafce9cb0093deb87a232699d`.
+pub const HELM_ORG_MELPA_PIN: (&str, &str) = ("helm-org", "20250405.1720");
 
 /// The exact final Helm Swoop source selected for practical candidate,
 /// narrowing, query, editing, face, and buffer-selection parity. MELPA's last

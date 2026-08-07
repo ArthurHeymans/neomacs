@@ -260,9 +260,9 @@ rank	package	downloads	status
 259	js2-refactor	454486	covered
 260	epc	454459	covered
 261	coffee-mode	454069	covered
-262	modus-themes	449391	todo
+262	modus-themes	449391	covered
 263	evil-textobj-line	446608	covered
-264	helm-org	445059	todo
+264	helm-org	445059	covered
 265	fringe-helper	442016	covered
 266	multi-term	436266	covered
 267	tagedit	435012	covered
