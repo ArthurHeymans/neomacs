@@ -23,11 +23,11 @@
 //!
 //! WHAT THE PRODUCER OWNS AT THIS RUNG — measured with a probe, not assumed:
 //! it yields whole text runs, row breaks and replacement items with buffer
-//! provenance. It does NOT stop runs at face boundaries, elide invisible text,
-//! expand tabs, or emit truncation marks; those are renderer-owned today (the
-//! per-iteration face checkpoint at loop_render.rs:199-215, the invisible
-//! checkpoint at row_lifecycle.rs:694+, `DisplayTabPolicy::advance_from`,
-//! special_glyphs.rs). Corpus cases whose inventory expectation depends on
+//! provenance, and it DOES terminate runs at a resolvable face boundary. It
+//! does NOT elide invisible text, expand tabs, or emit truncation marks; those
+//! are renderer-owned today (the invisible checkpoint at row_lifecycle.rs:694+,
+//! `DisplayTabPolicy::advance_from`, special_glyphs.rs). Corpus cases whose
+//! inventory expectation depends on
 //! producer-owned stop state are landed `#[ignore]` naming the rung that will
 //! un-ignore them, so the checklist lives in the code rather than a document.
 
@@ -55,21 +55,38 @@ const DRAIN_LIMIT: usize = 128;
 // ---------------------------------------------------------------------------
 
 /// One text property applied to a half-open character range of a corpus
-/// buffer.
+/// buffer. The Lisp value is built inside the fixture's `Context`, not here:
+/// constructing a list allocates on the thread's Lisp heap, which only exists
+/// while a `Context` does.
 struct CaseProperty {
     start_char: usize,
     end_char: usize,
-    name: &'static str,
-    value: Value,
+    kind: CasePropertyKind,
+}
+
+enum CasePropertyKind {
+    /// An ANONYMOUS face (an attribute plist), not a named one: a named face
+    /// only resolves when the face table happens to define it, which made this
+    /// corpus depend on which Lisp state the build had dumped. A plist always
+    /// resolves, so the seam is deterministic.
+    Face {
+        attribute: &'static str,
+        value: &'static str,
+    },
+    Invisible,
 }
 
 impl CaseProperty {
-    fn face(start_char: usize, end_char: usize, face: &'static str) -> Self {
+    fn face(
+        start_char: usize,
+        end_char: usize,
+        attribute: &'static str,
+        value: &'static str,
+    ) -> Self {
         Self {
             start_char,
             end_char,
-            name: "face",
-            value: Value::symbol(face),
+            kind: CasePropertyKind::Face { attribute, value },
         }
     }
 
@@ -77,8 +94,23 @@ impl CaseProperty {
         Self {
             start_char,
             end_char,
-            name: "invisible",
-            value: Value::t(),
+            kind: CasePropertyKind::Invisible,
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        match self.kind {
+            CasePropertyKind::Face { .. } => "face",
+            CasePropertyKind::Invisible => "invisible",
+        }
+    }
+
+    fn value(&self) -> Value {
+        match self.kind {
+            CasePropertyKind::Face { attribute, value } => {
+                Value::list(vec![Value::symbol(attribute), Value::symbol(value)])
+            }
+            CasePropertyKind::Invisible => Value::t(),
         }
     }
 }
@@ -106,10 +138,10 @@ impl StreamCase {
 
     /// A face property per character: the C3 shape that forces the pipeline to
     /// render a line character by character.
-    fn per_char_faces(mut self, faces: &[&'static str]) -> Self {
-        for (index, face) in faces.iter().enumerate() {
+    fn per_char_faces(mut self, faces: &[(&'static str, &'static str)]) -> Self {
+        for (index, (attribute, value)) in faces.iter().enumerate() {
             self.properties
-                .push(CaseProperty::face(index, index + 1, face));
+                .push(CaseProperty::face(index, index + 1, attribute, value));
         }
         self
     }
@@ -284,8 +316,8 @@ impl Fixture {
                     buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(property.end_char));
                 buffer.text_props_put_property_in_emacs_byte_range(
                     EmacsByteRange::new(start, end),
-                    Value::symbol(property.name),
-                    property.value.clone(),
+                    Value::symbol(property.name()),
+                    property.value(),
                 );
             }
         }
@@ -564,25 +596,32 @@ fn c1_plain_ascii_single_face() {
 
 #[test]
 fn c2_multi_face_line_keeps_one_continuous_scan_track() {
-    // Face boundaries do not cut the producer's runs today (that is the
-    // renderer's per-iteration face checkpoint), so what the stream must show
-    // is continuity: the property changes nothing about char, provenance or
-    // scan.
-    let case = StreamCase::new("C2 multi-face", "abcdef\n").with(CaseProperty::face(2, 4, "bold"));
+    // A face property cuts the producer's runs (see the boundary test below),
+    // but the CHARACTER stream underneath must be untouched: same chars, same
+    // provenance, same scan positions as the unfaced baseline. Only the
+    // face-ref differs.
+    let case = StreamCase::new("C2 multi-face", "abcdef\n")
+        .with(CaseProperty::face(2, 4, ":weight", "bold"));
     assert_streams_agree(&case);
 
     let plain = producer_stream(&StreamCase::new("C2 baseline", "abcdef\n"));
     let faced = producer_stream(&case);
-    assert_eq!(
-        plain, faced,
-        "a face property must not perturb the producer's element stream"
-    );
+    assert_eq!(plain.len(), faced.len());
+    for (plain, faced) in plain.iter().zip(faced.iter()) {
+        assert_eq!(plain.ch, faced.ch);
+        assert_eq!(plain.provenance, faced.provenance);
+        assert_eq!(plain.scan_before, faced.scan_before);
+        assert_eq!(plain.scan_after, faced.scan_after);
+        assert_eq!(plain.class, faced.class);
+    }
+    // Where the run BOUNDARIES fall is pinned char-exactly by the boundary
+    // test below; this case owns the continuity half.
 }
 
 #[test]
-#[ignore = "un-ignored by P4.4: run termination at face/overlay boundaries moves into the producer's stop state (GNU compute_stop_pos)"]
 fn c2_multi_face_line_ends_runs_at_face_boundaries() {
-    let case = StreamCase::new("C2 multi-face", "abcdef\n").with(CaseProperty::face(2, 4, "bold"));
+    let case = StreamCase::new("C2 multi-face", "abcdef\n")
+        .with(CaseProperty::face(2, 4, ":weight", "bold"));
     let fixture = Fixture::new(&case);
     let mut driver = fixture.driver(SplitPolicy::None);
 
@@ -599,14 +638,14 @@ fn c3_per_char_face_line_is_stream_identical_under_the_per_char_feeder() {
     // N-1 queued echoes, and the resulting stream must be indistinguishable
     // from the producer's whole-run stream.
     let case = StreamCase::new("C3 per-char faces", "abcdefgh\n").per_char_faces(&[
-        "bold",
-        "italic",
-        "underline",
-        "highlight",
-        "shadow",
-        "link",
-        "match",
-        "region",
+        (":weight", "bold"),
+        (":slant", "italic"),
+        (":underline", "t"),
+        (":overline", "t"),
+        (":strike-through", "t"),
+        (":inverse-video", "t"),
+        (":extend", "t"),
+        (":weight", "ultra-bold"),
     ]);
     assert_streams_agree(&case);
 
@@ -696,7 +735,7 @@ fn c6a_base_and_extender_stay_in_one_stream() {
 #[test]
 fn c6b_extender_at_a_face_seam_stays_in_one_stream() {
     let case = StreamCase::new("C6b extender at face seam", "ae\u{301}z\n")
-        .with(CaseProperty::face(2, 3, "bold"));
+        .with(CaseProperty::face(2, 3, ":weight", "bold"));
     assert_streams_agree(&case);
 }
 
