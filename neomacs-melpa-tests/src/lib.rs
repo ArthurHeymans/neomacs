@@ -2241,6 +2241,11 @@ pub const EVIL_IEDIT_STATE_MELPA_PIN: (&str, &str) = ("evil-iedit-state", "20220
 /// upstream commit `f392696e4813f1d3a92c7eeed333248914ba6dae`.
 pub const EVIL_INDENT_PLUS_MELPA_PIN: (&str, &str) = ("evil-indent-plus", "20230927.1513");
 
+/// The exact evil-textobj-line package selected for practical inner/outer line
+/// text objects, range calculation, and Evil map bindings. MELPA built this
+/// archive from upstream commit `9eaf9a5485c2b5c05e16552b34632ca520cd681d`.
+pub const EVIL_TEXTOBJ_LINE_MELPA_PIN: (&str, &str) = ("evil-textobj-line", "20211101.1429");
+
 /// The exact Restart Emacs package selected for practical restart transaction,
 /// launch strategy, command quoting, startup-directory, desktop handoff,
 /// terminal notification, and command-line restoration parity. MELPA built
@@ -2703,6 +2708,12 @@ pub const DEVDOCS_MELPA_PIN: (&str, &str) = ("devdocs", "20251022.1255");
 
 /// The exact f package selected by the comprehensive API parity corpus.
 pub const F_MELPA_PIN: (&str, &str) = ("f", "20241003.1131");
+
+/// The exact fringe-helper package selected for practical fringe bitmap
+/// conversion, definition, point/region insertion, removal, and stock library
+/// loading. MELPA built this archive from upstream commit
+/// `9bc3d3e82c9cc3937aa090248dc4dd2e289fc55c`.
+pub const FRINGE_HELPER_MELPA_PIN: (&str, &str) = ("fringe-helper", "20140620.2109");
 
 /// The exact Fancy Battery package selected by the practical cached-status,
 /// mode-line rendering, update-hook, backend, and global-mode lifecycle parity

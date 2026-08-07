@@ -261,9 +261,9 @@ rank	package	downloads	status
 260	epc	454459	covered
 261	coffee-mode	454069	covered
 262	modus-themes	449391	todo
-263	evil-textobj-line	446608	todo
+263	evil-textobj-line	446608	covered
 264	helm-org	445059	todo
-265	fringe-helper	442016	todo
+265	fringe-helper	442016	covered
 266	multi-term	436266	todo
 267	tagedit	435012	todo
 268	orderless	432786	todo
