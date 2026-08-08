@@ -1,6 +1,6 @@
 //! Buffer source item rendering orchestration.
 
-use crate::buffer_source::char_render::BufferSourceCharRenderRequest;
+use crate::buffer_source::char_render::render_source_char_and_apply;
 use crate::buffer_source::face_resolution::{
     BufferSourceItemLayoutResolutionContext, DisplaySourceNobreakHint,
 };
@@ -16,9 +16,6 @@ use crate::buffer_source::walk::BufferSourceWalk;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
-use crate::display_row::geometry::{
-    DisplayRowGeometryDefaults, DisplayRowLimit, DisplayRowVisibilityLimit,
-};
 use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row::transition::DisplayRowTransitionContinuation;
 use crate::display_source::DisplaySourceStepChar;
@@ -26,7 +23,6 @@ use crate::display_source::DisplaySourceStepItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 use neomacs_display_protocol::types::Color;
-use neovm_core::buffer::BufferId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferSourceItemRenderOutcome {
@@ -41,29 +37,27 @@ impl BufferSourceItemRenderOutcome {
     }
 }
 
+/// The Renderable element arm's body.
+///
+/// P4.8(c): the request used to carry `loop_context` AND twelve values copied
+/// straight back out of it, plus a `glyph_y_offset` that was only ever the
+/// literal 0.0. Those are gone; the arm reads the loop context directly, and
+/// only the references that are genuinely not window-invariant remain fields.
 #[derive(Clone, Copy)]
 pub(crate) struct BufferSourceItemRenderRequest<'a> {
     layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
     loop_context: BufferSourceLoopRequestContext,
     text: &'a [u8],
-    text_start_byte: usize,
-    buffer_id: BufferId,
     append_surface: &'a DisplayRowAppendSurface,
     overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     active_face_state: &'a DisplayRowActiveFaceState,
     params: &'a WindowParams,
-    glyph_y_offset: f32,
-    char_h: f32,
-    point_charpos: i64,
-    row_visibility_limit: DisplayRowVisibilityLimit,
-    content_x: f32,
-    has_prefix: bool,
-    row_geometry_defaults: DisplayRowGeometryDefaults,
-    display_text_row_base: usize,
-    max_rows: usize,
-    row_limit: DisplayRowLimit,
-    frame_background: Color,
 }
+
+/// Buffer glyphs sit on the row baseline the geometry already establishes, so
+/// the element arm never offsets them. It was a struct field carrying this
+/// constant through three request types.
+const GLYPH_Y_OFFSET: f32 = 0.0;
 
 impl<'a> BufferSourceItemRenderRequest<'a> {
     pub(crate) fn from_loop_context(
@@ -75,74 +69,14 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         active_face_state: &'a DisplayRowActiveFaceState,
         params: &'a WindowParams,
     ) -> Self {
-        Self::new(
-            layout_resolution_context,
-            loop_context,
-            text,
-            loop_context.text_start_byte(),
-            loop_context.buffer_id(),
-            append_surface,
-            overlay_context,
-            active_face_state,
-            params,
-            0.0,
-            loop_context.char_height(),
-            loop_context.point_charpos(),
-            loop_context.row_visibility_limit(),
-            loop_context.content_x(),
-            loop_context.has_prefix(),
-            loop_context.row_geometry_defaults(),
-            loop_context.display_text_row_base(),
-            loop_context.max_rows(),
-            loop_context.row_limit(),
-            loop_context.frame_background(),
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    fn new(
-        layout_resolution_context: BufferSourceItemLayoutResolutionContext<'a>,
-        loop_context: BufferSourceLoopRequestContext,
-        text: &'a [u8],
-        text_start_byte: usize,
-        buffer_id: BufferId,
-        append_surface: &'a DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
-        active_face_state: &'a DisplayRowActiveFaceState,
-        params: &'a WindowParams,
-        glyph_y_offset: f32,
-        char_h: f32,
-        point_charpos: i64,
-        row_visibility_limit: DisplayRowVisibilityLimit,
-        content_x: f32,
-        has_prefix: bool,
-        row_geometry_defaults: DisplayRowGeometryDefaults,
-        display_text_row_base: usize,
-        max_rows: usize,
-        row_limit: DisplayRowLimit,
-        frame_background: Color,
-    ) -> Self {
         Self {
             layout_resolution_context,
             loop_context,
             text,
-            text_start_byte,
-            buffer_id,
             append_surface,
             overlay_context,
             active_face_state,
             params,
-            glyph_y_offset,
-            char_h,
-            point_charpos,
-            row_visibility_limit,
-            content_x,
-            has_prefix,
-            row_geometry_defaults,
-            display_text_row_base,
-            max_rows,
-            row_limit,
-            frame_background,
         }
     }
 
@@ -210,7 +144,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             self.text,
             state.append_surface,
             self.active_face_state,
-            self.glyph_y_offset,
+            GLYPH_Y_OFFSET,
         );
         self.render_selective_display_tail(state, source_walk, request, buffer)
     }
@@ -325,11 +259,11 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         }
         let mut buffer_row_append_context = BufferSourceRowAppendContext::from_active_face_row(
             buffer,
-            self.buffer_id,
+            self.loop_context.buffer_id(),
             self.append_surface,
             &active_face_state,
-            self.glyph_y_offset,
-            self.char_h,
+            GLYPH_Y_OFFSET,
+            self.loop_context.char_height(),
             face_ids.clone(),
         );
         if let Some((face_id, face)) = resolved_item_face {
@@ -339,9 +273,9 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         let append_position = progress.row_position();
         let append_geometry = *row_geometry;
         let text_run_request = BufferSourceTextRunRenderRequest::new(
-            self.text_start_byte,
+            self.loop_context.text_start_byte(),
             self.overlay_context,
-            self.point_charpos,
+            self.loop_context.point_charpos(),
             self.append_surface.right_edge(),
             append_position,
             append_geometry,
@@ -394,23 +328,10 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             source_walk.request_char_granularity_until(end_charpos);
         }
 
-        BufferSourceCharRenderRequest::new(
+        render_source_char_and_apply(
+            self.loop_context,
             self.text,
-            self.text_start_byte,
-            self.append_surface,
-            self.overlay_context,
             self.params,
-            self.point_charpos,
-            self.row_visibility_limit,
-            self.content_x,
-            self.has_prefix,
-            self.row_geometry_defaults,
-            self.display_text_row_base,
-            self.max_rows,
-            self.row_limit,
-            self.frame_background,
-        )
-        .render_and_apply(
             source_item,
             source_walk,
             buffer,

@@ -72,10 +72,18 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
 
             self.render_face_checkpoint_for_context(face_resolution_context, active_face_state);
 
-            // Buffer-source acquisition migration (default ON; opt out via
-            // NEOMACS_ROW_ITEM_ROUTE=off): a classified plain row is
-            // acquired and rendered through the unified item renderer; its
-            // newline stays with the buffer pipeline's line-break lifecycle.
+            // The two cooperating render paths, tried in order. The route is
+            // the WHOLE-ROW fast path: when the classifier can prove a row
+            // plain, it plans and commits the row body in one pass through
+            // render_plan.rs, and hands the newline back to the line-break
+            // lifecycle below. It does NOT go through the element arm — the
+            // two paths share the row lifecycle, not the renderer.
+            //
+            // Coverage is capability-bounded, not total (~44% of attempts;
+            // display tables, point rows, box faces and word wrap genuinely
+            // cannot route), so the element arm below is the GENERAL path and
+            // renders everything the route refuses. Opt out of the route with
+            // NEOMACS_ROW_ITEM_ROUTE=off.
             if crate::buffer_source::row_route::row_item_route_ascii_enabled() {
                 use crate::buffer_source::row_route::AsciiRowRouteOutcome;
                 match self.try_render_ascii_row_via_item_renderer(
