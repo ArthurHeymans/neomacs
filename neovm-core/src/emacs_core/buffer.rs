@@ -4016,6 +4016,12 @@ pub(crate) fn builtin_narrow_to_region(
     let _ = eval
         .buffers
         .narrow_buffer_to_emacs_byte_range(current_id, byte_range);
+    // GNU carries narrowing into the mode line through `clip_changed`: it is a
+    // term of the update_mode_line expression (xdisp.c:20471-20475) and
+    // redisplay_internal escalates it to the buffer flag outright
+    // (`if (current_buffer->clip_changed) bset_update_mode_line`, :17498).
+    // `%n` ("Narrow") and `%p`/`%o` all change here.
+    eval.mark_chrome_dirty_all();
     Ok(Value::NIL)
 }
 
@@ -4026,6 +4032,8 @@ pub(crate) fn builtin_widen(eval: &mut super::eval::Context, args: Vec<Value>) -
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let _ = eval.buffers.widen_buffer(current_id);
+    // The other half of GNU's clip_changed; see `narrow-to-region` above.
+    eval.mark_chrome_dirty_all();
     Ok(Value::NIL)
 }
 

@@ -6615,6 +6615,13 @@ impl super::eval::Context {
         let mut outcome = ProcessOutputServiceOutcome::default();
         let owner_is_target = target_process.is_none_or(|target| target == pid);
 
+        // GNU's `status_notify` calls `bset_update_mode_line` on the process's
+        // buffer when its status changed (process.c:7940), because
+        // `mode-line-process` renders that status. This is the one trigger
+        // whose staleness is invisible to the editing user until the process
+        // exits, so it must not depend on some later edit to repaint.
+        self.mark_chrome_dirty_all();
+
         // Drain the owner's primary stream before exposing its terminal
         // status.  In GNU this happens while `status_notify` walks every
         // process whose tick changed.

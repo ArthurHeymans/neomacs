@@ -4434,6 +4434,14 @@ pub(crate) fn builtin_set_window_buffer(
     // (window.c:4383): the window now shows a different buffer, so every
     // buffer-derived construct in its chrome (`%b`, `%m`, `%*`, and a
     // buffer-local mode-line-format) is stale.
+    if let Some(window) = args.first().and_then(window_id_from_designator) {
+        eval.mark_chrome_dirty_window(window);
+    } else {
+        // No designator resolves to a live window id yet (nil means the
+        // selected window, resolved below). GNU's site is unconditional, so
+        // fall back to the frame-wide flag rather than dropping the event.
+        eval.mark_chrome_dirty_all();
+    }
     let (fid, wid, buf_id, keep_margins, run_buffer_list_hook) = {
         let (frames, buffers, minibuffers) =
             (&mut eval.frames, &mut eval.buffers, &eval.minibuffers);

@@ -24730,6 +24730,39 @@ fn p52_chrome_dirty_flag_is_raised_by_each_gnu_trigger() {
         );
     }
 
+    // set-window-buffer — GNU window.c:4383. Window-scoped.
+    {
+        let (mut eval, frame_id, buf_id, selected) = incr_editing_frame(&text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        engine.layout_frame_rust(&mut eval, frame_id);
+        assert!(!eval.chrome_dirty().is_any_dirty());
+        let other = eval.buffer_manager_mut().create_buffer("p52-other-buffer");
+        assert_ne!(other, buf_id);
+        eval.eval_str("(set-window-buffer (selected-window) \"p52-other-buffer\")")
+            .expect("eval");
+        assert!(
+            eval.chrome_dirty().is_dirty(selected),
+            "set-window-buffer must dirty the window that changed buffers"
+        );
+    }
+
+    // narrow-to-region / widen — GNU carries these through clip_changed
+    // (xdisp.c:20471-20475 and the escalation at :17498). `%n` and `%p`.
+    for form in [
+        "(narrow-to-region 1 20)",
+        "(progn (narrow-to-region 1 20) (widen))",
+    ] {
+        let (mut eval, frame_id, _buf, _sel) = incr_editing_frame(&text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        engine.layout_frame_rust(&mut eval, frame_id);
+        assert!(!eval.chrome_dirty().is_any_dirty());
+        eval.eval_str(form).expect("eval");
+        assert!(
+            eval.chrome_dirty().is_any_dirty(),
+            "{form} must raise the chrome dirty flag"
+        );
+    }
+
     // set-window-start — GNU window.c:1969. Window-scoped, not buffer-scoped:
     // this is the one case that must dirty a NAMED window.
     {
