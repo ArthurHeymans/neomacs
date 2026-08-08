@@ -351,29 +351,25 @@ proptest! {
     ///   -E 'test(oracle_prop_window_tree_survives_random_operation_sequences)' --no-capture
     /// ```
     ///
-    /// # Ignored: NOT YET DETERMINISTIC
+    /// # A note on flakiness
     ///
-    /// Three identical 1200-sequence runs gave FAIL / PASS / FAIL, with the
-    /// failures arriving in ~1.5s (a replayed `proptest-regressions` seed) and
-    /// the pass taking ~207s (every seed plus 1200 novel cases). Same binary,
-    /// same seed file, different verdicts — so replaying one generated program
-    /// does not always produce the same result. Until that is understood this
-    /// cannot gate: a flaky gate is worse than none, and it also means an
-    /// individual reported "divergence" may be a flake rather than a bug.
+    /// This test once gave FAIL / PASS / FAIL on identical runs, which looked
+    /// like harness flakiness. It was not: neomacs itself produced two
+    /// different window trees for the same input about 10% of the time,
+    /// because `Window`'s GC trace omitted the heap floats holding
+    /// `normal_cols`/`normal_lines`, so a collection could free a live
+    /// window's proportional sizes. Fixed; the seed that exposed it is now
+    /// 40/40 stable and matches GNU.
     ///
-    /// Confirm any finding with a standalone repro against GNU before treating
-    /// it as real. Every bug fixed via this oracle so far was confirmed that
-    /// way (`./tmp/sidewin/gen*.el`), so those stand regardless.
+    /// The lesson for the next apparent flake: test each engine against
+    /// ITSELF before blaming the harness. Running one generated program N
+    /// times per engine and comparing each engine's outputs to its own
+    /// separates "nondeterministic engine" from "bad comparison" in a single
+    /// step.
     ///
-    /// Suspects to rule out, roughly in order: contention with concurrent cargo
-    /// jobs; per-run sandbox/tempdir state leaking between the paired engine
-    /// invocations; a genuinely nondeterministic code path in one engine.
-    ///
-    /// Note `proptest-regressions/` is GITIGNORED in this repo
-    /// (`.gitignore:438`), so seeds are local-only and do not survive a clean
-    /// checkout — the deep run has to rediscover cases each time.
+    /// Note `proptest-regressions/` is GITIGNORED here (`.gitignore:438`), so
+    /// seeds are local-only and a deep run must rediscover cases each time.
     #[test]
-    #[ignore = "nondeterministic: same seed passes and fails across runs; see the doc comment"]
     fn oracle_prop_window_tree_survives_random_operation_sequences(
         ops in prop::collection::vec(op_strategy(), 2..9),
     ) {

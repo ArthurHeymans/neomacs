@@ -5770,12 +5770,26 @@ impl GcTrace for FrameManager {
 
 impl GcTrace for Window {
     fn trace_roots(&self, roots: &mut Vec<Value>) {
+        // Proportional sizes are HEAP values (`Value::make_float` ->
+        // `alloc_float`), and every window node -- internal ones included --
+        // owns some.  Leaving them untraced let a collection free a live
+        // window's `normal_cols`/`normal_lines`, after which a proportional
+        // resize read a dangling slot and produced a different layout.  That
+        // showed up as ~10% run-to-run NONDETERMINISM in the window tree for
+        // identical input: reading the sizes from Lisp shifted allocation
+        // enough to move the GC and hide it.  GNU's `mark_window` marks these
+        // slots for the same reason.
+        roots.push(self.normal_cols());
+        roots.push(self.normal_lines());
+        roots.push(self.new_normal());
         match self {
             Window::Leaf {
                 position_markers,
                 display,
+                dedicated,
                 ..
             } => {
+                roots.push(*dedicated);
                 // GNU's `mark_window` traces w->start, w->pointm, and
                 // w->old_pointm. The buffer marker chain is weak, so the live
                 // window itself must keep the corresponding MarkerObjs alive.
