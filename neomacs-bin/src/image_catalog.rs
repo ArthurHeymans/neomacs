@@ -245,6 +245,26 @@ impl ImageCatalog for AsyncImageCatalog {
             })
             .sum()
     }
+
+    fn promote_ready_entries(&self) {
+        let (lock, _) = &*self.image_metadata;
+        // Block: this runs only after ImageStateChanged, when redisplay is
+        // about to rebuild matrices and must observe Ready geometry.
+        let images = match lock.lock() {
+            Ok(images) => images,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let mut entries = self.entries.borrow_mut();
+        for state in entries.values_mut() {
+            let ImageLookup::Pending(pending) = state else {
+                continue;
+            };
+            let Some(terminal) = images.get(&pending.placement().image_id()).cloned() else {
+                continue;
+            };
+            *state = image_lookup_from_terminal(pending.clone(), terminal);
+        }
+    }
 }
 
 impl AsyncImageCatalog {
@@ -597,5 +617,46 @@ mod tests {
             cmd_rx.try_recv().expect("replacement image load"),
             RenderCommand::Asset(AssetCommand::ImageLoadFile { id, .. }) if id == second
         ));
+    }
+
+    #[test]
+    fn promote_ready_entries_upgrades_pending_to_ready_geometry() {
+        use neomacs_display_runtime::render_thread::ImageDecodeTerminal;
+        use neovm_core::emacs_core::image_catalog::{ImageLookup, ResolvedImageMetadata};
+
+        let (cmd_tx, _cmd_rx) = crossbeam_channel::unbounded();
+        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let catalog = AsyncImageCatalog::new(cmd_tx, None, Arc::clone(&metadata));
+        let request = file_request("/tmp/promote.png");
+
+        let ImageLookup::Pending(pending) = catalog.lookup(request.clone()) else {
+            panic!("expected pending");
+        };
+        let id = pending.placement().image_id();
+        // Placeholder from AtMost(24) pins.
+        assert_eq!(pending.placement().width(), 24);
+
+        {
+            let (lock, cvar) = &*metadata;
+            let mut map = lock.lock().expect("metadata lock");
+            map.insert(
+                id,
+                ImageDecodeTerminal::Ready(ResolvedImageMetadata {
+                    width: 120,
+                    height: 80,
+                    background: 0,
+                    background_transparent: false,
+                }),
+            );
+            cvar.notify_all();
+        }
+
+        catalog.promote_ready_entries();
+        let ImageLookup::Ready(ready) = catalog.lookup(request) else {
+            panic!("promote must leave Ready geometry for rebuild");
+        };
+        assert_eq!(ready.metadata.width, 120);
+        assert_eq!(ready.metadata.height, 80);
+        assert_eq!(ready.image_id, id);
     }
 }

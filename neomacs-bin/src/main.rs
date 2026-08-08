@@ -1736,6 +1736,10 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         Some(self.image_catalog.clone())
     }
 
+    fn prepare_image_catalog_for_media_rebuild(&self) {
+        self.image_catalog.promote_ready_entries();
+    }
+
     fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {
         {
             let cache = match self.resolved_videos.lock() {

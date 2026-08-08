@@ -2584,6 +2584,11 @@ impl crate::emacs_core::eval::Context {
                     // Emitted for `DisplayEvent::ImageStateChanged`: async media
                     // reached a terminal state, so the retained matrix that
                     // captured its placeholder geometry must not be reused.
+                    // Promote Pending→Ready in the catalog *before* bumping
+                    // media_generation so the rebuild sees real dimensions.
+                    if let Some(host) = self.display_host.as_ref() {
+                        host.prepare_image_catalog_for_media_rebuild();
+                    }
                     self.invalidate_media();
                     crate::frontend_events::InternalEventEffects {
                         redisplay_needed: true,

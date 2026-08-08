@@ -332,6 +332,14 @@ pub trait ImageCatalog {
     fn cached_size_bytes(&self) -> i64 {
         0
     }
+
+    /// After async decode reaches a terminal state, promote any `Pending`
+    /// entries whose metadata is already published so the media-generation
+    /// rebuild sees Ready geometry instead of re-baking the 1×1 placeholder.
+    ///
+    /// Redisplay `lookup` stays non-blocking (`try_lock`); this path may wait
+    /// briefly for the shared metadata map.
+    fn promote_ready_entries(&self) {}
 }
 
 #[cfg(test)]

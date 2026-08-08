@@ -1684,6 +1684,10 @@ pub trait DisplayHost {
     fn image_catalog_shared(&self) -> Option<std::rc::Rc<dyn super::image_catalog::ImageCatalog>> {
         None
     }
+    /// Called when async image decode reaches a terminal state, before the
+    /// retained layout matrices are invalidated. Hosts should promote catalog
+    /// Pending→Ready so the rebuild does not re-capture 1×1 placeholders.
+    fn prepare_image_catalog_for_media_rebuild(&self) {}
     fn request_video(
         &self,
         _request: VideoResolveRequest,
