@@ -29,6 +29,8 @@ pub enum EvalError {
         tag: Value,
         value: Value,
     },
+    /// `kill-emacs` reached this boundary: not an error, an exit request.
+    Shutdown(super::eval::ShutdownRequest),
 }
 
 impl Display for EvalError {
@@ -50,11 +52,39 @@ impl Display for EvalError {
                 super::print::print_value(tag),
                 super::print::print_value(value),
             ),
+            Self::Shutdown(request) => write!(f, "kill-emacs {}", request.exit_code),
         }
     }
 }
 
 impl Error for EvalError {}
+
+/// Re-enter internal control flow from a public error.
+///
+/// The inverse of [`map_flow`], for the boundaries that call `load_file` (and
+/// friends) from inside the evaluator. It lives here as the single conversion
+/// so a new [`Flow`] variant cannot be dropped by one of several hand-written
+/// copies — which is how `kill-emacs` used to get lost. Deliberately a
+/// function and not a `From` impl: a second `From<_> for Flow` makes the error
+/// type ambiguous at every `?` in the crate.
+pub(crate) fn flow_from_eval_error(err: EvalError) -> Flow {
+    match err {
+        EvalError::Signal {
+            symbol,
+            data,
+            raw_data,
+        } => Flow::Signal(Box::new(SignalData {
+            symbol,
+            data,
+            raw_data,
+            suppress_signal_hook: false,
+            selected_resume: None,
+            search_complete: false,
+        })),
+        EvalError::UncaughtThrow { tag, value } => Flow::Throw { tag, value },
+        EvalError::Shutdown(request) => Flow::Shutdown(request),
+    }
+}
 
 /// Internal non-local control flow.
 #[derive(Clone, Debug)]
@@ -68,6 +98,15 @@ pub enum Flow {
         blocker: Value,
         remaining_forms: Value,
     },
+    /// `kill-emacs`: unwind everything and exit with this request.
+    ///
+    /// GNU's `Fkill_emacs` is `noreturn` — it runs the hooks and calls
+    /// `exit()`, so no Lisp handler and no callback boundary ever sees it. A
+    /// distinct variant reproduces that: `condition-case` cannot catch it
+    /// (it is not a signal), and every boundary that matches `Flow`
+    /// exhaustively must decide about it at compile time instead of
+    /// silently absorbing it as a callback error.
+    Shutdown(super::eval::ShutdownRequest),
 }
 
 #[derive(Clone, Debug)]
@@ -137,8 +176,6 @@ pub(crate) enum LispCondition {
     InvalidReadSyntax,
     #[strum(serialize = "invalid-regexp")]
     InvalidRegexp,
-    #[strum(serialize = "kill-emacs")]
-    KillEmacs,
     #[strum(serialize = "malformed-keyword-arg-list")]
     MalformedKeywordArgList,
     #[strum(serialize = "no-catch")]
@@ -287,6 +324,7 @@ pub fn map_flow(flow: Flow) -> EvalError {
             }
         }
         Flow::Throw { tag, value } => EvalError::UncaughtThrow { tag, value },
+        Flow::Shutdown(request) => EvalError::Shutdown(request),
         Flow::ThreadBlocked { blocker, .. } => EvalError::Signal {
             symbol: intern("error"),
             data: vec![Value::string(format!(
@@ -341,6 +379,7 @@ pub fn format_eval_result(result: &Result<Value, EvalError>) -> String {
                 super::print::print_value(value),
             )
         }
+        Err(EvalError::Shutdown(request)) => format!("ERR (kill-emacs {})", request.exit_code),
     }
 }
 
@@ -1308,6 +1347,7 @@ pub(crate) fn format_flow_with_eval(eval: &super::eval::Context, flow: &Flow) ->
         Flow::ThreadBlocked { blocker, .. } => {
             format!("(thread-blocked {})", print_value_with_eval(eval, blocker))
         }
+        Flow::Shutdown(request) => format!("(kill-emacs {})", request.exit_code),
     }
 }
 
@@ -1342,6 +1382,7 @@ pub fn format_eval_result_with_eval(
                 print_value_with_eval(eval, value),
             )
         }
+        Err(EvalError::Shutdown(request)) => format!("ERR (kill-emacs {})", request.exit_code),
     }
 }
 
@@ -1392,6 +1433,9 @@ pub fn format_eval_result_bytes_with_eval(
             out.push(b' ');
             append_signal_payload_bytes_with_eval(eval, raw_data.as_ref(), data, &mut out);
             out.push(b')');
+        }
+        Err(EvalError::Shutdown(request)) => {
+            out.extend_from_slice(format!("ERR (kill-emacs {})", request.exit_code).as_bytes());
         }
         Err(EvalError::UncaughtThrow { tag, value }) => {
             out.extend_from_slice(b"ERR (no-catch (");

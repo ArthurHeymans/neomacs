@@ -14,7 +14,6 @@ use std::fs;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
-use strum::{EnumString, IntoStaticStr};
 
 fn load_string_text(value: &Value) -> Option<String> {
     // Used for error display, loaddefs file-name filtering and symbol-name
@@ -310,37 +309,15 @@ fn format_eval_error_in_state(eval: &super::eval::Context, err: &EvalError) -> S
             crate::emacs_core::error::print_value_in_state(eval, tag),
             crate::emacs_core::error::print_value_in_state(eval, value),
         ),
+        EvalError::Shutdown(request) => format!("(kill-emacs {})", request.exit_code),
     }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
-#[strum(serialize_all = "kebab-case")]
-enum LoadControlSignal {
-    KillEmacs,
-}
-
-impl LoadControlSignal {
-    fn from_symbol_id(symbol: super::intern::SymId) -> Option<Self> {
-        resolve_sym(symbol).parse().ok()
-    }
-
-    #[cfg(test)]
-    fn name(self) -> &'static str {
-        self.into()
-    }
-}
-
-fn is_kill_emacs_signal(err: &EvalError) -> bool {
-    matches!(
-        err,
-        EvalError::Signal { symbol, .. } if LoadControlSignal::from_symbol_id(*symbol)
-            == Some(LoadControlSignal::KillEmacs)
-    )
 }
 
 fn should_log_load_form_error(eval: &super::eval::Context, err: &EvalError) -> bool {
     match err {
-        EvalError::Signal { .. } => !is_kill_emacs_signal(err),
+        EvalError::Signal { .. } => true,
+        // A shutdown is the normal end of a dump run, not a load failure.
+        EvalError::Shutdown(_) => false,
         EvalError::UncaughtThrow { tag, .. } => !eval.has_active_catch(tag),
     }
 }
@@ -1147,21 +1124,7 @@ pub(crate) fn builtin_load_in_vm_runtime(
             let result = load_file_with_requested_and_found_options(
                 shared, &path, &requested, &found, options,
             )
-            .map_err(|e| match e {
-                EvalError::Signal {
-                    symbol,
-                    data,
-                    raw_data,
-                } => Flow::Signal(Box::new(crate::emacs_core::error::SignalData {
-                    symbol,
-                    data,
-                    raw_data,
-                    suppress_signal_hook: false,
-                    selected_resume: None,
-                    search_complete: false,
-                })),
-                EvalError::UncaughtThrow { tag, value } => Flow::Throw { tag, value },
-            });
+            .map_err(crate::emacs_core::error::flow_from_eval_error);
             shared.restore_specpdl_roots(root_scope);
             result
         }
@@ -5075,7 +5038,7 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         match load_file(&mut eval, &loadup_path) {
             Ok(_) => tracing::info!("loadup.el completed successfully"),
             Err(e) => {
-                if is_kill_emacs_signal(&e) {
+                if matches!(e, EvalError::Shutdown(_)) {
                     tracing::info!("loadup.el completed (kill-emacs after dump)");
                 } else {
                     let rendered = format_eval_error_in_state(&eval, &e);

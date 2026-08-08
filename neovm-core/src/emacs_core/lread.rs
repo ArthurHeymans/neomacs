@@ -165,23 +165,8 @@ fn eval_forms_from_lisp_source_streaming(
             eval.push_specpdl_root(form);
             let eval_result = if let Some(mexp_fn) = macroexpand_fn {
                 eval.push_specpdl_root(mexp_fn);
-                super::load::eager_expand_eval(eval, form, mexp_fn).map_err(|e| match e {
-                    super::error::EvalError::Signal {
-                        symbol,
-                        data,
-                        raw_data,
-                    } => super::error::Flow::Signal(Box::new(super::error::SignalData {
-                        symbol,
-                        data,
-                        raw_data,
-                        suppress_signal_hook: false,
-                        selected_resume: None,
-                        search_complete: false,
-                    })),
-                    super::error::EvalError::UncaughtThrow { tag, value } => {
-                        super::error::Flow::Throw { tag, value }
-                    }
-                })
+                super::load::eager_expand_eval(eval, form, mexp_fn)
+                    .map_err(super::error::flow_from_eval_error)
             } else {
                 eval.eval_sub(form)
             };
@@ -202,21 +187,7 @@ fn eval_forms_from_lisp_source_streaming(
 }
 
 fn map_eval_error_to_flow(err: super::error::EvalError) -> Flow {
-    match err {
-        super::error::EvalError::Signal {
-            symbol,
-            data,
-            raw_data,
-        } => Flow::Signal(Box::new(super::error::SignalData {
-            symbol,
-            data,
-            raw_data,
-            suppress_signal_hook: false,
-            selected_resume: None,
-            search_complete: false,
-        })),
-        super::error::EvalError::UncaughtThrow { tag, value } => Flow::Throw { tag, value },
-    }
+    super::error::flow_from_eval_error(err)
 }
 
 pub(crate) fn eval_buffer_source_text_in_state(

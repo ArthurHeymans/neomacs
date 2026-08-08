@@ -4388,6 +4388,95 @@ fn timer_service_defers_due_timer_scheduled_by_callback_to_next_pass() {
 }
 
 #[test]
+fn kill_emacs_from_a_timer_callback_unwinds_the_service_pass() {
+    // GNU's Fkill_emacs never returns (it runs the hooks and calls exit), so a
+    // timer callback that kills cannot continue and cannot be caught. Ours must
+    // propagate the shutdown out of the callback boundary rather than report it
+    // as a callback error, or the process runs on forever with the exit code
+    // lost.
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.eval_str(
+        r#"(progn
+             (setq neo-kill-timer-log nil)
+             (fset 'neo-kill-timer-callback
+                   (lambda ()
+                     (setq neo-kill-timer-log (append neo-kill-timer-log '(before)))
+                     (kill-emacs 3)
+                     (setq neo-kill-timer-log (append neo-kill-timer-log '(after)))))
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6)))))"#,
+    )
+    .expect("install killing timer callback");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![gnu_timer_before(
+            Duration::from_millis(1),
+            "neo-kill-timer-callback",
+        )]),
+    );
+
+    let flow = ev
+        .service_pending_timers_with_wait_policy(false)
+        .expect_err("kill-emacs must unwind out of the timer service pass");
+    assert!(
+        matches!(flow, Flow::Shutdown(request) if request.exit_code == 3 && !request.restart),
+        "expected a shutdown flow carrying the exit code, got {flow:?}"
+    );
+    assert_eq!(
+        ev.shutdown_request().map(|request| request.exit_code),
+        Some(3),
+        "the shutdown request must record the exit code kill-emacs was given"
+    );
+    assert_eq!(
+        ev.eval_symbol("neo-kill-timer-log").expect("timer log"),
+        Value::list(vec![Value::symbol("before")]),
+        "forms after kill-emacs must not run"
+    );
+}
+
+#[test]
+fn kill_emacs_from_a_timer_callback_is_not_catchable_as_an_error() {
+    // The shutdown is control flow, not a condition: condition-case must not be
+    // able to swallow it (GNU has no signal here to catch).
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.eval_str(
+        r#"(progn
+             (setq neo-kill-catch-log nil)
+             (fset 'neo-kill-catching-callback
+                   (lambda ()
+                     (condition-case nil
+                         (kill-emacs 3)
+                       (error (setq neo-kill-catch-log '(caught))))))
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6)))))"#,
+    )
+    .expect("install catching timer callback");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![gnu_timer_before(
+            Duration::from_millis(1),
+            "neo-kill-catching-callback",
+        )]),
+    );
+
+    let flow = ev
+        .service_pending_timers_with_wait_policy(false)
+        .expect_err("condition-case must not absorb the shutdown");
+    assert!(matches!(flow, Flow::Shutdown(_)), "got {flow:?}");
+    assert_eq!(
+        ev.eval_symbol("neo-kill-catch-log").expect("catch log"),
+        Value::NIL,
+        "the error handler must not have run"
+    );
+}
+
+#[test]
 fn command_input_preempts_self_rescheduling_zero_idle_timer_between_batches() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

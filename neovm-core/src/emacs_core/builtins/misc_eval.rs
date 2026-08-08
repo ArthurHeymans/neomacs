@@ -668,21 +668,7 @@ pub(crate) fn builtin_require(eval: &mut super::eval::Context, args: Vec<Value>)
 
 /// Convert an EvalError back to a Flow for builtins that call load_file.
 fn eval_error_to_flow(e: super::error::EvalError) -> Flow {
-    match e {
-        super::error::EvalError::Signal {
-            symbol,
-            data,
-            raw_data,
-        } => Flow::Signal(Box::new(super::error::SignalData {
-            symbol,
-            data,
-            raw_data,
-            suppress_signal_hook: false,
-            selected_resume: None,
-            search_complete: false,
-        })),
-        super::error::EvalError::UncaughtThrow { tag, value } => Flow::Throw { tag, value },
-    }
+    super::error::flow_from_eval_error(e)
 }
 
 /// `(garbage-collect)` — run a full GC cycle and return memory statistics.

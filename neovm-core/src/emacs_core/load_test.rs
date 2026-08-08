@@ -1396,16 +1396,6 @@ fn finalize_cached_bootstrap_eval_strips_transient_compile_features() {
 }
 
 #[test]
-fn load_control_signal_domain_matches_gnu_kill_emacs() {
-    crate::test_utils::init_test_tracing();
-    assert_eq!(
-        LoadControlSignal::from_symbol_id(intern(LoadControlSignal::KillEmacs.name())),
-        Some(LoadControlSignal::KillEmacs)
-    );
-    assert_eq!(LoadControlSignal::from_symbol_id(intern("error")), None);
-}
-
-#[test]
 fn load_file_stops_immediately_on_kill_emacs() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
@@ -1423,13 +1413,9 @@ fn load_file_stops_immediately_on_kill_emacs() {
     };
 
     match err {
-        EvalError::Signal { symbol, data, .. } => {
-            assert_eq!(resolve_sym(symbol), "kill-emacs");
-            assert!(
-                data.is_empty(),
-                "kill-emacs should not synthesize an ordinary error payload"
-            );
-        }
+        // kill-emacs is typed control flow, not a signal named kill-emacs:
+        // nothing at the load boundary has to recognize it by symbol.
+        EvalError::Shutdown(request) => assert_eq!(request.exit_code, 7),
         other => panic!("unexpected load error: {other:?}"),
     }
 
@@ -1740,6 +1726,7 @@ fn format_eval_error(eval: &Context, err: &EvalError) -> String {
             crate::emacs_core::print::print_value_with_buffers(tag, &eval.buffers),
             crate::emacs_core::print::print_value_with_buffers(value, &eval.buffers),
         ),
+        EvalError::Shutdown(request) => format!("(kill-emacs {})", request.exit_code),
     }
 }
 
@@ -3458,6 +3445,24 @@ fn bootstrap_runtime_command_loop_executes_meta_x_command_on_ret() {
     );
 }
 
+/// End of a scripted command loop: either the loop returned, or the exhausted
+/// input script ended the session with `kill-emacs` (GNU exits on terminal
+/// EOF, and `kill-emacs` is control flow, so it unwinds here rather than
+/// being reported as a command error).
+fn command_loop_end_value(
+    result: Result<Value, crate::emacs_core::error::Flow>,
+    context: &str,
+) -> Value {
+    match result {
+        Ok(value) => value,
+        Err(crate::emacs_core::error::Flow::Shutdown(request)) => {
+            assert_eq!(request.exit_code, 0, "{context}: unclean shutdown");
+            Value::NIL
+        }
+        Err(flow) => panic!("{context}: {flow:?}"),
+    }
+}
+
 #[test]
 fn bootstrap_runtime_command_loop_executes_help_describe_function_on_ret() {
     init_test_tracing();
@@ -3522,9 +3527,10 @@ fn bootstrap_runtime_command_loop_executes_help_describe_function_on_ret() {
     eval.input_rx = Some(rx);
     eval.command_loop.running = true;
 
-    let result = eval
-        .recursive_edit_inner()
-        .expect("C-h f command loop should exit normally");
+    let result = command_loop_end_value(
+        eval.recursive_edit_inner(),
+        "C-h f command loop should exit normally",
+    );
     assert_eq!(result, Value::NIL);
     assert_eq!(
         format_eval_result(&eval.eval_str(
@@ -6022,9 +6028,10 @@ fn bootstrap_runtime_command_loop_traces_describe_function_body_for_ch_f() {
 
     eval.input_rx = Some(rx);
     eval.command_loop.running = true;
-    let result = eval
-        .recursive_edit_inner()
-        .expect("command loop should exit via trace advice");
+    let result = command_loop_end_value(
+        eval.recursive_edit_inner(),
+        "command loop should exit via trace advice",
+    );
     assert_eq!(result, Value::NIL);
 
     let rendered = format_eval_result(&eval.eval_str(
@@ -13560,6 +13567,9 @@ fn key_parse_modifier_bits() {
                     }
                     EvalError::UncaughtThrow { tag, value } => {
                         format!("(throw {tag} {value})")
+                    }
+                    EvalError::Shutdown(request) => {
+                        format!("(kill-emacs {})", request.exit_code)
                     }
                 };
                 tracing::error!("FAIL: {desc}: {expr_str} => {msg}");

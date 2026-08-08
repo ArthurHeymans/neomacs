@@ -536,6 +536,16 @@ unsafe fn module_handle_nonlocal_exit(env: *mut emacs_env, flow: Flow) {
                 priv_.non_local_exit_data =
                     Value::list(vec![Value::string("Thread blocked inside module call")]);
             }
+            // The module ABI has no shutdown exit kind. Report it as a signal
+            // so the module's own error path runs; the shutdown request is
+            // already recorded, so the exit still happens once control returns
+            // to the evaluator.
+            Flow::Shutdown(request) => {
+                priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
+                priv_.non_local_exit_symbol = Value::symbol("kill-emacs");
+                priv_.non_local_exit_data =
+                    Value::list(vec![Value::fixnum(i64::from(request.exit_code))]);
+            }
         }
     }
 }

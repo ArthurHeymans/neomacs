@@ -6058,27 +6058,8 @@ pub(crate) fn builtin_dump_emacs_portable(
         .and_then(|name| name.to_str())
         .is_some_and(|name| matches!(name, "emacs.pdmp" | "neomacs.pdump"));
     if is_final_dump {
-        crate::emacs_core::load::normalize_final_dump_runtime_surface(ctx).map_err(
-            |err| match err {
-                crate::emacs_core::error::EvalError::Signal {
-                    symbol,
-                    data,
-                    raw_data,
-                } => crate::emacs_core::error::Flow::Signal(Box::new(
-                    crate::emacs_core::error::SignalData {
-                        symbol,
-                        data,
-                        raw_data,
-                        suppress_signal_hook: false,
-                        selected_resume: None,
-                        search_complete: false,
-                    },
-                )),
-                crate::emacs_core::error::EvalError::UncaughtThrow { tag, value } => {
-                    crate::emacs_core::error::Flow::Throw { tag, value }
-                }
-            },
-        )?;
+        crate::emacs_core::load::normalize_final_dump_runtime_surface(ctx)
+            .map_err(crate::emacs_core::error::flow_from_eval_error)?;
     }
     let saved_post_gc_hook = ctx
         .obarray()
@@ -6455,10 +6436,7 @@ pub(crate) fn builtin_kill_emacs(eval: &mut super::eval::Context, args: Vec<Valu
     let request = plan_kill_emacs_request(&args)?;
     let _ = eval.run_hook_if_bound("kill-emacs-hook");
     eval.request_shutdown(request.exit_code, request.restart);
-    Err(crate::emacs_core::error::signal_suppressed(
-        LispCondition::KillEmacs,
-        vec![],
-    ))
+    Err(Flow::Shutdown(request))
 }
 
 pub(crate) fn builtin_lower_frame(args: Vec<Value>) -> EvalResult {

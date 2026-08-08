@@ -892,6 +892,10 @@ pub(crate) fn finish_make_thread_result(
         }) => {
             threads.block_thread(thread_id, blocker, remaining_forms);
         }
+        // kill-emacs is process-wide in GNU (Fkill_emacs exits, whichever
+        // thread runs it), so it is not recorded as this thread's error — it
+        // unwinds to the caller and ends the process.
+        Err(flow @ Flow::Shutdown(_)) => return Err(flow),
     }
 
     Ok(threads

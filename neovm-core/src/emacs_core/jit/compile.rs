@@ -2318,7 +2318,7 @@ pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64
         let mut flow = take_pending_flow().expect("match shim runs only after STATUS_SIGNAL");
         loop {
             match flow {
-                Flow::ThreadBlocked { .. } => {
+                Flow::ThreadBlocked { .. } | Flow::Shutdown(_) => {
                     stash_pending_flow(flow);
                     return -1;
                 }

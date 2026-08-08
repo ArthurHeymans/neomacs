@@ -3614,9 +3614,7 @@ fn vm_runtime_control_tail_uses_localized_shared_paths() {
     let mut eval = Context::new_vm_runtime_harness();
     let kill_result = eval.eval_str("(kill-emacs 7)");
     match kill_result {
-        Err(EvalError::Signal { symbol, .. }) => {
-            assert_eq!(resolve_sym(symbol), "kill-emacs");
-        }
+        Err(EvalError::Shutdown(request)) => assert_eq!(request.exit_code, 7),
         other => panic!("kill-emacs should unwind, got {other:?}"),
     }
 
@@ -3642,9 +3640,7 @@ fn vm_kill_emacs_runs_hooks_on_shared_runtime() {
            vm-kill-hook-log)",
     );
     match result {
-        Err(EvalError::Signal { symbol, .. }) => {
-            assert_eq!(resolve_sym(symbol), "kill-emacs");
-        }
+        Err(EvalError::Shutdown(request)) => assert_eq!(request.exit_code, 3),
         other => panic!("kill-emacs should unwind after running hooks, got {other:?}"),
     }
     assert_eq!(

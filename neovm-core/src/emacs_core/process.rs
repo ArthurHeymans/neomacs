@@ -5915,6 +5915,10 @@ impl super::eval::Context {
     /// non-local control flow is propagated to the caller so it can reach the
     /// matching wait/catch boundary.  A throw to a tag with no live catch still
     /// becomes a `no-catch` error at the eval/thread boundary, as in GNU.
+    ///
+    /// `Flow::Shutdown` propagates for the same reason: GNU's `Fkill_emacs`
+    /// never returns, so a callback that kills cannot be resumed and its exit
+    /// code must not be swallowed here.
     pub(crate) fn finish_callback_flow(
         &mut self,
         result: EvalResult,
@@ -5922,7 +5926,9 @@ impl super::eval::Context {
     ) -> Result<(), Flow> {
         match result {
             Ok(_) => Ok(()),
-            Err(err @ (Flow::Throw { .. } | Flow::ThreadBlocked { .. })) => Err(err),
+            Err(err @ (Flow::Throw { .. } | Flow::ThreadBlocked { .. } | Flow::Shutdown(_))) => {
+                Err(err)
+            }
             Err(err @ Flow::Signal(_)) => {
                 let rendered = super::error::format_flow_with_eval(self, &err);
                 tracing::warn!("{label} callback error: {}", rendered);

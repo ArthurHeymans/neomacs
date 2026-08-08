@@ -7568,13 +7568,10 @@ fn kill_emacs_eval_requests_shutdown_and_stops_command_loop() {
 
     let result = super::symbols::builtin_kill_emacs(&mut eval, vec![Value::fixnum(7)]);
     match result {
-        Err(crate::emacs_core::error::Flow::Signal(sig)) => {
-            assert_eq!(
-                crate::emacs_core::intern::resolve_sym(sig.symbol),
-                "kill-emacs"
-            );
+        Err(crate::emacs_core::error::Flow::Shutdown(request)) => {
+            assert_eq!(request.exit_code, 7);
         }
-        other => panic!("kill-emacs should unwind with a shutdown signal, got {other:?}"),
+        other => panic!("kill-emacs should unwind as a shutdown, got {other:?}"),
     }
     assert_eq!(
         eval.shutdown_request,

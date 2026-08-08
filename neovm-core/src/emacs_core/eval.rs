@@ -3281,9 +3281,6 @@ impl Context {
     }
 
     fn dispatch_signal(&mut self, mut sig: SignalData) -> Result<SignalData, Flow> {
-        if sig.symbol == self.kill_emacs_symbol {
-            return Err(Flow::Signal(Box::new(sig)));
-        }
         self.run_signal_hook(&sig)?;
         sig = self.canonicalize_signal_symbol(sig);
 
@@ -3366,7 +3363,7 @@ impl Context {
                             self.restore_specpdl_roots(specpdl_root_scope);
                             return Err(flow);
                         }
-                        Err(flow @ Flow::ThreadBlocked { .. }) => {
+                        Err(flow @ (Flow::ThreadBlocked { .. } | Flow::Shutdown(_))) => {
                             self.pop_condition_frame();
                             self.restore_specpdl_roots(specpdl_root_scope);
                             return Err(flow);
@@ -6328,7 +6325,9 @@ impl Context {
     pub fn recursive_edit(&mut self) -> Result<(), String> {
         match self.recursive_edit_inner() {
             Ok(_) => Ok(()),
-            Err(Flow::Signal(sig)) if sig.symbol == self.kill_emacs_symbol => Ok(()),
+            // kill-emacs unwinds the recursive edit; the pending shutdown
+            // request carries the exit code to the caller.
+            Err(Flow::Shutdown(_)) => Ok(()),
             Err(flow) => Err(super::error::format_flow_with_eval(self, &flow)),
         }
     }
@@ -6473,8 +6472,7 @@ impl Context {
                     // GNU keyboard.c:1145 — end of file in batch run
                     tracing::info!("command_loop_inner: noninteractive EOF, calling kill-emacs");
                     match super::builtins::symbols::builtin_kill_emacs(self, vec![Value::T]) {
-                        Err(Flow::Signal(sig)) if sig.symbol == self.kill_emacs_symbol => {}
-                        Ok(_) => {}
+                        Err(Flow::Shutdown(_)) | Ok(_) => {}
                         Err(flow) => return Err(flow),
                     }
                     return Ok(value);
@@ -6519,9 +6517,6 @@ impl Context {
                 Ok(Value::NIL)
             }
             Err(Flow::Signal(sig)) => {
-                if sig.symbol == self.kill_emacs_symbol {
-                    return Err(Flow::Signal(sig));
-                }
                 let rendered = super::error::format_signal_data_with_eval(self, &sig);
                 tracing::warn!("command_loop_top_level_1: top-level SIGNALED: {}", rendered);
                 let error_msg = self.display_command_error(&sig);
@@ -6550,10 +6545,10 @@ impl Context {
                     // startup/eval errors as fatal: it prints the error and
                     // calls (kill-emacs -1), which exits with status 255.
                     self.request_shutdown(-1, false);
-                    return Err(crate::emacs_core::error::signal_suppressed(
-                        LispCondition::KillEmacs,
-                        vec![],
-                    ));
+                    return Err(Flow::Shutdown(ShutdownRequest {
+                        exit_code: -1,
+                        restart: false,
+                    }));
                 }
                 Ok(Value::NIL)
             }
@@ -6630,7 +6625,9 @@ impl Context {
                     // another key instead of unwinding like GNU Emacs.
                     return Err(flow);
                 }
-                Err(flow @ Flow::ThreadBlocked { .. }) => return Err(flow),
+                // A shutdown unwinds the command loop instead of restarting it:
+                // GNU never returns from Fkill_emacs to command_loop_2.
+                Err(flow @ (Flow::ThreadBlocked { .. } | Flow::Shutdown(_))) => return Err(flow),
                 Err(flow @ Flow::Signal(_))
                     if self
                         .command_loop
@@ -6974,7 +6971,9 @@ impl Context {
 
             if let Err(ref flow) = exec_result {
                 match flow {
-                    Flow::Throw { .. } | Flow::ThreadBlocked { .. } => return exec_result,
+                    Flow::Throw { .. } | Flow::ThreadBlocked { .. } | Flow::Shutdown(_) => {
+                        return exec_result;
+                    }
                     Flow::Signal(_)
                         if self
                             .command_loop
@@ -8538,8 +8537,10 @@ impl Context {
             .symbol_value_id_or_nil(self.throw_on_input_symbol);
 
         if flag.as_symbol_id() == Some(self.kill_emacs_symbol) {
-            self.request_shutdown(0, false);
-            return Err(signal(LispCondition::Quit, vec![]));
+            // GNU keyboard.c process_quit_flag: (setq quit-flag 'kill-emacs)
+            // calls Fkill_emacs, which runs the hooks and exits. Unwinding as
+            // a quit signal instead would let condition-case swallow the exit.
+            return super::builtins::symbols::builtin_kill_emacs(self, vec![]).map(|_| ());
         }
 
         if !throw_on_input.is_nil() && equal_value(&flag, &throw_on_input, 0) {
@@ -9105,20 +9106,8 @@ impl Context {
         path: &std::path::Path,
         options: super::load::LoadOptions,
     ) -> EvalResult {
-        super::load::load_file_with_options(self, path, options).map_err(|e| match e {
-            EvalError::Signal {
-                symbol,
-                data,
-                raw_data,
-            } => {
-                if let Some(raw) = raw_data {
-                    signal_with_data(resolve_sym(symbol), raw)
-                } else {
-                    signal(resolve_sym(symbol), data)
-                }
-            }
-            EvalError::UncaughtThrow { tag, value } => Flow::Throw { tag, value },
-        })
+        super::load::load_file_with_options(self, path, options)
+            .map_err(super::error::flow_from_eval_error)
     }
 
     pub(crate) fn eval_value_with_lexical_arg(
@@ -12203,7 +12192,9 @@ impl Context {
                 }
                 Err(flow)
             }
-            Err(flow @ Flow::Throw { .. }) => {
+            // A shutdown is not a condition: condition-case cannot handle it,
+            // matching GNU, where Fkill_emacs exits and no handler ever runs.
+            Err(flow @ (Flow::Throw { .. } | Flow::Shutdown(_))) => {
                 self.truncate_condition_stack(condition_stack_base);
                 Err(flow)
             }
@@ -12798,7 +12789,8 @@ impl Context {
         match flow {
             Flow::Signal(sig) => self.has_active_condition_handler_for_signal(sig),
             Flow::Throw { tag, .. } => self.has_active_catch(tag),
-            Flow::ThreadBlocked { .. } => false,
+            // Nothing handles a shutdown; it unwinds to the process boundary.
+            Flow::ThreadBlocked { .. } | Flow::Shutdown(_) => false,
         }
     }
 
@@ -13428,6 +13420,8 @@ impl Context {
                 self.push_vm_frame_root(*blocker);
                 self.push_vm_frame_root(*remaining_forms);
             }
+            // No Lisp values to root.
+            Err(Flow::Shutdown(_)) => {}
         }
     }
 

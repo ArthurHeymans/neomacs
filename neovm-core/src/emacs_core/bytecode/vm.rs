@@ -1014,6 +1014,9 @@ impl<'a> Vm<'a> {
                 out.push(*blocker);
                 out.push(*remaining_forms);
             }
+            // Carries only an exit code and a restart flag: no Lisp values to
+            // keep alive.
+            Flow::Shutdown(_) => {}
         }
     }
 
@@ -5051,7 +5054,9 @@ impl<'a> Vm<'a> {
         flow: Flow,
     ) -> Result<(), Flow> {
         match flow {
-            Flow::ThreadBlocked { .. } => Err(flow),
+            // Neither is resumable inside the VM: a blocked thread and a
+            // shutdown both unwind past every handler this frame owns.
+            Flow::ThreadBlocked { .. } | Flow::Shutdown(_) => Err(flow),
             Flow::Throw { tag, value } => {
                 let selected_resume = self.ctx.matching_catch_resume(&tag);
                 if let Some(ResumeTarget::VmCatch {
@@ -5091,9 +5096,6 @@ impl<'a> Vm<'a> {
                 Err(signal(LispCondition::NoCatch, vec![tag, value]))
             }
             Flow::Signal(sig) => {
-                if sig.symbol == intern("kill-emacs") {
-                    return Err(Flow::Signal(sig));
-                }
                 // dispatch_signal_if_needed may call signal hooks and
                 // handler-bind handlers via eval.apply(), which can trigger
                 // GC.  We must root the current frame so values survive
