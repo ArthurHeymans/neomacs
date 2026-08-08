@@ -25255,3 +25255,45 @@ fn p52_edit_that_adds_a_line_re_evaluates_the_mode_line() {
          line must be regenerated (GNU text_outside_line_unchanged_p)"
     );
 }
+
+/// CONTRACT: `widen` on an ALREADY-WIDE buffer must not dirty chrome.
+///
+/// GNU sets `clip_changed` only when the bounds actually move — the assignment
+/// sits inside `if (BEGV != s || ZV != e)` (editfns.c:2990), and the
+/// `narrow-to-region` side is guarded the same way (:3104, :3121). Porting it
+/// unconditionally looks conservative and is not: font-lock wraps its work in
+/// `save-restriction` + `widen`, so a no-op widen runs about twice per
+/// keystroke. Measured on the tty-typing fixture before this guard existed:
+/// 440 chrome-dirty marks over 200 keystrokes, chrome left permanently dirty,
+/// and a chrome skip rate of exactly zero — the whole of P5.2's win silently
+/// disabled by a trigger that was too eager rather than missing.
+#[test]
+fn p52_widening_an_already_wide_buffer_does_not_dirty_chrome() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, _buf, _selected) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert!(!eval.chrome_dirty().is_any_dirty(), "layout acknowledges");
+
+    eval.eval_str("(widen)").expect("eval");
+    assert!(
+        !eval.chrome_dirty().is_any_dirty(),
+        "widening an already-wide buffer changes no bound, so it must not \
+         dirty chrome (GNU editfns.c:2990 guards clip_changed the same way)"
+    );
+
+    // The guard must not cost the real case: a narrowing still dirties, and so
+    // does the widen that undoes it.
+    eval.eval_str("(narrow-to-region 1 20)").expect("eval");
+    assert!(
+        eval.chrome_dirty().is_any_dirty(),
+        "a real narrowing must dirty chrome"
+    );
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert!(!eval.chrome_dirty().is_any_dirty(), "layout acknowledges");
+    eval.eval_str("(widen)").expect("eval");
+    assert!(
+        eval.chrome_dirty().is_any_dirty(),
+        "the widen that undoes a narrowing moves the bounds, so it must dirty"
+    );
+}

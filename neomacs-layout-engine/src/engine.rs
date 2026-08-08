@@ -2089,8 +2089,19 @@ impl LayoutEngine {
             });
         let damage = EditDamage::new(dirty_start, dirty_end, delta, span_newlines);
         let mut replay = prev.edit_replay(&curr_key, damage, span_structure_safe)?;
-        if prev.chrome_reusable_after_edit(&replay, damage, chrome_reuse_context(params, evaluator))
-        {
+        if prev.chrome_reusable_after_edit(
+            &replay,
+            damage,
+            chrome_reuse_context(params, evaluator),
+            |from, to| {
+                (from.max(0)..to.max(0)).any(|cp| {
+                    let byte = buffer.char_pos_to_emacs_byte_pos_clamped(
+                        neovm_core::buffer::CharPos0::new(cp as usize),
+                    );
+                    buffer.char_at_emacs_byte_pos(byte) == Some('\n')
+                })
+            },
+        ) {
             replay.chrome = prev.retained_chrome();
         }
         Some(replay)

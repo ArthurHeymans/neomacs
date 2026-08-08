@@ -679,6 +679,7 @@ impl RetainedWindowMatrix {
         replay: &ScrollReplay,
         damage: EditDamage,
         ctx: ChromeReuseContext,
+        region_contains_newline: impl Fn(i64, i64) -> bool,
     ) -> bool {
         if !self.chrome_reuse_baseline(ctx) {
             return false;
@@ -698,11 +699,7 @@ impl RetainedWindowMatrix {
         if replay.dvpos != 0.0 || replay.new_window_start != self.key.window_start {
             return false;
         }
-        // The edit must be confined to one screen row, and no line boundary may
-        // appear or vanish.
-        if replay.exposed_row_count != 1 || damage.span_newlines() != 0 {
-            return false;
-        }
+        // (The line-structure test is below, once the cursor row is known.)
         // That row must be the one holding the cursor, and point must still be
         // inside it after the edit. Row bounds are PRE-edit, so the end moves
         // by the edit's delta; `+ 1` admits point resting just past the last
@@ -718,10 +715,24 @@ impl RetainedWindowMatrix {
         };
         let start = cursor_row.start_charpos as i64;
         let end = cursor_row.end_charpos as i64 + damage.delta();
-        damage.start() >= start
+        // Point must still be on the line the retained chrome described, which
+        // is what keeps `%l` honest. Rows ABOVE the cursor row are reused
+        // verbatim and the damage starts at or after this row's start, so the
+        // newline count before this row cannot have moved; all that remains is
+        // whether a newline now sits between the row's start and point.
+        //
+        // This is a bounded scan (a row is at most a window's width), and it
+        // is the test that `span_newlines` could not be. That counter reports
+        // newlines PRESENT in the damaged span, and jit-lock's span covers the
+        // whole line including its terminator, so it is >= 1 on every ordinary
+        // keystroke — using it refused 199 of 199 real edits while reading as
+        // a faithful port of `text_outside_line_unchanged_p`.
+        let ok = damage.start() >= start
             && damage.end_old() <= cursor_row.end_charpos as i64 + 1
             && replay.new_point >= start
             && replay.new_point <= end + 1
+            && !region_contains_newline(start, replay.new_point);
+        ok
     }
 
     /// Build a [`CursorOnlyReplay`] for this window if it can be reused this

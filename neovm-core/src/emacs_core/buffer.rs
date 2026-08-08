@@ -4013,6 +4013,7 @@ pub(crate) fn builtin_narrow_to_region(
         args[0],
         args[1],
     )?;
+    let before = accessible_bounds(eval, current_id);
     let _ = eval
         .buffers
         .narrow_buffer_to_emacs_byte_range(current_id, byte_range);
@@ -4021,8 +4022,32 @@ pub(crate) fn builtin_narrow_to_region(
     // redisplay_internal escalates it to the buffer flag outright
     // (`if (current_buffer->clip_changed) bset_update_mode_line`, :17498).
     // `%n` ("Narrow") and `%p`/`%o` all change here.
-    eval.mark_chrome_dirty_all();
+    //
+    // Only when the bounds ACTUALLY move, which is how GNU guards it
+    // (`buf->clip_changed = 1` sits inside a bounds-changed test,
+    // editfns.c:3104 and :3121). Marking unconditionally is not a
+    // conservative-but-safe choice: `widen` is called about twice per
+    // keystroke by font-lock's `save-restriction` + `widen`, so an
+    // unconditional mark leaves chrome permanently dirty and silently
+    // disables every chrome skip. Measured: 440 marks over 200 keystrokes,
+    // and a chrome skip rate of exactly zero.
+    if accessible_bounds(eval, current_id) != before {
+        eval.mark_chrome_dirty_all();
+    }
     Ok(Value::NIL)
+}
+
+/// The buffer's accessible bounds, for GNU's `clip_changed` bounds-changed
+/// test. A missing buffer reports an impossible range so a disappearing buffer
+/// never reads as "unchanged".
+fn accessible_bounds(
+    eval: &super::eval::Context,
+    buffer: crate::buffer::BufferId,
+) -> Option<(usize, usize)> {
+    eval.buffers.get(buffer).map(|buf| {
+        let range = buf.accessible_emacs_byte_region().range();
+        (range.start().get(), range.end().get())
+    })
 }
 
 pub(crate) fn builtin_widen(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
@@ -4031,9 +4056,15 @@ pub(crate) fn builtin_widen(eval: &mut super::eval::Context, args: Vec<Value>) -
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let before = accessible_bounds(eval, current_id);
     let _ = eval.buffers.widen_buffer(current_id);
-    // The other half of GNU's clip_changed; see `narrow-to-region` above.
-    eval.mark_chrome_dirty_all();
+    // The other half of GNU's clip_changed, and the same bounds-changed guard
+    // (GNU: `if (BEGV != s || ZV != e) current_buffer->clip_changed = 1;`,
+    // editfns.c:2990). This is the call that made the guard load-bearing —
+    // font-lock widens constantly on an already-widened buffer.
+    if accessible_bounds(eval, current_id) != before {
+        eval.mark_chrome_dirty_all();
+    }
     Ok(Value::NIL)
 }
 
