@@ -14,6 +14,7 @@ fn snapshot_serializes_stable_json_shape() {
             frame_p99_us: 16000,
             composite_only_frames: 10,
             retained_static_builds: 3,
+            demand_reasons: [("cursor_animation".to_owned(), 12)].into_iter().collect(),
         },
         gc: GcMetrics {
             collections: 7,
@@ -27,6 +28,7 @@ fn snapshot_serializes_stable_json_shape() {
     let v: serde_json::Value = serde_json::to_value(&snap).unwrap();
     assert_eq!(v["frame"]["presents"], 100);
     assert_eq!(v["frame"]["last_commit_to_present_us"], 1200);
+    assert_eq!(v["frame"]["demand_reasons"]["cursor_animation"], 12);
     assert_eq!(v["gc"]["collections"], 7);
     assert_eq!(v["gc"]["cons_cells"], 200);
 }
