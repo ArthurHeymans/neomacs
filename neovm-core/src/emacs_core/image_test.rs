@@ -1091,7 +1091,7 @@ fn image_metadata_second_arg_validates_frame_designator() {
 }
 
 #[test]
-fn image_metadata_returns_size_plist_on_gui_frame() {
+fn image_metadata_returns_nil_on_gui_frame_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
     let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
@@ -1102,8 +1102,30 @@ fn image_metadata_returns_size_plist_on_gui_frame() {
     eval.set_display_host(Box::new(RecordingImageDisplayHost::default()));
     let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();
 
+    // GNU image-metadata returns the decoder's lisp_data, nil for a plain
+    // image; Neomacs matches that and surfaces geometry via
+    // neomacs-image-extent instead.
     let meta = builtin_image_metadata_in_context(&mut eval, vec![spec]).unwrap();
-    let items = list_to_vec(&meta).expect("metadata plist");
+    assert!(
+        meta.is_nil(),
+        "image-metadata should be nil like GNU, got {meta:?}"
+    );
+}
+
+#[test]
+fn neomacs_image_extent_returns_size_plist_on_gui_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost::default()));
+    let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();
+
+    let meta = builtin_neomacs_image_extent_in_context(&mut eval, vec![spec]).unwrap();
+    let items = list_to_vec(&meta).expect("extent plist");
     assert!(
         items
             .windows(2)

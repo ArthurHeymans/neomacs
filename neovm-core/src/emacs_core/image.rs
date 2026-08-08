@@ -1242,20 +1242,41 @@ pub(crate) fn builtin_image_metadata(args: Vec<Value>) -> EvalResult {
     ))
 }
 
-/// GUI path for `image-metadata`: resolve SPEC and return a small plist of
-/// known fields. GNU returns decoder `lisp_data` (often nil); we surface width,
-/// height, and transparency when decode succeeds.
+/// GUI path for `image-metadata`: like GNU, resolve SPEC (for the same
+/// `lookup_image` caching side effect) and return the decoder's metadata.
+/// Neomacs does not carry GNU's `lisp_data` (count/delay/extension_data),
+/// so this returns nil for a successfully decoded image -- matching GNU's
+/// nil for a plain image. Dimensions live on the `neomacs-image-extent`
+/// companion, keeping `image-metadata` byte-compatible with GNU Emacs.
 pub(crate) fn builtin_image_metadata_in_context(
     eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    expect_args_range("image-metadata", &args, 1, 2)?;
+    // Resolve through the extent path (mirroring GNU's lookup_image side
+    // effect) and drop the geometry: image-metadata reports embedded
+    // metadata, not dimensions.
+    let _ = builtin_neomacs_image_extent_in_context(eval, args)?;
+    Ok(Value::NIL)
+}
+
+/// (neomacs-image-extent SPEC &optional FRAME) -> plist or nil
+///
+/// Neomacs-only companion to `image-metadata`: surfaces the resolved
+/// dual-extent geometry as (:width :height :pixel-width :pixel-height
+/// :background-transparent). pixel-width/pixel-height are the GNU
+/// Fimage_size pixel space (differs from layout under :scale default on
+/// HiDPI). Returns nil for non-image specs or unresolved images.
+pub(crate) fn builtin_neomacs_image_extent_in_context(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args_range("neomacs-image-extent", &args, 1, 2)?;
 
     if !is_image_spec(&args[0]) {
         return Ok(Value::NIL);
     }
 
-    require_image_window_system_frame(eval, "image-metadata", args.get(1))?;
+    require_image_window_system_frame(eval, "neomacs-image-extent", args.get(1))?;
     require_image_display_host(eval)?;
 
     let environment = image_scale_environment_for_frame(eval, args.get(1)).ok_or_else(|| {

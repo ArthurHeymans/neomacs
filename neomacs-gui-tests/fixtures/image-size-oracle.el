@@ -31,11 +31,12 @@
      (neomacs-image-oracle-cell
       :relief-3
       (lambda () (image-size (create-image d 'png t :relief 3) t)))
-     ;; `image-metadata' is intentionally NOT probed here: neomacs
-     ;; deliberately surfaces a dimensions plist (:width/:height/...) where
-     ;; GNU returns the decoder's `lisp_data' (nil for a plain PNG) -- see
-     ;; image.rs `builtin_image_metadata_in_context'. That is a known
-     ;; intentional split, not a parity regression this oracle should fail on.
+     ;; image-metadata now returns nil like GNU (the dual-extent geometry
+     ;; moved to the neomacs-image-extent companion), so this is a real
+     ;; parity probe rather than an intentional split.
+     (neomacs-image-oracle-cell
+      :metadata
+      (lambda () (image-metadata (create-image d 'png t))))
      (neomacs-image-oracle-cell
       :flush-reread
       (lambda ()

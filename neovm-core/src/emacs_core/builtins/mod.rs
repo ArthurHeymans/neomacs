@@ -9278,6 +9278,15 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(2),
         ),
     );
+    register_builtin(
+        ctx,
+        BuiltinRegistration::requires_eval_state(
+            "neomacs-image-extent",
+            super::image::builtin_neomacs_image_extent_in_context,
+            1,
+            Some(2),
+        ),
+    );
     ctx.defsubr(
         "imagep",
         |_ctx, args| super::image::builtin_imagep(args),
