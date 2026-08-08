@@ -218,13 +218,26 @@ fn registry_rejects_renderer_unsafe_numeric_ranges() {
 }
 
 #[test]
-fn cursor_profile_baseline_disables_default_enabled_cursor_effects() {
-    assert!(EffectsConfig::default().cursor_color_cycle.enabled);
-    assert!(
-        !EffectsConfig::cursor_profile_baseline()
-            .cursor_color_cycle
-            .enabled
-    );
+fn cursor_profile_baseline_disables_every_cursor_effect() {
+    // The baseline is independent of the global Rust defaults: whatever a
+    // cursor effect defaults to, a window-local profile starts from all-off
+    // and enables only what it names.
+    let baseline = EffectsConfig::cursor_profile_baseline();
+    for name in baseline
+        .effect_names()
+        .into_iter()
+        .filter(|name| name.starts_with("cursor-"))
+    {
+        for (property, value) in baseline.effect_values(&name).expect("registered effect") {
+            if property == "enabled" {
+                assert_eq!(
+                    value,
+                    EffectValue::Bool(false),
+                    "{name} is enabled in the cursor profile baseline"
+                );
+            }
+        }
+    }
 }
 
 // ── Helper: assert a config is Clone + Debug ───────────────────────
@@ -479,7 +492,7 @@ fn cursor_candle_flame_defaults() {
 #[test]
 fn cursor_color_cycle_defaults() {
     let c = CursorColorCycleConfig::default();
-    assert_eq!(c.enabled, true);
+    assert_eq!(c.enabled, false);
     assert_eq!(c.speed, 0.5);
     assert_eq!(c.saturation, 0.8);
     assert_eq!(c.lightness, 0.6);
@@ -2294,9 +2307,12 @@ fn all_opacity_defaults_are_in_zero_to_one() {
 #[test]
 fn default_enabled_fields_match_product_defaults() {
     let ec = EffectsConfig::default();
-    assert!(ec.cursor_color_cycle.enabled);
-    // Exhaustive check of every other config that has an `enabled` field.
+    // Exhaustive check of every config that has an `enabled` field: no visual
+    // effect is on by default. Any default-on effect that animates also
+    // declares standing frame demand, i.e. it costs a present per refresh for
+    // every user who never asked for it.
     let enabled_flags: Vec<bool> = vec![
+        ec.cursor_color_cycle.enabled,
         ec.accent_strip.enabled,
         ec.argyle_pattern.enabled,
         ec.aurora.enabled,
@@ -2450,10 +2466,13 @@ fn default_enabled_fields_match_product_defaults() {
 }
 
 #[test]
-fn default_cursor_color_cycle_is_enabled() {
+fn default_cursor_color_cycle_is_disabled() {
+    // An ambient animation enabled by default costs a present per display
+    // refresh forever (the frame scheduler declares standing MaxRate demand
+    // for it), so the rainbow cursor is opt-in like every other effect.
     let ec = EffectsConfig::default();
 
-    assert!(ec.cursor_color_cycle.enabled);
+    assert!(!ec.cursor_color_cycle.enabled);
 }
 
 // ═══════════════════════════════════════════════════════════════════

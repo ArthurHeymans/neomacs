@@ -254,8 +254,12 @@ effect_config!(
 
 effect_config!(
     /// Configuration for the cursor color cycle effect.
+    ///
+    /// Opt-in like every other effect: while enabled the frame scheduler holds
+    /// standing compositor-only demand at display cadence, so an idle editor
+    /// presents once per refresh instead of once per cursor blink.
     CursorColorCycleConfig {
-        enabled: bool = true,
+        enabled: bool = false,
         speed: f32 = 0.5,
         saturation: f32 = 0.8,
         lightness: f32 = 0.6,
