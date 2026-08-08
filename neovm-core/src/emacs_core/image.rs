@@ -315,6 +315,75 @@ fn parse_image_dimension(value: Value) -> Option<u32> {
     }
 }
 
+/// GNU image margins around the decoded bitmap (`:margin` / `:relief`).
+///
+/// `Fimage_size` reports `width + 2*hmargin` and `height + 2*vmargin`
+/// (`src/image.c`). Relief magnitude is added into both margins.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ImageSpecMargins {
+    hmargin: i64,
+    vmargin: i64,
+}
+
+impl ImageSpecMargins {
+    /// Parse `:margin` and `:relief` from an image SPEC plist (GNU rules).
+    fn from_image_spec(spec: &Value) -> Self {
+        let Some(items) = list_to_vec(spec) else {
+            return Self::default();
+        };
+        let mut hmargin = 0i64;
+        let mut vmargin = 0i64;
+        let mut relief = 0i64;
+        let mut i = 1usize;
+        while i + 1 < items.len() {
+            let value = items[i + 1];
+            match ImageSpecKey::from_lisp_value(items[i]) {
+                Some(ImageSpecKey::Margin) => {
+                    if let Some(n) = value.as_int() {
+                        let n = n.max(0);
+                        hmargin = n;
+                        vmargin = n;
+                    } else if value.is_cons() {
+                        // (H . V) or (H V)
+                        let car = value.cons_car();
+                        let cdr = value.cons_cdr();
+                        if let Some(h) = car.as_int() {
+                            hmargin = h.max(0);
+                        }
+                        if cdr.is_cons() {
+                            if let Some(v) = cdr.cons_car().as_int() {
+                                vmargin = v.max(0);
+                            }
+                        } else if let Some(v) = cdr.as_int() {
+                            vmargin = v.max(0);
+                        }
+                    }
+                }
+                Some(ImageSpecKey::Relief) => {
+                    if let Some(n) = value.as_int() {
+                        relief = n;
+                    }
+                }
+                _ => {}
+            }
+            i += 2;
+        }
+        // GNU: hmargin/vmargin += abs(relief)
+        let relief_abs = relief.unsigned_abs() as i64;
+        Self {
+            hmargin: hmargin.saturating_add(relief_abs),
+            vmargin: vmargin.saturating_add(relief_abs),
+        }
+    }
+
+    fn add_to_pixel_size(self, width: i64, height: i64) -> (i64, i64) {
+        (
+            width.saturating_add(self.hmargin.saturating_mul(2)),
+            height.saturating_add(self.vmargin.saturating_mul(2)),
+        )
+    }
+}
+
 pub(crate) fn image_resolve_request_from_spec(
     spec: &Value,
     environment: ImageScaleEnvironment,
@@ -682,10 +751,10 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
         ));
     };
 
-    // GNU: width/height include 2× hmargin/vmargin. Neomacs does not yet surface
-    // image margins in metadata; default margins are 0, matching the common path.
-    let width_px = image.metadata.width as i64;
-    let height_px = image.metadata.height as i64;
+    // GNU Fimage_size: (img->width + 2*hmargin) × (img->height + 2*vmargin).
+    let margins = ImageSpecMargins::from_image_spec(&args[0]);
+    let (width_px, height_px) =
+        margins.add_to_pixel_size(image.metadata.width as i64, image.metadata.height as i64);
     let pixels = args.get(1).copied().unwrap_or(Value::NIL);
     if !pixels.is_nil() {
         return Ok(Value::cons(
@@ -1121,10 +1190,25 @@ fn require_image_display_host(eval: &Context) -> Result<(), Flow> {
 
 /// (image-cache-size) -> integer
 ///
-/// NeoVM currently has no persistent image cache, so this is always 0.
+/// Without a display host this is 0. With a catalog, return the host estimate
+/// of cached decoded image storage (see [`ImageCatalog::cached_size_bytes`]).
 pub(crate) fn builtin_image_cache_size(args: Vec<Value>) -> EvalResult {
     expect_args("image-cache-size", &args, 0)?;
     Ok(Value::fixnum(0))
+}
+
+pub(crate) fn builtin_image_cache_size_in_context(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("image-cache-size", &args, 0)?;
+    let bytes = eval
+        .display_host
+        .as_ref()
+        .and_then(|host| host.image_catalog())
+        .map(|catalog| catalog.cached_size_bytes())
+        .unwrap_or(0);
+    Ok(Value::fixnum(bytes.max(0)))
 }
 
 /// (image-metadata SPEC &optional FRAME) -> metadata object or nil

@@ -9260,11 +9260,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(2),
         ),
     );
-    ctx.defsubr(
-        "image-cache-size",
-        |_ctx, args| super::image::builtin_image_cache_size(args),
-        0,
-        Some(0),
+    register_builtin(
+        ctx,
+        BuiltinRegistration::requires_eval_state(
+            "image-cache-size",
+            super::image::builtin_image_cache_size_in_context,
+            0,
+            Some(0),
+        ),
     );
     register_builtin(
         ctx,

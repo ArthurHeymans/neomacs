@@ -130,7 +130,12 @@ impl AsyncImageCatalog {
             placement.image_id(),
             Duration::from_secs(1),
         ) else {
-            return Ok(None);
+            // Bounded wait: do not invent dimensions. Callers (image-size, etc.)
+            // surface this as a failed resolve rather than a wrong pixel size.
+            return Err(format!(
+                "Timed out waiting for image decode (id {})",
+                placement.image_id()
+            ));
         };
         let state = image_lookup_from_terminal(pending, terminal);
         self.entries.borrow_mut().insert(request, state.clone());
@@ -224,6 +229,21 @@ impl ImageCatalog for AsyncImageCatalog {
                 .collect::<Vec<_>>()
         };
         self.free_image_ids(removed);
+    }
+
+    fn cached_size_bytes(&self) -> i64 {
+        // Nominal 32 bpp for decoded RGBA, matching GNU's coarse estimate for
+        // pixmap storage when server depth is not queried.
+        self.entries
+            .borrow()
+            .values()
+            .map(|state| {
+                let p = state.placement();
+                let w = i64::from(p.width());
+                let h = i64::from(p.height());
+                w.saturating_mul(h).saturating_mul(4)
+            })
+            .sum()
     }
 }
 

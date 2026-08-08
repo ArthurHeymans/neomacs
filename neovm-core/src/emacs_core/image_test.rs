@@ -1501,6 +1501,34 @@ fn image_size_uses_display_host_resolution_in_gui_context() {
     );
 }
 
+/// GNU includes 2×(:margin) and |:relief| in Fimage_size pixel extents.
+#[test]
+fn image_size_includes_margin_and_relief_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost::default()));
+    // Host returns 40×30; margin 5 → +10 each axis; relief 2 → +4 each.
+    let spec = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("png"),
+        Value::keyword("file"),
+        Value::string("/nonexistent/margin-size.png"),
+        Value::keyword("margin"),
+        Value::fixnum(5),
+        Value::keyword("relief"),
+        Value::fixnum(2),
+    ]);
+    let result = builtin_image_size_in_context(&mut eval, vec![spec, Value::T]).unwrap();
+    assert_eq!(result.cons_car(), Value::fixnum(40 + 2 * (5 + 2)));
+    assert_eq!(result.cons_cdr(), Value::fixnum(30 + 2 * (5 + 2)));
+}
+
 /// GNU `Fimage_size`: PIXELS nil → floats in canonical character units
 /// (`width / FRAME_COLUMN_WIDTH`, `height / FRAME_LINE_HEIGHT`); non-nil →
 /// fixnum pixels. Regression for https://github.com/eval-exec/neomacs/issues/243.

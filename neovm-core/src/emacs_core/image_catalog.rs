@@ -326,6 +326,12 @@ pub trait ImageCatalog {
     ///
     /// Hosts without an image cache may keep the default no-op.
     fn clear_all(&self) {}
+
+    /// Approximate byte size of cached image data for `image-cache-size`.
+    /// Default 0 when the host does not track accounting.
+    fn cached_size_bytes(&self) -> i64 {
+        0
+    }
 }
 
 #[cfg(test)]
