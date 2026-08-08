@@ -4161,7 +4161,14 @@ impl FrameManager {
             frame.recalculate_minibuffer_bounds();
         }
 
-        if removed && frame.selected_window == window_id {
+        // Deleting an INTERNAL window takes its whole subtree with it, so the
+        // selected window can die without being the one named -- `delete-window`
+        // on a member of an atomic window deletes the atom's ROOT, killing every
+        // leaf beneath it.  Testing `selected_window == window_id` missed that
+        // and left the frame pointing at a dead window, which the next
+        // `window-normalize-window ... t` reported as
+        // "#<window N> is not a live window".  Ask the tree instead.
+        if removed && frame.find_window(frame.selected_window).is_none() {
             // Select the first remaining leaf. We do NOT touch
             // `old_selected_window` here — that field is recorded
             // by `window_change_record` (GNU

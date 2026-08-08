@@ -164,6 +164,18 @@ enum WindowOp {
     ShrinkIfLarger { window: usize },
     /// Bind `window-sides-slots` so side-window creation hits the slot cap.
     SetSidesSlots { slots: i8 },
+    /// `enlarge-window` / `shrink-window` on the selected window — the
+    /// interactive resize entry points, which stage through
+    /// `window--resize-this-window` like everything else.
+    EnlargeOrShrink {
+        window: usize,
+        delta: i8,
+        horizontal: bool,
+        shrink: bool,
+    },
+    /// `maximize-window` / `minimize-window`: resize to the extreme the tree
+    /// allows, which stresses the min/max clamping in the staging pass.
+    MaximizeOrMinimize { window: usize, minimize: bool },
 }
 
 fn op_strategy() -> impl Strategy<Value = WindowOp> {
@@ -187,6 +199,11 @@ fn op_strategy() -> impl Strategy<Value = WindowOp> {
         1 => (0usize..8).prop_map(|window| WindowOp::FitToBuffer { window }),
         1 => (0usize..8).prop_map(|window| WindowOp::ShrinkIfLarger { window }),
         1 => (-1i8..4).prop_map(|slots| WindowOp::SetSidesSlots { slots }),
+        2 => (0usize..8, -6i8..7, any::<bool>(), any::<bool>())
+            .prop_map(|(window, delta, horizontal, shrink)| WindowOp::EnlargeOrShrink {
+                window, delta, horizontal, shrink }),
+        1 => (0usize..8, any::<bool>())
+            .prop_map(|(window, minimize)| WindowOp::MaximizeOrMinimize { window, minimize }),
     ]
 }
 
@@ -260,6 +277,28 @@ fn op_elisp(op: WindowOp, step: usize) -> String {
             };
             format!("(setq window-sides-slots (list {value} {value} {value} {value}))")
         }
+        WindowOp::EnlargeOrShrink {
+            window,
+            delta,
+            horizontal,
+            shrink,
+        } => format!(
+            "(with-selected-window (oracle--nth-window {window}) ({} {delta} {}))",
+            if shrink {
+                "shrink-window"
+            } else {
+                "enlarge-window"
+            },
+            if horizontal { "t" } else { "nil" },
+        ),
+        WindowOp::MaximizeOrMinimize { window, minimize } => format!(
+            "({} (oracle--nth-window {window}))",
+            if minimize {
+                "minimize-window"
+            } else {
+                "maximize-window"
+            },
+        ),
     }
 }
 
@@ -312,10 +351,29 @@ proptest! {
     ///   -E 'test(oracle_prop_window_tree_survives_random_operation_sequences)' --no-capture
     /// ```
     ///
-    /// Verified clean at 900 sequences (~335s) with the full thirteen-operation
-    /// alphabet. A nightly job at that depth is the natural home for the deep
-    /// run; the shallow default here only catches gross regressions.
+    /// # Ignored: NOT YET DETERMINISTIC
+    ///
+    /// Three identical 1200-sequence runs gave FAIL / PASS / FAIL, with the
+    /// failures arriving in ~1.5s (a replayed `proptest-regressions` seed) and
+    /// the pass taking ~207s (every seed plus 1200 novel cases). Same binary,
+    /// same seed file, different verdicts — so replaying one generated program
+    /// does not always produce the same result. Until that is understood this
+    /// cannot gate: a flaky gate is worse than none, and it also means an
+    /// individual reported "divergence" may be a flake rather than a bug.
+    ///
+    /// Confirm any finding with a standalone repro against GNU before treating
+    /// it as real. Every bug fixed via this oracle so far was confirmed that
+    /// way (`./tmp/sidewin/gen*.el`), so those stand regardless.
+    ///
+    /// Suspects to rule out, roughly in order: contention with concurrent cargo
+    /// jobs; per-run sandbox/tempdir state leaking between the paired engine
+    /// invocations; a genuinely nondeterministic code path in one engine.
+    ///
+    /// Note `proptest-regressions/` is GITIGNORED in this repo
+    /// (`.gitignore:438`), so seeds are local-only and do not survive a clean
+    /// checkout — the deep run has to rediscover cases each time.
     #[test]
+    #[ignore = "nondeterministic: same seed passes and fails across runs; see the doc comment"]
     fn oracle_prop_window_tree_survives_random_operation_sequences(
         ops in prop::collection::vec(op_strategy(), 2..9),
     ) {
