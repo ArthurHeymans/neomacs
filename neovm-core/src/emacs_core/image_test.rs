@@ -13,6 +13,8 @@ struct RecordingImageDisplayHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
     invalidations: Arc<Mutex<Vec<ImageResolveSource>>>,
     clear_all_calls: Arc<Mutex<usize>>,
+    /// Override resolved layout size (default 40×30).
+    fixed_size: Option<(u32, u32)>,
 }
 
 impl DisplayHost for RecordingImageDisplayHost {
@@ -32,11 +34,12 @@ impl DisplayHost for RecordingImageDisplayHost {
             .lock()
             .expect("image requests lock")
             .push(request);
+        let (width, height) = self.fixed_size.unwrap_or((40, 30));
         Ok(Some(ReadyImage {
             image_id: 9,
             metadata: ResolvedImageMetadata {
-                width: 40,
-                height: 30,
+                width,
+                height,
                 background: 0,
                 background_transparent: true,
             },
@@ -1499,6 +1502,46 @@ fn image_size_uses_display_host_resolution_in_gui_context() {
         ImageSizeSpec::new(AxisSize::AtMost(40), AxisSize::AtMost(30)),
         ":max-width/:max-height stay CLAMPS; only :width/:height are targets"
     );
+}
+
+/// On HiDPI, decoded metadata is logical; PIXELS=t must report GNU/image
+/// pixels (layout × device_scale, ceil) — e.g. splash 266@1.25 → 333.
+#[test]
+fn image_size_pixels_t_converts_logical_layout_to_device_pixels() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("selected frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.device_scale_factor = 1.25;
+        frame.char_width = 8.0;
+        frame.char_height = 16.0;
+    }
+    // Host returns logical 266×186 (333/1.25, 233/1.25 rounded).
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Default::default(),
+        invalidations: Default::default(),
+        clear_all_calls: Default::default(),
+        fixed_size: Some((266, 186)),
+    }));
+    let spec = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("svg"),
+        Value::keyword("file"),
+        Value::string("/nonexistent/splash.svg"),
+        Value::keyword("scale"),
+        Value::symbol("default"),
+    ]);
+    let in_pixels = builtin_image_size_in_context(&mut eval, vec![spec.clone(), Value::T]).unwrap();
+    assert_eq!(in_pixels.cons_car(), Value::fixnum(333)); // ceil(266*1.25)
+    assert_eq!(in_pixels.cons_cdr(), Value::fixnum(233)); // ceil(186*1.25)
+
+    let in_chars = builtin_image_size_in_context(&mut eval, vec![spec]).unwrap();
+    // Logical ÷ logical cell (not device pixels ÷ device column).
+    assert_eq!(in_chars.cons_car(), Value::make_float(266.0 / 8.0));
+    assert_eq!(in_chars.cons_cdr(), Value::make_float(186.0 / 16.0));
 }
 
 /// GNU includes 2×(:margin) and |:relief| in Fimage_size pixel extents.

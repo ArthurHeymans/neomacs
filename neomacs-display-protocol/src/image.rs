@@ -243,10 +243,12 @@ impl ImageSizeSpec {
 }
 
 /// GNU `scale_image_size` (src/image.c:2700): `size * multiplier / divisor`.
+///
+/// Uses `ceil` like GNU so fractional SVG/device pixels are never discarded.
 fn scale_size(size: u32, divisor: u32, multiplier: f64) -> u32 {
     let scaled = f64::from(size) * multiplier / f64::from(divisor.max(1));
     if scaled.is_finite() && scaled >= 1.0 {
-        scaled.round() as u32
+        scaled.ceil() as u32
     } else {
         1
     }

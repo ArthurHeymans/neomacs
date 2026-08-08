@@ -751,12 +751,24 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
         ));
     };
 
-    // GNU Fimage_size: (img->width + 2*hmargin) × (img->height + 2*vmargin).
+    // Decoded metadata is in *logical* layout pixels. For `:scale default`,
+    // `ImageScaleEnvironment::resolve` sets layout_scale = gnu_factor /
+    // device_scale so redisplay matches `frame-char-width` units. That makes
+    // metadata smaller than GNU `img->width` on HiDPI (e.g. splash 266 vs 333
+    // at 1.25×). Other scale policies leave layout already in GNU image
+    // pixels (layout_scale is not divided by device_scale).
+    //
+    // GNU `Fimage_size` with PIXELS non-nil reports post-`compute_image_size`
+    // `img->width`/`height` (+ margins). Recover that space for the default
+    // scale path by ceil(layout × device_scale). Character units keep logical
+    // size / logical cell so ratios stay comparable to GNU.
     let margins = ImageSpecMargins::from_image_spec(&args[0]);
-    let (width_px, height_px) =
+    let (layout_w, layout_h) =
         margins.add_to_pixel_size(image.metadata.width as i64, image.metadata.height as i64);
     let pixels = args.get(1).copied().unwrap_or(Value::NIL);
     if !pixels.is_nil() {
+        let (width_px, height_px) =
+            image_size_pixels_from_layout(eval, args.get(2), &args[0], layout_w, layout_h);
         return Ok(Value::cons(
             Value::fixnum(width_px),
             Value::fixnum(height_px),
@@ -771,9 +783,51 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
             )
         })?;
     Ok(Value::cons(
-        Value::make_float(width_px as f64 / column_width),
-        Value::make_float(height_px as f64 / line_height),
+        Value::make_float(layout_w as f64 / column_width),
+        Value::make_float(layout_h as f64 / line_height),
     ))
+}
+
+/// Convert logical layout size to the pixel size GNU `Fimage_size` reports.
+///
+/// Only `:scale default` (including `create-image`'s automatic default) maps
+/// layout through `/ device_scale`; other policies already store GNU image
+/// pixels in metadata.
+fn image_size_pixels_from_layout(
+    eval: &Context,
+    frame_arg: Option<&Value>,
+    spec: &Value,
+    layout_w: i64,
+    layout_h: i64,
+) -> (i64, i64) {
+    let uses_default_scale = image_spec_uses_scale_default(spec);
+    let device_scale = if uses_default_scale {
+        image_frame_for_arg(eval, frame_arg)
+            .map(|frame| frame.device_scale_factor)
+            .filter(|scale| scale.is_finite() && *scale > 0.0)
+            .unwrap_or(1.0)
+    } else {
+        1.0
+    };
+    let width_px = ((layout_w as f64) * device_scale).ceil().max(1.0) as i64;
+    let height_px = ((layout_h as f64) * device_scale).ceil().max(1.0) as i64;
+    (width_px, height_px)
+}
+
+fn image_spec_uses_scale_default(spec: &Value) -> bool {
+    let Some(items) = list_to_vec(spec) else {
+        return false;
+    };
+    let mut i = 1usize;
+    while i + 1 < items.len() {
+        if ImageSpecKey::from_lisp_value(items[i]) == Some(ImageSpecKey::Scale) {
+            return items[i + 1].is_symbol_named("default");
+        }
+        i += 2;
+    }
+    // `create-image` injects `:scale default` when omitted; raw specs without
+    // `:scale` use layout_scale 1 and must not be upscaled by device_scale.
+    false
 }
 
 /// (image-mask-p SPEC &optional FRAME) -> nil
@@ -1192,6 +1246,7 @@ fn require_image_display_host(eval: &Context) -> Result<(), Flow> {
 ///
 /// Without a display host this is 0. With a catalog, return the host estimate
 /// of cached decoded image storage (see [`ImageCatalog::cached_size_bytes`]).
+#[allow(dead_code)] // batch path; live registration uses the context variant
 pub(crate) fn builtin_image_cache_size(args: Vec<Value>) -> EvalResult {
     expect_args("image-cache-size", &args, 0)?;
     Ok(Value::fixnum(0))
