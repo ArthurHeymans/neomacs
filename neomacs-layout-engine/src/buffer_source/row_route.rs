@@ -212,63 +212,90 @@ pub(crate) enum RouteRefusal {
     ProbeMeasure,
 }
 
-impl RouteRefusal {
-    const COUNT: usize = 21;
+/// The reported refusal buckets.
+///
+/// P4.8(d): the 21-reason histogram existed to RANK the next migration
+/// increment — it answered "which refusal should the route learn to handle
+/// next?". The migration is over, so what the counters are for has changed:
+/// they now report standing coverage, and the question is whether a workload's
+/// misses are the expected capability ones. Four buckets carry that (they are
+/// the only reasons above 3% of corpus attempts) and everything else is
+/// `Other`. The full [`RouteRefusal`] vocabulary survives unchanged for
+/// control flow and for the per-reason assertions in row_route_test.rs; only
+/// the REPORT collapses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RouteRefusalClass {
+    /// The buffer has an active display table — the largest single class, and
+    /// a whole-buffer capability fact rather than a per-row one.
+    DisplayTable,
+    /// Point sits inside the routed coverage. Not a capability limit: it
+    /// tracks point, so it moves with the workload.
+    PointInRow,
+    /// A box face the route cannot reproduce.
+    ProbeBoxFace,
+    /// A hazard text property in range (display / mouse-face / line-height).
+    HazardProp,
+    /// Everything else: window policy, scan-ladder misses, overlays, elision,
+    /// replacements, seams and the remaining probe refusals.
+    Other,
+}
 
-    const ALL: [RouteRefusal; Self::COUNT] = [
-        RouteRefusal::PolicyHscroll,
-        RouteRefusal::PolicySelectiveDisplay,
-        RouteRefusal::PolicyWordWrap,
-        RouteRefusal::PolicyTrailingWhitespace,
-        RouteRefusal::ScanNoFitFirstChar,
-        RouteRefusal::ScanExactFill,
-        RouteRefusal::ScanChar,
-        RouteRefusal::ScanCompose,
-        RouteRefusal::ScanEob,
-        RouteRefusal::PointInRow,
-        RouteRefusal::Overlay,
-        RouteRefusal::DisplayTable,
-        RouteRefusal::Elision,
-        RouteRefusal::OverflowElision,
-        RouteRefusal::HazardProp,
-        RouteRefusal::Replacement,
-        RouteRefusal::Boundary,
-        RouteRefusal::ComposedSeam,
-        RouteRefusal::ProbeBoxFace,
-        RouteRefusal::ProbeFaceDiverges,
-        RouteRefusal::ProbeMeasure,
+impl RouteRefusalClass {
+    const COUNT: usize = 5;
+
+    const ALL: [RouteRefusalClass; Self::COUNT] = [
+        RouteRefusalClass::DisplayTable,
+        RouteRefusalClass::PointInRow,
+        RouteRefusalClass::ProbeBoxFace,
+        RouteRefusalClass::HazardProp,
+        RouteRefusalClass::Other,
     ];
 
     fn index(self) -> usize {
-        Self::ALL
-            .iter()
-            .position(|reason| *reason == self)
-            .expect("every refusal variant is listed in ALL")
+        match self {
+            RouteRefusalClass::DisplayTable => 0,
+            RouteRefusalClass::PointInRow => 1,
+            RouteRefusalClass::ProbeBoxFace => 2,
+            RouteRefusalClass::HazardProp => 3,
+            RouteRefusalClass::Other => 4,
+        }
     }
 
     fn label(self) -> &'static str {
         match self {
-            RouteRefusal::PolicyHscroll => "policy_hscroll",
-            RouteRefusal::PolicySelectiveDisplay => "policy_selective_display",
-            RouteRefusal::PolicyWordWrap => "policy_word_wrap",
-            RouteRefusal::PolicyTrailingWhitespace => "policy_trailing_ws",
-            RouteRefusal::ScanNoFitFirstChar => "scan_no_fit_first_char",
-            RouteRefusal::ScanExactFill => "scan_exact_fill",
-            RouteRefusal::ScanChar => "scan_char",
-            RouteRefusal::ScanCompose => "scan_compose",
-            RouteRefusal::ScanEob => "scan_eob",
-            RouteRefusal::PointInRow => "point_in_row",
-            RouteRefusal::Overlay => "overlay",
-            RouteRefusal::DisplayTable => "display_table",
-            RouteRefusal::Elision => "elision",
-            RouteRefusal::OverflowElision => "overflow_elision",
-            RouteRefusal::HazardProp => "hazard_prop",
-            RouteRefusal::Replacement => "replacement",
-            RouteRefusal::Boundary => "boundary",
-            RouteRefusal::ComposedSeam => "composed_seam",
-            RouteRefusal::ProbeBoxFace => "probe_box_face",
-            RouteRefusal::ProbeFaceDiverges => "probe_face_diverges",
-            RouteRefusal::ProbeMeasure => "probe_measure",
+            RouteRefusalClass::DisplayTable => "display_table",
+            RouteRefusalClass::PointInRow => "point_in_row",
+            RouteRefusalClass::ProbeBoxFace => "probe_box_face",
+            RouteRefusalClass::HazardProp => "hazard_prop",
+            RouteRefusalClass::Other => "other",
+        }
+    }
+}
+
+impl RouteRefusal {
+    fn class(self) -> RouteRefusalClass {
+        match self {
+            RouteRefusal::DisplayTable => RouteRefusalClass::DisplayTable,
+            RouteRefusal::PointInRow => RouteRefusalClass::PointInRow,
+            RouteRefusal::ProbeBoxFace => RouteRefusalClass::ProbeBoxFace,
+            RouteRefusal::HazardProp => RouteRefusalClass::HazardProp,
+            RouteRefusal::PolicyHscroll
+            | RouteRefusal::PolicySelectiveDisplay
+            | RouteRefusal::PolicyWordWrap
+            | RouteRefusal::PolicyTrailingWhitespace
+            | RouteRefusal::ScanNoFitFirstChar
+            | RouteRefusal::ScanExactFill
+            | RouteRefusal::ScanChar
+            | RouteRefusal::ScanCompose
+            | RouteRefusal::ScanEob
+            | RouteRefusal::Overlay
+            | RouteRefusal::Elision
+            | RouteRefusal::OverflowElision
+            | RouteRefusal::Replacement
+            | RouteRefusal::Boundary
+            | RouteRefusal::ComposedSeam
+            | RouteRefusal::ProbeFaceDiverges
+            | RouteRefusal::ProbeMeasure => RouteRefusalClass::Other,
         }
     }
 }
@@ -289,8 +316,19 @@ fn route_stats_file() -> Option<&'static str> {
 static ROUTE_STAT_ATTEMPTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static ROUTE_STAT_SKIPPED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static ROUTE_STAT_ROUTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-static ROUTE_STAT_REFUSALS: [std::sync::atomic::AtomicUsize; RouteRefusal::COUNT] =
-    [const { std::sync::atomic::AtomicUsize::new(0) }; RouteRefusal::COUNT];
+/// Attempts that took the route and then ran out of window mid-row, so the
+/// walk terminated inside the commit.
+///
+/// P4.8(d): this outcome had no counter, which is why `attempts` did not
+/// conserve. Every `NotRouted` exit notes a refusal and both success paths
+/// note a routed row, but an `AsciiRowRouteOutcome::Stopped` did neither. It
+/// is the walk's own termination, roughly once per redisplay pass: the corpus
+/// gap was 137 of 70341 attempts and the tty-typing gap was ~6002 against
+/// ~6004 redisplays. Counting it makes the line conservation-complete —
+/// attempts == routed + stopped + sum(refusals).
+static ROUTE_STAT_STOPPED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static ROUTE_STAT_REFUSALS: [std::sync::atomic::AtomicUsize; RouteRefusalClass::COUNT] =
+    [const { std::sync::atomic::AtomicUsize::new(0) }; RouteRefusalClass::COUNT];
 
 fn note_route_attempt() {
     if route_stats_file().is_some() {
@@ -300,8 +338,20 @@ fn note_route_attempt() {
 
 fn note_route_refusal(reason: RouteRefusal) {
     if route_stats_file().is_some() {
-        ROUTE_STAT_REFUSALS[reason.index()].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        ROUTE_STAT_REFUSALS[reason.class().index()]
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
+}
+
+/// The route committed a row and the walk then ran out of window. See
+/// [`ROUTE_STAT_STOPPED`]; returns its argument so the exits can stay
+/// single-expression.
+fn note_route_stopped(outcome: AsciiRowRouteOutcome) -> AsciiRowRouteOutcome {
+    debug_assert_eq!(outcome, AsciiRowRouteOutcome::Stopped);
+    if route_stats_file().is_some() {
+        ROUTE_STAT_STOPPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    outcome
 }
 
 fn note_route_skipped() {
@@ -370,16 +420,21 @@ pub(crate) fn route_stats_append_report() {
     let Some(path) = route_stats_file() else {
         return;
     };
+    // `skipped` is reported alongside `attempts`, not inside it: a skipped
+    // position never became an attempt (the refusal window answered for it),
+    // so the conserving identity is attempts == routed + stopped +
+    // sum(refuse_*), with skipped accounted separately.
     let mut line = format!(
-        "row_route pid={} attempts={} skipped={} routed={}",
+        "row_route pid={} attempts={} skipped={} routed={} stopped={}",
         std::process::id(),
         ROUTE_STAT_ATTEMPTS.load(std::sync::atomic::Ordering::Relaxed),
         ROUTE_STAT_SKIPPED.load(std::sync::atomic::Ordering::Relaxed),
         ROUTE_STAT_ROUTED.load(std::sync::atomic::Ordering::Relaxed),
+        ROUTE_STAT_STOPPED.load(std::sync::atomic::Ordering::Relaxed),
     );
-    for reason in RouteRefusal::ALL {
-        let count = ROUTE_STAT_REFUSALS[reason.index()].load(std::sync::atomic::Ordering::Relaxed);
-        line.push_str(&format!(" refuse_{}={}", reason.label(), count));
+    for class in RouteRefusalClass::ALL {
+        let count = ROUTE_STAT_REFUSALS[class.index()].load(std::sync::atomic::Ordering::Relaxed);
+        line.push_str(&format!(" refuse_{}={}", class.label(), count));
     }
     for (label, counter) in [("routed_mid_line", &ROUTE_STAT_ROUTED_MID_LINE)] {
         line.push_str(&format!(
@@ -2369,20 +2424,6 @@ impl crate::display_source::DisplayItemSource for BufferAsciiItemSource {
     }
 }
 
-/// Gate for the routed acquisition. Default ON since phase 3 (2026-08-06):
-/// the flip was justified by measured coverage (TUI suite: 37.8% of
-/// line-start row attempts routed) at neutral protected-workload cost
-/// (TTY keystroke instruction count +0.035% flag-on after the cursor/EOB
-/// pre-gate, word-wrap refused-heavy +0.016% — both within run noise).
-/// `NEOMACS_ROW_ITEM_ROUTE=off` opts OUT, restoring the pure buffer
-/// pipeline (kept for soak time; removal is phase 4 business). Any other
-/// value (including the historical opt-in `ascii`) leaves the route on.
-pub(crate) fn row_item_route_ascii_enabled() -> bool {
-    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ENABLED
-        .get_or_init(|| !std::env::var("NEOMACS_ROW_ITEM_ROUTE").is_ok_and(|value| value == "off"))
-}
-
 /// Test-only engagement proof: rows actually rendered through the routed
 /// item-renderer acquisition in this process. Lets the flag-on suite run
 /// assert the route is exercised rather than silently unreachable.
@@ -2561,8 +2602,8 @@ impl<'rows, 'emit, 'surface>
     crate::buffer_source::loop_state::BufferSourceLoopMutableState<'rows, 'emit, 'surface>
 {
     /// Attempt to acquire and render the row starting at the current walk
-    /// position through the unified item renderer (`NEOMACS_ROW_ITEM_ROUTE=
-    /// ascii` route). Only rows [`classify_row_acquisition`] approves are
+    /// position through the whole-row fast path. Only rows
+    /// [`classify_row_acquisition`] approves are
     /// taken; every candidate face segment is probed (checkpoint face,
     /// per-run face-chain agreement, box-free, natural-measurement fit — the
     /// same measurement the buffer pipeline's whole-run decision uses)
@@ -3169,7 +3210,7 @@ impl<'rows, 'emit, 'surface>
                     "routed overlay strings are single-line and fit the row"
                 );
                 if continuation.should_break() {
-                    return AsciiRowRouteOutcome::Stopped;
+                    return note_route_stopped(AsciiRowRouteOutcome::Stopped);
                 }
                 let committed = self.progress.row_position();
                 debug_assert_eq!(
@@ -3267,7 +3308,7 @@ impl<'rows, 'emit, 'surface>
                             "routed replacement strings are single-line"
                         );
                         if produced_row_break {
-                            return AsciiRowRouteOutcome::Stopped;
+                            return note_route_stopped(AsciiRowRouteOutcome::Stopped);
                         }
                         render_position = self.progress.row_position();
                     }
@@ -3308,13 +3349,13 @@ impl<'rows, 'emit, 'surface>
                                 &mut render_policy,
                             )
                         else {
-                            return AsciiRowRouteOutcome::Stopped;
+                            return note_route_stopped(AsciiRowRouteOutcome::Stopped);
                         };
                         render_position = append_progress.end();
                         self.progress.apply_row_position(render_position);
                     }
                     BufferDisplayPropertyTextReplacementApplyOutcome::Stop => {
-                        return AsciiRowRouteOutcome::Stopped;
+                        return note_route_stopped(AsciiRowRouteOutcome::Stopped);
                     }
                 }
                 continue;
@@ -3363,7 +3404,7 @@ impl<'rows, 'emit, 'surface>
                 DisplayRowAppendKind::SourceText,
                 &mut render_policy,
             ) else {
-                return AsciiRowRouteOutcome::Stopped;
+                return note_route_stopped(AsciiRowRouteOutcome::Stopped);
             };
             render_position = append_progress.end();
             self.progress.apply_row_position(render_position);
@@ -3455,7 +3496,7 @@ impl<'rows, 'emit, 'surface>
             )
             .render_and_apply(source_walk, buffer, self.reborrow());
         if continuation.should_break() {
-            return AsciiRowRouteOutcome::Stopped;
+            return note_route_stopped(AsciiRowRouteOutcome::Stopped);
         }
         note_routed_row(plan, wrap_mode, mid_line_start);
         AsciiRowRouteOutcome::Rendered

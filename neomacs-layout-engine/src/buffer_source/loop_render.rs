@@ -82,24 +82,21 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
             // Coverage is capability-bounded, not total (~44% of attempts;
             // display tables, point rows, box faces and word wrap genuinely
             // cannot route), so the element arm below is the GENERAL path and
-            // renders everything the route refuses. Opt out of the route with
-            // NEOMACS_ROW_ITEM_ROUTE=off.
-            if crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-                use crate::buffer_source::row_route::AsciiRowRouteOutcome;
-                match self.try_render_ascii_row_via_item_renderer(
-                    loop_context,
-                    face_resolution_context,
-                    source_walk,
-                    text,
-                    params,
-                    active_face_state,
-                    buffer,
-                    &mut route_refusals,
-                ) {
-                    AsciiRowRouteOutcome::Rendered => continue,
-                    AsciiRowRouteOutcome::Stopped => break,
-                    AsciiRowRouteOutcome::NotRouted => {}
-                }
+            // renders everything the route refuses.
+            use crate::buffer_source::row_route::AsciiRowRouteOutcome;
+            match self.try_render_ascii_row_via_item_renderer(
+                loop_context,
+                face_resolution_context,
+                source_walk,
+                text,
+                params,
+                active_face_state,
+                buffer,
+                &mut route_refusals,
+            ) {
+                AsciiRowRouteOutcome::Rendered => continue,
+                AsciiRowRouteOutcome::Stopped => break,
+                AsciiRowRouteOutcome::NotRouted => {}
             }
 
             if !BufferSourceRenderRequest::new(

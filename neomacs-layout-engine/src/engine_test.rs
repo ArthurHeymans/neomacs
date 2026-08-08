@@ -14598,15 +14598,11 @@ fn ascii_item_source_shadow_matches_row_after_empty_line() {
     assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
 }
 
-/// Engagement proof for the flag-on suite gate (NEOMACS_ROW_ITEM_ROUTE=ascii):
-/// laying out plain ASCII rows must actually take the routed item-renderer
-/// acquisition, not silently fall back. Trivially passes when the flag is off
-/// (the routed path is deliberately unreachable then).
+/// Engagement proof: laying out plain ASCII rows must actually take the routed
+/// acquisition, not silently fall back. Unconditional since P4.8(d) retired the
+/// route gate.
 #[test]
-fn ascii_route_flag_on_layout_engages_item_renderer_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_item_renderer_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, rows, _char_width, _char_height) =
@@ -14624,10 +14620,7 @@ fn ascii_route_flag_on_layout_engages_item_renderer_acquisition() {
 /// face-segmented row must actually take the routed segmented acquisition.
 /// Trivially passes when the flag is off.
 #[test]
-fn ascii_route_flag_on_layout_engages_segmented_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_segmented_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_SEGMENTED_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
@@ -14752,10 +14745,7 @@ fn ascii_item_prefix_shadow_matches_first_row_of_wrapped_line() {
 /// routed overflow-prefix acquisition. Trivially passes when the flag is
 /// off.
 #[test]
-fn ascii_route_flag_on_layout_engages_truncation_prefix_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_truncation_prefix_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_TRUNCATION_PREFIX_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let long_line: String = format!("{}\n", "abcdefghij".repeat(12));
@@ -14778,10 +14768,7 @@ fn ascii_route_flag_on_layout_engages_truncation_prefix_acquisition() {
 /// gate): laying out an over-wide line under character wrap must route row 1's
 /// fitting prefix. Trivially passes when the flag is off.
 #[test]
-fn ascii_route_flag_on_layout_engages_wrap_prefix_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_wrap_prefix_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_WRAP_PREFIX_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let long_line: String = format!("{}\n", "abcdefghij".repeat(12));
@@ -14800,10 +14787,7 @@ fn ascii_route_flag_on_layout_engages_wrap_prefix_acquisition() {
 /// the continuation rows of a wrapped plain line must route from their
 /// mid-line position. Trivially passes when the flag is off.
 #[test]
-fn ascii_route_flag_on_layout_engages_mid_line_start_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_mid_line_start_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_MID_LINE_START_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let long_line: String = format!("{}\n", "abcdefghij".repeat(12));
@@ -14825,10 +14809,7 @@ fn ascii_route_flag_on_layout_engages_mid_line_start_acquisition() {
 /// glyphs are asserted alongside, because the window's only real risk is
 /// silently withholding the route from positions that should have it.
 #[test]
-fn ascii_route_flag_on_layout_skips_reclassifying_a_refused_cursor_line() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_skips_reclassifying_a_refused_cursor_line() {
     let before = crate::buffer_source::row_route::ROUTE_SKIPPED_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     // Three face runs before point, so the walk stands at three distinct
@@ -15003,10 +14984,7 @@ fn ascii_item_prefix_shadow_matches_eob_tail_row() {
 /// gate): laying out a buffer with an empty line must route it RowBreak-only.
 /// Trivially passes when the flag is off.
 #[test]
-fn ascii_route_flag_on_layout_engages_empty_row_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_empty_row_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_EMPTY_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, rows, _char_width, _char_height) = layout_main_text_rows("x\n\ny\n");
@@ -15024,10 +15002,7 @@ fn ascii_route_flag_on_layout_engages_empty_row_acquisition() {
 /// a buffer ending without a trailing newline must route its final line when
 /// point is elsewhere. Trivially passes when the flag is off.
 #[test]
-fn ascii_route_flag_on_layout_engages_eob_tail_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_eob_tail_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_EOB_TAIL_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
@@ -15563,10 +15538,7 @@ fn ascii_route_classifies_wide_char_straddle_prefix_and_exact_fill() {
 /// Engagement proof for the tab extension (flag-on suite gate): a tab row
 /// must actually take the routed acquisition. Trivially passes flag-off.
 #[test]
-fn ascii_route_flag_on_layout_engages_tab_row_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_tab_row_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_TAB_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, rows, _char_width, _char_height) =
@@ -15584,10 +15556,7 @@ fn ascii_route_flag_on_layout_engages_tab_row_acquisition() {
 /// wide-char row must actually take the routed acquisition. Trivially passes
 /// flag-off.
 #[test]
-fn ascii_route_flag_on_layout_engages_wide_char_row_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_wide_char_row_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_WIDE_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, rows, _char_width, _char_height) =
@@ -16199,10 +16168,7 @@ fn overlay_string_rows_route_and_render_identically() {
 /// refuse for some unrelated reason and leave the delegation unreached.
 /// Trivially passes when the flag is off.
 #[test]
-fn ascii_route_flag_on_layout_engages_overlay_string_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_overlay_string_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_OVERLAY_STRING_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
@@ -16226,10 +16192,7 @@ fn ascii_route_flag_on_layout_engages_overlay_string_acquisition() {
 /// overlay-faced row must actually take the routed acquisition. Trivially
 /// passes when the flag is off.
 #[test]
-fn ascii_route_flag_on_layout_engages_overlay_face_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_overlay_face_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_OVERLAY_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
@@ -16527,10 +16490,7 @@ fn ascii_item_source_shadow_matches_mark_cluster_beside_face_span() {
 /// a combining-mark row must actually take the routed acquisition.
 /// Trivially passes when the flag is off.
 #[test]
-fn ascii_route_flag_on_layout_engages_composed_cluster_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_composed_cluster_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_COMPOSED_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, rows, _char_width, _char_height) =
@@ -16622,10 +16582,7 @@ fn ascii_item_source_shadow_matches_inert_composition_prop_row() {
 /// gate): an elided row must actually take the routed acquisition.
 /// Trivially passes when the flag is off.
 #[test]
-fn ascii_route_flag_on_layout_engages_elided_row_acquisition() {
-    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        return;
-    }
+fn ascii_route_layout_engages_elided_row_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_ELIDED_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
@@ -16646,9 +16603,8 @@ fn ascii_route_flag_on_layout_engages_elided_row_acquisition() {
 
 /// Phase 2d refusal pin: ellipsis-invisible rows stay on the buffer
 /// pipeline, which appends the `...` glyphs with their own rules (GNU
-/// setup_for_ellipsis: saved face, newpos-1 provenance). Identical output
-/// whether the route flag is on or off; if the classifier ever routed the
-/// row, the ellipsis would vanish under NEOMACS_ROW_ITEM_ROUTE=ascii.
+/// setup_for_ellipsis: saved face, newpos-1 provenance). If the classifier
+/// ever routed the row, the ellipsis would vanish.
 #[test]
 fn ellipsis_invisible_rows_stay_on_buffer_pipeline_under_item_route() {
     let text = "abXXcd\nnext\n";
@@ -16832,17 +16788,12 @@ fn display_string_replacement_row_routes_and_matches_pipeline() {
         .load(std::sync::atomic::Ordering::Relaxed);
     let (eval, buf_id, _fid_r, rows_routed, char_width, _ch_r) =
         layout_main_text_rows_with(text, put_replacement);
-    // Under NEOMACS_ROW_ITEM_ROUTE=off both sides render through the
-    // pipeline; the engagement proof applies only when the route is on (the
-    // glyph-identity assertions below hold either way).
-    if crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        assert!(
-            crate::buffer_source::row_route::ROUTED_REPLACEMENT_ROW_COUNT
-                .load(std::sync::atomic::Ordering::Relaxed)
-                > routed_before,
-            "the replacement row must render through the routed acquisition"
-        );
-    }
+    assert!(
+        crate::buffer_source::row_route::ROUTED_REPLACEMENT_ROW_COUNT
+            .load(std::sync::atomic::Ordering::Relaxed)
+            > routed_before,
+        "the replacement row must render through the routed acquisition"
+    );
 
     // Glyph-for-glyph identity: type, charpos provenance, face id, pixel
     // geometry, wide/padding flags.
@@ -16950,14 +16901,12 @@ fn space_width_spec_row_routes_and_matches_pipeline() {
     let routed_before = crate::buffer_source::row_route::ROUTED_REPLACEMENT_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (eval, buf_id, _f_r, rows_routed, _cw_r, _c_r) = layout_main_text_rows_with(text, put_spec);
-    if crate::buffer_source::row_route::row_item_route_ascii_enabled() {
-        assert!(
-            crate::buffer_source::row_route::ROUTED_REPLACEMENT_ROW_COUNT
-                .load(std::sync::atomic::Ordering::Relaxed)
-                > routed_before,
-            "the space-spec row must render through the routed acquisition"
-        );
-    }
+    assert!(
+        crate::buffer_source::row_route::ROUTED_REPLACEMENT_ROW_COUNT
+            .load(std::sync::atomic::Ordering::Relaxed)
+            > routed_before,
+        "the space-spec row must render through the routed acquisition"
+    );
     assert_eq!(
         rows_routed[0].glyphs[1], rows_pipeline[0].glyphs[1],
         "routed space-spec row must equal the pipeline row glyph-for-glyph"
