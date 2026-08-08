@@ -1332,6 +1332,11 @@ pub(crate) fn builtin_kill_all_local_variables(
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let kill_permanent = args.first().copied().unwrap_or(Value::NIL).is_truthy();
+    // GNU `Fkill_all_local_variables` calls `bset_update_mode_line`
+    // (buffer.c:3046, "Force mode-line redisplay.  Useful here because all
+    // major mode commands call this function."). `%m` and any buffer-local
+    // mode-line-format are the reason.
+    eval.mark_chrome_dirty_all();
 
     // GNU `Fkill_all_local_variables` (buffer.c) runs the normal hook
     // `change-major-mode-hook` as its very first action, *before* any local

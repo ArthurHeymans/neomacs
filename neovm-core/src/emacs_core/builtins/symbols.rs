@@ -2734,6 +2734,11 @@ pub(crate) fn builtin_rename_buffer(
         }
     };
     let old_name_text = expect_string_lossy(&old_name)?;
+    // GNU `Frename_buffer` calls `bset_update_mode_line` (buffer.c:1718)
+    // with the comment "Catch redisplay's attention.  Unless we do this, the
+    // mode lines for any windows displaying current_buffer will stay
+    // unchanged." `%b` is the reason.
+    eval.mark_chrome_dirty_all();
 
     let unique = args.get(1).copied().unwrap_or(Value::NIL);
 

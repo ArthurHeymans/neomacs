@@ -1404,6 +1404,35 @@ pub fn variable_affects_display(name: &str) -> bool {
 /// `variable_affects_display` keyed by `SymId`, for the hot variable-set
 /// path. Resolves the symbol's name once into a dense `SymId -> bool`
 /// table so the chokepoint avoids a string hash on every assignment.
+/// The three chrome formats. GNU reaches these through the same
+/// `add-variable-watcher` list as the other display variables
+/// (lisp/frame.el:3752-3779), but their effect is narrower: changing one
+/// invalidates a window's mode / header / tab line specifically, which is the
+/// flag redisplay's chrome skip consults.
+const CHROME_FORMAT_VARS: &[&str] = &["mode-line-format", "header-line-format", "tab-line-format"];
+
+/// Whether setting this variable invalidates chrome (mode / header / tab
+/// line). A subset of [`variable_affects_display_by_sym_id`].
+pub fn variable_affects_chrome_by_sym_id(sym_id: SymId) -> bool {
+    static CHROME_VAR_BY_SYM: OnceLock<Box<[bool]>> = OnceLock::new();
+    CHROME_VAR_BY_SYM
+        .get_or_init(|| {
+            let mut entries: Vec<bool> = Vec::new();
+            for &name in CHROME_FORMAT_VARS {
+                let id = intern(name);
+                let index = id.0 as usize;
+                if entries.len() <= index {
+                    entries.resize(index + 1, false);
+                }
+                entries[index] = true;
+            }
+            entries.into_boxed_slice()
+        })
+        .get(sym_id.0 as usize)
+        .copied()
+        .unwrap_or(false)
+}
+
 pub fn variable_affects_display_by_sym_id(sym_id: SymId) -> bool {
     static DISPLAY_VAR_BY_SYM: OnceLock<Box<[bool]>> = OnceLock::new();
     DISPLAY_VAR_BY_SYM

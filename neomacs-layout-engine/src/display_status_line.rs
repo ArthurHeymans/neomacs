@@ -82,12 +82,16 @@ use strum::{EnumString, IntoStaticStr};
 // frame.
 thread_local! {
     static MODE_LINE_EVAL_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static HEADER_LINE_EVAL_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static TAB_LINE_EVAL_COUNT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
 /// Reset the per-redisplay mode-line eval counter. Called once at the start of
 /// `layout_frame_rust`.
 pub fn reset_mode_line_eval_count() {
     MODE_LINE_EVAL_COUNT.with(|count| count.set(0));
+    HEADER_LINE_EVAL_COUNT.with(|count| count.set(0));
+    TAB_LINE_EVAL_COUNT.with(|count| count.set(0));
 }
 
 /// How many times `mode-line-format` has been evaluated for display since the
@@ -96,9 +100,27 @@ pub fn mode_line_eval_count() -> u32 {
     MODE_LINE_EVAL_COUNT.with(std::cell::Cell::get)
 }
 
+/// As [`mode_line_eval_count`], for `header-line-format`. GNU regenerates all
+/// three chrome formats together (`display_mode_lines`, xdisp.c:28027+), so a
+/// chrome skip must move these counters together with the mode line's.
+pub fn header_line_eval_count() -> u32 {
+    HEADER_LINE_EVAL_COUNT.with(std::cell::Cell::get)
+}
+
+/// As [`mode_line_eval_count`], for `tab-line-format`.
+pub fn tab_line_eval_count() -> u32 {
+    TAB_LINE_EVAL_COUNT.with(std::cell::Cell::get)
+}
+
 fn record_mode_line_eval(format_symbol: &str) {
     if format_symbol == "mode-line-format" {
         MODE_LINE_EVAL_COUNT.with(|count| count.set(count.get() + 1));
+    }
+    if format_symbol == "header-line-format" {
+        HEADER_LINE_EVAL_COUNT.with(|count| count.set(count.get() + 1));
+    }
+    if format_symbol == "tab-line-format" {
+        TAB_LINE_EVAL_COUNT.with(|count| count.set(count.get() + 1));
     }
 }
 

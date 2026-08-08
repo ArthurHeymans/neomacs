@@ -1762,6 +1762,12 @@ impl LayoutEngine {
             }
         }
         self.last_frame_display_state = Some(sealed);
+        // The chrome the dirty flags asked for has now been generated, so
+        // clear them — GNU's analogue is resetting `update_mode_lines` at the
+        // end of `redisplay_internal` plus `mark_window_display_accurate_1`.
+        // Clearing unconditionally is correct while nothing skips chrome; when
+        // the skip lands it must clear exactly what it honored.
+        evaluator.clear_chrome_dirty();
 
         self.prev_window_infos = curr_window_infos;
 

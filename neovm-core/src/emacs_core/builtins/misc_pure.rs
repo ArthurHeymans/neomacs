@@ -449,6 +449,12 @@ pub(crate) fn builtin_force_mode_line_update(
 ) -> EvalResult {
     expect_max_args("force-mode-line-update", &args, 1)?;
     ctx.invalidate_redisplay();
+    // GNU `Fforce_mode_line_update` (buffer.c) raises the mode-line dirty
+    // flag as well as forcing a redisplay: without ALL it is
+    // `bset_update_mode_line` on the current buffer, with ALL it is the
+    // global `update_mode_lines = 10`. Both reach every window showing the
+    // buffer, which is what `mark_chrome_dirty_all` models.
+    ctx.mark_chrome_dirty_all();
     Ok(args.first().cloned().unwrap_or(Value::NIL))
 }
 

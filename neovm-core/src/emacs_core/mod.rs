@@ -27,6 +27,7 @@ pub mod ccl;
 pub mod character;
 pub mod charset;
 pub mod chartable;
+pub mod chrome_dirty;
 pub mod cl_lib;
 pub mod coding;
 pub mod comp;

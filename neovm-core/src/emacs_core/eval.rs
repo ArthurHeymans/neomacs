@@ -2275,6 +2275,9 @@ pub struct Context {
     /// Explicit redisplay invalidation generation, used for state that GNU
     /// marks with update_mode_lines/window redisplay flags.
     redisplay_generation: u64,
+    /// Which windows' chrome (mode/header/tab line) must be re-generated on
+    /// the next redisplay. See [`ChromeDirty`].
+    chrome_dirty: crate::emacs_core::chrome_dirty::ChromeDirty,
     /// Process-unique id for THIS evaluator instance. Lets thread-local
     /// caches outside neovm-core (e.g. the layout engine's menu-bar item
     /// cache) refuse entries from a previous Context: tests create many
@@ -5591,6 +5594,7 @@ impl Context {
             materialized_face_table_source: None,
             display_var_change_count: 0,
             redisplay_generation: 0,
+            chrome_dirty: Default::default(),
             context_instance_id: next_context_instance_id(),
             media_generation: 0,
             last_redisplay_signature: None,
@@ -5783,6 +5787,7 @@ impl Context {
             materialized_face_table_source: None,
             display_var_change_count: 0,
             redisplay_generation: 0,
+            chrome_dirty: Default::default(),
             context_instance_id: next_context_instance_id(),
             media_generation: 0,
             last_redisplay_signature: None,
@@ -7587,6 +7592,32 @@ impl Context {
         self.context_instance_id
     }
 
+    /// The chrome dirty set — which windows must re-generate their mode /
+    /// header / tab line. See [`crate::emacs_core::chrome_dirty::ChromeDirty`]
+    /// for the GNU flags this ports and for why nothing consults it as a skip
+    /// yet.
+    pub fn chrome_dirty(&self) -> &crate::emacs_core::chrome_dirty::ChromeDirty {
+        &self.chrome_dirty
+    }
+
+    /// GNU `bset_update_mode_line`: a buffer-scoped event that invalidates
+    /// chrome everywhere the buffer might be shown.
+    pub fn mark_chrome_dirty_all(&mut self) {
+        self.chrome_dirty.mark_all();
+    }
+
+    /// GNU `wset_update_mode_line`: a window-scoped event.
+    pub fn mark_chrome_dirty_window(&mut self, window: WindowId) {
+        self.chrome_dirty.mark_window(window);
+    }
+
+    /// Called by redisplay once it has re-generated the chrome the flags asked
+    /// for. GNU's analogue is clearing `update_mode_lines` at the end of
+    /// `redisplay_internal` plus `mark_window_display_accurate_1`.
+    pub fn clear_chrome_dirty(&mut self) {
+        self.chrome_dirty.clear();
+    }
+
     pub(crate) fn invalidate_redisplay(&mut self) {
         tracing::debug!(target: "neomacs::redisplay_sig", "invalidate_redisplay");
         self.redisplay_generation = self.redisplay_generation.wrapping_add(1);
@@ -7625,6 +7656,15 @@ impl Context {
             builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id).unwrap_or(sym_id);
         if crate::buffer::buffer::variable_affects_display_by_sym_id(resolved) {
             self.invalidate_redisplay();
+            // GNU covers the three chrome formats with an
+            // `add-variable-watcher` calling `set-buffer-redisplay`
+            // (lisp/frame.el:3752-3779 -> xdisp.c:922-931), which raises the
+            // mode-line dirty flag. The curated display-variable set here is
+            // the same list by another name, so the chrome members of it get
+            // the chrome flag too.
+            if crate::buffer::buffer::variable_affects_chrome_by_sym_id(resolved) {
+                self.chrome_dirty.mark_all();
+            }
             // A display-affecting variable changed: the incremental fast paths
             // key on this counter so they re-lay instead of reusing rows shaped
             // under the old setting (the four buffer/face ticks do not move here).

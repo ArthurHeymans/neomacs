@@ -24659,3 +24659,170 @@ fn p52_force_mode_line_update_re_evaluates_the_mode_line() {
         "force-mode-line-update must re-evaluate mode-line-format"
     );
 }
+
+/// CONTRACT (the flag half): each event GNU answers with
+/// `bset_update_mode_line` / `wset_update_mode_line` must raise neomacs's
+/// chrome dirty flag. The trigger inventory is §2 of
+/// tmp/p52-gnu-extraction.md; this pins one case per GNU call site so the
+/// skip that will consult the flag inherits a checked invalidation set
+/// rather than an assumed one.
+///
+/// The flag is cleared at the end of every accepted layout, so each case
+/// starts from a laid-out frame and asserts the transition.
+#[test]
+fn p52_chrome_dirty_flag_is_raised_by_each_gnu_trigger() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+
+    // force-mode-line-update — GNU Fforce_mode_line_update (buffer.c).
+    {
+        let (mut eval, frame_id, _buf, _sel) = incr_editing_frame(&text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        engine.layout_frame_rust(&mut eval, frame_id);
+        assert!(
+            !eval.chrome_dirty().is_any_dirty(),
+            "layout clears the chrome dirty flag"
+        );
+        eval.eval_str("(force-mode-line-update)").expect("eval");
+        assert!(
+            eval.chrome_dirty().is_any_dirty(),
+            "force-mode-line-update must raise the chrome dirty flag"
+        );
+    }
+
+    // Setting mode-line-format — GNU's add-variable-watcher on the three
+    // chrome formats (lisp/frame.el:3752-3779 -> xdisp.c:922-931).
+    for var in ["mode-line-format", "header-line-format", "tab-line-format"] {
+        let (mut eval, frame_id, _buf, _sel) = incr_editing_frame(&text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        engine.layout_frame_rust(&mut eval, frame_id);
+        assert!(!eval.chrome_dirty().is_any_dirty());
+        eval.eval_str(&format!("(setq {var} \"X\")")).expect("eval");
+        assert!(
+            eval.chrome_dirty().is_any_dirty(),
+            "setting {var} must raise the chrome dirty flag"
+        );
+    }
+
+    // rename-buffer — GNU buffer.c:1718, the `%b` case.
+    {
+        let (mut eval, frame_id, _buf, _sel) = incr_editing_frame(&text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        engine.layout_frame_rust(&mut eval, frame_id);
+        assert!(!eval.chrome_dirty().is_any_dirty());
+        eval.eval_str("(rename-buffer \"renamed-for-p52\")")
+            .expect("eval");
+        assert!(
+            eval.chrome_dirty().is_any_dirty(),
+            "rename-buffer must raise the chrome dirty flag"
+        );
+    }
+
+    // kill-all-local-variables — GNU buffer.c:3046, the major-mode chokepoint.
+    {
+        let (mut eval, frame_id, _buf, _sel) = incr_editing_frame(&text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        engine.layout_frame_rust(&mut eval, frame_id);
+        assert!(!eval.chrome_dirty().is_any_dirty());
+        eval.eval_str("(kill-all-local-variables)").expect("eval");
+        assert!(
+            eval.chrome_dirty().is_any_dirty(),
+            "kill-all-local-variables must raise the chrome dirty flag"
+        );
+    }
+
+    // set-window-start — GNU window.c:1969. Window-scoped, not buffer-scoped:
+    // this is the one case that must dirty a NAMED window.
+    {
+        let (mut eval, frame_id, _buf, selected) = incr_editing_frame(&text, 800, 600);
+        let mut engine = LayoutEngine::new();
+        engine.layout_frame_rust(&mut eval, frame_id);
+        assert!(!eval.chrome_dirty().is_any_dirty());
+        eval.eval_str("(set-window-start (selected-window) 20)")
+            .expect("eval");
+        assert!(
+            eval.chrome_dirty().is_dirty(selected),
+            "set-window-start must dirty the window whose start moved"
+        );
+    }
+}
+
+/// CONTRACT: changing the selected window re-evaluates the mode line of BOTH
+/// windows, because the mode-line face flips active/inactive and the face is
+/// chosen from the real selected window
+/// (`CURRENT_MODE_LINE_ACTIVE_FACE_ID_3`, dispextern.h:1541-1549). GNU gets
+/// there through select_window -> wset_redisplay -> windows_or_buffers_changed
+/// -> update_mode_lines (xdisp.c:17545-17550), which is frame-wide, so the
+/// golden is 2 evals for a two-window frame, not 1.
+#[test]
+fn p52_selected_window_change_re_evaluates_both_windows_mode_lines() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("ML"));
+    }
+    let right = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected,
+            neovm_core::window::SplitDirection::Horizontal,
+            buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        2,
+        "a two-window frame evaluates mode-line-format once per window"
+    );
+
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .selected_window = right;
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        2,
+        "a selected-window change must re-evaluate BOTH windows' mode lines \
+         (the active/inactive face flips on both)"
+    );
+}
+
+/// CONTRACT: the header line and the tab line share the mode line's contract.
+/// GNU regenerates all three in one `display_mode_lines` call
+/// (xdisp.c:28027+), so a chrome skip is per window, never per chrome kind —
+/// these counters must move together with `mode_line_eval_count`.
+#[test]
+fn p52_header_and_tab_lines_are_evaluated_with_the_mode_line() {
+    use crate::display_status_line::{
+        header_line_eval_count, mode_line_eval_count, tab_line_eval_count,
+    };
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("ML"));
+        buf.set_buffer_local("header-line-format", Value::string("HL"));
+        buf.set_buffer_local("tab-line-format", Value::string("TL"));
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("x");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(mode_line_eval_count(), 1, "mode line evaluated once");
+    assert_eq!(header_line_eval_count(), 1, "header line evaluated once");
+    assert_eq!(tab_line_eval_count(), 1, "tab line evaluated once");
+}

@@ -2013,6 +2013,7 @@ pub(crate) fn builtin_set_window_start(
 ) -> EvalResult {
     expect_min_args("set-window-start", &args, 2)?;
     expect_max_args("set-window-start", &args, 3)?;
+    let chrome_dirty_window;
     let result = {
         let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
         let (fid, wid) =
@@ -2022,6 +2023,10 @@ pub(crate) fn builtin_set_window_start(
         // an explicit start is honored by the next redisplay (point moves
         // into the window if needed) unless NOFORCE asks for the soft mode.
         let force_start_p = args.get(2).is_none_or(|noforce| noforce.is_nil());
+        // GNU `Fset_window_start` calls `wset_update_mode_line (w)`
+        // (window.c:1969): a moved window start changes `%p`/`%l`, and it is
+        // window-scoped, not buffer-scoped.
+        chrome_dirty_window = Some(wid);
         let is_minibuffer = frames
             .get(fid)
             .is_some_and(|frame| frame.minibuffer_window == Some(wid));
@@ -2059,6 +2064,9 @@ pub(crate) fn builtin_set_window_start(
             }
         }
     };
+    if let Some(window) = chrome_dirty_window {
+        eval.mark_chrome_dirty_window(window);
+    }
     Ok(result)
 }
 fn set_window_force_start(window: &mut Window, force: bool) {
@@ -4285,6 +4293,15 @@ pub(crate) fn builtin_select_window(
             vec![Value::symbol("window-live-p"), args[0]],
         ));
     }
+    // GNU `select_window` (window.c) marks BOTH the old and the new window
+    // for redisplay "since the selected-window has a different mode-line";
+    // `wset_redisplay` on a non-selected window raises
+    // `windows_or_buffers_changed`, which `redisplay_internal` promotes into
+    // `update_mode_lines` (xdisp.c:17545-17550). The observable reason is the
+    // mode-line active/inactive face, chosen from the REAL selected window
+    // (`CURRENT_MODE_LINE_ACTIVE_FACE_ID_3`, dispextern.h:1541-1549), so both
+    // windows' chrome changes. GNU's promotion is frame-wide; so is ours.
+    eval.mark_chrome_dirty_all();
     let (record_selection, run_buffer_list_hook, frame_changed) = {
         let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
         let selected_fid = ensure_selected_frame_id_in_state(frames, buffers);
@@ -4413,6 +4430,10 @@ pub(crate) fn builtin_set_window_buffer(
 ) -> EvalResult {
     expect_min_args("set-window-buffer", &args, 2)?;
     expect_max_args("set-window-buffer", &args, 3)?;
+    // GNU's `set-window-buffer` internals call `wset_update_mode_line (w)`
+    // (window.c:4383): the window now shows a different buffer, so every
+    // buffer-derived construct in its chrome (`%b`, `%m`, `%*`, and a
+    // buffer-local mode-line-format) is stale.
     let (fid, wid, buf_id, keep_margins, run_buffer_list_hook) = {
         let (frames, buffers, minibuffers) =
             (&mut eval.frames, &mut eval.buffers, &eval.minibuffers);
