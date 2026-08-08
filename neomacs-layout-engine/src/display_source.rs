@@ -2346,6 +2346,44 @@ enum LispStringAction {
     Skip,
 }
 
+/// What a frame can do once any display property at the position has already
+/// been resolved: emit the position's own glyphs, or run out of string.
+///
+/// The point of the type is what it CANNOT say. It has no `PushReplacement`,
+/// so any path that reaches an action through here is structurally incapable
+/// of nesting a replacement — which is the ban GNU states as
+/// `it->string_from_display_prop_p` (xdisp.c:5934-5942, 6334-6335): a display
+/// string's own display properties are inert, while an overlay string's apply.
+/// [`NestedDisplayPolicy::ModifiersOnly`] used to enforce that with a runtime
+/// branch that simply declined to look; now the arm has no `return` of its own
+/// and can only finish through [`LispStringSourceFrame::resolved_action`], so
+/// the compiler enforces it and the P4.7 nested-ban pins pin behaviour the
+/// type already guarantees.
+enum LispStringResolvedAction {
+    PopFrame,
+    Emit(DisplayItem),
+}
+
+impl From<LispStringResolvedAction> for LispStringAction {
+    fn from(action: LispStringResolvedAction) -> Self {
+        match action {
+            LispStringResolvedAction::PopFrame => Self::PopFrame,
+            LispStringResolvedAction::Emit(item) => Self::Emit(item),
+        }
+    }
+}
+
+/// The position facts both policies compute before any display property is
+/// consulted, handed to [`LispStringSourceFrame::resolved_action`] so the two
+/// arms share one tail instead of two copies of it.
+struct LispStringResolvedSpan {
+    start: usize,
+    property_end: usize,
+    face: RenderFaceRef,
+    pointer_appearance: Option<DisplayPointerAppearance>,
+    item_layout: DisplayItemLayout,
+}
+
 pub(crate) struct LispStringSourceStack {
     frames: Vec<LispStringSourceFrame>,
     next_source_id: u64,
@@ -2526,6 +2564,11 @@ impl LispStringSourceFrame {
 
         let mut item_layout = DisplayItemLayout::default();
         if let Some(display_prop) = self.display_prop_at(start) {
+            // The two policies differ only here, and only the `Handle` arm may
+            // return: the `ModifiersOnly` arm falls through to
+            // `resolved_action`, whose type has no `PushReplacement`, so the
+            // nested-replacement ban is a property of the control flow rather
+            // than of a check someone has to remember to keep.
             if self.nested_display_policy == NestedDisplayPolicy::ModifiersOnly {
                 self.char_index = property_end;
                 item_layout = classify_display_property_modifiers_only(display_prop);
@@ -2572,8 +2615,29 @@ impl LispStringSourceFrame {
             }
         }
 
+        self.resolved_action(LispStringResolvedSpan {
+            start,
+            property_end,
+            face,
+            pointer_appearance,
+            item_layout,
+        })
+        .into()
+    }
+
+    /// Emit the glyphs for a position whose display property (if any) has
+    /// already been resolved. Returns [`LispStringResolvedAction`], which is
+    /// the whole point: no caller of this can produce a nested replacement.
+    fn resolved_action(&mut self, span: LispStringResolvedSpan) -> LispStringResolvedAction {
+        let LispStringResolvedSpan {
+            start,
+            property_end,
+            face,
+            pointer_appearance,
+            item_layout,
+        } = span;
         let Some(ch) = self.char_at(start) else {
-            return LispStringAction::PopFrame;
+            return LispStringResolvedAction::PopFrame;
         };
         if let Some(composition) = self
             .composition_prop_at(start)
@@ -2582,7 +2646,7 @@ impl LispStringSourceFrame {
             let end = start.saturating_add(composition.char_len());
             if end <= property_end && end <= self.char_count() {
                 self.char_index = end;
-                return LispStringAction::Emit(
+                return LispStringResolvedAction::Emit(
                     DisplayItem::new(
                         self.span(start, end),
                         face,
@@ -2607,7 +2671,7 @@ impl LispStringSourceFrame {
                 ));
             }
             self.char_index = start + 1;
-            return LispStringAction::Emit(
+            return LispStringResolvedAction::Emit(
                 DisplayItem::new(self.span(start, start + 1), face, kind)
                     .with_layout(item_layout)
                     .with_pointer_appearance(pointer_appearance),
@@ -2616,7 +2680,7 @@ impl LispStringSourceFrame {
 
         let end = self.next_text_run_end(start, property_end);
         self.char_index = end;
-        LispStringAction::Emit(
+        LispStringResolvedAction::Emit(
             DisplayItem::new(
                 self.span(start, end),
                 face,
