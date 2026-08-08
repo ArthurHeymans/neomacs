@@ -187,6 +187,11 @@ pub const AUTO_COMPLETE_PCMP_MELPA_PIN: (&str, &str) = ("auto-complete-pcmp", "2
 /// upstream commit `6d71462df9bf595d3861bfb328377346aceed422`.
 pub const LOG4E_MELPA_PIN: (&str, &str) = ("log4e", "20240123.1313");
 
+/// The exact logito package selected for practical EIEIO level filtering and
+/// buffer logger insertion without interactive messaging. MELPA built this
+/// archive from upstream commit `d5934ce10ba3a70d3fcfb94d742ce3b9136ce124`.
+pub const LOGITO_MELPA_PIN: (&str, &str) = ("logito", "20201226.534");
+
 /// The exact Yaxception package selected as an auto-complete-pcmp dependency
 /// and by the practical custom-error, catch-selection, nested rethrow, finally,
 /// error-wrapping, and stack-trace parity corpus. MELPA built this archive from
@@ -282,6 +287,12 @@ pub const EMR_MELPA_PIN: (&str, &str) = ("emr", "20220108.548");
 /// MELPA built this archive from upstream commit
 /// `94cd36a3bec752263ac9b1b3a9dd2def329d2af7`.
 pub const EPC_MELPA_PIN: (&str, &str) = ("epc", "20140610.534");
+
+/// The exact eshell-prompt-extras package selected for practical path
+/// abbreviation, fish-style trimming, status formatting, and newline trimming
+/// without a live remote/git prompt. MELPA built this archive from upstream
+/// commit `36504072605a2044cf291d1c2ea987cb898c6394`.
+pub const ESHELL_PROMPT_EXTRAS_MELPA_PIN: (&str, &str) = ("eshell-prompt-extras", "20260402.1141");
 
 /// The exact EPL package selected by the practical package metadata,
 /// descriptor, database, installation, deletion, and built-in discovery

@@ -302,7 +302,7 @@ rank	package	downloads	status
 301	unfill	367210	covered
 302	prettier-js	366751	todo
 303	parseedn	366105	covered
-304	eshell-prompt-extras	365095	todo
+304	eshell-prompt-extras	365095	covered
 305	parseclj	364817	covered
 306	emacsql-sqlite	363596	todo
 307	js-doc	361620	covered
@@ -310,7 +310,7 @@ rank	package	downloads	status
 309	yapfify	356275	todo
 310	geiser	352613	covered
 311	monokai-theme	351385	todo
-312	logito	350303	todo
+312	logito	350303	covered
 313	py-isort	347632	todo
 314	helm-lsp	347561	todo
 315	spaceline-all-the-icons	347169	todo
