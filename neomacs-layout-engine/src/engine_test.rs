@@ -24602,6 +24602,15 @@ fn p52_buffer_modification_re_evaluates_the_mode_line() {
 /// `mode-line-format` calling `set-buffer-redisplay`
 /// (lisp/frame.el:3752-3779 -> xdisp.c:922-931), which sets both
 /// `update_mode_lines` and `prevent_redisplay_optimizations_p`.
+///
+/// P5.2(b) note: the CHANGE is made through Lisp, deliberately. The watcher
+/// this pin cites is a property of the SET path, so writing the buffer slot
+/// directly (as this pin did before the skip existed) exercises a path no
+/// production caller takes — grep confirms nothing in Rust sets these three
+/// buffer-locals — and would assert that redisplay notices a change nothing
+/// announced. The window-parameter override, which is the one real way to
+/// change a window's chrome format without touching the buffer, dirties the
+/// window in `builtin_set_window_parameter`.
 #[test]
 fn p52_setting_mode_line_format_re_evaluates_and_reaches_the_screen() {
     let text = "(defun f (a b) (+ a b))\n".repeat(40);
@@ -24615,10 +24624,12 @@ fn p52_setting_mode_line_format_re_evaluates_and_reaches_the_screen() {
     activate_last_engine_presentation(&mut eval, &engine, frame_id);
     assert!(rendered_mode_line_text(&engine).contains("BEFORE"));
 
-    {
-        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
-        buf.set_buffer_local("mode-line-format", Value::string("AFTER"));
-    }
+    // `setq-local` is a subr.el macro and this Context is bare, so use what it
+    // expands to. The point is that the value travels the production set
+    // chokepoint (which is where the chrome watcher lives), not which surface
+    // syntax gets it there.
+    eval.eval_str("(set (make-local-variable 'mode-line-format) \"AFTER\")")
+        .expect("eval");
     engine.layout_frame_rust(&mut eval, frame_id);
 
     assert_eq!(
@@ -24858,4 +24869,389 @@ fn p52_header_and_tab_lines_are_evaluated_with_the_mode_line() {
     assert_eq!(mode_line_eval_count(), 1, "mode line evaluated once");
     assert_eq!(header_line_eval_count(), 1, "header line evaluated once");
     assert_eq!(tab_line_eval_count(), 1, "tab line evaluated once");
+}
+
+/// WORK LIST (expected RED today): a redisplay that only moved point inside
+/// an unchanged buffer must NOT re-evaluate the mode line. This is GNU's
+/// one-line optimization (xdisp.c:17572-17726): it re-displays the cursor's
+/// glyph row and `goto update`, never entering `redisplay_window`, so
+/// `display_mode_lines` never runs — even with `%l` in the format. neomacs
+/// classifies the same redisplay as cursor-only but re-walks chrome anyway
+/// (buffer_source/render_plan.rs:706-713).
+#[test]
+fn p52_cursor_only_redisplay_does_not_re_evaluate_the_mode_line() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("ML"));
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        1,
+        "precondition: this redisplay is classified cursor-only"
+    );
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        0,
+        "a cursor-only redisplay must not re-evaluate mode-line-format (GNU's \
+         one-line optimization never reaches display_mode_lines)"
+    );
+}
+
+/// CONTRACT (RED before (b)'s precondition (i), and it must STAY red-then-green
+/// for the right reason): a cursor-only redisplay that moves point to ANOTHER
+/// LINE must re-evaluate the mode line whenever `%l` is displayed.
+///
+/// This is the pin that separates GNU's actual skip from the flags-only version
+/// of it. GNU's one-line optimization is entered only while point stays on the
+/// recorded line — `PT >= CHARPOS (tlbufpos) && PT <= Z - CHARPOS (tlendpos)`,
+/// xdisp.c:17591-17593 — and when point leaves that line control reaches the
+/// `cancel:` label whose comment is literally "Text changed drastically or point
+/// moved off of line" (xdisp.c:17813), after which a full `redisplay_window`
+/// regenerates the mode line. That structural restriction is the ENTIRE reason
+/// `%l` cannot go stale while GNU skips.
+///
+/// neomacs's cursor-only path has no such restriction on its own:
+/// `RetainedWindowKey::cursor_only_eligible` compares every field EXCEPT
+/// `point` (incremental_layout.rs), so point may move to any retained row. A
+/// skip gated on the chrome dirty flags alone would therefore freeze `%l` — and
+/// `%l` is in OUR default mode line, not just GNU's: `line-number-mode` is
+/// `:init-value t` (lisp/simple.el:9380) and `mode-line-position-line-format` is
+/// `'(" L%l")` (lisp/bindings.el:687).
+///
+/// Note the sibling pin `p52_cursor_only_redisplay_does_not_re_evaluate_the_mode_line`
+/// moves point WITHIN line 1 and so goes green on the flags alone; this one is
+/// the reason precondition (i) (point remains in the same retained row) exists.
+#[test]
+fn p52_cursor_only_motion_to_another_line_re_evaluates_the_mode_line() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        // `%l` displayed, nothing else — the format under test is the line
+        // number itself, so a stale eval is directly observable.
+        buf.set_buffer_local("mode-line-format", Value::string("L%l"));
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+    assert!(
+        rendered_mode_line_text(&engine).contains("L1"),
+        "precondition: the first layout displays line 1, got {:?}",
+        rendered_mode_line_text(&engine)
+    );
+
+    // Line 1 is 24 bytes ("(defun f (a b) (+ a b))\n"), so byte 30 is on line 2.
+    // Point moves ONLY — no edit, no scroll, no tick movement.
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(30));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        1,
+        "precondition: this redisplay is still classified cursor-only"
+    );
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        1,
+        "point crossing a line boundary must re-evaluate mode-line-format: GNU \
+         declines its one-line optimization once PT leaves the recorded line \
+         (xdisp.c:17591-17593, cancel: at :17813), which is what keeps %l honest"
+    );
+    assert!(
+        rendered_mode_line_text(&engine).contains("L2"),
+        "the re-evaluated mode line must show the NEW line number, got {:?}",
+        rendered_mode_line_text(&engine)
+    );
+}
+
+/// CONTRACT: a replay that SKIPS the chrome walk must still publish the chrome
+/// rows' faces into this frame's output.
+///
+/// The chrome render does three things beyond emitting glyph rows, and face
+/// publication is the one with no other owner: `install_measured_window_display_row`
+/// calls `install_faces` -> `publish_output_face` for every face the chrome row
+/// resolved (display_rendered_row_output_install.rs). Re-installing a retained
+/// chrome row verbatim moves the GLYPHS but not that publication, so the row's
+/// `FaceId`s would dangle in `FrameDisplayState.faces` and the renderer would
+/// draw the mode line with whatever those ids happen to mean this frame.
+///
+/// The fix is to extend the replay's `retained_face_ids()` — which today
+/// iterates body rows only — so Phase A admits the chrome rows' ids before
+/// install. This pin is the detector for that extension; without it a
+/// face-install bug is invisible to every text-content assertion, because the
+/// characters are all correct.
+#[test]
+fn p52_skipped_chrome_replay_still_publishes_the_chrome_faces() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("ML"));
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    // A same-line cursor move: the redisplay the skip is built for.
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let mode_line_face_ids: Vec<_> = state
+        .window_matrices
+        .iter()
+        .flat_map(|wm| wm.matrix.rows.iter())
+        .filter(|row| row.role == GlyphRowRole::ModeLine && row.enabled)
+        .flat_map(|row| row.referenced_face_ids())
+        .collect();
+    assert!(
+        !mode_line_face_ids.is_empty(),
+        "precondition: the mode-line row references at least one face"
+    );
+    for face_id in mode_line_face_ids {
+        assert!(
+            state.faces.contains_key(&face_id),
+            "chrome face {face_id:?} referenced by the mode-line row is missing \
+             from this frame's published face table — a skipped chrome walk must \
+             still admit the retained chrome rows' faces"
+        );
+    }
+}
+
+/// CONTRACT: an in-line edit stops re-evaluating the mode line, but only once
+/// GNU's modified-star has settled — the pin that covers the EDIT replay, which
+/// is where the typing workload actually lives.
+///
+/// Two redisplays, two different answers, both GNU's:
+///
+/// 1. The FIRST edit to a clean buffer flips `%*` / `%+`. GNU has no trigger for
+///    this; `redisplay_internal` compares `(SAVE_MODIFF < MODIFF) !=
+///    w->last_had_star` per window per redisplay (xdisp.c:17487-17488) and sets
+///    `w->update_mode_line`, disqualifying the one-line optimization. So this
+///    redisplay must re-evaluate.
+/// 2. The SECOND edit on the same line changes nothing the chrome shows: the
+///    star is already set, no line boundary moved, point stayed in its row. This
+///    is exactly GNU's optimization-1 case, which never enters
+///    `redisplay_window` and so never reaches `display_mode_lines`.
+///
+/// The edit is placed mid-screen deliberately. An edit on the window's FIRST
+/// visible row has no rows above to reuse, so `edit_replay` declines
+/// (`first_dirty == 0`) and the window takes the full path, which always walks
+/// chrome — a pin written at the buffer start would pass no matter what the
+/// skip does.
+#[test]
+fn p52_in_line_edit_reuses_chrome_only_after_the_modified_star_has_settled() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let edit_at = 10 * 24 + 5;
+    let (mut eval, frame_id, buf_id, _selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("ML"));
+        // Point must already sit on the row about to be edited BEFORE the
+        // warm-up layout. Otherwise the first edit is refused by the
+        // cursor-row clause rather than by the star, and the star precondition
+        // goes untested (a deliberate-mutation run proved exactly that).
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        // ...and the buffer must be CLEAN, or there is no star to flip: the
+        // harness fills the buffer by inserting, which leaves it modified.
+        // Set the flag directly rather than through `set-buffer-modified-p`,
+        // whose GNU-faithful tail calls `force-mode-line-update` and would
+        // make the dirty flag, not the star, the thing under test.
+        buf.set_modified(false);
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("x");
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert_eq!(
+        engine.last_layout_stats().edit_windows,
+        1,
+        "precondition: the first edit takes the localized-edit fast path"
+    );
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        1,
+        "the modified-star flip must re-evaluate the mode line (GNU \
+         xdisp.c:17487-17488 sets w->update_mode_line on the flip)"
+    );
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("y");
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert_eq!(
+        engine.last_layout_stats().edit_windows,
+        1,
+        "precondition: the second edit also takes the localized-edit fast path"
+    );
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        0,
+        "a second in-line edit must NOT re-evaluate the mode line: nothing the \
+         chrome displays changed, which is GNU's one-line optimization \
+         (xdisp.c:17572-17726, never reaches display_mode_lines)"
+    );
+}
+
+/// CONTRACT: chrome that displays a COLUMN is never reused.
+///
+/// `%c` is the one point-dependent construct the same-screen-row precondition
+/// does not pin — point moving within a row changes the column while the row is
+/// unchanged. GNU refuses in exactly this case, via `mode_line_update_needed`
+/// (xdisp.c:13831-13837) setting `w->update_mode_line`. We refuse on the mere
+/// PRESENCE of the spec rather than comparing its value, which is stricter than
+/// GNU and free in the default configuration (`column-number-mode` is off,
+/// lisp/simple.el:9387); comparing values is the later relaxation.
+#[test]
+fn p52_chrome_displaying_a_column_is_never_reused() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let edit_at = 10 * 24 + 5;
+    let (mut eval, frame_id, buf_id, _selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("C%c"));
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    // Two in-line edits. The second is the one a column-free format would skip
+    // (see p52_in_line_edit_reuses_chrome_only_after_the_modified_star_has_settled);
+    // with %c displayed, BOTH must re-evaluate.
+    for step in ["x", "y"] {
+        eval.buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer")
+            .insert(step);
+        engine.layout_frame_rust(&mut eval, frame_id);
+        assert_eq!(
+            engine.last_layout_stats().edit_windows,
+            1,
+            "precondition: edit {step:?} takes the localized-edit fast path"
+        );
+        assert_eq!(
+            crate::display_status_line::mode_line_eval_count(),
+            1,
+            "chrome displaying %c must be re-evaluated on every edit, including \
+             {step:?} — the column changes while the screen row does not"
+        );
+        activate_last_engine_presentation(&mut eval, &engine, frame_id);
+    }
+}
+
+/// CONTRACT: a genuine SCROLL re-evaluates the mode line.
+///
+/// This is P5.2(b)'s answer to the handoff's open scroll question, and it is
+/// enforced structurally rather than by trusting a trigger to have fired:
+/// `%p` is computed from window-start and window-end (GNU xdisp.c:29406), so
+/// chrome whose visible region moved is stale by definition. The reuse
+/// predicate therefore requires `dvpos == 0` AND an unchanged window-start,
+/// which no scroll replay can satisfy. GNU agrees from the other side — every
+/// scroll command calls `wset_update_mode_line` (window.c:6279, 6418, 6603,
+/// 6864) — but we do not depend on the internal scroll path routing through the
+/// `set-window-start` builtin that P5.2(a) wired.
+#[test]
+fn p52_scroll_re_evaluates_the_mode_line() {
+    let line = "(defun f (a b) (+ a b))\n";
+    let text = line.repeat(80);
+    let new_window_start = 5 * line.len() as i64 + 1;
+    let point_byte = 7 * line.len();
+
+    let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("ML"));
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    scroll_window_to(
+        &mut eval,
+        frame_id,
+        win,
+        buf_id,
+        new_window_start,
+        point_byte,
+    );
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().scroll_windows,
+        1,
+        "precondition: this redisplay takes the pure-scroll fast path"
+    );
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        1,
+        "a scroll moves the visible region, so %p may have changed: chrome must \
+         be regenerated even though the buffer text did not change"
+    );
+}
+
+/// CONTRACT: an edit that adds a LINE re-evaluates the mode line.
+///
+/// GNU's one-line optimization requires all text outside the cursor's line to
+/// be unchanged (`text_outside_line_unchanged_p`, xdisp.c:17604). An inserted
+/// newline renumbers every line below it, so `%l` for any later point — and the
+/// line count itself — moves. The reuse predicate refuses whenever the edit
+/// spans a newline or the walk regenerates more than one row.
+#[test]
+fn p52_edit_that_adds_a_line_re_evaluates_the_mode_line() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let edit_at = 10 * 24 + 5;
+    let (mut eval, frame_id, buf_id, _selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("L%l"));
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
+        // Modified before the warm-up layout, so the star has already settled
+        // and this pin isolates the line-structure clause.
+        buf.insert("x");
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("\nnew line");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        1,
+        "an edit that inserts a newline changes the line structure, so the mode \
+         line must be regenerated (GNU text_outside_line_unchanged_p)"
+    );
 }

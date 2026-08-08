@@ -533,6 +533,41 @@ pub(crate) fn render_window_chrome_rows(
     ))
 }
 
+/// Re-install a window's RETAINED chrome instead of walking it — the chrome
+/// half of GNU's one-line optimization (xdisp.c:17572-17726, which reaches the
+/// update phase without ever entering `redisplay_window` and so never calls
+/// `display_mode_lines`).
+///
+/// GNU has nothing to re-install because its current matrix simply keeps the
+/// mode line it already had; neomacs re-emits every row into a fresh frame, so
+/// "not regenerated" has to be spelled as "installed from the retained
+/// matrix". The output is the previous accepted frame's own chrome rows, which
+/// is what makes this a skip rather than a cache: no key, no comparison, and
+/// the miss path (walking) is untouched.
+///
+/// Mirrors the three effects of the chrome walk. The glyph rows go into the
+/// grid already finalized; the row snapshots go back into the emitter, because
+/// they are what populates `WindowDisplaySnapshot.rows`; and the retained
+/// MEASURED heights are returned, so `window-mode-line-height` keeps reporting
+/// the real height rather than the face-only estimate. Face publication is the
+/// fourth effect and is handled upstream, by Phase A admitting the chrome rows'
+/// face IDs alongside the body's (`CursorOnlyReplay::retained_face_ids`).
+pub(crate) fn install_retained_window_chrome(
+    mut output: TextWindowOutputTarget<'_>,
+    output_emitter: &mut WindowOutputEmitter,
+    chrome: &crate::incremental_layout::RetainedChrome,
+) -> WindowChromeMetrics {
+    for (row_index, row) in &chrome.rows {
+        // Verbatim install is a refcount bump, not a per-glyph deep copy.
+        output.builder().install_finalized_output_row(
+            *row_index,
+            neomacs_display_protocol::glyph_matrix::MatrixRow::clone(row),
+        );
+    }
+    output_emitter.push_reused_chrome(chrome.row_snapshots.clone());
+    chrome.metrics
+}
+
 pub(crate) fn close_text_window_output(mut output: TextWindowOutputTarget<'_>) {
     output
         .builder()
@@ -1555,6 +1590,13 @@ impl WindowOutputEmitter {
 
     fn push_chrome_row(&mut self, row: DisplayRowSnapshot) {
         self.rows.push(row);
+    }
+
+    /// Seed the chrome rows a SKIPPED chrome walk would have pushed. Same
+    /// destination as [`Self::push_chrome_row`], so `finish_snapshot` (which
+    /// sorts by row index) cannot tell a reused chrome row from a walked one.
+    pub(crate) fn push_reused_chrome(&mut self, rows: Vec<DisplayRowSnapshot>) {
+        self.rows.extend(rows);
     }
 
     fn push_chrome_row_progress(&mut self, progress: DisplayRowOutputProgress) {

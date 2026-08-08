@@ -1411,6 +1411,13 @@ pub fn variable_affects_display(name: &str) -> bool {
 /// flag redisplay's chrome skip consults.
 const CHROME_FORMAT_VARS: &[&str] = &["mode-line-format", "header-line-format", "tab-line-format"];
 
+/// Whether this NAME is one of the chrome formats. The by-name form exists for
+/// the window-parameter path, which carries a symbol name rather than the
+/// `SymId` the hot variable-set chokepoint has.
+pub fn variable_affects_chrome(name: &str) -> bool {
+    CHROME_FORMAT_VARS.contains(&name)
+}
+
 /// Whether setting this variable invalidates chrome (mode / header / tab
 /// line). A subset of [`variable_affects_display_by_sym_id`].
 pub fn variable_affects_chrome_by_sym_id(sym_id: SymId) -> bool {

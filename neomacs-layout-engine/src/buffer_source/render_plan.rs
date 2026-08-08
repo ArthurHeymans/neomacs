@@ -539,7 +539,9 @@ impl BufferSourceOutputSetup {
         // SAME chrome + finish path. The output is byte-identical to a full
         // rebuild (honest layering, spec §4.6) — the win is skipping fontify /
         // shaping / measurement for the body.
-        if let Some(replay) = cursor_only {
+        if let Some(mut replay) = cursor_only {
+            // Taken before the replay's rows are moved into the grid below.
+            let retained_chrome = replay.chrome.take();
             let mut output_emitter = output.begin_text_window_output(self.begin_request);
 
             // Capture the point glyph's metrics from the new cursor row before the
@@ -703,14 +705,26 @@ impl BufferSourceOutputSetup {
                 walk_setup.window_top,
             );
 
-            // Chrome is always re-walked (mode/header/tab lines are point-dependent).
-            let measured_chrome_heights = render_window_chrome_rows(
-                output.reborrow(),
-                &mut output_emitter,
-                evaluator,
-                chrome_request,
-                render_services.reborrow(),
-            );
+            // Chrome is re-walked unless the replay carries a retained chrome
+            // plan — GNU's one-line optimization never reaches
+            // `display_mode_lines` (xdisp.c:17572-17726). The permission is
+            // decided in `RetainedWindowMatrix::chrome_reusable_after_cursor_move`,
+            // where the dirty flags and the point-stayed-on-this-line
+            // precondition live.
+            let measured_chrome_heights = match retained_chrome.as_ref() {
+                Some(chrome) => crate::window_output::install_retained_window_chrome(
+                    output.reborrow(),
+                    &mut output_emitter,
+                    chrome,
+                ),
+                None => render_window_chrome_rows(
+                    output.reborrow(),
+                    &mut output_emitter,
+                    evaluator,
+                    chrome_request,
+                    render_services.reborrow(),
+                ),
+            };
             tail_context.finish_and_install(
                 TextWindowFinishState::new(output, output_emitter, evaluator, hit_rows),
                 measured_chrome_heights,
@@ -747,7 +761,8 @@ impl BufferSourceOutputSetup {
         // reads from exposed_start_charpos. We then install the reused rows
         // (shifted) above them, splice the snapshots, re-decorate the cursor, and
         // re-walk chrome. Byte-identical to a full rebuild of the scrolled window.
-        if let Some(scroll) = scroll {
+        if let Some(mut scroll) = scroll {
+            let retained_chrome = scroll.chrome.take();
             // Phase A already admitted the frame-wide retained face namespace
             // before this partial walk can mint IDs.
             let (mut output_emitter, _post_loop) = walk_setup.begin_render_body_and_tail(
@@ -906,13 +921,24 @@ impl BufferSourceOutputSetup {
                 );
             }
 
-            let measured_chrome_heights = render_window_chrome_rows(
-                output.reborrow(),
-                &mut output_emitter,
-                evaluator,
-                chrome_request,
-                render_services.reborrow(),
-            );
+            // As on the cursor-only path: an EDIT replay confined to the cursor's
+            // own row may re-install the retained chrome, while a genuine scroll
+            // never may (its `%p` moved). The discriminator is in
+            // `RetainedWindowMatrix::chrome_reusable_after_edit`.
+            let measured_chrome_heights = match retained_chrome.as_ref() {
+                Some(chrome) => crate::window_output::install_retained_window_chrome(
+                    output.reborrow(),
+                    &mut output_emitter,
+                    chrome,
+                ),
+                None => render_window_chrome_rows(
+                    output.reborrow(),
+                    &mut output_emitter,
+                    evaluator,
+                    chrome_request,
+                    render_services.reborrow(),
+                ),
+            };
 
             // Hit map: the walk produced the exposed rows' hit; reconstruct the
             // reused rows' hit from their shifted geometry.

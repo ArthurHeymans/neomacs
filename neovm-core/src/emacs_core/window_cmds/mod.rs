@@ -1765,6 +1765,17 @@ pub(crate) fn builtin_set_window_parameter(
         resolve_window_object_id_with_pred_in_state(frames, buffers, args.first(), "windowp")?;
     let value = args[2];
     frames.set_window_parameter(wid, args[1], value);
+    // A window parameter named after one of the chrome formats OVERRIDES the
+    // buffer-local value (`eval_status_line_format_value` consults the window
+    // parameter first), so setting one changes this window's chrome with none
+    // of the buffer-scoped triggers firing. GNU has no such override and so
+    // needs no equivalent; here it is a window-scoped dirty event, the same
+    // shape as `set-window-start`.
+    if let Some(name) = args[1].as_symbol_name()
+        && crate::buffer::buffer::variable_affects_chrome(&name)
+    {
+        eval.mark_chrome_dirty_window(wid);
+    }
     Ok(value)
 }
 /// `(window-parameters &optional WINDOW)` -> alist of parameters.

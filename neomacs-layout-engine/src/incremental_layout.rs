@@ -297,6 +297,19 @@ pub struct RetainedWindowMatrix {
     pub presented_cursor: Option<PhysCursor>,
     /// Sealed frame-face generation that owns every ID referenced by `matrix`.
     pub(crate) face_generation: FrameFaceGeneration,
+    /// Whether the chrome this matrix carries displayed `%c` / `%C`. GNU's
+    /// `w->column_number_displayed`; a column is the one point-dependent
+    /// construct the same-row precondition does not pin, so chrome that shows
+    /// one is never reused.
+    pub(crate) chrome_uses_column: bool,
+    /// The buffer's modified flag when this chrome was generated — GNU's
+    /// `w->last_had_star`. GNU compares it in `redisplay_internal`
+    /// (xdisp.c:17487-17488, `if ((SAVE_MODIFF < MODIFF) != w->last_had_star)
+    /// w->update_mode_line = true;`) and the flip DISQUALIFIES the one-line
+    /// optimization, which is how `%*` / `%+` stay honest across the first edit
+    /// to a clean buffer. It is a comparison rather than a trigger because
+    /// nothing at edit time knows the flag changed value.
+    pub(crate) chrome_modified_flag: bool,
 }
 
 /// Everything the cursor-only fast path (Phase 1) needs to replay a window
@@ -324,6 +337,14 @@ pub struct CursorOnlyReplay {
     /// Matrix row index that now contains the new point (where the cursor is
     /// re-decorated).
     pub new_cursor_row_index: usize,
+    /// Matrix row index that carried the cursor in the RETAINED pass — GNU's
+    /// `this_line_vpos`. The chrome skip requires this to equal
+    /// `new_cursor_row_index`; see [`RetainedWindowMatrix::retained_chrome`].
+    pub retained_cursor_row_index: Option<usize>,
+    /// The retained chrome to install verbatim instead of re-walking it, or
+    /// `None` when the chrome must be regenerated. Filled by the engine, which
+    /// owns the dirty flags; the builder always produces `None`.
+    pub chrome: Option<RetainedChrome>,
     /// Cursor style carried over from the retained pass.
     pub cursor_style: CursorStyle,
     /// The authoritative presented cursor from the retained display, when point
@@ -384,8 +405,49 @@ pub struct ScrollReplay {
     /// the prove-ahead gates could not see (a property change re-wrapping or
     /// re-measuring a span line).
     pub expected_walk: Option<ExpectedBoundWalk>,
+    /// The retained chrome to install verbatim instead of re-walking it, or
+    /// `None` when the chrome must be regenerated. Filled by the engine, which
+    /// owns the dirty flags; the builders always produce `None`.
+    pub chrome: Option<RetainedChrome>,
     /// Sealed frame-face generation that owns every ID in `reused_rows`.
     pub(crate) face_generation: FrameFaceGeneration,
+}
+
+/// The current-frame facts a chrome reuse decision compares the retained
+/// chrome against. Bundled so a caller cannot supply one and forget the other.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ChromeReuseContext {
+    /// GNU `w->update_mode_line || update_mode_lines` for this window.
+    pub(crate) chrome_dirty: bool,
+    /// The buffer's modified flag NOW, compared against the flag the retained
+    /// chrome was generated with (GNU's `w->last_had_star`).
+    pub(crate) buffer_modified: bool,
+}
+
+/// One window's retained chrome (mode / header / tab line), ready to install
+/// verbatim in place of a chrome walk.
+///
+/// This is the payload of GNU's one-line optimization as it applies to chrome:
+/// GNU does not *reuse* a mode line, it simply never regenerates one, because
+/// `redisplay_window` — and so `display_mode_lines` — is never entered
+/// (xdisp.c:17572-17726). Neomacs re-emits every row into a fresh frame each
+/// redisplay, so "never regenerated" has to be spelled as "re-installed from
+/// the retained matrix", which is the same output by construction: these are
+/// the exact rows the previous accepted frame published.
+///
+/// All three pieces are needed because the chrome walk produces all three, and
+/// a skip that dropped any of them would be a silent divergence rather than an
+/// optimization:
+///   * `rows` — the glyphs;
+///   * `row_snapshots` — what the emitter would have pushed, which is what
+///     populates `WindowDisplaySnapshot.rows`;
+///   * `metrics` — the MEASURED heights, which is what `window-mode-line-height`
+///     reports (never the face-only estimate the text area was reserved from).
+#[derive(Clone, Debug)]
+pub struct RetainedChrome {
+    pub rows: Vec<(usize, MatrixRow)>,
+    pub row_snapshots: Vec<DisplayRowSnapshot>,
+    pub(crate) metrics: crate::window_layout::WindowChromeMetrics,
 }
 
 /// One window's accumulated edit damage for a frame: the dirty char span in
@@ -469,15 +531,37 @@ fn referenced_face_ids<'a>(rows: impl IntoIterator<Item = &'a GlyphRow>) -> Vec<
         .collect()
 }
 
+/// The face IDs a reused chrome plan references, so Phase A admits them with
+/// the body's. Re-installing a chrome row moves its GLYPHS but not the face
+/// publication the chrome walk would have done
+/// (`install_measured_window_display_row` -> `install_faces`), so a skip that
+/// forgot this would leave the mode line's face IDs dangling in the frame's
+/// face table — glyphs correct, colors arbitrary.
+fn chrome_face_ids(chrome: Option<&RetainedChrome>) -> impl Iterator<Item = &GlyphRow> {
+    chrome
+        .into_iter()
+        .flat_map(|chrome| chrome.rows.iter().map(|(_, row)| row.as_ref()))
+}
+
 impl CursorOnlyReplay {
     pub(crate) fn retained_face_ids(&self) -> Vec<FaceId> {
-        referenced_face_ids(self.body_rows.iter().map(|(_, row)| row.as_ref()))
+        referenced_face_ids(
+            self.body_rows
+                .iter()
+                .map(|(_, row)| row.as_ref())
+                .chain(chrome_face_ids(self.chrome.as_ref())),
+        )
     }
 }
 
 impl ScrollReplay {
     pub(crate) fn retained_face_ids(&self) -> Vec<FaceId> {
-        referenced_face_ids(self.reused_rows.iter().map(|(_, row)| row.as_ref()))
+        referenced_face_ids(
+            self.reused_rows
+                .iter()
+                .map(|(_, row)| row.as_ref())
+                .chain(chrome_face_ids(self.chrome.as_ref())),
+        )
     }
 }
 
@@ -495,6 +579,149 @@ impl RetainedWindowMatrix {
                 | GlyphRowRole::TabLine
                 | GlyphRowRole::TabBar
         )
+    }
+
+    /// Harvest this window's retained chrome for verbatim re-install, or
+    /// `None` when there is none to reuse.
+    ///
+    /// Callers must have already established that the chrome is ALLOWED to be
+    /// reused — this only gathers it. The permission half lives in
+    /// [`Self::chrome_reusable_after_cursor_move`] and
+    /// [`Self::chrome_reusable_after_edit`].
+    pub(crate) fn retained_chrome(&self) -> Option<RetainedChrome> {
+        let mut rows: Vec<(usize, MatrixRow)> = Vec::new();
+        let mut indices: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
+        for (idx, row) in self.matrix.rows.iter().enumerate() {
+            if row.enabled && Self::is_chrome_role(row.role) {
+                indices.insert(idx);
+                // Copy-on-write reuse: a refcount bump, not a deep copy.
+                rows.push((idx, MatrixRow::clone(row)));
+            }
+        }
+        if rows.is_empty() {
+            return None;
+        }
+        let row_snapshots = self
+            .display_snapshot
+            .rows
+            .iter()
+            .filter(|snapshot| indices.contains(&(snapshot.row as usize)))
+            .cloned()
+            .collect();
+        Some(RetainedChrome {
+            rows,
+            row_snapshots,
+            metrics: crate::window_layout::WindowChromeMetrics::from_snapshot(
+                &self.display_snapshot,
+            ),
+        })
+    }
+
+    /// Whether a CURSOR-ONLY replay of this window may skip its chrome walk.
+    ///
+    /// This is GNU's one-line optimization guard (`xdisp.c:17572-17610`)
+    /// restated in this engine's terms. The pieces GNU spells and we inherit
+    /// from fast-path eligibility (same buffer, no face change, no property or
+    /// overlay movement, unchanged geometry) are already in
+    /// [`RetainedWindowKey`]; what is left is the part GNU gets structurally
+    /// and we must state:
+    ///
+    /// * **The dirty flags.** `!w->update_mode_line && !update_mode_lines`,
+    ///   xdisp.c:17577 — the caller supplies this from [`ChromeDirty`].
+    /// * **Point stays on the recorded line.** GNU enters the optimization only
+    ///   while `PT >= CHARPOS (tlbufpos) && PT <= Z - CHARPOS (tlendpos)`
+    ///   (xdisp.c:17591-17593); once point leaves that line control falls to
+    ///   `cancel:`, whose comment is "Text changed drastically or point moved
+    ///   off of line" (xdisp.c:17813), and a full `redisplay_window` follows.
+    ///   THAT restriction is the entire reason `%l` cannot go stale while GNU
+    ///   skips, and our cursor-only eligibility does NOT imply it — the key
+    ///   compares every field except `point`, so point may move to any retained
+    ///   row. The screen row is the exact analogue of `this_line_vpos`, and
+    ///   requiring it to be unchanged is both free here and stricter than "same
+    ///   buffer line" (a continued line spans several rows).
+    /// * **No column displayed.** See `chrome_uses_column`.
+    pub(crate) fn chrome_reusable_after_cursor_move(
+        &self,
+        replay: &CursorOnlyReplay,
+        ctx: ChromeReuseContext,
+    ) -> bool {
+        self.chrome_reuse_baseline(ctx)
+            && replay.retained_cursor_row_index == Some(replay.new_cursor_row_index)
+    }
+
+    /// The clauses every chrome reuse needs, whatever moved: the dirty flags,
+    /// the displayed-column refusal, and GNU's modified-star comparison.
+    fn chrome_reuse_baseline(&self, ctx: ChromeReuseContext) -> bool {
+        !ctx.chrome_dirty
+            && !self.chrome_uses_column
+            && self.chrome_modified_flag == ctx.buffer_modified
+    }
+
+    /// Whether an EDIT replay of this window may skip its chrome walk.
+    ///
+    /// Same guard as [`Self::chrome_reusable_after_cursor_move`], with GNU's
+    /// `text_outside_line_unchanged_p` (xdisp.c:17604) supplying the extra
+    /// clause an edit needs. Expressed here as: the walk regenerates exactly
+    /// one row, that row is the one that carried the cursor, the edit adds or
+    /// removes no newline, and point lands back inside it. Those together mean
+    /// no line boundary above point moved, so `%l` is unchanged — which is what
+    /// GNU's one-line restriction buys structurally.
+    ///
+    /// A GENUINE SCROLL IS EXCLUDED HERE, and deliberately not by trusting a
+    /// trigger to have fired: `%p` is computed from window-start and window-end
+    /// (`xdisp.rs`, GNU xdisp.c:29406), so a replay whose visible region moved
+    /// must regenerate chrome no matter what the flags say. Requiring
+    /// `dvpos == 0` and an unchanged window-start states that in terms of what
+    /// `%p` actually reads, rather than relying on the internal scroll path
+    /// going through the `set-window-start` builtin that (a) wired.
+    pub(crate) fn chrome_reusable_after_edit(
+        &self,
+        replay: &ScrollReplay,
+        damage: EditDamage,
+        ctx: ChromeReuseContext,
+    ) -> bool {
+        if !self.chrome_reuse_baseline(ctx) {
+            return false;
+        }
+        // The visible region must not have moved, because `%p` is computed
+        // from window-start and window-end.
+        //
+        // DEFENSIVE, and deliberately kept as such: every edit replay already
+        // satisfies this (`edit_replay` builds with `dvpos: 0.0` and the
+        // eligibility check pins window-start), so a mutation of this clause
+        // alone reds no pin. The scroll path's refusal is structural — it never
+        // asks for chrome reuse at all — and THAT is what
+        // `p52_scroll_re_evaluates_the_mode_line` pins, verified by mutating
+        // `build_scroll_replay` to attach chrome. This clause states the
+        // invariant at the point that depends on it, so a future replay shape
+        // with a nonzero dvpos cannot silently inherit chrome reuse.
+        if replay.dvpos != 0.0 || replay.new_window_start != self.key.window_start {
+            return false;
+        }
+        // The edit must be confined to one screen row, and no line boundary may
+        // appear or vanish.
+        if replay.exposed_row_count != 1 || damage.span_newlines() != 0 {
+            return false;
+        }
+        // That row must be the one holding the cursor, and point must still be
+        // inside it after the edit. Row bounds are PRE-edit, so the end moves
+        // by the edit's delta; `+ 1` admits point resting just past the last
+        // character, which is where an append leaves it.
+        let Some((_, cursor_row)) = self
+            .matrix
+            .rows
+            .iter()
+            .enumerate()
+            .find(|(idx, row)| *idx == replay.exposed_row_base && row.cursor_type.is_some())
+        else {
+            return false;
+        };
+        let start = cursor_row.start_charpos as i64;
+        let end = cursor_row.end_charpos as i64 + damage.delta();
+        damage.start() >= start
+            && damage.end_old() <= cursor_row.end_charpos as i64 + 1
+            && replay.new_point >= start
+            && replay.new_point <= end + 1
     }
 
     /// Build a [`CursorOnlyReplay`] for this window if it can be reused this
@@ -516,6 +743,7 @@ impl RetainedWindowMatrix {
         let mut body_rows: Vec<(usize, MatrixRow)> = Vec::new();
         let mut body_indices: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
         let mut cursor_style: Option<CursorStyle> = None;
+        let mut retained_cursor_row_index: Option<usize> = None;
         let mut new_cursor: Option<(usize, &GlyphRow)> = None;
         for (idx, row) in self.matrix.rows.iter().enumerate() {
             if !row.enabled || Self::is_chrome_role(row.role) {
@@ -523,6 +751,7 @@ impl RetainedWindowMatrix {
             }
             if row.cursor_type.is_some() {
                 cursor_style = row.cursor_type;
+                retained_cursor_row_index = Some(idx);
             }
             let start = row.start_charpos as i64;
             let end = row.end_charpos as i64;
@@ -572,6 +801,10 @@ impl RetainedWindowMatrix {
             points: self.display_snapshot.points.clone(),
             new_point,
             new_cursor_row_index,
+            retained_cursor_row_index,
+            // Chrome is decided separately, by the engine, because the decision
+            // needs the chrome dirty flags off the evaluator. `None` = walk.
+            chrome: None,
             cursor_style: cursor_style.unwrap_or(CursorStyle::FilledBox),
             retained_cursor: (self.key.point == curr.point)
                 .then(|| self.presented_cursor.clone())
@@ -696,6 +929,7 @@ impl RetainedWindowMatrix {
             cursor_style,
             bound_walk: false,
             expected_walk: None,
+            chrome: None,
             face_generation: self.face_generation,
         })
     }
@@ -1036,6 +1270,7 @@ impl RetainedWindowMatrix {
                         total_height_px: span_rows().map(|row| row.height_px).sum(),
                         row_count: span_count,
                     }),
+                    chrome: None,
                     face_generation: self.face_generation,
                 });
             }
@@ -1055,6 +1290,7 @@ impl RetainedWindowMatrix {
             cursor_style,
             bound_walk: false,
             expected_walk: None,
+            chrome: None,
             face_generation: self.face_generation,
         })
     }
@@ -1202,6 +1438,8 @@ mod scroll_classifier_tests {
             },
             presented_cursor: None,
             face_generation: FrameFaceGeneration::default(),
+            chrome_uses_column: false,
+            chrome_modified_flag: false,
         }
     }
 

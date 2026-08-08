@@ -418,6 +418,22 @@ impl IncrementalWindowPlan {
     }
 }
 
+/// The current-frame facts a chrome reuse decision compares against.
+fn chrome_reuse_context(
+    params: &WindowParams,
+    evaluator: &neovm_core::emacs_core::Context,
+) -> crate::incremental_layout::ChromeReuseContext {
+    crate::incremental_layout::ChromeReuseContext {
+        chrome_dirty: evaluator
+            .chrome_dirty()
+            .is_dirty(neovm_core::window::WindowId(params.window_id as u64)),
+        buffer_modified: evaluator
+            .buffer_manager()
+            .get(neovm_core::buffer::BufferId(params.buffer_id))
+            .is_some_and(|buffer| buffer.is_modified()),
+    }
+}
+
 fn admit_retained_frame_faces(
     plans: &[IncrementalWindowPlan],
     face_attempt: &mut FrameFaceAttempt,
@@ -716,6 +732,7 @@ impl LayoutEngine {
         // laid out (and thus its `*-format` evaluated) exactly once per window
         // per frame; the single-eval invariant test asserts this stays at 1.
         crate::display_status_line::reset_mode_line_eval_count();
+        crate::display_status_line::reset_chrome_generation_record();
 
         evaluator.sync_runtime_faces_for_frame(frame_id);
 
@@ -1551,6 +1568,14 @@ impl LayoutEngine {
             let presented_cursor = frame_state.phys_cursor.clone();
             let mut retained: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowMatrix> =
                 rustc_hash::FxHashMap::default();
+            // What each window's chrome generation established this layout.
+            // Windows absent from this map SKIPPED their chrome, which is
+            // exactly the distinction the dirty-flag acknowledgement below and
+            // the `chrome_uses_column` carry-forward both turn on.
+            let chrome_generation: rustc_hash::FxHashMap<i64, _> =
+                crate::display_status_line::chrome_generation_record()
+                    .into_iter()
+                    .collect();
             for entry in &mut frame_state.window_matrices {
                 let window_id = entry.window_id;
                 let cursor_only = self.cursor_only_window_ids.contains(&window_id);
@@ -1677,6 +1702,29 @@ impl LayoutEngine {
                                 .filter(|cursor| cursor.window_id == window_id)
                                 .cloned(),
                             face_generation: sealed_face_arena.generation(),
+                            // A window that SKIPPED its chrome this frame has
+                            // no generation record, and its retained chrome is
+                            // the same chrome as last frame — so carry the
+                            // previous answer forward rather than defaulting to
+                            // "no column", which would let a `%c` format start
+                            // being reused after one skip.
+                            chrome_uses_column: chrome_generation
+                                .get(&window_id.get())
+                                .map(|record| record.uses_column)
+                                .unwrap_or_else(|| {
+                                    self.retained_window_matrices
+                                        .get(&window_id)
+                                        .is_some_and(|prev| prev.chrome_uses_column)
+                                }),
+                            // GNU `w->last_had_star`. Read fresh rather than
+                            // carried forward: a window that skipped chrome
+                            // kept the flag its chrome was generated with, and
+                            // that is exactly what this records, because the
+                            // skip required the two to be equal.
+                            chrome_modified_flag: evaluator
+                                .buffer_manager()
+                                .get(neovm_core::buffer::BufferId(key.buffer_id))
+                                .is_some_and(|buffer| buffer.is_modified()),
                         },
                     );
                 }
@@ -1762,12 +1810,15 @@ impl LayoutEngine {
             }
         }
         self.last_frame_display_state = Some(sealed);
-        // The chrome the dirty flags asked for has now been generated, so
-        // clear them — GNU's analogue is resetting `update_mode_lines` at the
-        // end of `redisplay_internal` plus `mark_window_display_accurate_1`.
-        // Clearing unconditionally is correct while nothing skips chrome; when
-        // the skip lands it must clear exactly what it honored.
-        evaluator.clear_chrome_dirty();
+        // Acknowledge the chrome dirty flag for exactly the windows whose
+        // chrome this layout GENERATED — GNU's `mark_window_display_accurate_1`.
+        // A blanket clear (what P5.2(a) did, correct while nothing skipped)
+        // would now eat two kinds of outstanding flag: a window that skipped
+        // its chrome this frame, and every window on a frame this layout never
+        // visited.
+        for (window_id, _) in crate::display_status_line::chrome_generation_record() {
+            evaluator.note_chrome_generated(neovm_core::window::WindowId(window_id as u64));
+        }
 
         self.prev_window_infos = curr_window_infos;
 
@@ -1830,7 +1881,12 @@ impl LayoutEngine {
         let window_id = DisplayWindowId::new(params.window_id);
         let prev = self.retained_window_matrices.get(&window_id)?;
         let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
-        prev.cursor_only_replay(&curr_key)
+        let mut replay = prev.cursor_only_replay(&curr_key)?;
+        if prev.chrome_reusable_after_cursor_move(&replay, chrome_reuse_context(params, evaluator))
+        {
+            replay.chrome = prev.retained_chrome();
+        }
+        Some(replay)
     }
 
     /// Smooth scroll (Phase 1): the laid-out body rows of `window_id` from the
@@ -1921,6 +1977,12 @@ impl LayoutEngine {
         let window_id = DisplayWindowId::new(params.window_id);
         let prev = self.retained_window_matrices.get(&window_id)?;
         let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
+        // A genuine scroll keeps walking chrome, and structurally rather than by
+        // trusting a trigger: `%p` is computed from window-start/window-end, so
+        // chrome whose visible region moved is stale by definition. Leaving
+        // `chrome` at `None` is that decision. (GNU agrees from the other side —
+        // its scroll commands all call `wset_update_mode_line`, window.c:6279,
+        // 6418, 6603, 6864.)
         prev.scroll_replay(&curr_key)
     }
 
@@ -2025,11 +2087,13 @@ impl LayoutEngine {
                     }
                 }
             });
-        prev.edit_replay(
-            &curr_key,
-            EditDamage::new(dirty_start, dirty_end, delta, span_newlines),
-            span_structure_safe,
-        )
+        let damage = EditDamage::new(dirty_start, dirty_end, delta, span_newlines);
+        let mut replay = prev.edit_replay(&curr_key, damage, span_structure_safe)?;
+        if prev.chrome_reusable_after_edit(&replay, damage, chrome_reuse_context(params, evaluator))
+        {
+            replay.chrome = prev.retained_chrome();
+        }
+        Some(replay)
     }
 
     fn layout_window_rust(

@@ -110,6 +110,44 @@ pub(crate) struct RegionTextMetrics {
     pub(crate) max_columns: usize,
 }
 
+// Whether the mode-line expansion currently running consumed `%c` / `%C`.
+//
+// GNU keeps the equivalent as `w->column_number_displayed` and consults it in
+// `mode_line_update_needed` (xdisp.c:13831-13837), which sets
+// `w->update_mode_line` and so DISQUALIFIES the one-line optimization whenever
+// the displayed column has changed. Redisplay needs the same answer, because a
+// column is the one point-dependent mode-line construct that a
+// same-screen-row precondition does NOT pin: moving point left or right within
+// a row changes `%c` while the row is unchanged.
+//
+// We record only WHETHER the spec was consumed, not its value. Refusing the
+// chrome skip outright whenever `%c`/`%C` is displayed is strictly more
+// conservative than GNU (which compares the value and still skips when the
+// column happens to be unchanged), and it costs nothing in the default
+// configuration because `column-number-mode` is off (lisp/simple.el:9387).
+// Comparing values is the later relaxation.
+//
+// Thread-local for the same reason as the layout engine's eval counter: the
+// mode line is expanded on the evaluator's thread.
+thread_local! {
+    static COLUMN_SPEC_CONSUMED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn note_column_spec_consumed() {
+    COLUMN_SPEC_CONSUMED.with(|consumed| consumed.set(true));
+}
+
+/// Arm the `%c`/`%C` detector for one mode-line expansion.
+pub fn reset_column_spec_consumed() {
+    COLUMN_SPEC_CONSUMED.with(|consumed| consumed.set(false));
+}
+
+/// Whether the expansion since [`reset_column_spec_consumed`] displayed a
+/// column. See the `COLUMN_SPEC_CONSUMED` comment for why redisplay asks.
+pub fn column_spec_consumed() -> bool {
+    COLUMN_SPEC_CONSUMED.with(std::cell::Cell::get)
+}
+
 fn prefix_line_and_column(buf: &Buffer, end_byte: EmacsBytePos) -> LineColumn {
     let end = end_byte.min(buf.point_max_emacs_byte_pos());
     // Column only needs the current line's prefix: find its start with a
@@ -2804,6 +2842,7 @@ fn expand_mode_line_percent_in_state(
                 index += 1;
             }
             Some('c') => {
+                note_column_spec_consumed();
                 append_mode_line_percent_string_spec(
                     result,
                     &point_line_column().column.to_string(),
@@ -2814,6 +2853,7 @@ fn expand_mode_line_percent_in_state(
             }
             Some('C') => {
                 // GNU: 1-indexed column number at point.
+                note_column_spec_consumed();
                 append_mode_line_percent_string_spec(
                     result,
                     &(point_line_column().column + 1).to_string(),

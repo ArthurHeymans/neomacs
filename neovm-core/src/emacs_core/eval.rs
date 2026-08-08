@@ -7611,11 +7611,18 @@ impl Context {
         self.chrome_dirty.mark_window(window);
     }
 
-    /// Called by redisplay once it has re-generated the chrome the flags asked
-    /// for. GNU's analogue is clearing `update_mode_lines` at the end of
-    /// `redisplay_internal` plus `mark_window_display_accurate_1`.
-    pub fn clear_chrome_dirty(&mut self) {
-        self.chrome_dirty.clear();
+    /// Called by redisplay for each window whose chrome it actually generated.
+    /// GNU's analogue is `mark_window_display_accurate_1`. A window that
+    /// SKIPPED its chrome must not be acknowledged here — see
+    /// [`crate::emacs_core::chrome_dirty::ChromeDirty`] for why the
+    /// acknowledgement is per window rather than a blanket clear.
+    pub fn note_chrome_generated(&mut self, window: WindowId) {
+        self.chrome_dirty.note_chrome_generated(window);
+    }
+
+    /// Drop a deleted window's chrome acknowledgement.
+    pub fn forget_chrome_window(&mut self, window: WindowId) {
+        self.chrome_dirty.forget_window(window);
     }
 
     pub(crate) fn invalidate_redisplay(&mut self) {

@@ -112,6 +112,48 @@ pub fn tab_line_eval_count() -> u32 {
     TAB_LINE_EVAL_COUNT.with(std::cell::Cell::get)
 }
 
+/// What one window's chrome generation established this layout.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ChromeGenerationRecord {
+    /// The chrome displayed `%c`/`%C`. GNU's `w->column_number_displayed`
+    /// (consulted by `mode_line_update_needed`, xdisp.c:13831-13837), kept as
+    /// a bare "was it displayed" because P5.2(b) refuses the skip rather than
+    /// comparing the value.
+    pub(crate) uses_column: bool,
+}
+
+// Which windows actually GENERATED chrome this layout, and what that
+// generation established. Two consumers at commit time: acknowledging the
+// chrome dirty flag per window (a window that skipped must NOT be
+// acknowledged, or its flag is eaten), and carrying `uses_column` into the
+// retained matrix so the NEXT frame's skip decision can consult it.
+thread_local! {
+    static CHROME_GENERATION_RECORD: std::cell::RefCell<HashMap<i64, ChromeGenerationRecord>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+
+/// Reset the per-redisplay chrome generation record. Called with
+/// [`reset_mode_line_eval_count`] at the start of `layout_frame_rust`.
+pub(crate) fn reset_chrome_generation_record() {
+    CHROME_GENERATION_RECORD.with(|record| record.borrow_mut().clear());
+}
+
+fn record_chrome_generated(window_id: i64, uses_column: bool) {
+    CHROME_GENERATION_RECORD.with(|record| {
+        let mut record = record.borrow_mut();
+        let entry = record.entry(window_id).or_default();
+        // All three chrome formats generate together, so OR the flag: a column
+        // anywhere in a window's chrome pins that window.
+        entry.uses_column |= uses_column;
+    });
+}
+
+/// The windows whose chrome was generated this layout, with what it
+/// established. Read once at layout commit.
+pub(crate) fn chrome_generation_record() -> Vec<(i64, ChromeGenerationRecord)> {
+    CHROME_GENERATION_RECORD.with(|record| record.borrow().iter().map(|(k, v)| (*k, *v)).collect())
+}
+
 fn record_mode_line_eval(format_symbol: &str) {
     if format_symbol == "mode-line-format" {
         MODE_LINE_EVAL_COUNT.with(|count| count.set(count.get() + 1));
@@ -1137,12 +1179,20 @@ pub(crate) fn eval_status_line_format_value(
     // `%p`/`%l` reflect the final window-start). The reserved/reported height
     // is the *measured* row height, not a second eval.
     record_mode_line_eval(format_symbol);
+    // Arm the `%c`/`%C` detector for exactly this expansion. P5.2(b)'s chrome
+    // skip refuses whenever a column was displayed, because a column is the one
+    // point-dependent construct its same-screen-row precondition does not pin.
+    neovm_core::emacs_core::xdisp::reset_column_spec_consumed();
     let rendered = neovm_core::emacs_core::xdisp::format_mode_line_for_display(
         evaluator,
         format_value,
         Value::make_window(window_id as u64),
         Value::make_buffer(BufferId(buffer_id)),
         target_cols,
+    );
+    record_chrome_generated(
+        window_id,
+        neovm_core::emacs_core::xdisp::column_spec_consumed(),
     );
     if rendered
         .as_runtime_string_owned()
