@@ -217,6 +217,35 @@ const MONTH_ABBREVS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
+/// Whether conversion `conversion` accepts the `E`/`O` locale modifier.
+///
+/// One decode of the modifier guards scattered through GNU
+/// `lib/strftime.c`'s big `switch (format_char)`, where a conversion that has
+/// no era (`E`) or alternative-digit (`O`) form does `goto bad_format` instead
+/// of ignoring the modifier. `bad_format` copies the whole directive out
+/// literally, so `(format-time-string "%Ed" ...)` yields the string `"%Ed"`,
+/// not the day of month.
+///
+/// In the C locale the ACCEPTED combinations all fall back to the plain
+/// conversion (`_NL_CURRENT` era strings are empty), so only the rejections are
+/// observable — `%Ex` formats like `%x` while `%Ox` stays literal. The table
+/// was extracted from GNU's source and then confirmed against the GNU binary
+/// for every conversion character.
+fn modifier_accepted_by(modifier: char, conversion: char) -> bool {
+    match conversion {
+        // `if (modifier != 0) goto bad_format;`
+        // NB `A` is spelled `case 'A':` in GNU's source, not `case L_('A'):`
+        // like its neighbours -- easy to miss when reading the table off.
+        'A' | 'D' | 'F' | 'a' => false,
+        // `if (modifier == L_('E')) goto bad_format;`
+        'B' | 'G' | 'H' | 'I' | 'M' | 'N' | 'S' | 'U' | 'V' | 'W' | 'b' | 'd' | 'e' | 'g' | 'h'
+        | 'j' | 'k' | 'l' | 'm' | 'w' => modifier != 'E',
+        // `if (modifier == L_('O')) goto bad_format;`
+        'X' | 'c' | 'x' => modifier != 'O',
+        _ => true,
+    }
+}
+
 /// `(format-time-string FORMAT-STRING &optional TIME ZONE)` -- format time
 /// like C `strftime`.
 ///
@@ -474,10 +503,17 @@ fn format_time(
             flags.width = w;
         }
 
-        // GNU: skip the `E`/`O` locale modifiers (no alternate reps here).
-        if i < chars.len() && (chars[i] == 'E' || chars[i] == 'O') {
-            i += 1;
-        }
+        // GNU: parse the `E`/`O` locale modifiers (`lib/strftime.c`).  They are
+        // NOT simply skipped: each conversion decides whether it accepts one,
+        // and a conversion that does not `goto bad_format`, which copies the
+        // whole directive out literally.
+        let modifier = match chars.get(i) {
+            Some(&m @ ('E' | 'O')) => {
+                i += 1;
+                Some(m)
+            }
+            _ => None,
+        };
 
         if i >= chars.len() {
             // GNU "% at end of format": emit the literal text from `%`.
@@ -486,6 +522,18 @@ fn format_time(
         }
 
         let fc = chars[i];
+
+        // GNU `bad_format`: a conversion that does not accept the modifier it
+        // was given emits the ENTIRE directive literally, `%` included
+        // (`cpy (f - percent + 1, percent)`), rather than ignoring the
+        // modifier and formatting anyway.
+        if let Some(m) = modifier
+            && !modifier_accepted_by(m, fc)
+        {
+            result.extend(chars[percent..=i].iter());
+            i += 1;
+            continue;
+        }
 
         // GNU: `:`, `::`, `:::` are valid only just before `z`.
         if fc == ':' {

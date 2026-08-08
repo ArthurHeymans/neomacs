@@ -565,3 +565,99 @@ fn format_time_string_subsecond_flags_match_gnu() {
     // Later flag wins: `0-` ends as NoPad.
     assert_eq!(fts_n("%0-N"), "25");
 }
+
+// ===================================================================
+// `E` / `O` locale modifiers
+//
+// GNU `lib/strftime.c` does not ignore these: each conversion decides
+// whether it accepts one, and a conversion that does not takes
+// `goto bad_format`, which copies the WHOLE directive out literally
+// (`cpy (f - percent + 1, percent)`).  So `%Ed` yields the four-character
+// string "%Ed", not the day of month.
+//
+// In the C locale every ACCEPTED combination falls back to the plain
+// conversion (the `_NL_CURRENT` era strings are empty), so only the
+// rejections are observable.  Verified against GNU Emacs for all
+// conversion characters x {E, O}.
+// ===================================================================
+
+/// Format `spec` against a fixed UTC instant (2024-04-22 14:32:48).
+fn fts_eo(spec: &str) -> String {
+    let result = builtin_format_time_string(vec![
+        Value::string(spec),
+        Value::fixnum(1_713_796_368),
+        Value::T,
+    ]);
+    result.unwrap().as_utf8_str().unwrap().to_string()
+}
+
+#[test]
+fn format_time_string_rejects_e_modifier_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // `if (modifier == L_('E')) goto bad_format;`
+    for conversion in [
+        'B', 'G', 'H', 'I', 'M', 'N', 'S', 'U', 'V', 'W', 'b', 'd', 'e', 'g', 'h', 'j', 'k', 'l',
+        'm', 'w',
+    ] {
+        let spec = format!("%E{conversion}");
+        assert_eq!(
+            fts_eo(&spec),
+            spec,
+            "%E{conversion} must be copied out literally, as GNU's bad_format does"
+        );
+    }
+}
+
+#[test]
+fn format_time_string_rejects_o_modifier_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // `if (modifier == L_('O')) goto bad_format;`
+    for conversion in ['X', 'c', 'x'] {
+        let spec = format!("%O{conversion}");
+        assert_eq!(fts_eo(&spec), spec, "%O{conversion} must be literal");
+    }
+}
+
+#[test]
+fn format_time_string_rejects_both_modifiers_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // `if (modifier != 0) goto bad_format;`
+    //
+    // `A` is spelled `case 'A':` in GNU's source while its neighbours use
+    // `case L_('A'):`, which makes it easy to miss when reading the table off.
+    for conversion in ['A', 'D', 'F', 'a'] {
+        for modifier in ['E', 'O'] {
+            let spec = format!("%{modifier}{conversion}");
+            assert_eq!(
+                fts_eo(&spec),
+                spec,
+                "%{modifier}{conversion} must be literal"
+            );
+        }
+    }
+}
+
+#[test]
+fn format_time_string_accepts_modifiers_that_gnu_allows() {
+    crate::test_utils::init_test_tracing();
+    // Accepted combinations format as the plain conversion in the C locale.
+    assert_eq!(fts_eo("%Od"), "22");
+    assert_eq!(fts_eo("%OH"), "14");
+    assert_eq!(fts_eo("%OB"), "April");
+    assert_eq!(fts_eo("%Oj"), "113");
+    assert_eq!(fts_eo("%EY"), "2024");
+    assert_eq!(fts_eo("%OY"), "2024");
+    assert_eq!(fts_eo("%Ey"), "24");
+    // `x` and `c` reject only `O`, so `E` goes through.
+    assert_eq!(fts_eo("%Ex"), fts_eo("%x"));
+    assert_eq!(fts_eo("%Ec"), fts_eo("%c"));
+}
+
+#[test]
+fn format_time_string_modifier_rejection_keeps_surrounding_text() {
+    crate::test_utils::init_test_tracing();
+    // `bad_format` emits only the offending directive; the rest of the
+    // format string is still processed.
+    assert_eq!(fts_eo("[%Ed] %Y"), "[%Ed] 2024");
+    assert_eq!(fts_eo("%Y-%Em-%Od"), "2024-%Em-22");
+}
