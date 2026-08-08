@@ -25,7 +25,7 @@ mod scroll_bar;
 pub mod split;
 pub mod window_markers;
 
-pub use split::{CombinationLimit, DeleteResize, ParentSeal, SplitAttachment};
+pub use split::{CombinationLimit, DeleteOutcome, DeleteResize, ParentSeal, SplitAttachment};
 
 pub use display::{
     WindowBufferDisplayDefaults, WindowFringeDefaults, WindowScrollBarDefaults,
@@ -4075,6 +4075,52 @@ impl FrameManager {
         Some(new_id)
     }
 
+    /// Commit the sizes `window.el` staged for the combination that just
+    /// gained `new_window_id`.
+    ///
+    /// Mirrors the tail of GNU `Fsplit_window_internal`
+    /// (`src/window.c:5636-5672`): the new window's own size is staged from the
+    /// SIZE argument,
+    ///
+    /// ```c
+    /// wset_new_pixel (n, pixel_size);
+    /// ...
+    /// window_resize_apply (p, horflag);
+    /// ```
+    ///
+    /// and then the whole parent combination is applied, so the siblings that
+    /// `window.el` shrank actually shrink. Without this the primitive would be
+    /// re-deriving a layout the Lisp layer already computed — which is how
+    /// `window-combination-resize` came to have no effect at all, since under
+    /// that policy the new window's space comes from *every* sibling rather
+    /// than only from the split target.
+    pub fn apply_staged_split_sizes(
+        &mut self,
+        frame_id: FrameId,
+        new_window_id: WindowId,
+        new_size: Option<i64>,
+        new_normal: Value,
+        direction: SplitDirection,
+    ) -> Option<()> {
+        let frame = self.frames.get_mut(&frame_id)?;
+        if let Some(window) = frame.find_window_mut(new_window_id) {
+            if let Some(size) = new_size {
+                window.set_new_pixel(Some(size));
+            }
+            // GNU `wset_new_normal (n, normal_size)`.  The *other* children's
+            // fractions were staged by `window.el`, so they are not touched
+            // here -- `window_resize_apply` commits them all together.
+            if !new_normal.is_nil() {
+                window.set_new_normal(new_normal);
+            }
+        }
+        let parent_id = find_parent_in_tree(&frame.root_window, new_window_id)?;
+        let horflag = matches!(direction, SplitDirection::Horizontal);
+        let parent = frame.find_window_mut(parent_id)?;
+        window_resize_apply(parent, horflag, 1.0, 1.0);
+        Some(())
+    }
+
     /// Delete a window from a frame. Cannot delete the last window.
     ///
     /// The freed space is spread over the remaining siblings. Callers coming
@@ -4105,7 +4151,9 @@ impl FrameManager {
         let deleted_parameters = frame
             .find_window(window_id)
             .map(|window| window.parameters().clone());
-        let removed = delete_window_in_tree(&mut frame.root_window, window_id, resize);
+        // A promotion at the very top has no grandparent to merge into, so the
+        // outcome collapses to "was it removed" here.
+        let removed = delete_window_in_tree(&mut frame.root_window, window_id, resize).removed();
         if removed {
             self.deleted_windows.insert(window_id);
             self.deleted_window_parameters
@@ -4358,6 +4406,84 @@ impl Default for FrameManager {
 // Tree manipulation helpers
 // ---------------------------------------------------------------------------
 
+/// Build the live leaf a split introduces beside `reference`.
+///
+/// Mirrors GNU `make_window` plus the property inheritance in
+/// `Fsplit_window_internal`: the new window gets a fresh identity, no
+/// parameters and no history, and inherits buffer-relative position state from
+/// the reference window only when it will display the same buffer.
+///
+/// # Why this is shared
+///
+/// The two split paths — interposing a new parent, and splicing into an
+/// existing combination — each used to clone-and-patch the reference leaf with
+/// their own hand-written field list, and the lists drifted. The splice path's
+/// list omitted `history`, so a window born there inherited the reference's
+/// `use_time` and reported itself to `get-lru-window` as recently used, which
+/// made `display-buffer`'s fallback pick a different window than GNU. Any field
+/// added to `Window::Leaf` now has exactly one place to be considered.
+fn make_split_sibling(
+    reference: &Window,
+    new_id: WindowId,
+    new_buffer_id: BufferId,
+    bounds: Rect,
+) -> Window {
+    // A split always introduces a live LEAF (GNU `make_window`), so an internal
+    // reference seeds a fresh one rather than being cloned.
+    let Window::Leaf {
+        buffer_id: reference_buffer,
+        ..
+    } = reference
+    else {
+        let mut leaf = Window::new_leaf(new_id, new_buffer_id, bounds);
+        // `Window::new_leaf` starts the character edges at zero and there is no
+        // leaf to clone them from, so seed them from the reference.  They are
+        // NOT derived from `bounds` here: GNU updates character edges lazily via
+        // `window--pixel-to-total`, and eagerly re-deriving the whole frame
+        // makes windows report an origin GNU has not moved yet (see
+        // `FrameManager::split_window`).
+        leaf.set_left_col(reference.left_col());
+        leaf.set_top_line(reference.top_line());
+        return leaf;
+    };
+    let same_buffer = new_buffer_id == *reference_buffer;
+
+    let mut sibling = reference.clone();
+    if let Window::Leaf {
+        id,
+        buffer_id,
+        bounds: sibling_bounds,
+        parameters,
+        history,
+        window_start,
+        position_markers,
+        window_end,
+        point,
+        old_point,
+        vscroll,
+        preserve_vscroll_p,
+        ..
+    } = &mut sibling
+    {
+        *id = new_id;
+        *buffer_id = new_buffer_id;
+        *sibling_bounds = bounds;
+        parameters.clear();
+        // `use_time` lives here: a brand-new window has never been selected.
+        *history = WindowHistoryState::default();
+        *position_markers = WindowPositionMarkerState::Detached;
+        *window_end = WindowEndState::Unrecorded;
+        if !same_buffer {
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::ONE;
+            *old_point = LispCharPos1::ONE;
+            *vscroll = 0;
+            *preserve_vscroll_p = false;
+        }
+    }
+    sibling
+}
+
 /// The combination direction of `target`'s parent within `tree`.
 ///
 /// Returns `Some(None)` when `target` *is* `tree`'s root (GNU's
@@ -4439,10 +4565,7 @@ fn split_window_in_tree(
         let old_top_line = old_window.top_line();
         let old_left_col = old_window.left_col();
 
-        if let Window::Leaf {
-            buffer_id: buf_id, ..
-        } = old_window
-        {
+        if let Window::Leaf { .. } = old_window {
             let (first_bounds, second_bounds) = match direction {
                 SplitDirection::Horizontal => {
                     let (old_size, new_size) = split_sizes(old_bounds.width, size);
@@ -4498,54 +4621,8 @@ fn split_window_in_tree(
             let mut old_leaf = old_window;
             old_leaf.set_bounds(old_leaf_bounds);
 
-            let mut new_leaf = old_leaf.clone();
-            if let Window::Leaf {
-                id,
-                buffer_id,
-                bounds,
-                parameters,
-                history,
-                window_start,
-                position_markers,
-                window_end,
-                point,
-                old_point,
-                vscroll,
-                preserve_vscroll_p,
-                ..
-            } = &mut new_leaf
-            {
-                let same_buffer = new_buffer_id == buf_id;
-                let inherited_window_start = *window_start;
-                let inherited_point = *point;
-                let inherited_old_point = *old_point;
-                let inherited_vscroll = *vscroll;
-                let inherited_preserve_vscroll_p = *preserve_vscroll_p;
-                *id = new_id;
-                *buffer_id = new_buffer_id;
-                *bounds = new_leaf_bounds;
-                parameters.clear();
-                *history = WindowHistoryState::default();
-                *window_start = if same_buffer {
-                    inherited_window_start
-                } else {
-                    LispCharPos1::ONE
-                };
-                *position_markers = WindowPositionMarkerState::Detached;
-                *window_end = WindowEndState::Unrecorded;
-                *point = if same_buffer {
-                    inherited_point
-                } else {
-                    LispCharPos1::ONE
-                };
-                *old_point = if same_buffer {
-                    inherited_old_point
-                } else {
-                    LispCharPos1::ONE
-                };
-                *vscroll = if same_buffer { inherited_vscroll } else { 0 };
-                *preserve_vscroll_p = same_buffer && inherited_preserve_vscroll_p;
-            }
+            let mut new_leaf =
+                make_split_sibling(&old_leaf, new_id, new_buffer_id, new_leaf_bounds);
 
             // Capture the old leaf's pre-split normal-size
             // fractions before we mutate the children. The new
@@ -4678,14 +4755,7 @@ fn split_window_in_tree(
         let mut old_subtree = old_window;
         resize_window_subtree(&mut old_subtree, old_subtree_bounds);
 
-        // `Window::new_leaf` leaves the character edges at zero for the resize
-        // passes to fill in, but the split path deliberately does not resync
-        // them (see `FrameManager::split_window`).  A leaf target hands them
-        // down by being cloned; an internal target has to seed them explicitly,
-        // or the new window reports itself at column/line 0.
-        let mut new_leaf = Window::new_leaf(new_id, new_buffer_id, new_leaf_bounds);
-        new_leaf.set_left_col(old_left_col);
-        new_leaf.set_top_line(old_top_line);
+        let mut new_leaf = make_split_sibling(&old_subtree, new_id, new_buffer_id, new_leaf_bounds);
 
         let parent_size = match direction {
             SplitDirection::Horizontal => old_bounds.width,
@@ -4833,36 +4903,8 @@ fn split_window_in_tree(
                     // Build the new sibling.  A split always introduces a live
                     // LEAF (GNU `make_window`), so an internal target seeds a
                     // fresh one rather than being cloned.
-                    let mut new_leaf = if children[i].is_leaf() {
-                        children[i].clone()
-                    } else {
-                        // See the same seeding in the `NewParent` path above:
-                        // a fresh leaf's character edges start at zero and the
-                        // split path does not resync them.
-                        let mut leaf = Window::new_leaf(new_id, new_buffer_id, new_leaf_bounds);
-                        leaf.set_left_col(children[i].left_col());
-                        leaf.set_top_line(children[i].top_line());
-                        leaf
-                    };
-                    if let Window::Leaf {
-                        id,
-                        buffer_id,
-                        bounds,
-                        parameters,
-                        window_start,
-                        position_markers,
-                        window_end,
-                        ..
-                    } = &mut new_leaf
-                    {
-                        *id = new_id;
-                        *buffer_id = new_buffer_id;
-                        *bounds = new_leaf_bounds;
-                        parameters.clear();
-                        *window_start = LispCharPos1::ONE;
-                        *position_markers = WindowPositionMarkerState::Detached;
-                        *window_end = WindowEndState::Unrecorded;
-                    }
+                    let mut new_leaf =
+                        make_split_sibling(&children[i], new_id, new_buffer_id, new_leaf_bounds);
 
                     // Compute normal fractions for all children in parent.
                     let parent_size = match direction {
@@ -4938,7 +4980,11 @@ fn split_window_in_tree(
 }
 
 /// Delete a window from the tree. Returns true if found and removed.
-fn delete_window_in_tree(tree: &mut Window, target: WindowId, resize: DeleteResize) -> bool {
+fn delete_window_in_tree(
+    tree: &mut Window,
+    target: WindowId,
+    resize: DeleteResize,
+) -> DeleteOutcome {
     let is_direct_child = matches!(
         tree,
         Window::Internal { children, .. } if children.iter().any(|c| c.id() == target)
@@ -4982,6 +5028,11 @@ fn delete_window_in_tree(tree: &mut Window, target: WindowId, resize: DeleteResi
             let mut promoted = children.pop().expect("one child remains");
             resize_window_subtree(&mut promoted, parent_bounds);
             *tree = promoted;
+            // GNU: "Have SIBLING inherit the following three slot values from
+            // PARENT (the combination_limit slot is not inherited)"
+            // (`src/window.c:5793-5796`) -- so the promoted node keeps its own
+            // seal, which is what decides recombination at the level above.
+            return DeleteOutcome::RemovedAndPromoted;
         } else {
             match resize {
                 // GNU `Fdelete_window_internal`: `window_resize_apply (p,
@@ -5007,19 +5058,104 @@ fn delete_window_in_tree(tree: &mut Window, target: WindowId, resize: DeleteResi
                 }
             }
         }
-        return true;
+        return DeleteOutcome::Removed;
     }
 
     // Recurse.
-    if let Window::Internal { children, .. } = tree {
-        for child in children {
-            if delete_window_in_tree(child, target, resize) {
-                return true;
+    let child_count = match tree {
+        Window::Internal { children, .. } => children.len(),
+        Window::Leaf { .. } => 0,
+    };
+    for i in 0..child_count {
+        let outcome = {
+            let Window::Internal { children, .. } = tree else {
+                unreachable!("child_count is 0 for a leaf")
+            };
+            delete_window_in_tree(&mut children[i], target, resize)
+        };
+        match outcome {
+            DeleteOutcome::NotFound => continue,
+            // GNU calls `recombine_windows` on the promoted sibling, and only
+            // there (`src/window.c:5801`).
+            DeleteOutcome::RemovedAndPromoted => {
+                recombine_child_into_parent(tree, i);
+                return DeleteOutcome::Removed;
             }
+            DeleteOutcome::Removed => return DeleteOutcome::Removed,
         }
     }
 
-    false
+    DeleteOutcome::NotFound
+}
+
+/// Merge `parent`'s `idx`th child into `parent` when the two are iso-combined
+/// and the child is unsealed.
+///
+/// Mirrors GNU `recombine_windows` (`src/window.c:2606-2650`). The child's own
+/// children are spliced into `parent`'s child list at the child's position, and
+/// each gets a fresh normal size measured against its new parent:
+///
+/// ```c
+/// wset_normal_cols (c, make_float ((double) c->pixel_width
+///                                  / (double) p->pixel_width));
+/// ```
+///
+/// A child whose stored `combination_limit` slot is set is left alone — that is
+/// exactly what `set-window-combination-limit` is for, and what
+/// `window--make-major-side-window` relies on to keep the main-window group
+/// from dissolving into the root (Bug#80665).
+fn recombine_child_into_parent(parent: &mut Window, idx: usize) {
+    let Window::Internal {
+        children,
+        direction: parent_direction,
+        bounds: parent_bounds,
+        ..
+    } = parent
+    else {
+        return;
+    };
+    let parent_direction = *parent_direction;
+    let parent_bounds = *parent_bounds;
+
+    // Only an unsealed combination along the same axis merges upward.
+    match children.get(idx) {
+        Some(Window::Internal {
+            direction,
+            combination_limit,
+            ..
+        }) if !*combination_limit && *direction == parent_direction => {}
+        _ => return,
+    }
+
+    let Window::Internal {
+        children: inner, ..
+    } = children.remove(idx)
+    else {
+        unreachable!("matched as Internal just above")
+    };
+
+    let parent_size = match parent_direction {
+        SplitDirection::Horizontal => parent_bounds.width,
+        SplitDirection::Vertical => parent_bounds.height,
+    };
+    for (offset, mut child) in inner.into_iter().enumerate() {
+        if parent_size > 0.0 {
+            let child_bounds = *child.bounds();
+            let fraction = match parent_direction {
+                SplitDirection::Horizontal => child_bounds.width / parent_size,
+                SplitDirection::Vertical => child_bounds.height / parent_size,
+            } as f64;
+            match parent_direction {
+                SplitDirection::Horizontal => {
+                    child.set_normal_cols(Value::make_float(fraction));
+                }
+                SplitDirection::Vertical => {
+                    child.set_normal_lines(Value::make_float(fraction));
+                }
+            }
+        }
+        children.insert(idx + offset, child);
+    }
 }
 
 fn collect_window_ids(window: &Window, ids: &mut HashSet<WindowId>) {
@@ -5193,14 +5329,27 @@ pub fn window_resize_apply(
     // moving the persistent fraction onto the Window struct here
     // means `window-normal-size` reads it back instead of
     // re-deriving the ratio from current pixel bounds.
+    // GNU guards this with `NUMBERP` (`src/window.c`):
+    //
+    //     if (NUMBERP (w->new_normal))
+    //       wset_normal_cols (w, w->new_normal);
+    //
+    // The slot legitimately holds the SYMBOLS `skip'/`stuck'/`ignore' while
+    // `window--resize-child-windows' is marking which children to leave alone
+    // (see `window--resize-child-windows-skip-p' in `lisp/window.el').
+    // Committing one of those as a window's normal size makes the next
+    // arithmetic on it signal `(wrong-type-argument number-or-marker-p skip)'.
+    //
+    // GNU also does NOT clear the slot here -- `window--resize-child-windows-skip-p'
+    // reads it back on the next pass, so clearing it changes which windows are
+    // skipped.
     let pending_normal = window.new_normal();
-    if !pending_normal.is_nil() {
+    if pending_normal.is_number() {
         if horflag {
             window.set_normal_cols(pending_normal);
         } else {
             window.set_normal_lines(pending_normal);
         }
-        window.set_new_normal(Value::NIL);
     }
 
     // Get updated bounds after applying new_pixel.

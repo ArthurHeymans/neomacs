@@ -8442,3 +8442,56 @@ fn deleting_a_right_side_window_leaves_the_left_side_window_width_intact() {
         "OK (h (\"*L*\" 0 20) (h (\"*scratch*\" 20 50) (\"*scratch*\" 50 80)))"
     );
 }
+
+/// GNU `recombine_windows` (src/window.c:2606-2650), called on the window
+/// promoted into its parent's slot (src/window.c:5801): if that window is
+/// itself a combination along the SAME axis as its new parent, and its stored
+/// `combination_limit` slot is nil, its children are spliced into the parent
+/// and it disappears.
+///
+/// The combination must be UNSEALED for this to fire, so the nesting here is
+/// built with *orthogonal* splits — a `window-combination-limit t` split seals
+/// the parent it creates, and GNU skips sealed nodes.
+///
+/// GNU Emacs 31 `--batch`, 80-column frame: `(h 0-40 40-60 60-80)`.
+#[test]
+fn deleting_a_window_recombines_the_promoted_child_into_an_iso_parent() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (let* ((w (selected-window))
+                    (n1 (split-window w nil 'right)))
+               (select-window n1)
+               (let ((n2 (split-window n1 nil 'below)))
+                 (select-window n2)
+                 (split-window n2 nil 'right)
+                 (delete-window n1)))
+             (neo--tree))"#,
+    );
+    assert_eq!(
+        tree,
+        "OK (h (\"*scratch*\" 0 40) (\"*scratch*\" 40 60) (\"*scratch*\" 60 80))"
+    );
+}
+
+/// A SEALED combination must survive promotion intact — `set-window-combination-limit`
+/// exists precisely to stop the merge (and `window--make-major-side-window`
+/// relies on it, Bug#80665).
+#[test]
+fn deleting_a_window_does_not_recombine_a_sealed_promoted_child() {
+    let tree = eval_window_tree(
+        r#"(progn
+             (let* ((w (selected-window))
+                    (n1 (split-window w nil 'right)))
+               (select-window n1)
+               (let ((n2 (split-window n1 nil 'below)))
+                 (select-window n2)
+                 (split-window n2 nil 'right)
+                 (set-window-combination-limit (window-parent (selected-window)) t)
+                 (delete-window n1)))
+             (neo--tree))"#,
+    );
+    assert_eq!(
+        tree,
+        "OK (h (\"*scratch*\" 0 40) (h (\"*scratch*\" 40 60) (\"*scratch*\" 60 80)))"
+    );
+}

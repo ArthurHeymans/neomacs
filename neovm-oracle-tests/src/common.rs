@@ -357,11 +357,24 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
          ;; occurrences of it to a second, coarser token AFTER the
          ;; more-specific lisp/ squash, keeping lisp paths on the finer
          ;; token. Exact-domain replacement avoids masking unrelated paths.
+         ;;
+         ;; Printed object identities leak a raw address into error messages
+         ;; and `prin1' output: GNU prints a real pointer
+         ;; (`#<frame F1 0x555555b46708>') while Neomacs prints a synthetic id
+         ;; (`#<frame F1 0x100000000>').  Neither is part of the observable
+         ;; contract, and the GNU side is not even stable across runs, so the
+         ;; address is squashed on BOTH engines while the object TYPE and NAME
+         ;; stay a real parity lock.  Scoped to the `#<...>' form so ordinary
+         ;; hex content (`%x' output, docstrings quoting code points) is
+         ;; untouched.
          ((stringp v)
           (replace-regexp-in-string
-           "%b - \\(?:GNU\\|NEO\\) Emacs at "
-           "%b - [EMACS-PRODUCT] at "
-           (neovm--oracle-squash-roots v)))
+           "\\(#<[^>]*\\) 0x[0-9a-f]+"
+           "\\1 0xADDR"
+           (replace-regexp-in-string
+            "%b - \\(?:GNU\\|NEO\\) Emacs at "
+            "%b - [EMACS-PRODUCT] at "
+            (neovm--oracle-squash-roots v))))
          (t v)))
       (defun neovm--oracle-squash-roots (s)
         (let ((load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))

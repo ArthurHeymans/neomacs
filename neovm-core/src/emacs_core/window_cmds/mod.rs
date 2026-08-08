@@ -3921,6 +3921,21 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
         )
         .ok_or_else(|| signal("error", vec![Value::string("Cannot split window")]))?;
 
+    // GNU `Fsplit_window_internal` finishes by staging the new window's own
+    // size and normal size and then committing the whole parent combination
+    // (`src/window.c:5636-5672`):
+    //
+    //     wset_new_pixel (n, pixel_size);
+    //     wset_new_normal (n, normal_size);
+    //     ...
+    //     window_resize_apply (p, horflag);
+    //
+    // Under `window-combination-resize' the new window's space comes from EVERY
+    // sibling, not just the split target, and `window.el' has already staged
+    // each sibling's share -- so the primitive must apply that plan instead of
+    // computing a layout of its own.
+    frames.apply_staged_split_sizes(fid, new_wid, size_opt, normal_size, direction);
+
     // GNU allocates independent start/point/old-point markers for the new
     // live leaf.  `FrameManager::split_window` intentionally clears marker IDs
     // copied from the old leaf; attach fresh markers before returning the Lisp
@@ -3929,42 +3944,6 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
         && let Some(new_window) = frame.find_window_mut(new_wid)
     {
         crate::window::window_markers::attach_window_position_markers(buffers, new_window);
-    }
-
-    // GNU `Fsplit_window_internal` (`src/window.c:5517-5644`)
-    // assigns `wset_normal_*` for the new sibling from the
-    // NORMAL-SIZE argument when supplied. The corresponding
-    // sibling fraction on the OTHER child is `1.0 - normal`,
-    // matching what GNU computes for the rebalanced parent.
-    if !normal_size.is_nil() {
-        let normal_f = match normal_size.kind() {
-            ValueKind::Float => normal_size.as_float().unwrap_or(0.5),
-            ValueKind::Fixnum(n) => n as f64,
-            _ => 0.5,
-        };
-        let other_f = (1.0 - normal_f).clamp(0.0, 1.0);
-        if let Some(frame) = frames.get_mut(fid) {
-            if let Some(new_window) = frame.find_window_mut(new_wid) {
-                match direction {
-                    SplitDirection::Horizontal => {
-                        new_window.set_normal_cols(Value::make_float(normal_f));
-                    }
-                    SplitDirection::Vertical => {
-                        new_window.set_normal_lines(Value::make_float(normal_f));
-                    }
-                }
-            }
-            if let Some(old_window) = frame.find_window_mut(wid) {
-                match direction {
-                    SplitDirection::Horizontal => {
-                        old_window.set_normal_cols(Value::make_float(other_f));
-                    }
-                    SplitDirection::Vertical => {
-                        old_window.set_normal_lines(Value::make_float(other_f));
-                    }
-                }
-            }
-        }
     }
 
     Ok(window_value(new_wid))

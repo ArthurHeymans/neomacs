@@ -340,3 +340,49 @@ fn oracle_deleting_the_only_side_window_returns_its_space_to_the_main_group() {
     let expect = expect_test::expect![[r#""OK (h (\"*scratch*\" 0 40) (\"*scratch*\" 40 80))""#]];
     assert_oracle_parity_expect(&form, expect);
 }
+
+/// GNU `recombine_windows` (src/window.c:2606-2650), called on the window
+/// promoted into its parent's slot (src/window.c:5801): an UNSEALED
+/// combination along the same axis as its new parent dissolves into it.
+///
+/// The nesting is built with *orthogonal* splits on purpose — a
+/// `window-combination-limit t` split seals the parent it creates, and GNU
+/// skips sealed nodes, so a sealed reproducer silently passes without ever
+/// exercising the merge.
+#[test]
+fn oracle_deleting_recombines_the_promoted_child_into_an_iso_parent() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let form = tree_form(
+        "(let* ((w (selected-window)) (n1 (split-window w nil 'right)))
+           (select-window n1)
+           (let ((n2 (split-window n1 nil 'below)))
+             (select-window n2)
+             (split-window n2 nil 'right)
+             (delete-window n1)))",
+    );
+    let expect = expect_test::expect![[
+        r#""OK (h (\"*scratch*\" 0 40) (\"*scratch*\" 40 60) (\"*scratch*\" 60 80))""#
+    ]];
+    assert_oracle_parity_expect(&form, expect);
+}
+
+/// The same shape with the inner combination SEALED must survive intact —
+/// which is what `set-window-combination-limit` is for, and what
+/// `window--make-major-side-window` relies on (Bug#80665).
+#[test]
+fn oracle_deleting_does_not_recombine_a_sealed_promoted_child() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let form = tree_form(
+        "(let* ((w (selected-window)) (n1 (split-window w nil 'right)))
+           (select-window n1)
+           (let ((n2 (split-window n1 nil 'below)))
+             (select-window n2)
+             (split-window n2 nil 'right)
+             (set-window-combination-limit (window-parent (selected-window)) t)
+             (delete-window n1)))",
+    );
+    let expect = expect_test::expect![[
+        r#""OK (h (\"*scratch*\" 0 40) (h (\"*scratch*\" 40 60) (\"*scratch*\" 60 80)))""#
+    ]];
+    assert_oracle_parity_expect(&form, expect);
+}

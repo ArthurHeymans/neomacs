@@ -64,6 +64,32 @@ pub enum DeleteResize {
     Redistribute,
 }
 
+/// What a delete did to the subtree it was applied to.
+///
+/// The `Promoted` case is what drives recombination: GNU calls
+/// `recombine_windows` on the surviving sibling *only* in the matryoshka branch
+/// of `Fdelete_window_internal` (`src/window.c:5801`), i.e. only when the
+/// deleted window's parent collapsed and the sibling took its place. Reporting
+/// it as a distinct outcome keeps that "only then" from decaying into "whenever
+/// the shape happens to look right".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeleteOutcome {
+    /// The target is not in this subtree.
+    NotFound,
+    /// The target was removed; this subtree's root still stands.
+    Removed,
+    /// The target was removed and this subtree's root was replaced by the sole
+    /// surviving sibling, which may now be iso-combined with its new parent.
+    RemovedAndPromoted,
+}
+
+impl DeleteOutcome {
+    /// Whether the target was removed, however the subtree was reshaped.
+    pub fn removed(self) -> bool {
+        !matches!(self, Self::NotFound)
+    }
+}
+
 /// The value of the dynamic Lisp variable `window-combination-limit`, as read
 /// by the split path.
 ///

@@ -2127,10 +2127,12 @@ pub(crate) fn builtin_split_window_internal(
         ));
     }
 
-    // NORMAL-SIZE and REFER are accepted for arity compatibility
-    // and ignored — see the docstring above and window audit
-    // Critical 5 in drafts/window-system-audit.md.
-    let _ = &args[3];
+    // REFER is accepted for arity compatibility and ignored.  NORMAL-SIZE is
+    // NOT ignored: GNU stages it as the new window's `new_normal'
+    // (`src/window.c:5650') for `window_resize_apply' to commit, and
+    // `lisp/window.el' relies on that to give the new window its proportional
+    // share -- especially under `window-combination-resize', where every
+    // sibling's fraction is restaged too.
     if let Some(refer) = args.get(4) {
         let _ = refer;
     }
@@ -2146,12 +2148,13 @@ pub(crate) fn builtin_split_window_internal(
         )
         .is_some_and(|value| value.is_t()),
     );
-    let result = super::window_cmds::split_window_internal_impl_in_state(
+    let result = super::window_cmds::split_window_internal_impl_in_state_with_normal(
         &mut eval.frames,
         &mut eval.buffers,
         args[0],
         args[1],
         args[2],
+        args[3],
         combination_limit,
     )?;
     // GNU does NOT run `window-configuration-change-hook' eagerly from
