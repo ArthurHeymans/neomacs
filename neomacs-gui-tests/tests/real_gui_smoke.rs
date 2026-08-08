@@ -189,6 +189,138 @@ fn real_gui_font_selection_oracle_matches_gnu_emacs_result_structure() {
     }
 }
 
+#[test]
+fn real_gui_image_size_oracle_matches_gnu_emacs() {
+    if !cfg!(target_os = "linux") {
+        eprintln!("skipping real GUI image-size oracle; X11 comparator is Linux-only");
+        return;
+    }
+
+    let backend = GuiBackend::LinuxX11;
+    let workspace_root = workspace_root();
+    let binary = neomacs_binary(&workspace_root);
+    assert!(
+        binary.exists(),
+        "build {binary:?} before running the real GUI image-size oracle"
+    );
+    let gnu_emacs = gnu_emacs_binary();
+    assert!(
+        gnu_emacs.exists(),
+        "GNU Emacs binary {gnu_emacs:?} should exist for image-size oracle"
+    );
+
+    let artifact_root = workspace_root.join("target/neomacs-gui-tests");
+    let dir = artifact_root.join(backend.slug());
+    std::fs::create_dir_all(&dir).unwrap();
+    let gnu_result_path = dir.join("image-size-oracle.gnu-result.el");
+    let neomacs_result_path = dir.join("image-size-oracle.neomacs-result.el");
+    let diff_path = dir.join("image-size-oracle.diff");
+    let _ = std::fs::remove_file(&gnu_result_path);
+    let _ = std::fs::remove_file(&neomacs_result_path);
+    let _ = std::fs::remove_file(&diff_path);
+
+    let scenario = GuiScenario::new(
+        "image-size-oracle",
+        workspace_root.join("neomacs-gui-tests/fixtures/image-size-oracle.el"),
+    );
+
+    let session = DisplayHarness::for_backend(backend)
+        .start_session(&artifact_root)
+        .expect("display session should start");
+
+    // GNU Emacs: the same fixture under the Xvfb display, writing its prin1
+    // result to a separate file. The fixture defers image-size past startup
+    // so a window-system frame exists (image-size otherwise signals
+    // "Window system frame should be used").
+    let artifacts = neomacs_gui_tests::GuiArtifactSet::new(&artifact_root, backend, &scenario.name);
+    let mut gnu_runner = ProcessGuiCommandRunner;
+    let gnu_output = gnu_runner
+        .run(
+            &gnu_image_oracle_command(
+                &gnu_emacs,
+                &scenario.script,
+                &gnu_result_path,
+                session.env(),
+            ),
+            &artifacts,
+            &GuiRunOptions::with_timeout(Duration::from_secs(20)),
+        )
+        .expect("GNU Emacs image oracle should run");
+    assert_eq!(
+        gnu_output.exit_code,
+        Some(0),
+        "GNU Emacs image oracle failed; stderr:\n{}",
+        gnu_output.stderr
+    );
+
+    // Neomacs: drive the same fixture through the GUI plan so it gets the
+    // proven window-system startup env, adding our result-file env var.
+    let mut plan = GuiTestPlan::new(backend, &workspace_root, &artifact_root, scenario)
+        .with_program(binary)
+        .with_env(
+            "NEOMACS_GUI_IMAGE_RESULT",
+            neomacs_result_path.display().to_string(),
+        );
+    for (key, value) in session.env() {
+        plan = plan.with_env(key.clone(), value.clone());
+    }
+    let mut runner = ProcessGuiCommandRunner;
+    let result = plan
+        .run_with(
+            &mut runner,
+            GuiRunOptions::with_timeout(Duration::from_secs(20)),
+        )
+        .expect("GUI run should produce the image-size oracle result");
+    assert_eq!(result.status, GuiRunStatus::Passed, "{result:#?}");
+
+    let gnu_result = std::fs::read_to_string(&gnu_result_path)
+        .expect("GNU Emacs image oracle result should be readable");
+    let neomacs_result = std::fs::read_to_string(&neomacs_result_path)
+        .expect("NEO Emacs image oracle result should be readable");
+    write_font_oracle_diff(&diff_path, &gnu_result, &neomacs_result)
+        .expect("image oracle diff artifact should be written");
+
+    if neomacs_result != gnu_result {
+        panic!(
+            "image-size oracle result diverged\n\
+             GNU Emacs result: {}\n\
+             NEO Emacs result: {}\n\
+             diff: {}",
+            gnu_result_path.display(),
+            neomacs_result_path.display(),
+            diff_path.display(),
+        );
+    }
+}
+
+/// Build the GNU Emacs command that runs the image oracle fixture under the
+/// Xvfb display, mirroring `gnu_font_oracle_command` but writing to the
+/// image result file.
+fn gnu_image_oracle_command(
+    program: &std::path::Path,
+    script: &std::path::Path,
+    result_path: &std::path::Path,
+    display_env: &[(String, String)],
+) -> CommandSpec {
+    let mut env = vec![
+        (
+            "NEOMACS_GUI_IMAGE_RESULT".to_string(),
+            result_path.display().to_string(),
+        ),
+        ("GDK_BACKEND".to_string(), "x11".to_string()),
+    ];
+    env.extend(display_env.iter().cloned());
+    CommandSpec {
+        program: program.to_path_buf(),
+        args: vec![
+            "-Q".to_string(),
+            "-l".to_string(),
+            script.display().to_string(),
+        ],
+        env,
+    }
+}
+
 fn requested_backend() -> Option<GuiBackend> {
     match std::env::var("NEOMACS_GUI_TEST_BACKEND").ok()?.as_str() {
         "wayland" | "linux-wayland" => Some(GuiBackend::LinuxWayland),
