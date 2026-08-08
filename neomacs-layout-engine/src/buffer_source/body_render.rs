@@ -2,7 +2,10 @@
 
 use crate::buffer_source::face_resolution::*;
 use crate::buffer_source::loop_context::BufferSourceLoopRequestContext;
-use crate::buffer_source::loop_state::BufferSourceLoopMutableState;
+use crate::buffer_source::loop_state::{
+    BufferSourceHitCaptureState, BufferSourceLoopMutableState, BufferSourceRowBuildState,
+    BufferSourceRowCarryoverState, BufferSourceSurfaceContext,
+};
 use crate::buffer_source::render_attempt::{
     BufferSourceOutputState, BufferSourceRedisplayPublishRequest,
 };
@@ -301,23 +304,25 @@ impl BufferSourceWalkSetup {
                 &mut self.col,
             ),
             state.source_render.reborrow(),
-            &mut self.row_extend,
-            &mut self.box_face,
-            state.line_numbers,
-            &mut self.row_geometry,
-            &mut self.row_flags,
-            &mut self.hit_rows,
-            &mut self.hit_row_range,
-            &mut self.prefix_request,
-            &mut self.hscroll_skip,
-            &mut self.word_wrap,
-            &mut self.trailing_whitespace,
+            BufferSourceRowBuildState::new(
+                &mut self.row_geometry,
+                &mut self.row_flags,
+                &mut self.row_extend,
+                &mut self.box_face,
+            ),
+            BufferSourceHitCaptureState::new(&mut self.hit_rows, &mut self.hit_row_range),
+            BufferSourceRowCarryoverState::new(
+                &mut self.prefix_request,
+                state.line_numbers,
+                &mut self.hscroll_skip,
+                &mut self.word_wrap,
+                &mut self.trailing_whitespace,
+            ),
             state.face_scan,
             &mut self.row_y_positions,
             &mut self.cursor_info,
             state.face_ids,
-            &self.text_append_surface,
-            overlay_text_row_context,
+            BufferSourceSurfaceContext::new(&self.text_append_surface, overlay_text_row_context),
         )
         .render_visible_steps(
             loop_context,

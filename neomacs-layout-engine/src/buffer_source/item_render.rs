@@ -138,7 +138,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         let request = self.loop_context.selective_display_tail_request(
             source_step_char,
             self.text,
-            state.append_surface,
+            state.surface.append_surface,
             self.active_face_state,
             GLYPH_Y_OFFSET,
         );
@@ -192,23 +192,14 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             invisible_text_checkpoint,
             mut progress,
             source_render,
-            row_extend,
-            box_face,
-            line_numbers,
-            row_geometry,
-            row_flags,
-            hit_rows,
-            hit_row_range,
-            prefix_request,
-            hscroll_skip,
-            word_wrap,
-            trailing_whitespace,
+            row_build,
+            row_carryover,
+            hit_capture,
             face_scan,
             row_y_positions,
             cursor_info,
             face_ids,
-            append_surface,
-            overlay_context,
+            surface,
         } = state;
         let mut source_render = source_render;
         // The unsubstituted buffer char + active nobreak policy, used by the
@@ -223,7 +214,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             .resolve_source_item_layout_for_active_face(
                 &mut source_render,
                 face_ids,
-                row_geometry,
+                row_build.row_geometry,
                 self.active_face_state,
                 source_item.item_mut(),
                 nobreak_hint,
@@ -248,9 +239,11 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             .and_then(|(face_id, face)| face.extend.then(|| (Color::from_pixel(face.bg), *face_id)))
             .or_else(|| active_face_state.row_extend_fill());
         if let Some(fill) = row_extend_fill {
-            row_extend.activate(row_geometry.current_row_marker(), fill);
+            row_build
+                .row_extend
+                .activate(row_build.row_geometry.current_row_marker(), fill);
         } else {
-            row_extend.clear();
+            row_build.row_extend.clear();
         }
         let mut buffer_row_append_context = BufferSourceRowAppendContext::from_active_face_row(
             buffer,
@@ -266,7 +259,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
                 buffer_row_append_context.with_resolved_item_face(face_id, face);
         }
         let append_position = progress.row_position();
-        let append_geometry = *row_geometry;
+        let append_geometry = *row_build.row_geometry;
         let text_run_request = BufferSourceTextRunRenderRequest::new(
             self.loop_context.text_start_byte(),
             self.loop_context.point_charpos(),
@@ -280,8 +273,8 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             &active_face_state,
             &buffer_row_append_context,
             cursor_info,
-            trailing_whitespace,
-            word_wrap,
+            row_carryover.trailing_whitespace,
+            row_carryover.word_wrap,
             &mut source_render,
             &mut progress,
         ) {
@@ -306,8 +299,8 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
                 &active_face_state,
                 &buffer_row_append_context,
                 cursor_info,
-                trailing_whitespace,
-                word_wrap,
+                row_carryover.trailing_whitespace,
+                row_carryover.word_wrap,
                 &mut source_render,
                 &mut progress,
             );
@@ -335,23 +328,14 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
                 invisible_text_checkpoint,
                 progress,
                 source_render,
-                row_extend,
-                box_face,
-                line_numbers,
-                row_geometry,
-                row_flags,
-                hit_rows,
-                hit_row_range,
-                prefix_request,
-                hscroll_skip,
-                word_wrap,
-                trailing_whitespace,
+                row_build,
+                hit_capture,
+                row_carryover,
                 face_scan,
                 row_y_positions,
                 cursor_info,
                 face_ids,
-                append_surface,
-                overlay_context,
+                surface,
             ),
         )
     }

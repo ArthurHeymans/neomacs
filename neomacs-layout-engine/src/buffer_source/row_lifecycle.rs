@@ -30,7 +30,7 @@ use crate::display_row::source_append::{
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::transition::{
     DisplayRowLineBreakTransitionPlan, DisplayRowTextWindowEmitContext,
-    DisplayRowTransitionContinuation, DisplayRowTransitionRenderState,
+    DisplayRowTransitionContinuation,
 };
 use crate::display_row::walk_state::{
     BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker, HorizontalScrollSkipState,
@@ -532,17 +532,10 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
     ) -> DisplayRowTransitionContinuation {
         let BufferSourceLoopMutableState {
             progress,
-            hscroll_skip,
-            row_extend,
+            mut row_carryover,
+            row_build,
             source_render,
-            prefix_request,
-            line_numbers,
-            word_wrap,
-            trailing_whitespace,
-            row_geometry,
-            row_flags,
-            hit_rows,
-            hit_row_range,
+            hit_capture,
             cursor_info,
             row_y_positions,
             face_ids,
@@ -556,7 +549,7 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
             .consume_hscroll_skip(
                 context.text,
                 progress.source_position(),
-                hscroll_skip,
+                row_carryover.hscroll_skip,
                 context.tab_width,
             )
             .apply_to_progress(&mut progress)
@@ -566,7 +559,7 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
 
         if hscroll_action.is_line_break() {
             hscroll_action.apply_line_break_before_row_transition(
-                row_extend,
+                row_build.row_extend,
                 source_render.output_emitter(),
                 progress.row_progress_mut().x_mut(),
                 context.content_x,
@@ -574,17 +567,17 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
             let row_position = progress.row_position();
             let line_break_transition = DisplayRowLineBreakTransitionPlan::hscroll_line_break();
             let hit_range = hscroll_action
-                .line_break_hit_range(hit_row_range)
+                .line_break_hit_range(hit_capture.hit_row_range)
                 .expect("hscroll line break hit range");
             let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                 context.row_geometry_defaults,
                 context.display_text_row_base,
                 row_y_positions,
                 context.max_rows,
-                row_geometry,
-                row_flags,
+                row_build.row_geometry,
+                row_build.row_flags,
                 context.row_limit,
-                hit_rows,
+                hit_capture.hit_rows,
                 &mut source_render,
             )
             .emit_line_break_then_row_start(
@@ -592,21 +585,14 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
                 hit_range,
                 row_position,
                 0.0,
-                DisplayRowTransitionRenderState::new(
-                    prefix_request,
-                    context.has_prefix,
-                    line_numbers,
-                    hscroll_skip,
-                    word_wrap,
-                    trailing_whitespace,
-                ),
+                row_carryover.render_state(context.has_prefix),
                 progress.row_progress_mut().coordinates_mut().1,
             );
             return hscroll_action.apply_after_line_break_row_transition(
                 row_transition,
                 cursor_info,
                 context.active_face_state,
-                row_geometry,
+                row_build.row_geometry,
                 context.point_charpos,
                 row_position.x_px(),
                 row_position.col(),
@@ -622,7 +608,7 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
                 context.metrics,
                 face_ids.clone(),
             ),
-            row_geometry,
+            row_build.row_geometry,
             &mut source_render.reborrow(),
             progress.row_progress_mut().reborrow(),
             context.content_x,
@@ -631,7 +617,7 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
         hscroll_action.capture_text_cursor_if_point(
             cursor_info,
             context.active_face_state,
-            row_geometry,
+            row_build.row_geometry,
             context.point_charpos,
             row_position.x_px(),
             row_position.col(),
@@ -829,17 +815,9 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
         let BufferSourceLoopMutableState {
             mut progress,
             source_render,
-            row_extend,
-            box_face,
-            line_numbers,
-            row_geometry,
-            row_flags,
-            hit_rows,
-            hit_row_range,
-            prefix_request,
-            hscroll_skip,
-            word_wrap,
-            trailing_whitespace,
+            row_build,
+            mut row_carryover,
+            hit_capture,
             row_y_positions,
             face_ids,
             ..
@@ -855,7 +833,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
                 context.metrics,
                 face_ids.clone(),
             ),
-            row_geometry,
+            row_build.row_geometry,
             &mut source_render.reborrow(),
             progress.row_progress_mut().reborrow(),
             ellipsis_text.as_deref(),
@@ -869,9 +847,9 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
         }
 
         tail_action.apply_hidden_line_break_row_state(
-            row_geometry,
-            row_extend,
-            box_face,
+            row_build.row_geometry,
+            row_build.row_extend,
+            row_build.box_face,
             context.content_x,
             progress.row_progress_mut().x_mut(),
         );
@@ -882,25 +860,18 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
             context.display_text_row_base,
             row_y_positions,
             context.max_rows,
-            row_geometry,
-            row_flags,
+            row_build.row_geometry,
+            row_build.row_flags,
             context.row_limit,
-            hit_rows,
+            hit_capture.hit_rows,
             &mut source_render,
         )
         .emit_line_break_then_row_start(
             line_break_transition,
-            hit_row_range.range_to(progress.charpos()),
+            hit_capture.hit_row_range.range_to(progress.charpos()),
             row_position,
             0.0,
-            DisplayRowTransitionRenderState::new(
-                prefix_request,
-                context.has_prefix,
-                line_numbers,
-                hscroll_skip,
-                word_wrap,
-                trailing_whitespace,
-            ),
+            row_carryover.render_state(context.has_prefix),
             progress.row_progress_mut().coordinates_mut().1,
         );
         let synced_charpos = buffer
@@ -913,7 +884,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
             row_transition,
             synced_charpos,
             &mut synced_source_position,
-            hit_row_range,
+            hit_capture.hit_row_range,
         );
         source_walk
             .source_position_update(synced_source_position)
@@ -1094,10 +1065,10 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             invisible_text_checkpoint,
             mut progress,
             source_render,
-            row_geometry,
+            row_build,
             cursor_info,
             face_ids,
-            line_numbers,
+            row_carryover,
             ..
         } = state;
         let mut source_render = source_render;
@@ -1123,7 +1094,7 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
         // Advance display-line-numbers past the buffer lines this fold hid, so
         // the next visible row's gutter shows its true buffer line number (GNU
         // counts every buffer newline, including ones inside invisible text).
-        hidden_text.apply_to_line_numbers(line_numbers);
+        hidden_text.apply_to_line_numbers(row_carryover.line_numbers);
 
         let ellipsis_text = crate::neovm_bridge::buffer_invisible_ellipsis_text(buffer);
         let mut row_progress = progress.row_progress_mut().reborrow();
@@ -1135,7 +1106,7 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
                 context.metrics,
                 face_ids.clone(),
             ),
-            row_geometry,
+            row_build.row_geometry,
             cursor_info,
             &mut source_render.reborrow(),
             &mut row_progress,
@@ -1568,18 +1539,10 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         let BufferSourceLoopMutableState {
             mut progress,
             cursor_info,
-            row_geometry,
-            trailing_whitespace,
-            row_extend,
-            box_face,
+            row_build,
+            mut row_carryover,
             source_render,
-            prefix_request,
-            line_numbers,
-            hscroll_skip,
-            word_wrap,
-            row_flags,
-            hit_rows,
-            hit_row_range,
+            hit_capture,
             row_y_positions,
             face_ids,
             ..
@@ -1600,7 +1563,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         line_break_action.capture_cursor_if_point(
             cursor_info,
             context.active_face_state,
-            row_geometry,
+            row_build.row_geometry,
             context.point_charpos,
             row_position.x_px(),
             row_position.col(),
@@ -1627,12 +1590,13 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                     col: context.fill_column_indicator,
                     ch: context.fill_column_indicator_char,
                 }),
-                extend: row_extend
-                    .value_on(row_geometry)
+                extend: row_build
+                    .row_extend
+                    .value_on(row_build.row_geometry)
                     .copied()
                     .filter(|(bg, _)| *bg != context.frame_background)
                     .map(|(bg, face_id)| LineEndExtend { bg, face_id }),
-                trailing_whitespace_enabled: trailing_whitespace.is_enabled(),
+                trailing_whitespace_enabled: row_carryover.trailing_whitespace.is_enabled(),
             };
             let line_end_geometry = LineEndFillGeometry {
                 content_x: context.content_x,
@@ -1643,10 +1607,10 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             source_render.render_line_end(&line_end_ctx, line_end_geometry, face_ids);
         }
         line_break_action.apply_before_row_transition(
-            row_geometry,
-            trailing_whitespace,
-            row_extend,
-            box_face,
+            row_build.row_geometry,
+            row_carryover.trailing_whitespace,
+            row_build.row_extend,
+            row_build.box_face,
             source_render.output_emitter(),
             context.content_x,
             &mut progress,
@@ -1658,25 +1622,18 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             context.display_text_row_base,
             row_y_positions,
             context.max_rows,
-            row_geometry,
-            row_flags,
+            row_build.row_geometry,
+            row_build.row_flags,
             context.row_limit,
-            hit_rows,
+            hit_capture.hit_rows,
             &mut source_render,
         )
         .emit_line_break_then_row_start(
             line_break_transition,
-            hit_row_range.range_to(progress.charpos()),
+            hit_capture.hit_row_range.range_to(progress.charpos()),
             progress.row_position(),
             line_break_action.line_spacing(),
-            DisplayRowTransitionRenderState::new(
-                prefix_request,
-                context.has_prefix,
-                line_numbers,
-                hscroll_skip,
-                word_wrap,
-                trailing_whitespace,
-            ),
+            row_carryover.render_state(context.has_prefix),
             progress.row_progress_mut().col_mut(),
         );
 
@@ -1690,11 +1647,11 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             row_transition,
             synced_charpos,
             &mut synced_source_position,
-            hit_row_range,
-            row_geometry,
-            row_extend,
+            hit_capture.hit_row_range,
+            row_build.row_geometry,
+            row_build.row_extend,
             context.active_face_state,
-            box_face,
+            row_build.box_face,
             context.content_x,
         );
         source_walk
@@ -1712,7 +1669,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                     context.tab_width,
                 ),
                 progress.source_position(),
-                line_numbers,
+                row_carryover.line_numbers,
             )
             .apply_to_progress(&mut progress);
         DisplayRowTransitionContinuation::Continue
@@ -1734,18 +1691,10 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
     ) -> DisplayRowTransitionContinuation {
         let BufferSourceLoopMutableState {
             mut progress,
-            row_geometry,
-            trailing_whitespace,
-            row_extend,
-            box_face,
+            row_build,
+            mut row_carryover,
             source_render,
-            prefix_request,
-            line_numbers,
-            hscroll_skip,
-            word_wrap,
-            row_flags,
-            hit_rows,
-            hit_row_range,
+            hit_capture,
             row_y_positions,
             ..
         } = state;
@@ -1761,8 +1710,8 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
         {
             let metrics = context.active_face_state.metrics();
             source_render.extend_face_to_end_of_line(
-                row_extend,
-                row_geometry,
+                row_build.row_extend,
+                row_build.row_geometry,
                 progress.row_progress().x(),
                 context.append_surface.full_text_right_edge(),
                 context.frame_background,
@@ -1773,10 +1722,10 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             );
         }
         line_break_action.apply_before_row_transition(
-            row_geometry,
-            trailing_whitespace,
-            row_extend,
-            box_face,
+            row_build.row_geometry,
+            row_carryover.trailing_whitespace,
+            row_build.row_extend,
+            row_build.box_face,
             source_render.output_emitter(),
             context.content_x,
             &mut progress,
@@ -1788,25 +1737,18 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             context.display_text_row_base,
             row_y_positions,
             context.max_rows,
-            row_geometry,
-            row_flags,
+            row_build.row_geometry,
+            row_build.row_flags,
             context.row_limit,
-            hit_rows,
+            hit_capture.hit_rows,
             &mut source_render,
         )
         .emit_line_break_then_row_start(
             line_break_transition,
-            hit_row_range.range_to(progress.charpos()),
+            hit_capture.hit_row_range.range_to(progress.charpos()),
             progress.row_position(),
             line_break_action.line_spacing(),
-            DisplayRowTransitionRenderState::new(
-                prefix_request,
-                context.has_prefix,
-                line_numbers,
-                hscroll_skip,
-                word_wrap,
-                trailing_whitespace,
-            ),
+            row_carryover.render_state(context.has_prefix),
             progress.row_progress_mut().col_mut(),
         );
 
@@ -1820,11 +1762,11 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             row_transition,
             synced_charpos,
             &mut synced_source_position,
-            hit_row_range,
-            row_geometry,
-            row_extend,
+            hit_capture.hit_row_range,
+            row_build.row_geometry,
+            row_build.row_extend,
             context.active_face_state,
-            box_face,
+            row_build.box_face,
             context.content_x,
         );
         source_walk

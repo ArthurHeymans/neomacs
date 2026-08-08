@@ -2639,18 +2639,18 @@ impl<'rows, 'emit, 'surface>
             start_x_px: position.x_px(),
             start_col: position.col(),
             char_width_px: params.char_width,
-            right_edge_px: self.append_surface.right_edge(),
-            tab_policy: self.append_surface.tab_policy(),
+            right_edge_px: self.surface.append_surface.right_edge(),
+            tab_policy: self.surface.append_surface.tab_policy(),
         };
         let policy = RowRouteWindowPolicy {
             point_charpos: loop_context.point_charpos(),
-            hscroll_active: params.hscroll != 0 || self.hscroll_skip.should_skip(),
+            hscroll_active: params.hscroll != 0 || self.row_carryover.hscroll_skip.should_skip(),
             selective_display: loop_context.selective_display(),
-            word_wrap: params.word_wrap || self.word_wrap.is_enabled(),
+            word_wrap: params.word_wrap || self.row_carryover.word_wrap.is_enabled(),
             show_trailing_whitespace: params.show_trailing_whitespace
-                || self.trailing_whitespace.is_enabled(),
+                || self.row_carryover.trailing_whitespace.is_enabled(),
             wrap_mode: params.wrap_mode,
-            overlay_string_window: self.overlay_context.string_window_id(),
+            overlay_string_window: self.surface.overlay_context.string_window_id(),
         };
         // P4.8(a): the entry taxonomy is gone, but ONE consumer still needs
         // to know a candidate is mid-line — the box-face probe below. It is
@@ -2869,7 +2869,7 @@ impl<'rows, 'emit, 'surface>
             });
         }
 
-        let geometry = *self.row_geometry;
+        let geometry = *self.row_build.row_geometry;
         let mut probe_position = position;
         for segment in &probed {
             // Advance-based measurement: tab expansion depends on the pen x
@@ -2948,7 +2948,7 @@ impl<'rows, 'emit, 'surface>
                         let append_context = BufferSourceRowAppendContext::from_active_face_row(
                             buffer,
                             loop_context.buffer_id(),
-                            self.append_surface,
+                            self.surface.append_surface,
                             &segment.active,
                             0.0,
                             loop_context.char_height(),
@@ -2981,7 +2981,7 @@ impl<'rows, 'emit, 'surface>
                     let append_context = BufferSourceRowAppendContext::from_active_face_row(
                         buffer,
                         loop_context.buffer_id(),
-                        self.append_surface,
+                        self.surface.append_surface,
                         &segment.active,
                         0.0,
                         loop_context.char_height(),
@@ -3106,7 +3106,7 @@ impl<'rows, 'emit, 'surface>
                     let append_context = BufferSourceRowAppendContext::from_active_face_row(
                         buffer,
                         loop_context.buffer_id(),
-                        self.append_surface,
+                        self.surface.append_surface,
                         &segment.active,
                         0.0,
                         loop_context.char_height(),
@@ -3141,9 +3141,9 @@ impl<'rows, 'emit, 'surface>
             // the tail there is no continuation/truncation edge, the walk
             // simply ends at the source end.
             let fits = if plan.is_overflow_handoff() || plan.is_end_of_source() {
-                probe_position.x_px() <= self.append_surface.right_edge()
+                probe_position.x_px() <= self.surface.append_surface.right_edge()
             } else {
-                probe_position.x_px() < self.append_surface.right_edge()
+                probe_position.x_px() < self.surface.append_surface.right_edge()
             };
             if !fits {
                 note_route_refusal(RouteRefusal::ProbeMeasure);
@@ -3173,22 +3173,25 @@ impl<'rows, 'emit, 'surface>
                 self.progress.apply_row_position(render_position);
                 let anchor_charpos = segment.start.get() as i64;
                 let (x, col) = self.progress.row_progress_mut().coordinates_mut();
-                let continuation = self.overlay_context.render_produced_strings_at_text_row(
-                    buffer,
-                    anchor_charpos,
-                    anchor.strings(),
-                    self.source_render.reborrow(),
-                    x,
-                    col,
-                    self.row_geometry,
-                    self.cursor_info,
-                    self.hit_rows,
-                    self.hit_row_range,
-                    self.row_y_positions,
-                    self.face_ids,
-                    self.line_numbers,
-                    self.face_scan,
-                );
+                let continuation = self
+                    .surface
+                    .overlay_context
+                    .render_produced_strings_at_text_row(
+                        buffer,
+                        anchor_charpos,
+                        anchor.strings(),
+                        self.source_render.reborrow(),
+                        x,
+                        col,
+                        self.row_build.row_geometry,
+                        self.cursor_info,
+                        self.hit_capture.hit_rows,
+                        self.hit_capture.hit_row_range,
+                        self.row_y_positions,
+                        self.face_ids,
+                        self.row_carryover.line_numbers,
+                        self.face_scan,
+                    );
                 // A routable overlay string holds no newline and the plan
                 // refused every anchor an overflow prefix reaches, so the
                 // session has neither a row break nor a clip to report.
@@ -3216,9 +3219,9 @@ impl<'rows, 'emit, 'surface>
                     self.face_scan,
                     self.face_ids,
                     active_face_state,
-                    self.row_geometry,
-                    self.row_extend,
-                    self.box_face,
+                    self.row_build.row_geometry,
+                    self.row_build.row_extend,
+                    self.row_build.box_face,
                     render_position.x_px(),
                     segment.start.get() as i64,
                 );
@@ -3277,8 +3280,8 @@ impl<'rows, 'emit, 'surface>
                     BufferDisplayPropertyTextReplacementRenderState::new(
                         self.source_render.reborrow(),
                         self.face_ids,
-                        self.append_surface,
-                        self.row_geometry,
+                        self.surface.append_surface,
+                        self.row_build.row_geometry,
                         active_face_state,
                     ),
                     &mut self.progress,
@@ -3315,13 +3318,13 @@ impl<'rows, 'emit, 'surface>
                         let append_context = BufferSourceRowAppendContext::from_active_face_row(
                             buffer,
                             loop_context.buffer_id(),
-                            self.append_surface,
+                            self.surface.append_surface,
                             active_face_state,
                             0.0,
                             loop_context.char_height(),
                             self.face_ids.clone(),
                         );
-                        let geometry = *self.row_geometry;
+                        let geometry = *self.row_build.row_geometry;
                         let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
                         let mut source_state =
                             crate::display_row::source_state::DisplayRowSourceState::default();
@@ -3356,10 +3359,11 @@ impl<'rows, 'emit, 'surface>
                 active_face_state.resolved_face(),
             );
             if let Some(fill) = active_face_state.row_extend_fill() {
-                self.row_extend
-                    .activate(self.row_geometry.current_row_marker(), fill);
+                self.row_build
+                    .row_extend
+                    .activate(self.row_build.row_geometry.current_row_marker(), fill);
             } else {
-                self.row_extend.clear();
+                self.row_build.row_extend.clear();
             }
 
             let mut source = BufferAsciiItemSource::text_only(
@@ -3372,13 +3376,13 @@ impl<'rows, 'emit, 'surface>
             let append_context = BufferSourceRowAppendContext::from_active_face_row(
                 buffer,
                 loop_context.buffer_id(),
-                self.append_surface,
+                self.surface.append_surface,
                 active_face_state,
                 0.0,
                 loop_context.char_height(),
                 self.face_ids.clone(),
             );
-            let geometry = *self.row_geometry;
+            let geometry = *self.row_build.row_geometry;
             let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
             let mut source_state =
                 crate::display_row::source_state::DisplayRowSourceState::default();
@@ -3474,7 +3478,12 @@ impl<'rows, 'emit, 'surface>
             crate::display_source::DisplaySourceStepChar::new('\n', row.byte_idx, row.charpos);
         self.progress.set_byte_idx(row.byte_idx + 1);
         let continuation = loop_context
-            .line_break_request(source_char, text, self.append_surface, active_face_state)
+            .line_break_request(
+                source_char,
+                text,
+                self.surface.append_surface,
+                active_face_state,
+            )
             .render_and_apply(source_walk, buffer, self.reborrow());
         if continuation.should_break() {
             return note_route_stopped(AsciiRowRouteOutcome::Stopped);

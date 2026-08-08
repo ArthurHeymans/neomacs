@@ -36,6 +36,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         let mut route_refusals = crate::buffer_source::row_route::RouteRefusalWindow::default();
         while self.progress.byte_idx() < text.len()
             && self
+                .row_build
                 .row_geometry
                 .current_row_is_visible(loop_context.row_visibility_limit())
         {
@@ -52,7 +53,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 continue;
             }
 
-            if self.hscroll_skip.should_skip() {
+            if self.row_carryover.hscroll_skip.should_skip() {
                 if self
                     .render_hscroll_skip_for_context(
                         loop_context,
@@ -120,10 +121,10 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         context
             .line_number_margin_request()
             .render_pending_with_source_state(
-                self.line_numbers,
+                self.row_carryover.line_numbers,
                 &mut self.source_render,
                 self.face_ids,
-                self.row_geometry,
+                self.row_build.row_geometry,
                 self.face_scan,
                 context.char_width(),
             );
@@ -133,15 +134,15 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         let (x, col) = self.progress.row_progress_mut().coordinates_mut();
         context
             .line_prefix_request(
-                self.append_surface,
-                self.row_geometry,
+                self.surface.append_surface,
+                self.row_build.row_geometry,
                 active_face_state,
                 0.0,
                 row_position,
                 params,
             )
             .render_requested_with_source_state_and_apply(
-                self.prefix_request,
+                self.row_carryover.prefix_request,
                 &mut self.source_render,
                 buffer,
                 charpos,
@@ -162,8 +163,12 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     where
         'surface: 'request,
     {
-        let request =
-            loop_context.invisible_text_request(text, self.append_surface, active_face_state, 0.0);
+        let request = loop_context.invisible_text_request(
+            text,
+            self.surface.append_surface,
+            active_face_state,
+            0.0,
+        );
         self.render_invisible_text_at_checkpoint(source_walk, request, buffer)
     }
 
@@ -187,7 +192,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         'surface: 'request,
     {
         let request =
-            loop_context.hscroll_skip_request(text, self.append_surface, active_face_state);
+            loop_context.hscroll_skip_request(text, self.surface.append_surface, active_face_state);
         self.render_hscroll_skip(source_walk, request)
     }
 
@@ -209,9 +214,9 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
             self.face_scan,
             self.face_ids,
             active_face_state,
-            self.row_geometry,
-            self.row_extend,
-            self.box_face,
+            self.row_build.row_geometry,
+            self.row_build.row_extend,
+            self.row_build.box_face,
             self.progress.row_progress().x(),
             self.progress.charpos(),
         );

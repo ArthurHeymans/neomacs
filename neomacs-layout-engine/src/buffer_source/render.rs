@@ -63,7 +63,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             face_resolution_context,
             self.state.face_ids,
             &mut self.state.source_render.reborrow(),
-            self.state.row_geometry,
+            self.state.row_build.row_geometry,
         ) else {
             return false;
         };
@@ -97,6 +97,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         let (x, col) = self.state.progress.row_progress_mut().coordinates_mut();
         let continuation = self
             .state
+            .surface
             .overlay_context
             .render_produced_strings_at_text_row(
                 buffer,
@@ -105,13 +106,13 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 self.state.source_render.reborrow(),
                 x,
                 col,
-                self.state.row_geometry,
+                self.state.row_build.row_geometry,
                 self.state.cursor_info,
-                self.state.hit_rows,
-                self.state.hit_row_range,
+                self.state.hit_capture.hit_rows,
+                self.state.hit_capture.hit_row_range,
                 self.state.row_y_positions,
                 self.state.face_ids,
-                self.state.line_numbers,
+                self.state.row_carryover.line_numbers,
                 self.state.face_scan,
             );
         !continuation.should_break()
@@ -144,8 +145,8 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             BufferDisplayPropertyTextReplacementRenderState::new(
                 self.state.source_render.reborrow(),
                 self.state.face_ids,
-                self.state.append_surface,
-                self.state.row_geometry,
+                self.state.surface.append_surface,
+                self.state.row_build.row_geometry,
                 self.active_face_state,
             ),
             &mut self.state.progress,
@@ -190,7 +191,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             .line_break_request(
                 synthetic_newline,
                 self.text,
-                self.state.append_surface,
+                self.state.surface.append_surface,
                 self.active_face_state,
             )
             .render_display_string_break_and_apply(source_walk, buffer, self.state.reborrow())
@@ -217,7 +218,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             layout_resolution_context,
             self.loop_context,
             self.text,
-            self.state.append_surface,
+            self.state.surface.append_surface,
             self.active_face_state,
             self.params,
         )

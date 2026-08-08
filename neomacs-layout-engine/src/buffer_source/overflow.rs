@@ -140,16 +140,9 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
         let BufferSourceLoopMutableState {
             mut progress,
             source_render,
-            row_extend,
-            line_numbers,
-            row_geometry,
-            row_flags,
-            hit_rows,
-            hit_row_range,
-            prefix_request,
-            hscroll_skip,
-            word_wrap,
-            trailing_whitespace,
+            row_build,
+            mut row_carryover,
+            hit_capture,
             face_scan,
             row_y_positions,
             ..
@@ -169,8 +162,8 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     .consume_truncation_skip(text, progress.source_position())
                     .apply_to_progress(&mut progress);
                 truncation_skip.apply_before_row_transition(
-                    line_numbers,
-                    row_extend,
+                    row_carryover.line_numbers,
+                    row_build.row_extend,
                     progress.row_progress_mut().x_mut(),
                     context.content_x,
                 );
@@ -180,24 +173,17 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     context.display_text_row_base,
                     row_y_positions,
                     context.max_rows,
-                    row_geometry,
-                    row_flags,
+                    row_build.row_geometry,
+                    row_build.row_flags,
                     context.row_limit,
-                    hit_rows,
+                    hit_capture.hit_rows,
                     &mut source_render,
                 )
                 .emit_overflow_then_row_start(
                     transition,
-                    hit_row_range.range_to(progress.charpos()),
+                    hit_capture.hit_row_range.range_to(progress.charpos()),
                     row_position,
-                    DisplayRowTransitionRenderState::new(
-                        prefix_request,
-                        context.has_prefix,
-                        line_numbers,
-                        hscroll_skip,
-                        word_wrap,
-                        trailing_whitespace,
-                    ),
+                    row_carryover.render_state(context.has_prefix),
                     progress.row_progress_mut().col_mut(),
                 );
                 BufferSourceOverflowRenderOutcome::Transition(
@@ -224,8 +210,8 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     let metrics = context.active_face_metrics;
                     // R2L (reversed_p) handled inside the mutation; pass `false`.
                     source_render.extend_face_to_end_of_line(
-                        row_extend,
-                        row_geometry,
+                        row_build.row_extend,
+                        row_build.row_geometry,
                         progress.row_progress().x(),
                         context.right_edge_px,
                         context.frame_background,
@@ -240,7 +226,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     source_render.output_emitter(),
                     &mut source_position,
                     col,
-                    row_extend,
+                    row_build.row_extend,
                     x,
                     context.content_x,
                 );
@@ -261,39 +247,32 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     context.display_text_row_base,
                     row_y_positions,
                     context.max_rows,
-                    row_geometry,
-                    row_flags,
+                    row_build.row_geometry,
+                    row_build.row_flags,
                     context.row_limit,
-                    hit_rows,
+                    hit_capture.hit_rows,
                     &mut source_render,
                 )
                 .emit_overflow(
                     transition,
-                    hit_row_range.range_to(progress.charpos()),
+                    hit_capture.hit_row_range.range_to(progress.charpos()),
                     progress.row_position(),
                 );
                 let continuation = word_wrap_action.apply_after_row_transition_and_prefix(
                     row_transition,
                     transition,
                     &mut source_position,
-                    hit_row_range,
+                    hit_capture.hit_row_range,
                     face_scan,
-                    row_geometry,
+                    row_build.row_geometry,
                     context.row_visibility_limit,
-                    DisplayRowTransitionRenderState::new(
-                        prefix_request,
-                        context.has_prefix,
-                        line_numbers,
-                        hscroll_skip,
-                        word_wrap,
-                        trailing_whitespace,
-                    ),
+                    row_carryover.render_state(context.has_prefix),
                 );
                 // GNU `maybe_produce_line_number`: each wrapped continuation row
                 // reserves a blank (no-number) line-number gutter so its text
                 // aligns with the first row's text column. Re-arm the loop's
-                // `line_numbers` so the next `render_row_prelude` emits it.
-                line_numbers.mark_continuation_row();
+                // `row_carryover.line_numbers` so the next `render_row_prelude` emits it.
+                row_carryover.line_numbers.mark_continuation_row();
                 source_walk
                     .source_position_update(source_position)
                     .apply_to_progress(&mut progress);
@@ -306,8 +285,8 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     let metrics = context.active_face_metrics;
                     // R2L (reversed_p) handled inside the mutation; pass `false`.
                     source_render.extend_face_to_end_of_line(
-                        row_extend,
-                        row_geometry,
+                        row_build.row_extend,
+                        row_build.row_geometry,
                         progress.row_progress().x(),
                         context.right_edge_px,
                         context.frame_background,
@@ -318,7 +297,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     );
                 }
                 character_wrap_action.apply_before_row_transition(
-                    row_extend,
+                    row_build.row_extend,
                     progress.row_progress_mut().x_mut(),
                     context.content_x,
                 );
@@ -329,32 +308,25 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     context.display_text_row_base,
                     row_y_positions,
                     context.max_rows,
-                    row_geometry,
-                    row_flags,
+                    row_build.row_geometry,
+                    row_build.row_flags,
                     context.row_limit,
-                    hit_rows,
+                    hit_capture.hit_rows,
                     &mut source_render,
                 )
                 .emit_overflow_then_row_start(
                     transition,
-                    hit_row_range.range_to(progress.charpos()),
+                    hit_capture.hit_row_range.range_to(progress.charpos()),
                     row_position,
-                    DisplayRowTransitionRenderState::new(
-                        prefix_request,
-                        context.has_prefix,
-                        line_numbers,
-                        hscroll_skip,
-                        word_wrap,
-                        trailing_whitespace,
-                    ),
+                    row_carryover.render_state(context.has_prefix),
                     progress.row_progress_mut().col_mut(),
                 );
                 let continuation = character_wrap_action.apply_after_visible_row_transition(
                     row_transition,
                     &mut source_position,
-                    hit_row_range,
+                    hit_capture.hit_row_range,
                     face_scan,
-                    row_geometry,
+                    row_build.row_geometry,
                     context.row_visibility_limit,
                 );
                 if !matches!(continuation, DisplayRowTransitionContinuation::Exhausted) {
@@ -366,8 +338,8 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 // GNU `maybe_produce_line_number`: each wrapped continuation row
                 // reserves a blank (no-number) line-number gutter so its text
                 // aligns with the first row's text column. Re-arm the loop's
-                // `line_numbers` so the next `render_row_prelude` emits it.
-                line_numbers.mark_continuation_row();
+                // `row_carryover.line_numbers` so the next `render_row_prelude` emits it.
+                row_carryover.line_numbers.mark_continuation_row();
                 source_walk
                     .source_position_update(source_position)
                     .apply_to_progress(&mut progress);
@@ -767,16 +739,9 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
         let BufferSourceLoopMutableState {
             mut progress,
             source_render,
-            row_extend,
-            line_numbers,
-            row_geometry,
-            row_flags,
-            hit_rows,
-            hit_row_range,
-            prefix_request,
-            hscroll_skip,
-            word_wrap,
-            trailing_whitespace,
+            row_build,
+            mut row_carryover,
+            hit_capture,
             row_y_positions,
             ..
         } = state;
@@ -797,8 +762,8 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                     .apply_to_progress(&mut progress);
                 let mut source_position = truncation_skip.source_position();
                 truncation_skip.apply_before_row_transition(
-                    line_numbers,
-                    row_extend,
+                    row_carryover.line_numbers,
+                    row_build.row_extend,
                     progress.row_progress_mut().x_mut(),
                     context.content_x,
                 );
@@ -808,24 +773,17 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                     context.display_text_row_base,
                     row_y_positions,
                     context.max_rows,
-                    row_geometry,
-                    row_flags,
+                    row_build.row_geometry,
+                    row_build.row_flags,
                     context.row_limit,
-                    hit_rows,
+                    hit_capture.hit_rows,
                     &mut source_render,
                 )
                 .emit_overflow_then_row_start(
                     transition,
-                    hit_row_range.range_to(progress.charpos()),
+                    hit_capture.hit_row_range.range_to(progress.charpos()),
                     row_position,
-                    DisplayRowTransitionRenderState::new(
-                        prefix_request,
-                        context.has_prefix,
-                        line_numbers,
-                        hscroll_skip,
-                        word_wrap,
-                        trailing_whitespace,
-                    ),
+                    row_carryover.render_state(context.has_prefix),
                     progress.row_progress_mut().col_mut(),
                 );
                 let synced_charpos = buffer
@@ -837,7 +795,7 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                     row_transition,
                     synced_charpos,
                     &mut source_position,
-                    hit_row_range,
+                    hit_capture.hit_row_range,
                 );
                 source_walk
                     .source_position_update(source_position)
@@ -847,41 +805,35 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
             Some(DisplaySourceSpecialCharOverflowAction::Wrap { transition }) => {
                 let special_wrap_action = BufferSourceSpecialWrapAction::new(progress.charpos());
                 special_wrap_action.apply_before_row_transition(
-                    row_extend,
+                    row_build.row_extend,
                     progress.row_progress_mut().x_mut(),
                     context.content_x,
                 );
-                let hit_range = special_wrap_action.hit_range_and_advance(hit_row_range);
+                let hit_range =
+                    special_wrap_action.hit_range_and_advance(hit_capture.hit_row_range);
                 let row_position = progress.row_position();
                 let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
                     context.row_geometry_defaults,
                     context.display_text_row_base,
                     row_y_positions,
                     context.max_rows,
-                    row_geometry,
-                    row_flags,
+                    row_build.row_geometry,
+                    row_build.row_flags,
                     context.row_limit,
-                    hit_rows,
+                    hit_capture.hit_rows,
                     &mut source_render,
                 )
                 .emit_overflow_then_row_start(
                     transition,
                     hit_range,
                     row_position,
-                    DisplayRowTransitionRenderState::new(
-                        prefix_request,
-                        context.has_prefix,
-                        line_numbers,
-                        hscroll_skip,
-                        word_wrap,
-                        trailing_whitespace,
-                    ),
+                    row_carryover.render_state(context.has_prefix),
                     progress.row_progress_mut().col_mut(),
                 );
                 BufferSourceSpecialOverflowRenderOutcome::AppendPrepared(
                     special_wrap_action.transition_continuation(
                         row_transition,
-                        row_geometry,
+                        row_build.row_geometry,
                         context.row_visibility_limit,
                     ),
                 )

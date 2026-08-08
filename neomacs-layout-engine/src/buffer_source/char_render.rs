@@ -64,8 +64,9 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
     // buffer character at the same position — the GNU handle_stop order this
     // call used to implement by probing every character.
     let append_position = state.progress.row_position();
-    let append_geometry = *state.row_geometry;
-    source_step_char.record_word_wrap_candidate(state.word_wrap, &state.source_render);
+    let append_geometry = *state.row_build.row_geometry;
+    source_step_char
+        .record_word_wrap_candidate(state.row_carryover.word_wrap, &state.source_render);
 
     let buffer_source_char = source_step_char.source_char(params.nobreak_char_display);
     let prepared_append = append_context.prepare_source_item_for_current_text_row(
@@ -87,7 +88,7 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
                     text,
                     text_start_byte,
                     state.progress.row_progress().x(),
-                    state.append_surface.full_text_right_edge(),
+                    state.surface.append_surface.full_text_right_edge(),
                     params.wrap_mode,
                     loop_context.row_visibility_limit(),
                     loop_context.content_x(),
@@ -109,12 +110,12 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
             if special_prepared_append
                 .append_to_text_row_and_apply(
                     append_context,
-                    state.row_geometry,
+                    state.row_build.row_geometry,
                     params,
                     state.face_ids,
                     &mut state.source_render.reborrow(),
                     state.face_scan,
-                    state.word_wrap,
+                    state.row_carryover.word_wrap,
                     &mut state.progress.reborrow(),
                 )
                 .should_break()
@@ -136,9 +137,9 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
         source_step_char,
         BufferSourceOverflowRenderContext::new(
             ch,
-            state.append_surface.right_edge(),
+            state.surface.append_surface.right_edge(),
             params.wrap_mode,
-            *state.word_wrap,
+            *state.row_carryover.word_wrap,
             loop_context.row_visibility_limit(),
             loop_context.content_x(),
             loop_context.has_prefix(),
@@ -162,7 +163,7 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
     prepared_append.capture_cursor_info_for_main_char_if_point(
         state.cursor_info,
         active_face_state,
-        state.row_geometry,
+        state.row_build.row_geometry,
         row_position.x_px(),
         source_step_char.start_byte_idx(),
         row_position.col(),
@@ -180,7 +181,7 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
             state.cursor_info,
             prepared_append.cursor_info_for_main_char(
                 active_face_state,
-                state.row_geometry.text_position(
+                state.row_build.row_geometry.text_position(
                     row_position.x_px(),
                     source_step_char.start_byte_idx(),
                     row_position.col(),
@@ -196,8 +197,8 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
             &append_geometry,
             ch,
             &mut state.source_render.reborrow(),
-            state.trailing_whitespace,
-            state.word_wrap,
+            state.row_carryover.trailing_whitespace,
+            state.row_carryover.word_wrap,
             &mut state.progress.reborrow(),
         )
         .should_break()
