@@ -1944,6 +1944,12 @@ pub const JSON_SNATCHER_MELPA_PIN: (&str, &str) = ("json-snatcher", "20200916.17
 /// `41d0e7f5ef51109c682016baa6fc6846e03e8517`.
 pub const JS2_MODE_MELPA_PIN: (&str, &str) = ("js2-mode", "20260627.1342");
 
+/// The exact js-doc package selected for practical JsDoc function metadata
+/// parsing, parameter/return tag insertion, and format-string expansion.
+/// MELPA built this archive from upstream commit
+/// `f0606e89d5aa89146f96edb38cf69af0068a9d1e`.
+pub const JS_DOC_MELPA_PIN: (&str, &str) = ("js-doc", "20160715.434");
+
 /// The exact multiple-cursors package selected for practical multi-line,
 /// occurrence-based, ordered, region-transforming, alignment, lifecycle, and
 /// focused-context editing parity, and required by js2-refactor's scope-aware
@@ -1995,6 +2001,17 @@ pub const PARADOX_MELPA_PIN: (&str, &str) = ("paradox", "20191011.1119");
 /// this archive from upstream commit
 /// `89e75b4cb21f525a6f4cabcd12f1bd4204e682ab`.
 pub const PAREDIT_MELPA_PIN: (&str, &str) = ("paredit", "20241103.2046");
+
+/// The exact parseclj package selected for practical Clojure/EDN lexing,
+/// AST construction, and unparse round-trips without a live Clojure process.
+/// MELPA built this archive from upstream commit
+/// `ca828c202c026e45bd60503984cf510d904cae50`.
+pub const PARSECLJ_MELPA_PIN: (&str, &str) = ("parseclj", "20260526.1843");
+
+/// The exact parseedn package selected for practical EDN read/print round-trips
+/// of scalars, vectors, maps, and tagged literals. MELPA built this archive
+/// from upstream commit `1a28a88e2aabd99b41e02f491d6b8874ec128d7d`.
+pub const PARSEEDN_MELPA_PIN: (&str, &str) = ("parseedn", "20260601.1258");
 
 /// The exact Parent Mode package selected for practical derived-mode feature
 /// dispatch, built-in hierarchies, aliased parents, runtime reparenting,
@@ -3283,6 +3300,11 @@ pub const USE_PACKAGE_GNU_ELPA_PIN: (&str, &str) = ("use-package", "2.4.6");
 /// interactive insertion, clock, network, and validation parity. MELPA built
 /// this archive from upstream commit `cebbe09d27c63abe61fe8c2e2248587d90265b59`.
 pub const UUIDGEN_MELPA_PIN: (&str, &str) = ("uuidgen", "20240201.2318");
+
+/// The exact unfill package selected for practical paragraph/region unwrap and
+/// fill/unfill toggle against filled prose. MELPA built this archive from
+/// upstream commit `075052ce0b4451d7d3ede013ce5a77e6a7a92360`.
+pub const UNFILL_MELPA_PIN: (&str, &str) = ("unfill", "20230227.1349");
 
 /// The exact Which-Key package selected by the comprehensive API parity corpus.
 pub const WHICH_KEY_MELPA_PIN: (&str, &str) = ("which-key", "20240620.2145");

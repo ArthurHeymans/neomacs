@@ -299,13 +299,13 @@ rank	package	downloads	status
 298	company-quickhelp	374966	covered
 299	helpful	373927	todo
 300	dashboard	373542	todo
-301	unfill	367210	todo
+301	unfill	367210	covered
 302	prettier-js	366751	todo
-303	parseedn	366105	todo
+303	parseedn	366105	covered
 304	eshell-prompt-extras	365095	todo
-305	parseclj	364817	todo
+305	parseclj	364817	covered
 306	emacsql-sqlite	363596	todo
-307	js-doc	361620	todo
+307	js-doc	361620	covered
 308	spacemacs-theme	358789	todo
 309	yapfify	356275	todo
 310	geiser	352613	covered
