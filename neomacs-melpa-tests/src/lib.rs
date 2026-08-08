@@ -2553,6 +2553,11 @@ pub const EXEC_PATH_FROM_SHELL_MELPA_PIN: (&str, &str) = ("exec-path-from-shell"
 /// `8588d80d414aee1fafce5b9da0e913612ee0bcdd`.
 pub const ELISP_SLIME_NAV_MELPA_PIN: (&str, &str) = ("elisp-slime-nav", "20210510.528");
 
+/// The exact elisp-refs package selected for practical reference search helpers
+/// (format/pluralize/unindent) used by helpful. MELPA built this archive from
+/// upstream commit `541a064c3ce27867872cf708354a65d83baf2a6d`.
+pub const ELISP_REFS_MELPA_PIN: (&str, &str) = ("elisp-refs", "20230920.201");
+
 /// The exact Dumb Jump package selected for practical ripgrep-backed xref
 /// definition and reference navigation, project configuration, contextual
 /// disambiguation, jump history, and missing-definition parity. MELPA built
@@ -2884,6 +2889,12 @@ pub const GOTO_CHG_MELPA_PIN: (&str, &str) = ("goto-chg", "20240407.1110");
 /// The exact Helm package selected by the practical source, matching, action,
 /// completion, imenu, and occur parity corpus, and as audacious' runtime
 /// user-interface dependency.
+
+/// The exact helpful package selected for practical help buffer formatting,
+/// alias resolution, and pretty-print paths. MELPA built this archive from
+/// upstream commit `03756fa6ad4dcca5e0920622b1ee3f70abfc4e39`.
+pub const HELPFUL_MELPA_PIN: (&str, &str) = ("helpful", "20250408.334");
+
 pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
 
 /// The exact Helm Company package selected for practical Company-backed
@@ -5945,3 +5956,15 @@ pub fn neomacs_binary() -> PathBuf {
 
 #[cfg(test)]
 mod parity_tests;
+
+/// The exact dashboard package selected for practical startup screen widgets and buffer name.
+/// MELPA built this archive from upstream commit `176d641a55543bda1f0c7506fb954702350c1857`.
+pub const DASHBOARD_MELPA_PIN: (&str, &str) = ("dashboard", "20260402.436");
+
+/// The exact yapfify package selected for practical yapf region line-range process invocation.
+/// MELPA built this archive from upstream commit `c9347e3b1dec5fc8d34883e206fcdc8500d22368`.
+pub const YAPFIFY_MELPA_PIN: (&str, &str) = ("yapfify", "20210914.634");
+
+/// The exact prettier-js package selected for practical prettier command/width/diff assembly without live prettier.
+/// MELPA built this archive from upstream commit `1ce7a310b000200e333f0015b87d910672ebdb7e`.
+pub const PRETTIER_JS_MELPA_PIN: (&str, &str) = ("prettier-js", "20250705.322");
