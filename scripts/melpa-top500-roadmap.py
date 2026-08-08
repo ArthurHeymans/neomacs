@@ -46,18 +46,24 @@ def main() -> int:
         with urllib.request.urlopen(COUNTS_URL, timeout=60) as resp:
             counts = json.load(resp)
 
-    dirs = {
-        entry
-        for entry in os.listdir(PARITY)
-        if os.path.isdir(os.path.join(PARITY, entry))
-    }
+    # A package is covered if it has a parity corpus under src/parity_tests/,
+    # either as a directory (pkg/mod.rs) or a single-file module (pkg.rs).
+    # Counting only directories misses the single-file modules and falsely
+    # regresses them to "todo" on regeneration.
+    covered_modules = set()
+    for entry in os.listdir(PARITY):
+        full = os.path.join(PARITY, entry)
+        if os.path.isdir(full):
+            covered_modules.add(entry)
+        elif entry.endswith(".rs") and entry != "mod.rs":
+            covered_modules.add(entry[: -len(".rs")])
 
     ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[: args.top]
     covered = 0
     with open(ROADMAP, "w") as out:
         out.write("rank\tpackage\tdownloads\tstatus\n")
         for rank, (package, downloads) in enumerate(ranked, start=1):
-            status = "covered" if module_name(package) in dirs else "todo"
+            status = "covered" if module_name(package) in covered_modules else "todo"
             covered += status == "covered"
             out.write(f"{rank}\t{package}\t{downloads}\t{status}\n")
 
