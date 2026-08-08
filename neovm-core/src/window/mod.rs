@@ -5014,48 +5014,69 @@ fn delete_window_in_tree(
             (parent_bounds, horflag, children.len())
         };
 
+        // GNU `Fdelete_window_internal` commits the staged sizes for the whole
+        // parent combination FIRST -- `window_resize_apply (p, horflag)` runs
+        // before the matryoshka `replace_window` (`src/window.c`), so it applies
+        // whether or not one sibling is about to be promoted.  Doing it only in
+        // the multi-child case left a promoted subtree laid out by proportional
+        // redistribution instead of by the plan `window.el` computed.
+        if let DeleteResize::ApplyStaged = resize {
+            window_resize_apply(tree, horflag, 1.0, 1.0);
+        }
+
         if remaining == 1 {
             // GNU's matryoshka case: the sole surviving sibling replaces the
-            // parent and inherits its geometry (`replace_window`).  The
-            // promoted child keeps its own subtree, so its descendants have to
-            // be re-laid-out too -- `set_bounds` alone would move the node's
-            // rect while leaving its children at the old, smaller geometry,
-            // visible as windows that fail to reclaim a deleted sibling's
-            // space.
+            // parent and inherits its geometry (`replace_window`).
+            let (parent_normal_cols, parent_normal_lines) =
+                (tree.normal_cols(), tree.normal_lines());
             let Window::Internal { children, .. } = tree else {
                 unreachable!("checked above")
             };
             let mut promoted = children.pop().expect("one child remains");
-            resize_window_subtree(&mut promoted, parent_bounds);
+            // GNU `Fdelete_window_internal` (`src/window.c:5793-5796`):
+            //
+            //     wset_normal_cols (s, p->normal_cols);
+            //     wset_normal_lines (s, p->normal_lines);
+            //
+            // The promoted window takes over the parent's SHARE of the
+            // grandparent, not the share it had of the parent it replaced.
+            // Leaving it at its own (typically 1.0, being an only child) makes
+            // every later proportional resize of the grandparent misweight it.
+            promoted.set_normal_cols(parent_normal_cols);
+            promoted.set_normal_lines(parent_normal_lines);
+            match resize {
+                // The sizes were just committed above, and the sole child was
+                // re-packed to fill its parent; re-laying it out here would
+                // discard exactly that.  Only its own rect needs to take the
+                // parent's slot.
+                DeleteResize::ApplyStaged => promoted.set_bounds(parent_bounds),
+                // Nothing was staged, so the promoted child keeps its own
+                // subtree at the old, smaller geometry unless it is re-laid-out
+                // -- visible as windows that fail to reclaim a deleted
+                // sibling's space.
+                DeleteResize::Redistribute => {
+                    resize_window_subtree(&mut promoted, parent_bounds);
+                }
+            }
             *tree = promoted;
             // GNU: "Have SIBLING inherit the following three slot values from
             // PARENT (the combination_limit slot is not inherited)"
             // (`src/window.c:5793-5796`) -- so the promoted node keeps its own
             // seal, which is what decides recombination at the level above.
             return DeleteOutcome::RemovedAndPromoted;
-        } else {
-            match resize {
-                // GNU `Fdelete_window_internal`: `window_resize_apply (p,
-                // horflag)` commits the sizes `window.el` staged in
-                // `new_pixel` and re-packs the survivors from the parent's
-                // edge.  The Lisp layer already chose which sibling absorbs
-                // the space; this must not second-guess it.
-                DeleteResize::ApplyStaged => {
-                    window_resize_apply(tree, horflag, 1.0, 1.0);
-                }
-                // No staged sizes to honor: spread the freed space over the
-                // remaining children, then push each child's new rect down
-                // through its own subtree.
-                DeleteResize::Redistribute => {
-                    let Window::Internal { children, .. } = tree else {
-                        unreachable!("checked above")
-                    };
-                    redistribute_bounds(children, parent_bounds);
-                    for child in children.iter_mut() {
-                        let child_bounds = *child.bounds();
-                        resize_window_subtree(child, child_bounds);
-                    }
-                }
+        }
+
+        if let DeleteResize::Redistribute = resize {
+            // No staged sizes to honor: spread the freed space over the
+            // remaining children, then push each child's new rect down through
+            // its own subtree.
+            let Window::Internal { children, .. } = tree else {
+                unreachable!("checked above")
+            };
+            redistribute_bounds(children, parent_bounds);
+            for child in children.iter_mut() {
+                let child_bounds = *child.bounds();
+                resize_window_subtree(child, child_bounds);
             }
         }
         return DeleteOutcome::Removed;

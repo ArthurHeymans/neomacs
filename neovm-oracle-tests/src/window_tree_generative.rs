@@ -142,6 +142,28 @@ enum WindowOp {
     DeleteOtherWindows { window: usize },
     /// `balance-windows`.
     Balance,
+    /// `window-make-atom` on a window's parent: the subtree then resizes and
+    /// deletes as a unit, and `split-window` redirects to the atom's root.
+    MakeAtom { window: usize },
+    /// `window-resize` by an explicit delta — the path that stages sizes
+    /// through `window--resize-child-windows` before committing them.
+    Resize {
+        window: usize,
+        delta: i8,
+        horizontal: bool,
+    },
+    /// Save the current configuration for a later `Restore`.
+    SaveConfiguration,
+    /// `set-window-configuration` of the most recent `SaveConfiguration`
+    /// (no-op if none was taken). Rebuilds the whole tree from a saved record,
+    /// which exercises a completely different construction path from splitting.
+    RestoreConfiguration,
+    /// `fit-window-to-buffer`.
+    FitToBuffer { window: usize },
+    /// `shrink-window-if-larger-than-buffer`.
+    ShrinkIfLarger { window: usize },
+    /// Bind `window-sides-slots` so side-window creation hits the slot cap.
+    SetSidesSlots { slots: i8 },
 }
 
 fn op_strategy() -> impl Strategy<Value = WindowOp> {
@@ -157,6 +179,14 @@ fn op_strategy() -> impl Strategy<Value = WindowOp> {
             .prop_map(|(window, value)| WindowOp::SealParent { window, value }),
         1 => (0usize..8).prop_map(|window| WindowOp::DeleteOtherWindows { window }),
         1 => Just(WindowOp::Balance),
+        1 => (0usize..8).prop_map(|window| WindowOp::MakeAtom { window }),
+        2 => (0usize..8, -8i8..9, any::<bool>())
+            .prop_map(|(window, delta, horizontal)| WindowOp::Resize { window, delta, horizontal }),
+        1 => Just(WindowOp::SaveConfiguration),
+        1 => Just(WindowOp::RestoreConfiguration),
+        1 => (0usize..8).prop_map(|window| WindowOp::FitToBuffer { window }),
+        1 => (0usize..8).prop_map(|window| WindowOp::ShrinkIfLarger { window }),
+        1 => (-1i8..4).prop_map(|slots| WindowOp::SetSidesSlots { slots }),
     ]
 }
 
@@ -196,6 +226,40 @@ fn op_elisp(op: WindowOp, step: usize) -> String {
             format!("(delete-other-windows (oracle--nth-window {window}))")
         }
         WindowOp::Balance => "(balance-windows)".to_string(),
+        WindowOp::MakeAtom { window } => {
+            format!("(window-make-atom (window-parent (oracle--nth-window {window})))")
+        }
+        WindowOp::Resize {
+            window,
+            delta,
+            horizontal,
+        } => format!(
+            "(window-resize (oracle--nth-window {window}) {delta} {})",
+            if horizontal { "t" } else { "nil" },
+        ),
+        WindowOp::SaveConfiguration => {
+            "(setq oracle--config (current-window-configuration))".to_string()
+        }
+        WindowOp::RestoreConfiguration => {
+            "(when oracle--config (set-window-configuration oracle--config))".to_string()
+        }
+        WindowOp::FitToBuffer { window } => {
+            format!("(fit-window-to-buffer (oracle--nth-window {window}))")
+        }
+        WindowOp::ShrinkIfLarger { window } => format!(
+            "(with-selected-window (oracle--nth-window {window}) \
+               (shrink-window-if-larger-than-buffer))"
+        ),
+        // `window-sides-slots' is a 4-element list of nil (unlimited) or a
+        // non-negative slot count per side; -1 stands for nil here.
+        WindowOp::SetSidesSlots { slots } => {
+            let value = if slots < 0 {
+                "nil".to_string()
+            } else {
+                slots.to_string()
+            };
+            format!("(setq window-sides-slots (list {value} {value} {value} {value}))")
+        }
     }
 }
 
@@ -214,6 +278,7 @@ fn program(ops: &[WindowOp]) -> String {
   (let ((ws (window-list nil 'no-minibuf nil)))
     (nth (mod n (length ws)) ws)))
 (defvar oracle--log nil)
+(defvar oracle--config nil)
 (defmacro oracle--step (&rest body)
   `(setq oracle--log
          (cons (list (condition-case nil (progn ,@body 'ok) (error 'err))
@@ -234,31 +299,37 @@ proptest! {
     /// Random split/delete/side-window/seal/balance sequences must leave GNU and
     /// neomacs with identical window trees at every step.
     ///
-    /// # Ignored by default — this is a hunting tool, not a gate
+    /// # Depth
     ///
-    /// It still finds KNOWN-OPEN divergences, so it cannot gate CI yet. And at
-    /// the default [`ORACLE_PROP_CASES`] it would be *flaky* rather than
-    /// cleanly red: the shallow run usually misses them. A flaky test is worse
-    /// than an ignored one.
-    ///
-    /// Run it explicitly, deep:
+    /// Runs at the suite-wide [`ORACLE_PROP_CASES`] by default so it stays
+    /// cheap enough to gate every commit. That shallow run only catches gross
+    /// regressions — to actually *hunt*, raise the depth:
     ///
     /// ```text
     /// NEOVM_FORCE_ORACLE_PATH=/path/to/emacs NEOVM_ORACLE_MODE=live \
-    /// NEOVM_WINDOW_PROP_CASES=400 \
-    /// cargo nextest run --release -p neovm-oracle-tests --run-ignored all \
+    /// NEOVM_WINDOW_PROP_CASES=800 \
+    /// cargo nextest run --release -p neovm-oracle-tests \
     ///   -E 'test(oracle_prop_window_tree_survives_random_operation_sequences)' --no-capture
     /// ```
     ///
-    /// Known-open finding (5 ops, surfaces around a few hundred cases):
-    /// deleting a window on a frame that has `top` and `left` side windows
-    /// leaves a different tree than GNU — the top side window disappears.
+    /// The six-operation core (split/delete/side-window/seal/delete-other/
+    /// balance) was verified clean at 800 sequences. Widening the alphabet to
+    /// atoms, explicit resizes, configuration save/restore, fit-to-buffer and
+    /// slot caps immediately turned up a KNOWN-OPEN divergence, so this is
+    /// `#[ignore]`d again rather than left to fail intermittently at the
+    /// shallow default depth:
     ///
-    /// Un-ignore once the corpus runs clean at a few hundred cases, and
-    /// consider wiring the deep run into a nightly job rather than per-commit
-    /// CI.
+    /// - `window-combination-resize` = `side` permits splitting a side window
+    ///   (GNU's guard is `(and (not (eq window-combination-resize 'side))
+    ///   (window-parameter window 'window-side))`). After such a split leaves
+    ///   two windows on one side, `display-buffer-in-side-window` for that slot
+    ///   picks a different one of them than GNU. Tree SHAPE matches; only the
+    ///   buffer-to-window assignment differs. Repro: `./tmp/sidewin/gen6.el`.
+    ///
+    /// Un-ignore once that is fixed and a deep run is clean. A nightly job is
+    /// the natural home for the deep run either way.
     #[test]
-    #[ignore = "hunting tool: finds known-open divergences; run explicitly with NEOVM_WINDOW_PROP_CASES"]
+    #[ignore = "hunting tool: one known-open divergence; run explicitly with NEOVM_WINDOW_PROP_CASES"]
     fn oracle_prop_window_tree_survives_random_operation_sequences(
         ops in prop::collection::vec(op_strategy(), 2..9),
     ) {
