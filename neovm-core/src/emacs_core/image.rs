@@ -811,13 +811,17 @@ pub(crate) fn builtin_image_mask_p_in_context(eval: &mut Context, args: Vec<Valu
         ));
     };
 
-    if let Some(catalog) = display_host.image_catalog()
-        && let super::image_catalog::ImageLookup::Failed(failed) = catalog.lookup(request)
-    {
-        return Err(signal("error", vec![Value::string(failed.error)]));
-    }
-
-    Ok(Value::NIL)
+    // Prefer a sync resolve so mask/transparency reflects decoded state, not a
+    // pending catalog probe. GNU inspects `img->mask` after `lookup_image`.
+    let resolved = display_host
+        .resolve_image_sync(request)
+        .map_err(|message| signal("error", vec![Value::string(message)]))?;
+    let Some(image) = resolved else {
+        return Ok(Value::NIL);
+    };
+    // Neomacs does not yet store a separate mask pixmap. Treat the decoder's
+    // transparent-background classification as the practical mask signal.
+    Ok(Value::bool_val(image.metadata.background_transparent))
 }
 
 /// (put-image IMAGE POINT &optional STRING AREA) -> nil
@@ -950,11 +954,15 @@ pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value
         ));
     }
 
-    if args.get(1).is_some_and(|value| value.is_t()) {
+    // GNU `FRAME t` flushes SPEC on every frame. Neomacs keeps one shared
+    // catalog, so invalidating the source once is the all-frames path.
+    let all_frames = args.get(1).is_some_and(|value| value.is_t());
+    if !all_frames {
+        require_image_window_system_frame(eval, "image-flush", args.get(1))?;
+    } else if eval.display_host.is_none() {
+        // Batch/no-host: accept FRAME=t without work (historic batch contract).
         return Ok(Value::NIL);
     }
-
-    require_image_window_system_frame(eval, "image-flush", args.get(1))?;
 
     if eval.display_host.is_none() {
         return Err(signal(
@@ -963,10 +971,11 @@ pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value
         ));
     }
 
+    let frame_for_env = if all_frames { None } else { args.get(1) };
     let default_colors = eval.face_table().default_face_colors();
     let Some(request) = image_resolve_request_from_spec(
         &args[0],
-        image_scale_environment_for_frame(eval, args.get(1)).unwrap_or_default(),
+        image_scale_environment_for_frame(eval, frame_for_env).unwrap_or_default(),
         default_colors,
     ) else {
         return Err(signal(
@@ -985,22 +994,22 @@ pub(crate) fn builtin_image_flush_in_context(eval: &mut Context, args: Vec<Value
     Ok(Value::NIL)
 }
 
-/// (clear-image-cache &optional FILTER) -> nil
+/// `(clear-image-cache &optional FILTER ANIMATION-FILTER)` → nil.
 ///
-/// Clear the image cache.  FILTER can be nil (clear all), a frame,
-/// or t (clear all frames).
-/// Stub: does nothing, returns nil.
+/// Mirrors GNU `Fclear_image_cache` (`src/image.c`):
+/// - non-nil `ANIMATION-FILTER` must be a list; animation cache only (no-op
+///   until Neomacs has one)
+/// - `FILTER` nil or a frame → clear the selected/that frame's images
+/// - `FILTER` t → clear all frames
+/// - other `FILTER` (usually a filename string) → clear images depending on it
+///
+/// Neomacs uses one shared image catalog, so frame-scoped clears clear the
+/// whole catalog (equivalent for a single GUI display).
+#[allow(dead_code)] // batch path kept for tests without a display host
 pub(crate) fn builtin_clear_image_cache(args: Vec<Value>) -> EvalResult {
-    if args.len() > 2 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("clear-image-cache"),
-                Value::fixnum(args.len() as i64),
-            ],
-        ));
-    }
-
+    expect_max_args("clear-image-cache", &args, 2)?;
+    // Batch/no-host: historical tests expect an error for empty/nil filter.
+    // GUI work goes through `builtin_clear_image_cache_in_context`.
     if args.len() == 2 {
         let animation_cache = &args[1];
         if !animation_cache.is_nil() && !animation_cache.is_cons() {
@@ -1009,24 +1018,105 @@ pub(crate) fn builtin_clear_image_cache(args: Vec<Value>) -> EvalResult {
                 vec![Value::symbol("listp"), *animation_cache],
             ));
         }
-        // When animation-cache is non-nil, Emacs does not validate `filter`.
+        if !animation_cache.is_nil() {
+            // GNU prunes only the animation cache and leaves image caches alone.
+            return Ok(Value::NIL);
+        }
     }
 
-    if args.is_empty() {
+    let filter = args.first().copied().unwrap_or(Value::NIL);
+    if filter.is_nil() {
         return Err(signal(
             "error",
             vec![Value::string("Window system frame should be used")],
         ));
     }
+    if filter.is_t() || filter.as_utf8_str().is_some() {
+        return Ok(Value::NIL);
+    }
+    expect_frame_designator("clear-image-cache", &filter)?;
+    Ok(Value::NIL)
+}
 
-    if args[0].is_nil() {
-        return Err(signal(
-            "error",
-            vec![Value::string("Window system frame should be used")],
-        ));
+pub(crate) fn builtin_clear_image_cache_in_context(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("clear-image-cache", &args, 2)?;
+
+    if args.len() == 2 {
+        let animation_filter = &args[1];
+        if !animation_filter.is_nil() && !animation_filter.is_cons() {
+            return Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("listp"), *animation_filter],
+            ));
+        }
+        if !animation_filter.is_nil() {
+            // No animation cache yet; match GNU by not touching image caches.
+            return Ok(Value::NIL);
+        }
+    }
+
+    let filter = args.first().copied().unwrap_or(Value::NIL);
+
+    // Filename / other non-frame filter: clear matching sources on all frames.
+    if !filter.is_nil() && !filter.is_t() && !is_frame_designator_value(&filter) {
+        if let Some(path) = filter.as_utf8_str() {
+            require_image_display_host(eval)?;
+            if let Some(catalog) = eval
+                .display_host
+                .as_ref()
+                .and_then(|host| host.image_catalog())
+            {
+                catalog.invalidate(&ImageResolveSource::File(
+                    crate::heap_types::LispString::from_utf8(path),
+                ));
+            }
+            return Ok(Value::NIL);
+        }
+        // Unknown filter object: accept without clearing (no dependency match).
+        return Ok(Value::NIL);
+    }
+
+    if filter.is_t() {
+        require_image_display_host(eval)?;
+    } else if filter.is_nil() {
+        require_image_window_system_frame(eval, "clear-image-cache", None)?;
+        require_image_display_host(eval)?;
+    } else {
+        require_image_window_system_frame(eval, "clear-image-cache", Some(&filter))?;
+        require_image_display_host(eval)?;
+    }
+
+    if let Some(catalog) = eval
+        .display_host
+        .as_ref()
+        .and_then(|host| host.image_catalog())
+    {
+        catalog.clear_all();
     }
 
     Ok(Value::NIL)
+}
+
+fn is_frame_designator_value(value: &Value) -> bool {
+    matches!(
+        value.kind(),
+        ValueKind::Fixnum(id) if id >= 0 && (id as u64) >= FRAME_ID_BASE
+    ) || matches!(value.kind(), ValueKind::Veclike(VecLikeType::Frame))
+}
+
+/// Neomacs shares one image catalog across GUI frames; presence of a display
+/// host is the practical gate for cache mutation (like a live window-system).
+fn require_image_display_host(eval: &Context) -> Result<(), Flow> {
+    if eval.display_host.is_none() {
+        return Err(signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        ));
+    }
+    Ok(())
 }
 
 /// (image-cache-size) -> integer
@@ -1041,6 +1131,7 @@ pub(crate) fn builtin_image_cache_size(args: Vec<Value>) -> EvalResult {
 ///
 /// Returns nil for non-image specifications. For valid image specs on
 /// non-window-system frames, this signals the same error shape as GNU Emacs.
+#[allow(dead_code)] // batch-only path used by unit tests without a display host
 pub(crate) fn builtin_image_metadata(args: Vec<Value>) -> EvalResult {
     expect_args_range("image-metadata", &args, 1, 2)?;
 
@@ -1056,6 +1147,53 @@ pub(crate) fn builtin_image_metadata(args: Vec<Value>) -> EvalResult {
         "error",
         vec![Value::string("Window system frame should be used")],
     ))
+}
+
+/// GUI path for `image-metadata`: resolve SPEC and return a small plist of
+/// known fields. GNU returns decoder `lisp_data` (often nil); we surface width,
+/// height, and transparency when decode succeeds.
+pub(crate) fn builtin_image_metadata_in_context(
+    eval: &mut Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args_range("image-metadata", &args, 1, 2)?;
+
+    if !is_image_spec(&args[0]) {
+        return Ok(Value::NIL);
+    }
+
+    require_image_window_system_frame(eval, "image-metadata", args.get(1))?;
+    require_image_display_host(eval)?;
+
+    let environment = image_scale_environment_for_frame(eval, args.get(1)).ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string("Window system frame should be used")],
+        )
+    })?;
+    let Some(request) = image_resolve_request_from_spec(
+        &args[0],
+        environment,
+        eval.face_table().default_face_colors(),
+    ) else {
+        return Ok(Value::NIL);
+    };
+    let display_host = eval.display_host.as_ref().expect("checked host");
+    let resolved = display_host
+        .resolve_image_sync(request)
+        .map_err(|message| signal("error", vec![Value::string(message)]))?;
+    let Some(image) = resolved else {
+        return Ok(Value::NIL);
+    };
+
+    Ok(Value::list(vec![
+        Value::keyword("width"),
+        Value::fixnum(image.metadata.width as i64),
+        Value::keyword("height"),
+        Value::fixnum(image.metadata.height as i64),
+        Value::keyword("background-transparent"),
+        Value::bool_val(image.metadata.background_transparent),
+    ]))
 }
 
 /// (imagep OBJECT) -> t if OBJECT looks like an image descriptor.

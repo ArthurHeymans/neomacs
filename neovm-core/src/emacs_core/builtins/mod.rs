@@ -9251,11 +9251,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(2),
         ),
     );
-    ctx.defsubr(
-        "clear-image-cache",
-        |_ctx, args| super::image::builtin_clear_image_cache(args),
-        0,
-        Some(2),
+    register_builtin(
+        ctx,
+        BuiltinRegistration::requires_eval_state(
+            "clear-image-cache",
+            super::image::builtin_clear_image_cache_in_context,
+            0,
+            Some(2),
+        ),
     );
     ctx.defsubr(
         "image-cache-size",
@@ -9263,11 +9266,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
-        "image-metadata",
-        |_ctx, args| super::image::builtin_image_metadata(args),
-        1,
-        Some(2),
+    register_builtin(
+        ctx,
+        BuiltinRegistration::requires_eval_state(
+            "image-metadata",
+            super::image::builtin_image_metadata_in_context,
+            1,
+            Some(2),
+        ),
     );
     ctx.defsubr(
         "imagep",

@@ -320,6 +320,12 @@ pub trait ImageCatalog {
     /// The next lookup must allocate a fresh renderer identity and decode the
     /// source again.  Hosts without an image cache may keep the default no-op.
     fn invalidate(&self, _source: &ImageResolveSource) {}
+
+    /// Drop every cached image (GNU `clear-image-cache` with filter `t`, or a
+    /// full-frame clear when Neomacs keeps one shared catalog).
+    ///
+    /// Hosts without an image cache may keep the default no-op.
+    fn clear_all(&self) {}
 }
 
 #[cfg(test)]

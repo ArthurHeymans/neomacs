@@ -212,6 +212,23 @@ impl ImageCatalog for AsyncImageCatalog {
                 .collect::<Vec<_>>()
         };
 
+        self.free_image_ids(removed);
+    }
+
+    fn clear_all(&self) {
+        let removed = {
+            let mut entries = self.entries.borrow_mut();
+            entries
+                .drain()
+                .map(|(_, state)| state.placement().image_id())
+                .collect::<Vec<_>>()
+        };
+        self.free_image_ids(removed);
+    }
+}
+
+impl AsyncImageCatalog {
+    fn free_image_ids(&self, removed: Vec<u32>) {
         for id in removed {
             let command = RenderCommand::Asset(AssetCommand::ImageFree { id });
             if let Err(error) =

@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 struct RecordingImageDisplayHost {
     requests: Arc<Mutex<Vec<ImageResolveRequest>>>,
     invalidations: Arc<Mutex<Vec<ImageResolveSource>>>,
+    clear_all_calls: Arc<Mutex<usize>>,
 }
 
 impl DisplayHost for RecordingImageDisplayHost {
@@ -61,6 +62,10 @@ impl ImageCatalog for RecordingImageDisplayHost {
             .lock()
             .expect("image invalidations lock")
             .push(source.clone());
+    }
+
+    fn clear_all(&self) {
+        *self.clear_all_calls.lock().expect("image clear_all lock") += 1;
     }
 }
 
@@ -488,7 +493,7 @@ fn image_mask_p_not_image() {
 }
 
 #[test]
-fn image_mask_p_resolves_image_and_returns_nil_on_gui_frame() {
+fn image_mask_p_resolves_image_and_reports_transparency_on_gui_frame() {
     crate::test_utils::init_test_tracing();
     let requests = Arc::new(Mutex::new(Vec::new()));
     let mut eval = crate::emacs_core::Context::new();
@@ -503,9 +508,10 @@ fn image_mask_p_resolves_image_and_returns_nil_on_gui_frame() {
     }));
     let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();
 
+    // Recording host marks background_transparent=true (practical mask proxy).
     let result = builtin_image_mask_p_in_context(&mut eval, vec![spec]).unwrap();
 
-    assert_eq!(result, Value::NIL);
+    assert_eq!(result, Value::T);
     assert_eq!(requests.lock().expect("image requests lock").len(), 1);
 }
 
@@ -810,6 +816,39 @@ fn image_flush_all_frames() {
 }
 
 #[test]
+fn image_flush_all_frames_invalidates_source_with_display_host() {
+    crate::test_utils::init_test_tracing();
+    let invalidations = Arc::new(Mutex::new(Vec::new()));
+    let mut eval = Context::new();
+    let buffer = eval.buffers.create_buffer("*scratch*");
+    let frame = eval.frames.create_frame("F1", 960, 640, buffer);
+    eval.frames
+        .get_mut(frame)
+        .expect("test frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        invalidations: Arc::clone(&invalidations),
+        ..Default::default()
+    }));
+
+    let spec = builtin_create_image(vec![
+        Value::string("/tmp/watched-all-frames.png"),
+        Value::symbol("png"),
+    ])
+    .unwrap();
+    builtin_image_flush_in_context(&mut eval, vec![spec, Value::T]).unwrap();
+
+    assert!(matches!(
+        invalidations
+            .lock()
+            .expect("image invalidations lock")
+            .as_slice(),
+        [ImageResolveSource::File(path)]
+            if path.as_utf8_str() == Some("/tmp/watched-all-frames.png")
+    ));
+}
+
+#[test]
 fn image_flush_non_t_frame_errors() {
     crate::test_utils::init_test_tracing();
     let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();
@@ -887,6 +926,62 @@ fn clear_image_cache_with_animation_cache_list() {
     let result = builtin_clear_image_cache(vec![Value::T, cache_arg]);
     assert!(result.is_ok());
     assert!(result.unwrap().is_nil());
+}
+
+#[test]
+fn clear_image_cache_nil_filter_clears_catalog_with_gui_host() {
+    crate::test_utils::init_test_tracing();
+    let clear_all_calls = Arc::new(Mutex::new(0usize));
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        clear_all_calls: Arc::clone(&clear_all_calls),
+        ..Default::default()
+    }));
+
+    builtin_clear_image_cache_in_context(&mut eval, vec![]).unwrap();
+    builtin_clear_image_cache_in_context(&mut eval, vec![Value::NIL]).unwrap();
+    builtin_clear_image_cache_in_context(&mut eval, vec![Value::T]).unwrap();
+
+    assert_eq!(*clear_all_calls.lock().unwrap(), 3);
+}
+
+#[test]
+fn clear_image_cache_filename_filter_invalidates_source() {
+    crate::test_utils::init_test_tracing();
+    let invalidations = Arc::new(Mutex::new(Vec::new()));
+    let mut eval = Context::new();
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        invalidations: Arc::clone(&invalidations),
+        ..Default::default()
+    }));
+
+    builtin_clear_image_cache_in_context(&mut eval, vec![Value::string("/tmp/only-this.png")])
+        .unwrap();
+
+    assert!(matches!(
+        invalidations.lock().unwrap().as_slice(),
+        [ImageResolveSource::File(path)]
+            if path.as_utf8_str() == Some("/tmp/only-this.png")
+    ));
+}
+
+#[test]
+fn clear_image_cache_animation_filter_skips_image_clear() {
+    crate::test_utils::init_test_tracing();
+    let clear_all_calls = Arc::new(Mutex::new(0usize));
+    let mut eval = Context::new();
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        clear_all_calls: Arc::clone(&clear_all_calls),
+        ..Default::default()
+    }));
+    let anim = Value::list(vec![Value::symbol("anim"), Value::symbol("entry")]);
+    builtin_clear_image_cache_in_context(&mut eval, vec![Value::T, anim]).unwrap();
+    assert_eq!(*clear_all_calls.lock().unwrap(), 0);
 }
 
 #[test]
@@ -993,6 +1088,37 @@ fn image_metadata_second_arg_validates_frame_designator() {
             if sig.symbol_name() == "wrong-type-argument"
             && sig.data.first() == Some(&Value::symbol("frame-live-p"))
     ));
+}
+
+#[test]
+fn image_metadata_returns_size_plist_on_gui_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost::default()));
+    let spec = builtin_create_image(vec![Value::string("test.png"), Value::symbol("png")]).unwrap();
+
+    let meta = builtin_image_metadata_in_context(&mut eval, vec![spec]).unwrap();
+    let items = list_to_vec(&meta).expect("metadata plist");
+    assert!(
+        items
+            .windows(2)
+            .any(|w| { w[0] == Value::keyword("width") && w[1] == Value::fixnum(40) })
+    );
+    assert!(
+        items
+            .windows(2)
+            .any(|w| { w[0] == Value::keyword("height") && w[1] == Value::fixnum(30) })
+    );
+    assert!(
+        items
+            .windows(2)
+            .any(|w| { w[0] == Value::keyword("background-transparent") && w[1] == Value::T })
+    );
 }
 
 // -----------------------------------------------------------------------
