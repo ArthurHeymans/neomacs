@@ -16,7 +16,6 @@ use crate::buffer_source::walk::BufferSourceWalk;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
-use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row::transition::DisplayRowTransitionContinuation;
 use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceStepItem;

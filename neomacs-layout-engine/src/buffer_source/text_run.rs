@@ -14,7 +14,6 @@ use crate::display_row::builder::{
 };
 use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::geometry::DisplayRowGeometryState;
-use crate::display_row::overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::walk_state::{TrailingWhitespaceRenderState, WordWrapRenderState};
 use crate::display_source::DisplaySourceStepItem;

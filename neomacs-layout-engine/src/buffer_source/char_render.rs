@@ -23,8 +23,12 @@ use crate::types::WindowParams;
 /// character once the run fell to char granularity. The window-invariant half
 /// of that bundle IS `loop_context`, so the arm reads it directly and only the
 /// genuinely per-call references are passed. The append surface is NOT among
-/// them: the loop state already carries the same one the request used to copy,
-/// so it is read from the destructured state below.
+/// them: the loop state already carries the same one the request used to copy.
+///
+/// P4.9: the loop state is no longer destructured here. It was, and the two
+/// overflow requests below each had to re-pack all twenty fields by hand to
+/// hand it on; `reborrow` already expresses that, so the field-by-field
+/// rebuilds are gone.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
     loop_context: BufferSourceLoopRequestContext,
@@ -35,32 +39,9 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
     buffer: &B,
     active_face_state: &DisplayRowActiveFaceState,
     append_context: &BufferSourceRowAppendContext<'_, '_, B>,
-    state: BufferSourceLoopMutableState<'_, '_, '_>,
+    mut state: BufferSourceLoopMutableState<'_, '_, '_>,
 ) -> BufferSourceItemRenderOutcome {
     let text_start_byte = loop_context.text_start_byte();
-    let BufferSourceLoopMutableState {
-        invisible_text_checkpoint,
-        mut progress,
-        source_render,
-        row_extend,
-        box_face,
-        line_numbers,
-        row_geometry,
-        row_flags,
-        hit_rows,
-        hit_row_range,
-        prefix_request,
-        hscroll_skip,
-        word_wrap,
-        trailing_whitespace,
-        face_scan,
-        row_y_positions,
-        cursor_info,
-        face_ids,
-        append_surface,
-        overlay_context,
-    } = state;
-    let mut source_render = source_render;
 
     // Element granularity: this path renders exactly ONE character, so take
     // the run's first character and leave the rest to the producer. The walk
@@ -82,15 +63,15 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
     // semantics, and the loop-level arm in render.rs appends them before the
     // buffer character at the same position — the GNU handle_stop order this
     // call used to implement by probing every character.
-    let append_position = progress.row_position();
-    let append_geometry = *row_geometry;
-    source_step_char.record_word_wrap_candidate(word_wrap, &source_render);
+    let append_position = state.progress.row_position();
+    let append_geometry = *state.row_geometry;
+    source_step_char.record_word_wrap_candidate(state.word_wrap, &state.source_render);
 
     let buffer_source_char = source_step_char.source_char(params.nobreak_char_display);
     let prepared_append = append_context.prepare_source_item_for_current_text_row(
         append_geometry,
         source_walk.append_state(),
-        &mut source_render,
+        &mut state.source_render,
         &buffer_source_char,
         text,
         source_step_char.start_byte_idx(),
@@ -105,8 +86,8 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
                 BufferSourceSpecialOverflowRenderContext::new(
                     text,
                     text_start_byte,
-                    progress.row_progress().x(),
-                    append_surface.full_text_right_edge(),
+                    state.progress.row_progress().x(),
+                    state.append_surface.full_text_right_edge(),
                     params.wrap_mode,
                     loop_context.row_visibility_limit(),
                     loop_context.content_x(),
@@ -117,32 +98,7 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
                     loop_context.row_limit(),
                 ),
             )
-            .render_if_needed_and_apply(
-                source_walk,
-                buffer,
-                BufferSourceLoopMutableState::new(
-                    invisible_text_checkpoint,
-                    progress.reborrow(),
-                    source_render.reborrow(),
-                    row_extend,
-                    box_face,
-                    line_numbers,
-                    row_geometry,
-                    row_flags,
-                    hit_rows,
-                    hit_row_range,
-                    prefix_request,
-                    hscroll_skip,
-                    word_wrap,
-                    trailing_whitespace,
-                    face_scan,
-                    row_y_positions,
-                    cursor_info,
-                    face_ids,
-                    append_surface,
-                    overlay_context,
-                ),
-            );
+            .render_if_needed_and_apply(source_walk, buffer, state.reborrow());
             if special_overflow_outcome.should_break() {
                 return BufferSourceItemRenderOutcome::Stop;
             }
@@ -153,20 +109,20 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
             if special_prepared_append
                 .append_to_text_row_and_apply(
                     append_context,
-                    row_geometry,
+                    state.row_geometry,
                     params,
-                    face_ids,
-                    &mut source_render.reborrow(),
-                    face_scan,
-                    word_wrap,
-                    &mut progress.reborrow(),
+                    state.face_ids,
+                    &mut state.source_render.reborrow(),
+                    state.face_scan,
+                    state.word_wrap,
+                    &mut state.progress.reborrow(),
                 )
                 .should_break()
             {
                 return BufferSourceItemRenderOutcome::Stop;
             }
             if let Some(end_byte_idx) = source_end_byte_idx {
-                progress.set_byte_idx(end_byte_idx);
+                state.progress.set_byte_idx(end_byte_idx);
             }
             return BufferSourceItemRenderOutcome::ContinueBufferWalk;
         }
@@ -174,15 +130,15 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
     };
 
     prepared_append
-        .update_cursor_info_for_main_char(cursor_info, source_step_char.start_byte_idx());
+        .update_cursor_info_for_main_char(state.cursor_info, source_step_char.start_byte_idx());
     let overflow_outcome = BufferSourceOverflowRenderRequest::new(
         &prepared_append,
         source_step_char,
         BufferSourceOverflowRenderContext::new(
             ch,
-            append_surface.right_edge(),
+            state.append_surface.right_edge(),
             params.wrap_mode,
-            *word_wrap,
+            *state.word_wrap,
             loop_context.row_visibility_limit(),
             loop_context.content_x(),
             loop_context.has_prefix(),
@@ -194,32 +150,7 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
             loop_context.frame_background(),
         ),
     )
-    .render_if_needed_and_apply(
-        source_walk,
-        text,
-        BufferSourceLoopMutableState::new(
-            invisible_text_checkpoint,
-            progress.reborrow(),
-            source_render.reborrow(),
-            row_extend,
-            box_face,
-            line_numbers,
-            row_geometry,
-            row_flags,
-            hit_rows,
-            hit_row_range,
-            prefix_request,
-            hscroll_skip,
-            word_wrap,
-            trailing_whitespace,
-            face_scan,
-            row_y_positions,
-            cursor_info,
-            face_ids,
-            append_surface,
-            overlay_context,
-        ),
-    );
+    .render_if_needed_and_apply(source_walk, text, state.reborrow());
     if overflow_outcome.should_break() {
         return BufferSourceItemRenderOutcome::Stop;
     }
@@ -227,28 +158,29 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
         return BufferSourceItemRenderOutcome::ContinueBufferWalk;
     }
 
-    let row_position = progress.row_position();
+    let row_position = state.progress.row_position();
     prepared_append.capture_cursor_info_for_main_char_if_point(
-        cursor_info,
+        state.cursor_info,
         active_face_state,
-        row_geometry,
+        state.row_geometry,
         row_position.x_px(),
         source_step_char.start_byte_idx(),
         row_position.col(),
         ch == '\t',
-        progress.charpos(),
+        state.progress.charpos(),
         loop_context.point_charpos(),
     );
-    if cursor_info.is_missing()
+    if state.cursor_info.is_missing()
         && source_end_charpos.is_some_and(|end| {
-            loop_context.point_charpos() > progress.charpos() && loop_context.point_charpos() < end
+            loop_context.point_charpos() > state.progress.charpos()
+                && loop_context.point_charpos() < end
         })
     {
         capture_cursor_info(
-            cursor_info,
+            state.cursor_info,
             prepared_append.cursor_info_for_main_char(
                 active_face_state,
-                row_geometry.text_position(
+                state.row_geometry.text_position(
                     row_position.x_px(),
                     source_step_char.start_byte_idx(),
                     row_position.col(),
@@ -263,20 +195,20 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
             append_context,
             &append_geometry,
             ch,
-            &mut source_render.reborrow(),
-            trailing_whitespace,
-            word_wrap,
-            &mut progress.reborrow(),
+            &mut state.source_render.reborrow(),
+            state.trailing_whitespace,
+            state.word_wrap,
+            &mut state.progress.reborrow(),
         )
         .should_break()
     {
         return BufferSourceItemRenderOutcome::Stop;
     }
     if let Some(end_charpos) = source_end_charpos {
-        progress.max_charpos(end_charpos);
+        state.progress.max_charpos(end_charpos);
     }
     if let Some(end_byte_idx) = source_end_byte_idx {
-        progress.set_byte_idx(end_byte_idx);
+        state.progress.set_byte_idx(end_byte_idx);
     }
 
     BufferSourceItemRenderOutcome::Rendered
