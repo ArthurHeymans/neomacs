@@ -399,7 +399,16 @@ pub(crate) fn image_scale_environment_for_frame(
     eval: &Context,
     frame_arg: Option<&Value>,
 ) -> Option<ImageScaleEnvironment> {
-    let frame = if let Some(frame_arg) = frame_arg.filter(|value| !value.is_nil()) {
+    let frame = image_frame_for_arg(eval, frame_arg)?;
+    Some(image_scale_environment(frame, eval.obarray()))
+}
+
+/// Resolve FRAME (or the selected frame) for image builtins.
+fn image_frame_for_arg<'a>(
+    eval: &'a Context,
+    frame_arg: Option<&Value>,
+) -> Option<&'a crate::window::Frame> {
+    if let Some(frame_arg) = frame_arg.filter(|value| !value.is_nil()) {
         let frame_id = match frame_arg.kind() {
             ValueKind::Fixnum(id) => crate::window::FrameId(id as u64),
             ValueKind::Veclike(VecLikeType::Frame) => {
@@ -407,11 +416,21 @@ pub(crate) fn image_scale_environment_for_frame(
             }
             _ => return None,
         };
-        eval.frame_manager().get(frame_id)?
+        eval.frame_manager().get(frame_id)
     } else {
-        eval.frame_manager().selected_frame()?
-    };
-    Some(image_scale_environment(frame, eval.obarray()))
+        eval.frame_manager().selected_frame()
+    }
+}
+
+/// Canonical character cell size in pixels for FRAME, matching
+/// `frame-char-width` / `frame-char-height` (GNU `FRAME_COLUMN_WIDTH` /
+/// `FRAME_LINE_HEIGHT` used by `Fimage_size`).
+fn image_frame_char_cell_pixels(eval: &Context, frame_arg: Option<&Value>) -> Option<(f64, f64)> {
+    let frame = image_frame_for_arg(eval, frame_arg)?;
+    // Same truncation as `builtin_frame_char_width` / `builtin_frame_char_height`.
+    let column_width = (frame.char_width as i64).max(1) as f64;
+    let line_height = (frame.char_height as i64).max(1) as f64;
+    Some((column_width, line_height))
 }
 
 /// Validate that a value looks like an image spec.
@@ -611,6 +630,12 @@ pub(crate) fn builtin_image_size(args: Vec<Value>) -> EvalResult {
     ))
 }
 
+/// `(image-size SPEC &optional PIXELS FRAME)` → `(WIDTH . HEIGHT)`.
+///
+/// Mirrors GNU `Fimage_size` (`src/image.c`): after resolving the image on
+/// FRAME, return pixel size as fixnums when PIXELS is non-nil; otherwise
+/// return size in canonical character units as floats
+/// (`width / FRAME_COLUMN_WIDTH`, `height / FRAME_LINE_HEIGHT`).
 pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("image-size", &args, 1)?;
     expect_max_args("image-size", &args, 3)?;
@@ -657,9 +682,28 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
         ));
     };
 
+    // GNU: width/height include 2× hmargin/vmargin. Neomacs does not yet surface
+    // image margins in metadata; default margins are 0, matching the common path.
+    let width_px = image.metadata.width as i64;
+    let height_px = image.metadata.height as i64;
+    let pixels = args.get(1).copied().unwrap_or(Value::NIL);
+    if !pixels.is_nil() {
+        return Ok(Value::cons(
+            Value::fixnum(width_px),
+            Value::fixnum(height_px),
+        ));
+    }
+
+    let (column_width, line_height) =
+        image_frame_char_cell_pixels(eval, args.get(2)).ok_or_else(|| {
+            signal(
+                "error",
+                vec![Value::string("Window system frame should be used")],
+            )
+        })?;
     Ok(Value::cons(
-        Value::fixnum(image.metadata.width as i64),
-        Value::fixnum(image.metadata.height as i64),
+        Value::make_float(width_px as f64 / column_width),
+        Value::make_float(height_px as f64 / line_height),
     ))
 }
 

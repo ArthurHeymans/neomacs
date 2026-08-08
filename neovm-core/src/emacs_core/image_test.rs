@@ -1375,6 +1375,44 @@ fn image_size_uses_display_host_resolution_in_gui_context() {
     );
 }
 
+/// GNU `Fimage_size`: PIXELS nil → floats in canonical character units
+/// (`width / FRAME_COLUMN_WIDTH`, `height / FRAME_LINE_HEIGHT`); non-nil →
+/// fixnum pixels. Regression for https://github.com/eval-exec/neomacs/issues/243.
+#[test]
+fn image_size_pixels_nil_returns_character_units_as_floats() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("selected frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.char_width = 10.0;
+        frame.char_height = 20.0;
+    }
+    eval.set_display_host(Box::new(RecordingImageDisplayHost::default()));
+    let spec = Value::list(vec![
+        Value::symbol("image"),
+        Value::keyword("type"),
+        Value::symbol("png"),
+        Value::keyword("file"),
+        Value::string("/tmp/neomacs-image-size-chars.png"),
+    ]);
+
+    // Recording host returns 40×30 metadata.
+    let in_chars = builtin_image_size_in_context(&mut eval, vec![spec.clone()]).unwrap();
+    assert_eq!(in_chars.cons_car(), Value::make_float(4.0)); // 40 / 10
+    assert_eq!(in_chars.cons_cdr(), Value::make_float(1.5)); // 30 / 20
+
+    let explicit_nil =
+        builtin_image_size_in_context(&mut eval, vec![spec.clone(), Value::NIL]).unwrap();
+    assert_eq!(explicit_nil.cons_car(), Value::make_float(4.0));
+    assert_eq!(explicit_nil.cons_cdr(), Value::make_float(1.5));
+
+    let in_pixels = builtin_image_size_in_context(&mut eval, vec![spec, Value::T]).unwrap();
+    assert_eq!(in_pixels.cons_car(), Value::fixnum(40));
+    assert_eq!(in_pixels.cons_cdr(), Value::fixnum(30));
+}
+
 #[test]
 fn image_spec_parse_reduces_rotation_to_a_quarter_turn() {
     crate::test_utils::init_test_tracing();
