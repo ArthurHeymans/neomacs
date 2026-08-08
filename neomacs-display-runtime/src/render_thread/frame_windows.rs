@@ -213,7 +213,13 @@ pub(crate) struct FrameCompositor {
     hidden_child_frames: HashSet<u64>,
     pub(super) pending_child_frame_removals_to_present: Vec<u64>,
     pub glyph_atlas: Option<WgpuGlyphAtlas>,
+    /// Content of the scene changed: the next frame must repaint layers.
     pub dirty: bool,
+    /// Only the cursor layer changed (a blink toggle). The composite fast
+    /// path reproduces such a frame from the retained scene, so this asks for
+    /// a cursor-only frame rather than a repaint. Kept separate from `dirty`
+    /// because anything that sets `dirty` outranks it in the demand model.
+    pub(super) cursor_dirty: bool,
     pub(super) visual_cursors: HashMap<i64, CursorState>,
     pub renderer_effects: RendererFrameEffects,
     pub transitions: TransitionState,
@@ -358,6 +364,7 @@ impl GuiFrameRenderState {
                 pending_child_frame_removals_to_present: Vec::new(),
                 glyph_atlas: Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32)),
                 dirty: false,
+                cursor_dirty: false,
                 visual_cursors: HashMap::new(),
                 renderer_effects: RendererFrameEffects::default(),
                 transitions: TransitionState::default(),
@@ -403,6 +410,7 @@ impl GuiFrameRenderState {
                 pending_child_frame_removals_to_present: Vec::new(),
                 glyph_atlas: None,
                 dirty: false,
+                cursor_dirty: false,
                 visual_cursors: HashMap::new(),
                 renderer_effects: RendererFrameEffects::default(),
                 transitions: TransitionState::default(),
@@ -867,12 +875,26 @@ impl GuiFrameRenderState {
         self.compositor.dirty && self.compositor.current_frame.is_some()
     }
 
+    /// Whether only the cursor layer needs to reach the screen. Never true at
+    /// the same time as a content repaint is owed: the caller checks
+    /// [`Self::has_presentable_dirty_content`] first and that wins.
+    pub(super) fn has_presentable_cursor_change(&self) -> bool {
+        self.compositor.cursor_dirty && self.compositor.current_frame.is_some()
+    }
+
     pub(super) fn begin_presentable_render(&mut self) {
         self.compositor.dirty = false;
+        self.compositor.cursor_dirty = false;
     }
 
     pub(super) fn set_dirty(&mut self, dirty: bool) {
         self.compositor.dirty = dirty;
+        if dirty {
+            return;
+        }
+        // Starting a frame satisfies the cursor layer too: every render path
+        // draws the cursor at its current blink state.
+        self.compositor.cursor_dirty = false;
     }
 
     pub(super) fn clear_all_chrome_pressed(&mut self) {
@@ -1086,7 +1108,13 @@ impl GuiFrameRenderState {
         {
             renderer.trigger_transient_cursor_wake(&mut self.compositor.renderer_effects, now);
         }
-        self.compositor.dirty = true;
+        // A blink changes the cursor layer and nothing else, so it asks for a
+        // composite of the retained scene rather than a repaint. When the
+        // toggle also triggers the cursor-wake effect above, that effect marks
+        // the window dirty through mark_active_visuals_dirty on this same
+        // about_to_wait pass, which outranks this and forces the full render
+        // it needs.
+        self.compositor.cursor_dirty = true;
         true
     }
 
@@ -1094,7 +1122,7 @@ impl GuiFrameRenderState {
         if !self.cursor.force_blink_on() {
             return false;
         }
-        self.compositor.dirty = true;
+        self.compositor.cursor_dirty = true;
         true
     }
 
@@ -1771,6 +1799,10 @@ impl GuiFrameWindowState {
 
     pub(super) fn has_presentable_dirty_content(&self) -> bool {
         self.lifecycle.is_active() && self.render.has_presentable_dirty_content()
+    }
+
+    pub(super) fn has_presentable_cursor_change(&self) -> bool {
+        self.lifecycle.is_active() && self.render.has_presentable_cursor_change()
     }
 
     pub fn window(&self) -> Option<&Arc<Window>> {

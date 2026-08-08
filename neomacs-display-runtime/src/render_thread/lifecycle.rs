@@ -520,6 +520,28 @@ impl RenderApp {
                     .retract(id, DemandReason::CursorColorCycle);
             }
 
+            // A blink toggle that already happened needs its frame now. It
+            // changes only the cursor layer, so it asks for a composite of the
+            // retained scene; a content repaint owed on the same pass has
+            // already submitted the stronger Redisplay demand above and wins
+            // the strongest-invalidation merge.
+            if window_state.has_presentable_cursor_change() {
+                let cursor_action = self.frame_coordinator.submit_demand(
+                    id,
+                    FrameDemand {
+                        invalidation: Invalidation::CompositeOnly {
+                            layers: LayerMask::CURSOR_EFFECTS,
+                        },
+                        cadence: Cadence::NextPresentation,
+                        reason: DemandReason::CursorAnimation,
+                    },
+                    now,
+                );
+                if cursor_action == PacingAction::RequestRedraw {
+                    action = PacingAction::RequestRedraw;
+                }
+            }
+
             match window_state.render.cursor.next_blink_deadline() {
                 Some(blink) => {
                     self.frame_coordinator.submit_demand(

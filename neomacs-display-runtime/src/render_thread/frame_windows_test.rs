@@ -1097,3 +1097,70 @@ fn many_pending_destroys_processed() {
     mgr.process_destroys();
     assert!(mgr.pending_destroys.is_empty());
 }
+
+#[test]
+fn cursor_blink_toggle_asks_for_a_cursor_frame_not_a_repaint() {
+    // A blink changes only the cursor layer, so it must not raise the content
+    // dirty flag: that would demand a full repaint every half second and keep
+    // the composite fast path from ever engaging in an idle session.
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    render.set_current_frame(Some(make_frame(0x42, 0)), None);
+    render
+        .cursor
+        .set_target(crate::render_thread::cursor::CursorTarget {
+            window_id: 7,
+            x: 10.0,
+            y: 20.0,
+            width: 8.0,
+            height: 16.0,
+            style: CursorStyle::Bar(2.0),
+            frame_id: 0x42,
+        });
+    render.cursor.blink_enabled = true;
+    render.cursor.blink_interval = std::time::Duration::from_millis(1);
+    render.begin_presentable_render();
+    assert!(!render.has_presentable_dirty_content());
+
+    let toggled = render.tick_cursor_blink(
+        std::time::Instant::now() + std::time::Duration::from_millis(500),
+        false,
+        None,
+    );
+
+    assert!(toggled, "the blink interval elapsed, so the cursor toggled");
+    assert!(
+        render.has_presentable_cursor_change(),
+        "a blink toggle owes a cursor frame"
+    );
+    assert!(
+        !render.has_presentable_dirty_content(),
+        "a blink toggle must not demand a content repaint"
+    );
+
+    // Starting any frame satisfies both channels: every render path draws the
+    // cursor at its current blink state.
+    render.begin_presentable_render();
+    assert!(!render.has_presentable_cursor_change());
+}
+
+#[test]
+fn content_change_outranks_a_pending_cursor_change() {
+    let Some(device) = make_test_device() else {
+        return;
+    };
+    let mut render = GuiFrameRenderState::new(0x42, &device, 1.0, false);
+    render.set_current_frame(Some(make_frame(0x42, 0)), None);
+    render.compositor.cursor_dirty = true;
+    render.mark_dirty();
+
+    assert!(render.has_presentable_dirty_content());
+    assert!(render.has_presentable_cursor_change());
+    // The demand model merges strongest-invalidation-wins, so the repaint the
+    // content owes covers the cursor layer too.
+    render.begin_presentable_render();
+    assert!(!render.has_presentable_dirty_content());
+    assert!(!render.has_presentable_cursor_change());
+}
