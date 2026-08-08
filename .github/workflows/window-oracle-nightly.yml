@@ -1,0 +1,125 @@
+name: window-oracle-nightly
+
+# Deep generative window-tree parity run against a LIVE GNU Emacs.
+#
+# `ci.yml` runs the oracle corpus in snapshot mode (expect vs neomacs, GNU never
+# invoked) and shards it 20 ways to stay fast. That is the right trade for a
+# per-commit gate, but it means the generative property
+# (`oracle_prop_window_tree_survives_random_operation_sequences`) only ever runs
+# at ORACLE_PROP_CASES depth, which catches gross regressions and little else.
+#
+# The value of that property is in DEEP runs: it found eight window bugs at
+# 400-1200 sequences, each shrunk to a minimal operation list. A deep run takes
+# ~200s wall, too slow per-commit but trivial nightly.
+#
+# `proptest-regressions/` is gitignored in this repo, so failing seeds do NOT
+# survive a clean checkout. Each nightly run therefore rediscovers cases from
+# scratch, and a failure must be captured from the log rather than replayed from
+# a committed seed -- hence the artifact upload below.
+
+on:
+  schedule:
+    # 03:43 UTC daily. Offset from ci.yml (05:17 Sun) and codeql (04:23 Mon) so
+    # the three never contend for runners.
+    - cron: "43 3 * * *"
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: "Number of random operation sequences"
+        required: false
+        default: "1200"
+
+concurrency:
+  group: window-oracle-nightly
+  cancel-in-progress: false
+
+env:
+  RUST_VERSION: "1.96.1"
+
+jobs:
+  deep-window-parity:
+    name: generative window-tree parity vs live GNU Emacs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      # `live` runs BOTH engines and compares them directly, with no recorded
+      # expectation involved. That is deliberate: recorded expects drift with
+      # the GNU build (frame geometry, configure flags), whereas a direct
+      # comparison only asserts that the two engines agree right now.
+      NEOVM_ORACLE_MODE: live
+      NEOVM_WINDOW_PROP_CASES: ${{ github.event.inputs.cases || '1200' }}
+      NEOVM_FORCE_ORACLE_PATH: /usr/bin/emacs
+      TMPDIR: ${{ github.workspace }}/tmp
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Prepare workspace temp directory
+        run: mkdir -p "$TMPDIR/nextest"
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential git pkg-config cmake m4 libssl-dev \
+            fontconfig libfontconfig1-dev libfreetype-dev libglib2.0-dev \
+            libunwind-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            wayland-protocols libxcb1-dev libxrandr-dev libxinerama-dev \
+            libxi-dev libxcursor-dev mesa-vulkan-drivers libvulkan-dev \
+            libdbus-1-dev libsystemd-dev libsqlite3-dev libxml2-dev \
+            gnutls-bin libgnutls28-dev zlib1g-dev
+
+      - name: Install GNU Emacs oracle
+        run: |
+          sudo apt-get install -y --no-install-recommends emacs-nox
+          # Record the oracle build: a divergence reported here is only
+          # meaningful against a known GNU version, and window geometry in
+          # particular varies between builds.
+          /usr/bin/emacs --version | head -n 1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: window-oracle-nightly-ubuntu-24.04
+          cache-on-failure: true
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      # The oracle spawns the real neomacs binary per case, so it needs the
+      # runtime tree (lisp/, etc.) in place, not just the test binary.
+      - name: Build neomacs runtime
+        run: cargo xtask fresh-build --release
+
+      - name: Deep generative window-tree parity run
+        # `shell: bash` is required, not cosmetic: the default Linux shell is
+        # `bash -e` WITHOUT pipefail, so `cargo nextest ... | tee` would report
+        # tee's exit status and the job would pass on a failing run.
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo nextest run --release -p neovm-oracle-tests \
+            -E 'test(oracle_prop_window_tree_survives_random_operation_sequences)' \
+            --no-capture 2>&1 | tee window-oracle-nightly.log
+
+      # A failure prints the minimal shrunk operation list AND the exact
+      # generated elisp under `program:`. Hand-translating the op list is
+      # error-prone -- lift the program verbatim from this artifact instead.
+      - name: Upload run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: window-oracle-nightly-log
+          path: window-oracle-nightly.log
+          retention-days: 30
