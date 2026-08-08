@@ -325,7 +325,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     }
 
     fn display_prop_at(&self, char_pos: CharPos0) -> Option<Value> {
-        let bytepos = self.byte_pos(char_pos);
         // GNU `get_char_property` (src/textprop.c): an overlay `display` property
         // overrides the text property (highest-priority overlay wins). Several
         // common features attach `display` to an OVERLAY covering a region rather

@@ -6,9 +6,17 @@
 //! append surface, overflow decisions — is renderer state and lives on
 //! [`BufferSourceWalk`](crate::buffer_source::walk::BufferSourceWalk).
 //!
-//! Producer position is saved and reinstated as an opaque [`ProducerSnapshot`],
-//! mirroring GNU's `SAVE_IT` / `RESTORE_IT`: the wrap retry does not merely
-//! rewind a published buffer position, it reseats the whole producer.
+//! Two rewind mechanisms exist, and they are not interchangeable:
+//!
+//! * [`BufferElementProducer::rewind_to`] reseats the producer at a published
+//!   source position. This is what the row-wrap retry uses
+//!   ([`BufferSourceWalk::rewind_source_consumption_to`](crate::buffer_source::walk::BufferSourceWalk::rewind_source_consumption_to)).
+//! * [`ProducerSnapshot`] saves the producer's whole seating opaquely,
+//!   mirroring GNU's `SAVE_IT` / `RESTORE_IT`. No production path calls it:
+//!   its consumers are the stream-equivalence harness and the producer unit
+//!   tests, which need to replay a producer from an exact seating to compare
+//!   two walks. It is deliberately retained as harness support, not as a
+//!   production mechanism.
 
 pub(crate) mod frame;
 pub(crate) mod vocabulary;
@@ -29,8 +37,9 @@ use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0};
 
 /// An opaque save of the producer's whole seating. Restoring one reinstates the
-/// producer exactly, which is what a wrap retry needs and what a bare position
-/// rewind cannot express.
+/// producer exactly, which a bare position rewind cannot express. Harness and
+/// unit-test support only — see the module docs for why the wrap retry uses
+/// [`BufferElementProducer::rewind_to`] instead.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ProducerSnapshot {
     cursor_char_pos: CharPos0,

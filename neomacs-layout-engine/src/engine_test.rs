@@ -23153,7 +23153,7 @@ fn truncated_first_row_glyphs(
     text: &str,
     setup: impl FnOnce(&mut Context, BufferId),
 ) -> Vec<neomacs_display_protocol::glyph_matrix::Glyph> {
-    let (mut eval, buf_id, _frame_id, rows, _cw, _ch) =
+    let (mut eval, _buf_id, _frame_id, rows, _cw, _ch) =
         layout_main_text_rows_with(text, |eval, buf_id| {
             eval.buffer_manager_mut().set_current(buf_id);
             eval.eval_str("(setq truncate-lines t)").expect("truncate");

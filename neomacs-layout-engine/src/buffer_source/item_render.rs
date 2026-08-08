@@ -78,7 +78,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
 
     pub(crate) fn render_and_apply<B: LayoutBufferView>(
         mut self,
-        mut source_item: DisplaySourceStepItem,
+        source_item: DisplaySourceStepItem,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
         state: BufferSourceLoopMutableState<'_, '_, '_>,
@@ -119,7 +119,7 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
 
     fn render_text_item_and_apply<B: LayoutBufferView>(
         self,
-        mut source_item: DisplaySourceStepItem,
+        source_item: DisplaySourceStepItem,
         source_walk: &mut BufferSourceWalk<'_, B>,
         buffer: &B,
         state: BufferSourceLoopMutableState<'_, '_, '_>,

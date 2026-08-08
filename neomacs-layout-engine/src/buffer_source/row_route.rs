@@ -2967,7 +2967,7 @@ impl<'rows, 'emit, 'surface>
                     position
                 }
                 RoutedRowPartKind::Text => {
-                    let mut source = BufferAsciiItemSource::text_only(
+                    let source = BufferAsciiItemSource::text_only(
                         loop_context.buffer_id(),
                         buffer,
                         segment.start,
