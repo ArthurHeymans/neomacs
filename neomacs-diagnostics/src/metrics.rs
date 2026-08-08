@@ -4,6 +4,7 @@
 //! (agents, Perfetto, dashboards) depend on them exactly.
 
 use serde::Serialize;
+use std::collections::BTreeMap;
 
 /// A point-in-time snapshot of neomacs performance metrics.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -30,6 +31,11 @@ pub struct FrameMetrics {
     pub frame_p99_us: u64,
     pub composite_only_frames: u64,
     pub retained_static_builds: u64,
+    /// Planned frames attributed per demand reason ("why did this frame
+    /// happen?"), keyed by the scheduler's reason names. A frame driven by
+    /// several reasons counts once under each.
+    #[serde(default)]
+    pub demand_reasons: BTreeMap<String, u64>,
 }
 
 /// Estimate a latency percentile from a bucketed histogram, returning the upper

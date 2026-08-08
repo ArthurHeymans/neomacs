@@ -36,6 +36,12 @@ pub(super) static RETAINED_STATIC_BUILDS: AtomicU64 = AtomicU64::new(0);
 /// Frames served by the retained-static composite fast path (blit + cursor,
 /// no glyph pipeline).
 pub(super) static COMPOSITE_ONLY_FRAMES: AtomicU64 = AtomicU64::new(0);
+/// Planned frames attributed per demand reason: one increment per reason a
+/// planned frame satisfies, so an idle session's frames can be traced to what
+/// asked for them. Indexed by [`super::frame_sched::DemandReason::index`]; a
+/// frame driven by several reasons increments each.
+static PLAN_DEMAND_REASONS: [AtomicU64; super::frame_sched::DemandReason::COUNT] =
+    [const { AtomicU64::new(0) }; super::frame_sched::DemandReason::COUNT];
 /// Microseconds from the most recently consumed scene commit to its present.
 pub(super) static LAST_COMMIT_TO_PRESENT_US: AtomicU64 = AtomicU64::new(0);
 /// Worst observed commit-to-present latency in microseconds.
@@ -90,16 +96,19 @@ pub(super) fn count(counter: &AtomicU64) {
     counter.fetch_add(1, Ordering::Relaxed);
 }
 
-/// Record a frame plan's render work class.
-pub(super) fn count_plan(work: &super::frame_sched::RenderWork) {
+/// Record a frame plan: its render work class and the demands it satisfies.
+pub(super) fn count_plan(plan: &super::frame_sched::FramePlan) {
     use super::frame_sched::RenderWork;
-    let counter = match work {
+    let counter = match plan.work {
         RenderWork::None => &PLAN_NONE,
         RenderWork::CompositeOnly { .. } => &PLAN_COMPOSITE_ONLY,
         RenderWork::RepaintLayers { .. } => &PLAN_REPAINT_LAYERS,
         RenderWork::RebuildScene => &PLAN_REBUILD_SCENE,
     };
     count(counter);
+    for reason in plan.reasons.iter() {
+        count(&PLAN_DEMAND_REASONS[reason.index()]);
+    }
 }
 
 /// Record that a scene commit arrived; starts the commit-to-present clock if
@@ -143,7 +152,21 @@ pub struct FrameSchedSnapshot {
     /// Commit-to-present latency histogram (counts per bucket; bounds in
     /// [`FRAME_TIME_BUCKET_UPPER_US`]).
     pub frame_time_buckets: [u64; 8],
+    /// Planned frames per demand reason, indexed as [`DEMAND_REASON_NAMES`].
+    pub demand_reasons: [u64; super::frame_sched::DemandReason::COUNT],
 }
+
+/// Names of the [`FrameSchedSnapshot::demand_reasons`] slots, in index order.
+pub const DEMAND_REASON_NAMES: [&str; super::frame_sched::DemandReason::COUNT] = {
+    let mut names = [""; super::frame_sched::DemandReason::COUNT];
+    let all = super::frame_sched::DemandReason::ALL;
+    let mut i = 0;
+    while i < all.len() {
+        names[all[i].index()] = all[i].name();
+        i += 1;
+    }
+    names
+};
 
 pub fn snapshot() -> FrameSchedSnapshot {
     FrameSchedSnapshot {
@@ -162,6 +185,7 @@ pub fn snapshot() -> FrameSchedSnapshot {
         last_commit_to_present_us: LAST_COMMIT_TO_PRESENT_US.load(Ordering::Relaxed),
         max_commit_to_present_us: MAX_COMMIT_TO_PRESENT_US.load(Ordering::Relaxed),
         frame_time_buckets: std::array::from_fn(|i| FRAME_TIME_BUCKETS[i].load(Ordering::Relaxed)),
+        demand_reasons: std::array::from_fn(|i| PLAN_DEMAND_REASONS[i].load(Ordering::Relaxed)),
     }
 }
 
@@ -188,6 +212,13 @@ pub(super) fn maybe_log_snapshot(now: Instant) {
         return;
     }
     let elapsed_s = tick.saturating_sub(last) as f64 / 1_000_000.0;
+    let demand_reasons = DEMAND_REASON_NAMES
+        .iter()
+        .zip(snap.demand_reasons.iter())
+        .filter(|(_, count)| **count > 0)
+        .map(|(name, count)| format!("{name}={count}"))
+        .collect::<Vec<_>>()
+        .join(" ");
     tracing::debug!(
         wakeups = snap.wakeups,
         wakeups_per_s = format!("{:.1}", (snap.wakeups - last_wakeups) as f64 / elapsed_s),
@@ -204,6 +235,7 @@ pub(super) fn maybe_log_snapshot(now: Instant) {
         composite_only_frames = snap.composite_only_frames,
         last_commit_to_present_us = snap.last_commit_to_present_us,
         max_commit_to_present_us = snap.max_commit_to_present_us,
+        demand_reasons = demand_reasons,
         "frame_sched_stats"
     );
 }

@@ -155,6 +155,125 @@ pub(crate) enum DemandReason {
     TransientEffect,
 }
 
+impl DemandReason {
+    /// Every reason, in declaration order. The order is the counter/report
+    /// order and matches the derived `Ord`.
+    pub(crate) const ALL: [DemandReason; Self::COUNT] = [
+        DemandReason::EditorCommit,
+        DemandReason::CursorAnimation,
+        DemandReason::CursorColorCycle,
+        DemandReason::FiniteEffect,
+        DemandReason::Transition,
+        DemandReason::Video,
+        DemandReason::WebKit,
+        DemandReason::ShaderSurface,
+        DemandReason::Terminal,
+        DemandReason::Expose,
+        DemandReason::DebugCapture,
+        DemandReason::Redisplay,
+        DemandReason::CursorEffect,
+        DemandReason::WindowEffect,
+        DemandReason::TextEffect,
+        DemandReason::ScrollEffect,
+        DemandReason::DecorativeEffect,
+        DemandReason::TransientEffect,
+    ];
+
+    /// Number of reasons: the width of [`DemandReason::ALL`] and of every
+    /// per-reason counter array.
+    pub(crate) const COUNT: usize = 18;
+
+    /// Index into [`DemandReason::ALL`] / the per-reason counter arrays. The
+    /// exhaustive match makes a new variant a compile error here; the dense
+    /// 0..COUNT range is pinned by `demand_reason_indices_are_dense`.
+    pub(crate) const fn index(self) -> usize {
+        match self {
+            DemandReason::EditorCommit => 0,
+            DemandReason::CursorAnimation => 1,
+            DemandReason::CursorColorCycle => 2,
+            DemandReason::FiniteEffect => 3,
+            DemandReason::Transition => 4,
+            DemandReason::Video => 5,
+            DemandReason::WebKit => 6,
+            DemandReason::ShaderSurface => 7,
+            DemandReason::Terminal => 8,
+            DemandReason::Expose => 9,
+            DemandReason::DebugCapture => 10,
+            DemandReason::Redisplay => 11,
+            DemandReason::CursorEffect => 12,
+            DemandReason::WindowEffect => 13,
+            DemandReason::TextEffect => 14,
+            DemandReason::ScrollEffect => 15,
+            DemandReason::DecorativeEffect => 16,
+            DemandReason::TransientEffect => 17,
+        }
+    }
+
+    /// Stable snake_case name for diagnostics output.
+    pub(crate) const fn name(self) -> &'static str {
+        match self {
+            DemandReason::EditorCommit => "editor_commit",
+            DemandReason::CursorAnimation => "cursor_animation",
+            DemandReason::CursorColorCycle => "cursor_color_cycle",
+            DemandReason::FiniteEffect => "finite_effect",
+            DemandReason::Transition => "transition",
+            DemandReason::Video => "video",
+            DemandReason::WebKit => "webkit",
+            DemandReason::ShaderSurface => "shader_surface",
+            DemandReason::Terminal => "terminal",
+            DemandReason::Expose => "expose",
+            DemandReason::DebugCapture => "debug_capture",
+            DemandReason::Redisplay => "redisplay",
+            DemandReason::CursorEffect => "cursor_effect",
+            DemandReason::WindowEffect => "window_effect",
+            DemandReason::TextEffect => "text_effect",
+            DemandReason::ScrollEffect => "scroll_effect",
+            DemandReason::DecorativeEffect => "decorative_effect",
+            DemandReason::TransientEffect => "transient_effect",
+        }
+    }
+}
+
+/// Set of [`DemandReason`]s, carried by value on a [`FramePlan`] so a frame can
+/// be attributed to what asked for it ("why did this present happen?").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) struct DemandReasonSet(u32);
+
+impl DemandReasonSet {
+    pub(crate) const fn empty() -> Self {
+        DemandReasonSet(0)
+    }
+
+    fn insert(&mut self, reason: DemandReason) {
+        self.0 |= 1 << reason.index();
+    }
+
+    pub(crate) fn contains(self, reason: DemandReason) -> bool {
+        self.0 & (1 << reason.index()) != 0
+    }
+
+    pub(crate) fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Reasons in [`DemandReason::ALL`] order.
+    pub(crate) fn iter(self) -> impl Iterator<Item = DemandReason> {
+        DemandReason::ALL
+            .into_iter()
+            .filter(move |r| self.contains(*r))
+    }
+}
+
+impl FromIterator<DemandReason> for DemandReasonSet {
+    fn from_iter<I: IntoIterator<Item = DemandReason>>(iter: I) -> Self {
+        let mut set = DemandReasonSet::empty();
+        for reason in iter {
+            set.insert(reason);
+        }
+        set
+    }
+}
+
 /// A declaration that pixels need to change, with reason, scope, and cadence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct FrameDemand {
@@ -227,6 +346,9 @@ pub(crate) struct FramePlan {
     pub tick: FrameTick,
     pub work: RenderWork,
     pub should_present: bool,
+    /// Which demands this frame satisfies. Attribution only — the work class
+    /// already encodes what must be drawn.
+    pub reasons: DemandReasonSet,
 }
 
 /// What the caller should do next for this window. The event loop executes
@@ -300,7 +422,7 @@ struct DueDemand {
     /// Whether the due work by itself justifies requesting a frame.
     /// OnDemand contributions record work without driving.
     driving: bool,
-    reasons: Vec<DemandReason>,
+    reasons: DemandReasonSet,
 }
 
 impl DueDemand {
@@ -312,9 +434,7 @@ impl DueDemand {
         }
         self.invalidation = self.invalidation.combine(invalidation);
         self.driving |= driving;
-        if !self.reasons.contains(&reason) {
-            self.reasons.push(reason);
-        }
+        self.reasons.insert(reason);
     }
 
     fn is_empty(&self) -> bool {
@@ -543,6 +663,7 @@ impl FrameCoordinator {
                 tick,
                 work: RenderWork::None,
                 should_present: false,
+                reasons: DemandReasonSet::empty(),
             };
         }
 
@@ -552,6 +673,7 @@ impl FrameCoordinator {
             tick,
             work,
             should_present: work != RenderWork::None,
+            reasons: due.reasons,
         }
     }
 
@@ -714,14 +836,11 @@ impl FrameCoordinator {
         let Some(ws) = self.windows.get(&id) else {
             return Vec::new();
         };
-        let mut reasons = ws.due.reasons.clone();
+        let mut reasons = ws.due.reasons;
         for s in &ws.scheduled {
-            if !reasons.contains(&s.reason) {
-                reasons.push(s.reason);
-            }
+            reasons.insert(s.reason);
         }
-        reasons.sort();
-        reasons
+        reasons.iter().collect()
     }
 
     /// Whether a redraw request is outstanding for this window.

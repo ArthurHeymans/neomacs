@@ -594,3 +594,60 @@ fn removed_window_contributes_nothing() {
     assert_eq!(c.next_wake_deadline(), None);
     assert_eq!(c.active_reasons(win(1)), Vec::new());
 }
+
+#[test]
+fn demand_reason_indices_are_dense() {
+    let mut seen = [false; DemandReason::COUNT];
+    for reason in DemandReason::ALL {
+        assert!(!seen[reason.index()], "duplicate index for {reason:?}");
+        seen[reason.index()] = true;
+    }
+    assert!(
+        seen.iter().all(|s| *s),
+        "DemandReason::ALL must list every reason exactly once"
+    );
+}
+
+#[test]
+fn plan_attributes_the_frame_to_its_driving_reasons() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    c.submit_demand(win(1), composite_cursor(), now);
+    c.submit_demand(win(1), editor_commit(), now);
+    let plan = c.begin_frame(win(1), tick_at(now + ms(1)));
+    assert!(plan.reasons.contains(DemandReason::CursorAnimation));
+    assert!(plan.reasons.contains(DemandReason::EditorCommit));
+    assert!(!plan.reasons.contains(DemandReason::WebKit));
+    assert_eq!(
+        plan.reasons.iter().collect::<Vec<_>>(),
+        vec![DemandReason::EditorCommit, DemandReason::CursorAnimation]
+    );
+    // Consumed demand is not re-attributed to the next frame.
+    let next = c.begin_frame(win(1), tick_at(now + ms(2)));
+    assert!(next.reasons.is_empty());
+}
+
+#[test]
+fn an_ambient_max_rate_demand_attributes_every_frame_it_drives() {
+    // The shape of the idle cursor-color-cycle load: one standing MaxRate
+    // demand paces a frame per period, and each of those frames names it.
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    let cycle = FrameDemand {
+        invalidation: Invalidation::CompositeOnly {
+            layers: LayerMask::CURSOR_EFFECTS,
+        },
+        cadence: Cadence::MaxRate(std::num::NonZeroU16::new(60).unwrap()),
+        reason: DemandReason::CursorColorCycle,
+    };
+    let mut attributed = 0;
+    for i in 0..10 {
+        let at = now + ms(17 * i);
+        c.submit_demand(win(1), cycle, at);
+        let plan = c.begin_frame(win(1), tick_at(at));
+        if plan.reasons.contains(DemandReason::CursorColorCycle) {
+            attributed += 1;
+        }
+    }
+    assert_eq!(attributed, 10);
+}

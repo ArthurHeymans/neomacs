@@ -471,7 +471,7 @@ impl RenderApp {
                         source: ClockSource::Synthetic,
                     };
                     let plan = self.frame_coordinator.begin_frame(sched_id, tick);
-                    super::frame_stats::count_plan(&plan.work);
+                    super::frame_stats::count_plan(&plan);
                     // Occluded/hidden windows present nothing. begin_frame
                     // already returns no work while ineligible; skipping the
                     // render here makes that concrete and avoids servicing an

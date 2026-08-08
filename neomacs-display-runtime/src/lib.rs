@@ -50,7 +50,9 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// NeoVM core backend selected at compile time.
 pub const CORE_BACKEND: &str = "rust";
 
-pub use render_thread::frame_stats::{FRAME_TIME_BUCKET_UPPER_US, FrameSchedSnapshot};
+pub use render_thread::frame_stats::{
+    DEMAND_REASON_NAMES, FRAME_TIME_BUCKET_UPPER_US, FrameSchedSnapshot,
+};
 
 #[cfg(test)]
 mod frame_metrics_pub_test;
