@@ -1023,12 +1023,9 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
     let (lock, cvar) = &*image_metadata;
     lock.lock().expect("image dimensions lock").insert(
         image.placement().image_id(),
-        ImageDecodeTerminal::Ready(ResolvedImageMetadata {
-            width: 25,
-            height: 50,
-            background: 0x12_34_56,
-            background_transparent: false,
-        }),
+        ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
+            25, 50, 0x12_34_56, false,
+        )),
     );
     cvar.notify_all();
 
@@ -1039,12 +1036,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
     assert_eq!(image.metadata.height, 50);
     assert_eq!(
         image.metadata,
-        ResolvedImageMetadata {
-            width: 25,
-            height: 50,
-            background: 0x12_34_56,
-            background_transparent: false,
-        }
+        ResolvedImageMetadata::layout_is_image_pixels(25, 50, 0x12_34_56, false)
     );
 }
 

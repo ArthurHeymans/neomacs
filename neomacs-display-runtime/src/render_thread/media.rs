@@ -403,6 +403,8 @@ impl RenderApp {
                             neovm_core::emacs_core::image_catalog::ResolvedImageMetadata {
                                 width: metadata.width,
                                 height: metadata.height,
+                                pixel_width: metadata.pixel_width,
+                                pixel_height: metadata.pixel_height,
                                 background: metadata.background,
                                 background_transparent: metadata.background_transparent,
                             };

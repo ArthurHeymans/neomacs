@@ -1833,21 +1833,15 @@ fn image_replacement_uses_only_ready_decoded_opaque_background_metadata() {
     };
     let opaque = render(
         image_text(false),
-        Some(ResolvedImageMetadata {
-            width: 16,
-            height: 16,
-            background: 0x12_34_56,
-            background_transparent: false,
-        }),
+        Some(ResolvedImageMetadata::layout_is_image_pixels(
+            16, 16, 0x12_34_56, false,
+        )),
     );
     let transparent = render(
         image_text(true),
-        Some(ResolvedImageMetadata {
-            width: 16,
-            height: 16,
-            background: 0,
-            background_transparent: true,
-        }),
+        Some(ResolvedImageMetadata::layout_is_image_pixels(
+            16, 16, 0, true,
+        )),
     );
     let not_ready = render(image_text(true), None);
     let background = |rendered: &RenderedDisplayRow| match rendered.row().glyphs

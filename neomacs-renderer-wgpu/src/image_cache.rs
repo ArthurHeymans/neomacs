@@ -94,15 +94,37 @@ struct DecodedImage {
     metadata: ImageMetadata,
 }
 
-/// Decoded pixels keep layout and texture extents separate.  They are equal
-/// for ordinary raster formats; scalable formats may rasterize at the device
-/// scale while retaining GNU-compatible logical layout geometry.
+/// Decoded pixels keep layout, GNU image-pixel, and texture extents separate.
+/// Layout feeds redisplay; pixel_* is Fimage_size PIXELS space; raster is GPU.
 struct DecodedPixels {
     layout_width: u32,
     layout_height: u32,
+    /// GNU `img->width` / `img->height` after `compute_image_size`.
+    pixel_width: u32,
+    pixel_height: u32,
     raster_width: u32,
     raster_height: u32,
     rgba: Vec<u8>,
+}
+
+/// Dual extents from one native size: layout uses `layout_scale`, image-pixels
+/// use [`ImageRealization::image_pixel_scale`] so `:scale default` on HiDPI
+/// recovers the true GNU size without inverting a non-invertible ceil path.
+fn dual_extents(
+    size: ImageSizeSpec,
+    native_width: u32,
+    native_height: u32,
+    realization: ImageRealization,
+) -> (u32, u32, u32, u32) {
+    let layout_scale = f64::from(realization.layout_scale());
+    let (layout_width, layout_height) = size.desired(native_width, native_height, layout_scale);
+    let image_pixel_scale = realization.image_pixel_scale();
+    let (pixel_width, pixel_height) = if (image_pixel_scale - layout_scale).abs() < 1e-9 {
+        (layout_width, layout_height)
+    } else {
+        size.desired(native_width, native_height, image_pixel_scale)
+    };
+    (layout_width, layout_height, pixel_width, pixel_height)
 }
 
 impl DecodedPixels {
@@ -110,6 +132,8 @@ impl DecodedPixels {
         Self {
             layout_width: width,
             layout_height: height,
+            pixel_width: width,
+            pixel_height: height,
             raster_width: width,
             raster_height: height,
             rgba,
@@ -133,11 +157,8 @@ impl DecodedPixels {
         rotation: ImageRotation,
         realization: ImageRealization,
     ) -> Option<Self> {
-        let (layout_width, layout_height) = size.desired(
-            self.layout_width,
-            self.layout_height,
-            f64::from(realization.layout_scale()),
-        );
+        let (layout_width, layout_height, pixel_width, pixel_height) =
+            dual_extents(size, self.layout_width, self.layout_height, realization);
         let (raster_width, raster_height) = constrain_dimensions(
             realization.raster_dimension(layout_width),
             realization.raster_dimension(layout_height),
@@ -173,10 +194,13 @@ impl DecodedPixels {
             }
         };
         let (layout_width, layout_height) = rotation.orient(layout_width, layout_height);
+        let (pixel_width, pixel_height) = rotation.orient(pixel_width, pixel_height);
 
         Some(Self {
             layout_width,
             layout_height,
+            pixel_width,
+            pixel_height,
             raster_width,
             raster_height,
             rgba,
@@ -263,6 +287,10 @@ pub struct ImageMetadata {
     /// the texture dimensions for a scalable image on a HiDPI display.
     pub width: u32,
     pub height: u32,
+    /// GNU `Fimage_size` pixel extents (`img->width` / `img->height` space).
+    /// For `:scale default` on HiDPI this is `ceil(layout × report_scale)`.
+    pub pixel_width: u32,
+    pub pixel_height: u32,
     /// GNU's four-corner background guess, encoded as 0x00RRGGBB.
     pub background: u32,
     /// Whether GNU's four-corner mask heuristic classifies the background as transparent.
@@ -494,9 +522,11 @@ impl ImageCache {
                     }));
 
                     let outcome = match result {
-                        Ok(Some(pixels)) => {
-                            WorkerDecodeOutcome::Ready(Self::decoded_image(load, pixels))
-                        }
+                        Ok(Some(pixels)) => WorkerDecodeOutcome::Ready(Self::decoded_image(
+                            load,
+                            pixels,
+                            realization,
+                        )),
                         Ok(None) => WorkerDecodeOutcome::Failed(load),
                         Err(_) => {
                             tracing::warn!(
@@ -635,26 +665,45 @@ impl ImageCache {
         layout_scale: f32,
         device_scale: f32,
     ) -> Option<DecodedImage> {
-        let pixels = Self::decode_data(
+        // Convenience path: layout already equals image-pixel space.
+        Self::decode_data_with_metadata_at_full_realization(
             data,
             size,
             rotation,
             fg_bg,
-            ImageRealization::new(layout_scale, device_scale),
-        )?;
+            ImageRealization::with_device_scale(layout_scale, device_scale),
+        )
+    }
+
+    #[cfg(test)]
+    fn decode_data_with_metadata_at_full_realization(
+        data: &[u8],
+        size: ImageSizeSpec,
+        rotation: ImageRotation,
+        fg_bg: (u32, u32),
+        realization: ImageRealization,
+    ) -> Option<DecodedImage> {
+        let pixels = Self::decode_data(data, size, rotation, fg_bg, realization)?;
         Some(Self::decoded_image(
             ImageLoadToken {
                 id: 0,
                 generation: 0,
             },
             pixels,
+            realization,
         ))
     }
 
-    fn decoded_image(load: ImageLoadToken, pixels: DecodedPixels) -> DecodedImage {
+    fn decoded_image(
+        load: ImageLoadToken,
+        pixels: DecodedPixels,
+        _realization: ImageRealization,
+    ) -> DecodedImage {
         let metadata = Self::metadata_from_rgba(
             pixels.layout_width,
             pixels.layout_height,
+            pixels.pixel_width,
+            pixels.pixel_height,
             pixels.raster_width,
             pixels.raster_height,
             &pixels.rgba,
@@ -671,6 +720,8 @@ impl ImageCache {
     fn metadata_from_rgba(
         layout_width: u32,
         layout_height: u32,
+        pixel_width: u32,
+        pixel_height: u32,
         raster_width: u32,
         raster_height: u32,
         rgba: &[u8],
@@ -712,6 +763,8 @@ impl ImageCache {
         ImageMetadata {
             width: layout_width,
             height: layout_height,
+            pixel_width,
+            pixel_height,
             background: (u32::from(background[0]) << 16)
                 | (u32::from(background[1]) << 8)
                 | u32::from(background[2]),
@@ -730,6 +783,8 @@ impl ImageCache {
         Some(DecodedPixels {
             layout_width: decoded.layout_width,
             layout_height: decoded.layout_height,
+            pixel_width: decoded.pixel_width,
+            pixel_height: decoded.pixel_height,
             raster_width: decoded.raster_width,
             raster_height: decoded.raster_height,
             rgba: decoded.rgba,
@@ -944,7 +999,7 @@ impl ImageCache {
             path,
             size,
             rotation,
-            ImageRealization::new(1.0, raster_scale),
+            ImageRealization::with_device_scale(1.0, raster_scale),
             fg_color,
             bg_color,
         );
@@ -1065,7 +1120,7 @@ impl ImageCache {
             source: ImageSource::Data(data.to_vec()),
             size,
             rotation,
-            realization: ImageRealization::new(1.0, raster_scale),
+            realization: ImageRealization::with_device_scale(1.0, raster_scale),
             fg_color,
             bg_color,
         });

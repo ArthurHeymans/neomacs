@@ -29,6 +29,7 @@ fn ready_and_failed_terminals_consume_their_active_generations() {
     let ready = WorkerDecodeOutcome::Ready(ImageCache::decoded_image(
         ready,
         DecodedPixels::raster(1, 1, vec![0, 0, 0, 255]),
+        ImageRealization::default(),
     ));
     assert!(matches!(
         loads.take_current(ready),
@@ -65,7 +66,7 @@ fn decoder_worker_survives_a_panicking_request() {
             source: ImageSource::Panic,
             size: Default::default(),
             rotation: Default::default(),
-            realization: ImageRealization::new(1.0, 1.0),
+            realization: ImageRealization::with_device_scale(1.0, 1.0),
             fg_color: 0,
             bg_color: 0,
         })
@@ -76,7 +77,7 @@ fn decoder_worker_survives_a_panicking_request() {
             source: ImageSource::Data(png_bytes(vec![0x12, 0x34, 0x56, 0xff], 1, 1)),
             size: Default::default(),
             rotation: Default::default(),
-            realization: ImageRealization::new(1.0, 1.0),
+            realization: ImageRealization::with_device_scale(1.0, 1.0),
             fg_color: 0,
             bg_color: 0,
         })
@@ -734,7 +735,7 @@ fn hidpi_svg_keeps_logical_layout_extent_and_uses_device_pixel_raster_extent() {
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
         ImageRotation::None,
-        neomacs_display_protocol::ImageRealization::new(1.0, 1.75),
+        neomacs_display_protocol::ImageRealization::with_device_scale(1.0, 1.75),
     )
     .expect("SVG decode");
 
@@ -756,7 +757,7 @@ fn resolved_auto_scale_controls_both_svg_layout_and_raster_extents() {
         data,
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
         ImageRotation::None,
-        neomacs_display_protocol::ImageRealization::new(1.3 / 1.75, 1.75),
+        neomacs_display_protocol::ImageRealization::with_device_scale(1.3 / 1.75, 1.75),
     )
     .expect("SVG decode");
 
@@ -802,7 +803,71 @@ fn hidpi_svg_decode_metadata_stays_logical_while_texture_pixels_are_physical() {
     .expect("SVG decode");
 
     assert_eq!((decoded.metadata.width, decoded.metadata.height), (48, 24));
+    // report_scale=1 when layout already lives in image-pixel space.
+    assert_eq!(
+        (decoded.metadata.pixel_width, decoded.metadata.pixel_height),
+        (48, 24)
+    );
     assert_eq!((decoded.raster_width, decoded.raster_height), (84, 42));
+}
+
+/// Real `etc/images/splash.svg` is 333×233 — the asset behind HiDPI #243.
+#[test]
+fn splash_svg_native_extent_is_333_by_233() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../etc/images/splash.svg");
+    let data = std::fs::read(&path).unwrap_or_else(|err| {
+        panic!("read splash.svg at {}: {err}", path.display());
+    });
+    let decoded = ImageCache::decode_data_with_metadata(
+        &data,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+        (0, 0),
+    )
+    .expect("splash.svg decode");
+    assert_eq!(
+        (decoded.metadata.width, decoded.metadata.height),
+        (333, 233),
+        "native layout extent"
+    );
+    assert_eq!(
+        (decoded.metadata.pixel_width, decoded.metadata.pixel_height),
+        (333, 233),
+        "image-pixel extent matches layout when report_scale=1"
+    );
+}
+
+/// `:scale default` on 1.25× HiDPI: layout shrinks for redisplay; pixel_*
+/// recovers GNU Fimage_size (333×233) via report_scale.
+#[test]
+fn splash_svg_scale_default_hidpi_preserves_gnu_image_pixel_extent() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../etc/images/splash.svg");
+    let data = std::fs::read(&path).expect("splash.svg");
+    // layout_scale = 1/1.25, report_scale = 1.25 (ImageScalePolicy::Default).
+    let realization = ImageRealization::new(1.0 / 1.25, 1.25, 1.25);
+    let decoded = ImageCache::decode_data_with_metadata_at_full_realization(
+        &data,
+        ImageSizeSpec::default(),
+        ImageRotation::None,
+        (0, 0),
+        realization,
+    )
+    .expect("splash.svg HiDPI decode");
+    // scale_image_size ceils: ceil(333*0.8)=267, ceil(233*0.8)=187.
+    assert_eq!(
+        (decoded.metadata.width, decoded.metadata.height),
+        (267, 187),
+        "logical layout for :scale default @ 1.25"
+    );
+    // Pixel extent re-runs compute_image_size at layout×report (=1.0), not
+    // ceil(layout×report), so we recover the true native 333×233.
+    assert_eq!(
+        (decoded.metadata.pixel_width, decoded.metadata.pixel_height),
+        (333, 233),
+        "Fimage_size PIXELS recovers native via layout×report scale"
+    );
+    // Texture is physical: ceil(267*1.25)=334, ceil(187*1.25)=234.
+    assert_eq!((decoded.raster_width, decoded.raster_height), (334, 234));
 }
 
 #[test]

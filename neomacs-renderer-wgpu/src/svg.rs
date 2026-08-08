@@ -19,6 +19,9 @@ pub(crate) struct DecodedSvg {
     /// Size consumed by redisplay in logical Emacs pixels.
     pub(crate) layout_width: u32,
     pub(crate) layout_height: u32,
+    /// GNU Fimage_size PIXELS extent after `compute_image_size`.
+    pub(crate) pixel_width: u32,
+    pub(crate) pixel_height: u32,
     /// Size of the uploaded texture in physical device pixels.
     pub(crate) raster_width: u32,
     pub(crate) raster_height: u32,
@@ -82,12 +85,18 @@ fn decode_inner(
     let loaded = load(data)?;
     // A vector document rasterizes straight to the requested size, so GNU's
     // `compute_image_size` is applied against its natural extent here rather
-    // than by resampling afterwards.
-    let (layout_width, layout_height) = size.desired(
-        loaded.natural_width.ceil() as u32,
-        loaded.natural_height.ceil() as u32,
-        f64::from(realization.layout_scale()),
-    );
+    // than by resampling afterwards. Pixel extents use layout×report scale so
+    // `:scale default` on HiDPI recovers img->width without inverting ceil.
+    let native_width = loaded.natural_width.ceil() as u32;
+    let native_height = loaded.natural_height.ceil() as u32;
+    let layout_scale = f64::from(realization.layout_scale());
+    let (layout_width, layout_height) = size.desired(native_width, native_height, layout_scale);
+    let image_pixel_scale = realization.image_pixel_scale();
+    let (pixel_width, pixel_height) = if (image_pixel_scale - layout_scale).abs() < 1e-9 {
+        (layout_width, layout_height)
+    } else {
+        size.desired(native_width, native_height, image_pixel_scale)
+    };
     // Match GNU `scale_image_size`: ceil so fractional device scales never
     // discard a partial SVG pixel. Constrain once more to the GPU limit.
     let (raster_width, raster_height) = constrain_dimensions(
@@ -131,10 +140,13 @@ fn decode_inner(
         }
     };
     let (layout_width, layout_height) = rotation.orient(layout_width, layout_height);
+    let (pixel_width, pixel_height) = rotation.orient(pixel_width, pixel_height);
 
     Some(DecodedSvg {
         layout_width,
         layout_height,
+        pixel_width,
+        pixel_height,
         raster_width,
         raster_height,
         rgba,

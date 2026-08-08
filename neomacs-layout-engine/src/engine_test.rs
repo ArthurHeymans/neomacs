@@ -10907,12 +10907,13 @@ impl ImageCatalog for FixedSizeImageCatalog {
     fn lookup(&self, _request: ImageResolveRequest) -> ImageLookup {
         ImageLookup::Ready(ReadyImage {
             image_id: 9,
-            metadata: neovm_core::emacs_core::image_catalog::ResolvedImageMetadata {
-                width: self.width,
-                height: self.height,
-                background: 0,
-                background_transparent: false,
-            },
+            metadata:
+                neovm_core::emacs_core::image_catalog::ResolvedImageMetadata::layout_is_image_pixels(
+                    self.width,
+                    self.height,
+                    0,
+                    false,
+                ),
         })
     }
 }

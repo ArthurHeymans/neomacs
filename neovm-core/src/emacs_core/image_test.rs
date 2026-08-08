@@ -30,19 +30,16 @@ impl DisplayHost for RecordingImageDisplayHost {
         &self,
         request: ImageResolveRequest,
     ) -> Result<Option<ReadyImage>, String> {
+        let (width, height) = self.fixed_size.unwrap_or((40, 30));
+        let metadata =
+            ResolvedImageMetadata::from_layout(width, height, request.realization, 0, true);
         self.requests
             .lock()
             .expect("image requests lock")
             .push(request);
-        let (width, height) = self.fixed_size.unwrap_or((40, 30));
         Ok(Some(ReadyImage {
             image_id: 9,
-            metadata: ResolvedImageMetadata {
-                width,
-                height,
-                background: 0,
-                background_transparent: true,
-            },
+            metadata,
         }))
     }
 
@@ -1116,6 +1113,17 @@ fn image_metadata_returns_size_plist_on_gui_frame() {
         items
             .windows(2)
             .any(|w| { w[0] == Value::keyword("height") && w[1] == Value::fixnum(30) })
+    );
+    // Without :scale default, layout equals image-pixel space.
+    assert!(
+        items
+            .windows(2)
+            .any(|w| { w[0] == Value::keyword("pixel-width") && w[1] == Value::fixnum(40) })
+    );
+    assert!(
+        items
+            .windows(2)
+            .any(|w| { w[0] == Value::keyword("pixel-height") && w[1] == Value::fixnum(30) })
     );
     assert!(
         items

@@ -2,19 +2,25 @@
 
 /// One resolved image realization for one frame presentation.
 ///
-/// `layout_scale` maps GNU image pixels to Emacs logical pixels.
-/// `device_scale` maps those logical pixels to physical texture pixels.  The
-/// values travel together so pending layout, decoded metadata, and GPU upload
-/// cannot consult different scale-factor snapshots.
+/// - `layout_scale` maps native/GNU image pixels into **logical** layout pixels
+///   (same space as `frame-char-width`).
+/// - `device_scale` maps those logical pixels to physical texture pixels.
+/// - `report_scale` maps layout pixels back to **GNU `Fimage_size` / image-pixel**
+///   space (`PIXELS` non-nil). For `:scale default` this is the frame device
+///   scale (layout was divided by it); otherwise it is 1.
+///
+/// The three factors travel together so pending layout, decoded metadata, and
+/// GPU upload cannot consult different scale-factor snapshots.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ImageRealization {
     layout_scale_bits: u32,
     device_scale_bits: u32,
+    report_scale_bits: u32,
 }
 
 impl ImageRealization {
     #[must_use]
-    pub fn new(layout_scale: f32, device_scale: f32) -> Self {
+    pub fn new(layout_scale: f32, device_scale: f32, report_scale: f32) -> Self {
         let layout_scale = if layout_scale.is_finite() && layout_scale >= 0.0 {
             layout_scale
         } else {
@@ -22,6 +28,11 @@ impl ImageRealization {
         };
         let device_scale = if device_scale.is_finite() && device_scale > 0.0 {
             device_scale
+        } else {
+            1.0
+        };
+        let report_scale = if report_scale.is_finite() && report_scale > 0.0 {
+            report_scale
         } else {
             1.0
         };
@@ -34,7 +45,15 @@ impl ImageRealization {
                 layout_scale.to_bits()
             },
             device_scale_bits: device_scale.to_bits(),
+            report_scale_bits: report_scale.to_bits(),
         }
+    }
+
+    /// Convenience when layout already lives in GNU image-pixel space
+    /// (`report_scale = 1`).
+    #[must_use]
+    pub fn with_device_scale(layout_scale: f32, device_scale: f32) -> Self {
+        Self::new(layout_scale, device_scale, 1.0)
     }
 
     #[must_use]
@@ -45,6 +64,11 @@ impl ImageRealization {
     #[must_use]
     pub fn device_scale(self) -> f32 {
         f32::from_bits(self.device_scale_bits)
+    }
+
+    #[must_use]
+    pub fn report_scale(self) -> f32 {
+        f32::from_bits(self.report_scale_bits)
     }
 
     /// Convert a GNU image dimension to integer logical layout pixels.
@@ -62,11 +86,40 @@ impl ImageRealization {
             .ceil()
             .max(1.0)) as u32
     }
+
+    /// Convert a logical layout extent to GNU `Fimage_size` pixel extent.
+    ///
+    /// Prefer re-running `ImageSizeSpec::desired` at [`Self::image_pixel_scale`]
+    /// when the native size is still known — `ceil` is not invertible.
+    #[must_use]
+    pub fn image_pixel_dimension(self, layout_dimension: u32) -> u32 {
+        ((f64::from(layout_dimension) * f64::from(self.report_scale()))
+            .ceil()
+            .max(1.0)) as u32
+    }
+
+    /// Scale factor for GNU `compute_image_size` / Fimage_size pixel space.
+    ///
+    /// Equal to `layout_scale × report_scale`, with a near-1.0 snap so that
+    /// `1/1.25 × 1.25` does not become `1.0000001` and ceil native extents
+    /// by an extra pixel.
+    #[must_use]
+    pub fn image_pixel_scale(self) -> f64 {
+        if (self.report_scale() - 1.0).abs() <= f32::EPSILON {
+            return f64::from(self.layout_scale());
+        }
+        let product = f64::from(self.layout_scale()) * f64::from(self.report_scale());
+        if (product - 1.0).abs() < 1e-4 {
+            1.0
+        } else {
+            product
+        }
+    }
 }
 
 impl Default for ImageRealization {
     fn default() -> Self {
-        Self::new(1.0, 1.0)
+        Self::new(1.0, 1.0, 1.0)
     }
 }
 
@@ -128,11 +181,8 @@ impl AxisSize {
 
 /// A quarter-turn rotation, the only kind native transforms perform.
 ///
-/// GNU reduces `:rotation` modulo 360 and then rotates only on an exact
-/// multiple of 90 (src/image.c:2927, 3144-3203); every other angle, and any
-/// non-number, leaves the image upright. Modelling the reduced angle instead of
-/// carrying raw degrees means the decoder cannot be handed an angle it has no
-/// branch for.
+/// GNU accepts any number for `:rotation` but only multiplies of 90 actually
+/// turn the image; everything else is a no-op (src/image.c:2928-2958).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ImageRotation {
     #[default]
@@ -143,41 +193,41 @@ pub enum ImageRotation {
 }
 
 impl ImageRotation {
-    /// GNU's `compute_image_rotation` followed by its 90-degree dispatch.
+    /// GNU's `image_compute_rotation` followed by its 90-degree dispatch.
     #[must_use]
     pub fn from_degrees(degrees: f64) -> Self {
         if !degrees.is_finite() {
             return Self::None;
         }
-        // Emacs `mod` takes the sign of the divisor, so -90 reduces to 270.
-        let reduced = degrees.rem_euclid(360.0);
-        match reduced {
-            90.0 => Self::Quarter,
-            180.0 => Self::Half,
-            270.0 => Self::ThreeQuarter,
+        // Emacs `mod` keeps the divisor's sign, so -90 → 270, not 90.
+        let mut reduced = degrees % 360.0;
+        if reduced < 0.0 {
+            reduced += 360.0;
+        }
+        // Snap near-integers; non-multiples of 90 stay upright.
+        let nearest = reduced.round();
+        if (reduced - nearest).abs() > 1e-6 {
+            return Self::None;
+        }
+        match nearest as i32 {
+            0 | 360 => Self::None,
+            90 => Self::Quarter,
+            180 => Self::Half,
+            270 => Self::ThreeQuarter,
             _ => Self::None,
         }
     }
 
-    /// Whether the rotation exchanges width and height (src/image.c:3171).
-    #[must_use]
-    pub fn swaps_axes(self) -> bool {
-        matches!(self, Self::Quarter | Self::ThreeQuarter)
-    }
-
-    /// Apply GNU's axis exchange to an already-sized extent.
+    /// Swap width/height for 90° and 270° turns (GNU after sizing).
     #[must_use]
     pub fn orient(self, width: u32, height: u32) -> (u32, u32) {
-        if self.swaps_axes() {
-            (height, width)
-        } else {
-            (width, height)
+        match self {
+            Self::None | Self::Half => (width, height),
+            Self::Quarter | Self::ThreeQuarter => (height, width),
         }
     }
 }
 
-/// How large an image should be drawn, as asked for by its spec.
-///
 /// This is GNU's `compute_image_size` input set (src/image.c:2750). The size
 /// cannot be resolved until the native size is known, i.e. after decoding, so
 /// this travels to the decoder rather than being applied up front.
@@ -397,9 +447,26 @@ mod tests {
 
     #[test]
     fn fractional_realization_has_one_layout_and_raster_rounding_policy() {
-        let realization = ImageRealization::new(1.3 / 1.75, 1.75);
+        let realization = ImageRealization::new(1.3 / 1.75, 1.75, 1.75);
 
         assert_eq!(realization.layout_dimension(24), 18);
         assert_eq!(realization.raster_dimension(18), 32);
+        // report recovers GNU image pixels from logical layout.
+        assert_eq!(realization.image_pixel_dimension(18), 32);
+    }
+
+    #[test]
+    fn report_scale_one_leaves_layout_as_image_pixels() {
+        let realization = ImageRealization::with_device_scale(1.0, 1.25);
+        assert_eq!(realization.image_pixel_dimension(333), 333);
+        assert_eq!(realization.raster_dimension(333), 417); // ceil(333*1.25)
+    }
+
+    #[test]
+    fn image_pixel_scale_snaps_default_hidpi_product_to_one() {
+        // 1/1.25 × 1.25 is not bit-exact in f32; snap so native 333 stays 333.
+        let realization = ImageRealization::new(1.0 / 1.25, 1.25, 1.25);
+        assert_eq!(realization.image_pixel_scale(), 1.0);
+        assert!((realization.layout_scale() - 0.8).abs() < 1e-6);
     }
 }

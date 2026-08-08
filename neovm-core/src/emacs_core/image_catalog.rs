@@ -97,9 +97,12 @@ impl ImageScaleEnvironment {
     #[must_use]
     pub fn resolve(self, policy: ImageScalePolicy) -> ResolvedImageRealization {
         let device_scale = self.device_scale.get();
-        let layout_scale = match policy {
-            ImageScalePolicy::Unspecified => 1.0,
-            ImageScalePolicy::Explicit(scale) => scale.get(),
+        // `report_scale` maps logical layout pixels → GNU Fimage_size pixels.
+        // Only `:scale default` divides layout by device_scale; report multiplies
+        // it back. Other policies leave layout already in image-pixel space.
+        let (layout_scale, report_scale) = match policy {
+            ImageScalePolicy::Unspecified => (1.0, 1.0),
+            ImageScalePolicy::Explicit(scale) => (scale.get(), 1.0),
             ImageScalePolicy::Default => {
                 let device_factor = match self.default_scale {
                     ImageDefaultScale::Auto => {
@@ -119,10 +122,10 @@ impl ImageScaleEnvironment {
                     }
                     ImageDefaultScale::Explicit(scale) => scale.get(),
                 };
-                device_factor / device_scale
+                (device_factor / device_scale, device_scale)
             }
         };
-        ResolvedImageRealization::new(layout_scale, device_scale)
+        ResolvedImageRealization::new(layout_scale, device_scale, report_scale)
     }
 }
 
@@ -182,12 +185,55 @@ pub struct ImageResolveRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedImageMetadata {
+    /// Logical layout size (redisplay / `frame-char-width` space).
     pub width: u32,
     pub height: u32,
+    /// GNU `Fimage_size` with PIXELS non-nil (`img->width` / `img->height` space).
+    pub pixel_width: u32,
+    pub pixel_height: u32,
     /// GNU's decoded four-corner background guess (0x00RRGGBB).
     pub background: u32,
     /// GNU's decoded four-corner mask classification.
     pub background_transparent: bool,
+}
+
+impl ResolvedImageMetadata {
+    /// Build metadata when layout already equals GNU image-pixel size.
+    #[must_use]
+    pub const fn layout_is_image_pixels(
+        width: u32,
+        height: u32,
+        background: u32,
+        background_transparent: bool,
+    ) -> Self {
+        Self {
+            width,
+            height,
+            pixel_width: width,
+            pixel_height: height,
+            background,
+            background_transparent,
+        }
+    }
+
+    /// Build metadata from logical layout + realization report scale.
+    #[must_use]
+    pub fn from_layout(
+        layout_width: u32,
+        layout_height: u32,
+        realization: ResolvedImageRealization,
+        background: u32,
+        background_transparent: bool,
+    ) -> Self {
+        Self {
+            width: layout_width,
+            height: layout_height,
+            pixel_width: realization.image_pixel_dimension(layout_width),
+            pixel_height: realization.image_pixel_dimension(layout_height),
+            background,
+            background_transparent,
+        }
+    }
 }
 
 /// Decoded image whose intrinsic metadata is available for layout.

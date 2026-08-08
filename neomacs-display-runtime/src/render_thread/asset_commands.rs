@@ -545,24 +545,18 @@ mod image_terminal_tests {
 
         lock.lock().unwrap().insert(
             9,
-            super::super::ImageDecodeTerminal::Ready(ResolvedImageMetadata {
-                width: 2,
-                height: 3,
-                background: 0,
-                background_transparent: true,
-            }),
+            super::super::ImageDecodeTerminal::Ready(
+                ResolvedImageMetadata::layout_is_image_pixels(2, 3, 0, true),
+            ),
         );
         clear_image_terminal(&shared, 9);
         assert!(!lock.lock().unwrap().contains_key(&9));
 
         lock.lock().unwrap().insert(
             9,
-            super::super::ImageDecodeTerminal::Ready(ResolvedImageMetadata {
-                width: 5,
-                height: 8,
-                background: 0x12_34_56,
-                background_transparent: false,
-            }),
+            super::super::ImageDecodeTerminal::Ready(
+                ResolvedImageMetadata::layout_is_image_pixels(5, 8, 0x12_34_56, false),
+            ),
         );
         assert!(matches!(
             lock.lock().unwrap().get(&9),

@@ -641,12 +641,9 @@ mod tests {
             let mut map = lock.lock().expect("metadata lock");
             map.insert(
                 id,
-                ImageDecodeTerminal::Ready(ResolvedImageMetadata {
-                    width: 120,
-                    height: 80,
-                    background: 0,
-                    background_transparent: false,
-                }),
+                ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
+                    120, 80, 0, false,
+                )),
             );
             cvar.notify_all();
         }
