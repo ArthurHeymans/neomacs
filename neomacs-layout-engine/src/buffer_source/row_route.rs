@@ -2632,6 +2632,26 @@ impl<'rows, 'emit, 'surface>
         // numbers or a line prefix rendered, so a pen test would newly
         // refuse boxed rows in line-numbered buffers.
         let mid_line_start = row.byte_idx > 0 && row.text.get(row.byte_idx - 1) != Some(&b'\n');
+        // P4.8(b) cleanup: the probe loop's FIRST segment resolves no face of
+        // its own — it carries the walk's live `active_face_state` — so for a
+        // mid-line start the box-face refusal down there is settled entirely
+        // by the pen's current face, with nothing from the row scan in it.
+        // Take it ahead of the classifier, like the display-table refusal:
+        // 6004 of 36243 attempts on the tty-typing fixture (17%) reach that
+        // probe only to refuse, having paid a full classifier walk for a
+        // verdict that never consulted it.
+        //
+        // The carve-out is exact rather than conservative. A plan covering
+        // ZERO chars renders RowBreak-only and returns BEFORE the probe loop,
+        // so it is not subject to the box refusal today; zero coverage means
+        // the position stands on the line's newline (the walk cannot stand at
+        // the text end, and a first char that does not fit refuses
+        // ScanNoFitFirstChar rather than planning), which is one byte test.
+        let covers_no_chars = row.text.get(row.byte_idx) == Some(&b'\n');
+        if mid_line_start && !covers_no_chars && active_face_state.resolved_face().box_type != 0 {
+            note_route_refusal(RouteRefusal::ProbeBoxFace);
+            return AsciiRowRouteOutcome::NotRouted;
+        }
         let plan = match plan_ascii_row_classified(buffer, row, fit, policy) {
             Ok(plan) => plan,
             Err(reason) => {

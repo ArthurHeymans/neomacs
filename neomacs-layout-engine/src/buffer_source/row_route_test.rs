@@ -1200,6 +1200,46 @@ fn a_refusal_window_covers_only_the_range_it_was_given() {
     );
 }
 
+/// P4.8(b) cleanup: the dispatch refuses a mid-line start under a box face
+/// BEFORE running the classifier, and carves out the zero-coverage plans with
+/// one byte test — they render RowBreak-only and return ahead of the probe
+/// loop, so they were never subject to that refusal. This pins the
+/// equivalence the carve-out rests on: a planned row covers zero chars
+/// exactly when the position stands on the line's newline. (A first char that
+/// does not fit refuses instead of planning, and the visible loop never
+/// stands at the text end, so those are not counterexamples.)
+#[test]
+fn a_zero_coverage_plan_is_exactly_a_position_standing_on_a_newline() {
+    let mut eval = Context::new();
+    let text = "ab\n\ncd\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let mut planned_on_newline = 0;
+    let mut planned_on_text = 0;
+    for byte_idx in 0..text.len() {
+        let plan = plan_ascii_row_classified(
+            buffer,
+            row_start(text.as_bytes(), byte_idx, byte_idx as i64),
+            wide_fit(),
+            wrap_policy(),
+        )
+        .unwrap_or_else(|reason| panic!("byte {byte_idx} must plan, refused {reason:?}"));
+        let on_newline = text.as_bytes()[byte_idx] == b'\n';
+        assert_eq!(
+            plan.is_empty_line(),
+            on_newline,
+            "byte {byte_idx} ({:?})",
+            text.as_bytes()[byte_idx] as char
+        );
+        if on_newline {
+            planned_on_newline += 1;
+        } else {
+            planned_on_text += 1;
+        }
+    }
+    assert_eq!((planned_on_newline, planned_on_text), (3, 4));
+}
+
 #[test]
 fn ascii_source_matches_buffer_text_source_cursor_items() {
     let mut eval = Context::new();
