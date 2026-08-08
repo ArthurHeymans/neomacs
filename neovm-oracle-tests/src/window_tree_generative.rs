@@ -312,24 +312,10 @@ proptest! {
     ///   -E 'test(oracle_prop_window_tree_survives_random_operation_sequences)' --no-capture
     /// ```
     ///
-    /// The six-operation core (split/delete/side-window/seal/delete-other/
-    /// balance) was verified clean at 800 sequences. Widening the alphabet to
-    /// atoms, explicit resizes, configuration save/restore, fit-to-buffer and
-    /// slot caps immediately turned up a KNOWN-OPEN divergence, so this is
-    /// `#[ignore]`d again rather than left to fail intermittently at the
-    /// shallow default depth:
-    ///
-    /// - `window-combination-resize` = `side` permits splitting a side window
-    ///   (GNU's guard is `(and (not (eq window-combination-resize 'side))
-    ///   (window-parameter window 'window-side))`). After such a split leaves
-    ///   two windows on one side, `display-buffer-in-side-window` for that slot
-    ///   picks a different one of them than GNU. Tree SHAPE matches; only the
-    ///   buffer-to-window assignment differs. Repro: `./tmp/sidewin/gen6.el`.
-    ///
-    /// Un-ignore once that is fixed and a deep run is clean. A nightly job is
-    /// the natural home for the deep run either way.
+    /// Verified clean at 900 sequences (~335s) with the full thirteen-operation
+    /// alphabet. A nightly job at that depth is the natural home for the deep
+    /// run; the shallow default here only catches gross regressions.
     #[test]
-    #[ignore = "hunting tool: one known-open divergence; run explicitly with NEOVM_WINDOW_PROP_CASES"]
     fn oracle_prop_window_tree_survives_random_operation_sequences(
         ops in prop::collection::vec(op_strategy(), 2..9),
     ) {

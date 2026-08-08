@@ -4454,6 +4454,7 @@ fn make_split_sibling(
         buffer_id,
         bounds: sibling_bounds,
         parameters,
+        dedicated,
         history,
         window_start,
         position_markers,
@@ -4469,6 +4470,13 @@ fn make_split_sibling(
         *buffer_id = new_buffer_id;
         *sibling_bounds = bounds;
         parameters.clear();
+        // GNU `make_window` leaves `w->dedicated` nil, and
+        // `Fsplit_window_internal` copies only decorations (margins, fringes,
+        // scroll bars) from the reference -- never the dedication.  Inheriting
+        // it makes the new window invisible to `get-lru-window', which skips
+        // dedicated windows unless asked otherwise, so `display-buffer' picks a
+        // different window than GNU.
+        *dedicated = Value::NIL;
         // `use_time` lives here: a brand-new window has never been selected.
         *history = WindowHistoryState::default();
         *position_markers = WindowPositionMarkerState::Detached;
