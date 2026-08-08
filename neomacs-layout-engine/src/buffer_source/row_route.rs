@@ -110,12 +110,31 @@ use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::composite::composition_display_text_for_property;
 
 /// Which pipeline acquires and renders a buffer row.
+///
+/// This is the classifier's verdict named as a value, and it exists for the
+/// tests: production never asks the yes/no question, it asks
+/// [`plan_ascii_row_classified`] for the plan or the refusal and acts on
+/// whichever it gets. Gated to tests so it cannot drift back into a decision
+/// production makes twice.
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RowAcquisitionRoute {
     /// The full buffer pipeline (`loop_render` / `item_render` orchestration).
     BufferPipeline,
     /// The unified item renderer, fed by [`BufferAsciiItemSource`].
     ItemRenderer,
+}
+
+#[cfg(test)]
+impl RowAcquisitionRoute {
+    /// The verdict a classifier result stands for.
+    pub(crate) fn of(plan: &Result<AsciiRowPlan, RouteRefusal>) -> Self {
+        if plan.is_ok() {
+            Self::ItemRenderer
+        } else {
+            Self::BufferPipeline
+        }
+    }
 }
 
 /// Per-window facts that disqualify the item-renderer route regardless of row
@@ -1747,36 +1766,9 @@ fn routed_row_elision_scan<B: LayoutBufferView>(
 }
 
 /// Classify the row starting at `row` for acquisition routing. Returns
-/// [`RowAcquisitionRoute::ItemRenderer`] only for the plain row class
-/// described in the module docs; everything else stays on the buffer
-/// pipeline. Cheap checks run first; the property/overlay probes only run for
-/// content that already passed the ASCII scan.
-pub(crate) fn classify_row_acquisition<B: LayoutBufferView>(
-    buffer: &B,
-    row: RowRouteRowStart<'_>,
-    fit: RowRouteFit<'_>,
-    policy: RowRouteWindowPolicy,
-) -> RowAcquisitionRoute {
-    if plan_ascii_row(buffer, row, fit, policy).is_some() {
-        RowAcquisitionRoute::ItemRenderer
-    } else {
-        RowAcquisitionRoute::BufferPipeline
-    }
-}
-
-/// The classifier behind [`classify_row_acquisition`], returning the routed
-/// row's plan so the render path does not rescan.
-pub(crate) fn plan_ascii_row<B: LayoutBufferView>(
-    buffer: &B,
-    row: RowRouteRowStart<'_>,
-    fit: RowRouteFit<'_>,
-    policy: RowRouteWindowPolicy,
-) -> Option<AsciiRowPlan> {
-    plan_ascii_row_classified(buffer, row, fit, policy).ok()
-}
-
-/// [`plan_ascii_row`] with the refusal reason preserved for the coverage
-/// telemetry histogram.
+/// Plan the routed body of the row starting at `row`, or say why the row
+/// cannot route. This is the classifier: production calls it through
+/// `try_render_ascii_row_via_item_renderer`, and the tests call it directly.
 pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     buffer: &B,
     row: RowRouteRowStart<'_>,

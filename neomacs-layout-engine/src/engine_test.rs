@@ -14448,30 +14448,32 @@ fn ascii_route_classification<B: crate::neovm_bridge::LayoutBufferView>(
     right_edge_px: f32,
     point_charpos: i64,
 ) -> crate::buffer_source::row_route::RowAcquisitionRoute {
-    crate::buffer_source::row_route::classify_row_acquisition(
-        buffer,
-        crate::buffer_source::row_route::RowRouteRowStart {
-            text,
-            byte_idx,
-            charpos,
-            text_start_byte: 0,
-        },
-        crate::buffer_source::row_route::RowRouteFit {
-            start_x_px: 0.0,
-            start_col: 0,
-            char_width_px: char_width,
-            right_edge_px,
-            tab_policy: &DisplayTabPolicy::every(8),
-        },
-        crate::buffer_source::row_route::RowRouteWindowPolicy {
-            point_charpos,
-            hscroll_active: false,
-            selective_display: 0,
-            word_wrap: false,
-            show_trailing_whitespace: false,
-            wrap_mode: crate::types::LineWrapMode::Truncate,
-            overlay_string_window: Some(0),
-        },
+    crate::buffer_source::row_route::RowAcquisitionRoute::of(
+        &crate::buffer_source::row_route::plan_ascii_row_classified(
+            buffer,
+            crate::buffer_source::row_route::RowRouteRowStart {
+                text,
+                byte_idx,
+                charpos,
+                text_start_byte: 0,
+            },
+            crate::buffer_source::row_route::RowRouteFit {
+                start_x_px: 0.0,
+                start_col: 0,
+                char_width_px: char_width,
+                right_edge_px,
+                tab_policy: &DisplayTabPolicy::every(8),
+            },
+            crate::buffer_source::row_route::RowRouteWindowPolicy {
+                point_charpos,
+                hscroll_active: false,
+                selective_display: 0,
+                word_wrap: false,
+                show_trailing_whitespace: false,
+                wrap_mode: crate::types::LineWrapMode::Truncate,
+                overlay_string_window: Some(0),
+            },
+        ),
     )
 }
 
@@ -15619,7 +15621,7 @@ fn assert_segmented_ascii_shadow_row(
     // `line_start` is a byte offset; row positions and segment ranges are
     // CHAR positions (the row may be multibyte since phase 2b).
     let line_start_chars = text[..line_start].chars().count();
-    let plan = rr::plan_ascii_row(
+    let plan = rr::plan_ascii_row_classified(
         &snapshot,
         rr::RowRouteRowStart {
             text: text.as_bytes(),
