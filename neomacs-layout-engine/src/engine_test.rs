@@ -24534,3 +24534,128 @@ fn a_tab_stretch_carries_its_own_buffer_position() {
         "the tab's stretch glyph carries the tab character's own position"
     );
 }
+
+// ---------------------------------------------------------------------------
+// P5.2 pin ladder: when must the chrome format be re-evaluated?
+//
+// GNU's decision is extracted in tmp/p52-gnu-extraction.md. These pins state
+// the behavioural contract a skip must not break, in the instrument that will
+// grade the skip: `mode_line_eval_count()`, which counts `format-mode-line`
+// runs for `mode-line-format` and is reset at the top of every
+// `layout_frame_rust`. Counts are written as explicit goldens, never derived
+// from the frame under test.
+// ---------------------------------------------------------------------------
+
+/// Read the rendered mode-line text of the frame's last display state.
+fn rendered_mode_line_text(engine: &LayoutEngine) -> String {
+    engine
+        .last_frame_display_state
+        .as_ref()
+        .map(|state| {
+            state
+                .window_matrices
+                .iter()
+                .flat_map(|wm| wm.matrix.rows.iter())
+                .filter(|row| row.role == GlyphRowRole::ModeLine && row.enabled)
+                .flat_map(|row| row.glyphs[1].iter())
+                .filter_map(|g| match &g.glyph_type {
+                    neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch } => Some(*ch),
+                    _ => None,
+                })
+                .collect::<String>()
+        })
+        .unwrap_or_default()
+}
+
+/// CONTRACT: an edit to the buffer re-evaluates the mode line. GNU reaches
+/// this through `bset_redisplay` + the modified-star flip
+/// (xdisp.c:17487-17488) and, once `redisplay_window` runs with
+/// `line-number-mode` on, through `w->base_line_pos > 0` (xdisp.c:21414).
+/// `%l`/`%p` honesty depends on it, so this must stay green after any skip.
+#[test]
+fn p52_buffer_modification_re_evaluates_the_mode_line() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("ML"));
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("x");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        1,
+        "an edited buffer must re-evaluate mode-line-format exactly once"
+    );
+}
+
+/// CONTRACT: `setq-local mode-line-format` re-evaluates, and the new format
+/// reaches the screen. GNU covers this with an `add-variable-watcher` on
+/// `mode-line-format` calling `set-buffer-redisplay`
+/// (lisp/frame.el:3752-3779 -> xdisp.c:922-931), which sets both
+/// `update_mode_lines` and `prevent_redisplay_optimizations_p`.
+#[test]
+fn p52_setting_mode_line_format_re_evaluates_and_reaches_the_screen() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("BEFORE"));
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+    assert!(rendered_mode_line_text(&engine).contains("BEFORE"));
+
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("AFTER"));
+    }
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        1,
+        "a changed mode-line-format must be re-evaluated"
+    );
+    let text = rendered_mode_line_text(&engine);
+    assert!(
+        text.contains("AFTER") && !text.contains("BEFORE"),
+        "the new mode-line-format must reach the screen, got {text:?}"
+    );
+}
+
+/// CONTRACT: `force-mode-line-update` re-evaluates. This is the escape hatch
+/// that makes every skip legal: GNU's `Fforce_mode_line_update` (buffer.c)
+/// sets `bset_update_mode_line` AND `prevent_redisplay_optimizations_p`, the
+/// second of which is what disqualifies the one-line optimization that
+/// otherwise skips chrome entirely (xdisp.c:17575-17577).
+#[test]
+fn p52_force_mode_line_update_re_evaluates_the_mode_line() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, _selected) = incr_editing_frame(&text, 800, 600);
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("mode-line-format", Value::string("ML"));
+    }
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    eval.eval_str("(force-mode-line-update)").expect("eval");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        crate::display_status_line::mode_line_eval_count(),
+        1,
+        "force-mode-line-update must re-evaluate mode-line-format"
+    );
+}
