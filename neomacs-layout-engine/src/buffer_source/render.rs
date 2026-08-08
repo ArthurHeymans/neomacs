@@ -191,7 +191,6 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 synthetic_newline,
                 self.text,
                 self.state.append_surface,
-                self.state.overlay_context,
                 self.active_face_state,
             )
             .render_display_string_break_and_apply(source_walk, buffer, self.state.reborrow())
@@ -219,7 +218,6 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.loop_context,
             self.text,
             self.state.append_surface,
-            self.state.overlay_context,
             self.active_face_state,
             self.params,
         )

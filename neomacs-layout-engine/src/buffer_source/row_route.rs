@@ -620,11 +620,6 @@ impl AsciiRowPlan {
     }
 
     #[cfg(test)]
-    pub(crate) fn has_overlay(&self) -> bool {
-        self.has_overlay
-    }
-
-    #[cfg(test)]
     pub(crate) fn elided(&self) -> &[(usize, usize)] {
         &self.elided
     }
@@ -3487,13 +3482,7 @@ impl<'rows, 'emit, 'surface>
             crate::display_source::DisplaySourceStepChar::new('\n', row.byte_idx, row.charpos);
         self.progress.set_byte_idx(row.byte_idx + 1);
         let continuation = loop_context
-            .line_break_request(
-                source_char,
-                text,
-                self.append_surface,
-                self.overlay_context,
-                active_face_state,
-            )
+            .line_break_request(source_char, text, self.append_surface, active_face_state)
             .render_and_apply(source_walk, buffer, self.reborrow());
         if continuation.should_break() {
             return note_route_stopped(AsciiRowRouteOutcome::Stopped);

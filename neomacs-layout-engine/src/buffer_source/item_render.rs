@@ -49,7 +49,6 @@ pub(crate) struct BufferSourceItemRenderRequest<'a> {
     loop_context: BufferSourceLoopRequestContext,
     text: &'a [u8],
     append_surface: &'a DisplayRowAppendSurface,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     active_face_state: &'a DisplayRowActiveFaceState,
     params: &'a WindowParams,
 }
@@ -65,7 +64,6 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         loop_context: BufferSourceLoopRequestContext,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
         params: &'a WindowParams,
     ) -> Self {
@@ -74,7 +72,6 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             loop_context,
             text,
             append_surface,
-            overlay_context,
             active_face_state,
             params,
         }
@@ -170,7 +167,6 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             source_char,
             self.text,
             self.append_surface,
-            state.overlay_context,
             self.active_face_state,
         );
         self.render_line_break(state, source_walk, request, buffer)
@@ -274,7 +270,6 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
         let append_geometry = *row_geometry;
         let text_run_request = BufferSourceTextRunRenderRequest::new(
             self.loop_context.text_start_byte(),
-            self.overlay_context,
             self.loop_context.point_charpos(),
             self.append_surface.right_edge(),
             append_position,

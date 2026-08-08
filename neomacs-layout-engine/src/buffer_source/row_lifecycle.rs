@@ -700,7 +700,6 @@ pub(crate) struct BufferSourceInvisibleTextRenderContext<'a> {
     accessible_end: i64,
     point_charpos: i64,
     append_surface: &'a DisplayRowAppendSurface,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     active_face_state: &'a DisplayRowActiveFaceState,
     glyph_y_offset: f32,
     metrics: DisplayRowFallbackMetrics,
@@ -713,11 +712,14 @@ pub(crate) enum BufferSourceSelectiveDisplayTailRenderOutcome {
     Stop,
 }
 
+/// The invisible checkpoint never ends the row: it either leaves the position
+/// visible or folds a hidden span and hands the walk back. Ending a row from a
+/// property is the selective-display tail's job, which is why only
+/// [`BufferSourceSelectiveDisplayTailRenderOutcome`] carries a `Stop`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferSourceInvisibleTextRenderOutcome {
     Visible,
     ContinueBufferWalk,
-    Stop,
 }
 
 impl BufferSourceSelectiveDisplayTailRenderOutcome {
@@ -731,10 +733,6 @@ impl BufferSourceSelectiveDisplayTailRenderOutcome {
 }
 
 impl BufferSourceInvisibleTextRenderOutcome {
-    pub(crate) fn should_break(self) -> bool {
-        matches!(self, Self::Stop)
-    }
-
     pub(crate) fn should_continue_buffer_walk(self) -> bool {
         matches!(self, Self::ContinueBufferWalk)
     }
@@ -784,7 +782,6 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
         accessible_end: i64,
         point_charpos: i64,
         append_surface: &'a DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
         metrics: DisplayRowFallbackMetrics,
@@ -794,7 +791,6 @@ impl<'a> BufferSourceInvisibleTextRenderContext<'a> {
             accessible_end,
             point_charpos,
             append_surface,
-            overlay_context,
             active_face_state,
             glyph_y_offset,
             metrics,
@@ -1502,7 +1498,6 @@ pub(crate) struct BufferSourceLineBreakRenderContext<'a> {
     row_limit: DisplayRowLimit,
     append_surface: &'a DisplayRowAppendSurface,
     frame_background: Color,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     fill_column_indicator: i32,
     fill_column_indicator_char: char,
 }
@@ -1526,7 +1521,6 @@ impl<'a> BufferSourceLineBreakRenderContext<'a> {
         row_limit: DisplayRowLimit,
         append_surface: &'a DisplayRowAppendSurface,
         frame_background: Color,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         fill_column_indicator: i32,
         fill_column_indicator_char: char,
     ) -> Self {
@@ -1547,7 +1541,6 @@ impl<'a> BufferSourceLineBreakRenderContext<'a> {
             row_limit,
             append_surface,
             frame_background,
-            overlay_context,
             fill_column_indicator,
             fill_column_indicator_char,
         }

@@ -48,9 +48,6 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 active_face_state,
                 buffer,
             );
-            if invisible_text_outcome.should_break() {
-                break;
-            }
             if invisible_text_outcome.should_continue_buffer_walk() {
                 continue;
             }
@@ -165,13 +162,8 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     where
         'surface: 'request,
     {
-        let request = loop_context.invisible_text_request(
-            text,
-            self.append_surface,
-            self.overlay_context,
-            active_face_state,
-            0.0,
-        );
+        let request =
+            loop_context.invisible_text_request(text, self.append_surface, active_face_state, 0.0);
         self.render_invisible_text_at_checkpoint(source_walk, request, buffer)
     }
 

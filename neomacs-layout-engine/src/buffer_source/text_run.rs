@@ -38,19 +38,17 @@ enum WholeTextRunFallbackReason {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct BufferSourceTextRunRenderRequest<'a> {
+pub(crate) struct BufferSourceTextRunRenderRequest {
     text_start_byte: usize,
-    overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
     point_charpos: i64,
     right_edge_px: f32,
     position: DisplayRowPosition,
     geometry: DisplayRowGeometryState,
 }
 
-impl<'a> BufferSourceTextRunRenderRequest<'a> {
+impl BufferSourceTextRunRenderRequest {
     pub(crate) fn new(
         text_start_byte: usize,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         point_charpos: i64,
         right_edge_px: f32,
         position: DisplayRowPosition,
@@ -58,7 +56,6 @@ impl<'a> BufferSourceTextRunRenderRequest<'a> {
     ) -> Self {
         Self {
             text_start_byte,
-            overlay_context,
             point_charpos,
             right_edge_px,
             position,

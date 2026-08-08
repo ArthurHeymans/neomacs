@@ -180,13 +180,6 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
         self.char_pos
     }
 
-    /// Forget which anchor's overlay strings were already produced, so a
-    /// row-transition retry at that anchor produces them again. See
-    /// [`overlay_strings_produced_at`](Self::overlay_strings_produced_at).
-    pub(crate) fn clear_overlay_strings_marker(&mut self) {
-        self.overlay_strings_produced_at = None;
-    }
-
     /// The overlay strings anchored at `char_pos`, GNU-ordered and filtered to
     /// this cursor's window, or `None` when the position anchors none.
     ///

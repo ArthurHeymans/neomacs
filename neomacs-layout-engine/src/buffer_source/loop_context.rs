@@ -86,7 +86,6 @@ impl BufferSourceLoopRequestContext {
         self,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
         glyph_y_offset: f32,
     ) -> BufferSourceInvisibleTextRenderContext<'a> {
@@ -95,7 +94,6 @@ impl BufferSourceLoopRequestContext {
             self.accessible_end,
             self.point_charpos,
             append_surface,
-            overlay_context,
             active_face_state,
             glyph_y_offset,
             self.metrics,
@@ -158,7 +156,6 @@ impl BufferSourceLoopRequestContext {
         source_char: DisplaySourceStepChar,
         text: &'a [u8],
         append_surface: &'a DisplayRowAppendSurface,
-        overlay_context: BufferOverlayStringTextRowRenderContext<'a>,
         active_face_state: &'a DisplayRowActiveFaceState,
     ) -> BufferSourceLineBreakRenderRequest<'a> {
         BufferSourceLineBreakRenderRequest::new(
@@ -180,7 +177,6 @@ impl BufferSourceLoopRequestContext {
                 self.row_limit,
                 append_surface,
                 self.frame_background,
-                overlay_context,
                 self.fill_column_indicator,
                 self.fill_column_indicator_char,
             ),

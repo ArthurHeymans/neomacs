@@ -2344,16 +2344,6 @@ impl LayoutCharPropertyLookup {
         )
     }
 
-    pub(crate) fn highest_overlay_value_at<B: LayoutBufferView + ?Sized>(
-        &self,
-        buffer: &B,
-        bytepos: EmacsBytePos,
-        current_window_id: Option<u64>,
-    ) -> Option<Value> {
-        self.highest_overlay_entry_at(buffer, bytepos, current_window_id)
-            .map(|(_, value)| value)
-    }
-
     /// The winning overlay and its value, in GNU `compare_overlays` order.
     fn highest_overlay_entry_at<B: LayoutBufferView + ?Sized>(
         &self,
