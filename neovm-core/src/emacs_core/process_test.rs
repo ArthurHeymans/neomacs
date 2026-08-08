@@ -8407,3 +8407,55 @@ fn internal_default_process_filter_uses_a_reaped_process_buffer() {
 
     assert_eq!(result, "OK (t t)");
 }
+
+/// CONTRACT: a process reaching a terminal status dirties chrome.
+///
+/// GNU's `status_notify` calls `bset_update_mode_line` on the process's buffer
+/// when its status changed (process.c:7940), because `mode-line-process`
+/// renders that status. This is the one chrome trigger whose staleness is
+/// invisible to the editing user — nothing else is going to repaint, so the
+/// exited process would keep showing "Run" until some unrelated edit happened
+/// to force a chrome walk.
+///
+/// This pin exists because a mutation run found the trigger UNCOVERED: the
+/// commit that added it claimed a pin per defect, but removing this call site
+/// reddened nothing. The layout-engine harness cannot stage a live child, so
+/// the case belongs here, next to the other process tests.
+#[test]
+fn process_reaching_terminal_status_dirties_chrome() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = Context::new();
+
+    // Reach a steady state first: whatever the startup did, acknowledge it, so
+    // the assertion below is about the process and nothing else.
+    ctx.note_chrome_generated(crate::window::WindowId(1));
+    while ctx.chrome_dirty().is_any_dirty() {
+        ctx.note_chrome_generated(crate::window::WindowId(1));
+        break;
+    }
+
+    let before = ctx.chrome_dirty().is_dirty(crate::window::WindowId(1));
+    let result = ctx.eval_str(
+        // Only core builtins here: this Context has no subr.el, so
+        // `process-live-p` / `ignore-errors` / `generate-new-buffer` are all
+        // void. The bounded loop also keeps a wedged child from hanging CI.
+        r#"(let* ((buf (get-buffer-create "p52-proc-chrome"))
+                  (p (start-process "p52-proc" buf "true"))
+                  (n 0))
+             (while (and (< n 100) (eq (process-status p) 'run))
+               (accept-process-output p 0.1)
+               (setq n (+ n 1)))
+             (symbol-name (process-status p)))"#,
+    );
+    assert!(result.is_ok(), "the child must run: {result:?}");
+
+    assert!(
+        !before || ctx.chrome_dirty().is_dirty(crate::window::WindowId(1)),
+        "precondition sanity"
+    );
+    assert!(
+        ctx.chrome_dirty().is_any_dirty(),
+        "a process reaching a terminal status must dirty chrome, so \
+         mode-line-process stops showing a stale status (GNU process.c:7940)"
+    );
+}
