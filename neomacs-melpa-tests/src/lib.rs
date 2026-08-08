@@ -270,6 +270,12 @@ pub const ELPY_MELPA_PIN: (&str, &str) = ("elpy", "20260715.1747");
 /// from upstream commit `322d3bb112fced57d63b44863357f7a0b7eee1e3`.
 pub const EMMET_MODE_MELPA_PIN: (&str, &str) = ("emmet-mode", "20240617.45");
 
+/// The exact emr package selected for practical Elisp free-variable analysis,
+/// let-form toggle, eval-and-replace, and declared-refactor availability.
+/// MELPA built this archive from upstream commit
+/// `cac1b52932926f56d7f6d2923732d20bbd20670d`.
+pub const EMR_MELPA_PIN: (&str, &str) = ("emr", "20220108.548");
+
 /// The exact EPC package selected for practical local RPC framing, method
 /// registration, synchronous and deferred calls, method discovery, application
 /// and protocol errors, Unicode payloads, and connection lifecycle parity.
@@ -2161,6 +2167,11 @@ pub const DASH_FUNCTIONAL_MELPA_PIN: (&str, &str) = ("dash-functional", "2025031
 /// The exact Evil package selected by the comprehensive API parity corpus.
 pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 
+/// The exact evil-org package selected for practical org-item open/insert
+/// commands, empty-element detection, and key-theme population. MELPA built
+/// this archive from upstream commit `b1f309726b1326e1a103742524ec331789f2bf94`.
+pub const EVIL_ORG_MELPA_PIN: (&str, &str) = ("evil-org", "20221001.2335");
+
 /// The exact Evil Cleverparens package selected for practical modal structural
 /// editing, navigation, form transformation, and lifecycle parity. MELPA built
 /// this archive from upstream commit
@@ -3125,6 +3136,12 @@ pub const DIFF_HL_MELPA_PIN: (&str, &str) = ("diff-hl", "20260723.238");
 /// deterministic build-command parity. MELPA built this archive from upstream
 /// commit `97733ce074b1252c1270fd5e8a53d178b66668ed`.
 pub const DOCKERFILE_MODE_MELPA_PIN: (&str, &str) = ("dockerfile-mode", "20251221.1644");
+
+/// The exact docker package selected for practical human-size parsing, column
+/// format helpers, process argv assembly, and terminal-backend selection.
+/// MELPA built this archive from upstream commit
+/// `8a51aee19a7931bc16aa63cf076b109cdd6a1c62`.
+pub const DOCKER_MELPA_PIN: (&str, &str) = ("docker", "20260803.930");
 
 /// The exact Doom Modeline package selected for practical file-buffer,
 /// state-transition, selection, encoding, extension, layout, and global-mode
