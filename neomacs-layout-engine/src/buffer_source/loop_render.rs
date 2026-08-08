@@ -29,6 +29,11 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     ) where
         'surface: 'request,
     {
+        // P4.8(b): walk-scoped, because a refusal window is a claim about
+        // absolute buffer positions this walk has already classified. It
+        // needs no invalidation — point does not move during a walk, and a
+        // window the walk has passed can never cover a later position.
+        let mut route_refusals = crate::buffer_source::row_route::RouteRefusalWindow::default();
         while self.progress.byte_idx() < text.len()
             && self
                 .row_geometry
@@ -81,6 +86,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                     params,
                     active_face_state,
                     buffer,
+                    &mut route_refusals,
                 ) {
                     AsciiRowRouteOutcome::Rendered => continue,
                     AsciiRowRouteOutcome::Stopped => break,

@@ -1135,6 +1135,71 @@ fn classifier_rejects_active_display_table() {
     );
 }
 
+/// P4.8(b): an active display table is a property of the BUFFER, not of the
+/// row, so it must refuse BEFORE any per-position row scan runs. The pin is
+/// the REASON on a row that also carries a content refusal: the display table
+/// has to win, which it can only do by being decided first. Production
+/// route-stats after (a) put 14718 of 75490 attempts here, each having paid a
+/// full classifier walk (display-property scan, overlay scans, fit walk,
+/// elision scan) before reaching a verdict that never depended on any of it.
+#[test]
+fn classifier_refuses_a_display_table_buffer_before_scanning_the_row() {
+    let mut eval = Context::new();
+    // A C0 control char: the char scan refuses this row on content alone.
+    let text = "a\x01b\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    {
+        let table = neovm_core::emacs_core::Value::make_char_table(
+            Value::symbol("display-table"),
+            Value::NIL,
+            6,
+        );
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.set_buffer_local("buffer-display-table", table);
+    }
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    assert_eq!(
+        plan_ascii_row_classified(
+            buffer,
+            row_start(text.as_bytes(), 0, 0),
+            wide_fit(),
+            plain_policy()
+        )
+        .unwrap_err(),
+        RouteRefusal::DisplayTable,
+        "the buffer-global refusal must be taken before the row is scanned"
+    );
+}
+
+/// P4.8(b): the refusal window is BOUNDED on both sides. Its whole reason to
+/// carry an end is that a refusal proven for the positions up to point says
+/// nothing about the positions after it — 1703 corpus rows route there — and
+/// a window opened at one line must not swallow a position before it either.
+#[test]
+fn a_refusal_window_covers_only_the_range_it_was_given() {
+    let mut window = RouteRefusalWindow::default();
+    assert!(!window.covers(7), "an empty window covers nothing");
+    window.refuse_through(4, 9);
+    assert!(!window.covers(3), "before the window start");
+    assert!(window.covers(4), "the start itself");
+    assert!(window.covers(9), "the end itself — point's own position");
+    assert!(
+        !window.covers(10),
+        "past the end, where the walk must classify"
+    );
+    // A later refusal describes later ground; it replaces the old window
+    // rather than merging with it.
+    window.refuse_through(20, 24);
+    assert!(!window.covers(9));
+    assert!(window.covers(24));
+    // An end before the start is not a range and records nothing.
+    window.refuse_through(40, 39);
+    assert!(
+        window.covers(24),
+        "the degenerate record left the window alone"
+    );
+}
+
 #[test]
 fn ascii_source_matches_buffer_text_source_cursor_items() {
     let mut eval = Context::new();

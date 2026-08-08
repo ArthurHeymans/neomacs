@@ -287,6 +287,7 @@ fn route_stats_file() -> Option<&'static str> {
 }
 
 static ROUTE_STAT_ATTEMPTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static ROUTE_STAT_SKIPPED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static ROUTE_STAT_ROUTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 static ROUTE_STAT_REFUSALS: [std::sync::atomic::AtomicUsize; RouteRefusal::COUNT] =
     [const { std::sync::atomic::AtomicUsize::new(0) }; RouteRefusal::COUNT];
@@ -303,6 +304,65 @@ fn note_route_refusal(reason: RouteRefusal) {
     }
 }
 
+fn note_route_skipped() {
+    if route_stats_file().is_some() {
+        ROUTE_STAT_SKIPPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+    #[cfg(test)]
+    ROUTE_SKIPPED_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Test-only engagement proof for the P4.8(b) refusal window: walk positions
+/// the route was NOT re-attempted at because an earlier position on the same
+/// line had already proven the range unroutable.
+#[cfg(test)]
+pub(crate) static ROUTE_SKIPPED_COUNT: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+/// Walk positions the route has already PROVEN unroutable, so the classifier
+/// is not re-run per position inside a line it has refused.
+///
+/// P4.8(a) made the route attempt EVERY walk position, which exposed how
+/// often the walk re-classifies inside one line: 36429 of 77128 production
+/// attempts are a repeat at a later position on a line an earlier position
+/// already refused. Most of that repetition cannot simply be dropped — a
+/// refusal is generally a fact about a POSITION in the line (a hazard
+/// property, an unroutable char), and the walk positions past it route: 2920
+/// rows in the corpus route after an earlier box-face refusal on their own
+/// line. Only a refusal whose justification provably holds for a whole RANGE
+/// of start positions may be recorded here, and it must name that range.
+///
+/// Today one refusal qualifies: [`RouteRefusal::PointInRow`] taken at the
+/// pre-gate, which is a pure line/point test with no fit walk in it. Point on
+/// this line at or after the start position means every start position from
+/// here through point sits on the same line with point at or after it, so
+/// each refuses identically. Positions PAST point are left to attempt (1703
+/// corpus rows route there), which is why the window carries an end and not
+/// just "the rest of the line".
+#[derive(Debug, Default)]
+pub(crate) struct RouteRefusalWindow {
+    /// Inclusive absolute charpos range proven unroutable.
+    refused: Option<(i64, i64)>,
+}
+
+impl RouteRefusalWindow {
+    /// Whether `charpos` is inside a range an earlier attempt proved
+    /// unroutable.
+    pub(crate) fn covers(&self, charpos: i64) -> bool {
+        self.refused
+            .is_some_and(|(from, through)| charpos >= from && charpos <= through)
+    }
+
+    /// Record that every start position in `from..=through` refuses. Later
+    /// records replace earlier ones: the walk moves forward, so an older
+    /// window can only describe ground already covered.
+    pub(crate) fn refuse_through(&mut self, from: i64, through: i64) {
+        if through >= from {
+            self.refused = Some((from, through));
+        }
+    }
+}
+
 /// The cumulative telemetry line for this process, or `None` when the stats
 /// file env is unset. Appended by the engine once per accepted frame.
 pub(crate) fn route_stats_append_report() {
@@ -311,9 +371,10 @@ pub(crate) fn route_stats_append_report() {
         return;
     };
     let mut line = format!(
-        "row_route pid={} attempts={} routed={}",
+        "row_route pid={} attempts={} skipped={} routed={}",
         std::process::id(),
         ROUTE_STAT_ATTEMPTS.load(std::sync::atomic::Ordering::Relaxed),
+        ROUTE_STAT_SKIPPED.load(std::sync::atomic::Ordering::Relaxed),
         ROUTE_STAT_ROUTED.load(std::sync::atomic::Ordering::Relaxed),
     );
     for reason in RouteRefusal::ALL {
@@ -1733,6 +1794,18 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
             return Err(RouteRefusal::PointInRow);
         }
     }
+    // P4.8(b): an active display table can remap any char (including the
+    // newline), and it is a property of the BUFFER, not of this row — so it
+    // is decided HERE, ahead of every row scan, alongside the window-policy
+    // gates and the line-scoped point gate. It used to sit past the display,
+    // overlay, fit and elision scans, which meant a display-table buffer paid
+    // a full classifier walk at every walk position to reach a verdict that
+    // never consulted any of it: 14718 of 75490 production attempts after
+    // P4.8(a), the largest capability refusal in the corpus.
+    if crate::neovm_bridge::buffer_has_active_display_table(buffer) {
+        return Err(RouteRefusal::DisplayTable);
+    }
+
     // Display-property scan over the whole line FIRST (increment 2i rung 2):
     // routable string replacements become plan spans the fit walk credits
     // with the STRING's width; unroutable display shapes are recorded with
@@ -1855,11 +1928,6 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
     let routed_end_byte = start_byte + scan.byte_len;
     let overlay_scan = routed_row_overlay_scan(buffer, row.charpos, start_byte, routed_end_byte)
         .ok_or(RouteRefusal::Overlay)?;
-
-    // An active display table can remap any char (including the newline).
-    if crate::neovm_bridge::buffer_has_active_display_table(buffer) {
-        return Err(RouteRefusal::DisplayTable);
-    }
 
     // Invisible text: accept only the plain-elision class (hidden spans that
     // simply drop chars from the row); ellipsis, newline-spanning folds,
@@ -2521,11 +2589,16 @@ impl<'rows, 'emit, 'surface>
         params: &crate::types::WindowParams,
         active_face_state: &mut crate::display_row::face_state::DisplayRowActiveFaceState,
         buffer: &B,
+        route_refusals: &mut RouteRefusalWindow,
     ) -> AsciiRowRouteOutcome {
         use crate::buffer_source::item_append::BufferSourceRowAppendContext;
         use crate::display_row::append_context::DisplayRowAppendKind;
         use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
 
+        if route_refusals.covers(self.progress.charpos()) {
+            note_route_skipped();
+            return AsciiRowRouteOutcome::NotRouted;
+        }
         note_route_attempt();
         let position = self.progress.row_position();
         let row = RowRouteRowStart {
@@ -2562,6 +2635,13 @@ impl<'rows, 'emit, 'surface>
         let plan = match plan_ascii_row_classified(buffer, row, fit, policy) {
             Ok(plan) => plan,
             Err(reason) => {
+                if reason == RouteRefusal::PointInRow {
+                    // Point is on this line at or after the start position, so
+                    // every start position from here through point refuses the
+                    // same way — see RouteRefusalWindow. The walk resumes
+                    // classifying at the first position past point.
+                    route_refusals.refuse_through(row.charpos, policy.point_charpos);
+                }
                 note_route_refusal(reason);
                 return AsciiRowRouteOutcome::NotRouted;
             }

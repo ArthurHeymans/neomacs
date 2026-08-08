@@ -14818,6 +14818,48 @@ fn ascii_route_flag_on_layout_engages_mid_line_start_acquisition() {
     );
 }
 
+/// Engagement proof for the P4.8(b) refusal window (flag-on suite gate): a
+/// line the walk splits into several runs, with point on it, must be
+/// classified ONCE and then skipped at the positions the first refusal
+/// already covered — instead of re-running the classifier per run. The row's
+/// glyphs are asserted alongside, because the window's only real risk is
+/// silently withholding the route from positions that should have it.
+#[test]
+fn ascii_route_flag_on_layout_skips_reclassifying_a_refused_cursor_line() {
+    if !crate::buffer_source::row_route::row_item_route_ascii_enabled() {
+        return;
+    }
+    let before = crate::buffer_source::row_route::ROUTE_SKIPPED_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    // Three face runs before point, so the walk stands at three distinct
+    // positions inside the line ahead of it; point sits in the last run.
+    let text = "aaaa bbbb cccc dddd\nsecond line\n";
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with(text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str(
+                "(progn (put-text-property 1 5 'face '(:weight bold)) \
+                        (put-text-property 6 10 'face '(:slant italic)) \
+                        (put-text-property 11 15 'face '(:underline t)) \
+                        (goto-char 17))",
+            )
+            .expect("face runs and point");
+        });
+    let after = crate::buffer_source::row_route::ROUTE_SKIPPED_COUNT
+        .load(std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        after > before,
+        "the cursor line must be classified once, not per run \
+         (before={before}, after={after})"
+    );
+    assert_eq!(
+        glyphs_logical_text(&rows[0].glyphs[1]),
+        // Trailing space = the appended newline glyph.
+        "aaaa bbbb cccc dddd ",
+        "skipping re-classification must not change what the row renders"
+    );
+}
+
 /// Increment 2j shadow proof — the tab-after-wrap acid case: a wrapped line
 /// whose continuation row begins with buffer text containing a TAB. The
 /// continuation row's glyphs (whichever mode produced them: the pipeline
