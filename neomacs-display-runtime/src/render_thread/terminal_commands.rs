@@ -49,8 +49,13 @@ impl RenderApp {
                 if let Ok(mut shared) = self.shared_terminals.lock() {
                     shared.remove(&id);
                 }
-                self.terminal_manager.destroy(id);
-                tracing::info!("Terminal {} destroyed", id);
+                match self.terminal_manager.destroy(id) {
+                    Ok(true) => tracing::info!("Terminal {} destroyed", id),
+                    Ok(false) => tracing::debug!("Terminal {} was already absent", id),
+                    Err(error) => {
+                        tracing::error!("Terminal {} teardown failed: {}", id, error);
+                    }
+                }
             }
             TerminalCommand::TerminalSetFloat { id, placement } => {
                 if let Some(view) = self.terminal_manager.get_mut(id) {

@@ -31,3 +31,52 @@ fn test_portable_pty_explicit_cmd() {
 
     let _ = child.wait();
 }
+
+#[cfg(target_os = "linux")]
+fn process_exists(pid: u32) -> bool {
+    // SAFETY: signal 0 performs existence/permission checking only.
+    unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+}
+
+#[cfg(target_os = "linux")]
+fn reader_thread_exists(name: &str) -> bool {
+    std::fs::read_dir("/proc/self/task")
+        .expect("read process task directory")
+        .filter_map(Result::ok)
+        .any(|task| {
+            std::fs::read_to_string(task.path().join("comm")).is_ok_and(|comm| comm.trim() == name)
+        })
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn destroying_terminal_reaps_child_and_joins_reader_thread() {
+    let id = TerminalId::new(77).expect("nonzero terminal id");
+    let size = TerminalGridSize::new(20, 5).expect("positive terminal grid");
+    let view = TerminalView::new(id, size, TerminalMode::Window, Some("/bin/sh"))
+        .expect("create real PTY shell");
+    let pid = view.child_process_id().expect("shell process id");
+    let thread_name = format!("neo-term-{id}-pty");
+    let mut manager = TerminalManager::new();
+    manager.terminals.insert(id, view);
+
+    assert!(process_exists(pid));
+    assert!(reader_thread_exists(&thread_name));
+    assert!(manager.destroy(id).expect("destroy terminal"));
+
+    let process_leaked = process_exists(pid);
+    let thread_leaked = reader_thread_exists(&thread_name);
+    if process_leaked {
+        // Leave no child behind when this regression intentionally fails.
+        // SAFETY: PID came from the child spawned immediately above.
+        unsafe {
+            libc::kill(pid as libc::pid_t, libc::SIGKILL);
+        }
+    }
+
+    assert!(!process_leaked, "destroy left PTY child {pid} alive");
+    assert!(
+        !thread_leaked,
+        "destroy left reader thread {thread_name} alive"
+    );
+}

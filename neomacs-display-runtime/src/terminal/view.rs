@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
 use parking_lot::{FairMutex, Mutex};
-use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 use rio_vt::ansi::CursorShape;
 use rio_vt::crosswords::{Crosswords, CrosswordsSize};
@@ -109,15 +109,10 @@ pub struct TerminalView {
     pub term: Arc<FairMutex<Crosswords<NeomacsEventProxy>>>,
     /// Event proxy for wakeup notifications.
     pub event_proxy: NeomacsEventProxy,
-    /// PTY master handle used for resize and I/O.
-    pty: Box<dyn MasterPty + Send>,
-    /// Child process handle. Kept alive for the lifetime of the terminal.
-    _pty_child: Box<dyn portable_pty::Child + Send + Sync>,
-    /// PTY master (for writing input to the shell). Shared with the reader
-    /// thread, which flushes the terminal's own replies (DA/DSR/CPR).
-    pty_writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    /// Reader thread handle.
-    _reader_thread: Option<JoinHandle<()>>,
+    /// Owns every operating-system resource backing this terminal. Keeping
+    /// the child, master handles, and reader join handle in one object makes
+    /// an incomplete teardown impossible through the normal API.
+    pty_session: PtySession,
     /// Cached content from last extraction.
     pub last_content: Option<TerminalContent>,
     /// Whether content changed since last render.
@@ -128,6 +123,89 @@ pub struct TerminalView {
     pub float_x: f32,
     pub float_y: f32,
     pub float_opacity: f32,
+}
+
+struct PtySession {
+    master: Option<Box<dyn MasterPty + Send>>,
+    child: Option<Box<dyn Child + Send + Sync>>,
+    writer: Option<Arc<Mutex<Box<dyn Write + Send>>>>,
+    reader_thread: Option<JoinHandle<()>>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum TerminalShutdownError {
+    #[error("failed to reap terminal child: {0}")]
+    Reap(std::io::Error),
+    #[error("terminal reader thread panicked during shutdown")]
+    ReaderPanicked,
+}
+
+impl PtySession {
+    fn process_id(&self) -> Option<u32> {
+        self.child.as_ref().and_then(|child| child.process_id())
+    }
+
+    fn write(&self, data: &[u8]) -> std::io::Result<()> {
+        let writer = self.writer.as_ref().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::BrokenPipe, "terminal is shut down")
+        })?;
+        let mut writer = writer.lock();
+        writer.write_all(data)?;
+        writer.flush()
+    }
+
+    fn resize(&self, size: PtySize) -> std::io::Result<()> {
+        self.master
+            .as_ref()
+            .ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::BrokenPipe, "terminal is shut down")
+            })?
+            .resize(size)
+            .map_err(|error| std::io::Error::other(error.to_string()))
+    }
+
+    fn shutdown(&mut self) -> Result<(), TerminalShutdownError> {
+        let reap_result = if let Some(mut child) = self.child.take() {
+            match child.try_wait() {
+                Ok(Some(_)) => Ok(()),
+                Ok(None) | Err(_) => {
+                    // A failed kill can race with natural exit. `wait` is the
+                    // authoritative operation: it both observes that race and
+                    // guarantees the child is reaped before teardown returns.
+                    let _ = child.kill();
+                    child
+                        .wait()
+                        .map(|_| ())
+                        .map_err(TerminalShutdownError::Reap)
+                }
+            }
+        } else {
+            Ok(())
+        };
+
+        // Close the render thread's master/writer handles before joining. The
+        // reader owns its cloned handles until the killed slave side reaches
+        // EOF/EIO and the reader exits.
+        self.writer.take();
+        self.master.take();
+        let join_result = self
+            .reader_thread
+            .take()
+            .map(JoinHandle::join)
+            .transpose()
+            .map(|_| ())
+            .map_err(|_| TerminalShutdownError::ReaderPanicked);
+
+        reap_result.and(join_result)
+    }
+}
+
+impl Drop for PtySession {
+    fn drop(&mut self) {
+        if let Err(error) = self.shutdown() {
+            tracing::warn!("Terminal PTY shutdown during drop failed: {error}");
+        }
+    }
 }
 
 impl TerminalView {
@@ -257,10 +335,12 @@ impl TerminalView {
             mode,
             term,
             event_proxy,
-            pty: pty_pair.master,
-            _pty_child: pty_child,
-            pty_writer,
-            _reader_thread: Some(reader_thread),
+            pty_session: PtySession {
+                master: Some(pty_pair.master),
+                child: Some(pty_child),
+                writer: Some(pty_writer),
+                reader_thread: Some(reader_thread),
+            },
             last_content: None,
             dirty: true,
             exit_notified: false,
@@ -272,9 +352,7 @@ impl TerminalView {
 
     /// Write input data to the terminal's PTY (keyboard input from user).
     pub fn write(&mut self, data: &[u8]) -> std::io::Result<()> {
-        let mut writer = self.pty_writer.lock();
-        writer.write_all(data)?;
-        writer.flush()
+        self.pty_session.write(data)
     }
 
     /// Resize the terminal grid and PTY.
@@ -292,7 +370,7 @@ impl TerminalView {
             pixel_width: 8u16.saturating_mul(cols),
             pixel_height: 16u16.saturating_mul(rows),
         };
-        if let Err(e) = self.pty.resize(pty_size) {
+        if let Err(e) = self.pty_session.resize(pty_size) {
             tracing::warn!("Terminal {} PTY resize failed: {}", self.id, e);
         }
         self.dirty = true;
@@ -334,6 +412,17 @@ impl TerminalView {
         let rows = term.screen_lines();
         super::content::extract_text(&*term, 0, 0, rows.saturating_sub(1), cols.saturating_sub(1))
     }
+
+    /// Terminate and reap the PTY child, close all master handles, and join
+    /// the reader thread. Safe to call repeatedly.
+    pub fn shutdown(&mut self) -> Result<(), TerminalShutdownError> {
+        self.pty_session.shutdown()
+    }
+
+    #[cfg(test)]
+    fn child_process_id(&self) -> Option<u32> {
+        self.pty_session.process_id()
+    }
 }
 
 /// Manages all terminal instances.
@@ -349,8 +438,12 @@ impl TerminalManager {
     }
 
     /// Destroy a terminal.
-    pub fn destroy(&mut self, id: TerminalId) -> bool {
-        self.terminals.remove(&id).is_some()
+    pub fn destroy(&mut self, id: TerminalId) -> Result<bool, TerminalShutdownError> {
+        let Some(mut view) = self.terminals.remove(&id) else {
+            return Ok(false);
+        };
+        view.shutdown()?;
+        Ok(true)
     }
 
     /// Get a terminal by ID.

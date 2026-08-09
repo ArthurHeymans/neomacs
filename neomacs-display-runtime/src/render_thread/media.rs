@@ -891,7 +891,7 @@ mod tests {
         });
         let mut contents = HashMap::new();
         contents.insert(
-            7,
+            crate::terminal::TerminalId::new(7).expect("nonzero terminal id"),
             TerminalContent {
                 cells: vec![RenderCell {
                     col: 1,
