@@ -18,7 +18,7 @@ use rio_vt::event::{EventListener, RioEvent, WindowId};
 use rio_vt::performer::handler::Processor;
 
 use super::content::TerminalContent;
-use super::{TerminalId, TerminalMode};
+use super::{TerminalGridSize, TerminalId, TerminalMode};
 
 /// Scrollback history limit, matching the previous emulator default.
 const SCROLLBACK_HISTORY: usize = 10_000;
@@ -134,12 +134,13 @@ impl TerminalView {
     /// Create a new terminal with the given grid dimensions.
     pub fn new(
         id: TerminalId,
-        cols: u16,
-        rows: u16,
+        size: TerminalGridSize,
         mode: TerminalMode,
         shell: Option<&str>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let event_proxy = NeomacsEventProxy::new(id);
+        let cols = size.cols.get();
+        let rows = size.rows.get();
 
         let grid_size = CrosswordsSize::new(cols.max(1) as usize, rows.max(1) as usize);
         let term = Crosswords::new(
@@ -277,8 +278,10 @@ impl TerminalView {
     }
 
     /// Resize the terminal grid and PTY.
-    pub fn resize(&mut self, cols: u16, rows: u16) {
-        let grid_size = CrosswordsSize::new(cols.max(1) as usize, rows.max(1) as usize);
+    pub fn resize(&mut self, size: TerminalGridSize) {
+        let cols = size.cols.get();
+        let rows = size.rows.get();
+        let grid_size = CrosswordsSize::new(cols as usize, rows as usize);
         let mut term = self.term.lock();
         term.resize(grid_size);
         drop(term);
@@ -336,30 +339,13 @@ impl TerminalView {
 /// Manages all terminal instances.
 pub struct TerminalManager {
     pub terminals: HashMap<TerminalId, TerminalView>,
-    next_id: TerminalId,
 }
 
 impl TerminalManager {
     pub fn new() -> Self {
         Self {
             terminals: HashMap::new(),
-            next_id: 1,
         }
-    }
-
-    /// Create a new terminal and return its ID.
-    pub fn create(
-        &mut self,
-        cols: u16,
-        rows: u16,
-        mode: TerminalMode,
-        shell: Option<&str>,
-    ) -> Result<TerminalId, Box<dyn std::error::Error>> {
-        let id = self.next_id;
-        self.next_id += 1;
-        let view = TerminalView::new(id, cols, rows, mode, shell)?;
-        self.terminals.insert(id, view);
-        Ok(id)
     }
 
     /// Destroy a terminal.

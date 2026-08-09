@@ -6,7 +6,7 @@
 ;;; Commentary:
 
 ;; neo-term provides a GPU-accelerated terminal emulator backed by
-;; alacritty_terminal + wgpu, integrated into the neomacs display engine.
+;; rio-vt + portable-pty + wgpu, integrated into the neomacs display engine.
 ;;
 ;; Three display modes:
 ;;   - Window mode: terminal fills a regular Emacs window/buffer

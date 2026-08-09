@@ -96,6 +96,8 @@ pub(crate) mod terminal_capabilities;
 pub(crate) mod tty_frontend;
 pub(crate) mod tty_init;
 
+#[cfg(feature = "neo-term")]
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -125,7 +127,7 @@ use neomacs_display_runtime::thread_comm::{
 };
 #[cfg(feature = "neo-term")]
 use neomacs_display_runtime::{
-    terminal::{SharedTerminals, TerminalMode, new_shared_terminals, visible_text},
+    terminal::{SharedTerminals, new_shared_terminals, visible_text},
     thread_comm::TerminalCommand,
 };
 use neomacs_layout_engine::font::fontconfig::FontSizing;
@@ -138,17 +140,16 @@ use neovm_core::buffer::{BufferId, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::builtins::set_neomacs_monitor_info;
 use neovm_core::emacs_core::display::gui_window_system_symbol;
+#[cfg(feature = "neo-term")]
+use neovm_core::emacs_core::display_host::{
+    TerminalCreateRequest, TerminalFloatPlacement, TerminalGridSize, TerminalId,
+};
 use neovm_core::emacs_core::eval::{
     FontResolveRequest, FontSpecResolveRequest, GuiFrameHostSize, ResolvedFontMatch,
     ResolvedFontSpecMatch, ResolvedFrameFont, ResolvedSurface, ResolvedVideo, ResolvedWebKit,
     ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
     ShaderSurfaceUniformInit, SurfaceChannelKind, SurfaceResolveRequest, VideoResolveRequest,
     VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
-};
-#[cfg(feature = "neo-term")]
-use neovm_core::emacs_core::eval::{
-    TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement, TerminalGridSize,
-    TerminalId,
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
@@ -1040,7 +1041,89 @@ struct PrimaryWindowDisplayHost {
     /// GPU device loss (it is Lisp-visible state, not a re-creatable cache).
     last_frame_shader: Mutex<Option<(String, RendererShaderLanguage, Vec<SurfaceUniformInit>)>>,
     #[cfg(feature = "neo-term")]
-    shared_terminals: SharedTerminals,
+    terminal_state: TerminalHostState,
+}
+
+#[cfg(feature = "neo-term")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TerminalLifecycle {
+    Pending,
+    Live,
+    Destroying,
+}
+
+/// Per-editor neo-term ownership state. IDs and lifecycle records must not be
+/// process-global: independent editor instances in one process remain isolated.
+#[cfg(feature = "neo-term")]
+struct TerminalHostState {
+    shared: SharedTerminals,
+    next_id: Cell<Option<TerminalId>>,
+    lifecycles: RefCell<HashMap<TerminalId, TerminalLifecycle>>,
+}
+
+#[cfg(feature = "neo-term")]
+impl TerminalHostState {
+    fn new(shared: SharedTerminals) -> Self {
+        Self {
+            shared,
+            next_id: Cell::new(TerminalId::new(HOST_TERMINAL_ID_START)),
+            lifecycles: RefCell::new(HashMap::new()),
+        }
+    }
+
+    fn allocate(&self) -> Result<TerminalId, String> {
+        let id = self
+            .next_id
+            .get()
+            .ok_or_else(|| "neo-term id allocator exhausted".to_owned())?;
+        self.next_id
+            .set(id.get().checked_add(1).and_then(TerminalId::new));
+        Ok(id)
+    }
+
+    fn record_created(&self, id: TerminalId) {
+        self.lifecycles
+            .borrow_mut()
+            .insert(id, TerminalLifecycle::Pending);
+    }
+
+    fn require_active(&self, id: TerminalId) -> Result<(), String> {
+        match self.lifecycles.borrow().get(&id) {
+            Some(TerminalLifecycle::Pending | TerminalLifecycle::Live) => Ok(()),
+            Some(TerminalLifecycle::Destroying) => {
+                Err(format!("neo-term terminal {id} is being destroyed"))
+            }
+            None => Err(format!("unknown neo-term terminal id {id}")),
+        }
+    }
+
+    fn mark_destroying(&self, id: TerminalId) {
+        self.lifecycles
+            .borrow_mut()
+            .insert(id, TerminalLifecycle::Destroying);
+    }
+
+    fn visible_text(&self, id: TerminalId) -> Result<Option<String>, String> {
+        let lifecycle = self
+            .lifecycles
+            .borrow()
+            .get(&id)
+            .copied()
+            .ok_or_else(|| format!("unknown neo-term terminal id {id}"))?;
+        let text = visible_text(&self.shared, id);
+        match (lifecycle, text.is_some()) {
+            (TerminalLifecycle::Pending, true) => {
+                self.lifecycles
+                    .borrow_mut()
+                    .insert(id, TerminalLifecycle::Live);
+            }
+            (TerminalLifecycle::Destroying, false) => {
+                self.lifecycles.borrow_mut().remove(&id);
+            }
+            _ => {}
+        }
+        Ok(text)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1073,14 +1156,6 @@ fn next_host_surface_id() -> u32 {
 
 #[cfg(feature = "neo-term")]
 const HOST_TERMINAL_ID_START: u32 = 0x4000_0000;
-#[cfg(feature = "neo-term")]
-static HOST_TERMINAL_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_TERMINAL_ID_START);
-
-#[cfg(feature = "neo-term")]
-fn next_host_terminal_id() -> Result<TerminalId, String> {
-    TerminalId::new(HOST_TERMINAL_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed))
-        .ok_or_else(|| "neo-term id allocator exhausted".to_owned())
-}
 
 fn renderer_shader_language(language: ShaderSurfaceLanguage) -> RendererShaderLanguage {
     match language {
@@ -2062,51 +2137,47 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
     #[cfg(feature = "neo-term")]
     fn create_terminal(&self, request: TerminalCreateRequest) -> Result<TerminalId, String> {
-        let id = next_host_terminal_id()?;
-        let mode = match request.mode {
-            TerminalDisplayMode::Window => TerminalMode::Window,
-            TerminalDisplayMode::Inline => TerminalMode::Inline,
-            TerminalDisplayMode::Floating => TerminalMode::Floating,
-        };
+        let id = self.terminal_state.allocate()?;
         self.send_render_command(
             RenderCommand::Terminal(TerminalCommand::TerminalCreate {
-                id: id.get(),
-                cols: request.size.cols.get(),
-                rows: request.size.rows.get(),
-                mode,
+                id,
+                size: request.size,
+                mode: request.mode,
                 shell: request.shell,
             }),
             "failed to queue terminal create",
         )?;
+        self.terminal_state.record_created(id);
         Ok(id)
     }
 
     #[cfg(feature = "neo-term")]
     fn write_terminal(&self, id: TerminalId, data: Vec<u8>) -> Result<(), String> {
+        self.terminal_state.require_active(id)?;
         self.send_render_command(
-            RenderCommand::Terminal(TerminalCommand::TerminalWrite { id: id.get(), data }),
+            RenderCommand::Terminal(TerminalCommand::TerminalWrite { id, data }),
             "failed to queue terminal input",
         )
     }
 
     #[cfg(feature = "neo-term")]
     fn resize_terminal(&self, id: TerminalId, size: TerminalGridSize) -> Result<(), String> {
+        self.terminal_state.require_active(id)?;
         self.send_render_command(
-            RenderCommand::Terminal(TerminalCommand::TerminalResize {
-                id: id.get(),
-                cols: size.cols.get(),
-                rows: size.rows.get(),
-            }),
+            RenderCommand::Terminal(TerminalCommand::TerminalResize { id, size }),
             "failed to queue terminal resize",
         )
     }
 
     #[cfg(feature = "neo-term")]
     fn destroy_terminal(&self, id: TerminalId) -> Result<(), String> {
+        self.terminal_state.require_active(id)?;
         self.send_render_command(
-            RenderCommand::Terminal(TerminalCommand::TerminalDestroy { id: id.get() }),
+            RenderCommand::Terminal(TerminalCommand::TerminalDestroy { id }),
             "failed to queue terminal destroy",
-        )
+        )?;
+        self.terminal_state.mark_destroying(id);
+        Ok(())
     }
 
     #[cfg(feature = "neo-term")]
@@ -2115,20 +2186,16 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         id: TerminalId,
         placement: TerminalFloatPlacement,
     ) -> Result<(), String> {
+        self.terminal_state.require_active(id)?;
         self.send_render_command(
-            RenderCommand::Terminal(TerminalCommand::TerminalSetFloat {
-                id: id.get(),
-                x: placement.x(),
-                y: placement.y(),
-                opacity: placement.opacity(),
-            }),
+            RenderCommand::Terminal(TerminalCommand::TerminalSetFloat { id, placement }),
             "failed to queue terminal placement",
         )
     }
 
     #[cfg(feature = "neo-term")]
     fn terminal_text(&self, id: TerminalId) -> Result<Option<String>, String> {
-        Ok(visible_text(&self.shared_terminals, id.get()))
+        self.terminal_state.visible_text(id)
     }
 
     fn set_frame_shader(
@@ -3065,7 +3132,7 @@ fn run_gui_evaluator_worker(
         frame_shader_installed: AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals,
+        terminal_state: TerminalHostState::new(shared_terminals),
     }));
     adopt_existing_primary_gui_frame(&mut evaluator)
         .expect("bootstrap GUI frame adoption should succeed");

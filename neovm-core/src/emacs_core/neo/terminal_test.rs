@@ -1,7 +1,8 @@
-use super::super::eval::{
-    Context, DisplayHost, GuiFrameHostRequest, TerminalCreateRequest, TerminalDisplayMode,
-    TerminalFloatPlacement, TerminalGridSize, TerminalId,
+use super::super::display_host::{
+    DisplayHost, TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement,
+    TerminalGridSize, TerminalId,
 };
+use super::super::eval::{Context, GuiFrameHostRequest};
 use super::super::value::{Value, list_to_vec};
 use std::sync::{Arc, Mutex};
 
@@ -84,7 +85,11 @@ impl DisplayHost for RecordingTerminalDisplayHost {
     }
 
     fn terminal_text(&self, id: TerminalId) -> Result<Option<String>, String> {
-        Ok((id.get() == 41).then(|| "ready\n$".to_owned()))
+        if id.get() == 41 {
+            Ok(Some("ready\n$".to_owned()))
+        } else {
+            Err(format!("unknown test terminal id {id}"))
+        }
     }
 }
 
@@ -113,7 +118,9 @@ fn public_terminal_builtins_route_typed_requests_through_the_display_host() {
          (neomacs-terminal-set-float id 10.5 20 0.85)
          (neomacs-terminal-get-text id)
          (neomacs-terminal-destroy id)
-         (neomacs-terminal-get-text 999))))
+         (condition-case err
+             (neomacs-terminal-get-text 999)
+           (error (car err))))))
 "#,
         )
         .expect("terminal public workflow should evaluate");
@@ -128,7 +135,7 @@ fn public_terminal_builtins_route_typed_requests_through_the_display_host() {
     assert_eq!(&values[1..4], &[Value::T, Value::T, Value::T]);
     assert_eq!(values[4].as_utf8_str(), Some("ready\n$"));
     assert_eq!(values[5], Value::T);
-    assert_eq!(values[6], Value::NIL);
+    assert_eq!(values[6], Value::symbol("error"));
 
     assert_eq!(
         *host.events.lock().expect("terminal host events"),
@@ -161,4 +168,41 @@ fn public_terminal_builtins_route_typed_requests_through_the_display_host() {
             },
         ]
     );
+}
+
+#[test]
+fn invalid_lisp_terminal_values_never_reach_the_display_host() {
+    crate::test_utils::init_test_tracing();
+    let host = RecordingTerminalDisplayHost::default();
+    let mut eval = Context::new();
+    eval.set_display_host(Box::new(host.clone()));
+
+    for form in [
+        "(neomacs-terminal-create 0 24 0)",
+        "(neomacs-terminal-create 80 65536 0)",
+        "(neomacs-terminal-create 80 24 3)",
+        "(neomacs-terminal-create 80 24 0 7)",
+        "(neomacs-terminal-write 0 \"data\")",
+        "(neomacs-terminal-resize 41 0 24)",
+        "(neomacs-terminal-set-float 41 0 0 -0.1)",
+        "(neomacs-terminal-set-float 41 0 0 1.1)",
+    ] {
+        let guarded = format!("(condition-case err {form} (error (car err)))");
+        let result = eval.eval_str(&guarded).expect("condition-case result");
+        assert_ne!(result, Value::symbol("unexpected"), "form: {form}");
+    }
+
+    assert!(host.events.lock().expect("terminal host events").is_empty());
+    assert!(TerminalGridSize::new(0, 24).is_none());
+    assert!(TerminalGridSize::new(80, 0).is_none());
+    assert!(TerminalFloatPlacement::new(f32::NAN, 0.0, 1.0).is_none());
+    assert!(TerminalFloatPlacement::new(0.0, f32::INFINITY, 1.0).is_none());
+    assert!(TerminalFloatPlacement::new(0.0, 0.0, -0.1).is_none());
+    assert!(TerminalFloatPlacement::new(0.0, 0.0, 1.1).is_none());
+
+    let mut no_host = Context::new();
+    let result = no_host
+        .eval_str("(condition-case err (neomacs-terminal-create 80 24 0) (error (car err)))")
+        .expect("missing-host condition-case result");
+    assert_eq!(result, Value::symbol("error"));
 }

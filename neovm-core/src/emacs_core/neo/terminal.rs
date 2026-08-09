@@ -4,11 +4,12 @@
 //! [`DisplayHost`]. PTY ownership, VT parsing, and rendering remain entirely
 //! behind the display-runtime boundary.
 
-use super::super::error::{EvalResult, Flow, signal};
-use super::super::eval::{
-    Context, DisplayHost, TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement,
+use super::super::display_host::{
+    DisplayHost, TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement,
     TerminalGridSize, TerminalId,
 };
+use super::super::error::{EvalResult, Flow, signal};
+use super::super::eval::Context;
 use super::super::value::Value;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroU16;

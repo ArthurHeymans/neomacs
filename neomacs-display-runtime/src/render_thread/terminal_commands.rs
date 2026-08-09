@@ -12,17 +12,22 @@ impl RenderApp {
         match cmd {
             TerminalCommand::TerminalCreate {
                 id,
-                cols,
-                rows,
+                size,
                 mode,
                 shell,
-            } => match crate::terminal::TerminalView::new(id, cols, rows, mode, shell.as_deref()) {
+            } => match crate::terminal::TerminalView::new(id, size, mode, shell.as_deref()) {
                 Ok(view) => {
                     if let Ok(mut shared) = self.shared_terminals.lock() {
                         shared.insert(id, view.term.clone());
                     }
                     self.terminal_manager.terminals.insert(id, view);
-                    tracing::info!("Terminal {} created ({}x{}, {:?})", id, cols, rows, mode);
+                    tracing::info!(
+                        "Terminal {} created ({}x{}, {:?})",
+                        id,
+                        size.cols,
+                        size.rows,
+                        mode
+                    );
                 }
                 Err(e) => {
                     tracing::error!("Failed to create terminal {}: {}", id, e);
@@ -35,9 +40,9 @@ impl RenderApp {
                     tracing::warn!("Terminal {} write error: {}", id, e);
                 }
             }
-            TerminalCommand::TerminalResize { id, cols, rows } => {
+            TerminalCommand::TerminalResize { id, size } => {
                 if let Some(view) = self.terminal_manager.get_mut(id) {
-                    view.resize(cols, rows);
+                    view.resize(size);
                 }
             }
             TerminalCommand::TerminalDestroy { id } => {
@@ -47,11 +52,11 @@ impl RenderApp {
                 self.terminal_manager.destroy(id);
                 tracing::info!("Terminal {} destroyed", id);
             }
-            TerminalCommand::TerminalSetFloat { id, x, y, opacity } => {
+            TerminalCommand::TerminalSetFloat { id, placement } => {
                 if let Some(view) = self.terminal_manager.get_mut(id) {
-                    view.float_x = x;
-                    view.float_y = y;
-                    view.float_opacity = opacity;
+                    view.float_x = placement.x();
+                    view.float_y = placement.y();
+                    view.float_opacity = placement.opacity();
                 }
             }
         }

@@ -143,10 +143,13 @@ pub enum InputEvent {
     SurfaceCreateFailed { id: u32, error: String },
     /// Terminal child process exited
     #[cfg(feature = "neo-term")]
-    TerminalExited { id: u32 },
+    TerminalExited { id: crate::terminal::TerminalId },
     /// Terminal title changed
     #[cfg(feature = "neo-term")]
-    TerminalTitleChanged { id: u32, title: String },
+    TerminalTitleChanged {
+        id: crate::terminal::TerminalId,
+        title: String,
+    },
     /// Popup menu selection made (index into menu items, -1 = cancelled)
     MenuSelection { index: i32 },
     /// File(s) dropped onto the window
@@ -559,24 +562,27 @@ pub enum AssetCommand {
 pub enum TerminalCommand {
     /// Create a terminal
     TerminalCreate {
-        id: u32,
-        cols: u16,
-        rows: u16,
+        id: crate::terminal::TerminalId,
+        size: crate::terminal::TerminalGridSize,
         mode: crate::terminal::TerminalMode,
         shell: Option<String>,
     },
     /// Write input to a terminal
-    TerminalWrite { id: u32, data: Vec<u8> },
+    TerminalWrite {
+        id: crate::terminal::TerminalId,
+        data: Vec<u8>,
+    },
     /// Resize a terminal
-    TerminalResize { id: u32, cols: u16, rows: u16 },
+    TerminalResize {
+        id: crate::terminal::TerminalId,
+        size: crate::terminal::TerminalGridSize,
+    },
     /// Destroy a terminal
-    TerminalDestroy { id: u32 },
+    TerminalDestroy { id: crate::terminal::TerminalId },
     /// Set floating terminal position and opacity
     TerminalSetFloat {
-        id: u32,
-        x: f32,
-        y: f32,
-        opacity: f32,
+        id: crate::terminal::TerminalId,
+        placement: crate::terminal::TerminalFloatPlacement,
     },
 }
 

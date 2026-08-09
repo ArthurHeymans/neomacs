@@ -35,14 +35,14 @@ use neomacs_layout_engine::font::metrics::FontMetricsService;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;
+#[cfg(feature = "neo-term")]
+use neovm_core::emacs_core::display_host::{
+    TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement, TerminalGridSize,
+};
 use neovm_core::emacs_core::error::EvalError;
 use neovm_core::emacs_core::eval::{
     PopupMenuEntry, PopupMenuRequest, VideoResolveRequest, VideoResolveSource,
     WebKitResolveRequest, WebKitResolveSource,
-};
-#[cfg(feature = "neo-term")]
-use neovm_core::emacs_core::eval::{
-    TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement, TerminalGridSize,
 };
 use neovm_core::emacs_core::image_catalog::{AxisSize, ImageRotation, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
@@ -732,7 +732,7 @@ fn opening_gui_frame_adoption_does_not_push_stale_window_size() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
 
     neovm_core::emacs_core::DisplayHost::realize_gui_frame(
@@ -812,7 +812,7 @@ fn opening_gui_frame_adoption_applies_fullscreen_mode() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
 
     neovm_core::emacs_core::DisplayHost::realize_gui_frame(
@@ -873,7 +873,7 @@ fn primary_display_host_destroy_gui_frame_routes_primary_and_secondary_windows()
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
 
     neovm_core::emacs_core::DisplayHost::destroy_gui_frame(&mut host, FrameId(0x100000002))
@@ -925,7 +925,7 @@ fn primary_display_host_popup_menu_routes_primary_and_secondary_frames() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
 
     let entry = PopupMenuEntry {
@@ -993,7 +993,7 @@ fn primary_image_catalog_lookup_returns_pending_without_waiting_for_render_threa
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -1098,7 +1098,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
             frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
             last_frame_shader: Mutex::new(None),
             #[cfg(feature = "neo-term")]
-            shared_terminals: new_shared_terminals(),
+            terminal_state: super::TerminalHostState::new(new_shared_terminals()),
         };
         let lookup = host.image_catalog.lookup(request.clone());
         let duplicate_lookup = host.image_catalog.lookup(request);
@@ -1156,7 +1156,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
@@ -1221,7 +1221,7 @@ fn primary_display_host_expands_tilde_in_image_file_before_render_command() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::File(LispString::from_utf8("~/Pictures/Pik.png")),
@@ -1310,7 +1310,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = ImageResolveRequest {
         source: ImageResolveSource::Data(vec![0xde, 0xad]),
@@ -1381,7 +1381,7 @@ fn primary_display_host_request_video_queues_create_once_with_stable_id() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = VideoResolveRequest {
         source: VideoResolveSource::File(LispString::from_utf8("/tmp/demo.mp4")),
@@ -1438,7 +1438,7 @@ fn primary_display_host_request_video_preserves_uri_source() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = VideoResolveRequest {
         source: VideoResolveSource::Uri(LispString::from_utf8("https://example.com/video.mp4")),
@@ -1491,7 +1491,7 @@ fn primary_display_host_request_webkit_queues_create_and_load_once_with_stable_i
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = WebKitResolveRequest {
         source: WebKitResolveSource::Uri(LispString::from_utf8("https://example.com")),
@@ -1551,7 +1551,7 @@ fn primary_display_host_xwidget_lifecycle_uses_explicit_xwidget_id() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
 
     neovm_core::emacs_core::DisplayHost::create_webkit_xwidget(&host, 42, 400, 300)
@@ -1627,7 +1627,7 @@ fn bootstrap_gui_frame_adoption_routes_future_resizes_to_primary_window() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     }));
 
     adopt_existing_primary_gui_frame(&mut eval).expect("bootstrap GUI frame should adopt");
@@ -1697,7 +1697,7 @@ fn primary_window_resize_does_not_wait_for_host_acknowledgement() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
 
     let started = Instant::now();
@@ -1766,7 +1766,7 @@ fn primary_window_display_host_forwards_visual_config_to_renderer() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
 
     let mut config = neomacs_display_protocol::VisualConfig::default();
@@ -1833,7 +1833,7 @@ fn primary_window_display_host_round_trips_clipboard_requests_through_renderer()
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
 
     neovm_core::emacs_core::DisplayHost::set_clipboard_text(&mut host, Some("copied"))
@@ -1899,7 +1899,7 @@ fn redisplay_title_sync_formats_frame_title_format_for_primary_window() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     }));
 
     adopt_existing_primary_gui_frame(&mut eval).expect("bootstrap GUI frame should adopt");
@@ -1950,7 +1950,7 @@ fn frame_host_title_formats_the_restored_runtime_system_name() {
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
         #[cfg(feature = "neo-term")]
-        shared_terminals: new_shared_terminals(),
+        terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     }));
     let expected_system_name: String = hostname::get()
         .expect("OS hostname")
@@ -4559,7 +4559,7 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
         resolved_surfaces: Mutex::new(super::ResolvedSurfaceMemo::default()),
         frame_shader_installed: std::sync::atomic::AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
-        shared_terminals,
+        terminal_state: super::TerminalHostState::new(shared_terminals),
     };
 
     let id = neovm_core::emacs_core::DisplayHost::create_terminal(
@@ -4598,6 +4598,22 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
     );
     neovm_core::emacs_core::DisplayHost::destroy_terminal(&host, id)
         .expect("terminal destroy should queue");
+    assert_eq!(
+        neovm_core::emacs_core::DisplayHost::terminal_text(&host, id)
+            .expect("destroyed terminal observation should settle"),
+        None
+    );
+    assert!(
+        neovm_core::emacs_core::DisplayHost::write_terminal(&host, id, b"stale".to_vec())
+            .unwrap_err()
+            .contains("unknown neo-term terminal id")
+    );
+    let arbitrary_id = neovm_core::emacs_core::display_host::TerminalId::new(999).unwrap();
+    assert!(
+        neovm_core::emacs_core::DisplayHost::terminal_text(&host, arbitrary_id)
+            .unwrap_err()
+            .contains("unknown neo-term terminal id")
+    );
 
     let commands: Vec<_> = cmd_rx.try_iter().collect();
     assert_eq!(commands.len(), 5);
@@ -4605,39 +4621,55 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
         &commands[0],
         RenderCommand::Terminal(TerminalCommand::TerminalCreate {
             id: command_id,
-            cols: 96,
-            rows: 31,
+            size,
             mode: TerminalMode::Floating,
             shell: Some(shell),
-        }) if *command_id == id.get() && shell == "/bin/sh"
+        }) if *command_id == id
+            && *size == TerminalGridSize::new(96, 31).unwrap()
+            && shell == "/bin/sh"
     ));
     assert!(matches!(
         &commands[1],
         RenderCommand::Terminal(TerminalCommand::TerminalWrite { id: command_id, data })
-            if *command_id == id.get() && data == b"echo typed\r"
+            if *command_id == id && data == b"echo typed\r"
     ));
     assert!(matches!(
         &commands[2],
         RenderCommand::Terminal(TerminalCommand::TerminalResize {
             id: command_id,
-            cols: 120,
-            rows: 40,
-        }) if *command_id == id.get()
+            size,
+        }) if *command_id == id && *size == TerminalGridSize::new(120, 40).unwrap()
     ));
     assert!(matches!(
         &commands[3],
         RenderCommand::Terminal(TerminalCommand::TerminalSetFloat {
             id: command_id,
-            x,
-            y,
-            opacity,
-        }) if *command_id == id.get() && *x == 12.5 && *y == 24.0 && *opacity == 0.9
+            placement,
+        }) if *command_id == id
+            && *placement == TerminalFloatPlacement::new(12.5, 24.0, 0.9).unwrap()
     ));
     assert!(matches!(
         &commands[4],
         RenderCommand::Terminal(TerminalCommand::TerminalDestroy { id: command_id })
-            if *command_id == id.get()
+            if *command_id == id
     ));
+}
+
+#[cfg(feature = "neo-term")]
+#[test]
+fn terminal_id_allocation_is_isolated_per_editor_host() {
+    let first = super::TerminalHostState::new(new_shared_terminals());
+    let second = super::TerminalHostState::new(new_shared_terminals());
+
+    assert_eq!(first.allocate().unwrap(), second.allocate().unwrap());
+    assert_eq!(
+        first.allocate().unwrap().get(),
+        super::HOST_TERMINAL_ID_START + 1
+    );
+    assert_eq!(
+        second.allocate().unwrap().get(),
+        super::HOST_TERMINAL_ID_START + 1
+    );
 }
 
 // ---------------------------------------------------------------------------

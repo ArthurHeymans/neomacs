@@ -48,7 +48,10 @@ impl RenderApp {
             else {
                 continue;
             };
-            let Some(content) = terminal_contents.get(terminal_id) else {
+            let Some(terminal_id) = crate::terminal::TerminalId::new(*terminal_id) else {
+                continue;
+            };
+            let Some(content) = terminal_contents.get(&terminal_id) else {
                 continue;
             };
 
@@ -485,7 +488,10 @@ impl RenderApp {
                         && (content.cols as u16 != target_cols
                             || content.rows as u16 != target_rows)
                     {
-                        view.resize(target_cols, target_rows);
+                        view.resize(
+                            crate::terminal::TerminalGridSize::new(target_cols, target_rows)
+                                .expect("positive terminal target dimensions"),
+                        );
                     }
                 }
             }
