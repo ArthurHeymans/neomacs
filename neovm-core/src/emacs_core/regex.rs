@@ -125,7 +125,11 @@ struct BufferRegexpSyntaxLookup<'a> {
     base: BufferSyntaxLookup,
     buffer: &'a Buffer,
     input_start: EmacsBytePos,
-    property_lookup: crate::emacs_core::syntax::SyntaxProperties<'a>,
+    /// One property-run cache for the whole match. GNU arms the same `gl_state`
+    /// runs for a regexp over a buffer (`RE_SETUP_SYNTAX_TABLE_FOR_OBJECT`,
+    /// src/syntax.c:277); without it every `\s` test did a fresh interval
+    /// lookup and a byte->char conversion.
+    property_lookup: crate::emacs_core::syntax::SyntaxPropByteRun<'a>,
 }
 
 impl SyntaxLookup for BufferRegexpSyntaxLookup<'_> {
@@ -139,7 +143,7 @@ impl SyntaxLookup for BufferRegexpSyntaxLookup<'_> {
             &self.base.syntax_table,
             c,
             EmacsBytePos::new(self.input_start.get().saturating_add(input_pos)),
-            self.property_lookup,
+            &self.property_lookup,
         )
     }
 
@@ -165,7 +169,9 @@ fn buffer_regexp_syntax_lookup<'a>(
         base: buffer_syntax_lookup_with_word_boundary(buf, context.word_boundary),
         buffer: buf,
         input_start,
-        property_lookup: context.syntax_properties,
+        property_lookup: crate::emacs_core::syntax::SyntaxPropByteRun::new(
+            context.syntax_properties,
+        ),
     }
 }
 

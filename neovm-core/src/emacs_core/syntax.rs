@@ -1608,7 +1608,7 @@ fn maybe_skip_comment_forward(
         buffer: buf,
         point: start_byte,
     };
-    let complete = forward_comment_forward(&mut scanner, 1, props);
+    let complete = forward_comment_forward(&mut scanner, 1, &SyntaxPropByteRun::new(props));
     let next = buffer_byte_to_char_pos(buf, scanner.point_emacs_byte_pos());
     if next <= idx {
         None
@@ -1638,7 +1638,7 @@ fn maybe_skip_comment_backward(
         buffer: buf,
         point: start_byte,
     };
-    if forward_comment_backward(&mut scanner, 1, props) {
+    if forward_comment_backward(&mut scanner, 1, &SyntaxPropByteRun::new(props)) {
         let next = buffer_byte_to_char_pos(buf, scanner.point_emacs_byte_pos());
         (next < idx).then_some(next)
     } else {
@@ -2716,6 +2716,119 @@ impl<'a> SyntaxProperties<'a> {
     }
 }
 
+/// The `[start, end)` run and its resolved value, in whatever coordinate the
+/// scan addresses text by.
+///
+/// Held as separate `Cell`s rather than one `RefCell<Option<..>>`: this is read
+/// PER CHARACTER, and a `RefCell` charged a borrow-flag load, increment and
+/// decrement on top of the comparison. `Value` and `Option<Value>` are `Copy`,
+/// so plain `Cell`s make an in-run read two integer compares and one load --
+/// GNU's inlined `charpos >= gl_state.e_property` test (`syntax.h`).
+///
+/// `start == end == 0` is the natural empty state (no position satisfies
+/// `start <= pos && pos < end`), so no reserved sentinel is needed.
+#[derive(Default)]
+struct PropRunCells {
+    start: Cell<usize>,
+    end: Cell<usize>,
+    value: Cell<Option<Value>>,
+}
+
+impl PropRunCells {
+    /// A run covering every position, for a scan that ignores properties: its
+    /// per-character path then answers from the same range check a honouring
+    /// scan uses, with no test of the property source at all.
+    fn covering_everything() -> Self {
+        Self {
+            start: Cell::new(0),
+            end: Cell::new(usize::MAX),
+            value: Cell::new(None),
+        }
+    }
+
+    #[inline]
+    fn get(&self, pos: usize) -> Option<Option<Value>> {
+        (pos >= self.start.get() && pos < self.end.get()).then(|| self.value.get())
+    }
+
+    fn set(&self, start: usize, end: usize, value: Option<Value>) {
+        self.start.set(start);
+        self.end.set(end);
+        self.value.set(value);
+    }
+}
+
+/// Per-scan `syntax-table` property cache for the scanners that address text by
+/// EMACS BYTE position: the regexp matcher, `forward-comment`, and
+/// `backward-prefix-chars`.
+///
+/// GNU's `gl_state` serves these scanners too -- `RE_SETUP_SYNTAX_TABLE_FOR_OBJECT`
+/// (src/syntax.c:277) arms the same machinery the sexp scanner uses -- so until
+/// this existed they were the only scanners doing a fresh interval lookup, and a
+/// byte->char conversion, for every character examined. Caching the run in BYTE
+/// coordinates is what removes the conversion: the byte<->char mapping is
+/// monotonic, so an interval's char run `[s, e)` is exactly the byte run
+/// `[byte(s), byte(e))`, and a hit becomes the same two integer compares the
+/// char-addressed cache does.
+///
+/// Same single-scan lifetime, and so the same invariant: no Lisp runs during a
+/// scan, so neither the intervals nor the resolver's snapshot can move under it.
+pub(crate) struct SyntaxPropByteRun<'a> {
+    run: PropRunCells,
+    props: SyntaxProperties<'a>,
+}
+
+impl<'a> SyntaxPropByteRun<'a> {
+    pub(crate) fn new(props: SyntaxProperties<'a>) -> Self {
+        let run = match props {
+            SyntaxProperties::Ignore => PropRunCells::covering_everything(),
+            SyntaxProperties::Honor(_) => PropRunCells::default(),
+        };
+        Self { run, props }
+    }
+
+    /// The resolved `syntax-table` property at an Emacs byte position, served
+    /// from the cached run when possible.
+    #[inline]
+    fn syntax_table_prop_at_emacs_byte(
+        &self,
+        buf: &Buffer,
+        byte_pos: EmacsBytePos,
+    ) -> Option<Value> {
+        if let Some(value) = self.run.get(byte_pos.get()) {
+            return value;
+        }
+        let SyntaxProperties::Honor(resolver) = self.props else {
+            // Unreachable: an ignoring cache covers every position.
+            return None;
+        };
+        self.refill_run(buf, byte_pos, resolver)
+    }
+
+    /// Locate the interval containing `byte_pos`, resolve its property once,
+    /// and cache both with the run converted to byte coordinates.
+    ///
+    /// Outlined so the per-character check above stays inlinable into the
+    /// scan loops.
+    #[inline(never)]
+    fn refill_run(
+        &self,
+        buf: &Buffer,
+        byte_pos: EmacsBytePos,
+        resolver: CharPropertyResolver<'_>,
+    ) -> Option<Value> {
+        let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(byte_pos);
+        let (plist, start, end) = buf.interval_plist_run_at_char_pos(char_pos);
+        let value = plist.and_then(|plist| resolver.resolve_interval_plist(plist));
+        self.run.set(
+            buffer_char_to_emacs_byte_pos(buf, start).get(),
+            buffer_char_to_emacs_byte_pos(buf, end).get(),
+            value,
+        );
+        value
+    }
+}
+
 /// Per-scan cache of the `syntax-table` text-property run, mirroring GNU
 /// `syntax.c` `gl_state` (`b_property`/`e_property` plus the current value).
 /// A scan reads the property once per char, but it is almost always nil over
@@ -2746,9 +2859,7 @@ struct SyntaxPropRange<'a> {
     /// `run_start == run_end == 0` is the natural empty state (no `pos`
     /// satisfies `start <= pos && pos < end`), so no reserved sentinel value is
     /// needed. Mirrors GNU's `gl_state.b_property` / `e_property`.
-    run_start: Cell<usize>,
-    run_end: Cell<usize>,
-    run_value: Cell<Option<Value>>,
+    run: PropRunCells,
     /// Lazily-filled memo of the 128 ASCII syntax entries for the table this
     /// scan runs under (GNU `SYNTAX_ENTRY` on the char-table's `ascii` slot,
     /// minus the per-char cons decode).
@@ -2810,17 +2921,12 @@ struct SyntaxPropRange<'a> {
 
 impl<'a> SyntaxPropRange<'a> {
     fn new(props: SyntaxProperties<'a>) -> Self {
-        // An ignoring scan gets one run covering every position, holding
-        // `None`: the per-character path then answers from the same two
-        // compares a honouring scan uses, with no branch on `props` at all.
-        let run_end = match props {
-            SyntaxProperties::Ignore => usize::MAX,
-            SyntaxProperties::Honor(_) => 0,
+        let run = match props {
+            SyntaxProperties::Ignore => PropRunCells::covering_everything(),
+            SyntaxProperties::Honor(_) => PropRunCells::default(),
         };
         Self {
-            run_start: Cell::new(0),
-            run_end: Cell::new(run_end),
-            run_value: Cell::new(None),
+            run,
             ascii: std::array::from_fn(|_| Cell::new(None)),
             ascii_table: Cell::new(0),
             props,
@@ -2873,14 +2979,11 @@ impl<'a> SyntaxPropRange<'a> {
     #[inline]
     fn syntax_table_prop_at_char(&self, buf: &Buffer, pos: usize) -> Option<Value> {
         // In-run fast path: two integer compares, as in GNU's
-        // UPDATE_SYNTAX_TABLE_FORWARD. Kept free of any borrow bookkeeping
-        // because this runs once per character scanned -- and free of any test
-        // of `props`, which an ignoring scan folds into the range check by
-        // caching a run of `None` over the whole position space (see
-        // [`Self::new`]). Touching the resolver here instead measured +10.6%
-        // on a forward-sexp sweep.
-        if pos >= self.run_start.get() && pos < self.run_end.get() {
-            let value = self.run_value.get();
+        // UPDATE_SYNTAX_TABLE_FORWARD -- and free of any test of `props`, which
+        // an ignoring scan folds into the range check by caching a run of
+        // `None` over the whole position space. Touching the resolver here
+        // instead measured +10.6% on a forward-sexp sweep.
+        if let Some(value) = self.run.get(pos) {
             #[cfg(debug_assertions)]
             if let SyntaxProperties::Honor(resolver) = self.props {
                 let plist = buf.interval_plist_at_char_pos(offset_char_pos(CharPos0::ZERO, pos));
@@ -2888,8 +2991,8 @@ impl<'a> SyntaxPropRange<'a> {
                 debug_assert!(
                     value == fresh,
                     "SyntaxPropRange stale syntax-table at char {pos} in [{}, {})",
-                    self.run_start.get(),
-                    self.run_end.get()
+                    self.run.start.get(),
+                    self.run.end.get()
                 );
             }
             return value;
@@ -2917,9 +3020,7 @@ impl<'a> SyntaxPropRange<'a> {
         let char_pos = offset_char_pos(CharPos0::ZERO, pos);
         let (plist, start, end) = buf.interval_plist_run_at_char_pos(char_pos);
         let value = plist.and_then(|plist| resolver.resolve_interval_plist(plist));
-        self.run_start.set(start.get());
-        self.run_end.set(end.get());
-        self.run_value.set(value);
+        self.run.set(start.get(), end.get(), value);
         value
     }
 }
@@ -2937,9 +3038,9 @@ fn effective_syntax_entry_for_char_at_byte(
     table: &SyntaxTable,
     ch: char,
     byte_pos: EmacsBytePos,
-    props: SyntaxProperties<'_>,
+    prop_cache: &SyntaxPropByteRun<'_>,
 ) -> SyntaxEntry {
-    if let Some(prop) = props.syntax_table_prop_at_emacs_byte(buf, byte_pos)
+    if let Some(prop) = prop_cache.syntax_table_prop_at_emacs_byte(buf, byte_pos)
         && let Some(entry) = syntax_entry_from_syntax_property(prop, ch)
     {
         return entry;
@@ -2958,9 +3059,9 @@ pub(crate) fn regexp_syntax_class_at_emacs_byte(
     table: &SyntaxTable,
     ch: char,
     byte_pos: EmacsBytePos,
-    props: SyntaxProperties<'_>,
+    prop_cache: &SyntaxPropByteRun<'_>,
 ) -> SyntaxClass {
-    effective_syntax_entry_for_char_at_byte(buf, table, ch, byte_pos, props).class
+    effective_syntax_entry_for_char_at_byte(buf, table, ch, byte_pos, prop_cache).class
 }
 
 /// The syntax entry governing the character at `abs_char`.
@@ -3452,7 +3553,7 @@ pub(crate) fn builtin_syntax_after_in_buffers(
         &SyntaxTable::for_buffer(buf),
         unit.ch,
         byte_index,
-        SyntaxProperties::for_scan(true, obarray, buffers),
+        &SyntaxPropByteRun::new(SyntaxProperties::for_scan(true, obarray, buffers)),
     );
     Ok(syntax_entry_to_value(&entry))
 }
@@ -3535,11 +3636,15 @@ fn forward_comment_in_buffers(
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        // One cache for the whole call: `forward-comment` examines every
+        // character it steps over, and until this existed each of those did a
+        // fresh interval lookup and a byte->char conversion.
+        let prop_cache = SyntaxPropByteRun::new(props);
         let mut scanner = ForwardCommentCursor::new(buf);
         let ok = if count > 0 {
-            forward_comment_forward(&mut scanner, count as u64, props)
+            forward_comment_forward(&mut scanner, count as u64, &prop_cache)
         } else {
-            forward_comment_backward(&mut scanner, (-count) as u64, props)
+            forward_comment_backward(&mut scanner, (-count) as u64, &prop_cache)
         };
         (ok, scanner.point_emacs_byte_pos())
     };
@@ -3582,7 +3687,7 @@ impl Deref for ForwardCommentCursor<'_> {
 fn forward_comment_forward(
     buf: &mut ForwardCommentCursor<'_>,
     count: u64,
-    props: SyntaxProperties<'_>,
+    prop_cache: &SyntaxPropByteRun<'_>,
 ) -> bool {
     let mut remaining = count;
     let accessible = buf.accessible_emacs_byte_region();
@@ -3603,7 +3708,7 @@ fn forward_comment_forward(
                 &SyntaxTable::for_buffer(buf),
                 unit.ch,
                 pt,
-                props,
+                prop_cache,
             );
             let class = entry.class;
 
@@ -3633,7 +3738,7 @@ fn forward_comment_forward(
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             pt,
-            props,
+            prop_cache,
         );
         let class = entry.class;
         let flags = entry.flags;
@@ -3643,7 +3748,7 @@ fn forward_comment_forward(
             let style = CommentStyle::from_main_flags(flags);
             let nested = flags.contains(SyntaxFlags::COMMENT_NESTABLE);
             buf.goto_emacs_byte_pos(unit.end);
-            if !scan_forward_comment_body(buf, style, nested, props) {
+            if !scan_forward_comment_body(buf, style, nested, prop_cache) {
                 return false;
             }
             remaining -= 1;
@@ -3654,7 +3759,7 @@ fn forward_comment_forward(
         if class == SyntaxClass::CommentFence {
             buf.goto_emacs_byte_pos(unit.end);
             // Scan forward for matching comment fence.
-            if !scan_forward_comment_fence(buf, props) {
+            if !scan_forward_comment_fence(buf, prop_cache) {
                 return false;
             }
             remaining -= 1;
@@ -3673,7 +3778,7 @@ fn forward_comment_forward(
                     &SyntaxTable::for_buffer(buf),
                     unit2.ch,
                     next_pos,
-                    props,
+                    prop_cache,
                 );
                 let flags2 = entry2.flags;
                 if flags2.contains(SyntaxFlags::COMMENT_START_SECOND) {
@@ -3681,7 +3786,7 @@ fn forward_comment_forward(
                     let nested = flags2.contains(SyntaxFlags::COMMENT_NESTABLE)
                         || flags.contains(SyntaxFlags::COMMENT_NESTABLE);
                     buf.goto_emacs_byte_pos(unit2.end);
-                    if !scan_forward_comment_body(buf, style, nested, props) {
+                    if !scan_forward_comment_body(buf, style, nested, prop_cache) {
                         return false;
                     }
                     remaining -= 1;
@@ -3704,7 +3809,7 @@ fn scan_forward_comment_body(
     buf: &mut ForwardCommentCursor<'_>,
     style: CommentStyle,
     nested: bool,
-    props: SyntaxProperties<'_>,
+    prop_cache: &SyntaxPropByteRun<'_>,
 ) -> bool {
     let mut nesting = 1i32;
     let max = buf.accessible_emacs_byte_region().end();
@@ -3722,7 +3827,7 @@ fn scan_forward_comment_body(
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             pt,
-            props,
+            prop_cache,
         );
         let class = entry.class;
         let flags = entry.flags;
@@ -3759,7 +3864,7 @@ fn scan_forward_comment_body(
                         &SyntaxTable::for_buffer(buf),
                         unit2.ch,
                         next_pos,
-                        props,
+                        prop_cache,
                     );
                     let flags2 = entry2.flags;
                     if is_nested_two_char_comment_start(flags, flags2, style) {
@@ -3802,7 +3907,7 @@ fn scan_forward_comment_body(
                     &SyntaxTable::for_buffer(buf),
                     unit2.ch,
                     next_pos,
-                    props,
+                    prop_cache,
                 );
                 let flags2 = entry2.flags;
                 if flags2.contains(SyntaxFlags::COMMENT_END_SECOND)
@@ -3825,7 +3930,7 @@ fn scan_forward_comment_body(
 /// Scan forward for matching comment fence character.
 fn scan_forward_comment_fence(
     buf: &mut ForwardCommentCursor<'_>,
-    props: SyntaxProperties<'_>,
+    prop_cache: &SyntaxPropByteRun<'_>,
 ) -> bool {
     let max = buf.accessible_emacs_byte_region().end();
     loop {
@@ -3841,7 +3946,7 @@ fn scan_forward_comment_fence(
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             pt,
-            props,
+            prop_cache,
         );
         let class = entry.class;
 
@@ -3870,7 +3975,7 @@ fn scan_forward_comment_fence(
 fn forward_comment_backward(
     buf: &mut ForwardCommentCursor<'_>,
     count: u64,
-    props: SyntaxProperties<'_>,
+    prop_cache: &SyntaxPropByteRun<'_>,
 ) -> bool {
     let mut remaining = count;
     let accessible = buf.accessible_emacs_byte_region();
@@ -3898,7 +4003,7 @@ fn forward_comment_backward(
                 &SyntaxTable::for_buffer(buf),
                 unit.ch,
                 ch_pos,
-                props,
+                prop_cache,
             );
             let class = entry.class;
             let flags = entry.flags;
@@ -3925,7 +4030,7 @@ fn forward_comment_backward(
                         &SyntaxTable::for_buffer(buf),
                         unit2.ch,
                         ch2_pos,
-                        props,
+                        prop_cache,
                     );
                     let flags2 = entry2.flags;
                     if flags2.contains(SyntaxFlags::COMMENT_END_FIRST) {
@@ -3942,7 +4047,7 @@ fn forward_comment_backward(
             // Comment fence backward.
             if code == SyntaxClass::CommentFence {
                 buf.goto_emacs_byte_pos(unit.start);
-                if !scan_backward_comment_fence(buf, props) {
+                if !scan_backward_comment_fence(buf, prop_cache) {
                     buf.goto_emacs_byte_pos(pt);
                     return false;
                 }
@@ -3957,7 +4062,7 @@ fn forward_comment_backward(
                     buf.goto_emacs_byte_pos(unit.start);
                 }
                 let saved = buf.point_emacs_byte_pos();
-                if scan_backward_comment_body(buf, comment_style, nested, props) {
+                if scan_backward_comment_body(buf, comment_style, nested, prop_cache) {
                     // Successfully scanned back through the comment body.
                     break;
                 }
@@ -4015,7 +4120,7 @@ fn scan_backward_comment_body(
     buf: &mut ForwardCommentCursor<'_>,
     style: CommentStyle,
     nested: bool,
-    props: SyntaxProperties<'_>,
+    prop_cache: &SyntaxPropByteRun<'_>,
 ) -> bool {
     let mut nesting = 1i32;
     let min = buf.accessible_emacs_byte_region().start();
@@ -4039,7 +4144,7 @@ fn scan_backward_comment_body(
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             ch_pos,
-            props,
+            prop_cache,
         );
         let class = entry.class;
         let flags = entry.flags;
@@ -4073,7 +4178,7 @@ fn scan_backward_comment_body(
                     &SyntaxTable::for_buffer(buf),
                     unit2.ch,
                     ch2_pos,
-                    props,
+                    prop_cache,
                 );
                 let flags2 = entry2.flags;
                 if flags2.contains(SyntaxFlags::COMMENT_END_FIRST)
@@ -4153,7 +4258,7 @@ fn scan_backward_comment_body(
                     &SyntaxTable::for_buffer(buf),
                     unit2.ch,
                     ch2_pos,
-                    props,
+                    prop_cache,
                 );
                 let flags2 = entry2.flags;
                 if flags2.contains(SyntaxFlags::COMMENT_START_FIRST)
@@ -4192,7 +4297,7 @@ fn scan_backward_comment_body(
 /// Scan backward for matching comment fence character.
 fn scan_backward_comment_fence(
     buf: &mut ForwardCommentCursor<'_>,
-    props: SyntaxProperties<'_>,
+    prop_cache: &SyntaxPropByteRun<'_>,
 ) -> bool {
     let min = buf.accessible_emacs_byte_region().start();
     loop {
@@ -4209,7 +4314,7 @@ fn scan_backward_comment_fence(
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             ch_pos,
-            props,
+            prop_cache,
         );
         let class = entry.class;
 
@@ -4255,6 +4360,7 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
 
     let min = buf.accessible_emacs_byte_region().start();
     let mut final_pos = buf.point_emacs_byte_pos();
+    let prop_cache = SyntaxPropByteRun::new(props);
     loop {
         let pt = final_pos;
         if pt <= min {
@@ -4269,7 +4375,7 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             ch_pos,
-            props,
+            &prop_cache,
         );
         let is_prefix =
             entry.class == SyntaxClass::Quote || entry.flags.contains(SyntaxFlags::PREFIX);
