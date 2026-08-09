@@ -101,11 +101,21 @@ pub enum Flow {
     /// `kill-emacs`: unwind everything and exit with this request.
     ///
     /// GNU's `Fkill_emacs` is `noreturn` — it runs the hooks and calls
-    /// `exit()`, so no Lisp handler and no callback boundary ever sees it. A
-    /// distinct variant reproduces that: `condition-case` cannot catch it
-    /// (it is not a signal), and every boundary that matches `Flow`
-    /// exhaustively must decide about it at compile time instead of
-    /// silently absorbing it as a callback error.
+    /// `exit()`, so no Lisp handler and no callback boundary ever sees it.
+    /// `condition-case` cannot catch this (it is not a signal), and every
+    /// boundary that matches `Flow` exhaustively must decide about it at
+    /// compile time instead of silently absorbing it as a callback error.
+    ///
+    /// The exit itself is DEFERRED, not immediate, and that is the one place
+    /// this diverges from GNU. `builtin_kill_emacs` records the request on the
+    /// evaluator before returning this variant, and the exit happens when
+    /// control reaches the evaluator's own return — so where GNU exits from
+    /// inside an FFI call, this engine finishes unwinding the boundary first.
+    /// A boundary with no shutdown exit kind of its own therefore reports
+    /// something else meanwhile: `module_handle_nonlocal_exit`
+    /// (`dynamic_module.rs`) hands the module a signal named `kill-emacs`, and
+    /// a module that clears it still exits, because the recorded request — not
+    /// the propagating variant — is what the evaluator acts on.
     Shutdown(super::eval::ShutdownRequest),
 }
 
