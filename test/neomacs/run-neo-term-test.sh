@@ -15,9 +15,13 @@ set -e
 
 cd "$(dirname "$0")/../.."
 
-LOG=/tmp/neo-term-test.log
-SCREENSHOT=/tmp/neo-term-screenshot.png
+TEST_ROOT="$PWD/tmp/neo-term-smoke"
+LOG="$TEST_ROOT/neo-term-test.log"
+SCREENSHOT="$TEST_ROOT/neo-term-screenshot.png"
 TEST_NAME="Neo Term"
+
+mkdir -p "$TEST_ROOT/runtime"
+export TMPDIR="$TEST_ROOT/runtime"
 
 echo "=== $TEST_NAME Test ==="
 echo "Starting Neomacs..."

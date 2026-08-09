@@ -51,14 +51,17 @@ TIMEOUT defaults to five seconds."
     (and (stringp text) (funcall predicate text) text)))
 
 (defun neo-term-itest--wait-until-destroyed (terminal-id &optional timeout)
-  "Wait until TERMINAL-ID disappears from renderer-owned terminal state."
+  "Wait until TERMINAL-ID is acknowledged absent by renderer-owned state."
   (let ((deadline (+ (float-time) (or timeout 5)))
         destroyed)
     (while (and (< (float-time) deadline) (not destroyed))
       (setq destroyed
-            (condition-case nil
-                (null (neomacs-terminal-get-text terminal-id))
-              (error t)))
+            (condition-case err
+                (progn (neomacs-terminal-get-text terminal-id) nil)
+              (error
+               (string-match-p
+                "unknown neo-term terminal id"
+                (error-message-string err)))))
       (unless destroyed (sit-for 0.05)))
     destroyed))
 
@@ -94,6 +97,9 @@ TIMEOUT defaults to five seconds."
 
 (defvar neo-term-itest--phase 0
   "Current test phase.")
+
+(defvar neo-term-itest--floating-id nil
+  "Floating terminal kept live until the screenshot has observed it.")
 
 (defun neo-term-itest--poll-phases ()
   "Poll for phase progression signals from the shell script."
@@ -207,27 +213,27 @@ TIMEOUT defaults to five seconds."
         (neo-term-itest--log "--- Phase 5: Floating terminal ---")
         (condition-case err
             (let ((float-id (neo-term-floating 150 150 60 20)))
+              (setq neo-term-itest--floating-id float-id)
               (neo-term-itest--check "Floating terminal created" (and float-id (> float-id 0)))
               (when float-id
                 (neo-term-itest--log "Floating terminal ID: %s" float-id)
                 ;; Write to floating terminal
-                (neomacs-terminal-write float-id "echo FLOATING_OK\r")
+                (neomacs-terminal-write
+                 float-id
+                 "printf '\\033[45mFLOATING_GPU_OK\\033[0m\\n'\r")
                 (let ((text (neo-term-itest--wait-for-text
                              float-id
-                             (lambda (value) (string-match-p "FLOATING_OK" value)))))
+                             (lambda (value)
+                               (string-match-p "FLOATING_GPU_OK" value)))))
                   (neo-term-itest--check "Floating get-text returns string" (stringp text))
                   (if (stringp text)
                       (progn
                         (neo-term-itest--log "Floating text: %s"
                                              (substring text 0 (min 200 (length text))))
                         (neo-term-itest--check "Floating terminal has output"
-                                               (string-match-p "FLOATING_OK" text)))
+                                               (string-match-p "FLOATING_GPU_OK" text)))
                     (neo-term-itest--check "Floating terminal has output" nil)))
-                ;; Destroy floating terminal
-                (neomacs-terminal-destroy float-id)
-                (neo-term-itest--check
-                 "Floating terminal removed from renderer state"
-                 (neo-term-itest--wait-until-destroyed float-id))))
+                (neo-term-itest--log "FLOATING_RENDER_READY")))
           (error
            (neo-term-itest--log "ERROR with floating terminal: %s" (error-message-string err))
            (neo-term-itest--check "Floating terminal created" nil))))
@@ -238,6 +244,12 @@ TIMEOUT defaults to five seconds."
         (setq neo-term-itest--phase 6)
         (neo-term-itest--log "")
         (neo-term-itest--log "--- Phase 6: Cleanup ---")
+        (when neo-term-itest--floating-id
+          (neomacs-terminal-destroy neo-term-itest--floating-id)
+          (neo-term-itest--check
+           "Floating terminal removed from renderer state"
+           (neo-term-itest--wait-until-destroyed
+            neo-term-itest--floating-id)))
         ;; Destroy main terminal
         (when neo-term-itest--terminal-id
           (condition-case err

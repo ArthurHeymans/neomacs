@@ -79,6 +79,16 @@ setup_display() {
     export DISPLAY="$test_display"
 }
 
+require_gui_probe_tools() {
+    local tool
+    for tool in xdotool import magick; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            echo "ERROR: $tool is required for renderer-observed neo-term verification"
+            exit 1
+        fi
+    done
+}
+
 # Cleanup function
 cleanup() {
     echo ""
@@ -95,6 +105,7 @@ echo "=== $TEST_NAME Test ==="
 
 setup_lib_path
 setup_display
+require_gui_probe_tools
 
 echo "Starting Neomacs with neo-term interactive test..."
 
@@ -152,10 +163,51 @@ wait_for_window() {
 take_screenshot() {
     local label=$1
     local file="$SCREENSHOT_DIR/neo-term-${label}.png"
-    if command -v import &>/dev/null && [ -n "$WIN_ID" ]; then
-        import -window "$WIN_ID" "$file" 2>/dev/null && \
-            echo "  Screenshot: $file" || echo "  Screenshot failed"
+    if [ -z "$WIN_ID" ] || ! import -window "$WIN_ID" "$file" 2>/dev/null || [ ! -s "$file" ]; then
+        echo "ERROR: Failed to capture required screenshot: $file"
+        return 1
     fi
+    echo "  Screenshot: $file"
+    LAST_SCREENSHOT="$file"
+}
+
+assert_pixel_fraction() {
+    local label=$1
+    local file=$2
+    local expression=$3
+    local minimum=$4
+    local fraction
+    fraction=$(pixel_fraction "$file" "$expression")
+    if ! awk -v value="$fraction" -v minimum="$minimum" \
+        'BEGIN { exit !(value > minimum) }'; then
+        echo "ERROR: $label pixel fraction $fraction did not exceed $minimum"
+        return 1
+    fi
+    echo "  $label pixel fraction: $fraction"
+}
+
+pixel_fraction() {
+    local file=$1
+    local expression=$2
+    magick "$file" -alpha off -colorspace sRGB \
+        -fx "$expression" -format '%[fx:mean]' info:
+}
+
+assert_pixel_fraction_drop() {
+    local label=$1
+    local visible_file=$2
+    local hidden_file=$3
+    local expression=$4
+    local minimum_drop=$5
+    local visible_fraction hidden_fraction
+    visible_fraction=$(pixel_fraction "$visible_file" "$expression")
+    hidden_fraction=$(pixel_fraction "$hidden_file" "$expression")
+    if ! awk -v visible="$visible_fraction" -v hidden="$hidden_fraction" \
+        -v minimum="$minimum_drop" 'BEGIN { exit !((visible - hidden) > minimum) }'; then
+        echo "ERROR: $label fraction did not fall enough ($visible_fraction -> $hidden_fraction)"
+        return 1
+    fi
+    echo "  $label fraction: $visible_fraction -> $hidden_fraction"
 }
 
 # Helper: wait for results file to contain a marker
@@ -227,6 +279,24 @@ sleep 2
 touch "$MARKER_DIR/phase2"
 wait_for_marker "Phase 2" 10
 take_screenshot "02-echo-hello"
+TERMINAL_SCREENSHOT="$LAST_SCREENSHOT"
+
+# Window terminals belong to their Emacs buffer. A real buffer switch must
+# remove the GPU surface, then switching back must preserve the PTY session.
+send_key "alt+x"
+type_text "switch-to-buffer"
+send_key "Return"
+type_text "*scratch*"
+send_key "Return"
+sleep 1
+take_screenshot "02-window-terminal-hidden"
+assert_pixel_fraction_drop "owned terminal dark surface" \
+    "$TERMINAL_SCREENSHOT" "$LAST_SCREENSHOT" \
+    'r<0.10&&g<0.10&&b<0.10?1:0' 0.25
+send_key "alt+x"
+type_text "switch-to-prev-buffer"
+send_key "Return"
+sleep 1
 
 # Phase 3: ANSI color output
 echo ""
@@ -239,6 +309,10 @@ sleep 2
 touch "$MARKER_DIR/phase3"
 wait_for_marker "Phase 3" 10
 take_screenshot "03-ansi-colors"
+assert_pixel_fraction "red terminal glyph" "$LAST_SCREENSHOT" \
+    'r>0.45&&r>1.5*g&&r>1.5*b?1:0' 0.00003
+assert_pixel_fraction "blue terminal glyph" "$LAST_SCREENSHOT" \
+    'b>0.35&&b>1.3*r&&b>1.3*g?1:0' 0.00003
 
 # Phase 4: Resize test (driven by Elisp)
 echo ""
@@ -253,8 +327,10 @@ echo ""
 echo "--- Phase 5: Floating terminal ---"
 sleep 1
 touch "$MARKER_DIR/phase5"
-wait_for_marker "Phase 5" 10
+wait_for_marker "FLOATING_RENDER_READY" 10
 take_screenshot "05-floating"
+assert_pixel_fraction "floating magenta surface" "$LAST_SCREENSHOT" \
+    'r>0.35&&b>0.35&&g<0.75*r&&g<0.75*b?1:0' 0.0003
 
 # Phase 6: Cleanup
 echo ""
