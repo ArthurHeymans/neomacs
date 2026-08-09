@@ -1623,10 +1623,18 @@ Pinned by neovm-core/src/emacs_core/syntax_category_property_test.rs (14
 tests, every expectation measured on GNU 31.0.90), which also pins two GNU
 boundaries the fix must not cross: overlays never reach the scanner, and the
 fallbacks apply only where an interval exists (GNU `update_syntax_table`
-returns early when `interval_of` finds none). Cost: TTY typing -0.67%, a
-fontified 160k-char syntax-scan sweep +1.29% instructions, concentrated in
-`skip-syntax` and `forward-comment`, whose byte-addressed lookups have no run
-cache; fontification, `forward-sexp` and `parse-partial-sexp` are neutral.
+returns early when `interval_of` finds none). Cost: NET NEGATIVE. On a fontified
+160k-char syntax-scan sweep the rung is -4.37% instructions against the
+pre-fix baseline, and TTY typing is -0.64%. Routing the scanner through the
+resolver initially cost +1.29%; 755689fa4 then gave the byte-addressed
+scanners (regexp matcher, `forward-comment`, `backward-prefix-chars`) the
+property-run cache GNU's `gl_state` has always given them, which removed a
+per-character byte->char conversion they had been paying all along: regexp
+searching -26.9%, `forward-sexp` -27.6%, fontification -1.7%. Still slightly
+up are loops that call `skip-syntax` (+3.6%) or `forward-comment` (+2.4%) at
+every buffer position, where a scan examines about one character and
+amortizes neither the resolver snapshot nor a refill's two char->byte
+conversions.
 
 The reduction below is kept as the regression record.
 
