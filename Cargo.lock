@@ -3567,7 +3567,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "crossbeam-channel",
  "crossterm",
@@ -3592,7 +3592,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs-allocator"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "mimalloc",
  "tikv-jemallocator",
@@ -3600,7 +3600,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs-diagnostics"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "axum",
  "http-body-util",
@@ -3616,7 +3616,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs-display-protocol"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "bitflags 2.13.1",
  "num_enum",
@@ -3630,7 +3630,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs-display-runtime"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "arboard",
  "ash",
@@ -3676,14 +3676,14 @@ dependencies = [
 
 [[package]]
 name = "neomacs-gui-tests"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "neomacs-layout-engine"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "allsorts",
  "core-foundation 0.10.1",
@@ -3712,7 +3712,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs-melpa-test-support"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "fs4",
  "sha2",
@@ -3722,7 +3722,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs-melpa-tests"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "expect-test",
  "fs4",
@@ -3735,7 +3735,7 @@ dependencies = [
 
 [[package]]
 name = "neomacs-renderer-wgpu"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "ash",
  "bytemuck",
@@ -3766,11 +3766,11 @@ dependencies = [
 
 [[package]]
 name = "neomacs-test-oracle"
-version = "0.0.14"
+version = "0.0.15"
 
 [[package]]
 name = "neomacs-tui-tests"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "libc",
  "pty-process",
@@ -3780,7 +3780,7 @@ dependencies = [
 
 [[package]]
 name = "neovm-core"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "aes",
  "base64",
@@ -3858,11 +3858,11 @@ dependencies = [
 
 [[package]]
 name = "neovm-host-abi"
-version = "0.0.14"
+version = "0.0.15"
 
 [[package]]
 name = "neovm-oracle-tests"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "colored",
  "expect-test",
@@ -3875,7 +3875,7 @@ dependencies = [
 
 [[package]]
 name = "neovm-worker"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "neovm-core",
  "neovm-host-abi",
@@ -8314,7 +8314,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "flate2",
  "rayon",

@@ -25,7 +25,7 @@ default-members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.0.14"
+version = "0.0.15"
 edition = "2024"
 authors = ["Eval Exec <execvy@gmail.com>"]
 license = "GPL-3.0-or-later"
