@@ -291,7 +291,7 @@ rank	package	downloads	status
 290	evil-org	393035	covered
 291	lsp-docker	390983	covered
 292	shell-pop	385040	covered
-293	magit-gitflow	383114	todo
+293	magit-gitflow	383114	covered
 294	browse-kill-ring	376162	covered
 295	slim-mode	375913	covered
 296	pytest	375800	covered

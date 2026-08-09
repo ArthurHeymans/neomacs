@@ -3069,6 +3069,14 @@ pub const XCSCOPE_MELPA_PIN: (&str, &str) = ("xcscope", "20230626.2109");
 /// The exact Magit package selected by the comprehensive API parity corpus.
 pub const MAGIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
+/// The final Magit Gitflow package selected for practical status-buffer,
+/// Git Flow initialization, branch lifecycle, configuration, diff, and
+/// failure parity. MELPA built this version from upstream commit
+/// `cc41b561ec6eea947fe9a176349fb4f771ed865b`. External-command responses
+/// are recorded from Git Flow AVH 1.12.3 at commit
+/// `d409eff2896b02e1ae1ac76c291aaf15213aac6d`.
+pub const MAGIT_GITFLOW_MELPA_PIN: (&str, &str) = ("magit-gitflow", "20170929.824");
+
 /// The final Magit Popup package selected for practical popup rendering,
 /// infix refresh, suffix dispatch, prefix defaults, extension, CLI argument,
 /// and sequence-mode parity. MELPA built version 2.13.3 from upstream commit
