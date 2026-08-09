@@ -3,15 +3,23 @@
 ;; Usage: ./target/release/neomacs -Q -l test/neomacs/neo-term-interactive-test.el
 ;;
 ;; This test is driven by xdotool from run-neo-term-interactive-test.sh.
-;; It creates a terminal, then waits for xdotool to send keystrokes.
-;; Results are written to /tmp/neo-term-interactive-results.txt.
+;; xdotool invokes M-x neo-term and then sends keystrokes to the terminal.
+;; All test state is rooted below the repository-local directory supplied by
+;; run-neo-term-interactive-test.sh.
 
 ;;; Code:
 
 (require 'cl-lib)
 
-(defvar neo-term-itest--results-file "/tmp/neo-term-interactive-results.txt"
+(defvar neo-term-itest--results-file
+  (or (getenv "NEO_TERM_ITEST_RESULTS")
+      (error "NEO_TERM_ITEST_RESULTS is not set"))
   "File to write test results to.")
+
+(defvar neo-term-itest--marker-dir
+  (or (getenv "NEO_TERM_ITEST_MARKER_DIR")
+      (error "NEO_TERM_ITEST_MARKER_DIR is not set"))
+  "Directory containing phase marker files.")
 
 (defvar neo-term-itest--terminal-id nil
   "Active terminal ID for testing.")
@@ -28,8 +36,12 @@
       (neo-term-itest--log "PASS: %s" name)
     (neo-term-itest--log "FAIL: %s" name)))
 
+(defun neo-term-itest--marker (name)
+  "Return the absolute marker path for NAME."
+  (expand-file-name name neo-term-itest--marker-dir))
+
 (defun neo-term-itest--run ()
-  "Set up terminal for interactive testing."
+  "Set up observation for an interactively created terminal."
   ;; Clear results file
   (when (file-exists-p neo-term-itest--results-file)
     (delete-file neo-term-itest--results-file))
@@ -46,38 +58,47 @@
     (neo-term-itest--log "=== DONE ===")
     (kill-emacs 1))
 
-  ;; Phase 1: Create window-mode terminal
+  ;; Phase 1 is driven through the real M-x command by the shell script.
   (neo-term-itest--log "")
-  (neo-term-itest--log "--- Phase 1: Window mode terminal ---")
-
-  (condition-case err
-      (progn
-        (neo-term)
-        (setq neo-term-itest--terminal-id neo-term--id)
-        (neo-term-itest--check "Terminal created" (and neo-term-itest--terminal-id
-                                                    (> neo-term-itest--terminal-id 0)))
-        (neo-term-itest--check "Buffer is neo-term-mode" (eq major-mode 'neo-term-mode))
-        (neo-term-itest--log "Terminal ID: %s" neo-term-itest--terminal-id)
-        (neo-term-itest--log "READY_FOR_INPUT"))
-    (error
-     (neo-term-itest--log "ERROR creating terminal: %s" (error-message-string err))
-     (neo-term-itest--log "=== DONE ===")
-     (kill-emacs 1)))
+  (neo-term-itest--log "--- Phase 1: Waiting for M-x neo-term ---")
 
   ;; Set up a timer to check text extraction after xdotool sends input
   ;; The shell script will signal us by creating a marker file
   (run-with-timer 1 1 #'neo-term-itest--poll-phases))
 
-(defvar neo-term-itest--phase 1
+(defvar neo-term-itest--phase 0
   "Current test phase.")
 
 (defun neo-term-itest--poll-phases ()
   "Poll for phase progression signals from the shell script."
   (condition-case err
       (cond
+       ;; Phase 1: xdotool invoked M-x neo-term.
+       ((= neo-term-itest--phase 0)
+        (let ((terminal-buffer
+               (cl-find-if
+                (lambda (buffer)
+                  (with-current-buffer buffer
+                    (eq major-mode 'neo-term-mode)))
+                (buffer-list))))
+          (when terminal-buffer
+            (setq neo-term-itest--phase 1)
+            (with-current-buffer terminal-buffer
+              (setq neo-term-itest--terminal-id neo-term--id)
+              (neo-term-itest--check
+               "M-x neo-term created a terminal"
+               (and neo-term-itest--terminal-id
+                    (> neo-term-itest--terminal-id 0)))
+              (neo-term-itest--check
+               "Selected buffer is neo-term-mode"
+               (and (eq (current-buffer) (window-buffer (selected-window)))
+                    (eq major-mode 'neo-term-mode)))
+              (neo-term-itest--log "Terminal ID: %s" neo-term-itest--terminal-id)
+              (neo-term-itest--log "READY_FOR_INPUT")))))
+
        ;; Phase 2: After xdotool typed "echo hello" + Return
        ((and (= neo-term-itest--phase 1)
-             (file-exists-p "/tmp/neo-term-phase2"))
+             (file-exists-p (neo-term-itest--marker "phase2")))
         (setq neo-term-itest--phase 2)
         (neo-term-itest--log "")
         (neo-term-itest--log "--- Phase 2: Text extraction after typing ---")
@@ -94,7 +115,7 @@
 
        ;; Phase 3: After xdotool typed a command with ANSI colors
        ((and (= neo-term-itest--phase 2)
-             (file-exists-p "/tmp/neo-term-phase3"))
+             (file-exists-p (neo-term-itest--marker "phase3")))
         (setq neo-term-itest--phase 3)
         (neo-term-itest--log "")
         (neo-term-itest--log "--- Phase 3: ANSI color output ---")
@@ -109,7 +130,7 @@
 
        ;; Phase 4: Resize test
        ((and (= neo-term-itest--phase 3)
-             (file-exists-p "/tmp/neo-term-phase4"))
+             (file-exists-p (neo-term-itest--marker "phase4")))
         (setq neo-term-itest--phase 4)
         (neo-term-itest--log "")
         (neo-term-itest--log "--- Phase 4: Terminal resize ---")
@@ -131,7 +152,7 @@
 
        ;; Phase 5: Floating terminal
        ((and (= neo-term-itest--phase 4)
-             (file-exists-p "/tmp/neo-term-phase5"))
+             (file-exists-p (neo-term-itest--marker "phase5")))
         (setq neo-term-itest--phase 5)
         (neo-term-itest--log "")
         (neo-term-itest--log "--- Phase 5: Floating terminal ---")
@@ -159,7 +180,7 @@
 
        ;; Phase 6: Cleanup and done
        ((and (= neo-term-itest--phase 5)
-             (file-exists-p "/tmp/neo-term-phase6"))
+             (file-exists-p (neo-term-itest--marker "phase6")))
         (setq neo-term-itest--phase 6)
         (neo-term-itest--log "")
         (neo-term-itest--log "--- Phase 6: Cleanup ---")

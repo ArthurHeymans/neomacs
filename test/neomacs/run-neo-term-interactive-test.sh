@@ -10,29 +10,42 @@
 #   5. Floating terminal overlay
 #   6. Cleanup and destruction
 #
-# Requires: xdotool, Xvfb (or existing DISPLAY)
+# Requires: xdotool and an accessible DISPLAY
 
 set -e
 
 cd "$(dirname "$0")/../.."
 
-LOG=/tmp/neo-term-interactive.log
-RESULTS=/tmp/neo-term-interactive-results.txt
-SCREENSHOT_DIR=/tmp/neo-term-screenshots
+TEST_ROOT="$PWD/tmp/neo-term-interactive"
+MARKER_DIR="$TEST_ROOT/markers"
+LOG="$TEST_ROOT/neo-term-interactive.log"
+RESULTS="$TEST_ROOT/neo-term-interactive-results.txt"
+SCREENSHOT_DIR="$TEST_ROOT/screenshots"
 TEST_NAME="Neo-Term Interactive"
-XVFB_PID=""
+EMACS_PID=""
 
 # Cleanup from previous runs
-rm -f /tmp/neo-term-phase{2,3,4,5,6}
+mkdir -p "$MARKER_DIR" "$SCREENSHOT_DIR" "$TEST_ROOT/runtime"
+rm -f "$MARKER_DIR"/phase{2,3,4,5,6}
 rm -f "$RESULTS"
-mkdir -p "$SCREENSHOT_DIR"
+rm -f "$SCREENSHOT_DIR"/neo-term-*.png
+export TMPDIR="$TEST_ROOT/runtime"
+export NEO_TERM_ITEST_RESULTS="$RESULTS"
+export NEO_TERM_ITEST_MARKER_DIR="$MARKER_DIR"
 
 # Setup LD_LIBRARY_PATH for nix-based systems
 setup_lib_path() {
     local xcursor_so=""
     local xkb_so=""
+    local libstdcpp_so=""
     xcursor_so=$(find /nix/store -maxdepth 3 -name 'libXcursor.so.1' 2>/dev/null | head -1)
     xkb_so=$(find /nix/store -maxdepth 3 -name 'libxkbcommon-x11.so' 2>/dev/null | head -1)
+    if command -v g++ >/dev/null 2>&1; then
+        libstdcpp_so=$(g++ -print-file-name=libstdc++.so.6)
+        if [ ! -f "$libstdcpp_so" ]; then
+            libstdcpp_so=""
+        fi
+    fi
 
     local extra_path=""
     if [ -n "$xcursor_so" ]; then
@@ -41,6 +54,9 @@ setup_lib_path() {
     if [ -n "$xkb_so" ]; then
         extra_path="${extra_path:+$extra_path:}$(dirname "$xkb_so")"
     fi
+    if [ -n "$libstdcpp_so" ]; then
+        extra_path="${extra_path:+$extra_path:}$(dirname "$libstdcpp_so")"
+    fi
 
     if [ -n "$extra_path" ]; then
         export LD_LIBRARY_PATH="${extra_path}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -48,41 +64,29 @@ setup_lib_path() {
     fi
 }
 
-# Setup display (start Xvfb if needed)
+# Validate the existing display. X11's Xvfb transport uses system-global socket
+# paths, so this repository-local test intentionally does not start one.
 setup_display() {
     local test_display="${DISPLAY:-}"
 
-    # If no DISPLAY or the display isn't accessible, start Xvfb
     if [ -z "$test_display" ] || ! DISPLAY="$test_display" xdotool getactivewindow >/dev/null 2>&1; then
-        echo "Starting Xvfb on :99..."
-        rm -f /tmp/.X99-lock
-        kill $(pgrep -f "Xvfb :99") 2>/dev/null || true
-        sleep 1
-        Xvfb :99 -screen 0 1920x1080x24 -ac 2>/dev/null &
-        XVFB_PID=$!
-        sleep 2
-        if ! kill -0 $XVFB_PID 2>/dev/null; then
-            echo "ERROR: Failed to start Xvfb"
-            exit 1
-        fi
-        export DISPLAY=:99
-        echo "Xvfb started (PID $XVFB_PID) on $DISPLAY"
-    else
-        echo "Using existing DISPLAY=$test_display"
-        export DISPLAY="$test_display"
+        echo "ERROR: An accessible DISPLAY is required"
+        exit 1
     fi
+
+    echo "Using existing DISPLAY=$test_display"
+    export DISPLAY="$test_display"
 }
 
 # Cleanup function
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    kill $EMACS_PID 2>/dev/null || true
-    wait $EMACS_PID 2>/dev/null || true
-    if [ -n "$XVFB_PID" ]; then
-        kill $XVFB_PID 2>/dev/null || true
+    if [ -n "$EMACS_PID" ]; then
+        kill "$EMACS_PID" 2>/dev/null || true
+        wait "$EMACS_PID" 2>/dev/null || true
     fi
-    rm -f /tmp/neo-term-phase{2,3,4,5,6}
+    rm -f "$MARKER_DIR"/phase{2,3,4,5,6}
 }
 trap cleanup EXIT
 
@@ -103,6 +107,8 @@ echo "Neomacs PID: $EMACS_PID"
 wait_for_window() {
     local attempts=0
     local max_attempts=30
+    local previous_id=""
+    local stable_observations=0
     while [ $attempts -lt $max_attempts ]; do
         if ! kill -0 $EMACS_PID 2>/dev/null; then
             echo "ERROR: Emacs process died"
@@ -110,10 +116,27 @@ wait_for_window() {
             tail -20 "$LOG" 2>/dev/null || true
             return 1
         fi
-        WIN_ID=$(xdotool search --class "neomacs" 2>/dev/null | head -1)
-        if [ -n "$WIN_ID" ]; then
-            echo "Found Emacs window: $WIN_ID"
-            return 0
+        local candidate=""
+        candidate=$(xdotool search --onlyvisible --pid "$EMACS_PID" 2>/dev/null | head -1)
+        if [ -n "$candidate" ] && xdotool getwindowgeometry "$candidate" >/dev/null 2>&1; then
+            if [ "$candidate" = "$previous_id" ]; then
+                stable_observations=$((stable_observations + 1))
+            else
+                previous_id="$candidate"
+                stable_observations=1
+            fi
+
+            # Neomacs replaces its bootstrap window when it adopts the first
+            # Emacs frame. Require two observations of the same visible XID so
+            # xdotool never targets the short-lived bootstrap window.
+            if [ "$stable_observations" -ge 2 ]; then
+                WIN_ID="$candidate"
+                echo "Found stable Emacs window: $WIN_ID"
+                return 0
+            fi
+        else
+            previous_id=""
+            stable_observations=0
         fi
         sleep 0.5
         attempts=$((attempts + 1))
@@ -173,14 +196,17 @@ if ! wait_for_window; then
     exit 1
 fi
 
-# Activate and focus (may fail on Xvfb without a window manager, that's ok)
+# Activate and focus the newly created Neomacs window.
 xdotool windowactivate --sync "$WIN_ID" 2>/dev/null || true
 xdotool windowfocus --sync "$WIN_ID" 2>/dev/null || true
 sleep 1
 
 # Wait for terminal to be ready
 echo ""
-echo "--- Phase 1: Waiting for terminal creation ---"
+echo "--- Phase 1: Running M-x neo-term ---"
+send_key "alt+x"
+type_text "neo-term"
+send_key "Return"
 if ! wait_for_marker "READY_FOR_INPUT" 15; then
     echo "ERROR: Terminal not ready"
     cat "$RESULTS" 2>/dev/null || true
@@ -197,7 +223,7 @@ type_text "echo hello"
 sleep 0.5
 send_key "Return"
 sleep 2
-touch /tmp/neo-term-phase2
+touch "$MARKER_DIR/phase2"
 wait_for_marker "Phase 2" 10
 take_screenshot "02-echo-hello"
 
@@ -209,7 +235,7 @@ type_text "printf '\\033[31mRED\\033[32mGREEN\\033[34mBLUE\\033[0m COLOR_TEST\\n
 sleep 0.5
 send_key "Return"
 sleep 2
-touch /tmp/neo-term-phase3
+touch "$MARKER_DIR/phase3"
 wait_for_marker "Phase 3" 10
 take_screenshot "03-ansi-colors"
 
@@ -217,7 +243,7 @@ take_screenshot "03-ansi-colors"
 echo ""
 echo "--- Phase 4: Resize test ---"
 sleep 1
-touch /tmp/neo-term-phase4
+touch "$MARKER_DIR/phase4"
 wait_for_marker "Phase 4" 10
 take_screenshot "04-after-resize"
 
@@ -225,14 +251,14 @@ take_screenshot "04-after-resize"
 echo ""
 echo "--- Phase 5: Floating terminal ---"
 sleep 1
-touch /tmp/neo-term-phase5
+touch "$MARKER_DIR/phase5"
 wait_for_marker "Phase 5" 10
 take_screenshot "05-floating"
 
 # Phase 6: Cleanup
 echo ""
 echo "--- Phase 6: Cleanup ---"
-touch /tmp/neo-term-phase6
+touch "$MARKER_DIR/phase6"
 wait_for_marker "DONE" 10
 take_screenshot "06-final"
 
