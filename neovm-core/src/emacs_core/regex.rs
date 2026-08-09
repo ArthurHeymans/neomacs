@@ -125,7 +125,7 @@ struct BufferRegexpSyntaxLookup<'a> {
     base: BufferSyntaxLookup,
     buffer: &'a Buffer,
     input_start: EmacsBytePos,
-    property_lookup: BufferRegexpSyntaxProperties,
+    property_lookup: crate::emacs_core::syntax::SyntaxProperties<'a>,
 }
 
 impl SyntaxLookup for BufferRegexpSyntaxLookup<'_> {
@@ -139,7 +139,7 @@ impl SyntaxLookup for BufferRegexpSyntaxLookup<'_> {
             &self.base.syntax_table,
             c,
             EmacsBytePos::new(self.input_start.get().saturating_add(input_pos)),
-            self.property_lookup.is_honor(),
+            self.property_lookup,
         )
     }
 
@@ -156,11 +156,11 @@ impl SyntaxLookup for BufferRegexpSyntaxLookup<'_> {
     }
 }
 
-fn buffer_regexp_syntax_lookup(
-    buf: &Buffer,
+fn buffer_regexp_syntax_lookup<'a>(
+    buf: &'a Buffer,
     input_start: EmacsBytePos,
-    context: BufferRegexpMatchContext,
-) -> BufferRegexpSyntaxLookup<'_> {
+    context: BufferRegexpMatchContext<'a>,
+) -> BufferRegexpSyntaxLookup<'a> {
     BufferRegexpSyntaxLookup {
         base: buffer_syntax_lookup_with_word_boundary(buf, context.word_boundary),
         buffer: buf,
@@ -252,15 +252,21 @@ pub(crate) enum BufferRegexpSyntaxProperties {
 /// This state is deliberately separate from the compiled pattern: GNU reads
 /// both positional syntax properties and word-boundary tables when matching,
 /// so cached bytecode must remain reusable when either one changes.
+///
+/// The syntax properties are a resolver snapshot, not a flag: the matcher reads
+/// each character's `syntax-table` property through the same GNU `textget`
+/// fallbacks the sexp scanner and `get-char-property` use. It is taken AFTER
+/// [`prepare_current_buffer_regexp_syntax_to`] has run `syntax-propertize`,
+/// which is the last Lisp to run before the match.
 #[derive(Clone, Copy)]
-pub(crate) struct BufferRegexpMatchContext {
-    syntax_properties: BufferRegexpSyntaxProperties,
+pub(crate) struct BufferRegexpMatchContext<'a> {
+    syntax_properties: crate::emacs_core::syntax::SyntaxProperties<'a>,
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
 }
 
-impl BufferRegexpMatchContext {
+impl<'a> BufferRegexpMatchContext<'a> {
     pub(crate) fn new(
-        syntax_properties: BufferRegexpSyntaxProperties,
+        syntax_properties: crate::emacs_core::syntax::SyntaxProperties<'a>,
         word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
     ) -> Self {
         Self {
@@ -2637,7 +2643,7 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     noerror: bool,
     case_fold: bool,
     posix: bool,
-    match_context: BufferRegexpMatchContext,
+    match_context: BufferRegexpMatchContext<'_>,
 ) -> Result<Option<BufferSearchSuccess>, String> {
     // GNU `re-search-forward` on a buffer drives the matcher with raw buffer
     // byte positions (`PT_BYTE`, `BEGV_BYTE`, `ZV_BYTE`), even when the
@@ -2701,7 +2707,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
     noerror: bool,
     case_fold: bool,
     posix: bool,
-    match_context: BufferRegexpMatchContext,
+    match_context: BufferRegexpMatchContext<'_>,
 ) -> Result<Option<BufferSearchSuccess>, String> {
     // GNU `re-search-backward` likewise uses buffer byte positions
     // throughout, not character positions.
@@ -2818,7 +2824,7 @@ pub(crate) fn looking_at_lisp_with_posix(
     pattern: &LispString,
     case_fold: bool,
     posix: bool,
-    match_context: BufferRegexpMatchContext,
+    match_context: BufferRegexpMatchContext<'_>,
 ) -> Result<Option<MatchData>, String> {
     // GNU `Flooking_at` (`src/search.c:fast_looking_at`) operates on
     // byte offsets throughout: `BEGV_BYTE`, `PT_BYTE`, `ZV_BYTE`, and

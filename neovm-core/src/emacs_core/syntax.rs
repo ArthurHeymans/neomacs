@@ -12,6 +12,8 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use strum::{EnumString, IntoStaticStr};
 
 use super::error::{EvalResult, Flow, signal};
+use super::symbol::Obarray;
+use super::textprop::CharPropertyResolver;
 use super::value::{Value, ValueKind, list_to_vec};
 use crate::buffer::{
     Buffer, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1,
@@ -822,7 +824,7 @@ impl Default for SyntaxTable {
 /// A "word" is a maximal run of characters with syntax class `Word`.
 /// Between words, non-word characters are skipped.
 pub fn forward_word(buf: &Buffer, table: &SyntaxTable, count: i64) -> EmacsBytePos {
-    forward_word_with_options(buf, table, count, false).0
+    forward_word_with_options(buf, table, count, SyntaxProperties::Ignore).0
 }
 
 fn syntax_char_from_code(code: u32) -> char {
@@ -977,15 +979,15 @@ fn forward_word_with_options(
     buf: &Buffer,
     table: &SyntaxTable,
     count: i64,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> (EmacsBytePos, bool) {
     // Per-scan syntax-table property cache (GNU gl_state); one
     // interval lookup per property RUN instead of per character.
-    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = SyntaxPropRange::new(props);
     let prop_cache = &prop_cache;
 
     if count < 0 {
-        return backward_word_with_options(buf, table, -count, honor_properties);
+        return backward_word_with_options(buf, table, -count, props);
     }
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
@@ -1005,7 +1007,6 @@ fn forward_word_with_options(
                     table,
                     chars.char_at(idx),
                     accessible_char_start + idx,
-                    honor_properties,
                     prop_cache
                 )
                 .class,
@@ -1026,7 +1027,6 @@ fn forward_word_with_options(
                     table,
                     chars.char_at(idx),
                     accessible_char_start + idx,
-                    honor_properties,
                     prop_cache
                 )
                 .class,
@@ -1044,7 +1044,7 @@ fn forward_word_with_options(
 
 /// Move backward over `count` words.  Returns the resulting Emacs byte position.
 pub fn backward_word(buf: &Buffer, table: &SyntaxTable, count: i64) -> EmacsBytePos {
-    backward_word_with_options(buf, table, count, false).0
+    backward_word_with_options(buf, table, count, SyntaxProperties::Ignore).0
 }
 
 /// Whether `find-word-boundary-function-table` has any binding (i.e. some mode
@@ -1071,10 +1071,13 @@ fn word_boundary_table_active(table: &Value) -> bool {
 /// function call it with (pos, limit) and jump to the returned boundary;
 /// otherwise fall back to a one-word syntax scan. Returns the destination byte
 /// position and whether all `count` motions completed.
+/// `honor` rather than a snapshot: the boundary callback below is arbitrary
+/// Lisp, so each probe takes its own [`SyntaxProperties::for_scan`] snapshot,
+/// just as it already builds its own property-run cache.
 fn word_motion_with_table(
     eval: &mut super::eval::Context,
     count: i64,
-    honor_properties: bool,
+    honor: bool,
     wbtable: Value,
 ) -> (EmacsBytePos, bool) {
     let forward = count > 0;
@@ -1091,7 +1094,8 @@ fn word_motion_with_table(
         // syntax-property cache inside this mutation-free probe: the boundary
         // callback below is arbitrary Lisp and may edit the buffer.
         let probe = {
-            let prop_cache = SyntaxPropRange::new();
+            let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
+            let prop_cache = SyntaxPropRange::new(props);
             let prop_cache = &prop_cache;
             let buf = match eval.buffers.get(current_id) {
                 Some(b) => b,
@@ -1111,7 +1115,6 @@ fn word_motion_with_table(
                         &table,
                         chars.char_at(i),
                         acc_start + i,
-                        honor_properties,
                         prop_cache
                     )
                     .class,
@@ -1200,14 +1203,10 @@ fn word_motion_with_table(
         if !handled {
             // Plain syntax scan of a single word from the current point.
             let (byte, ok) = {
+                let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
                 let buf = eval.buffers.get(current_id).expect("buffer");
                 let table = SyntaxTable::for_buffer(buf);
-                forward_word_with_options(
-                    buf,
-                    &table,
-                    if forward { 1 } else { -1 },
-                    honor_properties,
-                )
+                forward_word_with_options(buf, &table, if forward { 1 } else { -1 }, props)
             };
             let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, byte);
             if !ok {
@@ -1231,14 +1230,14 @@ fn word_motion_with_table(
 pub(crate) fn forward_word_destination(
     eval: &mut super::eval::Context,
     count: i64,
-    honor_properties: bool,
+    honor: bool,
 ) -> EmacsBytePos {
     let wbtable = eval.visible_variable_value_or_nil("find-word-boundary-function-table");
     if word_boundary_table_active(&wbtable) {
         let current_id = eval.buffers.current_buffer_id();
         let saved =
             current_id.and_then(|id| eval.buffers.get(id).map(|b| b.point_emacs_byte_pos()));
-        let (dest, _) = word_motion_with_table(eval, count, honor_properties, wbtable);
+        let (dest, _) = word_motion_with_table(eval, count, honor, wbtable);
         // word_motion_with_table moves point as it scans; restore it.
         if let (Some(id), Some(saved)) = (current_id, saved) {
             let _ = eval.buffers.goto_buffer_emacs_byte_pos(id, saved);
@@ -1249,8 +1248,9 @@ pub(crate) fn forward_word_destination(
             Some(b) => b,
             None => return EmacsBytePos::new(0),
         };
+        let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
         let table = SyntaxTable::for_buffer(buf);
-        forward_word_with_options(buf, &table, count, honor_properties).0
+        forward_word_with_options(buf, &table, count, props).0
     }
 }
 
@@ -1258,15 +1258,15 @@ fn backward_word_with_options(
     buf: &Buffer,
     table: &SyntaxTable,
     count: i64,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> (EmacsBytePos, bool) {
     // Per-scan syntax-table property cache (GNU gl_state); one
     // interval lookup per property RUN instead of per character.
-    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = SyntaxPropRange::new(props);
     let prop_cache = &prop_cache;
 
     if count < 0 {
-        return forward_word_with_options(buf, table, -count, honor_properties);
+        return forward_word_with_options(buf, table, -count, props);
     }
 
     let accessible_bytes = buf.accessible_emacs_byte_region();
@@ -1285,7 +1285,6 @@ fn backward_word_with_options(
                     table,
                     chars.char_at(idx - 1),
                     accessible_char_start + idx - 1,
-                    honor_properties,
                     prop_cache
                 )
                 .class,
@@ -1306,7 +1305,6 @@ fn backward_word_with_options(
                     table,
                     chars.char_at(idx - 1),
                     accessible_char_start + idx - 1,
-                    honor_properties,
                     prop_cache
                 )
                 .class,
@@ -1330,7 +1328,7 @@ pub fn skip_syntax_forward(
     syntax_chars: &str,
     limit: Option<usize>,
 ) -> usize {
-    skip_syntax_forward_with_options(buf, table, syntax_chars, limit, false)
+    skip_syntax_forward_with_options(buf, table, syntax_chars, limit, SyntaxProperties::Ignore)
 }
 
 fn skip_syntax_forward_with_options(
@@ -1338,11 +1336,11 @@ fn skip_syntax_forward_with_options(
     table: &SyntaxTable,
     syntax_chars: &str,
     limit: Option<usize>,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> usize {
     // Per-scan syntax-table property cache (GNU gl_state); one
     // interval lookup per property RUN instead of per character.
-    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = SyntaxPropRange::new(props);
     let prop_cache = &prop_cache;
 
     let (classes, negate) = parse_skip_syntax_classes(syntax_chars);
@@ -1368,7 +1366,6 @@ fn skip_syntax_forward_with_options(
             table,
             chars.char_at(idx),
             accessible_char_start + idx,
-            honor_properties,
             prop_cache,
         )
         .class;
@@ -1390,7 +1387,7 @@ pub fn skip_syntax_backward(
     syntax_chars: &str,
     limit: Option<usize>,
 ) -> usize {
-    skip_syntax_backward_with_options(buf, table, syntax_chars, limit, false)
+    skip_syntax_backward_with_options(buf, table, syntax_chars, limit, SyntaxProperties::Ignore)
 }
 
 fn skip_syntax_backward_with_options(
@@ -1398,11 +1395,11 @@ fn skip_syntax_backward_with_options(
     table: &SyntaxTable,
     syntax_chars: &str,
     limit: Option<usize>,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> usize {
     // Per-scan syntax-table property cache (GNU gl_state); one
     // interval lookup per property RUN instead of per character.
-    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = SyntaxPropRange::new(props);
     let prop_cache = &prop_cache;
 
     let (classes, negate) = parse_skip_syntax_classes(syntax_chars);
@@ -1427,7 +1424,6 @@ fn skip_syntax_backward_with_options(
             table,
             chars.char_at(idx - 1),
             accessible_char_start + idx - 1,
-            honor_properties,
             prop_cache,
         )
         .class;
@@ -1461,7 +1457,7 @@ pub fn scan_sexps(
     from: usize,
     count: i64,
 ) -> Result<usize, String> {
-    match scan_sexps_with_options(buf, table, from, count, false, false)
+    match scan_sexps_with_options(buf, table, from, count, SyntaxProperties::Ignore, false)
         .map_err(|err| err.message)?
     {
         Some(pos) => Ok(pos),
@@ -1475,12 +1471,12 @@ fn scan_sexps_with_options(
     table: &SyntaxTable,
     from: usize,
     count: i64,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
     ignore_comments: bool,
 ) -> Result<Option<usize>, ScanListError> {
     // Per-scan syntax-table property cache (GNU gl_state); one
     // interval lookup per property RUN instead of per character.
-    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = SyntaxPropRange::new(props);
     let prop_cache = &prop_cache;
 
     if count == 0 {
@@ -1504,7 +1500,6 @@ fn scan_sexps_with_options(
                 idx,
                 stop_bound,
                 table,
-                honor_properties,
                 ignore_comments,
                 prop_cache,
             );
@@ -1521,7 +1516,6 @@ fn scan_sexps_with_options(
                 stop_bound,
                 idx,
                 table,
-                honor_properties,
                 ignore_comments,
                 prop_cache,
             )?;
@@ -1534,7 +1528,6 @@ fn scan_sexps_with_options(
                 idx,
                 start_bound,
                 table,
-                honor_properties,
                 ignore_comments,
                 prop_cache,
             );
@@ -1547,7 +1540,6 @@ fn scan_sexps_with_options(
                 idx,
                 start_bound,
                 table,
-                honor_properties,
                 ignore_comments,
                 prop_cache,
             )?;
@@ -1600,7 +1592,7 @@ impl IgnoredSkip {
 fn maybe_skip_comment_forward(
     buf: &Buffer,
     idx: usize,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
     class: SyntaxClass,
     flags: SyntaxFlags,
 ) -> Option<CommentSkip> {
@@ -1616,7 +1608,7 @@ fn maybe_skip_comment_forward(
         buffer: buf,
         point: start_byte,
     };
-    let complete = forward_comment_forward(&mut scanner, 1, honor_properties);
+    let complete = forward_comment_forward(&mut scanner, 1, props);
     let next = buffer_byte_to_char_pos(buf, scanner.point_emacs_byte_pos());
     if next <= idx {
         None
@@ -1630,7 +1622,7 @@ fn maybe_skip_comment_forward(
 fn maybe_skip_comment_backward(
     buf: &Buffer,
     idx: usize,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
     class: SyntaxClass,
     flags: SyntaxFlags,
 ) -> Option<usize> {
@@ -1646,7 +1638,7 @@ fn maybe_skip_comment_backward(
         buffer: buf,
         point: start_byte,
     };
-    if forward_comment_backward(&mut scanner, 1, honor_properties) {
+    if forward_comment_backward(&mut scanner, 1, props) {
         let next = buffer_byte_to_char_pos(buf, scanner.point_emacs_byte_pos());
         (next < idx).then_some(next)
     } else {
@@ -1661,19 +1653,17 @@ fn skip_sexp_ignored_forward(
     mut idx: usize,
     stop: usize,
     table: &SyntaxTable,
-    honor_properties: bool,
     ignore_comments: bool,
-    prop_cache: &SyntaxPropRange,
+    prop_cache: &SyntaxPropRange<'_>,
 ) -> IgnoredSkip {
     let mut skipped_unterminated_comment = false;
     while idx < stop {
         let c = chars.char_at(idx);
-        let entry =
-            effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties, prop_cache);
+        let entry = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache);
         let class = entry.class;
         if ignore_comments
             && let Some(skip) =
-                maybe_skip_comment_forward(buf, idx, honor_properties, class, entry.flags)
+                maybe_skip_comment_forward(buf, idx, prop_cache.props(), class, entry.flags)
         {
             skipped_unterminated_comment |= matches!(skip, CommentSkip::Unterminated(_));
             idx = skip.next();
@@ -1699,19 +1689,17 @@ fn skip_sexp_ignored_backward(
     mut idx: usize,
     start: usize,
     table: &SyntaxTable,
-    honor_properties: bool,
     ignore_comments: bool,
-    prop_cache: &SyntaxPropRange,
+    prop_cache: &SyntaxPropRange<'_>,
 ) -> usize {
     while idx > start {
         let prev = idx - 1;
         let c = chars.char_at(prev);
-        let entry =
-            effective_syntax_entry_for_abs_char(buf, table, c, prev, honor_properties, prop_cache);
+        let entry = effective_syntax_entry_for_abs_char(buf, table, c, prev, prop_cache);
         let class = entry.class;
         if ignore_comments
             && let Some(next) =
-                maybe_skip_comment_backward(buf, idx, honor_properties, class, entry.flags)
+                maybe_skip_comment_backward(buf, idx, prop_cache.props(), class, entry.flags)
         {
             idx = next;
             continue;
@@ -1732,16 +1720,13 @@ fn skip_string_forward(
     mut idx: usize,
     stop: usize,
     table: &SyntaxTable,
-    honor_properties: bool,
     delimiter: char,
     delimiter_class: SyntaxClass,
-    prop_cache: &SyntaxPropRange,
+    prop_cache: &SyntaxPropRange<'_>,
 ) -> Result<usize, String> {
     while idx < stop {
         let c = chars.char_at(idx);
-        let class =
-            effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties, prop_cache)
-                .class;
+        let class = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache).class;
         if class == delimiter_class
             && (delimiter_class == SyntaxClass::StringFence || c == delimiter)
         {
@@ -1763,17 +1748,14 @@ fn skip_string_backward(
     mut idx: usize,
     stop: usize,
     table: &SyntaxTable,
-    honor_properties: bool,
     delimiter: char,
     delimiter_class: SyntaxClass,
-    prop_cache: &SyntaxPropRange,
+    prop_cache: &SyntaxPropRange<'_>,
 ) -> Result<usize, String> {
     while idx > stop {
         idx -= 1;
         let c = chars.char_at(idx);
-        let class =
-            effective_syntax_entry_for_abs_char(buf, table, c, idx, honor_properties, prop_cache)
-                .class;
+        let class = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache).class;
         if class == delimiter_class
             && (delimiter_class == SyntaxClass::StringFence || c == delimiter)
         {
@@ -1790,12 +1772,12 @@ fn scan_lists_with_options(
     from: usize,
     count: i64,
     initial_depth: i64,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
     ignore_comments: bool,
 ) -> Result<Option<usize>, ScanListError> {
     // Per-scan syntax-table property cache (GNU gl_state); one
     // interval lookup per property RUN instead of per character.
-    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = SyntaxPropRange::new(props);
     let prop_cache = &prop_cache;
 
     let mut chars = BufferChars::new(buf, CharPos0::ZERO);
@@ -1813,21 +1795,14 @@ fn scan_lists_with_options(
             let mut found = false;
             while idx < stop {
                 let ch = chars.char_at(idx);
-                let entry = effective_syntax_entry_for_abs_char(
-                    buf,
-                    table,
-                    ch,
-                    idx,
-                    honor_properties,
-                    prop_cache,
-                );
+                let entry = effective_syntax_entry_for_abs_char(buf, table, ch, idx, prop_cache);
                 let class = entry.class;
                 if depth == min_depth {
                     last_good = idx;
                 }
                 if ignore_comments
                     && let Some(skip) =
-                        maybe_skip_comment_forward(buf, idx, honor_properties, class, entry.flags)
+                        maybe_skip_comment_forward(buf, idx, prop_cache.props(), class, entry.flags)
                 {
                     idx = skip.next();
                     if matches!(skip, CommentSkip::Unterminated(_)) && depth == 0 {
@@ -1858,15 +1833,7 @@ fn scan_lists_with_options(
                     }
                     SyntaxClass::StringDelim | SyntaxClass::StringFence => {
                         idx = skip_string_forward(
-                            buf,
-                            &mut chars,
-                            idx,
-                            stop,
-                            table,
-                            honor_properties,
-                            ch,
-                            class,
-                            prop_cache,
+                            buf, &mut chars, idx, stop, table, ch, class, prop_cache,
                         )
                         .map_err(|_| ScanListError::unbalanced(last_good, stop))?;
                     }
@@ -1896,26 +1863,14 @@ fn scan_lists_with_options(
             while idx > start {
                 idx -= 1;
                 let ch = chars.char_at(idx);
-                let entry = effective_syntax_entry_for_abs_char(
-                    buf,
-                    table,
-                    ch,
-                    idx,
-                    honor_properties,
-                    prop_cache,
-                );
+                let entry = effective_syntax_entry_for_abs_char(buf, table, ch, idx, prop_cache);
                 let class = entry.class;
                 if depth == min_depth {
                     last_good = idx;
                 }
                 if ignore_comments
-                    && let Some(next) = maybe_skip_comment_backward(
-                        buf,
-                        idx + 1,
-                        honor_properties,
-                        class,
-                        entry.flags,
-                    )
+                    && let Some(next) =
+                        maybe_skip_comment_backward(buf, idx + 1, props, class, entry.flags)
                 {
                     idx = next;
                     continue;
@@ -1941,15 +1896,7 @@ fn scan_lists_with_options(
                     }
                     SyntaxClass::StringDelim | SyntaxClass::StringFence => {
                         idx = skip_string_backward(
-                            buf,
-                            &mut chars,
-                            idx,
-                            start,
-                            table,
-                            honor_properties,
-                            ch,
-                            class,
-                            prop_cache,
+                            buf, &mut chars, idx, start, table, ch, class, prop_cache,
                         )
                         .map_err(|_| ScanListError::unbalanced(last_good, start))?;
                     }
@@ -2013,17 +1960,14 @@ fn char_quoted_at(
     idx: usize,
     start_bound: usize,
     table: &SyntaxTable,
-    honor_properties: bool,
-    prop_cache: &SyntaxPropRange,
+    prop_cache: &SyntaxPropRange<'_>,
 ) -> bool {
     let mut pos = idx;
     let mut quoted = false;
     while pos > start_bound {
         pos -= 1;
         let c = chars.char_at(pos);
-        let class =
-            effective_syntax_entry_for_abs_char(buf, table, c, pos, honor_properties, prop_cache)
-                .class;
+        let class = effective_syntax_entry_for_abs_char(buf, table, c, pos, prop_cache).class;
         if !matches!(class, SyntaxClass::Escape | SyntaxClass::CharQuote) {
             break;
         }
@@ -2040,20 +1984,11 @@ fn scan_sexp_forward(
     len: usize,
     start: usize,
     table: &SyntaxTable,
-    honor_properties: bool,
     ignore_comments: bool,
-    prop_cache: &SyntaxPropRange,
+    prop_cache: &SyntaxPropRange<'_>,
 ) -> Result<usize, ScanListError> {
-    let skipped = skip_sexp_ignored_forward(
-        buf,
-        chars,
-        start,
-        len,
-        table,
-        honor_properties,
-        ignore_comments,
-        prop_cache,
-    );
+    let skipped =
+        skip_sexp_ignored_forward(buf, chars, start, len, table, ignore_comments, prop_cache);
     let mut idx = skipped.position();
 
     if matches!(skipped, IgnoredSkip::UnterminatedComment(_)) {
@@ -2065,8 +2000,7 @@ fn scan_sexp_forward(
     }
 
     let ch = chars.char_at(idx);
-    let syn_entry =
-        effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties, prop_cache);
+    let syn_entry = effective_syntax_entry_for_abs_char(buf, table, ch, idx, prop_cache);
     let syn = syn_entry.class;
 
     match syn {
@@ -2076,18 +2010,11 @@ fn scan_sexp_forward(
             idx += 1;
             while idx < len && depth > 0 {
                 let c = chars.char_at(idx);
-                let entry = effective_syntax_entry_for_abs_char(
-                    buf,
-                    table,
-                    c,
-                    idx,
-                    honor_properties,
-                    prop_cache,
-                );
+                let entry = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache);
                 let s = entry.class;
                 if ignore_comments
                     && let Some(skip) =
-                        maybe_skip_comment_forward(buf, idx, honor_properties, s, entry.flags)
+                        maybe_skip_comment_forward(buf, idx, prop_cache.props(), s, entry.flags)
                 {
                     idx = skip.next();
                     continue;
@@ -2109,7 +2036,6 @@ fn scan_sexp_forward(
                                 table,
                                 chars.char_at(idx),
                                 idx,
-                                honor_properties,
                                 prop_cache,
                             )
                             .class;
@@ -2145,15 +2071,7 @@ fn scan_sexp_forward(
             idx += 1;
             while idx < len {
                 let c = chars.char_at(idx);
-                let s = effective_syntax_entry_for_abs_char(
-                    buf,
-                    table,
-                    c,
-                    idx,
-                    honor_properties,
-                    prop_cache,
-                )
-                .class;
+                let s = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache).class;
                 if s == delim_class && (syn == SyntaxClass::StringFence || c == ch) {
                     break;
                 }
@@ -2185,15 +2103,7 @@ fn scan_sexp_forward(
             // Continue absorbing the rest of the word/symbol, honoring escapes.
             while idx < len {
                 let c = chars.char_at(idx);
-                let s = effective_syntax_entry_for_abs_char(
-                    buf,
-                    table,
-                    c,
-                    idx,
-                    honor_properties,
-                    prop_cache,
-                )
-                .class;
+                let s = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache).class;
                 match s {
                     SyntaxClass::Escape | SyntaxClass::CharQuote => {
                         // Skip the escape char, then the quoted char below.
@@ -2236,9 +2146,8 @@ fn scan_sexp_backward(
     start: usize,
     start_bound: usize,
     table: &SyntaxTable,
-    honor_properties: bool,
     ignore_comments: bool,
-    prop_cache: &SyntaxPropRange,
+    prop_cache: &SyntaxPropRange<'_>,
 ) -> Result<usize, ScanListError> {
     let mut idx = skip_sexp_ignored_backward(
         buf,
@@ -2246,7 +2155,6 @@ fn scan_sexp_backward(
         start,
         start_bound,
         table,
-        honor_properties,
         ignore_comments,
         prop_cache,
     );
@@ -2257,23 +2165,14 @@ fn scan_sexp_backward(
 
     idx -= 1; // move to the character we're examining
     let ch = chars.char_at(idx);
-    let syn_entry =
-        effective_syntax_entry_for_abs_char(buf, table, ch, idx, honor_properties, prop_cache);
+    let syn_entry = effective_syntax_entry_for_abs_char(buf, table, ch, idx, prop_cache);
     let mut syn = syn_entry.class;
 
     // Quoting turns anything except a comment-ender into a word character.
     // Mirrors GNU scan_lists: if the char we landed on is quoted (preceded by
     // an escape), step back past the escape and treat the pair as a word.
     if syn != SyntaxClass::EndComment
-        && char_quoted_at(
-            buf,
-            chars,
-            idx,
-            start_bound,
-            table,
-            honor_properties,
-            prop_cache,
-        )
+        && char_quoted_at(buf, chars, idx, start_bound, table, prop_cache)
     {
         idx -= 1;
         syn = SyntaxClass::Word;
@@ -2286,18 +2185,16 @@ fn scan_sexp_backward(
             while idx > start_bound && depth > 0 {
                 idx -= 1;
                 let c = chars.char_at(idx);
-                let entry = effective_syntax_entry_for_abs_char(
-                    buf,
-                    table,
-                    c,
-                    idx,
-                    honor_properties,
-                    prop_cache,
-                );
+                let entry = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache);
                 let s = entry.class;
                 if ignore_comments
-                    && let Some(next) =
-                        maybe_skip_comment_backward(buf, idx + 1, honor_properties, s, entry.flags)
+                    && let Some(next) = maybe_skip_comment_backward(
+                        buf,
+                        idx + 1,
+                        prop_cache.props(),
+                        s,
+                        entry.flags,
+                    )
                 {
                     idx = next;
                     continue;
@@ -2320,7 +2217,6 @@ fn scan_sexp_backward(
                                     table,
                                     chars.char_at(idx),
                                     idx,
-                                    honor_properties,
                                     prop_cache,
                                 )
                                 .class;
@@ -2352,30 +2248,14 @@ fn scan_sexp_backward(
             idx -= 1;
             while idx > start_bound {
                 let c = chars.char_at(idx);
-                let s = effective_syntax_entry_for_abs_char(
-                    buf,
-                    table,
-                    c,
-                    idx,
-                    honor_properties,
-                    prop_cache,
-                )
-                .class;
+                let s = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache).class;
                 if s == delim_class && (syn == SyntaxClass::StringFence || c == ch) {
                     break;
                 }
                 idx -= 1;
             }
             let c = chars.char_at(idx);
-            let s = effective_syntax_entry_for_abs_char(
-                buf,
-                table,
-                c,
-                idx,
-                honor_properties,
-                prop_cache,
-            )
-            .class;
+            let s = effective_syntax_entry_for_abs_char(buf, table, c, idx, prop_cache).class;
             if !(s == delim_class && (syn == SyntaxClass::StringFence || c == ch)) {
                 return Err(ScanListError::unbalanced(idx, start));
             }
@@ -2388,28 +2268,13 @@ fn scan_sexp_backward(
             while idx > start_bound {
                 let prev = idx - 1;
                 let c1 = chars.char_at(prev);
-                let c1_class = effective_syntax_entry_for_abs_char(
-                    buf,
-                    table,
-                    c1,
-                    prev,
-                    honor_properties,
-                    prop_cache,
-                )
-                .class;
+                let c1_class =
+                    effective_syntax_entry_for_abs_char(buf, table, c1, prev, prop_cache).class;
                 // Don't allow a comment-end to be quoted.
                 if c1_class == SyntaxClass::EndComment {
                     break;
                 }
-                let quoted = char_quoted_at(
-                    buf,
-                    chars,
-                    prev,
-                    start_bound,
-                    table,
-                    honor_properties,
-                    prop_cache,
-                );
+                let quoted = char_quoted_at(buf, chars, prev, start_bound, table, prop_cache);
                 if quoted {
                     // The previous char is escaped: step back past it now, so the
                     // following `idx -= 1` lands on the escape character.
@@ -2801,6 +2666,58 @@ pub(crate) fn syntax_table_decodes_for_test() -> usize {
     SYNTAX_TABLE_DECODES.with(Cell::get)
 }
 
+/// Where a scan gets each character's `syntax-table` property, or that it gets
+/// none at all -- GNU `SETUP_SYNTAX_TABLE`'s `parse_sexp_lookup_properties`
+/// test, carrying the resolver instead of a bare flag.
+///
+/// A scanner that honours properties can only do so through the resolver the
+/// property builtins use, so "honours properties but reads them raw" -- the
+/// state in which `forward-sexp` and `syntax-after` disagreed about a
+/// `category`-supplied syntax -- is not a value this type can hold.
+/// [`Self::for_scan`] is the one place the Lisp flag becomes a resolver.
+#[derive(Clone, Copy)]
+pub(crate) enum SyntaxProperties<'a> {
+    /// `parse-sexp-lookup-properties` is nil: buffer table syntax only.
+    Ignore,
+    /// Resolve `syntax-table` per character exactly as `get-char-property`
+    /// does, through GNU `textget`'s category/alias/default fallbacks.
+    Honor(CharPropertyResolver<'a>),
+}
+
+impl<'a> SyntaxProperties<'a> {
+    /// Snapshot the property source for one scan. `honor` is the value of
+    /// `parse-sexp-lookup-properties`, read (and any `syntax-propertize` run)
+    /// by the caller before this point, since Lisp must not run afterwards.
+    pub(crate) fn for_scan(honor: bool, obarray: &'a Obarray, buffers: &BufferManager) -> Self {
+        if honor {
+            Self::Honor(CharPropertyResolver::snapshot(
+                obarray,
+                buffers,
+                syntax_table_prop_symbol(),
+            ))
+        } else {
+            Self::Ignore
+        }
+    }
+
+    /// The resolved `syntax-table` property at a buffer byte, with no run
+    /// cache. Used by the scanners that address text by byte (regexp matching,
+    /// `forward-comment`, `backward-prefix-chars`); the char-addressed scanners
+    /// go through [`SyntaxPropRange`], which caches the same resolution.
+    fn syntax_table_prop_at_emacs_byte(
+        self,
+        buf: &Buffer,
+        byte_pos: EmacsBytePos,
+    ) -> Option<Value> {
+        let Self::Honor(resolver) = self else {
+            return None;
+        };
+        let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(byte_pos);
+        let (plist, _, _) = buf.interval_plist_run_at_char_pos(char_pos);
+        resolver.resolve_interval_plist(plist?)
+    }
+}
+
 /// Per-scan cache of the `syntax-table` text-property run, mirroring GNU
 /// `syntax.c` `gl_state` (`b_property`/`e_property` plus the current value).
 /// A scan reads the property once per char, but it is almost always nil over
@@ -2810,7 +2727,10 @@ pub(crate) fn syntax_table_decodes_for_test() -> usize {
 /// char-indexed scan needs no conversion at all on a hit.  Created fresh per
 /// scan, so it never observes a mid-scan property edit (syntax-propertize runs
 /// before the scan).
-struct SyntaxPropRange {
+struct SyntaxPropRange<'a> {
+    /// Where the property comes from, so a cached run and the resolution that
+    /// produced it cannot come from different sources.
+    props: SyntaxProperties<'a>,
     /// Run over which the `syntax-table` property is known constant, held as
     /// separate `Cell`s rather than one `RefCell<Option<..>>`.
     ///
@@ -2888,15 +2808,22 @@ struct SyntaxPropRange {
     ascii_table: Cell<usize>,
 }
 
-impl SyntaxPropRange {
-    fn new() -> Self {
+impl<'a> SyntaxPropRange<'a> {
+    fn new(props: SyntaxProperties<'a>) -> Self {
         Self {
+            props,
             run_start: Cell::new(0),
             run_end: Cell::new(0),
             run_value: Cell::new(None),
             ascii: std::array::from_fn(|_| Cell::new(None)),
             ascii_table: Cell::new(0),
         }
+    }
+
+    /// The property source this cache resolves through, for the byte-addressed
+    /// helpers a char-indexed scan calls into (comment skipping).
+    fn props(&self) -> SyntaxProperties<'a> {
+        self.props
     }
 
     /// The syntax entry for ASCII `ch` under `table`, served from the per-scan
@@ -2927,12 +2854,20 @@ impl SyntaxPropRange {
         Some(entry)
     }
 
-    /// The `syntax-table` property at char position `pos`, served from the
-    /// cached run when possible.  In debug builds every cache hit is validated
-    /// against a fresh interval lookup, the same safety net the byte<->char
-    /// cache uses.
+    /// The resolved `syntax-table` property at char position `pos`, served from
+    /// the cached run when possible.  In debug builds every cache hit is
+    /// validated against a fresh interval lookup, the same safety net the
+    /// byte<->char cache uses.
+    ///
+    /// The run is an interval, and a character's resolution depends only on its
+    /// interval's plist plus the snapshotted variables, so caching the RESOLVED
+    /// value over the run is exactly as sound as caching the raw one was -- and
+    /// keeps the category indirection off the per-character path.
     #[inline]
     fn syntax_table_prop_at_char(&self, buf: &Buffer, pos: usize) -> Option<Value> {
+        let SyntaxProperties::Honor(resolver) = self.props else {
+            return None;
+        };
         // In-run fast path: two integer compares, as in GNU's
         // UPDATE_SYNTAX_TABLE_FORWARD. Kept free of any borrow bookkeeping
         // because this runs once per character scanned.
@@ -2940,10 +2875,9 @@ impl SyntaxPropRange {
             let value = self.run_value.get();
             #[cfg(debug_assertions)]
             {
-                let (fresh, _, _) = buf.get_property_run_at_char_pos(
-                    offset_char_pos(CharPos0::ZERO, pos),
-                    syntax_table_prop_symbol(),
-                );
+                let (plist, _, _) =
+                    buf.interval_plist_run_at_char_pos(offset_char_pos(CharPos0::ZERO, pos));
+                let fresh = plist.and_then(|plist| resolver.resolve_interval_plist(plist));
                 debug_assert!(
                     value == fresh,
                     "SyntaxPropRange stale syntax-table at char {pos} in [{}, {})",
@@ -2953,18 +2887,24 @@ impl SyntaxPropRange {
             }
             return value;
         }
-        self.refill_run(buf, pos)
+        self.refill_run(buf, pos, resolver)
     }
 
-    /// Locate the run containing `pos` and cache it.
+    /// Locate the run containing `pos`, resolve its property once, and cache
+    /// both.
     ///
     /// Outlined so the per-character fast path above stays small enough to
     /// inline into the scan loop.
     #[inline(never)]
-    fn refill_run(&self, buf: &Buffer, pos: usize) -> Option<Value> {
+    fn refill_run(
+        &self,
+        buf: &Buffer,
+        pos: usize,
+        resolver: CharPropertyResolver<'_>,
+    ) -> Option<Value> {
         let char_pos = offset_char_pos(CharPos0::ZERO, pos);
-        let (value, start, end) =
-            buf.get_property_run_at_char_pos(char_pos, syntax_table_prop_symbol());
+        let (plist, start, end) = buf.interval_plist_run_at_char_pos(char_pos);
+        let value = plist.and_then(|plist| resolver.resolve_interval_plist(plist));
         self.run_start.set(start.get());
         self.run_end.set(end.get());
         self.run_value.set(value);
@@ -2985,11 +2925,9 @@ fn effective_syntax_entry_for_char_at_byte(
     table: &SyntaxTable,
     ch: char,
     byte_pos: EmacsBytePos,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> SyntaxEntry {
-    if honor_properties
-        && let Some(prop) =
-            buf.text_props_get_property_at_emacs_byte_pos(byte_pos, syntax_table_prop_symbol())
+    if let Some(prop) = props.syntax_table_prop_at_emacs_byte(buf, byte_pos)
         && let Some(entry) = syntax_entry_from_syntax_property(prop, ch)
     {
         return entry;
@@ -3008,9 +2946,9 @@ pub(crate) fn regexp_syntax_class_at_emacs_byte(
     table: &SyntaxTable,
     ch: char,
     byte_pos: EmacsBytePos,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> SyntaxClass {
-    effective_syntax_entry_for_char_at_byte(buf, table, ch, byte_pos, honor_properties).class
+    effective_syntax_entry_for_char_at_byte(buf, table, ch, byte_pos, props).class
 }
 
 /// The syntax entry governing the character at `abs_char`.
@@ -3031,11 +2969,9 @@ fn effective_syntax_entry_for_abs_char(
     table: &SyntaxTable,
     ch: char,
     abs_char: usize,
-    honor_properties: bool,
-    prop_cache: &SyntaxPropRange,
+    prop_cache: &SyntaxPropRange<'_>,
 ) -> SyntaxEntry {
-    if honor_properties
-        && let Some(prop) = prop_cache.syntax_table_prop_at_char(buf, abs_char)
+    if let Some(prop) = prop_cache.syntax_table_prop_at_char(buf, abs_char)
         && let Some(entry) = syntax_entry_from_syntax_property(prop, ch)
     {
         return entry;
@@ -3455,11 +3391,12 @@ pub(crate) fn builtin_syntax_after(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_syntax_after_in_buffers(&eval.buffers, args)
+    builtin_syntax_after_in_buffers(&eval.obarray, &eval.buffers, args)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_syntax_after_in_buffers(
+    obarray: &Obarray,
     buffers: &BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -3503,7 +3440,7 @@ pub(crate) fn builtin_syntax_after_in_buffers(
         &SyntaxTable::for_buffer(buf),
         unit.ch,
         byte_index,
-        true,
+        SyntaxProperties::for_scan(true, obarray, buffers),
     );
     Ok(syntax_entry_to_value(&entry))
 }
@@ -3524,8 +3461,8 @@ pub(crate) fn builtin_forward_comment(
     }
 
     let count = expect_forward_comment_count(&args)?;
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    if honor_properties {
+    let honor = parse_sexp_lookup_properties_enabled(eval);
+    if honor {
         let target = eval
             .buffers
             .current_buffer()
@@ -3542,7 +3479,8 @@ pub(crate) fn builtin_forward_comment(
         }
     }
 
-    forward_comment_in_buffers(&mut eval.buffers, count, honor_properties)
+    let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
+    forward_comment_in_buffers(&mut eval.buffers, count, props)
 }
 
 fn expect_forward_comment_count(args: &[Value]) -> Result<i64, Flow> {
@@ -3571,7 +3509,7 @@ fn expect_forward_comment_count(args: &[Value]) -> Result<i64, Flow> {
 fn forward_comment_in_buffers(
     buffers: &mut BufferManager,
     count: i64,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> EvalResult {
     let current_id = buffers
         .current_buffer_id()
@@ -3587,9 +3525,9 @@ fn forward_comment_in_buffers(
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let mut scanner = ForwardCommentCursor::new(buf);
         let ok = if count > 0 {
-            forward_comment_forward(&mut scanner, count as u64, honor_properties)
+            forward_comment_forward(&mut scanner, count as u64, props)
         } else {
-            forward_comment_backward(&mut scanner, (-count) as u64, honor_properties)
+            forward_comment_backward(&mut scanner, (-count) as u64, props)
         };
         (ok, scanner.point_emacs_byte_pos())
     };
@@ -3632,7 +3570,7 @@ impl Deref for ForwardCommentCursor<'_> {
 fn forward_comment_forward(
     buf: &mut ForwardCommentCursor<'_>,
     count: u64,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> bool {
     let mut remaining = count;
     let accessible = buf.accessible_emacs_byte_region();
@@ -3653,7 +3591,7 @@ fn forward_comment_forward(
                 &SyntaxTable::for_buffer(buf),
                 unit.ch,
                 pt,
-                honor_properties,
+                props,
             );
             let class = entry.class;
 
@@ -3683,7 +3621,7 @@ fn forward_comment_forward(
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             pt,
-            honor_properties,
+            props,
         );
         let class = entry.class;
         let flags = entry.flags;
@@ -3693,7 +3631,7 @@ fn forward_comment_forward(
             let style = CommentStyle::from_main_flags(flags);
             let nested = flags.contains(SyntaxFlags::COMMENT_NESTABLE);
             buf.goto_emacs_byte_pos(unit.end);
-            if !scan_forward_comment_body(buf, style, nested, honor_properties) {
+            if !scan_forward_comment_body(buf, style, nested, props) {
                 return false;
             }
             remaining -= 1;
@@ -3704,7 +3642,7 @@ fn forward_comment_forward(
         if class == SyntaxClass::CommentFence {
             buf.goto_emacs_byte_pos(unit.end);
             // Scan forward for matching comment fence.
-            if !scan_forward_comment_fence(buf, honor_properties) {
+            if !scan_forward_comment_fence(buf, props) {
                 return false;
             }
             remaining -= 1;
@@ -3723,7 +3661,7 @@ fn forward_comment_forward(
                     &SyntaxTable::for_buffer(buf),
                     unit2.ch,
                     next_pos,
-                    honor_properties,
+                    props,
                 );
                 let flags2 = entry2.flags;
                 if flags2.contains(SyntaxFlags::COMMENT_START_SECOND) {
@@ -3731,7 +3669,7 @@ fn forward_comment_forward(
                     let nested = flags2.contains(SyntaxFlags::COMMENT_NESTABLE)
                         || flags.contains(SyntaxFlags::COMMENT_NESTABLE);
                     buf.goto_emacs_byte_pos(unit2.end);
-                    if !scan_forward_comment_body(buf, style, nested, honor_properties) {
+                    if !scan_forward_comment_body(buf, style, nested, props) {
                         return false;
                     }
                     remaining -= 1;
@@ -3754,7 +3692,7 @@ fn scan_forward_comment_body(
     buf: &mut ForwardCommentCursor<'_>,
     style: CommentStyle,
     nested: bool,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> bool {
     let mut nesting = 1i32;
     let max = buf.accessible_emacs_byte_region().end();
@@ -3772,7 +3710,7 @@ fn scan_forward_comment_body(
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             pt,
-            honor_properties,
+            props,
         );
         let class = entry.class;
         let flags = entry.flags;
@@ -3809,7 +3747,7 @@ fn scan_forward_comment_body(
                         &SyntaxTable::for_buffer(buf),
                         unit2.ch,
                         next_pos,
-                        honor_properties,
+                        props,
                     );
                     let flags2 = entry2.flags;
                     if is_nested_two_char_comment_start(flags, flags2, style) {
@@ -3852,7 +3790,7 @@ fn scan_forward_comment_body(
                     &SyntaxTable::for_buffer(buf),
                     unit2.ch,
                     next_pos,
-                    honor_properties,
+                    props,
                 );
                 let flags2 = entry2.flags;
                 if flags2.contains(SyntaxFlags::COMMENT_END_SECOND)
@@ -3873,7 +3811,10 @@ fn scan_forward_comment_body(
 }
 
 /// Scan forward for matching comment fence character.
-fn scan_forward_comment_fence(buf: &mut ForwardCommentCursor<'_>, honor_properties: bool) -> bool {
+fn scan_forward_comment_fence(
+    buf: &mut ForwardCommentCursor<'_>,
+    props: SyntaxProperties<'_>,
+) -> bool {
     let max = buf.accessible_emacs_byte_region().end();
     loop {
         let pt = buf.point_emacs_byte_pos();
@@ -3888,7 +3829,7 @@ fn scan_forward_comment_fence(buf: &mut ForwardCommentCursor<'_>, honor_properti
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             pt,
-            honor_properties,
+            props,
         );
         let class = entry.class;
 
@@ -3917,7 +3858,7 @@ fn scan_forward_comment_fence(buf: &mut ForwardCommentCursor<'_>, honor_properti
 fn forward_comment_backward(
     buf: &mut ForwardCommentCursor<'_>,
     count: u64,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> bool {
     let mut remaining = count;
     let accessible = buf.accessible_emacs_byte_region();
@@ -3945,7 +3886,7 @@ fn forward_comment_backward(
                 &SyntaxTable::for_buffer(buf),
                 unit.ch,
                 ch_pos,
-                honor_properties,
+                props,
             );
             let class = entry.class;
             let flags = entry.flags;
@@ -3972,7 +3913,7 @@ fn forward_comment_backward(
                         &SyntaxTable::for_buffer(buf),
                         unit2.ch,
                         ch2_pos,
-                        honor_properties,
+                        props,
                     );
                     let flags2 = entry2.flags;
                     if flags2.contains(SyntaxFlags::COMMENT_END_FIRST) {
@@ -3989,7 +3930,7 @@ fn forward_comment_backward(
             // Comment fence backward.
             if code == SyntaxClass::CommentFence {
                 buf.goto_emacs_byte_pos(unit.start);
-                if !scan_backward_comment_fence(buf, honor_properties) {
+                if !scan_backward_comment_fence(buf, props) {
                     buf.goto_emacs_byte_pos(pt);
                     return false;
                 }
@@ -4004,7 +3945,7 @@ fn forward_comment_backward(
                     buf.goto_emacs_byte_pos(unit.start);
                 }
                 let saved = buf.point_emacs_byte_pos();
-                if scan_backward_comment_body(buf, comment_style, nested, honor_properties) {
+                if scan_backward_comment_body(buf, comment_style, nested, props) {
                     // Successfully scanned back through the comment body.
                     break;
                 }
@@ -4062,7 +4003,7 @@ fn scan_backward_comment_body(
     buf: &mut ForwardCommentCursor<'_>,
     style: CommentStyle,
     nested: bool,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> bool {
     let mut nesting = 1i32;
     let min = buf.accessible_emacs_byte_region().start();
@@ -4086,7 +4027,7 @@ fn scan_backward_comment_body(
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             ch_pos,
-            honor_properties,
+            props,
         );
         let class = entry.class;
         let flags = entry.flags;
@@ -4120,7 +4061,7 @@ fn scan_backward_comment_body(
                     &SyntaxTable::for_buffer(buf),
                     unit2.ch,
                     ch2_pos,
-                    honor_properties,
+                    props,
                 );
                 let flags2 = entry2.flags;
                 if flags2.contains(SyntaxFlags::COMMENT_END_FIRST)
@@ -4200,7 +4141,7 @@ fn scan_backward_comment_body(
                     &SyntaxTable::for_buffer(buf),
                     unit2.ch,
                     ch2_pos,
-                    honor_properties,
+                    props,
                 );
                 let flags2 = entry2.flags;
                 if flags2.contains(SyntaxFlags::COMMENT_START_FIRST)
@@ -4237,7 +4178,10 @@ fn scan_backward_comment_body(
 }
 
 /// Scan backward for matching comment fence character.
-fn scan_backward_comment_fence(buf: &mut ForwardCommentCursor<'_>, honor_properties: bool) -> bool {
+fn scan_backward_comment_fence(
+    buf: &mut ForwardCommentCursor<'_>,
+    props: SyntaxProperties<'_>,
+) -> bool {
     let min = buf.accessible_emacs_byte_region().start();
     loop {
         let pt = buf.point_emacs_byte_pos();
@@ -4253,7 +4197,7 @@ fn scan_backward_comment_fence(buf: &mut ForwardCommentCursor<'_>, honor_propert
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             ch_pos,
-            honor_properties,
+            props,
         );
         let class = entry.class;
 
@@ -4270,14 +4214,15 @@ pub(crate) fn builtin_backward_prefix_chars(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    builtin_backward_prefix_chars_in_buffers(&mut eval.buffers, args, honor_properties)
+    let honor = parse_sexp_lookup_properties_enabled(eval);
+    let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
+    builtin_backward_prefix_chars_in_buffers(&mut eval.buffers, args, props)
 }
 
 pub(crate) fn builtin_backward_prefix_chars_in_buffers(
     buffers: &mut BufferManager,
     args: Vec<Value>,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> EvalResult {
     if !args.is_empty() {
         return Err(signal(
@@ -4312,7 +4257,7 @@ pub(crate) fn builtin_backward_prefix_chars_in_buffers(
             &SyntaxTable::for_buffer(buf),
             unit.ch,
             ch_pos,
-            honor_properties,
+            props,
         );
         let is_prefix =
             entry.class == SyntaxClass::Quote || entry.flags.contains(SyntaxFlags::PREFIX);
@@ -4346,7 +4291,7 @@ pub(crate) fn builtin_forward_word(
         }
     };
 
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
+    let honor = parse_sexp_lookup_properties_enabled(eval);
     let orig_byte = {
         let buf = eval
             .buffers
@@ -4359,14 +4304,15 @@ pub(crate) fn builtin_forward_word(
     // used unchanged.
     let wbtable = eval.visible_variable_value_or_nil("find-word-boundary-function-table");
     let (raw_byte, completed) = if word_boundary_table_active(&wbtable) {
-        word_motion_with_table(eval, count, honor_properties, wbtable)
+        word_motion_with_table(eval, count, honor, wbtable)
     } else {
+        let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
         let buf = eval
             .buffers
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let table = SyntaxTable::for_buffer(buf);
-        forward_word_with_options(buf, &table, count, honor_properties)
+        forward_word_with_options(buf, &table, count, props)
     };
     let (orig_char, raw_char) = {
         let buf = eval
@@ -4448,8 +4394,8 @@ pub(crate) fn builtin_forward_sexp(
         }
     };
 
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    if honor_properties {
+    let honor = parse_sexp_lookup_properties_enabled(eval);
+    if honor {
         let target = eval
             .buffers
             .current_buffer()
@@ -4457,6 +4403,7 @@ pub(crate) fn builtin_forward_sexp(
             .unwrap_or(1);
         maybe_syntax_propertize_for_scan(eval, target)?;
     }
+    let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
     let buf = eval
         .buffers
         .current_buffer()
@@ -4464,20 +4411,14 @@ pub(crate) fn builtin_forward_sexp(
     let table = SyntaxTable::for_buffer(buf);
     let from = buf.point_emacs_byte_pos();
     let ignore_comments = parse_sexp_ignore_comments_enabled(eval);
-    let new_pos = match scan_sexps_with_options(
-        buf,
-        &table,
-        from.get(),
-        count,
-        honor_properties,
-        ignore_comments,
-    )
-    .map_err(|err| signal(LispCondition::ScanError, err.signal_data()))?
-    {
-        Some(pos) => EmacsBytePos::new(pos),
-        None if count < 0 => buf.accessible_emacs_byte_region().start(),
-        None => buf.accessible_emacs_byte_region().end(),
-    };
+    let new_pos =
+        match scan_sexps_with_options(buf, &table, from.get(), count, props, ignore_comments)
+            .map_err(|err| signal(LispCondition::ScanError, err.signal_data()))?
+        {
+            Some(pos) => EmacsBytePos::new(pos),
+            None if count < 0 => buf.accessible_emacs_byte_region().start(),
+            None => buf.accessible_emacs_byte_region().end(),
+        };
 
     let current_id = eval
         .buffers
@@ -4508,8 +4449,8 @@ pub(crate) fn builtin_backward_sexp(
         }
     };
 
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    if honor_properties {
+    let honor = parse_sexp_lookup_properties_enabled(eval);
+    if honor {
         let target = eval
             .buffers
             .current_buffer()
@@ -4517,6 +4458,7 @@ pub(crate) fn builtin_backward_sexp(
             .unwrap_or(1);
         maybe_syntax_propertize_for_scan(eval, target)?;
     }
+    let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
     let buf = eval
         .buffers
         .current_buffer()
@@ -4525,20 +4467,14 @@ pub(crate) fn builtin_backward_sexp(
     let from = buf.point_emacs_byte_pos();
     // backward-sexp with positive count => scan_sexps with negative count
     let ignore_comments = parse_sexp_ignore_comments_enabled(eval);
-    let new_pos = match scan_sexps_with_options(
-        buf,
-        &table,
-        from.get(),
-        -count,
-        honor_properties,
-        ignore_comments,
-    )
-    .map_err(|err| signal(LispCondition::ScanError, err.signal_data()))?
-    {
-        Some(pos) => EmacsBytePos::new(pos),
-        None if count < 0 => buf.accessible_emacs_byte_region().end(),
-        None => buf.accessible_emacs_byte_region().start(),
-    };
+    let new_pos =
+        match scan_sexps_with_options(buf, &table, from.get(), -count, props, ignore_comments)
+            .map_err(|err| signal(LispCondition::ScanError, err.signal_data()))?
+        {
+            Some(pos) => EmacsBytePos::new(pos),
+            None if count < 0 => buf.accessible_emacs_byte_region().end(),
+            None => buf.accessible_emacs_byte_region().start(),
+        };
 
     let current_id = eval
         .buffers
@@ -4590,8 +4526,8 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
         }
     };
 
-    let honor_properties = parse_sexp_lookup_properties_enabled(ctx);
-    if honor_properties {
+    let honor = parse_sexp_lookup_properties_enabled(ctx);
+    if honor {
         // A backward scan (COUNT < 0) never examines positions past FROM, so
         // propertizing through FROM suffices (GNU parse_sexp_propertize is
         // lazy and would stop there); only forward scans need the
@@ -4610,6 +4546,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
         maybe_syntax_propertize_for_scan(ctx, target)?;
     }
 
+    let props = SyntaxProperties::for_scan(honor, &ctx.obarray, &ctx.buffers);
     let buf = ctx
         .buffers
         .current_buffer()
@@ -4623,15 +4560,7 @@ pub(crate) fn builtin_scan_lists(ctx: &mut super::eval::Context, args: Vec<Value
     let from_char = LispCharPos1::new(clipped_from).to_char_pos().get();
 
     let ignore_comments = parse_sexp_ignore_comments_enabled(ctx);
-    match scan_lists_with_options(
-        buf,
-        &table,
-        from_char,
-        count,
-        depth,
-        honor_properties,
-        ignore_comments,
-    ) {
+    match scan_lists_with_options(buf, &table, from_char, count, depth, props, ignore_comments) {
         Ok(Some(new_char)) => Ok(Value::fixnum(char_pos_to_lisp_i64(new_char))),
         Ok(None) => Ok(Value::NIL),
         Err(err) => Err(signal(LispCondition::ScanError, err.signal_data())),
@@ -4669,8 +4598,8 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
         }
     };
 
-    let honor_properties = parse_sexp_lookup_properties_enabled(ctx);
-    if honor_properties {
+    let honor = parse_sexp_lookup_properties_enabled(ctx);
+    if honor {
         // A backward scan (COUNT < 0) never examines positions past FROM, so
         // propertizing through FROM suffices (GNU parse_sexp_propertize is
         // lazy and would stop there); only forward scans need the
@@ -4689,6 +4618,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
         maybe_syntax_propertize_for_scan(ctx, target)?;
     }
 
+    let props = SyntaxProperties::for_scan(honor, &ctx.obarray, &ctx.buffers);
     let buf = ctx
         .buffers
         .current_buffer()
@@ -4701,14 +4631,7 @@ pub(crate) fn builtin_scan_sexps(ctx: &mut super::eval::Context, args: Vec<Value
     let from_byte = buffer_char_to_emacs_byte_pos(buf, from_char);
 
     let ignore_comments = parse_sexp_ignore_comments_enabled(ctx);
-    match scan_sexps_with_options(
-        buf,
-        &table,
-        from_byte.get(),
-        count,
-        honor_properties,
-        ignore_comments,
-    ) {
+    match scan_sexps_with_options(buf, &table, from_byte.get(), count, props, ignore_comments) {
         Ok(Some(new_byte)) => Ok(Value::fixnum(buffer_byte_to_lisp_pos(
             buf,
             EmacsBytePos::new(new_byte),
@@ -5138,11 +5061,9 @@ fn syntax_class_and_flags(
     table: &SyntaxTable,
     ch: char,
     abs_char: usize,
-    honor_properties: bool,
-    prop_cache: &SyntaxPropRange,
+    prop_cache: &SyntaxPropRange<'_>,
 ) -> (SyntaxClass, SyntaxFlags) {
-    let entry =
-        effective_syntax_entry_for_abs_char(buf, table, ch, abs_char, honor_properties, prop_cache);
+    let entry = effective_syntax_entry_for_abs_char(buf, table, ch, abs_char, prop_cache);
     (entry.class, entry.flags)
 }
 
@@ -5170,7 +5091,7 @@ fn parse_state_from_range_with_options(
     stop_before: bool,
     oldstate: Option<&Value>,
     commentstop: CommentStopMode,
-    honor_properties: bool,
+    props: SyntaxProperties<'_>,
 ) -> (Value, i64) {
     let accessible_chars = buf.accessible_char_region();
     let point_min = accessible_chars.start().get();
@@ -5188,7 +5109,7 @@ fn parse_state_from_range_with_options(
     // `prop_cache` carries both the `syntax-table` property run cache and the
     // lazily-filled ASCII syntax memo consumed by
     // `effective_syntax_entry_for_abs_char`.
-    let prop_cache = SyntaxPropRange::new();
+    let prop_cache = SyntaxPropRange::new(props);
 
     let mut state = PartialParseState::from_oldstate(oldstate);
     let mut idx = 0;
@@ -5204,8 +5125,7 @@ fn parse_state_from_range_with_options(
         let abs_char = from_char + idx;
         let pos1 = (abs_char + 1) as i64;
         let ch = chars.char_at(idx);
-        let (class, flags) =
-            syntax_class_and_flags(buf, table, ch, abs_char, honor_properties, &prop_cache);
+        let (class, flags) = syntax_class_and_flags(buf, table, ch, abs_char, &prop_cache);
 
         // GNU INC_FROM records `prev_from_syntax` for every position it steps
         // over; element 10 of the result reports it when the final position
@@ -5311,7 +5231,6 @@ fn parse_state_from_range_with_options(
                                 table,
                                 chars.char_at(idx + 1),
                                 abs_char + 1,
-                                honor_properties,
                                 &prop_cache,
                             );
                             if is_nested_two_char_comment_start(flags, next_flags, style) {
@@ -5353,7 +5272,6 @@ fn parse_state_from_range_with_options(
                             table,
                             chars.char_at(idx + 1),
                             abs_char + 1,
-                            honor_properties,
                             &prop_cache,
                         );
                         if next_flags.contains(SyntaxFlags::COMMENT_END_SECOND)
@@ -5422,7 +5340,6 @@ fn parse_state_from_range_with_options(
                 table,
                 chars.char_at(idx + 1),
                 abs_char + 1,
-                honor_properties,
                 &prop_cache,
             );
             if next_flags.contains(SyntaxFlags::COMMENT_START_SECOND) {
@@ -5607,7 +5524,7 @@ pub(crate) fn builtin_parse_partial_sexp(
     let stop_before = args.get(3).is_some_and(|v| v.is_truthy());
     let oldstate = args.get(4).filter(|v| !v.is_nil());
     let commentstop = parse_commentstop_mode(args.get(5));
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
+    let honor = parse_sexp_lookup_properties_enabled(eval);
     // Parse-span observability: one line per call when NEOMACS_SYNTAX_STATS_FILE
     // names a path. The per-keystroke syntax cost is O(parsed span); this is
     // the only way to see WHO parses from WHERE (syntax-ppss cache misses
@@ -5633,6 +5550,7 @@ pub(crate) fn builtin_parse_partial_sexp(
             );
         }
     }
+    let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
     let (state, stop_pos) = parse_state_from_range_with_options(
         buf,
         &table,
@@ -5642,7 +5560,7 @@ pub(crate) fn builtin_parse_partial_sexp(
         stop_before,
         oldstate,
         commentstop,
-        honor_properties,
+        props,
     );
     let current_id = buf.id;
     let stop_byte = lisp_pos_to_byte(buf, LispCharPos1::new(stop_pos));
@@ -5663,7 +5581,7 @@ pub(crate) fn builtin_skip_syntax_forward(
     args: Vec<Value>,
 ) -> EvalResult {
     let (syntax_chars, limit) = expect_skip_syntax_args("skip-syntax-forward", &args)?;
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
+    let honor = parse_sexp_lookup_properties_enabled(eval);
 
     let (old_pt, limit_byte) = {
         let buf = eval
@@ -5676,7 +5594,7 @@ pub(crate) fn builtin_skip_syntax_forward(
         )
     };
 
-    let new_pos = if honor_properties {
+    let new_pos = if honor {
         // GNU's skip_syntax propertizes LAZILY as the scan advances
         // (parse_sexp_propertize stops at charpos + 1). The Rust scanner
         // cannot run re-entrant Lisp mid-scan, so scan in bounded windows:
@@ -5711,6 +5629,9 @@ pub(crate) fn builtin_skip_syntax_forward(
             };
             let window_end_byte = window_end_byte.min(final_limit_byte);
             maybe_syntax_propertize_for_scan(eval, window_end_char.saturating_add(1))?;
+            // Re-snapshot per window: propertizing ran Lisp, which may have
+            // changed a category symbol's plist or the control variables.
+            let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
             let buf = eval
                 .buffers
                 .get(current_id)
@@ -5721,7 +5642,7 @@ pub(crate) fn builtin_skip_syntax_forward(
                 &table,
                 &syntax_chars,
                 Some(window_end_byte),
-                honor_properties,
+                props,
             );
             if stop < window_end_byte || window_end_byte >= final_limit_byte {
                 break;
@@ -5738,7 +5659,13 @@ pub(crate) fn builtin_skip_syntax_forward(
             .current_buffer()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         let table = SyntaxTable::for_buffer(buf);
-        skip_syntax_forward_with_options(buf, &table, &syntax_chars, limit_byte, honor_properties)
+        skip_syntax_forward_with_options(
+            buf,
+            &table,
+            &syntax_chars,
+            limit_byte,
+            SyntaxProperties::Ignore,
+        )
     };
     let new_pos = EmacsBytePos::new(new_pos);
 
@@ -5768,8 +5695,8 @@ pub(crate) fn builtin_skip_syntax_backward(
     args: Vec<Value>,
 ) -> EvalResult {
     let (syntax_chars, limit) = expect_skip_syntax_args("skip-syntax-backward", &args)?;
-    let honor_properties = parse_sexp_lookup_properties_enabled(eval);
-    if honor_properties {
+    let honor = parse_sexp_lookup_properties_enabled(eval);
+    if honor {
         let target = eval
             .buffers
             .current_buffer()
@@ -5780,14 +5707,14 @@ pub(crate) fn builtin_skip_syntax_backward(
         }
     }
 
+    let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
     let buf = eval
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let table = SyntaxTable::for_buffer(buf);
     let limit = limit.map(|raw| lisp_pos_to_byte(buf, LispCharPos1::new(raw)).get());
-    let new_pos =
-        skip_syntax_backward_with_options(buf, &table, &syntax_chars, limit, honor_properties);
+    let new_pos = skip_syntax_backward_with_options(buf, &table, &syntax_chars, limit, props);
 
     let old_pt = eval
         .buffers

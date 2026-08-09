@@ -126,6 +126,8 @@ mod symbol_plist_regression_test;
 mod symbol_redirect_regression_test;
 pub mod syntax;
 #[cfg(test)]
+mod syntax_category_property_test;
+#[cfg(test)]
 mod syntax_gnu_parity_regression_test;
 pub mod terminal;
 pub mod textprop;

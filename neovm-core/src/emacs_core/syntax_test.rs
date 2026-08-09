@@ -841,7 +841,8 @@ fn scan_sexps_trailing_escape_signals_error() {
     // GNU signals scan-error ("Unbalanced parentheses" 1 5).
     let buf = buf_with_text("foo\\");
     let table = SyntaxTable::new_standard();
-    let err = scan_sexps_with_options(&buf, &table, 0, 1, false, false).unwrap_err();
+    let err =
+        scan_sexps_with_options(&buf, &table, 0, 1, SyntaxProperties::Ignore, false).unwrap_err();
     assert_eq!(err.message, "Unbalanced parentheses");
     // last_good = GNU 1 -> char index 0; at = GNU 5 -> char index 4 (EOB).
     assert_eq!(err.last_good, 0);
@@ -854,7 +855,7 @@ fn scan_sexps_lone_escape_forward_signals_error() {
     // A lone escape at the very start (nothing absorbed yet) also errors.
     let buf = buf_with_text("\\");
     let table = SyntaxTable::new_standard();
-    assert!(scan_sexps_with_options(&buf, &table, 0, 1, false, false).is_err());
+    assert!(scan_sexps_with_options(&buf, &table, 0, 1, SyntaxProperties::Ignore, false).is_err());
 }
 
 #[test]
@@ -1125,7 +1126,7 @@ fn backward_comment_skip_requires_matching_comment_start() {
     assert_eq!(entry.class, SyntaxClass::Word);
     assert!(entry.flags.contains(SyntaxFlags::COMMENT_END_SECOND));
     assert_eq!(
-        maybe_skip_comment_backward(buf, 2, false, entry.class, entry.flags,),
+        maybe_skip_comment_backward(buf, 2, SyntaxProperties::Ignore, entry.class, entry.flags,),
         None
     );
 }

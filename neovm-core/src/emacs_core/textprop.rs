@@ -265,7 +265,7 @@ where
         return Some(value);
     }
 
-    if let Some(category) = direct_get(Value::symbol("category"))
+    if let Some(category) = direct_get(Value::from_sym_id(category_sym_id()))
         && let Some(value) = category_get(category, prop)
         && !value.is_nil()
     {
@@ -281,6 +281,92 @@ where
     }
 
     default
+}
+
+/// Interned `category`, resolved once: [`resolve_effective_char_property`] runs
+/// per property lookup, and re-interning the name there costs a registry lock
+/// and a hash on the syntax scanner's run-refill path.
+fn category_sym_id() -> SymId {
+    static ID: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+    *ID.get_or_init(|| super::intern::intern("category"))
+}
+
+/// GNU `textget` (`src/intervals.c` `lookup_char_property` with
+/// `textprop = true`) for ONE property, snapshotted for the duration of one
+/// scan.
+///
+/// The syntax scanner cannot reach the property builtins per character: it runs
+/// under a plain `&Buffer` and reads its property once per character scanned.
+/// Without a shared resolver it read the property raw and disagreed with
+/// `get-char-property` about the same character -- notably for the CC Mode
+/// `category` indirection. This carries the same three fallbacks `textget`
+/// applies, so scanner and property API resolve a character identically by
+/// construction.
+///
+/// `char-property-alias-alist` and `default-text-properties` are read ONCE, at
+/// snapshot time, rather than per lookup as in GNU. No Lisp runs during a scan
+/// (`syntax-propertize` has already finished by then), which is the same
+/// immutability invariant the scanner's property-run cache and its ASCII syntax
+/// memo already depend on. Anything that does run Lisp mid-scan -- the
+/// `find-word-boundary-function-table` callback -- takes a fresh snapshot for
+/// each probe, exactly as it already rebuilds the run cache.
+#[derive(Clone, Copy)]
+pub(crate) struct CharPropertyResolver<'a> {
+    obarray: &'a Obarray,
+    prop: Value,
+    /// `(cdr (assq PROP char-property-alias-alist))` at snapshot time.
+    aliases: Value,
+    /// `(plist-get default-text-properties PROP)` at snapshot time.
+    default: Option<Value>,
+}
+
+impl<'a> CharPropertyResolver<'a> {
+    pub(crate) fn snapshot(obarray: &'a Obarray, buffers: &BufferManager, prop: Value) -> Self {
+        let aliases =
+            current_textprop_variable_value(obarray, buffers, char_property_alias_alist_sym_id())
+                .and_then(|value| assq_rest(value, prop))
+                .unwrap_or(Value::NIL);
+        let default =
+            current_textprop_variable_value(obarray, buffers, default_text_properties_sym_id())
+                .filter(|value| value.is_cons())
+                .and_then(|defaults| plist_get_value(defaults, prop));
+        Self {
+            obarray,
+            prop,
+            aliases,
+            default,
+        }
+    }
+
+    /// Resolve the property from one interval's plist.
+    ///
+    /// Callers pass the plist of the interval covering the position, never a
+    /// synthesized one: GNU's `update_syntax_table` returns early when
+    /// `interval_of` finds no interval, so a position outside every interval
+    /// gets no property at all -- not even the `default-text-properties`
+    /// fallback.
+    pub(crate) fn resolve_interval_plist(&self, plist: Value) -> Option<Value> {
+        let mut aliases = self.aliases;
+        let alias_iter = std::iter::from_fn(move || {
+            if !aliases.is_cons() {
+                return None;
+            }
+            let alias = aliases.cons_car();
+            aliases = aliases.cons_cdr();
+            Some(alias)
+        });
+        resolve_effective_char_property(
+            |name| plist_get_value(plist, name),
+            |category, property| {
+                let category_id = symbol_id_for_property_lookup(category)?;
+                let property_id = symbol_id_for_property_lookup(property)?;
+                self.obarray.get_property_id(category_id, property_id)
+            },
+            self.prop,
+            alias_iter,
+            self.default,
+        )
+    }
 }
 
 fn lookup_char_property_from_direct<F>(

@@ -50,11 +50,22 @@ pub(crate) fn current_word_boundary_lookup(
     )
 }
 
-fn current_buffer_regexp_match_context(
-    eval: &super::eval::Context,
+/// Snapshot the match-time state, borrowing only the obarray so the caller can
+/// still take `&mut eval.buffers` for the search itself.
+fn current_buffer_regexp_match_context<'a>(
+    obarray: &'a crate::emacs_core::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
+    word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
     syntax_properties: BufferRegexpSyntaxProperties,
-) -> BufferRegexpMatchContext {
-    BufferRegexpMatchContext::new(syntax_properties, current_word_boundary_lookup(eval))
+) -> BufferRegexpMatchContext<'a> {
+    BufferRegexpMatchContext::new(
+        crate::emacs_core::syntax::SyntaxProperties::for_scan(
+            syntax_properties.is_honor(),
+            obarray,
+            buffers,
+        ),
+        word_boundary,
+    )
 }
 
 fn buffer_byte_to_lisp_char(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 {
@@ -539,7 +550,12 @@ pub(crate) fn builtin_re_search_forward(
         .unwrap_or(true);
     let syntax_properties =
         prepare_buffer_regexp_search(eval, &args, SearchKind::ForwardRegexp, case_fold, false)?;
-    let match_context = current_buffer_regexp_match_context(eval, syntax_properties);
+    let match_context = current_buffer_regexp_match_context(
+        &eval.obarray,
+        &eval.buffers,
+        current_word_boundary_lookup(eval),
+        syntax_properties,
+    );
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     let result = re_search_forward_with_state_posix_and_syntax_properties(
@@ -567,7 +583,7 @@ pub(crate) fn builtin_re_search_forward(
 fn re_search_forward_with_state_posix_and_syntax_properties(
     case_fold: bool,
     posix: bool,
-    match_context: BufferRegexpMatchContext,
+    match_context: BufferRegexpMatchContext<'_>,
     buffers: &mut crate::buffer::BufferManager,
     mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
@@ -655,7 +671,12 @@ pub(crate) fn builtin_re_search_backward(
         .unwrap_or(true);
     let syntax_properties =
         prepare_buffer_regexp_search(eval, &args, SearchKind::BackwardRegexp, case_fold, false)?;
-    let match_context = current_buffer_regexp_match_context(eval, syntax_properties);
+    let match_context = current_buffer_regexp_match_context(
+        &eval.obarray,
+        &eval.buffers,
+        current_word_boundary_lookup(eval),
+        syntax_properties,
+    );
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     let result = re_search_backward_with_state_posix_and_syntax_properties(
@@ -677,7 +698,7 @@ pub(crate) fn builtin_re_search_backward(
 fn re_search_backward_with_state_posix_and_syntax_properties(
     case_fold: bool,
     posix: bool,
-    match_context: BufferRegexpMatchContext,
+    match_context: BufferRegexpMatchContext<'_>,
     buffers: &mut crate::buffer::BufferManager,
     mut match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
@@ -765,7 +786,12 @@ pub(crate) fn builtin_posix_search_forward(
         .unwrap_or(true);
     let syntax_properties =
         prepare_buffer_regexp_search(eval, &args, SearchKind::ForwardRegexp, case_fold, true)?;
-    let match_context = current_buffer_regexp_match_context(eval, syntax_properties);
+    let match_context = current_buffer_regexp_match_context(
+        &eval.obarray,
+        &eval.buffers,
+        current_word_boundary_lookup(eval),
+        syntax_properties,
+    );
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     re_search_forward_with_state_posix_and_syntax_properties(
@@ -788,7 +814,12 @@ pub(crate) fn builtin_posix_search_backward(
         .unwrap_or(true);
     let syntax_properties =
         prepare_buffer_regexp_search(eval, &args, SearchKind::BackwardRegexp, case_fold, true)?;
-    let match_context = current_buffer_regexp_match_context(eval, syntax_properties);
+    let match_context = current_buffer_regexp_match_context(
+        &eval.obarray,
+        &eval.buffers,
+        current_word_boundary_lookup(eval),
+        syntax_properties,
+    );
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     re_search_backward_with_state_posix_and_syntax_properties(
@@ -808,7 +839,12 @@ pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Valu
         .unwrap_or(true);
     let pattern = expect_lisp_string(&args[0])?;
     let syntax_properties = prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, false)?;
-    let match_context = current_buffer_regexp_match_context(eval, syntax_properties);
+    let match_context = current_buffer_regexp_match_context(
+        &eval.obarray,
+        &eval.buffers,
+        current_word_boundary_lookup(eval),
+        syntax_properties,
+    );
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     let result = builtin_looking_at_with_state_and_syntax_properties(
@@ -826,7 +862,7 @@ pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Valu
 
 fn builtin_looking_at_with_state_and_syntax_properties(
     case_fold: bool,
-    match_context: BufferRegexpMatchContext,
+    match_context: BufferRegexpMatchContext<'_>,
     buffers: &crate::buffer::BufferManager,
     match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
@@ -867,7 +903,12 @@ pub(crate) fn builtin_looking_at_p(
         .unwrap_or(true);
     let pattern = expect_lisp_string(&args[0])?;
     let syntax_properties = prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, false)?;
-    let match_context = current_buffer_regexp_match_context(eval, syntax_properties);
+    let match_context = current_buffer_regexp_match_context(
+        &eval.obarray,
+        &eval.buffers,
+        current_word_boundary_lookup(eval),
+        syntax_properties,
+    );
     builtin_looking_at_p_with_state_and_syntax_properties(
         case_fold,
         match_context,
@@ -885,7 +926,7 @@ pub(crate) fn builtin_looking_at_p_with_state(
     builtin_looking_at_p_with_state_and_syntax_properties(
         case_fold,
         BufferRegexpMatchContext::new(
-            BufferRegexpSyntaxProperties::Ignore,
+            crate::emacs_core::syntax::SyntaxProperties::Ignore,
             crate::emacs_core::regex_emacs::WordBoundaryLookup::default(),
         ),
         buffers,
@@ -895,7 +936,7 @@ pub(crate) fn builtin_looking_at_p_with_state(
 
 fn builtin_looking_at_p_with_state_and_syntax_properties(
     case_fold: bool,
-    match_context: BufferRegexpMatchContext,
+    match_context: BufferRegexpMatchContext<'_>,
     buffers: &crate::buffer::BufferManager,
     args: &[Value],
 ) -> EvalResult {
@@ -922,7 +963,12 @@ pub(crate) fn builtin_posix_looking_at(
         .unwrap_or(true);
     let pattern = expect_lisp_string(&args[0])?;
     let syntax_properties = prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, true)?;
-    let match_context = current_buffer_regexp_match_context(eval, syntax_properties);
+    let match_context = current_buffer_regexp_match_context(
+        &eval.obarray,
+        &eval.buffers,
+        current_word_boundary_lookup(eval),
+        syntax_properties,
+    );
     let inhibit_changing = read_inhibit_changing_match_data(eval);
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     builtin_posix_looking_at_with_state_and_syntax_properties(
@@ -936,7 +982,7 @@ pub(crate) fn builtin_posix_looking_at(
 
 fn builtin_posix_looking_at_with_state_and_syntax_properties(
     case_fold: bool,
-    match_context: BufferRegexpMatchContext,
+    match_context: BufferRegexpMatchContext<'_>,
     buffers: &crate::buffer::BufferManager,
     match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],

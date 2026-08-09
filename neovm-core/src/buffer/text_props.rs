@@ -2054,6 +2054,36 @@ impl TextPropertyTable {
         }
     }
 
+    /// Returns the plist of the interval covering `pos` together with its
+    /// `[start, end)` char run, or `None` for the plist when no interval covers
+    /// `pos` (the run then spans up to the next property boundary).
+    ///
+    /// This is the shape GNU's `update_syntax_table` (src/syntax.c) works in:
+    /// it takes `interval_of (charpos)`, keeps `i->position` /
+    /// `INTERVAL_LAST_POS (i)` as the run, and resolves the property from
+    /// `i->plist` with `textget` -- and returns early with NO property when
+    /// there is no interval, which is why the missing case is distinguished
+    /// from an interval whose plist lacks the property.
+    pub fn interval_plist_run_at_char_pos(
+        &self,
+        pos: CharPos0,
+        total: usize,
+    ) -> (Option<Value>, CharPos0, CharPos0) {
+        match self.intervals.find_id(pos) {
+            Some((start, id)) => {
+                let node = &self.intervals.nodes[id.0];
+                let end = self.intervals.interval_end(start, id);
+                (Some(node.plist), start, end)
+            }
+            None => {
+                let end = self
+                    .next_property_change_raw(pos)
+                    .unwrap_or_else(|| CharPos0::new(total));
+                (None, pos, end)
+            }
+        }
+    }
+
     /// The next char position in `(pos, cap)` where any property in `keys`
     /// changes VALUE from its value at `pos`, or `cap` if none change first.
     ///

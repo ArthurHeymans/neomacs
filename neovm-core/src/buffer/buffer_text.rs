@@ -1137,6 +1137,18 @@ impl BufferText {
             .get_property_run_at_char_pos(pos, name, total)
     }
 
+    /// See [`text_props::TextPropertyTable::interval_plist_run_at_char_pos`].
+    pub fn interval_plist_run_at_char_pos(
+        &self,
+        pos: CharPos0,
+    ) -> (Option<Value>, CharPos0, CharPos0) {
+        let storage = self.storage.borrow();
+        let total = storage.metrics.char_len().get();
+        storage
+            .text_props
+            .interval_plist_run_at_char_pos(pos, total)
+    }
+
     /// Next char position in `(pos, cap)` where any of `keys` changes value.
     /// See [`text_props::TextPropertyTable::next_watched_property_change`].
     pub fn next_watched_property_change_at_char_pos(

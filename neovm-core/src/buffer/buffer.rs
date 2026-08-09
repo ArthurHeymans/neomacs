@@ -2773,6 +2773,15 @@ impl Buffer {
         self.text.get_property_run_at_char_pos(pos, name)
     }
 
+    /// The interval plist covering char `pos` plus its `[start, end)` char run.
+    /// See [`BufferText::interval_plist_run_at_char_pos`].
+    pub fn interval_plist_run_at_char_pos(
+        &self,
+        pos: CharPos0,
+    ) -> (Option<Value>, CharPos0, CharPos0) {
+        self.text.interval_plist_run_at_char_pos(pos)
+    }
+
     /// Next char position in `(pos, cap)` where any of `keys` changes value.
     /// See [`text_props::TextPropertyTable::next_watched_property_change`].
     pub fn next_watched_property_change_at_char_pos(
