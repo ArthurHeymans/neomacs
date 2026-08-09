@@ -486,6 +486,7 @@ mod modus_themes;
 mod monokai_theme;
 mod move_text;
 mod mozc;
+mod multi_line;
 mod multi_term;
 mod multiple_cursors;
 mod nameless;

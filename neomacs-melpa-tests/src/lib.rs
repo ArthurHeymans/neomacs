@@ -443,6 +443,12 @@ pub const RTAGS_MELPA_PIN: (&str, &str) = ("rtags", "20260727.1603");
 /// upstream commit `0058837c048cc031ca1a13f598a6a6604777458b`.
 pub const RUST_MODE_MELPA_PIN: (&str, &str) = ("rust-mode", "20260725.1442");
 
+/// The exact Scala Mode package used to exercise Multi-Line's advertised
+/// Scala editing route with the real language syntax and indentation engine.
+/// MELPA built this archive from upstream commit
+/// `50bcafa181baec7054e27f4bca55d5f9277c6350`.
+pub const SCALA_MODE_MELPA_PIN: (&str, &str) = ("scala-mode", "20260118.942");
+
 /// The exact shell-maker package selected by the practical comint session,
 /// streaming, validation, interruption, history, transcript, process, and UI
 /// parity corpus. MELPA built this archive from upstream commit
@@ -1967,6 +1973,13 @@ pub const JS2_MODE_MELPA_PIN: (&str, &str) = ("js2-mode", "20260627.1342");
 /// MELPA built this archive from upstream commit
 /// `f0606e89d5aa89146f96edb38cf69af0068a9d1e`.
 pub const JS_DOC_MELPA_PIN: (&str, &str) = ("js-doc", "20160715.434");
+
+/// The exact Multi-Line package selected for practical language-aware
+/// expression formatting, repeated-command cycling, explicit single-lining,
+/// candidate highlighting, mode-hook lifecycle, and malformed-form parity.
+/// MELPA built this archive from upstream commit
+/// `06ea7294c4e4ace0c3253b7952a6d937a169eb55`.
+pub const MULTI_LINE_MELPA_PIN: (&str, &str) = ("multi-line", "20230721.1814");
 
 /// The exact multiple-cursors package selected for practical multi-line,
 /// occurrence-based, ordered, region-transforming, alignment, lifecycle, and
