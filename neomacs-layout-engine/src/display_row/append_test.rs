@@ -374,8 +374,7 @@ fn buffer_line_number_margin_render_request_renders_blank_gutter_on_continuation
     let mut face_scan = FaceScanCheckpoint::initial();
     let mut font_metrics = None;
 
-    // First row consumes the numbered gutter, then the wrap re-arms a blank one.
-    line_numbers.consume_render_request();
+    // A continuation transition replaces the first-row request with a blank one.
     line_numbers.mark_continuation_row();
     assert!(line_numbers.should_render());
 

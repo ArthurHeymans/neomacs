@@ -814,6 +814,11 @@ Emacs previously discarded arguments to emacsclient of zero length, such
 as in 'emacsclient --eval "(length (pop server-eval-args-left))" ""'.
 These are no longer discarded.
 
+---
+** The cursor at end of buffer no longer overlaps the line-number area.
+When a buffer ends with a newline, the blank final display row now
+reserves the same line-number width as preceding numbered rows.
+
 +++
 ** New user option 'xterm-update-cursor' to update cursor display on TTYs.
 When enabled, Emacs sends Xterm escape sequences on Xterm-compatible

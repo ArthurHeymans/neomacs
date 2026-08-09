@@ -40,11 +40,28 @@ pub(crate) struct HorizontalScrollSkipState {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct LineNumberRenderState {
-    enabled: bool,
     current_line: i64,
     point_line: i64,
-    render_pending: bool,
-    first_row_of_line: bool,
+    phase: LineNumberRenderPhase,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LineNumberRenderPhase {
+    Disabled,
+    Pending(LineNumberRowPrefix),
+    Rendered,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LineNumberRowPrefix {
+    Numbered,
+    ReservedBlank(LineNumberBlankReason),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LineNumberBlankReason {
+    Continuation,
+    BeyondAccessibleEnd,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -69,15 +86,14 @@ pub(crate) struct LineNumberMarginRenderRequest {
     display_number: i64,
     cols: i32,
     face: LineNumberMarginFace,
-    blank: bool,
+    prefix: LineNumberRowPrefix,
 }
 
 impl LineNumberMarginRenderRequest {
     pub(crate) fn text(self) -> String {
-        if self.blank {
-            String::new()
-        } else {
-            format!("{}", self.display_number)
+        match self.prefix {
+            LineNumberRowPrefix::Numbered => format!("{}", self.display_number),
+            LineNumberRowPrefix::ReservedBlank(_) => String::new(),
         }
     }
 
@@ -91,7 +107,7 @@ impl LineNumberMarginRenderRequest {
 
     #[cfg(test)]
     pub(crate) fn blank(self) -> bool {
-        self.blank
+        matches!(self.prefix, LineNumberRowPrefix::ReservedBlank(_))
     }
 }
 
@@ -466,34 +482,51 @@ impl HorizontalScrollSkipState {
 impl LineNumberRenderState {
     pub(crate) fn new(enabled: bool, current_line: i64, point_line: i64) -> Self {
         Self {
-            enabled,
             current_line,
             point_line,
-            render_pending: enabled,
-            first_row_of_line: true,
+            phase: if enabled {
+                LineNumberRenderPhase::Pending(LineNumberRowPrefix::Numbered)
+            } else {
+                LineNumberRenderPhase::Disabled
+            },
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn should_render(self) -> bool {
-        self.enabled && self.render_pending
+        matches!(self.phase, LineNumberRenderPhase::Pending(_))
     }
 
-    pub(crate) fn consume_render_request(&mut self) {
-        self.render_pending = false;
+    fn arm_prefix(&mut self, prefix: LineNumberRowPrefix) {
+        if !matches!(self.phase, LineNumberRenderPhase::Disabled) {
+            self.phase = LineNumberRenderPhase::Pending(prefix);
+        }
     }
 
     pub(crate) fn advance_line(&mut self) {
         self.current_line += 1;
-        self.render_pending = self.enabled;
-        self.first_row_of_line = true;
+        self.arm_prefix(LineNumberRowPrefix::Numbered);
     }
 
     /// GNU `maybe_produce_line_number` renders a blank (width-reserved, no
     /// number) gutter on each wrapped continuation row. Re-arm the pending
     /// render and mark the next row as a continuation so the gutter is blank.
     pub(crate) fn mark_continuation_row(&mut self) {
-        self.render_pending = self.enabled;
-        self.first_row_of_line = false;
+        self.arm_prefix(LineNumberRowPrefix::ReservedBlank(
+            LineNumberBlankReason::Continuation,
+        ));
+    }
+
+    /// GNU `maybe_produce_line_number` reserves the line-number width but does
+    /// not display another number on the synthetic empty row at or beyond ZV.
+    /// Only a still-pending prefix can become the EOB prefix: a final non-newline
+    /// text row has already rendered its number and must remain unchanged.
+    pub(crate) fn mark_beyond_accessible_end(&mut self) {
+        if matches!(self.phase, LineNumberRenderPhase::Pending(_)) {
+            self.phase = LineNumberRenderPhase::Pending(LineNumberRowPrefix::ReservedBlank(
+                LineNumberBlankReason::BeyondAccessibleEnd,
+            ));
+        }
     }
 
     pub(crate) fn advance_hidden_line(&mut self) {
@@ -527,32 +560,38 @@ impl LineNumberRenderState {
         }
     }
 
-    pub(crate) fn margin_render_request(
-        self,
+    pub(crate) fn take_margin_render_request(
+        &mut self,
         mode: u8,
         current_absolute: bool,
         offset: i64,
         major_tick: i32,
         cols: i32,
     ) -> Option<LineNumberMarginRenderRequest> {
-        if !self.should_render() {
+        let LineNumberRenderPhase::Pending(prefix) = self.phase else {
             return None;
-        }
+        };
 
-        let blank = !self.first_row_of_line;
-        let face = if self.is_current_line() {
+        let face = if matches!(
+            prefix,
+            LineNumberRowPrefix::ReservedBlank(LineNumberBlankReason::BeyondAccessibleEnd)
+        ) {
+            LineNumberMarginFace::Normal
+        } else if self.is_current_line() {
             LineNumberMarginFace::CurrentLine
         } else if major_tick > 0 && self.current_line % i64::from(major_tick) == 0 {
             LineNumberMarginFace::MajorTick
         } else {
             LineNumberMarginFace::Normal
         };
-        Some(LineNumberMarginRenderRequest {
+        let request = LineNumberMarginRenderRequest {
             display_number: self.display_number(mode, current_absolute, offset),
             cols,
             face,
-            blank,
-        })
+            prefix,
+        };
+        self.phase = LineNumberRenderPhase::Rendered;
+        Some(request)
     }
 }
 

@@ -821,13 +821,11 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert!(!state.is_current_line());
     assert_eq!(state.display_number(3, false, 0), 2);
     let request = state
-        .margin_render_request(3, false, 0, 0, 4)
+        .take_margin_render_request(3, false, 0, 0, 4)
         .expect("line number request");
     assert_eq!(request.text(), "2");
     assert_eq!(request.cols(), 4);
     assert_eq!(request.face().face_name(), "line-number");
-
-    state.consume_render_request();
 
     assert!(!state.should_render());
 
@@ -839,13 +837,12 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert!(state.is_current_line());
     assert_eq!(state.display_number(3, true, 10), 19);
     let request = state
-        .margin_render_request(3, true, 10, 3, 5)
+        .take_margin_render_request(3, true, 10, 3, 5)
         .expect("current line request");
     assert_eq!(request.text(), "19");
     assert_eq!(request.cols(), 5);
     assert_eq!(request.face().face_name(), "line-number-current-line");
 
-    state.consume_render_request();
     state.advance_hidden_line();
 
     assert!(!state.should_render());
@@ -853,7 +850,7 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert!(!LineNumberRenderState::new(false, 7, 9).should_render());
 
     let major_tick = LineNumberRenderState::new(true, 12, 9)
-        .margin_render_request(1, false, 0, 4, 3)
+        .take_margin_render_request(1, false, 0, 4, 3)
         .expect("major tick line number request");
     assert_eq!(major_tick.text(), "12");
     assert_eq!(major_tick.face().face_name(), "line-number-major-tick");
@@ -865,12 +862,11 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     // gutter (GNU `maybe_produce_line_number`).
     let mut state = LineNumberRenderState::new(true, 7, 9);
     let first = state
-        .margin_render_request(1, false, 0, 0, 4)
+        .take_margin_render_request(1, false, 0, 0, 4)
         .expect("first-row line number request");
     assert!(!first.blank());
     assert_eq!(first.text(), "7");
     assert_eq!(first.cols(), 4);
-    state.consume_render_request();
     assert!(!state.should_render());
 
     // A wrapped continuation row re-arms the pending render but renders a blank
@@ -878,19 +874,18 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     state.mark_continuation_row();
     assert!(state.should_render());
     let continuation = state
-        .margin_render_request(1, false, 0, 0, 4)
+        .take_margin_render_request(1, false, 0, 0, 4)
         .expect("continuation-row line number request");
     assert!(continuation.blank());
     assert_eq!(continuation.text(), "");
     assert_eq!(continuation.cols(), 4);
     assert_eq!(continuation.face().face_name(), first.face().face_name());
-    state.consume_render_request();
     assert!(!state.should_render());
 
     // The next buffer line resets back to a non-blank numbered gutter.
     state.advance_line();
     let next_line = state
-        .margin_render_request(1, false, 0, 0, 4)
+        .take_margin_render_request(1, false, 0, 0, 4)
         .expect("next-line line number request");
     assert!(!next_line.blank());
     assert_eq!(next_line.text(), "8");
@@ -2639,6 +2634,27 @@ fn backend_layout_trace_with_buffer_and_window_setup(
     setup: impl FnOnce(&mut neovm_core::buffer::Buffer, BufferId, &str),
     setup_window: impl FnOnce(&mut neovm_core::window::Window),
 ) -> BackendLayoutTrace {
+    let (eval, engine, frame_id) = backend_layout_with_buffer_and_window_setup(
+        kind,
+        frame_name,
+        text,
+        frame_width,
+        frame_height,
+        setup,
+        setup_window,
+    );
+    selected_window_layout_trace(&eval, &engine, frame_id)
+}
+
+fn backend_layout_with_buffer_and_window_setup(
+    kind: BufferTextBackendKind,
+    frame_name: &str,
+    text: &str,
+    frame_width: u32,
+    frame_height: u32,
+    setup: impl FnOnce(&mut neovm_core::buffer::Buffer, BufferId, &str),
+    setup_window: impl FnOnce(&mut neovm_core::window::Window),
+) -> (Context, LayoutEngine, neovm_core::window::FrameId) {
     let mut eval = Context::new();
     convert_current_buffer_text_backend(&mut eval, kind);
     let buf_id = eval
@@ -2674,7 +2690,7 @@ fn backend_layout_trace_with_buffer_and_window_setup(
 
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
-    selected_window_layout_trace(&eval, &engine, frame_id)
+    (eval, engine, frame_id)
 }
 
 /// Layout-engine micro-benchmark — the REDISPLAY LAYOUT cost, the rank-1
@@ -4993,6 +5009,112 @@ fn layout_frame_rust_line_number_cursor_tracks_first_text_column_after_c_n() {
     assert_eq!(cursor.row, point.row);
     assert_eq!(cursor.col, point.col);
     assert_eq!(cursor.x, point.x);
+}
+
+#[test]
+fn point_max_after_trailing_newline_stays_right_of_line_number_gutter() {
+    let (eval, engine, frame_id) = backend_layout_with_buffer_and_window_setup(
+        BufferTextBackendKind::GapBuffer,
+        "layout-point-max-after-line-number-gutter",
+        "abc\n",
+        360,
+        140,
+        |buffer, _buf_id, text| {
+            buffer.set_buffer_local("display-line-numbers", Value::T);
+            buffer.goto_emacs_byte_pos(EmacsBytePos::new(text.len()));
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+                *window_start = LispCharPos1::ONE;
+            }
+        },
+    );
+    let trace = selected_window_layout_trace(&eval, &engine, frame_id);
+
+    let numbered_row = trace
+        .matrix_rows
+        .iter()
+        .find(|row| row.role == GlyphRowRole::Text && row.displays_text)
+        .expect("numbered buffer row");
+    let (eob_row_index, eob_row) = trace
+        .matrix_rows
+        .iter()
+        .enumerate()
+        .find(|(_, row)| row.role == GlyphRowRole::Text && row.ends_at_zv && !row.displays_text)
+        .expect("blank EOB row");
+    let numbered_margin = &numbered_row.glyph_areas[GlyphArea::LeftMargin.index()];
+    let eob_margin = &eob_row.glyph_areas[GlyphArea::LeftMargin.index()];
+    let margin_width = |glyphs: &[GlyphTrace]| {
+        glyphs
+            .iter()
+            .map(|glyph| f32::from_bits(glyph.pixel_width_bits))
+            .sum::<f32>()
+    };
+    let margin_columns = |glyphs: &[GlyphTrace]| {
+        glyphs
+            .iter()
+            .map(|glyph| match glyph.kind {
+                GlyphKindTrace::Stretch(columns) => i64::from(columns),
+                _ => 1,
+            })
+            .sum::<i64>()
+    };
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let window_entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let text_origin = (
+        window_entry.text_pixel_bounds.x,
+        window_entry.text_pixel_bounds.y,
+    );
+    let presentation = state.materialize();
+    let cursor = presentation
+        .active_cursor()
+        .expect("point-max frame cursor");
+    let cursor_slot = cursor.slot_id;
+    assert_eq!(
+        (cursor_slot.row as usize, i64::from(cursor_slot.col)),
+        (eob_row_index, margin_columns(numbered_margin)),
+        "point-max after a trailing newline must remain on the blank EOB row at \
+         the first text column, to the right of the line-number gutter"
+    );
+
+    assert!(
+        !eob_margin.is_empty()
+            && eob_margin
+                .iter()
+                .all(|glyph| !matches!(glyph.kind, GlyphKindTrace::Char(_)))
+            && (margin_width(eob_margin) - margin_width(numbered_margin)).abs() < 0.01,
+        "the blank EOB row must reserve a width-matched, number-free line-number gutter; \
+         EOB margin={eob_margin:?}, numbered margin={numbered_margin:?}"
+    );
+
+    let eob_top = text_origin.1 + f32::from_bits(eob_row.pixel_y_bits);
+    let eob_bottom = eob_top + f32::from_bits(eob_row.height_px_bits);
+    let gutter_right = text_origin.0 + margin_width(eob_margin);
+    assert!(
+        cursor.x >= gutter_right - 0.01
+            && cursor.y >= eob_top - 0.01
+            && cursor.y + cursor.height <= eob_bottom + 0.01,
+        "the materialized cursor rectangle must be on the EOB row and outside its gutter; \
+         cursor=({:.2}, {:.2}, {:.2}, {:.2}), gutter_right={gutter_right:.2}, \
+         EOB vertical span={eob_top:.2}..{eob_bottom:.2}",
+        cursor.x,
+        cursor.y,
+        cursor.width,
+        cursor.height,
+    );
 }
 
 /// An anonymous `(:background ... :extend t)` face value, the shape hl-line /

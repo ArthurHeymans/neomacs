@@ -61,7 +61,7 @@ impl BufferLineNumberMarginRenderRequest {
         face_scan: &mut FaceScanCheckpoint,
         char_width: f32,
     ) -> bool {
-        let Some(line_number_request) = line_numbers.margin_render_request(
+        let Some(line_number_request) = line_numbers.take_margin_render_request(
             self.mode,
             self.current_absolute,
             self.offset,
@@ -104,7 +104,6 @@ impl BufferLineNumberMarginRenderRequest {
         );
 
         face_scan.invalidate();
-        line_numbers.consume_render_request();
         true
     }
 }

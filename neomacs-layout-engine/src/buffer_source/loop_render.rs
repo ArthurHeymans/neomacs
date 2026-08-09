@@ -110,6 +110,23 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 break;
             }
         }
+
+        // A trailing newline begins the next visual row at the same moment it
+        // consumes the final source byte.  That row is still a real, visible
+        // EOB row, but the byte-driven loop above cannot enter once more to
+        // render its prelude.  Complete the WHOLE pending prelude before the
+        // tail captures point; line numbers reserve a blank prefix beyond ZV,
+        // while line-prefix keeps the same row-begin lifecycle as every other
+        // visual row.
+        if self.progress.byte_idx() >= text.len()
+            && self
+                .row_build
+                .row_geometry
+                .current_row_is_visible(loop_context.row_visibility_limit())
+        {
+            self.row_carryover.line_numbers.mark_beyond_accessible_end();
+            self.render_row_prelude(row_prelude_context, params, active_face_state, buffer);
+        }
     }
 
     fn render_row_prelude<B: LayoutBufferView>(
@@ -119,16 +136,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         active_face_state: &DisplayRowActiveFaceState,
         buffer: &B,
     ) {
-        context
-            .line_number_margin_request()
-            .render_pending_with_source_state(
-                self.row_carryover.line_numbers,
-                &mut self.source_render,
-                self.face_ids,
-                self.row_build.row_geometry,
-                self.face_scan,
-                context.char_width(),
-            );
+        self.render_pending_line_number_margin(context);
 
         let row_position = self.progress.row_position();
         let charpos = self.progress.charpos();
@@ -150,6 +158,19 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 self.face_ids,
                 x,
                 col,
+            );
+    }
+
+    fn render_pending_line_number_margin(&mut self, context: BufferSourceRowPreludeRequestContext) {
+        context
+            .line_number_margin_request()
+            .render_pending_with_source_state(
+                self.row_carryover.line_numbers,
+                &mut self.source_render,
+                self.face_ids,
+                self.row_build.row_geometry,
+                self.face_scan,
+                context.char_width(),
             );
     }
 
