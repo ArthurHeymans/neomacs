@@ -83,13 +83,14 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
             // renders everything the route refuses.
             use crate::buffer_source::row_route::PlainRowRouteOutcome;
             match self.try_render_plain_row_via_item_renderer(
-                loop_context,
-                face_resolution_context,
+                crate::buffer_source::row_route::PlainRowRouteRequest::new(
+                    loop_context,
+                    face_resolution_context,
+                    text,
+                    params,
+                ),
                 source_walk,
-                text,
-                params,
                 active_face_state,
-                buffer,
                 &mut route_refusals,
             ) {
                 PlainRowRouteOutcome::Rendered => continue,

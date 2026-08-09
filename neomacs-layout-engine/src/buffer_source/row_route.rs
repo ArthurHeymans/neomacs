@@ -2577,6 +2577,38 @@ fn note_routed_row(plan: &PlainRowPlan, wrap_mode: LineWrapMode, mid_line_start:
     let _ = plan;
 }
 
+/// Everything a routed row acquisition reads that does not change during the
+/// walk, bundled because the render loop passes exactly these four together on
+/// every attempt.
+///
+/// The buffer is deliberately NOT a field: the face-resolution context already
+/// carries the one the faces were resolved against, so there is no way to hand
+/// the route a buffer that disagrees with its faces.
+#[derive(Clone, Copy)]
+pub(crate) struct PlainRowRouteRequest<'a, B: LayoutBufferView> {
+    loop_context: crate::buffer_source::loop_context::BufferSourceLoopRequestContext,
+    face_resolution_context:
+        crate::buffer_source::face_resolution::BufferSourceFaceResolutionContext<'a, B>,
+    text: &'a [u8],
+    params: &'a crate::types::WindowParams,
+}
+
+impl<'a, B: LayoutBufferView> PlainRowRouteRequest<'a, B> {
+    pub(crate) fn new(
+        loop_context: crate::buffer_source::loop_context::BufferSourceLoopRequestContext,
+        face_resolution_context: crate::buffer_source::face_resolution::BufferSourceFaceResolutionContext<'a, B>,
+        text: &'a [u8],
+        params: &'a crate::types::WindowParams,
+    ) -> Self {
+        Self {
+            loop_context,
+            face_resolution_context,
+            text,
+            params,
+        }
+    }
+}
+
 /// Outcome of an attempted item-renderer row acquisition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum PlainRowRouteOutcome {
@@ -2620,18 +2652,22 @@ impl<'rows, 'emit, 'surface>
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_render_plain_row_via_item_renderer<B: LayoutBufferView>(
         &mut self,
-        loop_context: crate::buffer_source::loop_context::BufferSourceLoopRequestContext,
-        face_resolution_context: crate::buffer_source::face_resolution::BufferSourceFaceResolutionContext<'_, B>,
+        request: PlainRowRouteRequest<'_, B>,
         source_walk: &mut crate::buffer_source::walk::BufferSourceWalk<'_, B>,
-        text: &[u8],
-        params: &crate::types::WindowParams,
         active_face_state: &mut crate::display_row::face_state::DisplayRowActiveFaceState,
-        buffer: &B,
         route_refusals: &mut RouteRefusalWindow,
     ) -> PlainRowRouteOutcome {
         use crate::buffer_source::item_append::BufferSourceRowAppendContext;
         use crate::display_row::append_context::DisplayRowAppendKind;
         use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
+
+        let PlainRowRouteRequest {
+            loop_context,
+            face_resolution_context,
+            text,
+            params,
+        } = request;
+        let buffer = face_resolution_context.buffer();
 
         if route_refusals.covers(self.progress.charpos()) {
             note_route_skipped();
