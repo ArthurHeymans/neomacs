@@ -317,6 +317,7 @@ mod dockerfile_mode;
 mod doom_modeline;
 mod doom_themes;
 mod dotenv_mode;
+mod dracula_theme;
 mod drag_stuff;
 mod dumb_jump;
 mod editorconfig;

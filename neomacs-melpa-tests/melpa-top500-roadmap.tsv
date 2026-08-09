@@ -365,7 +365,7 @@ rank	package	downloads	status
 364	reformatter	285344	covered
 365	scala-mode	284088	todo
 366	buffer-move	282179	todo
-367	dracula-theme	281412	todo
+367	dracula-theme	281412	covered
 368	tide	279725	todo
 369	livid-mode	276850	todo
 370	parsebib	276258	covered

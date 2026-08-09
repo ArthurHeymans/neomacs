@@ -6021,3 +6021,7 @@ pub const PARSEBIB_MELPA_PIN: (&str, &str) = ("parsebib", "20251127.1731");
 /// The exact groovy-mode package selected for practical indentation and font-lock.
 /// Pinned to upstream commit `7b8520b2e2d3ab1d62b35c426e17ac25ed0120bb`.
 pub const GROOVY_MODE_MELPA_PIN: (&str, &str) = ("groovy-mode", "20230317.2233");
+
+/// The exact dracula-theme package selected for practical theme palette parity.
+/// Pinned to upstream commit `df2be56b03fcbbafcc211013ff93ba50e34a4397`.
+pub const DRACULA_THEME_MELPA_PIN: (&str, &str) = ("dracula-theme", "20260719.2250");

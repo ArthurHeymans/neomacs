@@ -1,0 +1,56 @@
+use expect_test::expect;
+
+use super::ParityBatchCase;
+
+/// Drive `load-theme' and assert the colors the dracula theme DECLARES for the
+/// default face (read from theme-settings; live face-attribute is
+/// `unspecified' in batch).
+fn default_face_declares_palette_colors() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "default_face_declares_palette_colors",
+        r####"
+(progn
+  (load-theme 'dracula t)
+  (list :bg (drac-theme-color 'default :background)
+        :fg (drac-theme-color 'default :foreground)))
+"####,
+        expect![[r##"OK (:bg "#282a36" :fg "#f8f8f2")"##]],
+    )
+}
+
+/// Assert the foreground colors declared for core font-lock syntax faces.
+fn font_lock_faces_declare_syntax_colors() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "font_lock_faces_declare_syntax_colors",
+        r####"
+(progn
+  (load-theme 'dracula t)
+  (list :keyword (drac-theme-color 'font-lock-keyword-face :foreground)
+        :string (drac-theme-color 'font-lock-string-face :foreground)
+        :type (drac-theme-color 'font-lock-type-face :foreground)))
+"####,
+        expect![[r##"OK (:keyword "#ff79c6" :string "#f1fa8c" :type nil)"##]],
+    )
+}
+
+/// Assert the background colors declared for region and cursor.
+fn selection_faces_declare_background_colors() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "selection_faces_declare_background_colors",
+        r####"
+(progn
+  (load-theme 'dracula t)
+  (list :region (drac-theme-color 'region :background)
+        :cursor (drac-theme-color 'cursor :background)))
+"####,
+        expect![[r##"OK (:region "#44475a" :cursor "#ccccc7")"##]],
+    )
+}
+
+pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
+    vec![
+        default_face_declares_palette_colors(),
+        font_lock_faces_declare_syntax_colors(),
+        selection_faces_declare_background_colors(),
+    ]
+}
