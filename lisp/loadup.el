@@ -261,6 +261,10 @@
 (load "jit-lock")
 
 (load "mouse")
+;; The full Neomacs GUI terminal layer is loaded only when a GUI session starts,
+;; but backend key defaults must already be present in the portable dump so
+;; batch and TTY sessions expose the same global map as a GUI-capable GNU build.
+(load "term/neo-preload")
 ;; This loading happens on Android despite scroll bars being
 ;; unsupported, because scroll-bar-mode (the variable) must be
 ;; defined.

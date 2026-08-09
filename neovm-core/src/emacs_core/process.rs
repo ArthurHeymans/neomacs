@@ -2443,8 +2443,44 @@ fn process_stopped_for_io(proc: &Process) -> bool {
     proc.command == Value::T
 }
 
+const DEFAULT_PROCESS_FILTER_SYMBOL: &str = "internal-default-process-filter";
+
+/// The three behaviors GNU assigns to a process filter Lisp value.
+///
+/// Keep the original [`Value`] on [`Process`] so `process-filter` can return
+/// it exactly.  Classify it at the I/O boundary so Lisp `t` changes read
+/// interest instead of ever being treated as a callable value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProcessFilterDispatch {
+    Default,
+    Suspended,
+    Callback(Value),
+}
+
+impl ProcessFilterDispatch {
+    fn from_lisp(filter: Value) -> Self {
+        if filter.is_nil() || filter.is_symbol_named(DEFAULT_PROCESS_FILTER_SYMBOL) {
+            Self::Default
+        } else if filter.is_t() {
+            Self::Suspended
+        } else {
+            Self::Callback(filter)
+        }
+    }
+
+    fn accepts_output(self) -> bool {
+        !matches!(self, Self::Suspended)
+    }
+}
+
+fn process_filter_accepts_output(proc: &Process) -> bool {
+    ProcessFilterDispatch::from_lisp(proc.filter).accepts_output()
+}
+
 fn process_has_readable_process_io(proc: &Process) -> bool {
-    !process_stopped_for_io(proc) && process_status_has_readable_process_io(&proc.status)
+    !process_stopped_for_io(proc)
+        && process_filter_accepts_output(proc)
+        && process_status_has_readable_process_io(&proc.status)
 }
 
 fn process_has_observable_child_status(proc: &Process) -> bool {
@@ -3570,6 +3606,92 @@ impl ProcessManager {
         // See `register_child_stdout_with_poller`.
     }
 
+    /// Mirror GNU `set_process_filter_masks`: Lisp filter `t` removes only the
+    /// process's read interest, leaving child-status and write sources active.
+    /// Resuming the filter restores read interest without consuming bytes that
+    /// accumulated while suspended.
+    fn set_process_output_read_interest(&self, id: ProcessId, enabled: bool) {
+        let Some(poller) = self.wait_backend.poller() else {
+            return;
+        };
+        let Some(proc) = self.processes.get(&id) else {
+            return;
+        };
+
+        if let Some(stdout) = proc.live_io.child_stdout.as_ref() {
+            if enabled {
+                Self::register_child_stdout_with_poller(poller, stdout, id);
+            } else {
+                Self::unregister_child_stdout_from_poller(poller, stdout);
+            }
+            return;
+        }
+        if let Some(stderr) = proc.live_io.child_stderr.as_ref() {
+            if enabled {
+                Self::register_child_stderr_with_poller(poller, stderr, id);
+            } else {
+                Self::unregister_child_stderr_from_poller(poller, stderr);
+            }
+            return;
+        }
+
+        let wants_write =
+            proc.live_io.pending_network_connect.is_some() || !proc.write_queue.is_nil();
+        let event = match (enabled, wants_write) {
+            (true, true) => Some(polling::Event::all(id as usize)),
+            (true, false) => Some(polling::Event::readable(id as usize)),
+            (false, true) => Some(polling::Event::writable(id as usize)),
+            (false, false) => None,
+        };
+
+        if let Some(tls) = proc.live_io.tls_stream.as_ref() {
+            match event {
+                Some(event) => {
+                    if Self::modify_poll_source(poller, tls.tcp_stream(), event).is_err() {
+                        let _ = Self::register_readable_source(poller, tls.tcp_stream(), id);
+                        let _ = Self::modify_poll_source(poller, tls.tcp_stream(), event);
+                    }
+                }
+                None => {
+                    let _ = poller.delete(tls.tcp_stream());
+                }
+            }
+            return;
+        }
+        if let Some(socket) = proc.live_io.network_socket.as_ref() {
+            match event {
+                Some(event) => {
+                    if socket.modify_interest(poller, id, event).is_err() {
+                        let _ = socket.register_readable(poller, id);
+                        let _ = socket.modify_interest(poller, id, event);
+                    }
+                }
+                None => socket.unregister_readable(poller),
+            }
+            return;
+        }
+        #[cfg(unix)]
+        if let Some(master) = proc
+            .live_io
+            .pty_master
+            .as_ref()
+            .and_then(|master| master.as_raw_fd())
+        {
+            match event {
+                Some(event) => {
+                    if Self::modify_raw_fd_interest(poller, master, event).is_err() {
+                        let _ = Self::register_readable_raw_fd(poller, master, id);
+                        let _ = Self::modify_raw_fd_interest(poller, master, event);
+                    }
+                }
+                None => {
+                    let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(master) };
+                    let _ = poller.delete(borrowed);
+                }
+            }
+        }
+    }
+
     #[cfg(unix)]
     fn register_child_stdin_writable_with_poller(
         poller: &polling::Poller,
@@ -4063,7 +4185,12 @@ impl ProcessManager {
 
         // Register stdout with the poller where the platform exposes child
         // pipe descriptors as pollable sources.
-        if let (Some(poller), Some(stdout)) = (self.wait_backend.poller(), &stdout) {
+        if self
+            .processes
+            .get(&id)
+            .is_none_or(process_filter_accepts_output)
+            && let (Some(poller), Some(stdout)) = (self.wait_backend.poller(), &stdout)
+        {
             Self::register_child_stdout_with_poller(poller, stdout, id);
         }
         if let Some(status_source) = child_status_source.as_ref() {
@@ -4120,7 +4247,12 @@ impl ProcessManager {
         });
         match stderr_target {
             Some(stderr_id) => {
-                if let (Some(poller), Some(stderr)) = (self.wait_backend.poller(), &stderr) {
+                if self
+                    .processes
+                    .get(&stderr_id)
+                    .is_none_or(process_filter_accepts_output)
+                    && let (Some(poller), Some(stderr)) = (self.wait_backend.poller(), &stderr)
+                {
                     Self::register_child_stderr_with_poller(poller, stderr, stderr_id);
                 }
                 if let Some(stderr_proc) = self.processes.get_mut(&stderr_id) {
@@ -4332,7 +4464,12 @@ impl ProcessManager {
         if let Some(master_fd) = pty_pair.master.as_raw_fd() {
             // Set non-blocking on the master fd.
             let _ = sys::set_fd_nonblocking(master_fd);
-            if let Some(poller) = self.wait_backend.poller() {
+            if self
+                .processes
+                .get(&id)
+                .is_none_or(process_filter_accepts_output)
+                && let Some(poller) = self.wait_backend.poller()
+            {
                 let _ = Self::register_readable_raw_fd(poller, master_fd, id);
             }
         }
@@ -5097,6 +5234,9 @@ impl ProcessManager {
     /// `wait_for_output` wakes up when data arrives.
     pub fn register_socket_fd(&self, id: ProcessId) -> Result<(), String> {
         let proc = self.processes.get(&id).ok_or("Process not found")?;
+        if !process_filter_accepts_output(proc) {
+            return Ok(());
+        }
         if let Some(poller) = self.wait_backend.poller() {
             if let Some(tls) = proc.live_io.tls_stream.as_ref() {
                 Self::register_readable_source(poller, tls.tcp_stream(), id)?;
@@ -5143,31 +5283,9 @@ impl ProcessManager {
             return;
         }
 
-        let wants_write = matches!(interest, ProcessWriteInterest::ReadableAndWritable)
-            || proc.live_io.pending_network_connect.is_some();
-        let event = if wants_write {
-            polling::Event::all(id as usize)
-        } else {
-            polling::Event::readable(id as usize)
-        };
-
-        if let Some(tls) = proc.live_io.tls_stream.as_ref() {
-            let _ = Self::modify_poll_source(poller, tls.tcp_stream(), event);
-            return;
-        }
-        if let Some(socket) = proc.live_io.network_socket.as_ref() {
-            let _ = socket.modify_interest(poller, id, event);
-            return;
-        }
-        #[cfg(unix)]
-        if let Some(master) = proc
-            .live_io
-            .pty_master
-            .as_ref()
-            .and_then(|master| master.as_raw_fd())
-        {
-            let _ = Self::modify_raw_fd_interest(poller, master, event);
-        }
+        let accepts_output = process_filter_accepts_output(proc);
+        let _ = proc;
+        self.set_process_output_read_interest(id, accepts_output);
     }
 
     fn update_tcp_client_contact(
@@ -5733,6 +5851,13 @@ impl ProcessManager {
     /// Returns `Some(data)` with available data (possibly empty on WouldBlock),
     /// or `None` on EOF / connection closed.
     fn read_process_output_result(&mut self, id: ProcessId) -> ProcessOutputRead {
+        if self
+            .processes
+            .get(&id)
+            .is_some_and(|process| !process_filter_accepts_output(process))
+        {
+            return ProcessOutputRead::WouldBlock;
+        }
         let source = self.processes.get(&id).and_then(process_output_source);
 
         match source {
@@ -5773,7 +5898,6 @@ impl ProcessManager {
     }
 }
 
-const DEFAULT_PROCESS_FILTER_SYMBOL: &str = "internal-default-process-filter";
 const DEFAULT_PROCESS_SENTINEL_SYMBOL: &str = "internal-default-process-sentinel";
 
 fn dedupe_process_ids(process_ids: impl IntoIterator<Item = ProcessId>) -> Vec<ProcessId> {
@@ -6005,21 +6129,22 @@ impl super::eval::Context {
     ) -> Result<(), Flow> {
         let proc_val = Value::make_process(pid);
         let output_val = Value::heap_string(data.clone());
-        if filter.is_nil() || filter.is_symbol_named(DEFAULT_PROCESS_FILTER_SYMBOL) {
-            let callback = Value::symbol(DEFAULT_PROCESS_FILTER_SYMBOL);
-            self.run_async_process_callback_preserving_state(
-                callback,
-                vec![proc_val, output_val],
-                AsyncCallbackKind::ProcessFilter,
-            )
-        } else if filter.is_truthy() {
-            self.run_async_process_callback_preserving_state(
-                filter,
-                vec![proc_val, output_val],
-                AsyncCallbackKind::ProcessFilter,
-            )
-        } else {
-            Ok(())
+        match ProcessFilterDispatch::from_lisp(filter) {
+            ProcessFilterDispatch::Default => {
+                let callback = Value::symbol(DEFAULT_PROCESS_FILTER_SYMBOL);
+                self.run_async_process_callback_preserving_state(
+                    callback,
+                    vec![proc_val, output_val],
+                    AsyncCallbackKind::ProcessFilter,
+                )
+            }
+            ProcessFilterDispatch::Suspended => Ok(()),
+            ProcessFilterDispatch::Callback(callback) => self
+                .run_async_process_callback_preserving_state(
+                    callback,
+                    vec![proc_val, output_val],
+                    AsyncCallbackKind::ProcessFilter,
+                ),
         }
     }
 
@@ -14524,16 +14649,23 @@ pub(crate) fn builtin_set_process_filter_impl(
     } else {
         args[1]
     };
-    let proc = processes.get_any_mut(id).ok_or_else(|| {
-        signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("processp"), args[0]],
-        )
-    })?;
-    proc.filter = stored;
-    if process_uses_contact_plist(proc) {
-        proc.childp =
-            process_contact_plist_put(proc.childp, ProcessKeyword::Filter.value(), stored)?;
+    let (accepted_output_before, accepts_output_after) = {
+        let proc = processes.get_any_mut(id).ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("processp"), args[0]],
+            )
+        })?;
+        let accepted_output_before = process_filter_accepts_output(proc);
+        proc.filter = stored;
+        if process_uses_contact_plist(proc) {
+            proc.childp =
+                process_contact_plist_put(proc.childp, ProcessKeyword::Filter.value(), stored)?;
+        }
+        (accepted_output_before, process_filter_accepts_output(proc))
+    };
+    if accepted_output_before != accepts_output_after {
+        processes.set_process_output_read_interest(id, accepts_output_after);
     }
     Ok(stored)
 }

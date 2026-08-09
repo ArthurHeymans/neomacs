@@ -341,8 +341,8 @@ fn oracle_side_window_sides_vertical_left_occupies_full_height() {
        (edges (window-edges side))
        (root (frame-root-window))
        (root-edges (window-edges root))
-       (height (nth 3 edges))
-       (root-height (nth 3 root-edges)))
+       (height (- (nth 3 edges) (nth 1 edges)))
+       (root-height (- (nth 3 root-edges) (nth 1 root-edges))))
   (list (= height root-height)))
 "#;
     let expect = expect_test::expect![[r#""OK (t)""#]];
@@ -362,8 +362,8 @@ fn oracle_side_window_sides_vertical_right_occupies_full_height() {
        (edges (window-edges side))
        (root (frame-root-window))
        (root-edges (window-edges root))
-       (height (nth 3 edges))
-       (root-height (nth 3 root-edges)))
+       (height (- (nth 3 edges) (nth 1 edges)))
+       (root-height (- (nth 3 root-edges) (nth 1 root-edges))))
   (list (= height root-height)))
 "#;
     let expect = expect_test::expect![[r#""OK (t)""#]];
@@ -1294,7 +1294,7 @@ fn oracle_side_window_deep_sides_vertical_vs_horizontal_dimensions() {
        (l-body (list (window-body-width wl) (window-body-height wl))))
   (list l-size r-size l-h-size r-h-size l-pixel r-pixel l-body))
 "#;
-    let expect = expect_test::expect![[r#""OK (12 12 20 20 20 20 (19 11))""#]];
+    let expect = expect_test::expect![[r#""OK (24 24 20 20 20 20 (19 23))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1313,7 +1313,7 @@ fn oracle_side_window_deep_sides_vertical_nil_left_not_full_height() {
   (list (= sw-bottom root-bottom)
         sw-bottom root-bottom))
 "#;
-    let expect = expect_test::expect![[r#""OK (nil 19 25)""#]];
+    let expect = expect_test::expect![[r#""OK (nil 24 25)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1601,7 +1601,9 @@ fn oracle_side_window_deep_delete_main_window_with_side_windows() {
                  (error (list 'delete-err (car (cdr err)))))))
   (list result))
 "#;
-    let expect = expect_test::expect![[r#""OK ((delete-err window-live-p))""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((delete-err \"Attempt to delete main window of frame #<frame F1 0xADDR>\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -1705,7 +1707,7 @@ fn oracle_side_window_deep_window_body_vs_total_dimensions() {
        (right-div (window-right-divider-width sw)))
   (list total-w body-w total-h body-h margins fringes scroll-bar-w right-div))
 "#;
-    let expect = expect_test::expect![[r#""OK (20 19 12 11 (nil) (0 0 nil nil) nil 0)""#]];
+    let expect = expect_test::expect![[r#""OK (20 19 24 23 (nil) (0 0 nil nil) nil 0)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2182,7 +2184,7 @@ fn oracle_side_window_deep_pixel_level_positioning() {
   (list pixel-left pixel-top top-line left-col
         inside-edges pixel-edges))
 "#;
-    let expect = expect_test::expect![[r#""OK (0 1 1 0 (0 1 19 9) (0 1 20 10))""#]];
+    let expect = expect_test::expect![[r#""OK (0 0 0 0 (0 0 19 23) (0 0 20 24))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2210,7 +2212,7 @@ fn oracle_side_window_deep_all_four_sides_pixel_position() {
   (list l-top r-top t-top b-top
         l-pix-top r-pix-top t-pix-top b-pix-top))
 "#;
-    let expect = expect_test::expect![[r#""OK (6 6 1 19 6 6 1 19)""#]];
+    let expect = expect_test::expect![[r#""OK (6 6 1 20 5 5 0 19)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -2341,7 +2343,7 @@ fn oracle_side_window_deep_window_inside_edges_comparison() {
                           (window-total-height sw t))))
   (list inside-pixel inside-char body-pixel total-pixel))
 "#;
-    let expect = expect_test::expect![[r#""OK ((0 6 19 11) (0 6 19 11) (19 5) (20 6))""#]];
+    let expect = expect_test::expect![[r#""OK ((0 0 17 23) (0 0 17 23) (17 23) (18 24))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

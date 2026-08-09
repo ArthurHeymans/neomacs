@@ -31,10 +31,14 @@
   (error "%s: Loading neo-win.el but not compiled with NEOMACS"
          invocation-name))
 
-;; Documentation-purposes only: actually loaded in loadup.el.
+;; The GUI runtime loader loads common-win first; keep the dependency explicit
+;; so loading this file directly has the same prerequisites.
 (require 'term/common-win)
-;; neo-win.el is source-loaded during dump loadup; make the macro available
-;; before the mode definitions below.
+;; This is an implementation fragment, not a public feature: loading it must not
+;; add a Neomacs-only symbol to `features'.  Reapplying its key defaults is
+;; idempotent and also keeps direct source-loading robust outside a dumped image.
+(load "term/neo-preload")
+;; Make the macro available before the mode definitions when source-loading.
 (require 'easy-mmode)
 (require 'frame)
 (require 'mouse)

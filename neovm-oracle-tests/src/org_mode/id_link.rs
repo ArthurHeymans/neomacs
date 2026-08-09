@@ -6,7 +6,7 @@ fn org_id_create_save_reload_find_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (t \"org\" 2 t #(\"B\" 0 1 (fontified nil)) \"* A\n:PROPERTIES:\n:ID: a-id\n:END:\nBody\n* B\n:PROPERTIES:\n:ID:       <generated-id>\n:END:\n\")""#
+        r#""OK (t \"org\" 2 t \"B\" \"* A\n:PROPERTIES:\n:ID: a-id\n:END:\nBody\n* B\n:PROPERTIES:\n:ID:       <generated-id>\n:END:\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -83,7 +83,7 @@ fn org_id_relative_locations_reload_and_find_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"\n((\\\"a.org\\\" \\\"rel-a\\\") (\\\"sub/b.org\\\" \\\"rel-b\\\"))\n\" 2 \"a.org\" \"sub/b.org\" #(\"A\" 0 1 (fontified nil)) #(\"B\" 0 1 (fontified nil)))""#
+        r#""OK (\"\n((\\\"a.org\\\" \\\"rel-a\\\") (\\\"sub/b.org\\\" \\\"rel-b\\\"))\n\" 2 \"a.org\" \"sub/b.org\" \"A\" \"B\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -134,7 +134,7 @@ fn org_id_store_parent_context_and_open_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (#(\"id:parent-id::*Child\" 15 20 (fontified nil)) (:link #(\"id:parent-id::*Child\" 15 20 (fontified nil)) :description #(\"Child\" 0 5 (fontified nil)) :type \"id\") #(\"Child\" 0 5 (fontified nil)) nil \"* Parent\n:PROPERTIES:\n:ID: parent-id\n:END:\n** Child\nBody\n** Sibling\n\")""#
+        r#""OK (\"id:parent-id::*Child\" (:link \"id:parent-id::*Child\" :description \"Child\" :type \"id\") \"Child\" nil \"* Parent\n:PROPERTIES:\n:ID: parent-id\n:END:\n** Child\nBody\n** Sibling\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -296,7 +296,7 @@ fn org_id_open_option_and_colon_id_fallback_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"id:<generated>\" (:link \"id:<generated>\" :description #(\"Child Beta\" 0 10 (fontified nil)) :type \"id\") (\"a.org\" #(\"Child Beta\" 0 10 (fontified nil)) 7) (\"a.org\" #(\"Child Beta\" 0 10 (fontified nil)) \"<<beta-target>>\n\") (\"b.org\" #(\"Literal Colon ID\" 0 16 (fontified nil)) 1) nil (\"a.org\" \"b.org\"))""#
+        r#""OK (\"id:<generated>\" (:link \"id:<generated>\" :description \"Child Beta\" :type \"id\") (\"a.org\" \"Child Beta\" 7) (\"a.org\" \"Child Beta\" \"<<beta-target>>\n\") (\"b.org\" \"Literal Colon ID\" 1) nil (\"a.org\" \"b.org\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -382,7 +382,7 @@ fn org_id_get_force_copy_marker_override_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"parent-id\" \"parent-id\" nil \"parent-id\" t t t 0 #(\"Child\" 0 5 (fontified nil)) #(\"Child\" 0 5 (fontified nil)) t \"override.org\" (\"ids.org\" \"override.org\") \"* Parent\n:PROPERTIES:\n:ID: parent-id\n:END:\n** Child\n:PROPERTIES:\n:ID:       <forced-id>\n:END:\nBody\n* Numeric\n:PROPERTIES:\n:ID: 123\n:END:\n\")""#
+        r#""OK (\"parent-id\" \"parent-id\" nil \"parent-id\" t t t 0 \"Child\" \"Child\" t \"override.org\" (\"ids.org\" \"override.org\") \"* Parent\n:PROPERTIES:\n:ID: parent-id\n:END:\n** Child\n:PROPERTIES:\n:ID:       <forced-id>\n:END:\nBody\n* Numeric\n:PROPERTIES:\n:ID: 123\n:END:\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -476,7 +476,7 @@ fn org_id_link_move_reload_visibility_navigation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"id:deep-id\" (:link \"id:deep-id\" :description #(\"Deep Target\" 0 11 (fontified nil)) :type \"id\") 3 ((\"id\" \"deep-id\" \"id:deep-id\" \"[[id:deep-id][Deep ID]] \" 19 nil) (\"custom-id\" \"deep-custom\" \"#deep-custom\" \"[[#deep-custom][Deep Custom]] \" 19 nil) (\"fuzzy\" \"*Deep Target\" \"*Deep Target\" \"[[*Deep Target][Deep Fuzzy]] \" 19 nil) (\"fuzzy\" \"radio-deep\" \"radio-deep\" \"[[radio-deep][Radio]]\" 19 nil)) \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\" (#(\"Deep Target\" 0 11 (fontified nil face org-level-3)) 10 nil) (#(\"Deep Target\" 0 11 (fontified nil face org-level-3)) 10 \"deep-custom\") (#(\"Deep Target\" 0 11 (fontified nil face org-level-3)) 3 10 nil) (#(\"Deep Target\" 0 11 (fontified nil face org-level-3)) 3 10) ((\"https\" \"//example.test\" \"https://example.test\" \"web\") (\"id\" \"deep-id\" \"id:deep-id\" \"Deep ID\") (\"custom-id\" \"deep-custom\" \"#deep-custom\" \"Deep Custom\") (\"fuzzy\" \"*Deep Target\" \"*Deep Target\" \"Deep Fuzzy\") (\"fuzzy\" \"radio-deep\" \"radio-deep\" \"Radio\")) ((19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\")) \"#+TITLE: ID Link Nav\n* Project\n:PROPERTIES:\n:ID: project-id\n:END:\n** Alpha\n:PROPERTIES:\n:ID: alpha-id\n:END:\n*** Deep Target\n:PROPERTIES:\n:ID: deep-id\n:CUSTOM_ID: deep-custom\n:END:\nDeep body with <<radio-deep>> and [[https://example.test][web]].\n** Beta\nBeta body.\n* Links\n[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\n\")""##
+        r##""OK (\"id:deep-id\" (:link \"id:deep-id\" :description \"Deep Target\" :type \"id\") 3 ((\"id\" \"deep-id\" \"id:deep-id\" \"[[id:deep-id][Deep ID]] \" 19 nil) (\"custom-id\" \"deep-custom\" \"#deep-custom\" \"[[#deep-custom][Deep Custom]] \" 19 nil) (\"fuzzy\" \"*Deep Target\" \"*Deep Target\" \"[[*Deep Target][Deep Fuzzy]] \" 19 nil) (\"fuzzy\" \"radio-deep\" \"radio-deep\" \"[[radio-deep][Radio]]\" 19 nil)) \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\" (#(\"Deep Target\" 0 11 (face org-level-3)) 10 nil) (#(\"Deep Target\" 0 11 (face org-level-3)) 10 \"deep-custom\") (#(\"Deep Target\" 0 11 (face org-level-3)) 3 10 nil) (#(\"Deep Target\" 0 11 (face org-level-3)) 3 10) ((\"https\" \"//example.test\" \"https://example.test\" \"web\") (\"id\" \"deep-id\" \"id:deep-id\" \"Deep ID\") (\"custom-id\" \"deep-custom\" \"#deep-custom\" \"Deep Custom\") (\"fuzzy\" \"*Deep Target\" \"*Deep Target\" \"Deep Fuzzy\") (\"fuzzy\" \"radio-deep\" \"radio-deep\" \"Radio\")) ((19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\") (19 \"[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\")) \"#+TITLE: ID Link Nav\n* Project\n:PROPERTIES:\n:ID: project-id\n:END:\n** Alpha\n:PROPERTIES:\n:ID: alpha-id\n:END:\n*** Deep Target\n:PROPERTIES:\n:ID: deep-id\n:CUSTOM_ID: deep-custom\n:END:\nDeep body with <<radio-deep>> and [[https://example.test][web]].\n** Beta\nBeta body.\n* Links\n[[id:deep-id][Deep ID]] [[#deep-custom][Deep Custom]] [[*Deep Target][Deep Fuzzy]] [[radio-deep][Radio]].\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

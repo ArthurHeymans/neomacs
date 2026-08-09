@@ -71,6 +71,24 @@ fn get_text_property_returns_nil_when_absent() {
 }
 
 #[test]
+fn buffer_substring_runs_access_fontify_functions_before_copying_properties() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("B");
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (setq buffer-access-fontify-functions
+                       (list (lambda (beg end)
+                               (put-text-property beg end 'fontified nil))))
+                 (let ((copied (buffer-substring 1 2)))
+                   (text-properties-at 0 copied)))"#,
+        )
+        .expect("buffer-substring should run its access-fontification hook");
+
+    assert_eq!(format!("{result}"), "(fontified nil)");
+}
+
+#[test]
 fn get_text_property_out_of_range_signal_uses_gnu_point_range_payload() {
     crate::test_utils::init_test_tracing();
     let mut eval = eval_with_text("hello");

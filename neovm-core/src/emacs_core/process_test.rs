@@ -5308,6 +5308,99 @@ fn accept_process_output_runs_default_process_filter() {
 }
 
 #[test]
+fn accept_process_output_discards_output_when_filter_is_t() {
+    crate::test_utils::init_test_tracing();
+    let echo = find_bin("echo");
+    let mut ev = Context::new();
+    let buffer_id = ev.buffers.create_buffer("*apio-discard-filter*");
+    let pid = ev.processes.create_process(
+        "apio-discard-filter".into(),
+        Value::make_buffer(buffer_id),
+        echo,
+        vec!["discarded".into()],
+    );
+    builtin_set_process_filter(&mut ev, vec![Value::make_process(pid), Value::T])
+        .expect("set t process filter");
+    ev.processes
+        .spawn_child(pid, false)
+        .expect("spawn output process");
+
+    while ev
+        .processes
+        .get(pid)
+        .is_some_and(|process| process.status.is_symbol_named("run"))
+    {
+        builtin_accept_process_output(
+            &mut ev,
+            vec![Value::make_process(pid), Value::make_float(0.1)],
+        )
+        .expect("a t filter must discard output without being called");
+    }
+
+    assert_eq!(
+        builtin_process_filter(&mut ev, vec![Value::make_process(pid)]).expect("process-filter"),
+        Value::T
+    );
+    assert_eq!(
+        ev.buffers
+            .get(buffer_id)
+            .expect("process buffer")
+            .buffer_string(),
+        "\nProcess apio-discard-filter finished\n",
+        "a t process filter must discard process output but retain GNU's status message"
+    );
+}
+
+#[test]
+fn process_filter_t_suspends_output_until_filter_is_resumed() {
+    crate::test_utils::init_test_tracing();
+    let shell = find_bin("sh");
+    let mut ev = Context::new();
+    let buffer_id = ev.buffers.create_buffer("*filter-resume*");
+    let pid = ev.processes.create_process(
+        "filter-resume".into(),
+        Value::make_buffer(buffer_id),
+        shell,
+        vec!["-c".into(), "printf held; sleep 0.3; printf later".into()],
+    );
+    builtin_set_process_filter(&mut ev, vec![Value::make_process(pid), Value::T])
+        .expect("suspend process output");
+    ev.processes
+        .spawn_child(pid, false)
+        .expect("spawn suspended output process");
+
+    std::thread::sleep(Duration::from_millis(50));
+    builtin_accept_process_output(
+        &mut ev,
+        vec![Value::make_process(pid), Value::make_float(0.05)],
+    )
+    .expect("waiting while output is suspended");
+    builtin_set_process_filter(&mut ev, vec![Value::make_process(pid), Value::NIL])
+        .expect("resume the default process filter");
+
+    while ev
+        .processes
+        .get(pid)
+        .is_some_and(|process| process.status.is_symbol_named("run"))
+    {
+        builtin_accept_process_output(
+            &mut ev,
+            vec![Value::make_process(pid), Value::make_float(0.5)],
+        )
+        .expect("accept resumed process output");
+    }
+
+    assert_eq!(
+        ev.buffers
+            .get(buffer_id)
+            .expect("process buffer")
+            .buffer_string(),
+        "heldlater\nProcess filter-resume finished\n",
+        "GNU leaves bytes unread while filter t suspends process output"
+    );
+}
+
+#[test]
 fn accept_process_output_target_terminated_reports_exit_after_ready_output() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");

@@ -605,6 +605,35 @@ fn builtin_coding_string_helpers_accept_iso_8859_15_alias() {
 }
 
 #[test]
+fn decode_iso_8859_15_attaches_its_source_charset_property() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let encoded = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        0xE9, 0xA4,
+    ]));
+
+    let decoded = builtin_decode_coding_string_in_context(
+        &mut eval,
+        vec![encoded, Value::symbol("iso-8859-15")],
+    )
+    .expect("ISO-8859-15 decode should succeed");
+
+    assert_eq!(
+        decoded.as_lisp_string().and_then(|s| s.as_utf8_str()),
+        Some("é€")
+    );
+    let props = get_string_text_properties_for_value(decoded)
+        .expect("decoded ISO-8859-15 string should retain its source charset");
+    assert_eq!(props.len(), 1);
+    assert_eq!(props[0].start, 0);
+    assert_eq!(props[0].end, 2);
+    assert_eq!(
+        props[0].plist,
+        Value::list(vec![Value::symbol("charset"), Value::symbol("iso-8859-15"),])
+    );
+}
+
+#[test]
 fn encode_lisp_string_emacs_internal_uses_utf8_emacs_alias() {
     crate::test_utils::init_test_tracing();
     let text = crate::heap_types::LispString::from_utf8("abc\n");

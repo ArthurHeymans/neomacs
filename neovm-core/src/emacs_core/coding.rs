@@ -2323,23 +2323,34 @@ fn coding_system_charset_list_syms(mgr: &CodingSystemManager, name: &str) -> Opt
     Some(info.charset_list.clone())
 }
 
-/// GNU `char_encodable_p`: whether character `ch` can be encoded by some charset
-/// in `charset_list`.  `unicode` (the utf-8 family's only charset) and `ascii`
-/// cover their full repertoires, so the per-charset code-point lookup gives the
-/// same answer as GNU's `CHAR_CHARSET_P`.
-fn char_encodable_in_charset_list(ch: i64, charset_list: &[SymId]) -> bool {
-    charset_list
-        .iter()
-        .any(|&charset| super::charset::charset_encode_char_bytes(charset, ch).is_some())
+/// The concrete set of charsets through which a coding system can represent
+/// characters.  GNU derives both `char_encodable_p` and ASCII compatibility
+/// from `CODING_ATTR_CHARSET_LIST`; keeping them together prevents callers from
+/// approximating repertoire with coding-system names or code-point ranges.
+struct CodingRepertoire {
+    charsets: Vec<SymId>,
+    ascii_compatible: bool,
 }
 
-/// Whether a coding system's charset list makes it ASCII-compatible (it includes
-/// the `ascii` charset, or `unicode`).  GNU skips ASCII characters in
-/// `unencodable-char-position` only when the coding is `:ascii-compatible-p`.
-fn charset_list_is_ascii_compatible(charset_list: &[SymId]) -> bool {
-    charset_list
-        .iter()
-        .any(|&c| super::charset::charset_is_ascii_compatible(c))
+impl CodingRepertoire {
+    fn for_coding_system(mgr: &CodingSystemManager, name: &str) -> Option<Self> {
+        let charsets = coding_system_charset_list_syms(mgr, name)?;
+        let ascii_compatible = charsets
+            .iter()
+            .any(|&charset| super::charset::charset_is_ascii_compatible(charset));
+        Some(Self {
+            charsets,
+            ascii_compatible,
+        })
+    }
+
+    /// GNU `char_encodable_p`: whether `ch` belongs to any charset in this
+    /// coding system's effective charset list.
+    fn encodes(&self, ch: i64) -> bool {
+        self.charsets
+            .iter()
+            .any(|&charset| super::charset::charset_encode_char_bytes(charset, ch).is_some())
+    }
 }
 
 /// Scan the multibyte Emacs bytes of `text` (a region/string already known to be
@@ -2350,9 +2361,8 @@ fn charset_list_is_ascii_compatible(charset_list: &[SymId]) -> bool {
 /// coding is `ascii_compatible` and are skipped.  Stops after `limit` hits.
 fn scan_unencodable_positions(
     text: &[u8],
-    charset_list: &[SymId],
+    repertoire: &CodingRepertoire,
     base_pos: i64,
-    ascii_compatible: bool,
     limit: usize,
 ) -> Vec<i64> {
     let mut positions = Vec::new();
@@ -2363,7 +2373,7 @@ fn scan_unencodable_positions(
         byte += len;
         let ch = i64::from(code);
         let is_ascii = code < 0x80;
-        if !(char_encodable_in_charset_list(ch, charset_list) || is_ascii && ascii_compatible) {
+        if !(repertoire.encodes(ch) || is_ascii && repertoire.ascii_compatible) {
             positions.push(base_pos + char_index);
             if positions.len() >= limit {
                 break;
@@ -2443,17 +2453,12 @@ pub(crate) fn builtin_check_coding_systems_region(
         let Some(name) = coding_system.as_symbol_name() else {
             continue;
         };
-        let Some(charset_list) = coding_system_charset_list_syms(&eval.coding_systems, name) else {
+        let Some(repertoire) = CodingRepertoire::for_coding_system(&eval.coding_systems, name)
+        else {
             continue;
         };
-        let ascii_compatible = charset_list_is_ascii_compatible(&charset_list);
-        let positions = scan_unencodable_positions(
-            text.as_bytes(),
-            &charset_list,
-            base_pos,
-            ascii_compatible,
-            usize::MAX,
-        );
+        let positions =
+            scan_unencodable_positions(text.as_bytes(), &repertoire, base_pos, usize::MAX);
         if !positions.is_empty() {
             let mut entry = vec![coding_system];
             entry.extend(positions.into_iter().map(Value::fixnum));
@@ -2490,11 +2495,10 @@ pub(crate) fn builtin_unencodable_char_position(
     if coding_type_for_base(strip_eol_suffix(&resolved)) == Some("raw-text") {
         return Ok(Value::NIL);
     }
-    let Some(charset_list) = coding_system_charset_list_syms(&eval.coding_systems, &coding_name)
+    let Some(repertoire) = CodingRepertoire::for_coding_system(&eval.coding_systems, &coding_name)
     else {
         return Ok(Value::NIL);
     };
-    let ascii_compatible = charset_list_is_ascii_compatible(&charset_list);
 
     let string_arg = args.get(4).copied().unwrap_or(Value::NIL);
     let count = args.get(3).copied().unwrap_or(Value::NIL);
@@ -2558,14 +2562,13 @@ pub(crate) fn builtin_unencodable_char_position(
         let string = buffer.buffer_substring_lisp_string_range(byte_range);
         // GNU returns nil for an ASCII-compatible coding when the region has no
         // multibyte characters (byte length == char length).
-        if ascii_compatible && string.as_bytes().is_ascii() {
+        if repertoire.ascii_compatible && string.as_bytes().is_ascii() {
             return Ok(Value::NIL);
         }
         (string.as_bytes().to_vec(), start)
     };
 
-    let positions =
-        scan_unencodable_positions(&text, &charset_list, base_pos, ascii_compatible, limit);
+    let positions = scan_unencodable_positions(&text, &repertoire, base_pos, limit);
 
     if return_list {
         Ok(Value::list(
@@ -4595,15 +4598,6 @@ fn raw_coding_candidates(mgr: &CodingSystemManager, exclude: Option<&[Value]>) -
     names
 }
 
-fn coding_can_encode_char(coding: &str, ch: char) -> bool {
-    match properties_bucket_base(coding) {
-        "utf-8" | "utf-8-emacs" | "utf-8-auto" | "prefer-utf-8" => true,
-        "iso-latin-1" | "iso-latin-5" | "iso-latin-9" => (ch as u32) <= 0xFF,
-        "us-ascii" => ch.is_ascii(),
-        _ => false,
-    }
-}
-
 fn safe_coding_systems_for_text(
     mgr: &CodingSystemManager,
     text: &str,
@@ -4618,10 +4612,13 @@ fn safe_coding_systems_for_text(
         let exclude = coding_exclude_list(exclude)?;
         let mut safe_codings = Vec::new();
         for coding in raw_coding_candidates(mgr, exclude.as_deref()) {
+            let Some(repertoire) = CodingRepertoire::for_coding_system(mgr, &coding) else {
+                continue;
+            };
             if text
                 .chars()
                 .filter(|ch| !ch.is_ascii())
-                .all(|ch| coding_can_encode_char(&coding, ch))
+                .all(|ch| repertoire.encodes(ch as i64))
             {
                 safe_codings.push(Value::symbol(coding));
             }

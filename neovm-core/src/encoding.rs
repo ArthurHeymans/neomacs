@@ -858,59 +858,87 @@ fn decode_utf16_bytes(bytes: &[u8], default_endian: Utf16Endian) -> String {
         .collect()
 }
 
-fn decode_single_byte_family_char(family: &str, byte: u8) -> Option<char> {
-    match family {
-        "latin-1" | "iso-8859-1" | "iso-latin-1" => Some(byte as char),
-        "iso-latin-5" => Some(match byte {
-            0xD0 => '\u{011E}',
-            0xDD => '\u{0130}',
-            0xDE => '\u{015E}',
-            0xF0 => '\u{011F}',
-            0xFD => '\u{0131}',
-            0xFE => '\u{015F}',
-            _ => byte as char,
-        }),
-        "iso-latin-9" => Some(match byte {
-            0xA4 => '\u{20AC}',
-            0xA6 => '\u{0160}',
-            0xA8 => '\u{0161}',
-            0xB4 => '\u{017D}',
-            0xB8 => '\u{017E}',
-            0xBC => '\u{0152}',
-            0xBD => '\u{0153}',
-            0xBE => '\u{0178}',
-            _ => byte as char,
-        }),
-        _ => None,
-    }
+/// A Latin single-byte coding family and the GNU charset that supplies its
+/// characters.  Keeping the codec and source-charset identity in one type
+/// prevents a family from being decoded correctly while silently losing the
+/// `(charset NAME)` property produced by GNU's `decode_coding_charset`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SingleByteCharset {
+    Iso8859_1,
+    Iso8859_9,
+    Iso8859_15,
 }
 
-fn encode_single_byte_family_char(family: &str, code: u32) -> Option<u8> {
-    match family {
-        "latin-1" | "iso-8859-1" | "iso-latin-1" => (code <= 0xFF).then_some(code as u8),
-        "iso-latin-5" => match code {
-            0x011E => Some(0xD0),
-            0x0130 => Some(0xDD),
-            0x015E => Some(0xDE),
-            0x011F => Some(0xF0),
-            0x0131 => Some(0xFD),
-            0x015F => Some(0xFE),
-            _ if code <= 0xFF => Some(code as u8),
+impl SingleByteCharset {
+    fn for_coding_system(coding_system: &str) -> Option<Self> {
+        match coding_system_family(coding_system) {
+            "latin-1" | "iso-8859-1" | "iso-latin-1" => Some(Self::Iso8859_1),
+            "iso-latin-5" => Some(Self::Iso8859_9),
+            "iso-latin-9" => Some(Self::Iso8859_15),
             _ => None,
-        },
-        "iso-latin-9" => match code {
-            0x20AC => Some(0xA4),
-            0x0160 => Some(0xA6),
-            0x0161 => Some(0xA8),
-            0x017D => Some(0xB4),
-            0x017E => Some(0xB8),
-            0x0152 => Some(0xBC),
-            0x0153 => Some(0xBD),
-            0x0178 => Some(0xBE),
-            _ if code <= 0xFF => Some(code as u8),
-            _ => None,
-        },
-        _ => None,
+        }
+    }
+
+    fn source_charset_name(self) -> &'static str {
+        match self {
+            Self::Iso8859_1 => "iso-8859-1",
+            Self::Iso8859_9 => "iso-8859-9",
+            Self::Iso8859_15 => "iso-8859-15",
+        }
+    }
+
+    fn decode_byte(self, byte: u8) -> char {
+        match self {
+            Self::Iso8859_1 => byte as char,
+            Self::Iso8859_9 => match byte {
+                0xD0 => '\u{011E}',
+                0xDD => '\u{0130}',
+                0xDE => '\u{015E}',
+                0xF0 => '\u{011F}',
+                0xFD => '\u{0131}',
+                0xFE => '\u{015F}',
+                _ => byte as char,
+            },
+            Self::Iso8859_15 => match byte {
+                0xA4 => '\u{20AC}',
+                0xA6 => '\u{0160}',
+                0xA8 => '\u{0161}',
+                0xB4 => '\u{017D}',
+                0xB8 => '\u{017E}',
+                0xBC => '\u{0152}',
+                0xBD => '\u{0153}',
+                0xBE => '\u{0178}',
+                _ => byte as char,
+            },
+        }
+    }
+
+    fn encode_char(self, code: u32) -> Option<u8> {
+        match self {
+            Self::Iso8859_1 => (code <= 0xFF).then_some(code as u8),
+            Self::Iso8859_9 => match code {
+                0x011E => Some(0xD0),
+                0x0130 => Some(0xDD),
+                0x015E => Some(0xDE),
+                0x011F => Some(0xF0),
+                0x0131 => Some(0xFD),
+                0x015F => Some(0xFE),
+                _ if code <= 0xFF => Some(code as u8),
+                _ => None,
+            },
+            Self::Iso8859_15 => match code {
+                0x20AC => Some(0xA4),
+                0x0160 => Some(0xA6),
+                0x0161 => Some(0xA8),
+                0x017D => Some(0xB4),
+                0x017E => Some(0xB8),
+                0x0152 => Some(0xBC),
+                0x0153 => Some(0xBD),
+                0x0178 => Some(0xBE),
+                _ if code <= 0xFF => Some(code as u8),
+                _ => None,
+            },
+        }
     }
 }
 
@@ -1110,10 +1138,11 @@ pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str
         return encode_string(&text, coding_system);
     }
 
+    let single_byte_charset = SingleByteCharset::for_coding_system(coding_system);
     let mut out = Vec::with_capacity(s.sbytes());
-    let mut push_encoded = |code: u32| match family {
-        "latin-1" | "iso-8859-1" | "iso-latin-1" | "iso-latin-5" | "iso-latin-9" => {
-            if let Some(byte) = encode_single_byte_family_char(family, code) {
+    let mut push_encoded = |code: u32| {
+        if let Some(charset) = single_byte_charset {
+            if let Some(byte) = charset.encode_char(code) {
                 out.push(byte);
             } else if crate::emacs_core::emacs_char::char_byte8_p(code) {
                 out.push(crate::emacs_core::emacs_char::char_to_byte8(code));
@@ -1123,30 +1152,33 @@ pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str
                 // `?`).
                 out.push(b' ');
             }
+            return;
         }
-        "ascii" | "us-ascii" => {
-            if code <= 0x7F {
-                out.push(code as u8);
-            } else {
-                out.push(b'?');
+        match family {
+            "ascii" | "us-ascii" => {
+                if code <= 0x7F {
+                    out.push(code as u8);
+                } else {
+                    out.push(b'?');
+                }
             }
-        }
-        // Single-byte / codepage coding systems we do not fully model -- notably
-        // the Windows ANSI codepages (windows-1252/cp1252/cp437), which
-        // `default-file-name-coding-system` is set to on Windows. GNU round-trips
-        // ASCII unchanged. The previous empty arm dropped the WHOLE string, so a
-        // pure-ASCII input encoded to "" (e.g. make-temp-file-internal returned a
-        // bare nonce because its encoded PREFIX came back empty, leaving
-        // `org-persist-directory' separator-less and crashing org's load on
-        // Windows). Pass ASCII and raw byte8 through; substitute `?` for
-        // characters this codec does not model (matching the us-ascii fallback).
-        _ => {
-            if code <= 0x7F {
-                out.push(code as u8);
-            } else if crate::emacs_core::emacs_char::char_byte8_p(code) {
-                out.push(crate::emacs_core::emacs_char::char_to_byte8(code));
-            } else {
-                out.push(b'?');
+            // Single-byte / codepage coding systems we do not fully model -- notably
+            // the Windows ANSI codepages (windows-1252/cp1252/cp437), which
+            // `default-file-name-coding-system` is set to on Windows. GNU round-trips
+            // ASCII unchanged. The previous empty arm dropped the WHOLE string, so a
+            // pure-ASCII input encoded to "" (e.g. make-temp-file-internal returned a
+            // bare nonce because its encoded PREFIX came back empty, leaving
+            // `org-persist-directory' separator-less and crashing org's load on
+            // Windows). Pass ASCII and raw byte8 through; substitute `?` for
+            // characters this codec does not model (matching the us-ascii fallback).
+            _ => {
+                if code <= 0x7F {
+                    out.push(code as u8);
+                } else if crate::emacs_core::emacs_char::char_byte8_p(code) {
+                    out.push(crate::emacs_core::emacs_char::char_to_byte8(code));
+                } else {
+                    out.push(b'?');
+                }
             }
         }
     };
@@ -1170,6 +1202,17 @@ pub fn encode_string(s: &str, coding_system: &str) -> Vec<u8> {
         return encode_utf16_text(&eol_text, endian, bom);
     }
 
+    if let Some(charset) = SingleByteCharset::for_coding_system(coding_system) {
+        return eol_text
+            .chars()
+            .map(|ch| {
+                // GNU substitutes a space (0x20) for unencodable characters in
+                // Latin charset coding systems.
+                charset.encode_char(ch as u32).unwrap_or(b' ')
+            })
+            .collect();
+    }
+
     match coding_system_family(coding_system) {
         "utf-8" | "utf-8-unix" | "utf-8-dos" | "utf-8-mac" | "utf-8-emacs" => {
             encode_utf8_emacs_text(&eol_text)
@@ -1182,15 +1225,6 @@ pub fn encode_string(s: &str, coding_system: &str) -> Vec<u8> {
             let (encoded, _, _) = GBK.encode(&eol_text);
             encoded.into_owned()
         }
-        "latin-1" | "iso-8859-1" | "iso-latin-1" | "iso-latin-5" | "iso-latin-9" => eol_text
-            .chars()
-            .map(|c| {
-                // GNU substitutes a space (0x20) for unencodable characters in
-                // the Latin charset coding systems.
-                encode_single_byte_family_char(coding_system_family(coding_system), c as u32)
-                    .unwrap_or(b' ')
-            })
-            .collect(),
         "ascii" | "us-ascii" => eol_text
             .chars()
             .map(|c| if c.is_ascii() { c as u8 } else { b'?' })
@@ -1212,6 +1246,13 @@ pub fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
     {
         bytes.drain(..3);
     }
+    if let Some(charset) = SingleByteCharset::for_coding_system(coding_system) {
+        return bytes
+            .iter()
+            .map(|&byte| charset.decode_byte(byte))
+            .collect();
+    }
+
     match coding_system_family(coding_system) {
         "utf-8" | "utf-8-emacs" => {
             // `decode_bytes` is the lossy `String` boundary; the faithful,
@@ -1230,13 +1271,6 @@ pub fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
             let (decoded, _, _) = GBK.decode(&bytes);
             decoded.into_owned()
         }
-        "latin-1" | "iso-8859-1" | "iso-latin-1" | "iso-latin-5" | "iso-latin-9" => bytes
-            .iter()
-            .map(|&b| {
-                decode_single_byte_family_char(coding_system_family(coding_system), b)
-                    .unwrap_or('\u{FFFD}')
-            })
-            .collect(),
         "ascii" | "us-ascii" => bytes
             .iter()
             .map(|&b| if b < 128 { b as char } else { '?' })
@@ -1279,7 +1313,11 @@ pub(crate) fn lisp_string_coding_source_bytes(s: &crate::heap_types::LispString)
     }
 }
 
-fn charset_property_runs(text: &str, charset: &str) -> Vec<StringTextPropertyRun> {
+fn charset_property_runs(
+    text: &str,
+    charset: &str,
+    source_charset_decodes_ascii: bool,
+) -> Vec<StringTextPropertyRun> {
     let mut char_count = 0usize;
     let mut first_non_ascii = None;
     for (idx, ch) in text.chars().enumerate() {
@@ -1292,7 +1330,11 @@ fn charset_property_runs(text: &str, charset: &str) -> Vec<StringTextPropertyRun
     let Some(first_non_ascii) = first_non_ascii else {
         return Vec::new();
     };
-    let start = if charset == "iso-8859-1" {
+    // GNU records the charset selected by the decoder, not a property inferred
+    // from the resulting Unicode scalar.  Every byte in an ISO-8859 coding,
+    // including an ASCII byte, is decoded by that ISO charset, so once the
+    // non-ASCII fast path is left its property run begins at zero.
+    let start = if source_charset_decodes_ascii {
         0
     } else {
         first_non_ascii
@@ -4063,14 +4105,16 @@ pub(crate) fn builtin_decode_coding_string_with_known(
         ));
     }
     let decoded = decode_bytes(&bytes, &coding);
-    let charset = match coding_system_family(&coding) {
-        "iso-latin-1" => Some("iso-8859-1"),
-        "chinese-iso-8bit" => Some("chinese-gb2312"),
-        "chinese-big5" | "chinese-big5-hkscs" => Some("big5"),
-        _ => None,
+    let charset = match SingleByteCharset::for_coding_system(&coding) {
+        Some(single_byte) => Some((single_byte.source_charset_name(), true)),
+        None => match coding_system_family(&coding) {
+            "chinese-iso-8bit" => Some(("chinese-gb2312", false)),
+            "chinese-big5" | "chinese-big5-hkscs" => Some(("big5", false)),
+            _ => None,
+        },
     };
-    if let Some(charset) = charset {
-        let runs = charset_property_runs(&decoded, charset);
+    if let Some((charset, source_charset_decodes_ascii)) = charset {
+        let runs = charset_property_runs(&decoded, charset, source_charset_decodes_ascii);
         if !runs.is_empty() {
             return Ok(Value::multibyte_string_with_text_properties(decoded, runs));
         }

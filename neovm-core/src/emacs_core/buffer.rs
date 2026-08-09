@@ -802,6 +802,45 @@ pub(crate) fn builtin_buffer_last_name(
 }
 
 /// (buffer-substring START END) → string
+fn update_buffer_properties_for_access(
+    eval: &mut super::eval::Context,
+    start: LispCharPos1,
+    end: LispCharPos1,
+) -> Result<(), Flow> {
+    if eval
+        .visible_variable_value_or_nil("buffer-access-fontify-functions")
+        .is_nil()
+    {
+        return Ok(());
+    }
+
+    let fontified_property = eval.visible_variable_value_or_nil("buffer-access-fontified-property");
+    if !fontified_property.is_nil() {
+        let needs_fontification = super::textprop::builtin_text_property_any(
+            eval,
+            vec![
+                Value::fixnum(start.as_i64()),
+                Value::fixnum(end.as_i64()),
+                fontified_property,
+                Value::NIL,
+            ],
+        )?;
+        if needs_fontification.is_nil() {
+            return Ok(());
+        }
+    }
+
+    builtin_run_hook_with_args(
+        eval,
+        vec![
+            Value::symbol("buffer-access-fontify-functions"),
+            Value::fixnum(start.as_i64()),
+            Value::fixnum(end.as_i64()),
+        ],
+    )?;
+    Ok(())
+}
+
 pub(crate) fn builtin_buffer_substring(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -813,16 +852,23 @@ pub(crate) fn builtin_buffer_substring(
         .buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let (start, end) = {
+        let buf = eval
+            .buffers
+            .get(current_id)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        checked_accessible_lisp_range_from_raw(
+            buf,
+            start,
+            end,
+            vec![Value::make_buffer(buf.id), args[0], args[1]],
+        )?
+    };
+    update_buffer_properties_for_access(eval, start, end)?;
     let buf = eval
         .buffers
         .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let (start, end) = checked_accessible_lisp_range_from_raw(
-        buf,
-        start,
-        end,
-        vec![Value::make_buffer(buf.id), args[0], args[1]],
-    )?;
     let byte_range = accessible_lisp_range_to_byte_range(buf, start, end);
     Ok(buffer_slice_value_range(buf, byte_range))
 }
@@ -832,9 +878,21 @@ pub(crate) fn builtin_buffer_string(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("buffer-string", &args, 0)?;
+    let (current_id, start, end) = {
+        let buf = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        (
+            buf.id,
+            buf.point_min_lisp_char_pos(),
+            buf.point_max_lisp_char_pos(),
+        )
+    };
+    update_buffer_properties_for_access(eval, start, end)?;
     let buf = eval
         .buffers
-        .current_buffer()
+        .get(current_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     Ok(buffer_slice_value_range(
         buf,

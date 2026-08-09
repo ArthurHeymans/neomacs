@@ -6657,6 +6657,15 @@ fn bootstrap_neomacs_runtime_keeps_gui_term_layer_out_of_dump() {
     assert!(eval.feature_present("neomacs"));
     assert!(!eval.feature_present("neo-win"));
     assert!(!eval.feature_present("x-win"));
+    assert!(
+        !eval.feature_present("neo-preload"),
+        "the dump-safe implementation helper must not expand the public feature surface"
+    );
+    assert_eq!(
+        eval_rendered(&mut eval, "(lookup-key (current-global-map) [XF86WakeUp])"),
+        "OK ignore",
+        "dump-safe Neomacs key defaults should match GNU's preloaded X backend"
+    );
     assert!(eval.obarray().intern_soft("hook-on").is_none());
     assert!(eval.obarray().intern_soft("hook-off").is_none());
     assert!(eval.obarray().intern_soft("minor-MODE-hook").is_none());
@@ -6720,7 +6729,7 @@ fn neo_win_source_requires_easy_mmode_before_minor_mode_definitions() {
         fs::read_to_string(source_bootstrap_path("term/neo-win.el")).expect("read term/neo-win.el");
     let require_pos = source
         .find("(require 'easy-mmode)")
-        .expect("neo-win.el must require easy-mmode because loadup source-loads it");
+        .expect("neo-win.el must require easy-mmode when source-loaded");
     let mode_pos = source
         .find("(define-minor-mode neomacs-scroll-indicator-mode")
         .expect("neo-win.el should define neomacs-scroll-indicator-mode");
