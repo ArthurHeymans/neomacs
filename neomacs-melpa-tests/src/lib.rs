@@ -5992,3 +5992,7 @@ pub const MONOKAI_THEME_MELPA_PIN: (&str, &str) = ("monokai-theme", "20240911.10
 /// The exact spacemacs-theme package selected for practical theme load and defcustom defaults.
 /// Pinned to upstream commit `cbd290dfde96f53a7b41730c7840850a8a7b8a02`.
 pub const SPACEMACS_THEME_MELPA_PIN: (&str, &str) = ("spacemacs-theme", "0.2");
+
+/// The exact restclient package selected for practical major-mode setup and MIME mapping.
+/// Pinned to upstream commit `e2a2b13482d72634f8e49864cd9e5c907a5fe137`.
+pub const RESTCLIENT_MELPA_PIN: (&str, &str) = ("restclient", "20231010.1427");
