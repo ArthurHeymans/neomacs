@@ -66,7 +66,18 @@ const ACE_LINK_TEST_PRELUDE: &str = r##"
 
 (defun ace-link-test-labels ()
   "Return the avy labels a user can see right now.
-Each entry is (OFFSET LABEL TEXT-AT-OFFSET)."
+Each entry is (LINE COLUMN LABEL TEXT-AT-LABEL).
+
+The position is recorded as line and column rather than as a buffer
+offset on purpose.  Some of these buffers quote the sandbox root -- the
+*Help* buffer names the defining file, and a compilation buffer records
+`default-directory' in its header -- so every offset past that point
+carries the length of the sandbox path.  The oracle masks the path
+inside captured strings but cannot mask it inside an integer, which made
+the recorded expectation depend on how long this checkout's path
+happens to be.  Line and column do not move when the path length
+changes, and together with TEXT-AT-LABEL they pin the candidate more
+precisely than the offset did."
   (let (labels)
     (dolist (overlay (overlays-in (point-min) (point-max)))
       (let ((text (or (overlay-get overlay 'display)
@@ -76,14 +87,18 @@ Each entry is (OFFSET LABEL TEXT-AT-OFFSET)."
                    (> (length text) 0)
                    (memq (get-text-property 0 'face text)
                          '(avy-lead-face avy-lead-face-0)))
-          (push (list (- (overlay-start overlay) (point-min))
-                      (substring-no-properties text)
-                      (save-excursion
-                        (goto-char (overlay-start overlay))
+          (push (save-excursion
+                  (goto-char (overlay-start overlay))
+                  (list (line-number-at-pos)
+                        (current-column)
+                        (substring-no-properties text)
                         (buffer-substring-no-properties (point)
                                                         (line-end-position))))
                 labels))))
-    (sort labels (lambda (a b) (< (car a) (car b))))))
+    (sort labels (lambda (a b)
+                   (or (< (car a) (car b))
+                       (and (= (car a) (car b))
+                            (< (cadr a) (cadr b))))))))
 
 (defun ace-link-test-record-key (char)
   "Record CHAR and the labels on screen, then return CHAR unchanged."
