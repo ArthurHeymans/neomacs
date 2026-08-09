@@ -2,120 +2,252 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
-fn mode_registers_completion_ui_and_map_commands() -> ParityBatchCase {
+fn filtering_navigation_and_return_select_a_visible_candidate() -> ParityBatchCase {
+    let elisp_form = r####"
+(neomacs-vertico-test-with-mode
+  (let ((candidates '("api-gateway" "api-worker" "app-console"
+                      "billing-console" "cache-worker")))
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (neomacs-vertico-test-install-observer)
+          (setq unread-command-events
+                (append (string-to-list "ap")
+                        (listify-key-sequence (kbd "C-n <f8> RET"))
+                        unread-command-events)))
+      (let ((result (completing-read "Deploy service: " candidates nil t)))
+        (list :result result
+              :observations (nreverse neomacs-vertico-test-observations)
+              :minibuffer-active (and (active-minibuffer-window) t))))))
+"####;
+    let expected = expect![[
+        r#"OK (:result "api-worker" :observations ((:prompt "Deploy service: " :input "ap" :point 2 :index 1 :total 3 :count "2/3    " :display " \napi-gateway\napi-worker\napp-console\n" :current ((14 25 "api-worker\n")) :semantic-faces nil :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil)) :minibuffer-active nil)"#
+    ]];
     ParityBatchCase::value(
-        "mode_registers_completion_ui_and_map_commands",
-        r####"
-(list :mode (commandp 'vertico-mode)
-      :next (commandp 'vertico-next)
-      :previous (commandp 'vertico-previous)
-      :first (commandp 'vertico-first)
-      :last (commandp 'vertico-last)
-      :exit (commandp 'vertico-exit)
-      :insert (commandp 'vertico-insert)
-      :count vertico-count
-      :preselect vertico-preselect
-      :sort (functionp vertico-sort-function)
-      :style (assq 'vertico completion-styles-alist))
-"####,
-        expect![
-            "OK (:mode t :next t :previous t :first t :last t :exit t :insert t :count 10 :preselect directory :sort t :style nil)"
-        ],
+        "filtering_navigation_and_return_select_a_visible_candidate",
+        elisp_form,
+        expected,
     )
 }
 
-fn move_to_front_and_cycle_helpers_reorder_candidates() -> ParityBatchCase {
+fn tab_inserts_the_selected_candidate_before_exit() -> ParityBatchCase {
+    let elisp_form = r####"
+(neomacs-vertico-test-with-mode
+  (let ((candidates '("api-gateway" "api-worker" "app-console"
+                      "billing-console")))
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (neomacs-vertico-test-install-observer)
+          (setq unread-command-events
+                (append (string-to-list "ap")
+                        (listify-key-sequence
+                         (kbd "C-n C-n <f8> TAB <f8> RET"))
+                        unread-command-events)))
+      (let ((result (completing-read "Open service: " candidates nil t)))
+        (list :result result
+              :observations (nreverse neomacs-vertico-test-observations))))))
+"####;
+    let expected = expect![[
+        r#"OK (:result "app-console" :observations ((:prompt "Open service: " :input "ap" :point 2 :index 2 :total 3 :count "3/3    " :display " \napi-gateway\napi-worker\napp-console\n" :current ((25 37 "app-console\n")) :semantic-faces nil :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil) (:prompt "Open service: " :input "app-console" :point 11 :index 0 :total 1 :count "1/1    " :display " \napp-console\n" :current ((2 14 "app-console\n")) :semantic-faces nil :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil)))"#
+    ]];
     ParityBatchCase::value(
-        "move_to_front_and_cycle_helpers_reorder_candidates",
-        r####"
-(let* ((list '("a" "b" "c" "d"))
-       (front (vertico--move-to-front "c" (copy-sequence list)))
-       (cycled (vertico--cycle (copy-sequence list) 2)))
-  (list :front front
-        :cycled cycled
-        :identity (vertico--move-to-front "missing" (copy-sequence list))))
-"####,
-        expect![[
-            r#"OK (:front ("c" "a" "b" "d") :cycled ("c" "d" "a" "b") :identity ("a" "b" "c" "d"))"#
-        ]],
+        "tab_inserts_the_selected_candidate_before_exit",
+        elisp_form,
+        expected,
     )
 }
 
-fn navigation_updates_index_with_optional_wrapping() -> ParityBatchCase {
+fn meta_return_submits_new_input_with_no_candidates() -> ParityBatchCase {
+    let elisp_form = r####"
+(neomacs-vertico-test-with-mode
+  (let ((candidates '("production" "staging" "development")))
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (neomacs-vertico-test-install-observer)
+          (setq unread-command-events
+                (append (string-to-list "preview-42")
+                        (listify-key-sequence (kbd "<f8> M-RET"))
+                        unread-command-events)))
+      (let ((result (completing-read "Create environment: " candidates nil nil)))
+        (list :result result
+              :observations (nreverse neomacs-vertico-test-observations))))))
+"####;
+    let expected = expect![[
+        r#"OK (:result "preview-42" :observations ((:prompt "Create environment: " :input "preview-42" :point 10 :index -1 :total 0 :count "*/0    " :display " " :current nil :semantic-faces nil :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil)))"#
+    ]];
     ParityBatchCase::value(
-        "navigation_updates_index_with_optional_wrapping",
-        r####"
-(neomacs-vertico-test-with-session
- (lambda ()
-   (vertico--goto 0)
-   (let ((start vertico--index))
-     (vertico-next)
-     (let ((next vertico--index))
-       (vertico-previous)
-       (let ((prev vertico--index))
-         (vertico-last)
-         (let ((last vertico--index))
-           (vertico-first)
-           (list :start start
-                 :next next
-                 :prev prev
-                 :last last
-                 :first vertico--index
-                 :total vertico--total)))))))
-"####,
-        expect!["OK (:start 0 :next 1 :prev 0 :last 4 :first 0 :total 5)"],
+        "meta_return_submits_new_input_with_no_candidates",
+        elisp_form,
+        expected,
     )
 }
 
-fn format_count_and_candidate_helpers_report_session_state() -> ParityBatchCase {
+fn require_match_rejects_unknown_input_then_accepts_a_match() -> ParityBatchCase {
+    let elisp_form = r####"
+(neomacs-vertico-test-with-mode
+  (let ((candidates '("alpha" "beta" "gamma")))
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (neomacs-vertico-test-install-observer)
+          (setq unread-command-events
+                (append (string-to-list "missing")
+                        (listify-key-sequence (kbd "RET <f8> M-DEL"))
+                        (string-to-list "beta")
+                        (listify-key-sequence (kbd "<f8> RET"))
+                        unread-command-events)))
+      (let ((result (completing-read "Promote channel: " candidates nil t)))
+        (list :result result
+              :messages (nreverse neomacs-vertico-test-minibuffer-messages)
+              :observations (nreverse neomacs-vertico-test-observations))))))
+"####;
+    let expected = expect![[
+        r#"OK (:result "beta" :messages (" [Match required]") :observations ((:prompt "Promote channel: " :input "missing" :point 7 :index -1 :total 0 :count "!/0    " :display " " :current nil :semantic-faces nil :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil) (:prompt "Promote channel: " :input "beta" :point 4 :index 0 :total 1 :count "1/1    " :display " \nbeta\n" :current ((2 7 "beta\n")) :semantic-faces nil :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil)))"#
+    ]];
     ParityBatchCase::value(
-        "format_count_and_candidate_helpers_report_session_state",
-        r####"
-(neomacs-vertico-test-with-session
- (lambda ()
-   (vertico--goto 1)
-   (list :count (vertico--format-count)
-         :candidate (vertico--candidate)
-         :match-p (and (vertico--match-p "app") t)
-         :scroll (progn
-                   (setq vertico--index 4)
-                   (vertico--compute-scroll)
-                   vertico--scroll))))
-"####,
-        expect![[r#"OK (:count "2/5    " :candidate "apricot" :match-p t :scroll 2)"#]],
+        "require_match_rejects_unknown_input_then_accepts_a_match",
+        elisp_form,
+        expected,
     )
 }
 
-fn mode_toggle_installs_and_removes_completion_in_region_function() -> ParityBatchCase {
+fn annotations_and_group_navigation_change_the_visible_selection() -> ParityBatchCase {
+    let elisp_form = r####"
+(neomacs-vertico-test-with-mode
+  (minibuffer-with-setup-hook
+      (lambda ()
+        (neomacs-vertico-test-install-observer)
+        (setq unread-command-events
+              (append (string-to-list "a")
+                      (listify-key-sequence (kbd "<f8> M-} <f8> RET"))
+                      unread-command-events)))
+    (let ((result
+           (completing-read
+            "Inspect service: " #'neomacs-vertico-test-service-table nil t)))
+      (list :result result
+            :observations (nreverse neomacs-vertico-test-observations)))))
+"####;
+    let expected = expect![[
+        r#"OK (:result "app-console" :observations ((:prompt "Inspect service: " :input "a" :point 1 :index 0 :total 3 :count "1/3    " :display " \n     API services  \napi-gateway  [production API]\napi-worker  [production API]\n     Applications  \n" :current ((22 52 "api-gateway  [production API]\n")) :semantic-faces ((completions-annotations (33 51 "  [production API]") (62 80 "  [production API]")) (vertico-group-title (6 20 " API services ") (85 99 " Applications ")) (vertico-group-separator (2 6 "    ") (20 21 " ") (81 85 "    ") (99 100 " "))) :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil) (:prompt "Inspect service: " :input "a" :point 1 :index 0 :total 3 :count "1/3    " :display " \n     Applications  \napp-console  [operator UI]\n     API services  \napi-gateway  [production API]\n" :current ((22 49 "app-console  [operator UI]\n")) :semantic-faces ((completions-annotations (33 48 "  [operator UI]") (80 98 "  [production API]")) (vertico-group-title (6 20 " Applications ") (53 67 " API services ")) (vertico-group-separator (2 6 "    ") (20 21 " ") (49 53 "    ") (67 68 " "))) :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil)))"#
+    ]];
     ParityBatchCase::value(
-        "mode_toggle_installs_and_removes_completion_in_region_function",
-        r####"
-(let ((before completion-in-region-function)
-      (vertico-mode nil))
-  (vertico-mode 1)
-  (let ((on completion-in-region-function)
-        (mode (and vertico-mode t)))
-    (vertico-mode -1)
-    (list :before before
-          :on on
-          :mode-on mode
-          :mode-off (and vertico-mode t)
-          :after completion-in-region-function
-          :map-next (lookup-key vertico-map (kbd "C-n"))
-          :map-prev (lookup-key vertico-map (kbd "C-p")))))
-"####,
-        expect![
-            "OK (:before completion--in-region :on completion--in-region :mode-on t :mode-off nil :after completion--in-region :map-next nil :map-prev nil)"
-        ],
+        "annotations_and_group_navigation_change_the_visible_selection",
+        elisp_form,
+        expected,
+    )
+}
+
+fn cycling_previous_from_the_first_candidate_wraps_to_the_last() -> ParityBatchCase {
+    let elisp_form = r####"
+(neomacs-vertico-test-with-mode
+  (let ((candidates '("apple" "banana" "cherry")))
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (neomacs-vertico-test-install-observer)
+          (setq unread-command-events
+                (append (listify-key-sequence (kbd "C-p <f8> RET"))
+                        unread-command-events)))
+      (let ((result (completing-read "Pick fruit: " candidates nil t)))
+        (list :result result
+              :observations (nreverse neomacs-vertico-test-observations))))))
+"####;
+    let expected = expect![[
+        r#"OK (:result "cherry" :observations ((:prompt "Pick fruit: " :input "" :point 0 :index 2 :total 3 :count "3/3    " :display " \napple\nbanana\ncherry\n" :current ((15 22 "cherry\n")) :semantic-faces nil :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil)))"#
+    ]];
+    ParityBatchCase::value(
+        "cycling_previous_from_the_first_candidate_wraps_to_the_last",
+        elisp_form,
+        expected,
+    )
+}
+
+fn completing_read_multiple_inserts_two_selected_candidates() -> ParityBatchCase {
+    let elisp_form = r####"
+(neomacs-vertico-test-with-mode
+  (let ((candidates '("apple" "apricot" "banana" "blueberry")))
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (neomacs-vertico-test-install-observer)
+          (setq unread-command-events
+                (append (string-to-list "ap")
+                        (listify-key-sequence (kbd "TAB"))
+                        (string-to-list ", ba")
+                        (listify-key-sequence (kbd "TAB <f8> M-RET"))
+                        unread-command-events)))
+      (let ((result
+             (completing-read-multiple "Release fruits: " candidates nil t)))
+        (list :result result
+              :observations (nreverse neomacs-vertico-test-observations))))))
+"####;
+    let expected = expect![[
+        r#"OK (:result ("apple" "banana") :observations ((:prompt "[comma-separated list] Release fruits: " :input "apple, banana" :point 13 :index 0 :total 1 :count "1/1    " :display " \nbanana\n" :current ((2 9 "banana\n")) :semantic-faces nil :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil)))"#
+    ]];
+    ParityBatchCase::value(
+        "completing_read_multiple_inserts_two_selected_candidates",
+        elisp_form,
+        expected,
+    )
+}
+
+fn file_completion_enters_a_directory_then_selects_a_real_file() -> ParityBatchCase {
+    let elisp_form = r####"
+(neomacs-vertico-test-with-mode
+  (let* ((root
+          (file-name-as-directory
+           (expand-file-name
+            "vertico-file-workspace"
+            (or (getenv "NEOMACS_TEST_SANDBOX_ROOT")
+                (error "NEOMACS_TEST_SANDBOX_ROOT is required")))))
+         (configs (expand-file-name "configs/" root))
+         (vertico-preselect 'directory)
+         (completion-ignored-extensions '(".bak"))
+         result)
+    (make-directory configs t)
+    (dolist (file '("production.toml" "preview.toml" "production.bak"))
+      (with-temp-file (expand-file-name file configs)
+        (insert "fixture for " file "\n")))
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (neomacs-vertico-test-install-observer)
+          (setq unread-command-events
+                (append (string-to-list "conf")
+                        (listify-key-sequence (kbd "TAB <f8>"))
+                        (string-to-list "prod")
+                        (listify-key-sequence (kbd "<f8> RET"))
+                        unread-command-events)))
+      (setq result (read-file-name "Open config: " root nil t)))
+    (list
+     :result (file-relative-name result root)
+     :regular-file (and (file-regular-p result) t)
+     :observations
+     (mapcar
+      (lambda (observation)
+        (let ((normalized (copy-sequence observation)))
+          (setq normalized
+                (plist-put normalized :input
+                           (file-relative-name
+                            (plist-get observation :input) root)))
+          (plist-put normalized :point
+                     (- (plist-get observation :point) (length root)))))
+      (nreverse neomacs-vertico-test-observations)))))
+"####;
+    let expected = expect![[
+        r#"OK (:result "configs/production.toml" :regular-file t :observations ((:prompt "Open config: " :input "configs/" :point 8 :index -1 :total 2 :count "!/2    " :display " \npreview.toml\nproduction.toml\n" :current nil :semantic-faces nil :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil) (:prompt "Open config: " :input "configs/prod" :point 12 :index 0 :total 1 :count "1/1    " :display " \nproduction.toml\n" :current ((2 18 "production.toml\n")) :semantic-faces nil :return-command vertico-exit :tab-command vertico-insert :next-command vertico-next :message nil)))"#
+    ]];
+    ParityBatchCase::value(
+        "file_completion_enters_a_directory_then_selects_a_real_file",
+        elisp_form,
+        expected,
     )
 }
 
 pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
     vec![
-        mode_registers_completion_ui_and_map_commands(),
-        move_to_front_and_cycle_helpers_reorder_candidates(),
-        navigation_updates_index_with_optional_wrapping(),
-        format_count_and_candidate_helpers_report_session_state(),
-        mode_toggle_installs_and_removes_completion_in_region_function(),
+        filtering_navigation_and_return_select_a_visible_candidate(),
+        tab_inserts_the_selected_candidate_before_exit(),
+        meta_return_submits_new_input_with_no_candidates(),
+        require_match_rejects_unknown_input_then_accepts_a_match(),
+        annotations_and_group_navigation_change_the_visible_selection(),
+        cycling_previous_from_the_first_candidate_wraps_to_the_last(),
+        completing_read_multiple_inserts_two_selected_candidates(),
+        file_completion_enters_a_directory_then_selects_a_real_file(),
     ]
 }
