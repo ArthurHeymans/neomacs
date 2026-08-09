@@ -596,6 +596,40 @@ fn removed_window_contributes_nothing() {
 }
 
 #[test]
+fn demand_reason_names_are_an_explicit_golden_in_index_order() {
+    // The names are the diagnostics vocabulary (/metrics frame.demand_reasons),
+    // so reordering or renaming a reason silently reinterprets recorded
+    // captures. Spelled out rather than derived from the enum.
+    assert_eq!(
+        DemandReason::ALL
+            .into_iter()
+            .map(DemandReason::name)
+            .collect::<Vec<_>>(),
+        vec![
+            "editor_commit",
+            "cursor_animation",
+            "cursor_color_cycle",
+            "finite_effect",
+            "transition",
+            "video",
+            "webkit",
+            "shader_surface",
+            "terminal",
+            "expose",
+            "debug_capture",
+            "redisplay",
+            "cursor_effect",
+            "window_effect",
+            "text_effect",
+            "scroll_effect",
+            "decorative_effect",
+            "transient_effect",
+        ]
+    );
+    assert_eq!(DemandReason::COUNT, 18);
+}
+
+#[test]
 fn demand_reason_indices_are_dense() {
     let mut seen = [false; DemandReason::COUNT];
     for reason in DemandReason::ALL {

@@ -118,119 +118,82 @@ pub(crate) enum Cadence {
     At(Instant),
 }
 
-/// Why a frame is wanted. Diagnostic identity, not policy encoded as strings.
-/// Deadline demands are keyed by this, so each reason holds at most one
-/// scheduled deadline per window.
-// Interface variants/fields defined by the scheduling plan; consumed as
-// later stages migrate effects onto the coordinator.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum DemandReason {
-    EditorCommit,
-    CursorAnimation,
+/// Declares [`DemandReason`] and everything indexed by it from a single list.
+/// The variant set, `ALL`, `COUNT` and `name` all come from these lines, so a
+/// new reason is one line and cannot leave a hand-maintained table behind.
+macro_rules! demand_reasons {
+    ($(
+        $(#[$variant_meta:meta])*
+        $variant:ident => $name:literal,
+    )+) => {
+        /// Why a frame is wanted. Diagnostic identity, not policy encoded as
+        /// strings. Deadline demands are keyed by this, so each reason holds at
+        /// most one scheduled deadline per window.
+        // Interface variants/fields defined by the scheduling plan; consumed as
+        // later stages migrate effects onto the coordinator.
+        #[allow(dead_code)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        pub(crate) enum DemandReason {
+            $($(#[$variant_meta])* $variant,)+
+        }
+
+        impl DemandReason {
+            /// Every reason, in declaration order. The order is the
+            /// counter/report order and matches the derived `Ord`.
+            pub(crate) const ALL: [DemandReason; Self::COUNT] =
+                [$(DemandReason::$variant,)+];
+
+            /// Number of reasons: the width of [`DemandReason::ALL`] and of
+            /// every per-reason counter array.
+            pub(crate) const COUNT: usize = [$(DemandReason::$variant,)+].len();
+
+            /// Stable snake_case name for diagnostics output.
+            pub(crate) const fn name(self) -> &'static str {
+                match self {
+                    $(DemandReason::$variant => $name,)+
+                }
+            }
+        }
+    };
+}
+
+demand_reasons! {
+    EditorCommit => "editor_commit",
+    CursorAnimation => "cursor_animation",
     /// Infinite ambient compositor-only demand: the cursor color cycle
     /// (Stage 3 tracer bullet). Distinct from CursorAnimation so its MaxRate
     /// phase anchor cannot collide with the blink deadline.
-    CursorColorCycle,
-    FiniteEffect,
-    Transition,
-    Video,
-    WebKit,
+    CursorColorCycle => "cursor_color_cycle",
+    FiniteEffect => "finite_effect",
+    Transition => "transition",
+    Video => "video",
+    WebKit => "webkit",
     /// Animated shader surfaces visible in a composited frame
     /// (doc/display-engine/SHADER_SURFACES.md).
-    ShaderSurface,
-    Terminal,
-    Expose,
-    DebugCapture,
+    ShaderSurface => "shader_surface",
+    Terminal => "terminal",
+    Expose => "expose",
+    DebugCapture => "debug_capture",
     /// New editor content or blink toggle needing a repaint.
-    Redisplay,
+    Redisplay => "redisplay",
     /// Render-effect families (Stage 6). Each names the group animating so
     /// diagnostics can answer "why is this window still rendering?" without
     /// per-effect logging.
-    CursorEffect,
-    WindowEffect,
-    TextEffect,
-    ScrollEffect,
-    DecorativeEffect,
-    TransientEffect,
+    CursorEffect => "cursor_effect",
+    WindowEffect => "window_effect",
+    TextEffect => "text_effect",
+    ScrollEffect => "scroll_effect",
+    DecorativeEffect => "decorative_effect",
+    TransientEffect => "transient_effect",
 }
 
 impl DemandReason {
-    /// Every reason, in declaration order. The order is the counter/report
-    /// order and matches the derived `Ord`.
-    pub(crate) const ALL: [DemandReason; Self::COUNT] = [
-        DemandReason::EditorCommit,
-        DemandReason::CursorAnimation,
-        DemandReason::CursorColorCycle,
-        DemandReason::FiniteEffect,
-        DemandReason::Transition,
-        DemandReason::Video,
-        DemandReason::WebKit,
-        DemandReason::ShaderSurface,
-        DemandReason::Terminal,
-        DemandReason::Expose,
-        DemandReason::DebugCapture,
-        DemandReason::Redisplay,
-        DemandReason::CursorEffect,
-        DemandReason::WindowEffect,
-        DemandReason::TextEffect,
-        DemandReason::ScrollEffect,
-        DemandReason::DecorativeEffect,
-        DemandReason::TransientEffect,
-    ];
-
-    /// Number of reasons: the width of [`DemandReason::ALL`] and of every
-    /// per-reason counter array.
-    pub(crate) const COUNT: usize = 18;
-
     /// Index into [`DemandReason::ALL`] / the per-reason counter arrays. The
-    /// exhaustive match makes a new variant a compile error here; the dense
-    /// 0..COUNT range is pinned by `demand_reason_indices_are_dense`.
+    /// enum is fieldless with default discriminants, so the cast is the
+    /// declaration position, which is `ALL`'s order by construction; density is
+    /// pinned by `demand_reason_indices_are_dense`.
     pub(crate) const fn index(self) -> usize {
-        match self {
-            DemandReason::EditorCommit => 0,
-            DemandReason::CursorAnimation => 1,
-            DemandReason::CursorColorCycle => 2,
-            DemandReason::FiniteEffect => 3,
-            DemandReason::Transition => 4,
-            DemandReason::Video => 5,
-            DemandReason::WebKit => 6,
-            DemandReason::ShaderSurface => 7,
-            DemandReason::Terminal => 8,
-            DemandReason::Expose => 9,
-            DemandReason::DebugCapture => 10,
-            DemandReason::Redisplay => 11,
-            DemandReason::CursorEffect => 12,
-            DemandReason::WindowEffect => 13,
-            DemandReason::TextEffect => 14,
-            DemandReason::ScrollEffect => 15,
-            DemandReason::DecorativeEffect => 16,
-            DemandReason::TransientEffect => 17,
-        }
-    }
-
-    /// Stable snake_case name for diagnostics output.
-    pub(crate) const fn name(self) -> &'static str {
-        match self {
-            DemandReason::EditorCommit => "editor_commit",
-            DemandReason::CursorAnimation => "cursor_animation",
-            DemandReason::CursorColorCycle => "cursor_color_cycle",
-            DemandReason::FiniteEffect => "finite_effect",
-            DemandReason::Transition => "transition",
-            DemandReason::Video => "video",
-            DemandReason::WebKit => "webkit",
-            DemandReason::ShaderSurface => "shader_surface",
-            DemandReason::Terminal => "terminal",
-            DemandReason::Expose => "expose",
-            DemandReason::DebugCapture => "debug_capture",
-            DemandReason::Redisplay => "redisplay",
-            DemandReason::CursorEffect => "cursor_effect",
-            DemandReason::WindowEffect => "window_effect",
-            DemandReason::TextEffect => "text_effect",
-            DemandReason::ScrollEffect => "scroll_effect",
-            DemandReason::DecorativeEffect => "decorative_effect",
-            DemandReason::TransientEffect => "transient_effect",
-        }
+        self as usize
     }
 }
 
