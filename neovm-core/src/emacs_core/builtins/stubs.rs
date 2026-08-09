@@ -651,7 +651,16 @@ pub(crate) fn builtin_define_fringe_bitmap(
         align,
         face: None,
     };
+    let already_defined = existing_index.or_else(|| ctx.fringe_bitmaps.index_of(sym));
     let index = ctx.fringe_bitmaps.define(sym, existing_index, bitmap);
+
+    // GNU registers a *newly* named bitmap in `fringe-bitmaps' alongside its
+    // `fringe' property (fringe.c:1655), both guarded by the same "not already
+    // known" test, so redefining an existing bitmap does not list it twice.
+    if already_defined.is_none() {
+        let listed = ctx.eval_symbol("fringe-bitmaps").unwrap_or(Value::NIL);
+        ctx.assign("fringe-bitmaps", Value::cons(args[0], listed));
+    }
 
     ctx.note_macro_expansion_mutation();
     super::symbols::put_in_obarray_values(
@@ -663,6 +672,20 @@ pub(crate) fn builtin_define_fringe_bitmap(
     )?;
 
     Ok(args[0])
+}
+
+/// `fringe-bitmaps` with SYMBOL removed, as GNU's `Fdelq` leaves it.
+fn fringe_bitmaps_without(ctx: &mut crate::emacs_core::eval::Context, symbol: Value) -> Value {
+    let mut kept = Vec::new();
+    let mut tail = ctx.eval_symbol("fringe-bitmaps").unwrap_or(Value::NIL);
+    while tail.is_cons() {
+        let entry = tail.cons_car();
+        if entry != symbol {
+            kept.push(entry);
+        }
+        tail = tail.cons_cdr();
+    }
+    Value::list(kept)
 }
 
 pub(crate) fn builtin_destroy_fringe_bitmap(
@@ -677,15 +700,25 @@ pub(crate) fn builtin_destroy_fringe_bitmap(
             vec![Value::symbol("symbolp"), args[0]],
         ));
     };
+    // A standard bitmap keeps its listing and its `fringe' property: GNU only
+    // unregisters indices at or above the standard range (fringe.c:1409-1414).
+    let user_defined = ctx
+        .fringe_bitmaps
+        .index_of(sym)
+        .is_some_and(|index| index >= super::fringe_bitmap::FIRST_USER_FRINGE_BITMAP_INDEX);
     ctx.fringe_bitmaps.destroy(sym);
     ctx.note_macro_expansion_mutation();
-    super::symbols::put_in_obarray_values(
-        ctx.obarray_mut(),
-        args[0],
-        Value::symbol("fringe"),
-        Value::NIL,
-        symbols_with_pos_enabled,
-    )?;
+    if user_defined {
+        let remaining = fringe_bitmaps_without(ctx, args[0]);
+        ctx.assign("fringe-bitmaps", remaining);
+        super::symbols::put_in_obarray_values(
+            ctx.obarray_mut(),
+            args[0],
+            Value::symbol("fringe"),
+            Value::NIL,
+            symbols_with_pos_enabled,
+        )?;
+    }
     Ok(Value::NIL)
 }
 

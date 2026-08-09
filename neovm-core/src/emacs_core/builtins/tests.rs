@@ -17197,3 +17197,34 @@ fn overlay_put_and_move_bump_overlay_modified_tick() {
         "move-overlay must bump the overlay tick ({after_put} -> {after_move})"
     );
 }
+
+/// GNU registers a newly named bitmap in `fringe-bitmaps' next to setting its
+/// `fringe' property, both under the same "not already known" test
+/// (fringe.c:1620-1656), and unregisters it on destroy only when its index is
+/// above the standard range (fringe.c:1409-1414) -- so redefining does not
+/// list a bitmap twice, and destroying a standard bitmap leaves the listing
+/// and the property alone.
+#[test]
+fn define_fringe_bitmap_registers_the_symbol_in_fringe_bitmaps() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_all(
+        r#"(let ((standard (length fringe-bitmaps)))
+             (define-fringe-bitmap 'p9-a [0 0 24 24 0 0] nil nil 'center)
+             (let ((after-define (list (and (memq 'p9-a fringe-bitmaps) t)
+                                       (- (length fringe-bitmaps) standard))))
+               (define-fringe-bitmap 'p9-a [0 0 60 60 0 0] nil nil 'center)
+               (let ((after-redefine (- (length fringe-bitmaps) standard)))
+                 (destroy-fringe-bitmap 'p9-a)
+                 (let ((after-destroy (list (and (memq 'p9-a fringe-bitmaps) t)
+                                            (- (length fringe-bitmaps) standard)
+                                            (get 'p9-a 'fringe))))
+                   (destroy-fringe-bitmap 'question-mark)
+                   (list after-define after-redefine after-destroy
+                         (list (and (memq 'question-mark fringe-bitmaps) t)
+                               (get 'question-mark 'fringe)))))))"#,
+    )
+    .into_iter()
+    .next()
+    .expect("at least one form");
+    assert_eq!(result, "OK ((t 1) 1 (nil 0 nil) (t 1))");
+}
