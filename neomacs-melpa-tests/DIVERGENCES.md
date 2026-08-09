@@ -33,6 +33,34 @@ RUST_LOG=warn NEOMACS_BIN="$PWD/target/release/neomacs" TMPDIR="$PWD/tmp" \
 
 ---
 
+**The status column is a snapshot, not a record.** Re-run an entry's reduction
+in both editors before trusting its status: the 2026-08-05 column was found
+STALE on nine of the ten entries it listed as diverging when they were re-run
+on 2026-08-08 (see "Verification status 2026-08-09" below). A status here dates
+only from the sweep that wrote it.
+
+## Verification status 2026-08-09
+
+The ten entries the 2026-08-05 sweep left as still-diverging were re-run
+side by side against GNU Emacs and a fresh `target/release/neomacs`
+(evidence and per-entry output: `tmp/p7-reverify.md`). **Nine of the ten no
+longer reproduce**: 2, 6, 9, 15, 23, 26, 33, 37 and 42 now give identical
+output in both editors, so the 2026-08-05 column was stale for all of them.
+Entry 15 (the SIGSEGV) did not reproduce in 44 runs of its package; that is
+weaker evidence than a behavioural reduction, because an intermittent memory
+fault can be latent rather than gone.
+
+The tenth, **entry 18** (an error inside a process filter or sentinel is
+swallowed), was genuinely live and is now FIXED in this tree: filter and
+sentinel errors route through the shared command-error reporter with GNU's
+context strings, and batch exits 255 with the diagnostic on stderr, matching
+GNU byte for byte on all three reductions.
+
+Not re-verified and still the real open signal: the eleven failing parity
+suites from 2026-08-05, which have never been mapped to ledger entries. At
+least ace_link's help-buffer link offset looks like a divergence this ledger
+does not contain.
+
 ## Verification status 2026-08-05
 
 All single-form reductions re-run against GNU Emacs and a fresh
@@ -54,47 +82,47 @@ not in this ledger.
 | # | entry | status |
 |---|-------|--------|
 | 1 | A minibuffer prompt inside a keyboard macro reads stdin | PARITY (stale?) |
-| 2 | `read-char` / `read-event` / `read-char-exclusive` ignore the macro | DIVERGES |
+| 2 | `read-char` / `read-event` / `read-char-exclusive` ignore the macro | FIXED (2026-08-08, tmp/p7-reverify.md) |
 | 3 | `[t]` default keymap bindings are never dispatched | PARITY (stale?) |
 | 4 | `(throw 'exit …)` with no catch silently ends batch evaluation | PARITY (stale?) |
 | 5 | `write-region` writes `?` for every legacy coding system | PARITY (stale?) |
-| 6 | `directory-files` returns undecoded bytes | DIVERGES |
+| 6 | `directory-files` returns undecoded bytes | FIXED (2026-08-08, tmp/p7-reverify.md) |
 | 7 | `completing-read` forwards 7 arguments instead of 8 | PARITY (stale?) |
 | 8 | `string-search` rejects an explicit nil START | PARITY (stale?) |
-| 9 | Chained autoloads stop after one hop | DIVERGES |
+| 9 | Chained autoloads stop after one hop | FIXED (2026-08-08, tmp/p7-reverify.md) |
 | 10 | Face aliases are not followed | PARITY (stale?) |
 | 11 | `completion-in-region-mode-map` is empty | PARITY (stale?) |
 | 12 | `x-popup-menu` rejects the documented `POSITION` value `t` | PARITY (stale?) |
 | 13 | `buffer-list` differs in order *and* contents | PARITY (stale?) |
 | 14 | `delete-other-windows` does not move the surviving window | PARITY (stale?) |
-| 15 | SIGSEGV in `%S` printing of a string nested in conses | NO-REDUCTION |
+| 15 | SIGSEGV in `%S` printing of a string nested in conses | FIXED? (not reproduced in 44 runs, 2026-08-08 -- intermittent, may be latent) |
 | 16 | `real-last-command` is set one command-loop iteration too late | PARITY (stale?) |
 | 17 | An undefined face reference is never reported | PARITY (stale?) |
-| 18 | An error signalled inside a process filter is swallowed | DIVERGES |
+| 18 | An error signalled inside a process filter is swallowed | FIXED (2026-08-09, this tree -- filter/sentinel reporting + batch exit 255) |
 | 19 | Word boundaries at a script change are not honoured | PARITY (stale?) |
 | 20 | `*Messages*` does not replace a progress line with its "...done" | PARITY (stale?) |
 | 21 | A refused connection reports a different error — synchronously only | PARITY (stale?) |
 | 22 | `format` reverses the plist of a propertized string used as the FORMAT | PARITY (stale?) |
-| 23 | `write-file` leaves a stray lock file behind | DIVERGES |
+| 23 | `write-file` leaves a stray lock file behind | FIXED (2026-08-08, tmp/p7-reverify.md) |
 | 24 | The `default` face ignores a display-conditional theme setting | PARITY (stale?) |
 | 25 | An interpreted lambda's parameter destroys a built-in buffer-local | PARITY (stale?) |
-| 26 | No lock file is created for a modified visited buffer | DIVERGES |
+| 26 | No lock file is created for a modified visited buffer | FIXED (2026-08-08, tmp/p7-reverify.md) |
 | 27 | `get-buffer-window` does not prefer the selected window | PARITY (stale?) |
 | 28 | An error signalled in `pre-command-hook` is not reported | PARITY (stale?) |
 | 29 | `function-key-map` holds a malformed translation for keypad digits | PARITY (stale?) |
 | 30 | `*Messages*` keeps a `...` progress line that GNU replaces | PARITY (stale?) |
 | 31 | `self-insert-command` never expands an abbrev | PARITY (stale?) |
 | 32 | Backward `forward-comment` ignores a comment with a two-character ender | PARITY (stale?) |
-| 33 | `call-interactively` on a non-interactive autoload never resolves it | DIVERGES |
+| 33 | `call-interactively` on a non-interactive autoload never resolves it | FIXED (2026-08-08, tmp/p7-reverify.md) |
 | 34 | A regexp using a syntax class does not trigger `syntax-propertize` | PARITY (stale?) |
 | 35 | A `:family` set beside a colour on `default` is discarded by GNU only | PARITY (stale?) |
 | 36 | Process output does not relocate markers at the process mark | PARITY (stale?) |
-| 37 | Killing a windowed buffer leaves the current buffer out of sync | DIVERGES |
+| 37 | Killing a windowed buffer leaves the current buffer out of sync | FIXED (2026-08-08, tmp/p7-reverify.md) |
 | 38 | A quantifier after the `` \` `` anchor is not treated as literal | PARITY (stale?) |
 | 39 | `easy-menu-add-item` drops a submenu that carries any property | PARITY (stale?) |
 | 40 | `window-body-width` keeps the tty vertical-bar column | PARITY (stale?) |
 | 41 | `ceiling` and friends accept a marker as the divisor | PARITY (stale?) |
-| 42 | A tree-sitter font-lock setting without its language slot fails to compile | DIVERGES |
+| 42 | A tree-sitter font-lock setting without its language slot fails to compile | FIXED (2026-08-08, tmp/p7-reverify.md) |
 | 43 | `autoload` does not record its definition in `load-history` | PARITY (stale?) |
 
 
@@ -528,6 +556,11 @@ workflows agree on menu text, argv, working directory, results buffer and text
 properties, failing on the message list alone.
 
 ## 18. An error signalled inside a process filter is swallowed
+
+**FIXED 2026-08-09.** Both editors now print `error in process filter: filter
+boom` on stderr and exit 255, leaving `AFTER` unprinted; sentinels match too.
+The hole was `command-error-default-function` being a stub, so the reporting
+chain ended in nothing. Kept here with its reduction as the regression record.
 
 ```elisp
 (let ((process (start-process "probe" (get-buffer-create "*out*")
