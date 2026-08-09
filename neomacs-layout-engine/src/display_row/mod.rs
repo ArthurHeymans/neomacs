@@ -383,6 +383,7 @@ impl DisplayRowSourceRequestPolicy {
 struct DisplayRowRenderPlan<'a> {
     geometry: DisplayRowGeometry,
     render_bounds: DisplayRowRenderBounds,
+    line_end_right_edge_x: f32,
     area: GlyphArea,
     base_face_id: FaceId,
     base_face: &'a ResolvedFace,
@@ -395,6 +396,7 @@ struct DisplayRowRenderPlan<'a> {
 pub(crate) struct DisplayRowSourceRenderRequest<'a> {
     geometry: DisplayRowGeometry,
     render_bounds: DisplayRowRenderBounds,
+    line_end_right_edge_x: f32,
     area: GlyphArea,
     base_face_id: FaceId,
     base_face: &'a ResolvedFace,
@@ -415,6 +417,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         Self {
             geometry,
             render_bounds,
+            line_end_right_edge_x: render_bounds.max_x().to_f32(),
             area: GlyphArea::Text,
             base_face_id,
             base_face,
@@ -442,6 +445,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         Self {
             geometry,
             render_bounds,
+            line_end_right_edge_x: render_bounds.max_x().to_f32(),
             area: GlyphArea::Text,
             base_face_id,
             base_face,
@@ -498,6 +502,17 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
 
     pub(crate) fn with_render_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
         self.render_bounds = render_bounds;
+        self.line_end_right_edge_x = render_bounds.max_x().to_f32();
+        self
+    }
+
+    /// Sets the absolute edge used only by newline face extension.
+    ///
+    /// TTY text sources reserve the final column for a continuation marker,
+    /// so ordinary glyphs must clip before it.  A real newline may still paint
+    /// that column with an extending face, matching GNU redisplay.
+    pub(crate) fn with_line_end_right_edge_x(mut self, right_edge_x: f32) -> Self {
+        self.line_end_right_edge_x = right_edge_x;
         self
     }
 
@@ -541,6 +556,11 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
     #[cfg(test)]
     pub(crate) fn render_bounds(&self) -> DisplayRowRenderBounds {
         self.render_bounds
+    }
+
+    #[cfg(test)]
+    pub(crate) fn line_end_right_edge_x(&self) -> f32 {
+        self.line_end_right_edge_x
     }
 
     #[cfg(test)]
@@ -674,6 +694,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         DisplayRowRenderPlan {
             geometry: self.geometry,
             render_bounds: self.render_bounds,
+            line_end_right_edge_x: self.line_end_right_edge_x,
             area: self.area,
             base_face_id: self.base_face_id,
             base_face: self.base_face,
@@ -864,6 +885,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let DisplayRowRenderPlan {
             geometry,
             render_bounds,
+            line_end_right_edge_x,
             area,
             base_face_id,
             base_face,
@@ -1068,7 +1090,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             DisplayRowLineEndFinalizer::new(
                 row_break,
                 row_break_face_id,
-                render_bounds.max_x().to_f32() - position.x_px(),
+                line_end_right_edge_x - position.x_px(),
                 fallback_metrics,
                 row_face.background,
                 self.measurement_mode,

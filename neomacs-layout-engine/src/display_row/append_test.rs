@@ -5538,6 +5538,7 @@ fn display_row_append_surface_builds_positioned_source_requests() {
         request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
+    assert_eq!(request.line_end_right_edge_x(), 148.0);
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(
         request.base_face_ref(),

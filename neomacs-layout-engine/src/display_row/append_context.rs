@@ -705,6 +705,7 @@ impl DisplayRowAppendFrame {
         )
         .with_image_scale_environment(self.image_scale_environment)
         .with_render_bounds(DisplayRowRenderBounds::new(position, kind.max_x(self)))
+        .with_line_end_right_edge_x(self.text_right_edge_excluding_line_number())
     }
 
     fn source_render_geometry(&self, kind: DisplayRowAppendKind) -> DisplayRowGeometry {

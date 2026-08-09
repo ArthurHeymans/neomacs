@@ -5316,6 +5316,85 @@ fn line_break_extend_fill_reaches_tty_reserved_right_column() {
 }
 
 #[test]
+fn overlay_string_extend_fill_reaches_tty_reserved_right_column() {
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let candidate = eval
+        .eval_str(
+            r##"(propertize "project-beta\n"
+                            'face '(:extend t :background "#003366"))"##,
+        )
+        .expect("construct extended overlay candidate");
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("anchor\n");
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: buffer.point_max_emacs_byte_pos().get(),
+            front_advance: false,
+            rear_advance: false,
+        });
+        buffer.overlays_mut().insert_overlay(overlay);
+        let _ =
+            buffer
+                .overlays_mut()
+                .overlay_put(overlay, Value::symbol("before-string"), candidate);
+        buffer.goto_emacs_byte_pos(EmacsBytePos::ZERO);
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("overlay-extend-right-column", 360, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let candidate_row = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .find(|row| {
+            glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with("project-beta")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "overlay candidate row; rows={:?}",
+                enabled_window_row_texts(entry)
+            )
+        });
+    let rendered = glyphs_logical_text(&candidate_row.glyphs[GlyphArea::Text.index()]);
+
+    assert_eq!(
+        rendered.chars().count(),
+        entry.matrix.ncols,
+        "an overlay-string :extend fill must cover the full TTY text area, including the reserved right column; glyphs={:?}",
+        candidate_row.glyphs[GlyphArea::Text.index()]
+    );
+}
+
+#[test]
 fn extend_fill_does_not_bleed_onto_the_following_blank_line() {
     // Issue #185: an `:extend` line (hl-line / region) immediately followed by a
     // BLANK line must not paint the blank line with the previous line's fill.

@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::time::Duration;
 
-use neomacs_tui_tests::{COLS, ExpectedDivergence, StrictGridOptions, assert_grids_strict};
+use neomacs_tui_tests::{StrictGridOptions, assert_grids_strict};
 
 use crate::{COMPAT_GNU_ELPA_PIN, CachedMelpaOracle, VERTICO_MELPA_PIN};
 
@@ -69,11 +69,6 @@ fn vertico_real_minibuffer_candidates_and_selection_match_gnu_grid() {
     let options = StrictGridOptions {
         row_range: Some(covered_rows(&gnu_rows)),
         compare_faces: true,
-        allow: vec![ExpectedDivergence {
-            row: gnu_rows[0],
-            col: COLS - 1,
-            reason: "Neomacs does not extend vertico-current through the terminal edge cell",
-        }],
         ..StrictGridOptions::default()
     };
     assert_grids_strict(
