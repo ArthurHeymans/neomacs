@@ -2157,10 +2157,24 @@ here means giving the string matcher the same
 `SyntaxProperties`/`CharPropertyResolver` seam over the string's own
 `TextPropertyTable`.
 
-Noticed while fixing this and NOT part of it: on the BUFFER side,
+Found while fixing this, and split out as entry 55: on the BUFFER side
 `default-text-properties` does not reach a position whose interval exists but
-carries no `syntax-table`, where GNU applies the fallback. The string side now
-matches GNU there; the buffer side still answers nil.
+carries no `syntax-table`. That is a different mechanism -- interval coverage
+rather than property resolution -- so it did not travel with this fix.
+
+## 55. `default-text-properties` does not reach a buffer position whose interval says nothing
+
+Found while fixing entry 53, and a different mechanism from it: entry 53 was
+about which OBJECT the property is read from, this is about which POSITIONS
+have an interval to read at all.
+
+GNU's `textget` fallbacks -- `category`, `char-property-alias-alist`,
+`default-text-properties` -- apply wherever an interval exists, even one whose
+plist says nothing about syntax. GNU's interval tree partitions the whole
+object once any property is set anywhere in it, so every position then has an
+interval and the fallback applies everywhere. Neomacs's buffer table reports no
+interval at a position no property was ever set on, so the fallback is skipped
+there.
 
 ```elisp
 (with-temp-buffer
@@ -2174,7 +2188,14 @@ matches GNU there; the buffer side still answers nil.
 ;; Neomacs => nil
 ```
 
-The cause is interval COVERAGE, not resolution: GNU's interval tree partitions
-the whole object once any property exists, so position 1 has an interval with
-an empty plist and the fallback applies; neomacs's buffer table reports no
-interval there. Not yet attributed to a package suite.
+The string half of the same probe now agrees with GNU (pinned by
+`a_strings_interval_takes_syntax_from_default_text_properties` in
+neovm-core/src/emacs_core/syntax_gnu_parity_regression_test.rs), which is what
+exposed the buffer asymmetry. Note the boundary entry 44 already pins and this
+entry must not cross: where NO interval exists at all -- a string or buffer
+with no properties anywhere -- GNU applies no fallback either, because
+`update_syntax_table` returns early when `interval_of` finds nothing. The fix
+is about coverage of an EXISTING partition, not about synthesizing intervals
+for propertyless text.
+
+Not yet attributed to a package suite.
