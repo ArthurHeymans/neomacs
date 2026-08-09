@@ -2103,6 +2103,12 @@ pub const KEYFREQ_MELPA_PIN: (&str, &str) = ("keyfreq", "20231107.106");
 /// `8fbe89ad897921849665a3e8da18cee7d0721441`.
 pub const LINUM_RELATIVE_MELPA_PIN: (&str, &str) = ("linum-relative", "20221025.517");
 
+/// The exact LSP Docker package selected for practical legacy and persistent
+/// client registration, project path mapping, container discovery, Docker
+/// command construction, and registration-failure parity. MELPA built this
+/// archive from upstream commit `f666fba72b496c7750bb3f349771b07aa51714f0`.
+pub const LSP_DOCKER_MELPA_PIN: (&str, &str) = ("lsp-docker", "20260507.1750");
+
 /// The exact LSP Mode package selected for practical JSON-RPC transport,
 /// Unicode position, workspace edit, completion, diagnostics, and URI parity.
 /// MELPA built this archive from upstream commit
