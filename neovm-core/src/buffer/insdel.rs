@@ -475,7 +475,10 @@ impl BufferManager {
                     InsertMarkerAdjustment::ByInsertionType,
                 );
                 let edit = plan.edit();
-                let _ = buffer.execute_insert_text_plan(plan);
+                // GNU `replace_range` still records a zero-length deletion
+                // beside the insertion when the old range is empty; see
+                // `execute_replace_insert_only_plan`.
+                let _ = buffer.execute_replace_insert_only_plan(plan);
                 Some(SharedTextEditOutcome::edited(
                     (),
                     SharedTextEditMetadata::Insert(edit),

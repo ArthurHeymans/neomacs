@@ -329,3 +329,138 @@ fn replace_buffer_contents_deletion_run_marker_placement_matches_gnu() {
     );
     assert_eq!(result, r#"OK ("ace" 1 2 2 3 3 4)"#);
 }
+
+/// Run `replace-region-contents` over the whole of a temp buffer holding
+/// ORIG, replacing it with NEW supplied through a buffer SOURCE, and return
+/// FORM's value with `buffer-undo-list` freshly enabled for the replacement
+/// only.
+fn replace_region_contents_undo_probe(orig: &str, new: &str, form: &str) -> String {
+    eval_one(&format!(
+        r#"(with-temp-buffer
+              (insert {orig})
+              (setq buffer-undo-list nil)
+              (let ((temp (with-current-buffer (generate-new-buffer " *r*")
+                            (insert {new}) (current-buffer))))
+                (replace-region-contents (point-min) (point-max)
+                                         (lambda (&rest _) temp)))
+              {form})"#
+    ))
+}
+
+#[test]
+fn replace_region_contents_undo_restores_the_original_text() {
+    // DIVERGENCES.md 47 (data-loss class): undoing a `replace-region-contents`
+    // whose Myers diff produces two adjacent insertion runs used to give back
+    // "grmet" -- neither the original nor the replacement.  GNU restores
+    // "greet" exactly.  The other rows are the single-hunk shapes that already
+    // worked and must stay working.
+    for (orig, new) in [
+        (r#""greet""#, r#""welcome""#),
+        (r#""abc""#, r#""xyz""#),
+        (r#""abcde""#, r#""aZcYe""#),
+        (r#""abcde""#, r#""aZZcYYe""#),
+        (r#""abc""#, r#""aXbYc""#),
+    ] {
+        let restored = replace_region_contents_undo_probe(
+            orig,
+            new,
+            "(progn (primitive-undo 1 buffer-undo-list) (buffer-string))",
+        );
+        assert_eq!(restored, format!("OK {orig}"), "undoing {orig} -> {new}");
+    }
+}
+
+#[test]
+fn replace_region_contents_undo_list_shape_matches_gnu() {
+    // The undo-list shape is the stronger pin: text can come back right by
+    // accident, but only GNU's exact record sequence proves the recording
+    // shape.  GNU `replace_range` records `record_insert` then
+    // `record_delete` for EVERY change run whatever the run's lengths, so a
+    // pure-insertion run still conses a zero-length deletion ("" . POS) and a
+    // pure-deletion run still conses a zero-length insertion (POS . POS).
+    // Those zero-length records are load-bearing: `record_insert` coalesces
+    // into the newest record only when that record is an insertion ending
+    // where the new one begins, so they keep two adjacent runs from merging
+    // into one wide record that undo would then delete as a single span.
+    //
+    // Oracle: emacs 31.0.90 --batch, `buffer-undo-list` after the replacement.
+    for (orig, new, undo_list) in [
+        (
+            r#""greet""#,
+            r#""welcome""#,
+            r#"(("gr" . 1) (3 . 4) ("" . 4) (4 . 8) ("t" . -5) (6 . 6))"#,
+        ),
+        (r#""abc""#, r#""xyz""#, r#"(("abc" . -1) (4 . 7))"#),
+        (
+            r#""abcde""#,
+            r#""aZcYe""#,
+            r#"(("b" . 2) (3 . 4) ("d" . 4) (5 . 6) 6)"#,
+        ),
+        (
+            r#""abcde""#,
+            r#""aZZcYYe""#,
+            r#"(("b" . 2) (3 . 5) ("d" . 4) (5 . 7) 6)"#,
+        ),
+        (
+            r#""abc""#,
+            r#""aXbYc""#,
+            r#"(("" . 2) (2 . 3) ("" . 3) (3 . 4) 4)"#,
+        ),
+    ] {
+        let recorded = replace_region_contents_undo_probe(orig, new, "buffer-undo-list");
+        assert_eq!(
+            recorded,
+            format!("OK {undo_list}"),
+            "undo list for {orig} -> {new}"
+        );
+    }
+}
+
+#[test]
+fn replace_region_contents_records_gnu_undo_boundary_before_the_change_runs() {
+    // GNU `Freplace_region_contents` calls `Fundo_boundary` once compareseq
+    // has succeeded and before it walks the change runs, so a pre-existing
+    // undo list gets a boundary consed onto it -- even when the diff turns out
+    // to be empty.  The boundary also sets `point_before_last_command_or_undo`,
+    // which is why the first change run conses the point entry that follows
+    // it.  The trivial "one side is empty" path returns before reaching
+    // `Fundo_boundary`, so it records no boundary at all (and its
+    // pure-deletion run still conses the zero-length insertion `(4 . 4)`).
+    //
+    // Oracle: emacs 31.0.90 --batch.
+    let seeded = |orig: &str, new: &str| {
+        eval_one(&format!(
+            r#"(with-temp-buffer
+                  (insert "{orig}")
+                  (setq buffer-undo-list '((1 . 2)))
+                  (let ((temp (with-current-buffer (generate-new-buffer " *r*")
+                                (insert "{new}") (current-buffer))))
+                    (replace-region-contents (point-min) (point-max)
+                                             (lambda (&rest _) temp)))
+                  buffer-undo-list)"#
+        ))
+    };
+    assert_eq!(seeded("abc", "abc"), "OK (nil (1 . 2))");
+    assert_eq!(
+        seeded("abcde", "aZcYe"),
+        r#"OK (("b" . 2) (3 . 4) ("d" . 4) (5 . 6) 6 nil (1 . 2))"#
+    );
+    assert_eq!(seeded("abc", ""), r#"OK (("abc" . -1) (4 . 4) (1 . 2))"#);
+
+    // The point entry is the point at the boundary, not the buffer end.
+    let point_not_at_eob = eval_one(
+        r#"(with-temp-buffer
+              (insert "abcde")
+              (setq buffer-undo-list nil)
+              (goto-char 2)
+              (let ((temp (with-current-buffer (generate-new-buffer " *r*")
+                            (insert "aZcYe") (current-buffer))))
+                (replace-region-contents (point-min) (point-max)
+                                         (lambda (&rest _) temp)))
+              (list (point) buffer-undo-list))"#,
+    );
+    assert_eq!(
+        point_not_at_eob,
+        r#"OK (2 (("b" . 2) (3 . 4) ("d" . 4) (5 . 6) 2))"#
+    );
+}

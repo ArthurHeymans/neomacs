@@ -1840,6 +1840,18 @@ pub(crate) fn builtin_replace_region_contents(
 
     // Compute the minimal change runs (Myers O(ND), like GNU's compareseq).
     let runs = replace_region_minimal_change_runs(&a_codes, &b_codes);
+
+    // GNU `Freplace_region_contents` (editfns.c) calls `Fundo_boundary` once
+    // compareseq has succeeded, before walking the change runs — including
+    // when there is nothing to change.  Besides the boundary itself this sets
+    // `point_before_last_command_or_undo`, which the per-run `record_point`
+    // then conses ahead of the first change record.  The trivial
+    // empty-side/comparison-disabled paths above return before reaching it,
+    // matching GNU.
+    eval.buffers
+        .add_undo_boundary(current_id)
+        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
+
     if runs.is_empty() {
         // Buffers already identical within the region: nothing to do, and no
         // markers/point are disturbed.  GNU returns t in this case.

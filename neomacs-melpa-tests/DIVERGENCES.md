@@ -81,7 +81,7 @@ single-feature gap, and only one was a harness defect.
 | rainbow_delimiters | entry 44 (sexp scanner ignores `category`) |
 | helm_descbinds | entry 45 (`describe-bindings` omits global bindings and the function-key map) |
 | swiper | entry 46 (query-replace replaces nothing; not reduced below the package) |
-| lsp_mode | entry 47, **DATA LOSS** -- `replace-buffer-contents` cannot be undone; a zero-length deletion is not recorded, so two insertions coalesce. Reduced to pure ASCII; **not a multibyte bug at all**. Seam identified, not fixed |
+| lsp_mode | entry 47, **DATA LOSS**, FIXED -- `replace-buffer-contents` could not be undone; a zero-length deletion was not recorded, so two insertions coalesced. Reduced to pure ASCII; **not a multibyte bug at all** |
 | elisp_slime_nav | entry 48 (an error message loses a text property; not reduced below the package) |
 
 Every genuine divergence has a numbered entry with its reduction, kept after
@@ -92,10 +92,10 @@ Two of the fixes were much broader than the suite that caught them.
 *every* subexpression -- any package that computes bounds itself and then
 replaces was affected -- and the `command-history` gap meant no
 `repeat-complex-command` entry replayed the way GNU records it. The third,
-entry 47, is still open but was mis-framed by its own symptom: the suite shows
-corruption around an emoji, yet the reduction is pure ASCII and the trigger is
-the shape of a diff, so nothing built on `replace-buffer-contents` can be
-undone.
+entry 47, was mis-framed by its own symptom: the suite shows corruption around
+an emoji, yet the reduction is pure ASCII and the trigger is the shape of a
+diff, so nothing built on `replace-buffer-contents` could be undone. It is now
+fixed, in the undo recorder rather than anywhere near the diff.
 
 ## Verification status 2026-08-05
 
@@ -1733,16 +1733,16 @@ Affects: `swiper` (1)
 `query_replace_renames_selected_incidents_with_captured_identifiers`.
 
 
-## 47. DATA LOSS: `replace-buffer-contents` cannot be undone
+## 47. DATA LOSS: `replace-buffer-contents` cannot be undone — FIXED
 
-**Severity: data-loss class. Highest-severity open entry in this ledger.** The
-user's original text is unrecoverable through undo, and nothing warns them:
-the forward edit is always correct, so the damage only appears when undo is
-pressed, by which point the original is gone.
+**Was: data-loss class, the highest-severity entry in this ledger.** The
+user's original text was unrecoverable through undo, and nothing warned them:
+the forward edit is always correct, so the damage only appeared when undo was
+pressed, by which point the original was gone.
 
 Replacing a region through `replace-region-contents` and undoing the result
-gives back text that is neither the original nor the replacement -- individual
-characters from the replacement are left behind.
+gave back text that was neither the original nor the replacement -- individual
+characters from the replacement were left behind.
 
 ```elisp
 (with-temp-buffer
@@ -1790,44 +1790,53 @@ as one piece.
 GNU's `record_delete` (`undo.c`) has exactly one early return, for a disabled
 undo list; it never tests the string's length.
 
-Where the fix goes -- and where it does *not*.
-`undo_list_record_delete_with_point` (`neovm-core/src/buffer/undo.rs`) does
-carry an extra `|| text.is_empty()` guard that GNU lacks, but removing it alone
-does **not** fix this: the apply loop for `replace-region-contents`
-(`neovm-core/src/emacs_core/buffer.rs`, walking the Myers change runs
-back-to-front) hands each run to
-`replace_buffer_measured_region_lisp_string`, whose `range.is_empty()` branch
-(`neovm-core/src/buffer/insdel.rs:465`) routes a pure-insertion run down an
-insert-only path that never calls the delete recorder at all. GNU applies every
-run through `replace_range`, which always records a delete and then an insert
-whatever the lengths. So the fix is to give that apply loop GNU's
-`replace_range` recording shape -- there is already a precedent for exactly
-that just below it, `casify_replace_buffer_emacs_byte_range_lisp_string`, whose
-comment explains it records delete-then-insert "so the undo list shape matches
-GNU even when the replacement leaves the text unchanged".
-
-This was verified by making the `undo.rs` change on its own: the unit-level
-behaviour corrected and the whole neovm-core suite stayed green (8747/8747),
-but the reduction above and the lsp-mode suite were both unchanged, which is
-what localised the real seam. That change was reverted rather than left in,
-since it alters undo-list shape editor-wide for no observable gain until the
-apply loop is fixed too.
-
 Blast radius: everything built on `replace-buffer-contents` --
 `replace-region-contents`, `revert-buffer` with `preserve-modes`, format-on-save
 wrappers, and every LSP client applying workspace edits. The forward direction
-is always correct, so the damage only appears when the user presses undo, which
-makes it a data-loss bug rather than a visible one.
+is always correct, so the damage only appeared when the user pressed undo, which
+made it a data-loss bug rather than a visible one.
 
-Affects: `lsp-mode` (1).
+Affected: `lsp-mode` (1).
 `rename_response_applies_ordered_unicode_edits_as_one_undoable_transaction`
-reports `:undo-restored nil` with `fn grmet(name)` / `"Hellk, U+1F600 "` where
+reported `:undo-restored nil` with `fn grmet(name)` / `"Hellk, U+1F600 "` where
 GNU reports `:undo-restored t` and the original text, and point 36 against GNU's
-49. Every intermediate `:after rename` state matches in both editors.
+49. Every intermediate `:after rename` state matched in both editors.
 
-NOT FIXED. Reduced, and the mechanism and the seam are both identified above;
-the change is contained but needs its own validation of the undo-list shape
-across ordinary editing, which is why it is filed rather than rushed.
+**FIXED.** Three recording seams had to move together; each one alone leaves the
+reduction unchanged.
+
+1. `undo_list_record_delete` / `undo_list_record_insert`
+   (`neovm-core/src/buffer/undo.rs`) each carried a zero-length early return
+   that GNU's `record_delete` / `record_insert` (`undo.c`) lack -- GNU returns
+   early only for a disabled undo list. Both guards are gone, so `("" . POS)`
+   and `(POS . POS)` records are conses again.
+2. `replace_range` with an empty old range still records. GNU sets
+   `deletion` to the empty *string* rather than nil, so `!NILP (deletion)`
+   holds and it runs `record_insert (from, inschars)` then
+   `record_delete (from, "")`. Neomacs routed that case down an insert-only
+   path that never reached the delete recorder, at two layers:
+   `replace_buffer_measured_region_lisp_string`
+   (`neovm-core/src/buffer/insdel.rs`) and `execute_replace_text_plan`
+   (`neovm-core/src/buffer/edit_transaction.rs`). Both now go through
+   `execute_replace_insert_only_plan`, which keeps the insertion's marker and
+   point mechanics -- GNU's `adjust_markers_for_replace` delegates
+   `old_chars == 0` straight to `adjust_markers_for_insert` (insdel.c:351) --
+   and adds the empty deletion record.
+3. `Freplace_region_contents` (editfns.c) calls `Fundo_boundary` once
+   compareseq has succeeded and before it walks the change runs, including
+   when the diff is empty. Besides the boundary that conses, this sets
+   `point_before_last_command_or_undo`, which is what the first run's
+   `record_point` then conses ahead of the first change record. The neomacs
+   apply loop now does the same, and the trivial empty-side paths still return
+   before it, as in GNU.
+
+Pinned by `replace_region_contents_undo_restores_the_original_text`,
+`replace_region_contents_undo_list_shape_matches_gnu` and
+`replace_region_contents_records_gnu_undo_boundary_before_the_change_runs`
+(`neovm-core/src/emacs_core/builtins/replace_region_contents_test.rs`). The
+shape pin is the stronger of the three: it asserts GNU 31.0.90's exact
+`buffer-undo-list` for the reduction and for four neighbouring diff shapes,
+so a fix that restores the text by accident cannot pass.
 
 
 ## 48. An error message loses a text property that GNU keeps

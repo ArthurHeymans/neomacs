@@ -237,7 +237,7 @@ impl Buffer {
                 InsertMarkerPlacement::AfterMarkers,
                 InsertMarkerAdjustment::ByInsertionType,
             );
-            let insertion = self.execute_insert_text_plan(insertion_plan);
+            let insertion = self.execute_replace_insert_only_plan(insertion_plan);
             debug_assert_eq!(old_range.byte_start(), insertion.byte_pos());
             debug_assert_eq!(old_range.char_start(), insertion.char_pos());
             return TextReplacement::new(old_range, insertion.extent());
@@ -290,6 +290,51 @@ impl Buffer {
             );
         }
         replacement
+    }
+
+    /// Execute GNU `replace_range` for an empty old range (`from == to`).
+    ///
+    /// The storage mutation is a plain insertion — GNU
+    /// `adjust_markers_for_replace` delegates `old_chars == 0` straight to
+    /// `adjust_markers_for_insert` (insdel.c:351), so markers at `from` move
+    /// or stay by their insertion type exactly as for `insert`.  The *undo*
+    /// shape is not an insertion's, though: `deletion` in `replace_range` is
+    /// the empty string rather than nil, so GNU still runs
+    /// `record_insert (from, inschars)` followed by `record_delete (from, "")`.
+    /// Keeping that empty deletion is what stops two adjacent change runs (as
+    /// `replace-region-contents`' Myers diff produces) from coalescing into a
+    /// single wide insertion record that undo would delete as one span.
+    pub(in crate::buffer) fn execute_replace_insert_only_plan(
+        &mut self,
+        plan: InsertTextPlan,
+    ) -> TextInsertion {
+        let edit = plan.edit();
+        if edit.is_empty() {
+            // GNU `replace_range` returns before recording anything when the
+            // deletion and the insertion are both empty.
+            return edit.insertion();
+        }
+
+        let char_pos = edit.char_pos();
+        // GNU records both entries before `adjust_point`, so the deletion's
+        // point test (`PT == beg + SCHARS (string)`) sees the pre-edit point.
+        let old_point = self.point_char_pos();
+        let deleted_text = self
+            .buffer_region_lisp_string(EmacsByteRange::from_start_len(edit.byte_pos(), 0.into()));
+        let insertion = self.execute_insert_text_plan(plan);
+
+        let mut ul = self.get_undo_list();
+        if !undo::undo_list_is_disabled(&ul) {
+            undo::undo_list_record_delete(
+                &mut ul,
+                char_pos,
+                deleted_text,
+                old_point,
+                self.undo_state.point_before_command_or_undo(),
+            );
+            self.set_undo_list(ul);
+        }
+        insertion
     }
 
     /// Execute a case-region replacement using GNU `casify_region`'s undo
