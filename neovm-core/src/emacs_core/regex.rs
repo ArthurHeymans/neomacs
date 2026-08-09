@@ -116,11 +116,11 @@ fn buffer_syntax_lookup_with_word_boundary(
 
 /// Position-aware syntax lookup for regexp matching over an accessible buffer.
 ///
-/// `BufferSyntaxLookup` intentionally remains position-independent because it
-/// is also used by `string-match`, where GNU consults the current buffer's
-/// base syntax table but cannot apply buffer text properties to the string.
-/// This wrapper is only constructed for buffer input and translates matcher
-/// offsets back to absolute buffer bytes.
+/// `BufferSyntaxLookup` itself remains position-independent: it is the base
+/// table both objects share, since GNU's `RE_SETUP_SYNTAX_TABLE_FOR_OBJECT`
+/// calls `SETUP_BUFFER_SYNTAX_TABLE` whatever the object is. This wrapper adds
+/// the buffer's own positional properties; [`StringRegexpSyntaxLookup`] adds a
+/// searched string's.
 struct BufferRegexpSyntaxLookup<'a> {
     base: BufferSyntaxLookup,
     buffer: &'a Buffer,
@@ -143,6 +143,114 @@ impl SyntaxLookup for BufferRegexpSyntaxLookup<'_> {
             &self.base.syntax_table,
             c,
             EmacsBytePos::new(self.input_start.get().saturating_add(input_pos)),
+            &self.property_lookup,
+        )
+    }
+
+    fn char_has_category(&self, c: char, cat: u8) -> bool {
+        self.base.char_has_category(c, cat)
+    }
+
+    fn word_boundary_between(&self, c1: char, c2: char) -> bool {
+        self.base.word_boundary_between(c1, c2)
+    }
+
+    fn cache_key(&self) -> SyntaxCacheKey {
+        self.base.cache_key()
+    }
+}
+
+/// Position-aware syntax lookup for a regexp over a searched STRING.
+///
+/// GNU sets up syntax state for the object being searched, not only for buffers
+/// (`RE_SETUP_SYNTAX_TABLE_FOR_OBJECT`, src/syntax.c:277, armed from
+/// `re_match_object` in src/search.c), so `string-match` over a propertized
+/// string honours that string's own `syntax-table` property exactly as a buffer
+/// search honours the buffer's. The base table still comes from the current
+/// buffer, and so does the `parse-sexp-lookup-properties` gate that decided
+/// whether `syntax_properties` is a resolver at all.
+///
+/// The matcher's `input_pos` is already a byte offset from the string's first
+/// byte -- the string path passes the whole string to `re_search` -- so no
+/// origin shift is needed here, unlike the buffer wrapper above.
+pub(crate) struct StringRegexpSyntaxLookup<'a> {
+    base: BufferSyntaxLookup,
+    property_lookup: crate::emacs_core::syntax::StringSyntaxPropByteRun<'a>,
+}
+
+/// The syntax lookup a regexp over a searched STRING runs under.
+///
+/// The three variants are the three answers GNU's setup can produce, and
+/// separating them is what keeps the common case free: only
+/// [`Self::Propertized`] has a per-character property test, so a `string-match`
+/// over a string with no `syntax-table` properties to read -- very nearly all
+/// of them -- runs the identical position-free path it ran before strings
+/// carried syntax at all.
+pub(crate) enum StringSyntaxLookup<'a> {
+    /// No current buffer to take a base table from: GNU's standard
+    /// classification, as before.
+    Standard(DefaultSyntaxLookup),
+    /// The current buffer's table, with no positional property to read --
+    /// either the string carries none, or `parse-sexp-lookup-properties` is
+    /// nil.
+    Table(BufferSyntaxLookup),
+    /// The current buffer's table plus the string's own `syntax-table`
+    /// properties.
+    Propertized(StringRegexpSyntaxLookup<'a>),
+}
+
+impl<'a> StringSyntaxLookup<'a> {
+    /// GNU `RE_SETUP_SYNTAX_TABLE_FOR_OBJECT` for a string object
+    /// (src/syntax.c:277): `SETUP_BUFFER_SYNTAX_TABLE` for the base table
+    /// whatever the object, and the object's own intervals for the positional
+    /// property.
+    pub(crate) fn new(
+        base: Option<BufferSyntaxLookup>,
+        string: &'a LispString,
+        syntax_properties: crate::emacs_core::syntax::SyntaxProperties<'a>,
+    ) -> Self {
+        let Some(base) = base else {
+            return Self::Standard(DefaultSyntaxLookup);
+        };
+        // Only a honouring scan looks at the intervals at all: the caller has
+        // already established that a string with none cannot honour anything,
+        // so the ignoring path here touches the string object not at all.
+        let crate::emacs_core::syntax::SyntaxProperties::Honor(_) = syntax_properties else {
+            return Self::Table(base);
+        };
+        let intervals = string.intervals();
+        if intervals.is_empty() {
+            return Self::Table(base);
+        }
+        Self::Propertized(StringRegexpSyntaxLookup {
+            property_lookup: crate::emacs_core::syntax::StringSyntaxPropByteRun::new(
+                syntax_properties,
+                string,
+                Some(intervals),
+            ),
+            base,
+        })
+    }
+
+    pub(crate) fn as_lookup(&self) -> &dyn SyntaxLookup {
+        match self {
+            Self::Standard(lookup) => lookup,
+            Self::Table(lookup) => lookup,
+            Self::Propertized(lookup) => lookup,
+        }
+    }
+}
+
+impl SyntaxLookup for StringRegexpSyntaxLookup<'_> {
+    fn char_syntax(&self, c: char) -> crate::emacs_core::syntax::SyntaxClass {
+        self.base.char_syntax(c)
+    }
+
+    fn char_syntax_at(&self, c: char, input_pos: usize) -> crate::emacs_core::syntax::SyntaxClass {
+        crate::emacs_core::syntax::regexp_syntax_class_at_string_byte(
+            &self.base.syntax_table,
+            c,
+            input_pos,
             &self.property_lookup,
         )
     }

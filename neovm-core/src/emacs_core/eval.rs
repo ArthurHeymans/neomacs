@@ -3364,12 +3364,19 @@ impl Context {
                     crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?,
                 );
                 let word_boundary = builtins::search::current_word_boundary_lookup(self);
+                let syntax_properties = builtins::search::current_string_match_syntax_properties(
+                    self,
+                    &self.obarray,
+                    &self.buffers,
+                    Some(&message),
+                );
                 if builtins::search::builtin_string_match_p_with_case_fold(
                     false,
                     None,
                     syntax_table.as_ref(),
                     category_table,
                     word_boundary,
+                    syntax_properties,
                     &[entry, message],
                 )?
                 .as_fixnum()

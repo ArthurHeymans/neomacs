@@ -17,7 +17,9 @@ use super::textprop::CharPropertyResolver;
 use super::value::{Value, ValueKind, list_to_vec};
 use crate::buffer::{
     Buffer, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1,
+    TextPropertyTable,
 };
+use crate::heap_types::LispString;
 
 /// The `syntax-table` property symbol, interned once.
 ///
@@ -2827,6 +2829,121 @@ impl<'a> SyntaxPropByteRun<'a> {
         );
         value
     }
+}
+
+/// The string a regexp match reads `syntax-table` properties from: GNU's
+/// `gl_state.object` when that object is a string.
+///
+/// The matcher addresses a string by byte offset from its first byte, the
+/// intervals address it by character, so the string itself is needed for the
+/// conversion GNU does with `string_byte_to_char`
+/// (`RE_SYNTAX_TABLE_BYTE_TO_CHAR`, src/syntax.h).
+#[derive(Clone, Copy)]
+struct StringPropSource<'a> {
+    resolver: CharPropertyResolver<'a>,
+    string: &'a LispString,
+    intervals: &'a TextPropertyTable,
+}
+
+/// Per-match `syntax-table` property cache for a regexp over a STRING object.
+///
+/// GNU arms the same `gl_state` for a string as for a buffer
+/// (`RE_SETUP_SYNTAX_TABLE_FOR_OBJECT`, src/syntax.c:277), so `string-match`
+/// over a propertized string sees each character's own syntax. This is the
+/// string half of [`SyntaxPropByteRun`]: the same [`PropRunCells`] run check
+/// per character, and the same [`SyntaxProperties`] vocabulary at the seam, over
+/// the string's own intervals instead of a buffer's.
+///
+/// A scan that ignores properties -- and a string carrying none, which is the
+/// overwhelmingly common case and the reason the run is left `covering_everything`
+/// there -- keeps no source at all, so "honours properties but has nothing to
+/// read them from" is not a state this type can hold.
+pub(crate) struct StringSyntaxPropByteRun<'a> {
+    run: PropRunCells,
+    source: Option<StringPropSource<'a>>,
+}
+
+impl<'a> StringSyntaxPropByteRun<'a> {
+    /// `intervals` is the string's own interval table, absent when the string
+    /// carries no properties at all. GNU's `update_syntax_table` returns early
+    /// when `interval_of` finds no interval, giving such a position no property
+    /// -- not even the `default-text-properties` fallback -- so dropping the
+    /// resolver here is the same answer, reached without any per-character work.
+    pub(crate) fn new(
+        props: SyntaxProperties<'a>,
+        string: &'a LispString,
+        intervals: Option<&'a TextPropertyTable>,
+    ) -> Self {
+        let source = match (props, intervals) {
+            (SyntaxProperties::Honor(resolver), Some(intervals)) => Some(StringPropSource {
+                resolver,
+                string,
+                intervals,
+            }),
+            _ => None,
+        };
+        let run = if source.is_some() {
+            PropRunCells::default()
+        } else {
+            PropRunCells::covering_everything()
+        };
+        Self { run, source }
+    }
+
+    /// The resolved `syntax-table` property at a byte offset into the string,
+    /// served from the cached run when possible.
+    #[inline]
+    fn syntax_table_prop_at_string_byte(&self, byte_pos: usize) -> Option<Value> {
+        if let Some(value) = self.run.get(byte_pos) {
+            return value;
+        }
+        let Some(source) = self.source else {
+            // Unreachable: a cache with no source covers every position.
+            return None;
+        };
+        self.refill_run(source, byte_pos)
+    }
+
+    /// Locate the interval containing `byte_pos`, resolve its property once, and
+    /// cache both with the run converted to byte coordinates.
+    ///
+    /// Outlined so the per-character check above stays inlinable into the match
+    /// loop.
+    #[inline(never)]
+    fn refill_run(&self, source: StringPropSource<'a>, byte_pos: usize) -> Option<Value> {
+        let char_pos = source.string.byte_to_char_pos(byte_pos);
+        let (plist, start, end) = source
+            .intervals
+            .interval_plist_run_at_char_pos(CharPos0::new(char_pos), source.string.schars());
+        let value = plist.and_then(|plist| source.resolver.resolve_interval_plist(plist));
+        self.run.set(
+            source.string.char_to_byte_pos(start.get()),
+            source.string.char_to_byte_pos(end.get()),
+            value,
+        );
+        value
+    }
+}
+
+/// Syntax class seen by GNU's regexp `SYNTAX` macro at a byte offset into a
+/// searched STRING, the string counterpart of
+/// [`regexp_syntax_class_at_emacs_byte`].
+///
+/// `table` is the CURRENT BUFFER's syntax table: GNU's
+/// `RE_SETUP_SYNTAX_TABLE_FOR_OBJECT` calls `SETUP_BUFFER_SYNTAX_TABLE` for a
+/// string object too, so only the positional property comes from the string.
+pub(crate) fn regexp_syntax_class_at_string_byte(
+    table: &SyntaxTable,
+    ch: char,
+    byte_pos: usize,
+    prop_cache: &StringSyntaxPropByteRun<'_>,
+) -> SyntaxClass {
+    if let Some(prop) = prop_cache.syntax_table_prop_at_string_byte(byte_pos)
+        && let Some(entry) = syntax_entry_from_syntax_property(prop, ch)
+    {
+        return entry.class;
+    }
+    syntax_entry_from_table(table, ch).class
 }
 
 /// Per-scan cache of the `syntax-table` text-property run, mirroring GNU

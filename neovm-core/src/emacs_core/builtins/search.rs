@@ -68,6 +68,56 @@ fn current_buffer_regexp_match_context<'a>(
     )
 }
 
+/// The syntax lookup a regexp over STRING runs under: GNU's
+/// `RE_SETUP_SYNTAX_TABLE_FOR_OBJECT` for a string object (src/syntax.c:277),
+/// with the current buffer's syntax table as the base and the STRING's own
+/// intervals supplying each character's positional `syntax-table` property.
+fn string_regexp_syntax_lookup<'a>(
+    syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
+    category_table: Option<Value>,
+    word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
+    string: &'a crate::heap_types::LispString,
+    syntax_properties: crate::emacs_core::syntax::SyntaxProperties<'a>,
+) -> super::regex::StringSyntaxLookup<'a> {
+    super::regex::StringSyntaxLookup::new(
+        syntax_table.map(
+            |syntax_table| crate::emacs_core::regex_emacs::BufferSyntaxLookup {
+                syntax_table: *syntax_table,
+                category_table,
+                word_boundary,
+            },
+        ),
+        string,
+        syntax_properties,
+    )
+}
+
+/// Snapshot the string-match property source, borrowing only the obarray.
+///
+/// The gate is the CURRENT BUFFER's `parse-sexp-lookup-properties`, whatever
+/// buffer the string itself came from: GNU tests the C variable mirroring that
+/// buffer-local binding at the `RE_SETUP_SYNTAX_TABLE_FOR_OBJECT` site. Unlike
+/// a buffer search there is nothing to propertize first -- `syntax-propertize`
+/// works on buffers -- so this is a plain read.
+/// `searched` is the string-match STRING argument. A string with no intervals
+/// has no property to read at any position -- GNU's `update_syntax_table`
+/// returns early when `interval_of` finds no interval -- so it is tested first,
+/// ahead of the flag: the test is a pointer load on the string, the flag is a
+/// dynamic-variable lookup, and a `string-match` over a propertyless string
+/// (very nearly all of them) must pay neither that lookup nor the resolver
+/// snapshot behind it.
+pub(crate) fn current_string_match_syntax_properties<'a>(
+    eval: &super::eval::Context,
+    obarray: &'a crate::emacs_core::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
+    searched: Option<&Value>,
+) -> crate::emacs_core::syntax::SyntaxProperties<'a> {
+    let honor = searched.is_some_and(|value| {
+        crate::emacs_core::value::string_has_text_properties_for_value(*value)
+    }) && crate::emacs_core::syntax::parse_sexp_lookup_properties_enabled(eval);
+    crate::emacs_core::syntax::SyntaxProperties::for_scan(honor, obarray, buffers)
+}
+
 fn buffer_byte_to_lisp_char(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> i64 {
     buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
 }
@@ -1035,12 +1085,14 @@ fn commit_string_search_success(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // match-time Lisp state stays explicit at this seam
 pub(crate) fn builtin_string_match_with_state(
     case_fold: bool,
     case_translation: Option<crate::emacs_core::regex_emacs::CaseTranslation>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
+    syntax_properties: crate::emacs_core::syntax::SyntaxProperties<'_>,
     match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
@@ -1058,16 +1110,14 @@ pub(crate) fn builtin_string_match_with_state(
                         string,
                         args.get(2),
                     )?;
-                    let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
-                    let buffer_syntax = syntax_table.map(|syntax_table| {
-                        crate::emacs_core::regex_emacs::BufferSyntaxLookup {
-                            syntax_table: *syntax_table,
-                            category_table,
-                            word_boundary,
-                        }
-                    });
-                    let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
-                        buffer_syntax.as_ref().map_or(&default_syntax, |s| s);
+                    let string_syntax = string_regexp_syntax_lookup(
+                        syntax_table,
+                        category_table,
+                        word_boundary,
+                        string,
+                        syntax_properties,
+                    );
+                    let syntax = string_syntax.as_lookup();
                     let result = super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix_syntax(
                         pattern,
                         string,
@@ -1123,6 +1173,8 @@ pub(crate) fn builtin_string_match_slice(
         Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
     let word_boundary = current_word_boundary_lookup(eval);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
+    let syntax_properties =
+        current_string_match_syntax_properties(eval, &eval.obarray, &eval.buffers, args.get(1));
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     let result = builtin_string_match_with_state(
         case_fold,
@@ -1130,6 +1182,7 @@ pub(crate) fn builtin_string_match_slice(
         syntax_table.as_ref(),
         category_table,
         word_boundary,
+        syntax_properties,
         match_data,
         args,
     );
@@ -1138,12 +1191,14 @@ pub(crate) fn builtin_string_match_slice(
     result
 }
 
+#[allow(clippy::too_many_arguments)] // match-time Lisp state stays explicit at this seam
 pub(crate) fn builtin_posix_string_match_with_state(
     case_fold: bool,
     case_translation: Option<crate::emacs_core::regex_emacs::CaseTranslation>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
+    syntax_properties: crate::emacs_core::syntax::SyntaxProperties<'_>,
     match_data: Option<&mut Option<super::regex::MatchData>>,
     args: &[Value],
 ) -> EvalResult {
@@ -1167,16 +1222,14 @@ pub(crate) fn builtin_posix_string_match_with_state(
                         string,
                         args.get(2),
                     )?;
-                    let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
-                    let buffer_syntax = syntax_table.map(|syntax_table| {
-                        crate::emacs_core::regex_emacs::BufferSyntaxLookup {
-                            syntax_table: *syntax_table,
-                            category_table,
-                            word_boundary,
-                        }
-                    });
-                    let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
-                        buffer_syntax.as_ref().map_or(&default_syntax, |s| s);
+                    let string_syntax = string_regexp_syntax_lookup(
+                        syntax_table,
+                        category_table,
+                        word_boundary,
+                        string,
+                        syntax_properties,
+                    );
+                    let syntax = string_syntax.as_lookup();
                     let result = super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix_syntax(
                         pattern,
                         string,
@@ -1211,6 +1264,7 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
+    syntax_properties: crate::emacs_core::syntax::SyntaxProperties<'_>,
     args: &[Value],
 ) -> EvalResult {
     expect_args_range("string-match-p", args, 2, 3)?;
@@ -1220,16 +1274,14 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
             let string = args[1].as_lisp_string().unwrap();
             let start =
                 crate::emacs_core::search::normalize_lisp_string_start_arg(string, args.get(2))?;
-            let default_syntax = crate::emacs_core::regex_emacs::DefaultSyntaxLookup;
-            let buffer_syntax = syntax_table.map(|syntax_table| {
-                crate::emacs_core::regex_emacs::BufferSyntaxLookup {
-                    syntax_table: *syntax_table,
-                    category_table,
-                    word_boundary,
-                }
-            });
-            let syntax: &dyn crate::emacs_core::regex_emacs::SyntaxLookup =
-                buffer_syntax.as_ref().map_or(&default_syntax, |s| s);
+            let string_syntax = string_regexp_syntax_lookup(
+                syntax_table,
+                category_table,
+                word_boundary,
+                string,
+                syntax_properties,
+            );
+            let syntax = string_syntax.as_lookup();
             commit_string_search_success(
                 super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix_syntax(
                     pattern,
@@ -1276,12 +1328,15 @@ pub(crate) fn builtin_string_match_p(
     let category_table =
         Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
     let word_boundary = current_word_boundary_lookup(eval);
+    let syntax_properties =
+        current_string_match_syntax_properties(eval, &eval.obarray, &eval.buffers, args.get(1));
     builtin_string_match_p_with_case_fold(
         case_fold,
         case_translation,
         syntax_table.as_ref(),
         category_table,
         word_boundary,
+        syntax_properties,
         &args,
     )
 }
@@ -1305,6 +1360,8 @@ pub(crate) fn builtin_posix_string_match(
         Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
     let word_boundary = current_word_boundary_lookup(eval);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
+    let syntax_properties =
+        current_string_match_syntax_properties(eval, &eval.obarray, &eval.buffers, args.get(1));
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     builtin_posix_string_match_with_state(
         case_fold,
@@ -1312,6 +1369,7 @@ pub(crate) fn builtin_posix_string_match(
         syntax_table.as_ref(),
         category_table,
         word_boundary,
+        syntax_properties,
         match_data,
         &args,
     )

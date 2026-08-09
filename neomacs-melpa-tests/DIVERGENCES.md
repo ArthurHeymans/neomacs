@@ -2078,7 +2078,50 @@ Recorded so nobody re-investigates them:
   editors, and asserted from both sides in the suite.
 
 
-## 53. A string object's `syntax-table` property never reaches the regexp matcher
+## 53. A string object's `syntax-table` property never reaches the regexp matcher -- FIXED
+
+FIXED 2026-08-09. `string-match`, `string-match-p` and `posix-string-match` now
+set up syntax state for the STRING object the way GNU's
+`RE_SETUP_SYNTAX_TABLE_FOR_OBJECT` does: the current buffer still supplies the
+base table (GNU calls `SETUP_BUFFER_SYNTAX_TABLE` whatever the object is) and
+the current buffer's `parse-sexp-lookup-properties` is still the gate, but the
+positional property now comes from the searched string's own intervals,
+resolved through the same `CharPropertyResolver` (`textget`) the buffer half
+uses -- so a `category`, a `char-property-alias-alist` entry and
+`default-text-properties` all resolve on a string exactly as they do in a
+buffer. The string run cache (`StringSyntaxPropByteRun`) is the string sibling
+of the buffer's `SyntaxPropByteRun`, sharing `PropRunCells` and the
+`SyntaxProperties` vocabulary, and converts the matcher's byte offsets to
+interval characters with the string's own mapping (GNU
+`RE_SYNTAX_TABLE_BYTE_TO_CHAR`).
+
+Pinned by 11 tests in
+neovm-core/src/emacs_core/syntax_gnu_parity_regression_test.rs, every
+expectation measured on GNU 31.0.90: both reductions below, the
+alias-alist form, a property that takes syntax AWAY, the gate off, the gate
+read from the current buffer rather than the string's origin, a multibyte
+character ahead of the propertized one (the byte-to-character mapping), a
+propertyless string, `default-text-properties` reaching an interval that
+exists but says nothing about syntax -- and NOT reaching a string with no
+intervals at all -- and buffer matching left alone.
+
+Cost: the propertyless string, which is very nearly every `string-match`, is
+decided before any of this is built -- a string with no intervals has no
+property at any position, so it is tested ahead of the
+`parse-sexp-lookup-properties` read and runs the same position-free
+per-character path as before. Measured (instructions:u, three interleaved
+pairs): TTY typing +0.02% and the entry-44 syntax sweep -0.05%, both noise; a
+`string-match`-only microbench +0.14%, whose startup half is unchanged
+(551.0M both sides), so the residue is roughly 60 instructions per call on the
+seam itself.
+
+Entry points: the three Lisp-visible ones above. The internal
+`fast_string_match` analogues (completion, dired, file-name handlers) still
+match strings under `DefaultSyntaxLookup`; GNU honours properties there too,
+but those call sites do not even use the buffer's syntax table today, which is
+a separate and older gap.
+
+The reduction below is kept as the regression record.
 
 Found while fixing entry 44, and orthogonal to it: it is not about the
 `category` indirection but about strings carrying properties at all. GNU sets
@@ -2113,3 +2156,25 @@ Not yet attributed to a package suite. The buffer half of this path is fixed
 here means giving the string matcher the same
 `SyntaxProperties`/`CharPropertyResolver` seam over the string's own
 `TextPropertyTable`.
+
+Noticed while fixing this and NOT part of it: on the BUFFER side,
+`default-text-properties` does not reach a position whose interval exists but
+carries no `syntax-table`, where GNU applies the fallback. The string side now
+matches GNU there; the buffer side still answers nil.
+
+```elisp
+(with-temp-buffer
+  (setq-local parse-sexp-lookup-properties t)
+  (insert "a<b")
+  (put-text-property 2 3 'foo 'bar)
+  (let ((default-text-properties '(syntax-table (4 . ?>))))
+    (goto-char (point-min))
+    (re-search-forward "\\s(" nil t)))
+;; GNU     => 2
+;; Neomacs => nil
+```
+
+The cause is interval COVERAGE, not resolution: GNU's interval tree partitions
+the whole object once any property exists, so position 1 has an interval with
+an empty plist and the fallback applies; neomacs's buffer table reports no
+interval there. Not yet attributed to a package suite.

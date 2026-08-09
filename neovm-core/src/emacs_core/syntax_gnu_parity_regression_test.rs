@@ -693,3 +693,186 @@ fn c_mode_font_lock_ends_leading_comments_before_preprocessor_directives() {
         "OK (font-lock-preprocessor-face font-lock-preprocessor-face)"
     );
 }
+
+/// Ledger entry 53: a string object's own `syntax-table` properties reach the
+/// regexp matcher, exactly as they do for a buffer.
+///
+/// GNU sets up syntax state for the searched object, not only for buffers
+/// (`RE_SETUP_SYNTAX_TABLE_FOR_OBJECT`, src/syntax.c:277), so `string-match`
+/// over a propertized string resolves each character's syntax through the same
+/// `textget` fallbacks. Every expectation below is the value GNU Emacs 31.0.90
+/// prints for the same form.
+#[test]
+fn string_match_reads_the_strings_own_syntax_table_property() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let ((parse-sexp-lookup-properties t)
+              (s (concat "a" (propertize "<" 'syntax-table '(4 . ?>)) "b")))
+          (string-match "\\s(" s))
+        "#,
+    );
+    assert_eq!(result, "OK 1");
+}
+
+#[test]
+fn string_match_resolves_a_strings_syntax_through_a_category_symbol() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (progn
+          (put 'p13-open 'syntax-table '(4 . ?>))
+          (let ((parse-sexp-lookup-properties t)
+                (s (concat "a" (propertize "<" 'category 'p13-open) "b")))
+            (string-match "\\s(" s)))
+        "#,
+    );
+    assert_eq!(result, "OK 1");
+}
+
+#[test]
+fn string_match_resolves_a_strings_syntax_through_char_property_alias_alist() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let* ((parse-sexp-lookup-properties t)
+               (char-property-alias-alist '((syntax-table p13-syn)))
+               (s (concat "a" (propertize "<" 'p13-syn '(4 . ?>)) "b")))
+          (string-match "\\s(" s))
+        "#,
+    );
+    assert_eq!(result, "OK 1");
+}
+
+#[test]
+fn a_strings_syntax_table_property_can_also_take_syntax_away() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let ((parse-sexp-lookup-properties t)
+              (s (concat "a" (propertize "(" 'syntax-table '(1)) "b")))
+          (string-match "\\s(" s))
+        "#,
+    );
+    assert_eq!(result, "OK nil");
+}
+
+#[test]
+fn string_match_ignores_string_properties_when_lookup_is_disabled() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let ((parse-sexp-lookup-properties nil)
+              (s (concat "a" (propertize "<" 'syntax-table '(4 . ?>)) "b")))
+          (string-match "\\s(" s))
+        "#,
+    );
+    assert_eq!(result, "OK nil");
+}
+
+/// The gate is the CURRENT BUFFER's `parse-sexp-lookup-properties`, whatever
+/// buffer the string came from: GNU reads the C variable that mirrors the
+/// buffer-local binding at the `RE_SETUP_SYNTAX_TABLE_FOR_OBJECT` site.
+#[test]
+fn the_current_buffers_lookup_flag_governs_a_string_match() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let ((s (concat "a" (propertize "<" 'syntax-table '(4 . ?>)) "b")))
+          (list (with-temp-buffer
+                  (setq-local parse-sexp-lookup-properties t)
+                  (string-match "\\s(" s))
+                (with-temp-buffer
+                  (setq-local parse-sexp-lookup-properties nil)
+                  (string-match "\\s(" s))))
+        "#,
+    );
+    assert_eq!(result, "OK (1 nil)");
+}
+
+#[test]
+fn a_propertyless_string_still_matches_by_the_syntax_table_alone() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let ((parse-sexp-lookup-properties t))
+          (list (string-match "\\s(" "a(b")
+                (string-match "\\s(" "abc")
+                ;; A string with no intervals at all gets no property, not even
+                ;; the `default-text-properties' fallback -- GNU's
+                ;; `update_syntax_table' returns early when `interval_of' finds
+                ;; no interval.
+                (let ((default-text-properties '(syntax-table (4 . ?>))))
+                  (string-match "\\s(" "a<b"))))
+        "#,
+    );
+    assert_eq!(result, "OK (1 nil nil)");
+}
+
+/// The matcher addresses the string by BYTE, the intervals by CHARACTER, so a
+/// multibyte character before the propertized one is where a missing
+/// conversion would show up.
+#[test]
+fn string_match_maps_matcher_bytes_to_interval_characters() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let ((parse-sexp-lookup-properties t)
+              (s (concat "é" (propertize "<" 'syntax-table '(4 . ?>)) "b")))
+          (string-match "\\s(" s))
+        "#,
+    );
+    assert_eq!(result, "OK 1");
+}
+
+#[test]
+fn string_match_p_and_posix_string_match_read_string_syntax_properties_too() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let ((parse-sexp-lookup-properties t)
+              (s (concat "a" (propertize "<" 'syntax-table '(4 . ?>)) "b")))
+          (list (string-match-p "\\s(" s)
+                (posix-string-match "\\s(" s)))
+        "#,
+    );
+    assert_eq!(result, "OK (1 1)");
+}
+
+/// Buffer matching keeps reading the BUFFER's properties -- the string object
+/// arriving at the same seam must not redirect it.
+#[test]
+fn buffer_regexp_matching_is_unaffected_by_the_string_object_path() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (setq-local parse-sexp-lookup-properties t)
+          (insert "a<b")
+          (put-text-property 2 3 'syntax-table '(4 . ?>))
+          (setq-local syntax-propertize--done (point-max))
+          (goto-char (point-min))
+          (list (re-search-forward "\\s(" nil t)
+                (string-match "\\s(" "a<b")))
+        "#,
+    );
+    assert_eq!(result, "OK (3 nil)");
+}
+
+/// `default-text-properties` reaches a position that HAS an interval, even one
+/// whose plist says nothing about syntax -- the same `textget` fallback the
+/// buffer scanner applies. Contrast the propertyless string above, where there
+/// is no interval and so no fallback either.
+#[test]
+fn a_strings_interval_takes_syntax_from_default_text_properties() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let ((parse-sexp-lookup-properties t)
+              (default-text-properties '(syntax-table (4 . ?>)))
+              (s (concat "a" (propertize "<" 'p13-unrelated 'x) "b")))
+          (string-match "\\s(" s))
+        "#,
+    );
+    assert_eq!(result, "OK 0");
+}
