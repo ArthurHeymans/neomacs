@@ -2,53 +2,78 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
-fn mode_activates_with_lighter_and_local_map() -> ParityBatchCase {
+/// Drive `restclient-http-parse-current-and-do' (the HTTP request parser) on a
+/// realistic GET block with headers, capturing method/url/header-count via a
+/// no-op func (no network). Asserts the parser extracted them correctly.
+fn http_parse_extracts_get_method_url_and_headers() -> ParityBatchCase {
     ParityBatchCase::value(
-        "mode_activates_with_lighter_and_local_map",
+        "http_parse_extracts_get_method_url_and_headers",
         r####"
 (with-temp-buffer
-  (restclient-mode)
-  (list :mode major-mode
-        :lighter mode-name
-        :local-map-p (keymapp (current-local-map))))
+  (insert "GET https://example.com/api
+Authorization: Bearer xyz
+Content-Type: application/json
+")
+  (goto-char (point-min))
+  (let (captured)
+    (restclient-http-parse-current-and-do
+     (lambda (method url headers entity &rest args)
+       (setq captured (list :method method
+                            :url url
+                            :header-count (length headers)))))
+    captured))
 "####,
-        expect![[r#"OK (:mode restclient-mode :lighter "REST Client" :local-map-p t)"#]],
+        expect![[r#"OK (:method "GET" :url "https://example.com/api" :header-count 2)"#]],
     )
 }
 
-fn defcustoms_match_upstream_defaults() -> ParityBatchCase {
+/// Drive the pure header parser on a header string and assert the alist it
+/// builds (key/value shape from restclient-make-header).
+fn parse_headers_builds_alist() -> ParityBatchCase {
     ParityBatchCase::value(
-        "defcustoms_match_upstream_defaults",
+        "parse_headers_builds_alist",
         r####"
-(list :log-request restclient-log-request
-      :same-buf restclient-same-buffer-response
-      :threshold restclient-response-size-threshold
-      :vars-max restclient-vars-max-passes
-      :inhibit-cookies restclient-inhibit-cookies)
+(let ((headers (restclient-parse-headers
+                "Authorization: Bearer xyz
+Content-Type: application/json
+")))
+  (list :count (length headers)
+        :auth (assoc "Authorization" headers)
+        :ctype (assoc "Content-Type" headers)))
 "####,
         expect![[
-            r#"OK (:log-request t :same-buf t :threshold 100000 :vars-max 10 :inhibit-cookies nil)"#
+            r#"OK (:count 2 :auth ("Authorization" . "Bearer xyz") :ctype ("Content-Type" . "application/json"))"#
         ]],
     )
 }
 
-fn content_type_modes_map_mime_to_major_modes() -> ParityBatchCase {
+/// A POST block with a JSON body: the parser captures the entity (body text)
+/// past the blank line separating headers from body.
+fn http_parse_captures_post_body_entity() -> ParityBatchCase {
     ParityBatchCase::value(
-        "content_type_modes_map_mime_to_major_modes",
+        "http_parse_captures_post_body_entity",
         r####"
-(list :xml (cdr (assoc "text/xml" restclient-content-type-modes))
-      :json (cdr (assoc "application/json" restclient-content-type-modes))
-      :png (cdr (assoc "image/png" restclient-content-type-modes))
-      :plain (cdr (assoc "text/plain" restclient-content-type-modes)))
+(with-temp-buffer
+  (insert "POST https://example.com/things
+Content-Type: application/json
+
+{\"name\": \"foo\"}
+")
+  (goto-char (point-min))
+  (let (captured)
+    (restclient-http-parse-current-and-do
+     (lambda (method url headers entity &rest args)
+       (setq captured (list :method method :entity entity))))
+    captured))
 "####,
-        expect![[r#"OK (:xml xml-mode :json js-mode :png image-mode :plain text-mode)"#]],
+        expect![[r#"OK (:method "POST" :entity "{\"name\": \"foo\"}")"#]],
     )
 }
 
 pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
     vec![
-        mode_activates_with_lighter_and_local_map(),
-        defcustoms_match_upstream_defaults(),
-        content_type_modes_map_mime_to_major_modes(),
+        http_parse_extracts_get_method_url_and_headers(),
+        parse_headers_builds_alist(),
+        http_parse_captures_post_body_entity(),
     ]
 }
