@@ -1548,6 +1548,31 @@ pub struct SurfaceResolveRequest {
     pub channel0: Option<(SurfaceChannelKind, u32)>,
 }
 
+/// Where the display compositor places a neo-term instance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerminalDisplayMode {
+    Window,
+    Inline,
+    Floating,
+}
+
+/// Validated terminal creation request owned by the evaluator/display-host
+/// boundary. Renderer-specific command enums stay outside `neovm-core`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TerminalCreateRequest {
+    pub cols: u16,
+    pub rows: u16,
+    pub mode: TerminalDisplayMode,
+    pub shell: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TerminalFloatPlacement {
+    pub x: f32,
+    pub y: f32,
+    pub opacity: f32,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedSurface {
     pub surface_id: u32,
@@ -1756,6 +1781,28 @@ pub trait DisplayHost {
     }
     fn destroy_shader_surface(&self, _id: u32) -> Result<(), String> {
         Ok(())
+    }
+    fn create_terminal(&self, _request: TerminalCreateRequest) -> Result<u32, String> {
+        Err("neo-term is unsupported by this display host".to_owned())
+    }
+    fn write_terminal(&self, _id: u32, _data: Vec<u8>) -> Result<(), String> {
+        Err("neo-term is unsupported by this display host".to_owned())
+    }
+    fn resize_terminal(&self, _id: u32, _cols: u16, _rows: u16) -> Result<(), String> {
+        Err("neo-term is unsupported by this display host".to_owned())
+    }
+    fn destroy_terminal(&self, _id: u32) -> Result<(), String> {
+        Err("neo-term is unsupported by this display host".to_owned())
+    }
+    fn set_floating_terminal(
+        &self,
+        _id: u32,
+        _placement: TerminalFloatPlacement,
+    ) -> Result<(), String> {
+        Err("neo-term is unsupported by this display host".to_owned())
+    }
+    fn terminal_text(&self, _id: u32) -> Result<Option<String>, String> {
+        Err("neo-term is unsupported by this display host".to_owned())
     }
     fn set_visual_config(
         &mut self,

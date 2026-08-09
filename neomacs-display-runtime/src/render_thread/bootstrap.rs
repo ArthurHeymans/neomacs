@@ -514,8 +514,19 @@ pub fn run_render_loop_current_thread(
     shared_monitors: SharedMonitorInfo,
 ) -> Result<(), String> {
     #[cfg(feature = "neo-term")]
-    let shared_terminals =
-        std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+    let shared_terminals = crate::terminal::new_shared_terminals();
+    #[cfg(feature = "neo-term")]
+    return run_render_loop_current_thread_with_terminals(
+        event_loop,
+        comms,
+        width,
+        height,
+        title,
+        image_metadata,
+        shared_monitors,
+        shared_terminals,
+    );
+    #[cfg(not(feature = "neo-term"))]
     run_render_loop_with_event_loop(
         event_loop,
         comms,
@@ -530,6 +541,33 @@ pub fn run_render_loop_current_thread(
     )
 }
 
+/// Run the product render loop with a caller-owned terminal registry so the
+/// evaluator can synchronously inspect terminal text while the renderer owns
+/// PTYs and VT state.
+#[cfg(feature = "neo-term")]
+pub fn run_render_loop_current_thread_with_terminals(
+    event_loop: EventLoop<RenderUserEvent>,
+    comms: RenderComms,
+    width: u32,
+    height: u32,
+    title: String,
+    image_metadata: SharedImageMetadata,
+    shared_monitors: SharedMonitorInfo,
+    shared_terminals: crate::terminal::SharedTerminals,
+) -> Result<(), String> {
+    run_render_loop_with_event_loop(
+        event_loop,
+        comms,
+        width,
+        height,
+        title,
+        image_metadata,
+        shared_monitors,
+        false,
+        shared_terminals,
+    )
+}
+
 /// Build the render event loop and run it on the render thread.
 pub fn run_render_loop(
     comms: RenderComms,
@@ -540,8 +578,7 @@ pub fn run_render_loop(
     shared_monitors: SharedMonitorInfo,
 ) -> Result<(), String> {
     #[cfg(feature = "neo-term")]
-    let shared_terminals =
-        std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+    let shared_terminals = crate::terminal::new_shared_terminals();
     let event_loop = build_render_event_loop()?;
     run_render_loop_with_event_loop(
         event_loop,

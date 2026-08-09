@@ -1,11 +1,6 @@
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
-#[cfg(feature = "neo-term")]
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
 
 use super::bootstrap::{build_render_event_loop_any_thread, run_render_loop_with_event_loop};
 use super::{SharedImageMetadata, SharedMonitorInfo};
@@ -88,7 +83,7 @@ impl RenderThread {
         shared_monitors: SharedMonitorInfo,
     ) -> Result<Self, String> {
         #[cfg(feature = "neo-term")]
-        let shared_terminals = Arc::new(Mutex::new(HashMap::new()));
+        let shared_terminals = crate::terminal::new_shared_terminals();
         Self::spawn_inner(
             comms,
             width,

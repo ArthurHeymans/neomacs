@@ -562,7 +562,7 @@ pub enum TerminalCommand {
         id: u32,
         cols: u16,
         rows: u16,
-        mode: u8, // 0=Window, 1=Inline, 2=Floating
+        mode: crate::terminal::TerminalMode,
         shell: Option<String>,
     },
     /// Write input to a terminal

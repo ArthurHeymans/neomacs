@@ -16,37 +16,18 @@ impl RenderApp {
                 rows,
                 mode,
                 shell,
-            } => {
-                let term_mode = match mode {
-                    1 => crate::terminal::TerminalMode::Inline,
-                    2 => crate::terminal::TerminalMode::Floating,
-                    _ => crate::terminal::TerminalMode::Window,
-                };
-                match crate::terminal::TerminalView::new(
-                    id,
-                    cols,
-                    rows,
-                    term_mode,
-                    shell.as_deref(),
-                ) {
-                    Ok(view) => {
-                        if let Ok(mut shared) = self.shared_terminals.lock() {
-                            shared.insert(id, view.term.clone());
-                        }
-                        self.terminal_manager.terminals.insert(id, view);
-                        tracing::info!(
-                            "Terminal {} created ({}x{}, {:?})",
-                            id,
-                            cols,
-                            rows,
-                            term_mode
-                        );
+            } => match crate::terminal::TerminalView::new(id, cols, rows, mode, shell.as_deref()) {
+                Ok(view) => {
+                    if let Ok(mut shared) = self.shared_terminals.lock() {
+                        shared.insert(id, view.term.clone());
                     }
-                    Err(e) => {
-                        tracing::error!("Failed to create terminal {}: {}", id, e);
-                    }
+                    self.terminal_manager.terminals.insert(id, view);
+                    tracing::info!("Terminal {} created ({}x{}, {:?})", id, cols, rows, mode);
                 }
-            }
+                Err(e) => {
+                    tracing::error!("Failed to create terminal {}: {}", id, e);
+                }
+            },
             TerminalCommand::TerminalWrite { id, data } => {
                 if let Some(view) = self.terminal_manager.get_mut(id)
                     && let Err(e) = view.write(&data)

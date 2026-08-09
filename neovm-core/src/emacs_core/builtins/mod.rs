@@ -1318,6 +1318,42 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr("get-buffer-create", builtin_get_buffer_create, 1, Some(2));
     ctx.defsubr("get-buffer", builtin_get_buffer, 1, Some(1));
     ctx.defsubr(
+        "neomacs-terminal-create",
+        super::terminal_embed::builtin_neomacs_terminal_create,
+        3,
+        Some(4),
+    );
+    ctx.defsubr(
+        "neomacs-terminal-write",
+        super::terminal_embed::builtin_neomacs_terminal_write,
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "neomacs-terminal-resize",
+        super::terminal_embed::builtin_neomacs_terminal_resize,
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "neomacs-terminal-destroy",
+        super::terminal_embed::builtin_neomacs_terminal_destroy,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "neomacs-terminal-set-float",
+        super::terminal_embed::builtin_neomacs_terminal_set_float,
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "neomacs-terminal-get-text",
+        super::terminal_embed::builtin_neomacs_terminal_get_text,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
         "neomacs-surface-create",
         super::shader_surface::builtin_neomacs_surface_create,
         0,

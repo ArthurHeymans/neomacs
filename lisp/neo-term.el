@@ -47,18 +47,18 @@
 (defvar neo-term--next-buffer-num 1
   "Next buffer number for naming.")
 
-;; These are C DEFUN primitives defined in neomacsterm.c
-(declare-function neomacs-terminal-create "neomacsterm.c"
+;; These are Rust builtins routed through the active GUI display host.
+(declare-function neomacs-terminal-create "neovm-core"
                   (cols rows mode &optional shell))
-(declare-function neomacs-terminal-write "neomacsterm.c"
+(declare-function neomacs-terminal-write "neovm-core"
                   (terminal-id string))
-(declare-function neomacs-terminal-resize "neomacsterm.c"
+(declare-function neomacs-terminal-resize "neovm-core"
                   (terminal-id cols rows))
-(declare-function neomacs-terminal-destroy "neomacsterm.c"
+(declare-function neomacs-terminal-destroy "neovm-core"
                   (terminal-id))
-(declare-function neomacs-terminal-set-float "neomacsterm.c"
+(declare-function neomacs-terminal-set-float "neovm-core"
                   (terminal-id x y opacity))
-(declare-function neomacs-terminal-get-text "neomacsterm.c"
+(declare-function neomacs-terminal-get-text "neovm-core"
                   (terminal-id))
 
 (defun neo-term--shell-path ()

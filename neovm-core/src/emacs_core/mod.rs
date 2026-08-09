@@ -126,6 +126,9 @@ pub mod syntax;
 #[cfg(test)]
 mod syntax_gnu_parity_regression_test;
 pub mod terminal;
+pub mod terminal_embed;
+#[cfg(test)]
+mod terminal_embed_test;
 pub mod textprop;
 pub mod threads;
 pub mod timefns;

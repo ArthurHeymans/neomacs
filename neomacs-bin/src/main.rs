@@ -106,9 +106,13 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use neomacs_display_protocol::VisualConfig;
+#[cfg(not(feature = "neo-term"))]
+use neomacs_display_runtime::render_thread::run_render_loop_current_thread;
+#[cfg(feature = "neo-term")]
+use neomacs_display_runtime::render_thread::run_render_loop_current_thread_with_terminals;
 use neomacs_display_runtime::render_thread::{
     RenderEventLoopProxy, RenderUserEvent, SharedImageMetadata, SharedMonitorInfo,
-    build_render_event_loop, run_render_loop_current_thread,
+    build_render_event_loop,
 };
 use neomacs_display_runtime::shader_surface::{
     SurfaceChannelSource as RendererChannelSource, SurfaceShaderLanguage as RendererShaderLanguage,
@@ -118,6 +122,11 @@ use neomacs_display_runtime::thread_comm::{
     AssetCommand, ClipboardCommand, ClipboardSelection, ConfigCommand, EmacsComms, FrameRef,
     InputEvent as DisplayInputEvent, LifecycleCommand, MediaSource, RenderCommand, SurfaceSource,
     ThreadComms, UiCommand, WindowCommand, WindowFullscreenMode,
+};
+#[cfg(feature = "neo-term")]
+use neomacs_display_runtime::{
+    terminal::{SharedTerminals, TerminalMode, new_shared_terminals, visible_text},
+    thread_comm::TerminalCommand,
 };
 use neomacs_layout_engine::font::fontconfig::FontSizing;
 use neomacs_layout_engine::font::metrics::FontMetricsService;
@@ -135,6 +144,10 @@ use neovm_core::emacs_core::eval::{
     ShaderSurfaceContent, ShaderSurfaceCreateRequest, ShaderSurfaceLanguage,
     ShaderSurfaceUniformInit, SurfaceChannelKind, SurfaceResolveRequest, VideoResolveRequest,
     VideoResolveSource, WebKitResolveRequest, WebKitResolveSource,
+};
+#[cfg(feature = "neo-term")]
+use neovm_core::emacs_core::eval::{
+    TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement,
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
@@ -1025,6 +1038,8 @@ struct PrimaryWindowDisplayHost {
     /// received. Re-sent on `display_reset` so the frame shader survives a
     /// GPU device loss (it is Lisp-visible state, not a re-creatable cache).
     last_frame_shader: Mutex<Option<(String, RendererShaderLanguage, Vec<SurfaceUniformInit>)>>,
+    #[cfg(feature = "neo-term")]
+    shared_terminals: SharedTerminals,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1053,6 +1068,16 @@ static HOST_SURFACE_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_SURFACE_ID_STA
 
 fn next_host_surface_id() -> u32 {
     HOST_SURFACE_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
+}
+
+#[cfg(feature = "neo-term")]
+const HOST_TERMINAL_ID_START: u32 = 0x4000_0000;
+#[cfg(feature = "neo-term")]
+static HOST_TERMINAL_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_TERMINAL_ID_START);
+
+#[cfg(feature = "neo-term")]
+fn next_host_terminal_id() -> u32 {
+    HOST_TERMINAL_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
 }
 
 fn renderer_shader_language(language: ShaderSurfaceLanguage) -> RendererShaderLanguage {
@@ -2033,6 +2058,73 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         )
     }
 
+    #[cfg(feature = "neo-term")]
+    fn create_terminal(&self, request: TerminalCreateRequest) -> Result<u32, String> {
+        let id = next_host_terminal_id();
+        let mode = match request.mode {
+            TerminalDisplayMode::Window => TerminalMode::Window,
+            TerminalDisplayMode::Inline => TerminalMode::Inline,
+            TerminalDisplayMode::Floating => TerminalMode::Floating,
+        };
+        self.send_render_command(
+            RenderCommand::Terminal(TerminalCommand::TerminalCreate {
+                id,
+                cols: request.cols,
+                rows: request.rows,
+                mode,
+                shell: request.shell,
+            }),
+            "failed to queue terminal create",
+        )?;
+        Ok(id)
+    }
+
+    #[cfg(feature = "neo-term")]
+    fn write_terminal(&self, id: u32, data: Vec<u8>) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Terminal(TerminalCommand::TerminalWrite { id, data }),
+            "failed to queue terminal input",
+        )
+    }
+
+    #[cfg(feature = "neo-term")]
+    fn resize_terminal(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Terminal(TerminalCommand::TerminalResize { id, cols, rows }),
+            "failed to queue terminal resize",
+        )
+    }
+
+    #[cfg(feature = "neo-term")]
+    fn destroy_terminal(&self, id: u32) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Terminal(TerminalCommand::TerminalDestroy { id }),
+            "failed to queue terminal destroy",
+        )
+    }
+
+    #[cfg(feature = "neo-term")]
+    fn set_floating_terminal(
+        &self,
+        id: u32,
+        placement: TerminalFloatPlacement,
+    ) -> Result<(), String> {
+        self.send_render_command(
+            RenderCommand::Terminal(TerminalCommand::TerminalSetFloat {
+                id,
+                x: placement.x,
+                y: placement.y,
+                opacity: placement.opacity,
+            }),
+            "failed to queue terminal placement",
+        )
+    }
+
+    #[cfg(feature = "neo-term")]
+    fn terminal_text(&self, id: u32) -> Result<Option<String>, String> {
+        Ok(visible_text(&self.shared_terminals, id))
+    }
+
     fn set_frame_shader(
         &self,
         source: Option<(String, ShaderSurfaceLanguage, Vec<ShaderSurfaceUniformInit>)>,
@@ -2719,6 +2811,8 @@ fn run_gui_main_thread(
     let gui_image_metadata: SharedImageMetadata =
         Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
     let shared_monitors: SharedMonitorInfo = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
+    #[cfg(feature = "neo-term")]
+    let shared_terminals = new_shared_terminals();
 
     let evaluator_handle = spawn_gui_evaluator_worker(
         mode,
@@ -2730,6 +2824,8 @@ fn run_gui_main_thread(
         Arc::clone(&primary_window_size),
         Arc::clone(&gui_image_metadata),
         Arc::clone(&shared_monitors),
+        #[cfg(feature = "neo-term")]
+        Arc::clone(&shared_terminals),
         render_waker.clone(),
     );
 
@@ -2738,15 +2834,33 @@ fn run_gui_main_thread(
         width,
         height
     );
-    let render_result = run_render_loop_current_thread(
-        event_loop,
-        render_comms,
-        width,
-        height,
-        "Neomacs".to_string(),
-        Arc::clone(&gui_image_metadata),
-        Arc::clone(&shared_monitors),
-    );
+    let render_result = {
+        #[cfg(feature = "neo-term")]
+        {
+            run_render_loop_current_thread_with_terminals(
+                event_loop,
+                render_comms,
+                width,
+                height,
+                "Neomacs".to_string(),
+                Arc::clone(&gui_image_metadata),
+                Arc::clone(&shared_monitors),
+                shared_terminals,
+            )
+        }
+        #[cfg(not(feature = "neo-term"))]
+        {
+            run_render_loop_current_thread(
+                event_loop,
+                render_comms,
+                width,
+                height,
+                "Neomacs".to_string(),
+                Arc::clone(&gui_image_metadata),
+                Arc::clone(&shared_monitors),
+            )
+        }
+    };
     if let Err(err) = &render_result {
         tracing::error!("GUI event loop exited with error: {err}");
     }
@@ -2779,6 +2893,7 @@ fn spawn_gui_evaluator_worker(
     primary_window_size: SharedPrimaryWindowSize,
     gui_image_metadata: SharedImageMetadata,
     shared_monitors: SharedMonitorInfo,
+    #[cfg(feature = "neo-term")] shared_terminals: SharedTerminals,
     render_waker: GuiEventLoopWaker,
 ) -> std::thread::JoinHandle<EvaluatorExit> {
     let cmd_tx_for_panic = emacs_comms.cmd_tx.clone();
@@ -2803,6 +2918,8 @@ fn spawn_gui_evaluator_worker(
                     primary_window_size,
                     gui_image_metadata,
                     shared_monitors,
+                    #[cfg(feature = "neo-term")]
+                    shared_terminals,
                     render_waker,
                 )
             }));
@@ -2893,6 +3010,7 @@ fn run_gui_evaluator_worker(
     primary_window_size: SharedPrimaryWindowSize,
     gui_image_metadata: SharedImageMetadata,
     shared_monitors: SharedMonitorInfo,
+    #[cfg(feature = "neo-term")] shared_terminals: SharedTerminals,
     render_waker: GuiEventLoopWaker,
 ) -> EvaluatorExit {
     let mut evaluator = create_startup_evaluator_for_mode(mode, &startup);
@@ -2940,6 +3058,8 @@ fn run_gui_evaluator_worker(
         resolved_surfaces: Mutex::new(ResolvedSurfaceMemo::default()),
         frame_shader_installed: AtomicBool::new(false),
         last_frame_shader: Mutex::new(None),
+        #[cfg(feature = "neo-term")]
+        shared_terminals,
     }));
     adopt_existing_primary_gui_frame(&mut evaluator)
         .expect("bootstrap GUI frame adoption should succeed");

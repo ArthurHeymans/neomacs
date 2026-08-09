@@ -32,6 +32,8 @@ mod window_commands;
 mod window_events;
 mod x11_hints;
 
+#[cfg(feature = "neo-term")]
+pub use bootstrap::run_render_loop_current_thread_with_terminals;
 pub use bootstrap::{build_render_event_loop, run_render_loop, run_render_loop_current_thread};
 use state::{FpsCounter, ImeCursorArea, RenderApp};
 pub use state::{ImageDecodeTerminal, MonitorInfo, SharedImageMetadata, SharedMonitorInfo};
