@@ -78,7 +78,7 @@ single-feature gap, and only one was a harness defect.
 | dumb_jump | entry 50, FIXED 5f926d612 -- `error-message-string` kept text properties GNU strips everywhere but the `(error STRING)` fast path |
 | evil_numbers | entry 51, FIXED b20ec53b9 -- `replace-match` refused any match data recorded as string-sourced, which is what `set-match-data` from plain integers produces |
 | vi_tilde_fringe | entry 52, FIXED 392a9f90c -- `define-fringe-bitmap` never registered the symbol in `fringe-bitmaps` |
-| rainbow_delimiters | entry 44 (sexp scanner ignores `category`) |
+| rainbow_delimiters | entry 44, FIXED a5ebb0d7a -- the sexp scanner read the `syntax-table` text property raw instead of through GNU's `textget`, so a syntax supplied via `category` (the CC Mode `c-use-category` mechanism) was invisible to it |
 | helm_descbinds | entry 45 (`describe-bindings` omits global bindings and the function-key map) |
 | swiper | entry 46 (query-replace replaces nothing; not reduced below the package) |
 | lsp_mode | entry 47, **DATA LOSS**, FIXED -- `replace-buffer-contents` could not be undone; a zero-length deletion was not recorded, so two insertions coalesced. Reduced to pure ASCII; **not a multibyte bug at all** |
@@ -1609,7 +1609,26 @@ reads the autoload file's `load-history` record and gets
 `((provide . auto-dark-autoloads))` where GNU gives
 `((defun . auto-dark-mode) (provide . auto-dark-autoloads))`.
 
-## 44. The sexp scanner does not follow a `category` text property
+## 44. The sexp scanner does not follow a `category` text property -- FIXED
+
+FIXED 2026-08-09 (a5ebb0d7a fix, 6670885b6 perf). The scanner now resolves its
+`syntax-table` property through the shared `textget` implementation
+(`CharPropertyResolver`, neovm-core/src/emacs_core/textprop.rs), so it agrees
+with `get-char-property` on every character by construction. The
+`honor_properties` flag became `SyntaxProperties::{Ignore, Honor(resolver)}`,
+which makes "honours properties but reads them raw" -- the state this bug
+lived in -- unrepresentable. `rainbow_delimiters` now reports GNU's
+`c-<-as-paren-syntax` / `c->-as-paren-syntax` and its suite is GREEN.
+Pinned by neovm-core/src/emacs_core/syntax_category_property_test.rs (14
+tests, every expectation measured on GNU 31.0.90), which also pins two GNU
+boundaries the fix must not cross: overlays never reach the scanner, and the
+fallbacks apply only where an interval exists (GNU `update_syntax_table`
+returns early when `interval_of` finds none). Cost: TTY typing -0.67%, a
+fontified 160k-char syntax-scan sweep +1.29% instructions, concentrated in
+`skip-syntax` and `forward-comment`, whose byte-addressed lookups have no run
+cache; fontification, `forward-sexp` and `parse-partial-sexp` are neutral.
+
+The reduction below is kept as the regression record.
 
 `parse-sexp-lookup-properties` makes the scanner honour a `syntax-table` text
 property. GNU reaches that property through `textget`
@@ -2049,3 +2068,40 @@ Recorded so nobody re-investigates them:
   `thing-at-point` *is* autoloaded and the package's own xref backend calls it,
   which loads the library as a side effect. Upstream defect, identical in both
   editors, and asserted from both sides in the suite.
+
+
+## 53. A string object's `syntax-table` property never reaches the regexp matcher
+
+Found while fixing entry 44, and orthogonal to it: it is not about the
+`category` indirection but about strings carrying properties at all. GNU sets
+up its syntax state for a string object (`RE_SETUP_SYNTAX_TABLE_FOR_OBJECT`,
+`src/syntax.c:277`), so `string-match` on a propertized string honours the
+positional `syntax-table` property exactly as a buffer search does. Neomacs's
+`BufferSyntaxLookup` is documented as deliberately position-independent for
+string input, so the property is never consulted.
+
+```elisp
+(let ((parse-sexp-lookup-properties t)
+      (s (concat "a" (propertize "<" 'syntax-table '(4 . ?>)) "b")))
+  (string-match "\\s(" s))
+;; GNU     => 1
+;; Neomacs => nil
+```
+
+The `category` form of the same probe diverges identically, and for the same
+reason -- the property is not read, so nothing resolves it:
+
+```elisp
+(put 'p12-open 'syntax-table '(4 . ?>))
+(let ((parse-sexp-lookup-properties t)
+      (s (concat "a" (propertize "<" 'category 'p12-open) "b")))
+  (string-match "\\s(" s))
+;; GNU     => 1
+;; Neomacs => nil
+```
+
+Not yet attributed to a package suite. The buffer half of this path is fixed
+(entry 44 pins `re-search-forward` resolving a category in a buffer); a fix
+here means giving the string matcher the same
+`SyntaxProperties`/`CharPropertyResolver` seam over the string's own
+`TextPropertyTable`.
