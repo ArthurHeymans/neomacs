@@ -369,7 +369,7 @@ rank	package	downloads	status
 368	tide	279725	todo
 369	livid-mode	276850	todo
 370	parsebib	276258	covered
-371	groovy-mode	275480	todo
+371	groovy-mode	275480	covered
 372	ledger-mode	271643	todo
 373	lsp-python-ms	271010	todo
 374	blacken	267883	todo

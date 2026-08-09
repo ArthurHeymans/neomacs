@@ -6017,3 +6017,7 @@ pub const COLOR_THEME_SANITYINC_SOLARIZED_MELPA_PIN: (&str, &str) =
 /// The exact parsebib package selected for practical BibTeX entry parsing.
 /// Pinned to upstream commit `5b837e0a5b91a69cc0e5086d8e4a71d6d86dac93`.
 pub const PARSEBIB_MELPA_PIN: (&str, &str) = ("parsebib", "20251127.1731");
+
+/// The exact groovy-mode package selected for practical indentation and font-lock.
+/// Pinned to upstream commit `7b8520b2e2d3ab1d62b35c426e17ac25ed0120bb`.
+pub const GROOVY_MODE_MELPA_PIN: (&str, &str) = ("groovy-mode", "20230317.2233");
