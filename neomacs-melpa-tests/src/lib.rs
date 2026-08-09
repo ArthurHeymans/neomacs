@@ -2472,6 +2472,14 @@ pub const OVERSEER_MELPA_PIN: (&str, &str) = ("overseer", "20240109.800");
 /// `d811bbefcb5e27841af55cae53aa939ba720de77`.
 pub const EMACSQL_MELPA_PIN: (&str, &str) = ("emacsql", "20260601.1722");
 
+/// The final standalone EmacSQL SQLite package selected for practical
+/// migration-warning and feature lifecycle parity.  MELPA built version
+/// 20240825.1837 from the exact `legacy-stubs` revision
+/// `b9f19ac5e17a90d5b7314d67e3b790992be7d82d`; this package intentionally
+/// provides no database backend and directs users to uninstall it because the
+/// backend moved into `emacsql` itself.
+pub const EMACSQL_SQLITE_MELPA_PIN: (&str, &str) = ("emacsql-sqlite", "20240825.1837");
+
 /// The exact Ghub package selected for practical REST and GraphQL request,
 /// JSON response, pagination, authentication, forge identity, retry, and
 /// failure parity. MELPA built this archive from upstream commit
