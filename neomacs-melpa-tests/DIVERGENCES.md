@@ -21,8 +21,11 @@ on disk rather than one form, and entry 15 is an intermittent segfault not
 reduced below its package. The script that runs the rest is
 `tmp/verify-divergences.sh`.
 
-Entry 15 is a **memory fault**, not a behavioural difference; read it first if
-you are triaging by severity.
+Triaging by severity? Read these two first. Entry 47 is **data loss** --
+`replace-buffer-contents` cannot be undone, so a user who undoes an LSP edit,
+a format-on-save or a `revert-buffer` gets back corrupted text and cannot
+recover the original. Entry 15 is a **memory fault**, not a behavioural
+difference.
 
 Reproduce a failing suite with:
 
@@ -78,7 +81,7 @@ single-feature gap, and only one was a harness defect.
 | rainbow_delimiters | entry 44 (sexp scanner ignores `category`) |
 | helm_descbinds | entry 45 (`describe-bindings` omits global bindings and the function-key map) |
 | swiper | entry 46 (query-replace replaces nothing; not reduced below the package) |
-| lsp_mode | entry 47 -- `replace-buffer-contents` cannot be undone; a zero-length deletion is not recorded, so two insertions coalesce. Reduced to pure ASCII; **not a multibyte bug at all**. Seam identified, not fixed |
+| lsp_mode | entry 47, **DATA LOSS** -- `replace-buffer-contents` cannot be undone; a zero-length deletion is not recorded, so two insertions coalesce. Reduced to pure ASCII; **not a multibyte bug at all**. Seam identified, not fixed |
 | elisp_slime_nav | entry 48 (an error message loses a text property; not reduced below the package) |
 
 Every genuine divergence has a numbered entry with its reduction, kept after
@@ -1730,7 +1733,12 @@ Affects: `swiper` (1)
 `query_replace_renames_selected_incidents_with_captured_identifiers`.
 
 
-## 47. `replace-buffer-contents` cannot be undone: an empty deletion is not recorded
+## 47. DATA LOSS: `replace-buffer-contents` cannot be undone
+
+**Severity: data-loss class. Highest-severity open entry in this ledger.** The
+user's original text is unrecoverable through undo, and nothing warns them:
+the forward edit is always correct, so the damage only appears when undo is
+pressed, by which point the original is gone.
 
 Replacing a region through `replace-region-contents` and undoing the result
 gives back text that is neither the original nor the replacement -- individual
