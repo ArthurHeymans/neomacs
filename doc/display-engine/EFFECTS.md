@@ -28,6 +28,7 @@ positional setters:
                     :enabled t :speed 2.4
                     :style 'critically-damped-spring
                     :duration 0.15 :trail-size 0.7)
+(neomacs-effect-set 'cursor-color-cycle :enabled t :fps 24)
 (neomacs-effect-set 'cursor-blink :enabled t :interval 0.5)
 (neomacs-effect-set 'cursor-size-transition :enabled t :duration 0.15)
 (neomacs-effect-set 'crossfade-transition
@@ -47,7 +48,8 @@ boundary.  Time fields whose names end in `-ms` are milliseconds, while Rust
 `Duration` fields are exposed as seconds.  Opacity, saturation/lightness,
 cursor trail size, flicker, and normalized thumb radius are constrained to
 0–1; dimensions, speeds, and other unsigned quantities reject negative values
-before reaching the renderer.
+before reaching the renderer.  Frame rates are positive integers, so `:fps 0`
+is rejected rather than silently coerced by the scheduler.
 
 ## Profiles
 
@@ -92,3 +94,11 @@ must have focused round-trip tests.
 Effect updates are control-plane operations, not frame-loop operations.  The
 small serialization cost buys one source of truth and strict, atomic
 validation without affecting rendering performance.
+
+The default cursor color cycle is driven by the centralized frame scheduler,
+not an Elisp timer.  Its `:fps` setting defaults to 24 and is capped to the
+current display rate.  Frames use compositor-only cursor damage, and color is
+derived from elapsed presentation time, so missed or deliberately skipped
+ticks do not change the animation speed.  Demand pauses while the window is
+unfocused or cursors are blinked off.  Hollow cursor visuals do not contribute
+to the frame rate; split windows use the fastest enabled non-hollow cursor.

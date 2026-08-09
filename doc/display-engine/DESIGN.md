@@ -119,8 +119,10 @@ at physical resolution for HiDPI crispness.
 
 ## Animation System
 
-All animations run on the render thread at display refresh rate, completely independent
-of Emacs redisplay. Emacs sends configuration once; the render thread manages state.
+Animations run on the render thread independently of Emacs redisplay. The centralized
+frame scheduler drives interactive animation up to the display rate and lets ambient
+effects declare lower cadences (the cursor color cycle defaults to 24 Hz). Emacs sends
+configuration once; the render thread manages state.
 
 ### Cursor Animations
 

@@ -7,7 +7,10 @@ use crate::thread_comm::{
     ClipboardCommand, ClipboardSelection, RenderCommand, ThreadComms, UiCommand, WindowCommand,
 };
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
-use neomacs_display_protocol::{PopupMenuItem, SealedFramePresentation};
+use neomacs_display_protocol::{
+    Color, CursorStyle, DisplaySlotId, EffectsConfig, FrameRate, PhysCursor, PopupMenuItem,
+    SealedFramePresentation,
+};
 use neovm_core::window::GuiFrameGeometryHints;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -27,6 +30,136 @@ fn make_test_app() -> RenderApp {
         #[cfg(feature = "neo-term")]
         Arc::new(Mutex::new(HashMap::new())),
     )
+}
+
+#[test]
+fn cursor_color_cycle_rate_respects_effect_and_display_limits() {
+    let display_60_hz = std::num::NonZeroU16::new(60).unwrap();
+
+    assert_eq!(
+        RenderApp::cursor_color_cycle_rate(FrameRate::new(24).unwrap(), display_60_hz),
+        std::num::NonZeroU16::new(24).unwrap()
+    );
+    assert_eq!(
+        RenderApp::cursor_color_cycle_rate(FrameRate::new(144).unwrap(), display_60_hz),
+        display_60_hz
+    );
+}
+
+fn frame_with_cursor_effects(
+    effects: Option<EffectsConfig>,
+    cursor_style: CursorStyle,
+) -> FrameGlyphBuffer {
+    let window_id = DisplayWindowId::new(7);
+    let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
+    frame.set_phys_cursor(PhysCursor {
+        window_id,
+        charpos: 0,
+        row: 0,
+        col: 0,
+        slot_id: DisplaySlotId::ZERO,
+        x: 0.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: cursor_style,
+        color: Color::WHITE,
+        cursor_fg: Color::BLACK,
+    });
+    if let Some(effects) = effects {
+        frame.set_window_cursor_effects(window_id, effects);
+    }
+    frame
+}
+
+#[test]
+fn cursor_color_cycle_cadence_follows_the_effective_frame_profile() {
+    let display_60_hz = std::num::NonZeroU16::new(60).unwrap();
+    let mut global = EffectsConfig::default();
+    global.cursor_color_cycle.enabled = false;
+    let frame = frame_with_cursor_effects(None, CursorStyle::FilledBox);
+    assert_eq!(
+        RenderApp::cursor_color_cycle_cadence(&frame, &global, display_60_hz, true),
+        None
+    );
+
+    let mut local = EffectsConfig::cursor_profile_baseline();
+    local.cursor_color_cycle.enabled = true;
+    local.cursor_color_cycle.fps = FrameRate::new(12).unwrap();
+    let frame = frame_with_cursor_effects(Some(local), CursorStyle::FilledBox);
+    assert_eq!(
+        RenderApp::cursor_color_cycle_cadence(&frame, &global, display_60_hz, true),
+        std::num::NonZeroU16::new(12)
+    );
+
+    global.cursor_color_cycle.enabled = true;
+    let frame = frame_with_cursor_effects(
+        Some(EffectsConfig::cursor_profile_baseline()),
+        CursorStyle::FilledBox,
+    );
+    assert_eq!(
+        RenderApp::cursor_color_cycle_cadence(&frame, &global, display_60_hz, true),
+        None
+    );
+}
+
+#[test]
+fn cursor_color_cycle_cadence_pauses_when_the_cycle_cannot_change_pixels() {
+    let display_60_hz = std::num::NonZeroU16::new(60).unwrap();
+    let global = EffectsConfig::default();
+    let filled = frame_with_cursor_effects(None, CursorStyle::FilledBox);
+    assert_eq!(
+        RenderApp::cursor_color_cycle_cadence(&filled, &global, display_60_hz, false),
+        None,
+        "a blinked-off filled cursor has no visible cycle work"
+    );
+
+    let hollow = frame_with_cursor_effects(None, CursorStyle::Hollow);
+    assert_eq!(
+        RenderApp::cursor_color_cycle_cadence(&hollow, &global, display_60_hz, true),
+        None,
+        "the renderer deliberately does not color-cycle hollow cursors"
+    );
+}
+
+#[test]
+fn cursor_color_cycle_cadence_covers_every_rendered_window_cursor() {
+    let display_60_hz = std::num::NonZeroU16::new(60).unwrap();
+    let global = EffectsConfig::cursor_profile_baseline();
+
+    let mut selected = EffectsConfig::cursor_profile_baseline();
+    selected.cursor_color_cycle.enabled = true;
+    selected.cursor_color_cycle.fps = FrameRate::new(12).unwrap();
+    let mut frame = frame_with_cursor_effects(Some(selected), CursorStyle::FilledBox);
+
+    let decorative_window = DisplayWindowId::new(8);
+    frame.add_cursor(
+        decorative_window,
+        80.0,
+        0.0,
+        2.0,
+        16.0,
+        CursorStyle::Bar(2.0),
+        Color::WHITE,
+    );
+    let mut decorative = EffectsConfig::cursor_profile_baseline();
+    decorative.cursor_color_cycle.enabled = true;
+    decorative.cursor_color_cycle.fps = FrameRate::new(24).unwrap();
+    frame.set_window_cursor_effects(decorative_window, decorative);
+
+    assert_eq!(
+        RenderApp::cursor_color_cycle_cadence(&frame, &global, display_60_hz, true),
+        std::num::NonZeroU16::new(24),
+        "demand must use the fastest visible cursor rendered in a split frame"
+    );
+
+    frame.active_cursor_mut().unwrap().style = CursorStyle::Hollow;
+    assert_eq!(
+        RenderApp::cursor_color_cycle_cadence(&frame, &global, display_60_hz, true),
+        std::num::NonZeroU16::new(24),
+        "a hollow selected cursor must not suppress a cycling decorative cursor"
+    );
 }
 
 fn seal_state(mut state: FrameDisplayState) -> SealedFramePresentation {

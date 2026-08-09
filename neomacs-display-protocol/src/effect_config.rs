@@ -4,6 +4,32 @@
 //! All configs are grouped in `EffectsConfig` which is shared between
 //! `RenderApp` and `WgpuRenderer`.
 use crate::types::FaceId;
+use std::num::NonZeroU32;
+
+/// A user-facing animation rate that is non-zero by construction.
+///
+/// The transparent representation keeps the effect registry's Elisp value an
+/// integer while preventing an invalid zero cadence from entering a committed
+/// [`EffectsConfig`]. Display-specific caps remain a render-runtime policy.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct FrameRate(NonZeroU32);
+
+impl FrameRate {
+    #[must_use]
+    pub const fn new(fps: u32) -> Option<Self> {
+        match NonZeroU32::new(fps) {
+            Some(fps) => Some(Self(fps)),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0.get()
+    }
+}
 
 /// Macro for defining effect config structs with Default implementations.
 ///
@@ -255,11 +281,12 @@ effect_config!(
 effect_config!(
     /// Configuration for the cursor color cycle effect.
     ///
-    /// Opt-in like every other effect: while enabled the frame scheduler holds
-    /// standing compositor-only demand at display cadence, so an idle editor
-    /// presents once per refresh instead of once per cursor blink.
+    /// Enabled as a product default. Its standing compositor-only demand is
+    /// capped below display cadence by default so the ambient animation does
+    /// not make an otherwise idle editor present once per refresh.
     CursorColorCycleConfig {
-        enabled: bool = false,
+        enabled: bool = true,
+        fps: FrameRate = FrameRate::new(24).expect("24 Hz is non-zero"),
         speed: f32 = 0.5,
         saturation: f32 = 0.8,
         lightness: f32 = 0.6,

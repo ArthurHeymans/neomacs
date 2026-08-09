@@ -1322,6 +1322,61 @@ fn set_phys_cursor_stores_info() {
     assert_color_eq(&stored.cursor_fg, &cursor.cursor_fg);
 }
 
+#[test]
+fn effective_phys_cursor_effects_prefers_the_selected_window_profile() {
+    let mut buf = FrameGlyphBuffer::new();
+    let window_id = DisplayWindowId::new(2);
+    buf.set_phys_cursor(PhysCursor {
+        window_id,
+        charpos: 0,
+        row: 0,
+        col: 0,
+        slot_id: DisplaySlotId::ZERO,
+        x: 0.0,
+        y: 0.0,
+        width: 8.0,
+        height: 16.0,
+        ascent: 12.0,
+        style: CursorStyle::FilledBox,
+        color: Color::WHITE,
+        cursor_fg: Color::BLACK,
+    });
+
+    let mut global = EffectsConfig::default();
+    global.cursor_color_cycle.fps = crate::FrameRate::new(24).unwrap();
+    assert_eq!(
+        buf.effective_phys_cursor_effects(&global)
+            .cursor_color_cycle
+            .fps
+            .get(),
+        24
+    );
+
+    let mut local = EffectsConfig::cursor_profile_baseline();
+    local.cursor_color_cycle.enabled = true;
+    local.cursor_color_cycle.fps = crate::FrameRate::new(12).unwrap();
+    buf.set_window_cursor_effects(window_id, local);
+    assert_eq!(
+        buf.effective_window_cursor_effects(window_id, &global)
+            .cursor_color_cycle
+            .fps
+            .get(),
+        12
+    );
+    assert_eq!(
+        buf.effective_window_cursor_effects(DisplayWindowId::new(99), &global)
+            .cursor_color_cycle
+            .fps
+            .get(),
+        24
+    );
+    let effective = &buf
+        .effective_phys_cursor_effects(&global)
+        .cursor_color_cycle;
+    assert!(effective.enabled);
+    assert_eq!(effective.fps.get(), 12);
+}
+
 // =======================================================================
 // font_size() / set_font_size()
 // =======================================================================

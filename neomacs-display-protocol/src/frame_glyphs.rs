@@ -1813,10 +1813,32 @@ impl FrameGlyphBuffer {
         self.cursor_effects_by_window.get(&window_id)
     }
 
+    /// Resolve one window cursor's effect profile using the renderer-wide
+    /// profile when layout did not supply a local override.
+    pub fn effective_window_cursor_effects<'a>(
+        &'a self,
+        window_id: DisplayWindowId,
+        fallback: &'a EffectsConfig,
+    ) -> &'a EffectsConfig {
+        self.window_cursor_effects(window_id).unwrap_or(fallback)
+    }
+
     /// Return the active physical cursor's effect profile, if any.
     pub fn phys_cursor_effects(&self) -> Option<&EffectsConfig> {
         self.active_cursor()
             .and_then(|cursor| self.window_cursor_effects(cursor.window_id))
+    }
+
+    /// Resolve the effect profile used to render and schedule the active
+    /// physical cursor. A selected window's profile overrides the global
+    /// renderer profile; frames without one inherit the supplied fallback.
+    pub fn effective_phys_cursor_effects<'a>(
+        &'a self,
+        fallback: &'a EffectsConfig,
+    ) -> &'a EffectsConfig {
+        self.active_cursor().map_or(fallback, |cursor| {
+            self.effective_window_cursor_effects(cursor.window_id, fallback)
+        })
     }
 
     /// Add per-window metadata for animation detection

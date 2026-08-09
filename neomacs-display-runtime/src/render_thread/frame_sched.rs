@@ -385,6 +385,13 @@ struct ScheduledDemand {
     period: Option<Duration>,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct MaxRateAnchor {
+    reason: DemandReason,
+    at: Instant,
+    period: Duration,
+}
+
 #[derive(Debug, Default)]
 struct DueDemand {
     invalidation: Invalidation,
@@ -425,7 +432,7 @@ struct WindowSched {
     /// Future deadline demands, at most one per reason.
     scheduled: Vec<ScheduledDemand>,
     /// Phase anchors for MaxRate reasons: next allowed fire time.
-    max_rate_anchor: Vec<(DemandReason, Instant)>,
+    max_rate_anchor: Vec<MaxRateAnchor>,
     last_present_at: Option<Instant>,
 }
 
@@ -442,19 +449,29 @@ impl WindowSched {
         !self.due.is_empty() || !self.scheduled.is_empty()
     }
 
-    fn anchor_for(&mut self, reason: DemandReason) -> Option<Instant> {
+    fn anchor_for(&self, reason: DemandReason) -> Option<MaxRateAnchor> {
         self.max_rate_anchor
             .iter()
-            .find(|(r, _)| *r == reason)
-            .map(|(_, at)| *at)
+            .find(|anchor| anchor.reason == reason)
+            .copied()
     }
 
-    fn set_anchor(&mut self, reason: DemandReason, at: Instant) {
-        if let Some(entry) = self.max_rate_anchor.iter_mut().find(|(r, _)| *r == reason) {
-            entry.1 = at;
+    fn set_anchor(&mut self, reason: DemandReason, at: Instant, period: Duration) {
+        if let Some(anchor) = self
+            .max_rate_anchor
+            .iter_mut()
+            .find(|anchor| anchor.reason == reason)
+        {
+            anchor.at = at;
+            anchor.period = period;
         } else {
-            self.max_rate_anchor.push((reason, at));
+            self.max_rate_anchor
+                .push(MaxRateAnchor { reason, at, period });
         }
+    }
+
+    fn clear_schedule(&mut self, reason: DemandReason) {
+        self.scheduled.retain(|demand| demand.reason != reason);
     }
 
     fn schedule(&mut self, demand: ScheduledDemand) {
@@ -544,16 +561,24 @@ impl FrameCoordinator {
                     // First submission (or anchor already reached): fire now
                     // and anchor the phase grid at now + period.
                     None => {
-                        ws.set_anchor(demand.reason, now + period);
+                        ws.set_anchor(demand.reason, now + period, period);
                         ws.due.merge(demand.invalidation, true, demand.reason);
                         Self::drive(ws)
                     }
-                    Some(anchor) if anchor <= now => {
-                        let mut next = anchor;
+                    // Configuration changed: discard the old deadline, fire
+                    // once now, and establish the new phase grid immediately.
+                    Some(anchor) if anchor.period != period => {
+                        ws.clear_schedule(demand.reason);
+                        ws.set_anchor(demand.reason, now + period, period);
+                        ws.due.merge(demand.invalidation, true, demand.reason);
+                        Self::drive(ws)
+                    }
+                    Some(anchor) if anchor.at <= now => {
+                        let mut next = anchor.at;
                         while next <= now {
                             next += period;
                         }
-                        ws.set_anchor(demand.reason, next);
+                        ws.set_anchor(demand.reason, next, period);
                         ws.due.merge(demand.invalidation, true, demand.reason);
                         Self::drive(ws)
                     }
@@ -562,11 +587,11 @@ impl FrameCoordinator {
                     Some(anchor) => {
                         ws.schedule(ScheduledDemand {
                             reason: demand.reason,
-                            at: anchor,
+                            at: anchor.at,
                             invalidation: demand.invalidation,
                             period: Some(period),
                         });
-                        PacingAction::WakeAt(anchor)
+                        PacingAction::WakeAt(anchor.at)
                     }
                 }
             }
@@ -590,7 +615,7 @@ impl FrameCoordinator {
     pub(crate) fn retract(&mut self, id: NativeWindowId, reason: DemandReason) {
         let ws = self.window(id);
         ws.scheduled.retain(|s| s.reason != reason);
-        ws.max_rate_anchor.retain(|(r, _)| *r != reason);
+        ws.max_rate_anchor.retain(|anchor| anchor.reason != reason);
     }
 
     /// Consume demand for one tick and decide the work.
@@ -615,11 +640,11 @@ impl FrameCoordinator {
                 } = ws.scheduled.swap_remove(i);
                 ws.due.merge(invalidation, true, reason);
                 if let Some(period) = period {
-                    let mut next = ws.anchor_for(reason).unwrap_or(frame_time);
+                    let mut next = ws.anchor_for(reason).map_or(frame_time, |anchor| anchor.at);
                     while next <= frame_time {
                         next += period;
                     }
-                    ws.set_anchor(reason, next);
+                    ws.set_anchor(reason, next, period);
                 }
             } else {
                 i += 1;

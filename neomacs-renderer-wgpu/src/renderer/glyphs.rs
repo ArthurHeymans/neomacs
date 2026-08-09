@@ -1413,8 +1413,7 @@ impl WgpuRenderer {
             // Clone effect config into a local so we can mutably borrow `self`
             // while effect functions still read configuration.
             let effects_for_ctx = frame_glyphs
-                .phys_cursor_effects()
-                .unwrap_or(&self.effects)
+                .effective_phys_cursor_effects(&self.effects)
                 .clone();
             let ectx = super::effect_common::EffectCtx {
                 effects: &effects_for_ctx,

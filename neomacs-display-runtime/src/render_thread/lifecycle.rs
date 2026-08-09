@@ -380,10 +380,6 @@ impl RenderApp {
         let webkit_active = self.has_webkit_needing_redraw();
         let videos_active = self.has_playing_videos();
         let surfaces_active = self.has_active_shader_surfaces();
-        // Stage 3 tracer bullet: the cursor color cycle is explicit infinite
-        // compositor-only demand, not a render-time latch.
-        let cursor_cycle_enabled = self.effects.cursor_color_cycle.enabled;
-
         // Destroyed windows must not keep waking the loop.
         let live: std::collections::HashSet<NativeWindowId> = self
             .frame_windows
@@ -491,23 +487,36 @@ impl RenderApp {
             }
 
             // Infinite ambient effect: cursor color cycle animates whenever a
-            // cursor exists in a committed frame. Compositor-only demand at
-            // display cadence; the draw path no longer latches continuation.
-            // Policy (Stage 7): an unfocused window pauses the ambient cycle —
-            // there is no reason to keep cycling the cursor color at display
-            // cadence on a window the user is not looking at.
-            let cursor_cycle_active = cursor_cycle_enabled
-                && self.frame_coordinator.is_focused(id)
-                && window_state.render.cursor.target.is_some()
-                && window_state.render.compositor.current_frame.is_some();
-            if cursor_cycle_active {
+            // cursor exists in a committed frame. Its configured cadence is
+            // non-zero in the control-plane type and capped to the display rate
+            // at this scheduling boundary; the draw path no longer latches
+            // continuation. Policy (Stage 7): unfocused windows and blinked-off
+            // cursors pause ambient demand, while hollow cursor visuals do not
+            // contribute to the aggregate rate because the cycle cannot change
+            // their pixels. Color remains a function of elapsed presentation
+            // time, not the number of ticks.
+            let cycle_rate = window_state
+                .render
+                .compositor
+                .current_frame
+                .as_ref()
+                .and_then(|frame| {
+                    Self::cursor_color_cycle_cadence(
+                        frame,
+                        &self.effects,
+                        max_rate,
+                        window_state.render.cursor.blink_on,
+                    )
+                })
+                .filter(|_| self.frame_coordinator.is_focused(id));
+            if let Some(cycle_rate) = cycle_rate {
                 let cycle_action = self.frame_coordinator.submit_demand(
                     id,
                     FrameDemand {
                         invalidation: Invalidation::CompositeOnly {
                             layers: LayerMask::CURSOR_EFFECTS,
                         },
-                        cadence: Cadence::MaxRate(max_rate),
+                        cadence: Cadence::MaxRate(cycle_rate),
                         reason: DemandReason::CursorColorCycle,
                     },
                     now,
@@ -595,6 +604,46 @@ impl RenderApp {
             .clamp(30, 240);
         std::num::NonZeroU16::new(hz).unwrap_or(std::num::NonZeroU16::new(60).unwrap())
     }
+
+    /// Convert the user-facing integer rate into the scheduler's valid rate
+    /// domain, never scheduling faster than the target display can present.
+    pub(super) fn cursor_color_cycle_rate(
+        configured_fps: neomacs_display_protocol::FrameRate,
+        display_max_rate: std::num::NonZeroU16,
+    ) -> std::num::NonZeroU16 {
+        let display_hz = u32::from(display_max_rate.get());
+        let effective_hz = configured_fps.get().min(display_hz);
+        std::num::NonZeroU16::new(effective_hz as u16)
+            .expect("a non-zero frame rate capped to a non-zero display rate stays non-zero")
+    }
+
+    /// Derive standing cursor-cycle demand from every cursor visual the
+    /// renderer will color-cycle. `None` represents no visible cycle work;
+    /// otherwise the fastest enabled profile wins and is display-capped.
+    pub(super) fn cursor_color_cycle_cadence(
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        global_effects: &neomacs_display_protocol::EffectsConfig,
+        display_max_rate: std::num::NonZeroU16,
+        cursor_visible: bool,
+    ) -> Option<std::num::NonZeroU16> {
+        if !cursor_visible {
+            return None;
+        }
+        frame
+            .window_cursors
+            .iter()
+            .filter(|cursor| !cursor.style.is_hollow())
+            .filter_map(|cursor| {
+                let cycle = &frame
+                    .effective_window_cursor_effects(cursor.window_id, global_effects)
+                    .cursor_color_cycle;
+                cycle
+                    .enabled
+                    .then(|| Self::cursor_color_cycle_rate(cycle.fps, display_max_rate))
+            })
+            .max_by_key(|rate| rate.get())
+    }
+
     pub(super) fn handle_exiting(&mut self) {
         // Explicitly drop wgpu resources while the Wayland connection is still alive.
         // Without this, RenderApp's implicit drop happens AFTER the event loop's

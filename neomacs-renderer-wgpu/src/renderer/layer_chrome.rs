@@ -137,8 +137,7 @@ impl WgpuRenderer {
         // under line numbers or scaled fonts.
         for cursor in &frame_glyphs.window_cursors {
             let cursor_effects = frame_glyphs
-                .window_cursor_effects(cursor.window_id)
-                .unwrap_or(&self.effects)
+                .effective_window_cursor_effects(cursor.window_id, &self.effects)
                 .clone();
             self.emit_cursor_visual(
                 cursor.window_id,

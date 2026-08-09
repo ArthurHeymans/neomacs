@@ -1,7 +1,9 @@
 # Animations
 
-All animations run on the GPU render thread at display refresh rate, independent of the
-Emacs redisplay. Everything is configurable from Elisp — see [Configuration](#configuration).
+Animations run on the GPU render thread independently of Emacs redisplay. The centralized
+frame scheduler drives interactive animation up to the display rate while allowing ambient
+effects to declare a lower cadence; the cursor color cycle defaults to 24 Hz. Everything is
+configurable from Elisp — see [Configuration](#configuration).
 
 ## Cursor
 

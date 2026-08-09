@@ -328,6 +328,42 @@ fn max_rate_phase_survives_interleaved_commits() {
 }
 
 #[test]
+fn changing_max_rate_reanchors_without_waiting_for_the_old_period() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    let demand = |rate| FrameDemand {
+        invalidation: Invalidation::CompositeOnly {
+            layers: LayerMask::CURSOR_EFFECTS,
+        },
+        cadence: Cadence::MaxRate(NonZeroU16::new(rate).unwrap()),
+        reason: DemandReason::CursorColorCycle,
+    };
+
+    assert_eq!(
+        c.submit_demand(win(1), demand(1), now),
+        PacingAction::RequestRedraw
+    );
+    let _ = c.begin_frame(win(1), tick_at(now + ms(1)));
+    assert_eq!(
+        c.submit_demand(win(1), demand(1), now + ms(2)),
+        PacingAction::WakeAt(now + Duration::from_secs(1))
+    );
+
+    let changed_at = now + ms(10);
+    assert_eq!(
+        c.submit_demand(win(1), demand(24), changed_at),
+        PacingAction::RequestRedraw
+    );
+    let _ = c.begin_frame(win(1), tick_at(changed_at + ms(1)));
+    let next = changed_at + Duration::from_secs_f64(1.0 / 24.0);
+    assert_eq!(
+        c.submit_demand(win(1), demand(24), changed_at + ms(2)),
+        PacingAction::WakeAt(next)
+    );
+    assert_eq!(c.next_wake_deadline(), Some(next));
+}
+
+#[test]
 fn commit_wakes_immediately_despite_future_deadline() {
     let mut c = FrameCoordinator::new();
     let now = t0();
@@ -727,7 +763,7 @@ fn plan_attributes_the_frame_to_its_driving_reasons() {
 }
 
 #[test]
-fn an_ambient_max_rate_demand_attributes_every_frame_it_drives() {
+fn an_ambient_24_hz_demand_attributes_every_frame_it_drives() {
     // The shape of the idle cursor-color-cycle load: one standing MaxRate
     // demand paces a frame per period, and each of those frames names it.
     let mut c = FrameCoordinator::new();
@@ -736,12 +772,12 @@ fn an_ambient_max_rate_demand_attributes_every_frame_it_drives() {
         invalidation: Invalidation::CompositeOnly {
             layers: LayerMask::CURSOR_EFFECTS,
         },
-        cadence: Cadence::MaxRate(std::num::NonZeroU16::new(60).unwrap()),
+        cadence: Cadence::MaxRate(std::num::NonZeroU16::new(24).unwrap()),
         reason: DemandReason::CursorColorCycle,
     };
     let mut attributed = 0;
     for i in 0..10 {
-        let at = now + ms(17 * i);
+        let at = now + ms(42 * i);
         c.submit_demand(win(1), cycle, at);
         let plan = c.begin_frame(win(1), tick_at(at));
         if plan.reasons.contains(DemandReason::CursorColorCycle) {

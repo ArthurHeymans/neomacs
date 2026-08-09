@@ -375,6 +375,9 @@ fn number_for_target(
     if is_unit_interval(property) && !(0.0..=1.0).contains(&value) {
         return Err("a number between 0 and 1");
     }
+    if property == "fps" && (value <= 0.0 || value.fract() != 0.0) {
+        return Err("a positive integer");
+    }
     if value < 0.0 && !allows_negative(property) {
         return Err("a non-negative number");
     }

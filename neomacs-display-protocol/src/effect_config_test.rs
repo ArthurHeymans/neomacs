@@ -33,6 +33,39 @@ fn named_effect_properties_apply_without_resetting_unspecified_properties() {
 }
 
 #[test]
+fn cursor_color_cycle_rate_round_trips_through_the_effect_registry() {
+    let configured = EffectsConfig::default()
+        .apply_effects(&[EffectOperation::set(
+            "cursor-color-cycle",
+            [("fps", EffectValue::Integer(12))],
+        )])
+        .unwrap();
+
+    assert_eq!(configured.cursor_color_cycle.fps.get(), 12);
+    assert!(
+        configured
+            .effect_values("cursor-color-cycle")
+            .unwrap()
+            .contains(&("fps".to_owned(), EffectValue::Integer(12)))
+    );
+}
+
+#[test]
+fn cursor_color_cycle_rejects_zero_rate_at_the_control_plane() {
+    let error = EffectsConfig::default()
+        .apply_effects(&[EffectOperation::set(
+            "cursor-color-cycle",
+            [("fps", EffectValue::Integer(0))],
+        )])
+        .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "effect `cursor-color-cycle` property `fps` expects a positive integer"
+    );
+}
+
+#[test]
 fn one_registry_handles_non_cursor_effects_and_reports_their_own_properties() {
     let updated = EffectsConfig::default()
         .apply_effects(&[EffectOperation::set(
@@ -492,7 +525,8 @@ fn cursor_candle_flame_defaults() {
 #[test]
 fn cursor_color_cycle_defaults() {
     let c = CursorColorCycleConfig::default();
-    assert_eq!(c.enabled, false);
+    assert_eq!(c.enabled, true);
+    assert_eq!(c.fps.get(), 24);
     assert_eq!(c.speed, 0.5);
     assert_eq!(c.saturation, 0.8);
     assert_eq!(c.lightness, 0.6);
@@ -2307,12 +2341,12 @@ fn all_opacity_defaults_are_in_zero_to_one() {
 #[test]
 fn default_enabled_fields_match_product_defaults() {
     let ec = EffectsConfig::default();
-    // Exhaustive check of every config that has an `enabled` field: no visual
-    // effect is on by default. Any default-on effect that animates also
-    // declares standing frame demand, i.e. it costs a present per refresh for
-    // every user who never asked for it.
-    let enabled_flags: Vec<bool> = vec![
+    assert!(
         ec.cursor_color_cycle.enabled,
+        "the cursor color cycle is the deliberate default-on visual effect"
+    );
+    // Exhaustive check of every other config that has an `enabled` field.
+    let enabled_flags: Vec<bool> = vec![
         ec.accent_strip.enabled,
         ec.argyle_pattern.enabled,
         ec.aurora.enabled,
@@ -2463,16 +2497,6 @@ fn default_enabled_fields_match_product_defaults() {
     for (i, &e) in enabled_flags.iter().enumerate() {
         assert_eq!(e, false, "enabled flag at index {} was true", i);
     }
-}
-
-#[test]
-fn default_cursor_color_cycle_is_disabled() {
-    // An ambient animation enabled by default costs a present per display
-    // refresh forever (the frame scheduler declares standing MaxRate demand
-    // for it), so the rainbow cursor is opt-in like every other effect.
-    let ec = EffectsConfig::default();
-
-    assert!(!ec.cursor_color_cycle.enabled);
 }
 
 // ═══════════════════════════════════════════════════════════════════
