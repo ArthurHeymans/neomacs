@@ -324,6 +324,7 @@ mod elisp_slime_nav;
 mod elixir_mode;
 mod elpy;
 mod emacsql;
+mod embark;
 mod emmet_mode;
 mod emr;
 mod epc;
