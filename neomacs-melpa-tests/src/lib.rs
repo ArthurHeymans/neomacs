@@ -6013,3 +6013,7 @@ pub const ELFEED_MELPA_PIN: (&str, &str) = ("elfeed", "20260805.1030");
 /// Pinned to upstream commit `f42431850e0ff0cff90c6cc39edc222faa40323d`.
 pub const COLOR_THEME_SANITYINC_SOLARIZED_MELPA_PIN: (&str, &str) =
     ("color-theme-sanityinc-solarized", "20241126.1028");
+
+/// The exact parsebib package selected for practical BibTeX entry parsing.
+/// Pinned to upstream commit `5b837e0a5b91a69cc0e5086d8e4a71d6d86dac93`.
+pub const PARSEBIB_MELPA_PIN: (&str, &str) = ("parsebib", "20251127.1731");

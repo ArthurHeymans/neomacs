@@ -368,7 +368,7 @@ rank	package	downloads	status
 367	dracula-theme	281412	todo
 368	tide	279725	todo
 369	livid-mode	276850	todo
-370	parsebib	276258	todo
+370	parsebib	276258	covered
 371	groovy-mode	275480	todo
 372	ledger-mode	271643	todo
 373	lsp-python-ms	271010	todo

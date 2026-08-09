@@ -504,6 +504,7 @@ mod page_break_lines;
 mod paradox;
 mod paredit;
 mod parent_mode;
+mod parsebib;
 mod parseclj;
 mod parseedn;
 mod password_generator;
