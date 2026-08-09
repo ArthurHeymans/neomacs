@@ -64,6 +64,8 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.state.face_ids,
             &mut self.state.source_render.reborrow(),
             self.state.row_build.row_geometry,
+            self.state.surface.append_surface,
+            self.active_face_state,
         ) else {
             return false;
         };

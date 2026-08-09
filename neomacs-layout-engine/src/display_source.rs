@@ -8,7 +8,8 @@ use crate::display_item::{
 };
 use crate::display_origin::{DisplayOrigin, DisplayPropertySource, OverlayStringKind};
 use crate::display_property::{
-    DisplayPropertyClassification, DisplayReplacementProperty, classify_display_property,
+    DisplayMarginContent, DisplayMarginSide, DisplayPropertyClassification,
+    DisplayReplacementProperty, classify_display_property,
     classify_display_property_modifiers_only,
 };
 use crate::display_row::append_context::DisplayRowAppendKind;
@@ -31,20 +32,20 @@ use neovm_core::emacs_core::value::{get_string_text_properties_table_for_value, 
 
 pub(crate) struct DisplaySourceContext<'a> {
     face_resolver: Option<&'a mut dyn DisplayItemFaceResolver>,
-    /// Sink for `(left-fringe …)` / `(right-fringe …)` specs encountered while
-    /// walking ANY source (buffer text or a Lisp/overlay string). The covered
-    /// text is still suppressed (the replacement resolves to `Empty`); the
-    /// layout is collected here and drained by the row-render path, where the
-    /// evaluator + current row + face allocator are available to resolve the
-    /// bitmap index/face and record a fringe descriptor on the row.
-    fringe_sink: Option<&'a mut Vec<crate::display_spec::DisplayFringeLayout>>,
+    /// Typed side channel for output that does not belong to the text area.
+    ///
+    /// GNU's iterator changes `glyph_row_area` for margin/fringe display specs;
+    /// it does not turn them into zero-width text.  Keeping the placement in an
+    /// exhaustive enum prevents a newly supported non-text area from silently
+    /// degrading to `Empty` while walking nested Lisp/overlay strings.
+    non_text_area_sink: Option<&'a mut Vec<DisplayNonTextAreaEmission>>,
 }
 
 impl<'a> DisplaySourceContext<'a> {
     pub(crate) const fn empty() -> Self {
         Self {
             face_resolver: None,
-            fringe_sink: None,
+            non_text_area_sink: None,
         }
     }
 
@@ -52,23 +53,29 @@ impl<'a> DisplaySourceContext<'a> {
     pub(crate) fn with_face_resolver(resolver: &'a mut dyn DisplayItemFaceResolver) -> Self {
         Self {
             face_resolver: Some(resolver),
-            fringe_sink: None,
+            non_text_area_sink: None,
         }
     }
 
-    pub(crate) fn with_face_resolver_and_fringe_sink(
+    pub(crate) fn with_face_resolver_and_non_text_area_sink(
         resolver: &'a mut dyn DisplayItemFaceResolver,
-        fringe_sink: &'a mut Vec<crate::display_spec::DisplayFringeLayout>,
+        non_text_area_sink: &'a mut Vec<DisplayNonTextAreaEmission>,
     ) -> Self {
         Self {
             face_resolver: Some(resolver),
-            fringe_sink: Some(fringe_sink),
+            non_text_area_sink: Some(non_text_area_sink),
         }
     }
 
     fn collect_fringe(&mut self, layout: crate::display_spec::DisplayFringeLayout) {
-        if let Some(sink) = self.fringe_sink.as_mut() {
-            sink.push(layout);
+        if let Some(sink) = self.non_text_area_sink.as_mut() {
+            sink.push(DisplayNonTextAreaEmission::Fringe(layout));
+        }
+    }
+
+    fn collect_margin(&mut self, emission: DisplayMarginEmission) {
+        if let Some(sink) = self.non_text_area_sink.as_mut() {
+            sink.push(DisplayNonTextAreaEmission::Margin(emission));
         }
     }
 
@@ -102,6 +109,43 @@ impl<'a> DisplaySourceContext<'a> {
             .as_mut()
             .and_then(|resolver| resolver.resolve_display_media_replacement(display_prop, face))
     }
+}
+
+/// Resolved output whose placement is outside the ordinary text flow.
+///
+/// This mirrors GNU's closed `glyph_row_area` routing decision.  Consumers
+/// must handle every placement explicitly instead of interpreting absence of
+/// an inline glyph as absence of output.
+#[derive(Clone, Debug)]
+pub(crate) enum DisplayNonTextAreaEmission {
+    Fringe(crate::display_spec::DisplayFringeLayout),
+    Margin(DisplayMarginEmission),
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct DisplayMarginEmission {
+    side: DisplayMarginSide,
+    content: DisplayMarginEmissionContent,
+}
+
+impl DisplayMarginEmission {
+    pub(crate) fn new(side: DisplayMarginSide, content: DisplayMarginEmissionContent) -> Self {
+        Self { side, content }
+    }
+
+    pub(crate) fn side(&self) -> DisplayMarginSide {
+        self.side
+    }
+
+    pub(crate) fn content(&self) -> &DisplayMarginEmissionContent {
+        &self.content
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum DisplayMarginEmissionContent {
+    String(Value),
+    Item(DisplayItemKind),
 }
 
 impl Default for DisplaySourceContext<'_> {
@@ -2039,6 +2083,9 @@ pub(crate) enum DisplayPropertyReplacementSourceItem {
     /// text with zero inline width, e.g. a `(left-fringe …)` display spec. GNU
     /// draws the bitmap in the fringe; the text area shows nothing.
     Empty,
+    /// A replacement routed to a structural margin area. It consumes the
+    /// covered source with zero inline width while retaining typed output.
+    Margin(DisplayMarginEmission),
     String(DisplayReplacementStringSourceItem),
     Stretch(DisplayReplacementStretchSourceItem),
     Media(DisplayReplacementMediaSourceResolution),
@@ -2062,6 +2109,10 @@ impl DisplayPropertyReplacementSourceItem {
     pub(crate) fn cursor_policy(&self) -> DisplayPropertyReplacementCursorPolicy {
         match self {
             Self::Empty => DisplayPropertyReplacementCursorPolicy::TextSlot {
+                width_px: 0.0,
+                stretch_like: false,
+            },
+            Self::Margin(_) => DisplayPropertyReplacementCursorPolicy::TextSlot {
                 width_px: 0.0,
                 stretch_like: false,
             },
@@ -2160,8 +2211,11 @@ impl DisplayPropertyReplacementSourceItem {
             )),
             DisplayReplacementProperty::Media(_) => inputs.media.map(Self::Media),
             DisplayReplacementProperty::Fringe(_) => Some(Self::Empty),
-            // Marginal-area content is not shown in the text flow (#188).
-            DisplayReplacementProperty::Margin => Some(Self::Empty),
+            // Margin output discovered in the descriptor path is rendered by
+            // the row-area append plan, never as inline text.
+            // Margin descriptors are resolved earlier, where media and source
+            // face services are available.
+            DisplayReplacementProperty::Margin(_) => None,
         }
     }
 }
@@ -2254,6 +2308,10 @@ pub(crate) struct LispStringSourceCursor {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum LispStringSourceOrigin {
     Normal,
+    /// Content reached through `((margin SIDE) STRING)`.  Like every display
+    /// replacement string in GNU, its own replacing `display` properties are
+    /// inert while ordinary face/modifier properties still apply.
+    MarginDisplayReplacement,
     BufferDisplayReplacement(BufferDisplayReplacementSource),
     OverlayString {
         overlay_id: Value,
@@ -2286,7 +2344,9 @@ enum NestedDisplayPolicy {
 impl LispStringSourceOrigin {
     const fn nested_display_policy(self) -> NestedDisplayPolicy {
         match self {
-            Self::BufferDisplayReplacement(_) => NestedDisplayPolicy::ModifiersOnly,
+            Self::MarginDisplayReplacement | Self::BufferDisplayReplacement(_) => {
+                NestedDisplayPolicy::ModifiersOnly
+            }
             Self::Normal | Self::OverlayString { .. } => NestedDisplayPolicy::Handle,
         }
     }
@@ -2297,7 +2357,7 @@ impl LispStringSourceOrigin {
                 DisplayPointerOccurrence::OverlayString { overlay_id, kind }
             }
             Self::BufferDisplayReplacement(source) => source.pointer_occurrence(),
-            Self::Normal => DisplayPointerOccurrence::Source,
+            Self::Normal | Self::MarginDisplayReplacement => DisplayPointerOccurrence::Source,
         }
     }
 }
@@ -3009,9 +3069,34 @@ impl DisplayPropertySourceReplacement {
                 context.collect_fringe(*layout);
                 Self::Empty
             }
-            // Marginal-area content is not rendered in the text flow; suppress
-            // the covered placeholder (#188).
-            Some(DisplayReplacementProperty::Margin) => Self::Empty,
+            Some(DisplayReplacementProperty::Margin(margin)) => {
+                let content = match margin.content() {
+                    DisplayMarginContent::String(value) => {
+                        Some(DisplayMarginEmissionContent::String(*value))
+                    }
+                    DisplayMarginContent::Stretch { layout, .. } => {
+                        Some(DisplayMarginEmissionContent::Item(
+                            DisplayItemKind::Stretch(layout.clone()),
+                        ))
+                    }
+                    DisplayMarginContent::Media { spec, replacement } => replacement
+                        .direct_replacement()
+                        .map(DisplayItemKind::MediaReplacement)
+                        .or_else(|| {
+                            context
+                                .resolve_display_media_replacement(*spec, face)
+                                .filter(|media| replacement.accepts_media_replacement(media))
+                                .map(DisplayItemKind::MediaReplacement)
+                        })
+                        .map(DisplayMarginEmissionContent::Item),
+                };
+                if let Some(content) = content {
+                    context.collect_margin(DisplayMarginEmission::new(margin.side(), content));
+                }
+                // A margin display spec replaces its covered source in the text
+                // area even if its media payload cannot be resolved.
+                Self::Empty
+            }
             Some(DisplayReplacementProperty::Media(replacement)) => replacement
                 .direct_replacement()
                 .map(DisplayItemKind::MediaReplacement)

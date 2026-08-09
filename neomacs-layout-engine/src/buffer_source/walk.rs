@@ -14,7 +14,12 @@ use crate::buffer_source::row_lifecycle::{
     BufferSourceSelectiveDisplayHiddenLines, BufferSourceSelectiveDisplayLineTailAction,
     consume_hscroll_skip_from_position,
 };
+use crate::display_row::append_context::{
+    DisplayRowActiveFaceAppendContext, DisplayRowAppendSurface,
+};
+use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::geometry::DisplayRowGeometryState;
+use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::walk_state::{
     HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
@@ -42,18 +47,18 @@ fn apply_produced_step_to_progress(
 ) -> (
     Option<BufferSourceConsumedItem>,
     Vec<crate::display_source_resolver::PendingDisplaySourceFace>,
-    Vec<crate::display_spec::DisplayFringeLayout>,
+    Vec<crate::display_source::DisplayNonTextAreaEmission>,
 ) {
     let ProducedStep {
         source_item,
         source_position,
         pending_faces,
-        pending_fringes,
+        pending_non_text_area,
     } = step;
     if source_item.is_none() {
         progress.apply_source_position(source_position);
     }
-    (source_item, pending_faces, pending_fringes)
+    (source_item, pending_faces, pending_non_text_area)
 }
 
 fn apply_produced_step_to_render_progress<B: LayoutBufferView>(
@@ -62,22 +67,40 @@ fn apply_produced_step_to_render_progress<B: LayoutBufferView>(
     face_resolution_context: BufferSourceFaceResolutionContext<'_, B>,
     source_render: &mut TextRowSourceRenderState<'_>,
     row_geometry: &mut DisplayRowGeometryState,
+    append_surface: &DisplayRowAppendSurface,
+    active_face_state: &DisplayRowActiveFaceState,
     face_ids: &mut FrameFaceAttempt,
 ) -> Option<BufferSourceConsumedItem> {
-    let (source_item, pending_faces, pending_fringes) =
+    let (source_item, pending_faces, pending_non_text_area) =
         apply_produced_step_to_progress(step, progress);
     face_resolution_context.install_pending_source_faces(
         source_render,
         row_geometry,
         pending_faces,
     );
-    // The zero inline width was already applied; the bitmap draws in the fringe
-    // column. The fallback face is only used when neither a
-    // `set-fringe-bitmap-face` override nor the spec's FACE resolves (magit
-    // always supplies a FACE).
-    let fallback_face_id = FaceId::from(neomacs_display_protocol::face::BasicFaceId::Default);
-    for layout in &pending_fringes {
-        source_render.record_fringe_bitmap_layout(layout, face_ids, fallback_face_id);
+    let fallback_metrics =
+        DisplayRowFallbackMetrics::from_measured_face(active_face_state.metrics());
+    let frame = DisplayRowActiveFaceAppendContext::new(
+        append_surface,
+        row_geometry,
+        active_face_state,
+        0.0,
+        fallback_metrics,
+    )
+    .active_face_frame();
+    for emission in pending_non_text_area {
+        let structural_order = if progress.row_position().col() == 0 {
+            crate::display_row::source_render::DisplayStructuralAreaOrder::BeforeExisting
+        } else {
+            crate::display_row::source_render::DisplayStructuralAreaOrder::AfterExisting
+        };
+        source_render.render_non_text_area_emission(
+            emission,
+            &frame,
+            face_ids,
+            active_face_state.face_id(),
+            structural_order,
+        );
     }
     source_item
 }
@@ -160,6 +183,8 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         face_ids: &mut FrameFaceAttempt,
         source_render: &mut TextRowSourceRenderState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
+        append_surface: &DisplayRowAppendSurface,
+        active_face_state: &DisplayRowActiveFaceState,
     ) -> Option<BufferSourceConsumedItem> {
         let step = self.producer.produce_step(
             progress.source_position(),
@@ -172,6 +197,8 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
             face_resolution_context,
             source_render,
             row_geometry,
+            append_surface,
+            active_face_state,
             face_ids,
         )
     }

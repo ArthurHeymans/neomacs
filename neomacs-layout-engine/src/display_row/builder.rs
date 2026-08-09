@@ -926,7 +926,16 @@ struct DisplayRowWriter<'layout, 'row, 'measurer> {
     layout: &'layout DisplayRowLayout,
     row: &'row mut GlyphRow,
     glyph_measurer: Option<&'measurer mut dyn DisplayGlyphMeasurer>,
-    area_index: usize,
+    // Keep the semantic target instead of erasing it to a usize.  Structural
+    // margin lanes have different boundary behavior from flowing text, and an
+    // exhaustive enum match makes that distinction compile-time checked.
+    area: GlyphArea,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DisplayRowOverflowPolicy {
+    RejectOverflowingGlyph,
+    ClipToStructuralLane,
 }
 
 pub(crate) struct DisplayRowProgressWriter<'layout, 'row, 'measurer> {
@@ -1251,23 +1260,48 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             kind => {
                 let slot_start = self.position;
                 let slot_source = span.start.clone();
+                let before_len = self.area_len();
                 let checkpoint = DisplayRowGlyphCheckpoint::capture(self.writer.row);
-                let written = self.writer.push_item(
+                let mut written = self.writer.push_item(
                     DisplayItem::new(span, face, kind)
                         .with_layout(item_layout)
                         .with_pointer_appearance(pointer_appearance.clone()),
                 );
+                let mut status = DisplayRowAppendStatus::Complete;
                 if written.has_positive_width()
                     && self.position.x_px() + written.width_px() > self.max_x_px
                 {
-                    checkpoint.restore(self.writer.row);
-                    return DisplayRowAppendProgress::new(
-                        start,
-                        self.position,
-                        metrics,
-                        DisplayRowAppendStatus::Clipped,
-                        slots,
-                    );
+                    let available_px = (self.max_x_px - self.position.x_px()).max(0.0);
+                    match self.writer.overflow_policy() {
+                        DisplayRowOverflowPolicy::RejectOverflowingGlyph
+                        | DisplayRowOverflowPolicy::ClipToStructuralLane
+                            if available_px <= 0.0 =>
+                        {
+                            checkpoint.restore(self.writer.row);
+                            return DisplayRowAppendProgress::new(
+                                start,
+                                self.position,
+                                metrics,
+                                DisplayRowAppendStatus::Clipped,
+                                slots,
+                            );
+                        }
+                        DisplayRowOverflowPolicy::RejectOverflowingGlyph => {
+                            checkpoint.restore(self.writer.row);
+                            return DisplayRowAppendProgress::new(
+                                start,
+                                self.position,
+                                metrics,
+                                DisplayRowAppendStatus::Clipped,
+                                slots,
+                            );
+                        }
+                        DisplayRowOverflowPolicy::ClipToStructuralLane => {
+                            self.clip_new_glyphs_to_available_width(before_len, available_px);
+                            written = self.metrics_since(before_len);
+                            status = DisplayRowAppendStatus::Clipped;
+                        }
+                    }
                 }
                 if !written.is_empty() {
                     slots.push(DisplayRowGlyphSlot::with_pointer_appearance(
@@ -1281,7 +1315,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 }
                 self.advance(written);
                 metrics.add(written);
-                DisplayRowAppendStatus::Complete
+                status
             }
         };
 
@@ -1321,7 +1355,12 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             let advance =
                 self.writer
                     .item_horizontal_advance_px(ch, face_id, natural_advance, item_layout);
-            if advance > 0.0 && self.position.x_px + advance > self.max_x_px {
+            let overflowing = advance > 0.0 && self.position.x_px + advance > self.max_x_px;
+            if overflowing
+                && (self.writer.overflow_policy()
+                    == DisplayRowOverflowPolicy::RejectOverflowingGlyph
+                    || self.position.x_px() >= self.max_x_px)
+            {
                 status = DisplayRowAppendStatus::Clipped;
                 break;
             }
@@ -1334,13 +1373,19 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             );
             self.writer
                 .apply_item_layout_since(before_len, face_id, item_layout);
+            if overflowing {
+                let available_px = (self.max_x_px - slot_start.x_px()).max(0.0);
+                self.clip_new_glyphs_to_available_width(before_len, available_px);
+                status = DisplayRowAppendStatus::Clipped;
+            }
             if self.area_len() > before_len
                 && pointer_metadata.is_none()
                 && let Some(appearance) = glyph_pointer_appearance
             {
                 pointer_metadata = self.writer.row.intern_pointer_appearance(appearance);
             }
-            for glyph in &mut self.writer.row.glyphs[self.writer.area_index][before_len..] {
+            let area_index = self.writer.area_index();
+            for glyph in &mut self.writer.row.glyphs[area_index][before_len..] {
                 glyph.pointer_appearance = pointer_metadata;
             }
             let written = self.metrics_since(before_len);
@@ -1355,17 +1400,50 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             self.advance(written);
             metrics.add(written);
             byte_offset += ch.len_utf8();
+            if overflowing {
+                break;
+            }
         }
         status
     }
 
+    /// Constrain newly appended structural glyphs to their lane's remaining
+    /// pixel extent.  The final fitting glyph is retained with a clipped cell,
+    /// while later glyphs are discarded.  This preserves both visibility and
+    /// the authoritative start position of the following text lane.
+    fn clip_new_glyphs_to_available_width(&mut self, before_len: usize, available_px: f32) {
+        let area_index = self.writer.area_index();
+        let char_width_px = self.writer.layout.char_width_px;
+        let glyphs = &mut self.writer.row.glyphs[area_index];
+        let mut remaining_px = available_px.max(0.0);
+        let mut keep_len = before_len;
+
+        for index in before_len..glyphs.len() {
+            if remaining_px <= 0.0 {
+                break;
+            }
+            let width = DisplayRowWriteMetrics::from_glyphs(
+                std::slice::from_ref(&glyphs[index]),
+                char_width_px,
+            )
+            .width_px();
+            keep_len = index + 1;
+            if width > remaining_px {
+                glyphs[index].pixel_width = remaining_px;
+                break;
+            }
+            remaining_px -= width;
+        }
+        glyphs.truncate(keep_len);
+    }
+
     fn area_len(&self) -> usize {
-        self.writer.row.glyphs[self.writer.area_index].len()
+        self.writer.row.glyphs[self.writer.area_index()].len()
     }
 
     fn metrics_since(&self, before_len: usize) -> DisplayRowWriteMetrics {
         DisplayRowWriteMetrics::from_glyphs(
-            &self.writer.row.glyphs[self.writer.area_index][before_len..],
+            &self.writer.row.glyphs[self.writer.area_index()][before_len..],
             self.writer.layout.char_width_px,
         )
     }
@@ -1382,6 +1460,19 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
 }
 
 impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
+    fn area_index(&self) -> usize {
+        self.area.index()
+    }
+
+    fn overflow_policy(&self) -> DisplayRowOverflowPolicy {
+        match self.area {
+            GlyphArea::Text => DisplayRowOverflowPolicy::RejectOverflowingGlyph,
+            GlyphArea::LeftMargin | GlyphArea::RightMargin => {
+                DisplayRowOverflowPolicy::ClipToStructuralLane
+            }
+        }
+    }
+
     #[cfg(test)]
     fn new(layout: &'layout DisplayRowLayout, row: &'row mut GlyphRow) -> Self {
         Self::for_area(layout, row, GlyphArea::Text)
@@ -1398,7 +1489,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             layout,
             row,
             glyph_measurer: None,
-            area_index: area.index(),
+            area,
         }
     }
 
@@ -1422,7 +1513,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             layout,
             row,
             glyph_measurer: Some(glyph_measurer),
-            area_index: area.index(),
+            area,
         }
     }
 
@@ -1433,7 +1524,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .as_ref()
             .and_then(|appearance| appearance.glyph_metadata());
         let face_id = self.face_id(item.face);
-        let area_index = self.area_index;
+        let area_index = self.area_index();
         let before_len = self.row.glyphs[area_index].len();
         match item.kind {
             DisplayItemKind::TextRun(run) => {
@@ -1571,7 +1662,8 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     ) {
         let ch = advance_request.ch();
         let face_id = advance_request.face_id;
-        let before_len = self.row.glyphs[self.area_index].len();
+        let area_index = self.area_index();
+        let before_len = self.row.glyphs[area_index].len();
         match advance_request.kind() {
             DisplayRowTextNaturalAdvanceKind::Tab => {
                 self.push_tab_at_position(
@@ -1583,7 +1675,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             DisplayRowTextNaturalAdvanceKind::ClusterContinuation => {
                 glyph_row_writer::push_cluster_continuation_to_area(
                     self.row,
-                    self.area_index,
+                    area_index,
                     ch,
                     advance_request.face_id,
                     charpos,
@@ -1593,7 +1685,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 let advance = advance_request.resolve_advance_px_with_writer(self);
                 glyph_row_writer::push_run_member_to_area(
                     self.row,
-                    self.area_index,
+                    area_index,
                     ch,
                     advance_request.face_id,
                     charpos,
@@ -1604,7 +1696,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 let advance = advance_request.resolve_advance_px_with_writer(self);
                 glyph_row_writer::push_wide_char_to_area(
                     self.row,
-                    self.area_index,
+                    area_index,
                     ch,
                     advance_request.face_id,
                     charpos,
@@ -1615,7 +1707,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 let advance = advance_request.resolve_advance_px_with_writer(self);
                 glyph_row_writer::push_char_to_area(
                     self.row,
-                    self.area_index,
+                    area_index,
                     ch,
                     advance_request.face_id,
                     charpos,
@@ -1630,7 +1722,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         else {
             return;
         };
-        for glyph in &mut self.row.glyphs[self.area_index][before_len..] {
+        for glyph in &mut self.row.glyphs[area_index][before_len..] {
             if !glyph.padding {
                 glyph.pixel_height = metrics.height_px;
                 glyph.pixel_ascent = metrics.ascent_px;
@@ -1655,7 +1747,8 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 .as_deref_mut()
                 .and_then(|measurer| measurer.face_vertical_metrics_px(face_id))
         });
-        for glyph in &mut self.row.glyphs[self.area_index][before_len..] {
+        let area_index = self.area_index();
+        for glyph in &mut self.row.glyphs[area_index][before_len..] {
             if matches!(glyph.glyph_type, GlyphType::Char { ch: ' ' }) {
                 // GNU xdisp turns a space carrying `(space-width FACTOR)`
                 // into a stretch glyph.  Its width and vertical box come
@@ -1678,7 +1771,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             };
             glyph.vertical_offset_px = item_layout.vertical_offset_px(reference_height);
         }
-        let vertical_metrics = self.row.glyphs[self.area_index][before_len..]
+        let vertical_metrics = self.row.glyphs[area_index][before_len..]
             .iter()
             .filter_map(|glyph| {
                 DisplayRowVerticalMetrics::from_glyph(glyph)
@@ -1710,7 +1803,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn text_char_state(&self, ch: char) -> DisplayRowTextCharState {
-        DisplayRowTextCharState::for_glyphs(ch, &self.row.glyphs[self.area_index])
+        DisplayRowTextCharState::for_glyphs(ch, &self.row.glyphs[self.area_index()])
     }
 
     fn text_run_measurement(&mut self, text: &str, face_id: FaceId) -> DisplayTextRunMeasurement {
@@ -1743,7 +1836,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let width_cols = advance.width_cols.min(usize::from(u16::MAX)) as u16;
         glyph_row_writer::push_stretch_to_area(
             self.row,
-            self.area_index,
+            self.area_index(),
             width_cols,
             face_id,
             advance.pixel_width,
@@ -1771,7 +1864,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     /// non-empty row already owns its origin and must never be repositioned by
     /// a later append fragment.
     fn set_empty_row_start(&mut self, requested: DisplayRowPosition) {
-        if self.area_index != GlyphArea::Text.index() || display_row_glyph_count(self.row) != 0 {
+        if self.area != GlyphArea::Text || display_row_glyph_count(self.row) != 0 {
             return;
         }
 
@@ -1784,7 +1877,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
 
     fn current_text_metrics(&self) -> DisplayRowWriteMetrics {
         DisplayRowWriteMetrics::from_glyphs(
-            &self.row.glyphs[self.area_index],
+            &self.row.glyphs[self.area_index()],
             self.layout.char_width_px,
         )
     }
@@ -1820,7 +1913,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
 
         glyph_row_writer::push_stretch_to_area(
             self.row,
-            self.area_index,
+            self.area_index(),
             width_cols,
             face_id,
             pixel_width,
@@ -1876,15 +1969,16 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         );
         glyph.glyph_type = glyph_type;
         glyph.charpos = charpos;
-        self.row.glyphs[self.area_index].push(glyph);
-        if self.area_index == GlyphArea::Text.index() {
+        let area_index = self.area_index();
+        self.row.glyphs[area_index].push(glyph);
+        if self.area == GlyphArea::Text {
             self.row.displays_text = true;
         }
         self.promote_row_metrics_for_explicit_stretch();
     }
 
     fn promote_row_metrics_for_explicit_stretch(&mut self) {
-        let Some(glyph) = self.row.glyphs[self.area_index].last() else {
+        let Some(glyph) = self.row.glyphs[self.area_index()].last() else {
             return;
         };
         if let Some(metrics) = DisplayRowVerticalMetrics::from_glyph(glyph) {
@@ -1922,8 +2016,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             padding: false,
             pointer_appearance: None,
         };
-        self.row.glyphs[self.area_index].push(glyph);
-        if self.area_index == GlyphArea::Text.index() {
+        let area_index = self.area_index();
+        self.row.glyphs[area_index].push(glyph);
+        if self.area == GlyphArea::Text {
             self.row.displays_text = true;
         }
     }

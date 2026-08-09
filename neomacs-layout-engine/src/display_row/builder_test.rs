@@ -1109,6 +1109,40 @@ fn display_row_progress_writer_accepts_direct_text_run_measurement_plan() {
     );
 }
 
+#[test]
+fn display_row_progress_writer_clips_margin_glyph_to_structural_lane() {
+    // A GUI font can report a fractional advance (7.2 px) while Emacs exposes
+    // the corresponding one-column margin as an integer 7 px.  Structural
+    // content must remain visible inside that authoritative lane; dropping the
+    // whole glyph makes git-gutter markers disappear.
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let row_layout = layout();
+    let measurement =
+        DisplayTextRunMeasurement::Measured(vec![DisplayTextRunAdvance::new(0, 0, 7.2)]);
+    let mut writer = DisplayRowProgressWriter::with_text_run_measurement_for_area(
+        &row_layout,
+        &mut row,
+        measurement,
+        DisplayRowPosition::new(0.0, 0),
+        7.0,
+        GlyphArea::LeftMargin,
+    );
+
+    let progress = writer.push_item(text_item("+"));
+
+    assert_eq!(progress.status(), DisplayRowAppendStatus::Clipped);
+    assert_eq!(progress.end(), DisplayRowPosition::new(7.0, 1));
+    let margin = &row.glyphs[GlyphArea::LeftMargin.index()];
+    assert_eq!(
+        margin.len(),
+        1,
+        "the partially fitting marker stays visible"
+    );
+    assert_eq!(margin[0].glyph_type, GlyphType::Char { ch: '+' });
+    assert_eq!(margin[0].pixel_width, 7.0);
+    assert!(row.glyphs[GlyphArea::Text.index()].is_empty());
+}
+
 /// A composed Arabic cluster already on the row must report its full
 /// `string-width` worth of columns when a *new* writer (e.g. the TAB item in
 /// the multi-item buffer walk) resumes the row. GNU advances the column by the

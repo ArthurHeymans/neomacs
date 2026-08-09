@@ -8,8 +8,8 @@ use crate::display_spec::{
 };
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::display_spec::{
-    DisplayMediaSpecKind, DisplayPropertySpecs, DisplaySpecKind, display_spec_kind,
-    display_spec_margin_value, display_spec_when_parts,
+    DisplayMarginLocation, DisplayMediaSpecKind, DisplayPropertySpecs, DisplaySpecKind,
+    display_margin_spec, display_spec_kind, display_spec_when_parts,
 };
 use neovm_core::emacs_core::value::list_to_vec;
 use std::ops::ControlFlow;
@@ -80,13 +80,54 @@ pub(crate) enum DisplayReplacementProperty {
     /// record a fringe descriptor on the row; the inline text stays suppressed
     /// (zero inline width), matching GNU's text-area output.
     Fringe(DisplayFringeLayout),
-    /// `((margin left-margin|right-margin) CONTENT)`: GNU displays CONTENT in the
-    /// named marginal area, NOT in the text flow — the covered text (a
-    /// placeholder such as magit's `"o"` visibility indicator) shows NOTHING
-    /// inline. neomacs does not render marginal areas, so like GNU with a
-    /// zero-width margin we simply suppress the placeholder (zero inline width)
-    /// rather than leaking it into the text (neomacs#188).
-    Margin,
+    /// A parsed marginal-area replacement.  Side and content survive
+    /// classification as typed data, so later exhaustive matches cannot silently
+    /// turn a valid GNU margin spec into an empty inline replacement.
+    Margin(DisplayMarginReplacement),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayMarginSide {
+    Left,
+    Right,
+}
+
+impl DisplayMarginSide {
+    pub(crate) fn glyph_area(self) -> neomacs_display_protocol::glyph_matrix::GlyphArea {
+        match self {
+            Self::Left => neomacs_display_protocol::glyph_matrix::GlyphArea::LeftMargin,
+            Self::Right => neomacs_display_protocol::glyph_matrix::GlyphArea::RightMargin,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum DisplayMarginContent {
+    String(Value),
+    Stretch {
+        spec: Value,
+        layout: DisplayStretch,
+    },
+    Media {
+        spec: Value,
+        replacement: DisplayMediaReplacementProperty,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DisplayMarginReplacement {
+    side: DisplayMarginSide,
+    content: DisplayMarginContent,
+}
+
+impl DisplayMarginReplacement {
+    pub(crate) fn side(&self) -> DisplayMarginSide {
+        self.side
+    }
+
+    pub(crate) fn content(&self) -> &DisplayMarginContent {
+        &self.content
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -208,6 +249,10 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
         };
     }
 
+    if matches!(kind, DisplaySpecKind::Margin) {
+        return classify_margin_display_spec(value);
+    }
+
     let replacement = match kind {
         DisplaySpecKind::Text => Some(DisplayReplacementProperty::String),
         DisplaySpecKind::Space => {
@@ -255,9 +300,8 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
         // itself something GNU can display (`valid_p` after stripping the margin
         // prefix). An AREA GNU rejects, or a VALUE that is neither string, image,
         // `(space …)` nor xwidget, leaves the text alone.
-        DisplaySpecKind::Margin => display_spec_margin_value(value)
-            .filter(|inner| classify_single_display_spec(*inner).replacement.is_some())
-            .map(|_| DisplayReplacementProperty::Margin),
+        // Handled above so the typed location and content cannot be discarded.
+        DisplaySpecKind::Margin => None,
         // Modifiers and specs with no display effect: handled below.
         DisplaySpecKind::Height
         | DisplaySpecKind::SpaceWidth
@@ -285,6 +329,50 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
         replacement,
         replacement_spec: value,
         modifiers,
+    }
+}
+
+fn classify_margin_display_spec(value: Value) -> DisplayPropertyClassification {
+    let Some(spec) = display_margin_spec(value) else {
+        return DisplayPropertyClassification::default();
+    };
+    let inner = classify_single_display_spec(spec.content());
+
+    // GNU's `((margin nil) CONTENT)` selects TEXT_AREA and is otherwise the
+    // ordinary CONTENT replacement.  Preserve the inner classification rather
+    // than manufacturing a marginal replacement that suppresses it.
+    if spec.location() == DisplayMarginLocation::Text {
+        return inner;
+    }
+
+    // GNU accepts only string/image/space/xwidget-class content after a margin
+    // prefix.  Encoding that closed set here makes fringe/margin/modifier forms
+    // unrepresentable as marginal content in later stages.
+    let content = match inner.replacement {
+        Some(DisplayReplacementProperty::String) => DisplayMarginContent::String(spec.content()),
+        Some(DisplayReplacementProperty::Stretch(layout)) => DisplayMarginContent::Stretch {
+            spec: spec.content(),
+            layout,
+        },
+        Some(DisplayReplacementProperty::Media(replacement)) => DisplayMarginContent::Media {
+            spec: spec.content(),
+            replacement,
+        },
+        Some(DisplayReplacementProperty::Fringe(_) | DisplayReplacementProperty::Margin(_))
+        | None => return DisplayPropertyClassification::default(),
+    };
+    let side = match spec.location() {
+        DisplayMarginLocation::Left => DisplayMarginSide::Left,
+        DisplayMarginLocation::Right => DisplayMarginSide::Right,
+        DisplayMarginLocation::Text => unreachable!("text location returned above"),
+    };
+
+    DisplayPropertyClassification {
+        replacement: Some(DisplayReplacementProperty::Margin(
+            DisplayMarginReplacement { side, content },
+        )),
+        replacement_spec: value,
+        modifiers: DisplayTextPropertyModifiers::default(),
     }
 }
 

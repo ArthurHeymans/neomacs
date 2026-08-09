@@ -544,13 +544,23 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
             row_request,
             render_policy,
         );
-        // Record any fringe specs this source collected (e.g. a magit overlay
-        // before-string carrying `(left-fringe …)`) onto the current output row.
-        // The fallback face is the source's base face (used only when neither a
-        // `set-fringe-bitmap-face` override nor the spec's FACE resolves).
-        let pending_fringes = source_state.take_pending_fringes();
-        for layout in &pending_fringes {
-            state.record_fringe_bitmap_layout(layout, face_ids, face_id);
+        // Route every placement collected while walking nested Lisp/overlay
+        // strings. The frame carries the structural-area capacities, so margin
+        // content cannot leak into inline text geometry.
+        let pending_non_text_area = source_state.take_pending_non_text_area();
+        let structural_order = if position.col() == 0 {
+            crate::display_row::source_render::DisplayStructuralAreaOrder::BeforeExisting
+        } else {
+            crate::display_row::source_render::DisplayStructuralAreaOrder::AfterExisting
+        };
+        for emission in pending_non_text_area {
+            state.render_non_text_area_emission(
+                emission,
+                &self.frame,
+                face_ids,
+                face_id,
+                structural_order,
+            );
         }
         outcome
     }

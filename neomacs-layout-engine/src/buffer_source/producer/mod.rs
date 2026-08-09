@@ -25,12 +25,12 @@ use crate::buffer_source::consumption::{BufferSourceConsumedItem, BufferSourceCo
 use crate::buffer_source::face_resolution::BufferSourceFaceResolutionContext;
 use crate::buffer_source::text_source::BufferTextSourceCursor;
 use crate::display_item::RenderFaceRef;
-use crate::display_source::DisplaySourceContext;
-use crate::display_source::DisplaySourceTextPosition;
+use crate::display_source::{
+    DisplayNonTextAreaEmission, DisplaySourceContext, DisplaySourceTextPosition,
+};
 use crate::display_source_resolver::{
     BufferDisplaySourcePropertyResolver, DisplaySourceResolveState, PendingDisplaySourceFace,
 };
-use crate::display_spec::DisplayFringeLayout;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use neomacs_display_protocol::types::FaceId;
@@ -53,7 +53,7 @@ pub(crate) struct ProducedStep {
     pub(crate) source_item: Option<BufferSourceConsumedItem>,
     pub(crate) source_position: DisplaySourceTextPosition,
     pub(crate) pending_faces: Vec<PendingDisplaySourceFace>,
-    pub(crate) pending_fringes: Vec<DisplayFringeLayout>,
+    pub(crate) pending_non_text_area: Vec<DisplayNonTextAreaEmission>,
 }
 
 pub(crate) struct BufferElementProducer<'request, B: LayoutBufferView> {
@@ -177,7 +177,7 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
         face_ids: &mut FrameFaceAttempt,
     ) -> ProducedStep {
         let mut pending_faces = Vec::new();
-        let mut pending_fringes = Vec::new();
+        let mut pending_non_text_area = Vec::new();
         let source_item = {
             let params = face_resolution_context.source_resolve_params(None);
             let mut resolver = BufferDisplaySourcePropertyResolver::new(
@@ -187,10 +187,11 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
                 face_ids,
                 &mut pending_faces,
             );
-            let mut source_context = DisplaySourceContext::with_face_resolver_and_fringe_sink(
-                &mut resolver,
-                &mut pending_fringes,
-            );
+            let mut source_context =
+                DisplaySourceContext::with_face_resolver_and_non_text_area_sink(
+                    &mut resolver,
+                    &mut pending_non_text_area,
+                );
             self.source_consumption.next_source_consumption_item(
                 &mut self.source_cursor,
                 &mut source_context,
@@ -201,7 +202,7 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
             source_item,
             source_position,
             pending_faces,
-            pending_fringes,
+            pending_non_text_area,
         }
     }
 
@@ -233,7 +234,7 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
         position: &mut DisplaySourceTextPosition,
     ) -> Option<BufferSourceConsumedItem> {
         let mut pending_faces = Vec::new();
-        let mut pending_fringes = Vec::new();
+        let mut pending_non_text_area = Vec::new();
         let params = crate::display_source_resolver::DisplaySourceResolveParams::new(
             face_basis,
             None,
@@ -246,9 +247,9 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
             face_ids,
             &mut pending_faces,
         );
-        let mut context = DisplaySourceContext::with_face_resolver_and_fringe_sink(
+        let mut context = DisplaySourceContext::with_face_resolver_and_non_text_area_sink(
             &mut resolver,
-            &mut pending_fringes,
+            &mut pending_non_text_area,
         );
         self.source_consumption.next_source_consumption_item(
             &mut self.source_cursor,

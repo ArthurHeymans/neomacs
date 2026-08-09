@@ -434,7 +434,7 @@ fn display_replacement_property_describes_media_replacement_behavior() {
 }
 
 #[test]
-fn margin_display_spec_is_a_suppressing_replacement_not_inline_text() {
+fn margin_display_spec_preserves_its_typed_side_and_content() {
     // magit's section visibility indicator is
     //   #("o" 0 1 (display ((margin right-margin) " ")))
     // The `((margin …) …)` spec must classify as a replacement so the covered
@@ -447,21 +447,45 @@ fn margin_display_spec_is_a_suppressing_replacement_not_inline_text() {
             Value::string(" "),
         ]);
         let classified = classify_display_property(spec);
+        let Some(DisplayReplacementProperty::Margin(margin)) = classified.replacement else {
+            panic!("({side} …) should be a Margin replacement");
+        };
         assert_eq!(
-            classified.replacement,
-            Some(DisplayReplacementProperty::Margin),
-            "({side} …) should be a Margin replacement"
+            margin.side(),
+            if side == "left-margin" {
+                DisplayMarginSide::Left
+            } else {
+                DisplayMarginSide::Right
+            }
         );
+        assert!(matches!(
+            margin.content(),
+            DisplayMarginContent::String(value) if value.as_utf8_str() == Some(" ")
+        ));
     }
     // A non-margin cons-headed list is unaffected (still not a margin spec).
-    assert_ne!(
+    assert!(!matches!(
         classify_display_property(Value::list(vec![
             Value::list(vec![Value::symbol("not-margin")]),
             Value::string("x"),
         ]))
         .replacement,
-        Some(DisplayReplacementProperty::Margin)
+        Some(DisplayReplacementProperty::Margin(_))
+    ));
+}
+
+#[test]
+fn margin_nil_routes_content_to_the_text_area_like_gnu() {
+    let _eval = Context::new();
+    let classified = classify_display_property(Value::list(vec![
+        Value::list(vec![Value::symbol("margin"), Value::NIL]),
+        Value::string("TEXT"),
+    ]));
+    assert_eq!(
+        classified.replacement().cloned(),
+        Some(DisplayReplacementProperty::String)
     );
+    assert_eq!(classified.replacement_spec().as_utf8_str(), Some("TEXT"));
 }
 
 #[test]

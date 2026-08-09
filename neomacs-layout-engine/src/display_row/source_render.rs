@@ -8,11 +8,15 @@
 
 use crate::display_current_row_output::{DisplayCurrentRowMutation, DisplayRowCurrentRowOutput};
 use crate::display_face_policy::BaseFacePolicy;
-use crate::display_item::DisplayPropertyReplacementDescriptor;
+use crate::display_item::{
+    DisplayItem, DisplayPropertyReplacementDescriptor, RenderFaceRef, SourceSpan,
+};
 use crate::display_mock_frame::protocol_color_to_pixel;
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::DisplayReplacementProperty;
-use crate::display_row::append_context::DisplayRowAppendSourceRenderRequest;
+use crate::display_row::append_context::{
+    DisplayMarginAreaCapacity, DisplayRowAppendFrame, DisplayRowAppendSourceRenderRequest,
+};
 use crate::display_row::builder::{DisplayRowGlyphCheckpoint, DisplayRowPosition};
 use crate::display_row::face_state::{
     DisplayRowActiveFaceState, DisplayRowMeasurementMode, DisplayRowMeasurementPolicy,
@@ -35,7 +39,10 @@ use crate::display_row::{
     DisplayRowRenderContext, DisplayRowRenderExecutor, DisplayRowRenderer,
     DisplayRowSourceFragmentFrame, DisplayRowSourceRenderRequest,
 };
-use crate::display_source::DisplayItemSource;
+use crate::display_source::{
+    DisplayItemOnceSource, DisplayItemSource, DisplayMarginEmission, DisplayMarginEmissionContent,
+    DisplayNonTextAreaEmission, LispStringSourceCursor, LispStringSourceOrigin,
+};
 use crate::display_source_resolver::{
     ActiveDisplayStringBaseFace, DisplayDefaultFaceInstallPolicy, DisplayStringBaseFace,
     resolve_display_string_base_face,
@@ -80,6 +87,48 @@ struct FitGlyphAreaPaddingToExtentMutation {
     extent_px: f32,
 }
 
+/// Complete a structural margin segment to its authoritative window-owned
+/// extent.  Explicit margin content paints inside this segment; it must never
+/// become extra horizontal flow that moves line numbers or buffer text.
+struct FillMarginLaneToCapacityMutation {
+    area: GlyphArea,
+    capacity: DisplayMarginAreaCapacity,
+    face_id: FaceId,
+}
+
+struct TakeGlyphAreaMutation {
+    area: GlyphArea,
+}
+
+impl DisplayCurrentRowMutation for TakeGlyphAreaMutation {
+    type Output = Vec<neomacs_display_protocol::glyph_matrix::Glyph>;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        std::mem::take(&mut row.glyphs[self.area.index()])
+    }
+}
+
+struct AppendGlyphAreaMutation {
+    area: GlyphArea,
+    glyphs: Vec<neomacs_display_protocol::glyph_matrix::Glyph>,
+}
+
+impl DisplayCurrentRowMutation for AppendGlyphAreaMutation {
+    type Output = ();
+
+    fn apply(mut self, row: &mut GlyphRow) -> Self::Output {
+        row.glyphs[self.area.index()].append(&mut self.glyphs);
+    }
+}
+
+/// Source-order relation between an explicit margin spec and structural
+/// decorations already emitted for the row (notably display line numbers).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayStructuralAreaOrder {
+    BeforeExisting,
+    AfterExisting,
+}
+
 impl DisplayCurrentRowMutation for FitGlyphAreaPaddingToExtentMutation {
     type Output = bool;
 
@@ -109,6 +158,44 @@ impl DisplayCurrentRowMutation for FitGlyphAreaPaddingToExtentMutation {
                 glyph.pixel_width = padding_width;
             }
         }
+        true
+    }
+}
+
+impl DisplayCurrentRowMutation for FillMarginLaneToCapacityMutation {
+    type Output = bool;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        if self.capacity.is_empty() {
+            return false;
+        }
+        let glyphs = &mut row.glyphs[self.area.index()];
+        let content_width = glyphs
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .map(|glyph| glyph.pixel_width.max(0.0))
+            .sum::<f32>();
+        let remaining_width = (self.capacity.width_px() - content_width).max(0.0);
+        if !remaining_width.is_finite() || remaining_width <= f32::EPSILON {
+            return false;
+        }
+        let used_columns = glyphs
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .map(|glyph| match glyph.glyph_type {
+                GlyphType::Stretch { width_cols } => usize::from(width_cols),
+                _ if glyph.wide => 2,
+                _ => 1,
+            })
+            .sum::<usize>();
+        let remaining_columns = self.capacity.columns().saturating_sub(used_columns);
+        glyphs.push(
+            neomacs_display_protocol::glyph_matrix::Glyph::stretch(
+                remaining_columns.min(u16::MAX as usize) as u16,
+                self.face_id,
+            )
+            .with_pixel_width(remaining_width),
+        );
         true
     }
 }
@@ -862,14 +949,21 @@ impl<'a> TextRowSourceRenderState<'a> {
         source_state: &mut DisplayRowSourceState,
         face_ids: &mut FrameFaceAttempt,
     ) -> Option<DisplayRowRenderIntoRowResult> {
-        self.output_render
+        let result = self
+            .output_render
             .current_source_fragment_render_state(
                 self.font_metrics,
                 self.measurement_mode,
                 self.face_resolver,
                 face_ids,
             )
-            .render_natural_fragment_into_current_row(request, source, source_state)
+            .render_natural_fragment_into_current_row(request, source, source_state);
+        if let Some(result) = result.as_ref() {
+            self.output_render
+                .output
+                .install_rendered_fragment_assets(result.faces());
+        }
+        result
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -912,6 +1006,133 @@ impl<'a> TextRowSourceRenderState<'a> {
             .current_row_output()
             .apply_current_row_mutation(FitGlyphAreaPaddingToExtentMutation { area, extent_px })
             .unwrap_or(false)
+    }
+
+    /// Route one resolved non-text emission into its structural glyph area.
+    /// Inline text progress is deliberately untouched: GNU changes
+    /// `it->area`, emits the margin glyphs, then resumes `TEXT_AREA` at the same
+    /// buffer position.
+    pub(crate) fn render_non_text_area_emission(
+        &mut self,
+        emission: DisplayNonTextAreaEmission,
+        frame: &DisplayRowAppendFrame,
+        face_ids: &mut FrameFaceAttempt,
+        fallback_face_id: FaceId,
+        structural_order: DisplayStructuralAreaOrder,
+    ) {
+        match emission {
+            DisplayNonTextAreaEmission::Fringe(layout) => {
+                self.record_fringe_bitmap_layout(&layout, face_ids, fallback_face_id);
+            }
+            DisplayNonTextAreaEmission::Margin(margin) => {
+                self.render_margin_emission(margin, frame, face_ids, structural_order);
+            }
+        }
+    }
+
+    fn render_margin_emission(
+        &mut self,
+        emission: DisplayMarginEmission,
+        frame: &DisplayRowAppendFrame,
+        face_ids: &mut FrameFaceAttempt,
+        structural_order: DisplayStructuralAreaOrder,
+    ) {
+        let area = emission.side().glyph_area();
+        let Some(capacity) = frame.margin_capacity(area) else {
+            return;
+        };
+        if capacity.is_empty() {
+            return;
+        }
+
+        // GNU initializes marginal display strings from the named `margin`
+        // face, then lets the string's own face properties refine it.
+        let margin_face = self.resolve_named_face("margin");
+        let margin_face_id =
+            crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &margin_face);
+        self.insert_resolved_face(margin_face_id, &margin_face);
+
+        let columns = capacity.columns();
+        let char_width = (capacity.width_px() / columns as f32).max(1.0);
+        let fragment = DisplayRowSourceFragmentFrame::new(
+            crate::display_row::geometry::DisplayRowGeometry::new(
+                frame.geometry().y(),
+                capacity.width_px(),
+                frame.geometry().height(),
+                char_width,
+                frame.geometry().ascent(),
+                crate::display_row::builder::DisplayTabPolicy::every(8),
+            ),
+            neomacs_display_protocol::frame_glyphs::GlyphRowRole::Text,
+            margin_face_id,
+            &margin_face,
+        )
+        .render_request_from_column_for_area(0, columns, area);
+
+        // GNU encounters a BOL before-string before it calls
+        // `maybe_produce_line_number`. Neomacs' prelude currently materializes
+        // the line number eagerly, so temporarily detach existing structural
+        // glyphs and restore them after the explicit margin content. The enum
+        // makes this source-order choice explicit; later-in-line margin specs
+        // retain append order.
+        let trailing_glyphs = match structural_order {
+            DisplayStructuralAreaOrder::BeforeExisting => self
+                .output_render
+                .current_row_output()
+                .apply_current_row_mutation(TakeGlyphAreaMutation { area })
+                .unwrap_or_default(),
+            DisplayStructuralAreaOrder::AfterExisting => Vec::new(),
+        };
+
+        let mut source_state = DisplayRowSourceState::default();
+        match emission.content() {
+            DisplayMarginEmissionContent::String(value) => {
+                if let Some(mut source) = LispStringSourceCursor::new(
+                    0x6d61_7267,
+                    *value,
+                    RenderFaceRef::FaceId(margin_face_id),
+                    LispStringSourceOrigin::MarginDisplayReplacement,
+                ) {
+                    let _ = self.render_natural_fragment_into_current_row(
+                        fragment,
+                        &mut source,
+                        &mut source_state,
+                        face_ids,
+                    );
+                }
+            }
+            DisplayMarginEmissionContent::Item(kind) => {
+                let item = DisplayItem::new(
+                    SourceSpan::synthetic(0x6d61_7267, 0, 1),
+                    RenderFaceRef::FaceId(margin_face_id),
+                    kind.clone(),
+                );
+                let mut source = DisplayItemOnceSource::new(item);
+                let _ = self.render_natural_fragment_into_current_row(
+                    fragment,
+                    &mut source,
+                    &mut source_state,
+                    face_ids,
+                );
+            }
+        }
+        if structural_order == DisplayStructuralAreaOrder::BeforeExisting {
+            self.output_render
+                .current_row_output()
+                .apply_current_row_mutation(FillMarginLaneToCapacityMutation {
+                    area,
+                    capacity,
+                    face_id: margin_face_id,
+                });
+        }
+        if !trailing_glyphs.is_empty() {
+            self.output_render
+                .current_row_output()
+                .apply_current_row_mutation(AppendGlyphAreaMutation {
+                    area,
+                    glyphs: trailing_glyphs,
+                });
+        }
     }
 
     pub(crate) fn render_display_item_source_into_current_text_row_and_emit<

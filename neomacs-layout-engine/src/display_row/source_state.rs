@@ -13,9 +13,9 @@ pub(crate) struct DisplayRowSourceState {
     resolve_state: DisplaySourceResolveState,
     pending_item: Option<DisplayItem>,
     exhausted: bool,
-    /// `(left-fringe …)` / `(right-fringe …)` specs collected while resolving
-    /// this source's items, drained by the render path onto the output row.
-    pending_fringes: Vec<crate::display_spec::DisplayFringeLayout>,
+    /// Typed output collected outside the text flow while resolving this
+    /// source's items, drained by the render path onto the output row.
+    pending_non_text_area: Vec<crate::display_source::DisplayNonTextAreaEmission>,
 }
 
 impl DisplayRowSourceState {
@@ -33,16 +33,19 @@ impl DisplayRowSourceState {
         }
         let mut resolved =
             resolve_next_display_source_item(source, params, &mut self.resolve_state, face_ids);
-        self.pending_fringes.extend(resolved.take_pending_fringes());
+        self.pending_non_text_area
+            .extend(resolved.take_pending_non_text_area());
         if resolved.item().is_none() {
             self.mark_exhausted();
         }
         resolved
     }
 
-    /// Drain the fringe layouts collected while resolving this source.
-    pub(crate) fn take_pending_fringes(&mut self) -> Vec<crate::display_spec::DisplayFringeLayout> {
-        std::mem::take(&mut self.pending_fringes)
+    /// Drain non-text-area output collected while resolving this source.
+    pub(crate) fn take_pending_non_text_area(
+        &mut self,
+    ) -> Vec<crate::display_source::DisplayNonTextAreaEmission> {
+        std::mem::take(&mut self.pending_non_text_area)
     }
 
     pub(crate) fn resolved_face(&self, face_id: FaceId) -> Option<&ResolvedFace> {

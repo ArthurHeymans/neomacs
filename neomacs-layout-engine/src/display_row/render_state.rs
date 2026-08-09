@@ -183,6 +183,10 @@ impl DisplayRowRenderIntoRowResult {
         }
     }
 
+    pub(crate) fn faces(&self) -> &[Face] {
+        &self.faces
+    }
+
     #[cfg(test)]
     pub(crate) fn progress(&self) -> DisplayRowOutputProgress {
         self.progress

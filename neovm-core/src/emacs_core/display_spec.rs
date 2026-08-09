@@ -86,6 +86,35 @@ pub enum DisplayMediaSpecKind {
     Surface,
 }
 
+/// Typed destination from GNU's `(margin LOCATION)` display prefix.
+///
+/// GNU treats `nil` as the ordinary text area, not as a third marginal area.
+/// Keeping that case explicit prevents callers from accidentally suppressing a
+/// valid `((margin nil) CONTENT)` replacement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DisplayMarginLocation {
+    Text,
+    Left,
+    Right,
+}
+
+/// A validated GNU `((margin LOCATION) CONTENT)` display specification.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct DisplayMarginSpec {
+    location: DisplayMarginLocation,
+    content: Value,
+}
+
+impl DisplayMarginSpec {
+    pub fn location(self) -> DisplayMarginLocation {
+        self.location
+    }
+
+    pub fn content(self) -> Value {
+        self.content
+    }
+}
+
 impl DisplaySpecKind {
     /// Whether a spec of this kind REPLACES the text it covers, per the
     /// `it == NULL` paths of GNU `handle_single_display_spec`.
@@ -158,13 +187,21 @@ pub fn display_spec_kind(spec: Value) -> DisplaySpecKind {
 
 /// GNU's AREA test for a `((margin AREA) VALUE)` prefix: `nil`, `left-margin`
 /// or `right-margin`. `head_cdr` is the cdr of the `(margin . AREA-TAIL)` head.
-fn display_margin_area_valid(head_cdr: Value) -> bool {
+fn display_margin_location(head_cdr: Value) -> Option<DisplayMarginLocation> {
     let area = if head_cdr.is_cons() {
         head_cdr.cons_car()
     } else {
         Value::NIL
     };
-    area.is_nil() || area.is_symbol_named("left-margin") || area.is_symbol_named("right-margin")
+    if area.is_nil() {
+        Some(DisplayMarginLocation::Text)
+    } else if area.is_symbol_named("left-margin") {
+        Some(DisplayMarginLocation::Left)
+    } else if area.is_symbol_named("right-margin") {
+        Some(DisplayMarginLocation::Right)
+    } else {
+        None
+    }
 }
 
 /// `(when FORM . VALUE)` split into FORM and the inner spec VALUE.
@@ -187,19 +224,23 @@ pub fn display_spec_when_parts(spec: Value) -> Option<(Value, Value)> {
 /// not one GNU accepts — GNU then leaves its `location` unbound and tests the
 /// whole cons for validity, which no cons of this shape passes, so nothing is
 /// displayed.
-pub fn display_spec_margin_value(spec: Value) -> Option<Value> {
+pub fn display_margin_spec(spec: Value) -> Option<DisplayMarginSpec> {
     if !matches!(display_spec_kind(spec), DisplaySpecKind::Margin) {
         return None;
     }
-    if !display_margin_area_valid(spec.cons_car().cons_cdr()) {
-        return None;
-    }
+    let location = display_margin_location(spec.cons_car().cons_cdr())?;
     let after = spec.cons_cdr();
-    Some(if after.is_cons() {
+    let content = if after.is_cons() {
         after.cons_car()
     } else {
         Value::NIL
-    })
+    };
+    Some(DisplayMarginSpec { location, content })
+}
+
+/// Compatibility accessor for callers that only need the inner content.
+pub fn display_spec_margin_value(spec: Value) -> Option<Value> {
+    display_margin_spec(spec).map(DisplayMarginSpec::content)
 }
 
 /// The specs of one `display` property value, in GNU `handle_display_spec`

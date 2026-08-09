@@ -19108,6 +19108,385 @@ fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
     );
 }
 
+fn layout_overlay_before_string_in_left_margin_area(
+    display_line_numbers: bool,
+) -> (String, String, Color) {
+    // git-gutter attaches a zero-length overlay before-string whose single
+    // character has GNU's `((margin left-margin) CONTENT)` display form.  The
+    // content belongs to the row's left-margin glyph area; it must neither be
+    // dropped nor leak into the text flow.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let before_string = eval
+        .eval_str(
+            "(propertize \" \" 'display
+               (list (list 'margin 'left-margin)
+                     (propertize \"+\" 'face '(:background \"#00ff00\"))))",
+        )
+        .expect("propertize left-margin before-string");
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("Head:");
+        if display_line_numbers {
+            buf.set_buffer_local("display-line-numbers", Value::T);
+        }
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 0,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buf.overlays_mut().insert_overlay(overlay);
+        buf.overlays_mut()
+            .overlay_put(overlay, Value::symbol("before-string"), before_string)
+            .expect("before-string");
+        buf.goto_emacs_byte_pos(EmacsBytePos::ZERO);
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-left-margin-before-string", 640, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.eval_str("(set-window-margins nil 1 0)")
+        .expect("reserve one left-margin column");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("window matrix entry");
+    let marked_row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).contains("Head:"))
+        .expect("row containing buffer text");
+
+    let marker = marked_row.glyphs[GlyphArea::LeftMargin.index()]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '+' }))
+        .expect("left-margin marker glyph");
+    let marker_background = state
+        .faces
+        .get(&marker.face_id)
+        .expect("left-margin marker face")
+        .background;
+    (
+        glyphs_logical_text(&marked_row.glyphs[GlyphArea::LeftMargin.index()]),
+        glyphs_logical_text(&marked_row.glyphs[GlyphArea::Text.index()]),
+        marker_background,
+    )
+}
+
+#[test]
+fn layout_frame_rust_renders_overlay_before_string_in_left_margin_area() {
+    let (left_margin, text, marker_background) =
+        layout_overlay_before_string_in_left_margin_area(false);
+    assert_eq!(
+        left_margin, "+",
+        "GNU margin display content must render in the left-margin glyph area"
+    );
+    assert_eq!(
+        text, "Head:",
+        "margin content must not consume inline width or leak into text"
+    );
+    assert_eq!(
+        marker_background,
+        Color::from_pixel(0x0000ff00),
+        "margin string face properties must refine GNU's base margin face"
+    );
+}
+
+#[test]
+fn layout_frame_rust_keeps_left_margin_before_string_visible_with_line_numbers() {
+    let (left_margin, text, _) = layout_overlay_before_string_in_left_margin_area(true);
+    assert!(
+        left_margin.starts_with('+') && left_margin.contains('1'),
+        "BOL margin content must precede and coexist with line numbers, got {left_margin:?}"
+    );
+    assert_eq!(text, "Head:");
+}
+
+#[test]
+fn layout_frame_rust_renders_left_margin_marker_in_nested_split_window() {
+    // The real git-gutter failure lives in a window right of Treemacs and below
+    // another editor window.  A root-window fixture cannot catch parameters or
+    // output state that are accidentally borrowed from a sibling/root window.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let marker = eval
+        .eval_str(
+            "(propertize \" \" 'display
+               (list (list 'margin 'left-margin)
+                     (propertize \"+\" 'face '(:background \"#00ff00\"))))",
+        )
+        .expect("construct margin marker");
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("changed line\nnext line\n");
+        buffer.set_buffer_local("display-line-numbers", Value::T);
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            serial: 0,
+            plist: Value::NIL,
+            buffer: Some(buf_id),
+            start: 0,
+            end: 0,
+            front_advance: false,
+            rear_advance: false,
+        });
+        buffer.overlays_mut().insert_overlay(overlay);
+        buffer
+            .overlays_mut()
+            .overlay_put(overlay, Value::symbol("before-string"), marker)
+            .expect("install marker");
+        buffer.goto_emacs_byte_pos(EmacsBytePos::ZERO);
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-nested-split-margin", 800, 400, buf_id);
+    let root = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let right = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            root,
+            neovm_core::window::SplitDirection::Horizontal,
+            buf_id,
+            Some(140),
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split right of sidebar");
+    let bottom_right = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            right,
+            neovm_core::window::SplitDirection::Vertical,
+            buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split below upper editor");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("select-window"),
+        Value::make_window(bottom_right.0),
+    ]))
+    .expect("select nested target window");
+    eval.eval_str("(set-window-margins (selected-window) 1 1)")
+        .expect("reserve target margins");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == bottom_right.0 as i64)
+        .expect("nested target matrix");
+    let rendered_rows = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled)
+        .map(|row| {
+            (
+                row.role,
+                glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]),
+            )
+        })
+        .collect::<Vec<_>>();
+    let row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| {
+            row.enabled
+                && row.role == GlyphRowRole::Text
+                && glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with("chang")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "changed line row; bounds={:?}, text_bounds={:?}, rows={rendered_rows:?}",
+                entry.pixel_bounds, entry.text_pixel_bounds
+            )
+        });
+    let margin = glyphs_logical_text(&row.glyphs[GlyphArea::LeftMargin.index()]);
+    assert!(
+        margin.starts_with('+'),
+        "nested target must retain its explicit marker before line numbers; got {margin:?}"
+    );
+}
+
+#[test]
+fn layout_frame_rust_keeps_changed_margin_marker_among_dense_empty_gutter_overlays() {
+    // git-gutter with `git-gutter:unchanged-sign` set to the empty string puts
+    // one zero-length margin before-string at every BOL.  A changed line is the
+    // same overlay shape except that its margin content is "+".  The real
+    // misc.el failure only appears with this dense, large-buffer stream: the
+    // line-2 marker must survive without shifting either row's text origin.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("first line\nchanged line\n");
+        for line in 3..=1_100 {
+            buf.insert(&format!("unchanged line {line}\n"));
+        }
+        buf.set_buffer_local("display-line-numbers", Value::T);
+        buf.goto_emacs_byte_pos(EmacsBytePos::ZERO);
+    }
+    let install_gutter_overlays = r##"(save-excursion
+               (goto-char (point-min))
+               (let ((line 1))
+                 (while (< (point) (point-max))
+                   (let* ((content (if (= line 2)
+                                       (propertize "+" 'face
+                                                   '(:foreground "black"
+                                                     :background "#00ff00"))
+                                     ""))
+                          (before (propertize " " 'display
+                                              (list (list 'margin 'left-margin)
+                                                    content)))
+                          (overlay (make-overlay (point) (point))))
+                     (overlay-put overlay 'before-string before))
+                   (setq line (1+ line))
+                   (forward-line 1))))"##;
+
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-dense-empty-margin-overlays",
+        640,
+        180,
+        buf_id,
+    );
+    eval.eval_str("(set-window-margins nil 1 0)")
+        .expect("reserve one left-margin column");
+
+    let mut engine = LayoutEngine::new();
+    eval.eval_str(
+        "(let ((start (save-excursion
+                         (goto-char (point-min))
+                         (forward-line 900)
+                         (point))))
+           (goto-char start)
+           (set-window-start nil start))",
+    )
+    .expect("start with the changed line far above the viewport");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    eval.eval_str(install_gutter_overlays)
+        .expect("install dense git-gutter-shaped overlays after initial redisplay");
+    eval.eval_str(
+        "(progn
+           (goto-char (point-min))
+           (set-window-start nil (point-min)))",
+    )
+    .expect("scroll back to the changed line");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| {
+            entry.window_id.get()
+                == eval
+                    .frame_manager()
+                    .get(frame_id)
+                    .expect("frame")
+                    .selected_window
+                    .0 as i64
+        })
+        .expect("selected window matrix");
+    let text_rows = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .collect::<Vec<_>>();
+    let rendered_texts = text_rows
+        .iter()
+        .map(|row| glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]))
+        .collect::<Vec<_>>();
+    let first = text_rows
+        .iter()
+        .copied()
+        .find(|row| {
+            glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with("first line")
+        })
+        .unwrap_or_else(|| panic!("first line row; rendered rows={rendered_texts:?}"));
+    let changed = text_rows
+        .iter()
+        .copied()
+        .find(|row| {
+            glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with("changed line")
+        })
+        .unwrap_or_else(|| panic!("changed line row; rendered rows={rendered_texts:?}"));
+
+    let changed_margin = glyphs_logical_text(&changed.glyphs[GlyphArea::LeftMargin.index()]);
+    assert!(
+        changed_margin.starts_with('+') && changed_margin.contains('2'),
+        "the changed marker must precede and coexist with line number 2; got {changed_margin:?}"
+    );
+    let structural_width = |row: &GlyphRow| {
+        row.glyphs[GlyphArea::LeftMargin.index()]
+            .iter()
+            .filter(|glyph| !glyph.padding)
+            .map(|glyph| glyph.pixel_width)
+            .sum::<f32>()
+    };
+    assert_eq!(
+        structural_width(first),
+        structural_width(changed),
+        "empty and populated explicit margins must occupy the same fixed lane"
+    );
+    assert_eq!(
+        first.glyphs[GlyphArea::Text.index()]
+            .first()
+            .map(|glyph| glyph.pixel_width),
+        changed.glyphs[GlyphArea::Text.index()]
+            .first()
+            .map(|glyph| glyph.pixel_width),
+        "margin contents must not alter the text lane geometry"
+    );
+}
+
 #[test]
 fn layout_frame_rust_resolves_standard_fringe_bitmap_spec() {
     // Foundation Stage 1: an explicit `(left-fringe right-arrow fringe)` display

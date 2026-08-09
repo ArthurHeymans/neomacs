@@ -2,21 +2,22 @@ use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
-    DisplayImageItem, DisplayItem, DisplayMediaReplacement, DisplaySurfaceItem, DisplayVideoItem,
-    DisplayXwidgetItem, RenderFaceRef,
+    DisplayImageItem, DisplayItem, DisplayItemKind, DisplayMediaReplacement, DisplaySurfaceItem,
+    DisplayVideoItem, DisplayXwidgetItem, RenderFaceRef,
 };
 use crate::display_origin::DisplayOrigin;
 use crate::display_property::{
-    DisplayMediaReplacementProperty, DisplayPropertyClassification, DisplayReplacementProperty,
+    DisplayMarginContent, DisplayMediaReplacementProperty, DisplayPropertyClassification,
+    DisplayReplacementProperty,
 };
 use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::width::DisplayRowCharWidthPolicy;
 use crate::display_source::{DisplayItemFaceResolver, DisplayItemSource, DisplaySourceContext};
 use crate::display_source::{
-    DisplayPropertyReplacementSourceInputs, DisplayPropertyReplacementSourceItem,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem,
+    DisplayMarginEmission, DisplayMarginEmissionContent, DisplayPropertyReplacementSourceInputs,
+    DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
 };
 use crate::display_spec::{
     DisplaySpecHead, parse_display_image_layout, parse_display_surface_source_layout,
@@ -298,7 +299,7 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
 pub(crate) struct ResolvedDisplaySourceItem {
     item: Option<DisplayItem>,
     pending_faces: Vec<PendingDisplaySourceFace>,
-    pending_fringes: Vec<crate::display_spec::DisplayFringeLayout>,
+    pending_non_text_area: Vec<crate::display_source::DisplayNonTextAreaEmission>,
 }
 
 impl ResolvedDisplaySourceItem {
@@ -309,19 +310,19 @@ impl ResolvedDisplaySourceItem {
         Self {
             item,
             pending_faces,
-            pending_fringes: Vec::new(),
+            pending_non_text_area: Vec::new(),
         }
     }
 
-    fn with_fringes(
+    fn with_non_text_area(
         item: Option<DisplayItem>,
         pending_faces: Vec<PendingDisplaySourceFace>,
-        pending_fringes: Vec<crate::display_spec::DisplayFringeLayout>,
+        pending_non_text_area: Vec<crate::display_source::DisplayNonTextAreaEmission>,
     ) -> Self {
         Self {
             item,
             pending_faces,
-            pending_fringes,
+            pending_non_text_area,
         }
     }
 
@@ -333,8 +334,10 @@ impl ResolvedDisplaySourceItem {
         self.item.as_ref()
     }
 
-    pub(crate) fn take_pending_fringes(&mut self) -> Vec<crate::display_spec::DisplayFringeLayout> {
-        std::mem::take(&mut self.pending_fringes)
+    pub(crate) fn take_pending_non_text_area(
+        &mut self,
+    ) -> Vec<crate::display_source::DisplayNonTextAreaEmission> {
+        std::mem::take(&mut self.pending_non_text_area)
     }
 
     pub(crate) fn into_parts(self) -> (Option<DisplayItem>, Vec<PendingDisplaySourceFace>) {
@@ -467,6 +470,38 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
         let source_text = self.source_text;
         let face_metrics = self.face_metrics();
         let fallback_metrics = DisplayRowFallbackMetrics::from_measured_face(face_metrics);
+        if let DisplayReplacementProperty::Margin(margin) = display_property.replacement()? {
+            let content = match margin.content() {
+                DisplayMarginContent::String(value) => DisplayMarginEmissionContent::String(*value),
+                DisplayMarginContent::Stretch { layout, .. } => {
+                    DisplayMarginEmissionContent::Item(DisplayItemKind::Stretch(layout.clone()))
+                }
+                DisplayMarginContent::Media { spec, replacement } => {
+                    let resolution = DisplayReplacementMediaSourceItem::resolve_display_property(
+                        *spec,
+                        replacement,
+                        self.display_host,
+                        self.active_face_state,
+                        fallback_metrics,
+                        self.params.image_scale_environment,
+                    )?;
+                    let kind = match resolution {
+                        DisplayReplacementMediaSourceResolution::Media(item) => {
+                            DisplayItemKind::MediaReplacement(item.media())
+                        }
+                        DisplayReplacementMediaSourceResolution::Placeholder(item) => {
+                            DisplayItemKind::SourceMappedText(
+                                crate::display_item::DisplaySourceMappedText::new(item.into_text()),
+                            )
+                        }
+                    };
+                    DisplayMarginEmissionContent::Item(kind)
+                }
+            };
+            return Some(DisplayPropertyReplacementSourceItem::Margin(
+                DisplayMarginEmission::new(margin.side(), content),
+            ));
+        }
         let source_inputs = match display_property.replacement()? {
             DisplayReplacementProperty::String => {
                 let replacement = replacement_value.as_utf8_str()?;
@@ -503,7 +538,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
             }
             // `((margin …) …)`: marginal-area content, no inline output — the
             // covered placeholder is suppressed (#188).
-            DisplayReplacementProperty::Margin => DisplayPropertyReplacementSourceInputs::empty(),
+            DisplayReplacementProperty::Margin(_) => unreachable!("returned above"),
         };
         DisplayPropertyReplacementSourceItem::from_display_property_parts(
             display_property,
@@ -726,19 +761,19 @@ pub(crate) fn resolve_next_display_source_item(
     face_ids: &mut FrameFaceAttempt,
 ) -> ResolvedDisplaySourceItem {
     let mut pending_faces = Vec::new();
-    let mut pending_fringes = Vec::new();
+    let mut pending_non_text_area = Vec::new();
     let item = {
         let mut resolver =
             DisplaySourcePropertyResolver::new(params, state, face_ids, &mut pending_faces);
-        let mut context = DisplaySourceContext::with_face_resolver_and_fringe_sink(
+        let mut context = DisplaySourceContext::with_face_resolver_and_non_text_area_sink(
             &mut resolver,
-            &mut pending_fringes,
+            &mut pending_non_text_area,
         );
         source
             .next_item(&mut context)
             .map(|item| resolver.resolve_item_layout(item))
     };
-    ResolvedDisplaySourceItem::with_fringes(item, pending_faces, pending_fringes)
+    ResolvedDisplaySourceItem::with_non_text_area(item, pending_faces, pending_non_text_area)
 }
 
 #[derive(Clone, Copy)]

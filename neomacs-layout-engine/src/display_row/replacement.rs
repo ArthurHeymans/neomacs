@@ -24,11 +24,11 @@ use crate::display_row::source_append::SingleDisplayItemAppendContext;
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_source::{
-    BufferDisplayReplacementStringRequest, DisplayItemOnceSource,
-    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
-    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
-    DisplayReplacementSourceMappedTextItem, DisplayReplacementStretchSourceItem,
-    DisplayReplacementStringSourceItem,
+    BufferDisplayReplacementStringRequest, DisplayItemOnceSource, DisplayMarginEmission,
+    DisplayNonTextAreaEmission, DisplayPropertyReplacementCursorPolicy,
+    DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
+    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
+    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
 };
 use crate::display_source_append_plan::NaturalDisplayRowAppendRenderPolicy;
 use crate::display_source_resolver::{
@@ -916,6 +916,7 @@ impl DisplayPropertyReplacementAppendPlan {
 #[allow(clippy::large_enum_variant)]
 enum DisplayPropertyReplacementAppendPlanItem {
     Empty,
+    Margin(DisplayMarginEmission),
     String(DisplayReplacementStringAppendRequest),
     Item(DisplayReplacementItemAppendTemplate),
 }
@@ -939,6 +940,9 @@ impl DisplayPropertyReplacementAppendPlanItemRequest {
         match self.item {
             DisplayPropertyReplacementSourceItem::Empty => {
                 DisplayPropertyReplacementAppendPlanItem::Empty
+            }
+            DisplayPropertyReplacementSourceItem::Margin(emission) => {
+                DisplayPropertyReplacementAppendPlanItem::Margin(emission)
             }
             DisplayPropertyReplacementSourceItem::String(item) => {
                 let replacement_base_face = (!item.is_empty()).then(|| {
@@ -983,6 +987,22 @@ impl DisplayPropertyReplacementAppendPlanItem {
     ) -> DisplayReplacementAppendResult {
         match self {
             Self::Empty => DisplayReplacementAppendResult::without_row_break(position),
+            Self::Margin(emission) => {
+                let face_id = replacement_append_context.active_face.face_id();
+                let frame = replacement_append_context.active_face_frame();
+                state.render_non_text_area_emission(
+                    DisplayNonTextAreaEmission::Margin(emission),
+                    &frame,
+                    face_ids,
+                    face_id,
+                    if position.col() == 0 {
+                        crate::display_row::source_render::DisplayStructuralAreaOrder::BeforeExisting
+                    } else {
+                        crate::display_row::source_render::DisplayStructuralAreaOrder::AfterExisting
+                    },
+                );
+                DisplayReplacementAppendResult::without_row_break(position)
+            }
             Self::String(request) => request.append_to_text_row(
                 replacement_append_context,
                 state,

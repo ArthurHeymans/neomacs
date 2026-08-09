@@ -12,6 +12,7 @@ use crate::font::metrics::FontMetricsService;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::Glyph;
+use neomacs_display_protocol::glyph_matrix::GlyphArea;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 
@@ -85,9 +86,60 @@ impl DisplayRowAppendArea {
     }
 }
 
+/// Capacity of one structural margin glyph area.  Both logical columns and
+/// the authoritative pixel extent are kept because font advances are concrete
+/// while window geometry is allocated in canonical frame columns.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct DisplayMarginAreaCapacity {
+    columns: usize,
+    width_px: f32,
+}
+
+impl DisplayMarginAreaCapacity {
+    pub(crate) fn new(columns: usize, width_px: f32) -> Self {
+        Self {
+            columns,
+            width_px: width_px.max(0.0),
+        }
+    }
+
+    pub(crate) fn columns(self) -> usize {
+        self.columns
+    }
+
+    pub(crate) fn width_px(self) -> f32 {
+        self.width_px
+    }
+
+    pub(crate) fn is_empty(self) -> bool {
+        self.columns == 0 || self.width_px <= 0.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct DisplayRowMarginAreas {
+    left: DisplayMarginAreaCapacity,
+    right: DisplayMarginAreaCapacity,
+}
+
+impl DisplayRowMarginAreas {
+    fn new(left: DisplayMarginAreaCapacity, right: DisplayMarginAreaCapacity) -> Self {
+        Self { left, right }
+    }
+
+    fn capacity(self, area: GlyphArea) -> Option<DisplayMarginAreaCapacity> {
+        match area {
+            GlyphArea::LeftMargin => Some(self.left),
+            GlyphArea::RightMargin => Some(self.right),
+            GlyphArea::Text => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendSurface {
     area: DisplayRowAppendArea,
+    margin_areas: DisplayRowMarginAreas,
     tab_policy: DisplayTabPolicy,
     image_scale_environment: ImageScaleEnvironment,
 }
@@ -96,9 +148,24 @@ impl DisplayRowAppendSurface {
     pub(crate) fn new(area: DisplayRowAppendArea, tab_policy: DisplayTabPolicy) -> Self {
         Self {
             area,
+            margin_areas: DisplayRowMarginAreas::default(),
             tab_policy,
             image_scale_environment: ImageScaleEnvironment::default(),
         }
+    }
+
+    pub(crate) fn with_margin_areas(
+        mut self,
+        left_columns: usize,
+        left_width_px: f32,
+        right_columns: usize,
+        right_width_px: f32,
+    ) -> Self {
+        self.margin_areas = DisplayRowMarginAreas::new(
+            DisplayMarginAreaCapacity::new(left_columns, left_width_px),
+            DisplayMarginAreaCapacity::new(right_columns, right_width_px),
+        );
+        self
     }
 
     pub(crate) fn with_image_scale_environment(
@@ -130,6 +197,7 @@ impl DisplayRowAppendSurface {
     pub(crate) fn full_text_width_surface(&self) -> Self {
         Self {
             area: self.area.full_text_width(),
+            margin_areas: self.margin_areas,
             tab_policy: self.tab_policy.clone(),
             image_scale_environment: self.image_scale_environment,
         }
@@ -143,6 +211,7 @@ impl DisplayRowAppendSurface {
         DisplayRowAppendFrame::from_parts(
             placement,
             self.area,
+            self.margin_areas,
             metrics,
             self.tab_policy.clone(),
             self.image_scale_environment,
@@ -555,6 +624,7 @@ pub(crate) struct DisplayRowAppendFrame {
     content_x: f32,
     text_width: f32,
     line_number_width: f32,
+    margin_areas: DisplayRowMarginAreas,
     face_space_width: f32,
     image_scale_environment: ImageScaleEnvironment,
 }
@@ -642,6 +712,7 @@ impl DisplayRowAppendFrame {
     fn from_parts(
         placement: DisplayRowAppendPlacement,
         area: DisplayRowAppendArea,
+        margin_areas: DisplayRowMarginAreas,
         metrics: DisplayRowAppendMetrics,
         tab_policy: DisplayTabPolicy,
         image_scale_environment: ImageScaleEnvironment,
@@ -661,9 +732,14 @@ impl DisplayRowAppendFrame {
             content_x: area.content_x(),
             text_width: area.text_width(),
             line_number_width: area.line_number_width(),
+            margin_areas,
             face_space_width: metrics.space_width(),
             image_scale_environment,
         }
+    }
+
+    pub(crate) fn margin_capacity(&self, area: GlyphArea) -> Option<DisplayMarginAreaCapacity> {
+        self.margin_areas.capacity(area)
     }
 
     pub(crate) fn source_append_render_request<'face>(

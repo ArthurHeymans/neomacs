@@ -74,6 +74,10 @@ pub(crate) struct BufferSourceWalkSetupRequest<'a> {
     trailing_whitespace_enabled: bool,
     trailing_whitespace_bg: u32,
     image_scale_environment: ImageScaleEnvironment,
+    left_margin_columns: usize,
+    left_margin_width: f32,
+    right_margin_columns: usize,
+    right_margin_width: f32,
 }
 
 pub(crate) struct BufferSourceWalkSetup {
@@ -172,7 +176,25 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             trailing_whitespace_enabled,
             trailing_whitespace_bg,
             image_scale_environment: ImageScaleEnvironment::default(),
+            left_margin_columns: 0,
+            left_margin_width: 0.0,
+            right_margin_columns: 0,
+            right_margin_width: 0.0,
         }
+    }
+
+    fn with_margin_areas(
+        mut self,
+        left_columns: usize,
+        left_width: f32,
+        right_columns: usize,
+        right_width: f32,
+    ) -> Self {
+        self.left_margin_columns = left_columns;
+        self.left_margin_width = left_width;
+        self.right_margin_columns = right_columns;
+        self.right_margin_width = right_width;
+        self
     }
 
     fn with_image_scale_environment(
@@ -218,6 +240,12 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             params.show_trailing_whitespace,
             params.trailing_ws_bg,
         )
+        .with_margin_areas(
+            params.left_margin_columns.max(0) as usize,
+            params.left_margin_width,
+            params.right_margin_columns.max(0) as usize,
+            params.right_margin_width,
+        )
         .with_image_scale_environment(params.image_scale_environment)
     }
 
@@ -254,6 +282,12 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
                 self.tab_stop_list,
             )
             .into_surface()
+            .with_margin_areas(
+                self.left_margin_columns,
+                self.left_margin_width,
+                self.right_margin_columns,
+                self.right_margin_width,
+            )
             .with_image_scale_environment(self.image_scale_environment),
             row_geometry_defaults,
             row_geometry: row_geometry_defaults.initial_state(),

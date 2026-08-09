@@ -130,9 +130,21 @@ fn a_margin_head_stays_a_single_spec_even_with_an_area_gnu_rejects() {
         list(vec![symbol("margin"), symbol("right-margin")]),
         string("m"),
     ]);
+    let typed = display_margin_spec(accepted).expect("valid right margin spec");
+    assert_eq!(typed.location(), DisplayMarginLocation::Right);
+    assert_eq!(typed.content().as_utf8_str(), Some("m"));
     assert_eq!(
         display_spec_margin_value(accepted).and_then(|value| value.as_utf8_str()),
         Some("m")
+    );
+
+    let text_area = list(vec![
+        list(vec![symbol("margin"), Value::NIL]),
+        string("text"),
+    ]);
+    assert_eq!(
+        display_margin_spec(text_area).map(DisplayMarginSpec::location),
+        Some(DisplayMarginLocation::Text)
     );
 }
 
