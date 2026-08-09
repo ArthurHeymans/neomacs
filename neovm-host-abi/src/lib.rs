@@ -273,7 +273,7 @@ impl Default for TaskOptions {
     }
 }
 
-/// Failure modes for a VM task executed through the host runtime.
+/// Why a VM task executed through the host runtime produced no value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TaskError {
     /// Task was cancelled by the host or by the requester.
@@ -285,6 +285,23 @@ pub enum TaskError {
         /// The condition signal the task raised.
         Signal,
     ),
+    /// Task called `kill-emacs`. Not a failure: an order. GNU exits the
+    /// process when a Lisp thread calls `kill-emacs`, so a host that treats
+    /// this as one task's error keeps running against the program's wishes.
+    /// Its own variant so every host boundary decides at compile time instead
+    /// of pattern-matching a signal named "kill-emacs".
+    Shutdown(ShutdownOrder),
+}
+
+/// A task's request that the process exit. Carried by
+/// [`TaskError::Shutdown`] and latched by the runtime, so a host learns of it
+/// whether or not it inspects the task's own result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShutdownOrder {
+    /// Process exit status the task asked for.
+    pub exit_code: i32,
+    /// Whether the exit should restart the editor.
+    pub restart: bool,
 }
 
 /// One operation in a channel-select batch. The host picks whichever

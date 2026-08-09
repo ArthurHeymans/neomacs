@@ -15,6 +15,10 @@ fn render_task_error(err: TaskError) -> String {
         TaskError::Cancelled => "ERR (task-cancelled nil)".to_string(),
         TaskError::TimedOut => "ERR (task-timeout nil)".to_string(),
         TaskError::Failed(signal) => format!("ERR {}", render_signal(signal)),
+        // Not this case's result: the case asked the process to exit, and this
+        // runner is the process. Reported for the transcript, then obeyed by
+        // the caller (see the shutdown_request check in the case loop).
+        TaskError::Shutdown(order) => format!("ERR (kill-emacs {})", order.exit_code),
     }
 }
 
@@ -145,6 +149,17 @@ fn main() {
                 let status = render_task_error(err);
                 write_status_line(index, rendered_form.as_bytes(), status.as_bytes());
             }
+        }
+
+        // GNU exits when a Lisp thread calls kill-emacs, and so does this
+        // host: remaining cases are not run.
+        if let Some(order) = rt.shutdown_request() {
+            let _ = io::stdout().flush();
+            rt.close();
+            for worker in workers {
+                worker.join().expect("worker thread should join");
+            }
+            std::process::exit(order.exit_code);
         }
     }
 

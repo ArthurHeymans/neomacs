@@ -5,8 +5,8 @@ use neovm_core::emacs_core::load::{
 use neovm_core::emacs_core::{self, EvalError};
 use neovm_core::{TaskHandle, TaskScheduler, TaskStatus};
 use neovm_host_abi::{
-    Affinity, ChannelId, LispValue, SelectOp, SelectResult, Signal, TaskError, TaskOptions,
-    TaskPriority,
+    Affinity, ChannelId, LispValue, SelectOp, SelectResult, ShutdownOrder, Signal, TaskError,
+    TaskOptions, TaskPriority,
 };
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -436,6 +436,10 @@ pub struct WorkerRuntime {
     channel_events: Arc<ChannelEvents>,
     metrics: Arc<RuntimeMetrics>,
     executor: Arc<ExecuteFn>,
+    /// The first exit a task ordered, if any. Latched rather than merely
+    /// returned to that task's awaiter: a host must be able to obey a
+    /// kill-emacs it never awaited.
+    shutdown: Arc<Mutex<Option<ShutdownOrder>>>,
 }
 
 impl WorkerRuntime {
@@ -504,6 +508,7 @@ impl WorkerRuntime {
             channel_events: Arc::new(ChannelEvents::default()),
             metrics: Arc::new(RuntimeMetrics::default()),
             executor: Arc::new(executor),
+            shutdown: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -680,6 +685,13 @@ impl WorkerRuntime {
         tasks.get(&handle.0).map(|entry| entry.status())
     }
 
+    /// The exit a task ordered through kill-emacs, if one has. A host polls
+    /// this (or reads [`TaskError::Shutdown`] from an await) and exits the
+    /// process with the code; the runtime cannot exit on the host's behalf.
+    pub fn shutdown_request(&self) -> Option<ShutdownOrder> {
+        *self.shutdown.lock().expect("shutdown latch mutex poisoned")
+    }
+
     pub fn close(&self) {
         let mut state = self
             .queue
@@ -699,6 +711,7 @@ impl WorkerRuntime {
             let finished = Arc::clone(&self.finished);
             let metrics = Arc::clone(&self.metrics);
             let executor = Arc::clone(&self.executor);
+            let shutdown = Arc::clone(&self.shutdown);
             joins.push(thread::spawn(move || {
                 loop {
                     let handle = {
@@ -746,6 +759,22 @@ impl WorkerRuntime {
 
                     let execution = executor(&task.form, &task.opts, &task.context);
                     let was_cancelled = matches!(execution, Err(TaskError::Cancelled));
+                    if let Err(TaskError::Shutdown(order)) = &execution {
+                        // The process was told to exit. That outranks every
+                        // queued task, so the runtime latches the order and
+                        // stops taking work; the host reads it back through
+                        // shutdown_request and performs the exit. Awaiters of
+                        // this task still see the order as its outcome.
+                        let mut latched = shutdown.lock().expect("shutdown latch mutex poisoned");
+                        if latched.is_none() {
+                            *latched = Some(*order);
+                        }
+                        drop(latched);
+                        let mut state = queue.state.lock().expect("worker queue mutex poisoned");
+                        state.closed = true;
+                        drop(state);
+                        queue.ready.notify_all();
+                    }
 
                     if task.context.is_cancelled() {
                         if task.mark_cancelled() {
@@ -1009,14 +1038,14 @@ fn eval_error_to_task_error(err: EvalError) -> TaskError {
                 emacs_core::print_value(&value)
             )),
         }),
-        // A worker task cannot exit the process; kill-emacs escaping a task
-        // surfaces as that task's failure so the submitter sees it rather
-        // than the request being silently absorbed. Whether a worker-side
-        // kill-emacs should instead shut down the whole process (GNU's
-        // Lisp threads do) is an open parity question for the task runtime.
-        EvalError::Shutdown(request) => TaskError::Failed(Signal {
-            symbol: "kill-emacs".to_string(),
-            data: Some(format!("{}", request.exit_code)),
+        // GNU exits the process when a Lisp thread calls kill-emacs, so this
+        // is not the task's failure -- it is an order. Kept as its own
+        // TaskError variant rather than a signal named "kill-emacs" so no
+        // host can log it beside an arith-error and keep running; the runtime
+        // latches it and stops accepting work.
+        EvalError::Shutdown(request) => TaskError::Shutdown(ShutdownOrder {
+            exit_code: request.exit_code,
+            restart: request.restart,
         }),
     }
 }

@@ -470,3 +470,66 @@ fn elisp_executor_uses_bootstrap_runtime_surface() {
         "(t t nil nil cl-lib gv t t)"
     );
 }
+
+#[test]
+fn elisp_executor_propagates_kill_emacs_as_a_shutdown_order() {
+    // GNU: a Lisp thread calling kill-emacs kills Emacs. A worker task is this
+    // engine's nearest equivalent, so kill-emacs escaping a task is not that
+    // task's failure -- it is an order the host must obey. Reporting it as
+    // TaskError::Failed let a host log it beside an arith-error and keep
+    // running, which is how a shutdown gets absorbed.
+    let rt = WorkerRuntime::with_elisp_executor(WorkerConfig {
+        threads: 1,
+        queue_capacity: 16,
+    });
+    let workers = rt.start_dummy_workers();
+
+    assert_eq!(rt.shutdown_request(), None);
+
+    let task = rt
+        .spawn(
+            LispValue {
+                bytes: b"(kill-emacs 7)".to_vec(),
+            },
+            TaskOptions::default(),
+        )
+        .expect("task should enqueue");
+    let result = TaskScheduler::task_await(&rt, task, Some(Duration::from_millis(500)))
+        .expect_err("kill-emacs does not produce a task value");
+
+    assert_eq!(
+        result,
+        TaskError::Shutdown(ShutdownOrder {
+            exit_code: 7,
+            restart: false
+        }),
+        "the exit code is the task's outcome, not a signal payload"
+    );
+
+    // The runtime latches it, so a host that never inspects an individual task
+    // result still learns the process was asked to exit.
+    assert_eq!(
+        rt.shutdown_request(),
+        Some(ShutdownOrder {
+            exit_code: 7,
+            restart: false
+        })
+    );
+
+    // A shutdown outranks pending work: nothing further is accepted.
+    let rejected = rt.spawn(
+        LispValue {
+            bytes: b"(+ 1 1)".to_vec(),
+        },
+        TaskOptions::default(),
+    );
+    assert!(
+        matches!(rejected, Err(EnqueueError::Closed)),
+        "a runtime under a shutdown order must not accept more work, got {rejected:?}"
+    );
+
+    rt.close();
+    for worker in workers {
+        worker.join().expect("worker thread should join");
+    }
+}
