@@ -1430,6 +1430,7 @@ fn test_window_params() -> WindowParams {
         bounds: Rect::new(0.0, 0.0, 800.0, 600.0),
         text_bounds: Rect::new(0.0, 0.0, 800.0, 560.0),
         selected: true,
+        mode_line_active: true,
         kind: WindowKind::Main,
         left_col: 0,
         top_line: 0,

@@ -87,10 +87,12 @@ pub enum TtyItalicRendition {
 ///
 /// Fields mirror the terminfo capabilities GNU reads in `init_tty`: `so`, `us`,
 /// `Smulx`, `md`, `mh`, `ZH`, `smxx`, `Co` and `NC`.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TtyAttributeCapabilities {
-    /// `so` (standout).
-    pub inverse: bool,
+    /// Complete `so` (standout) control sequence after terminfo padding is
+    /// removed. GNU emits this capability itself; preserving its bytes handles
+    /// combined and non-SGR renditions without guessing their meaning.
+    pub standout_sequence: Option<Vec<u8>>,
     /// `us`.
     pub underline: bool,
     /// `Smulx`.
@@ -115,9 +117,9 @@ impl TtyAttributeCapabilities {
     /// This is the assumption neomacs shipped with before capabilities existed,
     /// so it stays the default for a terminal whose terminfo entry cannot be
     /// read: a missing entry should not silently strip highlighting.
-    pub const fn full() -> Self {
+    pub fn full() -> Self {
         Self {
-            inverse: true,
+            standout_sequence: Some(b"\x1b[7m".to_vec()),
             underline: true,
             underline_styled: true,
             bold: true,
@@ -130,9 +132,9 @@ impl TtyAttributeCapabilities {
     }
 
     /// A terminal that can render no attributes at all (a `dumb`-style entry).
-    pub const fn none() -> Self {
+    pub fn none() -> Self {
         Self {
-            inverse: false,
+            standout_sequence: None,
             underline: false,
             underline_styled: false,
             bold: false,
@@ -149,7 +151,7 @@ impl TtyAttributeCapabilities {
     /// (`MAY_USE_WITH_COLORS_P`). A monochrome terminal ignores `ncv` entirely.
     pub fn supports(&self, capability: TtyCapability) -> bool {
         let present = match capability {
-            TtyCapability::Inverse => self.inverse,
+            TtyCapability::Inverse => self.standout_sequence.is_some(),
             TtyCapability::Underline => self.underline,
             TtyCapability::UnderlineStyled => self.underline_styled,
             TtyCapability::Bold => self.bold,

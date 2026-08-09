@@ -763,6 +763,12 @@ pub struct RawTerminalSnapshot {
 }
 
 impl RawTerminalSnapshot {
+    /// Capture every physical cell in the terminal, without normalization.
+    #[must_use]
+    pub fn capture_full_screen(screen: &vt100::Screen) -> Self {
+        Self::capture_rows(screen, 0..screen.size().0)
+    }
+
     /// Capture every physical cell in `rows`, without normalization.
     #[must_use]
     pub fn capture_rows(screen: &vt100::Screen, rows: std::ops::Range<u16>) -> Self {
@@ -850,23 +856,25 @@ impl RawTerminalSnapshot {
         let mut output = String::new();
 
         for row in &self.rows {
-            output.push_str(&format!("{:>label_width$} |", row.row));
-            for cell in &row.cells {
-                if cell.is_wide_continuation() {
-                    output.push('›');
-                } else if !cell.has_contents() {
-                    output.push('∅');
-                } else if cell.contents() == " " {
-                    output.push('␠');
-                } else {
-                    output.push_str(cell.contents());
-                }
+            write_plain_row(&mut output, row, label_width);
+        }
+
+        output
+    }
+
+    fn differing_plain_rows(&self, neomacs: &Self) -> String {
+        let label_width = usize::max(2, self.terminal_size.0.saturating_sub(1).to_string().len());
+        let mut output = String::new();
+
+        for (gnu_row, neo_row) in self.rows.iter().zip(&neomacs.rows) {
+            if gnu_row == neo_row {
+                continue;
             }
-            output.push('|');
-            if row.wrapped {
-                output.push_str(" ↩");
-            }
-            output.push('\n');
+
+            output.push_str("GNU     ");
+            write_plain_row(&mut output, gnu_row, label_width);
+            output.push_str("Neomacs ");
+            write_plain_row(&mut output, neo_row, label_width);
         }
 
         output
@@ -973,6 +981,26 @@ impl RawTerminalSnapshot {
     }
 }
 
+fn write_plain_row(output: &mut String, row: &RawTerminalRow, label_width: usize) {
+    output.push_str(&format!("{:>label_width$} |", row.row));
+    for cell in &row.cells {
+        if cell.is_wide_continuation() {
+            output.push('›');
+        } else if !cell.has_contents() {
+            output.push('∅');
+        } else if cell.contents() == " " {
+            output.push('␠');
+        } else {
+            output.push_str(cell.contents());
+        }
+    }
+    output.push('|');
+    if row.wrapped {
+        output.push_str(" ↩");
+    }
+    output.push('\n');
+}
+
 fn raw_cell_description(cell: &vt100::Cell) -> String {
     let mut attributes = Vec::new();
     if cell.bold() {
@@ -1011,8 +1039,11 @@ pub fn assert_raw_terminal_snapshots_eq(
     let differences = gnu.exact_differences(neomacs);
     assert!(
         differences.is_empty(),
-        "{label}: {} exact terminal-state difference(s):\n{}",
+        "{label}: {} exact terminal-state difference(s):\n\
+         Differing plain rows (comparison remains full-screen and exact):\n{}\
+         Exact differences:\n{}",
         differences.len(),
+        gnu.differing_plain_rows(neomacs),
         differences.join("\n"),
     );
 }

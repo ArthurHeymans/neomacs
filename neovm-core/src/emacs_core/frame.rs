@@ -168,7 +168,7 @@ pub(crate) fn builtin_make_frame_invisible(
                 if let Some(old_fid) = eval.frames.selected_frame().map(|frame| frame.id) {
                     remember_selected_window_point_in_state(
                         &mut eval.frames,
-                        &eval.buffers,
+                        &mut eval.buffers,
                         old_fid,
                     );
                 }

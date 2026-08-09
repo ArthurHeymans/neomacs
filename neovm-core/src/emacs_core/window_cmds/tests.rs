@@ -793,7 +793,7 @@ fn selected_window_sync_prefers_live_current_buffer_point_before_resync() {
 
     crate::emacs_core::window_cmds::remember_selected_window_point_in_state(
         &mut ev.frames,
-        &ev.buffers,
+        &mut ev.buffers,
         frame_id,
     );
     crate::emacs_core::window_cmds::sync_selected_window_buffer_in_state(

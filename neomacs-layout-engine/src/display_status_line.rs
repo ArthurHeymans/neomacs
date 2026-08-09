@@ -583,12 +583,12 @@ impl WindowChromeRowsPlan {
     pub(crate) fn new(params: &WindowParams, face_resolver: &FaceResolver) -> Self {
         let mode_line_face = (params.mode_line_height > 0.0).then(|| {
             face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine {
-                selected: params.selected,
+                selected: params.mode_line_active,
             })
         });
         let header_line_face = (params.header_line_height > 0.0).then(|| {
             face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::HeaderLine {
-                selected: params.selected,
+                selected: params.mode_line_active,
             })
         });
         let tab_line_face = (params.tab_line_height > 0.0).then(|| {
@@ -761,7 +761,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
                     kind: WindowChromeKind::HeaderLine,
-                    selected: params.selected,
+                    selected: params.mode_line_active,
                     display_row_index: usize::from(self.tab_line_height > 0.0),
                     output: ChromeRowOutput::new(
                         i64::from(self.tab_line_height > 0.0),
@@ -820,7 +820,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                 WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
                     kind: WindowChromeKind::ModeLine,
-                    selected: params.selected,
+                    selected: params.mode_line_active,
                     display_row_index: self.mode_line_display_row,
                     output: ChromeRowOutput::new(self.mode_line_display_row as i64, mode_line_y),
                     bounds: Rect::new(

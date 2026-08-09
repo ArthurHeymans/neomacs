@@ -975,7 +975,7 @@ impl TtyRif {
     /// done, as typed operations. Mutates the screen model exactly like a
     /// real render's planning stage.
     #[cfg(test)]
-    pub(crate) fn plan_for_test(&mut self) -> Vec<TermOp> {
+    fn plan_for_test(&mut self) -> Vec<TermOp> {
         self.frame_stats = TtyFrameStats::default();
         self.plan_frame()
     }
@@ -1133,34 +1133,51 @@ impl TtyRif {
                 continue;
             }
             if self.force_full_render {
-                // Repaint an unknown row exactly like a terminal row, not as
-                // an artificial width-sized string. GNU writes the meaningful
-                // prefix and erases the uniform blank tail. Besides saving
-                // bytes, this preserves the terminal distinction between
-                // cells that were written as spaces and cells cleared by EL.
+                // GNU's initial update physically writes the complete width
+                // of every nonempty desired row.  This is observable terminal
+                // state: those trailing cells contain written spaces, while a
+                // wholly blank row is cleared by EL and contains unwritten
+                // cells.  Keep that distinction instead of treating the two
+                // states as visually interchangeable.
                 if let Some((split, bg)) = uniform_erasable_tail(desired_row, 0)
+                    && split == 0
                     && self.caps.erase_to_eol
                     && (bg.is_none() || self.caps.back_color_erase)
                 {
-                    if split > 0 {
-                        ops.push(TermOp::WriteRun {
-                            row: row as u16,
-                            start: 0,
-                            end: split as u16,
-                        });
-                    }
                     ops.push(TermOp::EraseToEol {
                         row: row as u16,
-                        from: split as u16,
+                        from: 0,
                         bg,
                     });
                 } else {
                     ops.push(TermOp::WriteRun {
                         row: row as u16,
-                        start: first_changed as u16,
-                        end: last_changed as u16 + 1,
+                        start: 0,
+                        end: desired_row.len() as u16,
                     });
                 }
+                continue;
+            }
+
+            // A row whose entire current model is default blank was produced
+            // by EL on the initial/most recent blank repaint, so its physical
+            // terminal cells are unwritten.  GNU's update_frame_line writes
+            // through the right edge when genuinely new content first
+            // appears on such a row, establishing physical trailing spaces.
+            // Content with one consumed source row was relocated by GNU's line
+            // operations and retains its EL-produced unwritten tail, so let
+            // the usual incremental path reproduce that tail. Merely finding
+            // equal content elsewhere is insufficient: a copied/duplicate row
+            // is new content and must establish its own written-space tail.
+            let current_row_is_erased = current_row.iter().all(|cell| cell == &TtyCell::default());
+            let content_origin = current_row_is_erased
+                .then(|| classify_new_row_content(&self.current, &self.desired, row));
+            if content_origin == Some(NewRowContentOrigin::New) {
+                ops.push(TermOp::WriteRun {
+                    row: row as u16,
+                    start: first_changed as u16,
+                    end: desired_row.len() as u16,
+                });
                 continue;
             }
 
@@ -1210,19 +1227,20 @@ impl TtyRif {
             }
 
             // Erase-to-EOL: when the desired row's physical tail is one
-            // uniform run of erasable blanks (see erasable_blank) and at
-            // least a few of them changed, one ESC[K replaces writing them
-            // all - the line-kill / popup-close / full-clear shape. The
-            // erase repaints the unchanged part of the tail with identical
-            // content, so correctness needs the WHOLE tail erasable, not
-            // just the changed part. Without back-color-erase the terminal
-            // fills with its default background, so a colored tail then
-            // stays on the write path.
+            // uniform run of erasable blanks (see erasable_blank) and the
+            // changed span reaches that tail, finish the logical-line update
+            // with ESC[K.  GNU does this even when the abstract blank cells
+            // in the tail compare equal: the erase changes physically written
+            // spaces into unwritten cells, which is observable terminal state.
+            // Correctness needs the WHOLE tail erasable, not just its changed
+            // part. Without back-color-erase the terminal fills with its
+            // default background, so a colored tail stays on the write path.
             const MIN_ERASE_CELLS: usize = 4;
             let mut erase_from: Option<usize> = None;
             {
                 if let Some((split, bg)) = uniform_erasable_tail(desired_row, first_changed)
-                    && split + MIN_ERASE_CELLS <= last_changed + 1
+                    && desired_row.len().saturating_sub(split) >= MIN_ERASE_CELLS
+                    && split <= last_changed + 1
                     && self.caps.erase_to_eol
                     && (bg.is_none() || self.caps.back_color_erase)
                 {
@@ -1673,21 +1691,36 @@ fn detect_scroll(
     }
     // A carried, unwritten desired row is byte-identical to the current row
     // at the same index by construction: give BOTH sides a per-row sentinel
-    // instead of hashing 2x row cells. Row-unique sentinels keep the row
-    // stationary (old == new at r) while never colliding across rows, so the
-    // shift voting below cannot mistake two carried rows for a moved run —
-    // which is also semantically right: a carried row IS stationary evidence.
+    // instead of hashing 2x row cells. Default blank rows get the same
+    // stationary treatment. Moving them saves no output (EL already clears a
+    // whole row), and counting a large blank band as a shifted content run
+    // makes us scroll where GNU's cost model chooses a repaint. Row-unique
+    // sentinels keep both kinds stationary (old == new at r) while never
+    // matching across rows.
     const CARRIED_SENTINEL: u64 = 1 << 63;
-    let sentinel = |r: usize| {
-        desired
-            .row_provably_unchanged(r)
-            .then_some(CARRIED_SENTINEL | r as u64)
+    const DEFAULT_BLANK_SENTINEL: u64 = 1 << 62;
+    let carried_sentinel = |r: usize| desired.row_provably_unchanged(r).then_some(r as u64);
+    let default_blank_sentinel = |grid: &TtyGrid, r: usize| {
+        let row = &grid.cells[r * w..(r + 1) * w];
+        row.iter()
+            .all(|cell| cell == &TtyCell::default())
+            .then_some(DEFAULT_BLANK_SENTINEL | r as u64)
     };
     let old_hash: Vec<u64> = (0..h)
-        .map(|r| sentinel(r).unwrap_or_else(|| row_hash(&current.cells[r * w..(r + 1) * w])))
+        .map(|r| {
+            carried_sentinel(r)
+                .map(|row| CARRIED_SENTINEL | row)
+                .or_else(|| default_blank_sentinel(current, r))
+                .unwrap_or_else(|| row_hash(&current.cells[r * w..(r + 1) * w]))
+        })
         .collect();
     let new_hash: Vec<u64> = (0..h)
-        .map(|r| sentinel(r).unwrap_or_else(|| row_hash(&desired.cells[r * w..(r + 1) * w])))
+        .map(|r| {
+            carried_sentinel(r)
+                .map(|row| CARRIED_SENTINEL | row)
+                .or_else(|| default_blank_sentinel(desired, r))
+                .unwrap_or_else(|| row_hash(&desired.cells[r * w..(r + 1) * w]))
+        })
         .collect();
 
     // Changed band: rows outside it already match in place.
@@ -1861,19 +1894,68 @@ fn detect_row_shift(
     None
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NewRowContentOrigin {
+    New,
+    RelocatedFrom(usize),
+}
+
+/// Classify content appearing on an erased destination row.
+///
+/// A relocation has exactly one source row with the same old content, the new
+/// grid consumes that source by changing it, and exactly one destination gains
+/// that content. Any duplicate source or destination makes provenance
+/// ambiguous, so we deliberately choose `New` rather than silently preserve
+/// the wrong physical tail.
+fn classify_new_row_content(
+    current: &TtyGrid,
+    desired: &TtyGrid,
+    destination: usize,
+) -> NewRowContentOrigin {
+    let width = current.width;
+    let target = &desired.cells[destination * width..(destination + 1) * width];
+    let mut matching_sources = current
+        .cells
+        .chunks_exact(width)
+        .zip(desired.cells.chunks_exact(width))
+        .enumerate()
+        .filter(|(_, (old_row, _))| *old_row == target);
+    let source = match (matching_sources.next(), matching_sources.next()) {
+        (Some((source, (old_row, new_row))), None) if new_row != old_row => source,
+        _ => return NewRowContentOrigin::New,
+    };
+
+    let mut matching_destinations = current
+        .cells
+        .chunks_exact(width)
+        .zip(desired.cells.chunks_exact(width))
+        .enumerate()
+        .filter_map(|(candidate, (old_row, new_row))| {
+            (old_row != target && new_row == target).then_some(candidate)
+        });
+    match (matching_destinations.next(), matching_destinations.next()) {
+        (Some(candidate), None) if candidate == destination => {
+            NewRowContentOrigin::RelocatedFrom(source)
+        }
+        _ => NewRowContentOrigin::New,
+    }
+}
+
 /// A desired cell that erase-to-EOL may paint instead of writing.
 ///
 /// The erased cell a terminal produces is "space in the current background":
-/// foreground, bold and italic are invisible on a blank, so they may differ,
-/// but underline, strike-through and inverse all RENDER on a blank cell (an
-/// inverse blank is a solid foreground-colored block) and must refuse the
-/// erase; so must wide-char padding (it belongs to the wide base beside it)
-/// and grapheme extenders. The background must match the erase's BCE fill,
-/// which the caller guarantees by grouping the tail by one uniform bg.
+/// Exact terminal parity preserves more than visible pixels: EL creates an
+/// unwritten cell in the active background, so it cannot replace a space whose
+/// foreground or attributes were explicitly written even when those settings
+/// are visually inert on a blank. The background must match the erase's BCE
+/// fill, which the caller guarantees by grouping the tail by one uniform bg.
 fn erasable_blank(cell: &TtyCell) -> bool {
     cell.ch == ' '
         && !cell.padding
         && cell.extenders.is_none()
+        && cell.attrs.fg.is_none()
+        && !cell.attrs.bold
+        && !cell.attrs.italic
         && cell.attrs.underline == 0
         && !cell.attrs.strikethrough
         && !cell.attrs.inverse
@@ -1999,14 +2081,14 @@ const TIER_TRUECOLOR: u8 = 3;
 /// [`TtyAttributeCapabilities::full`] so an uninitialised path (a test, a
 /// terminfo entry that cannot be read) keeps the previous behavior instead of
 /// silently dropping highlighting.
-static CAPABILITIES: std::sync::RwLock<TtyAttributeCapabilities> =
-    std::sync::RwLock::new(TtyAttributeCapabilities::full());
+static CAPABILITIES: std::sync::LazyLock<std::sync::RwLock<TtyAttributeCapabilities>> =
+    std::sync::LazyLock::new(|| std::sync::RwLock::new(TtyAttributeCapabilities::full()));
 
 /// The capabilities registered for this terminal.
 pub fn capabilities() -> TtyAttributeCapabilities {
     CAPABILITIES
         .read()
-        .map(|caps| *caps)
+        .map(|caps| caps.clone())
         .unwrap_or_else(|_| TtyAttributeCapabilities::full())
 }
 
@@ -2154,7 +2236,11 @@ pub fn write_sgr_with_capabilities(
         buf.extend_from_slice(b"\x1b[9m");
     }
     if attrs.inverse && caps.supports(TtyCapability::Inverse) {
-        buf.extend_from_slice(b"\x1b[7m");
+        buf.extend_from_slice(
+            caps.standout_sequence
+                .as_deref()
+                .expect("supported standout has a control sequence"),
+        );
     }
 
     // GNU term.c only emits color SGR for specified TTY colors.

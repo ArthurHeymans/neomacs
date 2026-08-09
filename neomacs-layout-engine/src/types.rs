@@ -144,6 +144,11 @@ pub struct WindowParams {
     pub text_bounds: Rect,
     /// Whether this is the selected window
     pub selected: bool,
+    /// Whether this window's mode/header-line chrome uses the active face.
+    /// During an active minibuffer this remains true for the window that
+    /// invoked the minibuffer even though the minibuffer owns input/cursor
+    /// selection.
+    pub mode_line_active: bool,
     /// What kind of window this is (main editing area or minibuffer).
     pub kind: WindowKind,
     /// Independent character-grid origin; never derived from pixel bounds.

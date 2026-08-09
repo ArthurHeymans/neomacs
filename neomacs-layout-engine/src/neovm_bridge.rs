@@ -1522,12 +1522,27 @@ pub fn window_params_from_neovm(
         obarray,
         face_table,
         default_font_ascent,
-        is_selected,
-        is_minibuffer,
+        WindowDisplayRole {
+            is_selected,
+            mode_line_active: is_selected,
+            is_minibuffer,
+        },
         window_cursor_type,
         window_cursor_effect,
         FontSizing::xft(),
     )
+}
+
+/// Selection-dependent display roles for one window.
+///
+/// GNU keeps cursor selection, active mode-line selection, and minibuffer
+/// identity separate: during minibuffer input the caller loses the cursor but
+/// retains its active mode line.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WindowDisplayRole {
+    pub is_selected: bool,
+    pub mode_line_active: bool,
+    pub is_minibuffer: bool,
 }
 
 pub fn window_params_from_neovm_with_font_sizing(
@@ -1537,12 +1552,16 @@ pub fn window_params_from_neovm_with_font_sizing(
     obarray: &Obarray,
     face_table: &FaceTable,
     default_font_ascent: Option<f32>,
-    is_selected: bool,
-    is_minibuffer: bool,
+    display_role: WindowDisplayRole,
     window_cursor_type: Value,
     window_cursor_effect: Value,
     font_sizing: FontSizing,
 ) -> Option<WindowParams> {
+    let WindowDisplayRole {
+        is_selected,
+        mode_line_active,
+        is_minibuffer,
+    } = display_role;
     // Only leaf windows can be laid out.
     let effective_window_system = frame.effective_window_system();
     let is_window_system = effective_window_system.is_some();
@@ -1711,7 +1730,7 @@ pub fn window_params_from_neovm_with_font_sizing(
     let mode_line_height = if wants_mode_line {
         chrome_face_pixel_height(
             &face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine {
-                selected: is_selected,
+                selected: mode_line_active,
             }),
             char_height,
         )
@@ -1744,7 +1763,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         chrome_face_pixel_height(
             &face_resolver.default_base_face_for_origin_without_buffer(
                 &DisplayOrigin::HeaderLine {
-                    selected: is_selected,
+                    selected: mode_line_active,
                 },
             ),
             char_height,
@@ -1775,6 +1794,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         bounds: display_bounds,
         text_bounds,
         selected: is_selected,
+        mode_line_active,
         kind: if is_minibuffer {
             WindowKind::Minibuffer
         } else {
@@ -1955,6 +1975,7 @@ pub fn collect_layout_params_with_font_sizing(
         .frame_manager()
         .selected_frame()
         .is_some_and(|selected| selected.id == frame_id);
+    let minibuffer_caller = evaluator.minibuffer_selected_window_id();
     let frame_params = frame_params_from_neovm(frame, evaluator.face_table(), evaluator.obarray());
 
     let mut window_params = Vec::new();
@@ -1972,6 +1993,8 @@ pub fn collect_layout_params_with_font_sizing(
             continue;
         };
         let is_selected = frame_is_selected && frame.selected_window == *win_id;
+        let mode_line_active = frame_is_selected
+            && (frame.selected_window == *win_id || minibuffer_caller == Some(*win_id));
         let window_cursor_type = evaluator.frame_manager().window_cursor_type(*win_id);
         let window_cursor_effect = evaluator
             .frame_manager()
@@ -1984,8 +2007,11 @@ pub fn collect_layout_params_with_font_sizing(
             evaluator.obarray(),
             evaluator.face_table(),
             default_font_ascent,
-            is_selected,
-            false,
+            WindowDisplayRole {
+                is_selected,
+                mode_line_active,
+                is_minibuffer: false,
+            },
             window_cursor_type,
             window_cursor_effect,
             font_sizing,
@@ -2032,8 +2058,11 @@ pub fn collect_layout_params_with_font_sizing(
                 evaluator.obarray(),
                 evaluator.face_table(),
                 default_font_ascent,
-                is_selected,
-                true,
+                WindowDisplayRole {
+                    is_selected,
+                    mode_line_active: is_selected,
+                    is_minibuffer: true,
+                },
                 window_cursor_type,
                 window_cursor_effect,
                 font_sizing,

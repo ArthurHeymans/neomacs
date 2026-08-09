@@ -19,7 +19,7 @@ impl FakeCapabilityDatabase {
     fn screen_256color() -> Self {
         Self {
             strings: HashMap::from([
-                ("so", "\x1b[7m"),
+                ("so", "\x1b[3m"),
                 ("us", "\x1b[4m"),
                 ("md", "\x1b[1m"),
                 ("mh", "\x1b[2m"),
@@ -118,12 +118,30 @@ fn screen_terminfo_reports_no_italics_but_keeps_bold_and_underline() {
     assert_eq!(caps.italic_rendition(), TtyItalicRendition::Dim);
     assert!(caps.bold);
     assert!(caps.underline);
-    assert!(caps.inverse);
+    assert_eq!(
+        caps.standout_sequence.as_deref(),
+        Some(b"\x1b[3m".as_slice())
+    );
     assert!(!caps.strike_through, "screen has no smxx");
     assert!(!caps.underline_styled, "screen has no Smulx");
     assert_eq!(caps.color_cells, 256);
     // GNU: `if (TN_no_color_video == -1) TN_no_color_video = 0'.
     assert_eq!(caps.no_color_video, TtyNoColorVideo::NONE);
+}
+
+#[test]
+fn complete_standout_sequence_is_preserved() {
+    let mut database = FakeCapabilityDatabase::bare()
+        .with_string("so", "\x1b[0;1;3m$<2>")
+        .with_number("Co", 256);
+
+    let caps = resolve_tty_attribute_capabilities(&mut database);
+
+    assert_eq!(
+        caps.standout_sequence.as_deref(),
+        Some(b"\x1b[0;1;3m".as_slice()),
+    );
+    assert!(caps.supports(TtyCapability::Inverse));
 }
 
 #[test]

@@ -4152,7 +4152,7 @@ pub(crate) fn builtin_delete_other_windows_internal(
 }
 pub(crate) fn remember_selected_window_point_in_state(
     frames: &mut FrameManager,
-    buffers: &BufferManager,
+    buffers: &mut BufferManager,
     fid: FrameId,
 ) {
     let Some(frame) = frames.get(fid) else {
@@ -4171,14 +4171,15 @@ pub(crate) fn remember_selected_window_point_in_state(
     else {
         return;
     };
-    if let Some(Window::Leaf {
-        point: window_point,
-        ..
-    }) = frames
+    if let Some(window) = frames
         .get_mut(fid)
         .and_then(|frame| frame.find_window_mut(selected_wid))
     {
-        *window_point = lisp_char_pos_from_one_based_usize(point);
+        crate::window::window_markers::set_window_point_with_marker(
+            buffers,
+            window,
+            lisp_char_pos_from_one_based_usize(point),
+        );
     }
 }
 

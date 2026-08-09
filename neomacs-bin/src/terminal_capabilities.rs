@@ -81,9 +81,12 @@ pub(crate) fn resolve_tty_attribute_capabilities(
         .get_number("NC")
         .filter(|ncv| *ncv > 0)
         .map_or(TtyNoColorVideo::NONE, |ncv| TtyNoColorVideo(ncv as u16));
+    let standout = database
+        .get_string("so")
+        .filter(|sequence| !sequence.is_empty());
 
     TtyAttributeCapabilities {
-        inverse: has(database, "so"),
+        standout_sequence: standout.map(|sequence| canonical_cap(&sequence)),
         underline: has(database, "us"),
         underline_styled: has(database, "Smulx"),
         bold: has(database, "md"),

@@ -738,6 +738,35 @@ fn test_format_mode_line_percent_specs_preserve_source_string_text_properties() 
 }
 
 #[test]
+fn mode_line_percent_field_padding_inherits_the_format_string_face() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer_id = eval.buffers.create_buffer("xy");
+    eval.buffers.set_current(buffer_id);
+
+    let format = Value::string("%12b");
+    set_string_text_properties_for_value(
+        format,
+        vec![StringTextPropertyRun {
+            start: 0,
+            end: 4,
+            plist: Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
+        }],
+    );
+
+    let rendered =
+        builtin_format_mode_line_ctx(&mut eval, vec![format]).expect("format padded %b field");
+    assert_eq!(rendered.as_utf8_str(), Some("xy          "));
+    let props =
+        get_string_text_properties_table_for_value(rendered).expect("mode-line text properties");
+    assert_eq!(
+        props.get_property_at_char_pos(CharPos0::new(11), Value::symbol("face")),
+        Some(Value::symbol("bold")),
+        "GNU applies the source format face to the complete padded %b field",
+    );
+}
+
+#[test]
 fn test_format_mode_line_status_specs_match_gnu_buffer_state() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();
@@ -1679,6 +1708,41 @@ fn test_window_text_pixel_size_tty_frame_uses_char_cell_metrics() {
     assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
     assert_eq!(result.cons_car(), Value::fixnum(4));
     assert_eq!(result.cons_cdr(), Value::fixnum(2));
+}
+
+#[test]
+fn window_text_pixel_size_counts_tty_wrapped_screen_rows() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval.frames.create_frame("xdisp-wrap-test", 10, 24, buf_id);
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.char_width = 1.0;
+        frame.char_height = 1.0;
+        frame.font_pixel_size = 1.0;
+        frame.set_window_system(None);
+    }
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("123456789012\nnext\n");
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window.0 as u64;
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window),
+            Value::NIL,
+            Value::T,
+            Value::NIL,
+            Value::fixnum(24),
+            Value::T,
+        ],
+    )
+    .expect("measure wrapped TTY buffer text");
+
+    assert_eq!(result.cons_cdr(), Value::fixnum(4));
 }
 
 #[test]

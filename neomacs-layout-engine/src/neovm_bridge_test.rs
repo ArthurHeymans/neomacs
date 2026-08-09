@@ -1075,6 +1075,40 @@ fn test_window_params_partial_width_windows_force_truncation_like_gnu() {
 }
 
 #[test]
+fn active_minibuffer_keeps_its_callers_mode_line_active() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let root_buffer = evaluator.buffer_manager_mut().create_buffer("*caller*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("test", 160, 50, root_buffer);
+    let caller_window = evaluator
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let minibuffer = evaluator.buffer_manager_mut().create_buffer(" *Minibuf-1*");
+    evaluator
+        .activate_minibuffer_window_for_buffer(
+            minibuffer,
+            neovm_core::heap_types::LispString::from_utf8("Prompt: "),
+            None,
+        )
+        .expect("activate minibuffer");
+
+    let (_, windows) = collect_layout_params(&evaluator, frame_id, None).expect("layout params");
+    let caller = windows
+        .iter()
+        .find(|window| window.window_id == caller_window.0 as i64)
+        .expect("caller window");
+
+    assert!(!caller.selected, "the minibuffer owns input selection");
+    assert!(
+        caller.mode_line_active,
+        "GNU keeps the minibuffer caller's mode line active"
+    );
+}
+
+#[test]
 fn test_window_params_partial_width_windows_respect_disabled_truncate_partial_width_windows() {
     use neovm_core::window::{SplitDirection, SplitPlacement};
 

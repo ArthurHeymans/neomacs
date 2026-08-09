@@ -38,7 +38,7 @@ struct TerminalRuntime {
 }
 
 impl TerminalRuntime {
-    const fn inactive() -> Self {
+    fn inactive() -> Self {
         Self {
             active: false,
             tty_type: None,

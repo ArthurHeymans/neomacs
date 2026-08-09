@@ -9,6 +9,17 @@ fn screen(rows: u16, cols: u16, bytes: &[u8]) -> vt100::Parser {
 }
 
 #[test]
+fn snapshot_can_capture_the_full_terminal_screen() {
+    let parser = screen(3, 4, b"top\x1b[3;1Hbottom");
+
+    let snapshot = RawTerminalSnapshot::capture_full_screen(parser.screen());
+
+    assert_eq!(snapshot.captured_rows, 0..3);
+    assert_eq!(snapshot.rows.len(), 3);
+    assert!(snapshot.rows.iter().all(|row| row.cells.len() == 4));
+}
+
+#[test]
 fn snapshot_compares_terminal_state_not_the_original_ansi_spelling() {
     let short = screen(2, 4, b"\x1b[31mX\x1b[39m");
     let long = screen(2, 4, b"\x1b[1;1H\x1b[0;31mX\x1b[0m");

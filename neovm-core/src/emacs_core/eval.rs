@@ -7330,7 +7330,7 @@ impl Context {
         }
         super::window_cmds::remember_selected_window_point_in_state(
             &mut self.frames,
-            &self.buffers,
+            &mut self.buffers,
             frame_id,
         );
         let mut query = self.window_layout_query_fn.take()?;
@@ -7493,7 +7493,7 @@ impl Context {
         if let Some(frame_id) = self.frames.selected_frame().map(|frame| frame.id) {
             super::window_cmds::remember_selected_window_point_in_state(
                 &mut self.frames,
-                &self.buffers,
+                &mut self.buffers,
                 frame_id,
             );
         }
@@ -9403,6 +9403,15 @@ impl Context {
         self.active_minibuffer_window_id() == Some(window_id)
     }
 
+    /// Window that invoked the currently active minibuffer.
+    ///
+    /// GNU keeps this window's mode/header line active while the minibuffer
+    /// owns input selection (`minibuffer-selected-window`).
+    pub fn minibuffer_selected_window_id(&self) -> Option<WindowId> {
+        self.active_minibuffer_window_id()?;
+        self.minibuffer_selected_window
+    }
+
     pub fn activate_minibuffer_window_for_buffer(
         &mut self,
         minibuf_id: BufferId,
@@ -9430,6 +9439,11 @@ impl Context {
         };
         let previous_selected_window = frame.selected_window;
 
+        super::window_cmds::remember_selected_window_point_in_state(
+            &mut self.frames,
+            &mut self.buffers,
+            frame_id,
+        );
         if let Some(frame) = self.frames.get_mut(frame_id) {
             if let Some(window) = frame.find_window_mut(minibuffer_window_id) {
                 window.set_buffer(minibuf_id);
@@ -16436,7 +16450,7 @@ impl Context {
         };
         super::window_cmds::remember_selected_window_point_in_state(
             &mut self.frames,
-            &self.buffers,
+            &mut self.buffers,
             frame_id,
         );
         super::window_cmds::sync_selected_window_buffer_in_state(

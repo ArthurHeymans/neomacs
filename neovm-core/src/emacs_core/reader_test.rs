@@ -1499,6 +1499,50 @@ fn activate_minibuffer_window_switches_displayed_buffer_and_restores_state() {
 }
 
 #[test]
+fn activate_minibuffer_window_saves_the_callers_live_buffer_point() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut ev);
+    let caller_window = ev
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let caller_buffer = ev
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(caller_window))
+        .and_then(|window| window.buffer_id())
+        .expect("caller buffer");
+    let text = "one\ntwo\nthree\n";
+    ev.buffer_manager_mut()
+        .get_mut(caller_buffer)
+        .expect("caller buffer")
+        .insert(text);
+    ev.buffer_manager_mut()
+        .goto_buffer_emacs_byte_pos(caller_buffer, crate::buffer::EmacsBytePos::new(text.len()));
+    let expected = LispCharPos1::from_one_based_usize(text.len() + 1);
+
+    let minibuffer = ev.buffer_manager_mut().create_buffer(" *Minibuf-1*");
+    let _saved = activate_minibuffer_window(&mut ev, minibuffer).expect("activate minibuffer");
+    // Redisplay/text edits refresh the cached window point from its marker.
+    // Saving only the cache would therefore lose the caller's live point as
+    // soon as the next synchronization runs.
+    ev.sync_window_positions(caller_buffer);
+    let saved_point = match ev
+        .frame_manager()
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(caller_window))
+        .expect("caller window")
+    {
+        crate::window::Window::Leaf { point, .. } => *point,
+        crate::window::Window::Internal { .. } => panic!("caller must remain a live window"),
+    };
+
+    assert_eq!(saved_point, expected);
+}
+
+#[test]
 fn expired_minibuffer_buffer_is_erased_before_restore() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -1571,7 +1615,7 @@ fn active_minibuffer_window_sync_keeps_live_buffer_point() {
 
     crate::emacs_core::window_cmds::remember_selected_window_point_in_state(
         &mut ev.frames,
-        &ev.buffers,
+        &mut ev.buffers,
         frame_id,
     );
     crate::emacs_core::window_cmds::sync_selected_window_buffer_in_state(

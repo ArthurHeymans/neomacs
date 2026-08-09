@@ -334,6 +334,11 @@ fn activate_minibuffer_window_in_state(
         previous_active_minibuffer_window: *active_minibuffer_window,
     };
 
+    // GNU saves the caller's live BUF_PT into its window point marker before
+    // selecting the minibuffer.  The caller becomes non-selected during the
+    // read, so redisplay and mode-line `%l` must read that saved point rather
+    // than the window's stale construction-time marker.
+    super::window_cmds::remember_selected_window_point_in_state(frames, buffers, frame_id);
     if let Some(frame) = frames.get_mut(frame_id) {
         if let Some(window) = frame.find_window_mut(minibuffer_window_id) {
             window.set_buffer(minibuf_id);

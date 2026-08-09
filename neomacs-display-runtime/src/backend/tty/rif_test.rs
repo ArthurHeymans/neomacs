@@ -1335,7 +1335,7 @@ fn first_diff_repaints_unknown_terminal() {
 }
 
 #[test]
-fn first_diff_erases_default_blank_tails_instead_of_writing_spaces() {
+fn first_diff_writes_the_full_width_of_nonempty_rows() {
     let mut caps = TermCaps::default();
     caps.synchronized_output = false;
     let mut rif = TtyRif::new_with_caps(5, 1, caps);
@@ -1345,16 +1345,223 @@ fn first_diff_erases_default_blank_tails_instead_of_writing_spaces() {
     let output = rif.take_output();
 
     assert!(
-        output
-            .windows(b"\x1b[K".len())
-            .any(|bytes| bytes == b"\x1b[K"),
-        "full repaint should erase its blank tail: {:?}",
+        output.windows(5).any(|bytes| bytes == b"A    "),
+        "full repaint must write the complete nonempty terminal row: {:?}",
         String::from_utf8_lossy(&output),
     );
     assert!(
-        !output.windows(5).any(|bytes| bytes == b"A    "),
-        "full repaint wrote explicit trailing spaces: {:?}",
+        !output
+            .windows(b"\x1b[K".len())
+            .any(|bytes| bytes == b"\x1b[K"),
+        "full repaint erased cells GNU writes explicitly: {:?}",
         String::from_utf8_lossy(&output),
+    );
+}
+
+#[test]
+fn first_content_written_into_an_erased_row_writes_its_full_tail() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(8, 1, caps);
+
+    // The initial blank repaint uses EL, leaving the physical cells
+    // unwritten.  GNU writes the complete width when content first appears
+    // on that row, so its default trailing spaces become physical cells.
+    rif.diff_and_render();
+    let _ = rif.take_output();
+    for (col, ch) in "NEW".chars().enumerate() {
+        rif.desired.set(0, col, ch, CellAttrs::default(), false);
+    }
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![TermOp::WriteRun {
+            row: 0,
+            start: 0,
+            end: 8,
+        }],
+        "first content on an erased row must establish GNU's written-space tail",
+    );
+}
+
+#[test]
+fn relocated_content_keeps_its_unwritten_tail_when_repainted() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(8, 3, caps);
+    for (col, ch) in "MOVED".chars().enumerate() {
+        rif.desired.set(2, col, ch, CellAttrs::default(), false);
+    }
+    rif.diff_and_render();
+    let _ = rif.take_output();
+
+    rif.desired = TtyGrid::new(8, 3);
+    for (col, ch) in "MOVED".chars().enumerate() {
+        rif.desired.set(0, col, ch, CellAttrs::default(), false);
+    }
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![
+            TermOp::WriteRun {
+                row: 0,
+                start: 0,
+                end: 5,
+            },
+            TermOp::EraseToEol {
+                row: 2,
+                from: 0,
+                bg: None,
+            },
+        ],
+        "relocated rows must retain GNU's unwritten tail instead of writing spaces through it",
+    );
+}
+
+#[test]
+fn copied_content_is_not_mistaken_for_a_relocated_row() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(8, 3, caps);
+    for (col, ch) in "COPY".chars().enumerate() {
+        rif.desired.set(2, col, ch, CellAttrs::default(), false);
+    }
+    rif.diff_and_render();
+    let _ = rif.take_output();
+
+    rif.desired = TtyGrid::new(8, 3);
+    for row in [0, 2] {
+        for (col, ch) in "COPY".chars().enumerate() {
+            rif.desired.set(row, col, ch, CellAttrs::default(), false);
+        }
+    }
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![TermOp::WriteRun {
+            row: 0,
+            start: 0,
+            end: 8,
+        }],
+        "new duplicate content must establish its own written-space tail",
+    );
+}
+
+#[test]
+fn one_source_copied_to_two_destinations_is_not_two_relocations() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(8, 3, caps);
+    for (col, ch) in "COPY".chars().enumerate() {
+        rif.desired.set(2, col, ch, CellAttrs::default(), false);
+    }
+    rif.diff_and_render();
+    let _ = rif.take_output();
+
+    rif.desired = TtyGrid::new(8, 3);
+    for row in [0, 1] {
+        for (col, ch) in "COPY".chars().enumerate() {
+            rif.desired.set(row, col, ch, CellAttrs::default(), false);
+        }
+    }
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![
+            TermOp::WriteRun {
+                row: 0,
+                start: 0,
+                end: 8,
+            },
+            TermOp::WriteRun {
+                row: 1,
+                start: 0,
+                end: 8,
+            },
+            TermOp::EraseToEol {
+                row: 2,
+                from: 0,
+                bg: None,
+            },
+        ],
+        "one consumed source cannot relocate into two destinations",
+    );
+}
+
+#[test]
+fn changed_row_erases_its_unchanged_default_blank_tail() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(8, 1, caps);
+    for (col, ch) in "OLD".chars().enumerate() {
+        rif.desired.set(0, col, ch, CellAttrs::default(), false);
+    }
+    rif.diff_and_render();
+    let _ = rif.take_output();
+
+    rif.desired = TtyGrid::new(8, 1);
+    for (col, ch) in "NEW".chars().enumerate() {
+        rif.desired.set(0, col, ch, CellAttrs::default(), false);
+    }
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![
+            TermOp::WriteRun {
+                row: 0,
+                start: 0,
+                end: 3,
+            },
+            TermOp::EraseToEol {
+                row: 0,
+                from: 3,
+                bg: None,
+            },
+        ],
+        "GNU erases the blank tail whenever it updates a shorter logical line",
+    );
+}
+
+#[test]
+fn erase_to_eol_preserves_a_colored_foreground_space_at_the_boundary() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(8, 1, caps);
+    for (col, ch) in "ABCDEFGH".chars().enumerate() {
+        rif.desired.set(0, col, ch, CellAttrs::default(), false);
+    }
+    rif.diff_and_render();
+    let _ = rif.take_output();
+
+    rif.desired = TtyGrid::new(8, 1);
+    rif.desired.set(0, 0, 'A', CellAttrs::default(), false);
+    rif.desired.set(
+        0,
+        1,
+        ' ',
+        CellAttrs {
+            fg: Some((255, 127, 36)),
+            ..CellAttrs::default()
+        },
+        false,
+    );
+    let ops = rif.plan_for_test();
+
+    assert_eq!(
+        ops,
+        vec![
+            TermOp::WriteRun {
+                row: 0,
+                start: 1,
+                end: 2,
+            },
+            TermOp::EraseToEol {
+                row: 0,
+                from: 2,
+                bg: None,
+            },
+        ],
+        "the styled boundary space must be written before only the default tail is erased",
     );
 }
 
@@ -1442,9 +1649,10 @@ fn diff_and_render_rewrites_changed_row_span_contiguously() {
     assert!(output.contains("XBCDY"));
     assert_eq!(
         output.matches("\x1b[1;").count(),
-        1,
-        "expected a single CUP run"
+        2,
+        "expected one contiguous write plus GNU's tail erase"
     );
+    assert!(output.contains("\x1b[K"));
 }
 
 #[test]
@@ -1925,6 +2133,54 @@ fn italic_falls_back_to_dim_when_the_terminal_has_no_sitm() {
 }
 
 #[test]
+fn inverse_face_uses_the_terminals_physical_standout_rendition() {
+    let attrs = CellAttrs {
+        inverse: true,
+        ..CellAttrs::default()
+    };
+    let screen_like = TtyAttributeCapabilities {
+        standout_sequence: Some(b"\x1b[3m".to_vec()),
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut output = Vec::new();
+
+    write_sgr_with_capabilities(&mut output, &attrs, &screen_like);
+
+    let output = String::from_utf8(output).expect("UTF-8 terminal output");
+    assert!(
+        output.contains("\x1b[3m"),
+        "screen standout is SGR 3: {output:?}"
+    );
+    assert!(
+        !output.contains("\x1b[7m"),
+        "must not replace screen's standout with hard-coded inverse: {output:?}",
+    );
+}
+
+#[test]
+fn inverse_face_emits_the_complete_standout_capability() {
+    let attrs = CellAttrs {
+        inverse: true,
+        ..CellAttrs::default()
+    };
+    let caps = TtyAttributeCapabilities {
+        standout_sequence: Some(b"\x1b[0;1;3m".to_vec()),
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut output = Vec::new();
+
+    write_sgr_with_capabilities(&mut output, &attrs, &caps);
+
+    assert!(
+        output
+            .windows(b"\x1b[0;1;3m".len())
+            .any(|bytes| bytes == b"\x1b[0;1;3m"),
+        "standout must be emitted byte-for-byte after terminfo padding is removed: {:?}",
+        String::from_utf8_lossy(&output),
+    );
+}
+
+#[test]
 fn attributes_the_terminal_lacks_are_not_emitted() {
     // Every arm of GNU turn_on_face is gated on its capability string.
     let attrs = CellAttrs {
@@ -2182,7 +2438,8 @@ fn distant_edits_on_one_row_skip_the_untouched_middle() {
 #[test]
 fn nearby_edits_coalesce_into_one_span() {
     // Two edits six unchanged cells apart: retransmitting the gap is
-    // cheaper than a second cursor motion, so one span covers both.
+    // cheaper than a second text run, so one span covers both. The second
+    // cursor motion belongs to GNU's distinct erase-to-EOL operation.
     let mut rif = TtyRif::new(40, 4);
     set_row(&mut rif, 1, "abcdefgh");
     let _ = render_output(&mut rif);
@@ -2191,10 +2448,11 @@ fn nearby_edits_coalesce_into_one_span() {
     let text = String::from_utf8_lossy(&out);
     assert_eq!(
         text.matches("\x1b[2;").count(),
-        1,
-        "a six-cell gap coalesces into one span: {text:?}"
+        2,
+        "a six-cell gap coalesces into one text span plus tail erase: {text:?}"
     );
     assert!(text.contains("AbcdefgH"));
+    assert!(text.contains("\x1b[K"));
 }
 
 #[test]
@@ -2258,6 +2516,25 @@ fn caps_without_scroll_region_never_plan_scroll_ops() {
     assert!(
         text.contains("10"),
         "changed content must be drawn: {text:?}"
+    );
+}
+
+#[test]
+fn default_blank_rows_do_not_make_a_region_scroll_worthwhile() {
+    let mut rif = TtyRif::new(12, 10);
+    set_row(&mut rif, 8, "old-footer");
+    let _ = render_output(&mut rif);
+
+    rif.desired = TtyGrid::new(12, 10);
+    set_row(&mut rif, 1, "new-line-1");
+    set_row(&mut rif, 2, "new-line-2");
+    rif.set_scroll_seed_for_test(Some(-2));
+
+    let ops = rif.plan_for_test();
+    assert!(
+        ops.iter()
+            .all(|op| !matches!(op, TermOp::ScrollRows { .. })),
+        "moving default blank rows saves no terminal output and must not masquerade as a content scroll: {ops:?}",
     );
 }
 

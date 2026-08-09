@@ -359,6 +359,8 @@ pub(crate) enum CharColumnWidth {
 /// `char_width` selects the per-char column accounting (see [`CharColumnWidth`]).
 /// `x_limit` / `y_limit` cap the measured columns-per-line and lines (used by
 /// `buffer-text-pixel-size`); pass `None` for an unbounded scan.
+/// `wrap_columns` counts soft-wrapped display rows at the supplied text width,
+/// as `window-text-pixel-size` must do for a live window.
 #[allow(clippy::too_many_arguments)] // measurement bounds and display policy are independent inputs
 pub(crate) fn region_text_metrics_with_display(
     eval: &super::eval::Context,
@@ -369,6 +371,7 @@ pub(crate) fn region_text_metrics_with_display(
     char_width: CharColumnWidth,
     x_limit: Option<usize>,
     y_limit: Option<usize>,
+    wrap_columns: Option<usize>,
 ) -> RegionTextMetrics {
     let Some(buf) = eval.buffers.get(buffer_id) else {
         return RegionTextMetrics {
@@ -397,7 +400,7 @@ pub(crate) fn region_text_metrics_with_display(
     }
 
     let display_sym = Value::symbol("display");
-    let mut state = ScanState::new(char_width, x_limit, y_limit);
+    let mut state = ScanState::new(char_width, x_limit, y_limit, wrap_columns);
 
     let mut scan = from.get();
     let end = scan_end.get();
@@ -465,6 +468,7 @@ struct ScanState {
     char_width: CharColumnWidth,
     x_limit: Option<usize>,
     y_limit: Option<usize>,
+    wrap_columns: Option<usize>,
     max_cols: usize,
     lines: usize,
     cur_col: usize,
@@ -474,11 +478,17 @@ struct ScanState {
 }
 
 impl ScanState {
-    fn new(char_width: CharColumnWidth, x_limit: Option<usize>, y_limit: Option<usize>) -> Self {
+    fn new(
+        char_width: CharColumnWidth,
+        x_limit: Option<usize>,
+        y_limit: Option<usize>,
+        wrap_columns: Option<usize>,
+    ) -> Self {
         Self {
             char_width,
             x_limit,
             y_limit,
+            wrap_columns: wrap_columns.filter(|columns| *columns > 0),
             max_cols: 0,
             lines: 1,
             cur_col: 0,
@@ -509,10 +519,39 @@ impl ScanState {
 
     /// Advance the running column by a resolved `(space ...)` width.
     fn advance_columns(&mut self, width: usize) {
-        if !self.line_capped {
-            self.cur_col = self.cur_col.saturating_add(width);
-            self.cap_line();
+        if self.line_capped {
+            return;
         }
+
+        let mut remaining = width;
+        while remaining > 0 {
+            if let Some(wrap_columns) = self.wrap_columns {
+                if self.cur_col >= wrap_columns {
+                    self.soft_wrap();
+                }
+                let available = wrap_columns.saturating_sub(self.cur_col);
+                let advanced = remaining.min(available);
+                self.cur_col = self.cur_col.saturating_add(advanced);
+                remaining = remaining.saturating_sub(advanced);
+                if remaining > 0 {
+                    self.soft_wrap();
+                }
+            } else {
+                self.cur_col = self.cur_col.saturating_add(remaining);
+                remaining = 0;
+            }
+            self.cap_line();
+            if self.line_capped {
+                break;
+            }
+        }
+    }
+
+    fn soft_wrap(&mut self) {
+        self.lines += 1;
+        self.max_cols = self.max_cols.max(self.cur_col);
+        self.cur_col = 0;
+        self.line_capped = false;
     }
 
     /// End the current line, record its width, and reset for the next line.
@@ -530,16 +569,17 @@ impl ScanState {
             self.newline();
         } else if !self.line_capped {
             if code == '\t' as u32 {
-                self.cur_col = (self.cur_col + 8) & !7;
+                let next_tab = (self.cur_col + 8) & !7;
+                self.advance_columns(next_tab.saturating_sub(self.cur_col));
             } else {
-                self.cur_col += match self.char_width {
+                let columns = match self.char_width {
                     CharColumnWidth::One => 1,
                     CharColumnWidth::DisplayWidth => char::from_u32(code)
                         .map(crate::encoding::char_width)
                         .unwrap_or(1),
                 };
+                self.advance_columns(columns);
             }
-            self.cap_line();
         }
         self.last_code = Some(code);
     }
@@ -2020,9 +2060,29 @@ fn append_mode_line_percent_string_spec(
     props_at_percent: &std::collections::HashMap<Value, Value>,
     field_width: i64,
 ) {
-    let mut segment = ModeLineRendered::plain(spec);
+    append_mode_line_percent_segment(
+        result,
+        ModeLineRendered::plain(spec),
+        props_at_percent,
+        field_width,
+    );
+}
+
+fn append_mode_line_percent_segment(
+    result: &mut ModeLineRendered,
+    mut segment: ModeLineRendered,
+    props_at_percent: &std::collections::HashMap<Value, Value>,
+    field_width: i64,
+) {
+    let rendered_len = segment.char_len() as i64;
+    if field_width > 0 && rendered_len < field_width {
+        segment.pad_plain_spaces((field_width - rendered_len) as usize);
+    }
+    // GNU applies the source format string's properties to the entire
+    // expanded field, including spaces introduced by `%12b`-style padding.
+    // Inner rendered values still do not donate their properties to padding.
     segment.overlay_property_map(props_at_percent.clone());
-    append_mode_line_rendered_segment(result, &segment, field_width, 0);
+    result.append_rendered(&segment);
 }
 
 fn append_mode_line_percent_lisp_text_spec(
@@ -2033,8 +2093,7 @@ fn append_mode_line_percent_lisp_text_spec(
 ) {
     let mut segment = ModeLineRendered::default();
     segment.append_string_or_char_value_preserving_props(value);
-    segment.overlay_property_map(props_at_percent.clone());
-    append_mode_line_rendered_segment(result, &segment, field_width, 0);
+    append_mode_line_percent_segment(result, segment, props_at_percent, field_width);
 }
 
 #[allow(clippy::too_many_arguments)] // split evaluator state avoids aliasing the full Context
@@ -3455,7 +3514,19 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     };
     let char_w = frame.char_width;
     let char_h = frame.char_height;
-    let buf_id = frame.find_window(wid).and_then(|w| w.buffer_id());
+    let window = frame.find_window(wid);
+    let buf_id = window.and_then(|window| window.buffer_id());
+    let wrap_columns = window
+        .filter(|_| frame.effective_window_system().is_none())
+        .map(|window| {
+            let body_pixels =
+                super::window_cmds::window_body_width_pixels(&eval.frames, fid, window).max(0);
+            let body_columns = (body_pixels as f32 / char_w.max(1.0)).floor() as usize;
+            // GNU reserves the final TTY column for the continuation glyph,
+            // so wrapped text has one fewer usable column than
+            // `window-body-width` reports.
+            body_columns.saturating_sub(1).max(1)
+        });
 
     let Some(buf_id) = buf_id else {
         return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
@@ -3494,6 +3565,7 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
         CharColumnWidth::One,
         None,
         None,
+        wrap_columns,
     );
 
     let width = (text_metrics.max_columns as f32 * char_w).ceil() as i64;
@@ -5874,6 +5946,7 @@ pub(crate) fn builtin_buffer_text_pixel_size(
         crate::emacs_core::xdisp::CharColumnWidth::DisplayWidth,
         x_limit,
         y_limit,
+        None,
     );
 
     if metrics.lines == 0 {
