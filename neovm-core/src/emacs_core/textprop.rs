@@ -200,7 +200,7 @@ fn plist_get_value(plist: Value, prop: Value) -> Option<Value> {
         if !pair_cdr.is_cons() {
             return None;
         };
-        if pair_car == prop {
+        if eq_value(&pair_car, &prop) {
             return Some(pair_cdr.cons_car());
         }
         tail = pair_cdr.cons_cdr();
@@ -221,7 +221,7 @@ fn assq_rest(list: Value, prop: Value) -> Option<Value> {
         if pair_car.is_cons() {
             let entry_car = pair_car.cons_car();
             let entry_cdr = pair_car.cons_cdr();
-            if entry_car == prop {
+            if eq_value(&entry_car, &prop) {
                 return Some(entry_cdr);
             }
         }
@@ -239,33 +239,101 @@ fn symbol_id_for_property_lookup(value: Value) -> Option<SymId> {
     }
 }
 
-/// Resolve one GNU effective character property from its raw property list.
+/// What one property list says directly about a property: its own value, and
+/// the `category` symbol that may supply one on its behalf.
+///
+/// GNU's `lookup_char_property` reads both in a SINGLE pass over the plist
+/// (`src/intervals.c`), and so must we: this runs on the syntax scanner's
+/// run-refill path, where a second pass over a font-lock plist to ask "is there
+/// a category here?" measured ~1.6% of a syntax-scan profile.
+#[derive(Clone, Copy, Default)]
+pub struct DirectCharProperties {
+    /// The property's own entry. `Some(nil)` means present with value nil,
+    /// which GNU honours over every fallback.
+    pub value: Option<Value>,
+    /// The `category` entry's value, whatever its type.
+    pub category: Option<Value>,
+}
+
+impl DirectCharProperties {
+    /// Read both entries through a caller's property getter, for sources that
+    /// are not a walkable plist (overlays, layout buffer views). Two probes,
+    /// where [`Self::from_plist`] needs one pass; none of these callers is on
+    /// the per-character scanning path.
+    pub fn from_getter<F>(mut get: F, prop: Value) -> Self
+    where
+        F: FnMut(Value) -> Option<Value>,
+    {
+        let value = get(prop);
+        let category = value
+            .is_none()
+            .then(|| get(Value::from_sym_id(category_sym_id())))
+            .flatten();
+        Self { value, category }
+    }
+
+    /// Scan a Lisp plist once for `prop` and for `category`, as GNU's
+    /// `lookup_char_property` loop does.
+    #[inline]
+    pub fn from_plist(plist: Value, prop: Value) -> Self {
+        let category_key = Value::from_sym_id(category_sym_id());
+        let mut found = Self::default();
+        let mut tail = plist;
+        while tail.is_cons() {
+            let key = tail.cons_car();
+            let rest = tail.cons_cdr();
+            if !rest.is_cons() {
+                break;
+            }
+            if eq_value(&key, &prop) {
+                // GNU returns here: the direct entry wins outright, and a
+                // later `category` cannot be consulted.
+                found.value = Some(rest.cons_car());
+                return found;
+            }
+            if eq_value(&key, &category_key) {
+                found.category = Some(rest.cons_car());
+            }
+            tail = rest.cons_cdr();
+        }
+        found
+    }
+}
+
+/// Resolve one GNU effective character property from what its property list
+/// says directly.
 ///
 /// This is the shared implementation of `lookup_char_property' precedence
 /// from GNU `src/intervals.c`: a directly present canonical property wins even
 /// when its value is nil; otherwise a non-nil category property wins; then
 /// non-nil aliases are considered in order; finally the caller-supplied
 /// optional `default-text-properties' value is used for text properties.
-/// Overlay callers supply no default. Callers own
-/// the environment adapters because evaluator lookups and immutable layout
-/// snapshots obtain category/default values differently.
-pub fn resolve_effective_char_property<D, C, A>(
-    mut direct_get: D,
+/// Overlay callers supply no default. Callers own the environment adapters
+/// because evaluator lookups and immutable layout snapshots obtain
+/// category/default values differently, and because only a caller holding a
+/// real plist can read `direct` in one pass.
+///
+/// `alias_get` is consulted only for a non-empty `aliases` list, which
+/// `char-property-alias-alist` leaves empty in every default configuration.
+#[inline]
+pub fn resolve_effective_char_property<C, A, G>(
+    direct: DirectCharProperties,
     mut category_get: C,
     prop: Value,
     aliases: A,
+    mut alias_get: G,
     default: Option<Value>,
 ) -> Option<Value>
 where
-    D: FnMut(Value) -> Option<Value>,
     C: FnMut(Value, Value) -> Option<Value>,
     A: IntoIterator<Item = Value>,
+    G: FnMut(Value) -> Option<Value>,
 {
-    if let Some(value) = direct_get(prop) {
+    if let Some(value) = direct.value {
         return Some(value);
     }
 
-    if let Some(category) = direct_get(Value::from_sym_id(category_sym_id()))
+    if let Some(category) = direct.category
         && let Some(value) = category_get(category, prop)
         && !value.is_nil()
     {
@@ -273,7 +341,7 @@ where
     }
 
     for alias in aliases {
-        if let Some(value) = direct_get(alias)
+        if let Some(value) = alias_get(alias)
             && !value.is_nil()
         {
             return Some(value);
@@ -345,7 +413,26 @@ impl<'a> CharPropertyResolver<'a> {
     /// `interval_of` finds no interval, so a position outside every interval
     /// gets no property at all -- not even the `default-text-properties`
     /// fallback.
+    #[inline]
     pub(crate) fn resolve_interval_plist(&self, plist: Value) -> Option<Value> {
+        let direct = DirectCharProperties::from_plist(plist, self.prop);
+        if let Some(value) = direct.value {
+            return Some(value);
+        }
+        // The overwhelmingly common shape: no direct entry, no category, and
+        // both control variables nil. Kept inline and ahead of the fallback
+        // machinery because the syntax scanner reaches here once per property
+        // run, and once per character on the byte-addressed scanners.
+        if direct.category.is_none() && !self.aliases.is_cons() && self.default.is_none() {
+            return None;
+        }
+        self.resolve_fallbacks(direct, plist)
+    }
+
+    /// The `category` / alias / `default-text-properties` tail, outlined so the
+    /// common answer above stays inlinable into the scanners.
+    #[inline(never)]
+    fn resolve_fallbacks(&self, direct: DirectCharProperties, plist: Value) -> Option<Value> {
         let mut aliases = self.aliases;
         let alias_iter = std::iter::from_fn(move || {
             if !aliases.is_cons() {
@@ -356,7 +443,7 @@ impl<'a> CharPropertyResolver<'a> {
             Some(alias)
         });
         resolve_effective_char_property(
-            |name| plist_get_value(plist, name),
+            direct,
             |category, property| {
                 let category_id = symbol_id_for_property_lookup(category)?;
                 let property_id = symbol_id_for_property_lookup(property)?;
@@ -364,6 +451,7 @@ impl<'a> CharPropertyResolver<'a> {
             },
             self.prop,
             alias_iter,
+            |name| plist_get_value(plist, name),
             self.default,
         )
     }
@@ -399,8 +487,9 @@ where
         })
         .flatten();
 
+    let direct = DirectCharProperties::from_getter(&mut direct_get, prop);
     resolve_effective_char_property(
-        &mut direct_get,
+        direct,
         |category, property| {
             let category_id = symbol_id_for_property_lookup(category)?;
             let property_id = symbol_id_for_property_lookup(property)?;
@@ -408,6 +497,7 @@ where
         },
         prop,
         alias_iter,
+        &mut direct_get,
         default,
     )
     .unwrap_or(Value::NIL)

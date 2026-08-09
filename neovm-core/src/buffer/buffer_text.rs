@@ -1108,6 +1108,23 @@ impl BufferText {
             .get_property_at_char_pos(pos, name)
     }
 
+    /// See [`text_props::TextPropertyTable::interval_plist_at_char_pos`].
+    pub fn interval_plist_at_char_pos(&self, pos: CharPos0) -> Option<Value> {
+        self.storage
+            .borrow()
+            .text_props
+            .interval_plist_at_char_pos(pos)
+    }
+
+    /// See [`text_props::TextPropertyTable::interval_plist_at_char_pos`].
+    pub fn interval_plist_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<Value> {
+        let pos = self.byte_range_to_char_range(EmacsByteRange::new(pos, pos));
+        self.storage
+            .borrow()
+            .text_props
+            .interval_plist_at_char_pos(pos.start())
+    }
+
     pub fn text_props_get_property_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

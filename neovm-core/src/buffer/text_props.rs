@@ -2020,6 +2020,19 @@ impl TextPropertyTable {
         self.get_property_raw(pos, name)
     }
 
+    /// The plist of the interval covering `pos`, or `None` when no interval
+    /// does -- GNU `interval_of` (src/textprop.c), whose NULL result means the
+    /// character has no properties at all.
+    ///
+    /// Distinct from [`Self::interval_plist_run_at_char_pos`]: a caller that
+    /// only needs the character's properties must not pay for the run bounds,
+    /// which cost an interval-end computation and, in a gap, a walk to the next
+    /// property change. That walk ran per character on the byte-addressed
+    /// scanners (regexp matching, forward-comment) until this existed.
+    pub fn interval_plist_at_char_pos(&self, pos: CharPos0) -> Option<Value> {
+        self.find_interval(pos).map(|(_, node)| node.plist)
+    }
+
     fn get_property_raw(&self, pos: CharPos0, name: Value) -> Option<Value> {
         let (_, node) = self.find_interval(pos)?;
         plist_value_get(node.plist, name)

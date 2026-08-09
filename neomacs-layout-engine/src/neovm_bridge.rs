@@ -17,7 +17,7 @@ use neovm_core::emacs_core::image_catalog::image_scale_environment;
 use neovm_core::emacs_core::intern;
 use neovm_core::emacs_core::plist::plist_get;
 use neovm_core::emacs_core::symbol::Obarray;
-use neovm_core::emacs_core::textprop::resolve_effective_char_property;
+use neovm_core::emacs_core::textprop::{DirectCharProperties, resolve_effective_char_property};
 use neovm_core::emacs_core::value::{ValueKind, eq_value, list_to_vec};
 use neovm_core::emacs_core::{Context, SymId, Value};
 use neovm_core::face::{
@@ -2367,10 +2367,14 @@ impl LayoutCharPropertyLookup {
     ) -> Option<Value> {
         let (canonical, aliases) = self.lookup_order.split_first()?;
         resolve_effective_char_property(
-            |property| buffer.layout_text_prop_at_emacs_byte_pos(bytepos, property),
+            DirectCharProperties::from_getter(
+                |property| buffer.layout_text_prop_at_emacs_byte_pos(bytepos, property),
+                *canonical,
+            ),
             |category, property| buffer.layout_category_symbol_property(category, property),
             *canonical,
             aliases.iter().copied(),
+            |property| buffer.layout_text_prop_at_emacs_byte_pos(bytepos, property),
             self.default,
         )
     }
@@ -2391,10 +2395,14 @@ impl LayoutCharPropertyLookup {
                 return None;
             }
             resolve_effective_char_property(
-                |property| overlays.overlay_get_named(overlay, property),
+                DirectCharProperties::from_getter(
+                    |property| overlays.overlay_get_named(overlay, property),
+                    *canonical,
+                ),
                 |category, property| buffer.layout_category_symbol_property(category, property),
                 *canonical,
                 aliases.iter().copied(),
+                |property| overlays.overlay_get_named(overlay, property),
                 None,
             )
             .filter(|value| !value.is_nil())
@@ -2457,10 +2465,14 @@ impl LayoutCharPropertyLookup {
             .filter(|overlay| overlays.overlay_applies_to_window(*overlay, current_window_id))
             .filter_map(|overlay| {
                 resolve_effective_char_property(
-                    |property| overlays.overlay_get_named(overlay, property),
+                    DirectCharProperties::from_getter(
+                        |property| overlays.overlay_get_named(overlay, property),
+                        *canonical,
+                    ),
                     |category, property| buffer.layout_category_symbol_property(category, property),
                     *canonical,
                     aliases.iter().copied(),
+                    |property| overlays.overlay_get_named(overlay, property),
                     None,
                 )
                 .filter(|value| !value.is_nil())

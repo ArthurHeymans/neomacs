@@ -2744,6 +2744,19 @@ impl Buffer {
         self.text.contiguous_window_at(pos)
     }
 
+    /// The interval plist covering char `pos`, or `None` when no interval
+    /// covers it. See [`BufferText::interval_plist_at_char_pos`].
+    pub fn interval_plist_at_char_pos(&self, pos: CharPos0) -> Option<Value> {
+        self.text.interval_plist_at_char_pos(pos)
+    }
+
+    /// The interval plist covering an Emacs byte position, or `None` when no
+    /// interval covers it. See [`BufferText::interval_plist_at_emacs_byte_pos`].
+    pub fn interval_plist_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<Value> {
+        self.text
+            .interval_plist_at_emacs_byte_pos(self.clamped_emacs_byte_pos(pos))
+    }
+
     pub fn text_props_get_property_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

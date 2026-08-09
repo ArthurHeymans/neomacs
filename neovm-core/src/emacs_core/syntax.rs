@@ -2712,9 +2712,7 @@ impl<'a> SyntaxProperties<'a> {
         let Self::Honor(resolver) = self else {
             return None;
         };
-        let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(byte_pos);
-        let (plist, _, _) = buf.interval_plist_run_at_char_pos(char_pos);
-        resolver.resolve_interval_plist(plist?)
+        resolver.resolve_interval_plist(buf.interval_plist_at_emacs_byte_pos(byte_pos)?)
     }
 }
 
@@ -2728,9 +2726,6 @@ impl<'a> SyntaxProperties<'a> {
 /// scan, so it never observes a mid-scan property edit (syntax-propertize runs
 /// before the scan).
 struct SyntaxPropRange<'a> {
-    /// Where the property comes from, so a cached run and the resolution that
-    /// produced it cannot come from different sources.
-    props: SyntaxProperties<'a>,
     /// Run over which the `syntax-table` property is known constant, held as
     /// separate `Cell`s rather than one `RefCell<Option<..>>`.
     ///
@@ -2806,17 +2801,29 @@ struct SyntaxPropRange<'a> {
     /// Identity of the chartable `ascii` was filled against, so a cache reused
     /// across tables cannot serve entries from the wrong one.
     ascii_table: Cell<usize>,
+    /// Where the property comes from, so a cached run and the resolution that
+    /// produced it cannot come from different sources. Last so the run fields
+    /// above, which every scanned character reads, keep the front of the
+    /// struct.
+    props: SyntaxProperties<'a>,
 }
 
 impl<'a> SyntaxPropRange<'a> {
     fn new(props: SyntaxProperties<'a>) -> Self {
+        // An ignoring scan gets one run covering every position, holding
+        // `None`: the per-character path then answers from the same two
+        // compares a honouring scan uses, with no branch on `props` at all.
+        let run_end = match props {
+            SyntaxProperties::Ignore => usize::MAX,
+            SyntaxProperties::Honor(_) => 0,
+        };
         Self {
-            props,
             run_start: Cell::new(0),
-            run_end: Cell::new(0),
+            run_end: Cell::new(run_end),
             run_value: Cell::new(None),
             ascii: std::array::from_fn(|_| Cell::new(None)),
             ascii_table: Cell::new(0),
+            props,
         }
     }
 
@@ -2865,18 +2872,18 @@ impl<'a> SyntaxPropRange<'a> {
     /// keeps the category indirection off the per-character path.
     #[inline]
     fn syntax_table_prop_at_char(&self, buf: &Buffer, pos: usize) -> Option<Value> {
-        let SyntaxProperties::Honor(resolver) = self.props else {
-            return None;
-        };
         // In-run fast path: two integer compares, as in GNU's
         // UPDATE_SYNTAX_TABLE_FORWARD. Kept free of any borrow bookkeeping
-        // because this runs once per character scanned.
+        // because this runs once per character scanned -- and free of any test
+        // of `props`, which an ignoring scan folds into the range check by
+        // caching a run of `None` over the whole position space (see
+        // [`Self::new`]). Touching the resolver here instead measured +10.6%
+        // on a forward-sexp sweep.
         if pos >= self.run_start.get() && pos < self.run_end.get() {
             let value = self.run_value.get();
             #[cfg(debug_assertions)]
-            {
-                let (plist, _, _) =
-                    buf.interval_plist_run_at_char_pos(offset_char_pos(CharPos0::ZERO, pos));
+            if let SyntaxProperties::Honor(resolver) = self.props {
+                let plist = buf.interval_plist_at_char_pos(offset_char_pos(CharPos0::ZERO, pos));
                 let fresh = plist.and_then(|plist| resolver.resolve_interval_plist(plist));
                 debug_assert!(
                     value == fresh,
@@ -2887,6 +2894,11 @@ impl<'a> SyntaxPropRange<'a> {
             }
             return value;
         }
+        let SyntaxProperties::Honor(resolver) = self.props else {
+            // Unreachable: an ignoring cache covers every position. Keep the
+            // total function rather than an unwrap.
+            return None;
+        };
         self.refill_run(buf, pos, resolver)
     }
 
