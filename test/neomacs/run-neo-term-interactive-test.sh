@@ -22,6 +22,7 @@ LOG="$TEST_ROOT/neo-term-interactive.log"
 RESULTS="$TEST_ROOT/neo-term-interactive-results.txt"
 SCREENSHOT_DIR="$TEST_ROOT/screenshots"
 TEST_NAME="Neo-Term Interactive"
+EXPECTED_PASS_COUNT=15
 EMACS_PID=""
 
 # Cleanup from previous runs
@@ -312,7 +313,12 @@ if [ -f "$RESULTS" ]; then
         grep "^FAIL:" "$RESULTS"
     fi
 
-    if [ "$FAIL_COUNT" -gt 0 ] || [ "$PANIC_COUNT" -gt 0 ]; then
+    if [ "$PASS_COUNT" -ne "$EXPECTED_PASS_COUNT" ]; then
+        echo "Expected exactly $EXPECTED_PASS_COUNT completed assertions"
+    fi
+
+    if [ "$FAIL_COUNT" -gt 0 ] || [ "$PANIC_COUNT" -gt 0 ] || \
+       [ "$PASS_COUNT" -ne "$EXPECTED_PASS_COUNT" ]; then
         echo ""
         echo "RESULT: FAIL"
         exit 1

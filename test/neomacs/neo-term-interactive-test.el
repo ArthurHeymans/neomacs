@@ -36,6 +36,32 @@
       (neo-term-itest--log "PASS: %s" name)
     (neo-term-itest--log "FAIL: %s" name)))
 
+(defun neo-term-itest--wait-for-text (terminal-id predicate &optional timeout)
+  "Wait until TERMINAL-ID text satisfies PREDICATE, then return the text.
+TIMEOUT defaults to five seconds."
+  (let ((deadline (+ (float-time) (or timeout 5)))
+        text)
+    (while (and (< (float-time) deadline)
+                (not (and (setq text
+                                (ignore-errors
+                                  (neomacs-terminal-get-text terminal-id)))
+                          (stringp text)
+                          (funcall predicate text))))
+      (sit-for 0.05))
+    (and (stringp text) (funcall predicate text) text)))
+
+(defun neo-term-itest--wait-until-destroyed (terminal-id &optional timeout)
+  "Wait until TERMINAL-ID disappears from renderer-owned terminal state."
+  (let ((deadline (+ (float-time) (or timeout 5)))
+        destroyed)
+    (while (and (< (float-time) deadline) (not destroyed))
+      (setq destroyed
+            (condition-case nil
+                (null (neomacs-terminal-get-text terminal-id))
+              (error t)))
+      (unless destroyed (sit-for 0.05)))
+    destroyed))
+
 (defun neo-term-itest--marker (name)
   "Return the absolute marker path for NAME."
   (expand-file-name name neo-term-itest--marker-dir))
@@ -102,16 +128,17 @@
         (setq neo-term-itest--phase 2)
         (neo-term-itest--log "")
         (neo-term-itest--log "--- Phase 2: Text extraction after typing ---")
-        ;; Wait a moment for terminal to process
-        (sit-for 1)
-        (let ((text (ignore-errors
-                      (neomacs-terminal-get-text neo-term-itest--terminal-id))))
+        (let ((text (neo-term-itest--wait-for-text
+                     neo-term-itest--terminal-id
+                     (lambda (value) (string-match-p "hello" value)))))
           (neo-term-itest--check "get-text returns string" (stringp text))
-          (when (stringp text)
-            (neo-term-itest--log "Terminal text (first 200 chars): %s"
-                                  (substring text 0 (min 200 (length text))))
-            (neo-term-itest--check "Text contains 'hello'"
-                                    (string-match-p "hello" text)))))
+          (if (stringp text)
+              (progn
+                (neo-term-itest--log "Terminal text (first 200 chars): %s"
+                                     (substring text 0 (min 200 (length text))))
+                (neo-term-itest--check "Text contains 'hello'"
+                                       (string-match-p "hello" text)))
+            (neo-term-itest--check "Text contains 'hello'" nil))))
 
        ;; Phase 3: After xdotool typed a command with ANSI colors
        ((and (= neo-term-itest--phase 2)
@@ -119,14 +146,25 @@
         (setq neo-term-itest--phase 3)
         (neo-term-itest--log "")
         (neo-term-itest--log "--- Phase 3: ANSI color output ---")
-        (sit-for 1)
-        (let ((text (ignore-errors
-                      (neomacs-terminal-get-text neo-term-itest--terminal-id))))
-          (when (stringp text)
-            (neo-term-itest--log "Terminal text (first 300 chars): %s"
-                                  (substring text 0 (min 300 (length text))))
-            (neo-term-itest--check "Text contains color test output"
-                                    (string-match-p "RED\\|GREEN\\|BLUE\\|COLOR_TEST" text)))))
+        (let ((text (neo-term-itest--wait-for-text
+                     neo-term-itest--terminal-id
+                     (lambda (value)
+                       (and (string-match-p "RED" value)
+                            (string-match-p "GREEN" value)
+                            (string-match-p "BLUE" value)
+                            (string-match-p "COLOR_TEST" value))))))
+          (neo-term-itest--check "ANSI terminal text returns string" (stringp text))
+          (if (stringp text)
+              (progn
+                (neo-term-itest--log "Terminal text (first 300 chars): %s"
+                                     (substring text 0 (min 300 (length text))))
+                (neo-term-itest--check
+                 "Text contains complete color test output"
+                 (and (string-match-p "RED" text)
+                      (string-match-p "GREEN" text)
+                      (string-match-p "BLUE" text)
+                      (string-match-p "COLOR_TEST" text))))
+            (neo-term-itest--check "Text contains complete color test output" nil))))
 
        ;; Phase 4: Resize test
        ((and (= neo-term-itest--phase 3)
@@ -138,12 +176,23 @@
             (progn
               (neomacs-terminal-resize neo-term-itest--terminal-id 120 40)
               (neo-term-itest--check "Resize API call succeeded" t)
-              (sit-for 1)
-              ;; Verify text extraction still works after resize
-              (let ((text (ignore-errors
-                            (neomacs-terminal-get-text neo-term-itest--terminal-id))))
+              ;; Renderer commands are FIFO, so stty observes the PTY only
+              ;; after the preceding resize has actually been applied.
+              (neomacs-terminal-write
+               neo-term-itest--terminal-id
+               "printf '__NEO_SIZE__'; stty size\r")
+              (let ((text (neo-term-itest--wait-for-text
+                           neo-term-itest--terminal-id
+                           (lambda (value)
+                             (string-match-p
+                              "__NEO_SIZE__[[:space:]]*40 120"
+                              value)))))
                 (neo-term-itest--check "Text extraction works after resize"
                                         (and (stringp text) (> (length text) 0)))
+                (neo-term-itest--check
+                 "PTY reports 40 rows by 120 columns"
+                 (and (stringp text)
+                      (string-match-p "__NEO_SIZE__[[:space:]]*40 120" text)))
                 (when (stringp text)
                   (neo-term-itest--log "After resize text length: %d" (length text)))))
           (error
@@ -163,17 +212,22 @@
                 (neo-term-itest--log "Floating terminal ID: %s" float-id)
                 ;; Write to floating terminal
                 (neomacs-terminal-write float-id "echo FLOATING_OK\r")
-                (sit-for 2)
-                (let ((text (ignore-errors
-                              (neomacs-terminal-get-text float-id))))
-                  (when (stringp text)
-                    (neo-term-itest--log "Floating text: %s"
-                                          (substring text 0 (min 200 (length text))))
-                    (neo-term-itest--check "Floating terminal has output"
-                                            (string-match-p "FLOATING_OK" text))))
+                (let ((text (neo-term-itest--wait-for-text
+                             float-id
+                             (lambda (value) (string-match-p "FLOATING_OK" value)))))
+                  (neo-term-itest--check "Floating get-text returns string" (stringp text))
+                  (if (stringp text)
+                      (progn
+                        (neo-term-itest--log "Floating text: %s"
+                                             (substring text 0 (min 200 (length text))))
+                        (neo-term-itest--check "Floating terminal has output"
+                                               (string-match-p "FLOATING_OK" text)))
+                    (neo-term-itest--check "Floating terminal has output" nil)))
                 ;; Destroy floating terminal
                 (neomacs-terminal-destroy float-id)
-                (neo-term-itest--check "Floating terminal destroyed" t)))
+                (neo-term-itest--check
+                 "Floating terminal removed from renderer state"
+                 (neo-term-itest--wait-until-destroyed float-id))))
           (error
            (neo-term-itest--log "ERROR with floating terminal: %s" (error-message-string err))
            (neo-term-itest--check "Floating terminal created" nil))))
@@ -189,7 +243,10 @@
           (condition-case err
               (progn
                 (neomacs-terminal-destroy neo-term-itest--terminal-id)
-                (neo-term-itest--check "Main terminal destroyed" t))
+                (neo-term-itest--check
+                 "Main terminal removed from renderer state"
+                 (neo-term-itest--wait-until-destroyed
+                  neo-term-itest--terminal-id)))
             (error
              (neo-term-itest--log "ERROR destroying: %s" (error-message-string err)))))
         (neo-term-itest--log "")
