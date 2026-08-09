@@ -3163,6 +3163,16 @@ pub const TREEMACS_PROJECTILE_MELPA_PIN: (&str, &str) = ("treemacs-projectile", 
 /// MELPA built it from commit `0521cbb6bb371cbfd9b7b5688b82ac119af1bf30`.
 pub const ORG_CATEGORY_CAPTURE_MELPA_PIN: (&str, &str) = ("org-category-capture", "20260127.711");
 
+/// The exact Org Project Capture dependency selected for the public
+/// Org-Projectile compatibility workflows. MELPA built it from upstream
+/// commit `6a95fb90bcdb7fcdeba9d9421d7c511cea95ef70`.
+pub const ORG_PROJECT_CAPTURE_MELPA_PIN: (&str, &str) = ("org-project-capture", "20260313.1738");
+
+/// The exact Org-Projectile compatibility package selected for practical
+/// Projectile-backed project capture, navigation, and storage parity. MELPA
+/// built it from upstream commit `6a95fb90bcdb7fcdeba9d9421d7c511cea95ef70`.
+pub const ORG_PROJECTILE_MELPA_PIN: (&str, &str) = ("org-projectile", "20260313.1738");
+
 /// The exact Diminish package selected for practical live minor-mode,
 /// abbreviation, reporting, restoration, and configuration-order parity.
 /// MELPA built this archive from upstream commit
