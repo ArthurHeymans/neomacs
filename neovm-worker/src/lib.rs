@@ -1009,6 +1009,15 @@ fn eval_error_to_task_error(err: EvalError) -> TaskError {
                 emacs_core::print_value(&value)
             )),
         }),
+        // A worker task cannot exit the process; kill-emacs escaping a task
+        // surfaces as that task's failure so the submitter sees it rather
+        // than the request being silently absorbed. Whether a worker-side
+        // kill-emacs should instead shut down the whole process (GNU's
+        // Lisp threads do) is an open parity question for the task runtime.
+        EvalError::Shutdown(request) => TaskError::Failed(Signal {
+            symbol: "kill-emacs".to_string(),
+            data: Some(format!("{}", request.exit_code)),
+        }),
     }
 }
 
