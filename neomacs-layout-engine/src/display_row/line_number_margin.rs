@@ -1,8 +1,9 @@
-//! Display-line-number left-margin rendering — GNU `maybe_produce_line_number` (xdisp.c:25447). Relocated out of display_row_append.rs (pure move, no behavior change).
+//! Display-line-number left-margin rendering, following GNU
+//! `maybe_produce_line_number` (`xdisp.c`): emit a complete face-backed padded
+//! field, then fit only its padding to the gutter's authoritative pixel extent.
 
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch, DisplayStretchWidth,
-    DisplayTextRun, RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
 use crate::display_row::geometry::DisplayRowGeometryState;
 use crate::display_row::source_render::TextRowSourceRenderState;
@@ -10,17 +11,11 @@ use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_row::walk_state::{FaceScanCheckpoint, LineNumberRenderState};
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::frame_face_arena::FrameFaceAttempt;
+use crate::types::DisplayLineNumbersMode;
 use neomacs_display_protocol::glyph_matrix::GlyphArea;
 use neomacs_display_protocol::types::FaceId;
 
 const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct TextWindowLineNumberMargin<'a> {
-    text: &'a str,
-    cols: i32,
-    face_id: FaceId,
-}
 
 struct LineNumberMarginItemSource {
     items: std::vec::IntoIter<DisplayItem>,
@@ -28,7 +23,7 @@ struct LineNumberMarginItemSource {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct BufferLineNumberMarginRenderRequest {
-    mode: u8,
+    mode: DisplayLineNumbersMode,
     current_absolute: bool,
     offset: i64,
     major_tick: i32,
@@ -37,7 +32,7 @@ pub(crate) struct BufferLineNumberMarginRenderRequest {
 
 impl BufferLineNumberMarginRenderRequest {
     pub(crate) fn new(
-        mode: u8,
+        mode: DisplayLineNumbersMode,
         current_absolute: bool,
         offset: i64,
         major_tick: i32,
@@ -79,15 +74,10 @@ impl BufferLineNumberMarginRenderRequest {
         );
         source_render.insert_resolved_face(line_number_face_id, &line_number_face);
 
-        let text = line_number_request.text();
-        let margin_request = TextWindowLineNumberMargin {
-            text: &text,
-            cols: line_number_request.cols(),
-            face_id: line_number_face_id,
-        };
-        let mut source = LineNumberMarginItemSource::new(&margin_request);
+        let text = line_number_request.padded_text();
+        let mut source = LineNumberMarginItemSource::new(&text, line_number_face_id);
         let mut source_state = DisplayRowSourceState::default();
-        let margin_cols = margin_request.cols.max(1) as usize + 1;
+        let margin_cols = line_number_request.cols().max(1) as usize + 1;
         source_render.render_natural_fragment_from_row_geometry_columns(
             row_geometry,
             &mut source,
@@ -102,6 +92,8 @@ impl BufferLineNumberMarginRenderRequest {
             GlyphArea::LeftMargin,
             face_ids,
         );
+        let extent = line_number_request.pixel_extent(char_width);
+        source_render.fit_current_row_area_padding_to_extent(GlyphArea::LeftMargin, extent.get());
 
         face_scan.invalidate();
         true
@@ -117,51 +109,10 @@ fn line_number_margin_text_item(text: &str, face_id: FaceId, start_offset: usize
     )
 }
 
-fn line_number_margin_stretch_item(cols: u16, face_id: FaceId, start_offset: usize) -> DisplayItem {
-    DisplayItem::new(
-        SourceSpan::synthetic(
-            LINE_NUMBER_MARGIN_SOURCE_ID,
-            start_offset,
-            start_offset.saturating_add(usize::from(cols)),
-        ),
-        RenderFaceRef::FaceId(face_id),
-        DisplayItemKind::Stretch(DisplayStretch {
-            width: DisplayStretchWidth::Length(DisplayLength::Columns(cols)),
-            height: None,
-            ascent: None,
-        }),
-    )
-}
-
 impl LineNumberMarginItemSource {
-    fn new(request: &TextWindowLineNumberMargin<'_>) -> Self {
-        let mut items = Vec::new();
-        let mut source_offset = 0usize;
-        let padding = (request.cols - 1) - request.text.chars().count() as i32;
-        if padding > 0 {
-            let cols = padding.min(i32::from(u16::MAX)) as u16;
-            items.push(line_number_margin_stretch_item(
-                cols,
-                request.face_id,
-                source_offset,
-            ));
-            source_offset = source_offset.saturating_add(usize::from(cols));
-        }
-        if !request.text.is_empty() {
-            items.push(line_number_margin_text_item(
-                request.text,
-                request.face_id,
-                source_offset,
-            ));
-            source_offset = source_offset.saturating_add(request.text.chars().count());
-        }
-        items.push(line_number_margin_stretch_item(
-            1,
-            request.face_id,
-            source_offset,
-        ));
+    fn new(text: &str, face_id: FaceId) -> Self {
         Self {
-            items: items.into_iter(),
+            items: vec![line_number_margin_text_item(text, face_id, 0)].into_iter(),
         }
     }
 }

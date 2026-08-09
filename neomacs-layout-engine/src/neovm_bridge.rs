@@ -29,7 +29,9 @@ use neovm_core::window::{
     resolve_window_scroll_bar_geometry,
 };
 
-use super::types::{FrameParams, LineWrapMode, VisualCursorSpec, WindowKind, WindowParams};
+use super::types::{
+    DisplayLineNumbersMode, FrameParams, LineWrapMode, VisualCursorSpec, WindowKind, WindowParams,
+};
 use crate::coords::{
     clamped_lisp_charpos_to_layout_i64, layout_char_pos_from_i64, layout_emacs_byte_pos_from_i64,
     lisp_char_pos_to_layout_i64, lisp_charpos_to_layout_char_pos,
@@ -43,14 +45,6 @@ use neomacs_display_protocol::face::BoxLineWidth;
 use neomacs_display_protocol::types::{FaceId, Rect};
 use rustc_hash::FxHashMap;
 use strum::{EnumString, IntoStaticStr};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum DisplayLineNumbersMode {
-    Off,
-    Absolute,
-    Relative,
-    Visual,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
@@ -83,15 +77,6 @@ impl DisplayLineNumbersMode {
                 })
                 .unwrap_or(Self::Off),
             None => Self::Off,
-        }
-    }
-
-    pub(crate) fn engine_code(self) -> u8 {
-        match self {
-            Self::Off => 0,
-            Self::Absolute => 1,
-            Self::Relative => 2,
-            Self::Visual => 3,
         }
     }
 }
@@ -1681,6 +1666,11 @@ pub fn window_params_from_neovm_with_font_sizing(
     let wrap_mode = effective_wrap_mode(window, buffer, frame, obarray, hscroll);
     let word_wrap = effective_buffer_bool(buffer, obarray, LayoutVar::WordWrap);
     let tab_width = effective_buffer_int(buffer, obarray, LayoutVar::TabWidth, 8) as i32;
+    let display_line_numbers = DisplayLineNumbersMode::from_lisp_value(effective_buffer_value(
+        buffer,
+        obarray,
+        LayoutVar::DisplayLineNumbers,
+    ));
     // GNU `try_scrolling` reads `scroll-conservatively` / `scroll-margin`
     // (buffer-local with a global fallback) to choose between minimal scrolling
     // and recentering point when point jumps off-screen (src/xdisp.c).
@@ -1834,6 +1824,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         },
         buffer_size: buffer.point_max_char_pos().get() as i64,
         buffer_begv: buffer.point_min_char_pos().get() as i64,
+        display_line_numbers,
         hscroll: hscroll as i32,
         vscroll,
         wrap_mode,

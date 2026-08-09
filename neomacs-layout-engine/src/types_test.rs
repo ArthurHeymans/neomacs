@@ -3,6 +3,27 @@ use neomacs_display_protocol::cursor::CursorBarWidth;
 // --- WindowParams ---
 
 #[test]
+fn line_number_modes_declare_their_point_motion_body_dependency() {
+    assert_eq!(
+        DisplayLineNumbersMode::Off.point_motion_body_dependency(),
+        PointMotionBodyDependency::Independent
+    );
+    assert_eq!(
+        DisplayLineNumbersMode::Absolute.point_motion_body_dependency(),
+        PointMotionBodyDependency::CurrentDisplayRow
+    );
+    for mode in [
+        DisplayLineNumbersMode::Relative,
+        DisplayLineNumbersMode::Visual,
+    ] {
+        assert_eq!(
+            mode.point_motion_body_dependency(),
+            PointMotionBodyDependency::EntireWindow
+        );
+    }
+}
+
+#[test]
 fn window_params_construction() {
     let params = WindowParams {
         space_image_catalog: None,
@@ -20,6 +41,7 @@ fn window_params_construction() {
         point: 42,
         buffer_size: 10000,
         buffer_begv: 1,
+        display_line_numbers: DisplayLineNumbersMode::Off,
         hscroll: 0,
         vscroll: 0,
         wrap_mode: LineWrapMode::Wrap,
@@ -104,6 +126,7 @@ fn window_params_minibuffer() {
         point: 1,
         buffer_size: 0,
         buffer_begv: 1,
+        display_line_numbers: DisplayLineNumbersMode::Off,
         hscroll: 0,
         vscroll: 0,
         wrap_mode: LineWrapMode::Truncate,
@@ -180,6 +203,7 @@ fn window_params_clone() {
         point: 1,
         buffer_size: 100,
         buffer_begv: 1,
+        display_line_numbers: DisplayLineNumbersMode::Off,
         hscroll: 5,
         vscroll: 0,
         wrap_mode: LineWrapMode::Truncate,

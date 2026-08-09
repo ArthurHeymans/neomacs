@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::{FrameParams, LineWrapMode, WindowKind, WindowParams};
+use crate::types::{DisplayLineNumbersMode, FrameParams, LineWrapMode, WindowKind, WindowParams};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_chrome::FrameChromeKind;
 use neomacs_display_protocol::frame_glyphs::{
@@ -41,6 +41,7 @@ fn window_params() -> WindowParams {
         point: 10,
         buffer_size: 210,
         buffer_begv: 0,
+        display_line_numbers: DisplayLineNumbersMode::Off,
         hscroll: 4,
         vscroll: 0,
         wrap_mode: LineWrapMode::Wrap,

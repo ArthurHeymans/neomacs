@@ -105,6 +105,7 @@ use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferSnapshot, RustBufferAccess};
 use crate::scroll_policy::ScrollPolicy;
+use crate::types::DisplayLineNumbersMode;
 use crate::types::LayoutCharPos0;
 use crate::types::WindowKind;
 use crate::window_output::DisplayTextRowTransition;
@@ -331,15 +332,21 @@ fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin(
             &face_resolver,
         );
         assert!(
-            BufferLineNumberMarginRenderRequest::new(1, false, 0, 4, 4)
-                .render_pending_with_source_state(
-                    &mut line_numbers,
-                    &mut source_render,
-                    &mut face_ids,
-                    &context.geometry,
-                    &mut face_scan,
-                    8.0,
-                )
+            BufferLineNumberMarginRenderRequest::new(
+                DisplayLineNumbersMode::Absolute,
+                false,
+                0,
+                4,
+                4,
+            )
+            .render_pending_with_source_state(
+                &mut line_numbers,
+                &mut source_render,
+                &mut face_ids,
+                &context.geometry,
+                &mut face_scan,
+                8.0,
+            )
         );
     }
 
@@ -349,10 +356,15 @@ fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin(
     let margin = &state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::LeftMargin as usize];
 
     assert_eq!(margin.len(), 4);
-    assert_eq!(margin[0].glyph_type, GlyphType::Stretch { width_cols: 1 });
+    assert_eq!(margin[0].glyph_type, GlyphType::Char { ch: ' ' });
     assert_eq!(margin[1].glyph_type, GlyphType::Char { ch: '1' });
     assert_eq!(margin[2].glyph_type, GlyphType::Char { ch: '2' });
-    assert_eq!(margin[3].glyph_type, GlyphType::Stretch { width_cols: 1 });
+    assert_eq!(margin[3].glyph_type, GlyphType::Char { ch: ' ' });
+    assert_eq!(
+        margin.iter().map(|glyph| glyph.pixel_width).sum::<f32>(),
+        32.0,
+        "the rendered margin must consume its four-column reserved extent"
+    );
     assert!(
         margin
             .iter()
@@ -387,15 +399,21 @@ fn buffer_line_number_margin_render_request_renders_blank_gutter_on_continuation
             &face_resolver,
         );
         assert!(
-            BufferLineNumberMarginRenderRequest::new(1, false, 0, 4, 4)
-                .render_pending_with_source_state(
-                    &mut line_numbers,
-                    &mut source_render,
-                    &mut face_ids,
-                    &context.geometry,
-                    &mut face_scan,
-                    8.0,
-                )
+            BufferLineNumberMarginRenderRequest::new(
+                DisplayLineNumbersMode::Absolute,
+                false,
+                0,
+                4,
+                4,
+            )
+            .render_pending_with_source_state(
+                &mut line_numbers,
+                &mut source_render,
+                &mut face_ids,
+                &context.geometry,
+                &mut face_scan,
+                8.0,
+            )
         );
     }
 
@@ -404,11 +422,19 @@ fn buffer_line_number_margin_render_request_renders_blank_gutter_on_continuation
     let state = context.builder.finish(20, 1, 8.0, 16.0);
     let margin = &state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::LeftMargin as usize];
 
-    // No number glyphs: a leading padding stretch of (cols-1) and a trailing
-    // stretch of 1 — same total width (4 cols) as the numbered first row.
-    assert_eq!(margin.len(), 2);
-    assert_eq!(margin[0].glyph_type, GlyphType::Stretch { width_cols: 3 });
-    assert_eq!(margin[1].glyph_type, GlyphType::Stretch { width_cols: 1 });
+    // No number glyphs: GNU's complete four-character field becomes four
+    // face-backed blanks whose total is the same reserved extent as the
+    // numbered first row.
+    assert_eq!(margin.len(), 4);
+    assert!(
+        margin
+            .iter()
+            .all(|glyph| glyph.glyph_type == GlyphType::Char { ch: ' ' })
+    );
+    assert_eq!(
+        margin.iter().map(|glyph| glyph.pixel_width).sum::<f32>(),
+        32.0
+    );
     assert!(
         margin
             .iter()
@@ -10469,6 +10495,7 @@ fn test_display_space_window_params() -> WindowParams {
         point: 1,
         buffer_size: 1,
         buffer_begv: 1,
+        display_line_numbers: DisplayLineNumbersMode::Off,
         hscroll: 0,
         vscroll: 0,
         wrap_mode: LineWrapMode::Wrap,

@@ -36,6 +36,50 @@ pub enum LineWrapMode {
     Wrap,
 }
 
+/// GNU `display-line-numbers` modes understood by the layout engine.
+///
+/// This is a closed semantic domain rather than the old `u8` transport code:
+/// adding a mode now requires every renderer and retained-layout policy to
+/// handle it explicitly.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DisplayLineNumbersMode {
+    #[default]
+    Off,
+    Absolute,
+    Relative,
+    Visual,
+}
+
+/// How bare point motion can change pixels baked into retained body rows.
+///
+/// Cursor decoration itself is replayed separately. This dependency describes
+/// point-derived *body* content which cannot be repaired by moving only the
+/// cursor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointMotionBodyDependency {
+    /// No retained body glyph depends on point.
+    Independent,
+    /// Only decoration of the display row containing point can change.
+    CurrentDisplayRow,
+    /// Point contributes to values throughout the visible window.
+    EntireWindow,
+}
+
+impl DisplayLineNumbersMode {
+    pub const fn enabled(self) -> bool {
+        !matches!(self, Self::Off)
+    }
+
+    /// GNU `xdisp.c` point-motion invalidation expressed as layout data.
+    pub const fn point_motion_body_dependency(self) -> PointMotionBodyDependency {
+        match self {
+            Self::Off => PointMotionBodyDependency::Independent,
+            Self::Absolute => PointMotionBodyDependency::CurrentDisplayRow,
+            Self::Relative | Self::Visual => PointMotionBodyDependency::EntireWindow,
+        }
+    }
+}
+
 /// Semantic category of a window within its frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum WindowKind {
@@ -136,6 +180,9 @@ pub struct WindowParams {
     pub buffer_size: i64,
     /// Accessible start (BEGV) in layout 0-based char coordinates.
     pub buffer_begv: i64,
+
+    /// Effective typed `display-line-numbers` mode for this layout snapshot.
+    pub display_line_numbers: DisplayLineNumbersMode,
 
     /// Horizontal scroll offset in columns
     pub hscroll: i32,

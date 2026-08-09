@@ -1,6 +1,6 @@
 use super::*;
 use crate::scroll_policy::ScrollPolicy;
-use crate::types::{LineWrapMode, WindowKind, WindowParams};
+use crate::types::{DisplayLineNumbersMode, LineWrapMode, WindowKind, WindowParams};
 use neomacs_display_protocol::types::Rect;
 
 fn window_params() -> WindowParams {
@@ -20,6 +20,7 @@ fn window_params() -> WindowParams {
         point: 21,
         buffer_size: 80,
         buffer_begv: 3,
+        display_line_numbers: DisplayLineNumbersMode::Off,
         hscroll: 0,
         vscroll: 0,
         wrap_mode: LineWrapMode::Wrap,

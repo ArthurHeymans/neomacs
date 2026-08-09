@@ -25,6 +25,7 @@ fn window_params() -> WindowParams {
         point: 17,
         buffer_size: 80,
         buffer_begv: 1,
+        display_line_numbers: DisplayLineNumbersMode::Off,
         hscroll: 0,
         vscroll: 0,
         wrap_mode: LineWrapMode::Wrap,
@@ -404,7 +405,7 @@ fn row_prelude_request_context_carries_margin_and_prefix_policy() {
     let prefix_values =
         crate::display_row::lisp_string::DisplayRowPrefixValues::default_values(None, None);
     let context = BufferSourceRowPreludeRequestContext::new(
-        2,
+        DisplayLineNumbersMode::Relative,
         true,
         3,
         4,
@@ -413,7 +414,7 @@ fn row_prelude_request_context_carries_margin_and_prefix_policy() {
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
 
-    assert_eq!(context.line_number_mode(), 2);
+    assert_eq!(context.line_number_mode(), DisplayLineNumbersMode::Relative);
     assert_eq!(context.prefix_values(), prefix_values);
     assert_eq!(context.char_width(), 8.0);
 }
@@ -422,7 +423,12 @@ fn row_prelude_request_context_carries_margin_and_prefix_policy() {
 fn local_display_policy_builds_row_prelude_context() {
     let prefix_values =
         crate::display_row::lisp_string::DisplayRowPrefixValues::default_values(None, None);
-    let policy = BufferWindowLocalDisplayPolicy::from_parts(2, false, 3, prefix_values);
+    let policy = BufferWindowLocalDisplayPolicy::from_parts(
+        DisplayLineNumbersMode::Relative,
+        false,
+        3,
+        prefix_values,
+    );
     let context = policy.row_prelude_context(
         6,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
@@ -430,7 +436,7 @@ fn local_display_policy_builds_row_prelude_context() {
 
     assert!(!policy.has_prefix());
     assert!(!policy.has_line_default_prefix());
-    assert_eq!(context.line_number_mode(), 2);
+    assert_eq!(context.line_number_mode(), DisplayLineNumbersMode::Relative);
     assert_eq!(context.prefix_values(), prefix_values);
     assert_eq!(context.char_width(), 8.0);
 }

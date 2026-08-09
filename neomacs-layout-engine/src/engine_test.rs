@@ -819,12 +819,17 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert_eq!(state.current_line(), 7);
     assert_eq!(state.point_line(), 9);
     assert!(!state.is_current_line());
-    assert_eq!(state.display_number(3, false, 0), 2);
+    assert_eq!(
+        state.display_number(DisplayLineNumbersMode::Visual, false, 0),
+        2
+    );
     let request = state
-        .take_margin_render_request(3, false, 0, 0, 4)
+        .take_margin_render_request(DisplayLineNumbersMode::Visual, false, 0, 0, 4)
         .expect("line number request");
     assert_eq!(request.text(), "2");
+    assert_eq!(request.padded_text(), "  2 ");
     assert_eq!(request.cols(), 4);
+    assert_eq!(request.pixel_extent(8.0).get(), 32.0);
     assert_eq!(request.face().face_name(), "line-number");
 
     assert!(!state.should_render());
@@ -835,11 +840,15 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert!(state.should_render());
     assert_eq!(state.current_line(), 9);
     assert!(state.is_current_line());
-    assert_eq!(state.display_number(3, true, 10), 19);
+    assert_eq!(
+        state.display_number(DisplayLineNumbersMode::Visual, true, 10),
+        19
+    );
     let request = state
-        .take_margin_render_request(3, true, 10, 3, 5)
+        .take_margin_render_request(DisplayLineNumbersMode::Visual, true, 10, 3, 5)
         .expect("current line request");
     assert_eq!(request.text(), "19");
+    assert_eq!(request.padded_text(), "  19 ");
     assert_eq!(request.cols(), 5);
     assert_eq!(request.face().face_name(), "line-number-current-line");
 
@@ -850,7 +859,7 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert!(!LineNumberRenderState::new(false, 7, 9).should_render());
 
     let major_tick = LineNumberRenderState::new(true, 12, 9)
-        .take_margin_render_request(1, false, 0, 4, 3)
+        .take_margin_render_request(DisplayLineNumbersMode::Absolute, false, 0, 4, 3)
         .expect("major tick line number request");
     assert_eq!(major_tick.text(), "12");
     assert_eq!(major_tick.face().face_name(), "line-number-major-tick");
@@ -862,7 +871,7 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     // gutter (GNU `maybe_produce_line_number`).
     let mut state = LineNumberRenderState::new(true, 7, 9);
     let first = state
-        .take_margin_render_request(1, false, 0, 0, 4)
+        .take_margin_render_request(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
         .expect("first-row line number request");
     assert!(!first.blank());
     assert_eq!(first.text(), "7");
@@ -874,7 +883,7 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     state.mark_continuation_row();
     assert!(state.should_render());
     let continuation = state
-        .take_margin_render_request(1, false, 0, 0, 4)
+        .take_margin_render_request(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
         .expect("continuation-row line number request");
     assert!(continuation.blank());
     assert_eq!(continuation.text(), "");
@@ -885,7 +894,7 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     // The next buffer line resets back to a non-blank numbered gutter.
     state.advance_line();
     let next_line = state
-        .take_margin_render_request(1, false, 0, 0, 4)
+        .take_margin_render_request(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
         .expect("next-line line number request");
     assert!(!next_line.blank());
     assert_eq!(next_line.text(), "8");
@@ -1430,6 +1439,7 @@ fn test_window_params() -> WindowParams {
         point: 1,
         buffer_size: 1,
         buffer_begv: 1,
+        display_line_numbers: DisplayLineNumbersMode::Off,
         hscroll: 0,
         vscroll: 0,
         wrap_mode: LineWrapMode::Wrap,
@@ -3117,6 +3127,78 @@ fn phase1_cursor_move_matches_full_rebuild_golden() {
     assert_eq!(
         incremental, reference,
         "cursor-only output must be byte-identical to a full rebuild"
+    );
+}
+
+/// GNU `xdisp.c:19861-19865` refuses cursor-only redisplay when relative line
+/// numbers are active because every displayed gutter value depends on point.
+/// The incremental path must therefore publish the same margin glyphs as a
+/// fresh full layout after point moves to another line.
+#[test]
+fn relative_line_numbers_follow_point_across_incremental_redisplay() {
+    fn line_number_margins(trace: &BackendLayoutTrace) -> Vec<Vec<GlyphKindTrace>> {
+        trace
+            .matrix_rows
+            .iter()
+            .filter(|row| row.role == GlyphRowRole::Text && row.displays_text)
+            .map(|row| {
+                row.glyph_areas[GlyphArea::LeftMargin.index()]
+                    .iter()
+                    .map(|glyph| glyph.kind.clone())
+                    .collect()
+            })
+            .collect()
+    }
+
+    const INITIAL_POINT: usize = 9 * 5;
+    const MOVED_POINT: usize = 10 * 5;
+    let text = "line\n".repeat(40);
+
+    let (mut reference_eval, reference_frame, reference_buffer, _) =
+        incr_editing_frame(&text, 800, 600);
+    {
+        let buffer = reference_eval
+            .buffer_manager_mut()
+            .get_mut(reference_buffer)
+            .expect("reference buffer");
+        buffer.set_buffer_local("display-line-numbers", Value::symbol("relative"));
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(MOVED_POINT));
+    }
+    let mut reference_engine = LayoutEngine::new();
+    reference_engine.layout_frame_rust(&mut reference_eval, reference_frame);
+    let expected = line_number_margins(&selected_window_layout_trace(
+        &reference_eval,
+        &reference_engine,
+        reference_frame,
+    ));
+
+    let (mut incremental_eval, incremental_frame, incremental_buffer, _) =
+        incr_editing_frame(&text, 800, 600);
+    {
+        let buffer = incremental_eval
+            .buffer_manager_mut()
+            .get_mut(incremental_buffer)
+            .expect("incremental buffer");
+        buffer.set_buffer_local("display-line-numbers", Value::symbol("relative"));
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(INITIAL_POINT));
+    }
+    let mut incremental_engine = LayoutEngine::new();
+    incremental_engine.layout_frame_rust(&mut incremental_eval, incremental_frame);
+    incremental_eval
+        .buffer_manager_mut()
+        .get_mut(incremental_buffer)
+        .expect("incremental buffer")
+        .goto_emacs_byte_pos(EmacsBytePos::new(MOVED_POINT));
+    incremental_engine.layout_frame_rust(&mut incremental_eval, incremental_frame);
+    let actual = line_number_margins(&selected_window_layout_trace(
+        &incremental_eval,
+        &incremental_engine,
+        incremental_frame,
+    ));
+
+    assert_eq!(
+        actual, expected,
+        "relative line-number margins after point movement must match a fresh full layout"
     );
 }
 
@@ -5094,9 +5176,9 @@ fn point_max_after_trailing_newline_stays_right_of_line_number_gutter() {
         !eob_margin.is_empty()
             && eob_margin
                 .iter()
-                .all(|glyph| !matches!(glyph.kind, GlyphKindTrace::Char(_)))
+                .all(|glyph| matches!(glyph.kind, GlyphKindTrace::Char(' ')))
             && (margin_width(eob_margin) - margin_width(numbered_margin)).abs() < 0.01,
-        "the blank EOB row must reserve a width-matched, number-free line-number gutter; \
+        "the blank EOB row must reserve a width-matched, space-only line-number gutter; \
          EOB margin={eob_margin:?}, numbered margin={numbered_margin:?}"
     );
 
@@ -5569,10 +5651,73 @@ fn layout_frame_rust_line_number_width_matches_gnu_visible_row_width() {
             .map(|glyph| glyph.kind.clone())
             .collect::<Vec<_>>(),
         vec![
-            GlyphKindTrace::Stretch(2),
+            GlyphKindTrace::Char(' '),
+            GlyphKindTrace::Char(' '),
             GlyphKindTrace::Char('1'),
-            GlyphKindTrace::Stretch(1),
+            GlyphKindTrace::Char(' '),
         ]
+    );
+}
+
+/// GNU produces the complete, space-padded line-number string in one face
+/// (`maybe_produce_line_number`, xdisp.c).  A smaller line-number face must not
+/// let the number of padding columns leak into the source text's pixel origin:
+/// otherwise rows cross a one-pixel boundary whenever their relative number
+/// changes between one and two digits, which appears as horizontal jitter while
+/// point moves.
+#[test]
+fn layout_frame_rust_relative_line_numbers_keep_one_text_pixel_origin() {
+    let text: String = (1..=40).map(|line| format!("row {line:02}\n")).collect();
+    let (mut eval, frame_id, buffer_id, selected_window) = incr_editing_frame(&text, 800, 600);
+    eval.eval_str(
+        "(progn
+           (internal-set-lisp-face-attribute
+             'line-number :height 80 (selected-frame))
+           (internal-set-lisp-face-attribute
+             'line-number-current-line :height 80 (selected-frame)))",
+    )
+    .expect("make both line-number faces smaller than the text face");
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(buffer_id)
+            .expect("line-number buffer");
+        buffer.set_buffer_local("display-line-numbers", Value::symbol("relative"));
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(19 * "row 01\n".len()));
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let frame = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state")
+        .materialize();
+    let text_origins: Vec<f32> = frame
+        .glyphs
+        .iter()
+        .filter_map(|glyph| match glyph {
+            neomacs_display_protocol::frame_glyphs::FrameGlyph::Char {
+                window_id,
+                row_role: GlyphRowRole::Text,
+                char: 'r',
+                x,
+                ..
+            } if window_id.get() == selected_window.0 as i64 => Some(*x),
+            _ => None,
+        })
+        .collect();
+
+    assert!(
+        text_origins.len() > 10,
+        "test must cover both one- and two-digit relative line numbers: {text_origins:?}"
+    );
+    let expected = text_origins[0];
+    assert!(
+        text_origins
+            .iter()
+            .all(|origin| origin.to_bits() == expected.to_bits()),
+        "every source row must start at one stable pixel X; origins={text_origins:?}"
     );
 }
 
@@ -18781,7 +18926,7 @@ fn overlay_newline_continuation_reserves_a_blank_line_number_margin() {
     assert!(
         code_margin
             .iter()
-            .all(|glyph| !matches!(glyph.glyph_type, GlyphType::Char { .. })),
+            .all(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: ' ' })),
         "the continuation must not repeat its logical line number; margin={code_margin:?}"
     );
     assert!(

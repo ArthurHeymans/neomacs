@@ -51,7 +51,7 @@ use crate::window_output::{
     WindowOutputEmitter, install_text_window_row_decoration_request,
     transition_text_window_row_with_limit,
 };
-use neomacs_display_protocol::glyph_matrix::{FringeBitmapInfo, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{FringeBitmapInfo, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::Context;
@@ -64,6 +64,53 @@ use neovm_core::window::DisplayRowSnapshot;
 struct SetRowFringeBitmapMutation {
     side: DisplayFringeSide,
     info: FringeBitmapInfo,
+}
+
+/// Reconcile a preallocated structural area's logical extent with the
+/// concrete advances of its rendered content.
+///
+/// GNU line-number faces are documented to be monospaced, but Neomacs keeps
+/// subpixel concrete glyph advances while the frame grid is integer/hinted.
+/// Even a monospaced font can therefore expose a small measurement-domain
+/// delta between digits and blank padding.  The owning structural area—not
+/// the following buffer text—absorbs that delta by distributing the remaining
+/// extent over its explicit space glyphs.
+struct FitGlyphAreaPaddingToExtentMutation {
+    area: GlyphArea,
+    extent_px: f32,
+}
+
+impl DisplayCurrentRowMutation for FitGlyphAreaPaddingToExtentMutation {
+    type Output = bool;
+
+    fn apply(self, row: &mut GlyphRow) -> Self::Output {
+        if !self.extent_px.is_finite() || self.extent_px <= 0.0 {
+            return false;
+        }
+        let glyphs = &mut row.glyphs[self.area.index()];
+        let mut padding_count = 0usize;
+        let mut content_width = 0.0f32;
+        for glyph in glyphs.iter() {
+            if !glyph.padding && matches!(glyph.glyph_type, GlyphType::Char { ch: ' ' }) {
+                padding_count += 1;
+            } else if !glyph.padding {
+                content_width += glyph.pixel_width.max(0.0);
+            }
+        }
+        if padding_count == 0 || content_width >= self.extent_px {
+            return false;
+        }
+        let padding_width = (self.extent_px - content_width) / padding_count as f32;
+        if !padding_width.is_finite() || padding_width <= 0.0 {
+            return false;
+        }
+        for glyph in glyphs.iter_mut() {
+            if !glyph.padding && matches!(glyph.glyph_type, GlyphType::Char { ch: ' ' }) {
+                glyph.pixel_width = padding_width;
+            }
+        }
+        true
+    }
 }
 
 impl DisplayCurrentRowMutation for SetRowFringeBitmapMutation {
@@ -851,6 +898,20 @@ impl<'a> TextRowSourceRenderState<'a> {
         )
         .render_request_from_column_for_area(start_col, max_col, area);
         self.render_natural_fragment_into_current_row(request, source, source_state, face_ids)
+    }
+
+    /// Make a structural glyph area consume exactly its preallocated extent by
+    /// assigning all residual width to the area's explicit blank padding.
+    /// Concrete nonblank glyph advances remain untouched.
+    pub(crate) fn fit_current_row_area_padding_to_extent(
+        &mut self,
+        area: GlyphArea,
+        extent_px: f32,
+    ) -> bool {
+        self.output_render
+            .current_row_output()
+            .apply_current_row_mutation(FitGlyphAreaPaddingToExtentMutation { area, extent_px })
+            .unwrap_or(false)
     }
 
     pub(crate) fn render_display_item_source_into_current_text_row_and_emit<

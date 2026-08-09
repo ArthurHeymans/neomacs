@@ -13,7 +13,7 @@
 //! (§4.1 retained structure, §4.6 RowDamage, §5 Phase 0a, §7 go-criteria).
 
 use crate::frame_face_arena::FrameFaceGeneration;
-use crate::types::{LineWrapMode, WindowParams};
+use crate::types::{DisplayLineNumbersMode, LineWrapMode, PointMotionBodyDependency, WindowParams};
 use crate::window_layout::{WindowLayoutBox, WindowPartitionSignature};
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, PhysCursor};
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
@@ -84,6 +84,10 @@ pub struct RetainedWindowKey {
     pub buffer_id: u64,
     pub window_start: i64,
     pub point: i64,
+    /// Effective line-number semantics baked into the retained left margin.
+    /// Unlike a generic display-variable generation, this typed value also
+    /// declares how bare point motion invalidates body glyphs.
+    pub display_line_numbers: DisplayLineNumbersMode,
     pub buffer_begv: i64,
     pub buffer_size: i64,
     pub(crate) partition: WindowPartitionSignature,
@@ -184,6 +188,7 @@ impl RetainedWindowKey {
             buffer_id: p.buffer_id,
             window_start: p.window_start,
             point: p.point,
+            display_line_numbers: p.display_line_numbers,
             buffer_begv: p.buffer_begv,
             buffer_size,
             partition: WindowPartitionSignature::from_layout_box(layout_box),
@@ -750,6 +755,14 @@ impl RetainedWindowMatrix {
         if !RetainedWindowKey::cursor_only_eligible(&self.key, curr) {
             return None;
         }
+        let point_moved = self.key.point != curr.point;
+        let point_dependency = curr.display_line_numbers.point_motion_body_dependency();
+        if point_moved && point_dependency == PointMotionBodyDependency::EntireWindow {
+            // GNU xdisp.c refuses cursor-only redisplay for relative and visual
+            // line numbers: every gutter value is derived from point, so the
+            // retained body as a whole is stale.
+            return None;
+        }
         let new_point = curr.point;
         let mut body_rows: Vec<(usize, MatrixRow)> = Vec::new();
         let mut body_indices: rustc_hash::FxHashSet<usize> = rustc_hash::FxHashSet::default();
@@ -777,6 +790,15 @@ impl RetainedWindowMatrix {
             return None;
         }
         let (new_cursor_row_index, cursor_row) = new_cursor?;
+        if point_moved
+            && point_dependency == PointMotionBodyDependency::CurrentDisplayRow
+            && retained_cursor_row_index != Some(new_cursor_row_index)
+        {
+            // Absolute line numbers bake the current-line face into the left
+            // margin. Moving to another display row changes body decoration
+            // even though the underlying number stays absolute.
+            return None;
+        }
         if cursor_row.continued
             || cursor_row.truncated_left
             || cursor_row.left_fringe_bitmap.is_some()
@@ -1372,6 +1394,7 @@ mod scroll_classifier_tests {
             buffer_id: 1,
             window_start,
             point,
+            display_line_numbers: DisplayLineNumbersMode::Off,
             buffer_begv: 0,
             buffer_size: 1000,
             partition: WindowPartitionSignature::from_regions(
@@ -1550,6 +1573,9 @@ mod scroll_classifier_tests {
         ));
 
         let mutations: &[(&str, fn(&mut RetainedWindowKey))] = &[
+            ("display_line_numbers", |k| {
+                k.display_line_numbers = DisplayLineNumbersMode::Relative
+            }),
             ("tab_stop_list", |k| k.tab_stop_list = vec![4, 12]),
             ("extra_line_spacing", |k| k.extra_line_spacing = 2.0),
             ("selective_display", |k| k.selective_display = 4),

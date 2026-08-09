@@ -9,7 +9,7 @@ use crate::neovm_bridge::{
 };
 #[cfg(test)]
 use crate::types::LineWrapMode;
-use crate::types::{WindowKind, WindowParams};
+use crate::types::{DisplayLineNumbersMode, WindowKind, WindowParams};
 use crate::window_layout::WindowLayoutBox;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -89,7 +89,7 @@ impl BufferWindowGeometry {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferWindowLocalDisplayPolicy {
-    line_number_mode: u8,
+    line_number_mode: DisplayLineNumbersMode,
     line_number_offset: i64,
     line_number_major_tick: i32,
     line_number_current_absolute: bool,
@@ -294,7 +294,7 @@ impl BufferWindowGeometryRequest {
 impl BufferWindowLocalDisplayPolicy {
     pub(crate) fn from_buffer(buffer: &impl LayoutBufferView) -> Self {
         Self {
-            line_number_mode: buffer_display_line_numbers_mode(buffer).engine_code(),
+            line_number_mode: buffer_display_line_numbers_mode(buffer),
             line_number_offset: buffer_local_int(buffer, LayoutVar::DisplayLineNumbersOffset, 0),
             line_number_major_tick: buffer_local_int(
                 buffer,
@@ -391,12 +391,12 @@ impl BufferWindowLocalDisplayPolicy {
     }
 
     fn line_numbers_enabled(self) -> bool {
-        self.line_number_mode > 0
+        self.line_number_mode.enabled()
     }
 
     #[cfg(test)]
     pub(crate) fn from_parts(
-        line_number_mode: u8,
+        line_number_mode: DisplayLineNumbersMode,
         line_number_widen: bool,
         line_number_min_width: i32,
         prefix_values: DisplayRowPrefixValues,

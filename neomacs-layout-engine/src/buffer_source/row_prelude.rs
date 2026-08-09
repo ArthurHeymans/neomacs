@@ -13,7 +13,7 @@ use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::walk_state::{FaceScanCheckpoint, LineNumberRenderState};
 use crate::frame_face_arena::FrameFaceAttempt;
-use crate::types::WindowParams;
+use crate::types::{DisplayLineNumbersMode, WindowParams};
 
 /// The buffer-owned decoration emitted when a display-only source starts a
 /// continuation row without advancing the logical buffer line.
@@ -30,7 +30,7 @@ pub(crate) struct BufferSourceContinuationRowPreludeRequest {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferSourceRowPreludeRequestContext {
-    line_number_mode: u8,
+    line_number_mode: DisplayLineNumbersMode,
     line_number_current_absolute: bool,
     line_number_offset: i64,
     line_number_major_tick: i32,
@@ -63,7 +63,7 @@ impl BufferSourceContinuationRowPreludeRequest {
 impl BufferSourceRowPreludeRequestContext {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        line_number_mode: u8,
+        line_number_mode: DisplayLineNumbersMode,
         line_number_current_absolute: bool,
         line_number_offset: i64,
         line_number_major_tick: i32,
@@ -125,7 +125,7 @@ impl BufferSourceRowPreludeRequestContext {
     }
 
     #[cfg(test)]
-    pub(crate) fn line_number_mode(self) -> u8 {
+    pub(crate) fn line_number_mode(self) -> DisplayLineNumbersMode {
         self.line_number_mode
     }
 
