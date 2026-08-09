@@ -2,61 +2,56 @@ use expect_test::expect;
 
 use super::ParityBatchCase;
 
-fn defcustoms_match_upstream_defaults() -> ParityBatchCase {
+/// Drive `load-theme' and assert the actual colors the theme DECLARES for the
+/// default face (read from its theme-settings spec, since live face-attribute
+/// is `unspecified' in batch). Validates the theme's real palette, not that it
+/// merely registered.
+fn default_face_declares_palette_colors() -> ParityBatchCase {
     ParityBatchCase::value(
-        "defcustoms_match_upstream_defaults",
-        r####"
-(list :comment-bg spacemacs-theme-comment-bg
-      :comment-italic spacemacs-theme-comment-italic
-      :org-height spacemacs-theme-org-height
-      :custom-colors spacemacs-theme-custom-colors
-      :underline-parens spacemacs-theme-underline-parens)
-"####,
-        expect![[
-            r#"OK (:comment-bg t :comment-italic nil :org-height t :custom-colors nil :underline-parens t)"#
-        ]],
-    )
-}
-
-fn load_theme_registers_and_enables_spacemacs_dark() -> ParityBatchCase {
-    ParityBatchCase::value(
-        "load_theme_registers_and_enables_spacemacs_dark",
+        "default_face_declares_palette_colors",
         r####"
 (progn
   (load-theme 'spacemacs-dark t)
-  (list :theme-p (and (custom-theme-p 'spacemacs-dark) t)
-        :enabled (and (custom-theme-enabled-p 'spacemacs-dark) t)
-        :in-enabled (and (memq 'spacemacs-dark custom-enabled-themes) t)
-        :feature (get 'spacemacs-dark 'theme-feature)))
+  (list :bg (spc-theme-color 'default :background)
+        :fg (spc-theme-color 'default :foreground)))
 "####,
-        expect![[r#"OK (:theme-p t :enabled t :in-enabled t :feature spacemacs-dark-theme)"#]],
+        expect![[r##"OK (:bg "#262626" :fg "#b2b2b2")"##]],
     )
 }
 
-fn theme_settings_include_default_and_font_lock_faces() -> ParityBatchCase {
+/// Assert the foreground colors declared for core font-lock syntax faces.
+fn font_lock_faces_declare_syntax_colors() -> ParityBatchCase {
     ParityBatchCase::value(
-        "theme_settings_include_default_and_font_lock_faces",
+        "font_lock_faces_declare_syntax_colors",
         r####"
 (progn
   (load-theme 'spacemacs-dark t)
-  (let ((faces
-         (mapcar #'cadr
-                 (cl-remove-if-not
-                  (lambda (s) (eq (car s) 'theme-face))
-                  (get 'spacemacs-dark 'theme-settings)))))
-    (list :has-default (and (memq 'default faces) t)
-          :has-comment (and (memq 'font-lock-comment-face faces) t)
-          :has-keyword (and (memq 'font-lock-keyword-face faces) t)
-          :many-faces (> (length faces) 50))))
+  (list :keyword (spc-theme-color 'font-lock-keyword-face :foreground)
+        :string (spc-theme-color 'font-lock-string-face :foreground)
+        :type (spc-theme-color 'font-lock-type-face :foreground)))
 "####,
-        expect![[r#"OK (:has-default t :has-comment t :has-keyword t :many-faces t)"#]],
+        expect![[r##"OK (:keyword "#268bd2" :string "#2aa198" :type "#df005f")"##]],
+    )
+}
+
+/// Assert the background colors declared for region and cursor.
+fn selection_faces_declare_background_colors() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "selection_faces_declare_background_colors",
+        r####"
+(progn
+  (load-theme 'spacemacs-dark t)
+  (list :region (spc-theme-color 'region :background)
+        :cursor (spc-theme-color 'cursor :background)))
+"####,
+        expect![[r##"OK (:region "#444444" :cursor "#d0d0d0")"##]],
     )
 }
 
 pub(super) fn workflow_batch_cases() -> Vec<ParityBatchCase> {
     vec![
-        defcustoms_match_upstream_defaults(),
-        load_theme_registers_and_enables_spacemacs_dark(),
-        theme_settings_include_default_and_font_lock_faces(),
+        default_face_declares_palette_colors(),
+        font_lock_faces_declare_syntax_colors(),
+        selection_faces_declare_background_colors(),
     ]
 }

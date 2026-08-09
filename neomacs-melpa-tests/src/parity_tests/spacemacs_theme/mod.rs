@@ -9,6 +9,12 @@ mod workflows;
 const SPACEMACS_THEME_TEST_TIMEOUT: Duration = Duration::from_secs(180);
 const SPACEMACS_THEME_TEST_PRELUDE: &str = r####"
 (require 'cl-lib)
+;; Batch-safe palette reader: live face-attribute is `unspecified' without a
+;; display, so read colors straight from the theme's declared face specs.
+(defun spc-theme-color (face kw)
+  (let ((entry (cl-some (lambda (e) (and (consp e) (eq (cadr e) face) e))
+                        (get 'spacemacs-dark 'theme-settings))))
+    (when entry (plist-get (cadr (car (cadddr entry))) kw))))
 "####;
 
 fn spacemacs_theme_oracle() -> CachedMelpaOracle {
