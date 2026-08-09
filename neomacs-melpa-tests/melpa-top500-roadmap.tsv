@@ -384,7 +384,7 @@ rank	package	downloads	status
 383	git-rebase-mode	255634	todo
 384	pipenv	255250	todo
 385	gist	254696	todo
-386	material-theme	253079	todo
+386	material-theme	253079	covered
 387	helm-org-rifle	250130	todo
 388	elixir-mode	249963	covered
 389	cargo	249399	todo

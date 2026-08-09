@@ -6025,3 +6025,7 @@ pub const GROOVY_MODE_MELPA_PIN: (&str, &str) = ("groovy-mode", "20230317.2233")
 /// The exact dracula-theme package selected for practical theme palette parity.
 /// Pinned to upstream commit `df2be56b03fcbbafcc211013ff93ba50e34a4397`.
 pub const DRACULA_THEME_MELPA_PIN: (&str, &str) = ("dracula-theme", "20260719.2250");
+
+/// The exact material-theme package selected for practical theme palette parity.
+/// Pinned to upstream commit `6823009bc92f82aa3a90e27e1009f7da8e87b648`.
+pub const MATERIAL_THEME_MELPA_PIN: (&str, &str) = ("material-theme", "20210904.1426");

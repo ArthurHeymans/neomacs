@@ -469,6 +469,7 @@ mod makey;
 mod marginalia;
 mod markdown_mode;
 mod markdown_toc;
+mod material_theme;
 mod math_symbol_lists;
 mod maude_mode;
 mod memoize;
