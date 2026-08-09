@@ -3711,15 +3711,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "neomacs-melpa-test-support"
+version = "0.0.14"
+dependencies = [
+ "fs4",
+ "sha2",
+ "tempfile",
+ "wait-timeout",
+]
+
+[[package]]
 name = "neomacs-melpa-tests"
 version = "0.0.14"
 dependencies = [
  "expect-test",
  "fs4",
+ "neomacs-melpa-test-support",
  "neomacs-test-oracle",
+ "neomacs-tui-tests",
  "sha2",
  "tempfile",
- "wait-timeout",
 ]
 
 [[package]]
@@ -3763,6 +3774,7 @@ version = "0.0.14"
 dependencies = [
  "libc",
  "pty-process",
+ "tempfile",
  "vt100",
 ]
 

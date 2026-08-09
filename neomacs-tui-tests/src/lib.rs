@@ -27,6 +27,10 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+mod launch;
+
+pub use launch::TuiLaunch;
+
 // ── Session ──────────────────────────────────────────────────────────
 
 /// Default terminal size for tests.
@@ -53,6 +57,7 @@ pub struct TuiSession {
     parser: vt100::Parser,
     recent_output: Vec<u8>,
     home: PathBuf,
+    owned_dirs: Vec<PathBuf>,
     pub name: String,
 }
 
@@ -97,16 +102,42 @@ impl TuiSession {
 
     /// Spawn `cmd` (e.g. `"emacs -nw -Q"`) in a new PTY.
     pub fn spawn(cmd: &str, name: &str) -> Self {
+        Self::spawn_launch(TuiLaunch::from(cmd), name)
+    }
+
+    /// Spawn a structured process description in a new PTY.
+    pub fn spawn_launch(launch: TuiLaunch, name: &str) -> Self {
         let (pty, pts) = pty_process::blocking::open().expect("open pty");
         pty.resize(pty_process::Size::new(ROWS, COLS))
             .expect("resize pty");
 
-        let parts: Vec<&str> = cmd.split_whitespace().collect();
-        let mut command = pty_process::blocking::Command::new(parts[0]);
-        for arg in &parts[1..] {
+        let supplied_home = launch.environment_value("HOME").map(PathBuf::from);
+        let supplied_tmp = launch.environment_value("TMPDIR").map(PathBuf::from);
+        let home = supplied_home
+            .clone()
+            .unwrap_or_else(|| Self::unique_home_dir(name));
+        let tmp = supplied_tmp
+            .clone()
+            .unwrap_or_else(|| Self::unique_tmp_dir(name));
+        let mut owned_dirs = Vec::new();
+        if supplied_home.is_none() {
+            owned_dirs.push(home.clone());
+        }
+        if supplied_tmp.is_none() {
+            owned_dirs.push(tmp.clone());
+        }
+
+        let TuiLaunch {
+            program,
+            args,
+            env: environment,
+            env_remove: removed_environment,
+            current_dir,
+        } = launch;
+        let mut command = pty_process::blocking::Command::new(program);
+        for arg in args {
             command = command.arg(arg);
         }
-        let home = Self::unique_home_dir(name);
         command = command
             .env("TERM", "screen-256color")
             .env("COLUMNS", COLS.to_string())
@@ -114,7 +145,7 @@ impl TuiSession {
             // Prevent user config from interfering while also isolating
             // concurrent TUI tests from one another.
             .env("HOME", &home)
-            .env("TMPDIR", Self::unique_tmp_dir(name));
+            .env("TMPDIR", &tmp);
         for var in [
             "RUST_LOG",
             "NEOMACS_LOG_FILE",
@@ -124,6 +155,15 @@ impl TuiSession {
             if let Some(value) = std::env::var_os(var) {
                 command = command.env(var, value);
             }
+        }
+        for name in removed_environment {
+            command = command.env_remove(name);
+        }
+        for (name, value) in environment {
+            command = command.env(name, value);
+        }
+        if let Some(current_dir) = current_dir {
+            command = command.current_dir(current_dir);
         }
 
         let child = command.spawn(pts).expect("spawn");
@@ -136,6 +176,7 @@ impl TuiSession {
             parser,
             recent_output: Vec::new(),
             home,
+            owned_dirs,
             name: name.to_string(),
         }
     }
@@ -146,44 +187,22 @@ impl TuiSession {
         // native compiler can fail after startup and pop *Warnings*, which
         // pollutes the rendered screen unrelated to the command under test.
         let quiet_native_comp = "--eval=(progn(set'native-comp-jit-compilation())(set'native-comp-async-report-warnings-errors'silent)(push'(native-compiler)warning-suppress-types)(mapc'kill-process(process-list)))";
-        let cmd = if extra_args.is_empty() {
-            format!("emacs -nw -Q -no-comp-spawn {quiet_native_comp}")
-        } else {
-            format!("emacs -nw -Q -no-comp-spawn {quiet_native_comp} {extra_args}")
-        };
-        Self::spawn(&cmd, "GNU")
+        let launch = TuiLaunch::new("emacs")
+            .args(["-nw", "-Q", "-no-comp-spawn", quiet_native_comp])
+            .args(extra_args.split_whitespace());
+        Self::spawn_launch(launch, "GNU")
     }
 
     /// Spawn GNU Emacs in TUI mode WITHOUT `-Q`, loading the user's init
     /// file (e.g. Doom config).  Uses the real HOME so Doom is found.
     /// For face/theme comparison tests.
     pub fn gnu_emacs_with_init(extra_args: &str) -> Self {
-        let (pty, pts) = pty_process::blocking::open().expect("open pty");
-        pty.resize(pty_process::Size::new(ROWS, COLS))
-            .expect("resize pty");
         let real_home = PathBuf::from(std::env::var("HOME").expect("HOME"));
-        let mut command = pty_process::blocking::Command::new("emacs");
-        command = command.arg("-nw");
-        if !extra_args.is_empty() {
-            for arg in extra_args.split_whitespace() {
-                command = command.arg(arg);
-            }
-        }
-        command = command.env("TERM", "screen-256color");
-        command = command.env("COLUMNS", COLS.to_string());
-        command = command.env("LINES", ROWS.to_string());
-        command = command.env("HOME", &real_home);
-        command = command.env("TMPDIR", Self::unique_tmp_dir("GNU"));
-        let child = command.spawn(pts).expect("spawn");
-        let parser = vt100::Parser::new(ROWS, COLS, 0);
-        TuiSession {
-            pty,
-            _child: child,
-            parser,
-            recent_output: Vec::new(),
-            home: real_home,
-            name: "GNU".into(),
-        }
+        let launch = TuiLaunch::new("emacs")
+            .arg("-nw")
+            .args(extra_args.split_whitespace())
+            .env("HOME", real_home.as_os_str());
+        Self::spawn_launch(launch, "GNU")
     }
 
     /// Spawn Neomacs in TUI mode WITHOUT `-Q` so the user's init file
@@ -198,32 +217,12 @@ impl TuiSession {
             "neomacs binary not found at {}",
             bin.display()
         );
-        let (pty, pts) = pty_process::blocking::open().expect("open pty");
-        pty.resize(pty_process::Size::new(ROWS, COLS))
-            .expect("resize pty");
         let real_home = PathBuf::from(std::env::var("HOME").expect("HOME"));
-        let mut command = pty_process::blocking::Command::new(&bin);
-        command = command.arg("-nw");
-        if !extra_args.is_empty() {
-            for arg in extra_args.split_whitespace() {
-                command = command.arg(arg);
-            }
-        }
-        command = command.env("TERM", "screen-256color");
-        command = command.env("COLUMNS", COLS.to_string());
-        command = command.env("LINES", ROWS.to_string());
-        command = command.env("HOME", &real_home);
-        command = command.env("TMPDIR", Self::unique_tmp_dir("NEO"));
-        let child = command.spawn(pts).expect("spawn");
-        let parser = vt100::Parser::new(ROWS, COLS, 0);
-        TuiSession {
-            pty,
-            _child: child,
-            parser,
-            recent_output: Vec::new(),
-            home: real_home,
-            name: "NEO".into(),
-        }
+        let launch = TuiLaunch::new(bin.as_os_str())
+            .arg("-nw")
+            .args(extra_args.split_whitespace())
+            .env("HOME", real_home.as_os_str());
+        Self::spawn_launch(launch, "NEO")
     }
 
     /// Spawn Neomacs in TUI mode.
@@ -242,12 +241,10 @@ impl TuiSession {
              `cargo build --release -p neomacs` for release, or set NEOMACS_TUI_NEOMACS_BIN.",
             bin.display()
         );
-        let cmd = if extra_args.is_empty() {
-            format!("{} -nw -Q", bin.display())
-        } else {
-            format!("{} -nw -Q {extra_args}", bin.display())
-        };
-        Self::spawn(&cmd, "NEO")
+        let launch = TuiLaunch::new(bin.as_os_str())
+            .args(["-nw", "-Q"])
+            .args(extra_args.split_whitespace());
+        Self::spawn_launch(launch, "NEO")
     }
 
     /// Read PTY output until the editor has been quiet for
@@ -467,7 +464,9 @@ impl Drop for TuiSession {
         // Best-effort kill
         let _ = self._child.kill();
         let _ = self._child.wait();
-        let _ = std::fs::remove_dir_all(&self.home);
+        for directory in &self.owned_dirs {
+            let _ = std::fs::remove_dir_all(directory);
+        }
     }
 }
 
@@ -525,10 +524,49 @@ pub fn emacs_key(key: &str) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{active_cargo_profile_dir, emacs_key, neomacs_binary_path_from_override};
+    use super::{
+        TuiLaunch, TuiSession, active_cargo_profile_dir, emacs_key,
+        neomacs_binary_path_from_override,
+    };
     use std::ffi::OsString;
     use std::fmt::Write as _;
     use std::path::{Path, PathBuf};
+    use std::time::Duration;
+
+    #[test]
+    fn structured_launch_preserves_spaces_in_arguments_and_environment() {
+        let launch = TuiLaunch::new("sh")
+            .args(["-c", "printf '%s' \"$NEOMACS_TUI_STRUCTURED_VALUE\""])
+            .env("NEOMACS_TUI_STRUCTURED_VALUE", "alpha beta");
+        let mut session = TuiSession::spawn_launch(launch, "STRUCTURED");
+
+        session.read_until(Duration::from_secs(2), |grid| {
+            grid.iter().any(|row| row.contains("alpha beta"))
+        });
+
+        assert!(
+            session
+                .text_grid()
+                .iter()
+                .any(|row| row.contains("alpha beta"))
+        );
+    }
+
+    #[test]
+    fn structured_launch_never_deletes_a_caller_owned_home() {
+        let external_home = tempfile::tempdir().expect("create caller-owned HOME");
+        let sentinel = external_home.path().join("keep-me");
+        std::fs::write(&sentinel, "owned by caller").expect("write HOME sentinel");
+        let launch = TuiLaunch::new("sh")
+            .args(["-c", "printf done"])
+            .env("HOME", external_home.path().as_os_str());
+
+        let mut session = TuiSession::spawn_launch(launch, "EXTERNAL-HOME");
+        session.read(Duration::from_secs(1));
+        drop(session);
+
+        assert!(sentinel.is_file(), "TUI session deleted caller-owned HOME");
+    }
 
     #[test]
     fn neomacs_binary_path_prefers_explicit_override() {

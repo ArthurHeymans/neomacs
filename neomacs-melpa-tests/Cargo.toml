@@ -11,10 +11,13 @@ publish = false
 # `package-install`; Rust only orchestrates isolated processes and verifies
 # pinned fixture checksums.
 neomacs-test-oracle.workspace = true
+neomacs-melpa-test-support.workspace = true
 fs4.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
-wait-timeout.workspace = true
 
 [dev-dependencies]
 expect-test.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+neomacs-tui-tests.workspace = true

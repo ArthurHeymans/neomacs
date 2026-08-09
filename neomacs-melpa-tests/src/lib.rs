@@ -5,26 +5,26 @@
 //! packages. The same scenario can run against Neomacs or GNU Emacs and
 //! against either revision-pinned package source or a local fixture archive.
 
-use std::ffi::OsString;
 use std::fmt;
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
+use std::process::{Command, Output};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use neomacs_melpa_test_support::{
+    CommandError, configure_process_environment, elisp_string, output_with_timeout,
+    package_preparation_run_id, publish_package_preparation_failure, sanitize_label,
+};
+pub use neomacs_melpa_test_support::{
+    EmacsRuntime, LockedPackageSource, MelpaSandbox, PackageActivation, PreparedPackageSet,
+    SHALLOW_GIT_FETCH_ARGS, SourceBuild, locked_melpa_install_plan, locked_melpa_source,
+    locked_melpa_sources, neomacs_binary, package_activation_elisp,
+    preflight_locked_melpa_packages, prepare_cached_locked_melpa_package, workspace_root,
+};
 use neomacs_test_oracle::{
     BatchProbe, EvalOutcome, ExpectedOutcome, extract_marked_batch_protocol,
     extract_marked_outcome, wrap_elisp_batch_outcomes, wrap_elisp_outcome,
-};
-use wait_timeout::ChildExt;
-
-mod source_lock;
-
-pub use source_lock::{
-    LockedPackageSource, SourceBuild, locked_melpa_install_plan, locked_melpa_source,
-    locked_melpa_sources, preflight_locked_melpa_packages, prepare_cached_locked_melpa_package,
 };
 
 const RESULT_MARKER: &str = "NEOMACS-MELPA-RESULT:";
@@ -33,7 +33,7 @@ const BATCH_BEGIN_MARKER: &str = "NEOMACS-MELPA-BEGIN:";
 const BATCH_COMPLETE_MARKER: &str = "NEOMACS-MELPA-COMPLETE:";
 const TRANSPORTED_FORM_FUNCTION: &str = "neomacs--melpa-oracle-transported-form";
 const INSTALLED_MARKER: &str = "NEOMACS-MELPA-INSTALLED:";
-const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
+const DEFAULT_PROCESS_TIMEOUT: Duration = neomacs_melpa_test_support::DEFAULT_PROCESS_TIMEOUT;
 
 #[derive(Clone, Copy)]
 struct PackageArchiveSpec {
@@ -3347,193 +3347,6 @@ pub const WINDOW_PURPOSE_MELPA_PIN: (&str, &str) = ("window-purpose", "20241207.
 /// `098249c65042ee0308b8236d1ee838c8da8fdf25`.
 pub const WINUM_MELPA_PIN: (&str, &str) = ("winum", "20190911.1607");
 
-/// Resolve the checkout used by a normal Cargo run or an extracted Nextest
-/// archive.
-pub fn workspace_root() -> PathBuf {
-    if let Some(root) = std::env::var_os("NEXTEST_WORKSPACE_ROOT") {
-        return PathBuf::from(root);
-    }
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("neomacs-melpa-tests is a workspace member")
-        .to_path_buf()
-}
-
-/// Per-scenario filesystem and subprocess isolation.
-pub struct MelpaSandbox {
-    case_root: tempfile::TempDir,
-    home: PathBuf,
-    tmp: PathBuf,
-}
-
-impl MelpaSandbox {
-    /// Create a sandbox below `<workspace>/tmp/melpa`.
-    pub fn new(label: &str) -> Result<Self, String> {
-        let base = workspace_root().join("tmp/melpa");
-        fs::create_dir_all(&base).map_err(|error| {
-            format!(
-                "failed to create MELPA scratch directory {}: {error}",
-                base.display()
-            )
-        })?;
-        let prefix = format!("{}-", sanitize_label(label));
-        let case_root = tempfile::Builder::new()
-            .prefix(&prefix)
-            .tempdir_in(&base)
-            .map_err(|error| {
-                format!(
-                    "failed to create MELPA scenario directory in {}: {error}",
-                    base.display()
-                )
-            })?;
-        let home = case_root.path().join("home");
-        let tmp = case_root.path().join("tmp");
-        let xdg_config = case_root.path().join("xdg/config");
-        let xdg_cache = case_root.path().join("xdg/cache");
-        let xdg_data = case_root.path().join("xdg/data");
-        let xdg_state = case_root.path().join("xdg/state");
-        for directory in [&home, &tmp, &xdg_config, &xdg_cache, &xdg_data, &xdg_state] {
-            fs::create_dir_all(directory).map_err(|error| {
-                format!(
-                    "failed to create MELPA sandbox directory {}: {error}",
-                    directory.display()
-                )
-            })?;
-        }
-        fs::create_dir_all(home.join(".emacs.d"))
-            .map_err(|error| format!("failed to create isolated .emacs.d: {error}"))?;
-
-        Ok(Self {
-            case_root,
-            home,
-            tmp,
-        })
-    }
-
-    pub fn root(&self) -> &Path {
-        self.case_root.path()
-    }
-
-    pub fn home(&self) -> &Path {
-        &self.home
-    }
-
-    pub fn tmp_dir(&self) -> &Path {
-        &self.tmp
-    }
-
-    /// Apply the deterministic process environment shared by install and
-    /// restart/probe processes.
-    pub fn configure(&self, command: &mut Command) {
-        configure_process_environment(command, self.root(), &self.home, &self.tmp);
-    }
-}
-
-fn configure_process_environment(command: &mut Command, root: &Path, home: &Path, tmp: &Path) {
-    command
-        .current_dir(root)
-        .env("HOME", home)
-        .env("TMPDIR", tmp)
-        .env("TMP", tmp)
-        .env("TEMP", tmp)
-        .env("XDG_CONFIG_HOME", root.join("xdg/config"))
-        .env("XDG_CACHE_HOME", root.join("xdg/cache"))
-        .env("XDG_DATA_HOME", root.join("xdg/data"))
-        .env("XDG_STATE_HOME", root.join("xdg/state"))
-        .env("LANG", "C.UTF-8")
-        .env("LC_ALL", "C.UTF-8")
-        .env("TZ", "UTC")
-        .env("USER", "melpa-test")
-        .env("LOGNAME", "melpa-test")
-        .env("HOSTNAME", "melpa-host")
-        .env("EMAIL", "melpa-test@melpa-host")
-        .env("TERM", "dumb")
-        .env("NEOMACS_TEST_SANDBOX_ROOT", root)
-        .env("NEOMACS_TEST_WORKSPACE_ROOT", workspace_root())
-        .env_remove("EMACSLOADPATH")
-        .env("GIT_CEILING_DIRECTORIES", workspace_root());
-}
-
-fn sanitize_label(label: &str) -> String {
-    let sanitized = label
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || character == '-' {
-                character
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>();
-    if sanitized.is_empty() {
-        "scenario".to_string()
-    } else {
-        sanitized
-    }
-}
-
-/// An editor executable that can run a package scenario.
-#[derive(Clone, Debug)]
-pub struct EmacsRuntime {
-    pub name: String,
-    pub executable: PathBuf,
-    extra_env: Vec<(OsString, OsString)>,
-    timeout: Duration,
-}
-
-impl EmacsRuntime {
-    pub fn new(name: impl Into<String>, executable: impl Into<PathBuf>) -> Self {
-        Self {
-            name: name.into(),
-            executable: executable.into(),
-            extra_env: Vec::new(),
-            timeout: DEFAULT_PROCESS_TIMEOUT,
-        }
-    }
-
-    pub fn neomacs() -> Self {
-        Self::new("neomacs", neomacs_binary())
-    }
-
-    /// GNU Emacs oracle selected explicitly by environment, then from the
-    /// developer's adjacent source checkout, and finally from `PATH`.
-    pub fn gnu_emacs() -> Self {
-        for variable in [
-            "NEOMACS_MELPA_ORACLE_EMACS",
-            "NEOVM_ORACLE_EMACS",
-            "ORACLE_EMACS",
-        ] {
-            if let Some(path) = std::env::var_os(variable) {
-                return Self::new("gnu-emacs", PathBuf::from(path));
-            }
-        }
-        let source_checkout =
-            PathBuf::from("/home/exec/Projects/github.com/emacs-mirror/emacs/src/emacs");
-        if source_checkout.is_file() {
-            return Self::new("gnu-emacs", source_checkout);
-        }
-        Self::new("gnu-emacs", "emacs")
-    }
-
-    pub fn with_env(mut self, name: impl Into<OsString>, value: impl Into<OsString>) -> Self {
-        self.extra_env.push((name.into(), value.into()));
-        self
-    }
-
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
-        self
-    }
-
-    fn command(&self) -> Command {
-        let mut command = Command::new(&self.executable);
-        for (name, value) in &self.extra_env {
-            command.env(name, value);
-        }
-        command
-    }
-}
-
 /// Package archive used by a scenario.
 #[derive(Clone, Debug)]
 pub struct PackageSource {
@@ -3953,27 +3766,8 @@ pub struct OracleBatchReport {
 
 /// Differential oracle for one exact package cached below `./tmp`.
 pub struct CachedPackageOracle {
-    package_name: String,
-    package_user_dir: PathBuf,
-    package_directory_list: Vec<PathBuf>,
-    package_load_list: Vec<(String, String)>,
-    source_file: PathBuf,
-    activation: PackageActivation,
-    prelude: String,
+    packages: PreparedPackageSet,
     timeout: Duration,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum PackageActivation {
-    SourceFile,
-    InstalledAutoloads,
-}
-
-fn package_activation_elisp(activation: PackageActivation) -> &'static str {
-    match activation {
-        PackageActivation::SourceFile => r#"(load (getenv "NEOMACS_PACKAGE_SOURCE") nil t t)"#,
-        PackageActivation::InstalledAutoloads => "nil",
-    }
 }
 
 /// MELPA-focused name retained for package-specific parity modules.
@@ -3991,8 +3785,11 @@ impl CachedPackageOracle {
         source_file_name: &str,
     ) -> Result<Self, String> {
         validate_cached_source_file_name("source-built package", source_file_name)?;
-        let package_dir = prepare_cached_locked_melpa_package(gnu_emacs, package)?;
-        Self::from_package_dir(package, source_file_name, package_dir)
+        let packages = PreparedPackageSet::from_locked_melpa(gnu_emacs, package, source_file_name)?;
+        Ok(Self {
+            packages,
+            timeout: DEFAULT_PROCESS_TIMEOUT,
+        })
     }
 
     /// Prepare one pinned GNU ELPA package and select its Elisp source file.
@@ -4010,40 +3807,22 @@ impl CachedPackageOracle {
         source_file_name: &str,
         package_dir: PathBuf,
     ) -> Result<Self, String> {
-        let source_file = package_dir.join(source_file_name);
-        if !source_file.is_file() {
-            return Err(format!(
-                "cached {} source `{source_file_name}` is missing below {}",
-                package.0,
-                package_dir.display()
-            ));
-        }
-        let package_user_dir = package_dir
-            .parent()
-            .expect("cached package directory is below an ELPA directory")
-            .to_path_buf();
         Ok(Self {
-            package_name: package.0.to_string(),
-            package_user_dir,
-            package_directory_list: Vec::new(),
-            package_load_list: vec![(package.0.to_string(), package.1.to_string())],
-            source_file,
-            activation: PackageActivation::SourceFile,
-            prelude: String::new(),
+            packages: PreparedPackageSet::from_package_dir(package, source_file_name, package_dir)?,
             timeout: DEFAULT_PROCESS_TIMEOUT,
         })
     }
 
     /// Evaluate an additional setup form before loading the package source.
     pub fn with_prelude(mut self, prelude: impl Into<String>) -> Self {
-        self.prelude = prelude.into();
+        self.packages = self.packages.with_prelude(prelude);
         self
     }
 
     /// Exercise the package state established by `package-initialize` without
     /// loading the selected source file afterward.
     pub fn with_installed_autoloads(mut self) -> Self {
-        self.activation = PackageActivation::InstalledAutoloads;
+        self.packages = self.packages.with_installed_autoloads();
         self
     }
 
@@ -4052,28 +3831,9 @@ impl CachedPackageOracle {
         package: (&str, &str),
         package_dir: PathBuf,
     ) -> Result<Self, String> {
-        let package_directory = package_dir
-            .parent()
-            .expect("cached package directory is below an ELPA directory")
-            .to_path_buf();
-        if !self.package_directory_list.contains(&package_directory) {
-            self.package_directory_list.push(package_directory);
-        }
-        if let Some((_, pinned_version)) = self
-            .package_load_list
-            .iter()
-            .find(|(pinned_name, _)| pinned_name == package.0)
-        {
-            if pinned_version != package.1 {
-                return Err(format!(
-                    "package `{}` is already pinned to version `{pinned_version}`, cannot also pin `{}`",
-                    package.0, package.1
-                ));
-            }
-        } else {
-            self.package_load_list
-                .push((package.0.to_string(), package.1.to_string()));
-        }
+        self.packages = self
+            .packages
+            .with_prepared_dependency(package, package_dir)?;
         Ok(self)
     }
 
@@ -4096,6 +3856,18 @@ impl CachedPackageOracle {
         self
     }
 
+    /// The immutable package setup shared by batch and interactive adapters.
+    pub fn prepared_packages(&self) -> &PreparedPackageSet {
+        &self.packages
+    }
+
+    fn configured_runtime(&self, mut runtime: EmacsRuntime) -> EmacsRuntime {
+        for (name, value) in self.packages.process_environment() {
+            runtime = runtime.with_env(name, value);
+        }
+        runtime.with_timeout(self.timeout)
+    }
+
     /// Run a parity case that must complete with a value in both editors.
     pub fn run_value(&self, name: &str, probe: &str) -> Result<ElispOracleReport, String> {
         self.run_expected(name, probe, ExpectedOutcome::Value)
@@ -4114,25 +3886,13 @@ impl CachedPackageOracle {
         probe: &str,
         expected: ExpectedOutcome,
     ) -> Result<OracleBatchReport, String> {
-        let neomacs = EmacsRuntime::neomacs()
-            .with_env(
-                "NEOMACS_PACKAGE_USER_DIR",
-                self.package_user_dir.as_os_str(),
-            )
-            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
-            .with_timeout(self.timeout);
-        let gnu_emacs = EmacsRuntime::gnu_emacs()
-            .with_env(
-                "NEOMACS_PACKAGE_USER_DIR",
-                self.package_user_dir.as_os_str(),
-            )
-            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
-            .with_timeout(self.timeout);
+        let neomacs = self.configured_runtime(EmacsRuntime::neomacs());
+        let gnu_emacs = self.configured_runtime(EmacsRuntime::gnu_emacs());
         let observed = run_elisp_oracle_case(
             &neomacs,
             &gnu_emacs,
             name,
-            &self.package_setup_elisp(),
+            &self.packages.startup_elisp(),
             probe,
         )?;
         let mut failures = Vec::new();
@@ -4179,7 +3939,7 @@ impl CachedPackageOracle {
         if cases.is_empty() {
             return Err(format!(
                 "{} batch `{batch_name}` requires at least one probe",
-                self.package_name
+                self.packages.package_name()
             ));
         }
         let probes: Vec<BatchProbe<'_>> = cases
@@ -4189,21 +3949,9 @@ impl CachedPackageOracle {
                 probe: case.probe,
             })
             .collect();
-        let neomacs = EmacsRuntime::neomacs()
-            .with_env(
-                "NEOMACS_PACKAGE_USER_DIR",
-                self.package_user_dir.as_os_str(),
-            )
-            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
-            .with_timeout(self.timeout);
-        let gnu_emacs = EmacsRuntime::gnu_emacs()
-            .with_env(
-                "NEOMACS_PACKAGE_USER_DIR",
-                self.package_user_dir.as_os_str(),
-            )
-            .with_env("NEOMACS_PACKAGE_SOURCE", self.source_file.as_os_str())
-            .with_timeout(self.timeout);
-        let setup = self.package_setup_elisp();
+        let neomacs = self.configured_runtime(EmacsRuntime::neomacs());
+        let gnu_emacs = self.configured_runtime(EmacsRuntime::gnu_emacs());
+        let setup = self.packages.startup_elisp();
         let mut report = run_elisp_oracle_batch(&neomacs, &gnu_emacs, batch_name, &setup, &probes)?;
         for (case, observed) in cases.iter().zip(report.cases.iter()) {
             for (editor, actual) in [
@@ -4223,43 +3971,6 @@ impl CachedPackageOracle {
         Ok(report)
     }
 
-    fn package_setup_elisp(&self) -> String {
-        let package_directory_list = self
-            .package_directory_list
-            .iter()
-            .map(|directory| elisp_string(&directory.to_string_lossy()))
-            .collect::<Vec<_>>()
-            .join(" ");
-        let package_load_list = self
-            .package_load_list
-            .iter()
-            .map(|(name, version)| {
-                format!(
-                    "(list (intern {}) {})",
-                    elisp_string(name),
-                    elisp_string(version)
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
-        format!(
-            r##"(progn
-                   (require 'package)
-                   (setq package-user-dir
-                         (getenv "NEOMACS_PACKAGE_USER_DIR")
-                         package-directory-list
-                         (list {package_directory_list})
-                         package-load-list
-                         (list 'all {package_load_list})
-                         load-suffixes '(".el"))
-                   (package-initialize)
-                   {}
-                   {})"##,
-            self.prelude,
-            package_activation_elisp(self.activation)
-        )
-    }
-
     fn run_expected(
         &self,
         name: &str,
@@ -4270,7 +3981,7 @@ impl CachedPackageOracle {
         if !report.failures.is_empty() {
             return Err(format!(
                 "{} parity case `{name}` failed:\n{}",
-                self.package_name,
+                self.packages.package_name(),
                 report
                     .failures
                     .iter()
@@ -4486,28 +4197,6 @@ pub fn prepare_cached_gnu_elpa_package(
     package: (&str, &str),
 ) -> Result<PathBuf, String> {
     prepare_cached_package(gnu_emacs, package, GNU_ELPA_ARCHIVE)
-}
-
-fn package_preparation_run_id() -> String {
-    std::env::var("NEXTEST_RUN_ID").unwrap_or_else(|_| format!("process-{}", std::process::id()))
-}
-
-fn publish_package_preparation_failure(
-    failed_marker: &Path,
-    failure_prefix: &str,
-    error: String,
-) -> String {
-    let marker_tmp = failed_marker.with_extension(format!("{}.tmp", std::process::id()));
-    let contents = format!("{failure_prefix}{error}");
-    if let Err(cache_error) =
-        fs::write(&marker_tmp, contents).and_then(|()| fs::rename(&marker_tmp, failed_marker))
-    {
-        return format!(
-            "{error}\nfailed to publish shared package preparation failure {}: {cache_error}",
-            failed_marker.display()
-        );
-    }
-    error
 }
 
 /// Build one exact Tree-sitter grammar into a cross-process cache below
@@ -5734,71 +5423,6 @@ fn command_error_message(
     }
 }
 
-enum CommandError {
-    Launch(std::io::Error),
-    TimedOut(Output),
-    Capture(String),
-}
-
-fn output_with_timeout(command: &mut Command, timeout: Duration) -> Result<Output, CommandError> {
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command.spawn().map_err(CommandError::Launch)?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| CommandError::Capture("stdout pipe was not created".to_string()))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| CommandError::Capture("stderr pipe was not created".to_string()))?;
-    let stdout_reader = thread::spawn(move || read_pipe(stdout));
-    let stderr_reader = thread::spawn(move || read_pipe(stderr));
-
-    let status = match child.wait_timeout(timeout).map_err(CommandError::Launch)? {
-        Some(status) => status,
-        None => {
-            let _ = child.kill();
-            let status = child.wait().map_err(CommandError::Launch)?;
-            let stdout = stdout_reader
-                .join()
-                .map_err(|_| CommandError::Capture("stdout reader panicked".to_string()))?
-                .map_err(|error| {
-                    CommandError::Capture(format!("failed to read stdout: {error}"))
-                })?;
-            let stderr = stderr_reader
-                .join()
-                .map_err(|_| CommandError::Capture("stderr reader panicked".to_string()))?
-                .map_err(|error| {
-                    CommandError::Capture(format!("failed to read stderr: {error}"))
-                })?;
-            return Err(CommandError::TimedOut(Output {
-                status,
-                stdout,
-                stderr,
-            }));
-        }
-    };
-    let stdout = stdout_reader
-        .join()
-        .map_err(|_| CommandError::Capture("stdout reader panicked".to_string()))?
-        .map_err(|error| CommandError::Capture(format!("failed to read stdout: {error}")))?;
-    let stderr = stderr_reader
-        .join()
-        .map_err(|_| CommandError::Capture("stderr reader panicked".to_string()))?
-        .map_err(|error| CommandError::Capture(format!("failed to read stderr: {error}")))?;
-    Ok(Output {
-        status,
-        stdout,
-        stderr,
-    })
-}
-
-fn read_pipe(mut pipe: impl Read) -> std::io::Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    pipe.read_to_end(&mut bytes)?;
-    Ok(bytes)
-}
-
 fn phase_report(phase: ScenarioPhase, duration: Duration, output: Output) -> PhaseReport {
     PhaseReport {
         phase,
@@ -5925,10 +5549,6 @@ fn format_installed_packages(installed: &[InstalledPackage]) -> String {
         .join(", ")
 }
 
-pub(crate) fn elisp_string(value: &str) -> String {
-    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
-}
-
 fn check_error_markers(stdout: &str, stderr: &str) -> Result<(), String> {
     for needle in [
         "wrong-type-argument",
@@ -5947,15 +5567,11 @@ fn check_error_markers(stdout: &str, stderr: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// The path to the `neomacs` binary (override with `NEOMACS_BIN`).
-pub fn neomacs_binary() -> PathBuf {
-    std::env::var_os("NEOMACS_BIN")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| workspace_root().join("target/release/neomacs"))
-}
-
 #[cfg(test)]
 mod parity_tests;
+
+#[cfg(all(test, unix))]
+mod tui_parity_tests;
 
 /// The exact dashboard package selected for practical startup screen widgets and buffer name.
 /// MELPA built this archive from upstream commit `176d641a55543bda1f0c7506fb954702350c1857`.

@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 
 use sha2::{Digest, Sha256};
 
-use super::{
+use crate::{
     CommandError, EmacsRuntime, configure_process_environment, elisp_string, output_with_timeout,
     package_preparation_run_id, publish_package_preparation_failure, workspace_root,
 };
@@ -18,7 +18,7 @@ const MELPA_RECIPE_REPOSITORY: &str = "https://github.com/melpa/melpa";
 const MELPA_RECIPE_REVISION: &str = "517749e477c16c0437cae029be71e672061a6c19";
 const PACKAGE_BUILD_REPOSITORY: &str = "https://github.com/melpa/package-build";
 const PACKAGE_BUILD_REVISION: &str = "d31dec67631f14ef8be3ad6438e172a07298082b";
-pub(crate) const SHALLOW_GIT_FETCH_ARGS: &[&str] = &["fetch", "--depth=1", "--no-tags"];
+pub const SHALLOW_GIT_FETCH_ARGS: &[&str] = &["fetch", "--depth=1", "--no-tags"];
 
 type PackagePin = (&'static str, &'static str);
 
@@ -1154,7 +1154,7 @@ fn prepare_cached_source_artifact_with_tools(
             }
         };
         let build_script =
-            workspace_root().join("neomacs-melpa-tests/elisp/build-package-from-source.el");
+            workspace_root().join("neomacs-melpa-test-support/elisp/build-package-from-source.el");
         let mut command = gnu_emacs.command();
         configure_process_environment(&mut command, &root, &home, &editor_tmp);
         command

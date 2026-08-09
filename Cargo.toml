@@ -13,6 +13,7 @@ members = [
     "neovm-worker",
     "neomacs-tui-tests",
     "neomacs-gui-tests",
+    "neomacs-melpa-test-support",
     "neomacs-melpa-tests",
     "neomacs-test-oracle",
     "xtask",
@@ -57,6 +58,8 @@ neomacs-layout-engine = { path = "neomacs-layout-engine", default-features = fal
 neomacs-renderer-wgpu = { path = "neomacs-renderer-wgpu", default-features = false }
 neomacs-diagnostics = { path = "neomacs-diagnostics", default-features = false }
 neomacs-test-oracle = { path = "neomacs-test-oracle" }
+neomacs-melpa-test-support = { path = "neomacs-melpa-test-support" }
+neomacs-tui-tests = { path = "neomacs-tui-tests" }
 
 # Cranelift is one API-coupled release train: these crates exchange nominal IR
 # types and must move together. Dependabot groups the family, and xtask verifies

@@ -93,12 +93,13 @@ keymap bindings of real commands, file layout, and so on).
 
 ## Package lock
 
-`melpa-package-lock.tsv` is the single source of truth for reproducible MELPA
-inputs. Each sorted package row owns its version, immutable source revisions,
-build rule, and a sorted comma-separated list of direct dependency names (`-`
-means none). Every dependency must name another row; because each name has
-exactly one pinned version, dependency versions are resolved from that row
-instead of being duplicated on each edge.
+`../neomacs-melpa-test-support/melpa-package-lock.tsv` is the single source of
+truth for reproducible MELPA inputs shared by batch and interactive adapters.
+Each sorted package row owns its version, immutable source revisions, build
+rule, and a sorted comma-separated list of direct dependency names (`-` means
+none). Every dependency must name another row; because each name has exactly
+one pinned version, dependency versions are resolved from that row instead of
+being duplicated on each edge.
 
 After preparing package caches, compare their `Package-Requires` headers with
 the lock or update dependency cells without changing source pins:

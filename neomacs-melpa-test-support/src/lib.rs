@@ -1,0 +1,366 @@
+//! Shared preparation support for Neomacs MELPA compatibility tests.
+//!
+//! This crate owns revision-pinned package acquisition, deterministic package
+//! process setup, and filesystem isolation. Test adapters remain in their
+//! respective crates: batch/value comparison in `neomacs-melpa-tests` and PTY
+//! grid comparison in `neomacs-tui-tests`.
+
+use std::ffi::{OsStr, OsString};
+use std::fs;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::Duration;
+
+use wait_timeout::ChildExt;
+
+mod prepared_package_set;
+mod source_lock;
+
+pub use prepared_package_set::{PackageActivation, PreparedPackageSet, package_activation_elisp};
+pub use source_lock::{
+    LockedPackageSource, SHALLOW_GIT_FETCH_ARGS, SourceBuild, locked_melpa_install_plan,
+    locked_melpa_source, locked_melpa_sources, preflight_locked_melpa_packages,
+    prepare_cached_locked_melpa_package, prepare_cached_locked_package_plan,
+};
+
+pub const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Resolve the checkout used by a normal Cargo run or an extracted Nextest
+/// archive.
+pub fn workspace_root() -> PathBuf {
+    if let Some(root) = std::env::var_os("NEXTEST_WORKSPACE_ROOT") {
+        return PathBuf::from(root);
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("neomacs-melpa-test-support is a workspace member")
+        .to_path_buf()
+}
+
+/// Per-scenario filesystem and subprocess isolation.
+pub struct MelpaSandbox {
+    case_root: tempfile::TempDir,
+    home: PathBuf,
+    tmp: PathBuf,
+}
+
+impl MelpaSandbox {
+    /// Create a sandbox below `<workspace>/tmp/melpa`.
+    pub fn new(label: &str) -> Result<Self, String> {
+        let base = workspace_root().join("tmp/melpa");
+        fs::create_dir_all(&base).map_err(|error| {
+            format!(
+                "failed to create MELPA scratch directory {}: {error}",
+                base.display()
+            )
+        })?;
+        let prefix = format!("{}-", sanitize_label(label));
+        let case_root = tempfile::Builder::new()
+            .prefix(&prefix)
+            .tempdir_in(&base)
+            .map_err(|error| {
+                format!(
+                    "failed to create MELPA scenario directory in {}: {error}",
+                    base.display()
+                )
+            })?;
+        let home = case_root.path().join("home");
+        let tmp = case_root.path().join("tmp");
+        let xdg_config = case_root.path().join("xdg/config");
+        let xdg_cache = case_root.path().join("xdg/cache");
+        let xdg_data = case_root.path().join("xdg/data");
+        let xdg_state = case_root.path().join("xdg/state");
+        for directory in [&home, &tmp, &xdg_config, &xdg_cache, &xdg_data, &xdg_state] {
+            fs::create_dir_all(directory).map_err(|error| {
+                format!(
+                    "failed to create MELPA sandbox directory {}: {error}",
+                    directory.display()
+                )
+            })?;
+        }
+        fs::create_dir_all(home.join(".emacs.d"))
+            .map_err(|error| format!("failed to create isolated .emacs.d: {error}"))?;
+
+        Ok(Self {
+            case_root,
+            home,
+            tmp,
+        })
+    }
+
+    pub fn root(&self) -> &Path {
+        self.case_root.path()
+    }
+
+    pub fn home(&self) -> &Path {
+        &self.home
+    }
+
+    pub fn tmp_dir(&self) -> &Path {
+        &self.tmp
+    }
+
+    /// Deterministic environment entries for adapters that do not use
+    /// [`std::process::Command`] directly, such as a PTY launcher.
+    pub fn process_environment(&self) -> Vec<PackageEnvironmentEntry> {
+        deterministic_process_environment(self.root(), &self.home, &self.tmp)
+    }
+
+    /// Apply the deterministic process environment shared by package test
+    /// adapters.
+    pub fn configure(&self, command: &mut Command) {
+        configure_process_environment(command, self.root(), &self.home, &self.tmp);
+    }
+}
+
+/// Apply the deterministic environment used by package preparation and test
+/// processes.
+pub fn configure_process_environment(command: &mut Command, root: &Path, home: &Path, tmp: &Path) {
+    command
+        .current_dir(root)
+        .envs(deterministic_process_environment(root, home, tmp))
+        .env_remove("EMACSLOADPATH");
+}
+
+fn deterministic_process_environment(
+    root: &Path,
+    home: &Path,
+    tmp: &Path,
+) -> Vec<PackageEnvironmentEntry> {
+    vec![
+        (OsString::from("HOME"), os_string(home.as_os_str())),
+        (OsString::from("TMPDIR"), os_string(tmp.as_os_str())),
+        (OsString::from("TMP"), os_string(tmp.as_os_str())),
+        (OsString::from("TEMP"), os_string(tmp.as_os_str())),
+        (
+            OsString::from("XDG_CONFIG_HOME"),
+            os_string(root.join("xdg/config").as_os_str()),
+        ),
+        (
+            OsString::from("XDG_CACHE_HOME"),
+            os_string(root.join("xdg/cache").as_os_str()),
+        ),
+        (
+            OsString::from("XDG_DATA_HOME"),
+            os_string(root.join("xdg/data").as_os_str()),
+        ),
+        (
+            OsString::from("XDG_STATE_HOME"),
+            os_string(root.join("xdg/state").as_os_str()),
+        ),
+        (OsString::from("LANG"), OsString::from("C.UTF-8")),
+        (OsString::from("LC_ALL"), OsString::from("C.UTF-8")),
+        (OsString::from("TZ"), OsString::from("UTC")),
+        (OsString::from("USER"), OsString::from("melpa-test")),
+        (OsString::from("LOGNAME"), OsString::from("melpa-test")),
+        (OsString::from("HOSTNAME"), OsString::from("melpa-host")),
+        (
+            OsString::from("EMAIL"),
+            OsString::from("melpa-test@melpa-host"),
+        ),
+        (OsString::from("TERM"), OsString::from("dumb")),
+        (
+            OsString::from("NEOMACS_TEST_SANDBOX_ROOT"),
+            os_string(root.as_os_str()),
+        ),
+        (
+            OsString::from("NEOMACS_TEST_WORKSPACE_ROOT"),
+            os_string(workspace_root().as_os_str()),
+        ),
+        (
+            OsString::from("GIT_CEILING_DIRECTORIES"),
+            os_string(workspace_root().as_os_str()),
+        ),
+    ]
+}
+
+pub fn sanitize_label(label: &str) -> String {
+    let sanitized = label
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || character == '-' {
+                character
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    if sanitized.is_empty() {
+        "scenario".to_string()
+    } else {
+        sanitized
+    }
+}
+
+/// An editor executable used to prepare or exercise a package scenario.
+#[derive(Clone, Debug)]
+pub struct EmacsRuntime {
+    pub name: String,
+    pub executable: PathBuf,
+    extra_env: Vec<(OsString, OsString)>,
+    pub timeout: Duration,
+}
+
+impl EmacsRuntime {
+    pub fn new(name: impl Into<String>, executable: impl Into<PathBuf>) -> Self {
+        Self {
+            name: name.into(),
+            executable: executable.into(),
+            extra_env: Vec::new(),
+            timeout: DEFAULT_PROCESS_TIMEOUT,
+        }
+    }
+
+    pub fn neomacs() -> Self {
+        Self::new("neomacs", neomacs_binary())
+    }
+
+    /// GNU Emacs oracle selected explicitly by environment, then from the
+    /// developer's adjacent source checkout, and finally from `PATH`.
+    pub fn gnu_emacs() -> Self {
+        for variable in [
+            "NEOMACS_MELPA_ORACLE_EMACS",
+            "NEOVM_ORACLE_EMACS",
+            "ORACLE_EMACS",
+        ] {
+            if let Some(path) = std::env::var_os(variable) {
+                return Self::new("gnu-emacs", PathBuf::from(path));
+            }
+        }
+        let source_checkout =
+            PathBuf::from("/home/exec/Projects/github.com/emacs-mirror/emacs/src/emacs");
+        if source_checkout.is_file() {
+            return Self::new("gnu-emacs", source_checkout);
+        }
+        Self::new("gnu-emacs", "emacs")
+    }
+
+    pub fn with_env(mut self, name: impl Into<OsString>, value: impl Into<OsString>) -> Self {
+        self.extra_env.push((name.into(), value.into()));
+        self
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    pub fn command(&self) -> Command {
+        let mut command = Command::new(&self.executable);
+        for (name, value) in &self.extra_env {
+            command.env(name, value);
+        }
+        command
+    }
+}
+
+#[derive(Debug)]
+pub enum CommandError {
+    Launch(std::io::Error),
+    TimedOut(Output),
+    Capture(String),
+}
+
+pub fn output_with_timeout(
+    command: &mut Command,
+    timeout: Duration,
+) -> Result<Output, CommandError> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn().map_err(CommandError::Launch)?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| CommandError::Capture("stdout pipe was not created".to_string()))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| CommandError::Capture("stderr pipe was not created".to_string()))?;
+    let stdout_reader = thread::spawn(move || read_pipe(stdout));
+    let stderr_reader = thread::spawn(move || read_pipe(stderr));
+
+    let status = match child.wait_timeout(timeout).map_err(CommandError::Launch)? {
+        Some(status) => status,
+        None => {
+            let _ = child.kill();
+            let status = child.wait().map_err(CommandError::Launch)?;
+            let stdout = stdout_reader
+                .join()
+                .map_err(|_| CommandError::Capture("stdout reader panicked".to_string()))?
+                .map_err(|error| {
+                    CommandError::Capture(format!("failed to read stdout: {error}"))
+                })?;
+            let stderr = stderr_reader
+                .join()
+                .map_err(|_| CommandError::Capture("stderr reader panicked".to_string()))?
+                .map_err(|error| {
+                    CommandError::Capture(format!("failed to read stderr: {error}"))
+                })?;
+            return Err(CommandError::TimedOut(Output {
+                status,
+                stdout,
+                stderr,
+            }));
+        }
+    };
+    let stdout = stdout_reader
+        .join()
+        .map_err(|_| CommandError::Capture("stdout reader panicked".to_string()))?
+        .map_err(|error| CommandError::Capture(format!("failed to read stdout: {error}")))?;
+    let stderr = stderr_reader
+        .join()
+        .map_err(|_| CommandError::Capture("stderr reader panicked".to_string()))?
+        .map_err(|error| CommandError::Capture(format!("failed to read stderr: {error}")))?;
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn read_pipe(mut pipe: impl Read) -> std::io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    pipe.read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
+pub fn package_preparation_run_id() -> String {
+    std::env::var("NEXTEST_RUN_ID").unwrap_or_else(|_| format!("process-{}", std::process::id()))
+}
+
+pub fn publish_package_preparation_failure(
+    failed_marker: &Path,
+    failure_prefix: &str,
+    error: String,
+) -> String {
+    let marker_tmp = failed_marker.with_extension(format!("{}.tmp", std::process::id()));
+    let contents = format!("{failure_prefix}{error}");
+    if let Err(cache_error) =
+        fs::write(&marker_tmp, contents).and_then(|()| fs::rename(&marker_tmp, failed_marker))
+    {
+        return format!(
+            "{error}\nfailed to publish shared package preparation failure {}: {cache_error}",
+            failed_marker.display()
+        );
+    }
+    error
+}
+
+pub fn elisp_string(value: &str) -> String {
+    format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// The path to the `neomacs` binary (override with `NEOMACS_BIN`).
+pub fn neomacs_binary() -> PathBuf {
+    std::env::var_os("NEOMACS_BIN")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| workspace_root().join("target/release/neomacs"))
+}
+
+/// Environment entry exported by a prepared package set.
+pub type PackageEnvironmentEntry = (OsString, OsString);
+
+pub(crate) fn os_string(value: &OsStr) -> OsString {
+    value.to_os_string()
+}

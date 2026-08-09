@@ -3,12 +3,12 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-use crate::source_lock::SHALLOW_GIT_FETCH_ARGS;
 use crate::{
     EmacsRuntime, ErtScenario, MelpaSandbox, OracleBatchFailure, PackageActivation,
-    PackageScenario, PackageSource, ScenarioPhase, SourceBuild, locked_melpa_install_plan,
-    locked_melpa_source, locked_melpa_sources, package_activation_elisp, run_elisp_oracle,
-    run_elisp_oracle_batch, run_ert_scenario, run_oracle_scenario, run_scenario, workspace_root,
+    PackageScenario, PackageSource, SHALLOW_GIT_FETCH_ARGS, ScenarioPhase, SourceBuild,
+    locked_melpa_install_plan, locked_melpa_source, locked_melpa_sources, package_activation_elisp,
+    run_elisp_oracle, run_elisp_oracle_batch, run_ert_scenario, run_oracle_scenario, run_scenario,
+    workspace_root,
 };
 use neomacs_test_oracle::{BatchProbe, EvalOutcome};
 
@@ -722,7 +722,7 @@ fn every_exact_package_has_a_complete_acyclic_source_plan() {
 
 #[test]
 fn git_source_acquisition_is_shallow_and_never_reads_a_package_catalog() {
-    let source_harness = include_str!("../source_lock.rs");
+    let source_harness = include_str!("../../../neomacs-melpa-test-support/src/source_lock.rs");
 
     assert_eq!(SHALLOW_GIT_FETCH_ARGS, ["fetch", "--depth=1", "--no-tags"]);
     assert!(source_harness.contains("--is-shallow-repository"));
