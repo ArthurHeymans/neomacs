@@ -2774,6 +2774,12 @@ pub const COMPANY_MELPA_PIN: (&str, &str) = ("company", "20260721.100");
 /// `5bda859577582cc42d16fc0eaf5f7c8bedfd9e69`.
 pub const COMPANY_QUICKHELP_MELPA_PIN: (&str, &str) = ("company-quickhelp", "20231026.1714");
 
+/// The exact Company Web package selected for practical HTML, Pug, and Slim
+/// completion, candidate metadata, documentation, CSS delegation, and invalid
+/// source parity. MELPA built this archive from upstream commit
+/// `e0c6bfa3ae7006c73d0fdfc0fdb69816309baf1b`.
+pub const COMPANY_WEB_MELPA_PIN: (&str, &str) = ("company-web", "20220115.2146");
+
 /// The exact Company Anaconda package selected for Python prefix eligibility,
 /// asynchronous candidate metadata, real Company selection/insertion,
 /// annotation customization, docs, locations, empty results, and policy parity.
@@ -5667,6 +5673,11 @@ pub const PY_ISORT_MELPA_PIN: (&str, &str) = ("py-isort", "20160925.1018");
 /// The exact pug-mode package selected for practical Pug indent computation without a live compiler.
 /// MELPA built this archive from upstream commit `73f8c2f95eba695f701df20c8436f49abadebdc1`.
 pub const PUG_MODE_MELPA_PIN: (&str, &str) = ("pug-mode", "20211114.1645");
+
+/// The exact Jade Mode package used to exercise Company Web's documented
+/// Jade backend against its real major mode. MELPA built this archive from
+/// upstream commit `111460b056838854e470a6383041a99f843b93ee`.
+pub const JADE_MODE_MELPA_PIN: (&str, &str) = ("jade-mode", "20210908.2121");
 
 /// The exact monokai-theme package selected for practical theme load and palette defaults.
 /// MELPA built this archive from upstream commit `dacd9d8a8867afea3ed76b15a6c997053ff88093`.

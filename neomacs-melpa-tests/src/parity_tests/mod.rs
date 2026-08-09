@@ -290,6 +290,7 @@ mod commander;
 mod company;
 mod company_anaconda;
 mod company_quickhelp;
+mod company_web;
 mod compat;
 mod concurrent;
 mod cond_let;
