@@ -47,12 +47,18 @@ fn current_host_name() -> String {
 }
 
 fn current_lock_info_string() -> String {
-    format!(
+    let prefix = format!(
         "{}@{}.{}",
         current_user_name(),
         current_host_name(),
         std::process::id()
-    )
+    );
+    let boot_time = system_boot_time_sec();
+    if boot_time == 0 {
+        prefix
+    } else {
+        format!("{prefix}:{boot_time}")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -163,9 +169,7 @@ fn current_lock_owner(lock_path: &Path) -> Result<LockOwner, io::Error> {
     if info.pid == std::process::id() {
         return Ok(LockOwner::Current);
     }
-    let pid_alive = info.pid > 0
-        && (unsafe { libc::kill(info.pid as libc::pid_t, 0) } == 0
-            || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM));
+    let pid_alive = process_is_alive(info.pid);
     let boot_matches = info.boot_time == 0 || (info.boot_time - system_boot_time_sec()).abs() <= 1;
     if pid_alive && boot_matches {
         return Ok(LockOwner::Other(info.user));
@@ -177,21 +181,80 @@ fn current_lock_owner(lock_path: &Path) -> Result<LockOwner, io::Error> {
     }
 }
 
-/// Seconds since the epoch at which this system booted (Linux: the `btime`
-/// line of /proc/stat), or 0 when unknown — 0 disables the boot-time
-/// staleness comparison, exactly like a lock file without a boot suffix.
+#[cfg(unix)]
+fn process_is_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    let Ok(pid) = libc::pid_t::try_from(pid) else {
+        return false;
+    };
+    (unsafe { libc::kill(pid, 0) } == 0)
+        || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+}
+
+#[cfg(windows)]
+fn process_is_alive(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{
+        CloseHandle, ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER, GetLastError,
+    };
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION};
+
+    if pid == 0 {
+        return false;
+    }
+    // GNU's sys_kill reports EPERM for these reserved system PIDs, which
+    // current_lock_owner interprets as proof that the process exists.
+    if pid <= 4 {
+        return true;
+    }
+
+    let process = unsafe { OpenProcess(PROCESS_QUERY_INFORMATION, 0, pid) };
+    if !process.is_null() {
+        unsafe {
+            CloseHandle(process);
+        }
+        return true;
+    }
+
+    match unsafe { GetLastError() } {
+        ERROR_INVALID_PARAMETER => false,
+        ERROR_ACCESS_DENIED => true,
+        // GNU's sys_kill falls through to success for other OpenProcess
+        // failures, conservatively retaining a lock it cannot prove stale.
+        _ => true,
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn process_is_alive(_pid: u32) -> bool {
+    false
+}
+
+/// Seconds since the epoch at which this system booted, or 0 when unknown.
+/// GNU appends this value to new lock files and uses it to reject a live PID
+/// recycled after a reboot.
 fn system_boot_time_sec() -> i64 {
     static BOOT: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
-    *BOOT.get_or_init(|| {
-        std::fs::read_to_string("/proc/stat")
-            .ok()
-            .and_then(|stat| {
-                stat.lines()
-                    .find_map(|line| line.strip_prefix("btime "))
-                    .and_then(|rest| rest.trim().parse().ok())
-            })
-            .unwrap_or(0)
-    })
+    *BOOT.get_or_init(query_system_boot_time_sec)
+}
+
+#[cfg(windows)]
+fn query_system_boot_time_sec() -> i64 {
+    // GNU gnulib checks this boot-touched file before falling back to
+    // current time minus GetTickCount64 uptime.
+    std::fs::metadata(r"C:\pagefile.sys")
+        .ok()
+        .and_then(|metadata| metadata.modified().ok())
+        .and_then(|modified| modified.duration_since(std::time::UNIX_EPOCH).ok())
+        .and_then(|duration| i64::try_from(duration.as_secs()).ok())
+        .or_else(|| i64::try_from(sysinfo::System::boot_time()).ok())
+        .unwrap_or(0)
+}
+
+#[cfg(not(windows))]
+fn query_system_boot_time_sec() -> i64 {
+    i64::try_from(sysinfo::System::boot_time()).unwrap_or(0)
 }
 
 fn create_lock_file(lock_path: &Path, contents: &str, force: bool) -> io::Result<()> {
@@ -537,150 +600,5 @@ pub(crate) fn builtin_unlock_buffer(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[cfg(unix)]
-    #[test]
-    fn first_text_change_locks_a_clean_file_visiting_buffer_like_gnu() {
-        crate::test_utils::init_test_tracing();
-        let root = std::env::current_dir()
-            .expect("workspace directory")
-            .join("tmp/neovm-core-test-artifacts")
-            .join(format!("first-change-lock-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).expect("create workspace-local fixture directory");
-        let visited = root.join("visited.txt");
-        let lock = root.join(".#visited.txt");
-        fs::write(&visited, b"before\n").expect("write visited file");
-        let visited_value = Value::string(visited.to_string_lossy());
-
-        let mut eval = super::super::eval::Context::new();
-        eval.set_variable("create-lockfiles", Value::T);
-        let current = eval.buffers.current_buffer_id().expect("current buffer");
-        eval.buffers
-            .set_buffer_file_name(current, visited_value)
-            .expect("set buffer-file-name");
-        eval.buffers
-            .set_buffer_file_truename(current, visited_value)
-            .expect("set buffer-file-truename");
-
-        super::super::editfns::insert_lisp_string_with_change_hooks_in_buffer(
-            &mut eval,
-            current,
-            &LispString::from_utf8("changed"),
-        )
-        .expect("modify visiting buffer");
-
-        assert!(
-            fs::symlink_metadata(&lock).is_ok(),
-            "GNU locks a clean file-visiting buffer before its first text change"
-        );
-
-        let _ = fs::remove_file(&lock);
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn lock_and_unlock_file_dispatch_matching_file_name_handlers_like_gnu() {
-        crate::test_utils::init_test_tracing();
-        let mut eval = super::super::eval::Context::new();
-
-        let result = eval.eval_str(
-            r#"(progn
-                 (setq neovm-file-lock-handler-calls nil)
-                 (setq file-name-handler-alist
-                       (list
-                        (cons "\\`/remote:"
-                              (lambda (operation &rest arguments)
-                                (setq neovm-file-lock-handler-calls
-                                      (cons (cons operation arguments)
-                                            neovm-file-lock-handler-calls))
-                                (if (eq operation 'file-locked-p)
-                                    :remote-owner
-                                  :handled)))))
-                 (list (lock-file "/remote:host:/work/note.txt")
-                       (file-locked-p "/remote:host:/work/note.txt")
-                       (unlock-file "/remote:host:/work/note.txt")
-                       (reverse neovm-file-lock-handler-calls)))"#,
-        );
-
-        assert_eq!(
-            crate::emacs_core::format_eval_result(&result),
-            "OK (:handled :remote-owner nil ((lock-file \"/remote:host:/work/note.txt\") (file-locked-p \"/remote:host:/work/note.txt\") (unlock-file \"/remote:host:/work/note.txt\")))"
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn current_lock_owner_recognizes_dangling_symlink_lockfiles() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let lock_path = dir.path().join(".#probe");
-        std::os::unix::fs::symlink(current_lock_info_string(), &lock_path)
-            .expect("create lock symlink");
-
-        assert!(matches!(
-            current_lock_owner(&lock_path).expect("read lock owner"),
-            LockOwner::Current
-        ));
-    }
-}
-
-#[cfg(test)]
-mod stale_lock_tests {
-    use super::*;
-
-    #[test]
-    fn dead_pid_lock_on_this_host_is_zapped_and_reported_free() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let lock_path = dir.path().join(".#stale");
-        // A pid from a crashed session: pid 1 is init (alive, but use an
-        // impossible one). Recycle-proof choice: our own pid is alive, so use
-        // a pid that cannot exist (> pid_max default of 4194304).
-        let contents = format!("someone@{}.999999999", current_host_name());
-        std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
-        match current_lock_owner(&lock_path).expect("owner check") {
-            LockOwner::None => {}
-            LockOwner::Current => panic!("stale lock cannot be ours"),
-            LockOwner::Other(user) => panic!("stale lock must be zapped, got owner {user}"),
-        }
-        assert!(
-            std::fs::symlink_metadata(&lock_path).is_err(),
-            "GNU unlinks the stale lockfile in current_lock_owner"
-        );
-    }
-
-    #[test]
-    fn live_pid_lock_on_this_host_names_the_other_owner() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let lock_path = dir.path().join(".#live");
-        // pid 1 is always alive; kill(1, 0) fails with EPERM for non-root,
-        // which GNU treats as alive.
-        let contents = format!("someone@{}.1", current_host_name());
-        std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
-        match current_lock_owner(&lock_path).expect("owner check") {
-            LockOwner::Other(user) => assert_eq!(user, "someone"),
-            _ => panic!("live-pid lock must report the other owner"),
-        }
-        assert!(
-            std::fs::symlink_metadata(&lock_path).is_ok(),
-            "live locks are never zapped"
-        );
-    }
-
-    #[test]
-    fn stale_boot_time_zaps_even_a_live_pid() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let lock_path = dir.path().join(".#reboot");
-        // pid 1 alive, but a boot time of 12 (1970) cannot match this boot.
-        let contents = format!("someone@{}.1:12", current_host_name());
-        std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
-        if system_boot_time_sec() == 0 {
-            return; // No btime on this platform: comparison disabled.
-        }
-        match current_lock_owner(&lock_path).expect("owner check") {
-            LockOwner::None => {}
-            _ => panic!("previous-boot lock must be stale"),
-        }
-    }
-}
+#[path = "filelock_test.rs"]
+mod tests;

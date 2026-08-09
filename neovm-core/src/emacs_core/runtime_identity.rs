@@ -116,23 +116,148 @@ std::cfg_select! {
     windows => {
         const SECONDARY_LOGIN_ENV: &str = "USERNAME";
 
-        fn windows_passwd_entry() -> Option<PasswdEntry> {
-            let login = whoami::fallible::username().ok()?;
+        fn windows_token_account() -> Option<(String, i64)> {
+            use windows_sys::Win32::Foundation::{
+                CloseHandle, ERROR_INSUFFICIENT_BUFFER, GetLastError, HANDLE,
+            };
+            use windows_sys::Win32::Security::{
+                GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation,
+                LookupAccountSidW, SID_NAME_USE, TOKEN_QUERY, TOKEN_USER, TokenUser,
+            };
+            use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+
+            let mut token: HANDLE = std::ptr::null_mut();
+            if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+                return None;
+            }
+
+            let result = (|| {
+                let mut required = 0u32;
+                let status = unsafe {
+                    GetTokenInformation(token, TokenUser, std::ptr::null_mut(), 0, &mut required)
+                };
+                if status != 0
+                    || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+                    || required < std::mem::size_of::<TOKEN_USER>() as u32
+                {
+                    return None;
+                }
+
+                // TOKEN_USER requires pointer alignment stronger than Vec<u8>
+                // promises. Store the variable-sized result in machine words.
+                let word_size = std::mem::size_of::<usize>();
+                let word_count = (required as usize).div_ceil(word_size);
+                let mut token_buffer = vec![0usize; word_count];
+                if unsafe {
+                    GetTokenInformation(
+                        token,
+                        TokenUser,
+                        token_buffer.as_mut_ptr().cast(),
+                        required,
+                        &mut required,
+                    )
+                } == 0
+                {
+                    return None;
+                }
+
+                let token_user = unsafe { &*(token_buffer.as_ptr().cast::<TOKEN_USER>()) };
+                let sid = token_user.User.Sid;
+                let count = unsafe { GetSidSubAuthorityCount(sid).as_ref().copied() }?;
+                if count == 0 {
+                    return None;
+                }
+                let rid = unsafe { GetSidSubAuthority(sid, u32::from(count - 1)).as_ref() }
+                    .copied()?;
+
+                let mut name_len = 0u32;
+                let mut domain_len = 0u32;
+                let mut sid_name_use: SID_NAME_USE = 0;
+                let status = unsafe {
+                    LookupAccountSidW(
+                        std::ptr::null(),
+                        sid,
+                        std::ptr::null_mut(),
+                        &mut name_len,
+                        std::ptr::null_mut(),
+                        &mut domain_len,
+                        &mut sid_name_use,
+                    )
+                };
+                if status != 0
+                    || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
+                    || name_len == 0
+                {
+                    return None;
+                }
+
+                let mut name = vec![0u16; name_len as usize];
+                let mut domain = vec![0u16; domain_len as usize];
+                let domain_ptr = if domain.is_empty() {
+                    std::ptr::null_mut()
+                } else {
+                    domain.as_mut_ptr()
+                };
+                if unsafe {
+                    LookupAccountSidW(
+                        std::ptr::null(),
+                        sid,
+                        name.as_mut_ptr(),
+                        &mut name_len,
+                        domain_ptr,
+                        &mut domain_len,
+                        &mut sid_name_use,
+                    )
+                } == 0
+                {
+                    return None;
+                }
+
+                let name = &name[..usize::min(name_len as usize, name.len())];
+                let name = name.strip_suffix(&[0]).unwrap_or(name);
+                let login = String::from_utf16_lossy(name);
+                let uid = if login.eq_ignore_ascii_case("administrator") {
+                    500
+                } else {
+                    i64::from(rid)
+                };
+                Some((login, uid))
+            })();
+
+            unsafe {
+                CloseHandle(token);
+            }
+            result
+        }
+
+        fn windows_account() -> (PasswdEntry, i64) {
+            let (login, uid) = windows_token_account().unwrap_or_else(|| {
+                // This is GNU w32.c's fallback after token/SID lookup fails.
+                let login = whoami::username().unwrap_or_else(|_| "unknown".to_string());
+                let uid = if login.eq_ignore_ascii_case("administrator") {
+                    0
+                } else {
+                    123
+                };
+                (login, uid)
+            });
             // GNU w32.c leaves its synthetic passwd `pw_gecos` empty.
-            Some(PasswdEntry {
-                login,
-                gecos: String::new(),
-            })
+            (
+                PasswdEntry {
+                    login,
+                    gecos: String::new(),
+                },
+                uid,
+            )
         }
 
         fn lookup_passwd_by_uid(uid: i64) -> Option<PasswdEntry> {
-            (uid == effective_uid())
-                .then(windows_passwd_entry)
-                .flatten()
+            let (entry, effective_uid) = windows_account();
+            (uid == effective_uid).then_some(entry)
         }
 
         fn lookup_passwd_by_login(login: &str) -> Option<PasswdEntry> {
-            let mut entry = windows_passwd_entry()?;
+            let (mut entry, _) = windows_account();
             let environment_alias = login_name_from_env();
             if !entry.login.eq_ignore_ascii_case(login)
                 && environment_alias
@@ -146,84 +271,22 @@ std::cfg_select! {
         }
 
         pub(crate) fn effective_uid() -> i64 {
-            windows_effective_uid().unwrap_or(123)
-        }
-
-        fn windows_effective_uid() -> Option<i64> {
-            use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
-            use windows_sys::Win32::Security::{
-                GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TOKEN_QUERY,
-                TOKEN_USER, TokenUser,
-            };
-            use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-
-            if whoami::fallible::username()
-                .ok()
-                .is_some_and(|name| name.eq_ignore_ascii_case("administrator"))
-            {
-                return Some(500);
-            }
-
-            let mut token: HANDLE = std::ptr::null_mut();
-            if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
-                return None;
-            }
-
-            let result = (|| {
-                let mut required = 0u32;
-                unsafe {
-                    GetTokenInformation(token, TokenUser, std::ptr::null_mut(), 0, &mut required);
-                }
-                if required < std::mem::size_of::<TOKEN_USER>() as u32 {
-                    return None;
-                }
-                let mut buffer = vec![0u8; required as usize];
-                if unsafe {
-                    GetTokenInformation(
-                        token,
-                        TokenUser,
-                        buffer.as_mut_ptr().cast(),
-                        required,
-                        &mut required,
-                    )
-                } == 0
-                {
-                    return None;
-                }
-
-                let token_user = unsafe { &*(buffer.as_ptr().cast::<TOKEN_USER>()) };
-                let sid = token_user.User.Sid;
-                let count = unsafe { GetSidSubAuthorityCount(sid).as_ref().copied() }?;
-                if count == 0 {
-                    return None;
-                }
-                unsafe { GetSidSubAuthority(sid, u32::from(count - 1)).as_ref() }
-                    .copied()
-                    .map(i64::from)
-            })();
-
-            unsafe {
-                CloseHandle(token);
-            }
-            result
+            windows_account().1
         }
 
         fn capture_platform_identity() -> PlatformIdentity {
-            // GNU w32.c synthesizes its passwd entry from the process token.
-            // `whoami` uses the corresponding native Windows account APIs.
             let environment_login = login_name_from_env();
-            let native_passwd = windows_passwd_entry();
-            let environment_passwd = environment_login.as_ref().and_then(|login| {
-                native_passwd.clone().map(|mut entry| {
-                    entry.login = login.clone();
-                    entry
-                })
+            let (native_passwd, _) = windows_account();
+            let environment_passwd = environment_login.as_ref().map(|login| {
+                let mut entry = native_passwd.clone();
+                entry.login = login.clone();
+                entry
             });
             PlatformIdentity {
-                effective_passwd: native_passwd.clone(),
+                effective_passwd: Some(native_passwd.clone()),
                 environment_login,
                 environment_passwd,
-                real_passwd: native_passwd,
+                real_passwd: Some(native_passwd),
             }
         }
     }
@@ -427,40 +490,5 @@ pub(crate) fn install(eval: &mut Context) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn runtime_owned_system_name_refreshes_but_a_lisp_replacement_does_not() {
-        let mut eval = Context::new();
-        refresh_system_name_from(&mut eval, "host-after-refresh".to_string());
-        assert_eq!(
-            eval.obarray()
-                .symbol_value("system-name")
-                .and_then(|value| value.as_utf8_str()),
-            Some("host-after-refresh")
-        );
-
-        // GNU compares object identity, not string contents: replacing the
-        // variable with an equal, freshly allocated string is still a Lisp
-        // override and must stop automatic refresh.
-        eval.set_variable("system-name", Value::string("host-after-refresh"));
-        refresh_system_name_from(&mut eval, "host-after-second-refresh".to_string());
-        assert_eq!(
-            eval.obarray()
-                .symbol_value("system-name")
-                .and_then(|value| value.as_utf8_str()),
-            Some("host-after-refresh")
-        );
-    }
-
-    std::cfg_select! {
-        unix => {
-            #[test]
-            fn effective_uid_comes_from_the_os_without_a_child_process() {
-                assert_eq!(effective_uid(), unsafe { libc::geteuid() as i64 });
-            }
-        }
-        _ => {}
-    }
-}
+#[path = "runtime_identity_test.rs"]
+mod tests;
