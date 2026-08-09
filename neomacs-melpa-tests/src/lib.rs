@@ -2195,6 +2195,12 @@ pub const DASH_FUNCTIONAL_MELPA_PIN: (&str, &str) = ("dash-functional", "2025031
 /// The exact Evil package selected by the comprehensive API parity corpus.
 pub const EVIL_MELPA_PIN: (&str, &str) = ("evil", "20260603.654");
 
+/// The final Evil Magit snapshot selected for practical Vim-style Magit
+/// status, rebase, text-mode, yank, and reversible-setup parity. MELPA built
+/// this archive from upstream commit
+/// `f2e8dddbb22f6f300f2a8f05fe0444414ce71e04`.
+pub const EVIL_MAGIT_MELPA_PIN: (&str, &str) = ("evil-magit", "20210117.1749");
+
 /// The exact evil-org package selected for practical org-item open/insert
 /// commands, empty-element detection, and key-theme population. MELPA built
 /// this archive from upstream commit `b1f309726b1326e1a103742524ec331789f2bf94`.

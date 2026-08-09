@@ -351,6 +351,7 @@ mod evil_iedit_state;
 mod evil_indent_plus;
 mod evil_lion;
 mod evil_lisp_state;
+mod evil_magit;
 mod evil_matchit;
 mod evil_mc;
 mod evil_nerd_commenter;
