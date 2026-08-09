@@ -42,7 +42,7 @@ use neovm_core::emacs_core::eval::{
 };
 #[cfg(feature = "neo-term")]
 use neovm_core::emacs_core::eval::{
-    TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement,
+    TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement, TerminalGridSize,
 };
 use neovm_core::emacs_core::image_catalog::{AxisSize, ImageRotation, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
@@ -4565,8 +4565,10 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
     let id = neovm_core::emacs_core::DisplayHost::create_terminal(
         &host,
         TerminalCreateRequest {
-            cols: 96,
-            rows: 31,
+            size: TerminalGridSize {
+                cols: std::num::NonZeroU16::new(96).unwrap(),
+                rows: std::num::NonZeroU16::new(31).unwrap(),
+            },
             mode: TerminalDisplayMode::Floating,
             shell: Some("/bin/sh".to_owned()),
         },
@@ -4574,16 +4576,19 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
     .expect("terminal create should queue");
     neovm_core::emacs_core::DisplayHost::write_terminal(&host, id, b"echo typed\r".to_vec())
         .expect("terminal input should queue");
-    neovm_core::emacs_core::DisplayHost::resize_terminal(&host, id, 120, 40)
-        .expect("terminal resize should queue");
+    neovm_core::emacs_core::DisplayHost::resize_terminal(
+        &host,
+        id,
+        TerminalGridSize {
+            cols: std::num::NonZeroU16::new(120).unwrap(),
+            rows: std::num::NonZeroU16::new(40).unwrap(),
+        },
+    )
+    .expect("terminal resize should queue");
     neovm_core::emacs_core::DisplayHost::set_floating_terminal(
         &host,
         id,
-        TerminalFloatPlacement {
-            x: 12.5,
-            y: 24.0,
-            opacity: 0.9,
-        },
+        TerminalFloatPlacement::new(12.5, 24.0, 0.9).unwrap(),
     )
     .expect("terminal placement should queue");
     assert_eq!(
@@ -4604,12 +4609,12 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
             rows: 31,
             mode: TerminalMode::Floating,
             shell: Some(shell),
-        }) if *command_id == id && shell == "/bin/sh"
+        }) if *command_id == id.get() && shell == "/bin/sh"
     ));
     assert!(matches!(
         &commands[1],
         RenderCommand::Terminal(TerminalCommand::TerminalWrite { id: command_id, data })
-            if *command_id == id && data == b"echo typed\r"
+            if *command_id == id.get() && data == b"echo typed\r"
     ));
     assert!(matches!(
         &commands[2],
@@ -4617,7 +4622,7 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
             id: command_id,
             cols: 120,
             rows: 40,
-        }) if *command_id == id
+        }) if *command_id == id.get()
     ));
     assert!(matches!(
         &commands[3],
@@ -4626,12 +4631,12 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
             x,
             y,
             opacity,
-        }) if *command_id == id && *x == 12.5 && *y == 24.0 && *opacity == 0.9
+        }) if *command_id == id.get() && *x == 12.5 && *y == 24.0 && *opacity == 0.9
     ));
     assert!(matches!(
         &commands[4],
         RenderCommand::Terminal(TerminalCommand::TerminalDestroy { id: command_id })
-            if *command_id == id
+            if *command_id == id.get()
     ));
 }
 

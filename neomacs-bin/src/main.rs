@@ -147,7 +147,8 @@ use neovm_core::emacs_core::eval::{
 };
 #[cfg(feature = "neo-term")]
 use neovm_core::emacs_core::eval::{
-    TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement,
+    TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement, TerminalGridSize,
+    TerminalId,
 };
 use neovm_core::emacs_core::image_catalog::{ImageCatalog, ImageResolveRequest, ReadyImage};
 use neovm_core::emacs_core::load::{
@@ -1076,8 +1077,9 @@ const HOST_TERMINAL_ID_START: u32 = 0x4000_0000;
 static HOST_TERMINAL_ID_ALLOCATOR: AtomicU32 = AtomicU32::new(HOST_TERMINAL_ID_START);
 
 #[cfg(feature = "neo-term")]
-fn next_host_terminal_id() -> u32 {
-    HOST_TERMINAL_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
+fn next_host_terminal_id() -> Result<TerminalId, String> {
+    TerminalId::new(HOST_TERMINAL_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed))
+        .ok_or_else(|| "neo-term id allocator exhausted".to_owned())
 }
 
 fn renderer_shader_language(language: ShaderSurfaceLanguage) -> RendererShaderLanguage {
@@ -2059,8 +2061,8 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     #[cfg(feature = "neo-term")]
-    fn create_terminal(&self, request: TerminalCreateRequest) -> Result<u32, String> {
-        let id = next_host_terminal_id();
+    fn create_terminal(&self, request: TerminalCreateRequest) -> Result<TerminalId, String> {
+        let id = next_host_terminal_id()?;
         let mode = match request.mode {
             TerminalDisplayMode::Window => TerminalMode::Window,
             TerminalDisplayMode::Inline => TerminalMode::Inline,
@@ -2068,9 +2070,9 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         };
         self.send_render_command(
             RenderCommand::Terminal(TerminalCommand::TerminalCreate {
-                id,
-                cols: request.cols,
-                rows: request.rows,
+                id: id.get(),
+                cols: request.size.cols.get(),
+                rows: request.size.rows.get(),
                 mode,
                 shell: request.shell,
             }),
@@ -2080,25 +2082,29 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     }
 
     #[cfg(feature = "neo-term")]
-    fn write_terminal(&self, id: u32, data: Vec<u8>) -> Result<(), String> {
+    fn write_terminal(&self, id: TerminalId, data: Vec<u8>) -> Result<(), String> {
         self.send_render_command(
-            RenderCommand::Terminal(TerminalCommand::TerminalWrite { id, data }),
+            RenderCommand::Terminal(TerminalCommand::TerminalWrite { id: id.get(), data }),
             "failed to queue terminal input",
         )
     }
 
     #[cfg(feature = "neo-term")]
-    fn resize_terminal(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {
+    fn resize_terminal(&self, id: TerminalId, size: TerminalGridSize) -> Result<(), String> {
         self.send_render_command(
-            RenderCommand::Terminal(TerminalCommand::TerminalResize { id, cols, rows }),
+            RenderCommand::Terminal(TerminalCommand::TerminalResize {
+                id: id.get(),
+                cols: size.cols.get(),
+                rows: size.rows.get(),
+            }),
             "failed to queue terminal resize",
         )
     }
 
     #[cfg(feature = "neo-term")]
-    fn destroy_terminal(&self, id: u32) -> Result<(), String> {
+    fn destroy_terminal(&self, id: TerminalId) -> Result<(), String> {
         self.send_render_command(
-            RenderCommand::Terminal(TerminalCommand::TerminalDestroy { id }),
+            RenderCommand::Terminal(TerminalCommand::TerminalDestroy { id: id.get() }),
             "failed to queue terminal destroy",
         )
     }
@@ -2106,23 +2112,23 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     #[cfg(feature = "neo-term")]
     fn set_floating_terminal(
         &self,
-        id: u32,
+        id: TerminalId,
         placement: TerminalFloatPlacement,
     ) -> Result<(), String> {
         self.send_render_command(
             RenderCommand::Terminal(TerminalCommand::TerminalSetFloat {
-                id,
-                x: placement.x,
-                y: placement.y,
-                opacity: placement.opacity,
+                id: id.get(),
+                x: placement.x(),
+                y: placement.y(),
+                opacity: placement.opacity(),
             }),
             "failed to queue terminal placement",
         )
     }
 
     #[cfg(feature = "neo-term")]
-    fn terminal_text(&self, id: u32) -> Result<Option<String>, String> {
-        Ok(visible_text(&self.shared_terminals, id))
+    fn terminal_text(&self, id: TerminalId) -> Result<Option<String>, String> {
+        Ok(visible_text(&self.shared_terminals, id.get()))
     }
 
     fn set_frame_shader(

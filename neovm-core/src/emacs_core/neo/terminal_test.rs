@@ -1,28 +1,27 @@
-use super::eval::{
+use super::super::eval::{
     Context, DisplayHost, GuiFrameHostRequest, TerminalCreateRequest, TerminalDisplayMode,
-    TerminalFloatPlacement,
+    TerminalFloatPlacement, TerminalGridSize, TerminalId,
 };
-use super::value::{Value, list_to_vec};
+use super::super::value::{Value, list_to_vec};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug, PartialEq)]
 enum TerminalHostEvent {
     Create(TerminalCreateRequest),
     Write {
-        id: u32,
+        id: TerminalId,
         data: Vec<u8>,
     },
     Resize {
-        id: u32,
-        cols: u16,
-        rows: u16,
+        id: TerminalId,
+        size: TerminalGridSize,
     },
     Float {
-        id: u32,
+        id: TerminalId,
         placement: TerminalFloatPlacement,
     },
     Destroy {
-        id: u32,
+        id: TerminalId,
     },
 }
 
@@ -40,15 +39,15 @@ impl DisplayHost for RecordingTerminalDisplayHost {
         Ok(())
     }
 
-    fn create_terminal(&self, request: TerminalCreateRequest) -> Result<u32, String> {
+    fn create_terminal(&self, request: TerminalCreateRequest) -> Result<TerminalId, String> {
         self.events
             .lock()
             .expect("terminal host events")
             .push(TerminalHostEvent::Create(request));
-        Ok(41)
+        Ok(TerminalId::new(41).expect("nonzero terminal id"))
     }
 
-    fn write_terminal(&self, id: u32, data: Vec<u8>) -> Result<(), String> {
+    fn write_terminal(&self, id: TerminalId, data: Vec<u8>) -> Result<(), String> {
         self.events
             .lock()
             .expect("terminal host events")
@@ -56,17 +55,17 @@ impl DisplayHost for RecordingTerminalDisplayHost {
         Ok(())
     }
 
-    fn resize_terminal(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {
+    fn resize_terminal(&self, id: TerminalId, size: TerminalGridSize) -> Result<(), String> {
         self.events
             .lock()
             .expect("terminal host events")
-            .push(TerminalHostEvent::Resize { id, cols, rows });
+            .push(TerminalHostEvent::Resize { id, size });
         Ok(())
     }
 
     fn set_floating_terminal(
         &self,
-        id: u32,
+        id: TerminalId,
         placement: TerminalFloatPlacement,
     ) -> Result<(), String> {
         self.events
@@ -76,7 +75,7 @@ impl DisplayHost for RecordingTerminalDisplayHost {
         Ok(())
     }
 
-    fn destroy_terminal(&self, id: u32) -> Result<(), String> {
+    fn destroy_terminal(&self, id: TerminalId) -> Result<(), String> {
         self.events
             .lock()
             .expect("terminal host events")
@@ -84,8 +83,8 @@ impl DisplayHost for RecordingTerminalDisplayHost {
         Ok(())
     }
 
-    fn terminal_text(&self, id: u32) -> Result<Option<String>, String> {
-        Ok((id == 41).then(|| "ready\n$".to_owned()))
+    fn terminal_text(&self, id: TerminalId) -> Result<Option<String>, String> {
+        Ok((id.get() == 41).then(|| "ready\n$".to_owned()))
     }
 }
 
@@ -135,29 +134,31 @@ fn public_terminal_builtins_route_typed_requests_through_the_display_host() {
         *host.events.lock().expect("terminal host events"),
         vec![
             TerminalHostEvent::Create(TerminalCreateRequest {
-                cols: 80,
-                rows: 24,
+                size: TerminalGridSize {
+                    cols: std::num::NonZeroU16::new(80).unwrap(),
+                    rows: std::num::NonZeroU16::new(24).unwrap(),
+                },
                 mode: TerminalDisplayMode::Floating,
                 shell: Some("/bin/sh".to_owned()),
             }),
             TerminalHostEvent::Write {
-                id: 41,
+                id: TerminalId::new(41).unwrap(),
                 data: b"echo ready\r".to_vec(),
             },
             TerminalHostEvent::Resize {
-                id: 41,
-                cols: 120,
-                rows: 40,
-            },
-            TerminalHostEvent::Float {
-                id: 41,
-                placement: TerminalFloatPlacement {
-                    x: 10.5,
-                    y: 20.0,
-                    opacity: 0.85,
+                id: TerminalId::new(41).unwrap(),
+                size: TerminalGridSize {
+                    cols: std::num::NonZeroU16::new(120).unwrap(),
+                    rows: std::num::NonZeroU16::new(40).unwrap(),
                 },
             },
-            TerminalHostEvent::Destroy { id: 41 },
+            TerminalHostEvent::Float {
+                id: TerminalId::new(41).unwrap(),
+                placement: TerminalFloatPlacement::new(10.5, 20.0, 0.85).unwrap(),
+            },
+            TerminalHostEvent::Destroy {
+                id: TerminalId::new(41).unwrap(),
+            },
         ]
     );
 }

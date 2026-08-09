@@ -3,6 +3,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::hash::Hash;
+use std::num::{NonZeroU16, NonZeroU32};
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -1556,21 +1557,61 @@ pub enum TerminalDisplayMode {
     Floating,
 }
 
+/// A live terminal identifier. Zero is reserved as the Lisp failure sentinel,
+/// so it cannot cross the typed display-host boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TerminalId(NonZeroU32);
+
+impl TerminalId {
+    pub fn new(id: u32) -> Option<Self> {
+        NonZeroU32::new(id).map(Self)
+    }
+
+    pub fn get(self) -> u32 {
+        self.0.get()
+    }
+}
+
+/// Non-empty terminal grid dimensions validated at the Lisp boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TerminalGridSize {
+    pub cols: NonZeroU16,
+    pub rows: NonZeroU16,
+}
+
 /// Validated terminal creation request owned by the evaluator/display-host
 /// boundary. Renderer-specific command enums stay outside `neovm-core`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TerminalCreateRequest {
-    pub cols: u16,
-    pub rows: u16,
+    pub size: TerminalGridSize,
     pub mode: TerminalDisplayMode,
     pub shell: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TerminalFloatPlacement {
-    pub x: f32,
-    pub y: f32,
-    pub opacity: f32,
+    x: f32,
+    y: f32,
+    opacity: f32,
+}
+
+impl TerminalFloatPlacement {
+    pub fn new(x: f32, y: f32, opacity: f32) -> Option<Self> {
+        (x.is_finite() && y.is_finite() && opacity.is_finite() && (0.0..=1.0).contains(&opacity))
+            .then_some(Self { x, y, opacity })
+    }
+
+    pub fn x(self) -> f32 {
+        self.x
+    }
+
+    pub fn y(self) -> f32 {
+        self.y
+    }
+
+    pub fn opacity(self) -> f32 {
+        self.opacity
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1782,26 +1823,26 @@ pub trait DisplayHost {
     fn destroy_shader_surface(&self, _id: u32) -> Result<(), String> {
         Ok(())
     }
-    fn create_terminal(&self, _request: TerminalCreateRequest) -> Result<u32, String> {
+    fn create_terminal(&self, _request: TerminalCreateRequest) -> Result<TerminalId, String> {
         Err("neo-term is unsupported by this display host".to_owned())
     }
-    fn write_terminal(&self, _id: u32, _data: Vec<u8>) -> Result<(), String> {
+    fn write_terminal(&self, _id: TerminalId, _data: Vec<u8>) -> Result<(), String> {
         Err("neo-term is unsupported by this display host".to_owned())
     }
-    fn resize_terminal(&self, _id: u32, _cols: u16, _rows: u16) -> Result<(), String> {
+    fn resize_terminal(&self, _id: TerminalId, _size: TerminalGridSize) -> Result<(), String> {
         Err("neo-term is unsupported by this display host".to_owned())
     }
-    fn destroy_terminal(&self, _id: u32) -> Result<(), String> {
+    fn destroy_terminal(&self, _id: TerminalId) -> Result<(), String> {
         Err("neo-term is unsupported by this display host".to_owned())
     }
     fn set_floating_terminal(
         &self,
-        _id: u32,
+        _id: TerminalId,
         _placement: TerminalFloatPlacement,
     ) -> Result<(), String> {
         Err("neo-term is unsupported by this display host".to_owned())
     }
-    fn terminal_text(&self, _id: u32) -> Result<Option<String>, String> {
+    fn terminal_text(&self, _id: TerminalId) -> Result<Option<String>, String> {
         Err("neo-term is unsupported by this display host".to_owned())
     }
     fn set_visual_config(

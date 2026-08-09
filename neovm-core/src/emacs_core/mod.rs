@@ -87,6 +87,7 @@ pub mod minibuffer;
 pub mod misc;
 pub mod mode;
 pub mod navigation;
+pub(crate) mod neo;
 pub mod network;
 pub mod pdump;
 pub mod perf_trace;
@@ -126,9 +127,6 @@ pub mod syntax;
 #[cfg(test)]
 mod syntax_gnu_parity_regression_test;
 pub mod terminal;
-pub mod terminal_embed;
-#[cfg(test)]
-mod terminal_embed_test;
 pub mod textprop;
 pub mod threads;
 pub mod timefns;

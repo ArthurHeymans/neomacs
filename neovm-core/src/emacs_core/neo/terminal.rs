@@ -4,10 +4,14 @@
 //! [`DisplayHost`]. PTY ownership, VT parsing, and rendering remain entirely
 //! behind the display-runtime boundary.
 
-use super::error::{EvalResult, signal};
-use super::eval::{Context, TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement};
-use super::value::Value;
+use super::super::error::{EvalResult, Flow, signal};
+use super::super::eval::{
+    Context, DisplayHost, TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement,
+    TerminalGridSize, TerminalId,
+};
+use super::super::value::Value;
 use std::fmt::{Display, Formatter};
+use std::num::NonZeroU16;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum TerminalOperation {
@@ -32,11 +36,11 @@ impl Display for TerminalOperation {
     }
 }
 
-fn terminal_error(message: impl Into<String>) -> super::error::Flow {
+fn terminal_error(message: impl Into<String>) -> Flow {
     signal("error", vec![Value::string(message.into())])
 }
 
-fn wrong_type(predicate: &str, value: Value) -> super::error::Flow {
+fn wrong_type(predicate: &str, value: Value) -> Flow {
     signal("wrong-type-argument", vec![Value::symbol(predicate), value])
 }
 
@@ -44,27 +48,23 @@ fn positive_u16(
     value: Value,
     operation: TerminalOperation,
     argument: &str,
-) -> Result<u16, super::error::Flow> {
+) -> Result<NonZeroU16, Flow> {
     let integer = value.as_int().ok_or_else(|| wrong_type("fixnump", value))?;
     u16::try_from(integer)
         .ok()
-        .filter(|value| *value > 0)
+        .and_then(NonZeroU16::new)
         .ok_or_else(|| terminal_error(format!("{operation}: {argument} must be in 1..=65535")))
 }
 
-fn terminal_id(value: Value, operation: TerminalOperation) -> Result<u32, super::error::Flow> {
+fn terminal_id(value: Value, operation: TerminalOperation) -> Result<TerminalId, Flow> {
     let integer = value.as_int().ok_or_else(|| wrong_type("fixnump", value))?;
     u32::try_from(integer)
         .ok()
-        .filter(|value| *value > 0)
+        .and_then(TerminalId::new)
         .ok_or_else(|| terminal_error(format!("{operation}: terminal id must be positive")))
 }
 
-fn number(
-    value: Value,
-    operation: TerminalOperation,
-    argument: &str,
-) -> Result<f32, super::error::Flow> {
+fn number(value: Value, operation: TerminalOperation, argument: &str) -> Result<f32, Flow> {
     let number = value
         .as_int()
         .map(|value| value as f32)
@@ -79,13 +79,50 @@ fn number(
     }
 }
 
-fn display_host(
-    eval: &Context,
-    operation: TerminalOperation,
-) -> Result<&dyn super::eval::DisplayHost, super::error::Flow> {
+fn display_host(eval: &Context, operation: TerminalOperation) -> Result<&dyn DisplayHost, Flow> {
     eval.display_host
         .as_deref()
         .ok_or_else(|| terminal_error(format!("{operation}: no GUI display host in this session")))
+}
+
+/// Register the Neomacs-only terminal Lisp surface.
+pub(crate) fn syms_of_terminal(ctx: &mut Context) {
+    ctx.defsubr(
+        "neomacs-terminal-create",
+        builtin_neomacs_terminal_create,
+        3,
+        Some(4),
+    );
+    ctx.defsubr(
+        "neomacs-terminal-write",
+        builtin_neomacs_terminal_write,
+        2,
+        Some(2),
+    );
+    ctx.defsubr(
+        "neomacs-terminal-resize",
+        builtin_neomacs_terminal_resize,
+        3,
+        Some(3),
+    );
+    ctx.defsubr(
+        "neomacs-terminal-destroy",
+        builtin_neomacs_terminal_destroy,
+        1,
+        Some(1),
+    );
+    ctx.defsubr(
+        "neomacs-terminal-set-float",
+        builtin_neomacs_terminal_set_float,
+        4,
+        Some(4),
+    );
+    ctx.defsubr(
+        "neomacs-terminal-get-text",
+        builtin_neomacs_terminal_get_text,
+        1,
+        Some(1),
+    );
 }
 
 /// `(neomacs-terminal-create COLS ROWS MODE &optional SHELL)`.
@@ -119,17 +156,12 @@ pub(crate) fn builtin_neomacs_terminal_create(eval: &mut Context, args: Vec<Valu
     };
     let id = display_host(eval, OPERATION)?
         .create_terminal(TerminalCreateRequest {
-            cols,
-            rows,
+            size: TerminalGridSize { cols, rows },
             mode,
             shell,
         })
         .map_err(terminal_error)?;
-    Ok(if id == 0 {
-        Value::NIL
-    } else {
-        Value::fixnum(i64::from(id))
-    })
+    Ok(Value::fixnum(i64::from(id.get())))
 }
 
 /// `(neomacs-terminal-write TERMINAL-ID STRING)`.
@@ -151,10 +183,12 @@ pub(crate) fn builtin_neomacs_terminal_write(eval: &mut Context, args: Vec<Value
 pub(crate) fn builtin_neomacs_terminal_resize(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     const OPERATION: TerminalOperation = TerminalOperation::Resize;
     let id = terminal_id(args[0], OPERATION)?;
-    let cols = positive_u16(args[1], OPERATION, "COLS")?;
-    let rows = positive_u16(args[2], OPERATION, "ROWS")?;
+    let size = TerminalGridSize {
+        cols: positive_u16(args[1], OPERATION, "COLS")?,
+        rows: positive_u16(args[2], OPERATION, "ROWS")?,
+    };
     display_host(eval, OPERATION)?
-        .resize_terminal(id, cols, rows)
+        .resize_terminal(id, size)
         .map_err(terminal_error)?;
     Ok(Value::T)
 }
@@ -179,13 +213,10 @@ pub(crate) fn builtin_neomacs_terminal_set_float(
     let x = number(args[1], OPERATION, "X")?;
     let y = number(args[2], OPERATION, "Y")?;
     let opacity = number(args[3], OPERATION, "OPACITY")?;
-    if !(0.0..=1.0).contains(&opacity) {
-        return Err(terminal_error(format!(
-            "{OPERATION}: OPACITY must be in 0.0..=1.0"
-        )));
-    }
+    let placement = TerminalFloatPlacement::new(x, y, opacity)
+        .ok_or_else(|| terminal_error(format!("{OPERATION}: OPACITY must be in 0.0..=1.0")))?;
     display_host(eval, OPERATION)?
-        .set_floating_terminal(id, TerminalFloatPlacement { x, y, opacity })
+        .set_floating_terminal(id, placement)
         .map_err(terminal_error)?;
     Ok(Value::T)
 }
