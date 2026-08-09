@@ -3239,6 +3239,35 @@ fn builtin_coding_string_in_context(
         )
     })?;
     let mut coding = context_coding_name(ctx, args[1])?;
+    // `last-coding-system-used' reports the name the caller passed, not the
+    // system the codec resolved to, so keep it before any rewriting below.
+    let mut reported_coding = coding.clone();
+    // A coding system defined with `define-coding-system-alias' is, in GNU, a
+    // KEY in the same hash table as its target pointing at the SAME spec
+    // (`Fputhash (alias, spec, Vcoding_system_hash_table)`, src/coding.c), so
+    // every lookup resolves it -- encoders included.  Here the codec is chosen
+    // by matching the NAME against a static table of built-in systems, which a
+    // user-defined alias falls straight through, leaving no codec and encoding
+    // non-ASCII as `?`.
+    //
+    // Resolve only in that fall-through case: when the static table does not
+    // recognise the name but the runtime manager does.  Built-in aliases that
+    // the static table already handles keep their current path, and `coding`
+    // itself is left alone because `last-coding-system-used' must report the
+    // alias exactly as the caller wrote it (see
+    // `canonical_context_coding_name`), which GNU also does.
+    if coding_system_base(&coding) == coding.as_str()
+        && let Some(canonical) = ctx.coding_systems.resolve(&coding)
+    {
+        let canonical = resolve_sym(canonical);
+        if canonical != coding.as_str() {
+            coding = canonical.to_owned();
+            // Downstream helpers re-read `args[1]` rather than `coding` (see the
+            // `undecided` rewrite below), so the resolved system has to be put
+            // back there too or the codec still selects on the alias name.
+            args[1] = Value::symbol(&coding);
+        }
+    }
     // `undecided` / `prefer-utf-8` decode by detecting the byte pattern and
     // decoding as the resolved concrete coding system (GNU detect_coding).  When
     // the alias carries a CONCRETE eol_type (the bare `dos`/`mac`/`unix`
@@ -3264,6 +3293,10 @@ fn builtin_coding_string_in_context(
             // (which re-reads args[1]) uses the detected system rather than the
             // original `undecided`/`prefer-utf-8`.
             args[1] = Value::symbol(&coding);
+            // GNU stores the DETECTED system when the argument was not fully
+            // specified (`undecided`/`prefer-utf-8`), so this rewrite does
+            // reach `last-coding-system-used'.
+            reported_coding = coding.clone();
         }
     }
     let destination = coding_string_destination(args.get(3).copied())?;
@@ -3344,7 +3377,7 @@ fn builtin_coding_string_in_context(
             .clone();
         ctx.set_variable(
             "last-coding-system-used",
-            Value::symbol(canonical_context_coding_name(ctx, &coding)),
+            Value::symbol(canonical_context_coding_name(ctx, &reported_coding)),
         );
         let Some(buffer_id) = destination else {
             return Ok(result);
@@ -3457,7 +3490,7 @@ fn builtin_coding_string_in_context(
         .clone();
     ctx.set_variable(
         "last-coding-system-used",
-        Value::symbol(canonical_context_coding_name(ctx, &coding)),
+        Value::symbol(canonical_context_coding_name(ctx, &reported_coding)),
     );
 
     let Some(buffer_id) = destination else {

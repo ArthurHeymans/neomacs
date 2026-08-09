@@ -661,3 +661,63 @@ fn format_time_string_modifier_rejection_keeps_surrounding_text() {
     assert_eq!(fts_eo("[%Ed] %Y"), "[%Ed] 2024");
     assert_eq!(fts_eo("%Y-%Em-%Od"), "2024-%Em-22");
 }
+
+// ===================================================================
+// `define-coding-system-alias`
+//
+// GNU registers the alias as a KEY in the same table as its target,
+// pointing at the SAME spec (`Fputhash (alias, spec,
+// Vcoding_system_hash_table)`, src/coding.c), so every lookup resolves
+// it -- encoders and decoders included.  neomacs selects a codec by
+// matching the NAME against a table of built-in systems, which a
+// user-defined alias falls through, leaving no codec and encoding
+// non-ASCII as `?`.
+// ===================================================================
+
+#[test]
+fn coding_system_alias_encodes_through_its_target() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let _ = ev.eval_str("(define-coding-system-alias 'neo-alias-utf8 'utf-8)");
+
+    // Was `(116 63 115 116)` -- `63` is `?`, i.e. silent data loss.
+    let encoded = ev.eval_str("(append (encode-coding-string \"t\\u00ebst\" 'neo-alias-utf8) nil)");
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&encoded),
+        "OK (116 195 171 115 116)"
+    );
+
+    let roundtrip = ev.eval_str(
+        "(let ((s \"t\\u00ebst\")) \
+           (string= s (decode-coding-string (encode-coding-string s 'neo-alias-utf8) \
+                                            'neo-alias-utf8)))",
+    );
+    assert_eq!(crate::emacs_core::format_eval_result(&roundtrip), "OK t");
+}
+
+#[test]
+fn coding_system_alias_of_a_charset_system_encodes_through_its_target() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let _ = ev.eval_str("(define-coding-system-alias 'neo-alias-8859-15 'iso-8859-15)");
+    let encoded = ev.eval_str("(append (encode-coding-string \"\\u00e9\" 'neo-alias-8859-15) nil)");
+    assert_eq!(crate::emacs_core::format_eval_result(&encoded), "OK (233)");
+}
+
+#[test]
+fn coding_system_alias_is_reported_verbatim_in_last_coding_system_used() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let _ = ev.eval_str("(define-coding-system-alias 'neo-alias-reported 'utf-8)");
+    // GNU stores `CODING_ID_NAME (coding.id)` -- the name the caller passed,
+    // NOT the resolved base -- so resolving for codec selection must not leak
+    // into this variable.
+    let last = ev.eval_str(
+        "(progn (encode-coding-string \"t\\u00ebst\" 'neo-alias-reported) \
+           last-coding-system-used)",
+    );
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&last),
+        "OK neo-alias-reported"
+    );
+}
