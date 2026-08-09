@@ -312,7 +312,7 @@ rank	package	downloads	status
 311	monokai-theme	351436	covered
 312	logito	350421	covered
 313	py-isort	347936	covered
-314	helm-lsp	347705	todo
+314	helm-lsp	347705	covered
 315	spaceline-all-the-icons	347175	todo
 316	web-completion-data	345812	covered
 317	helm-pydoc	344386	todo

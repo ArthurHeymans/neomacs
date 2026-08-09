@@ -415,6 +415,7 @@ mod helm_core;
 mod helm_descbinds;
 mod helm_flx;
 mod helm_ls_git;
+mod helm_lsp;
 mod helm_make;
 mod helm_mode_manager;
 mod helm_org;

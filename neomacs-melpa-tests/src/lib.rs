@@ -2988,6 +2988,12 @@ pub const HELM_ORG_MELPA_PIN: (&str, &str) = ("helm-org", "20250405.1720");
 /// `dd0ed5847d4bf1b27e767cf194475ada88ee8898`.
 pub const HELM_LS_GIT_MELPA_PIN: (&str, &str) = ("helm-ls-git", "20260105.455");
 
+/// The exact Helm LSP package selected for practical workspace-symbol,
+/// code-action, diagnostic filtering, navigation, and failure parity. MELPA
+/// built this archive from upstream commit
+/// `056bb16b5f69137218613b7558b477f6b21f22be`.
+pub const HELM_LSP_MELPA_PIN: (&str, &str) = ("helm-lsp", "20260507.1749");
+
 /// The exact final Helm Swoop source selected for practical candidate,
 /// narrowing, query, editing, face, and buffer-selection parity. MELPA's last
 /// rolling build came from upstream commit
