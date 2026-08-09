@@ -8262,7 +8262,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "command-error-default-function",
-        |_ctx, args| builtin_command_error_default_function(args),
+        builtin_command_error_default_function,
         3,
         Some(3),
     );

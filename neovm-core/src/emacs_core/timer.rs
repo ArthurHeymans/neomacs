@@ -280,7 +280,7 @@ impl super::eval::Context {
         self.unbind_to(specpdl_count);
         self.restore_specpdl_roots(gc_roots);
 
-        self.finish_callback_flow(result, "GNU Lisp timer")
+        self.finish_callback_flow(result, crate::emacs_core::process::AsyncCallbackKind::Timer)
     }
 }
 

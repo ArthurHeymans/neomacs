@@ -8548,3 +8548,88 @@ fn process_reaching_terminal_status_dirties_chrome() {
          mode-line-process stops showing a stale status (GNU process.c:7940)"
     );
 }
+
+/// DIVERGENCES.md #18: an error signaled inside a process FILTER is reported,
+/// not swallowed. GNU routes it through `cmd_error_internal (error_val, "error
+/// in process filter: ")` (process.c:6208), whose default reporter writes the
+/// diagnostic to stderr and calls `Fkill_emacs (-1)` when noninteractive
+/// (keyboard.c:1078-1083) -- so batch dies with status 255 and the form after
+/// the error never runs.
+#[test]
+fn a_process_filter_error_is_reported_and_kills_batch_like_gnu() {
+    let mut eval = Context::new();
+    eval.assign("noninteractive", Value::T);
+
+    let flow = eval.finish_callback_flow(
+        Err(signal("error", vec![Value::string("filter boom")])),
+        AsyncCallbackKind::ProcessFilter,
+    );
+
+    match flow {
+        Err(Flow::Shutdown(request)) => {
+            assert_eq!(
+                request.exit_code, -1,
+                "GNU's Fkill_emacs (-1) is exit status 255"
+            );
+        }
+        other => panic!("a filter error must not be swallowed, got {other:?}"),
+    }
+    assert_eq!(
+        eval.shutdown_request().map(|r| r.exit_code),
+        Some(-1),
+        "the exit must be recorded, so the run cannot continue past it"
+    );
+}
+
+/// Same for SENTINELS: GNU `exec_sentinel_error_handler` (process.c:7791) uses
+/// the identical path with the "error in process sentinel: " context.
+#[test]
+fn a_process_sentinel_error_is_reported_and_kills_batch_like_gnu() {
+    let mut eval = Context::new();
+    eval.assign("noninteractive", Value::T);
+
+    let flow = eval.finish_callback_flow(
+        Err(signal("error", vec![Value::string("sentinel boom")])),
+        AsyncCallbackKind::ProcessSentinel,
+    );
+
+    assert!(
+        matches!(flow, Err(Flow::Shutdown(request)) if request.exit_code == -1),
+        "a sentinel error must not be swallowed, got {flow:?}"
+    );
+}
+
+/// A TIMER error is NOT fatal, and this is the boundary the fix must not cross.
+/// GNU runs timers through timer.el `timer-event-handler`, which wraps the call
+/// in `condition-case-unless-debug` and merely `message`s the error
+/// (timer.el:332-338) -- it never reaches `cmd_error_internal`, so batch
+/// survives a failing timer.
+#[test]
+fn a_timer_error_is_logged_but_never_fatal_like_gnu() {
+    let mut eval = Context::new();
+    eval.assign("noninteractive", Value::T);
+
+    let flow = eval.finish_callback_flow(
+        Err(signal("error", vec![Value::string("timer boom")])),
+        AsyncCallbackKind::Timer,
+    );
+
+    assert!(flow.is_ok(), "a timer error must not end the process");
+    assert_eq!(eval.shutdown_request(), None);
+}
+
+/// Interactive sessions report the same error WITHOUT exiting: GNU's default
+/// reporter only writes-and-dies on the noninteractive branch.
+#[test]
+fn an_interactive_filter_error_is_reported_without_exiting_like_gnu() {
+    let mut eval = Context::new();
+    eval.assign("noninteractive", Value::NIL);
+
+    let flow = eval.finish_callback_flow(
+        Err(signal("error", vec![Value::string("filter boom")])),
+        AsyncCallbackKind::ProcessFilter,
+    );
+
+    assert!(flow.is_ok(), "an interactive filter error must not exit");
+    assert_eq!(eval.shutdown_request(), None);
+}

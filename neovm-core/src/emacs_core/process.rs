@@ -5786,6 +5786,51 @@ fn dedupe_process_ids(process_ids: impl IntoIterator<Item = ProcessId>) -> Vec<P
     unique
 }
 
+/// Which asynchronous callback an escaped error came from.
+///
+/// GNU treats the classes DIFFERENTLY, so the kind decides the reporting, not
+/// a log string: a filter or sentinel error goes through `cmd_error_internal`
+/// (process.c:6208, :7791) and is therefore FATAL in batch, while a timer error
+/// is caught by timer.el's own `condition-case-unless-debug` and merely
+/// messaged (timer.el:332-338), so batch survives it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AsyncCallbackKind {
+    /// GNU `read_process_output_error_handler` (process.c:6208).
+    ProcessFilter,
+    /// GNU `exec_sentinel_error_handler` (process.c:7791).
+    ProcessSentinel,
+    /// GNU runs these through timer.el `timer-event-handler`, never through
+    /// the command-error reporter.
+    Timer,
+    /// A network server's log function. GNU installs NO handler around it
+    /// (a bare `calln`, process.c:5176), so an error there propagates to the
+    /// command loop instead of being reported here. Keeping the catch is a
+    /// known, deliberate divergence rather than part of this fix.
+    ServerLog,
+}
+
+impl AsyncCallbackKind {
+    /// Diagnostic name for the trace log.
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            AsyncCallbackKind::ProcessFilter => "process filter",
+            AsyncCallbackKind::ProcessSentinel => "process sentinel",
+            AsyncCallbackKind::Timer => "GNU Lisp timer",
+            AsyncCallbackKind::ServerLog => "server log",
+        }
+    }
+
+    /// GNU's `cmd_error_internal` context string for this class, or `None`
+    /// when GNU does not route the class through the command-error reporter.
+    pub(crate) fn command_error_context(self) -> Option<&'static str> {
+        match self {
+            AsyncCallbackKind::ProcessFilter => Some("error in process filter: "),
+            AsyncCallbackKind::ProcessSentinel => Some("error in process sentinel: "),
+            AsyncCallbackKind::Timer | AsyncCallbackKind::ServerLog => None,
+        }
+    }
+}
+
 impl super::eval::Context {
     fn visible_process_read_config(&self) -> ProcessReadConfig {
         let readmax = self
@@ -5852,7 +5897,7 @@ impl super::eval::Context {
         &mut self,
         callback: Value,
         args: Vec<Value>,
-        label: &str,
+        kind: AsyncCallbackKind,
     ) -> Result<(), Flow> {
         let saved_match_data = self.match_data.clone();
         let saved_current_buffer = self.buffers.current_buffer_id();
@@ -5896,7 +5941,7 @@ impl super::eval::Context {
         self.unbind_to(specpdl_count);
         self.restore_specpdl_roots(gc_roots);
 
-        self.finish_callback_flow(result, label)
+        self.finish_callback_flow(result, kind)
     }
 
     /// Resolve the control flow that escaped a timer/process callback after the
@@ -5922,7 +5967,7 @@ impl super::eval::Context {
     pub(crate) fn finish_callback_flow(
         &mut self,
         result: EvalResult,
-        label: &str,
+        kind: AsyncCallbackKind,
     ) -> Result<(), Flow> {
         match result {
             Ok(_) => Ok(()),
@@ -5931,8 +5976,23 @@ impl super::eval::Context {
             }
             Err(err @ Flow::Signal(_)) => {
                 let rendered = super::error::format_flow_with_eval(self, &err);
-                tracing::warn!("{label} callback error: {}", rendered);
-                Ok(())
+                tracing::warn!("{} callback error: {}", kind.label(), rendered);
+                let Flow::Signal(sig) = &err else {
+                    unreachable!("matched Flow::Signal above")
+                };
+                match kind.command_error_context() {
+                    // GNU reports these through cmd_error_internal, whose
+                    // default reporter writes to stderr and kills a batch
+                    // session -- so the shutdown propagates and the work the
+                    // error escaped from is not resumed.
+                    Some(context) => {
+                        let data = self.signal_error_data_value(sig);
+                        self.report_command_error(data, context)
+                    }
+                    // Reported by the callback's own Lisp handler in GNU; the
+                    // trace above is all this boundary owes.
+                    None => Ok(()),
+                }
             }
         }
     }
@@ -5950,13 +6010,13 @@ impl super::eval::Context {
             self.run_async_process_callback_preserving_state(
                 callback,
                 vec![proc_val, output_val],
-                "process filter",
+                AsyncCallbackKind::ProcessFilter,
             )
         } else if filter.is_truthy() {
             self.run_async_process_callback_preserving_state(
                 filter,
                 vec![proc_val, output_val],
-                "process filter",
+                AsyncCallbackKind::ProcessFilter,
             )
         } else {
             Ok(())
@@ -6067,7 +6127,7 @@ impl super::eval::Context {
         self.run_async_process_callback_preserving_state(
             callback,
             vec![Value::make_process(pid), Value::string(message)],
-            "process sentinel",
+            AsyncCallbackKind::ProcessSentinel,
         )
     }
 
@@ -6111,7 +6171,7 @@ impl super::eval::Context {
                 Value::make_process(client_id),
                 Value::string(message),
             ],
-            "process log",
+            AsyncCallbackKind::ServerLog,
         )
     }
 

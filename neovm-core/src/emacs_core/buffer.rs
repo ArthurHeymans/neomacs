@@ -2749,8 +2749,17 @@ pub(crate) fn builtin_clear_string(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(command-error-default-function DATA CONTEXT CALLER)` -> nil
-pub(crate) fn builtin_command_error_default_function(args: Vec<Value>) -> EvalResult {
+///
+/// GNU keyboard.c:1049-1101. Batch and pre-display sessions print the
+/// diagnostic to stderr and exit with status 255; a live session messages it.
+/// help.el's `help-command-error-confusable-suggestions` delegates here, so
+/// this is what every unhandled command/filter/sentinel error is reported by.
+pub(crate) fn builtin_command_error_default_function(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("command-error-default-function", &args, 3)?;
+    eval.command_error_default_report(args[0], args[1])?;
     Ok(Value::NIL)
 }
 

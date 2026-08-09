@@ -6871,7 +6871,14 @@ fn vm_base64_json_ccl_and_runtime_clusters_use_direct_dispatch() {
                  (stringp (dbus-get-unique-name :session))
                  (null (dbus-message-internal 2 :dest :path :iface :member))
                  (consp (get-load-suffixes))
-                 (null (command-error-default-function nil nil nil))
+                 ;; Valid args, and bound non-interactive so the reporter
+                 ;; takes its message branch: the batch branch is GNU's
+                 ;; Fkill_emacs (-1) and would end the test run. Nil args are
+                 ;; deliberately not used -- GNU segfaults on them (XCAR of
+                 ;; nil), so they pin nothing.
+                 (null (let ((noninteractive nil))
+                         (command-error-default-function
+                          '(error "dispatch probe") "probe: " nil)))
                  (equal
                   (single-key-description (event-convert-list '(control ?x)))
                   "C-x")
