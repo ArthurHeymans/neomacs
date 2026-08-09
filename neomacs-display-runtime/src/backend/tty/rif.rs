@@ -1133,11 +1133,34 @@ impl TtyRif {
                 continue;
             }
             if self.force_full_render {
-                ops.push(TermOp::WriteRun {
-                    row: row as u16,
-                    start: first_changed as u16,
-                    end: last_changed as u16 + 1,
-                });
+                // Repaint an unknown row exactly like a terminal row, not as
+                // an artificial width-sized string. GNU writes the meaningful
+                // prefix and erases the uniform blank tail. Besides saving
+                // bytes, this preserves the terminal distinction between
+                // cells that were written as spaces and cells cleared by EL.
+                if let Some((split, bg)) = uniform_erasable_tail(desired_row, 0)
+                    && self.caps.erase_to_eol
+                    && (bg.is_none() || self.caps.back_color_erase)
+                {
+                    if split > 0 {
+                        ops.push(TermOp::WriteRun {
+                            row: row as u16,
+                            start: 0,
+                            end: split as u16,
+                        });
+                    }
+                    ops.push(TermOp::EraseToEol {
+                        row: row as u16,
+                        from: split as u16,
+                        bg,
+                    });
+                } else {
+                    ops.push(TermOp::WriteRun {
+                        row: row as u16,
+                        start: first_changed as u16,
+                        end: last_changed as u16 + 1,
+                    });
+                }
                 continue;
             }
 
@@ -1197,24 +1220,8 @@ impl TtyRif {
             // stays on the write path.
             const MIN_ERASE_CELLS: usize = 4;
             let mut erase_from: Option<usize> = None;
-            let width = desired_row.len();
             {
-                let mut split = width;
-                let mut tail_bg: Option<Option<(u8, u8, u8)>> = None;
-                for col in (first_changed..width).rev() {
-                    let cell = &desired_row[col];
-                    if !erasable_blank(cell) {
-                        break;
-                    }
-                    match tail_bg {
-                        None => tail_bg = Some(cell.attrs.bg),
-                        Some(bg) if bg != cell.attrs.bg => break,
-                        Some(_) => {}
-                    }
-                    split = col;
-                }
-                if let Some(bg) = tail_bg
-                    && split < width
+                if let Some((split, bg)) = uniform_erasable_tail(desired_row, first_changed)
                     && split + MIN_ERASE_CELLS <= last_changed + 1
                     && self.caps.erase_to_eol
                     && (bg.is_none() || self.caps.back_color_erase)
@@ -1870,6 +1877,29 @@ fn erasable_blank(cell: &TtyCell) -> bool {
         && cell.attrs.underline == 0
         && !cell.attrs.strikethrough
         && !cell.attrs.inverse
+}
+
+/// Return the start and background of the physical row's uniform erasable
+/// blank tail, without scanning before `search_start`.
+fn uniform_erasable_tail(
+    row: &[TtyCell],
+    search_start: usize,
+) -> Option<(usize, Option<(u8, u8, u8)>)> {
+    let mut cells = row.get(search_start..)?.iter().enumerate().rev();
+    let (last_offset, last) = cells.next()?;
+    if !erasable_blank(last) {
+        return None;
+    }
+
+    let background = last.attrs.bg;
+    let mut split = search_start + last_offset;
+    for (offset, cell) in cells {
+        if !erasable_blank(cell) || cell.attrs.bg != background {
+            break;
+        }
+        split = search_start + offset;
+    }
+    Some((split, background))
 }
 
 fn row_has_composite_cells(row: &[TtyCell]) -> bool {

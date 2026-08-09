@@ -1335,6 +1335,30 @@ fn first_diff_repaints_unknown_terminal() {
 }
 
 #[test]
+fn first_diff_erases_default_blank_tails_instead_of_writing_spaces() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(5, 1, caps);
+    rif.desired.set(0, 0, 'A', CellAttrs::default(), false);
+
+    rif.diff_and_render();
+    let output = rif.take_output();
+
+    assert!(
+        output
+            .windows(b"\x1b[K".len())
+            .any(|bytes| bytes == b"\x1b[K"),
+        "full repaint should erase its blank tail: {:?}",
+        String::from_utf8_lossy(&output),
+    );
+    assert!(
+        !output.windows(5).any(|bytes| bytes == b"A    "),
+        "full repaint wrote explicit trailing spaces: {:?}",
+        String::from_utf8_lossy(&output),
+    );
+}
+
+#[test]
 fn diff_and_render_emits_hardware_cursor_shape_for_bar_cursor() {
     let mut rif = TtyRif::new(10, 5);
     rif.desired.set(0, 0, 'A', CellAttrs::default(), false);

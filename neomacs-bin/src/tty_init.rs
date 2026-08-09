@@ -157,8 +157,22 @@ pub fn tty_check_terminal_powerful_enough() -> Result<(), String> {
     }
 }
 
+/// Bytes that enter the GNU-compatible interactive TTY state.
+fn tty_enter_sequence() -> &'static [u8] {
+    // GNU's TTY startup enables the terminal modes its input decoder relies
+    // on: application keypad, application cursor keys, and bracketed paste.
+    // Keep the inverse sequence in `tty_leave_sequence` so shell state is
+    // restored even though the modes do not affect painted cells directly.
+    b"\x1b[?1049h\x1b=\x1b[?1h\x1b[?2004h\x1b[?25l\x1b[2J"
+}
+
+/// Bytes that restore the terminal state owned by the invoking shell.
+fn tty_leave_sequence() -> &'static [u8] {
+    b"\x1b[0m\x1b[?25h\x1b[?2004l\x1b[?1l\x1b>\x1b[?1049l"
+}
+
 /// Set up the terminal for the TtyRif direct-rendering path:
-/// raw mode, alternate screen buffer, hidden cursor.
+/// raw mode, alternate screen buffer, GNU input modes, hidden cursor.
 pub fn tty_init_terminal() {
     // Register what this terminal can render, as GNU does in `init_tty`: the
     // terminfo attribute strings (`sitm`, `smul`, `Smulx`, `bold`, `dim`, `smxx`,
@@ -179,9 +193,9 @@ pub fn tty_init_terminal() {
         return;
     }
 
-    // Enter alternate screen, hide cursor, clear
+    // Enter alternate screen, configure input modes, hide cursor, clear.
     let mut stdout = std::io::stdout();
-    let _ = stdout.write_all(b"\x1b[?1049h\x1b[?25l\x1b[2J");
+    let _ = stdout.write_all(tty_enter_sequence());
     let _ = stdout.flush();
     tracing::info!("TTY terminal initialized (raw mode + alt screen)");
 }
@@ -189,9 +203,9 @@ pub fn tty_init_terminal() {
 /// Restore the terminal to its original state: show cursor, leave alt screen,
 /// reset SGR, disable raw mode.
 pub fn tty_shutdown_terminal() {
-    // Show cursor, reset SGR, leave alternate screen
+    // Show cursor, restore input modes, reset SGR, leave alternate screen.
     let mut stdout = std::io::stdout();
-    let _ = stdout.write_all(b"\x1b[0m\x1b[?25h\x1b[?1049l");
+    let _ = stdout.write_all(tty_leave_sequence());
     let _ = stdout.flush();
 
     // Restore raw mode
@@ -209,30 +223,5 @@ pub fn should_enable_live_tty_io(startup: &StartupOptions) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::terminal_size_from_env_values;
-
-    #[test]
-    fn terminal_size_from_env_values_uses_positive_columns_and_lines() {
-        assert_eq!(
-            terminal_size_from_env_values(Some("160".to_string()), Some("50".to_string())),
-            Some((160, 50))
-        );
-    }
-
-    #[test]
-    fn terminal_size_from_env_values_rejects_missing_zero_or_invalid_values() {
-        assert_eq!(
-            terminal_size_from_env_values(None, Some("50".to_string())),
-            None
-        );
-        assert_eq!(
-            terminal_size_from_env_values(Some("160".to_string()), Some("0".to_string())),
-            None
-        );
-        assert_eq!(
-            terminal_size_from_env_values(Some("wide".to_string()), Some("50".to_string())),
-            None
-        );
-    }
-}
+#[path = "tty_init_test.rs"]
+mod tty_init_test;
