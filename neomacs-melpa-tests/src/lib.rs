@@ -3145,6 +3145,12 @@ pub const TREEMACS_EVIL_MELPA_PIN: (&str, &str) = ("treemacs-evil", "20250320.21
 /// monorepo commit `55079b017fb821a34ace398cd3d8c5b556a22f6d`.
 pub const TREEMACS_ICONS_DIRED_MELPA_PIN: (&str, &str) = ("treemacs-icons-dired", "20250320.2145");
 
+/// The exact Treemacs-Magit integration selected for practical real-repository
+/// staging, update coalescing, Treemacs refresh, and disabled-mode parity.
+/// MELPA built this archive from the Treemacs monorepo commit
+/// `68e444e066a30d70a201fb162c8cf3d472226853`.
+pub const TREEMACS_MAGIT_MELPA_PIN: (&str, &str) = ("treemacs-magit", "20250726.2233");
+
 /// The exact Treemacs-Projectile package selected for practical workspace
 /// admission, project discovery, startup-root, file-buffer/cache, mouse-menu,
 /// keymap, and hook-registration parity. MELPA built this archive from the

@@ -283,7 +283,7 @@ rank	package	downloads	status
 282	cython-mode	401710	covered
 283	web-beautify	397973	covered
 284	docker	397957	covered
-285	treemacs-magit	396611	todo
+285	treemacs-magit	396611	covered
 286	counsel-projectile	395439	covered
 287	org-projectile	394642	todo
 288	gh	394629	todo

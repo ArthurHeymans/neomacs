@@ -585,6 +585,7 @@ mod transient;
 mod treemacs;
 mod treemacs_evil;
 mod treemacs_icons_dired;
+mod treemacs_magit;
 mod treemacs_persp;
 mod treemacs_projectile;
 mod treepy;
