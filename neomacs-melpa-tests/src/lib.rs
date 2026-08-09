@@ -482,6 +482,13 @@ pub const SLY_MELPA_PIN: (&str, &str) = ("sly", "20260402.2249");
 /// `086420d16e526c79b67fc1edec4c2ae1e699f372`.
 pub const SPACELINE_MELPA_PIN: (&str, &str) = ("spaceline", "20230922.1127");
 
+/// The exact Spaceline All The Icons package selected by the practical
+/// installed-theme, mode-line interaction, customization, and failure-
+/// diagnosis parity corpus. MELPA built this archive from upstream commit
+/// `5afd48c10f1bd42d9b9648c5e64596b72f3e9042`.
+pub const SPACELINE_ALL_THE_ICONS_MELPA_PIN: (&str, &str) =
+    ("spaceline-all-the-icons", "20190325.1602");
+
 /// The exact Spinner package selected by the practical mode-line, timer,
 /// delayed-animation, multi-buffer, and lifecycle parity corpus. MELPA built
 /// this archive from upstream commit `bca794fa6f6b007292cdac9b0a850a3711986db5`.

@@ -313,7 +313,7 @@ rank	package	downloads	status
 312	logito	350421	covered
 313	py-isort	347936	covered
 314	helm-lsp	347705	covered
-315	spaceline-all-the-icons	347175	todo
+315	spaceline-all-the-icons	347175	covered
 316	web-completion-data	345812	covered
 317	helm-pydoc	344386	todo
 318	restclient	344348	covered

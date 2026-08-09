@@ -574,6 +574,7 @@ mod smeargle;
 mod smex;
 mod solarized_theme;
 mod spaceline;
+mod spaceline_all_the_icons;
 mod spacemacs_theme;
 mod spinner;
 mod splitter;
