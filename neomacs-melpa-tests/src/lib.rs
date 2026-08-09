@@ -6004,3 +6004,7 @@ pub const EMBARK_MELPA_PIN: (&str, &str) = ("embark", "20260609.2102");
 /// The exact julia-mode package selected for practical indentation and font-lock.
 /// Pinned to upstream commit `1b5a4c2f5b7c3f842785985bf8778b8805cc6766`.
 pub const JULIA_MODE_MELPA_PIN: (&str, &str) = ("julia-mode", "20260529.1624");
+
+/// The exact elfeed package selected for practical feed/OPML/date parsing.
+/// Pinned to upstream commit `2970e5d1aa2a6f5c4cb607e0b835b91a6bffec4f`.
+pub const ELFEED_MELPA_PIN: (&str, &str) = ("elfeed", "20260805.1030");

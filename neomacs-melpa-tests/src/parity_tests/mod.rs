@@ -319,6 +319,7 @@ mod dotenv_mode;
 mod drag_stuff;
 mod dumb_jump;
 mod editorconfig;
+mod elfeed;
 mod elisp_refs;
 mod elisp_slime_nav;
 mod elixir_mode;

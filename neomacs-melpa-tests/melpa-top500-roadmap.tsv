@@ -346,7 +346,7 @@ rank	package	downloads	status
 345	julia-mode	303997	covered
 346	helm-css-scss	303862	todo
 347	eshell-z	302638	todo
-348	elfeed	301741	todo
+348	elfeed	301741	covered
 349	elisp-def	300903	todo
 350	ggtags	300868	todo
 351	git-gutter-fringe	299123	todo
