@@ -46,6 +46,26 @@ fn cursor_color_cycle_rate_respects_effect_and_display_limits() {
     );
 }
 
+#[test]
+fn reported_display_rate_is_a_hard_cap_even_below_30_hz() {
+    assert_eq!(
+        RenderApp::display_rate_limit(Some(24_000)),
+        std::num::NonZeroU16::new(24).unwrap()
+    );
+    assert_eq!(
+        RenderApp::display_rate_limit(Some(23_976)),
+        std::num::NonZeroU16::new(23).unwrap(),
+        "the integer scheduler must conservatively floor a fractional display rate"
+    );
+    assert_eq!(
+        RenderApp::cursor_color_cycle_rate(
+            FrameRate::new(60).unwrap(),
+            RenderApp::display_rate_limit(Some(24_000)),
+        ),
+        std::num::NonZeroU16::new(24).unwrap()
+    );
+}
+
 fn frame_with_cursor_effects(
     effects: Option<EffectsConfig>,
     cursor_style: CursorStyle,
@@ -160,6 +180,150 @@ fn cursor_color_cycle_cadence_covers_every_rendered_window_cursor() {
         std::num::NonZeroU16::new(24),
         "a hollow selected cursor must not suppress a cycling decorative cursor"
     );
+}
+
+#[test]
+fn cursor_color_cycle_state_translates_to_an_exact_scheduler_demand() {
+    use super::frame_sched::{Cadence, DemandReason, FrameDemand, Invalidation, LayerMask};
+
+    let display_60_hz = std::num::NonZeroU16::new(60).unwrap();
+    let global = EffectsConfig::default();
+    let frame = frame_with_cursor_effects(None, CursorStyle::FilledBox);
+    let expected = FrameDemand {
+        invalidation: Invalidation::CompositeOnly {
+            layers: LayerMask::CURSOR_EFFECTS,
+        },
+        cadence: Cadence::MaxRate(std::num::NonZeroU16::new(24).unwrap()),
+        reason: DemandReason::CursorColorCycle,
+    };
+
+    assert_eq!(
+        RenderApp::cursor_color_cycle_demand(&frame, &global, display_60_hz, true, true),
+        Some(expected)
+    );
+    assert_eq!(
+        RenderApp::cursor_color_cycle_demand(&frame, &global, display_60_hz, false, true),
+        None,
+        "blinked-off cursor state must retract standing demand"
+    );
+    assert_eq!(
+        RenderApp::cursor_color_cycle_demand(&frame, &global, display_60_hz, true, false),
+        None,
+        "unfocused windows must retract standing demand"
+    );
+}
+
+#[test]
+fn cursor_color_cycle_reconciliation_drives_attributed_frames_and_retracts() {
+    use super::frame_sched::{
+        ClockSource, DemandReason, FrameCoordinator, FrameTick, NativeWindowId, PacingAction,
+        RenderWork,
+    };
+
+    let mut coordinator = FrameCoordinator::new();
+    let id = NativeWindowId(7);
+    let now = std::time::Instant::now();
+    let display_60_hz = std::num::NonZeroU16::new(60).unwrap();
+    let global = EffectsConfig::default();
+    let frame = frame_with_cursor_effects(None, CursorStyle::FilledBox);
+    let tick = |at| FrameTick {
+        frame_time: at,
+        target_presentation_time: at,
+        estimated_interval: std::time::Duration::from_secs_f64(1.0 / 60.0),
+        source: ClockSource::Synthetic,
+    };
+
+    assert_eq!(
+        RenderApp::reconcile_cursor_color_cycle_demand(
+            &mut coordinator,
+            id,
+            Some(&frame),
+            &global,
+            display_60_hz,
+            true,
+            now,
+        ),
+        PacingAction::RequestRedraw
+    );
+    let plan = coordinator.begin_frame(id, tick(now));
+    assert_eq!(
+        plan.work,
+        RenderWork::CompositeOnly {
+            layers: super::frame_sched::LayerMask::CURSOR_EFFECTS,
+        }
+    );
+    assert!(plan.reasons.contains(DemandReason::CursorColorCycle));
+    assert!(!plan.reasons.contains(DemandReason::PlatformRedraw));
+
+    assert!(matches!(
+        RenderApp::reconcile_cursor_color_cycle_demand(
+            &mut coordinator,
+            id,
+            Some(&frame),
+            &global,
+            display_60_hz,
+            true,
+            now + std::time::Duration::from_millis(1),
+        ),
+        PacingAction::WakeAt(_)
+    ));
+    assert_eq!(
+        RenderApp::reconcile_cursor_color_cycle_demand(
+            &mut coordinator,
+            id,
+            Some(&frame),
+            &global,
+            display_60_hz,
+            false,
+            now + std::time::Duration::from_millis(2),
+        ),
+        PacingAction::Sleep,
+        "a blinked-off cursor must withdraw its standing deadline"
+    );
+    assert!(coordinator.active_reasons(id).is_empty());
+    assert_eq!(coordinator.next_wake_deadline(), None);
+
+    assert_eq!(
+        RenderApp::reconcile_cursor_color_cycle_demand(
+            &mut coordinator,
+            id,
+            Some(&frame),
+            &global,
+            display_60_hz,
+            true,
+            now + std::time::Duration::from_millis(3),
+        ),
+        PacingAction::RequestRedraw
+    );
+    let _ = coordinator.begin_frame(id, tick(now + std::time::Duration::from_millis(3)));
+    assert!(matches!(
+        RenderApp::reconcile_cursor_color_cycle_demand(
+            &mut coordinator,
+            id,
+            Some(&frame),
+            &global,
+            display_60_hz,
+            true,
+            now + std::time::Duration::from_millis(4),
+        ),
+        PacingAction::WakeAt(_)
+    ));
+    coordinator.set_focused(id, false);
+    assert_eq!(
+        RenderApp::reconcile_cursor_color_cycle_demand(
+            &mut coordinator,
+            id,
+            Some(&frame),
+            &global,
+            display_60_hz,
+            true,
+            now + std::time::Duration::from_millis(5),
+        ),
+        PacingAction::Sleep,
+        "an unfocused window must withdraw its standing deadline"
+    );
+    assert!(coordinator.active_reasons(id).is_empty());
+    assert_eq!(coordinator.next_wake_deadline(), None);
 }
 
 fn seal_state(mut state: FrameDisplayState) -> SealedFramePresentation {

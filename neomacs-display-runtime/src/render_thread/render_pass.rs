@@ -35,7 +35,29 @@ mod retained_static_pointer_tests {
     use crate::core::frame_glyphs::{CursorStyle, DisplaySlotId, FrameGlyphBuffer, WindowCursor};
     use crate::render_thread::state::{PointerAppearanceState, PresentedAppearanceKey};
     use neomacs_display_protocol::frame_chrome::PresentationId;
-    use neomacs_display_protocol::{Color, DisplayWindowId, PointerAppearanceId};
+    use neomacs_display_protocol::{
+        Color, DisplayWindowId, EffectsConfig, FrameRate, PointerAppearanceId,
+    };
+
+    fn filled_box_frame(effects: EffectsConfig) -> (FrameGlyphBuffer, DisplayWindowId) {
+        let window_id = DisplayWindowId::new(1);
+        let mut frame = FrameGlyphBuffer::with_size(20.0, 20.0);
+        frame.window_cursors.push(WindowCursor {
+            window_id,
+            slot_id: DisplaySlotId::ZERO,
+            x: 1.0,
+            y: 2.0,
+            width: 3.0,
+            height: 4.0,
+            style: CursorStyle::FilledBox,
+            color: Color::WHITE,
+            cursor_fg: Color::BLACK,
+            ascent: 0.0,
+            active: true,
+        });
+        frame.set_window_cursor_effects(window_id, effects);
+        (frame, window_id)
+    }
 
     #[test]
     fn hover_and_pressed_pointer_appearance_force_full_render_and_disable_cursor_cells() {
@@ -77,6 +99,32 @@ mod retained_static_pointer_tests {
             &pointer
         ));
         assert!(RenderApp::build_filled_box_cursor_cells(&frame, 1.0, &pointer).is_empty());
+    }
+
+    #[test]
+    fn retained_filled_box_cursor_cells_preserve_local_effect_profiles() {
+        let pointer = PointerAppearanceState::default();
+
+        for local_enabled in [false, true] {
+            let mut local = EffectsConfig::cursor_profile_baseline();
+            local.cursor_color_cycle.enabled = local_enabled;
+            local.cursor_color_cycle.fps = FrameRate::new(12).unwrap();
+            let (frame, window_id) = filled_box_frame(local.clone());
+
+            let mut global = EffectsConfig::default();
+            global.cursor_color_cycle.enabled = !local_enabled;
+            global.cursor_color_cycle.fps = FrameRate::new(60).unwrap();
+
+            let cells = RenderApp::build_filled_box_cursor_cells(&frame, 1.0, &pointer);
+            assert_eq!(cells.len(), 1);
+            assert_eq!(
+                cells[0]
+                    .mini
+                    .effective_window_cursor_effects(window_id, &global),
+                &local,
+                "the retained cursor-only path must resolve the same local profile as the full renderer"
+            );
+        }
     }
 }
 
@@ -1171,6 +1219,13 @@ impl RenderApp {
             let mut only_cursor = cursor.clone();
             only_cursor.active = true;
             mini.window_cursors = vec![only_cursor];
+            // The retained cursor cell is rendered independently from its
+            // source frame. Preserve the source window's local profile so the
+            // cursor-only and full-render paths resolve configuration through
+            // the same local-over-global rule.
+            if let Some(effects) = frame.window_cursor_effects(cursor.window_id) {
+                mini.set_window_cursor_effects(cursor.window_id, effects.clone());
+            }
             // The box covers the cell = the cursor rect; scissor to it in
             // physical pixels (glyph positions are logical, scaled by the
             // uniform, so the scissor rect is logical * scale).

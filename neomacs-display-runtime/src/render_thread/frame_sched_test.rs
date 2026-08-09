@@ -364,6 +364,76 @@ fn changing_max_rate_reanchors_without_waiting_for_the_old_period() {
 }
 
 #[test]
+fn max_rate_preserves_its_phase_after_a_year_of_missed_frames() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    let rate = std::num::NonZeroU16::new(1).unwrap();
+    let demand = FrameDemand {
+        invalidation: Invalidation::CompositeOnly {
+            layers: LayerMask::CURSOR_EFFECTS,
+        },
+        cadence: Cadence::MaxRate(rate),
+        reason: DemandReason::CursorColorCycle,
+    };
+
+    c.submit_demand(win(1), demand, now);
+    let _ = c.begin_frame(win(1), tick_at(now));
+
+    let resumed_at = now + Duration::from_secs(365 * 24 * 60 * 60) + Duration::from_millis(250);
+    assert_eq!(
+        c.submit_demand(win(1), demand, resumed_at),
+        PacingAction::RequestRedraw
+    );
+    let _ = c.begin_frame(win(1), tick_at(resumed_at));
+    let next = match c.submit_demand(win(1), demand, resumed_at + Duration::from_nanos(1)) {
+        PacingAction::WakeAt(next) => next,
+        action => panic!("expected a phase-aligned deadline after resume, got {action:?}"),
+    };
+
+    assert_eq!(
+        next,
+        resumed_at + Duration::from_millis(750),
+        "missed frames must advance on the original phase grid, not re-anchor at resume time"
+    );
+}
+
+#[test]
+fn late_reconciliation_consumes_the_expired_schedule_exactly_once() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    let demand = FrameDemand {
+        invalidation: Invalidation::CompositeOnly {
+            layers: LayerMask::CURSOR_EFFECTS,
+        },
+        cadence: Cadence::MaxRate(std::num::NonZeroU16::new(1).unwrap()),
+        reason: DemandReason::CursorColorCycle,
+    };
+
+    assert_eq!(
+        c.submit_demand(win(1), demand, now),
+        PacingAction::RequestRedraw
+    );
+    let _ = c.begin_frame(win(1), tick_at(now));
+    assert_eq!(
+        c.submit_demand(win(1), demand, now + ms(100)),
+        PacingAction::WakeAt(now + Duration::from_secs(1))
+    );
+
+    let late = now + Duration::from_millis(1_250);
+    assert_eq!(
+        c.submit_demand(win(1), demand, late),
+        PacingAction::RequestRedraw
+    );
+    let plan = c.begin_frame(win(1), tick_at(late));
+    assert!(plan.reasons.contains(DemandReason::CursorColorCycle));
+    assert_eq!(
+        c.submit_demand(win(1), demand, late + Duration::from_nanos(1)),
+        PacingAction::WakeAt(now + Duration::from_secs(2)),
+        "the expired scheduled record must not be consumed twice or re-anchor the phase"
+    );
+}
+
+#[test]
 fn commit_wakes_immediately_despite_future_deadline() {
     let mut c = FrameCoordinator::new();
     let now = t0();

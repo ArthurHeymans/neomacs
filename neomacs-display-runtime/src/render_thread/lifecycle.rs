@@ -495,38 +495,17 @@ impl RenderApp {
             // contribute to the aggregate rate because the cycle cannot change
             // their pixels. Color remains a function of elapsed presentation
             // time, not the number of ticks.
-            let cycle_rate = window_state
-                .render
-                .compositor
-                .current_frame
-                .as_ref()
-                .and_then(|frame| {
-                    Self::cursor_color_cycle_cadence(
-                        frame,
-                        &self.effects,
-                        max_rate,
-                        window_state.render.cursor.blink_on,
-                    )
-                })
-                .filter(|_| self.frame_coordinator.is_focused(id));
-            if let Some(cycle_rate) = cycle_rate {
-                let cycle_action = self.frame_coordinator.submit_demand(
-                    id,
-                    FrameDemand {
-                        invalidation: Invalidation::CompositeOnly {
-                            layers: LayerMask::CURSOR_EFFECTS,
-                        },
-                        cadence: Cadence::MaxRate(cycle_rate),
-                        reason: DemandReason::CursorColorCycle,
-                    },
-                    now,
-                );
-                if cycle_action == PacingAction::RequestRedraw {
-                    action = PacingAction::RequestRedraw;
-                }
-            } else {
-                self.frame_coordinator
-                    .retract(id, DemandReason::CursorColorCycle);
+            let cycle_action = Self::reconcile_cursor_color_cycle_demand(
+                &mut self.frame_coordinator,
+                id,
+                window_state.render.compositor.current_frame.as_ref(),
+                &self.effects,
+                max_rate,
+                window_state.render.cursor.blink_on,
+                now,
+            );
+            if cycle_action == PacingAction::RequestRedraw {
+                action = PacingAction::RequestRedraw;
             }
 
             // A blink toggle that already happened needs its frame now. It
@@ -589,20 +568,33 @@ impl RenderApp {
         }
     }
 
-    /// Estimated display cadence for a window: the monitor-reported refresh
-    /// rate is an initial estimate (refined by measurement in later stages),
-    /// clamped to a sane range, defaulting to 60 Hz.
+    /// Convert a monitor-reported refresh rate into the scheduler's display
+    /// limit. A real, low refresh rate is preserved: the limit must never make
+    /// an effect run faster than the display can present. Missing or zero
+    /// reports fall back to 60 Hz, and implausibly high reports are bounded.
+    pub(super) fn display_rate_limit(refresh_rate_millihertz: Option<u32>) -> std::num::NonZeroU16 {
+        let hz = refresh_rate_millihertz
+            .filter(|millihertz| *millihertz != 0)
+            .map(|millihertz| {
+                (u64::from(millihertz) / 1_000)
+                    .clamp(1, 240)
+                    .try_into()
+                    .expect("the display-rate bound fits u16")
+            })
+            .unwrap_or(60);
+        std::num::NonZeroU16::new(hz).expect("the display-rate limit is non-zero")
+    }
+
+    /// Estimated maximum presentation cadence for a window, derived from the
+    /// current monitor and defaulting to 60 Hz when it is unavailable.
     pub(super) fn window_max_rate(
         window_state: &super::frame_windows::GuiFrameWindowState,
     ) -> std::num::NonZeroU16 {
-        let hz = window_state
+        let reported_millihertz = window_state
             .window()
             .and_then(|window| window.current_monitor())
-            .and_then(|monitor| monitor.refresh_rate_millihertz())
-            .map(|mhz| ((mhz as f64) / 1000.0).round() as u16)
-            .unwrap_or(60)
-            .clamp(30, 240);
-        std::num::NonZeroU16::new(hz).unwrap_or(std::num::NonZeroU16::new(60).unwrap())
+            .and_then(|monitor| monitor.refresh_rate_millihertz());
+        Self::display_rate_limit(reported_millihertz)
     }
 
     /// Convert the user-facing integer rate into the scheduler's valid rate
@@ -642,6 +634,70 @@ impl RenderApp {
                     .then(|| Self::cursor_color_cycle_rate(cycle.fps, display_max_rate))
             })
             .max_by_key(|rate| rate.get())
+    }
+
+    /// Translate renderer-visible cursor state into one typed standing demand.
+    /// This is the policy seam between visual configuration and the generic
+    /// frame coordinator: lifecycle code does not reconstruct the cadence,
+    /// invalidation, or diagnostic reason independently.
+    pub(super) fn cursor_color_cycle_demand(
+        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        global_effects: &neomacs_display_protocol::EffectsConfig,
+        display_max_rate: std::num::NonZeroU16,
+        cursor_visible: bool,
+        window_focused: bool,
+    ) -> Option<super::frame_sched::FrameDemand> {
+        use super::frame_sched::{Cadence, DemandReason, FrameDemand, Invalidation, LayerMask};
+
+        if !window_focused {
+            return None;
+        }
+        let rate = Self::cursor_color_cycle_cadence(
+            frame,
+            global_effects,
+            display_max_rate,
+            cursor_visible,
+        )?;
+        Some(FrameDemand {
+            invalidation: Invalidation::CompositeOnly {
+                layers: LayerMask::CURSOR_EFFECTS,
+            },
+            cadence: Cadence::MaxRate(rate),
+            reason: DemandReason::CursorColorCycle,
+        })
+    }
+
+    /// Atomically reconcile the cursor-cycle producer's standing demand with
+    /// the generic coordinator. This is the runtime integration seam: absent,
+    /// blinked-off, hollow, disabled, or unfocused cursor state withdraws the
+    /// producer; visible cycling state submits its exact typed demand.
+    pub(super) fn reconcile_cursor_color_cycle_demand(
+        coordinator: &mut super::frame_sched::FrameCoordinator,
+        id: super::frame_sched::NativeWindowId,
+        frame: Option<&crate::core::frame_glyphs::FrameGlyphBuffer>,
+        global_effects: &neomacs_display_protocol::EffectsConfig,
+        display_max_rate: std::num::NonZeroU16,
+        cursor_visible: bool,
+        now: std::time::Instant,
+    ) -> super::frame_sched::PacingAction {
+        use super::frame_sched::{DemandReason, PacingAction};
+
+        let demand = frame.and_then(|frame| {
+            Self::cursor_color_cycle_demand(
+                frame,
+                global_effects,
+                display_max_rate,
+                cursor_visible,
+                coordinator.is_focused(id),
+            )
+        });
+        match demand {
+            Some(demand) => coordinator.submit_demand(id, demand, now),
+            None => {
+                coordinator.retract(id, DemandReason::CursorColorCycle);
+                PacingAction::Sleep
+            }
+        }
     }
 
     pub(super) fn handle_exiting(&mut self) {

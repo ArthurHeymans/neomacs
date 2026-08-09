@@ -376,6 +376,24 @@ pub(crate) struct NativeWindowId(pub u64);
 /// failure cannot produce an immediate retry storm).
 const TIMEOUT_BACKOFF: Duration = Duration::from_millis(50);
 
+/// Return the first point on `anchor + n * period` strictly after `now`.
+///
+/// A compositor may resume after hours or days of suspension. Advancing one
+/// period at a time makes wake-up work proportional to every frame that was
+/// deliberately skipped; remainder arithmetic preserves the same phase in
+/// constant time.
+fn next_max_rate_phase(anchor: Instant, now: Instant, period: Duration) -> Instant {
+    debug_assert!(anchor <= now);
+    let elapsed = now.duration_since(anchor);
+    let remainder_nanos = elapsed.as_nanos() % period.as_nanos();
+    let until_next = if remainder_nanos == 0 {
+        period
+    } else {
+        period - Duration::from_nanos(remainder_nanos as u64)
+    };
+    now + until_next
+}
+
 #[derive(Debug)]
 struct ScheduledDemand {
     reason: DemandReason,
@@ -574,10 +592,12 @@ impl FrameCoordinator {
                         Self::drive(ws)
                     }
                     Some(anchor) if anchor.at <= now => {
-                        let mut next = anchor.at;
-                        while next <= now {
-                            next += period;
-                        }
+                        let next = next_max_rate_phase(anchor.at, now, period);
+                        // This declaration itself consumes the expired phase.
+                        // Remove the matching WaitUntil record so begin_frame
+                        // cannot consume it again against the newly-future
+                        // anchor.
+                        ws.clear_schedule(demand.reason);
                         ws.set_anchor(demand.reason, next, period);
                         ws.due.merge(demand.invalidation, true, demand.reason);
                         Self::drive(ws)
@@ -634,16 +654,16 @@ impl FrameCoordinator {
             if ws.scheduled[i].at <= frame_time {
                 let ScheduledDemand {
                     reason,
+                    at,
                     invalidation,
                     period,
-                    ..
                 } = ws.scheduled.swap_remove(i);
                 ws.due.merge(invalidation, true, reason);
                 if let Some(period) = period {
-                    let mut next = ws.anchor_for(reason).map_or(frame_time, |anchor| anchor.at);
-                    while next <= frame_time {
-                        next += period;
-                    }
+                    // A scheduled record owns the phase it represents. Advance
+                    // from that deadline rather than consulting mutable anchor
+                    // state that may have been reconciled independently.
+                    let next = next_max_rate_phase(at, frame_time, period);
                     ws.set_anchor(reason, next, period);
                 }
             } else {

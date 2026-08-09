@@ -8,7 +8,7 @@ use super::WgpuRenderer;
 use super::frame_pass::{BoxSpan, FrameParams, FramePassCtx};
 use super::scissor::SurfaceScissor;
 use neomacs_display_protocol::PointerAppearanceSelection;
-use neomacs_display_protocol::effect_config::EffectsConfig;
+use neomacs_display_protocol::effect_config::{CursorColorCycleConfig, EffectsConfig};
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
@@ -25,6 +25,22 @@ use std::sync::{
 pub(super) const CHAR_OVERLAP_MIN_AXIS: f32 = 0.5;
 const CHAR_OVERLAP_MIN_AREA: f32 = 1.0;
 const CHAR_OVERLAP_LOG_LIMIT: usize = 32;
+
+fn cursor_color_cycle_color_at(
+    cycle: &CursorColorCycleConfig,
+    sample_time: std::time::Instant,
+    cycle_start: std::time::Instant,
+) -> Color {
+    let elapsed = sample_time
+        .saturating_duration_since(cycle_start)
+        .as_secs_f64();
+    // Keep the unbounded uptime calculation in f64. Converting a year of
+    // elapsed seconds to f32 loses more precision than a 24 Hz frame interval
+    // and makes adjacent samples collapse to the same color. Only narrow the
+    // already-bounded phase used by the renderer.
+    let hue = ((elapsed * f64::from(cycle.speed)) % 1.0) as f32;
+    WgpuRenderer::hsl_to_color(hue, cycle.saturation, cycle.lightness)
+}
 
 #[derive(Debug, Clone)]
 pub(super) struct RenderedCharBounds {
@@ -795,15 +811,10 @@ impl WgpuRenderer {
             // Sampled from the frame's target presentation time, never
             // advanced per frame; continuation is owned by the frame
             // coordinator's cursor-color-cycle demand, not latched here.
-            let elapsed = self
-                .frame_sample_time
-                .saturating_duration_since(self.clocks.cursor_color_cycle_start)
-                .as_secs_f32();
-            let hue = (elapsed * effects.cursor_color_cycle.speed) % 1.0;
-            cycle_color = Self::hsl_to_color(
-                hue,
-                effects.cursor_color_cycle.saturation,
-                effects.cursor_color_cycle.lightness,
+            cycle_color = cursor_color_cycle_color_at(
+                &effects.cursor_color_cycle,
+                self.frame_sample_time,
+                self.clocks.cursor_color_cycle_start,
             );
             &cycle_color
         } else {
