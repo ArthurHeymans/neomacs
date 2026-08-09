@@ -6000,3 +6000,7 @@ pub const RESTCLIENT_MELPA_PIN: (&str, &str) = ("restclient", "20231010.1427");
 /// The exact embark package selected for practical action-menu setup and defaults.
 /// Pinned to upstream commit `350ca86924c5027e80875943fba7b912a71e5791`.
 pub const EMBARK_MELPA_PIN: (&str, &str) = ("embark", "20260609.2102");
+
+/// The exact julia-mode package selected for practical indentation and font-lock.
+/// Pinned to upstream commit `1b5a4c2f5b7c3f842785985bf8778b8805cc6766`.
+pub const JULIA_MODE_MELPA_PIN: (&str, &str) = ("julia-mode", "20260529.1624");

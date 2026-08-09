@@ -439,6 +439,7 @@ mod js_doc;
 mod json_mode;
 mod json_reformat;
 mod json_snatcher;
+mod julia_mode;
 mod keyfreq;
 mod keytar;
 mod link_hint;
