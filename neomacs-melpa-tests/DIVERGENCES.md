@@ -61,6 +61,32 @@ suites from 2026-08-05, which have never been mapped to ledger entries. At
 least ace_link's help-buffer link offset looks like a divergence this ledger
 does not contain.
 
+## The eleven failing suites, mapped 2026-08-09
+
+Each of the eleven was run in isolation and diagnosed. They did **not** collapse
+into a few shared causes: with one exception every failure was its own
+single-feature gap, and only one was a harness defect.
+
+| suite | verdict |
+|---|---|
+| auctex_latexmk | already green; nothing was wrong with it |
+| ace_link | HARNESS DEFECT, fixed 5dd14bf22 -- it failed on *both* editors, the signature of a stale expectation. Avy label positions were recorded as buffer offsets, and two workflows build a buffer quoting the sandbox root, so every offset past it carried the path length. Now recorded as line and column |
+| counsel | FIXED 7ac897fee -- `command-history` recorded raw argument values; GNU's `quotify_arg`, `varies` and `fix_command` were all missing |
+| dumb_jump | FIXED 5f926d612 -- `error-message-string` kept text properties GNU strips everywhere but the `(error STRING)` fast path |
+| evil_numbers | FIXED b20ec53b9 -- `replace-match` refused any match data recorded as string-sourced, which is what `set-match-data` from plain integers produces |
+| vi_tilde_fringe | FIXED -- `define-fringe-bitmap` never registered the symbol in `fringe-bitmaps` |
+| rainbow_delimiters | entry 44 (sexp scanner ignores `category`) |
+| helm_descbinds | entry 45 (`describe-bindings` omits global bindings and the function-key map) |
+| swiper | entry 46 (query-replace replaces nothing; not reduced below the package) |
+| lsp_mode | entry 47 (undo of a group around a multibyte character restores corrupt text; not reduced below the package) |
+| elisp_slime_nav | entry 48 (an error message loses a text property; not reduced below the package) |
+
+Two of the fixes were much broader than the suite that caught them.
+`replace-match` after `set-match-data` with integers had been failing for
+*every* subexpression -- any package that computes bounds itself and then
+replaces was affected -- and the `command-history` gap meant no
+`repeat-complex-command` entry replayed the way GNU records it.
+
 ## Verification status 2026-08-05
 
 All single-form reductions re-run against GNU Emacs and a fresh
@@ -1572,6 +1598,181 @@ Affects: `auto-dark` (1).
 reads the autoload file's `load-history` record and gets
 `((provide . auto-dark-autoloads))` where GNU gives
 `((defun . auto-dark-mode) (provide . auto-dark-autoloads))`.
+
+## 44. The sexp scanner does not follow a `category` text property
+
+`parse-sexp-lookup-properties` makes the scanner honour a `syntax-table` text
+property. GNU reaches that property through `textget`
+(`textprop.c:lookup_char_property`), which falls back to the `category`
+property: when the plist carries `(category SYM)` and `SYM` has a
+`syntax-table` property, that value is the character's syntax. Neomacs reads
+the `syntax-table` text property directly, so a character whose syntax is
+supplied *through* a category is scanned with its plain table syntax.
+
+```elisp
+(defconst c-<-as-paren-syntax '(4 . ?>))
+(put 'c-<-as-paren-syntax 'syntax-table c-<-as-paren-syntax)
+(defconst c->-as-paren-syntax '(5 . ?<))
+(put 'c->-as-paren-syntax 'syntax-table c->-as-paren-syntax)
+(with-temp-buffer
+  (let ((parse-sexp-lookup-properties t))
+    (set-syntax-table (make-syntax-table))
+    (insert "<()>")
+    (put-text-property 1 2 'category 'c-<-as-paren-syntax)
+    (put-text-property 4 5 'category 'c->-as-paren-syntax)
+    (goto-char (point-min))
+    (forward-sexp)
+    (point)))
+;; GNU     => 5   (the whole `<()>` is one sexp)
+;; Neomacs => 2
+```
+
+The indirection is not broken everywhere -- `syntax-after` and
+`get-char-property` resolve it in both editors, which is what makes this narrow
+and easy to mistake for working:
+
+| probe | GNU | Neomacs |
+|---|---|---|
+| `(get-char-property POS 'syntax-table)` via category | `(4 . 62)` | `(4 . 62)` OK |
+| `(syntax-after POS)` via category | `(4 . 62)` | `(4 . 62)` OK |
+| `forward-sexp` honouring the same category | 5 | **2** wrong |
+
+Blast radius: this is exactly the feature probe CC Mode runs to set
+`c-use-category` (`cc-defs.el:1288-1301`), and that constant is baked in at
+byte-compile time. With it nil, `c-mark-<-as-paren` puts a direct
+`syntax-table` property where GNU puts a `category`, so every CC Mode buffer
+carries different text properties from GNU's for template brackets -- and CC
+Mode loses the cheap "toggle every template bracket at once" operation the
+indirection exists to provide (`cc-defs.el:1851-1858`).
+
+Affects: `rainbow-delimiters` (1).
+`cpp_release_manifest_colors_templates_calls_and_initializer_lists` reports
+`:category nil` for each of `<` `<` `>` `>` in
+`std::vector<std::pair<int, std::string>>` where GNU reports
+`c-<-as-paren-syntax` / `c->-as-paren-syntax`. The delimiter *faces* agree, so
+the visible colouring is right today; the property mechanism underneath is not.
+
+A fix belongs in the scanner's property lookup
+(`neovm-core/src/emacs_core/syntax.rs`, `effective_syntax_entry_for_char_at_byte`
+and the `SyntaxPropRange` run cache), which resolve `syntax-table` with a raw
+text-property read. Both sit on the per-character scanning path that carries a
+run cache, so the change needs a before/after measurement, not just a
+correctness test.
+
+
+## 45. `describe-bindings` omits global bindings and the function-key map
+
+`describe-buffer-bindings` builds a much shorter report than GNU's. Two whole
+sections are wrong: user bindings made in the global map are missing from
+`Global Bindings:`, and the `Function key map translations:` section is not
+emitted at all.
+
+```elisp
+(global-set-key (kbd "C-c g s") 'p9-global-status)
+(define-key function-key-map (kbd "<f24>") (kbd "C-c d d"))
+(with-temp-buffer
+  (describe-bindings)
+  (with-current-buffer "*Help*"
+    (list :lines (count-lines (point-min) (point-max))
+          :has-global-binding
+          (and (save-excursion (goto-char (point-min))
+                               (search-forward "p9-global-status" nil t)) t)
+          :has-function-key-map
+          (and (save-excursion (goto-char (point-min))
+                               (search-forward "Function key map translations" nil t))
+               t))))
+;; GNU     => (:lines 2393 :has-global-binding t   :has-function-key-map t)
+;; Neomacs => (:lines 1441 :has-global-binding nil :has-function-key-map nil)
+```
+
+The `Global Bindings:` *heading* is present in both, so the section is being
+started and then filled from the wrong keymap; `Key translations:` is present in
+both as well. Only the function-key-map section is absent outright.
+
+Affects: `helm-descbinds` (2).
+`real_major_minor_and_global_bindings_preserve_gnu_section_precedence` loses the
+entire `("Global Bindings:" ("C-c g s" . …))` section from the Helm source list,
+and `function_key_translations_are_exposed_as_a_searchable_binding_section`
+returns nil where GNU returns
+`(("Function key map translations:" ("<f24>" . "C-c d d…")))`. Helm-Descbinds
+parses the `*Help*` buffer, so anything `describe-bindings` does not print is
+simply not offered to the user.
+
+
+## 46. `swiper`'s query-replace replaces nothing
+
+Driving `swiper` to its query-replace (`M-q`) and answering `!` ("replace all")
+leaves the buffer untouched and point back where it started, where GNU performs
+every replacement.
+
+This one is **not yet reduced below the package**. It is recorded so the suite's
+failure is not mistaken for the `replace-match` match-data bug fixed in
+b20ec53b9: `swiper` installs each candidate's match data with `set-match-data`
+from `(match-data t)` -- plain integers -- and then replaces, which is exactly
+the shape that bug broke, but the suite still fails with it fixed, so the
+remaining cause is elsewhere in the ivy/swiper interactive path.
+
+```
+Neomacs: :text "ticket-417 state:failed\nticket-418 state:healthy\nticket-419 state:failed\n"
+         :point (:line 1 :column 0 :text "ticket-417 state:failed")
+GNU:     :text "INC-417 state:retry\nticket-418 state:healthy\nINC-419 state:retry\n"
+         :point (:line 3 :column 19 :text "INC-419 state:retry")
+```
+
+Affects: `swiper` (1)
+`query_replace_renames_selected_incidents_with_captured_identifiers`.
+
+
+## 47. Undoing a group of edits around a multibyte character restores corrupt text
+
+Applying several edits as one undoable transaction and then undoing it restores
+text that is neither the original nor the edited version: individual characters
+are wrong, in a buffer containing an emoji.
+
+```
+original : fn greet(name) {\n  return "Hello, U+1F600 " + name;\n}\n
+GNU undo : fn greet(name) {\n  return "Hello, U+1F600 " + name;\n}\n   (restored)
+Neomacs  : fn grmet(name) {\n  return "Hellk, U+1F600 " + name;\n}\n   (corrupt)
+```
+
+`greet` comes back as `grmet` and `Hello` as `Hellk` -- single characters
+displaced, the signature of byte offsets being applied where character offsets
+are meant, with the 4-byte emoji supplying the discrepancy. Point is restored to
+36 where GNU restores 49.
+
+This entry is **not yet reduced below the package**: a hand-built
+`atomic-change-group` plus `primitive-undo` does not reproduce it (both editors
+agree there, and neither restores), so the reduction has to follow lsp-mode's
+actual route -- `lsp--apply-text-edits` sorting edits end-first and applying
+them inside one change group.
+
+Affects: `lsp-mode` (1).
+`rename_response_applies_ordered_unicode_edits_as_one_undoable_transaction`
+reports `:undo-restored nil` with the corrupt buffer above, where GNU reports
+`:undo-restored t` and the original text. The *forward* direction is correct in
+both editors -- every intermediate `:after rename` state matches -- so only undo
+is affected.
+
+
+## 48. An error message loses a text property that GNU keeps
+
+`elisp-slime-nav`'s "Don't know how to find X" error carries `(fontified nil)`
+on the symbol name in GNU, inherited from the buffer text the symbol was read
+from. Neomacs's message carries no properties there.
+
+**Not reduced.** Every step probed separately agrees between the editors:
+`find-file-noselect` gives buffer text with `(fontified nil)`,
+`thing-at-point 'symbol` keeps it, `format`, `concat` and `format-message`
+propagate it, and `error-message-string` on `(error STRING)` returns the string
+object itself. So the property is lost somewhere inside `elisp-slime-nav`'s own
+path between reading the symbol and signalling, and finding it needs the package
+loaded.
+
+Affects: `elisp-slime-nav` (1).
+`stale_symbol_failure_returns_to_the_caller_and_records_xref_forward_history`
+reports `:message-properties nil` against GNU's `(fontified nil)`. The message
+*text* is identical, so only the property is at stake.
+
 
 ## Behaviour that is NOT a divergence
 
