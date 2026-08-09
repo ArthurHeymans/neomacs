@@ -81,8 +81,8 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
             // display tables, point rows, box faces and word wrap genuinely
             // cannot route), so the element arm below is the GENERAL path and
             // renders everything the route refuses.
-            use crate::buffer_source::row_route::AsciiRowRouteOutcome;
-            match self.try_render_ascii_row_via_item_renderer(
+            use crate::buffer_source::row_route::PlainRowRouteOutcome;
+            match self.try_render_plain_row_via_item_renderer(
                 loop_context,
                 face_resolution_context,
                 source_walk,
@@ -92,9 +92,9 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 buffer,
                 &mut route_refusals,
             ) {
-                AsciiRowRouteOutcome::Rendered => continue,
-                AsciiRowRouteOutcome::Stopped => break,
-                AsciiRowRouteOutcome::NotRouted => {}
+                PlainRowRouteOutcome::Rendered => continue,
+                PlainRowRouteOutcome::Stopped => break,
+                PlainRowRouteOutcome::NotRouted => {}
             }
 
             if !BufferSourceRenderRequest::new(

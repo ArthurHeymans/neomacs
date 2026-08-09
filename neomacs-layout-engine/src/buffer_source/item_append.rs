@@ -476,8 +476,8 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     /// row through the unified item renderer — the same
     /// `SingleDisplayItemAppendContext` seam every other source consumer
     /// (Lisp strings, overlay strings, display strings) uses. The routed
-    /// ascii-row acquisition path drives this with a
-    /// [`crate::buffer_source::row_route::BufferAsciiItemSource`]; items are
+    /// plain-row acquisition path drives this with a
+    /// [`crate::buffer_source::row_route::BufferPlainItemSource`]; items are
     /// expected to carry their realized `FaceId` (the active face for a
     /// classified row).
     #[allow(clippy::too_many_arguments)]

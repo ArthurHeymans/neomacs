@@ -14343,10 +14343,10 @@ fn buffer_text_source_shadow_matches_main_buffer_trailing_whitespace_row() {
 }
 
 /// Render one buffer row through the unified item renderer fed by the
-/// classified-row source ([`crate::buffer_source::row_route::BufferAsciiItemSource`]),
+/// classified-row source ([`crate::buffer_source::row_route::BufferPlainItemSource`]),
 /// for shadow comparison against the buffer-pipeline row.
 #[allow(clippy::too_many_arguments)]
-fn render_buffer_ascii_item_source_shadow_row(
+fn render_buffer_plain_item_source_shadow_row(
     buf_id: BufferId,
     snapshot: &LayoutBufferSnapshot,
     start: CharPos0,
@@ -14357,7 +14357,7 @@ fn render_buffer_ascii_item_source_shadow_row(
     ascent_px: f32,
     char_width_px: f32,
 ) -> GlyphRow {
-    let mut source = crate::buffer_source::row_route::BufferAsciiItemSource::with_row_break(
+    let mut source = crate::buffer_source::row_route::BufferPlainItemSource::with_row_break(
         buf_id,
         snapshot,
         start,
@@ -14392,13 +14392,13 @@ fn render_buffer_ascii_item_source_shadow_row(
     .into_row()
 }
 
-/// Like [`render_buffer_ascii_item_source_shadow_row`] but rendering the
+/// Like [`render_buffer_plain_item_source_shadow_row`] but rendering the
 /// TEXT ONLY over `[start, end)` — no row-break item — mirroring the routed
 /// production render of a phase-2f overflow-prefix plan, where the walk
 /// hands back to the pipeline at the first non-fitting char instead of
 /// consuming a newline.
 #[allow(clippy::too_many_arguments)]
-fn render_buffer_ascii_item_prefix_shadow_row(
+fn render_buffer_plain_item_prefix_shadow_row(
     buf_id: BufferId,
     snapshot: &LayoutBufferSnapshot,
     start: CharPos0,
@@ -14409,7 +14409,7 @@ fn render_buffer_ascii_item_prefix_shadow_row(
     ascent_px: f32,
     char_width_px: f32,
 ) -> GlyphRow {
-    let mut source = crate::buffer_source::row_route::BufferAsciiItemSource::text_only(
+    let mut source = crate::buffer_source::row_route::BufferPlainItemSource::text_only(
         buf_id,
         snapshot,
         start,
@@ -14523,7 +14523,7 @@ fn layout_main_text_rows_with(
 /// pixel geometry, wide/padding flags) — including the appended GNU newline
 /// space, which the routed source produces through the shared line-end seam
 /// when it emits the row-break item.
-fn assert_ascii_shadow_row_matches(
+fn assert_plain_shadow_row_matches(
     main_row: &neomacs_display_protocol::glyph_matrix::MatrixRow,
     shadow_row: &GlyphRow,
 ) {
@@ -14540,7 +14540,7 @@ fn main_row_base_face_id(row: &neomacs_display_protocol::glyph_matrix::MatrixRow
     row.glyphs[1].first().expect("main row glyph").face_id
 }
 
-fn ascii_route_classification<B: crate::neovm_bridge::LayoutBufferView>(
+fn plain_route_classification<B: crate::neovm_bridge::LayoutBufferView>(
     buffer: &B,
     text: &[u8],
     byte_idx: usize,
@@ -14550,7 +14550,7 @@ fn ascii_route_classification<B: crate::neovm_bridge::LayoutBufferView>(
     point_charpos: i64,
 ) -> crate::buffer_source::row_route::RowAcquisitionRoute {
     crate::buffer_source::row_route::RowAcquisitionRoute::of(
-        &crate::buffer_source::row_route::plan_ascii_row_classified(
+        &crate::buffer_source::row_route::plan_plain_row_classified(
             buffer,
             crate::buffer_source::row_route::RowRouteRowStart {
                 text,
@@ -14579,14 +14579,14 @@ fn ascii_route_classification<B: crate::neovm_bridge::LayoutBufferView>(
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_main_buffer_plain_row() {
+fn plain_item_source_shadow_matches_main_buffer_plain_row() {
     let text = "hello world\n";
     let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
 
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -14599,7 +14599,7 @@ fn ascii_item_source_shadow_matches_main_buffer_plain_row() {
     );
 
     let line_end = CharPos0::new("hello world".chars().count());
-    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -14610,18 +14610,18 @@ fn ascii_item_source_shadow_matches_main_buffer_plain_row() {
         char_height,
         char_width,
     );
-    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[0], &shadow_row);
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_main_buffer_trailing_whitespace_row() {
+fn plain_item_source_shadow_matches_main_buffer_trailing_whitespace_row() {
     let text = "ab  \n";
     let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
 
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -14634,7 +14634,7 @@ fn ascii_item_source_shadow_matches_main_buffer_trailing_whitespace_row() {
     );
 
     let line_end = CharPos0::new("ab  ".chars().count());
-    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -14645,11 +14645,11 @@ fn ascii_item_source_shadow_matches_main_buffer_trailing_whitespace_row() {
         char_height,
         char_width,
     );
-    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[0], &shadow_row);
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_row_after_empty_line() {
+fn plain_item_source_shadow_matches_row_after_empty_line() {
     // "x", an empty line, then "y": since phase 2h the empty line routes too
     // (RowBreak-only production); its neighbors route and must match.
     let text = "x\n\ny\n";
@@ -14660,16 +14660,16 @@ fn ascii_item_source_shadow_matches_row_after_empty_line() {
 
     let point = text.chars().count() as i64;
     assert_eq!(
-        ascii_route_classification(&snapshot, text.as_bytes(), 2, 2, char_width, 640.0, point),
+        plain_route_classification(&snapshot, text.as_bytes(), 2, 2, char_width, 640.0, point),
         crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer,
         "the empty line routes RowBreak-only since phase 2h"
     );
     assert_eq!(
-        ascii_route_classification(&snapshot, text.as_bytes(), 3, 3, char_width, 640.0, point),
+        plain_route_classification(&snapshot, text.as_bytes(), 3, 3, char_width, 640.0, point),
         crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
     );
 
-    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::new(3),
@@ -14680,14 +14680,14 @@ fn ascii_item_source_shadow_matches_row_after_empty_line() {
         char_height,
         char_width,
     );
-    assert_ascii_shadow_row_matches(&rows[2], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[2], &shadow_row);
 
     // The row BEFORE the empty line routes and matches too.
     assert_eq!(
-        ascii_route_classification(&snapshot, text.as_bytes(), 0, 0, char_width, 640.0, point),
+        plain_route_classification(&snapshot, text.as_bytes(), 0, 0, char_width, 640.0, point),
         crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
     );
-    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -14698,14 +14698,14 @@ fn ascii_item_source_shadow_matches_row_after_empty_line() {
         char_height,
         char_width,
     );
-    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[0], &shadow_row);
 }
 
 /// Engagement proof: laying out plain ASCII rows must actually take the routed
 /// acquisition, not silently fall back. Unconditional since P4.8(d) retired the
 /// route gate.
 #[test]
-fn ascii_route_layout_engages_item_renderer_acquisition() {
+fn plain_route_layout_engages_item_renderer_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, rows, _char_width, _char_height) =
@@ -14723,7 +14723,7 @@ fn ascii_route_layout_engages_item_renderer_acquisition() {
 /// face-segmented row must actually take the routed segmented acquisition.
 /// Trivially passes when the flag is off.
 #[test]
-fn ascii_route_layout_engages_segmented_acquisition() {
+fn plain_route_layout_engages_segmented_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_SEGMENTED_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
@@ -14748,7 +14748,7 @@ fn ascii_route_layout_engages_segmented_acquisition() {
 /// the row Truncated; the indicator is a fringe bitmap, not a text glyph).
 /// The routed prefix render must equal it glyph-for-glyph.
 #[test]
-fn ascii_item_prefix_shadow_matches_truncated_row() {
+fn plain_item_prefix_shadow_matches_truncated_row() {
     let long_line: String = format!("{}\nshort\n", "abcdefghij".repeat(12));
     let (eval, buf_id, _frame_id, rows, char_width, char_height) =
         layout_main_text_rows_with(&long_line, |eval, buf_id| {
@@ -14777,7 +14777,7 @@ fn ascii_item_prefix_shadow_matches_truncated_row() {
         "truncated row must end in the '$' marker cell, got {:?}",
         main_glyphs[n - 1].glyph_type
     );
-    let shadow_row = render_buffer_ascii_item_prefix_shadow_row(
+    let shadow_row = render_buffer_plain_item_prefix_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -14802,7 +14802,7 @@ fn ascii_item_prefix_shadow_matches_truncated_row() {
 /// wholly on the pipeline (flag-on and flag-off alike), preserving the
 /// carry-over bookkeeping by construction.
 #[test]
-fn ascii_item_prefix_shadow_matches_first_row_of_wrapped_line() {
+fn plain_item_prefix_shadow_matches_first_row_of_wrapped_line() {
     let long_line: String = format!("{}\nshort\n", "abcdefghij".repeat(12));
     let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(&long_line);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -14824,7 +14824,7 @@ fn ascii_item_prefix_shadow_matches_first_row_of_wrapped_line() {
         "continued row must end in the continuation marker cell, got {:?}",
         main_glyphs[n - 1].glyph_type
     );
-    let shadow_row = render_buffer_ascii_item_prefix_shadow_row(
+    let shadow_row = render_buffer_plain_item_prefix_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -14848,7 +14848,7 @@ fn ascii_item_prefix_shadow_matches_first_row_of_wrapped_line() {
 /// routed overflow-prefix acquisition. Trivially passes when the flag is
 /// off.
 #[test]
-fn ascii_route_layout_engages_truncation_prefix_acquisition() {
+fn plain_route_layout_engages_truncation_prefix_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_TRUNCATION_PREFIX_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let long_line: String = format!("{}\n", "abcdefghij".repeat(12));
@@ -14871,7 +14871,7 @@ fn ascii_route_layout_engages_truncation_prefix_acquisition() {
 /// gate): laying out an over-wide line under character wrap must route row 1's
 /// fitting prefix. Trivially passes when the flag is off.
 #[test]
-fn ascii_route_layout_engages_wrap_prefix_acquisition() {
+fn plain_route_layout_engages_wrap_prefix_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_WRAP_PREFIX_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let long_line: String = format!("{}\n", "abcdefghij".repeat(12));
@@ -14890,7 +14890,7 @@ fn ascii_route_layout_engages_wrap_prefix_acquisition() {
 /// the continuation rows of a wrapped plain line must route from their
 /// mid-line position. Trivially passes when the flag is off.
 #[test]
-fn ascii_route_layout_engages_mid_line_start_acquisition() {
+fn plain_route_layout_engages_mid_line_start_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_MID_LINE_START_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let long_line: String = format!("{}\n", "abcdefghij".repeat(12));
@@ -14912,7 +14912,7 @@ fn ascii_route_layout_engages_mid_line_start_acquisition() {
 /// glyphs are asserted alongside, because the window's only real risk is
 /// silently withholding the route from positions that should have it.
 #[test]
-fn ascii_route_layout_skips_reclassifying_a_refused_cursor_line() {
+fn plain_route_layout_skips_reclassifying_a_refused_cursor_line() {
     let before = crate::buffer_source::row_route::ROUTE_SKIPPED_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     // Three face runs before point, so the walk stands at three distinct
@@ -14982,7 +14982,7 @@ fn continuation_resume_shadow_matches_tab_after_wrap_row() {
         "the continuation row must contain the tab's stretch glyph"
     );
     let end = covered.last().expect("covered glyphs").charpos + 1;
-    let shadow_row = render_buffer_ascii_item_prefix_shadow_row(
+    let shadow_row = render_buffer_plain_item_prefix_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::new(start),
@@ -15007,7 +15007,7 @@ fn continuation_resume_shadow_matches_tab_after_wrap_row() {
 /// row must carry the empty-row flags/charpos the redesign goldens pin
 /// (start == end == the newline's charpos, displays_text = false).
 #[test]
-fn ascii_item_row_break_only_shadow_matches_empty_line_row() {
+fn plain_item_row_break_only_shadow_matches_empty_line_row() {
     let text = "x\n\ny\n";
     let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -15026,7 +15026,7 @@ fn ascii_item_row_break_only_shadow_matches_empty_line_row() {
     );
 
     // start == line_end: the shadow source degenerates to RowBreak-only.
-    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::new(2),
@@ -15037,7 +15037,7 @@ fn ascii_item_row_break_only_shadow_matches_empty_line_row() {
         char_height,
         char_width,
     );
-    assert_ascii_shadow_row_matches(empty_row, &shadow_row);
+    assert_plain_shadow_row_matches(empty_row, &shadow_row);
 }
 
 /// Phase 2h rung 2 shadow proof: the EOB tail row (buffer ends without a
@@ -15046,7 +15046,7 @@ fn ascii_item_row_break_only_shadow_matches_empty_line_row() {
 /// post-loop pipeline machinery on BOTH modes, so the shadow compares the
 /// text prefix and pins the pipeline-owned row flags separately.
 #[test]
-fn ascii_item_prefix_shadow_matches_eob_tail_row() {
+fn plain_item_prefix_shadow_matches_eob_tail_row() {
     let text = "first\nlast";
     let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -15063,7 +15063,7 @@ fn ascii_item_prefix_shadow_matches_eob_tail_row() {
         "a content row at ZV keeps displays_text: {tail_row:?}"
     );
 
-    let shadow_row = render_buffer_ascii_item_prefix_shadow_row(
+    let shadow_row = render_buffer_plain_item_prefix_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::new(6),
@@ -15087,7 +15087,7 @@ fn ascii_item_prefix_shadow_matches_eob_tail_row() {
 /// gate): laying out a buffer with an empty line must route it RowBreak-only.
 /// Trivially passes when the flag is off.
 #[test]
-fn ascii_route_layout_engages_empty_row_acquisition() {
+fn plain_route_layout_engages_empty_row_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_EMPTY_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, rows, _char_width, _char_height) = layout_main_text_rows("x\n\ny\n");
@@ -15105,7 +15105,7 @@ fn ascii_route_layout_engages_empty_row_acquisition() {
 /// a buffer ending without a trailing newline must route its final line when
 /// point is elsewhere. Trivially passes when the flag is off.
 #[test]
-fn ascii_route_layout_engages_eob_tail_acquisition() {
+fn plain_route_layout_engages_eob_tail_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_EOB_TAIL_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
@@ -15128,14 +15128,14 @@ fn ascii_route_layout_engages_eob_tail_acquisition() {
 /// shape) stays on the buffer pipeline — cursor capture at EOB is
 /// pipeline-owned.
 #[test]
-fn ascii_route_classifies_eob_tail_cursor_row_to_buffer_pipeline() {
+fn plain_route_classifies_eob_tail_cursor_row_to_buffer_pipeline() {
     let text = "first\nlast";
     let (eval, buf_id, _rows, char_width, _char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     // Point at EOB (one past the last char).
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             6,
@@ -15148,13 +15148,13 @@ fn ascii_route_classifies_eob_tail_cursor_row_to_buffer_pipeline() {
     );
     // Point elsewhere: the tail row routes.
     assert_eq!(
-        ascii_route_classification(&snapshot, text.as_bytes(), 6, 6, char_width, 640.0, 0),
+        plain_route_classification(&snapshot, text.as_bytes(), 6, 6, char_width, 640.0, 0),
         crate::buffer_source::row_route::RowAcquisitionRoute::ItemRenderer
     );
 }
 
 #[test]
-fn ascii_route_classifies_exactly_filling_line_to_buffer_pipeline() {
+fn plain_route_classifies_exactly_filling_line_to_buffer_pipeline() {
     let text = "abcdefgh\n";
     let (eval, buf_id, _rows, char_width, _char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -15165,7 +15165,7 @@ fn ascii_route_classifies_exactly_filling_line_to_buffer_pipeline() {
     // pipeline (continuation policy owns the exact-fill edge).
     let exact_edge = 8.0 * char_width;
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15177,7 +15177,7 @@ fn ascii_route_classifies_exactly_filling_line_to_buffer_pipeline() {
         crate::buffer_source::row_route::RowAcquisitionRoute::BufferPipeline
     );
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15191,7 +15191,7 @@ fn ascii_route_classifies_exactly_filling_line_to_buffer_pipeline() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_leading_tab_indent_row() {
+fn plain_item_source_shadow_matches_leading_tab_indent_row() {
     // Leading tabs (indentation): the routed source keeps the tabs inside its
     // TextRun and the unified renderer expands each to the same stretch glyph
     // the buffer pipeline produces (GNU gui_produce_glyphs next_tab_x).
@@ -15201,7 +15201,7 @@ fn ascii_item_source_shadow_matches_leading_tab_indent_row() {
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
 
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15214,7 +15214,7 @@ fn ascii_item_source_shadow_matches_leading_tab_indent_row() {
     );
 
     let line_end = CharPos0::new("\t\tindented".chars().count());
-    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -15225,7 +15225,7 @@ fn ascii_item_source_shadow_matches_leading_tab_indent_row() {
         char_height,
         char_width,
     );
-    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[0], &shadow_row);
     // The row really renders its tabs as stretch glyphs.
     let stretches = rows[0].glyphs[1]
         .iter()
@@ -15235,14 +15235,14 @@ fn ascii_item_source_shadow_matches_leading_tab_indent_row() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_mid_line_tab_row() {
+fn plain_item_source_shadow_matches_mid_line_tab_row() {
     let text = "ab\tcd\nnext\n";
     let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
 
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15255,7 +15255,7 @@ fn ascii_item_source_shadow_matches_mid_line_tab_row() {
     );
 
     let line_end = CharPos0::new("ab\tcd".chars().count());
-    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -15266,11 +15266,11 @@ fn ascii_item_source_shadow_matches_mid_line_tab_row() {
         char_height,
         char_width,
     );
-    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[0], &shadow_row);
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_tab_between_face_spans() {
+fn plain_item_source_shadow_matches_tab_between_face_spans() {
     // A tab BETWEEN two face spans: the tab sits in its own base-face
     // stretch between the bold and italic segments, and the stretch face,
     // pen positions, and charpos bookkeeping must all match the pipeline.
@@ -15284,7 +15284,7 @@ fn ascii_item_source_shadow_matches_tab_between_face_spans() {
             )
             .expect("faces around the tab");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -15298,7 +15298,7 @@ fn ascii_item_source_shadow_matches_tab_between_face_spans() {
 }
 
 #[test]
-fn ascii_route_classifies_tab_exact_fill_to_buffer_pipeline() {
+fn plain_route_classifies_tab_exact_fill_to_buffer_pipeline() {
     // "ab\t": the tab expands to the col-8 stop. A row exactly 8 cells wide
     // is exact fill — the classifier must refuse it (continuation policy
     // owns that edge); one extra cell routes.
@@ -15308,7 +15308,7 @@ fn ascii_route_classifies_tab_exact_fill_to_buffer_pipeline() {
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     let point = text.chars().count() as i64;
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15321,7 +15321,7 @@ fn ascii_route_classifies_tab_exact_fill_to_buffer_pipeline() {
         "tab expansion landing exactly on the right edge must refuse"
     );
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15335,7 +15335,7 @@ fn ascii_route_classifies_tab_exact_fill_to_buffer_pipeline() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_wide_char_row() {
+fn plain_item_source_shadow_matches_wide_char_row() {
     // CJK wide chars mid-line: base glyph with the wide flag plus its padding
     // glyph, both carrying the char's buffer position — full glyph equality
     // with the pipeline (which the simple_unicode shadow proves for the
@@ -15346,7 +15346,7 @@ fn ascii_item_source_shadow_matches_wide_char_row() {
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
 
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15359,7 +15359,7 @@ fn ascii_item_source_shadow_matches_wide_char_row() {
     );
 
     let line_end = CharPos0::new("ab\u{4E2D}\u{6587}cd".chars().count());
-    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -15370,7 +15370,7 @@ fn ascii_item_source_shadow_matches_wide_char_row() {
         char_height,
         char_width,
     );
-    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[0], &shadow_row);
 
     // The equality is meaningful: the row carries wide and padding glyphs
     // with the wide chars' buffer positions.
@@ -15399,14 +15399,14 @@ fn ascii_item_source_shadow_matches_wide_char_row() {
 /// equality covers visual glyph order, per-glyph bidi levels, charpos
 /// provenance, and `reversed_p`.
 #[test]
-fn ascii_item_source_shadow_matches_hebrew_rtl_row() {
+fn plain_item_source_shadow_matches_hebrew_rtl_row() {
     let text = "\u{05D0}\u{05D1}\u{05D2}\nnext\n";
     let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
 
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15420,7 +15420,7 @@ fn ascii_item_source_shadow_matches_hebrew_rtl_row() {
     );
 
     let line_end = CharPos0::new("\u{05D0}\u{05D1}\u{05D2}".chars().count());
-    let mut shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let mut shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -15434,7 +15434,7 @@ fn ascii_item_source_shadow_matches_hebrew_rtl_row() {
     // Finalize the shadow row exactly the way install does; the main row in
     // the matrix is already post-install (visual order).
     crate::glyph_row_writer::reorder_row_bidi(&mut shadow_row, None);
-    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[0], &shadow_row);
 
     // The equality is meaningful: the installed row IS reordered — an R2L
     // paragraph flags `reversed_p` and reads visually right-to-left
@@ -15471,14 +15471,14 @@ fn ascii_item_source_shadow_matches_hebrew_rtl_row() {
 /// reorder — the L2R base direction keeps `reversed_p` off while the embedded
 /// Hebrew run is reversed in place.
 #[test]
-fn ascii_item_source_shadow_matches_mixed_l2r_rtl_row() {
+fn plain_item_source_shadow_matches_mixed_l2r_rtl_row() {
     let text = "abc \u{05D0}\u{05D1}\u{05D2} def\nnext\n";
     let (eval, buf_id, rows, char_width, char_height) = layout_main_text_rows(text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
 
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15491,7 +15491,7 @@ fn ascii_item_source_shadow_matches_mixed_l2r_rtl_row() {
     );
 
     let line_end = CharPos0::new("abc \u{05D0}\u{05D1}\u{05D2} def".chars().count());
-    let mut shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let mut shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -15503,7 +15503,7 @@ fn ascii_item_source_shadow_matches_mixed_l2r_rtl_row() {
         char_width,
     );
     crate::glyph_row_writer::reorder_row_bidi(&mut shadow_row, None);
-    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[0], &shadow_row);
 
     // L2R paragraph: not reversed, but the Hebrew segment is reversed in
     // place ("abc גבא def").
@@ -15536,7 +15536,7 @@ fn directional_marks_row_stays_on_buffer_pipeline() {
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
 
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15551,7 +15551,7 @@ fn directional_marks_row_stays_on_buffer_pipeline() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_mixed_tab_wide_multiface_row() {
+fn plain_item_source_shadow_matches_mixed_tab_wide_multiface_row() {
     // Mixed tab + wide + multi-face: bold "a", base tab, italic CJK + "b".
     let text = "a\t\u{4E2D}b\nnext\n";
     let (eval, buf_id, frame_id, rows, char_width, char_height) =
@@ -15563,7 +15563,7 @@ fn ascii_item_source_shadow_matches_mixed_tab_wide_multiface_row() {
             )
             .expect("mixed row faces");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -15584,7 +15584,7 @@ fn ascii_item_source_shadow_matches_mixed_tab_wide_multiface_row() {
 }
 
 #[test]
-fn ascii_route_classifies_wide_char_straddle_prefix_and_exact_fill() {
+fn plain_route_classifies_wide_char_straddle_prefix_and_exact_fill() {
     // A wide char that would straddle the right edge. Phase 2b refused the
     // whole row; since phase 2f the fitting "abc" prefix routes and the
     // straddling char hands off to the pipeline's own overflow machinery
@@ -15598,7 +15598,7 @@ fn ascii_route_classifies_wide_char_straddle_prefix_and_exact_fill() {
     let point = text.chars().count() as i64;
     for edge_cells in [4.0, 4.5] {
         assert_eq!(
-            ascii_route_classification(
+            plain_route_classification(
                 &snapshot,
                 text.as_bytes(),
                 0,
@@ -15612,7 +15612,7 @@ fn ascii_route_classifies_wide_char_straddle_prefix_and_exact_fill() {
         );
     }
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15625,7 +15625,7 @@ fn ascii_route_classifies_wide_char_straddle_prefix_and_exact_fill() {
         "exact fill still refuses whole"
     );
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -15641,7 +15641,7 @@ fn ascii_route_classifies_wide_char_straddle_prefix_and_exact_fill() {
 /// Engagement proof for the tab extension (flag-on suite gate): a tab row
 /// must actually take the routed acquisition. Trivially passes flag-off.
 #[test]
-fn ascii_route_layout_engages_tab_row_acquisition() {
+fn plain_route_layout_engages_tab_row_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_TAB_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, rows, _char_width, _char_height) =
@@ -15659,7 +15659,7 @@ fn ascii_route_layout_engages_tab_row_acquisition() {
 /// wide-char row must actually take the routed acquisition. Trivially passes
 /// flag-off.
 #[test]
-fn ascii_route_layout_engages_wide_char_row_acquisition() {
+fn plain_route_layout_engages_wide_char_row_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_WIDE_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, rows, _char_width, _char_height) =
@@ -15703,7 +15703,7 @@ fn engine_face_resolver_for_frame(
 /// unified item renderer, and require FULL `Vec<Glyph>` equality with the
 /// buffer-pipeline row (including the appended newline space and its face).
 /// Returns the planned segments for scenario-specific assertions.
-fn assert_segmented_ascii_shadow_row(
+fn assert_segmented_plain_shadow_row(
     eval: &Context,
     frame_id: neovm_core::window::FrameId,
     buf_id: BufferId,
@@ -15722,7 +15722,7 @@ fn assert_segmented_ascii_shadow_row(
     // `line_start` is a byte offset; row positions and segment ranges are
     // CHAR positions (the row may be multibyte since phase 2b).
     let line_start_chars = text[..line_start].chars().count();
-    let plan = rr::plan_ascii_row_classified(
+    let plan = rr::plan_plain_row_classified(
         &snapshot,
         rr::RowRouteRowStart {
             text: text.as_bytes(),
@@ -15826,13 +15826,13 @@ fn assert_segmented_ascii_shadow_row(
 
     let item_segments: Vec<_> = segments
         .iter()
-        .map(|segment| rr::AsciiRowItemSegment {
+        .map(|segment| rr::PlainRowItemSegment {
             start: segment.start,
             end: segment.end,
             face: RenderFaceRef::FaceId(segment.face_id),
         })
         .collect();
-    let mut source = rr::BufferAsciiItemSource::with_row_break_segments(
+    let mut source = rr::BufferPlainItemSource::with_row_break_segments(
         buf_id,
         &snapshot,
         &item_segments,
@@ -15874,7 +15874,7 @@ fn assert_segmented_ascii_shadow_row(
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_font_locked_multi_span_row() {
+fn plain_item_source_shadow_matches_font_locked_multi_span_row() {
     // A font-lock style line with three distinct face spans plus plain
     // stretches between them: "def foo (bar)".
     let text = "def foo (bar)\nrest\n";
@@ -15888,7 +15888,7 @@ fn ascii_item_source_shadow_matches_font_locked_multi_span_row() {
             )
             .expect("font-lock style faces");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -15911,7 +15911,7 @@ fn ascii_item_source_shadow_matches_font_locked_multi_span_row() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_font_lock_face_property_row() {
+fn plain_item_source_shadow_matches_font_lock_face_property_row() {
     // The `font-lock-face` alias must feed the same segmentation and face
     // realization as `face`.
     let text = "keyword rest\nnext\n";
@@ -15921,7 +15921,7 @@ fn ascii_item_source_shadow_matches_font_lock_face_property_row() {
             eval.eval_str("(put-text-property 1 8 'font-lock-face 'bold)")
                 .expect("font-lock-face");
         });
-    assert_segmented_ascii_shadow_row(
+    assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -15934,7 +15934,7 @@ fn ascii_item_source_shadow_matches_font_lock_face_property_row() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_mid_line_face_span_row() {
+fn plain_item_source_shadow_matches_mid_line_face_span_row() {
     let text = "hello world\nnext\n";
     let (eval, buf_id, frame_id, rows, char_width, char_height) =
         layout_main_text_rows_with(text, |eval, buf_id| {
@@ -15942,7 +15942,7 @@ fn ascii_item_source_shadow_matches_mid_line_face_span_row() {
             eval.eval_str("(put-text-property 3 8 'face 'bold)")
                 .expect("mid-line face span");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -15958,7 +15958,7 @@ fn ascii_item_source_shadow_matches_mid_line_face_span_row() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_face_span_ending_at_newline() {
+fn plain_item_source_shadow_matches_face_span_ending_at_newline() {
     // The span covers "world" and ends EXACTLY at the newline: the appended
     // newline space stays on the base face.
     let text = "hello world\nnext\n";
@@ -15968,7 +15968,7 @@ fn ascii_item_source_shadow_matches_face_span_ending_at_newline() {
             eval.eval_str("(put-text-property 7 12 'face 'bold)")
                 .expect("span to newline");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -15987,7 +15987,7 @@ fn ascii_item_source_shadow_matches_face_span_ending_at_newline() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_face_span_covering_newline() {
+fn plain_item_source_shadow_matches_face_span_covering_newline() {
     // The span covers "cd" AND the newline: its face must ride the appended
     // newline space through the line-end plan (buffer pipeline
     // row_break_face_id behavior).
@@ -15998,7 +15998,7 @@ fn ascii_item_source_shadow_matches_face_span_covering_newline() {
             eval.eval_str("(put-text-property 3 6 'face 'bold)")
                 .expect("span covering newline");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16018,7 +16018,7 @@ fn ascii_item_source_shadow_matches_face_span_covering_newline() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_adjacent_same_face_spans() {
+fn plain_item_source_shadow_matches_adjacent_same_face_spans() {
     // Two adjacent spans with the SAME face but a property boundary between
     // them (fontified flips): the producer emits two items with one face id
     // and the glyph output must still be identical.
@@ -16032,7 +16032,7 @@ fn ascii_item_source_shadow_matches_adjacent_same_face_spans() {
             )
             .expect("adjacent same-face spans");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16054,7 +16054,7 @@ fn ascii_item_source_shadow_matches_adjacent_same_face_spans() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_overlay_face_span_row() {
+fn plain_item_source_shadow_matches_overlay_face_span_row() {
     // A face-only overlay mid-line: its face merges through the same
     // checkpoint resolver seam and its start/end segment the row exactly
     // like GNU next_overlay_change folded into compute_stop_pos.
@@ -16065,7 +16065,7 @@ fn ascii_item_source_shadow_matches_overlay_face_span_row() {
             eval.eval_str("(overlay-put (make-overlay 4 9) 'face 'bold)")
                 .expect("mid-line overlay face span");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16081,7 +16081,7 @@ fn ascii_item_source_shadow_matches_overlay_face_span_row() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_overlapping_priority_overlays_row() {
+fn plain_item_source_shadow_matches_overlapping_priority_overlays_row() {
     // Two overlapping overlays with conflicting foregrounds: GNU
     // face_at_buffer_position merges overlay faces in ASCENDING priority
     // order, so the higher-priority foreground wins on the overlap.
@@ -16099,7 +16099,7 @@ fn ascii_item_source_shadow_matches_overlapping_priority_overlays_row() {
             )
             .expect("overlapping priority overlays");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16119,7 +16119,7 @@ fn ascii_item_source_shadow_matches_overlapping_priority_overlays_row() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_overlay_ending_at_newline() {
+fn plain_item_source_shadow_matches_overlay_ending_at_newline() {
     // The overlay covers "cd" and ends EXACTLY at the newline: the appended
     // newline space stays on the base face.
     let text = "abcd\nrest\n";
@@ -16129,7 +16129,7 @@ fn ascii_item_source_shadow_matches_overlay_ending_at_newline() {
             eval.eval_str("(overlay-put (make-overlay 3 5) 'face 'bold)")
                 .expect("overlay to newline");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16148,7 +16148,7 @@ fn ascii_item_source_shadow_matches_overlay_ending_at_newline() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_overlay_covering_newline() {
+fn plain_item_source_shadow_matches_overlay_covering_newline() {
     // The overlay covers "cd" AND the newline (hl-line's [bol, next-bol)
     // shape): its face must ride the appended newline space through the
     // line-end plan exactly as the buffer pipeline's row-break face does.
@@ -16159,7 +16159,7 @@ fn ascii_item_source_shadow_matches_overlay_covering_newline() {
             eval.eval_str("(overlay-put (make-overlay 3 6) 'face 'bold)")
                 .expect("overlay covering newline");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16179,7 +16179,7 @@ fn ascii_item_source_shadow_matches_overlay_covering_newline() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_zero_length_overlay_row() {
+fn plain_item_source_shadow_matches_zero_length_overlay_row() {
     // A zero-length face-only overlay: GNU next_overlay_change gives it one
     // stop at its position and face_at_buffer_position's GET_OVERLAYS_AT
     // never sees it covering any char, so it paints nothing — in BOTH paths.
@@ -16190,7 +16190,7 @@ fn ascii_item_source_shadow_matches_zero_length_overlay_row() {
             eval.eval_str("(overlay-put (make-overlay 3 3) 'face 'bold)")
                 .expect("zero-length overlay");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16252,7 +16252,7 @@ fn overlay_string_rows_route_and_render_identically() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -16271,7 +16271,7 @@ fn overlay_string_rows_route_and_render_identically() {
 /// refuse for some unrelated reason and leave the delegation unreached.
 /// Trivially passes when the flag is off.
 #[test]
-fn ascii_route_layout_engages_overlay_string_acquisition() {
+fn plain_route_layout_engages_overlay_string_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_OVERLAY_STRING_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
@@ -16295,7 +16295,7 @@ fn ascii_route_layout_engages_overlay_string_acquisition() {
 /// overlay-faced row must actually take the routed acquisition. Trivially
 /// passes when the flag is off.
 #[test]
-fn ascii_route_layout_engages_overlay_face_acquisition() {
+fn plain_route_layout_engages_overlay_face_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_OVERLAY_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
@@ -16315,7 +16315,7 @@ fn ascii_route_layout_engages_overlay_face_acquisition() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_mid_line_elision_row() {
+fn plain_item_source_shadow_matches_mid_line_elision_row() {
     // Phase 2d rung 1: a mid-line plain-invisible span (no ellipsis) simply
     // elides its chars. The routed source emits visible-segment TextRuns
     // whose charpos bookkeeping jumps the hidden gap exactly like the
@@ -16344,7 +16344,7 @@ fn ascii_item_source_shadow_matches_mid_line_elision_row() {
         "visible glyph charpos must jump the elided span (the appended newline \
          space is GNU's positionless append_space_for_newline glyph)"
     );
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16362,7 +16362,7 @@ fn ascii_item_source_shadow_matches_mid_line_elision_row() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_trailing_elision_row() {
+fn plain_item_source_shadow_matches_trailing_elision_row() {
     // The hidden run ends exactly AT the newline: only the visible prefix
     // renders, and the appended newline space still carries the NEWLINE's
     // char position (not the last visible segment's end).
@@ -16380,7 +16380,7 @@ fn ascii_item_source_shadow_matches_trailing_elision_row() {
         usize::MAX,
         "the appended newline space stays GNU's positionless append_space_for_newline glyph"
     );
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16395,7 +16395,7 @@ fn ascii_item_source_shadow_matches_trailing_elision_row() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_elision_between_face_spans() {
+fn plain_item_source_shadow_matches_elision_between_face_spans() {
     // Elision interleaved with face segmentation: bold prefix, hidden gap,
     // base suffix. Segment faces resolve at each visible segment start and
     // the glyph identity must match the pipeline completely.
@@ -16410,7 +16410,7 @@ fn ascii_item_source_shadow_matches_elision_between_face_spans() {
             .expect("face + invisible spans");
         });
     assert_eq!(glyphs_logical_text(&rows[0].glyphs[1]), "abcd ");
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16427,7 +16427,7 @@ fn ascii_item_source_shadow_matches_elision_between_face_spans() {
 // ---- Phase 2e rung 1: composition rows (pin refusal + pipeline shape) ----
 
 #[test]
-fn ascii_route_refuses_zwj_emoji_row_and_pipeline_composes() {
+fn plain_route_refuses_zwj_emoji_row_and_pipeline_composes() {
     // A ZWJ emoji sequence composes into ONE Composite glyph in the
     // pipeline's shared writer (composition.rs continues_cluster); the
     // classifier refuses the row on the same predicate, so flag-on and
@@ -16438,7 +16438,7 @@ fn ascii_route_refuses_zwj_emoji_row_and_pipeline_composes() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -16465,7 +16465,7 @@ fn ascii_route_refuses_zwj_emoji_row_and_pipeline_composes() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_combining_mark_cluster_row() {
+fn plain_item_source_shadow_matches_combining_mark_cluster_row() {
     // Phase 2e rung 2: a zero-width combining mark on a simple 1-col base is
     // the routed composite class. The shared writer merges the mark into the
     // base Char glyph (Char -> Composite) identically on both paths; the
@@ -16477,7 +16477,7 @@ fn ascii_item_source_shadow_matches_combining_mark_cluster_row() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -16506,7 +16506,7 @@ fn ascii_item_source_shadow_matches_combining_mark_cluster_row() {
     );
 
     let line_end = CharPos0::new(text.chars().count() - 1);
-    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -16517,11 +16517,11 @@ fn ascii_item_source_shadow_matches_combining_mark_cluster_row() {
         char_height,
         char_width,
     );
-    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[0], &shadow_row);
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_keycap_cluster_row() {
+fn plain_item_source_shadow_matches_keycap_cluster_row() {
     // VS16 + combining enclosing keycap on a digit base: two zero-width
     // extenders merging into one Composite through the same writer seam.
     let text = "1\u{FE0F}\u{20E3}x\n";
@@ -16529,7 +16529,7 @@ fn ascii_item_source_shadow_matches_keycap_cluster_row() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -16548,7 +16548,7 @@ fn ascii_item_source_shadow_matches_keycap_cluster_row() {
         "the pipeline composes the keycap sequence into one Composite"
     );
     let line_end = CharPos0::new(text.chars().count() - 1);
-    let shadow_row = render_buffer_ascii_item_source_shadow_row(
+    let shadow_row = render_buffer_plain_item_source_shadow_row(
         buf_id,
         &snapshot,
         CharPos0::ZERO,
@@ -16559,11 +16559,11 @@ fn ascii_item_source_shadow_matches_keycap_cluster_row() {
         char_height,
         char_width,
     );
-    assert_ascii_shadow_row_matches(&rows[0], &shadow_row);
+    assert_plain_shadow_row_matches(&rows[0], &shadow_row);
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_mark_cluster_beside_face_span() {
+fn plain_item_source_shadow_matches_mark_cluster_beside_face_span() {
     // The composed cluster coexists with face segmentation as long as no
     // boundary lands ON the extender: bold over "cd" (boundaries 3 and 5)
     // leaves the cluster whole inside segment 0.
@@ -16575,7 +16575,7 @@ fn ascii_item_source_shadow_matches_mark_cluster_beside_face_span() {
             eval.eval_str("(put-text-property 4 6 'face 'bold)")
                 .expect("face span beside the cluster");
         });
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16593,7 +16593,7 @@ fn ascii_item_source_shadow_matches_mark_cluster_beside_face_span() {
 /// a combining-mark row must actually take the routed acquisition.
 /// Trivially passes when the flag is off.
 #[test]
-fn ascii_route_layout_engages_composed_cluster_acquisition() {
+fn plain_route_layout_engages_composed_cluster_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_COMPOSED_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, rows, _char_width, _char_height) =
@@ -16609,7 +16609,7 @@ fn ascii_route_layout_engages_composed_cluster_acquisition() {
 }
 
 #[test]
-fn ascii_route_refuses_static_composition_row_and_pipeline_replaces() {
+fn plain_route_refuses_static_composition_row_and_pipeline_replaces() {
     // A parseable static `composition` text property replaces the covered
     // chars with the composition's display text
     // (BufferTextSourceCursor::next_text_item_with_layout ->
@@ -16626,7 +16626,7 @@ fn ascii_route_refuses_static_composition_row_and_pipeline_replaces() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -16647,7 +16647,7 @@ fn ascii_route_refuses_static_composition_row_and_pipeline_replaces() {
 }
 
 #[test]
-fn ascii_item_source_shadow_matches_inert_composition_prop_row() {
+fn plain_item_source_shadow_matches_inert_composition_prop_row() {
     // A `composition` prop the pipeline's replacement predicate does NOT
     // parse renders literally: the row routes and must match glyph-for-glyph.
     // The prop's change positions segment the row like any other property
@@ -16660,7 +16660,7 @@ fn ascii_item_source_shadow_matches_inert_composition_prop_row() {
                 .expect("inert composition prop");
         });
     assert_eq!(glyphs_logical_text(&rows[0].glyphs[1]), "hello ");
-    let segments = assert_segmented_ascii_shadow_row(
+    let segments = assert_segmented_plain_shadow_row(
         &eval,
         frame_id,
         buf_id,
@@ -16685,7 +16685,7 @@ fn ascii_item_source_shadow_matches_inert_composition_prop_row() {
 /// gate): an elided row must actually take the routed acquisition.
 /// Trivially passes when the flag is off.
 #[test]
-fn ascii_route_layout_engages_elided_row_acquisition() {
+fn plain_route_layout_engages_elided_row_acquisition() {
     let before = crate::buffer_source::row_route::ROUTED_ELIDED_ROW_COUNT
         .load(std::sync::atomic::Ordering::Relaxed);
     let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
@@ -16731,7 +16731,7 @@ fn ellipsis_invisible_rows_stay_on_buffer_pipeline_under_item_route() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -16770,7 +16770,7 @@ fn newline_spanning_fold_rows_stay_on_buffer_pipeline_under_item_route() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -16804,7 +16804,7 @@ fn row_start_invisible_rows_stay_on_buffer_pipeline_under_item_route() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -16838,7 +16838,7 @@ fn overlay_invisible_rows_stay_on_buffer_pipeline_under_item_route() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -16916,7 +16916,7 @@ fn display_string_replacement_row_routes_and_matches_pipeline() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -16954,7 +16954,7 @@ fn propertized_display_string_rows_stay_on_buffer_pipeline_under_item_route() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,
@@ -17032,7 +17032,7 @@ fn space_width_spec_row_routes_and_matches_pipeline() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
     assert_eq!(
-        ascii_route_classification(
+        plain_route_classification(
             &snapshot,
             text.as_bytes(),
             0,

@@ -67,7 +67,7 @@ fn classify_in_buffer(
     policy: RowRouteWindowPolicy,
 ) -> RowAcquisitionRoute {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    RowAcquisitionRoute::of(&plan_ascii_row_classified(buffer, row, fit, policy))
+    RowAcquisitionRoute::of(&plan_plain_row_classified(buffer, row, fit, policy))
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn plan_reports_tab_wide_flags_and_char_byte_lengths() {
     let text = "a\t\u{4E2D}b\n";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -151,11 +151,11 @@ fn plan_reports_tab_wide_flags_and_char_byte_lengths() {
     // A plain ASCII row classifies without either flag.
     let buf_id = buffer_with_text(&mut eval, "ab\n");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let ascii =
-        plan_ascii_row_classified(buffer, row_start(b"ab\n", 0, 0), wide_fit(), plain_policy())
-            .expect("ascii row routes");
-    assert!(!ascii.has_tab());
-    assert!(!ascii.has_wide());
+    let plain =
+        plan_plain_row_classified(buffer, row_start(b"ab\n", 0, 0), wide_fit(), plain_policy())
+            .expect("plain row routes");
+    assert!(!plain.has_tab());
+    assert!(!plain.has_wide());
 }
 
 #[test]
@@ -169,7 +169,7 @@ fn plan_face_boundaries_are_char_offsets_on_multibyte_rows() {
     eval.eval_str("(put-text-property 2 4 'face 'bold)")
         .expect("put-text-property");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -247,7 +247,7 @@ fn classifier_fit_advances_a_full_stop_for_tab_exactly_on_a_stop() {
     {
         let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
         let plan =
-            plan_ascii_row_classified(buffer, row_start(text, 0, 0), fit_to(96.0), plain_policy())
+            plan_plain_row_classified(buffer, row_start(text, 0, 0), fit_to(96.0), plain_policy())
                 .expect("overflow prefix plan");
         assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
         assert_eq!(plan.line_char_len(), 8, "prefix ends BEFORE the tab");
@@ -292,7 +292,7 @@ fn classifier_rejects_wide_char_exact_fill_and_straddle() {
     // and the straddling char hands off to the pipeline's overflow machinery
     // (GNU consumes it into the truncation skip / pushes it to the next row).
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         fit_to(36.0),
@@ -387,7 +387,7 @@ fn classifier_refuses_a_mid_line_start_whose_first_char_does_not_fit() {
         tab_policy: &TAB_EVERY_8,
     };
     assert_eq!(
-        plan_ascii_row_classified(buffer, row_start(text.as_bytes(), 3, 3), fit, wrap_policy())
+        plan_plain_row_classified(buffer, row_start(text.as_bytes(), 3, 3), fit, wrap_policy())
             .unwrap_err(),
         RouteRefusal::ScanNoFitFirstChar
     );
@@ -404,7 +404,7 @@ fn mid_line_tail_plans_from_its_own_charpos() {
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let row = row_start(text.as_bytes(), 3, 3);
-    let plan = plan_ascii_row_classified(buffer, row, wide_fit(), wrap_policy())
+    let plan = plan_plain_row_classified(buffer, row, wide_fit(), wrap_policy())
         .expect("mid-line tail plans");
     assert_eq!(plan.line_char_len(), 3);
     assert_eq!(plan.line_byte_len(), 3);
@@ -429,7 +429,7 @@ fn continuation_resume_tab_expands_from_carried_column() {
         right_edge_px: 72.0,
         tab_policy: &TAB_EVERY_8,
     };
-    let plan = plan_ascii_row_classified(buffer, row, carried, wrap_policy())
+    let plan = plan_plain_row_classified(buffer, row, carried, wrap_policy())
         .expect("carried tab tail plans");
     assert!(plan.has_tab());
     // tab (24px -> the 64px stop) + 'x' (64 -> 72, landing AT the edge) fit;
@@ -442,7 +442,7 @@ fn continuation_resume_tab_expands_from_carried_column() {
         right_edge_px: 96.0,
         ..carried
     };
-    let plan = plan_ascii_row_classified(buffer, row, wider, wrap_policy())
+    let plan = plan_plain_row_classified(buffer, row, wider, wrap_policy())
         .expect("wider carried tab tail plans");
     assert_eq!(plan.line_end(), RoutedRowLineEnd::Newline);
     assert_eq!(plan.line_char_len(), 3);
@@ -461,7 +461,7 @@ fn continuation_resume_still_refuses_point_in_tail() {
         ..wrap_policy()
     };
     assert_eq!(
-        plan_ascii_row_classified(buffer, row_start(text.as_bytes(), 3, 3), wide_fit(), policy,)
+        plan_plain_row_classified(buffer, row_start(text.as_bytes(), 3, 3), wide_fit(), policy,)
             .unwrap_err(),
         RouteRefusal::PointInRow
     );
@@ -477,7 +477,7 @@ fn continuation_resume_at_newline_plans_row_break_only() {
     let text = "abc\n";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 3, 3),
         wide_fit(),
@@ -588,7 +588,7 @@ fn classifier_accepts_face_property_span_and_plans_boundaries() {
     // A face span mid-line routes and segments the row at each property
     // change ("he" / "ll" bold / "o").
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(buffer, row_start(text, 0, 0), wide_fit(), plain_policy())
+    let plan = plan_plain_row_classified(buffer, row_start(text, 0, 0), wide_fit(), plain_policy())
         .expect("face-propped row routes");
     assert_eq!(plan.line_char_len(), 5);
     assert_eq!(plan.line_byte_len(), 5);
@@ -603,7 +603,7 @@ fn classifier_accepts_face_property_span_and_plans_boundaries() {
         ]
     );
     // The second, unfaced row routes unsegmented.
-    let plan = plan_ascii_row_classified(buffer, row_start(text, 6, 6), wide_fit(), plain_policy())
+    let plan = plan_plain_row_classified(buffer, row_start(text, 6, 6), wide_fit(), plain_policy())
         .expect("unfaced row routes");
     assert!(!plan.is_segmented());
 }
@@ -616,7 +616,7 @@ fn classifier_accepts_font_lock_face_and_whole_line_span() {
     eval.eval_str("(put-text-property 1 8 'font-lock-face 'bold)")
         .expect("put-text-property");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(b"keyword\n", 0, 0),
         wide_fit(),
@@ -638,7 +638,7 @@ fn classifier_accepts_fontified_boundary_as_segment_split() {
     eval.eval_str("(put-text-property 1 3 'fontified t)")
         .expect("put-text-property");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(b"abcd\n", 0, 0),
         wide_fit(),
@@ -713,7 +713,7 @@ fn classifier_accepts_face_only_overlay_and_plans_boundaries() {
     )
     .expect("face-only overlay");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(b"hello\n", 0, 0),
         wide_fit(),
@@ -741,7 +741,7 @@ fn classifier_merges_overlay_and_text_prop_boundaries() {
     )
     .expect("overlapping overlays over a text span");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(b"hello\n", 0, 0),
         wide_fit(),
@@ -762,7 +762,7 @@ fn classifier_accepts_zero_length_face_only_overlay() {
     eval.eval_str("(overlay-put (make-overlay 3 3) 'face 'bold)")
         .expect("zero-length overlay");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(b"hello\n", 0, 0),
         wide_fit(),
@@ -910,7 +910,7 @@ fn classifier_routes_a_mid_line_overlay_string_anchor() {
     )
     .expect("string overlay");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(b"hello\n", 0, 0),
         wide_fit(),
@@ -955,7 +955,7 @@ fn classifier_rejects_unroutable_overlay_string_shapes() {
         ))
         .expect("string overlay");
         let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-        let plan = plan_ascii_row_classified(
+        let plan = plan_plain_row_classified(
             buffer,
             row_start(b"hello\n", 0, 0),
             wide_fit(),
@@ -1161,7 +1161,7 @@ fn classifier_refuses_a_display_table_buffer_before_scanning_the_row() {
     }
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     assert_eq!(
-        plan_ascii_row_classified(
+        plan_plain_row_classified(
             buffer,
             row_start(text.as_bytes(), 0, 0),
             wide_fit(),
@@ -1219,7 +1219,7 @@ fn a_zero_coverage_plan_is_exactly_a_position_standing_on_a_newline() {
     let mut planned_on_newline = 0;
     let mut planned_on_text = 0;
     for byte_idx in 0..text.len() {
-        let plan = plan_ascii_row_classified(
+        let plan = plan_plain_row_classified(
             buffer,
             row_start(text.as_bytes(), byte_idx, byte_idx as i64),
             wide_fit(),
@@ -1243,7 +1243,7 @@ fn a_zero_coverage_plan_is_exactly_a_position_standing_on_a_newline() {
 }
 
 #[test]
-fn ascii_source_matches_buffer_text_source_cursor_items() {
+fn plain_source_matches_buffer_text_source_cursor_items() {
     let mut eval = Context::new();
     let buf_id = buffer_with_text(&mut eval, "hello world\n");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -1263,20 +1263,20 @@ fn ascii_source_matches_buffer_text_source_cursor_items() {
         cursor_items.push(item);
     }
 
-    let mut ascii = BufferAsciiItemSource::with_row_break(
+    let mut plain = BufferPlainItemSource::with_row_break(
         buf_id,
         buffer,
         start,
         line_end,
         RenderFaceRef::Inherit,
     );
-    let mut ascii_items = Vec::new();
-    while let Some(item) = ascii.next_item(&mut context) {
-        ascii_items.push(item);
+    let mut plain_items = Vec::new();
+    while let Some(item) = plain.next_item(&mut context) {
+        plain_items.push(item);
     }
 
-    assert_eq!(ascii_items, cursor_items);
-    assert_eq!(ascii_items.len(), 2, "one text run, then the row break");
+    assert_eq!(plain_items, cursor_items);
+    assert_eq!(plain_items.len(), 2, "one text run, then the row break");
 }
 
 #[test]
@@ -1305,7 +1305,7 @@ fn routed_source_matches_buffer_text_source_cursor_items_for_tab_and_wide() {
         cursor_items.push(item);
     }
 
-    let mut routed = BufferAsciiItemSource::with_row_break(
+    let mut routed = BufferPlainItemSource::with_row_break(
         buf_id,
         buffer,
         start,
@@ -1337,7 +1337,7 @@ fn plan_row_face_segments_resolves_per_segment_stable_ids() {
     eval.eval_str("(put-text-property 3 5 'face 'bold)")
         .expect("put-text-property");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(b"hello\n", 0, 0),
         wide_fit(),
@@ -1483,27 +1483,27 @@ fn routed_segment_item_face_diverges_under_default_remapping() {
 }
 
 #[test]
-fn ascii_source_segments_produce_per_face_text_runs_and_break_face() {
+fn plain_source_segments_produce_per_face_text_runs_and_break_face() {
     let mut eval = Context::new();
     let buf_id = buffer_with_text(&mut eval, "hello\n");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let bold = RenderFaceRef::FaceId(neomacs_display_protocol::types::FaceId::new(40));
     let base = RenderFaceRef::FaceId(neomacs_display_protocol::types::FaceId::new(33));
-    let mut source = BufferAsciiItemSource::with_row_break_segments(
+    let mut source = BufferPlainItemSource::with_row_break_segments(
         buf_id,
         buffer,
         &[
-            AsciiRowItemSegment {
+            PlainRowItemSegment {
                 start: CharPos0::ZERO,
                 end: CharPos0::new(2),
                 face: base,
             },
-            AsciiRowItemSegment {
+            PlainRowItemSegment {
                 start: CharPos0::new(2),
                 end: CharPos0::new(4),
                 face: bold,
             },
-            AsciiRowItemSegment {
+            PlainRowItemSegment {
                 start: CharPos0::new(4),
                 end: CharPos0::new(5),
                 face: base,
@@ -1538,11 +1538,11 @@ fn ascii_source_segments_produce_per_face_text_runs_and_break_face() {
 }
 
 #[test]
-fn ascii_source_text_only_omits_the_row_break() {
+fn plain_source_text_only_omits_the_row_break() {
     let mut eval = Context::new();
     let buf_id = buffer_with_text(&mut eval, "ab\n");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let mut source = BufferAsciiItemSource::text_only(
+    let mut source = BufferPlainItemSource::text_only(
         buf_id,
         buffer,
         CharPos0::ZERO,
@@ -1570,7 +1570,7 @@ fn classifier_routes_mid_line_plain_elision_and_plans_segments() {
     eval.eval_str("(put-text-property 3 5 'invisible t)")
         .expect("invisible span");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -1602,7 +1602,7 @@ fn classifier_routes_trailing_elision_ending_at_newline() {
     eval.eval_str("(put-text-property 4 6 'invisible t)")
         .expect("trailing invisible span");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -1661,7 +1661,7 @@ fn classifier_elision_uses_entry_run_ellipsis_flag_for_adjacent_runs() {
     )
     .expect("adjacent invisible runs");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -1797,7 +1797,7 @@ fn classifier_routes_non_hiding_invisible_value() {
     )
     .expect("non-hiding invisible value");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -1827,7 +1827,7 @@ fn classifier_routes_display_string_replacement() {
     eval.eval_str("(put-text-property 3 5 'display \"STR\")")
         .expect("display string replacement");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -1861,7 +1861,7 @@ fn routed_replacement_extent_follows_the_same_display_object_across_a_property_c
     )
     .expect("same display object across a face change");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -1889,7 +1889,7 @@ fn routed_replacement_extent_stops_at_a_different_display_object_with_equal_text
     )
     .expect("two distinct display objects");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -2080,7 +2080,7 @@ fn classifier_routes_inert_composition_prop() {
         eval.eval_str(&format!("(put-text-property 3 5 'composition {value})"))
             .expect("put-text-property");
         let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-        let plan = plan_ascii_row_classified(
+        let plan = plan_plain_row_classified(
             buffer,
             row_start(b"hello\n", 0, 0),
             wide_fit(),
@@ -2145,7 +2145,7 @@ fn classifier_routes_plain_space_width_spec() {
     eval.eval_str("(put-text-property 3 4 'display '(space :width 3))")
         .expect("space width spec");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -2236,7 +2236,7 @@ fn classifier_routes_combining_mark_cluster_and_plans_composed() {
     let text = "ae\u{0301}b\n";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -2258,7 +2258,7 @@ fn classifier_routes_keycap_cluster() {
     let text = "1\u{FE0F}\u{20E3}x\n";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -2352,7 +2352,7 @@ fn classifier_rejects_composed_cluster_with_hidden_base() {
     eval.eval_str("(put-text-property 3 4 'invisible t)")
         .expect("hide the mark");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         wide_fit(),
@@ -2386,7 +2386,7 @@ fn routed_source_matches_cursor_items_for_combining_mark() {
         cursor_items.push(item);
     }
 
-    let mut routed = BufferAsciiItemSource::with_row_break(
+    let mut routed = BufferPlainItemSource::with_row_break(
         buf_id,
         buffer,
         start,
@@ -2420,7 +2420,7 @@ fn classifier_plans_truncation_prefix_for_overwide_line() {
     let text = "abcdefgh\n";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         fit_to(40.0),
@@ -2453,7 +2453,7 @@ fn classifier_plans_wrap_prefix_for_overwide_line() {
     let text = "abcdefgh\n";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         fit_to(40.0),
@@ -2654,7 +2654,7 @@ fn classifier_prefix_plans_face_boundaries_inside_prefix_only() {
     eval.eval_str("(put-text-property 2 4 'face 'bold)")
         .expect("face span");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         fit_to(40.0),
@@ -2686,7 +2686,7 @@ fn classifier_prefix_face_span_crossing_the_clip_splits_at_its_start_only() {
     eval.eval_str("(put-text-property 4 8 'face 'bold)")
         .expect("face span crossing the clip");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         fit_to(40.0),
@@ -2716,7 +2716,7 @@ fn classifier_prefix_ignores_hazards_beyond_the_handoff() {
     eval.eval_str("(put-text-property 7 9 'display \"XX\")")
         .expect("display prop beyond the prefix");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         fit_to(40.0),
@@ -2777,7 +2777,7 @@ fn classifier_prefix_byte_len_tracks_multibyte_chars() {
     let text = "ééééé\n";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         fit_to(24.0),
@@ -2811,7 +2811,7 @@ fn classifier_routes_empty_line_and_plans_row_break_only() {
         RowAcquisitionRoute::ItemRenderer
     );
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 2, 2),
         wide_fit(),
@@ -2834,7 +2834,7 @@ fn classifier_refuses_empty_line_when_point_on_newline() {
     let text = "x\n\ny\n";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let refused = plan_ascii_row_classified(
+    let refused = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 2, 2),
         wide_fit(),
@@ -2858,7 +2858,7 @@ fn classifier_refuses_empty_line_with_hazard_prop_on_newline() {
     eval.eval_str("(put-text-property 3 4 'display \"D\")")
         .expect("display prop on the empty line's newline");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let refused = plan_ascii_row_classified(
+    let refused = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 2, 2),
         wide_fit(),
@@ -2878,7 +2878,7 @@ fn classifier_refuses_empty_line_with_string_overlay_at_newline() {
     eval.eval_str("(overlay-put (make-overlay 3 4) 'before-string \"S\")")
         .expect("string overlay at the empty line");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let refused = plan_ascii_row_classified(
+    let refused = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 2, 2),
         wide_fit(),
@@ -2888,12 +2888,12 @@ fn classifier_refuses_empty_line_with_string_overlay_at_newline() {
 }
 
 #[test]
-fn ascii_source_row_break_only_produces_single_row_break_item() {
+fn plain_source_row_break_only_produces_single_row_break_item() {
     let mut eval = Context::new();
     let text = "x\n\ny\n";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let mut source = BufferAsciiItemSource::with_row_break_segments(
+    let mut source = BufferPlainItemSource::with_row_break_segments(
         buf_id,
         buffer,
         &[],
@@ -2950,7 +2950,7 @@ fn classifier_routes_eob_tail_row_without_newline() {
         RowAcquisitionRoute::ItemRenderer
     );
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 4, 4),
         wide_fit(),
@@ -2976,7 +2976,7 @@ fn classifier_refuses_eob_tail_containing_point() {
     // Point inside the tail AND point at EOB (one past the last char — the
     // cursor-at-EOB row) both refuse: cursor capture is pipeline-owned.
     for point in [4, 5, 7] {
-        let refused = plan_ascii_row_classified(
+        let refused = plan_plain_row_classified(
             buffer,
             row_start(text.as_bytes(), 4, 4),
             wide_fit(),
@@ -3002,7 +3002,7 @@ fn classifier_plans_overflow_prefix_for_overwide_eob_tail() {
     let text = "abcdefgh";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         fit_to(40.0),
@@ -3023,7 +3023,7 @@ fn classifier_routes_exactly_filling_eob_tail() {
     let text = "abcde";
     let buf_id = buffer_with_text(&mut eval, text);
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 0, 0),
         fit_to(40.0),
@@ -3044,7 +3044,7 @@ fn classifier_eob_tail_plans_face_boundaries() {
     eval.eval_str("(put-text-property 6 7 'face 'bold)")
         .expect("face span in the EOB tail");
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
-    let plan = plan_ascii_row_classified(
+    let plan = plan_plain_row_classified(
         buffer,
         row_start(text.as_bytes(), 4, 4),
         wide_fit(),

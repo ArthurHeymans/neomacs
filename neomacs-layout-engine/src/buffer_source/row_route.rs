@@ -9,9 +9,19 @@
 //! * [`RowAcquisitionRoute`] + [`classify_row_acquisition`] decide, at the
 //!   start of a buffer line, whether the row is plain enough for the item
 //!   renderer. "Plain" mirrors what makes GNU `get_next_display_element`
-//!   trivial: single-byte printable ASCII only, no display/mouse-face/
-//!   line-height properties in range, no display table, L2R (guaranteed by
-//!   ASCII-only content), and either the whole line fits without
+//!   trivial: TAB plus printable characters the shared width table sizes at
+//!   exactly 1 or 2 columns — ASCII since increment 1, and since increment 2b
+//!   any printable non-ASCII char of unambiguous width, so CJK and Latin
+//!   accents route while contextual-shaping scripts, regional indicators and
+//!   nobreak chars refuse (see [`classify_routed_row_char`], which states the
+//!   full ladder). Also required: no display/mouse-face/line-height
+//!   properties in range and no display table. Direction is NOT a condition:
+//!   RTL and mixed rows route, because bidi reordering is a row-level install
+//!   step below this seam (`GlyphRowFinalizer::finalize` ->
+//!   `reorder_row_bidi`), so both producers emit the same logical-order row
+//!   and the same pure permutation makes it visual
+//!   (`classifier_routes_hebrew_rtl_rows`). Either the whole line fits
+//!   without
 //!   continuation or truncation and ends in a real newline, or — phase 2f —
 //!   the line overflows and the route covers only its maximal fitting
 //!   prefix, handing the walk back to the pipeline at the first char that
@@ -73,7 +83,7 @@
 //!   pipeline's OWN replacement session at commit (covered-charpos glyph
 //!   provenance, string base-face policy, session walk bookkeeping); every
 //!   other display shape refuses through [`routed_row_replacement_scan`].
-//! * [`BufferAsciiItemSource`] is the `DisplayItemSource` for such a row: it
+//! * [`BufferPlainItemSource`] is the `DisplayItemSource` for such a row: it
 //!   produces exactly the items `BufferTextSourceCursor` would — one plain
 //!   `TextRun` per face segment (one for the whole line when no property
 //!   changes in range), then the explicit-newline row break.
@@ -113,7 +123,7 @@ use neovm_core::emacs_core::composite::composition_display_text_for_property;
 ///
 /// This is the classifier's verdict named as a value, and it exists for the
 /// tests: production never asks the yes/no question, it asks
-/// [`plan_ascii_row_classified`] for the plan or the refusal and acts on
+/// [`plan_plain_row_classified`] for the plan or the refusal and acts on
 /// whichever it gets. Gated to tests so it cannot drift back into a decision
 /// production makes twice.
 #[cfg(test)]
@@ -121,14 +131,14 @@ use neovm_core::emacs_core::composite::composition_display_text_for_property;
 pub(crate) enum RowAcquisitionRoute {
     /// The full buffer pipeline (`loop_render` / `item_render` orchestration).
     BufferPipeline,
-    /// The unified item renderer, fed by [`BufferAsciiItemSource`].
+    /// The unified item renderer, fed by [`BufferPlainItemSource`].
     ItemRenderer,
 }
 
 #[cfg(test)]
 impl RowAcquisitionRoute {
     /// The verdict a classifier result stands for.
-    pub(crate) fn of(plan: &Result<AsciiRowPlan, RouteRefusal>) -> Self {
+    pub(crate) fn of(plan: &Result<PlainRowPlan, RouteRefusal>) -> Self {
         if plan.is_ok() {
             Self::ItemRenderer
         } else {
@@ -340,7 +350,7 @@ static ROUTE_STAT_ROUTED: std::sync::atomic::AtomicUsize = std::sync::atomic::At
 ///
 /// P4.8(d): this outcome had no counter, which is why `attempts` did not
 /// conserve. Every `NotRouted` exit notes a refusal and both success paths
-/// note a routed row, but an `AsciiRowRouteOutcome::Stopped` did neither. It
+/// note a routed row, but an `PlainRowRouteOutcome::Stopped` did neither. It
 /// is the walk's own termination, roughly once per redisplay pass: the corpus
 /// gap was 137 of 70341 attempts and the tty-typing gap was ~6002 against
 /// ~6004 redisplays. Counting it makes the line conservation-complete —
@@ -365,8 +375,8 @@ fn note_route_refusal(reason: RouteRefusal) {
 /// The route committed a row and the walk then ran out of window. See
 /// [`ROUTE_STAT_STOPPED`]; returns its argument so the exits can stay
 /// single-expression.
-fn note_route_stopped(outcome: AsciiRowRouteOutcome) -> AsciiRowRouteOutcome {
-    debug_assert_eq!(outcome, AsciiRowRouteOutcome::Stopped);
+fn note_route_stopped(outcome: PlainRowRouteOutcome) -> PlainRowRouteOutcome {
+    debug_assert_eq!(outcome, PlainRowRouteOutcome::Stopped);
     if route_stats_file().is_some() {
         ROUTE_STAT_STOPPED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
@@ -517,7 +527,7 @@ pub(crate) struct RowRouteFit<'a> {
 /// into their preceding base glyph (phase 2e rung 2) — they occupy no
 /// column and produce no glyph of their own.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct AsciiRowPlan {
+pub(crate) struct PlainRowPlan {
     line_byte_len: usize,
     line_char_len: usize,
     has_tab: bool,
@@ -529,7 +539,7 @@ pub(crate) struct AsciiRowPlan {
     replacements: Vec<RoutedRowReplacement>,
     /// The overlay-string anchors inside the routed coverage, ascending. Each
     /// is an INSERTION: it consumes no chars, so it is not a gap in
-    /// [`AsciiRowPlan::segment_ranges`] the way a replacement is.
+    /// [`PlainRowPlan::segment_ranges`] the way a replacement is.
     overlay_strings: Vec<RoutedRowOverlayStrings>,
     line_end: RoutedRowLineEnd,
 }
@@ -614,7 +624,7 @@ pub(crate) enum RoutedRowLineEnd {
     EndOfSource,
 }
 
-impl AsciiRowPlan {
+impl PlainRowPlan {
     pub(crate) fn line_byte_len(&self) -> usize {
         self.line_byte_len
     }
@@ -1768,13 +1778,13 @@ fn routed_row_elision_scan<B: LayoutBufferView>(
 /// Classify the row starting at `row` for acquisition routing. Returns
 /// Plan the routed body of the row starting at `row`, or say why the row
 /// cannot route. This is the classifier: production calls it through
-/// `try_render_ascii_row_via_item_renderer`, and the tests call it directly.
-pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
+/// `try_render_plain_row_via_item_renderer`, and the tests call it directly.
+pub(crate) fn plan_plain_row_classified<B: LayoutBufferView>(
     buffer: &B,
     row: RowRouteRowStart<'_>,
     fit: RowRouteFit<'_>,
     policy: RowRouteWindowPolicy,
-) -> Result<AsciiRowPlan, RouteRefusal> {
+) -> Result<PlainRowPlan, RouteRefusal> {
     if policy.hscroll_active {
         return Err(RouteRefusal::PolicyHscroll);
     }
@@ -2100,7 +2110,7 @@ pub(crate) fn plan_ascii_row_classified<B: LayoutBufferView>(
         }
     }
 
-    Ok(AsciiRowPlan {
+    Ok(PlainRowPlan {
         line_byte_len: scan.byte_len,
         line_char_len: scan.char_len,
         has_tab: scan.has_tab,
@@ -2155,7 +2165,7 @@ pub(crate) fn plan_row_face_segments<B: LayoutBufferView>(
     face_resolver: &FaceResolver,
     face_ids: &mut FrameFaceAttempt,
     start: CharPos0,
-    plan: &AsciiRowPlan,
+    plan: &PlainRowPlan,
 ) -> Vec<RoutedRowFaceSegment> {
     plan.segment_ranges(start)
         .into_iter()
@@ -2237,7 +2247,7 @@ pub(crate) fn routed_segment_item_face_diverges<B: LayoutBufferView>(
 
 /// One text segment of a routed row: `[start, end)` rendered with `face`.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct AsciiRowItemSegment {
+pub(crate) struct PlainRowItemSegment {
     pub(crate) start: CharPos0,
     pub(crate) end: CharPos0,
     pub(crate) face: RenderFaceRef,
@@ -2250,11 +2260,11 @@ pub(crate) struct AsciiRowItemSegment {
 /// `RowBreak` — mirroring GNU `next_element_from_buffer` yielding the line's
 /// characters, re-segmented at each `compute_stop_pos` stop, and then the
 /// newline element.
-pub(crate) struct BufferAsciiItemSource {
+pub(crate) struct BufferPlainItemSource {
     items: std::collections::VecDeque<DisplayItem>,
 }
 
-impl BufferAsciiItemSource {
+impl BufferPlainItemSource {
     /// Source over `[start, line_end)` text plus the newline row break at
     /// `line_end` — the full row, as the shadow renderer consumes it.
     pub(crate) fn with_row_break<B: LayoutBufferView + ?Sized>(
@@ -2267,7 +2277,7 @@ impl BufferAsciiItemSource {
         Self::from_segments(
             buffer_id,
             buffer,
-            &[AsciiRowItemSegment {
+            &[PlainRowItemSegment {
                 start,
                 end: line_end,
                 face,
@@ -2285,7 +2295,7 @@ impl BufferAsciiItemSource {
     pub(crate) fn with_row_break_segments<B: LayoutBufferView + ?Sized>(
         buffer_id: BufferId,
         buffer: &B,
-        segments: &[AsciiRowItemSegment],
+        segments: &[PlainRowItemSegment],
         line_end: CharPos0,
         row_break_face: RenderFaceRef,
     ) -> Self {
@@ -2311,7 +2321,7 @@ impl BufferAsciiItemSource {
         Self::from_segments(
             buffer_id,
             buffer,
-            &[AsciiRowItemSegment {
+            &[PlainRowItemSegment {
                 start,
                 end: line_end,
                 face,
@@ -2323,7 +2333,7 @@ impl BufferAsciiItemSource {
     fn from_segments<B: LayoutBufferView + ?Sized>(
         buffer_id: BufferId,
         buffer: &B,
-        segments: &[AsciiRowItemSegment],
+        segments: &[PlainRowItemSegment],
         row_break: Option<(CharPos0, RenderFaceRef)>,
     ) -> Self {
         let byte_at = |pos: CharPos0| buffer.layout_char_pos_to_emacs_byte_pos(pos);
@@ -2350,14 +2360,14 @@ impl BufferAsciiItemSource {
                 let (ch, len) = decode_utf8(&bytes[offset..]);
                 debug_assert!(
                     len > 0 && ch.len_utf8() == len,
-                    "BufferAsciiItemSource requires well-formed UTF-8 row text"
+                    "BufferPlainItemSource requires well-formed UTF-8 row text"
                 );
                 if len == 0 {
                     break;
                 }
                 debug_assert!(
                     classify_routed_row_char(ch).is_some() || routed_composable_extender(ch),
-                    "BufferAsciiItemSource requires a classified routable row (got {ch:?})"
+                    "BufferPlainItemSource requires a classified routable row (got {ch:?})"
                 );
                 text.push(ch);
                 offset += len;
@@ -2402,7 +2412,7 @@ impl BufferAsciiItemSource {
     }
 }
 
-impl crate::display_source::DisplayItemSource for BufferAsciiItemSource {
+impl crate::display_source::DisplayItemSource for BufferPlainItemSource {
     fn next_item(
         &mut self,
         _context: &mut crate::display_source::DisplaySourceContext<'_>,
@@ -2506,7 +2516,7 @@ pub(crate) static ROUTED_MID_LINE_START_ROW_COUNT: std::sync::atomic::AtomicUsiz
 static ROUTE_STAT_ROUTED_MID_LINE: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
-fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode, mid_line_start: bool) {
+fn note_routed_row(plan: &PlainRowPlan, wrap_mode: LineWrapMode, mid_line_start: bool) {
     if route_stats_file().is_some() {
         ROUTE_STAT_ROUTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if mid_line_start {
@@ -2569,7 +2579,7 @@ fn note_routed_row(plan: &AsciiRowPlan, wrap_mode: LineWrapMode, mid_line_start:
 
 /// Outcome of an attempted item-renderer row acquisition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum AsciiRowRouteOutcome {
+pub(crate) enum PlainRowRouteOutcome {
     /// The row is not eligible (or measurement rejected it); the buffer
     /// pipeline proceeds unchanged.
     NotRouted,
@@ -2608,7 +2618,7 @@ impl<'rows, 'emit, 'surface>
     /// carries a before/after-string — the classifier's overlay allow-list
     /// admits only face-affecting properties).
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn try_render_ascii_row_via_item_renderer<B: LayoutBufferView>(
+    pub(crate) fn try_render_plain_row_via_item_renderer<B: LayoutBufferView>(
         &mut self,
         loop_context: crate::buffer_source::loop_context::BufferSourceLoopRequestContext,
         face_resolution_context: crate::buffer_source::face_resolution::BufferSourceFaceResolutionContext<'_, B>,
@@ -2618,14 +2628,14 @@ impl<'rows, 'emit, 'surface>
         active_face_state: &mut crate::display_row::face_state::DisplayRowActiveFaceState,
         buffer: &B,
         route_refusals: &mut RouteRefusalWindow,
-    ) -> AsciiRowRouteOutcome {
+    ) -> PlainRowRouteOutcome {
         use crate::buffer_source::item_append::BufferSourceRowAppendContext;
         use crate::display_row::append_context::DisplayRowAppendKind;
         use crate::display_source_append_plan::DisplaySourceAppendRenderPolicy;
 
         if route_refusals.covers(self.progress.charpos()) {
             note_route_skipped();
-            return AsciiRowRouteOutcome::NotRouted;
+            return PlainRowRouteOutcome::NotRouted;
         }
         note_route_attempt();
         let position = self.progress.row_position();
@@ -2678,9 +2688,9 @@ impl<'rows, 'emit, 'surface>
         let covers_no_chars = row.text.get(row.byte_idx) == Some(&b'\n');
         if mid_line_start && !covers_no_chars && active_face_state.resolved_face().box_type != 0 {
             note_route_refusal(RouteRefusal::ProbeBoxFace);
-            return AsciiRowRouteOutcome::NotRouted;
+            return PlainRowRouteOutcome::NotRouted;
         }
-        let plan = match plan_ascii_row_classified(buffer, row, fit, policy) {
+        let plan = match plan_plain_row_classified(buffer, row, fit, policy) {
             Ok(plan) => plan,
             Err(reason) => {
                 if reason == RouteRefusal::PointInRow {
@@ -2691,7 +2701,7 @@ impl<'rows, 'emit, 'surface>
                     route_refusals.refuse_through(row.charpos, policy.point_charpos);
                 }
                 note_route_refusal(reason);
-                return AsciiRowRouteOutcome::NotRouted;
+                return PlainRowRouteOutcome::NotRouted;
             }
         };
 
@@ -2839,7 +2849,7 @@ impl<'rows, 'emit, 'surface>
             // it now covers the mid-line positions (a) newly admits.
             if (plan.is_segmented() || mid_line_start) && active.resolved_face().box_type != 0 {
                 note_route_refusal(RouteRefusal::ProbeBoxFace);
-                return AsciiRowRouteOutcome::NotRouted;
+                return PlainRowRouteOutcome::NotRouted;
             }
             // The pipeline stamps glyphs with the PER-RUN face chain; refuse
             // the row when it would diverge from the checkpoint chain (e.g.
@@ -2858,7 +2868,7 @@ impl<'rows, 'emit, 'surface>
                 )
             {
                 note_route_refusal(RouteRefusal::ProbeFaceDiverges);
-                return AsciiRowRouteOutcome::NotRouted;
+                return PlainRowRouteOutcome::NotRouted;
             }
             carried_active = Some(active.clone());
             probed.push(ProbedSegment {
@@ -2967,7 +2977,7 @@ impl<'rows, 'emit, 'surface>
                     position
                 }
                 RoutedRowPartKind::Text => {
-                    let source = BufferAsciiItemSource::text_only(
+                    let source = BufferPlainItemSource::text_only(
                         loop_context.buffer_id(),
                         buffer,
                         segment.start,
@@ -2976,7 +2986,7 @@ impl<'rows, 'emit, 'surface>
                     );
                     let Some(text_item) = source.text_item().cloned() else {
                         note_route_refusal(RouteRefusal::ProbeMeasure);
-                        return AsciiRowRouteOutcome::NotRouted;
+                        return PlainRowRouteOutcome::NotRouted;
                     };
                     let append_context = BufferSourceRowAppendContext::from_active_face_row(
                         buffer,
@@ -3125,7 +3135,7 @@ impl<'rows, 'emit, 'surface>
             };
             let Some(end_position) = measured else {
                 note_route_refusal(RouteRefusal::ProbeMeasure);
-                return AsciiRowRouteOutcome::NotRouted;
+                return PlainRowRouteOutcome::NotRouted;
             };
             probe_position = end_position;
             // Fit re-verification with the pipeline's OWN natural
@@ -3147,7 +3157,7 @@ impl<'rows, 'emit, 'surface>
             };
             if !fits {
                 note_route_refusal(RouteRefusal::ProbeMeasure);
-                return AsciiRowRouteOutcome::NotRouted;
+                return PlainRowRouteOutcome::NotRouted;
             }
         }
 
@@ -3200,7 +3210,7 @@ impl<'rows, 'emit, 'surface>
                     "routed overlay strings are single-line and fit the row"
                 );
                 if continuation.should_break() {
-                    return note_route_stopped(AsciiRowRouteOutcome::Stopped);
+                    return note_route_stopped(PlainRowRouteOutcome::Stopped);
                 }
                 let committed = self.progress.row_position();
                 debug_assert_eq!(
@@ -3298,7 +3308,7 @@ impl<'rows, 'emit, 'surface>
                             "routed replacement strings are single-line"
                         );
                         if produced_row_break {
-                            return note_route_stopped(AsciiRowRouteOutcome::Stopped);
+                            return note_route_stopped(PlainRowRouteOutcome::Stopped);
                         }
                         render_position = self.progress.row_position();
                     }
@@ -3308,7 +3318,7 @@ impl<'rows, 'emit, 'surface>
                         // utf8 string). Render the covered text literally —
                         // the same glyphs the pipeline's fallback appends.
                         debug_assert!(false, "a classified replacement string must resolve");
-                        let mut source = BufferAsciiItemSource::text_only(
+                        let mut source = BufferPlainItemSource::text_only(
                             loop_context.buffer_id(),
                             buffer,
                             segment.start,
@@ -3339,13 +3349,13 @@ impl<'rows, 'emit, 'surface>
                                 &mut render_policy,
                             )
                         else {
-                            return note_route_stopped(AsciiRowRouteOutcome::Stopped);
+                            return note_route_stopped(PlainRowRouteOutcome::Stopped);
                         };
                         render_position = append_progress.end();
                         self.progress.apply_row_position(render_position);
                     }
                     BufferDisplayPropertyTextReplacementApplyOutcome::Stop => {
-                        return note_route_stopped(AsciiRowRouteOutcome::Stopped);
+                        return note_route_stopped(PlainRowRouteOutcome::Stopped);
                     }
                 }
                 continue;
@@ -3366,7 +3376,7 @@ impl<'rows, 'emit, 'surface>
                 self.row_build.row_extend.clear();
             }
 
-            let mut source = BufferAsciiItemSource::text_only(
+            let mut source = BufferPlainItemSource::text_only(
                 loop_context.buffer_id(),
                 buffer,
                 segment.start,
@@ -3395,7 +3405,7 @@ impl<'rows, 'emit, 'surface>
                 DisplayRowAppendKind::SourceText,
                 &mut render_policy,
             ) else {
-                return note_route_stopped(AsciiRowRouteOutcome::Stopped);
+                return note_route_stopped(PlainRowRouteOutcome::Stopped);
             };
             render_position = append_progress.end();
             self.progress.apply_row_position(render_position);
@@ -3405,12 +3415,12 @@ impl<'rows, 'emit, 'surface>
         self.progress
             .set_byte_idx(row.byte_idx + plan.line_byte_len());
         note_routed_row(&plan, policy.wrap_mode, mid_line_start);
-        AsciiRowRouteOutcome::Rendered
+        PlainRowRouteOutcome::Rendered
     }
 
     /// Phase 2h rung 1 production: render a classified EMPTY line (a bare
     /// newline) through the item vocabulary's RowBreak-only shape. The
-    /// [`BufferAsciiItemSource`] yields exactly one explicit-newline
+    /// [`BufferPlainItemSource`] yields exactly one explicit-newline
     /// `RowBreak` at the newline's charpos (shadow-proven glyph-identical to
     /// the pipeline's empty row in engine_test), and that break drives the
     /// SAME shared line-end plan + row-transition lifecycle the pipeline's
@@ -3439,17 +3449,17 @@ impl<'rows, 'emit, 'surface>
         active_face_state: &crate::display_row::face_state::DisplayRowActiveFaceState,
         buffer: &B,
         row: RowRouteRowStart<'_>,
-        plan: &AsciiRowPlan,
+        plan: &PlainRowPlan,
         wrap_mode: LineWrapMode,
         mid_line_start: bool,
-    ) -> AsciiRowRouteOutcome {
+    ) -> PlainRowRouteOutcome {
         use crate::display_source::DisplayItemSource as _;
 
         debug_assert_eq!(plan.line_char_len(), 0);
         debug_assert_eq!(text.get(row.byte_idx), Some(&b'\n'));
 
         let line_end = CharPos0::new(row.charpos.max(0) as usize);
-        let mut source = BufferAsciiItemSource::with_row_break_segments(
+        let mut source = BufferPlainItemSource::with_row_break_segments(
             loop_context.buffer_id(),
             buffer,
             &[],
@@ -3486,10 +3496,10 @@ impl<'rows, 'emit, 'surface>
             )
             .render_and_apply(source_walk, buffer, self.reborrow());
         if continuation.should_break() {
-            return note_route_stopped(AsciiRowRouteOutcome::Stopped);
+            return note_route_stopped(PlainRowRouteOutcome::Stopped);
         }
         note_routed_row(plan, wrap_mode, mid_line_start);
-        AsciiRowRouteOutcome::Rendered
+        PlainRowRouteOutcome::Rendered
     }
 }
 
