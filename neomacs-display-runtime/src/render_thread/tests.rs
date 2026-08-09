@@ -28,7 +28,7 @@ fn make_test_app() -> RenderApp {
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
-        Arc::new(Mutex::new(HashMap::new())),
+        crate::terminal::new_shared_terminals(),
     )
 }
 
@@ -492,7 +492,7 @@ fn clipboard_command_before_display_initialization_returns_an_explicit_error() {
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
-        Arc::new(Mutex::new(HashMap::new())),
+        crate::terminal::new_shared_terminals(),
     );
     let (reply_tx, reply_rx) = crossbeam_channel::bounded(1);
     emacs
@@ -1035,7 +1035,7 @@ fn unknown_secondary_frame_snapshot_does_not_fall_back_to_primary() {
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
-        Arc::new(Mutex::new(HashMap::new())),
+        crate::terminal::new_shared_terminals(),
     );
     let Some(device) = make_test_device() else {
         return;
@@ -1103,7 +1103,7 @@ fn installing_frame_emits_activation_before_replaced_presentation_retirement() {
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
-        Arc::new(Mutex::new(HashMap::new())),
+        crate::terminal::new_shared_terminals(),
     );
     app.frame_windows.adopt_primary_frame_id(0x42);
 
@@ -1152,7 +1152,7 @@ fn superseded_pending_frame_is_discarded_before_activation() {
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
-        Arc::new(Mutex::new(HashMap::new())),
+        crate::terminal::new_shared_terminals(),
     );
 
     emacs
@@ -1189,7 +1189,7 @@ fn poll_frame_routes_nested_child_through_its_presented_ancestor_to_the_root_win
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
-        Arc::new(Mutex::new(HashMap::new())),
+        crate::terminal::new_shared_terminals(),
     );
     app.frame_windows.adopt_primary_frame_id(0x42);
 

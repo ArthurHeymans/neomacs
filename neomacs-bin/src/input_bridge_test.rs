@@ -45,6 +45,31 @@ fn surface_create_failure_reaches_the_evaluator_with_id_and_error() {
 }
 
 #[test]
+fn terminal_lifecycle_events_reach_the_evaluator_losslessly() {
+    let id = neovm_core::emacs_core::display_host::TerminalId::new(17).unwrap();
+    assert!(matches!(
+        convert_display_event(&DisplayEvent::TerminalCreateFailed {
+            id,
+            error: "shell executable not found".to_owned(),
+        }),
+        Some(KbInputEvent::TerminalCreateFailed { id: actual, error })
+            if actual == id && error == "shell executable not found"
+    ));
+    assert!(matches!(
+        convert_display_event(&DisplayEvent::TerminalExited { id }),
+        Some(KbInputEvent::TerminalExited { id: actual }) if actual == id
+    ));
+    assert!(matches!(
+        convert_display_event(&DisplayEvent::TerminalTitleChanged {
+            id,
+            title: "project shell".to_owned(),
+        }),
+        Some(KbInputEvent::TerminalTitleChanged { id: actual, title })
+            if actual == id && title == "project shell"
+    ));
+}
+
+#[test]
 fn presentation_lifecycle_events_reach_the_evaluator_losslessly() {
     assert!(matches!(
         convert_display_event(&DisplayEvent::PresentationActivated {

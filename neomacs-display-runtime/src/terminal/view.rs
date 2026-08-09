@@ -18,7 +18,7 @@ use rio_vt::event::{EventListener, RioEvent, WindowId};
 use rio_vt::performer::handler::Processor;
 
 use super::content::TerminalContent;
-use super::{TerminalGridSize, TerminalId, TerminalMode};
+use super::{TerminalDisplayTarget, TerminalGridSize, TerminalId};
 
 /// Scrollback history limit, matching the previous emulator default.
 const SCROLLBACK_HISTORY: usize = 10_000;
@@ -33,6 +33,8 @@ pub struct NeomacsEventProxy {
     exited: Arc<std::sync::atomic::AtomicBool>,
     /// Replies the terminal wants written back to the PTY (DA/DSR/CPR).
     pending_writes: Arc<Mutex<Vec<u8>>>,
+    /// Latest title not yet forwarded to the evaluator.
+    pending_title: Arc<Mutex<Option<String>>>,
 }
 
 impl NeomacsEventProxy {
@@ -42,6 +44,7 @@ impl NeomacsEventProxy {
             wakeup: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             exited: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             pending_writes: Arc::new(Mutex::new(Vec::new())),
+            pending_title: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -76,6 +79,10 @@ impl NeomacsEventProxy {
     fn take_pending_writes(&self) -> Vec<u8> {
         std::mem::take(&mut *self.pending_writes.lock())
     }
+
+    pub fn take_title(&self) -> Option<String> {
+        self.pending_title.lock().take()
+    }
 }
 
 impl EventListener for NeomacsEventProxy {
@@ -92,6 +99,8 @@ impl EventListener for NeomacsEventProxy {
             }
             RioEvent::Title(title) => {
                 tracing::debug!("Terminal {}: title changed to '{}'", self.id, title);
+                *self.pending_title.lock() = Some(title);
+                self.notify_wakeup();
             }
             RioEvent::Bell => {
                 tracing::debug!("Terminal {}: bell", self.id);
@@ -104,7 +113,7 @@ impl EventListener for NeomacsEventProxy {
 /// A single terminal instance.
 pub struct TerminalView {
     pub id: TerminalId,
-    pub mode: TerminalMode,
+    pub target: TerminalDisplayTarget,
     /// The terminal state (shared with PTY reader).
     pub term: Arc<FairMutex<Crosswords<NeomacsEventProxy>>>,
     /// Event proxy for wakeup notifications.
@@ -141,6 +150,7 @@ pub enum TerminalShutdownError {
 }
 
 impl PtySession {
+    #[cfg(test)]
     fn process_id(&self) -> Option<u32> {
         self.child.as_ref().and_then(|child| child.process_id())
     }
@@ -213,7 +223,7 @@ impl TerminalView {
     pub fn new(
         id: TerminalId,
         size: TerminalGridSize,
-        mode: TerminalMode,
+        target: TerminalDisplayTarget,
         shell: Option<&str>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let event_proxy = NeomacsEventProxy::new(id);
@@ -332,7 +342,7 @@ impl TerminalView {
 
         Ok(Self {
             id,
-            mode,
+            target,
             term,
             event_proxy,
             pty_session: PtySession {

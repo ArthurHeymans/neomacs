@@ -1148,6 +1148,20 @@ pub enum InputEvent {
     /// pre-validation accepted it. Runs `neomacs-surface-error-functions`
     /// with the surface id and the renderer's error string.
     SurfaceCreateFailed { id: u32, error: String },
+    /// A compositor-owned neo-term failed to create after reserving its ID.
+    TerminalCreateFailed {
+        id: crate::emacs_core::display_host::TerminalId,
+        error: String,
+    },
+    /// A compositor-owned neo-term child process exited.
+    TerminalExited {
+        id: crate::emacs_core::display_host::TerminalId,
+    },
+    /// A compositor-owned neo-term published a new title.
+    TerminalTitleChanged {
+        id: crate::emacs_core::display_host::TerminalId,
+        title: String,
+    },
 }
 
 impl InputEvent {
@@ -3589,6 +3603,15 @@ impl crate::emacs_core::eval::Context {
                     // hook (mirrors MonitorsChanged running its hook here).
                     self.handle_surface_create_failed_input_event(id, &error)?;
                 }
+                InputEvent::TerminalCreateFailed { id, error } => {
+                    self.handle_terminal_create_failed_input_event(id, &error)?;
+                }
+                InputEvent::TerminalExited { id } => {
+                    self.handle_terminal_exited_input_event(id)?;
+                }
+                InputEvent::TerminalTitleChanged { id, title } => {
+                    self.handle_terminal_title_changed_input_event(id, &title)?;
+                }
                 _ => {}
             }
         }
@@ -3633,6 +3656,43 @@ impl crate::emacs_core::eval::Context {
             Value::symbol("neomacs-surface-error-functions"),
             Value::fixnum(i64::from(id)),
             Value::string(error),
+        ];
+        crate::emacs_core::hook_runtime::run_named_hook_with_args(self, &args)
+    }
+
+    fn handle_terminal_exited_input_event(
+        &mut self,
+        id: crate::emacs_core::display_host::TerminalId,
+    ) -> crate::emacs_core::error::EvalResult {
+        let args = [
+            Value::symbol("neo-term-exit-functions"),
+            Value::fixnum(i64::from(id.get())),
+        ];
+        crate::emacs_core::hook_runtime::run_named_hook_with_args(self, &args)
+    }
+
+    fn handle_terminal_create_failed_input_event(
+        &mut self,
+        id: crate::emacs_core::display_host::TerminalId,
+        error: &str,
+    ) -> crate::emacs_core::error::EvalResult {
+        let args = [
+            Value::symbol("neo-term-create-failed-functions"),
+            Value::fixnum(i64::from(id.get())),
+            Value::string(error),
+        ];
+        crate::emacs_core::hook_runtime::run_named_hook_with_args(self, &args)
+    }
+
+    fn handle_terminal_title_changed_input_event(
+        &mut self,
+        id: crate::emacs_core::display_host::TerminalId,
+        title: &str,
+    ) -> crate::emacs_core::error::EvalResult {
+        let args = [
+            Value::symbol("neo-term-title-changed-functions"),
+            Value::fixnum(i64::from(id.get())),
+            Value::string(title),
         ];
         crate::emacs_core::hook_runtime::run_named_hook_with_args(self, &args)
     }
@@ -4348,6 +4408,18 @@ impl crate::emacs_core::eval::Context {
             }
             InputEvent::SurfaceCreateFailed { id, error } => {
                 self.handle_surface_create_failed_input_event(id, &error)?;
+                Ok(None)
+            }
+            InputEvent::TerminalCreateFailed { id, error } => {
+                self.handle_terminal_create_failed_input_event(id, &error)?;
+                Ok(None)
+            }
+            InputEvent::TerminalExited { id } => {
+                self.handle_terminal_exited_input_event(id)?;
+                Ok(None)
+            }
+            InputEvent::TerminalTitleChanged { id, title } => {
+                self.handle_terminal_title_changed_input_event(id, &title)?;
                 Ok(None)
             }
             InputEvent::Focus {

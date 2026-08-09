@@ -13,13 +13,17 @@ use super::eval::{
     ShaderSurfaceCreateRequest, ShaderSurfaceLanguage, ShaderSurfaceUniformInit,
     SurfaceResolveRequest, VideoResolveRequest, WebKitResolveRequest,
 };
+use crate::buffer::BufferId;
 use crate::face::Face as RuntimeFace;
 use crate::window::FrameFullscreen;
 
-/// Where the display compositor places a neo-term instance.
+/// The display object that owns a neo-term instance.
+///
+/// Window terminals carry their buffer identity in the variant itself, so a
+/// detached frame-wide `Window` state cannot be constructed accidentally.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TerminalDisplayMode {
-    Window,
+pub enum TerminalDisplayTarget {
+    Window { buffer: BufferId },
     Inline,
     Floating,
 }
@@ -66,7 +70,7 @@ impl TerminalGridSize {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TerminalCreateRequest {
     pub size: TerminalGridSize,
-    pub mode: TerminalDisplayMode,
+    pub target: TerminalDisplayTarget,
     pub shell: Option<String>,
 }
 

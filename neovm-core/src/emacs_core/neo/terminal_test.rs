@@ -1,5 +1,5 @@
 use super::super::display_host::{
-    DisplayHost, TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement,
+    DisplayHost, TerminalCreateRequest, TerminalDisplayTarget, TerminalFloatPlacement,
     TerminalGridSize, TerminalId,
 };
 use super::super::eval::{Context, GuiFrameHostRequest};
@@ -145,7 +145,7 @@ fn public_terminal_builtins_route_typed_requests_through_the_display_host() {
                     cols: std::num::NonZeroU16::new(80).unwrap(),
                     rows: std::num::NonZeroU16::new(24).unwrap(),
                 },
-                mode: TerminalDisplayMode::Floating,
+                target: TerminalDisplayTarget::Floating,
                 shell: Some("/bin/sh".to_owned()),
             }),
             TerminalHostEvent::Write {
@@ -167,6 +167,26 @@ fn public_terminal_builtins_route_typed_requests_through_the_display_host() {
                 id: TerminalId::new(41).unwrap(),
             },
         ]
+    );
+}
+
+#[test]
+fn window_terminal_target_carries_the_current_buffer_identity() {
+    let host = RecordingTerminalDisplayHost::default();
+    let mut eval = Context::new();
+    let owner = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.set_display_host(Box::new(host.clone()));
+
+    eval.eval_str("(neomacs-terminal-create 80 24 0 \"/bin/sh\")")
+        .expect("create window terminal");
+
+    let events = host.events.lock().expect("terminal host events");
+    let TerminalHostEvent::Create(request) = &events[0] else {
+        panic!("expected terminal create event");
+    };
+    assert_eq!(
+        request.target,
+        TerminalDisplayTarget::Window { buffer: owner }
     );
 }
 

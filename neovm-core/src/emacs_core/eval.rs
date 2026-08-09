@@ -18,7 +18,7 @@ use super::builtins;
 use super::coding::CodingSystemManager;
 use super::custom::CustomManager;
 pub use super::display_host::{
-    DisplayHost, TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement,
+    DisplayHost, TerminalCreateRequest, TerminalDisplayTarget, TerminalFloatPlacement,
     TerminalGridSize, TerminalId,
 };
 use super::doc::{STARTUP_VARIABLE_DOC_STRING_PROPERTIES, STARTUP_VARIABLE_DOC_STUBS};

@@ -27,7 +27,7 @@ use neomacs_display_runtime::thread_comm::{
 };
 #[cfg(feature = "neo-term")]
 use neomacs_display_runtime::{
-    terminal::{TerminalMode, new_shared_terminals},
+    terminal::{TerminalDisplayTarget, new_shared_terminals},
     thread_comm::TerminalCommand,
 };
 use neomacs_layout_engine::font::fontconfig::face_height_to_pixels;
@@ -37,7 +37,8 @@ use neovm_core::emacs_core::GuiFrameHostRequest;
 use neovm_core::emacs_core::Value;
 #[cfg(feature = "neo-term")]
 use neovm_core::emacs_core::display_host::{
-    TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement, TerminalGridSize,
+    TerminalCreateRequest, TerminalDisplayTarget as CoreTerminalDisplayTarget,
+    TerminalFloatPlacement, TerminalGridSize,
 };
 use neovm_core::emacs_core::error::EvalError;
 use neovm_core::emacs_core::eval::{
@@ -4569,7 +4570,7 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
                 cols: std::num::NonZeroU16::new(96).unwrap(),
                 rows: std::num::NonZeroU16::new(31).unwrap(),
             },
-            mode: TerminalDisplayMode::Floating,
+            target: CoreTerminalDisplayTarget::Floating,
             shell: Some("/bin/sh".to_owned()),
         },
     )
@@ -4606,7 +4607,7 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
     assert!(
         neovm_core::emacs_core::DisplayHost::write_terminal(&host, id, b"stale".to_vec())
             .unwrap_err()
-            .contains("unknown neo-term terminal id")
+            .contains("being destroyed")
     );
     let arbitrary_id = neovm_core::emacs_core::display_host::TerminalId::new(999).unwrap();
     assert!(
@@ -4622,7 +4623,7 @@ fn primary_display_host_routes_typed_terminal_requests_to_the_renderer() {
         RenderCommand::Terminal(TerminalCommand::TerminalCreate {
             id: command_id,
             size,
-            mode: TerminalMode::Floating,
+            target: TerminalDisplayTarget::Floating,
             shell: Some(shell),
         }) if *command_id == id
             && *size == TerminalGridSize::new(96, 31).unwrap()

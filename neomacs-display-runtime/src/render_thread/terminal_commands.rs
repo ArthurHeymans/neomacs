@@ -13,12 +13,13 @@ impl RenderApp {
             TerminalCommand::TerminalCreate {
                 id,
                 size,
-                mode,
+                target,
                 shell,
-            } => match crate::terminal::TerminalView::new(id, size, mode, shell.as_deref()) {
+            } => match crate::terminal::TerminalView::new(id, size, target, shell.as_deref()) {
                 Ok(view) => {
-                    if let Ok(mut shared) = self.shared_terminals.lock() {
-                        shared.insert(id, view.term.clone());
+                    if let Err(error) = self.shared_terminals.mark_live(id, view.term.clone()) {
+                        tracing::error!("Failed to publish terminal {id}: {error}");
+                        return;
                     }
                     self.terminal_manager.terminals.insert(id, view);
                     tracing::info!(
@@ -26,10 +27,17 @@ impl RenderApp {
                         id,
                         size.cols,
                         size.rows,
-                        mode
+                        target
                     );
                 }
                 Err(e) => {
+                    let error = e.to_string();
+                    self.shared_terminals.mark_failed(id, error.clone());
+                    self.comms
+                        .send_input(crate::thread_comm::InputEvent::TerminalCreateFailed {
+                            id,
+                            error: error.clone(),
+                        });
                     tracing::error!("Failed to create terminal {}: {}", id, e);
                 }
             },
@@ -45,18 +53,21 @@ impl RenderApp {
                     view.resize(size);
                 }
             }
-            TerminalCommand::TerminalDestroy { id } => {
-                if let Ok(mut shared) = self.shared_terminals.lock() {
-                    shared.remove(&id);
+            TerminalCommand::TerminalDestroy { id } => match self.terminal_manager.destroy(id) {
+                Ok(true) => {
+                    self.shared_terminals.complete_destroy(id);
+                    tracing::info!("Terminal {} destroyed", id);
                 }
-                match self.terminal_manager.destroy(id) {
-                    Ok(true) => tracing::info!("Terminal {} destroyed", id),
-                    Ok(false) => tracing::debug!("Terminal {} was already absent", id),
-                    Err(error) => {
-                        tracing::error!("Terminal {} teardown failed: {}", id, error);
-                    }
+                Ok(false) => {
+                    self.shared_terminals.complete_destroy(id);
+                    tracing::debug!("Terminal {} was already absent", id);
                 }
-            }
+                Err(error) => {
+                    self.shared_terminals
+                        .mark_destroy_failed(id, format!("teardown failed: {error}"));
+                    tracing::error!("Terminal {} teardown failed: {}", id, error);
+                }
+            },
             TerminalCommand::TerminalSetFloat { id, placement } => {
                 if let Some(view) = self.terminal_manager.get_mut(id) {
                     view.float_x = placement.x();

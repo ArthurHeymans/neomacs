@@ -148,10 +148,20 @@ Returns terminal ID or nil on failure."
   :group 'neo-term
   (setq-local buffer-read-only t)
   (setq-local truncate-lines t)
-  (setq-local neo-term--id nil))
+  (setq-local neo-term--id nil)
+  (add-hook 'kill-buffer-hook #'neo-term--kill-buffer-terminal nil t))
 
 (defvar-local neo-term--id nil
   "Terminal ID for this buffer.")
+
+(defun neo-term--kill-buffer-terminal ()
+  "Destroy the terminal owned by the buffer being killed."
+  (when neo-term--id
+    (let ((id neo-term--id))
+      ;; Clear first so errors or recursive buffer cleanup cannot queue a
+      ;; second destroy for the same host-owned terminal.
+      (setq neo-term--id nil)
+      (neo-term--destroy id))))
 
 (defun neo-term-send-key ()
   "Send the current key to the terminal."
@@ -243,8 +253,6 @@ Returns terminal ID or nil on failure."
 (defun neo-term-quit ()
   "Kill the terminal and close the buffer."
   (interactive)
-  (when neo-term--id
-    (neo-term--destroy neo-term--id))
   (kill-buffer))
 
 (defun neo-term--handle-exit (terminal-id)
@@ -260,6 +268,25 @@ Returns terminal ID or nil on failure."
           (insert "\n[Process exited]\n"))
         (message "neo-term: terminal %d exited" terminal-id)))))
 
+(defun neo-term--handle-create-failed (terminal-id error)
+  "Handle creation failure ERROR for TERMINAL-ID."
+  ;; Retire the failed reservation through the typed Rust lifecycle.  There is
+  ;; no PTY to tear down, but the renderer must acknowledge removal of the ID.
+  (ignore-errors (neomacs-terminal-destroy terminal-id))
+  (remhash terminal-id neo-term--terminals)
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (when (and (eq major-mode 'neo-term-mode)
+                 (eql neo-term--id terminal-id))
+        ;; The renderer owns the failed lifecycle record; clearing the local
+        ;; ID prevents kill-buffer cleanup from attempting to destroy it.
+        (setq neo-term--id nil)
+        (let ((inhibit-read-only t))
+          (goto-char (point-max))
+          (insert (format "\n[Terminal creation failed: %s]\n" error)))
+        (message "neo-term: terminal %d creation failed: %s"
+                 terminal-id error)))))
+
 (defun neo-term--handle-title-changed (terminal-id title)
   "Handle terminal TERMINAL-ID title change to TITLE."
   (dolist (buf (buffer-list))
@@ -268,6 +295,19 @@ Returns terminal ID or nil on failure."
                  (eql neo-term--id terminal-id))
         (rename-buffer (format "*neo-term: %s*" title) t)))))
 
+(defvar neo-term-exit-functions nil
+  "Functions called with a terminal ID after its child process exits.")
+
+(defvar neo-term-create-failed-functions nil
+  "Functions called with a terminal ID and renderer creation error.")
+
+(defvar neo-term-title-changed-functions nil
+  "Functions called with a terminal ID and its new title.")
+
+(add-hook 'neo-term-exit-functions #'neo-term--handle-exit)
+(add-hook 'neo-term-create-failed-functions #'neo-term--handle-create-failed)
+(add-hook 'neo-term-title-changed-functions #'neo-term--handle-title-changed)
+
 ;;; Public API
 
 ;;;###autoload
@@ -275,18 +315,20 @@ Returns terminal ID or nil on failure."
   "Open a new GPU-accelerated terminal in the current window."
   (interactive)
   (let* ((buf-name (format "*neo-term-%d*" neo-term--next-buffer-num))
-         (buf (get-buffer-create buf-name))
-         (id (neo-term--create neo-term-default-cols neo-term-default-rows
-                               0))) ; mode=0 (Window)
-    (unless id
-      (kill-buffer buf)
-      (error "Failed to create terminal"))
-    (cl-incf neo-term--next-buffer-num)
+         (buf (get-buffer-create buf-name)))
     (switch-to-buffer buf)
     (neo-term-mode)
-    (setq-local neo-term--id id)
-    (message "neo-term: terminal %d created (%dx%d)"
-             id neo-term-default-cols neo-term-default-rows)))
+    ;; The Rust boundary captures the current buffer as the typed owner of a
+    ;; Window terminal, so creation must occur after switching to BUF.
+    (let ((id (neo-term--create neo-term-default-cols neo-term-default-rows
+                                0))) ; mode=0 (Window)
+      (unless id
+        (kill-buffer buf)
+        (error "Failed to create terminal"))
+      (cl-incf neo-term--next-buffer-num)
+      (setq-local neo-term--id id)
+      (message "neo-term: terminal %d created (%dx%d)"
+               id neo-term-default-cols neo-term-default-rows))))
 
 ;;;###autoload
 (defun neo-term-floating (&optional x y cols rows)

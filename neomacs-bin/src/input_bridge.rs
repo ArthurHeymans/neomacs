@@ -261,6 +261,22 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
                 error: error.clone(),
             })
         }
+        #[cfg(feature = "neo-term")]
+        DisplayEvent::TerminalCreateFailed { id, error } => {
+            Some(KbInputEvent::TerminalCreateFailed {
+                id: *id,
+                error: error.clone(),
+            })
+        }
+        #[cfg(feature = "neo-term")]
+        DisplayEvent::TerminalExited { id } => Some(KbInputEvent::TerminalExited { id: *id }),
+        #[cfg(feature = "neo-term")]
+        DisplayEvent::TerminalTitleChanged { id, title } => {
+            Some(KbInputEvent::TerminalTitleChanged {
+                id: *id,
+                title: title.clone(),
+            })
+        }
         // Ignore other events (WebKit title changes, etc.)
         _ => None,
     }

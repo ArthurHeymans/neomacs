@@ -141,6 +141,12 @@ pub enum InputEvent {
     /// renderer's error so the evaluator can surface it to Lisp instead of the
     /// failure only living in a log line + a silently-blank quad.
     SurfaceCreateFailed { id: u32, error: String },
+    /// Terminal creation failed after the evaluator reserved its typed ID.
+    #[cfg(feature = "neo-term")]
+    TerminalCreateFailed {
+        id: crate::terminal::TerminalId,
+        error: String,
+    },
     /// Terminal child process exited
     #[cfg(feature = "neo-term")]
     TerminalExited { id: crate::terminal::TerminalId },
@@ -564,7 +570,7 @@ pub enum TerminalCommand {
     TerminalCreate {
         id: crate::terminal::TerminalId,
         size: crate::terminal::TerminalGridSize,
-        mode: crate::terminal::TerminalMode,
+        target: crate::terminal::TerminalDisplayTarget,
         shell: Option<String>,
     },
     /// Write input to a terminal
@@ -843,6 +849,8 @@ impl RenderComms {
             InputEvent::PresentationDiscarded { .. } => "presentation-discarded",
             InputEvent::PresentationRetired { .. } => "presentation-retired",
             InputEvent::MenuBarClick { .. } => "menubar-click",
+            #[cfg(feature = "neo-term")]
+            InputEvent::TerminalCreateFailed { .. } => "terminal-create-failed",
             #[cfg(feature = "neo-term")]
             InputEvent::TerminalExited { .. } => "terminal-exited",
             #[cfg(feature = "neo-term")]

@@ -5,7 +5,7 @@
 //! behind the display-runtime boundary.
 
 use super::super::display_host::{
-    DisplayHost, TerminalCreateRequest, TerminalDisplayMode, TerminalFloatPlacement,
+    DisplayHost, TerminalCreateRequest, TerminalDisplayTarget, TerminalFloatPlacement,
     TerminalGridSize, TerminalId,
 };
 use super::super::error::{EvalResult, Flow, signal};
@@ -131,13 +131,19 @@ pub(crate) fn builtin_neomacs_terminal_create(eval: &mut Context, args: Vec<Valu
     const OPERATION: TerminalOperation = TerminalOperation::Create;
     let cols = positive_u16(args[0], OPERATION, "COLS")?;
     let rows = positive_u16(args[1], OPERATION, "ROWS")?;
-    let mode = match args[2]
+    let target = match args[2]
         .as_int()
         .ok_or_else(|| wrong_type("fixnump", args[2]))?
     {
-        0 => TerminalDisplayMode::Window,
-        1 => TerminalDisplayMode::Inline,
-        2 => TerminalDisplayMode::Floating,
+        0 => TerminalDisplayTarget::Window {
+            buffer: eval.buffers.current_buffer_id().ok_or_else(|| {
+                terminal_error(format!(
+                    "{OPERATION}: no current buffer for window terminal"
+                ))
+            })?,
+        },
+        1 => TerminalDisplayTarget::Inline,
+        2 => TerminalDisplayTarget::Floating,
         _ => {
             return Err(terminal_error(format!(
                 "{OPERATION}: MODE must be 0, 1, or 2"
@@ -158,7 +164,7 @@ pub(crate) fn builtin_neomacs_terminal_create(eval: &mut Context, args: Vec<Valu
     let id = display_host(eval, OPERATION)?
         .create_terminal(TerminalCreateRequest {
             size: TerminalGridSize { cols, rows },
-            mode,
+            target,
             shell,
         })
         .map_err(terminal_error)?;

@@ -97,7 +97,7 @@ pub(crate) mod tty_frontend;
 pub(crate) mod tty_init;
 
 #[cfg(feature = "neo-term")]
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -127,7 +127,7 @@ use neomacs_display_runtime::thread_comm::{
 };
 #[cfg(feature = "neo-term")]
 use neomacs_display_runtime::{
-    terminal::{SharedTerminals, new_shared_terminals, visible_text},
+    terminal::{SharedTerminals, new_shared_terminals},
     thread_comm::TerminalCommand,
 };
 use neomacs_layout_engine::font::fontconfig::FontSizing;
@@ -1044,21 +1044,12 @@ struct PrimaryWindowDisplayHost {
     terminal_state: TerminalHostState,
 }
 
-#[cfg(feature = "neo-term")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TerminalLifecycle {
-    Pending,
-    Live,
-    Destroying,
-}
-
 /// Per-editor neo-term ownership state. IDs and lifecycle records must not be
 /// process-global: independent editor instances in one process remain isolated.
 #[cfg(feature = "neo-term")]
 struct TerminalHostState {
     shared: SharedTerminals,
     next_id: Cell<Option<TerminalId>>,
-    lifecycles: RefCell<HashMap<TerminalId, TerminalLifecycle>>,
 }
 
 #[cfg(feature = "neo-term")]
@@ -1067,7 +1058,6 @@ impl TerminalHostState {
         Self {
             shared,
             next_id: Cell::new(TerminalId::new(HOST_TERMINAL_ID_START)),
-            lifecycles: RefCell::new(HashMap::new()),
         }
     }
 
@@ -1081,48 +1071,12 @@ impl TerminalHostState {
         Ok(id)
     }
 
-    fn record_created(&self, id: TerminalId) {
-        self.lifecycles
-            .borrow_mut()
-            .insert(id, TerminalLifecycle::Pending);
-    }
-
     fn require_active(&self, id: TerminalId) -> Result<(), String> {
-        match self.lifecycles.borrow().get(&id) {
-            Some(TerminalLifecycle::Pending | TerminalLifecycle::Live) => Ok(()),
-            Some(TerminalLifecycle::Destroying) => {
-                Err(format!("neo-term terminal {id} is being destroyed"))
-            }
-            None => Err(format!("unknown neo-term terminal id {id}")),
-        }
-    }
-
-    fn mark_destroying(&self, id: TerminalId) {
-        self.lifecycles
-            .borrow_mut()
-            .insert(id, TerminalLifecycle::Destroying);
+        self.shared.require_active(id)
     }
 
     fn visible_text(&self, id: TerminalId) -> Result<Option<String>, String> {
-        let lifecycle = self
-            .lifecycles
-            .borrow()
-            .get(&id)
-            .copied()
-            .ok_or_else(|| format!("unknown neo-term terminal id {id}"))?;
-        let text = visible_text(&self.shared, id);
-        match (lifecycle, text.is_some()) {
-            (TerminalLifecycle::Pending, true) => {
-                self.lifecycles
-                    .borrow_mut()
-                    .insert(id, TerminalLifecycle::Live);
-            }
-            (TerminalLifecycle::Destroying, false) => {
-                self.lifecycles.borrow_mut().remove(&id);
-            }
-            _ => {}
-        }
-        Ok(text)
+        self.shared.visible_text(id)
     }
 }
 
@@ -2138,16 +2092,17 @@ impl DisplayHost for PrimaryWindowDisplayHost {
     #[cfg(feature = "neo-term")]
     fn create_terminal(&self, request: TerminalCreateRequest) -> Result<TerminalId, String> {
         let id = self.terminal_state.allocate()?;
+        let reservation = self.terminal_state.shared.reserve(id)?;
         self.send_render_command(
             RenderCommand::Terminal(TerminalCommand::TerminalCreate {
                 id,
                 size: request.size,
-                mode: request.mode,
+                target: request.target,
                 shell: request.shell,
             }),
             "failed to queue terminal create",
         )?;
-        self.terminal_state.record_created(id);
+        reservation.commit();
         Ok(id)
     }
 
@@ -2171,12 +2126,12 @@ impl DisplayHost for PrimaryWindowDisplayHost {
 
     #[cfg(feature = "neo-term")]
     fn destroy_terminal(&self, id: TerminalId) -> Result<(), String> {
-        self.terminal_state.require_active(id)?;
+        let transition = self.terminal_state.shared.begin_destroy(id)?;
         self.send_render_command(
             RenderCommand::Terminal(TerminalCommand::TerminalDestroy { id }),
             "failed to queue terminal destroy",
         )?;
-        self.terminal_state.mark_destroying(id);
+        transition.commit();
         Ok(())
     }
 
@@ -2898,7 +2853,7 @@ fn run_gui_main_thread(
         Arc::clone(&gui_image_metadata),
         Arc::clone(&shared_monitors),
         #[cfg(feature = "neo-term")]
-        Arc::clone(&shared_terminals),
+        shared_terminals.clone(),
         render_waker.clone(),
     );
 

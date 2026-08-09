@@ -53,8 +53,15 @@ fn reader_thread_exists(name: &str) -> bool {
 fn destroying_terminal_reaps_child_and_joins_reader_thread() {
     let id = TerminalId::new(77).expect("nonzero terminal id");
     let size = TerminalGridSize::new(20, 5).expect("positive terminal grid");
-    let view = TerminalView::new(id, size, TerminalMode::Window, Some("/bin/sh"))
-        .expect("create real PTY shell");
+    let view = TerminalView::new(
+        id,
+        size,
+        TerminalDisplayTarget::Window {
+            buffer: neovm_core::buffer::BufferId(9),
+        },
+        Some("/bin/sh"),
+    )
+    .expect("create real PTY shell");
     let pid = view.child_process_id().expect("shell process id");
     let thread_name = format!("neo-term-{id}-pty");
     let mut manager = TerminalManager::new();

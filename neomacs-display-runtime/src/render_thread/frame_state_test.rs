@@ -19,7 +19,7 @@ fn make_test_app() -> RenderApp {
         Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new())),
         true,
         #[cfg(feature = "neo-term")]
-        Arc::new(Mutex::new(HashMap::new())),
+        crate::terminal::new_shared_terminals(),
     )
 }
 

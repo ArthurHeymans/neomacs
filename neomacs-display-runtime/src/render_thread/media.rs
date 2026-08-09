@@ -8,7 +8,7 @@ use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, FrameGlyphBuffer, Gly
 #[cfg(feature = "neo-term")]
 use crate::core::types::DisplayWindowId;
 #[cfg(feature = "neo-term")]
-use crate::core::types::{Color, FaceId, Px};
+use crate::core::types::{Color, FaceId, Px, Rect};
 #[cfg(any(
     feature = "neo-term",
     all(feature = "wpe-webkit", wpe_platform_available)
@@ -16,6 +16,29 @@ use crate::core::types::{Color, FaceId, Px};
 use crate::thread_comm::InputEvent;
 #[cfg(feature = "neo-term")]
 use std::collections::HashMap;
+
+#[cfg(feature = "neo-term")]
+#[derive(Clone, Copy)]
+struct TerminalPaintTarget {
+    window_id: DisplayWindowId,
+    row_role: GlyphRowRole,
+    clip_rect: Option<Rect>,
+}
+
+#[cfg(feature = "neo-term")]
+impl TerminalPaintTarget {
+    const DETACHED_TEXT: Self = Self {
+        window_id: DisplayWindowId::new(0),
+        row_role: GlyphRowRole::Text,
+        clip_rect: None,
+    };
+
+    const FLOATING: Self = Self {
+        window_id: DisplayWindowId::new(0),
+        row_role: GlyphRowRole::ModeLine,
+        clip_rect: None,
+    };
+}
 
 #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
 use crate::backend::wpe::sys::platform as plat;
@@ -83,7 +106,7 @@ impl RenderApp {
                 cell_h,
                 ascent,
                 font_size,
-                false,
+                TerminalPaintTarget::DETACHED_TEXT,
                 1.0,
                 &mut extra_glyphs,
                 &mut extra_faces,
@@ -97,13 +120,110 @@ impl RenderApp {
     fn expand_terminal_glyphs_for_render_state(
         render: &mut GuiFrameRenderState,
         terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
+        terminal_targets: &HashMap<
+            crate::terminal::TerminalId,
+            crate::terminal::TerminalDisplayTarget,
+        >,
     ) {
         let Some(frame) = render.compositor.current_frame.as_ref() else {
             return;
         };
-        let (extra_glyphs, extra_faces) =
+        let (mut extra_glyphs, mut extra_faces) =
             Self::expanded_terminal_glyphs_for_frame(frame, terminal_contents);
+        let (window_glyphs, window_faces) =
+            Self::expanded_window_terminals_for_frame(frame, terminal_contents, terminal_targets);
+        extra_glyphs.extend(window_glyphs);
+        extra_faces.extend(window_faces);
         render.extend_current_frame_glyphs_and_faces(extra_glyphs, extra_faces);
+    }
+
+    #[cfg(feature = "neo-term")]
+    fn window_text_body(info: &crate::core::frame_glyphs::WindowInfo) -> Rect {
+        match info.geometry {
+            neomacs_display_protocol::PresentedWindowGeometry::Complete { regions, .. } => {
+                regions.text_body
+            }
+            neomacs_display_protocol::PresentedWindowGeometry::Skipped { .. } => Rect::new(
+                info.bounds.x,
+                info.bounds.y + info.tab_line_height + info.header_line_height,
+                info.bounds.width,
+                (info.bounds.height
+                    - info.tab_line_height
+                    - info.header_line_height
+                    - info.mode_line_height)
+                    .max(0.0),
+            ),
+        }
+    }
+
+    #[cfg(feature = "neo-term")]
+    fn expanded_window_terminals_for_frame(
+        frame: &FrameGlyphBuffer,
+        terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
+        terminal_targets: &HashMap<
+            crate::terminal::TerminalId,
+            crate::terminal::TerminalDisplayTarget,
+        >,
+    ) -> (Vec<FrameGlyph>, HashMap<FaceId, Face>) {
+        let mut glyphs = Vec::new();
+        let mut faces = HashMap::new();
+        let cell_w = frame.char_width;
+        let cell_h = frame.char_height;
+        let ascent = cell_h * 0.8;
+
+        for (id, target) in terminal_targets {
+            let crate::terminal::TerminalDisplayTarget::Window { buffer } = target else {
+                continue;
+            };
+            let Some(content) = terminal_contents.get(id) else {
+                continue;
+            };
+            for info in frame
+                .window_infos
+                .iter()
+                .filter(|info| info.buffer_id == buffer.0 && !info.is_minibuffer)
+            {
+                let body = Self::window_text_body(info);
+                let paint = TerminalPaintTarget {
+                    window_id: info.window_id,
+                    row_role: GlyphRowRole::Text,
+                    clip_rect: Some(body),
+                };
+                glyphs.push(FrameGlyph::Stretch {
+                    window_id: paint.window_id,
+                    row_role: paint.row_role,
+                    clip_rect: paint.clip_rect,
+                    slot_id: DisplaySlotId::from_pixels(
+                        paint.window_id,
+                        Px(body.x),
+                        Px(body.y),
+                        Px(cell_w),
+                        Px(cell_h),
+                    ),
+                    bidi_level: 0,
+                    x: body.x,
+                    y: body.y,
+                    width: body.width,
+                    height: body.height,
+                    bg: content.default_bg,
+                    face_id: FaceId::new(0),
+                });
+                Self::expand_terminal_cells(
+                    content,
+                    body.x,
+                    body.y,
+                    cell_w,
+                    cell_h,
+                    ascent,
+                    frame.font_pixel_size,
+                    paint,
+                    1.0,
+                    &mut glyphs,
+                    &mut faces,
+                );
+            }
+        }
+        (glyphs, faces)
     }
 
     #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
@@ -442,58 +562,69 @@ impl RenderApp {
     /// Update terminal content and expand Terminal glyphs into renderable cells.
     #[cfg(feature = "neo-term")]
     pub(super) fn update_terminals(&mut self) {
-        use crate::terminal::TerminalMode;
+        use crate::terminal::TerminalDisplayTarget;
 
         // Get frame font metrics for terminal cell sizing.
         // These come from FRAME_COLUMN_WIDTH / FRAME_LINE_HEIGHT / FRAME_FONT->pixel_size.
-        let (cell_w, cell_h, font_size, frame_w, frame_h) = if let Some(frame) = self
+        let (cell_w, cell_h, font_size) = if let Some(frame) = self
             .frame_windows
             .primary_window()
             .and_then(|ws| ws.render.compositor.current_frame.as_ref())
         {
-            (
-                frame.char_width,
-                frame.char_height,
-                frame.font_pixel_size,
-                frame.width,
-                frame.height,
-            )
+            (frame.char_width, frame.char_height, frame.font_pixel_size)
         } else {
-            let (frame_w, frame_h) = self
-                .frame_windows
-                .primary_window()
-                .map_or((0.0, 0.0), |ws| {
-                    let (w, h) = ws.native_size();
-                    let s = ws.scale_factor() as f32;
-                    (w as f32 / s, h as f32 / s)
-                });
-            (8.0, 16.0, 14.0, frame_w, frame_h)
+            (8.0, 16.0, 14.0)
         };
         let ascent = cell_h * 0.8;
 
-        // Auto-resize Window-mode terminals to fit the frame area.
-        // Reserve space for mode-line (~1 row) and echo area (~1 row).
-        let term_area_height = (frame_h - cell_h * 2.0).max(cell_h);
-        let target_cols = (frame_w / cell_w).floor() as u16;
-        let target_rows = (term_area_height / cell_h).floor() as u16;
-
-        if target_cols > 0 && target_rows > 0 {
-            for id in self.terminal_manager.ids() {
-                if let Some(view) = self.terminal_manager.get_mut(id) {
-                    if view.mode != TerminalMode::Window {
-                        continue;
-                    }
-                    // Resize if grid dimensions changed
-                    if let Some(content) = view.content()
-                        && (content.cols as u16 != target_cols
-                            || content.rows as u16 != target_rows)
-                    {
-                        view.resize(
-                            crate::terminal::TerminalGridSize::new(target_cols, target_rows)
-                                .expect("positive terminal target dimensions"),
-                        );
-                    }
+        // A window terminal follows a visible window displaying its owning
+        // buffer. Prefer the selected one when the same buffer is shown more
+        // than once; one PTY has one authoritative grid size.
+        let mut window_layouts = HashMap::new();
+        self.frame_windows
+            .for_each_top_level_window(|window_state| {
+                let Some(frame) = window_state.render.compositor.current_frame.as_ref() else {
+                    return;
+                };
+                for info in frame.window_infos.iter().filter(|info| !info.is_minibuffer) {
+                    let layout = (
+                        info.selected,
+                        Self::window_text_body(info),
+                        frame.char_width,
+                        frame.char_height,
+                    );
+                    window_layouts
+                        .entry(info.buffer_id)
+                        .and_modify(|current: &mut (bool, Rect, f32, f32)| {
+                            if !current.0 && info.selected {
+                                *current = layout;
+                            }
+                        })
+                        .or_insert(layout);
                 }
+            });
+        for id in self.terminal_manager.ids() {
+            let Some(view) = self.terminal_manager.get_mut(id) else {
+                continue;
+            };
+            let TerminalDisplayTarget::Window { buffer } = view.target else {
+                continue;
+            };
+            let Some((_, body, owner_cell_w, owner_cell_h)) =
+                window_layouts.get(&buffer.0).copied()
+            else {
+                continue;
+            };
+            let target_cols = (body.width / owner_cell_w).floor() as u16;
+            let target_rows = (body.height / owner_cell_h).floor() as u16;
+            let Some(size) = crate::terminal::TerminalGridSize::new(target_cols, target_rows)
+            else {
+                continue;
+            };
+            if view.content().is_some_and(|content| {
+                content.cols as u16 != target_cols || content.rows as u16 != target_rows
+            }) {
+                view.resize(size);
             }
         }
 
@@ -510,6 +641,16 @@ impl RenderApp {
                 self.comms.send_input(InputEvent::TerminalExited { id });
             }
         }
+        for id in self.terminal_manager.ids() {
+            if let Some(title) = self
+                .terminal_manager
+                .get(id)
+                .and_then(|view| view.event_proxy.take_title())
+            {
+                self.comms
+                    .send_input(InputEvent::TerminalTitleChanged { id, title });
+            }
+        }
 
         let terminal_contents: HashMap<_, _> = self
             .terminal_manager
@@ -521,89 +662,28 @@ impl RenderApp {
                     .and_then(|view| view.content().map(|content| (id, content.clone())))
             })
             .collect();
+        let terminal_targets: HashMap<_, _> = self
+            .terminal_manager
+            .ids()
+            .into_iter()
+            .filter_map(|id| self.terminal_manager.get(id).map(|view| (id, view.target)))
+            .collect();
 
         self.frame_windows
             .for_each_top_level_window_mut(|window_state| {
                 Self::expand_terminal_glyphs_for_render_state(
                     &mut window_state.render,
                     &terminal_contents,
+                    &terminal_targets,
                 );
             });
-
-        if let Some(primary_frame) = self
-            .frame_windows
-            .primary_window_mut()
-            .map(|ws| &mut ws.render)
-        {
-            Self::expand_terminal_glyphs_for_render_state(primary_frame, &terminal_contents);
-        }
-
-        // Render Window-mode terminals as overlays covering the frame body.
-        let mut win_glyphs = Vec::new();
-        let mut win_faces = HashMap::new();
-        for id in self.terminal_manager.ids() {
-            if let Some(view) = self.terminal_manager.get(id) {
-                if view.mode != TerminalMode::Window {
-                    continue;
-                }
-                if let Some(content) = view.content() {
-                    let x = 0.0_f32;
-                    let y = 0.0_f32;
-                    let width = content.cols as f32 * cell_w;
-                    let height = content.rows as f32 * cell_h;
-
-                    // Terminal background
-                    win_glyphs.push(FrameGlyph::Stretch {
-                        window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
-                        row_role: GlyphRowRole::ModeLine,
-                        clip_rect: None,
-                        slot_id: DisplaySlotId::from_pixels(
-                            DisplayWindowId::new(0),
-                            Px(x),
-                            Px(y),
-                            Px(cell_w),
-                            Px(cell_h),
-                        ),
-                        bidi_level: 0,
-                        x,
-                        y,
-                        width,
-                        height,
-                        bg: content.default_bg,
-                        face_id: FaceId::new(0),
-                    });
-
-                    Self::expand_terminal_cells(
-                        content,
-                        x,
-                        y,
-                        cell_w,
-                        cell_h,
-                        ascent,
-                        font_size,
-                        true,
-                        1.0,
-                        &mut win_glyphs,
-                        &mut win_faces,
-                    );
-                }
-            }
-        }
-
-        if let Some(primary_frame) = self
-            .frame_windows
-            .primary_window_mut()
-            .map(|ws| &mut ws.render)
-        {
-            primary_frame.extend_current_frame_glyphs_and_faces(win_glyphs, win_faces);
-        }
 
         // Render floating terminals
         let mut float_glyphs = Vec::new();
         let mut float_faces = HashMap::new();
         for id in self.terminal_manager.ids() {
             if let Some(view) = self.terminal_manager.get(id) {
-                if view.mode != TerminalMode::Floating {
+                if view.target != TerminalDisplayTarget::Floating {
                     continue;
                 }
                 if let Some(content) = view.content() {
@@ -642,7 +722,7 @@ impl RenderApp {
                         cell_h,
                         ascent,
                         font_size,
-                        true,
+                        TerminalPaintTarget::FLOATING,
                         view.float_opacity,
                         &mut float_glyphs,
                         &mut float_faces,
@@ -679,17 +759,12 @@ impl RenderApp {
         cell_h: f32,
         ascent: f32,
         font_size: f32,
-        is_overlay: bool,
+        paint: TerminalPaintTarget,
         opacity: f32,
         out: &mut Vec<FrameGlyph>,
         faces: &mut HashMap<FaceId, Face>,
     ) {
         use rio_vt::crosswords::style::StyleFlags as CellFlags;
-        let row_role = if is_overlay {
-            GlyphRowRole::ModeLine
-        } else {
-            GlyphRowRole::Text
-        };
 
         for cell in &content.cells {
             let cx = origin_x + cell.col as f32 * cell_w;
@@ -699,11 +774,11 @@ impl RenderApp {
                 let mut bg = cell.bg;
                 bg.a *= opacity;
                 out.push(FrameGlyph::Stretch {
-                    window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
-                    row_role,
-                    clip_rect: None,
+                    window_id: paint.window_id,
+                    row_role: paint.row_role,
+                    clip_rect: paint.clip_rect,
                     slot_id: DisplaySlotId::from_pixels(
-                        DisplayWindowId::new(0),
+                        paint.window_id,
                         Px(cx),
                         Px(cy),
                         Px(cell_w),
@@ -731,11 +806,11 @@ impl RenderApp {
                     terminal_cell_face(face_id, fg, bold, italic, underline, strikeout, font_size)
                 });
                 out.push(FrameGlyph::Char {
-                    window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
-                    row_role,
-                    clip_rect: None,
+                    window_id: paint.window_id,
+                    row_role: paint.row_role,
+                    clip_rect: paint.clip_rect,
                     slot_id: DisplaySlotId::from_pixels(
-                        DisplayWindowId::new(0),
+                        paint.window_id,
                         Px(cx),
                         Px(cy),
                         Px(cell_w),
@@ -762,9 +837,9 @@ impl RenderApp {
             let mut fg = content.default_fg;
             fg.a *= opacity;
             out.push(FrameGlyph::Border {
-                window_id: neomacs_display_protocol::types::DisplayWindowId::new(0),
-                row_role,
-                clip_rect: None,
+                window_id: paint.window_id,
+                row_role: paint.row_role,
+                clip_rect: paint.clip_rect,
                 x: cx,
                 y: cy,
                 width: cell_w,
@@ -963,5 +1038,97 @@ mod tests {
 
         assert!(glyphs.is_empty());
         assert!(faces.is_empty());
+    }
+
+    #[test]
+    fn window_terminal_is_clipped_to_windows_displaying_its_owner_buffer() {
+        let mut frame = FrameGlyphBuffer::with_size(300.0, 200.0);
+        frame.char_width = 10.0;
+        frame.char_height = 20.0;
+        frame.font_pixel_size = 18.0;
+        frame.add_window_info(
+            DisplayWindowId::new(31),
+            9,
+            1,
+            1,
+            1,
+            20.0,
+            30.0,
+            100.0,
+            80.0,
+            20.0,
+            0.0,
+            0.0,
+            true,
+            false,
+            20.0,
+            "*neo-term-1*".to_owned(),
+            String::new(),
+            false,
+        );
+        frame.add_window_info(
+            DisplayWindowId::new(32),
+            10,
+            1,
+            1,
+            1,
+            130.0,
+            30.0,
+            100.0,
+            80.0,
+            20.0,
+            0.0,
+            0.0,
+            false,
+            false,
+            20.0,
+            "*scratch*".to_owned(),
+            String::new(),
+            false,
+        );
+        let id = crate::terminal::TerminalId::new(7).unwrap();
+        let contents = HashMap::from([(
+            id,
+            TerminalContent {
+                cells: Vec::new(),
+                cols: 10,
+                rows: 3,
+                cursor: RenderCursor {
+                    col: 0,
+                    row: 0,
+                    visible: false,
+                },
+                default_bg: Color::BLACK,
+                default_fg: Color::WHITE,
+            },
+        )]);
+        let targets = HashMap::from([(
+            id,
+            crate::terminal::TerminalDisplayTarget::Window {
+                buffer: neovm_core::buffer::BufferId(9),
+            },
+        )]);
+
+        let (glyphs, _) =
+            RenderApp::expanded_window_terminals_for_frame(&frame, &contents, &targets);
+
+        assert_eq!(glyphs.len(), 1);
+        assert!(matches!(
+            glyphs[0],
+            FrameGlyph::Stretch {
+                window_id,
+                clip_rect: Some(Rect {
+                    x: 20.0,
+                    y: 30.0,
+                    width: 100.0,
+                    height: 60.0,
+                }),
+                x: 20.0,
+                y: 30.0,
+                width: 100.0,
+                height: 60.0,
+                ..
+            } if window_id == DisplayWindowId::new(31)
+        ));
     }
 }

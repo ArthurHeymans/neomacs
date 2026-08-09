@@ -198,6 +198,9 @@ fn semantics(event: &InputEvent) -> FrontendEventSemantics {
         // A shader-surface build failure: not command input; serviced during
         // waits so the error surfaces promptly instead of behind a keystroke.
         InputEvent::SurfaceCreateFailed { .. } => special(PendingPolicy::Never, false, true),
+        InputEvent::TerminalCreateFailed { .. }
+        | InputEvent::TerminalExited { .. }
+        | InputEvent::TerminalTitleChanged { .. } => special(PendingPolicy::Never, false, true),
         InputEvent::Focus { focused, .. } => {
             special(PendingPolicy::Focus { focused: *focused }, false, false)
         }
