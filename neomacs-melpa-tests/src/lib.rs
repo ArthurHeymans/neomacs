@@ -2880,9 +2880,9 @@ pub const GIT_GUTTER_MELPA_PIN: (&str, &str) = ("git-gutter", "20241212.1415");
 pub const GIT_TIMEMACHINE_MELPA_PIN: (&str, &str) = ("git-timemachine", "20250128.940");
 
 /// The exact Git Modes successor selected to cover the historical standalone
-/// `gitconfig-mode` Top-500 entry through practical file detection,
-/// fontification, syntax, indentation, comments, alignment, and navigation
-/// parity. MELPA built version 1.5.0 from upstream commit
+/// `gitconfig-mode`, `gitignore-mode`, and `gitattributes-mode` Top-500 entries
+/// through practical file detection, rendering, editing, documentation, and
+/// navigation parity. MELPA built version 1.5.0 from upstream commit
 /// `f291a4cc4a8b02a25d5cf93b4ab6af29e6f060d9`.
 pub const GIT_MODES_MELPA_PIN: (&str, &str) = ("git-modes", "20260601.1550");
 

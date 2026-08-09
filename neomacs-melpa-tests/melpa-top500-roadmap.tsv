@@ -278,7 +278,7 @@ rank	package	downloads	status
 277	pyenv-mode	414279	covered
 278	flycheck-elsa	413095	covered
 279	dired-quick-sort	411228	covered
-280	gitattributes-mode	410338	todo
+280	gitattributes-mode	410338	covered
 281	emr	409265	covered
 282	cython-mode	401710	covered
 283	web-beautify	397973	covered

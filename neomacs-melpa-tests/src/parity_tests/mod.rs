@@ -392,6 +392,7 @@ mod git_gutter;
 mod git_link;
 mod git_messenger;
 mod git_timemachine;
+mod gitattributes_mode;
 mod gitconfig_mode;
 mod gitignore_mode;
 mod gntp;
