@@ -596,6 +596,70 @@ fn removed_window_contributes_nothing() {
 }
 
 #[test]
+fn a_platform_redraw_presents_with_an_explicit_reason() {
+    // A window-system RedrawRequested (expose, resize, first map) or a direct
+    // request_redraw from device-lost recovery carries no coordinator demand.
+    // The surface must still be repainted, so the plan presents -- and names
+    // why, per architectural invariant 12 (every scheduled frame has at least
+    // one inspectable demand reason).
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    let planned = c.begin_frame(win(1), tick_at(now));
+    assert!(!planned.should_present, "no demand explains this tick");
+    assert!(planned.reasons.is_empty());
+
+    let plan = c.platform_redraw_plan(win(1), tick_at(now));
+    assert!(plan.should_present);
+    assert_eq!(
+        plan.work,
+        RenderWork::RepaintLayers {
+            layers: LayerMask::all(),
+            damage: Damage::FullLayer
+        },
+        "nothing survives a surface invalidation, so the repaint is full"
+    );
+    assert_eq!(
+        plan.reasons.iter().collect::<Vec<_>>(),
+        vec![DemandReason::PlatformRedraw]
+    );
+}
+
+#[test]
+fn a_platform_redraw_presents_nothing_while_ineligible() {
+    // An occluded surface shows nothing; a platform redraw for it is still not
+    // a licence to present.
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    c.set_occluded(win(1), true);
+    let plan = c.platform_redraw_plan(win(1), tick_at(now));
+    assert!(!plan.should_present);
+    assert_eq!(plan.work, RenderWork::None);
+    assert!(plan.reasons.is_empty());
+}
+
+#[test]
+fn a_planned_frame_with_real_demand_never_reaches_the_platform_redraw_path() {
+    // Attribution must not upgrade work: a tick carrying a pending
+    // composite-only blink plans that blink, so the caller never falls through
+    // to the full repaint and the retained-static fast path keeps engaging.
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    c.submit_demand(win(1), composite_cursor(), now);
+    let plan = c.begin_frame(win(1), tick_at(now + ms(1)));
+    assert!(plan.should_present);
+    assert_eq!(
+        plan.work,
+        RenderWork::CompositeOnly {
+            layers: LayerMask::CURSOR_EFFECTS
+        }
+    );
+    assert_eq!(
+        plan.reasons.iter().collect::<Vec<_>>(),
+        vec![DemandReason::CursorAnimation]
+    );
+}
+
+#[test]
 fn demand_reason_names_are_an_explicit_golden_in_index_order() {
     // The names are the diagnostics vocabulary (/metrics frame.demand_reasons),
     // so reordering or renaming a reason silently reinterprets recorded
@@ -616,6 +680,7 @@ fn demand_reason_names_are_an_explicit_golden_in_index_order() {
             "shader_surface",
             "terminal",
             "expose",
+            "platform_redraw",
             "debug_capture",
             "redisplay",
             "cursor_effect",
@@ -626,7 +691,7 @@ fn demand_reason_names_are_an_explicit_golden_in_index_order() {
             "transient_effect",
         ]
     );
-    assert_eq!(DemandReason::COUNT, 18);
+    assert_eq!(DemandReason::COUNT, 19);
 }
 
 #[test]

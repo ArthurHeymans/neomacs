@@ -42,6 +42,12 @@ pub(super) static COMPOSITE_ONLY_FRAMES: AtomicU64 = AtomicU64::new(0);
 /// frame driven by several reasons increments each.
 static PLAN_DEMAND_REASONS: [AtomicU64; super::frame_sched::DemandReason::COUNT] =
     [const { AtomicU64::new(0) }; super::frame_sched::DemandReason::COUNT];
+/// Frames rendered without any demand reason to name. Structurally zero: the
+/// redraw handler falls back to a platform-redraw plan when nothing it
+/// scheduled explains the tick. Kept as standing evidence for architectural
+/// invariant 12 ("every scheduled frame has at least one inspectable demand
+/// reason"), which a counter can attest and a code reading cannot.
+pub(super) static UNATTRIBUTED_PRESENT_ATTEMPTS: AtomicU64 = AtomicU64::new(0);
 /// Microseconds from the most recently consumed scene commit to its present.
 pub(super) static LAST_COMMIT_TO_PRESENT_US: AtomicU64 = AtomicU64::new(0);
 /// Worst observed commit-to-present latency in microseconds.
@@ -154,6 +160,8 @@ pub struct FrameSchedSnapshot {
     pub frame_time_buckets: [u64; 8],
     /// Planned frames per demand reason, indexed as [`DEMAND_REASON_NAMES`].
     pub demand_reasons: [u64; super::frame_sched::DemandReason::COUNT],
+    /// Frames rendered with no demand reason. Must stay 0.
+    pub unattributed_present_attempts: u64,
 }
 
 /// Names of the [`FrameSchedSnapshot::demand_reasons`] slots, in index order.
@@ -186,6 +194,7 @@ pub fn snapshot() -> FrameSchedSnapshot {
         max_commit_to_present_us: MAX_COMMIT_TO_PRESENT_US.load(Ordering::Relaxed),
         frame_time_buckets: std::array::from_fn(|i| FRAME_TIME_BUCKETS[i].load(Ordering::Relaxed)),
         demand_reasons: std::array::from_fn(|i| PLAN_DEMAND_REASONS[i].load(Ordering::Relaxed)),
+        unattributed_present_attempts: UNATTRIBUTED_PRESENT_ATTEMPTS.load(Ordering::Relaxed),
     }
 }
 
@@ -236,6 +245,7 @@ pub(super) fn maybe_log_snapshot(now: Instant) {
         last_commit_to_present_us = snap.last_commit_to_present_us,
         max_commit_to_present_us = snap.max_commit_to_present_us,
         demand_reasons = demand_reasons,
+        unattributed_present_attempts = snap.unattributed_present_attempts,
         "frame_sched_stats"
     );
 }

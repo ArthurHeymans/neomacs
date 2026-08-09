@@ -15,6 +15,7 @@ fn snapshot_serializes_stable_json_shape() {
             composite_only_frames: 10,
             retained_static_builds: 3,
             demand_reasons: [("cursor_animation".to_owned(), 12)].into_iter().collect(),
+            unattributed_presents: 0,
         },
         gc: GcMetrics {
             collections: 7,
@@ -29,6 +30,7 @@ fn snapshot_serializes_stable_json_shape() {
     assert_eq!(v["frame"]["presents"], 100);
     assert_eq!(v["frame"]["last_commit_to_present_us"], 1200);
     assert_eq!(v["frame"]["demand_reasons"]["cursor_animation"], 12);
+    assert_eq!(v["frame"]["unattributed_presents"], 0);
     assert_eq!(v["gc"]["collections"], 7);
     assert_eq!(v["gc"]["cons_cells"], 200);
 }

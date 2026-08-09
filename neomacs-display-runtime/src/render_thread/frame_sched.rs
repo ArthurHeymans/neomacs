@@ -173,6 +173,12 @@ demand_reasons! {
     ShaderSurface => "shader_surface",
     Terminal => "terminal",
     Expose => "expose",
+    /// A tick the coordinator did not ask for: the platform invalidated the
+    /// surface (expose, resize, first map) or a runtime recovery path called
+    /// request_redraw on the window directly. Distinct from Expose, which
+    /// attributes the coordinator's own re-queue of work a present failed to
+    /// deliver.
+    PlatformRedraw => "platform_redraw",
     DebugCapture => "debug_capture",
     /// New editor content or blink toggle needing a repaint.
     Redisplay => "redisplay",
@@ -637,6 +643,44 @@ impl FrameCoordinator {
             work,
             should_present: work != RenderWork::None,
             reasons: due.reasons,
+        }
+    }
+
+    /// Grant a frame for a platform-delivered redraw that no demand explains.
+    ///
+    /// The caller — and only the caller — knows a tick arrived from the window
+    /// system rather than from a deadline of ours. Such a tick means the
+    /// surface was invalidated (expose, resize, first map) or a runtime
+    /// recovery path asked the window for a repaint directly (device loss, GPU
+    /// reconfigure, both of which bypass the coordinator). Declining it leaves
+    /// stale or absent content on screen, so the frame is granted and named:
+    /// every present carries a demand reason (architectural invariant 12).
+    ///
+    /// Nothing is retained across a surface invalidation, hence a full repaint.
+    /// Callers reach this only after [`begin_frame`](Self::begin_frame) planned
+    /// no work, so it can never downgrade a real demand's work class.
+    pub(crate) fn platform_redraw_plan(
+        &mut self,
+        id: NativeWindowId,
+        tick: FrameTick,
+    ) -> FramePlan {
+        let ws = self.window(id);
+        if !ws.eligible() {
+            return FramePlan {
+                tick,
+                work: RenderWork::None,
+                should_present: false,
+                reasons: DemandReasonSet::empty(),
+            };
+        }
+        FramePlan {
+            tick,
+            work: RenderWork::RepaintLayers {
+                layers: LayerMask::all(),
+                damage: Damage::FullLayer,
+            },
+            should_present: true,
+            reasons: [DemandReason::PlatformRedraw].into_iter().collect(),
         }
     }
 

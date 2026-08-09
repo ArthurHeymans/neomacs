@@ -3085,6 +3085,7 @@ fn build_metrics_snapshot() -> neomacs_diagnostics::MetricsSnapshot {
                 .zip(f.demand_reasons.iter())
                 .map(|(name, count)| ((*name).to_owned(), *count))
                 .collect(),
+            unattributed_presents: f.unattributed_present_attempts,
         },
         gc: GcMetrics {
             collections: g.collections,

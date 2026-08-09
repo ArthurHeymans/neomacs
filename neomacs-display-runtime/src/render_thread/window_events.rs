@@ -470,15 +470,35 @@ impl RenderApp {
                         estimated_interval,
                         source: ClockSource::Synthetic,
                     };
-                    let plan = self.frame_coordinator.begin_frame(sched_id, tick);
-                    super::frame_stats::count_plan(&plan);
+                    let mut plan = self.frame_coordinator.begin_frame(sched_id, tick);
                     // Occluded/hidden windows present nothing. begin_frame
                     // already returns no work while ineligible; skipping the
                     // render here makes that concrete and avoids servicing an
                     // OS-delivered RedrawRequested for a surface the
                     // compositor is not showing.
                     if !self.frame_coordinator.is_eligible(sched_id) {
+                        super::frame_stats::count_plan(&plan);
                         return;
+                    }
+                    if !plan.should_present {
+                        // Nothing we scheduled explains this tick, and this is
+                        // the one place that knows why: the event came from the
+                        // window system (expose, resize, first map) or from a
+                        // recovery path that requests a redraw on the window
+                        // directly. Both need the surface repainted, so the
+                        // frame is granted under a reason of its own rather
+                        // than rendered unattributed.
+                        plan = self.frame_coordinator.platform_redraw_plan(sched_id, tick);
+                    }
+                    super::frame_stats::count_plan(&plan);
+                    if plan.reasons.is_empty() {
+                        super::frame_stats::count(
+                            &super::frame_stats::UNATTRIBUTED_PRESENT_ATTEMPTS,
+                        );
+                        debug_assert!(
+                            false,
+                            "every presented frame must name a demand reason (invariant 12)"
+                        );
                     }
                     if let Some(renderer) = self.renderer.as_mut() {
                         renderer.set_frame_sample_time(plan.tick.target_presentation_time);

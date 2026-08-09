@@ -36,6 +36,10 @@ pub struct FrameMetrics {
     /// several reasons counts once under each.
     #[serde(default)]
     pub demand_reasons: BTreeMap<String, u64>,
+    /// Frames rendered with no demand reason at all. Zero by construction; a
+    /// nonzero value means a present escaped attribution.
+    #[serde(default)]
+    pub unattributed_presents: u64,
 }
 
 /// Estimate a latency percentile from a bucketed histogram, returning the upper
