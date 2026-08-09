@@ -4821,6 +4821,42 @@ impl ProcessManager {
         }
     }
 
+    /// Retire a pipe process whose read end reached EOF: GNU's fd-loop half of
+    /// the split at src/process.c:6072-6080.
+    ///
+    ///     else if (nread == 0 && PIPECONN_P (proc))
+    ///       {
+    ///         XPROCESS (proc)->tick = ++process_tick;
+    ///         deactivate_process (proc);
+    ///         if (EQ (XPROCESS (proc)->status, Qrun))
+    ///           pset_status (XPROCESS (proc), list2 (Qexit, make_fixnum (0)));
+    ///       }
+    ///
+    /// The status changes HERE, so `process-status` reports `closed` (a pipe
+    /// maps `exit` to `closed`, src/process.c:1193) from this moment on; the
+    /// SENTINEL is not run here. GNU runs it from `status_notify`, which the fd
+    /// loop calls only once it has finished scanning, and which walks the alist
+    /// newest-first so the owner of an implicit `:stderr` pipe -- created after
+    /// it -- is always notified first. Marking the notification pending is what
+    /// hands the sentinel to that later pass, and what keeps the process in the
+    /// alist until then.
+    ///
+    /// Doing the two halves together here was the bug behind ledger entry 54:
+    /// a sentinel that kills the stderr buffer saw the pipe either still `open`
+    /// (EOF discarded) or already gone (sentinel run and reaped inline), never
+    /// GNU's `closed`.
+    fn retire_pipe_process_at_read_eof(&mut self, id: ProcessId) {
+        self.deactivate_stderr_pipe_process_io(id);
+        if let Some(proc) = self.processes.get_mut(&id)
+            && !process_status_is_terminal_for_notify(&proc.status)
+        {
+            let terminal = process_status_exit_value(0);
+            proc.status = terminal;
+            proc.pending_status = terminal;
+            proc.status_notify_pending = true;
+        }
+    }
+
     /// GNU `read_process_output`: EOF/EIO on a real subprocess PTY removes the
     /// read fd, but does not make the process terminal; SIGCHLD/status
     /// notification observes child death later.
@@ -6148,7 +6184,47 @@ impl super::eval::Context {
         }
     }
 
-    fn poll_associated_stderr_output_without_status(
+    /// If `pid` is an implicit `:stderr` pipe whose owner also has a terminal
+    /// status to publish, publish the OWNER's first.
+    ///
+    /// This is the ordering GNU gets for free from `status_notify`'s
+    /// newest-first walk of the process alist (src/process.c:7886): the owner
+    /// is created after its stderr pipe, so it is always the newer entry. Here
+    /// the owner's exit may simply not have been polled yet when the pipe's EOF
+    /// arrives, so the check has to be explicit -- including polling the
+    /// owner's child status, which is what `status_notify` would already have
+    /// seen via SIGCHLD by the time it runs.
+    fn notify_stderr_pipe_owner_first(
+        &mut self,
+        pid: ProcessId,
+        target_process: Option<ProcessId>,
+        outcome: &mut ProcessOutputServiceOutcome,
+    ) -> Result<(), Flow> {
+        let Some(owner_id) = self.processes.stderr_pipe_owner(pid) else {
+            return Ok(());
+        };
+        let owner_pending = self
+            .processes
+            .get(owner_id)
+            .is_some_and(|owner| owner.status_notify_pending)
+            || self.processes.check_child_status_change(owner_id);
+        if owner_pending {
+            outcome.absorb(self.run_process_status_notification(owner_id, target_process)?);
+        }
+        Ok(())
+    }
+
+    /// Drain an implicit `:stderr` pipe's available bytes through its filter,
+    /// and close it if the drain reaches EOF, WITHOUT running its sentinel.
+    ///
+    /// That is GNU's division of labour, not a compromise: the fd-scan loop
+    /// gives a pipe connection its terminal status as soon as a read returns 0
+    /// (src/process.c:6072-6080), and `status_notify` runs the sentinel later.
+    /// Deferring the sentinel is what the split-stderr wait wants -- a targeted
+    /// wait for the owner must not run the pipe's sentinel early -- but
+    /// deferring the STATUS with it left the pipe reading as `open` to the
+    /// owner's sentinel, which is ledger entry 54.
+    fn drain_associated_stderr_output_without_notifying(
         &mut self,
         stderr_id: ProcessId,
         target_process: Option<ProcessId>,
@@ -6156,23 +6232,28 @@ impl super::eval::Context {
         let mut outcome = ProcessOutputServiceOutcome::default();
         let is_target = target_process.is_none_or(|target| target == stderr_id);
 
-        while let ProcessOutputRead::Data { data, bytes_read } =
-            self.processes.read_process_output_result(stderr_id)
-        {
-            if bytes_read > 0 {
-                outcome.record_activity(is_target);
-            }
-            if !data.is_empty() {
-                let filter = self
-                    .processes
-                    .get(stderr_id)
-                    .map(|p| p.filter)
-                    .unwrap_or(Value::NIL);
-                self.run_process_filter_callback(stderr_id, filter, &data)?;
+        loop {
+            match self.processes.read_process_output_result(stderr_id) {
+                ProcessOutputRead::Data { data, bytes_read } => {
+                    if bytes_read > 0 {
+                        outcome.record_activity(is_target);
+                    }
+                    if !data.is_empty() {
+                        let filter = self
+                            .processes
+                            .get(stderr_id)
+                            .map(|p| p.filter)
+                            .unwrap_or(Value::NIL);
+                        self.run_process_filter_callback(stderr_id, filter, &data)?;
+                    }
+                }
+                ProcessOutputRead::Eof | ProcessOutputRead::NoSource => {
+                    self.processes.retire_pipe_process_at_read_eof(stderr_id);
+                    return Ok(outcome);
+                }
+                ProcessOutputRead::WouldBlock => return Ok(outcome),
             }
         }
-
-        Ok(outcome)
     }
 
     fn poll_process_stdout_output_without_status_detailed(
@@ -6412,6 +6493,18 @@ impl super::eval::Context {
                 .get(pid)
                 .is_some_and(|process| process.status_notify_pending)
             {
+                // GNU's `status_notify` walks the process alist newest-first,
+                // and an implicit `:stderr` pipe is created BEFORE the process
+                // that owns it, so within one notification pass the owner's
+                // sentinel always runs before the pipe's. This loop instead
+                // services whichever process is ready, which flipped that order
+                // whenever the pipe's EOF was observed before the child's exit
+                // was polled -- and the flip is Lisp-visible, because the pipe
+                // is removed from the alist by its own notification, so the
+                // owner's sentinel then found `get-buffer-process' nil where
+                // GNU still has the pipe attached and `closed` (ledger 54).
+                self.notify_stderr_pipe_owner_first(pid, target_process, &mut outcome)?;
+
                 if self
                     .processes
                     .get(pid)
@@ -6599,38 +6692,18 @@ impl super::eval::Context {
                         }
                         outcome.record_serviced();
 
-                        // Mirror GNU's later status notification pass: when
-                        // the child's stderr EOF is reported, the stderr
-                        // pipe-process finishes (exit status 0) and runs its
-                        // sentinel, which inserts "Process NAME stderr
-                        // finished".
-                        self.processes.deactivate_stderr_pipe_process_io(pid);
-                        if let Some(proc) = self.processes.get_mut(pid) {
-                            proc.status = process_status_exit_value(0);
-                        }
-                        let sentinel = self
-                            .processes
-                            .get(pid)
-                            .map(|p| p.sentinel)
-                            .unwrap_or(Value::NIL);
-                        let exit_msg = self
-                            .processes
-                            .get(pid)
-                            .map(gnu_process_status_message_for_process)
-                            .unwrap_or_else(|| "finished\n".to_string());
-                        self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
-
-                        // GNU `status_notify`: a terminated process (including the
-                        // implicit stderr pipe-process) is removed from
-                        // `Vprocess_alist' when `delete-exited-processes' is non-nil
-                        // (its default), so `get-process'/`get-buffer-process' no
-                        // longer return it.  Without this the dead "<name> stderr"
-                        // process lingers in the process list, diverging from GNU
-                        // (which returns nil for `get-buffer-process' on the stderr
-                        // buffer once the process has finished).
-                        if self.delete_exited_processes_enabled() {
-                            self.processes.reap_exited_process(pid);
-                        }
+                        // The pipe finishes HERE (exit 0, so `process-status`
+                        // reports `closed`) and is notified LATER, which is
+                        // where GNU draws the line: the fd loop retires it
+                        // (src/process.c:6072-6080) and `status_notify`
+                        // (src/process.c:7873) runs the sentinel that inserts
+                        // "Process NAME stderr finished" and removes it from
+                        // the alist. Running both halves here published the
+                        // pipe's death to Lisp -- sentinel first, then gone
+                        // from `get-buffer-process' -- ahead of the OWNER's
+                        // sentinel, where GNU's newest-first alist walk always
+                        // puts the owner first (ledger entry 54).
+                        self.processes.retire_pipe_process_at_read_eof(pid);
                         handled_terminal_eof = true;
                         break;
                     }
@@ -6716,11 +6789,13 @@ impl super::eval::Context {
                     // GNU's first targeted wait for a split-stderr subprocess
                     // can read both stdout and stderr bytes without also
                     // running the main or implicit stderr process sentinels.
-                    // Drain currently available stderr bytes here, leaving EOF
-                    // and terminal notification visible to a later wait/status
-                    // pass.
-                    let stderr_outcome = self
-                        .poll_associated_stderr_output_without_status(stderr_id, target_process)?;
+                    // Drain currently available stderr bytes here; an EOF
+                    // closes the pipe as GNU's fd loop does and leaves only the
+                    // NOTIFICATION to a later status pass.
+                    let stderr_outcome = self.drain_associated_stderr_output_without_notifying(
+                        stderr_id,
+                        target_process,
+                    )?;
                     outcome.absorb(stderr_outcome);
                 }
 
@@ -6853,7 +6928,7 @@ impl super::eval::Context {
             .and_then(|proc| process_value_to_id(&proc.stderrproc));
         if let Some(stderr_id) = stderr_id.filter(|id| self.processes.get(*id).is_some()) {
             outcome.absorb(
-                self.poll_associated_stderr_output_without_status(stderr_id, target_process)?,
+                self.drain_associated_stderr_output_without_notifying(stderr_id, target_process)?,
             );
         }
 

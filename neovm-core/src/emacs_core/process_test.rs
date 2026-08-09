@@ -8726,3 +8726,90 @@ fn an_interactive_filter_error_is_reported_without_exiting_like_gnu() {
     assert!(flow.is_ok(), "an interactive filter error must not exit");
     assert_eq!(eval.shutdown_request(), None);
 }
+
+/// Ledger entry 54: the implicit `:stderr` pipe is `closed`, and still
+/// attached, when the owner's sentinel runs.
+///
+/// GNU splits this across two phases. The fd-scan loop retires a pipe
+/// connection the moment its read returns 0 -- `tick++`, `deactivate_process`,
+/// and status `(exit 0)` if it was still running (src/process.c:6072-6080),
+/// which `process-status` reports as `closed` for a pipe
+/// (src/process.c:1193) -- while the SENTINEL runs later, from `status_notify`
+/// (src/process.c:7873), which the fd loop calls only after it finishes.
+/// `status_notify` walks the process alist newest-first, so the owner, created
+/// after its stderr pipe, is notified first and sees the pipe closed but not
+/// yet removed.
+///
+/// The consequence is Lisp-visible: `process-kill-buffer-query-function`
+/// (lisp/subr.el:3542) prompts only for a process whose status is one of
+/// `run stop open listen`, so a sentinel that kills the stderr buffer -- what
+/// Magit's blame sentinel does -- prompts on `open` and is silent on `closed`.
+/// In batch that prompt reads EOF from stdin and kills the session.
+///
+/// Twelve iterations, both empty and non-empty stderr payloads, because the
+/// divergence was timing-dependent: GNU answers `closed` 12/12; before this
+/// fix neomacs answered `GONE` 10/12 (the pipe reaped out of the alist ahead
+/// of the owner's sentinel) and `open` 2/12 (EOF discarded entirely).
+#[test]
+fn the_stderr_pipe_is_closed_and_attached_when_the_owner_sentinel_runs() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let ((seen nil))
+             (dolist (payload '("" "boom"))
+               (dotimes (_ 6)
+                 (let* ((out (generate-new-buffer " *p14-out*"))
+                        (err (generate-new-buffer " *p14-err*"))
+                        (done nil))
+                   (let ((p (make-process
+                             :name "p14"
+                             :buffer out
+                             :stderr err
+                             :command (list "{sh}" "-c"
+                                            (format "printf '%%s' '%%s' 1>&2; printf 'x'"
+                                                    payload)))))
+                     (set-process-sentinel
+                      p (lambda (pr _e)
+                          (when (memq (process-status pr) '(exit signal))
+                            (let ((sp (get-buffer-process err)))
+                              (push (if sp (process-status sp) 'GONE) seen))
+                            (setq done t))))
+                     (while (not done) (accept-process-output nil 0.05))))))
+             (delete-dups (nreverse seen)))"#
+    ));
+
+    assert_eq!(result, "OK (closed)");
+}
+
+/// The deferred half of the same split: the pipe's own sentinel still runs,
+/// after the owner's. GNU's `status_notify` reaches the older stderr pipe on
+/// the same pass, so retiring it early in the fd loop must not cost it its
+/// notification.
+#[test]
+fn the_stderr_pipe_sentinel_still_runs_after_the_owners() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((order nil)
+                  (out (generate-new-buffer " *p14b-out*"))
+                  (err (generate-new-buffer " *p14b-err*"))
+                  (done nil)
+                  (p (make-process
+                      :name "p14b"
+                      :buffer out
+                      :stderr err
+                      :command (list "{sh}" "-c" "printf 'e' 1>&2; printf 'x'"))))
+             (set-process-sentinel (get-buffer-process err)
+                                   (lambda (&rest _) (push 'stderr order)))
+             (set-process-sentinel
+              p (lambda (pr _e)
+                  (when (memq (process-status pr) '(exit signal))
+                    (push 'owner order)
+                    (setq done t))))
+             (while (not done) (accept-process-output nil 0.05))
+             (dotimes (_ 4) (accept-process-output nil 0.05))
+             (nreverse order))"#
+    ));
+
+    assert_eq!(result, "OK (owner stderr)");
+}

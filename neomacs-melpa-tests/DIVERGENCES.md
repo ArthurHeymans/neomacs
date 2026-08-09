@@ -2162,6 +2162,76 @@ Found while fixing this, and split out as entry 55: on the BUFFER side
 carries no `syntax-table`. That is a different mechanism -- interval coverage
 rather than property resolution -- so it did not travel with this fix.
 
+## 54. An implicit `:stderr` pipe is not `closed` when the owner's sentinel runs -- FIXED
+
+FIXED 2026-08-09. GNU retires a pipe connection in two separate phases, and
+neomacs was doing both in one place, or neither.
+
+The fd-scan loop gives a pipe connection its terminal status the moment a read
+returns 0 -- `tick++`, `deactivate_process`, and `(exit 0)` if it was still
+running (`src/process.c:6072-6080`), which `process-status` reports as `closed`
+for a pipe (`src/process.c:1193`). The SENTINEL is not run there: that happens
+later in `status_notify` (`src/process.c:7873`), which the fd loop calls only
+once it has finished scanning, and which walks the process alist newest-first
+-- so the owner of an implicit `:stderr` pipe, created after it, is notified
+first and sees the pipe `closed` but still attached.
+
+neomacs had two paths and both diverged. The drain used during a targeted wait
+consumed stderr bytes and fell out of its loop on EOF without recording
+anything, so the pipe stayed `open`; the wait loop's own stderr-EOF branch went
+to the other extreme and ran the pipe's sentinel and removed it from the alist
+inline, so the owner's sentinel then found `get-buffer-process` nil. Both now
+go through one retire step that sets the status and defers the notification,
+and a pipe whose notification is pending yields to its owner's, reproducing
+GNU's newest-first order.
+
+This is Lisp-visible because `process-kill-buffer-query-function`
+(`lisp/subr.el:3542`) prompts only for a process whose status is one of
+`run stop open listen`. Magit's blame sentinel kills the stderr buffer, so on
+`open` it prompted; in batch that prompt reads EOF from stdin, the sentinel
+signals, and the session exits 255.
+
+```elisp
+(let* ((out (generate-new-buffer " *o*"))
+       (err (generate-new-buffer " *e*"))
+       (done nil) (seen nil))
+  (let ((p (make-process :name "s" :buffer out :stderr err
+                         :command (list "sh" "-c" "printf 'e' 1>&2; printf 'x'"))))
+    (set-process-sentinel
+     p (lambda (pr _e)
+         (when (memq (process-status pr) '(exit signal))
+           (let ((sp (get-buffer-process err)))
+             (setq seen (if sp (process-status sp) 'GONE)))
+           (setq done t))))
+    (while (not done) (accept-process-output nil 0.05))
+    seen))
+;; GNU     => closed (12/12)
+;; Neomacs => GONE 10/12, open 2/12, closed 0/12  (before this fix)
+```
+
+The sentinel ORDER diverged for the same reason, and is the same fix:
+
+```elisp
+;; owner sentinel and stderr-pipe sentinel, in the order they run
+;; GNU     => (owner stderr)
+;; Neomacs => (stderr owner)   (before this fix)
+```
+
+Pinned by `the_stderr_pipe_is_closed_and_attached_when_the_owner_sentinel_runs`
+and `the_stderr_pipe_sentinel_still_runs_after_the_owners` in
+neovm-core/src/emacs_core/process_test.rs. The first runs twelve iterations
+over both empty and non-empty stderr payloads because the divergence was
+timing-dependent; the second exists because retiring the pipe early must not
+cost it the notification GNU still delivers.
+
+Discovered as the cause of the `magit_package_batch` flake (blame cases). On
+ten serial runs of that suite the neomacs-side failure went from 8/10 to 0/10,
+and the instrumented real Magit case now reports GNU's exact line,
+`(:kill " *git-stderr*" :proc "git stderr" :status closed :live nil :query t)`,
+24/24. Two of those ten runs still fail, but on the GNU BASELINE side -- real
+GNU Emacs 31.0.90 also prompts there under load -- which is an environmental
+flake in the harness, not a neomacs divergence.
+
 ## 55. `default-text-properties` does not reach a buffer position whose interval says nothing
 
 Found while fixing entry 53, and a different mechanism from it: entry 53 was
