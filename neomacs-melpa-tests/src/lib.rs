@@ -2844,6 +2844,11 @@ pub const FRINGE_HELPER_MELPA_PIN: (&str, &str) = ("fringe-helper", "20140620.21
 /// `bcc2d7960ba207b5b4db96fe40f7d72670fdbb68`.
 pub const FANCY_BATTERY_MELPA_PIN: (&str, &str) = ("fancy-battery", "20150101.1204");
 
+/// The exact gh.el API client selected for practical authenticated repository,
+/// issue, gist, paging, mutation, and cache workflow parity. MELPA built this
+/// archive from upstream commit `b1551245d3404eac6394abaebe1a9e0b2c504235`.
+pub const GH_MELPA_PIN: (&str, &str) = ("gh", "20260210.1535");
+
 /// The exact gh-md package selected for practical GitHub Markdown API
 /// rendering, region/buffer conversion, GFM context payloads, HTML export
 /// customization, Unicode request encoding, and transport-error parity.

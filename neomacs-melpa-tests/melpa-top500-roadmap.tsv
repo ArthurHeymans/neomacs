@@ -286,7 +286,7 @@ rank	package	downloads	status
 285	treemacs-magit	396611	covered
 286	counsel-projectile	395439	covered
 287	org-projectile	394642	covered
-288	gh	394629	todo
+288	gh	394629	covered
 289	flyspell-correct	393695	covered
 290	evil-org	393035	covered
 291	lsp-docker	390983	todo

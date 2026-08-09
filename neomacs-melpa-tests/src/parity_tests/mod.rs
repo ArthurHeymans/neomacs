@@ -384,6 +384,7 @@ mod fuzzy;
 mod game_2048;
 mod geiser;
 mod general;
+mod gh;
 mod gh_md;
 mod ghub;
 mod git;
