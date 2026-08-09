@@ -283,6 +283,7 @@ mod clojure_mode;
 mod closql;
 mod cmake_mode;
 mod coffee_mode;
+mod color_theme_sanityinc_solarized;
 mod color_theme_sanityinc_tomorrow;
 mod column_enforce_mode;
 mod commander;

@@ -332,7 +332,7 @@ rank	package	downloads	status
 331	pug-mode	319227	covered
 332	quelpa	318753	todo
 333	evil-easymotion	317517	todo
-334	color-theme-sanityinc-solarized	316378	todo
+334	color-theme-sanityinc-solarized	316378	covered
 335	robe	316133	todo
 336	lsp-pyright	315668	todo
 337	ido-vertical-mode	312897	todo

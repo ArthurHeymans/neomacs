@@ -6008,3 +6008,8 @@ pub const JULIA_MODE_MELPA_PIN: (&str, &str) = ("julia-mode", "20260529.1624");
 /// The exact elfeed package selected for practical feed/OPML/date parsing.
 /// Pinned to upstream commit `2970e5d1aa2a6f5c4cb607e0b835b91a6bffec4f`.
 pub const ELFEED_MELPA_PIN: (&str, &str) = ("elfeed", "20260805.1030");
+
+/// The exact color-theme-sanityinc-solarized package selected for practical theme palette parity.
+/// Pinned to upstream commit `f42431850e0ff0cff90c6cc39edc222faa40323d`.
+pub const COLOR_THEME_SANITYINC_SOLARIZED_MELPA_PIN: (&str, &str) =
+    ("color-theme-sanityinc-solarized", "20241126.1028");
