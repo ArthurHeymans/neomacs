@@ -1866,12 +1866,9 @@ fn update_match_data_after_buffer_replace(
         return;
     };
 
-    if md.source().is_string() {
-        return;
-    }
     let (oldstart, oldend, newend) = replacement.published_match_data_bounds();
     let change = newend as i64 - oldend as i64;
-    md.map_buffer_positions(|match_group| {
+    md.map_lisp_positions(|match_group| {
         let mut start = match_group.start();
         let mut end = match_group.end();
 
@@ -1999,15 +1996,6 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         };
     }
 
-    if md_snapshot
-        .as_ref()
-        .is_some_and(|match_data| match_data.source().is_string())
-    {
-        return Err(signal(
-            LispCondition::ArgsOutOfRange,
-            vec![Value::fixnum(0)],
-        ));
-    }
     if let Some(md) = md_snapshot.as_ref()
         && subexp >= md.group_count()
     {
@@ -2028,6 +2016,21 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        // GNU checks the subexpression against the *accessible* portion of the
+        // current buffer and reports both endpoints (search.c:2418-2427).
+        if let Some(group) = md_snapshot.as_ref().and_then(|md| md.group(subexp)) {
+            let begv = buf.point_min_lisp_char_pos().to_one_based_usize();
+            let zv = buf.point_max_lisp_char_pos().to_one_based_usize();
+            if group.start() < begv || group.end() > zv {
+                return Err(signal(
+                    LispCondition::ArgsOutOfRange,
+                    vec![
+                        Value::fixnum(group.start() as i64),
+                        Value::fixnum(group.end() as i64),
+                    ],
+                ));
+            }
+        }
         let replacement = crate::emacs_core::search::compute_buffer_replacement_lisp_string(
             buf,
             newtext_lisp,

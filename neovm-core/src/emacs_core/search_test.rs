@@ -1053,3 +1053,101 @@ fn replace_regexp_function_can_return_raw_unibyte_string() {
         call_replace_regexp_in_string(vec![Value::string("a"), replacement, source]).unwrap();
     assert_lisp_string_bytes(result, &[0xFE, 0xFF, b'b'], false);
 }
+
+fn bootstrap_eval_one(src: &str) -> String {
+    crate::test_utils::runtime_startup_eval_all(src)
+        .into_iter()
+        .next()
+        .expect("at least one form")
+}
+
+/// GNU's `Freplace_match' (search.c:2396) chooses between buffer and string
+/// from its STRING argument alone and never consults `last_thing_searched'.
+/// So a match installed by `set-match-data' from plain integers still replaces
+/// in the current buffer, even though both editors record such match data as
+/// string-sourced because no element names a buffer (search.c:2966).
+///
+/// shift-number, which evil-numbers drives, reaches `replace-match' exactly
+/// this way.
+#[test]
+fn replace_match_uses_the_current_buffer_whatever_the_match_data_records() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(list
+             (with-temp-buffer
+               (insert "workers = 0099\n")
+               (goto-char 11)
+               (set-match-data (list 11 15 11 11 11 15))
+               (replace-match "0102" t t nil 2)
+               (buffer-string))
+             (with-temp-buffer
+               (insert "workers = 0099\n")
+               (set-match-data (list 11 15))
+               (replace-match "X" t t nil 0)
+               (buffer-string))
+             (with-temp-buffer
+               (insert "workers = 0099\n")
+               (set-match-data (list (copy-marker 11) (copy-marker 15)))
+               (replace-match "X" t t nil 0)
+               (buffer-string)))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (\"workers = 0102\n\" \"workers = X\n\" \"workers = X\n\")"
+    );
+}
+
+/// The subexpression is checked against the *accessible* portion of the
+/// buffer, and both endpoints are reported (search.c:2418-2427).  A group that
+/// did not participate is a different error entirely.
+#[test]
+fn replace_match_reports_a_subexpression_outside_the_accessible_portion() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(mapcar
+             (lambda (thunk) (condition-case e (funcall thunk) (error e)))
+             (list
+              (lambda () (with-temp-buffer
+                           (insert "abc")
+                           (set-match-data (list 2 99))
+                           (replace-match "X" t t nil 0)))
+              (lambda () (with-temp-buffer
+                           (insert "abcdef")
+                           (narrow-to-region 3 6)
+                           (set-match-data (list 1 2))
+                           (replace-match "X" t t nil 0)))
+              (lambda () (with-temp-buffer
+                           (insert "abc")
+                           (set-match-data (list 1 3 nil nil))
+                           (replace-match "X" t t nil 1)))))"#,
+    );
+    assert_eq!(
+        result,
+        r#"OK ((args-out-of-range 2 99) (args-out-of-range 1 2) (error "replace-match subexpression does not exist" 1))"#
+    );
+}
+
+/// GNU adjusts the match registers for the edit it just made
+/// (`update_search_regs', search.c) whatever the match data records as its
+/// origin.  Leaving them stale makes a caller that replaces in a loop -- which
+/// is how shift-number drives evil-numbers -- read the same registers forever
+/// and never terminate.
+#[test]
+fn replace_match_adjusts_the_registers_for_the_edit_it_made() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(list
+             (with-temp-buffer
+               (insert "aa 01 bb 02 cc")
+               (set-match-data (list 4 6))
+               (replace-match "999" t t nil 0)
+               (list (point) (match-beginning 0) (match-end 0)))
+             (with-temp-buffer
+               (insert "aa 01 bb 02 cc")
+               (goto-char (point-min))
+               (re-search-forward "[0-9]+")
+               (replace-match "999" t t nil 0)
+               (list (point) (match-beginning 0) (match-end 0))))"#,
+    );
+    assert_eq!(result, "OK ((7 4 7) (7 4 7))");
+}

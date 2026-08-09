@@ -671,12 +671,28 @@ impl MatchData {
         }
     }
 
-    pub(crate) fn map_buffer_positions(&mut self, mut map: impl FnMut(MatchGroup) -> MatchGroup) {
-        let MatchDataKind::Buffer { groups, .. } = &mut self.kind else {
-            return;
-        };
-        for range in groups.iter_mut().flatten() {
-            *range = LispCharMatchRange::from_match_group(map(range.into_match_group()));
+    /// Rewrite every group through MAP, in the same Lisp-visible coordinates
+    /// `match-beginning' reports.
+    ///
+    /// Both origins are mapped.  `replace-match' adjusts the registers after
+    /// editing (GNU's `update_search_regs', search.c) no matter what the match
+    /// data records as its origin, because with STRING nil the registers name
+    /// buffer positions however they were installed -- `set-match-data' from
+    /// plain integers records string-sourced data that still describes the
+    /// buffer.  Skipping the adjustment there leaves a caller that replaces in
+    /// a loop reading the same stale registers forever.
+    pub(crate) fn map_lisp_positions(&mut self, mut map: impl FnMut(MatchGroup) -> MatchGroup) {
+        match &mut self.kind {
+            MatchDataKind::StringChars { groups, .. } => {
+                for range in groups.iter_mut().flatten() {
+                    *range = map(MatchGroup::from_char_range(*range)).string_char_range();
+                }
+            }
+            MatchDataKind::Buffer { groups, .. } => {
+                for range in groups.iter_mut().flatten() {
+                    *range = LispCharMatchRange::from_match_group(map(range.into_match_group()));
+                }
+            }
         }
     }
 

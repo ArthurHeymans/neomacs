@@ -587,46 +587,41 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         return Err(super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string());
     }
 
-    let char_range = md
-        .group_zero_based_char_range(subexp)
-        .expect("group existence checked above");
-    let buffer_start = buf
-        .char_pos_to_emacs_byte_pos_clamped(char_range.start())
-        .get();
-    let buffer_end = buf
-        .char_pos_to_emacs_byte_pos_clamped(char_range.end())
-        .get();
+    // Every group here is read as a Lisp buffer position, whatever the match
+    // data records as its origin.  GNU's `Freplace_match' (search.c:2396)
+    // decides between buffer and string purely from its STRING argument and
+    // never consults `last_thing_searched', so a match installed by
+    // `set-match-data' from plain integers -- which both editors record as
+    // string-sourced, since no element names a buffer (search.c:2966) -- still
+    // replaces in the current buffer.
+    let group = md.group(subexp).expect("group existence checked above");
+    let buffer_start = buffer_match_char_pos_to_byte_pos(buf, group.start()).get();
+    let buffer_end = buffer_match_char_pos_to_byte_pos(buf, group.end()).get();
 
     // GNU `replace_match` reads only the matched text from the buffer; it never
     // copies the whole buffer.  Materialize just group 0 -- which spans the
     // whole match and therefore every subgroup -- and re-base the group indices
     // onto it, so this is O(match) rather than O(buffer).  The whole-buffer copy
     // made a replace loop (query-replace / replace-string) O(n^2).
-    let mut replacement_match_data = md.clone();
-    let source = if !replacement_match_data.source().is_string() {
-        let group0 = md
-            .group(0)
-            .ok_or_else(|| super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string())?;
-        let group0_start = group0.start();
-        let group0_byte_start = buffer_match_char_pos_to_byte_pos(buf, group0_start);
-        let group0_byte_end = buffer_match_char_pos_to_byte_pos(buf, group0.end());
-        let source = buf.buffer_substring_lisp_string_range(crate::buffer::EmacsByteRange::new(
-            group0_byte_start,
-            group0_byte_end,
-        ));
-        // Group positions are 1-based buffer chars; re-base them to 0-based
-        // offsets within `source` (whose char 0 is the first char of group 0).
-        replacement_match_data = super::regex::MatchData::string(
-            md.groups_snapshot()
-                .into_iter()
-                .map(|group| group.map(|group| group.saturating_sub(group0_start)))
-                .collect(),
-            Some(super::regex::SearchedString::Owned(source.clone())),
-        );
-        source
-    } else {
-        buf.buffer_substring_lisp_string_range(buf.full_emacs_byte_range())
-    };
+    let group0 = md
+        .group(0)
+        .ok_or_else(|| super::regex::REPLACE_MATCH_SUBEXP_MISSING.to_string())?;
+    let group0_start = group0.start();
+    let group0_byte_start = buffer_match_char_pos_to_byte_pos(buf, group0_start);
+    let group0_byte_end = buffer_match_char_pos_to_byte_pos(buf, group0.end());
+    let source = buf.buffer_substring_lisp_string_range(crate::buffer::EmacsByteRange::new(
+        group0_byte_start,
+        group0_byte_end,
+    ));
+    // Group positions are 1-based buffer chars; re-base them to 0-based
+    // offsets within `source` (whose char 0 is the first char of group 0).
+    let replacement_match_data = super::regex::MatchData::string(
+        md.groups_snapshot()
+            .into_iter()
+            .map(|group| group.map(|group| group.saturating_sub(group0_start)))
+            .collect(),
+        Some(super::regex::SearchedString::Owned(source.clone())),
+    );
 
     let replacement_match_option = Some(replacement_match_data.clone());
     // The buffer's case + syntax tables drive GNU's case analysis, so pass them
