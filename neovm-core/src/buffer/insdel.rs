@@ -462,30 +462,20 @@ impl BufferManager {
         range: TextEditRange,
         text: &LispString,
     ) -> Option<()> {
-        if range.is_empty() {
-            if text.is_empty() {
-                return Some(());
-            }
-            return self.execute_shared_text_edit(id, |buffer| {
-                let plan = InsertTextPlan::from_lisp_string(
-                    text,
-                    buffer.get_multibyte(),
-                    range.start_anchor(),
-                    InsertMarkerPlacement::AfterMarkers,
-                    InsertMarkerAdjustment::ByInsertionType,
-                );
-                let edit = plan.edit();
-                // GNU `replace_range` still records a zero-length deletion
-                // beside the insertion when the old range is empty; see
-                // `execute_replace_insert_only_plan`.
-                let _ = buffer.execute_replace_insert_only_plan(plan);
-                Some(SharedTextEditOutcome::edited(
-                    (),
-                    SharedTextEditMetadata::Insert(edit),
-                ))
-            });
+        // GNU: `if (nbytes_del <= 0 && inschars == 0) return;` (insdel.c:1521).
+        if range.is_empty() && text.is_empty() {
+            return Some(());
         }
 
+        // Every other shape, including an empty old range, is one
+        // `replace_range`.  There is deliberately no insert-only branch here:
+        // the sibling metadata for a replacement already delegates an empty
+        // old range to the insertion behaviour it shares with GNU
+        // (`adjust_markers_for_replace_range` and
+        // `adjust_for_replace_at_emacs_byte_pos` both dispatch on
+        // `old_len.is_empty()`), so a separate insert path would buy nothing
+        // and could only reintroduce the missing-deletion bug of
+        // DIVERGENCES.md 47.
         self.execute_shared_text_edit(id, |buffer| {
             let edit = buffer.replace_measured_region_lisp_string_edit(range, text);
             Some(SharedTextEditOutcome::edited(

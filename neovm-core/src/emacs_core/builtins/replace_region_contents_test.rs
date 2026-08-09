@@ -464,3 +464,42 @@ fn replace_region_contents_records_gnu_undo_boundary_before_the_change_runs() {
         r#"OK (2 (("b" . 2) (3 . 4) ("d" . 4) (5 . 6) 2))"#
     );
 }
+
+#[test]
+fn replace_region_contents_insertion_run_reaches_indirect_buffer_siblings() {
+    // A pure-insertion change run is applied in the base buffer while an
+    // indirect buffer holds the markers and the overlay.  GNU
+    // `replace_range` delegates `old_chars == 0` to
+    // `adjust_markers_for_insert` (insdel.c:351), so the plain marker at the
+    // insertion point stays put, the insertion-type marker advances, and the
+    // overlay grows -- and all of that has to reach the sibling buffer.
+    //
+    // This pins the sibling side of the empty-old-range replacement, which is
+    // the seam the recording unification moves from insert-shaped metadata to
+    // replace-shaped metadata.
+    //
+    // Oracle: emacs 31.0.90 --batch => ("aXbYc" 2 3 2 4 1).
+    let result = eval_one(
+        r#"(let* ((base (generate-new-buffer " base"))
+                  (ind (make-indirect-buffer base " ind"))
+                  out)
+             (with-current-buffer base (insert "abc"))
+             (with-current-buffer ind
+               (let ((m-plain (copy-marker 2))
+                     (m-advance (copy-marker 2 t))
+                     (ov (make-overlay 2 3)))
+                 (with-current-buffer base
+                   (let ((temp (with-current-buffer (generate-new-buffer " *r*")
+                                 (insert "aXbYc") (current-buffer))))
+                     (replace-region-contents (point-min) (point-max)
+                                              (lambda (&rest _) temp))))
+                 (setq out (list (buffer-string)
+                                 (marker-position m-plain)
+                                 (marker-position m-advance)
+                                 (overlay-start ov) (overlay-end ov)
+                                 (point)))))
+             (kill-buffer ind) (kill-buffer base)
+             out)"#,
+    );
+    assert_eq!(result, r#"OK ("aXbYc" 2 3 2 4 1)"#);
+}

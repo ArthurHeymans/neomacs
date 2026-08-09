@@ -155,7 +155,23 @@ impl Buffer {
             );
             self.set_undo_list(ul);
         }
+        self.apply_insert_text_plan(plan)
+    }
 
+    /// Mutate storage for a fully measured insertion plan *without* recording
+    /// undo.
+    ///
+    /// Split out from [`Self::execute_insert_text_plan`] so that recording and
+    /// mutation are separate layers: an insertion records
+    /// `record_insert`, whereas a replacement whose old range is empty is
+    /// still storage-wise an insertion but records GNU `replace_range`'s
+    /// delete-and-insert pair. The caller owns the recording; this owns the
+    /// text.
+    fn apply_insert_text_plan(&mut self, plan: InsertTextPlan) -> TextInsertion {
+        let edit = plan.edit();
+        if edit.is_empty() {
+            return edit.insertion();
+        }
         self.text
             .insert_measured_emacs_bytes(edit.byte_pos(), plan.bytes(), edit.extent());
         self.apply_byte_insert_side_effects(edit, InsertSideEffectPolicy::current_buffer());
@@ -221,52 +237,48 @@ impl Buffer {
 
     /// Execute a fully measured replacement plan.
     ///
-    /// GNU `replace_range` records insertion undo before deletion undo for a
-    /// non-empty replacement.  Keep that ordering next to the storage
-    /// mutation and side-effect policy so the transaction is one explicit
-    /// replace operation rather than scattered delete/insert bookkeeping.
+    /// This is the single entry point for GNU `replace_range` (insdel.c:1463).
+    /// Recording happens once, unconditionally, before any dispatch on the
+    /// plan's shape, because GNU records once unconditionally: `deletion` is
+    /// `make_buffer_string_both (from, ..., to, ...)`, a *string* that is
+    /// merely empty when `from == to`, so `!NILP (deletion)` always holds and
+    /// `record_insert` / `record_delete` always both run (insdel.c:1614-1618).
+    /// Only the storage mutation varies with the shape.
+    ///
+    /// Keeping the recording ahead of the dispatch is deliberate: it is what
+    /// makes an insert-only replacement — the class of bug behind
+    /// DIVERGENCES.md 47, where a pure-insertion change run recorded no
+    /// deletion and two adjacent runs then coalesced into one undo record —
+    /// unrepresentable here rather than merely fixed.
     pub(in crate::buffer) fn execute_replace_text_plan(
         &mut self,
         plan: ReplaceTextPlan,
     ) -> TextReplacement {
         let old_range = plan.old_range();
 
+        if old_range.is_empty() && plan.new_extent().chars().is_empty() {
+            // GNU: `if (nbytes_del <= 0 && inschars == 0) return;`
+            // (insdel.c:1521) — returns before recording anything.
+            return TextReplacement::new(old_range, plan.new_extent());
+        }
+
+        self.record_replace_range_undo(&plan);
+
         if old_range.is_empty() {
+            // GNU `adjust_markers_for_replace` delegates `old_chars == 0`
+            // straight to `adjust_markers_for_insert` (insdel.c:351), so the
+            // storage mutation, markers, overlays and point all behave exactly
+            // as for `insert`.  Only the recording above differs, and it has
+            // already happened.
             let insertion_plan = plan.into_insert_plan(
                 old_range.start_anchor(),
                 InsertMarkerPlacement::AfterMarkers,
                 InsertMarkerAdjustment::ByInsertionType,
             );
-            let insertion = self.execute_replace_insert_only_plan(insertion_plan);
+            let insertion = self.apply_insert_text_plan(insertion_plan);
             debug_assert_eq!(old_range.byte_start(), insertion.byte_pos());
             debug_assert_eq!(old_range.char_start(), insertion.char_pos());
             return TextReplacement::new(old_range, insertion.extent());
-        }
-
-        let old_point = self.point_anchor();
-        let deleted_text = self.buffer_region_lisp_string(plan.old_range().byte_range());
-
-        self.undo_prepare_change(plan.old_range().byte_start(), old_point.emacs_byte_pos());
-        let mut ul = self.get_undo_list();
-        if !undo::undo_list_is_disabled(&ul) {
-            // GNU `replace_range` records the insertion before the deletion
-            // at FROM + old-length, so primitive-undo reinserts the old text
-            // before deleting the replacement.  That order keeps markers and
-            // overlay endpoints on opposite sides of the replacement distinct.
-            undo::undo_list_record_insert(
-                &mut ul,
-                plan.old_char_end(),
-                plan.new_char_len(),
-                self.undo_state.point_before_command_or_undo(),
-            );
-            undo::undo_list_record_delete(
-                &mut ul,
-                plan.old_char_start(),
-                deleted_text,
-                old_point.char_pos(),
-                self.undo_state.point_before_command_or_undo(),
-            );
-            self.set_undo_list(ul);
         }
 
         let replacement = plan.replacement();
@@ -292,49 +304,50 @@ impl Buffer {
         replacement
     }
 
-    /// Execute GNU `replace_range` for an empty old range (`from == to`).
+    /// Record GNU `replace_range`'s undo pair for `plan`, whatever its shape.
     ///
-    /// The storage mutation is a plain insertion — GNU
-    /// `adjust_markers_for_replace` delegates `old_chars == 0` straight to
-    /// `adjust_markers_for_insert` (insdel.c:351), so markers at `from` move
-    /// or stay by their insertion type exactly as for `insert`.  The *undo*
-    /// shape is not an insertion's, though: `deletion` in `replace_range` is
-    /// the empty string rather than nil, so GNU still runs
-    /// `record_insert (from, inschars)` followed by `record_delete (from, "")`.
-    /// Keeping that empty deletion is what stops two adjacent change runs (as
-    /// `replace-region-contents`' Myers diff produces) from coalescing into a
-    /// single wide insertion record that undo would delete as one span.
-    pub(in crate::buffer) fn execute_replace_insert_only_plan(
-        &mut self,
-        plan: InsertTextPlan,
-    ) -> TextInsertion {
-        let edit = plan.edit();
-        if edit.is_empty() {
-            // GNU `replace_range` returns before recording anything when the
-            // deletion and the insertion are both empty.
-            return edit.insertion();
-        }
+    /// GNU records the insertion first and the deletion second
+    /// (insdel.c:1610-1618): "Record the insertion first, so that when we
+    /// undo, the deletion will be undone first.  Thus, undo will insert
+    /// before deleting, and thus will keep the markers before and after this
+    /// text separate."  Because entries cons onto the front, the deletion
+    /// ends up newest.
+    ///
+    /// Nothing here inspects a length.  A pure-insertion run records a
+    /// zero-length deletion `("" . POS)` and a pure-deletion run records a
+    /// zero-length insertion `(POS . POS)`, exactly as GNU does, because
+    /// `record_delete` and `record_insert` (undo.c) return early only for a
+    /// disabled undo list.  Those zero-length entries are load-bearing:
+    /// `record_insert` coalesces into the newest record only when that record
+    /// is a `(FIXNUM . FIXNUM)` cons whose CDR equals the new start
+    /// (undo.c:100-112), so a record of the other shape between two adjacent
+    /// runs is what keeps them from merging into one span.
+    fn record_replace_range_undo(&mut self, plan: &ReplaceTextPlan) {
+        let old_range = plan.old_range();
+        // GNU reads `deletion` and tests point before it touches the gap, so
+        // both see the pre-edit buffer.
+        let old_point = self.point_anchor();
+        let deleted_text = self.buffer_region_lisp_string(old_range.byte_range());
 
-        let char_pos = edit.char_pos();
-        // GNU records both entries before `adjust_point`, so the deletion's
-        // point test (`PT == beg + SCHARS (string)`) sees the pre-edit point.
-        let old_point = self.point_char_pos();
-        let deleted_text = self
-            .buffer_region_lisp_string(EmacsByteRange::from_start_len(edit.byte_pos(), 0.into()));
-        let insertion = self.execute_insert_text_plan(plan);
-
+        self.undo_prepare_change(old_range.byte_start(), old_point.emacs_byte_pos());
         let mut ul = self.get_undo_list();
-        if !undo::undo_list_is_disabled(&ul) {
-            undo::undo_list_record_delete(
-                &mut ul,
-                char_pos,
-                deleted_text,
-                old_point,
-                self.undo_state.point_before_command_or_undo(),
-            );
-            self.set_undo_list(ul);
+        if undo::undo_list_is_disabled(&ul) {
+            return;
         }
-        insertion
+        undo::undo_list_record_insert(
+            &mut ul,
+            plan.old_char_end(),
+            plan.new_char_len(),
+            self.undo_state.point_before_command_or_undo(),
+        );
+        undo::undo_list_record_delete(
+            &mut ul,
+            plan.old_char_start(),
+            deleted_text,
+            old_point.char_pos(),
+            self.undo_state.point_before_command_or_undo(),
+        );
+        self.set_undo_list(ul);
     }
 
     /// Execute a case-region replacement using GNU `casify_region`'s undo
