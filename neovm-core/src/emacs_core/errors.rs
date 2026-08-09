@@ -755,8 +755,45 @@ pub(crate) fn builtin_error_message_string(
         ));
     }
 
-    let error_data = &args[0];
+    // GNU's `Ferror_message_string' (print.c:1046-1051) short-circuits an
+    // error of exactly the shape (error STRING) and hands back that very
+    // string object, text properties and all.  Every other shape is rendered
+    // by printing into `prin1-to-string-buffer' one character at a time, which
+    // carries no properties, and the result is read back out with
+    // `buffer-string'.  So the fast path is the *only* way a property reaches
+    // the caller: a `user-error' message, a file-error, or an (error STRING
+    // EXTRA) all come back plain even when their payload was propertized.
+    //
+    // Routing every other answer through one strip keeps that guarantee in a
+    // single place rather than leaving it to each of the branches below.
+    if let Some(message) = single_error_string_payload(&args[0]) {
+        return Ok(message);
+    }
+    let rendered = error_message_string_rendered(eval, &args[0])?;
+    Ok(match rendered.as_lisp_string() {
+        Some(string) => Value::heap_string(string.without_properties()),
+        None => rendered,
+    })
+}
 
+/// The STRING of an error datum of exactly the shape `(error STRING)`, which
+/// GNU returns unchanged.
+fn single_error_string_payload(error_data: &Value) -> Option<Value> {
+    if !error_data.is_cons() || error_data.cons_car() != Value::symbol("error") {
+        return None;
+    }
+    let tail = error_data.cons_cdr();
+    if !tail.is_cons() || !tail.cons_cdr().is_nil() {
+        return None;
+    }
+    let message = tail.cons_car();
+    message.as_lisp_string().is_some().then_some(message)
+}
+
+fn error_message_string_rendered(
+    eval: &mut super::eval::Context,
+    error_data: &Value,
+) -> EvalResult {
     // Emacs expects ERROR-DATA to be a list (or nil).
     let (sym_name, data) = match error_data.kind() {
         ValueKind::Cons => {

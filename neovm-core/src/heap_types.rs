@@ -751,6 +751,15 @@ impl LispString {
         self.slice_bytes_no_properties(start, end)
     }
 
+    /// The same text with every text property dropped.
+    ///
+    /// Callers use this where GNU produces a string by printing into a buffer
+    /// and reading it back, a route that never carries properties across.
+    pub fn without_properties(&self) -> Self {
+        self.slice_no_properties(0, self.as_bytes().len())
+            .unwrap_or_else(|| self.clone())
+    }
+
     /// Byte-index slice without text properties when the caller already knows
     /// the corresponding character bounds.
     pub(crate) fn slice_no_properties_with_char_bounds(

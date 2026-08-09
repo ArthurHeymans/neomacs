@@ -1563,3 +1563,34 @@ fn signal_cons_with_explicit_data_keeps_old_behavior() {
         r#"OK (wrong-type-argument symbolp (scan-error "msg"))"#
     );
 }
+
+fn bootstrap_eval_one(src: &str) -> String {
+    bootstrap_eval_all(src)
+        .into_iter()
+        .next()
+        .expect("at least one form")
+}
+
+/// GNU's `Ferror_message_string' (print.c:1046) hands back the payload string
+/// itself only for an error of exactly the shape (error STRING).  Every other
+/// shape is rendered by printing into a buffer, so the answer carries no text
+/// properties even when the payload did -- a `user-error' built by
+/// `format-message' from propertized buffer text comes back plain.
+#[test]
+fn error_message_string_keeps_properties_only_for_a_lone_error_string() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(let ((s (propertize "SYM" 'p 1)))
+             (mapcar (lambda (data)
+                       (let ((m (error-message-string data)))
+                         (list m (text-properties-at 0 m))))
+                     (list (list 'error s)
+                           (list 'user-error s)
+                           (list 'error s "extra")
+                           (list 'file-error s "more"))))"#,
+    );
+    assert_eq!(
+        result,
+        r#"OK ((#("SYM" 0 3 (p 1)) (p 1)) ("SYM" nil) ("SYM: \"extra\"" nil) ("SYM: more" nil))"#
+    );
+}
