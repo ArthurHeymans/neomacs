@@ -2989,6 +2989,11 @@ pub const HELM_MAKE_MELPA_PIN: (&str, &str) = ("helm-make", "20200620.27");
 /// `4744ca7f8b35e17bafce9cb0093deb87a232699d`.
 pub const HELM_ORG_MELPA_PIN: (&str, &str) = ("helm-org", "20250405.1720");
 
+/// The exact Helm Pydoc package selected by its practical parity workflows.
+/// MELPA built version 20220721.433 from upstream commit
+/// `cac7b8953adcab85e898bc42b699c3afde5d33c6`.
+pub const HELM_PYDOC_MELPA_PIN: (&str, &str) = ("helm-pydoc", "20220721.433");
+
 /// The exact helm-ls-git package selected for practical git-root discovery,
 /// ls-files listing, branch normalization, status/source defaults, and project
 /// manager command surface. MELPA built this archive from upstream commit

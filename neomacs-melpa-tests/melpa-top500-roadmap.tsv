@@ -315,7 +315,7 @@ rank	package	downloads	status
 314	helm-lsp	347705	covered
 315	spaceline-all-the-icons	347175	covered
 316	web-completion-data	345812	covered
-317	helm-pydoc	344386	todo
+317	helm-pydoc	344386	covered
 318	restclient	344348	covered
 319	embark	343651	covered
 320	company-web	340984	todo
