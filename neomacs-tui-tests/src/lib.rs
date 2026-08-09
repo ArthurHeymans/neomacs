@@ -638,6 +638,385 @@ mod tests {
 
 // ── Screen diffing ───────────────────────────────────────────────────
 
+/// Exact attributes currently active for newly drawn terminal cells.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RawTerminalAttributes {
+    pub foreground: vt100::Color,
+    pub background: vt100::Color,
+    pub bold: bool,
+    pub dim: bool,
+    pub italic: bool,
+    pub underline: bool,
+    pub inverse: bool,
+}
+
+impl RawTerminalAttributes {
+    fn from_screen(screen: &vt100::Screen) -> Self {
+        Self {
+            foreground: screen.fgcolor(),
+            background: screen.bgcolor(),
+            bold: screen.bold(),
+            dim: screen.dim(),
+            italic: screen.italic(),
+            underline: screen.underline(),
+            inverse: screen.inverse(),
+        }
+    }
+
+    fn from_cell(cell: &vt100::Cell) -> Self {
+        Self {
+            foreground: cell.fgcolor(),
+            background: cell.bgcolor(),
+            bold: cell.bold(),
+            dim: cell.dim(),
+            italic: cell.italic(),
+            underline: cell.underline(),
+            inverse: cell.inverse(),
+        }
+    }
+
+    fn default_cell() -> Self {
+        Self {
+            foreground: vt100::Color::Default,
+            background: vt100::Color::Default,
+            bold: false,
+            dim: false,
+            italic: false,
+            underline: false,
+            inverse: false,
+        }
+    }
+
+    fn write_canonical_sgr(self, output: &mut String) {
+        let mut codes = vec!["0".to_string()];
+        if self.bold {
+            codes.push("1".to_string());
+        }
+        if self.dim {
+            codes.push("2".to_string());
+        }
+        if self.italic {
+            codes.push("3".to_string());
+        }
+        if self.underline {
+            codes.push("4".to_string());
+        }
+        if self.inverse {
+            codes.push("7".to_string());
+        }
+        append_color_codes(&mut codes, self.foreground, 38);
+        append_color_codes(&mut codes, self.background, 48);
+        output.push_str("\x1b[");
+        output.push_str(&codes.join(";"));
+        output.push('m');
+    }
+}
+
+fn append_color_codes(codes: &mut Vec<String>, color: vt100::Color, prefix: u8) {
+    match color {
+        vt100::Color::Default => {}
+        vt100::Color::Idx(index) => {
+            codes.push(prefix.to_string());
+            codes.push("5".to_string());
+            codes.push(index.to_string());
+        }
+        vt100::Color::Rgb(red, green, blue) => {
+            codes.push(prefix.to_string());
+            codes.push("2".to_string());
+            codes.push(red.to_string());
+            codes.push(green.to_string());
+            codes.push(blue.to_string());
+        }
+    }
+}
+
+/// One absolute terminal row in an exact raw-state capture.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RawTerminalRow {
+    pub row: u16,
+    pub wrapped: bool,
+    pub cells: Vec<vt100::Cell>,
+}
+
+/// Exact observable terminal state for a selected range of absolute rows.
+///
+/// Equality is deliberately stricter than the older grid comparators: it
+/// preserves empty versus written-space cells, exact colors and attributes,
+/// wide-cell flags, row wrapping, cursor state, dimensions, and all terminal
+/// modes exposed by `vt100`. The ANSI and plain grids are review projections;
+/// equality of this raw structure remains the parity authority.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RawTerminalSnapshot {
+    pub terminal_size: (u16, u16),
+    pub captured_rows: std::ops::Range<u16>,
+    pub scrollback: usize,
+    pub cursor_position: (u16, u16),
+    pub alternate_screen: bool,
+    pub application_keypad: bool,
+    pub application_cursor: bool,
+    pub cursor_hidden: bool,
+    pub bracketed_paste: bool,
+    pub mouse_protocol_mode: vt100::MouseProtocolMode,
+    pub mouse_protocol_encoding: vt100::MouseProtocolEncoding,
+    pub active_attributes: RawTerminalAttributes,
+    pub rows: Vec<RawTerminalRow>,
+}
+
+impl RawTerminalSnapshot {
+    /// Capture every physical cell in `rows`, without normalization.
+    #[must_use]
+    pub fn capture_rows(screen: &vt100::Screen, rows: std::ops::Range<u16>) -> Self {
+        let terminal_size = screen.size();
+        assert!(
+            rows.start <= rows.end && rows.end <= terminal_size.0,
+            "captured row range {rows:?} is outside terminal height {}",
+            terminal_size.0,
+        );
+
+        let captured = rows
+            .clone()
+            .map(|row| RawTerminalRow {
+                row,
+                wrapped: screen.row_wrapped(row),
+                cells: (0..terminal_size.1)
+                    .map(|col| {
+                        screen
+                            .cell(row, col)
+                            .unwrap_or_else(|| panic!("terminal cell ({row}, {col}) is absent"))
+                            .clone()
+                    })
+                    .collect(),
+            })
+            .collect();
+
+        Self {
+            terminal_size,
+            captured_rows: rows,
+            scrollback: screen.scrollback(),
+            cursor_position: screen.cursor_position(),
+            alternate_screen: screen.alternate_screen(),
+            application_keypad: screen.application_keypad(),
+            application_cursor: screen.application_cursor(),
+            cursor_hidden: screen.hide_cursor(),
+            bracketed_paste: screen.bracketed_paste(),
+            mouse_protocol_mode: screen.mouse_protocol_mode(),
+            mouse_protocol_encoding: screen.mouse_protocol_encoding(),
+            active_attributes: RawTerminalAttributes::from_screen(screen),
+            rows: captured,
+        }
+    }
+
+    /// Canonically re-encode the captured cells with ANSI SGR styling.
+    ///
+    /// This is intentionally derived from terminal state, not copied from the
+    /// editor's original byte stream, because different command sequences can
+    /// create the same exact terminal cells.
+    #[must_use]
+    pub fn ansi_grid(&self) -> String {
+        let mut output = String::new();
+        let default = RawTerminalAttributes::default_cell();
+
+        for row in &self.rows {
+            let mut active = default;
+            for cell in &row.cells {
+                if cell.is_wide_continuation() {
+                    continue;
+                }
+                let attributes = RawTerminalAttributes::from_cell(cell);
+                if attributes != active {
+                    attributes.write_canonical_sgr(&mut output);
+                    active = attributes;
+                }
+                if cell.has_contents() {
+                    output.push_str(cell.contents());
+                } else {
+                    output.push(' ');
+                }
+            }
+            output.push_str("\x1b[0m\n");
+        }
+
+        output
+    }
+
+    /// Render a control-free, fixed-cell view of the captured rows.
+    ///
+    /// `∅` is an unwritten cell, `␠` is a written space, and `›` is a
+    /// wide-character continuation cell. These visible markers keep the view
+    /// readable without normalizing terminal cells that compare differently.
+    #[must_use]
+    pub fn plain_grid(&self) -> String {
+        let label_width = usize::max(2, self.terminal_size.0.saturating_sub(1).to_string().len());
+        let mut output = String::new();
+
+        for row in &self.rows {
+            output.push_str(&format!("{:>label_width$} |", row.row));
+            for cell in &row.cells {
+                if cell.is_wide_continuation() {
+                    output.push('›');
+                } else if !cell.has_contents() {
+                    output.push('∅');
+                } else if cell.contents() == " " {
+                    output.push('␠');
+                } else {
+                    output.push_str(cell.contents());
+                }
+            }
+            output.push('|');
+            if row.wrapped {
+                output.push_str(" ↩");
+            }
+            output.push('\n');
+        }
+
+        output
+    }
+
+    /// List every exact-state difference from the GNU snapshot to Neomacs.
+    ///
+    /// Consecutive cells with the same pair of states are reported as a
+    /// coordinate range. This only compacts the diagnostic; no mismatch is
+    /// ignored or treated as equal.
+    #[must_use]
+    pub fn exact_differences(&self, neomacs: &Self) -> Vec<String> {
+        let mut differences = Vec::new();
+
+        macro_rules! compare_field {
+            ($field:ident) => {
+                if self.$field != neomacs.$field {
+                    differences.push(format!(
+                        "{}: GNU {:?} | Neomacs {:?}",
+                        stringify!($field),
+                        self.$field,
+                        neomacs.$field,
+                    ));
+                }
+            };
+        }
+
+        compare_field!(terminal_size);
+        compare_field!(captured_rows);
+        compare_field!(scrollback);
+        compare_field!(cursor_position);
+        compare_field!(alternate_screen);
+        compare_field!(application_keypad);
+        compare_field!(application_cursor);
+        compare_field!(cursor_hidden);
+        compare_field!(bracketed_paste);
+        compare_field!(mouse_protocol_mode);
+        compare_field!(mouse_protocol_encoding);
+        compare_field!(active_attributes);
+
+        if self.rows.len() != neomacs.rows.len() {
+            differences.push(format!(
+                "row count: GNU {} | Neomacs {}",
+                self.rows.len(),
+                neomacs.rows.len(),
+            ));
+        }
+
+        for (gnu_row, neo_row) in self.rows.iter().zip(&neomacs.rows) {
+            if gnu_row.row != neo_row.row {
+                differences.push(format!(
+                    "row index: GNU {} | Neomacs {}",
+                    gnu_row.row, neo_row.row,
+                ));
+            }
+            if gnu_row.wrapped != neo_row.wrapped {
+                differences.push(format!(
+                    "row {} wrapped: GNU {} | Neomacs {}",
+                    gnu_row.row, gnu_row.wrapped, neo_row.wrapped,
+                ));
+            }
+            if gnu_row.cells.len() != neo_row.cells.len() {
+                differences.push(format!(
+                    "row {} cell count: GNU {} | Neomacs {}",
+                    gnu_row.row,
+                    gnu_row.cells.len(),
+                    neo_row.cells.len(),
+                ));
+            }
+
+            let mut col = 0;
+            let common_cells = usize::min(gnu_row.cells.len(), neo_row.cells.len());
+            while col < common_cells {
+                if gnu_row.cells[col] == neo_row.cells[col] {
+                    col += 1;
+                    continue;
+                }
+
+                let start = col;
+                let gnu_description = raw_cell_description(&gnu_row.cells[col]);
+                let neo_description = raw_cell_description(&neo_row.cells[col]);
+                col += 1;
+                while col < common_cells
+                    && gnu_row.cells[col] != neo_row.cells[col]
+                    && raw_cell_description(&gnu_row.cells[col]) == gnu_description
+                    && raw_cell_description(&neo_row.cells[col]) == neo_description
+                {
+                    col += 1;
+                }
+
+                let coordinate = if col == start + 1 {
+                    format!("col {start}")
+                } else {
+                    format!("cols {start}..={}", col - 1)
+                };
+                differences.push(format!(
+                    "row {} {coordinate}: GNU {gnu_description} | Neomacs {neo_description}",
+                    gnu_row.row,
+                ));
+            }
+        }
+
+        differences
+    }
+}
+
+fn raw_cell_description(cell: &vt100::Cell) -> String {
+    let mut attributes = Vec::new();
+    if cell.bold() {
+        attributes.push("bold");
+    }
+    if cell.dim() {
+        attributes.push("dim");
+    }
+    if cell.italic() {
+        attributes.push("italic");
+    }
+    if cell.underline() {
+        attributes.push("underline");
+    }
+    if cell.inverse() {
+        attributes.push("inverse");
+    }
+
+    format!(
+        "contents={:?} fg={:?} bg={:?} attrs=[{}] wide={} continuation={}",
+        cell.contents(),
+        cell.fgcolor(),
+        cell.bgcolor(),
+        attributes.join(","),
+        cell.is_wide(),
+        cell.is_wide_continuation(),
+    )
+}
+
+/// Assert exact raw terminal-state parity and report every mismatched range.
+pub fn assert_raw_terminal_snapshots_eq(
+    label: &str,
+    gnu: &RawTerminalSnapshot,
+    neomacs: &RawTerminalSnapshot,
+) {
+    let differences = gnu.exact_differences(neomacs);
+    assert!(
+        differences.is_empty(),
+        "{label}: {} exact terminal-state difference(s):\n{}",
+        differences.len(),
+        differences.join("\n"),
+    );
+}
+
 /// A single cell difference between two screens.
 #[derive(Debug)]
 pub struct CellDiff {

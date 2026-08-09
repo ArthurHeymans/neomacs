@@ -1,7 +1,8 @@
 use std::ops::Range;
 use std::time::Duration;
 
-use neomacs_tui_tests::{StrictGridOptions, assert_grids_strict};
+use expect_test::expect;
+use neomacs_tui_tests::{RawTerminalSnapshot, assert_raw_terminal_snapshots_eq};
 
 use crate::{COMPAT_GNU_ELPA_PIN, CachedMelpaOracle, VERTICO_MELPA_PIN};
 
@@ -66,16 +67,27 @@ fn vertico_real_minibuffer_candidates_and_selection_match_gnu_grid() {
     let gnu_rows = candidate_rows(&pair.gnu.text_grid());
     let neo_rows = candidate_rows(&pair.neo.text_grid());
     assert_eq!(neo_rows, gnu_rows, "Vertico candidate rows differ from GNU");
-    let options = StrictGridOptions {
-        row_range: Some(covered_rows(&gnu_rows)),
-        compare_faces: true,
-        ..StrictGridOptions::default()
-    };
-    assert_grids_strict(
-        "Vertico candidate grid",
-        pair.gnu.screen(),
-        pair.neo.screen(),
-        &options,
+    let candidate_rows = covered_rows(&gnu_rows);
+    let gnu_snapshot = RawTerminalSnapshot::capture_rows(pair.gnu.screen(), candidate_rows.clone());
+    let neo_snapshot = RawTerminalSnapshot::capture_rows(pair.neo.screen(), candidate_rows);
+
+    let expected_ansi_grid = expect![[r#"
+        [0;38;2;173;216;230;48;2;85;107;47mproject-[0;1;48;2;85;107;47mb[0;48;2;85;107;47meta                                                                                                                                                    [0m
+        [0;38;2;173;216;230mproject-[0;1ma[0mlpha                                                                                                                                                   [0m
+        [0;38;2;173;216;230mproject-[0;1mn[0motes                                                                                                                                                   [0m
+    "#]];
+    expected_ansi_grid.assert_eq(&gnu_snapshot.ansi_grid());
+    let expected_plain_grid = expect![[r#"
+        45 |project-beta␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠␠|
+        46 |project-alpha∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅|
+        47 |project-notes∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅∅|
+    "#]];
+    expected_plain_grid.assert_eq(&gnu_snapshot.plain_grid());
+
+    assert_raw_terminal_snapshots_eq(
+        "Vertico candidate terminal state",
+        &gnu_snapshot,
+        &neo_snapshot,
     );
 
     for session in [&mut pair.gnu, &mut pair.neo] {

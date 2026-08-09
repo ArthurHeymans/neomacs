@@ -1,4 +1,4 @@
 //! Interactive package parity through the shared PTY/grid adapter.
 
 mod support;
-mod vertico;
+mod vertico_test;
