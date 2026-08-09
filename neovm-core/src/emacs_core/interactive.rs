@@ -913,6 +913,74 @@ impl InteractiveControlLetter {
             Self::CodingSystem => 'z',
         }
     }
+
+    /// How this letter's arguments are written into `command-history`, one
+    /// entry per argument the letter contributes.
+    ///
+    /// The slice length is the letter's argument count, which is what keeps
+    /// this table in step with the arguments the spec walk actually pushes;
+    /// `every_letter_reports_one_history_form_per_argument_it_pushes` checks
+    /// the two against each other.
+    ///
+    /// The position-reading letters are GNU's `varies' codes 1-6
+    /// (callint.c:151-153, assigned at :510, :631 and :679-681).
+    fn history_forms(self) -> &'static [ArgHistoryForm] {
+        match self {
+            Self::Point => &[ArgHistoryForm::Call("point")],
+            Self::Mark => &[ArgHistoryForm::Call("mark")],
+            Self::Region => &[
+                ArgHistoryForm::Call("region-beginning"),
+                ArgHistoryForm::Call("region-end"),
+            ],
+            Self::ActiveRegion => &[
+                ArgHistoryForm::Call("use-region-beginning"),
+                ArgHistoryForm::Call("use-region-end"),
+            ],
+            _ => &[ArgHistoryForm::ByValue],
+        }
+    }
+}
+
+/// How one interactive argument is written into `command-history`.
+///
+/// GNU keeps this in the `varies' array of `Fcall_interactively'
+/// (callint.c:447): an argument that came from point, the mark or the region
+/// is recorded as a call to the function that produced it, so replaying the
+/// entry through `repeat-complex-command' re-reads the *current* position
+/// rather than the one that happened to be current when the command ran.
+/// Every other argument is recorded by value.
+///
+/// Which form an argument takes is fixed by the spec letter that produced it,
+/// never by the value it produced -- `R' records the `use-region-*' calls even
+/// when the region was inactive and both arguments came out nil.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ArgHistoryForm {
+    ByValue,
+    Call(&'static str),
+}
+
+impl ArgHistoryForm {
+    /// GNU's `visargs[i]` assignment (callint.c:780-782).
+    fn record(self, value: Value) -> Value {
+        match self {
+            Self::ByValue => quotify_history_arg(value),
+            Self::Call(function) => Value::list(vec![Value::symbol(function)]),
+        }
+    }
+}
+
+/// GNU's `quotify_arg` (callint.c:127): wrap the argument in `quote` unless it
+/// already evaluates to itself.  Conses and symbols other than nil and t need
+/// the quote; numbers, strings, vectors and the two self-evaluating symbols do
+/// not.
+fn quotify_history_arg(value: Value) -> Value {
+    let needs_quote =
+        value.is_cons() || (value.as_symbol_id().is_some() && !value.is_nil() && value != Value::T);
+    if needs_quote {
+        Value::list(vec![Value::symbol("quote"), value])
+    } else {
+        value
+    }
 }
 
 /// Environment in which GNU `call-interactively` evaluates a Lisp-form
@@ -2450,14 +2518,111 @@ pub(crate) fn plan_call_interactively_after_interactive_form_in_state(
     })
 }
 
+/// The `command-history` form of each argument a string spec produces.
+///
+/// Returns `None` when the flattened table does not cover the arguments that
+/// were actually resolved, which can only happen if a spec letter's argument
+/// count drifts from `history_forms`; recording every argument by value is
+/// then still correct for all but the position letters.
+fn string_code_history_forms(
+    code: &crate::heap_types::LispString,
+    arg_count: usize,
+) -> Option<Vec<ArgHistoryForm>> {
+    let mut forms = Vec::with_capacity(arg_count);
+    for (letter, _) in parse_interactive_code_entries(code).entries {
+        forms.extend_from_slice(InteractiveControlLetter::from_char(letter)?.history_forms());
+    }
+    (forms.len() == arg_count).then_some(forms)
+}
+
+/// GNU's `fix_command` (callint.c:175), which runs only for a Lisp-form
+/// interactive spec.  It substitutes the replacements a command declares in its
+/// `interactive-args` property, then drops trailing nil optional arguments so
+/// the entry reads the way the user would type it.
+fn fix_recorded_command_args(eval: &mut Context, function: Value, args: &mut Vec<Value>) {
+    if args.is_empty() || function.as_symbol_id().is_none() {
+        return;
+    }
+
+    let reps = function
+        .as_symbol_id()
+        .and_then(|symbol| {
+            eval.obarray
+                .get_property_id(symbol, intern("interactive-args"))
+        })
+        .unwrap_or(Value::NIL);
+    if reps.is_cons() {
+        for (index, arg) in args.iter_mut().enumerate() {
+            let key = Value::fixnum(index as i64);
+            let mut tail = reps;
+            while tail.is_cons() {
+                let entry = tail.cons_car();
+                if entry.is_cons() && entry.cons_car() == key {
+                    *arg = entry.cons_cdr();
+                    break;
+                }
+                tail = tail.cons_cdr();
+            }
+        }
+    }
+
+    // A `&rest' function has no fixed maximum arity, and GNU deliberately
+    // leaves its trailing nils alone: they may be meaningful positionals.
+    let Some((min_args, _max_args)) = fixed_arity_of_function(eval, function) else {
+        return;
+    };
+    let Some(last_non_nil) = args.iter().rposition(|arg| !arg.is_nil()) else {
+        return;
+    };
+    if last_non_nil > 0 && last_non_nil + 1 >= min_args {
+        args.truncate(last_non_nil + 1);
+    }
+}
+
+/// The `(MIN . MAX)` arity of FUNCTION when both ends are fixnums, matching
+/// GNU's `FIXNUMP (XCAR (arity)) && FIXNUMP (XCDR (arity))` guard.
+fn fixed_arity_of_function(eval: &mut Context, function: Value) -> Option<(usize, usize)> {
+    let arity = eval
+        .apply(Value::symbol("func-arity"), vec![function])
+        .ok()?;
+    if !arity.is_cons() {
+        return None;
+    }
+    let min = arity.cons_car().as_fixnum()?;
+    let max = arity.cons_cdr().as_fixnum()?;
+    Some((min.max(0) as usize, max.max(0) as usize))
+}
+
 fn record_call_interactively_command_history(
     eval: &mut Context,
     invocation_function: Value,
+    interactive_spec: &ParsedInteractiveSpec,
     call_args: &[Value],
 ) -> Result<(), Flow> {
-    let mut command = Vec::with_capacity(call_args.len() + 1);
+    let mut recorded: Vec<Value> = match interactive_spec {
+        ParsedInteractiveSpec::StringCode(code) => {
+            let forms = string_code_history_forms(code, call_args.len());
+            call_args
+                .iter()
+                .enumerate()
+                .map(|(index, arg)| {
+                    forms
+                        .as_ref()
+                        .map_or(ArgHistoryForm::ByValue, |forms| forms[index])
+                        .record(*arg)
+                })
+                .collect()
+        }
+        _ => {
+            let mut args: Vec<Value> = call_args.iter().copied().map(quotify_history_arg).collect();
+            fix_recorded_command_args(eval, invocation_function, &mut args);
+            args
+        }
+    };
+
+    let mut command = Vec::with_capacity(recorded.len() + 1);
     command.push(invocation_function);
-    command.extend(call_args.iter().copied());
+    command.append(&mut recorded);
     let command = Value::list(command);
 
     if eval.obarray.fboundp("add-to-history") {
@@ -2501,7 +2666,12 @@ pub(crate) fn finish_call_interactively_in_eval(
     }
     let result = (|| -> EvalResult {
         if should_record {
-            record_call_interactively_command_history(eval, plan.invocation_function, &call_args)?;
+            record_call_interactively_command_history(
+                eval,
+                plan.invocation_function,
+                &plan.interactive_spec,
+                &call_args,
+            )?;
         }
         let mut funcall_args = Vec::with_capacity(call_args.len() + 1);
         funcall_args.push(plan.invocation_function);

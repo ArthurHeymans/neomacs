@@ -5993,3 +5993,133 @@ fn a_spine_tail_naming_no_keymap_ends_the_spine() {
     );
     assert_eq!(result, "OK (t t t)");
 }
+
+/// GNU's `quotify_arg' (callint.c:127) wraps an argument in `quote' when it is
+/// a cons, or a symbol other than nil and t -- exactly the values that would
+/// not evaluate to themselves when `repeat-complex-command' re-reads the entry.
+/// Numbers, strings and vectors are recorded bare.
+#[test]
+fn command_history_quotes_arguments_that_do_not_evaluate_to_themselves() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(progn
+             (defun p9-hist-raw (arg) (interactive "P") arg)
+             (defun p9-hist-sym (s) (interactive (list 'a-symbol)) s)
+             (defun p9-hist-lit (s v n) (interactive (list "txt" [1 2] 7)) (list s v n))
+             (defun p9-hist-bool (x y) (interactive (list t nil)) (list x y))
+             (setq command-history nil)
+             (let ((current-prefix-arg '(4))) (call-interactively 'p9-hist-raw t))
+             (call-interactively 'p9-hist-sym t)
+             (call-interactively 'p9-hist-lit t)
+             (call-interactively 'p9-hist-bool t)
+             (mapcar #'prin1-to-string (reverse command-history)))"#,
+    );
+    assert_eq!(
+        result,
+        r#"OK ("(p9-hist-raw '(4))" "(p9-hist-sym 'a-symbol)" "(p9-hist-lit \"txt\" [1 2] 7)" "(p9-hist-bool t nil)")"#
+    );
+}
+
+/// GNU's `varies' array (callint.c:781) records an argument that came from
+/// point, the mark or the region as a call to the function that produced it,
+/// so replaying the entry re-reads the *current* position instead of the one
+/// that happened to be current when the command ran.
+#[test]
+fn command_history_records_position_arguments_as_the_calls_that_produced_them() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(with-temp-buffer
+             (defun p9-hist-d (p) (interactive "d") p)
+             (defun p9-hist-m (m) (interactive "m") m)
+             (defun p9-hist-r (b e) (interactive "r") (list b e))
+             (defun p9-hist-cap-r (b e) (interactive "R") (list b e))
+             (insert "hello world")
+             (set-mark 3)
+             (goto-char 8)
+             (setq command-history nil)
+             (call-interactively 'p9-hist-d t)
+             (call-interactively 'p9-hist-m t)
+             (call-interactively 'p9-hist-r t)
+             (call-interactively 'p9-hist-cap-r t)
+             (mapcar #'prin1-to-string (reverse command-history)))"#,
+    );
+    assert_eq!(
+        result,
+        r#"OK ("(p9-hist-d (point))" "(p9-hist-m (mark))" "(p9-hist-r (region-beginning) (region-end))" "(p9-hist-cap-r (use-region-beginning) (use-region-end))")"#
+    );
+}
+
+/// GNU's `fix_command' (callint.c:175) rewrites the recorded arguments of a
+/// command carrying an `interactive-args' property, then drops trailing nil
+/// optional arguments so the history entry reads as the user would type it.
+/// The trim is skipped for a `&rest' function, whose arity has no fixed max.
+#[test]
+fn command_history_applies_interactive_args_and_trims_trailing_optional_nils() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(progn
+             (defun p9-fix-reps (a b) (interactive (list 'val 'other)) (list a b))
+             (put 'p9-fix-reps 'interactive-args '((1 . (some-form))))
+             (defun p9-fix-trim (a b &optional c d) (interactive (list 'x 'y nil nil))
+               (list a b c d))
+             (defun p9-fix-keep (a &optional b) (interactive (list nil nil)) (list a b))
+             (defun p9-fix-rest (a &rest r) (interactive (list 'x nil nil)) (list a r))
+             (setq command-history nil)
+             (call-interactively 'p9-fix-reps t)
+             (call-interactively 'p9-fix-trim t)
+             (call-interactively 'p9-fix-keep t)
+             (call-interactively 'p9-fix-rest t)
+             (mapcar #'prin1-to-string (reverse command-history)))"#,
+    );
+    assert_eq!(
+        result,
+        r#"OK ("(p9-fix-reps 'val (some-form))" "(p9-fix-trim 'x 'y)" "(p9-fix-keep nil nil)" "(p9-fix-rest 'x nil nil)")"#
+    );
+}
+
+/// The `history_forms` slice length is a letter's argument count, so the table
+/// must agree with the arguments the spec walk actually pushes.  Checked here
+/// for every letter that reads no input, which covers both letters GNU gives a
+/// two-argument entry.
+#[test]
+fn every_letter_reports_one_history_form_per_argument_it_pushes() {
+    crate::test_utils::init_test_tracing();
+    for letter in InteractiveControlLetter::iter() {
+        let forms = letter.history_forms().len();
+        let expected = match letter {
+            InteractiveControlLetter::Region | InteractiveControlLetter::ActiveRegion => 2,
+            _ => 1,
+        };
+        assert_eq!(
+            forms,
+            expected,
+            "history_forms arity for spec letter {}",
+            letter.letter()
+        );
+    }
+
+    // The letters that resolve without reading input, walked for real.
+    let result = bootstrap_eval_one(
+        r#"(with-temp-buffer
+             (defun p9-arity (&rest args) (interactive "d\nm\nr\nR\ni\nP\np\nU") (length args))
+             (insert "hello world")
+             (set-mark 3)
+             (goto-char 8)
+             (call-interactively 'p9-arity t))"#,
+    );
+    let walked: usize = result
+        .strip_prefix("OK ")
+        .expect("spec walk should succeed")
+        .parse()
+        .expect("argument count");
+    let tabled: usize = "dmrRiPpU"
+        .chars()
+        .map(|letter| {
+            InteractiveControlLetter::from_char(letter)
+                .expect("known spec letter")
+                .history_forms()
+                .len()
+        })
+        .sum();
+    assert_eq!(walked, tabled, "spec walk arity vs history_forms arity");
+}
