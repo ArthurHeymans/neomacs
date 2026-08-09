@@ -182,6 +182,7 @@ impl<'a> OverlayStringRenderRowContext<'a> {
             face_width: self.metrics.char_width(),
             face_height: self.metrics.row_height(),
             face_ascent: self.metrics.ascent(),
+            foreground: neomacs_display_protocol::types::Color::from_pixel(base_face.fg),
             background: neomacs_display_protocol::types::Color::from_pixel(base_face.bg),
         }
     }

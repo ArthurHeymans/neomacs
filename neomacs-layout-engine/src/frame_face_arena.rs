@@ -399,7 +399,6 @@ impl FrameFaceAttempt {
         self.state.borrow().faces.clone()
     }
 
-    #[cfg(test)]
     pub(crate) fn face(&self, face_id: FaceId) -> Option<Face> {
         self.state.borrow().faces.get(&face_id).cloned()
     }

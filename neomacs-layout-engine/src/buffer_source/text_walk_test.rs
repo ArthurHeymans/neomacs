@@ -50,6 +50,7 @@ fn window_params() -> WindowParams {
         cursor_bar_width: neomacs_display_protocol::cursor::CursorBarWidth::TWO,
         x_stretch_cursor: false,
         cursor_color: 0x00ff_ffff,
+        cursor_foreground: 0,
         cursor_effects: None,
         visual_cursors: Vec::new(),
         left_fringe_width: 8.0,

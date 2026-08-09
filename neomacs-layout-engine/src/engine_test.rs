@@ -1,8 +1,9 @@
 use super::*;
 use crate::display_cursor::{
     CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
-    CursorGeometryContext, CursorGeometrySource, VisualTextWindowCursorPublishContext,
-    VisualTextWindowCursorPublishSummary, cursor_style_for_window,
+    CursorGeometryContext, CursorGeometrySource, CursorGlyphFaceColors, ResolvedBoxCursorPaint,
+    VisualTextWindowCursorPublishContext, VisualTextWindowCursorPublishSummary,
+    cursor_style_for_window,
 };
 use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
@@ -516,6 +517,7 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
         face_w: 7.0,
         face_h: 14.0,
         face_ascent: 10.0,
+        fg: Color::WHITE,
         bg: Color::from_pixel(0x00112233),
         byte_idx: 5,
         col: 3,
@@ -542,6 +544,43 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
     assert_eq!(captured.x, 1.0);
     assert_eq!(captured.byte_idx, 5);
     assert_eq!(captured.slot_width, Some(12.5));
+}
+
+#[test]
+fn gnu_box_cursor_uses_glyph_background_as_its_glyph_foreground() {
+    let paint = ResolvedBoxCursorPaint::resolve_gnu(
+        Color::BLACK,
+        CursorGlyphFaceColors::new(Color::BLACK, Color::WHITE),
+        Color::WHITE,
+    );
+
+    assert_eq!(paint.background, Color::BLACK);
+    assert_eq!(paint.glyph_foreground, Color::WHITE);
+}
+
+#[test]
+fn gnu_box_cursor_falls_back_and_swaps_when_cursor_matches_glyph_background() {
+    let red = Color::from_pixel(0x00ff0000);
+    let paint = ResolvedBoxCursorPaint::resolve_gnu(
+        Color::BLACK,
+        CursorGlyphFaceColors::new(red, Color::BLACK),
+        Color::WHITE,
+    );
+
+    assert_eq!(paint.background, red);
+    assert_eq!(paint.glyph_foreground, Color::BLACK);
+}
+
+#[test]
+fn gnu_box_cursor_uses_frame_cursor_foreground_as_last_contrast_fallback() {
+    let paint = ResolvedBoxCursorPaint::resolve_gnu(
+        Color::BLACK,
+        CursorGlyphFaceColors::new(Color::BLACK, Color::BLACK),
+        Color::WHITE,
+    );
+
+    assert_eq!(paint.background, Color::BLACK);
+    assert_eq!(paint.glyph_foreground, Color::WHITE);
 }
 
 #[test]
@@ -1029,6 +1068,7 @@ fn captured_cursor_info_builds_from_visual_state() {
             face_width: 9.0,
             face_height: 22.0,
             face_ascent: 17.0,
+            foreground: Color::WHITE,
             background: Color::from_pixel(0x00112233),
         },
         CapturedCursorPlacement {
@@ -1062,6 +1102,7 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
             face_width: 9.0,
             face_height: 22.0,
             face_ascent: 17.0,
+            foreground: Color::WHITE,
             background: Color::from_pixel(0x00112233),
         },
         CapturedCursorPlacement {
@@ -1105,7 +1146,10 @@ fn cursor_geometry_source_builds_from_captured_cursor_and_row_metrics() {
     assert_eq!(source.default_line_height, 16.0);
     assert!(source.stretch_like);
     assert!(source.ends_at_visible_eob);
-    assert_eq!(source.cursor_fg, Color::from_pixel(0x00112233));
+    assert_eq!(
+        source.glyph_face,
+        CursorGlyphFaceColors::new(Color::WHITE, Color::from_pixel(0x00112233))
+    );
 }
 
 #[test]
@@ -1126,6 +1170,7 @@ fn cursor_geometry_source_builds_from_display_point_snapshot() {
             window_id: -10,
             text_area_left: 100.0,
             window_top: 7.0,
+            glyph_face: CursorGlyphFaceColors::new(Color::WHITE, Color::BLACK),
         },
     );
 
@@ -1147,7 +1192,10 @@ fn cursor_geometry_source_builds_from_display_point_snapshot() {
     assert_eq!(source.default_line_height, 19.0);
     assert!(!source.stretch_like);
     assert!(!source.ends_at_visible_eob);
-    assert_eq!(source.cursor_fg, Color::BLACK);
+    assert_eq!(
+        source.glyph_face,
+        CursorGlyphFaceColors::new(Color::WHITE, Color::BLACK)
+    );
 }
 
 #[test]
@@ -1157,6 +1205,7 @@ fn captured_cursor_info_resolves_explicit_slot_width_before_style_width() {
             face_width: 9.0,
             face_height: 22.0,
             face_ascent: 17.0,
+            foreground: Color::WHITE,
             background: Color::from_pixel(0x00112233),
         },
         CapturedCursorPlacement {
@@ -1184,6 +1233,7 @@ fn captured_cursor_info_resolves_missing_slot_width_from_style_width() {
             face_width: 8.0,
             face_height: 22.0,
             face_ascent: 17.0,
+            foreground: Color::WHITE,
             background: Color::from_pixel(0x00112233),
         },
         CapturedCursorPlacement {
@@ -1212,6 +1262,7 @@ fn captured_cursor_info_builds_logical_cursor_position() {
             face_width: 9.0,
             face_height: 22.0,
             face_ascent: 17.0,
+            foreground: Color::WHITE,
             background: Color::from_pixel(0x00112233),
         },
         CapturedCursorPlacement {
@@ -1259,6 +1310,7 @@ fn captured_text_window_cursor_publish_context_publishes_captured_cursor() {
             face_width: 8.0,
             face_height: 16.0,
             face_ascent: 12.0,
+            foreground: Color::WHITE,
             background: Color::from_pixel(0x00112233),
         },
         CapturedCursorPlacement {
@@ -1408,6 +1460,7 @@ fn test_window_params() -> WindowParams {
         cursor_bar_width: CursorBarWidth::TWO,
         x_stretch_cursor: false,
         cursor_color: 0xFFFFFF,
+        cursor_foreground: 0x000000,
         cursor_effects: None,
         visual_cursors: Vec::new(),
         left_fringe_width: 0.0,
@@ -2904,6 +2957,54 @@ fn phase1_cursor_move_is_cursor_only() {
         m.stats.relaid_body_rows < m.total_body_rows,
         "cursor-only drives relaid body rows below the full-rebuild total (got {:?})",
         m.stats
+    );
+}
+
+/// GNU xterm.c:pgtk_set_cursor_gc draws a filled box with the frame cursor
+/// color behind a glyph whose foreground is resolved from that glyph's face
+/// background.  A cursor-only replay must preserve that paint, not replace its
+/// semantic colors with raw black defaults.
+#[test]
+fn cursor_only_move_preserves_gnu_box_cursor_glyph_foreground() {
+    let text = "abcdef\n";
+    let (mut eval, frame_id, buf_id, _window) = incr_editing_frame(text, 800, 600);
+    realize_test_gui_frame(&mut eval, frame_id);
+    let mut engine = LayoutEngine::new();
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let initial = engine
+        .last_frame_display_state
+        .as_ref()
+        .and_then(|state| state.phys_cursor.as_ref())
+        .expect("initial selected-window cursor");
+    assert_eq!(initial.color, Color::BLACK, "GNU -Q cursor background");
+    assert_eq!(
+        initial.cursor_fg,
+        Color::WHITE,
+        "GNU -Q paints the glyph under a black box cursor in white"
+    );
+
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .goto_emacs_byte_pos(EmacsBytePos::new(1));
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        1,
+        "the regression lives in the cursor-only production path"
+    );
+    let moved = engine
+        .last_frame_display_state
+        .as_ref()
+        .and_then(|state| state.phys_cursor.as_ref())
+        .expect("moved selected-window cursor");
+    assert_eq!(moved.color, Color::BLACK, "cursor box remains black");
+    assert_eq!(
+        moved.cursor_fg,
+        Color::WHITE,
+        "the glyph under the moved cursor must remain visible"
     );
 }
 

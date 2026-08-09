@@ -14,7 +14,9 @@ use crate::buffer_source::tail_render::{
 };
 use crate::buffer_source::window_geometry::{BufferWindowGeometry, BufferWindowLocalDisplayPolicy};
 use crate::buffer_source::window_source::BufferWindowSource;
-use crate::display_cursor::CursorVisualColumnResolutionRequest;
+use crate::display_cursor::{
+    CursorGlyphFaceColors, CursorVisualColumnResolutionRequest, ResolvedBoxCursorPaint,
+};
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::face_state::{
     DisplayRowActiveFaceState, DisplayRowMeasurementMode, DisplayRowMeasurementPolicy,
@@ -149,6 +151,37 @@ fn publish_fast_path_cursor(
     );
 }
 
+fn replay_cursor_paint(
+    output: &mut TextWindowOutputTarget<'_>,
+    cursor_row: usize,
+    point: usize,
+    params: &WindowParams,
+) -> ResolvedBoxCursorPaint {
+    let fallback_face = CursorGlyphFaceColors::new(
+        Color::from_pixel(params.default_fg),
+        Color::from_pixel(params.default_bg),
+    );
+    let glyph_face_id = output
+        .builder()
+        .current_window_row(cursor_row)
+        .and_then(|row| {
+            row.glyphs[GlyphArea::Text.index()]
+                .iter()
+                .find(|glyph| glyph.charpos == point)
+                .map(|glyph| glyph.face_id)
+        });
+    let glyph_face = glyph_face_id
+        .and_then(|face_id| output.builder().output_face(face_id))
+        .map(|face| CursorGlyphFaceColors::new(face.foreground, face.background))
+        .unwrap_or(fallback_face);
+
+    ResolvedBoxCursorPaint::resolve_gnu(
+        Color::from_pixel(params.cursor_color),
+        glyph_face,
+        Color::from_pixel(params.cursor_foreground),
+    )
+}
+
 /// Re-decorate a window's cursor for the current point on an already-installed
 /// grid row (Phase 2 scroll fast path). Reads the row geometry from the grid,
 /// resolves the visual column, and writes the cursor onto the matrix row + the
@@ -165,7 +198,7 @@ fn decorate_window_cursor(
     cursor_row: usize,
     point: usize,
     style: CursorStyle,
-    selected: bool,
+    params: &WindowParams,
     text_area_left: f32,
     window_top: f32,
     char_w: f32,
@@ -187,6 +220,7 @@ fn decorate_window_cursor(
             None => (0.0, default_height, default_ascent, char_w),
         };
     let window_id_i64 = window_id as i64;
+    let paint = replay_cursor_paint(output, cursor_row, point, params);
     let mut cursor = PhysCursor {
         window_id: DisplayWindowId::new(window_id_i64),
         charpos: point,
@@ -203,8 +237,8 @@ fn decorate_window_cursor(
         height: row_height,
         ascent: row_ascent,
         style,
-        color: Color::BLACK,
-        cursor_fg: Color::BLACK,
+        color: paint.background,
+        cursor_fg: paint.glyph_foreground,
     };
     if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
         .resolve_phys_cursor_placement(output.builder().cursor_visual_column_context())
@@ -216,7 +250,7 @@ fn decorate_window_cursor(
         output,
         output_emitter,
         cursor,
-        selected,
+        params.selected,
         text_area_left,
         window_top,
     );
@@ -665,6 +699,12 @@ impl BufferSourceOutputSetup {
             let cursor = if let Some(retained) = replay.retained_cursor.as_ref() {
                 retained.clone()
             } else {
+                let paint = replay_cursor_paint(
+                    &mut output,
+                    replay.new_cursor_row_index,
+                    replay.new_point as usize,
+                    params,
+                );
                 let mut cursor = PhysCursor {
                     window_id: display_window_id,
                     charpos: replay.new_point as usize,
@@ -681,8 +721,8 @@ impl BufferSourceOutputSetup {
                     height: cursor_height,
                     ascent: cursor_ascent,
                     style: replay.cursor_style,
-                    color: Color::BLACK,
-                    cursor_fg: Color::BLACK,
+                    color: paint.background,
+                    cursor_fg: paint.glyph_foreground,
                 };
                 if let Some(placement) = CursorVisualColumnResolutionRequest::from_cursor(&cursor)
                     .resolve_phys_cursor_placement(output.builder().cursor_visual_column_context())
@@ -912,7 +952,7 @@ impl BufferSourceOutputSetup {
                     cursor_row,
                     scroll.new_point as usize,
                     scroll.cursor_style,
-                    params.selected,
+                    params,
                     walk_setup.text_area_left,
                     walk_setup.window_top,
                     geometry.char_width,

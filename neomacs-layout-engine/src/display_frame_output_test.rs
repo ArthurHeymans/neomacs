@@ -66,6 +66,7 @@ fn window_params() -> WindowParams {
         cursor_bar_width: CursorBarWidth::default(),
         x_stretch_cursor: false,
         cursor_color: 0,
+        cursor_foreground: 0,
         cursor_effects: None,
         visual_cursors: Vec::new(),
         left_fringe_width: 0.0,

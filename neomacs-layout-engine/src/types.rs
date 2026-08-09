@@ -212,6 +212,10 @@ pub struct WindowParams {
     pub x_stretch_cursor: bool,
     /// Cursor color in sRGB pixel format.
     pub cursor_color: u32,
+    /// Foreground used to redraw a glyph inside a filled cursor when the
+    /// glyph face alone cannot provide a contrasting color. Mirrors GNU's
+    /// per-frame `cursor_foreground_pixel` / `cursor_foreground_color`.
+    pub cursor_foreground: u32,
     /// Neomacs-specific cursor effect profile for this window.
     pub cursor_effects: Option<neomacs_display_protocol::effect_config::EffectsConfig>,
     /// Neomacs-only visual cursors for this window's buffer.

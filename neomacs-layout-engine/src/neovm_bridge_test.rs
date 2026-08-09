@@ -929,6 +929,48 @@ fn test_gui_frame_cursor_color_keeps_contrasting_parameter_like_gnu() {
 }
 
 #[test]
+fn test_frame_cursor_foreground_defaults_to_frame_background_like_gnu() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*cursor-foreground*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("test", 800, 600, buf_id);
+    evaluator
+        .frame_manager_mut()
+        .get_mut(frame_id)
+        .unwrap()
+        .set_known_parameter(FrameParam::BackgroundColor, Value::string("#123456"));
+    let frame = evaluator.frame_manager().get(frame_id).unwrap();
+
+    assert_eq!(
+        frame_cursor_foreground_pixel(frame, evaluator.face_table(), evaluator.obarray()),
+        0x123456
+    );
+}
+
+#[test]
+fn test_frame_cursor_foreground_honors_x_cursor_fore_pixel_like_gnu() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*cursor-foreground*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("test", 800, 600, buf_id);
+    evaluator
+        .eval_str("(setq x-cursor-fore-pixel \"#abcdef\")")
+        .expect("set GNU cursor foreground override");
+    let frame = evaluator.frame_manager().get(frame_id).unwrap();
+
+    assert_eq!(
+        frame_cursor_foreground_pixel(frame, evaluator.face_table(), evaluator.obarray()),
+        0xabcdef
+    );
+}
+
+#[test]
 fn test_window_params_buffer_locals() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*locals*");

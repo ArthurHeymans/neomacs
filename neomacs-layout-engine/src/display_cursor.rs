@@ -14,6 +14,69 @@ use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, NO_BUFFER_POSI
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
 
+/// The ordinary face colors of the glyph underneath a cursor.
+///
+/// Keeping this pair typed prevents cursor reconstruction paths from confusing
+/// a glyph foreground with the cursor-box background.  GNU's GUI ports need
+/// both values when they merge the cursor GC with a non-default glyph face.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct CursorGlyphFaceColors {
+    pub(crate) foreground: Color,
+    pub(crate) background: Color,
+}
+
+impl CursorGlyphFaceColors {
+    pub(crate) const fn new(foreground: Color, background: Color) -> Self {
+        Self {
+            foreground,
+            background,
+        }
+    }
+}
+
+/// Fully resolved box-cursor paint, ready for the display protocol.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ResolvedBoxCursorPaint {
+    pub(crate) background: Color,
+    pub(crate) glyph_foreground: Color,
+}
+
+impl ResolvedBoxCursorPaint {
+    /// Port of GNU xterm.c `x_set_cursor_gc` / pgtkterm.c
+    /// `pgtk_set_cursor_gc`.
+    pub(crate) fn resolve_gnu(
+        cursor_background: Color,
+        glyph_face: CursorGlyphFaceColors,
+        frame_cursor_foreground: Color,
+    ) -> Self {
+        let mut paint = Self {
+            background: cursor_background,
+            glyph_foreground: glyph_face.background,
+        };
+
+        if paint.glyph_foreground == paint.background {
+            paint.glyph_foreground = glyph_face.foreground;
+        }
+        if paint.glyph_foreground == paint.background {
+            paint.glyph_foreground = frame_cursor_foreground;
+        }
+        if paint.glyph_foreground == paint.background {
+            paint.glyph_foreground = glyph_face.foreground;
+        }
+
+        // GNU also keeps the cursor visually distinct when the proposed paint
+        // would reproduce the ordinary glyph face unchanged.
+        if paint.background == glyph_face.background
+            && paint.glyph_foreground == glyph_face.foreground
+        {
+            paint.background = glyph_face.foreground;
+            paint.glyph_foreground = glyph_face.background;
+        }
+
+        paint
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CapturedCursorInfo {
     pub(crate) x: f32,
@@ -21,6 +84,7 @@ pub(crate) struct CapturedCursorInfo {
     pub(crate) face_w: f32,
     pub(crate) face_h: f32,
     pub(crate) face_ascent: f32,
+    pub(crate) fg: Color,
     pub(crate) bg: Color,
     pub(crate) byte_idx: usize,
     pub(crate) col: usize,
@@ -277,6 +341,7 @@ pub(crate) struct CapturedCursorVisualState {
     pub(crate) face_width: f32,
     pub(crate) face_height: f32,
     pub(crate) face_ascent: f32,
+    pub(crate) foreground: Color,
     pub(crate) background: Color,
 }
 
@@ -287,6 +352,7 @@ impl CapturedCursorVisualState {
             face_width: metrics.char_width(),
             face_height: metrics.row_height(),
             face_ascent: metrics.ascent(),
+            foreground: Color::from_pixel(active_face_state.resolved_face().fg),
             background: active_face_state.background(),
         }
     }
@@ -301,6 +367,7 @@ impl CapturedCursorVisualState {
             face_width: metrics.char_width(),
             face_height,
             face_ascent,
+            foreground: Color::from_pixel(active_face_state.resolved_face().fg),
             background: active_face_state.background(),
         }
     }
@@ -361,6 +428,7 @@ impl CapturedCursorInfo {
             face_w: visual_state.face_width,
             face_h: visual_state.face_height,
             face_ascent: visual_state.face_ascent,
+            fg: visual_state.foreground,
             bg: visual_state.background,
             byte_idx: placement.byte_idx,
             col: placement.col,
@@ -439,7 +507,7 @@ pub(crate) struct CursorGeometrySource {
     pub(crate) default_line_height: f32,
     pub(crate) stretch_like: bool,
     pub(crate) ends_at_visible_eob: bool,
-    pub(crate) cursor_fg: Color,
+    pub(crate) glyph_face: CursorGlyphFaceColors,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -455,6 +523,7 @@ pub(crate) struct VisualCursorGeometryContext {
     pub(crate) window_id: i64,
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
+    pub(crate) glyph_face: CursorGlyphFaceColors,
 }
 
 impl CursorGeometrySource {
@@ -479,7 +548,7 @@ impl CursorGeometrySource {
             default_line_height: context.default_line_height,
             stretch_like: cursor.stretch_like,
             ends_at_visible_eob: context.ends_at_visible_eob,
-            cursor_fg: cursor.bg,
+            glyph_face: CursorGlyphFaceColors::new(cursor.fg, cursor.bg),
         }
     }
 
@@ -504,7 +573,7 @@ impl CursorGeometrySource {
             default_line_height: point_h,
             stretch_like: false,
             ends_at_visible_eob: false,
-            cursor_fg: Color::BLACK,
+            glyph_face: context.glyph_face,
         }
     }
 }
@@ -684,6 +753,7 @@ pub(crate) fn resolve_cursor_geometry(
     x_stretch_cursor: bool,
     fallback_char_width: f32,
     color: Color,
+    frame_cursor_foreground: Color,
 ) -> ResolvedCursorGeometry {
     let actual_slot_width = match style {
         CursorStyle::Bar(width) => width.max(1.0),
@@ -707,6 +777,9 @@ pub(crate) fn resolve_cursor_geometry(
         source.ends_at_visible_eob,
     );
 
+    let paint =
+        ResolvedBoxCursorPaint::resolve_gnu(color, source.glyph_face, frame_cursor_foreground);
+
     ResolvedCursorGeometry {
         slot_id: source.slot_id,
         x: source.x,
@@ -715,8 +788,8 @@ pub(crate) fn resolve_cursor_geometry(
         height,
         ascent,
         style,
-        color,
-        cursor_fg: source.cursor_fg,
+        color: paint.background,
+        cursor_fg: paint.glyph_foreground,
     }
 }
 
@@ -725,6 +798,7 @@ pub(crate) fn visual_cursor_source_from_point(
     window_id: i64,
     text_area_left: f32,
     window_top: f32,
+    glyph_face: CursorGlyphFaceColors,
 ) -> CursorGeometrySource {
     CursorGeometrySource::from_display_point(
         point,
@@ -732,6 +806,7 @@ pub(crate) fn visual_cursor_source_from_point(
             window_id,
             text_area_left,
             window_top,
+            glyph_face,
         },
     )
 }
@@ -852,6 +927,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
             self.params.x_stretch_cursor,
             self.char_w,
             Color::from_pixel(self.params.cursor_color),
+            Color::from_pixel(self.params.cursor_foreground),
         );
         if resolved_cursor.y < self.text_y
             || resolved_cursor.y + resolved_cursor.height > self.text_y + self.text_height
@@ -958,6 +1034,10 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
                 spec.id as i64,
                 self.text_area_left,
                 self.window_top,
+                CursorGlyphFaceColors::new(
+                    Color::from_pixel(self.params.default_fg),
+                    Color::from_pixel(self.params.default_bg),
+                ),
             );
             let resolved_cursor = resolve_cursor_geometry(
                 style,
@@ -965,6 +1045,7 @@ impl<'a> VisualTextWindowCursorPublishContext<'a> {
                 self.params.x_stretch_cursor,
                 self.char_w,
                 Color::from_pixel(spec.color),
+                Color::from_pixel(self.params.cursor_foreground),
             );
             if resolved_cursor.y < self.text_y
                 || resolved_cursor.y + resolved_cursor.height > self.text_y + self.text_height

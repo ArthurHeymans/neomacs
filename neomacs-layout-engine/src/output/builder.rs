@@ -553,7 +553,6 @@ impl DisplayOutputBuilder {
         self.frame_state.background_color()
     }
 
-    #[cfg(test)]
     pub(crate) fn output_face(&self, face_id: FaceId) -> Option<Face> {
         self.face_attempt.face(face_id)
     }

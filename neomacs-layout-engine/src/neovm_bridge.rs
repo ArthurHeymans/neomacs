@@ -1349,6 +1349,15 @@ fn frame_cursor_color_pixel(frame: &Frame, face_table: &FaceTable) -> u32 {
     frame_foreground_color_pixel(frame, face_table)
 }
 
+fn frame_cursor_foreground_pixel(frame: &Frame, face_table: &FaceTable, obarray: &Obarray) -> u32 {
+    // GNU's Vx_cursor_fore_pixel is a color-name string when explicitly set;
+    // otherwise x_set_cursor_color uses FRAME_BACKGROUND_PIXEL.
+    obarray
+        .symbol_value("x-cursor-fore-pixel")
+        .and_then(|value| parse_color_pixel(&value))
+        .unwrap_or_else(|| frame_background_color_pixel(frame, face_table))
+}
+
 fn cursor_effect_name_from_symbol(value: Value) -> Option<String> {
     effect_name_from_lisp(value, EffectScope::Cursor).ok()
 }
@@ -1732,6 +1741,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         bar_width: CursorBarWidth::DEFAULT,
     });
     let cursor_color = frame_cursor_color_pixel(frame, face_table);
+    let cursor_foreground = frame_cursor_foreground_pixel(frame, face_table, obarray);
     let cursor_effects = parse_cursor_effect_profile(window_cursor_effect).or_else(|| {
         buffer_local_value(buffer, LayoutVar::NeomacsCursorEffect)
             .and_then(parse_cursor_effect_profile)
@@ -1861,6 +1871,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         cursor_bar_width: cursor_spec.bar_width,
         x_stretch_cursor,
         cursor_color,
+        cursor_foreground,
         cursor_effects,
         visual_cursors,
         left_fringe_width: left_fringe,
