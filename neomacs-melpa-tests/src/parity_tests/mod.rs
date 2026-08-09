@@ -557,6 +557,7 @@ mod smeargle;
 mod smex;
 mod solarized_theme;
 mod spaceline;
+mod spacemacs_theme;
 mod spinner;
 mod splitter;
 mod string_inflection;

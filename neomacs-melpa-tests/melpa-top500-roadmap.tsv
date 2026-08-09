@@ -306,7 +306,7 @@ rank	package	downloads	status
 305	eshell-prompt-extras	365232	covered
 306	emacsql-sqlite	363596	todo
 307	js-doc	361741	covered
-308	spacemacs-theme	358823	todo
+308	spacemacs-theme	358823	covered
 309	yapfify	356524	covered
 310	geiser	352871	covered
 311	monokai-theme	351436	covered

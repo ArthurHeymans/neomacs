@@ -5988,3 +5988,7 @@ pub const PUG_MODE_MELPA_PIN: (&str, &str) = ("pug-mode", "20211114.1645");
 /// The exact monokai-theme package selected for practical theme load and palette defaults.
 /// MELPA built this archive from upstream commit `dacd9d8a8867afea3ed76b15a6c997053ff88093`.
 pub const MONOKAI_THEME_MELPA_PIN: (&str, &str) = ("monokai-theme", "20240911.1046");
+
+/// The exact spacemacs-theme package selected for practical theme load and defcustom defaults.
+/// Pinned to upstream commit `cbd290dfde96f53a7b41730c7840850a8a7b8a02`.
+pub const SPACEMACS_THEME_MELPA_PIN: (&str, &str) = ("spacemacs-theme", "0.2");
