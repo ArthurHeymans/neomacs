@@ -71,21 +71,28 @@ single-feature gap, and only one was a harness defect.
 |---|---|
 | auctex_latexmk | already green; nothing was wrong with it |
 | ace_link | HARNESS DEFECT, fixed 5dd14bf22 -- it failed on *both* editors, the signature of a stale expectation. Avy label positions were recorded as buffer offsets, and two workflows build a buffer quoting the sandbox root, so every offset past it carried the path length. Now recorded as line and column |
-| counsel | FIXED 7ac897fee -- `command-history` recorded raw argument values; GNU's `quotify_arg`, `varies` and `fix_command` were all missing |
-| dumb_jump | FIXED 5f926d612 -- `error-message-string` kept text properties GNU strips everywhere but the `(error STRING)` fast path |
-| evil_numbers | FIXED b20ec53b9 -- `replace-match` refused any match data recorded as string-sourced, which is what `set-match-data` from plain integers produces |
-| vi_tilde_fringe | FIXED -- `define-fringe-bitmap` never registered the symbol in `fringe-bitmaps` |
+| counsel | entry 49, FIXED 7ac897fee -- `command-history` recorded raw argument values; GNU's `quotify_arg`, `varies` and `fix_command` were all missing |
+| dumb_jump | entry 50, FIXED 5f926d612 -- `error-message-string` kept text properties GNU strips everywhere but the `(error STRING)` fast path |
+| evil_numbers | entry 51, FIXED b20ec53b9 -- `replace-match` refused any match data recorded as string-sourced, which is what `set-match-data` from plain integers produces |
+| vi_tilde_fringe | entry 52, FIXED 392a9f90c -- `define-fringe-bitmap` never registered the symbol in `fringe-bitmaps` |
 | rainbow_delimiters | entry 44 (sexp scanner ignores `category`) |
 | helm_descbinds | entry 45 (`describe-bindings` omits global bindings and the function-key map) |
 | swiper | entry 46 (query-replace replaces nothing; not reduced below the package) |
-| lsp_mode | entry 47 (undo of a group around a multibyte character restores corrupt text; not reduced below the package) |
+| lsp_mode | entry 47 -- `replace-buffer-contents` cannot be undone; a zero-length deletion is not recorded, so two insertions coalesce. Reduced to pure ASCII; **not a multibyte bug at all**. Seam identified, not fixed |
 | elisp_slime_nav | entry 48 (an error message loses a text property; not reduced below the package) |
+
+Every genuine divergence has a numbered entry with its reduction, kept after
+the fix lands as the regression record.
 
 Two of the fixes were much broader than the suite that caught them.
 `replace-match` after `set-match-data` with integers had been failing for
 *every* subexpression -- any package that computes bounds itself and then
 replaces was affected -- and the `command-history` gap meant no
-`repeat-complex-command` entry replayed the way GNU records it.
+`repeat-complex-command` entry replayed the way GNU records it. The third,
+entry 47, is still open but was mis-framed by its own symptom: the suite shows
+corruption around an emoji, yet the reduction is pure ASCII and the trigger is
+the shape of a diff, so nothing built on `replace-buffer-contents` can be
+undone.
 
 ## Verification status 2026-08-05
 
@@ -1723,35 +1730,96 @@ Affects: `swiper` (1)
 `query_replace_renames_selected_incidents_with_captured_identifiers`.
 
 
-## 47. Undoing a group of edits around a multibyte character restores corrupt text
+## 47. `replace-buffer-contents` cannot be undone: an empty deletion is not recorded
 
-Applying several edits as one undoable transaction and then undoing it restores
-text that is neither the original nor the edited version: individual characters
-are wrong, in a buffer containing an emoji.
+Replacing a region through `replace-region-contents` and undoing the result
+gives back text that is neither the original nor the replacement -- individual
+characters from the replacement are left behind.
+
+```elisp
+(with-temp-buffer
+  (buffer-enable-undo)
+  (insert "greet")
+  (setq buffer-undo-list nil)
+  (let ((temp (with-current-buffer (generate-new-buffer " *r*")
+                (insert "welcome") (current-buffer))))
+    (replace-region-contents (point-min) (point-max) (lambda (&rest _) temp)))
+  (undo-boundary)
+  (undo-only 1)
+  (buffer-string))
+;; GNU     => "greet"
+;; Neomacs => "grmet"
+```
+
+**The multibyte character in the originating suite is a red herring.** The
+reduction above is pure ASCII. What decides it is the *shape of the diff*:
+`replace-buffer-contents` applies its result as a run of small hunks, and the
+bug needs two insertion hunks that end up adjacent in the undo list.
+
+| replacement | GNU | Neomacs |
+|---|---|---|
+| `abc` -> `xyz` (one hunk) | `abc` | `abc` OK |
+| `abcde` -> `aZcYe` (equal lengths) | `abcde` | `abcde` OK |
+| `abcde` -> `aZZcYYe` | `abcde` | `abcde` OK |
+| `greet` -> `welcome` | `greet` | **`grmet`** wrong |
+
+The undo lists show the mechanism directly:
 
 ```
-original : fn greet(name) {\n  return "Hello, U+1F600 " + name;\n}\n
-GNU undo : fn greet(name) {\n  return "Hello, U+1F600 " + name;\n}\n   (restored)
-Neomacs  : fn grmet(name) {\n  return "Hellk, U+1F600 " + name;\n}\n   (corrupt)
+GNU:     (("gr" . 1) (3 . 4) ("" . 4) (4 . 8) ("t" . -5) (6 . 6))
+Neomacs: (("gr" . 1) (3 . 8)                  ("t" . -5))
 ```
 
-`greet` comes back as `grmet` and `Hello` as `Hellk` -- single characters
-displaced, the signature of byte offsets being applied where character offsets
-are meant, with the 4-byte emoji supplying the discrepancy. Point is restored to
-36 where GNU restores 49.
+GNU records six entries, neomacs three. GNU's `("" . 4)` is a **zero-length
+deletion**, and it is load-bearing: it sits between the insertions `(3 . 4)` and
+`(4 . 8)` and stops them coalescing. `record_insert` merges a new insertion into
+the newest record only when that record is an insertion ending exactly where the
+new one begins, so the empty deletion breaks the chain. Neomacs skipped
+recording a deletion whose text is empty, the two insertions coalesced into
+`(3 . 8)`, and undoing that single wide record deletes a span GNU never deletes
+as one piece.
 
-This entry is **not yet reduced below the package**: a hand-built
-`atomic-change-group` plus `primitive-undo` does not reproduce it (both editors
-agree there, and neither restores), so the reduction has to follow lsp-mode's
-actual route -- `lsp--apply-text-edits` sorting edits end-first and applying
-them inside one change group.
+GNU's `record_delete` (`undo.c`) has exactly one early return, for a disabled
+undo list; it never tests the string's length.
+
+Where the fix goes -- and where it does *not*.
+`undo_list_record_delete_with_point` (`neovm-core/src/buffer/undo.rs`) does
+carry an extra `|| text.is_empty()` guard that GNU lacks, but removing it alone
+does **not** fix this: the apply loop for `replace-region-contents`
+(`neovm-core/src/emacs_core/buffer.rs`, walking the Myers change runs
+back-to-front) hands each run to
+`replace_buffer_measured_region_lisp_string`, whose `range.is_empty()` branch
+(`neovm-core/src/buffer/insdel.rs:465`) routes a pure-insertion run down an
+insert-only path that never calls the delete recorder at all. GNU applies every
+run through `replace_range`, which always records a delete and then an insert
+whatever the lengths. So the fix is to give that apply loop GNU's
+`replace_range` recording shape -- there is already a precedent for exactly
+that just below it, `casify_replace_buffer_emacs_byte_range_lisp_string`, whose
+comment explains it records delete-then-insert "so the undo list shape matches
+GNU even when the replacement leaves the text unchanged".
+
+This was verified by making the `undo.rs` change on its own: the unit-level
+behaviour corrected and the whole neovm-core suite stayed green (8747/8747),
+but the reduction above and the lsp-mode suite were both unchanged, which is
+what localised the real seam. That change was reverted rather than left in,
+since it alters undo-list shape editor-wide for no observable gain until the
+apply loop is fixed too.
+
+Blast radius: everything built on `replace-buffer-contents` --
+`replace-region-contents`, `revert-buffer` with `preserve-modes`, format-on-save
+wrappers, and every LSP client applying workspace edits. The forward direction
+is always correct, so the damage only appears when the user presses undo, which
+makes it a data-loss bug rather than a visible one.
 
 Affects: `lsp-mode` (1).
 `rename_response_applies_ordered_unicode_edits_as_one_undoable_transaction`
-reports `:undo-restored nil` with the corrupt buffer above, where GNU reports
-`:undo-restored t` and the original text. The *forward* direction is correct in
-both editors -- every intermediate `:after rename` state matches -- so only undo
-is affected.
+reports `:undo-restored nil` with `fn grmet(name)` / `"Hellk, U+1F600 "` where
+GNU reports `:undo-restored t` and the original text, and point 36 against GNU's
+49. Every intermediate `:after rename` state matches in both editors.
+
+NOT FIXED. Reduced, and the mechanism and the seam are both identified above;
+the change is contained but needs its own validation of the undo-list shape
+across ordinary editing, which is why it is filed rather than rushed.
 
 
 ## 48. An error message loses a text property that GNU keeps
@@ -1772,6 +1840,154 @@ Affects: `elisp-slime-nav` (1).
 `stale_symbol_failure_returns_to_the_caller_and_records_xref_forward_history`
 reports `:message-properties nil` against GNU's `(fontified nil)`. The message
 *text* is identical, so only the property is at stake.
+
+
+## 49. `command-history` records raw argument values
+
+`call-interactively` pushed the resolved arguments onto `command-history`
+verbatim. GNU applies three transformations first, and neomacs applied none, so
+no entry replayed through `repeat-complex-command` the way GNU records it.
+
+```elisp
+(defun d (arg) (interactive "P") arg)
+(defun p (pos) (interactive "d") pos)
+(defun r (b e) (interactive "r") (list b e))
+(defun s (x) (interactive (list 'a-symbol)) x)
+(setq command-history nil)
+(let ((current-prefix-arg '(4))) (call-interactively 'd t))
+(with-temp-buffer (insert "hello") (set-mark 2) (goto-char 4)
+                  (call-interactively 'p t) (call-interactively 'r t))
+(call-interactively 's t)
+(mapcar #'prin1-to-string (reverse command-history))
+;; GNU     => ("(d '(4))" "(p (point))" "(r (region-beginning) (region-end))" "(s 'a-symbol)")
+;; Neomacs => ("(d (4))"  "(p 4)"       "(r 2 4)"                             "(s a-symbol)")
+```
+
+Three separate rules, all missing:
+
+- `quotify_arg` (`callint.c:127`) wraps an argument in `quote` unless it already
+  evaluates to itself -- conses, and symbols other than nil and t. Numbers,
+  strings and vectors stay bare.
+- the `varies` array (`callint.c:447`, read at `:781`) records an argument that
+  came from point, the mark or the region as a call to the function that
+  produced it, so replaying re-reads the *current* position. Which form an
+  argument takes is fixed by its spec letter, not by its value: `R` records the
+  `use-region-*` calls even when the region was inactive and both arguments came
+  out nil.
+- `fix_command` (`callint.c:175`), for a Lisp-form spec only, substitutes the
+  replacements a command declares in its `interactive-args` property and then
+  drops trailing nil optional arguments, skipping that trim for a `&rest`
+  function whose arity has no fixed maximum.
+
+Affects: `counsel` (1).
+`command_palette_remaps_m_x_executes_prefix_commands_and_records_history`
+reads `command-history` back through `prin1-to-string` and got
+`"(neomacs-counsel-test-deploy (4))"` against GNU's
+`"(neomacs-counsel-test-deploy '(4))"`.
+
+FIXED in `neovm-core/src/emacs_core/interactive.rs`. Kept as the regression
+record.
+
+
+## 50. `error-message-string` keeps text properties GNU strips
+
+```elisp
+(let ((s (propertize "SYM" 'p 1)))
+  (mapcar (lambda (data) (error-message-string data))
+          (list (list 'error s) (list 'user-error s)
+                (list 'error s "extra") (list 'file-error s "more"))))
+;; GNU     => (#("SYM" 0 3 (p 1))  "SYM"                "SYM: \"extra\""                "SYM: more")
+;; Neomacs => (#("SYM" 0 3 (p 1))  #("SYM" 0 3 (p 1))   #("SYM: \"extra\"" 0 3 (p 1))   #("SYM: more" 0 3 (p 1)))
+```
+
+GNU's `Ferror_message_string` (`print.c:1046-1061`) short-circuits an error of
+exactly the shape `(error STRING)` and hands back that very string object,
+properties and all. Every other shape is rendered by `print_error_message` into
+`prin1-to-string-buffer` one character at a time -- a route that carries no
+properties -- and read back with `buffer-string`. So the fast path is the only
+way a property reaches the caller, and the first column above is the only one
+where the two editors agreed.
+
+Affects: `dumb-jump` (1).
+`a_missing_definition_reports_the_real_xref_error_without_moving_the_user` built
+its `user-error` from buffer text carrying dumb-jump's own `:dumb-jump-ctx`
+property, which survived into the reported message where GNU reports plain text.
+
+FIXED in `neovm-core/src/emacs_core/errors.rs`. Kept as the regression record.
+
+
+## 51. `replace-match` refuses match data that did not come from a buffer
+
+```elisp
+(with-temp-buffer
+  (insert "aa 01 bb")
+  (set-match-data (list 4 6))
+  (replace-match "999" t t nil 0)
+  (list (buffer-string) (match-beginning 0) (match-end 0)))
+;; GNU     => ("aa 999 bb" 4 7)
+;; Neomacs => signals (args-out-of-range 0)
+```
+
+`set-match-data` called with plain integers records the match as
+*string-sourced* in both editors -- GNU sets `last_thing_searched` to `Qt`
+unless an element names a buffer or is a marker carrying one
+(`search.c:2966`). Neomacs's `replace-match` consulted that flag and refused,
+signalling `args-out-of-range` with a bare `0`, an error shape GNU never
+produces. It therefore failed for **every** subexpression, and only worked when
+a caller happened to pass markers.
+
+GNU's `Freplace_match` (`search.c:2396`) never consults `last_thing_searched`.
+A nil STRING argument means the current buffer, full stop. It validates the
+subexpression against the accessible portion and reports both endpoints
+(`search.c:2418-2427`):
+
+```elisp
+(with-temp-buffer (insert "abc") (set-match-data (list 2 99))
+                  (replace-match "X" t t nil 0))
+;; GNU => (args-out-of-range 2 99)
+```
+
+Two further consequences hid behind the refusal. The buffer replacement path
+used the same flag to choose between slicing the match and copying the whole
+buffer, and the whole-buffer branch misread 1-based buffer positions as 0-based
+string offsets. And the post-replacement register adjustment (GNU's
+`update_search_regs`) skipped string-sourced data, leaving the registers stale
+after the edit -- so once the refusal was removed, a caller replacing in a loop
+read the same positions forever and never terminated.
+
+Blast radius: any package that computes a region itself, installs it with
+`set-match-data` and calls `replace-match`. That is the normal way to reuse the
+replacement machinery without running a search.
+
+Affects: `evil-numbers` (5, all cases), through `shift-number`.
+
+FIXED in `neovm-core/src/emacs_core/builtins/search.rs`,
+`.../search.rs` and `.../regex.rs`. Kept as the regression record.
+
+
+## 52. `define-fringe-bitmap` does not register the symbol in `fringe-bitmaps`
+
+```elisp
+(define-fringe-bitmap 'p9 [0 0 24 24 0 0] nil nil 'center)
+(list (and (memq 'p9 fringe-bitmaps) t) (get 'p9 'fringe))
+;; GNU     => (t 25)
+;; Neomacs => (nil 25)
+```
+
+The `fringe` property was set but the symbol never joined the list Emacs
+documents as "List of fringe bitmap symbols", and `destroy-fringe-bitmap` never
+removed one. GNU does both next to the property: a newly named bitmap is consed
+onto `Vfringe_bitmaps` under the same "not already known" test that assigns its
+index (`fringe.c:1620-1656`), which is why redefining does not list it twice,
+and destroy unregisters only indices at or above the standard range
+(`fringe.c:1409-1414`), so a standard bitmap keeps both its listing and its
+property.
+
+Affects: `vi-tilde-fringe` (1), which checks
+`(memq 'vi-tilde-fringe-bitmap fringe-bitmaps)` to confirm registration.
+
+FIXED in `neovm-core/src/emacs_core/builtins/stubs.rs`. Kept as the regression
+record.
 
 
 ## Behaviour that is NOT a divergence
