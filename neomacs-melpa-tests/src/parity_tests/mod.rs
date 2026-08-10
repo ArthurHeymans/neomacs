@@ -587,6 +587,7 @@ mod symbol_overlay;
 mod symon;
 mod tablist;
 mod tagedit;
+mod tern;
 mod tinysegmenter;
 mod toc_org;
 mod toml_mode;

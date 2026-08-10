@@ -518,6 +518,13 @@ pub const SVG_LIB_MELPA_PIN: (&str, &str) = ("svg-lib", "0.3");
 /// `01f065e387ffe6b7a41f180f257cd12551c7a9c2`.
 pub const TABLIST_MELPA_PIN: (&str, &str) = ("tablist", "20260623.1855");
 
+/// The exact Tern package selected for practical JavaScript completion,
+/// argument hints, type/documentation lookup, cross-file navigation,
+/// refactoring, reference highlighting, transport, and failure parity.
+/// MELPA built this archive from upstream commit
+/// `fab80daebd798b233a9a40d5a8b99359ace63b5e`.
+pub const TERN_MELPA_PIN: (&str, &str) = ("tern", "20260514.1348");
+
 /// The exact TinySegmenter package selected by the practical Japanese text,
 /// mixed-script release-note, document-indexing, buffer-editing, and boundary
 /// parity corpus. MELPA built this archive from upstream commit
