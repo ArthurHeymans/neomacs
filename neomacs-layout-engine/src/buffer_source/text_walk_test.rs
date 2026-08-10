@@ -150,7 +150,7 @@ fn geometry_request_derives_text_area_and_matrix_rows() {
     assert_eq!(geometry.mode_line_display_row, 7);
     assert_eq!(geometry.line_number_pixel_width, 24.0);
     assert_eq!(geometry.content_x, 40.0);
-    assert_eq!(geometry.cols, 17);
+    assert_eq!(geometry.matrix_columns.get(), 20);
 }
 
 #[test]

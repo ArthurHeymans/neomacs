@@ -256,13 +256,32 @@ impl CursorVisualColumnResolutionRequest {
         // being shoved to the fill's right edge.
         let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
         let mut text_end = text_glyphs.len();
-        while text_end > 0 && text_glyphs[text_end - 1].charpos == NO_BUFFER_POSITION_CHARPOS {
-            text_end -= 1;
+        if let Some(fill) = text_glyphs.last()
+            && fill.charpos == NO_BUFFER_POSITION_CHARPOS
+            && matches!(
+                fill.glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { .. }
+            )
+        {
+            let fill_face = fill.face_id;
+            while text_end > 0
+                && text_glyphs[text_end - 1].charpos == NO_BUFFER_POSITION_CHARPOS
+                && text_glyphs[text_end - 1].face_id == fill_face
+            {
+                text_end -= 1;
+            }
         }
 
         let mut nearest_after: Option<(usize, u16)> = None;
         for glyph in &text_glyphs[..text_end] {
             if glyph.padding {
+                continue;
+            }
+            if glyph.charpos == NO_BUFFER_POSITION_CHARPOS {
+                // GNU's line-number TEXT_AREA prefix has object=nil and
+                // position=-1.  It consumes visual columns but can never be a
+                // cursor candidate (exact or nearest-after).
+                col_acc = col_acc.saturating_add(glyph.materialized_slot_span());
                 continue;
             }
             if glyph.charpos == self.charpos {

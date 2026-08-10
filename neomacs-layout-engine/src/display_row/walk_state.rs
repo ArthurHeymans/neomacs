@@ -65,13 +65,13 @@ enum LineNumberBlankReason {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum LineNumberMarginFace {
+pub(crate) enum LineNumberTextPrefixFace {
     Normal,
     CurrentLine,
     MajorTick,
 }
 
-impl LineNumberMarginFace {
+impl LineNumberTextPrefixFace {
     pub(crate) fn face_name(self) -> &'static str {
         match self {
             Self::Normal => "line-number",
@@ -82,15 +82,15 @@ impl LineNumberMarginFace {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum LineNumberMarginContent {
+pub(crate) enum LineNumberTextPrefixContent {
     Number(i64),
     Blank,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct LineNumberMarginColumns(usize);
+pub(crate) struct LineNumberTextPrefixColumns(usize);
 
-impl LineNumberMarginColumns {
+impl LineNumberTextPrefixColumns {
     fn from_layout_columns(cols: i32) -> Self {
         Self(cols.max(1) as usize)
     }
@@ -102,15 +102,15 @@ impl LineNumberMarginColumns {
 
 /// The authoritative pixel extent reserved for the line-number field.
 ///
-/// Keeping this distinct from [`LineNumberMarginColumns`] prevents the margin
+/// Keeping this distinct from [`LineNumberTextPrefixColumns`] prevents the prefix
 /// producer from accidentally comparing a shaped glyph advance with a logical
 /// column count.  Buffer-window geometry reserves this same `columns × frame
 /// column width` extent before ordinary source text is laid out.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct LineNumberMarginExtentPx(f32);
+pub(crate) struct LineNumberTextPrefixExtentPx(f32);
 
-impl LineNumberMarginExtentPx {
-    fn from_columns(columns: LineNumberMarginColumns, frame_column_width: f32) -> Self {
+impl LineNumberTextPrefixExtentPx {
+    fn from_columns(columns: LineNumberTextPrefixColumns, frame_column_width: f32) -> Self {
         Self(columns.get() as f32 * frame_column_width.max(1.0))
     }
 
@@ -120,18 +120,26 @@ impl LineNumberMarginExtentPx {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct LineNumberMarginRenderRequest {
-    content: LineNumberMarginContent,
-    columns: LineNumberMarginColumns,
-    face: LineNumberMarginFace,
+pub(crate) struct LineNumberTextPrefix {
+    content: LineNumberTextPrefixContent,
+    columns: LineNumberTextPrefixColumns,
+    face: LineNumberTextPrefixFace,
 }
 
-impl LineNumberMarginRenderRequest {
+impl LineNumberTextPrefix {
+    pub(crate) fn blank_beyond_accessible_end(cols: i32) -> Self {
+        Self {
+            content: LineNumberTextPrefixContent::Blank,
+            columns: LineNumberTextPrefixColumns::from_layout_columns(cols),
+            face: LineNumberTextPrefixFace::Normal,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn text(self) -> String {
         match self.content {
-            LineNumberMarginContent::Number(number) => number.to_string(),
-            LineNumberMarginContent::Blank => String::new(),
+            LineNumberTextPrefixContent::Number(number) => number.to_string(),
+            LineNumberTextPrefixContent::Blank => String::new(),
         }
     }
 
@@ -139,8 +147,8 @@ impl LineNumberMarginRenderRequest {
         self.columns.get() as i32
     }
 
-    pub(crate) fn pixel_extent(self, frame_column_width: f32) -> LineNumberMarginExtentPx {
-        LineNumberMarginExtentPx::from_columns(self.columns, frame_column_width)
+    pub(crate) fn pixel_extent(self, frame_column_width: f32) -> LineNumberTextPrefixExtentPx {
+        LineNumberTextPrefixExtentPx::from_columns(self.columns, frame_column_width)
     }
 
     /// Produce GNU's complete `lnum_buf`: right-aligned number field plus
@@ -153,8 +161,8 @@ impl LineNumberMarginRenderRequest {
     pub(crate) fn padded_text(self) -> String {
         let columns = self.columns.get();
         match self.content {
-            LineNumberMarginContent::Blank => " ".repeat(columns),
-            LineNumberMarginContent::Number(number) => {
+            LineNumberTextPrefixContent::Blank => " ".repeat(columns),
+            LineNumberTextPrefixContent::Number(number) => {
                 let number = number.to_string();
                 let leading_spaces = columns.saturating_sub(number.chars().count() + 1);
                 let mut text = String::with_capacity(columns.max(number.len() + 1));
@@ -166,13 +174,13 @@ impl LineNumberMarginRenderRequest {
         }
     }
 
-    pub(crate) fn face(self) -> LineNumberMarginFace {
+    pub(crate) fn face(self) -> LineNumberTextPrefixFace {
         self.face
     }
 
     #[cfg(test)]
     pub(crate) fn blank(self) -> bool {
-        self.content == LineNumberMarginContent::Blank
+        self.content == LineNumberTextPrefixContent::Blank
     }
 }
 
@@ -633,39 +641,39 @@ impl LineNumberRenderState {
         }
     }
 
-    pub(crate) fn take_margin_render_request(
+    pub(crate) fn take_text_prefix(
         &mut self,
         mode: crate::types::DisplayLineNumbersMode,
         current_absolute: bool,
         offset: i64,
         major_tick: i32,
         cols: i32,
-    ) -> Option<LineNumberMarginRenderRequest> {
+    ) -> Option<LineNumberTextPrefix> {
         let LineNumberRenderPhase::Pending(prefix) = self.phase else {
             return None;
         };
 
         let content = match prefix {
-            LineNumberRowPrefix::Numbered => {
-                LineNumberMarginContent::Number(self.display_number(mode, current_absolute, offset))
-            }
-            LineNumberRowPrefix::ReservedBlank(_) => LineNumberMarginContent::Blank,
+            LineNumberRowPrefix::Numbered => LineNumberTextPrefixContent::Number(
+                self.display_number(mode, current_absolute, offset),
+            ),
+            LineNumberRowPrefix::ReservedBlank(_) => LineNumberTextPrefixContent::Blank,
         };
         let face = if matches!(
             prefix,
             LineNumberRowPrefix::ReservedBlank(LineNumberBlankReason::BeyondAccessibleEnd)
         ) {
-            LineNumberMarginFace::Normal
+            LineNumberTextPrefixFace::Normal
         } else if self.is_current_line() {
-            LineNumberMarginFace::CurrentLine
+            LineNumberTextPrefixFace::CurrentLine
         } else if major_tick > 0 && self.current_line % i64::from(major_tick) == 0 {
-            LineNumberMarginFace::MajorTick
+            LineNumberTextPrefixFace::MajorTick
         } else {
-            LineNumberMarginFace::Normal
+            LineNumberTextPrefixFace::Normal
         };
-        let request = LineNumberMarginRenderRequest {
+        let request = LineNumberTextPrefix {
             content,
-            columns: LineNumberMarginColumns::from_layout_columns(cols),
+            columns: LineNumberTextPrefixColumns::from_layout_columns(cols),
             face,
         };
         self.phase = LineNumberRenderPhase::Rendered;

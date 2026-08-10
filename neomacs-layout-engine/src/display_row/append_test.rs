@@ -48,7 +48,7 @@ use crate::display_row::geometry::{
     DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit, DisplayRowMaxX,
     DisplayRowScopedValue, DisplayRowStartMarker, DisplayRowVisibilityLimit, DisplayRowYPositions,
 };
-use crate::display_row::line_number_margin::BufferLineNumberMarginRenderRequest;
+use crate::display_row::line_number_prefix::BufferLineNumberTextPrefixRenderRequest;
 use crate::display_row::lisp_string::{
     BufferLinePrefixRenderRequest, DisplayRowPrefixRequest, DisplayRowPrefixValues,
     LispStringRowAppendContext, LispStringSourceAppendRequest,
@@ -313,8 +313,8 @@ impl RowTransitionTestContext {
 }
 
 #[test]
-fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin() {
-    let mut context = RowTransitionTestContext::new("line-number-margin-render-request");
+fn buffer_line_number_text_prefix_renders_and_consumes_pending_request() {
+    let mut context = RowTransitionTestContext::new("line-number-text-prefix-render-request");
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
@@ -332,7 +332,7 @@ fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin(
             &face_resolver,
         );
         assert!(
-            BufferLineNumberMarginRenderRequest::new(
+            BufferLineNumberTextPrefixRenderRequest::new(
                 DisplayLineNumbersMode::Absolute,
                 false,
                 0,
@@ -353,20 +353,20 @@ fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin(
     context.builder.end_row();
     context.builder.end_window();
     let state = context.builder.finish(20, 1, 8.0, 16.0);
-    let margin = &state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::LeftMargin as usize];
+    let prefix = &state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::Text as usize];
 
-    assert_eq!(margin.len(), 4);
-    assert_eq!(margin[0].glyph_type, GlyphType::Char { ch: ' ' });
-    assert_eq!(margin[1].glyph_type, GlyphType::Char { ch: '1' });
-    assert_eq!(margin[2].glyph_type, GlyphType::Char { ch: '2' });
-    assert_eq!(margin[3].glyph_type, GlyphType::Char { ch: ' ' });
+    assert_eq!(prefix.len(), 4);
+    assert_eq!(prefix[0].glyph_type, GlyphType::Char { ch: ' ' });
+    assert_eq!(prefix[1].glyph_type, GlyphType::Char { ch: '1' });
+    assert_eq!(prefix[2].glyph_type, GlyphType::Char { ch: '2' });
+    assert_eq!(prefix[3].glyph_type, GlyphType::Char { ch: ' ' });
     assert_eq!(
-        margin.iter().map(|glyph| glyph.pixel_width).sum::<f32>(),
+        prefix.iter().map(|glyph| glyph.pixel_width).sum::<f32>(),
         32.0,
-        "the rendered margin must consume its four-column reserved extent"
+        "the TEXT_AREA prefix must consume its four-column reserved extent"
     );
     assert!(
-        margin
+        prefix
             .iter()
             .all(|glyph| glyph.face_id == FaceId::new(BasicFaceId::SENTINEL))
     );
@@ -375,10 +375,10 @@ fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin(
 }
 
 #[test]
-fn buffer_line_number_margin_render_request_renders_blank_gutter_on_continuation_row() {
+fn buffer_line_number_text_prefix_renders_blank_field_on_continuation_row() {
     // GNU `maybe_produce_line_number` reserves a blank, width-matched gutter on
     // each wrapped continuation row so its text aligns with the first row.
-    let mut context = RowTransitionTestContext::new("line-number-margin-continuation-row");
+    let mut context = RowTransitionTestContext::new("line-number-prefix-continuation-row");
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(7);
@@ -399,7 +399,7 @@ fn buffer_line_number_margin_render_request_renders_blank_gutter_on_continuation
             &face_resolver,
         );
         assert!(
-            BufferLineNumberMarginRenderRequest::new(
+            BufferLineNumberTextPrefixRenderRequest::new(
                 DisplayLineNumbersMode::Absolute,
                 false,
                 0,
@@ -420,23 +420,23 @@ fn buffer_line_number_margin_render_request_renders_blank_gutter_on_continuation
     context.builder.end_row();
     context.builder.end_window();
     let state = context.builder.finish(20, 1, 8.0, 16.0);
-    let margin = &state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::LeftMargin as usize];
+    let prefix = &state.window_matrices[0].matrix.rows[0].glyphs[GlyphArea::Text as usize];
 
     // No number glyphs: GNU's complete four-character field becomes four
     // face-backed blanks whose total is the same reserved extent as the
     // numbered first row.
-    assert_eq!(margin.len(), 4);
+    assert_eq!(prefix.len(), 4);
     assert!(
-        margin
+        prefix
             .iter()
             .all(|glyph| glyph.glyph_type == GlyphType::Char { ch: ' ' })
     );
     assert_eq!(
-        margin.iter().map(|glyph| glyph.pixel_width).sum::<f32>(),
+        prefix.iter().map(|glyph| glyph.pixel_width).sum::<f32>(),
         32.0
     );
     assert!(
-        margin
+        prefix
             .iter()
             .all(|glyph| glyph.face_id == FaceId::new(BasicFaceId::SENTINEL))
     );

@@ -136,7 +136,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         active_face_state: &DisplayRowActiveFaceState,
         buffer: &B,
     ) {
-        self.render_pending_line_number_margin(context);
+        self.render_pending_line_number_prefix(context);
 
         let row_position = self.progress.row_position();
         let charpos = self.progress.charpos();
@@ -161,9 +161,9 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
             );
     }
 
-    fn render_pending_line_number_margin(&mut self, context: BufferSourceRowPreludeRequestContext) {
+    fn render_pending_line_number_prefix(&mut self, context: BufferSourceRowPreludeRequestContext) {
         context
-            .line_number_margin_request()
+            .line_number_prefix_request()
             .render_pending_with_source_state(
                 self.row_carryover.line_numbers,
                 &mut self.source_render,

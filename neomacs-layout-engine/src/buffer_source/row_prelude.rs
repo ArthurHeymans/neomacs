@@ -7,7 +7,7 @@ use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::builder::DisplayRowPosition;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::geometry::DisplayRowGeometryState;
-use crate::display_row::line_number_margin::BufferLineNumberMarginRenderRequest;
+use crate::display_row::line_number_prefix::BufferLineNumberTextPrefixRenderRequest;
 use crate::display_row::lisp_string::{BufferLinePrefixRenderRequest, DisplayRowPrefixValues};
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::source_render::TextRowSourceRenderState;
@@ -24,7 +24,7 @@ use crate::types::{DisplayLineNumbersMode, WindowParams};
 /// understand line-number modes, faces, widths, or margin glyph construction.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferSourceContinuationRowPreludeRequest {
-    line_number_margin: BufferLineNumberMarginRenderRequest,
+    line_number_prefix: BufferLineNumberTextPrefixRenderRequest,
     char_width: f32,
 }
 
@@ -49,7 +49,7 @@ impl BufferSourceContinuationRowPreludeRequest {
         face_scan: &mut FaceScanCheckpoint,
     ) {
         line_numbers.mark_continuation_row();
-        self.line_number_margin.render_pending_with_source_state(
+        self.line_number_prefix.render_pending_with_source_state(
             line_numbers,
             source_render,
             face_ids,
@@ -82,8 +82,8 @@ impl BufferSourceRowPreludeRequestContext {
         }
     }
 
-    pub(crate) fn line_number_margin_request(self) -> BufferLineNumberMarginRenderRequest {
-        BufferLineNumberMarginRenderRequest::new(
+    pub(crate) fn line_number_prefix_request(self) -> BufferLineNumberTextPrefixRenderRequest {
+        BufferLineNumberTextPrefixRenderRequest::new(
             self.line_number_mode,
             self.line_number_current_absolute,
             self.line_number_offset,
@@ -119,7 +119,7 @@ impl BufferSourceRowPreludeRequestContext {
 
     pub(crate) fn continuation_row_prelude(self) -> BufferSourceContinuationRowPreludeRequest {
         BufferSourceContinuationRowPreludeRequest {
-            line_number_margin: self.line_number_margin_request(),
+            line_number_prefix: self.line_number_prefix_request(),
             char_width: self.char_width(),
         }
     }

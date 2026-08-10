@@ -4,7 +4,7 @@ pub(crate) mod body_render;
 pub(crate) mod char_render;
 pub(crate) mod consumption;
 pub(crate) mod display_property_render;
-pub(crate) mod empty_line_fringe;
+pub(crate) mod end_of_buffer_rows;
 pub(crate) mod face_resolution;
 pub(crate) mod fringe_arrows;
 pub(crate) mod item_append;

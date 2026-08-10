@@ -59,7 +59,12 @@ pub(crate) struct BufferWindowGeometry {
     pub(crate) display_text_rows: usize,
     pub(crate) bottom_chrome_rows: usize,
     pub(crate) mode_line_display_row: usize,
-    pub(crate) cols: usize,
+    /// Capacity of GNU's complete TEXT_AREA, including the line-number prefix.
+    ///
+    /// This is deliberately not a bare `usize`: buffer-content capacity is
+    /// smaller when line numbers are enabled, and passing that value to the
+    /// glyph matrix caused presentation to reset ordinary text onto the prefix.
+    pub(crate) matrix_columns: GlyphMatrixColumnCapacity,
     pub(crate) line_number_pixel_width: f32,
     pub(crate) content_x: f32,
     /// Y at which a row stops being "visible" during the walk.  For ordinary
@@ -69,6 +74,19 @@ pub(crate) struct BufferWindowGeometry {
     /// window's current (often one-row) physical height; `max_rows` still hard
     /// caps the row count at the `max-mini-window-height` ceiling.
     pub(crate) visibility_bottom_y: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct GlyphMatrixColumnCapacity(usize);
+
+impl GlyphMatrixColumnCapacity {
+    fn for_text_area(width_policy: DisplayRowCharWidthPolicy, text_width: f32) -> Self {
+        Self(width_policy.columns_for_width(text_width))
+    }
+
+    pub(crate) const fn get(self) -> usize {
+        self.0
+    }
 }
 
 pub(crate) struct BufferWindowGeometryPlan {
@@ -180,7 +198,11 @@ impl BufferWindowGeometryRequest {
         let display_text_row_base = self.top_chrome_rows;
         let display_text_rows = max_rows.max(1);
         let mode_line_display_row = display_text_row_base + display_text_rows;
-        let cols = width_policy.columns_for_width(self.text_width - line_number_pixel_width);
+        // GNU appends line-number glyphs to TEXT_AREA, then advances current_x
+        // before producing buffer text.  The matrix therefore spans the whole
+        // text area; only the buffer append surface subtracts the prefix width.
+        let matrix_columns =
+            GlyphMatrixColumnCapacity::for_text_area(width_policy, self.text_width);
         let content_x = self.text_x + line_number_pixel_width;
 
         // Content-up shift applied to the body row-walk origin. Minibuffers and
@@ -223,7 +245,7 @@ impl BufferWindowGeometryRequest {
             display_text_rows,
             bottom_chrome_rows: self.bottom_chrome_rows,
             mode_line_display_row,
-            cols,
+            matrix_columns,
             line_number_pixel_width,
             content_x,
             visibility_bottom_y,

@@ -1,7 +1,7 @@
 //! Buffer source render plan construction and completion.
 
 use crate::buffer_source::body_render::BufferSourceWalkSetup;
-use crate::buffer_source::empty_line_fringe::EmptyLineFringeFillRequest;
+use crate::buffer_source::end_of_buffer_rows::EndOfBufferRowsFillRequest;
 use crate::buffer_source::face_resolution::*;
 use crate::buffer_source::fringe_arrows::TruncationContinuationFringeRequest;
 use crate::buffer_source::loop_context::BufferSourceLoopRequestContext;
@@ -273,7 +273,7 @@ impl BufferSourceOutputSetup {
             geometry.display_text_row_base,
             geometry.display_text_rows,
             geometry.bottom_chrome_rows,
-            geometry.cols,
+            geometry.matrix_columns.get(),
             params.bounds,
             params.text_bounds,
             layout_box.body(),
@@ -1101,22 +1101,22 @@ impl BufferSourceOutputSetup {
             &tail_context,
             publish_request,
         );
-        // GNU's redisplay tail fills the rows below the last buffer line with
-        // blank rows that carry the `empty-line` fringe bitmap when
-        // `indicate-empty-lines` is on (Doom's vi-tilde-fringe `~`). neomacs's
-        // buffer walk stops at ZV, so emit those filler rows here — after the
-        // body is installed (so `walk_setup.row_geometry` reflects the position
-        // below the last buffer row) and before the mode-line chrome row, into
-        // the same window grid. The request guards against over-filling the
-        // mode-line / echo-area boundary (`max_rows` + text-area bottom).
-        EmptyLineFringeFillRequest::new(
+        // GNU's redisplay tail keeps producing rows below the last buffer line.
+        // Compose the decorations for those rows here: a line-number-faced
+        // TEXT_AREA prefix when line numbers are active, and an `empty-line`
+        // fringe bitmap when requested. This runs after the body is installed
+        // (so `walk_setup.row_geometry` is immediately below the last buffer
+        // row) and before mode-line chrome, with row and pixel boundary guards.
+        EndOfBufferRowsFillRequest::new(
             params,
             geometry.display_text_row_base,
             geometry.max_rows,
             geometry.text_y,
             geometry.text_height,
+            geometry.char_width,
             geometry.char_height,
             window_metrics.ascent(),
+            line_number_cols,
         )
         .fill(
             buffer,

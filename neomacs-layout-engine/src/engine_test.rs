@@ -36,7 +36,9 @@ use crate::window_output::{TextWindowOutputTarget, WindowOutputEmitter};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_chrome::{FrameChromeContent, FrameChromeKind};
 use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, FrameGlyph, GlyphRowRole};
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{
+    Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
+};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{
     BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
@@ -824,7 +826,7 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
         2
     );
     let request = state
-        .take_margin_render_request(DisplayLineNumbersMode::Visual, false, 0, 0, 4)
+        .take_text_prefix(DisplayLineNumbersMode::Visual, false, 0, 0, 4)
         .expect("line number request");
     assert_eq!(request.text(), "2");
     assert_eq!(request.padded_text(), "  2 ");
@@ -845,7 +847,7 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
         19
     );
     let request = state
-        .take_margin_render_request(DisplayLineNumbersMode::Visual, true, 10, 3, 5)
+        .take_text_prefix(DisplayLineNumbersMode::Visual, true, 10, 3, 5)
         .expect("current line request");
     assert_eq!(request.text(), "19");
     assert_eq!(request.padded_text(), "  19 ");
@@ -859,7 +861,7 @@ fn line_number_render_state_tracks_current_point_and_pending_render() {
     assert!(!LineNumberRenderState::new(false, 7, 9).should_render());
 
     let major_tick = LineNumberRenderState::new(true, 12, 9)
-        .take_margin_render_request(DisplayLineNumbersMode::Absolute, false, 0, 4, 3)
+        .take_text_prefix(DisplayLineNumbersMode::Absolute, false, 0, 4, 3)
         .expect("major tick line number request");
     assert_eq!(major_tick.text(), "12");
     assert_eq!(major_tick.face().face_name(), "line-number-major-tick");
@@ -871,7 +873,7 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     // gutter (GNU `maybe_produce_line_number`).
     let mut state = LineNumberRenderState::new(true, 7, 9);
     let first = state
-        .take_margin_render_request(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
+        .take_text_prefix(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
         .expect("first-row line number request");
     assert!(!first.blank());
     assert_eq!(first.text(), "7");
@@ -883,7 +885,7 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     state.mark_continuation_row();
     assert!(state.should_render());
     let continuation = state
-        .take_margin_render_request(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
+        .take_text_prefix(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
         .expect("continuation-row line number request");
     assert!(continuation.blank());
     assert_eq!(continuation.text(), "");
@@ -894,7 +896,7 @@ fn line_number_render_state_renders_blank_gutter_on_continuation_rows() {
     // The next buffer line resets back to a non-blank numbered gutter.
     state.advance_line();
     let next_line = state
-        .take_margin_render_request(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
+        .take_text_prefix(DisplayLineNumbersMode::Absolute, false, 0, 0, 4)
         .expect("next-line line number request");
     assert!(!next_line.blank());
     assert_eq!(next_line.text(), "8");
@@ -4374,6 +4376,119 @@ fn layout_frame_rust_lays_out_line_numbers() {
 }
 
 #[test]
+fn layout_frame_rust_places_line_number_prefix_before_buffer_text() {
+    let (mut eval, frame_id, buffer_id, selected_window) =
+        incr_editing_frame("alpha\nbeta\ngamma\n", 360, 180);
+    eval.buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("line-number buffer")
+        .set_buffer_local("display-line-numbers", Value::T);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let frame = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state")
+        .materialize();
+
+    let mut line_number_right = None;
+    let mut buffer_text_left = None;
+    for glyph in &frame.glyphs {
+        let FrameGlyph::Char {
+            window_id,
+            row_role: GlyphRowRole::Text,
+            char,
+            x,
+            width,
+            ..
+        } = glyph
+        else {
+            continue;
+        };
+        if window_id.get() != selected_window.0 as i64 {
+            continue;
+        }
+        if *char == '1' && line_number_right.is_none() {
+            line_number_right = Some(*x + *width);
+        } else if *char == 'a' && buffer_text_left.is_none() {
+            buffer_text_left = Some(*x);
+        }
+    }
+
+    let line_number_right = line_number_right.expect("materialized line number 1");
+    let buffer_text_left = buffer_text_left.expect("materialized buffer text alpha");
+    assert!(
+        line_number_right <= buffer_text_left,
+        "GNU puts line numbers at the start of TEXT_AREA and advances current_x before buffer \
+         text; number right edge {line_number_right} overlaps text left edge {buffer_text_left}"
+    );
+    let cursor = frame.active_cursor().expect("selected-window cursor");
+    assert!(
+        cursor.x >= buffer_text_left,
+        "GNU stamps line-number prefix glyphs with no buffer position, so point at BOB must \
+         resolve to buffer text rather than the prefix; cursor x={} text left={buffer_text_left}",
+        cursor.x
+    );
+}
+
+#[test]
+fn layout_frame_rust_fills_rows_beyond_eob_with_line_number_text_prefix() {
+    let (mut eval, frame_id, buffer_id, selected_window) = incr_editing_frame("hello\n", 640, 400);
+    eval.buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("line-number buffer")
+        .set_buffer_local("display-line-numbers", Value::T);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let zv = "hello\n".len();
+
+    let beyond_eob_prefixes: Vec<_> = entry
+        .matrix
+        .rows
+        .iter()
+        .filter(|row| {
+            row.role == GlyphRowRole::Text
+                && row.ends_at_zv
+                && row.start_charpos == zv
+                && row.end_charpos == zv
+                && !row.glyphs[GlyphArea::Text.index()].is_empty()
+                && row.glyphs[GlyphArea::Text.index()].iter().all(|glyph| {
+                    matches!(glyph.glyph_type, GlyphType::Char { ch: ' ' })
+                        && glyph.charpos == NO_BUFFER_POSITION_CHARPOS
+                })
+        })
+        .map(|row| &row.glyphs[GlyphArea::Text.index()])
+        .collect();
+
+    assert!(
+        beyond_eob_prefixes.len() >= 5,
+        "GNU maybe_produce_line_number reserves a line-number-faced TEXT_AREA prefix on every \
+         visible row beyond ZV; got only {} qualifying row(s) out of {} matrix rows",
+        beyond_eob_prefixes.len(),
+        entry.matrix.rows.len()
+    );
+    let prefix_width = beyond_eob_prefixes[0].len();
+    let prefix_face = beyond_eob_prefixes[0][0].face_id;
+    assert!(
+        beyond_eob_prefixes.iter().all(|prefix| {
+            prefix.len() == prefix_width && prefix.iter().all(|glyph| glyph.face_id == prefix_face)
+        }),
+        "every beyond-ZV row must reserve the same complete normal line-number prefix"
+    );
+}
+
+#[test]
 fn layout_frame_rust_lays_out_word_wrap() {
     let text = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda";
     let setup = |buffer: &mut neovm_core::buffer::Buffer, _buf_id: BufferId, _text: &str| {
@@ -5123,17 +5238,25 @@ fn point_max_after_trailing_newline_stays_right_of_line_number_gutter() {
         .matrix_rows
         .iter()
         .enumerate()
-        .find(|(_, row)| row.role == GlyphRowRole::Text && row.ends_at_zv && !row.displays_text)
+        .find(|(_, row)| {
+            row.role == GlyphRowRole::Text && row.ends_at_zv && row.start_charpos == row.end_charpos
+        })
         .expect("blank EOB row");
-    let numbered_margin = &numbered_row.glyph_areas[GlyphArea::LeftMargin.index()];
-    let eob_margin = &eob_row.glyph_areas[GlyphArea::LeftMargin.index()];
-    let margin_width = |glyphs: &[GlyphTrace]| {
+    let numbered_text = &numbered_row.glyph_areas[GlyphArea::Text.index()];
+    let numbered_prefix_len = numbered_text
+        .iter()
+        .take_while(|glyph| glyph.charpos == NO_BUFFER_POSITION_CHARPOS)
+        .count();
+    let numbered_prefix = &numbered_text[..numbered_prefix_len];
+    let eob_text = &eob_row.glyph_areas[GlyphArea::Text.index()];
+    let eob_prefix = &eob_text[..numbered_prefix_len];
+    let prefix_width = |glyphs: &[GlyphTrace]| {
         glyphs
             .iter()
             .map(|glyph| f32::from_bits(glyph.pixel_width_bits))
             .sum::<f32>()
     };
-    let margin_columns = |glyphs: &[GlyphTrace]| {
+    let prefix_columns = |glyphs: &[GlyphTrace]| {
         glyphs
             .iter()
             .map(|glyph| match glyph.kind {
@@ -5168,24 +5291,24 @@ fn point_max_after_trailing_newline_stays_right_of_line_number_gutter() {
     let cursor_slot = cursor.slot_id;
     assert_eq!(
         (cursor_slot.row as usize, i64::from(cursor_slot.col)),
-        (eob_row_index, margin_columns(numbered_margin)),
+        (eob_row_index, prefix_columns(numbered_prefix)),
         "point-max after a trailing newline must remain on the blank EOB row at \
          the first text column, to the right of the line-number gutter"
     );
 
     assert!(
-        !eob_margin.is_empty()
-            && eob_margin
+        !eob_prefix.is_empty()
+            && eob_prefix
                 .iter()
                 .all(|glyph| matches!(glyph.kind, GlyphKindTrace::Char(' ')))
-            && (margin_width(eob_margin) - margin_width(numbered_margin)).abs() < 0.01,
+            && (prefix_width(eob_prefix) - prefix_width(numbered_prefix)).abs() < 0.01,
         "the blank EOB row must reserve a width-matched, space-only line-number gutter; \
-         EOB margin={eob_margin:?}, numbered margin={numbered_margin:?}"
+         EOB prefix={eob_prefix:?}, numbered prefix={numbered_prefix:?}"
     );
 
     let eob_top = text_origin.1 + f32::from_bits(eob_row.pixel_y_bits);
     let eob_bottom = eob_top + f32::from_bits(eob_row.height_px_bits);
-    let gutter_right = text_origin.0 + margin_width(eob_margin);
+    let gutter_right = text_origin.0 + prefix_width(eob_prefix);
     assert!(
         cursor.x >= gutter_right - 0.01
             && cursor.y >= eob_top - 0.01
@@ -5644,11 +5767,12 @@ fn layout_frame_rust_line_number_width_matches_gnu_visible_row_width() {
         .iter()
         .find(|row| row.role == GlyphRowRole::Text && row.displays_text)
         .expect("first text row");
-    let left_margin = &first_text_row.glyph_areas[GlyphArea::LeftMargin.index()];
+    let text_prefix = first_text_row.glyph_areas[GlyphArea::Text.index()]
+        .iter()
+        .take_while(|glyph| glyph.charpos == NO_BUFFER_POSITION_CHARPOS);
 
     assert_eq!(
-        left_margin
-            .iter()
+        text_prefix
             .map(|glyph| glyph.kind.clone())
             .collect::<Vec<_>>(),
         vec![
@@ -6707,8 +6831,12 @@ fn implemented_text_backends_match_layout_frame_rows_points_and_cursor() {
         baseline
             .matrix_rows
             .iter()
-            .any(|row| !row.glyph_areas[0].is_empty()),
-        "baseline should exercise left-margin line-number glyphs, got {baseline:?}"
+            .any(|row| row.role == GlyphRowRole::Text
+                && row.glyph_areas[GlyphArea::Text.index()]
+                    .iter()
+                    .take_while(|glyph| glyph.charpos == NO_BUFFER_POSITION_CHARPOS)
+                    .any(|glyph| matches!(glyph.kind, GlyphKindTrace::Char(ch) if ch.is_ascii_digit()))),
+        "baseline should exercise GNU TEXT_AREA line-number prefixes, got {baseline:?}"
     );
     assert!(
         baseline.phys_cursor.is_some(),
@@ -18909,7 +19037,7 @@ fn layout_frame_rust_extends_overlay_string_face_across_content_only_row() {
 }
 
 #[test]
-fn overlay_newline_continuation_reserves_a_blank_line_number_margin() {
+fn overlay_newline_continuation_reserves_a_blank_line_number_text_prefix() {
     // GNU `maybe_produce_line_number` emits the number on the display row that
     // contains an overlay before-string, then a width-matched blank prefix on
     // the continuation display row below it.  The continuation is still part
@@ -18982,25 +19110,33 @@ fn overlay_newline_continuation_reserves_a_blank_line_number_margin() {
     };
     let code_row = row_containing("code");
     let next_row = row_containing("next");
-    let code_margin = &code_row.glyphs[GlyphArea::LeftMargin.index()];
-    let next_margin = &next_row.glyphs[GlyphArea::LeftMargin.index()];
-    let margin_width = |glyphs: &[Glyph]| glyphs.iter().map(|glyph| glyph.pixel_width).sum::<f32>();
+    fn line_number_prefix(row: &GlyphRow) -> &[Glyph] {
+        let text = &row.glyphs[GlyphArea::Text.index()];
+        let len = text
+            .iter()
+            .take_while(|glyph| glyph.charpos == NO_BUFFER_POSITION_CHARPOS)
+            .count();
+        &text[..len]
+    }
+    let code_prefix = line_number_prefix(code_row);
+    let next_prefix = line_number_prefix(next_row);
+    let prefix_width = |glyphs: &[Glyph]| glyphs.iter().map(|glyph| glyph.pixel_width).sum::<f32>();
 
     assert!(
-        !code_margin.is_empty(),
+        !code_prefix.is_empty(),
         "the continuation below an overlay newline must reserve a blank line-number margin; \
          code row={code_row:?}"
     );
     assert!(
-        code_margin
+        code_prefix
             .iter()
             .all(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: ' ' })),
-        "the continuation must not repeat its logical line number; margin={code_margin:?}"
+        "the continuation must not repeat its logical line number; prefix={code_prefix:?}"
     );
     assert!(
-        (margin_width(code_margin) - margin_width(next_margin)).abs() < 0.01,
+        (prefix_width(code_prefix) - prefix_width(next_prefix)).abs() < 0.01,
         "the blank continuation margin must match the normal line-number margin width; \
-         continuation={code_margin:?}, normal={next_margin:?}"
+         continuation={code_prefix:?}, normal={next_prefix:?}"
     );
 }
 
@@ -19285,11 +19421,8 @@ fn layout_frame_rust_renders_overlay_before_string_in_left_margin_area() {
 #[test]
 fn layout_frame_rust_keeps_left_margin_before_string_visible_with_line_numbers() {
     let (left_margin, text, _) = layout_overlay_before_string_in_left_margin_area(true);
-    assert!(
-        left_margin.starts_with('+') && left_margin.contains('1'),
-        "BOL margin content must precede and coexist with line numbers, got {left_margin:?}"
-    );
-    assert_eq!(text, "Head:");
+    assert_eq!(left_margin, "+");
+    assert_eq!(text, " 1 Head:");
 }
 
 #[test]
@@ -19399,7 +19532,7 @@ fn layout_frame_rust_renders_left_margin_marker_in_nested_split_window() {
         .find(|row| {
             row.enabled
                 && row.role == GlyphRowRole::Text
-                && glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with("chang")
+                && glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).contains("change")
         })
         .unwrap_or_else(|| {
             panic!(
@@ -19408,9 +19541,10 @@ fn layout_frame_rust_renders_left_margin_marker_in_nested_split_window() {
             )
         });
     let margin = glyphs_logical_text(&row.glyphs[GlyphArea::LeftMargin.index()]);
+    assert_eq!(margin, "+", "nested target explicit margin lane");
     assert!(
-        margin.starts_with('+'),
-        "nested target must retain its explicit marker before line numbers; got {margin:?}"
+        glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with("  1 change"),
+        "line number must remain the GNU TEXT_AREA prefix"
     );
 }
 
@@ -19515,21 +19649,26 @@ fn layout_frame_rust_keeps_changed_margin_marker_among_dense_empty_gutter_overla
         .iter()
         .copied()
         .find(|row| {
-            glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with("first line")
+            glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).contains("first line")
         })
         .unwrap_or_else(|| panic!("first line row; rendered rows={rendered_texts:?}"));
     let changed = text_rows
         .iter()
         .copied()
         .find(|row| {
-            glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).starts_with("changed line")
+            glyphs_logical_text(&row.glyphs[GlyphArea::Text.index()]).contains("changed line")
         })
         .unwrap_or_else(|| panic!("changed line row; rendered rows={rendered_texts:?}"));
 
     let changed_margin = glyphs_logical_text(&changed.glyphs[GlyphArea::LeftMargin.index()]);
-    assert!(
-        changed_margin.starts_with('+') && changed_margin.contains('2'),
-        "the changed marker must precede and coexist with line number 2; got {changed_margin:?}"
+    assert_eq!(changed_margin, "+", "changed explicit margin marker");
+    assert_eq!(
+        glyphs_logical_text(&first.glyphs[GlyphArea::Text.index()]),
+        "    1 first line "
+    );
+    assert_eq!(
+        glyphs_logical_text(&changed.glyphs[GlyphArea::Text.index()]),
+        "    2 changed line "
     );
     let structural_width = |row: &GlyphRow| {
         row.glyphs[GlyphArea::LeftMargin.index()]

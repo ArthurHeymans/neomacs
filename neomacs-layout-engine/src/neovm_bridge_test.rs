@@ -520,6 +520,35 @@ fn layout_snapshot_buffer_local_value_prefers_local_binding() {
 }
 
 #[test]
+fn layout_snapshot_sees_display_line_numbers_set_through_lisp() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    evaluator
+        .eval_str("(setq display-line-numbers t)")
+        .expect("enable display-line-numbers through Lisp");
+    let buf_id = evaluator
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+
+    let snapshot = {
+        let buffer = evaluator.buffer_manager().get(buf_id).expect("buffer");
+        assert_eq!(
+            buffer.buffer_local_value("display-line-numbers"),
+            Some(Value::T),
+            "the public buffer-local value is the source of truth consumed by redisplay"
+        );
+        LayoutBufferSnapshot::from_buffer_with_obarray(buffer, evaluator.obarray())
+    };
+
+    assert_eq!(
+        buffer_display_line_numbers_mode(&snapshot),
+        DisplayLineNumbersMode::Absolute,
+        "the immutable layout snapshot must preserve a Lisp-created local-if-set binding"
+    );
+}
+
+#[test]
 fn test_window_params_nonselected_reads_window_point() {
     // For NON-selected windows, `params.point` comes from
     // `Window::point` (the snapshotted pointm marker), NOT

@@ -16,7 +16,9 @@ use crate::glyph_row_writer;
 #[cfg(test)]
 use crate::output::builder::DisplayOutputBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{
+    Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
+};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
@@ -896,6 +898,9 @@ enum DisplayTextSourceMapping {
 
 impl DisplayTextSourceMapping {
     fn charpos(self, start_char: usize, char_offset: usize) -> usize {
+        if start_char == NO_BUFFER_POSITION_CHARPOS {
+            return NO_BUFFER_POSITION_CHARPOS;
+        }
         match self {
             Self::NaturalText => start_char + char_offset,
             Self::SourceMapped => start_char,
@@ -2156,7 +2161,10 @@ fn source_span_start_char(span: &SourceSpan) -> usize {
     match &span.start {
         DisplaySourcePosition::Buffer { char_pos, .. } => char_pos.get(),
         DisplaySourcePosition::LispString { char_index, .. } => *char_index,
-        DisplaySourcePosition::Synthetic { offset, .. } => *offset,
+        // Redisplay-owned glyphs have no buffer object/position.  GNU stamps
+        // line-number glyphs with position -1 before copying them into
+        // TEXT_AREA; the protocol sentinel is the typed Rust equivalent.
+        DisplaySourcePosition::Synthetic { .. } => NO_BUFFER_POSITION_CHARPOS,
     }
 }
 

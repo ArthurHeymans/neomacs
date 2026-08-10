@@ -9,7 +9,7 @@ use super::*;
 #[test]
 fn off_when_indicate_empty_lines_disabled() {
     assert!(
-        EmptyLineFringeFillRequest::from_parts(0, false)
+        EndOfBufferRowsFillRequest::from_parts(0, false)
             .side()
             .is_none()
     );
@@ -18,7 +18,7 @@ fn off_when_indicate_empty_lines_disabled() {
 #[test]
 fn left_fringe_for_value_one() {
     assert_eq!(
-        EmptyLineFringeFillRequest::from_parts(1, false).side(),
+        EndOfBufferRowsFillRequest::from_parts(1, false).side(),
         Some(EmptyLineFringeSide::Left),
         "indicate-empty-lines = 1 (t/left) draws in the left fringe"
     );
@@ -27,7 +27,7 @@ fn left_fringe_for_value_one() {
 #[test]
 fn right_fringe_for_value_two() {
     assert_eq!(
-        EmptyLineFringeFillRequest::from_parts(2, false).side(),
+        EndOfBufferRowsFillRequest::from_parts(2, false).side(),
         Some(EmptyLineFringeSide::Right),
         "indicate-empty-lines = 2 (right) draws in the right fringe"
     );
@@ -37,7 +37,7 @@ fn right_fringe_for_value_two() {
 fn never_in_minibuffer() {
     // GNU `!MINI_WINDOW_P (it->w)` — the echo area never shows empty-line marks.
     assert!(
-        EmptyLineFringeFillRequest::from_parts(1, true)
+        EndOfBufferRowsFillRequest::from_parts(1, true)
             .side()
             .is_none(),
         "empty-line indicator is suppressed in the mini-window even when on"

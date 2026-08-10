@@ -250,11 +250,68 @@ fn display_line_numbers_mode_shows_buffer_line_numbers() {
     neo.read_until(Duration::from_secs(8), ready);
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
-    assert_pair_nearly_matches(
+    for (label, session) in [("GNU", &gnu), ("Neomacs", &neo)] {
+        assert!(
+            ready(&session.text_grid()),
+            "{label} must visibly number all buffer lines:\n{}",
+            session.text_grid().join("\n")
+        );
+    }
+    assert_grids_strict(
         "display_line_numbers_mode_shows_buffer_line_numbers",
-        &gnu,
-        &neo,
-        3,
+        gnu.screen(),
+        neo.screen(),
+        &StrictGridOptions {
+            masked_rows: ((ROWS - 2)..ROWS).collect(),
+            row_range: Some(0..(ROWS - 2)),
+            compare_faces: true,
+            allow: Vec::new(),
+        },
+    );
+}
+
+#[test]
+fn global_display_line_numbers_mode_numbers_new_file_buffers() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    invoke_mx_command(&mut gnu, &mut neo, "global-display-line-numbers-mode");
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "global-display-line-numbers.txt",
+        "alpha\nbeta\ngamma\n",
+        "C-x C-f",
+    );
+
+    let has_numbered_lines = |grid: &[String]| {
+        grid.iter().any(|row| row.contains("1 alpha"))
+            && grid.iter().any(|row| row.contains("2 beta"))
+            && grid.iter().any(|row| row.contains("3 gamma"))
+    };
+    gnu.read_until(Duration::from_secs(6), has_numbered_lines);
+    neo.read_until(Duration::from_secs(8), has_numbered_lines);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert!(
+        has_numbered_lines(&gnu.text_grid()),
+        "GNU oracle must number a new file buffer after enabling the global mode:\n{}",
+        gnu.text_grid().join("\n")
+    );
+    assert!(
+        has_numbered_lines(&neo.text_grid()),
+        "Neomacs must number a new file buffer after enabling the global mode:\n{}",
+        neo.text_grid().join("\n")
+    );
+    assert_grids_strict(
+        "global_display_line_numbers_mode_numbers_new_file_buffers",
+        gnu.screen(),
+        neo.screen(),
+        &StrictGridOptions {
+            masked_rows: ((ROWS - 2)..ROWS).collect(),
+            row_range: Some(0..(ROWS - 2)),
+            compare_faces: true,
+            allow: Vec::new(),
+        },
     );
 }
 
