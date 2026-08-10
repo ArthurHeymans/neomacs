@@ -1698,6 +1698,12 @@ pub const AUTO_AUTO_INDENT_MELPA_PIN: (&str, &str) = ("auto-auto-indent", "20131
 /// `753b27363e39c10edc9e4e452bdbbbe4d190df4a`.
 pub const ES_LIB_MELPA_PIN: (&str, &str) = ("es-lib", "20141111.1830");
 
+/// The exact Esh Help package selected for practical Eshell command
+/// discovery, ElDoc, manual synopsis, cache, and full-help parity. MELPA built
+/// this archive from upstream commit
+/// `417673ed18a983930a66a6692dbfb288a995cb80`.
+pub const ESH_HELP_MELPA_PIN: (&str, &str) = ("esh-help", "20190905.22");
+
 /// The exact ESS package selected for practical R source editing,
 /// indentation, syntax/fontification, assignment and call filling,
 /// navigation/indexing, command generation, project discovery, package

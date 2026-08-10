@@ -327,7 +327,7 @@ rank	package	downloads	status
 326	org-cliplink	328397	covered
 327	lsp-java	325659	covered
 328	toml-mode	323991	covered
-329	esh-help	323603	todo
+329	esh-help	323603	covered
 330	helm-gitignore	323538	todo
 331	pug-mode	319227	covered
 332	quelpa	318753	todo
