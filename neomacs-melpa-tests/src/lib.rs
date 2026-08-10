@@ -3052,6 +3052,12 @@ pub const HELM_C_YASNIPPET_MELPA_PIN: (&str, &str) = ("helm-c-yasnippet", "20230
 /// by the Helm parity corpus.
 pub const HELM_CORE_MELPA_PIN: (&str, &str) = ("helm-core", "20260720.1307");
 
+/// The exact Helm CSS SCSS package selected for real selector navigation,
+/// comment generation, cache lifecycle, and modern-Helm compatibility parity.
+/// MELPA built this archive from upstream commit
+/// `2169d83d8fdc661241df208cb3235112735d936e`.
+pub const HELM_CSS_SCSS_MELPA_PIN: (&str, &str) = ("helm-css-scss", "20230522.1113");
+
 /// The exact Helm-Descbinds package selected for practical active-keymap
 /// collection, prefix narrowing, Helm source/candidate construction, command
 /// execution and help actions, global-mode lifecycle, and launch parity.

@@ -416,6 +416,7 @@ mod helm_ag;
 mod helm_c_yasnippet;
 mod helm_company;
 mod helm_core;
+mod helm_css_scss;
 mod helm_descbinds;
 mod helm_flx;
 mod helm_ls_git;

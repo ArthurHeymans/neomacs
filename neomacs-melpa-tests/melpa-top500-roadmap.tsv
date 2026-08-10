@@ -344,7 +344,7 @@ rank	package	downloads	status
 343	gitignore-templates	307177	covered
 344	ag	307059	covered
 345	julia-mode	303997	covered
-346	helm-css-scss	303862	todo
+346	helm-css-scss	303862	covered
 347	eshell-z	302638	todo
 348	elfeed	301741	covered
 349	elisp-def	300903	todo
