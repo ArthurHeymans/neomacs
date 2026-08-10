@@ -346,6 +346,7 @@ mod evil_anzu;
 mod evil_args;
 mod evil_cleverparens;
 mod evil_collection;
+mod evil_easymotion;
 mod evil_ediff;
 mod evil_escape;
 mod evil_exchange;
