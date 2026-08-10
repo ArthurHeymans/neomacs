@@ -4113,6 +4113,35 @@ fn write_region_honors_dynamic_coding_system_for_write() {
 }
 
 #[test]
+fn write_region_honors_buffer_coding_cookie_over_default_dos_eol() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("generated-lisp.el");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let results = bootstrap_eval(&format!(
+        r#"(let ((saved-default (default-value 'buffer-file-coding-system)))
+             (unwind-protect
+                 (progn
+                   (set-default 'buffer-file-coding-system 'undecided-dos)
+                   (with-temp-buffer
+                     (insert "alpha\n;; Local Variables:\n;; coding: utf-8-emacs-unix\n;; End:\n")
+                     (write-region nil nil "{path_lisp}" nil 'silent)
+                     last-coding-system-used))
+               (set-default 'buffer-file-coding-system saved-default)))"#
+    ));
+
+    assert_eq!(results[0], "OK utf-8-emacs-unix");
+    assert_eq!(
+        std::fs::read(&path).expect("read generated Lisp output"),
+        b"alpha\n;; Local Variables:\n;; coding: utf-8-emacs-unix\n;; End:\n"
+    );
+}
+
+#[test]
 fn write_region_uses_runtime_shift_jis_codec() {
     crate::test_utils::init_test_tracing();
 

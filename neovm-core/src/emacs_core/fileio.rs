@@ -5880,15 +5880,6 @@ pub(crate) enum WriteCodingFallback {
     RawText,
 }
 
-impl WriteCodingFallback {
-    fn coding_system(self) -> crate::encoding::RuntimeCodingSystem {
-        match self {
-            Self::Utf8 => crate::encoding::RuntimeCodingSystem::from_symbol(intern("utf-8")),
-            Self::RawText => crate::encoding::RuntimeCodingSystem::from_symbol(intern("raw-text")),
-        }
-    }
-}
-
 /// Resolve the coding system to use for writing as an interned protocol value.
 ///
 /// Priority:
@@ -5900,10 +5891,20 @@ pub(crate) fn resolve_write_coding_system(
     buffer_id: crate::buffer::BufferId,
     fallback: WriteCodingFallback,
 ) -> crate::encoding::RuntimeCodingSystem {
+    crate::encoding::RuntimeCodingSystem::from_symbol(resolve_write_coding_system_symbol(
+        eval, buffer_id, fallback,
+    ))
+}
+
+fn resolve_write_coding_system_symbol(
+    eval: &super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    fallback: WriteCodingFallback,
+) -> super::intern::SymId {
     // 1. Check coding-system-for-write
     let coding_system_for_write = eval.visible_variable_value_or_nil("coding-system-for-write");
     if let Some(name) = coding_system_value_to_name(&coding_system_for_write) {
-        return crate::encoding::RuntimeCodingSystem::from_symbol(intern(&name));
+        return intern(&name);
     }
 
     // 2. Read the visible per-buffer slot, not only an explicitly local
@@ -5912,10 +5913,50 @@ pub(crate) fn resolve_write_coding_system(
         && let Some(val) = buf.buffer_local_value("buffer-file-coding-system")
         && let Some(name) = coding_system_value_to_name(&val)
     {
-        return crate::encoding::RuntimeCodingSystem::from_symbol(intern(&name));
+        return intern(&name);
     }
 
-    fallback.coding_system()
+    match fallback {
+        WriteCodingFallback::Utf8 => intern("utf-8"),
+        WriteCodingFallback::RawText => intern("raw-text"),
+    }
+}
+
+fn select_write_region_coding_system(
+    eval: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    from: Value,
+    to: Value,
+    filename: Value,
+) -> Result<crate::encoding::RuntimeCodingSystem, Flow> {
+    let fallback = resolve_write_coding_system_symbol(eval, buffer_id, WriteCodingFallback::Utf8);
+    let selector = eval.visible_variable_value_or_nil("select-safe-coding-system-function");
+    let Some(selector_id) = selector.as_symbol_id() else {
+        return Ok(crate::encoding::RuntimeCodingSystem::from_symbol(fallback));
+    };
+    if !eval.obarray().fboundp_id(selector_id) {
+        return Ok(crate::encoding::RuntimeCodingSystem::from_symbol(fallback));
+    }
+
+    // GNU `choose_write_coding_system` delegates the final choice to
+    // `select-safe-coding-system-function`.  Among other safety checks, the
+    // Lisp selector calls `find-auto-coding` on the exact region, so a
+    // `coding:` declaration in generated Lisp takes precedence over the
+    // inherited platform default.
+    let selected = eval.funcall_general(
+        selector,
+        vec![from, to, Value::symbol(fallback), Value::NIL, filename],
+    )?;
+    let selected_id = selected
+        .as_symbol_id()
+        .ok_or_else(|| signal(LispCondition::CodingSystemError, vec![selected]))?;
+    let selected_name = resolve_sym(selected_id);
+    if !eval.coding_systems.is_known_or_derived(selected_name) {
+        return Err(signal(LispCondition::CodingSystemError, vec![selected]));
+    }
+    Ok(crate::encoding::RuntimeCodingSystem::from_symbol(
+        selected_id,
+    ))
 }
 
 /// Extract a coding system name from a `Value` (symbol or string).
@@ -6074,9 +6115,27 @@ pub(crate) fn builtin_write_region(
         ));
     }
 
-    // --- Encode using the appropriate coding system ---
-    // Priority: coding-system-for-write > buffer-file-coding-system > utf-8
-    let coding_system = resolve_write_coding_system(eval, current_id, WriteCodingFallback::Utf8);
+    let (coding_from, coding_to) = if args[0].is_string() {
+        (args[0], Value::NIL)
+    } else if args[0].is_nil() {
+        (
+            super::buffer::builtin_point_min_0(eval)?,
+            super::buffer::builtin_point_max_0(eval)?,
+        )
+    } else {
+        (args[0], args.get(1).copied().unwrap_or(Value::NIL))
+    };
+
+    // --- Encode using GNU's complete write-coding selection protocol. ---
+    // The Lisp selector detects content declarations such as the
+    // `utf-8-emacs-unix` trailer emitted for generated Lisp files.
+    let coding_system = select_write_region_coding_system(
+        eval,
+        current_id,
+        coding_from,
+        coding_to,
+        Value::heap_string(resolved.clone()),
+    )?;
     let encoded = crate::encoding::encode_file_region_in_context(eval, content, coding_system)?;
 
     // GNU `write_region' locks LOCKNAME after coding-system selection and
