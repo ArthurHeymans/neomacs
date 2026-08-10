@@ -114,7 +114,7 @@ fn find_file_name_handler_matches_raw_unibyte_filename_bytes() {
 
     let raw_filename = crate::heap_types::LispString::from_unibyte(b"/fake:\xFF".to_vec());
     assert_eq!(
-        find_file_name_handler_lisp(&eval.obarray, &raw_filename, Value::symbol("file-exists-p")),
+        find_file_name_handler_lisp_for_eval(&eval, &raw_filename, Value::symbol("file-exists-p")),
         handler
     );
 }
@@ -5645,4 +5645,92 @@ fn rename_by_copy_delete_recreates_a_symlink() {
     rename_regular_file_by_copy_delete(&src, &dst, false).expect("symlink move");
     assert!(!src.exists(), "source symlink removed");
     assert_eq!(std::fs::read_link(&dst).unwrap(), target);
+}
+
+/// Task #26: the `directory-files` MATCH argument runs GNU
+/// `fast_string_match_internal` (`src/dired.c:311`), which arms
+/// `re_match_object` = the file name and `RE_SETUP_SYNTAX_TABLE_FOR_OBJECT`
+/// (`src/syntax.c:277`): `\sw` classifies by the CURRENT BUFFER's syntax
+/// table. Measured GNU 31 (buffer-local copy of the standard table, `?z`
+/// made whitespace, files abc + zzz): → ("abc").
+#[test]
+fn directory_files_match_reads_current_buffer_syntax_table() {
+    crate::test_utils::init_test_tracing();
+    let dir = std::env::temp_dir().join("neovm_dirfiles_syntax_table");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    let dir_str = dir.to_string_lossy().to_string();
+    fs::write(dir.join("abc"), "").unwrap();
+    fs::write(dir.join("zzz"), "").unwrap();
+
+    let mut eval = Context::new();
+    eval.eval_str("(set-syntax-table (copy-syntax-table (standard-syntax-table)))")
+        .expect("set-syntax-table");
+    eval.eval_str("(modify-syntax-entry ?z \" \")")
+        .expect("modify-syntax-entry");
+    let result = builtin_directory_files(
+        &mut eval,
+        vec![
+            Value::string(&dir_str),
+            Value::NIL,
+            Value::string("\\`\\sw+\\'"),
+        ],
+    )
+    .unwrap();
+    let names: Vec<String> = list_to_vec(&result)
+        .expect("file list")
+        .iter()
+        .map(|v| v.as_utf8_str().unwrap().to_string())
+        .collect();
+    LAST_TEST_CTX.with(|slot| slot.borrow_mut().push(eval));
+    assert_eq!(
+        names,
+        vec!["abc"],
+        "directory-files MATCH must consult the buffer's syntax table"
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// Task #26: GNU `Ffind_file_name_handler` (`src/fileio.c:411`) matches
+/// `file-name-handler-alist` regexps with `fast_string_match`, under the
+/// current buffer's syntax table. Measured GNU 31 (buffer-local table, `?z`
+/// made whitespace, alist ("\\`\\sw+\\'" . my-handler)): "abc" → my-handler,
+/// "zzz" → nil.
+#[test]
+fn find_file_name_handler_reads_current_buffer_syntax_table() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str("(set-syntax-table (copy-syntax-table (standard-syntax-table)))")
+        .expect("set-syntax-table");
+    eval.eval_str("(modify-syntax-entry ?z \" \")")
+        .expect("modify-syntax-entry");
+    eval.obarray.set_symbol_value(
+        "file-name-handler-alist",
+        Value::list(vec![Value::cons(
+            Value::string("\\`\\sw+\\'"),
+            Value::symbol("my-handler"),
+        )]),
+    );
+
+    let hit = builtin_find_file_name_handler(
+        &mut eval,
+        vec![Value::string("abc"), Value::symbol("insert-file-contents")],
+    )
+    .unwrap();
+    let miss = builtin_find_file_name_handler(
+        &mut eval,
+        vec![Value::string("zzz"), Value::symbol("insert-file-contents")],
+    )
+    .unwrap();
+    let hit_name = hit.as_symbol_name().map(|name| name.to_string());
+    LAST_TEST_CTX.with(|slot| slot.borrow_mut().push(eval));
+    assert_eq!(
+        hit_name.as_deref(),
+        Some("my-handler"),
+        "handler regexp \\sw must match abc under the buffer table"
+    );
+    assert!(
+        miss.is_nil(),
+        "zzz must not match \\sw+ once ?z is whitespace in the buffer table"
+    );
 }

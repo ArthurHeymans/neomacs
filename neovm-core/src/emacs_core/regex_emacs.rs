@@ -3455,6 +3455,7 @@ pub(crate) struct DefaultSyntaxLookup;
 
 /// Syntax lookup backed by a buffer's actual syntax table.
 /// Used when regex searching within a buffer context.
+#[derive(Clone, Copy)]
 pub(crate) struct BufferSyntaxLookup {
     pub syntax_table: crate::emacs_core::syntax::SyntaxTable,
     pub category_table: Option<crate::emacs_core::value::Value>,

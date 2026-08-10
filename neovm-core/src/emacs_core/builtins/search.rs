@@ -92,6 +92,95 @@ fn string_regexp_syntax_lookup<'a>(
     )
 }
 
+/// The syntax state GNU's internal `fast_string_match_internal`
+/// (`src/search.c:485`) arms before matching: `re_match_object` = the searched
+/// string plus `RE_SETUP_SYNTAX_TABLE_FOR_OBJECT` (`src/syntax.c:277`), whose
+/// `SETUP_BUFFER_SYNTAX_TABLE` takes the base table -- and the category table
+/// and the `parse-sexp-lookup-properties` gate -- from the CURRENT BUFFER,
+/// exactly as the Lisp-visible `string-match` does. Its callers are the
+/// internal matchers: `completion-regexp-list` filtering
+/// (`src/minibuf.c:1592`, `src/dired.c:756`), the `directory-files` MATCH
+/// argument (`src/dired.c:311`) and `Ffind_file_name_handler`
+/// (`src/fileio.c:411`).
+///
+/// Owned and `Copy` so a caller snapshots it once and keeps matching between
+/// `eval.apply` calls (the completion predicate loop) without holding any
+/// borrow of the evaluator. The per-string property resolver is rebuilt from
+/// `(obarray, buffers)` at each match, and only when the snapshot's gate was
+/// set AND the string actually carries intervals -- a match over a
+/// propertyless string runs the position-free path, as GNU's
+/// `update_syntax_table` returns early when `interval_of` finds none.
+#[derive(Clone, Copy)]
+pub(crate) struct FastStringMatchSyntax {
+    /// `SETUP_BUFFER_SYNTAX_TABLE`: `None` when there is no current buffer,
+    /// which degrades to GNU's standard classification.
+    base: Option<crate::emacs_core::regex_emacs::BufferSyntaxLookup>,
+    /// The current buffer's `parse-sexp-lookup-properties` at snapshot time.
+    honor_properties: bool,
+}
+
+impl FastStringMatchSyntax {
+    /// Snapshot from the evaluator -- the only constructor, so an internal
+    /// string matcher cannot exist without having consulted the current
+    /// buffer's tables. Infallible: the sole failure inside
+    /// `active_category_table_for_buffer` is the standard category table
+    /// failing to bootstrap, and a `None` category table already degrades to
+    /// the default classification at match time
+    /// (`BufferSyntaxLookup::char_has_category`).
+    pub(crate) fn for_current_buffer(eval: &super::eval::Context) -> Self {
+        let current_buffer = eval.buffers.current_buffer();
+        let base =
+            current_buffer.map(
+                |buffer| crate::emacs_core::regex_emacs::BufferSyntaxLookup {
+                    syntax_table: crate::emacs_core::syntax::SyntaxTable::for_buffer(buffer),
+                    category_table: crate::emacs_core::category::active_category_table_for_buffer(
+                        current_buffer,
+                    )
+                    .ok(),
+                    word_boundary: current_word_boundary_lookup(eval),
+                },
+            );
+        let honor_properties =
+            base.is_some() && crate::emacs_core::syntax::parse_sexp_lookup_properties_enabled(eval);
+        Self {
+            base,
+            honor_properties,
+        }
+    }
+
+    /// GNU `fast_string_match_internal`'s `re_search` over STRING (always
+    /// non-POSIX: `search.c` compiles the pattern with `posix = 0`).
+    #[allow(clippy::too_many_arguments)] // matching options stay explicit at the GNU-regexp boundary
+    pub(crate) fn search(
+        &self,
+        obarray: &crate::emacs_core::symbol::Obarray,
+        buffers: &crate::buffer::BufferManager,
+        pattern: &crate::heap_types::LispString,
+        string: &crate::heap_types::LispString,
+        searched_string: super::regex::SearchedString,
+        start: usize,
+        case_fold: bool,
+    ) -> Result<Option<super::regex::StringSearchSuccess>, String> {
+        // Interval test ahead of the resolver snapshot: a string with no
+        // intervals cannot honour anything (see
+        // `current_string_match_syntax_properties`).
+        let honor = self.honor_properties && !string.intervals().is_empty();
+        let properties =
+            crate::emacs_core::syntax::SyntaxProperties::for_scan(honor, obarray, buffers);
+        let lookup = super::regex::StringSyntaxLookup::new(self.base, string, properties);
+        super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix_syntax(
+            pattern,
+            string,
+            searched_string,
+            start,
+            case_fold,
+            false,
+            None,
+            lookup.as_lookup(),
+        )
+    }
+}
+
 /// Snapshot the string-match property source, borrowing only the obarray.
 ///
 /// The gate is the CURRENT BUFFER's `parse-sexp-lookup-properties`, whatever

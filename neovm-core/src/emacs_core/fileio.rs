@@ -1455,17 +1455,31 @@ fn directory_files(
     nosort: bool,
     count: Option<usize>,
 ) -> Result<Vec<crate::heap_types::LispString>, DirectoryFilesError> {
-    directory_files_with_decoder(dir, full, match_regex, nosort, count, |bytes| {
-        crate::heap_types::LispString::from_unibyte(bytes.to_vec())
-    })
+    let eval = super::eval::Context::new();
+    let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(&eval);
+    directory_files_with_decoder(
+        dir,
+        full,
+        match_regex,
+        nosort,
+        count,
+        syntax,
+        &eval.obarray,
+        &eval.buffers,
+        |bytes| crate::heap_types::LispString::from_unibyte(bytes.to_vec()),
+    )
 }
 
+#[allow(clippy::too_many_arguments)] // match-time state stays explicit at the GNU-regexp boundary
 fn directory_files_with_decoder(
     dir: &crate::heap_types::LispString,
     full: bool,
     match_regex: Option<&crate::heap_types::LispString>,
     nosort: bool,
     count: Option<usize>,
+    syntax: super::builtins::search::FastStringMatchSyntax,
+    obarray: &super::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
     decode_name: impl Fn(&[u8]) -> crate::heap_types::LispString,
 ) -> Result<Vec<crate::heap_types::LispString>, DirectoryFilesError> {
     if count == Some(0) {
@@ -1484,13 +1498,14 @@ fn directory_files_with_decoder(
     for raw_name in names {
         let name = decode_name(raw_name.as_bytes());
         if let Some(pattern) = match_regex {
-            let matched =
-                super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
+            let matched = syntax
+                .search(
+                    obarray,
+                    buffers,
                     pattern,
                     &name,
                     super::regex::SearchedString::Owned(name.clone()),
                     0,
-                    false,
                     false,
                 )
                 .map_err(|msg| {
@@ -4600,27 +4615,6 @@ pub(crate) fn builtin_find_file_name_handler(eval: &mut Context, args: Vec<Value
 /// handlers declare a restricted operation set without writing
 /// trampolines for everything else.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn find_file_name_handler(obarray: &Obarray, filename: &str, operation: Value) -> Value {
-    let filename = super::builtins::plain_str_to_lisp_string(filename, !filename.is_ascii());
-    find_file_name_handler_lisp(obarray, &filename, operation)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn find_file_name_handler_lisp(
-    obarray: &Obarray,
-    filename: &crate::heap_types::LispString,
-    operation: Value,
-) -> Value {
-    find_file_name_handler_lisp_with_values(
-        obarray,
-        filename,
-        operation,
-        obarray.symbol_value("file-name-handler-alist").copied(),
-        obarray.symbol_value("inhibit-file-name-operation").copied(),
-        obarray.symbol_value("inhibit-file-name-handlers").copied(),
-    )
-}
-
 fn dynamic_or_global_symbol_value(eval: &Context, name: &str) -> Option<Value> {
     eval.eval_symbol_by_id(intern(name)).ok()
 }
@@ -4632,6 +4626,8 @@ pub(crate) fn find_file_name_handler_lisp_for_eval(
 ) -> Value {
     find_file_name_handler_lisp_with_values(
         &eval.obarray,
+        &eval.buffers,
+        super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval),
         filename,
         operation,
         dynamic_or_global_symbol_value(eval, "file-name-handler-alist"),
@@ -4640,8 +4636,11 @@ pub(crate) fn find_file_name_handler_lisp_for_eval(
     )
 }
 
+#[allow(clippy::too_many_arguments)] // match-time state stays explicit at the GNU-regexp boundary
 fn find_file_name_handler_lisp_with_values(
     obarray: &Obarray,
+    buffers: &crate::buffer::BufferManager,
+    syntax: super::builtins::search::FastStringMatchSyntax,
     filename: &crate::heap_types::LispString,
     operation: Value,
     handler_alist: Option<Value>,
@@ -4705,18 +4704,18 @@ fn find_file_name_handler_lisp_with_values(
         }
 
         // Match the regexp against the filename.
-        let match_pos =
-            match super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
-                regexp,
-                filename,
-                crate::emacs_core::regex::SearchedString::Owned(filename.clone()),
-                0,
-                false,
-                false,
-            ) {
-                Ok(Some(success)) => success.into_parts().0.get() as i64,
-                _ => continue,
-            };
+        let match_pos = match syntax.search(
+            obarray,
+            buffers,
+            regexp,
+            filename,
+            crate::emacs_core::regex::SearchedString::Owned(filename.clone()),
+            0,
+            false,
+        ) {
+            Ok(Some(success)) => success.into_parts().0.get() as i64,
+            _ => continue,
+        };
 
         if match_pos > best_pos {
             // Skip if this handler is inhibited for the current operation.
@@ -4847,11 +4846,19 @@ pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> E
         None
     };
 
-    let files =
-        directory_files_with_decoder(&dir, full, match_pattern.as_ref(), nosort, count, |bytes| {
-            decode_file_name_lisp(eval, bytes)
-        })
-        .map_err(|e| signal_directory_files_error(e, &dir))?;
+    let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval);
+    let files = directory_files_with_decoder(
+        &dir,
+        full,
+        match_pattern.as_ref(),
+        nosort,
+        count,
+        syntax,
+        &eval.obarray,
+        &eval.buffers,
+        |bytes| decode_file_name_lisp(eval, bytes),
+    )
+    .map_err(|e| signal_directory_files_error(e, &dir))?;
     Ok(Value::list(
         files.into_iter().map(Value::heap_string).collect(),
     ))

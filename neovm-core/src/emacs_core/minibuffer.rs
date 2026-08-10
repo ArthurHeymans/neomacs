@@ -1927,11 +1927,12 @@ fn completion_predicate_matches_with(
 }
 
 pub(crate) fn builtin_try_completion_with_candidates(
+    eval: &mut super::eval::Context,
     args: &[Value],
     candidates: Option<Vec<CompletionCandidate>>,
     ignore_case: bool,
     regexps: &[crate::heap_types::LispString],
-    mut apply: impl FnMut(Value, Vec<Value>) -> EvalResult,
+    syntax: super::builtins::search::FastStringMatchSyntax,
 ) -> EvalResult {
     expect_min_args("try-completion", args, 2)?;
     expect_max_args("try-completion", args, 3)?;
@@ -1940,7 +1941,7 @@ pub(crate) fn builtin_try_completion_with_candidates(
     let collection = args[1];
 
     let Some(candidates) = candidates else {
-        return apply(collection, vec![args[0], predicate, Value::NIL]);
+        return eval.apply(collection, vec![args[0], predicate, Value::NIL]);
     };
 
     // Faithful port of GNU `Ftry_completion` (src/minibuf.c).  We iterate over
@@ -1961,11 +1962,20 @@ pub(crate) fn builtin_try_completion_with_candidates(
             continue;
         }
         if !regexps.is_empty()
-            && !matches_completion_regexps(&candidate.completion, regexps, ignore_case)?
+            && !matches_completion_regexps(
+                syntax,
+                &eval.obarray,
+                &eval.buffers,
+                &candidate.completion,
+                regexps,
+                ignore_case,
+            )?
         {
             continue;
         }
-        if !completion_predicate_matches_with(predicate, candidate, &mut apply)? {
+        if !completion_predicate_matches_with(predicate, candidate, &mut |function, call_args| {
+            eval.apply(function, call_args)
+        })? {
             continue;
         }
 
@@ -2054,11 +2064,12 @@ pub(crate) fn builtin_try_completion_with_candidates(
 }
 
 pub(crate) fn builtin_all_completions_with_candidates(
+    eval: &mut super::eval::Context,
     args: &[Value],
     candidates: Option<Vec<CompletionCandidate>>,
     ignore_case: bool,
     regexps: &[crate::heap_types::LispString],
-    mut apply: impl FnMut(Value, Vec<Value>) -> EvalResult,
+    syntax: super::builtins::search::FastStringMatchSyntax,
 ) -> EvalResult {
     expect_min_args("all-completions", args, 2)?;
     expect_max_args("all-completions", args, 4)?;
@@ -2067,7 +2078,7 @@ pub(crate) fn builtin_all_completions_with_candidates(
     let collection = args[1];
 
     let Some(candidates) = candidates else {
-        return apply(collection, vec![args[0], predicate, Value::T]);
+        return eval.apply(collection, vec![args[0], predicate, Value::T]);
     };
 
     // Two-pass approach: first filter candidates using the predicate
@@ -2081,11 +2092,20 @@ pub(crate) fn builtin_all_completions_with_candidates(
             continue;
         }
         if !regexps.is_empty()
-            && !matches_completion_regexps(&candidate.completion, regexps, ignore_case)?
+            && !matches_completion_regexps(
+                syntax,
+                &eval.obarray,
+                &eval.buffers,
+                &candidate.completion,
+                regexps,
+                ignore_case,
+            )?
         {
             continue;
         }
-        if completion_predicate_matches_with(predicate, candidate, &mut apply)? {
+        if completion_predicate_matches_with(predicate, candidate, &mut |function, call_args| {
+            eval.apply(function, call_args)
+        })? {
             matching_completions.push(candidate.completion.clone());
         }
     }
@@ -2098,11 +2118,12 @@ pub(crate) fn builtin_all_completions_with_candidates(
 }
 
 pub(crate) fn builtin_test_completion_with_candidates(
+    eval: &mut super::eval::Context,
     args: &[Value],
     candidates: Option<Vec<CompletionCandidate>>,
     ignore_case: bool,
     regexps: &[crate::heap_types::LispString],
-    mut apply: impl FnMut(Value, Vec<Value>) -> EvalResult,
+    syntax: super::builtins::search::FastStringMatchSyntax,
 ) -> EvalResult {
     expect_min_args("test-completion", args, 2)?;
     expect_max_args("test-completion", args, 3)?;
@@ -2111,7 +2132,7 @@ pub(crate) fn builtin_test_completion_with_candidates(
     let collection = args[1];
 
     let Some(candidates) = candidates else {
-        return apply(
+        return eval.apply(
             collection,
             vec![args[0], predicate, Value::symbol("lambda")],
         );
@@ -2123,11 +2144,20 @@ pub(crate) fn builtin_test_completion_with_candidates(
             continue;
         }
         if !regexps.is_empty()
-            && !matches_completion_regexps(&candidate.completion, regexps, ignore_case)?
+            && !matches_completion_regexps(
+                syntax,
+                &eval.obarray,
+                &eval.buffers,
+                &candidate.completion,
+                regexps,
+                ignore_case,
+            )?
         {
             continue;
         }
-        if completion_predicate_matches_with(predicate, candidate, &mut apply)? {
+        if completion_predicate_matches_with(predicate, candidate, &mut |function, call_args| {
+            eval.apply(function, call_args)
+        })? {
             return Ok(Value::T);
         }
     }
@@ -2204,14 +2234,21 @@ pub(crate) fn completion_regexp_lisp_list_from_obarray(
 
 /// Return `true` when `candidate` matches **all** regexps in `regexps`.
 ///
-/// Uses the Emacs regex engine (`string_match_full_with_case_fold`) so that
-/// Emacs-style `\(...\)` patterns work correctly.
+/// GNU `match_regexps` / `Ftry_completion` (`src/minibuf.c:1592`,
+/// `src/minibuf.c` candidate loop) run `fast_string_match_internal`, so the
+/// match carries the current buffer's syntax state via `syntax`.
 fn matches_completion_regexps(
+    syntax: super::builtins::search::FastStringMatchSyntax,
+    obarray: &super::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
     candidate: &CompletionText,
     regexps: &[crate::heap_types::LispString],
     ignore_case: bool,
 ) -> Result<bool, Flow> {
     completion_string_matches_regexps(
+        syntax,
+        obarray,
+        buffers,
         candidate.lisp_string(),
         candidate.searched_string(),
         regexps,
@@ -2220,11 +2257,17 @@ fn matches_completion_regexps(
 }
 
 pub(crate) fn lisp_string_matches_completion_regexps(
+    syntax: super::builtins::search::FastStringMatchSyntax,
+    obarray: &super::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
     candidate: &crate::heap_types::LispString,
     regexps: &[crate::heap_types::LispString],
     ignore_case: bool,
 ) -> Result<bool, Flow> {
     completion_string_matches_regexps(
+        syntax,
+        obarray,
+        buffers,
         candidate,
         super::regex::SearchedString::Owned(candidate.clone()),
         regexps,
@@ -2232,20 +2275,25 @@ pub(crate) fn lisp_string_matches_completion_regexps(
     )
 }
 
+#[allow(clippy::too_many_arguments)] // match-time state stays explicit at the GNU-regexp boundary
 fn completion_string_matches_regexps(
+    syntax: super::builtins::search::FastStringMatchSyntax,
+    obarray: &super::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
     candidate: &crate::heap_types::LispString,
     searched_string: super::regex::SearchedString,
     regexps: &[crate::heap_types::LispString],
     ignore_case: bool,
 ) -> Result<bool, Flow> {
     for re in regexps {
-        match super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
+        match syntax.search(
+            obarray,
+            buffers,
             re,
             candidate,
             searched_string.clone(),
             0,
             ignore_case,
-            false,
         ) {
             Ok(Some(_)) => {} // matched — continue checking remaining regexps
             Ok(None) => return Ok(false),
@@ -2289,17 +2337,19 @@ pub(crate) fn builtin_try_completion(
     let candidates = completion_candidates_from_collection(eval, &args[1])?;
     let ignore_case = completion_ignore_case(&eval.obarray);
     let regexps = completion_regexp_lisp_list_from_obarray(&eval.obarray);
+    let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval);
     // Root the candidate set across the predicate calls (see the holder doc).
     let root_scope = eval.save_specpdl_roots();
     if let Some(candidates) = &candidates {
         eval.push_specpdl_root(completion_candidates_root_holder(candidates));
     }
     let result = builtin_try_completion_with_candidates(
+        eval,
         &args,
         candidates,
         ignore_case,
         &regexps,
-        |function, call_args| eval.apply(function, call_args),
+        syntax,
     );
     eval.restore_specpdl_roots(root_scope);
     result
@@ -2312,17 +2362,19 @@ pub(crate) fn builtin_all_completions(
     let candidates = completion_candidates_from_collection(eval, &args[1])?;
     let ignore_case = completion_ignore_case(&eval.obarray);
     let regexps = completion_regexp_lisp_list_from_obarray(&eval.obarray);
+    let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval);
     // Root the candidate set across the predicate calls (see the holder doc).
     let root_scope = eval.save_specpdl_roots();
     if let Some(candidates) = &candidates {
         eval.push_specpdl_root(completion_candidates_root_holder(candidates));
     }
     let result = builtin_all_completions_with_candidates(
+        eval,
         &args,
         candidates,
         ignore_case,
         &regexps,
-        |function, call_args| eval.apply(function, call_args),
+        syntax,
     );
     eval.restore_specpdl_roots(root_scope);
     result
@@ -2335,17 +2387,19 @@ pub(crate) fn builtin_test_completion(
     let candidates = completion_candidates_from_collection(eval, &args[1])?;
     let ignore_case = completion_ignore_case(&eval.obarray);
     let regexps = completion_regexp_lisp_list_from_obarray(&eval.obarray);
+    let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval);
     // Root the candidate set across the predicate calls (see the holder doc).
     let root_scope = eval.save_specpdl_roots();
     if let Some(candidates) = &candidates {
         eval.push_specpdl_root(completion_candidates_root_holder(candidates));
     }
     let result = builtin_test_completion_with_candidates(
+        eval,
         &args,
         candidates,
         ignore_case,
         &regexps,
-        |function, call_args| eval.apply(function, call_args),
+        syntax,
     );
     eval.restore_specpdl_roots(root_scope);
     result

@@ -1656,3 +1656,81 @@ fn value_to_string_list_from_vector() {
     let result = value_to_string_list(&vec);
     assert_eq!(result, vec!["a", "b"]);
 }
+
+/// Task #26: GNU filters completion candidates against
+/// `completion-regexp-list` through `fast_string_match_internal`
+/// (`src/minibuf.c:1592` `match_regexps`, `Ftry_completion`), which arms
+/// `re_match_object` = the candidate string and
+/// `RE_SETUP_SYNTAX_TABLE_FOR_OBJECT` (`src/syntax.c:277`):
+/// `SETUP_BUFFER_SYNTAX_TABLE` makes `\sw` classify by the CURRENT BUFFER's
+/// syntax table, buffer-local table included. Measured GNU 31 (buffer-local
+/// copy of the standard table, `?z` made whitespace): all-completions →
+/// ("abc"), try-completion → "abc", test-completion "zzz" → nil.
+#[test]
+fn completion_regexp_list_reads_current_buffer_syntax_table() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.eval_str("(set-syntax-table (copy-syntax-table (standard-syntax-table)))")
+        .expect("set-syntax-table");
+    eval.eval_str("(modify-syntax-entry ?z \" \")")
+        .expect("modify-syntax-entry");
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("\\`\\sw+\\'")]),
+    );
+
+    let coll = Value::list(vec![Value::string("abc"), Value::string("zzz")]);
+    let all = builtin_all_completions(&mut eval, vec![Value::string(""), coll]).unwrap();
+    let names: Vec<String> = crate::emacs_core::value::list_to_vec(&all)
+        .expect("completion list")
+        .iter()
+        .map(|v| v.as_utf8_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        names,
+        vec!["abc"],
+        "all-completions: \\sw must classify by the buffer's syntax table"
+    );
+
+    let coll = Value::list(vec![Value::string("abc"), Value::string("zzz")]);
+    let tried = builtin_try_completion(&mut eval, vec![Value::string(""), coll]).unwrap();
+    assert_eq!(
+        tried.as_utf8_str(),
+        Some("abc"),
+        "try-completion must filter zzz through the buffer's syntax table"
+    );
+
+    let coll = Value::list(vec![Value::string("abc"), Value::string("zzz")]);
+    let tested = builtin_test_completion(&mut eval, vec![Value::string("zzz"), coll]).unwrap();
+    assert!(
+        tested.is_nil(),
+        "test-completion: zzz is not \\sw+ under the buffer table"
+    );
+}
+
+/// Task #26: the candidate string's own `syntax-table` text properties apply
+/// under `parse-sexp-lookup-properties`, exactly as for the Lisp-visible
+/// `string-match` — GNU's `re_match_object` is the candidate string itself.
+/// Measured GNU 31: gate off → 2 survivors, gate on → 1 ("abc"; class 6 =
+/// expression prefix is not `\sw`).
+#[test]
+fn completion_regexp_list_reads_candidate_syntax_table_properties() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let out = eval
+        .eval_str(
+            r#"(let ((cand (copy-sequence "zzz"))
+      (completion-regexp-list '("\\`\\sw+\\'")))
+  (put-text-property 0 3 'syntax-table '(6) cand)
+  (format "%S"
+          (list (length (all-completions "" (list cand "abc")))
+                (length (let ((parse-sexp-lookup-properties t))
+                          (all-completions "" (list cand "abc")))))))"#,
+        )
+        .expect("propertized completion program");
+    assert_eq!(
+        out.as_utf8_str(),
+        Some("(2 1)"),
+        "candidate syntax-table properties must be honored only under parse-sexp-lookup-properties"
+    );
+}

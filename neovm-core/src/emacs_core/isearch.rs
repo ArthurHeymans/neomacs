@@ -377,8 +377,15 @@ fn build_lax_whitespace_pattern(pattern: &[u8], whitespace_regex: &[u8]) -> Vec<
     raw
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+/// Match one buffer line, lifted out as a string, against PATTERN.
+///
+/// GNU `keep-lines`/`flush-lines` (lisp/replace.el) run `re-search-forward`
+/// over the buffer, so their matches see the current buffer's syntax state;
+/// this string-shaped analogue carries the same state via `syntax`.
 fn string_matches_regexp(
+    syntax: super::builtins::search::FastStringMatchSyntax,
+    obarray: &super::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
     line: &[u8],
     multibyte: bool,
     pattern: &crate::heap_types::LispString,
@@ -387,16 +394,18 @@ fn string_matches_regexp(
     // Issue #131: match the line's Emacs bytes against the faithful LispString
     // pattern, no storage round-trip.
     let text = lisp_string_from_buffer_bytes(line.to_vec(), multibyte);
-    super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
-        pattern,
-        &text,
-        super::regex::SearchedString::Owned(text.clone()),
-        0,
-        case_fold,
-        false,
-    )
-    .map(|matched| matched.is_some())
-    .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))
+    syntax
+        .search(
+            obarray,
+            buffers,
+            pattern,
+            &text,
+            super::regex::SearchedString::Owned(text.clone()),
+            0,
+            case_fold,
+        )
+        .map(|matched| matched.is_some())
+        .map_err(|e| signal(LispCondition::InvalidRegexp, vec![Value::string(e)]))
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -2236,6 +2245,7 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
     let source_byte_len = source.len();
 
     let case_fold = case_fold_for_pattern(eval, regexp_ls);
+    let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval);
 
     let rel_start = range
         .start()
@@ -2269,7 +2279,15 @@ pub(crate) fn builtin_keep_lines(eval: &mut super::eval::Context, args: Vec<Valu
             &source[rel_cursor..rel_line_end]
         };
 
-        let keep_line = match string_matches_regexp(line, source_multibyte, regexp_ls, case_fold) {
+        let keep_line = match string_matches_regexp(
+            syntax,
+            &eval.obarray,
+            &eval.buffers,
+            line,
+            source_multibyte,
+            regexp_ls,
+            case_fold,
+        ) {
             Ok(matched) => matched,
             Err(Flow::Signal(sig)) if sig.symbol_name() == "invalid-regexp" => {
                 return Ok(Value::NIL);
@@ -2323,6 +2341,7 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
     let source_byte_len = source.len();
 
     let case_fold = case_fold_for_pattern(eval, regexp_ls);
+    let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval);
 
     let rel_start = range
         .start()
@@ -2356,7 +2375,15 @@ pub(crate) fn builtin_flush_lines(eval: &mut super::eval::Context, args: Vec<Val
             &source[rel_cursor..rel_line_end]
         };
 
-        if string_matches_regexp(line, source_multibyte, regexp_ls, case_fold)? {
+        if string_matches_regexp(
+            syntax,
+            &eval.obarray,
+            &eval.buffers,
+            line,
+            source_multibyte,
+            regexp_ls,
+            case_fold,
+        )? {
             delete_ranges.push(EmacsByteRange::new(
                 point_min.add_len(EmacsByteLen::new(rel_cursor)),
                 point_min.add_len(EmacsByteLen::new(rel_line_end)),

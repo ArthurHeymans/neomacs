@@ -484,15 +484,26 @@ pub(crate) fn builtin_directory_files_and_attributes(
     let dir =
         super::fileio::resolve_filename_lisp_in_state(&eval.obarray, &[], &eval.buffers, &dir);
     let time_output = LispTimeOutput::from_context(eval)?;
-    directory_files_and_attributes_with_dir(&args, &dir, time_output, |bytes| {
-        super::fileio::decode_file_name_lisp(eval, bytes)
-    })
+    let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval);
+    directory_files_and_attributes_with_dir(
+        &args,
+        &dir,
+        time_output,
+        syntax,
+        &eval.obarray,
+        &eval.buffers,
+        |bytes| super::fileio::decode_file_name_lisp(eval, bytes),
+    )
 }
 
+#[allow(clippy::too_many_arguments)] // match-time state stays explicit at the GNU-regexp boundary
 fn directory_files_and_attributes_with_dir(
     args: &[Value],
     dir: &LispString,
     time_output: LispTimeOutput,
+    syntax: super::builtins::search::FastStringMatchSyntax,
+    obarray: &super::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
     decode_name: impl Fn(&[u8]) -> LispString,
 ) -> EvalResult {
     let full_name = args.get(1).is_some_and(|v| v.is_truthy());
@@ -517,13 +528,14 @@ fn directory_files_and_attributes_with_dir(
     for raw_name in names {
         let name = decode_name(raw_name.as_bytes());
         if let Some(pattern) = match_regexp.as_ref() {
-            let matched =
-                super::regex::string_search_full_with_case_fold_source_lisp_pattern_posix(
+            let matched = syntax
+                .search(
+                    obarray,
+                    buffers,
                     pattern,
                     &name,
                     super::regex::SearchedString::Owned(name.clone()),
                     0,
-                    false,
                     false,
                 )
                 .map_err(|msg| {
@@ -600,10 +612,15 @@ pub(crate) fn builtin_file_name_completion(eval: &mut Context, args: Vec<Value>)
         Value::heap_string(directory),
         args.get(2).copied().unwrap_or(Value::NIL),
     ];
-    let plan =
-        prepare_file_name_completion_in_state(&eval.obarray, &[], &eval.buffers, &args, |bytes| {
-            super::fileio::decode_file_name_lisp(eval, bytes)
-        })?;
+    let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval);
+    let plan = prepare_file_name_completion_in_state(
+        &eval.obarray,
+        &[],
+        &eval.buffers,
+        syntax,
+        &args,
+        |bytes| super::fileio::decode_file_name_lisp(eval, bytes),
+    )?;
     let predicate = args.get(2);
     finish_file_name_completion_with_eval_predicate(
         eval,
@@ -643,7 +660,11 @@ pub(crate) fn builtin_file_name_all_completions(
     let regexps = super::minibuffer::completion_regexp_lisp_list_from_obarray(&eval.obarray);
     // GNU Emacs: file-name-all-completions does NOT filter by
     // completion-ignored-extensions (the "all_flag" path).
+    let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval);
     let completions = filter_by_completion_regexps(
+        syntax,
+        &eval.obarray,
+        &eval.buffers,
         collect_file_name_completions(&file, &directory, ignore_case, true, |bytes| {
             super::fileio::decode_file_name_lisp(eval, bytes)
         })?,
@@ -744,6 +765,9 @@ fn collect_file_name_completions(
 }
 
 fn filter_by_completion_regexps(
+    syntax: super::builtins::search::FastStringMatchSyntax,
+    obarray: &super::symbol::Obarray,
+    buffers: &crate::buffer::BufferManager,
     completions: Vec<LispString>,
     regexps: &[LispString],
     ignore_case: bool,
@@ -762,6 +786,9 @@ fn filter_by_completion_regexps(
             completion.clone()
         };
         if super::minibuffer::lisp_string_matches_completion_regexps(
+            syntax,
+            obarray,
+            buffers,
             &candidate,
             regexps,
             ignore_case,
@@ -910,6 +937,7 @@ pub(crate) fn prepare_file_name_completion_in_state(
     obarray: &super::symbol::Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
     buffers: &crate::buffer::BufferManager,
+    syntax: super::builtins::search::FastStringMatchSyntax,
     args: &[Value],
     decode_name: impl Fn(&[u8]) -> LispString,
 ) -> Result<FileNameCompletionPlan, Flow> {
@@ -930,7 +958,7 @@ pub(crate) fn prepare_file_name_completion_in_state(
         // Apply completion-ignored-extensions filtering for file-name-completion
         // (but not for file-name-all-completions, per GNU Emacs).
         let filtered = filter_by_ignored_extensions(&file, raw, &ignored_extensions, ignore_case);
-        filter_by_completion_regexps(filtered, &regexps, ignore_case)?
+        filter_by_completion_regexps(syntax, obarray, buffers, filtered, &regexps, ignore_case)?
     };
 
     Ok(FileNameCompletionPlan {

@@ -17,7 +17,9 @@ use super::regex::MatchGroup;
 use super::value::*;
 use crate::buffer::{CharLen, CharPos0, EmacsBytePos};
 use crate::emacs_core::error::LispCondition;
-use crate::emacs_core::error::{expect_args, expect_args_range, expect_fixnum};
+#[cfg(test)]
+use crate::emacs_core::error::expect_args_range;
+use crate::emacs_core::error::{expect_args, expect_fixnum};
 use crate::emacs_core::value::ValueKind;
 
 // ---------------------------------------------------------------------------
@@ -675,7 +677,10 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
     Ok((buffer_start, buffer_end, replacement_only))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+/// Test-only: production `replace-regexp-in-string` is the subr.el Lisp
+/// definition (which goes through the syntax-carrying `string-match`
+/// builtin); this Rust port survives for its unit tests.
+#[cfg(test)]
 fn replace_regexp_in_string_lisp<F>(
     args: &[Value],
     case_fold: bool,
@@ -772,7 +777,8 @@ fn dynamic_or_global_symbol_value(eval: &super::eval::Context, name: &str) -> Op
     eval.eval_symbol_by_id(id).ok()
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+/// Test-only: see [`replace_regexp_in_string_lisp`].
+#[cfg(test)]
 pub(crate) fn builtin_replace_regexp_in_string(
     eval: &mut super::eval::Context,
     args: Vec<Value>,

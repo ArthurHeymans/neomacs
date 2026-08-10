@@ -3064,7 +3064,13 @@ pub fn string_match_full_with_case_fold_and_posix(
     )
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+/// Engine-test convenience: match under [`DefaultSyntaxLookup`]. Production
+/// string matches must carry their syntax state -- the `string-match`
+/// builtins thread the current buffer's tables explicitly, and the internal
+/// `fast_string_match` analogues go through
+/// `crate::emacs_core::builtins::search::FastStringMatchSyntax` -- so this
+/// bypass exists only for tests of the matcher itself.
+#[cfg(test)]
 pub(crate) fn string_match_full_with_case_fold_source_lisp(
     pattern: &str,
     string: &crate::heap_types::LispString,
@@ -3085,10 +3091,8 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp(
 }
 
 /// POSIX longest-match variant of
-/// [`string_match_full_with_case_fold_source_lisp`] used by
-/// `posix-string-match` on Lisp strings. See GNU
-/// `src/search.c:Fposix_string_match`.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+/// [`string_match_full_with_case_fold_source_lisp`]; same test-only bypass.
+#[cfg(test)]
 pub(crate) fn string_match_full_with_case_fold_source_lisp_posix(
     pattern: &str,
     string: &crate::heap_types::LispString,
@@ -3110,6 +3114,10 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_posix(
     )
 }
 
+/// Engine-test convenience: see
+/// [`string_match_full_with_case_fold_source_lisp`] for why this
+/// [`DefaultSyntaxLookup`] bypass is test-only.
+#[cfg(test)]
 pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix(
     pattern: &LispString,
     string: &crate::heap_types::LispString,
@@ -3132,26 +3140,7 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix(
     )
 }
 
-pub(crate) fn string_search_full_with_case_fold_source_lisp_pattern_posix(
-    pattern: &LispString,
-    string: &crate::heap_types::LispString,
-    searched_string: SearchedString,
-    start: usize,
-    case_fold: bool,
-    posix: bool,
-) -> Result<Option<StringSearchSuccess>, String> {
-    string_search_full_with_case_fold_source_lisp_pattern_posix_syntax(
-        pattern,
-        string,
-        searched_string,
-        start,
-        case_fold,
-        posix,
-        None,
-        &DefaultSyntaxLookup,
-    )
-}
-
+#[cfg(test)] // production match-data callers commit through StringSearchSuccess
 #[allow(clippy::too_many_arguments)] // matching options remain explicit at the GNU-regexp boundary
 pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
     pattern: &LispString,

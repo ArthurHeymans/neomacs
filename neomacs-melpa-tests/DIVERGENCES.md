@@ -2603,7 +2603,70 @@ was read from, and does not.
 Affects: `elisp-slime-nav` (1).
 
 
-## 58. The global map is missing the `touch-screen-*` window-part bindings
+## 58. The internal `fast_string_match` analogues bypassed the current buffer's syntax state -- FIXED
+
+FIXED 2026-08-10 (task #26, recorded during the entry-53 fix). Entry 53 gave
+the Lisp-visible `string-match` family the syntax state GNU gives any matched
+object, but the INTERNAL string matchers -- GNU's `fast_string_match_internal`
+callers -- still ran under the hardcoded standard classification and never saw
+the current buffer at all. GNU arms the same `re_match_object` +
+`RE_SETUP_SYNTAX_TABLE_FOR_OBJECT` (`src/syntax.c:277`) machinery for these
+too, and `SETUP_BUFFER_SYNTAX_TABLE` takes the base table, the category table
+and the `parse-sexp-lookup-properties` gate from the CURRENT BUFFER:
+
+- `completion-regexp-list` filtering in `try-completion`, `all-completions`
+  and `test-completion` (`src/minibuf.c:1592` `match_regexps` and the
+  `Ftry_completion` candidate loop);
+- the same filtering in `file-name-completion` and
+  `file-name-all-completions` (`src/dired.c:756`);
+- the MATCH argument of `directory-files` and
+  `directory-files-and-attributes` (`src/dired.c:311`);
+- `find-file-name-handler`'s walk of `file-name-handler-alist`
+  (`src/fileio.c:411`).
+
+```elisp
+(with-temp-buffer
+  (set-syntax-table (copy-syntax-table (standard-syntax-table)))
+  (modify-syntax-entry ?z " ")
+  (let ((completion-regexp-list '("\\`\\sw+\\'")))
+    (all-completions "" '("abc" "zzz"))))
+;; GNU 31          => ("abc")   ; buffer-local table decides \sw
+;; Neomacs before  => ("abc" "zzz")
+```
+
+The same reduction was measured on GNU for every surface above (files abc +
+zzz, regexp `\`\sw+\'`: `directory-files` => ("abc"),
+`file-name-completion` => "abc", handler alist entry matches "abc" and not
+"zzz"), and for the searched string's own `syntax-table` text properties,
+which GNU honours here under `parse-sexp-lookup-properties` exactly as in
+entry 53 (a `'(6)` property on a candidate removes it from `all-completions`
+only when the gate is on).
+
+The fix routes every internal caller through one seam,
+`FastStringMatchSyntax` (neovm-core/src/emacs_core/builtins/search.rs): an
+owned, `Copy` snapshot of GNU's `fast_string_match_internal` setup -- current
+buffer's syntax table, category table, word-boundary state and
+`parse-sexp-lookup-properties` gate -- whose only constructor takes the
+evaluator, so an internal matcher without buffer state is unrepresentable.
+Matching goes through the entry-53 `StringSyntaxLookup` vocabulary, so string
+properties resolve through the same `CharPropertyResolver` as everywhere
+else; the per-string interval test still precedes any resolver work, keeping
+the propertyless case position-free. The old `DefaultSyntaxLookup` wrappers
+are now `#[cfg(test)]`, so no production caller can silently bypass again.
+The `keep-lines`/`flush-lines` per-line matcher (a string-shaped port of what
+GNU does as a buffer search) was routed through the same seam. Known
+remaining bypass, out of scope here: the `iterate_string_matches`
+cluster behind the `query-replace`/`how-many` Rust ports still compiles under
+the default lookup and deserves its own pass (GNU runs those as buffer
+searches).
+
+Pinned by 6 tests (minibuffer_test.rs, dired_test.rs, fileio_test.rs), every
+expectation measured on GNU 31.
+
+Affects: found by audit during entry 53, not by a package failure; the
+exposed surfaces (completion filtering, dired, file handlers) are
+package-facing.
+## 59. The global map is missing the `touch-screen-*` window-part bindings
 
 `describe-bindings` emits 77 rows that GNU does, and we do not. Nearly all of
 them bind a touch-screen event on a window-part prefix:

@@ -1238,3 +1238,96 @@ fn test_format_mode_string() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+/// Task #26: GNU `file_name_completion` (`src/dired.c:756`) and
+/// `Ffile_name_all_completions` filter through `fast_string_match_internal`,
+/// so `\sw` in `completion-regexp-list` classifies by the CURRENT BUFFER's
+/// syntax table. Measured GNU 31 (buffer-local copy of the standard table,
+/// `?z` made whitespace, files abc + zzz): file-name-completion → "abc",
+/// file-name-all-completions → ("abc").
+#[test]
+fn file_name_completion_reads_current_buffer_syntax_table() {
+    crate::test_utils::init_test_tracing();
+    let (dir, dir_str) = make_test_dir("fnc_syntax_table");
+    create_file(&dir, "abc", "");
+    create_file(&dir, "zzz", "");
+
+    let mut eval = test_eval_ctx();
+    eval.eval_str("(set-syntax-table (copy-syntax-table (standard-syntax-table)))")
+        .expect("set-syntax-table");
+    eval.eval_str("(modify-syntax-entry ?z \" \")")
+        .expect("modify-syntax-entry");
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("\\`\\sw+\\'")]),
+    );
+
+    let all = builtin_file_name_all_completions(
+        &mut eval,
+        vec![Value::string(""), Value::string(&dir_str)],
+    )
+    .unwrap();
+    let names: Vec<String> = list_to_vec(&all)
+        .expect("completion list")
+        .iter()
+        .map(|v| v.as_utf8_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        names,
+        vec!["abc"],
+        "file-name-all-completions: \\sw must classify by the buffer's syntax table"
+    );
+
+    let one =
+        builtin_file_name_completion(&mut eval, vec![Value::string(""), Value::string(&dir_str)])
+            .unwrap();
+    assert_eq!(
+        one.as_utf8_str(),
+        Some("abc"),
+        "file-name-completion must filter zzz through the buffer's syntax table"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// Task #26: the `directory-files-and-attributes` MATCH argument runs GNU
+/// `fast_string_match_internal` (`src/dired.c:311`) under the current
+/// buffer's syntax table. Measured GNU 31 (buffer-local table, `?z` made
+/// whitespace, files abc + zzz): → ("abc") — "." ".." and "zzz" all fail
+/// `\`\sw+\'`.
+#[test]
+fn directory_files_and_attributes_match_reads_current_buffer_syntax_table() {
+    crate::test_utils::init_test_tracing();
+    let (dir, dir_str) = make_test_dir("dfaa_syntax_table");
+    create_file(&dir, "abc", "");
+    create_file(&dir, "zzz", "");
+
+    let mut eval = test_eval_ctx();
+    eval.eval_str("(set-syntax-table (copy-syntax-table (standard-syntax-table)))")
+        .expect("set-syntax-table");
+    eval.eval_str("(modify-syntax-entry ?z \" \")")
+        .expect("modify-syntax-entry");
+
+    let result = builtin_directory_files_and_attributes(
+        &mut eval,
+        vec![
+            Value::string(&dir_str),
+            Value::NIL,
+            Value::string("\\`\\sw+\\'"),
+            Value::NIL,
+        ],
+    )
+    .unwrap();
+    let names: Vec<String> = list_to_vec(&result)
+        .expect("entry list")
+        .iter()
+        .map(|entry| entry.cons_car().as_utf8_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        names,
+        vec!["abc"],
+        "directory-files-and-attributes MATCH must consult the buffer's syntax table"
+    );
+
+    let _ = fs::remove_dir_all(&dir);
+}
