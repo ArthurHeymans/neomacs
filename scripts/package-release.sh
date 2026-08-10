@@ -127,6 +127,10 @@ cp -a etc "$package_dir/share/neomacs/"
 cp -a leim "$package_dir/share/neomacs/"
 cp -a info "$package_dir/share/neomacs/" 2>/dev/null || true
 
+if [[ "$target_triple" == *-linux-* ]]; then
+  scripts/install-linux-desktop-assets.sh "$package_dir"
+fi
+
 install -m 0644 README.md "$package_dir/README.md"
 install -m 0644 COPYING "$package_dir/COPYING"
 

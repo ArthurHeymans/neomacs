@@ -18,6 +18,8 @@ pub(crate) mod clipboard;
 pub mod core;
 pub mod thread_comm;
 pub mod tty_input;
+#[cfg(target_os = "linux")]
+mod wayland_toplevel_icon;
 mod window_icon;
 mod window_identity;
 

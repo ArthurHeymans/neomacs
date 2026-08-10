@@ -92,28 +92,16 @@ elif ((skip_build == 0)); then
 fi
 
 rm -rf "$appdir" "$appimage"
-mkdir -p "$appdir/usr/bin" "$appdir/usr/share/neomacs" "$appdir/usr/share/applications" \
-  "$appdir/usr/share/icons/hicolor/128x128/apps"
+mkdir -p "$appdir/usr/bin" "$appdir/usr/share/neomacs"
 
 cp -a "$package_dir/bin/." "$appdir/usr/bin/"
 cp -a "$package_dir/share/neomacs/." "$appdir/usr/share/neomacs/"
 install -m 0644 "$package_dir/README.md" "$appdir/usr/share/neomacs/README.md"
 install -m 0644 "$package_dir/COPYING" "$appdir/usr/share/neomacs/COPYING"
 
+scripts/install-linux-desktop-assets.sh "$appdir/usr"
 desktop_file="$appdir/usr/share/applications/neomacs.desktop"
-cat >"$desktop_file" <<'DESKTOP'
-[Desktop Entry]
-Type=Application
-Name=NEO Emacs
-Comment=Extensible text editor
-Exec=neomacs %F
-Icon=neomacs
-Terminal=false
-Categories=Development;TextEditor;
-StartupWMClass=neomacs
-DESKTOP
-
-install -m 0644 assets/logo-128.png "$appdir/usr/share/icons/hicolor/128x128/apps/neomacs.png"
+icon_file="$appdir/usr/share/icons/hicolor/scalable/apps/neomacs.svg"
 
 cat >"$appdir/AppRun" <<'APPRUN'
 #!/usr/bin/env sh
@@ -127,14 +115,14 @@ chmod 0755 "$appdir/AppRun"
   --appdir "$appdir" \
   --executable "$appdir/usr/bin/neomacs" \
   --desktop-file "$desktop_file" \
-  --icon-file "$appdir/usr/share/icons/hicolor/128x128/apps/neomacs.png"
+  --icon-file "$icon_file"
 
 env -u SOURCE_DATE_EPOCH ARCH=x86_64 "$appimagetool" "$appdir" "$appimage"
 chmod 0755 "$appimage"
 
 if ((smoke)); then
   APPIMAGE_EXTRACT_AND_RUN=1 \
-    NEOMACS_RUNTIME_ROOT= \
+    NEOMACS_RUNTIME_ROOT='' \
     timeout 30s "$appimage" --batch --eval "(kill-emacs 0)"
 fi
 

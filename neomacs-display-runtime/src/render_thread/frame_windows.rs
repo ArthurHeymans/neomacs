@@ -2016,6 +2016,7 @@ impl GuiFrameWindowManager {
     pub fn process_creates(
         &mut self,
         event_loop: &ActiveEventLoop,
+        window_icon: &mut crate::window_icon::WindowIconService,
         instance: &wgpu::Instance,
         device: &wgpu::Device,
         adapter: &wgpu::Adapter,
@@ -2040,7 +2041,7 @@ impl GuiFrameWindowManager {
             match event_loop.create_window(attrs) {
                 Ok(window) => {
                     let window = Arc::new(window);
-                    crate::window_icon::apply_window_icon(&window);
+                    window_icon.apply(&window);
                     let raw_scale_factor = window.scale_factor();
                     let scale_factor = effective_window_scale_factor(raw_scale_factor);
                     let phys = window.inner_size();

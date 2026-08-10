@@ -93,8 +93,6 @@ rm -rf "$pkg_dir"
 mkdir -p "$pkg_dir/DEBIAN"
 mkdir -p "$pkg_dir/usr/bin"
 mkdir -p "$pkg_dir/usr/share/neomacs"
-mkdir -p "$pkg_dir/usr/share/applications"
-mkdir -p "$pkg_dir/usr/share/icons/hicolor/128x128/apps"
 mkdir -p "$pkg_dir/usr/share/doc/neomacs"
 
 install -m 0755 "$release_tree/bin/neomacs" "$pkg_dir/usr/bin/neomacs"
@@ -111,22 +109,7 @@ cp -a "$release_tree/share/neomacs/." "$pkg_dir/usr/share/neomacs/"
 install -m 0644 README.md "$pkg_dir/usr/share/doc/neomacs/README.md"
 install -m 0644 COPYING "$pkg_dir/usr/share/doc/neomacs/copyright"
 
-cat >"$pkg_dir/usr/share/applications/neomacs.desktop" <<'DESKTOP'
-[Desktop Entry]
-Type=Application
-Name=NEO Emacs
-Comment=Extensible text editor
-Exec=neomacs %F
-Icon=neomacs
-Terminal=false
-Categories=Development;TextEditor;
-StartupWMClass=neomacs
-DESKTOP
-
-if [[ -f assets/logo-128.png ]]; then
-  install -m 0644 assets/logo-128.png \
-    "$pkg_dir/usr/share/icons/hicolor/128x128/apps/neomacs.png"
-fi
+scripts/install-linux-desktop-assets.sh "$pkg_dir/usr"
 
 installed_size="$(du -sk "$pkg_dir" | cut -f1)"
 
@@ -162,6 +145,9 @@ cat >"$pkg_dir/DEBIAN/postrm" <<'POSTRM'
 set -e
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database -q /usr/share/applications 2>/dev/null || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || true
 fi
 POSTRM
 chmod 0755 "$pkg_dir/DEBIAN/postrm"

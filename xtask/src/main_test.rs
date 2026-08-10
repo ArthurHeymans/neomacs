@@ -2,6 +2,72 @@ use super::*;
 use flate2::{Compression, write::GzEncoder};
 
 #[test]
+#[cfg(unix)]
+fn linux_desktop_assets_install_the_runtime_window_identity() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir
+        .parent()
+        .expect("xtask must live under the repository root");
+    let fixture = tempdir();
+
+    let output = Command::new("bash")
+        .arg(repo_root.join("scripts/install-linux-desktop-assets.sh"))
+        .arg(&fixture)
+        .output()
+        .expect("run Linux desktop asset installer");
+    assert!(
+        output.status.success(),
+        "desktop asset installation failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let installed_desktop =
+        fs::read_to_string(fixture.join("share/applications/neomacs.desktop")).unwrap();
+    let canonical_desktop =
+        fs::read_to_string(repo_root.join("neomacs-display-runtime/assets/neomacs.desktop"))
+            .unwrap();
+    assert_eq!(installed_desktop, canonical_desktop);
+    assert!(installed_desktop.contains("\nExec=neomacs %F\n"));
+    assert!(installed_desktop.contains("\nIcon=neomacs\n"));
+
+    let installed_icon =
+        fs::read(fixture.join("share/icons/hicolor/scalable/apps/neomacs.svg")).unwrap();
+    let runtime_icon =
+        fs::read(repo_root.join("neomacs-display-runtime/assets/window-icon.svg")).unwrap();
+    assert_eq!(
+        installed_icon, runtime_icon,
+        "packaging must install the exact SVG embedded by the runtime"
+    );
+}
+
+#[test]
+fn every_linux_package_uses_the_canonical_desktop_asset_installer() {
+    for (name, script) in [
+        ("tar", include_str!("../../scripts/package-release.sh")),
+        ("Debian", include_str!("../../scripts/package-deb.sh")),
+        (
+            "AppImage",
+            include_str!("../../scripts/package-appimage.sh"),
+        ),
+        ("RPM", include_str!("../../scripts/package-rpm.sh")),
+    ] {
+        assert!(
+            script.contains("scripts/install-linux-desktop-assets.sh"),
+            "{name} packaging bypasses the canonical desktop assets"
+        );
+        assert!(
+            !script.contains("assets/logo-128.png"),
+            "{name} packaging still uses the legacy unrelated PNG"
+        );
+        assert!(
+            !script.contains("[Desktop Entry]"),
+            "{name} packaging duplicates the canonical desktop entry"
+        );
+    }
+}
+
+#[test]
 fn cranelift_dependencies_are_workspace_owned_and_share_one_release_line() {
     let workspace_manifest = include_str!("../../Cargo.toml");
     let versions: Vec<(&str, &str)> = workspace_manifest

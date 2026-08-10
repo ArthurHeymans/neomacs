@@ -133,6 +133,17 @@ audit_tree() {
   done < <(find "$root" -type f -print0)
 }
 
+audit_desktop_identity() {
+  local prefix="$1"
+  local desktop="$prefix/share/applications/neomacs.desktop"
+  local icon="$prefix/share/icons/hicolor/scalable/apps/neomacs.svg"
+
+  cmp "$desktop" "$repo_root/neomacs-display-runtime/assets/neomacs.desktop"
+  cmp "$icon" "$repo_root/neomacs-display-runtime/assets/window-icon.svg"
+  grep -Fxq 'Exec=neomacs %F' "$desktop"
+  grep -Fxq 'Icon=neomacs' "$desktop"
+}
+
 smoke_binary() {
   local binary="$1"
   local runtime_root="$2"
@@ -158,6 +169,7 @@ test_tar() {
     runtime_root="$package_root"
   fi
   smoke_binary "$binary" "$runtime_root"
+  audit_desktop_identity "$package_root"
   audit_tree "$package_root"
 }
 
@@ -173,6 +185,7 @@ test_appimage() {
   )
   extracted="$root/squashfs-root"
   test -x "$extracted/AppRun"
+  audit_desktop_identity "$extracted/usr"
   audit_tree "$extracted"
   echo "smoke-testing $artifact"
   env -u NEOMACS_RUNTIME_ROOT \
@@ -188,6 +201,7 @@ test_deb() {
   mkdir -p "$root"
   dpkg-deb --extract "$artifact" "$root"
   smoke_binary "$root/usr/bin/neomacs" "$root/usr/share/neomacs"
+  audit_desktop_identity "$root/usr"
   audit_tree "$root"
 }
 
@@ -201,6 +215,7 @@ test_rpm() {
     cpio --extract --make-directories --quiet
   )
   smoke_binary "$root/usr/bin/neomacs" "$root/usr/share/neomacs"
+  audit_desktop_identity "$root/usr"
   audit_tree "$root"
 }
 

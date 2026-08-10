@@ -100,8 +100,6 @@ mkdir -p "$rpm_topdir"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
 payload="$rpm_topdir/SOURCES/neomacs-payload"
 install -d "$payload/usr/bin"
 install -d "$payload/usr/share/neomacs"
-install -d "$payload/usr/share/applications"
-install -d "$payload/usr/share/icons/hicolor/128x128/apps"
 install -d "$payload/usr/share/doc/neomacs"
 
 install -m 0755 "$release_tree/bin/neomacs" "$payload/usr/bin/neomacs"
@@ -121,22 +119,7 @@ cp -a "$release_tree/share/neomacs/." "$payload/usr/share/neomacs/"
 install -m 0644 README.md "$payload/usr/share/doc/neomacs/README.md"
 install -m 0644 COPYING "$payload/usr/share/doc/neomacs/COPYING"
 
-cat >"$payload/usr/share/applications/neomacs.desktop" <<'DESKTOP'
-[Desktop Entry]
-Type=Application
-Name=NEO Emacs
-Comment=Extensible text editor
-Exec=neomacs %F
-Icon=neomacs
-Terminal=false
-Categories=Development;TextEditor;
-StartupWMClass=neomacs
-DESKTOP
-
-if [[ -f assets/logo-128.png ]]; then
-  install -m 0644 assets/logo-128.png \
-    "$payload/usr/share/icons/hicolor/128x128/apps/neomacs.png"
-fi
+scripts/install-linux-desktop-assets.sh "$payload/usr"
 
 cat >"$rpm_topdir/SPECS/neomacs.spec" <<SPEC
 Name:           neomacs
@@ -167,13 +150,15 @@ cp -a %{_sourcedir}/neomacs-payload/. %{buildroot}/
 /usr/bin/neomacs.pdump
 ${extra_bin_files}/usr/share/neomacs/
 /usr/share/applications/neomacs.desktop
-/usr/share/icons/hicolor/128x128/apps/neomacs.png
+/usr/share/icons/hicolor/scalable/apps/neomacs.svg
 
 %post
 update-desktop-database /usr/share/applications 2>/dev/null || :
+gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || :
 
 %postun
 update-desktop-database /usr/share/applications 2>/dev/null || :
+gtk-update-icon-cache -q /usr/share/icons/hicolor 2>/dev/null || :
 
 %changelog
 * $(date '+%a %b %d %Y') eval-exec <noreply@github.com> - ${version}-1

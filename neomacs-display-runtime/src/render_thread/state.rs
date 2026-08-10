@@ -630,6 +630,10 @@ pub(super) struct RenderGpuContext {
 pub(super) struct RenderApp {
     pub(super) comms: RenderComms,
 
+    /// Display-lifetime owner for decoded application icon data and native
+    /// Wayland toplevel-icon protocol state.
+    pub(super) window_icon: crate::window_icon::WindowIconService,
+
     /// Non-blocking handle to the clipboard worker that owns its display.
     pub(super) clipboard: Result<ClipboardService, String>,
 
@@ -761,6 +765,7 @@ impl RenderApp {
 
         Self {
             comms,
+            window_icon: crate::window_icon::WindowIconService::new(),
             clipboard: Err("clipboard is unavailable before display initialization".to_owned()),
             gpu: None,
             renderer: None,

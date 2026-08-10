@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=NEO Emacs
+Comment=Extensible text editor
+Exec=neomacs %F
+Icon=neomacs
+Terminal=false
+Categories=Development;TextEditor;
+StartupNotify=true
+StartupWMClass=neomacs

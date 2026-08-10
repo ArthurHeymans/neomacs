@@ -191,7 +191,7 @@ impl RenderApp {
                         apply_window_geometry_hints(&window, geometry_hints);
                     }
 
-                    crate::window_icon::apply_window_icon(&window);
+                    self.window_icon.apply(&window);
                 }
                 Err(e) => {
                     tracing::error!("Failed to create window: {:?}", e);
@@ -241,6 +241,7 @@ impl RenderApp {
         if let Some(gpu) = &self.gpu {
             self.frame_windows.process_creates(
                 event_loop,
+                &mut self.window_icon,
                 &gpu.instance,
                 &gpu.device,
                 &gpu.adapter,
@@ -715,6 +716,8 @@ impl RenderApp {
         // Solution: leak the adapter to prevent eglTerminate from ever running.
         // The OS reclaims all GPU resources on process exit anyway.
         tracing::info!("Event loop exiting, cleaning up GPU resources");
+
+        self.window_icon.shutdown();
 
         // The Wayland clipboard borrows Winit's wl_display. Stop its worker
         // before dropping any native windows or the event-loop connection.
