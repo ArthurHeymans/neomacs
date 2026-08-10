@@ -2654,6 +2654,12 @@ pub const EVIL_SURROUND_MELPA_PIN: (&str, &str) = ("evil-surround", "20240325.85
 /// archive from upstream commit `dae820da35ad46234cbca31626ffb6da7928694a`.
 pub const EXEC_PATH_FROM_SHELL_MELPA_PIN: (&str, &str) = ("exec-path-from-shell", "20260423.1833");
 
+/// The exact elisp-def package selected for real macro-aware Emacs Lisp
+/// definition navigation, xref, highlighting, completion, and failure parity.
+/// MELPA built this archive from upstream commit
+/// `61a5f64498c9c8de8e9aab84a22775162f336144`.
+pub const ELISP_DEF_MELPA_PIN: (&str, &str) = ("elisp-def", "20250818.2223");
+
 /// The exact Elisp Slime Nav package selected for practical key-driven
 /// function, variable, library, and face navigation; xref return history;
 /// prompted symbol selection; help display; and stale-symbol recovery parity.
