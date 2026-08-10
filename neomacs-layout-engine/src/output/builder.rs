@@ -176,8 +176,8 @@ impl DisplayOutputBuilder {
 
     /// Find the current window's buffer-text row containing `charpos` (Phase 2
     /// scroll cursor re-decorate target).
-    pub(crate) fn find_current_window_text_row(&self, charpos: usize) -> Option<usize> {
-        self.window_state.find_current_window_text_row(charpos)
+    pub(crate) fn find_current_window_cursor_row(&self, charpos: usize) -> Option<usize> {
+        self.window_state.find_current_window_cursor_row(charpos)
     }
 
     /// Read a row from the current window grid.

@@ -8,6 +8,7 @@ use crate::output::row_request::{
     OutputRowLifecycleRequest, OutputRowMetricsRequest,
 };
 use crate::output::window_request::OutputWindowLifecycleRequest;
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::frame_glyphs::PhysCursor;
 use neomacs_display_protocol::glyph_matrix::MatrixRow;
 use neomacs_display_protocol::glyph_matrix::{GlyphMatrix, GlyphRow, WindowMatrixEntry};
@@ -232,12 +233,12 @@ impl OutputWindowBuildState {
         }
     }
 
-    /// Find the current window's buffer-text row containing `charpos` (Phase 2
-    /// scroll cursor re-decorate).
-    pub(crate) fn find_current_window_text_row(&self, charpos: usize) -> Option<usize> {
+    /// Find the current window row that owns the cursor at `charpos` (Phase 2
+    /// scroll/edit cursor re-decorate).
+    pub(crate) fn find_current_window_cursor_row(&self, charpos: usize) -> Option<usize> {
         self.current_row_grid
             .as_ref()?
-            .find_text_row_for_charpos(charpos)
+            .find_cursor_row_for_charpos(charpos)
     }
 
     /// Read a row from the current window grid.
@@ -299,6 +300,31 @@ pub(crate) struct OutputWindowRowGrid {
     /// `Finalize` a true no-op instead of a double-reorder. Cleared whenever a
     /// row's contents are (re)installed via `begin_row` / `replace_row`.
     finalized_rows: Vec<bool>,
+}
+
+/// How an enabled buffer row can own point.
+///
+/// GNU's `set_cursor_from_row` treats the newline glyph of an empty line as a
+/// real cursor position even though the row displays no buffer text.  Keeping
+/// that case distinct from an ordinary displayed span prevents callers from
+/// accidentally using `displays_text` as a cursor-addressability predicate.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CursorRowBufferMatch {
+    DisplayedSpan,
+    EmptyLineAnchor,
+}
+
+impl CursorRowBufferMatch {
+    fn classify(row: &GlyphRow, charpos: usize) -> Option<Self> {
+        if !row.enabled || row.role != GlyphRowRole::Text {
+            return None;
+        }
+        if !row.displays_text && row.start_charpos == charpos && row.end_charpos == charpos {
+            return Some(Self::EmptyLineAnchor);
+        }
+        (row.displays_text && row.start_charpos <= charpos && charpos <= row.end_charpos)
+            .then_some(Self::DisplayedSpan)
+    }
 }
 
 pub(crate) struct OutputWindowGridEntry {
@@ -371,16 +397,24 @@ impl OutputWindowRowGrid {
         self.matrix.rows.get(row).map(|row| row.as_ref())
     }
 
-    /// Find the enabled buffer-text row whose `[start_charpos, end_charpos]`
-    /// contains `charpos` (the Phase 2 scroll cursor re-decorate target). Returns
-    /// `None` when point is not on a visible text row (e.g. scrolled off-screen).
-    pub(crate) fn find_text_row_for_charpos(&self, charpos: usize) -> Option<usize> {
-        self.matrix.rows.iter().position(|row| {
-            row.enabled
-                && row.displays_text
-                && row.start_charpos <= charpos
-                && charpos <= row.end_charpos
-        })
+    /// Find the enabled buffer row that owns `charpos` for cursor placement.
+    ///
+    /// Prefer an exact empty-line anchor over a displayed span.  This mirrors
+    /// GNU `set_cursor_from_row`: an empty line's newline glyph is cursor
+    /// addressable, while synthetic rows below ZV can repeat the same anchor;
+    /// the first such row owns the hardware cursor.
+    pub(crate) fn find_cursor_row_for_charpos(&self, charpos: usize) -> Option<usize> {
+        let mut displayed_span = None;
+        for (row_index, row) in self.matrix.rows.iter().enumerate() {
+            match CursorRowBufferMatch::classify(row, charpos) {
+                Some(CursorRowBufferMatch::EmptyLineAnchor) => return Some(row_index),
+                Some(CursorRowBufferMatch::DisplayedSpan) => {
+                    displayed_span.get_or_insert(row_index);
+                }
+                None => {}
+            }
+        }
+        displayed_span
     }
 
     pub(crate) fn row_mut(&mut self, row: usize) -> Option<&mut GlyphRow> {
@@ -546,3 +580,7 @@ impl OutputWindowGridEntry {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "window_state_test.rs"]
+mod tests;

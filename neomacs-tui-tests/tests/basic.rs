@@ -13,6 +13,41 @@ fn is_blank_cell(cell: &vt100::Cell) -> bool {
 
 // ── Tests ──────────────────────────────────────────────────
 #[test]
+fn return_after_self_insert_moves_cursor_to_next_terminal_row() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    send_both_raw(&mut gnu, &mut neo, b"a");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+    let gnu_after_insert = gnu.screen().cursor_position();
+    let neo_after_insert = neo.screen().cursor_position();
+
+    send_both(&mut gnu, &mut neo, "RET");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(2));
+    let gnu_after_return = gnu.screen().cursor_position();
+    let neo_after_return = neo.screen().cursor_position();
+
+    assert_eq!(
+        neo_after_insert,
+        gnu_after_insert,
+        "Neomacs cursor after self-insert must exactly match GNU\nNeomacs screen:\n{}",
+        neo.text_grid().join("\n")
+    );
+
+    assert_eq!(
+        gnu_after_return,
+        (gnu_after_insert.0 + 1, 0),
+        "GNU oracle must display Return on the next terminal row"
+    );
+    assert_eq!(
+        neo_after_return,
+        gnu_after_return,
+        "Neomacs cursor after Return must exactly match GNU; \
+         Neomacs={neo_after_return:?}\nNeomacs screen:\n{}",
+        neo.text_grid().join("\n")
+    );
+}
+
+#[test]
 fn control_x_prefix_echo_has_no_trailing_dash() {
     let (mut gnu, mut neo) = boot_pair("");
 

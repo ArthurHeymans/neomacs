@@ -13304,6 +13304,59 @@ fn layout_frame_rust_keeps_visible_eob_cursor_on_short_trailing_newline_buffer()
 }
 
 #[test]
+fn incremental_newline_insert_moves_phys_cursor_to_empty_eob_row() {
+    let initial_text = ";; first scratch comment\n;; second scratch comment\n\n";
+    let initial_eob = initial_text.len();
+    let (mut eval, frame_id, buf_id, _selected_window) = incr_editing_frame(initial_text, 320, 640);
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(initial_eob));
+    let mut engine = LayoutEngine::new();
+
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a");
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+    let after_insert = engine
+        .last_frame_display_state
+        .as_ref()
+        .and_then(|state| state.phys_cursor.as_ref())
+        .expect("cursor after self-insert");
+    assert_eq!((after_insert.row, after_insert.col), (3, 1));
+
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("\n");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state after Return");
+    let after_return = state.phys_cursor.as_ref().expect("cursor after Return");
+    assert_eq!(
+        (after_return.row, after_return.col),
+        (4, 0),
+        "GNU places point after the inserted newline on the next empty row"
+    );
+    assert_eq!(
+        (
+            (after_return.y / state.char_height.max(1.0)) as usize,
+            (after_return.x / state.char_width.max(1.0)) as usize,
+        ),
+        (after_return.row, usize::from(after_return.col)),
+        "the pixel geometry consumed by the TTY must identify the same cursor cell as its typed slot"
+    );
+}
+
+#[test]
 fn layout_frame_rust_keeps_visible_eob_cursor_across_redisplay_with_scroll_step() {
     let mut eval = Context::new();
     let buf_id = eval

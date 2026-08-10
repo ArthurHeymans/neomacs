@@ -943,7 +943,7 @@ impl BufferSourceOutputSetup {
             output.builder().clear_current_window_cursors();
             if let Some(cursor_row) = output
                 .builder()
-                .find_current_window_text_row(scroll.new_point as usize)
+                .find_current_window_cursor_row(scroll.new_point as usize)
             {
                 decorate_window_cursor(
                     &mut output,
