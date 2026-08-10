@@ -767,7 +767,6 @@ fn horizontal_scroll_skip_state_consumes_and_resets_remaining_columns() {
     let mut state = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 5);
 
     assert!(state.should_skip());
-    assert!(state.should_show_left_truncation());
     assert_eq!(state.consumed_columns(), 0);
 
     state.consume_columns(2);
@@ -8331,8 +8330,9 @@ fn implemented_text_backends_match_hscroll_cursor_and_position_output() {
         "baseline should render the left truncation marker, rows={text_rows:?}"
     );
     assert!(
-        text_rows.iter().any(|row| row.contains("def")),
-        "baseline should render the hscrolled visible suffix, rows={text_rows:?}"
+        text_rows.iter().any(|row| row.starts_with("$ef")),
+        "GNU's left truncation marker should replace `d`, the first visible suffix glyph; \
+         rows={text_rows:?}"
     );
     assert!(
         text_rows.iter().all(|row| !row.contains("abc")),
@@ -8341,16 +8341,67 @@ fn implemented_text_backends_match_hscroll_cursor_and_position_output() {
     assert_eq!(
         baseline.visible_span,
         Some(WindowVisibleBufferSpan::new(
-            LispCharPos1::new(4),
+            LispCharPos1::new(5),
             LispCharPos1::new(8)
         )),
-        "baseline should include the visible EOB insertion boundary"
+        "the visible span starts at `e` because GNU's `$` overwrites `d`, and includes the EOB \
+         insertion boundary"
     );
 
     for kind in implemented_text_backends() {
         let trace = hscroll_cursor_backend_layout_trace(kind);
         assert_eq!(trace, baseline, "{kind:?}");
     }
+}
+
+#[test]
+fn tty_hscroll_eol_cursor_matches_gnu_display_matrix() {
+    // GNU xdisp.c first lays out the visible suffix, then
+    // insert_left_trunc_glyphs OVERWRITES its first glyph with `$`.  At a real
+    // newline, append_space_for_newline adds one positionless space, but
+    // set_cursor_from_row excludes that trailing redisplay glyph when it places
+    // point on the newline.  For a 160-column frame hscrolled 144 columns into
+    // 300 single-column characters, the resulting matrix is therefore:
+    //
+    //   `$` + 155 `x` glyphs + the positionless newline space
+    //
+    // and the cursor hpos is 156 (immediately before the newline space).
+    let text = format!("{}\n", "x".repeat(300));
+    let trace = backend_layout_trace_with_buffer_and_window_setup(
+        BufferTextBackendKind::GapBuffer,
+        "tty-hscroll-eol-cursor-gnu-matrix",
+        &text,
+        1280,
+        120,
+        |buffer, _buf_id, _text| {
+            buffer.set_buffer_local("truncate-lines", Value::T);
+            buffer.goto_emacs_byte_pos(EmacsBytePos::new(300));
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf { point, hscroll, .. } = window {
+                *point = LispCharPos1::from_one_based_usize(301);
+                *hscroll = 144;
+            }
+        },
+    );
+
+    let row = trace
+        .matrix_rows
+        .iter()
+        .find(|row| row.role == GlyphRowRole::Text && row.truncated_left)
+        .expect("hscrolled text row");
+    let visible_text = row.glyph_areas[GlyphArea::Text.index()]
+        .iter()
+        .map(glyph_trace_text)
+        .collect::<Vec<_>>()
+        .join("");
+    assert_eq!(visible_text, format!("${} ", "x".repeat(155)));
+    assert_eq!(row.cursor_col, Some(156));
+
+    let cursor = trace.phys_cursor.as_ref().expect("selected phys cursor");
+    assert_eq!(cursor.row, 0);
+    assert_eq!(cursor.col, 156);
+    assert_eq!(cursor.x, 156 * 8);
 }
 
 #[test]

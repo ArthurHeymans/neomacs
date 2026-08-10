@@ -35,7 +35,29 @@ pub(crate) struct WordWrapRenderState {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct HorizontalScrollSkipState {
     configured_columns: i32,
-    remaining_columns: i32,
+    phase: HorizontalScrollSkipPhase,
+}
+
+/// What remains to be consumed at the left edge of a horizontally-scrolled
+/// row.  GNU lays out the first visible glyph and then overwrites it with the
+/// left-truncation mark.  `ReplaceNextGlyph` makes the exact-boundary case a
+/// distinct state: reaching the boundary is not the same as having consumed
+/// the glyph that the mark replaces.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum HorizontalScrollSkipPhase {
+    #[default]
+    Disabled,
+    Skipping {
+        remaining_columns: i32,
+    },
+    ReplaceNextGlyph,
+    Complete,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HscrollConsumedTextDisposition {
+    Hidden,
+    ReplacedByLeftTruncation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -527,28 +549,73 @@ impl HorizontalScrollSkipState {
         };
         Self {
             configured_columns,
-            remaining_columns: configured_columns,
+            phase: if configured_columns > 0 {
+                HorizontalScrollSkipPhase::Skipping {
+                    remaining_columns: configured_columns,
+                }
+            } else {
+                HorizontalScrollSkipPhase::Disabled
+            },
         }
     }
 
     pub(crate) fn reset_line(&mut self) {
-        self.remaining_columns = self.configured_columns;
+        self.phase = if self.configured_columns > 0 {
+            HorizontalScrollSkipPhase::Skipping {
+                remaining_columns: self.configured_columns,
+            }
+        } else {
+            HorizontalScrollSkipPhase::Disabled
+        };
     }
 
     pub(crate) fn should_skip(self) -> bool {
-        self.remaining_columns > 0
-    }
-
-    pub(crate) fn should_show_left_truncation(self) -> bool {
-        self.configured_columns > 0
+        matches!(
+            self.phase,
+            HorizontalScrollSkipPhase::Skipping { .. }
+                | HorizontalScrollSkipPhase::ReplaceNextGlyph
+        )
     }
 
     pub(crate) fn consumed_columns(self) -> i32 {
-        self.configured_columns - self.remaining_columns
+        match self.phase {
+            HorizontalScrollSkipPhase::Disabled => 0,
+            HorizontalScrollSkipPhase::Skipping { remaining_columns } => {
+                self.configured_columns - remaining_columns
+            }
+            HorizontalScrollSkipPhase::ReplaceNextGlyph | HorizontalScrollSkipPhase::Complete => {
+                self.configured_columns
+            }
+        }
     }
 
-    pub(crate) fn consume_columns(&mut self, columns: i32) {
-        self.remaining_columns -= columns.max(0).min(self.remaining_columns);
+    pub(crate) fn consume_columns(&mut self, columns: i32) -> HscrollConsumedTextDisposition {
+        let columns = columns.max(0);
+        match self.phase {
+            HorizontalScrollSkipPhase::Skipping { remaining_columns }
+                if columns < remaining_columns =>
+            {
+                self.phase = HorizontalScrollSkipPhase::Skipping {
+                    remaining_columns: remaining_columns - columns,
+                };
+                HscrollConsumedTextDisposition::Hidden
+            }
+            HorizontalScrollSkipPhase::Skipping { remaining_columns }
+                if columns == remaining_columns =>
+            {
+                self.phase = HorizontalScrollSkipPhase::ReplaceNextGlyph;
+                HscrollConsumedTextDisposition::Hidden
+            }
+            HorizontalScrollSkipPhase::Skipping { .. }
+            | HorizontalScrollSkipPhase::ReplaceNextGlyph => {
+                self.phase = HorizontalScrollSkipPhase::Complete;
+                HscrollConsumedTextDisposition::ReplacedByLeftTruncation
+            }
+            HorizontalScrollSkipPhase::Disabled | HorizontalScrollSkipPhase::Complete => {
+                debug_assert!(false, "hscroll columns consumed after skipping completed");
+                HscrollConsumedTextDisposition::Hidden
+            }
+        }
     }
 }
 

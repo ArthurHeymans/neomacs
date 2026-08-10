@@ -246,14 +246,16 @@ impl CursorVisualColumnResolutionRequest {
             col_acc = col_acc.saturating_add(glyph.materialized_slot_span());
         }
 
-        // Trim the trailing `:extend` fill glyphs from the Text area. The blank
-        // space + stretch glyphs that `extend_face_to_end_of_line` appends past
-        // EOL carry the no-buffer-position sentinel; they fill the highlighted
-        // background to the window edge but represent no buffer character. GNU's
-        // set_cursor_from_row walks `end` back over exactly these glyphs (the
-        // ones whose `object` is nil, src/xdisp.c:18648) so the EOL/blank-line
-        // cursor lands in the empty area right after the real text rather than
-        // being shoved to the fill's right edge.
+        // Trim the trailing redisplay-owned LINE-END suffix from the Text
+        // area. GNU set_cursor_from_row walks `end` backwards while object is
+        // nil and charpos <= 0 (xdisp.c), but first advances over leading
+        // redisplay glyphs such as a line-number prefix. This protocol does
+        // not yet retain GNU's object identity, so preserve the leading prefix
+        // by identifying the two line-end products we emit:
+        //
+        // 1. the same-face `:extend` suffix ending in a stretch glyph;
+        // 2. append_space_for_newline's one terminal space on a row that
+        //    actually spans buffer text (unlike the blank EOB gutter row).
         let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
         let mut text_end = text_glyphs.len();
         if let Some(fill) = text_glyphs.last()
@@ -270,6 +272,16 @@ impl CursorVisualColumnResolutionRequest {
             {
                 text_end -= 1;
             }
+        }
+        if row.end_charpos > row.start_charpos
+            && text_end > 0
+            && text_glyphs[text_end - 1].charpos == NO_BUFFER_POSITION_CHARPOS
+            && matches!(
+                text_glyphs[text_end - 1].glyph_type,
+                neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: ' ' }
+            )
+        {
+            text_end -= 1;
         }
 
         let mut nearest_after: Option<(usize, u16)> = None;

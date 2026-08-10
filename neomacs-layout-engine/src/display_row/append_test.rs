@@ -67,8 +67,9 @@ use crate::display_row::source_render::{
 use crate::display_row::transition::*;
 use crate::display_row::walk_state::{
     BoxFaceRowState, DisplayRowTextOverflowDecision, FaceScanCheckpoint, HitRowRangeTracker,
-    HorizontalScrollSkipState, InvisibleTextScanCheckpoint, LineNumberRenderState,
-    TrailingWhitespaceRenderState, WordWrapBreakCandidate, WordWrapRenderState,
+    HorizontalScrollSkipState, HscrollConsumedTextDisposition, InvisibleTextScanCheckpoint,
+    LineNumberRenderState, TrailingWhitespaceRenderState, WordWrapBreakCandidate,
+    WordWrapRenderState,
 };
 use crate::display_row::{
     CurrentTextRowRenderOutcome, DisplayRowActiveFaceState, DisplayRowFallbackMetrics,
@@ -970,7 +971,7 @@ fn display_row_text_window_emit_context_applies_line_break_render_state_after_tr
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
-    hscroll_skip.consume_columns(4);
+    hscroll_skip.consume_columns(5);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
     let mut trailing_whitespace = TrailingWhitespaceRenderState::new(true, 0x00ff00);
@@ -1086,7 +1087,7 @@ fn display_row_transition_render_state_applies_row_start_line_break_policy() {
     let mut prefix_request = DisplayRowPrefixRequest::None;
     let mut line_numbers = LineNumberRenderState::new(true, 4, 9);
     let mut hscroll_skip = HorizontalScrollSkipState::new(LineWrapMode::Truncate, 4);
-    hscroll_skip.consume_columns(4);
+    hscroll_skip.consume_columns(5);
     let mut word_wrap = WordWrapRenderState::new(true);
     word_wrap.allow_after_current_char(' ');
     word_wrap.record_candidate(
@@ -1157,7 +1158,7 @@ fn buffer_hscroll_skip_consumes_tab_to_next_stop() {
         BufferSourceHscrollSkipAction::Text {
             ch_start_byte_idx: 0,
             charpos: 1,
-            show_left_truncation: true
+            disposition: HscrollConsumedTextDisposition::ReplacedByLeftTruncation
         }
     );
     assert_eq!(position, DisplaySourceTextPosition::new(1, 1));
@@ -1178,10 +1179,25 @@ fn buffer_hscroll_skip_consumes_wide_char_columns() {
         BufferSourceHscrollSkipAction::Text {
             ch_start_byte_idx: 0,
             charpos: 4,
-            show_left_truncation: true
+            disposition: HscrollConsumedTextDisposition::Hidden
         }
     );
     assert_eq!(position, DisplaySourceTextPosition::new("界".len(), 4));
+    assert!(hscroll_skip.should_skip());
+
+    let action =
+        consume_hscroll_skip_from_position("界x".as_bytes(), &mut position, &mut hscroll_skip, 8)
+            .expect("left truncation replacement action");
+
+    assert_eq!(
+        action,
+        BufferSourceHscrollSkipAction::Text {
+            ch_start_byte_idx: "界".len(),
+            charpos: 5,
+            disposition: HscrollConsumedTextDisposition::ReplacedByLeftTruncation
+        }
+    );
+    assert_eq!(position, DisplaySourceTextPosition::new("界x".len(), 5));
     assert!(!hscroll_skip.should_skip());
 }
 
@@ -1198,7 +1214,7 @@ fn buffer_hscroll_skip_keeps_marker_pending_while_still_skipping() {
         BufferSourceHscrollSkipAction::Text {
             ch_start_byte_idx: 0,
             charpos: 1,
-            show_left_truncation: false
+            disposition: HscrollConsumedTextDisposition::Hidden
         }
     );
     assert_eq!(position, DisplaySourceTextPosition::new(1, 1));
@@ -1435,7 +1451,7 @@ fn buffer_hscroll_skip_action_captures_text_cursor() {
     let action = BufferSourceHscrollSkipAction::Text {
         ch_start_byte_idx: 5,
         charpos: 9,
-        show_left_truncation: false,
+        disposition: HscrollConsumedTextDisposition::Hidden,
     };
     let mut cursor = CursorCaptureState::new();
 
@@ -1493,7 +1509,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
     let action = BufferSourceHscrollSkipAction::Text {
         ch_start_byte_idx: 5,
         charpos: 9,
-        show_left_truncation: true,
+        disposition: HscrollConsumedTextDisposition::ReplacedByLeftTruncation,
     };
 
     action.append_left_truncation_marker_to_text_row_and_apply(

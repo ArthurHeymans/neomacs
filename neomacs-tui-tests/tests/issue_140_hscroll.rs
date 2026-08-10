@@ -62,14 +62,8 @@ fn assert_matches_gnu(label: &str, gh: i64, nh: i64, gc: (u16, u16), nc: (u16, u
     );
     assert_eq!(nh, gh, "[{label}] neomacs window-hscroll must equal GNU's");
     assert_eq!(
-        nc.0, gc.0,
-        "[{label}] cursor must be on the same (long-line) row as GNU, not dropped off",
-    );
-    assert!(
-        (nc.1 as i64 - gc.1 as i64).abs() <= 1,
-        "[{label}] cursor column {} must be within 1 of GNU's {}",
-        nc.1,
-        gc.1,
+        nc, gc,
+        "[{label}] neomacs cursor row and column must exactly equal GNU's",
     );
 }
 

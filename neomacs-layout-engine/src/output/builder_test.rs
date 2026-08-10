@@ -1122,6 +1122,80 @@ fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
 }
 
 #[test]
+fn resolve_eol_cursor_excludes_positionless_newline_glyph() {
+    // GNU set_cursor_from_row walks END backwards over redisplay-owned glyphs
+    // with nil object and charpos <= 0 before it resolves point.  In
+    // particular, append_space_for_newline's terminal space is present in the
+    // matrix but is not to the left of an EOL cursor.
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 80, Rect::new(0.0, 0.0, 640.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 'H', FaceId::new(0), 40);
+    write_char_to_current_row(&mut builder, 'i', FaceId::new(0), 41);
+    write_char_to_current_row(
+        &mut builder,
+        ' ',
+        FaceId::new(0),
+        NO_BUFFER_POSITION_CHARPOS,
+    );
+    builder
+        .edit_current_row_for_test(|row| {
+            row.start_charpos = 40;
+            row.end_charpos = 43;
+        })
+        .expect("current row");
+    builder.end_row();
+
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 0, 42)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(2)
+    );
+    builder.end_window();
+}
+
+#[test]
+fn resolve_empty_line_cursor_preserves_gutter_before_line_end_fill() {
+    // Line-number prefixes and line-end fill are both redisplay-owned in this
+    // protocol.  GNU distinguishes their positions in the row: it advances
+    // over the leading prefix, then trims the trailing newline/fill glyphs.
+    // The cursor must therefore land after the three-column gutter, not at
+    // column zero and not at the fill's right edge.
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 80, Rect::new(0.0, 0.0, 640.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    for _ in 0..3 {
+        write_char_to_current_row(
+            &mut builder,
+            ' ',
+            FaceId::new(1),
+            NO_BUFFER_POSITION_CHARPOS,
+        );
+    }
+    write_char_to_current_row(
+        &mut builder,
+        ' ',
+        FaceId::new(0),
+        NO_BUFFER_POSITION_CHARPOS,
+    );
+    write_stretch_to_current_row(&mut builder, 20, FaceId::new(2));
+    builder
+        .edit_current_row_for_test(|row| {
+            row.start_charpos = 4;
+            row.end_charpos = 5;
+        })
+        .expect("current row");
+    builder.end_row();
+
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 0, 4)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(3)
+    );
+    builder.end_window();
+}
+
+#[test]
 fn builder_reorders_status_line_rtl_row() {
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 0.0, 80.0, 32.0), true);

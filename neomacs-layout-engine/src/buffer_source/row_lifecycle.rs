@@ -34,8 +34,8 @@ use crate::display_row::transition::{
 };
 use crate::display_row::walk_state::{
     BoxFaceRowState, FaceScanCheckpoint, HitRowRangeTracker, HorizontalScrollSkipState,
-    InvisibleTextScanCheckpoint, LineNumberRenderState, TrailingWhitespaceRenderState,
-    sync_position_after_row_transition,
+    HscrollConsumedTextDisposition, InvisibleTextScanCheckpoint, LineNumberRenderState,
+    TrailingWhitespaceRenderState, sync_position_after_row_transition,
 };
 use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceTextPosition;
@@ -90,7 +90,7 @@ pub(crate) enum BufferSourceHscrollSkipAction {
     Text {
         ch_start_byte_idx: usize,
         charpos: i64,
-        show_left_truncation: bool,
+        disposition: HscrollConsumedTextDisposition,
     },
 }
 
@@ -120,7 +120,7 @@ impl BufferSourceHscrollSkipAction {
         matches!(
             self,
             Self::Text {
-                show_left_truncation: true,
+                disposition: HscrollConsumedTextDisposition::ReplacedByLeftTruncation,
                 ..
             }
         )
@@ -498,7 +498,7 @@ fn consume_source_char_for_hscroll(
         };
     }
 
-    hscroll_skip.consume_columns(hscroll_skip_column_width(
+    let disposition = hscroll_skip.consume_columns(hscroll_skip_column_width(
         source_char,
         tab_width,
         hscroll_skip.consumed_columns(),
@@ -506,8 +506,7 @@ fn consume_source_char_for_hscroll(
     BufferSourceHscrollSkipAction::Text {
         ch_start_byte_idx: source_char.start_byte_idx(),
         charpos: end_charpos,
-        show_left_truncation: !hscroll_skip.should_skip()
-            && hscroll_skip.should_show_left_truncation(),
+        disposition,
     }
 }
 
