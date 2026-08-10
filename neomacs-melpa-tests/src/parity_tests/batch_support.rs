@@ -24,6 +24,7 @@ enum CaseExecution {
     SharedProcess,
     FreshProcess,
     SetupOutcome,
+    DirectCommandLoop,
 }
 
 impl ParityBatchCase {
@@ -71,6 +72,16 @@ impl ParityBatchCase {
     /// signal remains observable without misclassifying it as state leakage.
     pub(crate) fn setup_outcome(mut self) -> Self {
         self.execution = CaseExecution::SetupOutcome;
+        self
+    }
+
+    /// Run this case as a top-level editor script with a real command loop.
+    ///
+    /// This is reserved for workflows whose public behavior depends on
+    /// `recursive-edit`, process sentinels, or other command-loop state that
+    /// cannot be nested below the ordinary oracle transport.
+    pub(crate) fn direct_command_loop(mut self) -> Self {
+        self.execution = CaseExecution::DirectCommandLoop;
         self
     }
 }
@@ -210,7 +221,18 @@ fn run_isolated_case(
     oracle: &CachedMelpaOracle,
     case: &ParityBatchCase,
 ) -> Result<OracleBatchReport, String> {
-    oracle.run_case(case.id, case.probe.as_ref(), case.expected_outcome)
+    match case.execution {
+        CaseExecution::DirectCommandLoop => oracle.run_direct_command_loop_probe(
+            case.id,
+            case.probe.as_ref(),
+            case.expected_outcome,
+        ),
+        CaseExecution::SharedProcess
+        | CaseExecution::FreshProcess
+        | CaseExecution::SetupOutcome => {
+            oracle.run_case(case.id, case.probe.as_ref(), case.expected_outcome)
+        }
+    }
 }
 
 fn audit_batch_isolation(
@@ -267,7 +289,12 @@ fn audit_batch_isolation(
 fn isolation_audit_cases(cases: &[ParityBatchCase]) -> Vec<&ParityBatchCase> {
     cases
         .iter()
-        .filter(|case| case.execution != CaseExecution::SetupOutcome)
+        .filter(|case| {
+            matches!(
+                case.execution,
+                CaseExecution::SharedProcess | CaseExecution::FreshProcess
+            )
+        })
         .collect()
 }
 
@@ -316,6 +343,7 @@ mod tests {
                 expect![[r#"ERR (void-function dependency)"#]],
             )
             .setup_outcome(),
+            ParityBatchCase::value("command-loop", "4", expect!["OK 4"]).direct_command_loop(),
         ];
 
         assert_eq!(

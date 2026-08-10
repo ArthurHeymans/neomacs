@@ -3677,11 +3677,13 @@ version = "0.0.15"
 dependencies = [
  "expect-test",
  "fs4",
+ "libc",
  "neomacs-melpa-test-support",
  "neomacs-test-oracle",
  "neomacs-tui-tests",
  "sha2",
  "tempfile",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

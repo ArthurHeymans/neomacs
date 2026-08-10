@@ -33,6 +33,7 @@ slow-timeout = { period = "600s", terminate-after = 1, grace-period = "0s" }
 # not for constraining a spawned production GUI stack.
 [[profile.default.scripts]]
 filter = 'not binary_id(neomacs-gui-tests::real_gui_smoke)'
+platform = { host = "cfg(unix)" }
 run-wrapper = 'memory-limit'
 
 # Start both editor adapters once before package parity cases are dispatched.

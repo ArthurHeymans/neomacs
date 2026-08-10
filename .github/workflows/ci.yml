@@ -242,6 +242,45 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  neomacs-melpa-direct-windows-tests:
+    name: MELPA direct adapter Job Object contracts (windows x86_64)
+    if: github.event_name != 'schedule'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - *checkout
+
+      - name: Prepare workspace temp directory
+        shell: pwsh
+        run: |
+          $taskTmp = Join-Path $env:GITHUB_WORKSPACE 'tmp'
+          New-Item -ItemType Directory -Force -Path $taskTmp | Out-Null
+          "TMPDIR=$taskTmp" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "TMP=$taskTmp" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "TEMP=$taskTmp" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - *install_rust
+      - *install_nextest
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: ci-windows-direct-adapter-x86_64
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+
+      - name: Run native Windows direct adapter contracts
+        run: >-
+          cargo nextest run
+          -p neomacs-melpa-tests
+          -E 'test(/direct_windows_/)'
+          --success-output immediate
+          --no-fail-fast
+
   neovm-core-tests:
     name: neovm-core tests shard ${{ matrix.partition }}/20 (linux x86_64)
     if: github.event_name != 'schedule'

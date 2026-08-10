@@ -1,16 +1,25 @@
+#[cfg(unix)]
 use std::fs;
+#[cfg(unix)]
 use std::path::Path;
+#[cfg(unix)]
 use std::process::Command;
+#[cfg(unix)]
 use std::time::Duration;
 
 use crate::{
-    EmacsRuntime, ErtScenario, MelpaSandbox, OracleBatchFailure, PackageActivation,
-    PackageScenario, PackageSource, SHALLOW_GIT_FETCH_ARGS, ScenarioPhase, SourceBuild,
+    EmacsRuntime, MelpaSandbox, PackageActivation, SHALLOW_GIT_FETCH_ARGS, SourceBuild,
     locked_melpa_install_plan, locked_melpa_source, locked_melpa_sources, package_activation_elisp,
-    run_elisp_oracle, run_elisp_oracle_batch, run_ert_scenario, run_oracle_scenario, run_scenario,
-    workspace_root,
+    run_elisp_oracle, workspace_root,
 };
-use neomacs_test_oracle::{BatchProbe, EvalOutcome};
+#[cfg(unix)]
+use crate::{
+    ErtScenario, OracleBatchFailure, PackageScenario, PackageSource, ScenarioPhase,
+    run_elisp_oracle_batch, run_ert_scenario, run_oracle_scenario, run_scenario,
+};
+#[cfg(unix)]
+use neomacs_test_oracle::BatchProbe;
+use neomacs_test_oracle::EvalOutcome;
 
 #[test]
 fn installed_autoload_activation_never_loads_the_package_source() {
@@ -685,7 +694,7 @@ fn every_exact_package_has_a_complete_acyclic_source_plan() {
     let sources = locked_melpa_sources().expect("parse the source lock");
     assert_eq!(
         sources.len(),
-        655,
+        656,
         "every root package, exact dependency, and legacy all-ext dependency stays pinned"
     );
 

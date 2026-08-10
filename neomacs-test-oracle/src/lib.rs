@@ -208,8 +208,8 @@ fn marked_batch_case_id(
     Ok(Some(rest.to_string()))
 }
 
-/// Lisp that defines the shared normalizer used by single- and multi-probe wrappers.
-fn oracle_normalizer_elisp() -> &'static str {
+/// Lisp that defines the shared normalizer used by every oracle transport.
+pub fn oracle_normalizer_elisp() -> &'static str {
     r##"(defun neomacs--test-oracle-normalize-string (value)
              (dolist
                  (root

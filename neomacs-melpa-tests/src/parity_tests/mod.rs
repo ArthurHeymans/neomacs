@@ -549,6 +549,7 @@ mod pyim;
 mod pytest;
 mod pythonic;
 mod pyvenv;
+mod quelpa;
 mod queue;
 mod quickrun;
 mod racer;

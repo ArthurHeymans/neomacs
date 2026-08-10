@@ -6,9 +6,9 @@
 //! against either revision-pinned package source or a local fixture archive.
 
 use std::fmt;
-use std::fs;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -24,7 +24,8 @@ pub use neomacs_melpa_test_support::{
 };
 use neomacs_test_oracle::{
     BatchProbe, EvalOutcome, ExpectedOutcome, extract_marked_batch_protocol,
-    extract_marked_outcome, wrap_elisp_batch_outcomes, wrap_elisp_outcome,
+    extract_marked_outcome, oracle_normalizer_elisp, validate_batch_case_id,
+    wrap_elisp_batch_outcomes, wrap_elisp_outcome,
 };
 
 const RESULT_MARKER: &str = "NEOMACS-MELPA-RESULT:";
@@ -406,6 +407,12 @@ pub const PYVENV_MELPA_PIN: (&str, &str) = ("pyvenv", "20211014.707");
 /// priority, copy, iterator, traversal, event-loop, and live-view parity
 /// corpus.
 pub const QUEUE_GNU_ELPA_PIN: (&str, &str) = ("queue", "0.2");
+
+/// The exact Quelpa package selected for practical source checkout, package
+/// build/install, dependency, upgrade, cache, async, and failure-state parity.
+/// MELPA built this archive from upstream commit
+/// `cf01224edd82920a0fb8a90568d2e14347354fc8`.
+pub const QUELPA_MELPA_PIN: (&str, &str) = ("quelpa", "20250113.1906");
 
 /// The exact Quickrun package selected for current-buffer and region execution,
 /// replacement, arguments, working directory, stdin sidecars, multi-outputters,
@@ -3883,6 +3890,7 @@ pub struct OracleBatchReport {
 }
 
 /// Differential oracle for one exact package cached below `./tmp`.
+#[derive(Clone)]
 pub struct CachedPackageOracle {
     packages: PreparedPackageSet,
     timeout: Duration,
@@ -3979,6 +3987,46 @@ impl CachedPackageOracle {
         &self.packages
     }
 
+    /// Run one command-loop-sensitive probe directly in each editor.
+    ///
+    /// Unlike the ordinary `--eval` oracle, this adapter loads a script as a
+    /// top-level command-line action. That leaves `recursive-edit` at a real
+    /// command-loop boundary. Each editor owns a separate process tree and
+    /// atomically publishes exactly one schema-tagged outcome file, so a
+    /// timeout can reap the editor and every Git/tool child before its
+    /// workspace-local sandbox is removed.
+    pub fn run_direct_command_loop_probe(
+        &self,
+        name: &str,
+        probe: &str,
+        expected: ExpectedOutcome,
+    ) -> Result<OracleBatchReport, String> {
+        validate_batch_case_id(name)
+            .map_err(|error| format!("invalid direct command-loop case id: {error}"))?;
+        let gnu_emacs = self.configured_runtime(EmacsRuntime::gnu_emacs());
+        let neomacs = self.configured_runtime(EmacsRuntime::neomacs());
+        let setup = self.packages.startup_elisp();
+        let (gnu_result, neomacs_result) = thread::scope(|scope| {
+            let gnu_handle =
+                scope.spawn(|| run_direct_editor_probe(&gnu_emacs, name, &setup, probe));
+            let neomacs_handle =
+                scope.spawn(|| run_direct_editor_probe(&neomacs, name, &setup, probe));
+            (
+                gnu_handle
+                    .join()
+                    .unwrap_or_else(|_| Err("GNU Emacs direct-probe thread panicked".into())),
+                neomacs_handle
+                    .join()
+                    .unwrap_or_else(|_| Err("Neomacs direct-probe thread panicked".into())),
+            )
+        });
+        let gnu_emacs =
+            gnu_result.map_err(|error| format!("GNU Emacs direct probe failed: {error}"))?;
+        let neomacs =
+            neomacs_result.map_err(|error| format!("Neomacs direct probe failed: {error}"))?;
+        Ok(oracle_batch_report(name, neomacs, gnu_emacs, expected))
+    }
+
     fn configured_runtime(&self, mut runtime: EmacsRuntime) -> EmacsRuntime {
         for (name, value) in self.packages.process_environment() {
             runtime = runtime.with_env(name, value);
@@ -4013,35 +4061,12 @@ impl CachedPackageOracle {
             &self.packages.startup_elisp(),
             probe,
         )?;
-        let mut failures = Vec::new();
-        if observed.neomacs != observed.gnu_emacs {
-            failures.push(OracleBatchFailure::OutcomeMismatch {
-                id: name.to_string(),
-                neomacs: observed.neomacs.clone(),
-                gnu_emacs: observed.gnu_emacs.clone(),
-            });
-        }
-        for (editor, actual) in [
-            (OracleEditor::GnuEmacs, &observed.gnu_emacs),
-            (OracleEditor::Neomacs, &observed.neomacs),
-        ] {
-            if !expected.matches(actual) {
-                failures.push(OracleBatchFailure::UnexpectedOutcome {
-                    id: name.to_string(),
-                    editor,
-                    expected,
-                    actual: actual.clone(),
-                });
-            }
-        }
-        Ok(OracleBatchReport {
-            cases: vec![OracleBatchCaseReport {
-                id: name.to_string(),
-                neomacs: observed.neomacs,
-                gnu_emacs: observed.gnu_emacs,
-            }],
-            failures,
-        })
+        Ok(oracle_batch_report(
+            name,
+            observed.neomacs,
+            observed.gnu_emacs,
+            expected,
+        ))
     }
 
     /// Run many named probes in one GNU Emacs process and one Neomacs process.
@@ -4114,6 +4139,883 @@ impl CachedPackageOracle {
             gnu_emacs: report.gnu_emacs,
         })
     }
+}
+
+fn oracle_batch_report(
+    name: &str,
+    neomacs: EvalOutcome,
+    gnu_emacs: EvalOutcome,
+    expected: ExpectedOutcome,
+) -> OracleBatchReport {
+    let mut failures = Vec::new();
+    if neomacs != gnu_emacs {
+        failures.push(OracleBatchFailure::OutcomeMismatch {
+            id: name.to_string(),
+            neomacs: neomacs.clone(),
+            gnu_emacs: gnu_emacs.clone(),
+        });
+    }
+    for (editor, actual) in [
+        (OracleEditor::GnuEmacs, &gnu_emacs),
+        (OracleEditor::Neomacs, &neomacs),
+    ] {
+        if !expected.matches(actual) {
+            failures.push(OracleBatchFailure::UnexpectedOutcome {
+                id: name.to_string(),
+                editor,
+                expected,
+                actual: actual.clone(),
+            });
+        }
+    }
+    OracleBatchReport {
+        cases: vec![OracleBatchCaseReport {
+            id: name.to_string(),
+            neomacs,
+            gnu_emacs,
+        }],
+        failures,
+    }
+}
+
+const DIRECT_PROBE_SCHEMA: &str = "neomacs-melpa-direct-v1";
+const DIRECT_PROBE_MAX_BYTES: u64 = 2 * 1024 * 1024;
+const DIRECT_PROBE_LOG_MAX_BYTES: u64 = 1024 * 1024;
+const DIRECT_PROBE_POLL_INTERVAL: Duration = Duration::from_millis(10);
+const DIRECT_PROBE_TERM_GRACE: Duration = Duration::from_millis(500);
+
+fn run_direct_editor_probe(
+    runtime: &EmacsRuntime,
+    name: &str,
+    setup: &str,
+    probe: &str,
+) -> Result<EvalOutcome, String> {
+    let sandbox = MelpaSandbox::new(&format!("{name}-direct-{}", runtime.name))?;
+    let script_path = sandbox.root().join("direct-probe.el");
+    let outcome_path = sandbox.root().join("direct-outcome.el");
+    let outcome_tmp_path = sandbox.root().join("direct-outcome.el.partial");
+    let stdout_path = sandbox.root().join("editor.stdout");
+    let stderr_path = sandbox.root().join("editor.stderr");
+    let script = direct_probe_script(name, setup, probe, &outcome_path, &outcome_tmp_path);
+    fs::write(&script_path, script).map_err(|error| {
+        format!(
+            "failed to write direct probe script {}: {error}",
+            script_path.display()
+        )
+    })?;
+
+    let stdout = File::create(&stdout_path).map_err(|error| {
+        format!(
+            "failed to create direct probe stdout {}: {error}",
+            stdout_path.display()
+        )
+    })?;
+    let stderr = File::create(&stderr_path).map_err(|error| {
+        format!(
+            "failed to create direct probe stderr {}: {error}",
+            stderr_path.display()
+        )
+    })?;
+    let mut command = runtime.command();
+    sandbox.configure(&mut command);
+    command
+        .arg("--quick")
+        .arg("--batch")
+        .arg("--load")
+        .arg(&script_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr));
+    let mut child = DirectEditorChild::spawn(&mut command).map_err(|error| {
+        format!(
+            "failed to launch {} for direct probe `{name}`: {error}",
+            runtime.name
+        )
+    })?;
+    let status = child.wait_for_exit(runtime.timeout).map_err(|error| {
+        direct_probe_process_error(runtime, name, error, &stdout_path, &stderr_path)
+    })?;
+
+    if !status.success() {
+        return Err(direct_probe_process_error(
+            runtime,
+            name,
+            format!("exited with status {status}"),
+            &stdout_path,
+            &stderr_path,
+        ));
+    }
+    let stdout = read_direct_probe_file(&stdout_path, DIRECT_PROBE_LOG_MAX_BYTES, "stdout")?;
+    let stderr = read_direct_probe_file(&stderr_path, DIRECT_PROBE_LOG_MAX_BYTES, "stderr")?;
+    let outcome = read_direct_probe_outcome(name, &outcome_path, &outcome_tmp_path).map_err(
+        |error| {
+        format!(
+            "{} direct probe `{name}` emitted an invalid {DIRECT_PROBE_SCHEMA} outcome: {error}",
+            runtime.name
+        )
+        },
+    )?;
+    Ok(wrap_direct_probe_logs(outcome, stdout, stderr, &sandbox))
+}
+
+fn direct_probe_script(
+    name: &str,
+    setup: &str,
+    probe: &str,
+    outcome_path: &Path,
+    outcome_tmp_path: &Path,
+) -> String {
+    let outcome_path = elisp_string(&outcome_path.to_string_lossy());
+    let outcome_tmp_path = elisp_string(&outcome_tmp_path.to_string_lossy());
+    let case_id = elisp_string(name);
+    let normalizer = oracle_normalizer_elisp();
+    format!(
+        r####";;; -*- lexical-binding: t; -*-
+(progn
+  {normalizer}
+  {setup}
+  (let ((direct-case-id {case_id})
+        (direct-outcome-file {outcome_path})
+        (direct-outcome-tmp {outcome_tmp_path})
+        direct-kind
+        direct-value)
+    (condition-case direct-error
+        (setq direct-kind "value"
+              direct-value
+              (neomacs--test-oracle-normalized (progn {probe})))
+      (error
+       (setq direct-kind "signal"
+             direct-value
+             (neomacs--test-oracle-normalized direct-error))))
+    (let ((direct-payload
+           (with-temp-buffer
+        (let ((print-circle t)
+              (print-length nil)
+              (print-level nil)
+              (print-escape-newlines t)
+              (print-escape-control-characters t))
+               (prin1 direct-value (current-buffer))
+               (buffer-substring-no-properties (point-min) (point-max))))))
+      (let* ((encoded direct-payload)
+           (read-eval nil)
+           (decoded (read-from-string encoded))
+           (trailing (substring encoded (cdr decoded))))
+        (unless (equal (car decoded) direct-value)
+          (error "Direct payload failed its Elisp round-trip check"))
+        (unless (string-match-p "\\`[[:space:]]*\\'" trailing)
+          (error "Direct payload contains trailing protocol bytes")))
+      (let* ((coding-system-for-write 'no-conversion)
+             (newline (string-as-unibyte "\n"))
+             (schema-bytes
+              (encode-coding-string "{DIRECT_PROBE_SCHEMA}" 'utf-8-unix t))
+             (case-bytes
+              (encode-coding-string direct-case-id 'utf-8-unix t))
+             (kind-bytes
+              (encode-coding-string direct-kind 'utf-8-unix t))
+             (payload-bytes
+              (encode-coding-string direct-payload 'utf-8-unix t))
+             (envelope
+              (concat
+               schema-bytes newline
+               (string-as-unibyte (number-to-string (length case-bytes))) newline
+               case-bytes newline
+               kind-bytes newline
+               (string-as-unibyte (number-to-string (length payload-bytes))) newline
+               payload-bytes)))
+        (with-temp-file direct-outcome-tmp
+          (set-buffer-multibyte nil)
+          (insert envelope))))
+    (rename-file direct-outcome-tmp direct-outcome-file t)))
+"####
+    )
+}
+
+struct DirectEditorChild {
+    child: Child,
+    status: Option<ExitStatus>,
+    #[cfg(unix)]
+    process_group: i32,
+    #[cfg(windows)]
+    job: DirectWindowsJob,
+    tree_armed: bool,
+}
+
+impl DirectEditorChild {
+    fn spawn(command: &mut Command) -> Result<Self, String> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
+        #[cfg(windows)]
+        let job = {
+            use std::os::windows::process::CommandExt;
+            use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
+
+            command.creation_flags(CREATE_SUSPENDED);
+            DirectWindowsJob::new()?
+        };
+        let mut child = command
+            .spawn()
+            .map_err(|error| format!("failed to spawn editor: {error}"))?;
+        #[cfg(unix)]
+        {
+            let child_id = child.id();
+            let process_group = match i32::try_from(child_id) {
+                Ok(process_group) => process_group,
+                Err(_) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "editor pid {child_id} does not fit a process-group id"
+                    ));
+                }
+            };
+            if process_group <= 1 {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "refusing unsafe direct-probe process group {process_group}"
+                ));
+            }
+            Ok(Self {
+                child,
+                status: None,
+                process_group,
+                tree_armed: true,
+            })
+        }
+        #[cfg(windows)]
+        {
+            if let Err(error) = job.assign_and_resume(&child) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error);
+            }
+            Ok(Self {
+                child,
+                status: None,
+                job,
+                tree_armed: true,
+            })
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            Ok(Self {
+                child,
+                status: None,
+                tree_armed: true,
+            })
+        }
+    }
+
+    fn wait_for_exit(&mut self, timeout: Duration) -> Result<ExitStatus, String> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            match self.poll_child() {
+                Ok(Some(status)) => {
+                    if self.process_tree_has_members() {
+                        let cleanup = self.shutdown_process_tree();
+                        return Err(append_cleanup_error(
+                            "exited while descendant processes were still live; the adapter reaped the process tree",
+                            cleanup,
+                        ));
+                    }
+                    self.tree_armed = false;
+                    return Ok(status);
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    let cleanup = self.shutdown_process_tree();
+                    return Err(append_cleanup_error(error, cleanup));
+                }
+            }
+            if Instant::now() >= deadline {
+                let cleanup = self.shutdown_process_tree();
+                return Err(append_cleanup_error(
+                    format!("timed out after {timeout:?}"),
+                    cleanup,
+                ));
+            }
+            thread::sleep(DIRECT_PROBE_POLL_INTERVAL);
+        }
+    }
+
+    fn poll_child(&mut self) -> Result<Option<ExitStatus>, String> {
+        if let Some(status) = self.status {
+            return Ok(Some(status));
+        }
+        let status = self
+            .child
+            .try_wait()
+            .map_err(|error| format!("failed while waiting for editor: {error}"))?;
+        if let Some(status) = status {
+            self.status = Some(status);
+        }
+        Ok(status)
+    }
+
+    fn shutdown_process_tree(&mut self) -> Result<(), String> {
+        let mut errors = Vec::new();
+        if let Err(error) = self.request_process_tree_stop() {
+            errors.push(error);
+        }
+        #[cfg(not(any(unix, windows)))]
+        if let Err(error) = self.child.kill() {
+            errors.push(format!("failed to terminate editor: {error}"));
+        }
+
+        if self.wait_until_process_tree_empty(DIRECT_PROBE_TERM_GRACE, &mut errors) {
+            self.tree_armed = false;
+            return errors_if_any(errors);
+        }
+
+        if let Err(error) = self.force_process_tree_stop() {
+            errors.push(error);
+        }
+        #[cfg(not(any(unix, windows)))]
+        if let Err(error) = self.child.kill() {
+            errors.push(format!("failed to kill editor: {error}"));
+        }
+        if self.status.is_none() {
+            match self.child.wait() {
+                Ok(status) => self.status = Some(status),
+                Err(error) => errors.push(format!("failed to reap killed editor: {error}")),
+            }
+        }
+        if self.wait_until_process_tree_empty(DIRECT_PROBE_TERM_GRACE, &mut errors) {
+            self.tree_armed = false;
+        } else {
+            errors.push("direct-probe process tree remained live after forced termination".into());
+        }
+        errors_if_any(errors)
+    }
+
+    fn wait_until_process_tree_empty(&mut self, grace: Duration, errors: &mut Vec<String>) -> bool {
+        let deadline = Instant::now() + grace;
+        loop {
+            if self.status.is_none() {
+                match self.child.try_wait() {
+                    Ok(Some(status)) => self.status = Some(status),
+                    Ok(None) => {}
+                    Err(error) => errors.push(format!("failed while reaping editor: {error}")),
+                }
+            }
+            let child_reaped = self.status.is_some();
+            if child_reaped && !self.process_tree_has_members() {
+                return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
+            }
+            thread::sleep(DIRECT_PROBE_POLL_INTERVAL);
+        }
+    }
+
+    fn process_tree_has_members(&self) -> bool {
+        #[cfg(unix)]
+        {
+            if !self.tree_armed {
+                return false;
+            }
+            // Signal 0 probes group existence without delivering a signal.
+            let result = unsafe { libc::kill(-self.process_group, 0) };
+            result == 0 || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+        }
+        #[cfg(windows)]
+        {
+            // The Job handle remains queryable after cleanup is disarmed, so
+            // Windows runtime contracts can prove that ActiveProcesses is
+            // actually zero rather than observing only adapter bookkeeping.
+            self.job.has_members().unwrap_or(true)
+        }
+        #[cfg(not(any(unix, windows)))]
+        self.status.is_none()
+    }
+
+    #[cfg(all(test, windows))]
+    fn active_windows_job_processes(&self) -> Result<u32, String> {
+        self.job.active_processes()
+    }
+
+    #[cfg(unix)]
+    fn signal_process_group(&self, signal: i32) -> Result<(), String> {
+        if !self.tree_armed {
+            return Ok(());
+        }
+        // The child was spawned with process_group(0), so its pid is the
+        // exact, positively validated group id. A negative kill target is
+        // therefore scoped to this adapter-owned editor/tool process tree.
+        let result = unsafe { libc::kill(-self.process_group, signal) };
+        if result == 0 {
+            return Ok(());
+        }
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ESRCH) {
+            Ok(())
+        } else {
+            Err(format!(
+                "failed to signal direct-probe process group {} with {signal}: {error}",
+                self.process_group
+            ))
+        }
+    }
+
+    #[cfg(unix)]
+    fn request_process_tree_stop(&self) -> Result<(), String> {
+        self.signal_process_group(libc::SIGTERM)
+    }
+
+    #[cfg(windows)]
+    fn request_process_tree_stop(&self) -> Result<(), String> {
+        self.job.terminate()
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    fn request_process_tree_stop(&self) -> Result<(), String> {
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    fn force_process_tree_stop(&self) -> Result<(), String> {
+        self.signal_process_group(libc::SIGKILL)
+    }
+
+    #[cfg(windows)]
+    fn force_process_tree_stop(&self) -> Result<(), String> {
+        self.job.terminate()
+    }
+
+    #[cfg(not(any(unix, windows)))]
+    fn force_process_tree_stop(&self) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+impl Drop for DirectEditorChild {
+    fn drop(&mut self) {
+        if self.tree_armed {
+            let _ = self.force_process_tree_stop();
+        }
+        if self.status.is_none() {
+            let _ = self.child.kill();
+            if let Ok(status) = self.child.wait() {
+                self.status = Some(status);
+            }
+        }
+        if self.tree_armed {
+            let mut ignored_errors = Vec::new();
+            if self.wait_until_process_tree_empty(DIRECT_PROBE_TERM_GRACE, &mut ignored_errors) {
+                self.tree_armed = false;
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+struct DirectWindowsJob {
+    handle: windows_sys::Win32::Foundation::HANDLE,
+}
+
+#[cfg(windows)]
+impl DirectWindowsJob {
+    fn new() -> Result<Self, String> {
+        use std::mem::{size_of, zeroed};
+        use std::ptr;
+        use windows_sys::Win32::System::JobObjects::{
+            CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+            SetInformationJobObject,
+        };
+
+        // SAFETY: null attributes/name request a private job with default
+        // security. The returned owned handle is closed by Drop.
+        let handle = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
+        if handle.is_null() {
+            return Err(format!(
+                "failed to create direct-probe Job Object: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // SAFETY: this Windows ABI struct is plain data and accepts an
+        // all-zero initial state before its documented limit flag is set.
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { zeroed() };
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let size = u32::try_from(size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>())
+            .expect("Windows Job Object limit structure size fits u32");
+        // SAFETY: HANDLE is live, pointer/size describe LIMITS for the exact
+        // requested information class, and the call does not retain it.
+        let configured = unsafe {
+            SetInformationJobObject(
+                handle,
+                JobObjectExtendedLimitInformation,
+                (&raw const limits).cast(),
+                size,
+            )
+        };
+        if configured == 0 {
+            let error = std::io::Error::last_os_error();
+            // SAFETY: HANDLE was created above and has not been closed.
+            unsafe { windows_sys::Win32::Foundation::CloseHandle(handle) };
+            return Err(format!(
+                "failed to configure direct-probe Job Object: {error}"
+            ));
+        }
+        Ok(Self { handle })
+    }
+
+    fn assign_and_resume(&self, child: &Child) -> Result<(), String> {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+
+        let process_handle = child.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
+        // SAFETY: both handles are live; the suspended process cannot create
+        // descendants before it becomes owned by the kill-on-close job.
+        if unsafe { AssignProcessToJobObject(self.handle, process_handle) } == 0 {
+            return Err(format!(
+                "failed to assign suspended editor to direct-probe Job Object: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        resume_windows_process_primary_thread(child.id())
+    }
+
+    fn terminate(&self) -> Result<(), String> {
+        use windows_sys::Win32::System::JobObjects::TerminateJobObject;
+
+        // SAFETY: HANDLE remains owned by SELF for the entire call.
+        if unsafe { TerminateJobObject(self.handle, 1) } == 0 {
+            return Err(format!(
+                "failed to terminate direct-probe Job Object: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Ok(())
+    }
+
+    fn active_processes(&self) -> Result<u32, String> {
+        use std::mem::{size_of, zeroed};
+        use std::ptr;
+        use windows_sys::Win32::System::JobObjects::{
+            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JobObjectBasicAccountingInformation,
+            QueryInformationJobObject,
+        };
+
+        // SAFETY: this accounting structure is plain output data.
+        let mut accounting: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = unsafe { zeroed() };
+        let size = u32::try_from(size_of::<JOBOBJECT_BASIC_ACCOUNTING_INFORMATION>())
+            .expect("Windows Job Object accounting structure size fits u32");
+        // SAFETY: HANDLE is live, output pointer/size match the requested
+        // information class, and no return-length storage is required.
+        if unsafe {
+            QueryInformationJobObject(
+                self.handle,
+                JobObjectBasicAccountingInformation,
+                (&raw mut accounting).cast(),
+                size,
+                ptr::null_mut(),
+            )
+        } == 0
+        {
+            return Err(format!(
+                "failed to query direct-probe Job Object: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Ok(accounting.ActiveProcesses)
+    }
+
+    fn has_members(&self) -> Result<bool, String> {
+        self.active_processes().map(|active| active != 0)
+    }
+}
+
+#[cfg(windows)]
+impl Drop for DirectWindowsJob {
+    fn drop(&mut self) {
+        // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE makes this the final fail-safe
+        // for every editor/tool descendant still assigned to the job.
+        unsafe { windows_sys::Win32::Foundation::CloseHandle(self.handle) };
+    }
+}
+
+#[cfg(windows)]
+fn resume_windows_process_primary_thread(process_id: u32) -> Result<(), String> {
+    use std::mem::{size_of, zeroed};
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
+    };
+    use windows_sys::Win32::System::Threading::{OpenThread, ResumeThread, THREAD_SUSPEND_RESUME};
+
+    // SAFETY: snapshot has no input pointers and returns an owned handle.
+    let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+    if snapshot == INVALID_HANDLE_VALUE {
+        return Err(format!(
+            "failed to enumerate suspended editor threads: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    // SAFETY: THREADENTRY32 is an output-only C structure whose dwSize field
+    // is initialized to the documented structure size before enumeration.
+    let mut entry: THREADENTRY32 = unsafe { zeroed() };
+    entry.dwSize = u32::try_from(size_of::<THREADENTRY32>())
+        .expect("Windows thread-entry structure size fits u32");
+    // SAFETY: SNAPSHOT and ENTRY are live for the call.
+    let mut has_entry = unsafe { Thread32First(snapshot, &raw mut entry) } != 0;
+    let mut result = Err(format!(
+        "suspended editor process {process_id} had no enumerable primary thread"
+    ));
+    while has_entry {
+        if entry.th32OwnerProcessID == process_id {
+            // SAFETY: thread id came from the live system snapshot; the
+            // returned owned handle is closed below.
+            let thread = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID) };
+            if thread.is_null() {
+                result = Err(format!(
+                    "failed to open suspended editor thread {}: {}",
+                    entry.th32ThreadID,
+                    std::io::Error::last_os_error()
+                ));
+            } else {
+                // SAFETY: THREAD is live and was opened with suspend/resume access.
+                let previous_count = unsafe { ResumeThread(thread) };
+                // SAFETY: THREAD is owned by this function and no longer used.
+                unsafe { CloseHandle(thread) };
+                result = match previous_count {
+                    1 => Ok(()),
+                    u32::MAX => Err(format!(
+                        "failed to release suspended editor startup gate: {}",
+                        std::io::Error::last_os_error()
+                    )),
+                    unexpected => Err(format!(
+                        "suspended editor startup gate had suspension count {unexpected}, expected exactly 1"
+                    )),
+                };
+            }
+            break;
+        }
+        // SAFETY: SNAPSHOT and ENTRY remain live for the call.
+        has_entry = unsafe { Thread32Next(snapshot, &raw mut entry) } != 0;
+    }
+    // SAFETY: SNAPSHOT is owned by this function and no longer used.
+    unsafe { CloseHandle(snapshot) };
+    result
+}
+
+fn append_cleanup_error(reason: impl fmt::Display, cleanup: Result<(), String>) -> String {
+    match cleanup {
+        Ok(()) => reason.to_string(),
+        Err(error) => format!("{reason}; process-tree cleanup also failed: {error}"),
+    }
+}
+
+fn errors_if_any(errors: Vec<String>) -> Result<(), String> {
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+fn direct_probe_process_error(
+    runtime: &EmacsRuntime,
+    name: &str,
+    reason: impl fmt::Display,
+    stdout_path: &Path,
+    stderr_path: &Path,
+) -> String {
+    let stdout = read_direct_probe_file(stdout_path, DIRECT_PROBE_LOG_MAX_BYTES, "stdout")
+        .unwrap_or_else(|error| format!("<unavailable: {error}>"));
+    let stderr = read_direct_probe_file(stderr_path, DIRECT_PROBE_LOG_MAX_BYTES, "stderr")
+        .unwrap_or_else(|error| format!("<unavailable: {error}>"));
+    format!(
+        "{} direct probe `{name}` {reason}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+        runtime.name
+    )
+}
+
+fn read_direct_probe_file(path: &Path, limit: u64, label: &str) -> Result<String, String> {
+    let bytes = read_direct_probe_bytes(path, limit, label)?;
+    String::from_utf8(bytes)
+        .map_err(|error| format!("failed to read UTF-8 {label} {}: {error}", path.display()))
+}
+
+fn read_direct_probe_bytes(path: &Path, limit: u64, label: &str) -> Result<Vec<u8>, String> {
+    let metadata = fs::metadata(path)
+        .map_err(|error| format!("failed to inspect {label} {}: {error}", path.display()))?;
+    if metadata.len() > limit {
+        return Err(format!(
+            "{label} {} is {} bytes, exceeding the {limit}-byte protocol limit",
+            path.display(),
+            metadata.len()
+        ));
+    }
+    fs::read(path).map_err(|error| format!("failed to read {label} {}: {error}", path.display()))
+}
+
+fn read_direct_probe_outcome(
+    name: &str,
+    outcome_path: &Path,
+    outcome_tmp_path: &Path,
+) -> Result<EvalOutcome, String> {
+    if outcome_tmp_path.exists() {
+        return Err(format!(
+            "incomplete atomic outcome remains at {}",
+            outcome_tmp_path.display()
+        ));
+    }
+    let encoded = read_direct_probe_bytes(outcome_path, DIRECT_PROBE_MAX_BYTES, "outcome")?;
+    parse_direct_probe_outcome(name, &encoded)
+}
+
+fn parse_direct_probe_outcome(name: &str, encoded: &[u8]) -> Result<EvalOutcome, String> {
+    struct EnvelopeReader<'a> {
+        remaining: &'a [u8],
+    }
+
+    impl<'a> EnvelopeReader<'a> {
+        fn line(&mut self, label: &str) -> Result<&'a [u8], String> {
+            let newline = self
+                .remaining
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .ok_or_else(|| format!("{label} line is incomplete"))?;
+            let (line, rest) = self.remaining.split_at(newline);
+            self.remaining = &rest[1..];
+            Ok(line)
+        }
+
+        fn length(&mut self, label: &str) -> Result<usize, String> {
+            let line = self.line(label)?;
+            let text = std::str::from_utf8(line)
+                .map_err(|error| format!("{label} length is not UTF-8: {error}"))?;
+            let length = text
+                .parse::<usize>()
+                .map_err(|error| format!("{label} length `{text}` is invalid: {error}"))?;
+            if text != length.to_string() {
+                return Err(format!("{label} length `{text}` is not canonical decimal"));
+            }
+            Ok(length)
+        }
+
+        fn bytes(&mut self, length: usize, label: &str) -> Result<&'a [u8], String> {
+            if self.remaining.len() < length {
+                return Err(format!(
+                    "{label} declares {length} bytes but only {} remain",
+                    self.remaining.len()
+                ));
+            }
+            let (bytes, rest) = self.remaining.split_at(length);
+            self.remaining = rest;
+            Ok(bytes)
+        }
+
+        fn separator(&mut self, label: &str) -> Result<(), String> {
+            if self.remaining.first() != Some(&b'\n') {
+                return Err(format!("{label} is not followed by a newline separator"));
+            }
+            self.remaining = &self.remaining[1..];
+            Ok(())
+        }
+    }
+
+    let mut reader = EnvelopeReader { remaining: encoded };
+    let schema = std::str::from_utf8(reader.line("schema")?)
+        .map_err(|error| format!("schema is not UTF-8: {error}"))?;
+    if schema != DIRECT_PROBE_SCHEMA {
+        return Err(format!(
+            "expected schema `{DIRECT_PROBE_SCHEMA}`, got `{schema}`"
+        ));
+    }
+    let case_length = reader.length("case id")?;
+    let case_id = std::str::from_utf8(reader.bytes(case_length, "case id")?)
+        .map_err(|error| format!("case id is not UTF-8: {error}"))?;
+    if case_id != name {
+        return Err(format!("expected case id `{name}`, got `{case_id}`"));
+    }
+    reader.separator("case id")?;
+    let kind = std::str::from_utf8(reader.line("outcome kind")?)
+        .map_err(|error| format!("outcome kind is not UTF-8: {error}"))?;
+    let payload_length = reader.length("payload")?;
+    let payload = std::str::from_utf8(reader.bytes(payload_length, "payload")?)
+        .map_err(|error| format!("payload is not UTF-8: {error}"))?;
+    if !reader.remaining.is_empty() {
+        return Err(format!(
+            "outcome has {} trailing bytes after its payload",
+            reader.remaining.len()
+        ));
+    }
+    match kind {
+        "value" => Ok(EvalOutcome::Value(payload.to_string())),
+        "signal" => Ok(EvalOutcome::Signal(payload.to_string())),
+        _ => Err(format!("unknown outcome kind `{kind}`")),
+    }
+}
+
+fn wrap_direct_probe_logs(
+    outcome: EvalOutcome,
+    stdout: String,
+    stderr: String,
+    sandbox: &MelpaSandbox,
+) -> EvalOutcome {
+    fn normalize_known_paths(value: String, sandbox: &MelpaSandbox) -> String {
+        value
+            .replace(
+                &sandbox.root().to_string_lossy().into_owned(),
+                "[ORACLE-SANDBOX]",
+            )
+            .replace(
+                &workspace_root().to_string_lossy().into_owned(),
+                "[ORACLE-WORKSPACE]",
+            )
+    }
+
+    let stdout = direct_log_elisp_string(&normalize_known_paths(stdout, sandbox));
+    let stderr = direct_log_elisp_string(&normalize_known_paths(stderr, sandbox));
+    match outcome {
+        EvalOutcome::Value(value) => EvalOutcome::Value(format!(
+            "(:value {value} :stdout {stdout} :stderr {stderr})"
+        )),
+        EvalOutcome::Signal(signal) => EvalOutcome::Signal(format!(
+            "(:signal {signal} :stdout {stdout} :stderr {stderr})"
+        )),
+    }
+}
+
+/// Serialize a UTF-8 editor log as the readable string syntax produced by
+/// GNU Emacs with `print-escape-newlines' and
+/// `print-escape-control-characters' enabled.
+fn direct_log_elisp_string(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len() + 2);
+    encoded.push('"');
+    let mut characters = value.chars().peekable();
+    while let Some(character) = characters.next() {
+        match character {
+            '\n' => encoded.push_str("\\n"),
+            '\u{c}' => encoded.push_str("\\f"),
+            '"' => encoded.push_str("\\\""),
+            '\\' => encoded.push_str("\\\\"),
+            '\0'..='\u{1f}' | '\u{7f}' => {
+                let code = u32::from(character);
+                let next_is_octal = characters
+                    .peek()
+                    .is_some_and(|next| matches!(next, '0'..='7'));
+                let width = if code > 0o77 || next_is_octal {
+                    3
+                } else if code > 0o7 {
+                    2
+                } else {
+                    1
+                };
+                encoded.push('\\');
+                encoded.push_str(&format!("{code:0width$o}"));
+            }
+            _ => encoded.push(character),
+        }
+    }
+    encoded.push('"');
+    encoded
 }
 
 fn validate_cached_source_file_name(
@@ -5687,6 +6589,9 @@ fn check_error_markers(stdout: &str, stderr: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod parity_tests;
+
+#[cfg(test)]
+mod direct_adapter_tests;
 
 #[cfg(all(test, unix))]
 mod tui_parity_tests;
