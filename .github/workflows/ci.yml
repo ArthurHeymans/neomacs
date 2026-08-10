@@ -467,6 +467,9 @@ jobs:
       - *unpack_test_runtime
       - *download_workspace_test_archive
 
+      - name: Install Nix for exact MELPA test runtimes
+        uses: cachix/install-nix-action@v31
+
       - name: Run deterministic package ecosystem compatibility tests
         run: |
           cargo nextest run \

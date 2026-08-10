@@ -559,6 +559,7 @@ mod reformatter;
 mod request;
 mod restart_emacs;
 mod restclient;
+mod robe;
 mod rtags;
 mod rust_mode;
 mod s;

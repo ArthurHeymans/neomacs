@@ -6679,3 +6679,9 @@ pub const DRACULA_THEME_MELPA_PIN: (&str, &str) = ("dracula-theme", "20260719.22
 /// The exact material-theme package selected for practical theme palette parity.
 /// Pinned to upstream commit `6823009bc92f82aa3a90e27e1009f7da8e87b648`.
 pub const MATERIAL_THEME_MELPA_PIN: (&str, &str) = ("material-theme", "20210904.1426");
+
+/// The exact Robe package selected for practical Ruby completion, ElDoc,
+/// documentation, definition navigation, and server-lifecycle parity. MELPA
+/// built this archive from upstream commit
+/// `73a78e55394c1c70c11f9354ef52e7ffce31547c`.
+pub const ROBE_MELPA_PIN: (&str, &str) = ("robe", "20250219.1910");

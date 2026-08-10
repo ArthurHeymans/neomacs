@@ -92,6 +92,9 @@ jobs:
       - name: Run tui tests for neomacs
         run: cargo nextest run -p neomacs-tui-tests --release --no-fail-fast
 
+      - name: Install Nix for exact MELPA test runtimes
+        uses: cachix/install-nix-action@v31
+
       - name: Run melpa package tests for neomacs
         run: cargo nextest run -p neomacs-melpa-tests --release --no-fail-fast
 
