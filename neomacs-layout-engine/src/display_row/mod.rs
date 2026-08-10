@@ -231,6 +231,10 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
         self
     }
 
+    pub(crate) fn base_face_id(&self) -> FaceId {
+        self.row_request.base_face_id()
+    }
+
     pub(crate) fn with_image_scale_environment(
         mut self,
         image_scale_environment: ImageScaleEnvironment,

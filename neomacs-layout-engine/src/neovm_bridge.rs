@@ -41,7 +41,7 @@ use crate::display_origin::DisplayOrigin;
 use crate::font::fontconfig::FontSizing;
 use neomacs_display_protocol::EffectsConfig;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
-use neomacs_display_protocol::face::BoxLineWidth;
+use neomacs_display_protocol::face::{BasicFaceId, BoxLineWidth};
 use neomacs_display_protocol::types::{FaceId, Rect};
 use rustc_hash::FxHashMap;
 use strum::{EnumString, IntoStaticStr};
@@ -1725,11 +1725,24 @@ pub fn window_params_from_neovm_with_font_sizing(
         wants_header_line,
     );
 
+    // Window chrome is buffer-owned in GNU: `face-remapping-alist` can remap
+    // mode-line, header-line, and tab-line independently for this buffer.  Keep
+    // the buffer in the resolution seam for both the geometry estimate and the
+    // later row render so they cannot select different effective faces.
+    let mut chrome_face_next_check = buffer.point_max_char_pos().get();
+    let mut resolve_window_chrome_face = |origin: DisplayOrigin| {
+        face_resolver.default_base_face_for_origin(
+            Some(buffer),
+            &origin,
+            &mut chrome_face_next_check,
+        )
+    };
+
     // GNU xdisp.c's estimate_mode_line_height starts from the frame line
     // height and lets realized face metrics grow from there.
     let mode_line_height = if wants_mode_line {
         chrome_face_pixel_height(
-            &face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine {
+            &resolve_window_chrome_face(DisplayOrigin::ModeLine {
                 selected: mode_line_active,
             }),
             char_height,
@@ -1761,11 +1774,9 @@ pub fn window_params_from_neovm_with_font_sizing(
 
     let header_line_height = if wants_header_line {
         chrome_face_pixel_height(
-            &face_resolver.default_base_face_for_origin_without_buffer(
-                &DisplayOrigin::HeaderLine {
-                    selected: mode_line_active,
-                },
-            ),
+            &resolve_window_chrome_face(DisplayOrigin::HeaderLine {
+                selected: mode_line_active,
+            }),
             char_height,
         )
     } else {
@@ -1774,7 +1785,7 @@ pub fn window_params_from_neovm_with_font_sizing(
 
     let tab_line_height = if wants_tab_line {
         chrome_face_pixel_height(
-            &face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::TabLine),
+            &resolve_window_chrome_face(DisplayOrigin::TabLine),
             char_height,
         )
     } else {
@@ -3319,6 +3330,86 @@ impl ResolvedFace {
     }
 }
 
+/// The terminal channel a default-color sentinel belongs to.
+///
+/// ANSI has distinct "default foreground" and "default background" values;
+/// a boolean attached to the destination slot cannot represent one after
+/// inverse-video moves it to the other slot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FaceColorSlot {
+    Foreground,
+    Background,
+}
+
+/// A face color before it is assigned to its post-inverse destination slot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TerminalFaceColor {
+    Concrete(u32),
+    TerminalDefault {
+        slot: FaceColorSlot,
+        fallback_pixel: u32,
+    },
+}
+
+impl TerminalFaceColor {
+    fn from_resolved_slot(pixel: u32, defaulted: bool, slot: FaceColorSlot) -> Self {
+        if defaulted {
+            Self::TerminalDefault {
+                slot,
+                fallback_pixel: pixel,
+            }
+        } else {
+            Self::Concrete(pixel)
+        }
+    }
+
+    fn materialize_in(self, destination: FaceColorSlot) -> (u32, bool) {
+        match self {
+            Self::Concrete(pixel) => (pixel, false),
+            Self::TerminalDefault {
+                slot,
+                fallback_pixel,
+            } if slot == destination => (fallback_pixel, true),
+            // ANSI cannot select the terminal's default background as a
+            // foreground (or vice versa). GNU realizes the frame color first
+            // and swaps that concrete color, so use the carried fallback.
+            Self::TerminalDefault { fallback_pixel, .. } => (fallback_pixel, false),
+        }
+    }
+
+    fn is_terminal_default(self) -> bool {
+        matches!(self, Self::TerminalDefault { .. })
+    }
+}
+
+/// Apply GNU TTY inverse-video realization to a fully merged face.
+///
+/// GNU `realize_tty_face` maps both source colors and then swaps them. When
+/// both are terminal defaults it can preserve that intent with reverse-video;
+/// otherwise a default color crossing channels must become its concrete frame
+/// fallback instead of changing into the other channel's default sentinel.
+fn apply_resolved_face_inverse_video(face: &mut ResolvedFace) {
+    let foreground = TerminalFaceColor::from_resolved_slot(
+        face.fg,
+        face.use_default_foreground,
+        FaceColorSlot::Foreground,
+    );
+    let background = TerminalFaceColor::from_resolved_slot(
+        face.bg,
+        face.use_default_background,
+        FaceColorSlot::Background,
+    );
+
+    if foreground.is_terminal_default() && background.is_terminal_default() {
+        face.terminal_inverse_video = true;
+        return;
+    }
+
+    (face.fg, face.use_default_foreground) = background.materialize_in(FaceColorSlot::Foreground);
+    (face.bg, face.use_default_background) = foreground.materialize_in(FaceColorSlot::Background);
+    face.terminal_inverse_video = false;
+}
+
 // ---------------------------------------------------------------------------
 // FaceResolver
 // ---------------------------------------------------------------------------
@@ -3337,6 +3428,88 @@ enum FilteredFaceSpec {
     /// A `:filtered` form whose FILTER matched — the caller recurses into the
     /// unwrapped SPEC.
     Matched(Vec<Value>),
+}
+
+/// One source in GNU's `face_at_buffer_position` merge order.
+///
+/// Keeping text and overlay sources distinct makes the ordering contract
+/// explicit at call sites: the text property is lower precedence, followed by
+/// overlays in ascending `sort_overlays` order.
+#[derive(Clone, Copy, Debug)]
+enum OrderedFaceSource {
+    TextProperty(Value),
+    Overlay(Value),
+}
+
+/// Logical face sources which must be merged before terminal realization.
+///
+/// GNU accumulates all lface attributes first and calls `lookup_face` once.
+/// In particular, `:inverse-video` is not applied between the text property
+/// and an overlay.  This type prevents those sources from being passed around
+/// as an already-realized [`ResolvedFace`] chain.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct OrderedFaceSources {
+    sources: Vec<OrderedFaceSource>,
+}
+
+impl OrderedFaceSources {
+    pub(crate) fn from_text_and_overlays(
+        text_property: Option<Value>,
+        overlays_ascending: Vec<Value>,
+    ) -> Self {
+        let mut sources = Vec::with_capacity(
+            usize::from(text_property.is_some()).saturating_add(overlays_ascending.len()),
+        );
+        if let Some(value) = text_property {
+            sources.push(OrderedFaceSource::TextProperty(value));
+        }
+        sources.extend(
+            overlays_ascending
+                .into_iter()
+                .map(OrderedFaceSource::Overlay),
+        );
+        Self { sources }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.sources.is_empty()
+    }
+
+    pub(crate) fn values(&self) -> impl Iterator<Item = Value> + '_ {
+        self.sources.iter().map(|source| match source {
+            OrderedFaceSource::TextProperty(value) | OrderedFaceSource::Overlay(value) => *value,
+        })
+    }
+}
+
+/// Accumulates GNU lface attributes without realizing colors or decorations.
+///
+/// `ResolvedFace` is deliberately absent from the stored state.  Consequently
+/// inverse-video, distant-foreground, and terminal-default color mapping can
+/// only run in [`Self::realize`], after every source has contributed.
+#[derive(Default)]
+struct UnresolvedFaceComposition {
+    attributes: Option<NeoFace>,
+}
+
+impl UnresolvedFaceComposition {
+    fn merge(&mut self, contribution: NeoFace) {
+        self.attributes = Some(match self.attributes.take() {
+            Some(attributes) => attributes.merge(&contribution),
+            None => contribution,
+        });
+    }
+
+    fn merge_optional(&mut self, contribution: Option<NeoFace>) {
+        if let Some(contribution) = contribution {
+            self.merge(contribution);
+        }
+    }
+
+    fn realize(self, resolver: &FaceResolver, base: &ResolvedFace) -> Option<ResolvedFace> {
+        self.attributes
+            .map(|attributes| resolver.apply_specified_face_over(base, &attributes))
+    }
 }
 
 /// Resolves face attributes at buffer positions using the neovm-core
@@ -3373,6 +3546,17 @@ pub struct FaceResolver {
     /// evaluator; the engine logs only the accepted attempt.
     invalid_face_references: std::cell::RefCell<Vec<String>>,
     font_sizing: FontSizing,
+}
+
+/// GNU basic-face lookup has two identity outcomes.  A canonical lookup keeps
+/// the fixed `enum face_id` slot; a window-named lookup may incorporate
+/// `face-remapping-alist` and therefore needs a content-addressed dynamic slot.
+/// Keeping that distinction typed prevents a remapped face from accidentally
+/// retaining the canonical basic-face id.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BufferBasicFaceLookup {
+    Canonical(BasicFaceId),
+    WindowNamed(BasicFaceId),
 }
 
 impl FaceResolver {
@@ -3582,14 +3766,7 @@ impl FaceResolver {
             rf.use_default_background = false;
         }
         match face.inverse_video {
-            Some(true) => {
-                rf.terminal_inverse_video = rf.use_default_foreground && rf.use_default_background;
-                std::mem::swap(&mut rf.fg, &mut rf.bg);
-                std::mem::swap(
-                    &mut rf.use_default_foreground,
-                    &mut rf.use_default_background,
-                );
-            }
+            Some(true) => apply_resolved_face_inverse_video(&mut rf),
             Some(false) => rf.terminal_inverse_video = false,
             None => {}
         }
@@ -3693,21 +3870,6 @@ impl FaceResolver {
         rf
     }
 
-    fn apply_inline_face_over(&self, base: &ResolvedFace, face: &NeoFace) -> ResolvedFace {
-        // Resolve `:inherit` first so the inline face's own attributes
-        // below override the inherited ones. Mirrors GNU
-        // `merge_face_vectors` (xfaces.c:2305-2314): inherited attrs are
-        // merged first, then the face's own specified attributes take
-        // precedence.
-        let base_after_inherit = match face.inherit {
-            Some(inherit_ref) => self
-                .resolve_face_value_over(base, &inherit_ref)
-                .unwrap_or_else(|| base.clone()),
-            None => base.clone(),
-        };
-        self.apply_specified_face_over(&base_after_inherit, face)
-    }
-
     fn resolve_named_face_overlay_spec(&self, name: &str, depth: usize) -> NeoFace {
         if depth > 40 {
             return NeoFace::default();
@@ -3738,45 +3900,46 @@ impl FaceResolver {
     }
 
     fn resolve_face_ref_overlay_spec(&self, face_ref: Value, depth: usize) -> NeoFace {
+        self.resolve_face_value_overlay_spec(face_ref, depth)
+            .unwrap_or_default()
+    }
+
+    /// Resolve one GNU face reference to logical attributes, without realizing
+    /// it against a base face yet.
+    fn resolve_face_value_overlay_spec(&self, face_ref: Value, depth: usize) -> Option<NeoFace> {
         if depth > 40 || face_ref.is_nil() || face_ref.is_symbol_named("nil") {
-            return NeoFace::default();
+            return None;
         }
 
         if let Some(name) = Self::face_name_from_value(&face_ref) {
-            return self.resolve_named_face_overlay_spec(name, depth);
+            return Some(self.resolve_named_face_overlay_spec(name, depth));
         }
 
         let Some(items) = list_to_vec(&face_ref) else {
-            return NeoFace::default();
+            return None;
         };
         if items.is_empty() {
-            return NeoFace::default();
+            return None;
         }
 
         match self.eval_filtered_face_spec(&items) {
             FilteredFaceSpec::Matched(filtered_spec) => {
-                return self.resolve_face_ref_overlay_spec(Value::list(filtered_spec), depth + 1);
+                return self.resolve_face_value_overlay_spec(Value::list(filtered_spec), depth + 1);
             }
             // Filter didn't match → the wrapped spec contributes nothing.
-            FilteredFaceSpec::Rejected => return NeoFace::default(),
+            FilteredFaceSpec::Rejected => return None,
             FilteredFaceSpec::NotFiltered => {}
         }
         if Self::face_spec_is_plist(&items) {
             let face = NeoFace::from_plist("--inline--", &items);
-            return self.resolve_face_overlay_spec(face, depth + 1);
+            return Some(self.resolve_face_overlay_spec(face, depth + 1));
         }
 
-        let mut result = NeoFace::default();
+        let mut composition = UnresolvedFaceComposition::default();
         for item in items.iter().rev() {
-            let next = self.resolve_face_ref_overlay_spec(*item, depth + 1);
-            result = result.merge(&next);
+            composition.merge_optional(self.resolve_face_value_overlay_spec(*item, depth + 1));
         }
-        result
-    }
-
-    fn apply_named_face_over(&self, base: &ResolvedFace, name: &str) -> ResolvedFace {
-        let face = self.resolve_named_face_overlay_spec(name, 0);
-        self.apply_specified_face_over(base, &face)
+        composition.attributes
     }
 
     fn face_name_from_value(value: &Value) -> Option<&str> {
@@ -3897,13 +4060,106 @@ impl FaceResolver {
         }
     }
 
-    fn resolve_buffer_face_value_over_inner<B: LayoutBufferView>(
+    fn buffer_basic_face_lookup<B: LayoutBufferView>(
         &self,
         buffer: &B,
-        base: &ResolvedFace,
+        face_id: BasicFaceId,
+    ) -> BufferBasicFaceLookup {
+        let Some(remapping_alist) = buffer.layout_buffer_local_value(LayoutVar::FaceRemappingAlist)
+        else {
+            return BufferBasicFaceLookup::Canonical(face_id);
+        };
+        if remapping_alist.is_nil() {
+            return BufferBasicFaceLookup::Canonical(face_id);
+        }
+
+        let face_name = face_id.lisp_face_name();
+        let has_direct_mapping = Self::buffer_face_remapping_specs(buffer, face_name).is_some();
+        let inherits = self
+            .face_table
+            .get(face_name)
+            .and_then(|face| face.inherit)
+            .is_some_and(|inherit| !inherit.is_nil() && !inherit.is_symbol_named("unspecified"));
+
+        // This is GNU `lookup_basic_face`'s fast path: an unrelated, non-nil
+        // remapping alist cannot change a basic face that neither has a direct
+        // mapping nor inherits from another face.
+        if !has_direct_mapping && !inherits {
+            BufferBasicFaceLookup::Canonical(face_id)
+        } else {
+            BufferBasicFaceLookup::WindowNamed(face_id)
+        }
+    }
+
+    fn resolve_buffer_named_face_overlay_spec_inner<B: LayoutBufferView>(
+        &self,
+        buffer: &B,
+        name: &str,
+        remap_stack: &mut Vec<String>,
+        depth: usize,
+    ) -> Option<NeoFace> {
+        if depth > 40 || name == "nil" {
+            return None;
+        }
+
+        // GNU face remapping is non-recursive for the face being remapped:
+        // `(FACE REMAP FACE)` applies REMAP over FACE's ordinary definition.
+        if !remap_stack.iter().any(|active| active == name)
+            && let Some(specs) = Self::buffer_face_remapping_specs(buffer, name)
+        {
+            remap_stack.push(name.to_string());
+            let remapped = self.resolve_buffer_face_value_overlay_spec_inner(
+                buffer,
+                &specs,
+                remap_stack,
+                depth + 1,
+            );
+            remap_stack.pop();
+            if remapped.is_some() {
+                return remapped;
+            }
+        }
+
+        // Every logical composition is ultimately realized over the already
+        // resolved buffer default.  GNU therefore treats an inherited
+        // `default` here as a merge point, not as a second fully specified
+        // face.  Re-merging its weight/colors into each named source would
+        // let a higher-priority `italic` overlay erase a lower-priority
+        // `bold` text face.
+        if name == "default" {
+            return Some(NeoFace::default());
+        }
+
+        let Some(mut face) = self.face_table.get(name).cloned() else {
+            self.invalid_face_references
+                .borrow_mut()
+                .push(name.to_owned());
+            return Some(NeoFace::default());
+        };
+        let parent = face.inherit.take().and_then(|inherit_ref| {
+            self.resolve_buffer_face_value_overlay_spec_inner(
+                buffer,
+                &inherit_ref,
+                remap_stack,
+                depth + 1,
+            )
+        });
+        Some(match parent {
+            Some(parent) => parent.merge(&face),
+            None => face,
+        })
+    }
+
+    fn resolve_buffer_face_value_overlay_spec_inner<B: LayoutBufferView>(
+        &self,
+        buffer: &B,
         val: &Value,
         remap_stack: &mut Vec<String>,
-    ) -> Option<ResolvedFace> {
+        depth: usize,
+    ) -> Option<NeoFace> {
+        if depth > 40 {
+            return None;
+        }
         match val.kind() {
             ValueKind::Nil => None,
             ValueKind::Symbol(_) | ValueKind::String => {
@@ -3911,24 +4167,12 @@ impl FaceResolver {
                 if name == "nil" {
                     return None;
                 }
-
-                if !remap_stack.iter().any(|active| active == name)
-                    && let Some(specs) = Self::buffer_face_remapping_specs(buffer, name)
-                {
-                    remap_stack.push(name.to_string());
-                    let remapped = self.resolve_buffer_face_value_over_inner(
-                        buffer,
-                        base,
-                        &specs,
-                        remap_stack,
-                    );
-                    remap_stack.pop();
-                    if remapped.is_some() {
-                        return remapped;
-                    }
-                }
-
-                Some(self.apply_named_face_over(base, name))
+                self.resolve_buffer_named_face_overlay_spec_inner(
+                    buffer,
+                    name,
+                    remap_stack,
+                    depth + 1,
+                )
             }
             ValueKind::Cons => {
                 let items = list_to_vec(val)?;
@@ -3938,11 +4182,11 @@ impl FaceResolver {
                 match self.eval_filtered_face_spec(&items) {
                     FilteredFaceSpec::Matched(filtered_spec) => {
                         // Recurse into the filtered spec (unwrap the :filtered wrapper)
-                        return self.resolve_buffer_face_value_over_inner(
+                        return self.resolve_buffer_face_value_overlay_spec_inner(
                             buffer,
-                            base,
                             &Value::list(filtered_spec),
                             remap_stack,
+                            depth + 1,
                         );
                     }
                     // Filter didn't match → the remap contributes nothing.
@@ -3950,24 +4194,31 @@ impl FaceResolver {
                     FilteredFaceSpec::NotFiltered => {}
                 }
                 if Self::face_spec_is_plist(&items) {
-                    let inline = NeoFace::from_plist("--inline--", &items);
-                    return Some(self.apply_inline_face_over(base, &inline));
+                    let mut inline = NeoFace::from_plist("--inline--", &items);
+                    let parent = inline.inherit.take().and_then(|inherit_ref| {
+                        self.resolve_buffer_face_value_overlay_spec_inner(
+                            buffer,
+                            &inherit_ref,
+                            remap_stack,
+                            depth + 1,
+                        )
+                    });
+                    return Some(match parent {
+                        Some(parent) => parent.merge(&inline),
+                        None => inline,
+                    });
                 }
 
-                let mut current = base.clone();
-                let mut changed = false;
+                let mut composition = UnresolvedFaceComposition::default();
                 for item in items.iter().rev() {
-                    if let Some(next) = self.resolve_buffer_face_value_over_inner(
+                    composition.merge_optional(self.resolve_buffer_face_value_overlay_spec_inner(
                         buffer,
-                        &current,
                         item,
                         remap_stack,
-                    ) {
-                        current = next;
-                        changed = true;
-                    }
+                        depth + 1,
+                    ));
                 }
-                changed.then_some(current)
+                composition.attributes
             }
             _ => None,
         }
@@ -3980,7 +4231,28 @@ impl FaceResolver {
         val: &Value,
     ) -> Option<ResolvedFace> {
         let mut remap_stack = Vec::new();
-        self.resolve_buffer_face_value_over_inner(buffer, base, val, &mut remap_stack)
+        self.resolve_buffer_face_value_overlay_spec_inner(buffer, val, &mut remap_stack, 0)
+            .map(|attributes| self.apply_specified_face_over(base, &attributes))
+    }
+
+    /// Merge all buffer face sources logically, then realize exactly once.
+    pub(crate) fn resolve_buffer_face_sources_over<B: LayoutBufferView>(
+        &self,
+        buffer: &B,
+        base: &ResolvedFace,
+        sources: &OrderedFaceSources,
+    ) -> Option<ResolvedFace> {
+        let mut remap_stack = Vec::new();
+        let mut composition = UnresolvedFaceComposition::default();
+        for value in sources.values() {
+            composition.merge_optional(self.resolve_buffer_face_value_overlay_spec_inner(
+                buffer,
+                &value,
+                &mut remap_stack,
+                0,
+            ));
+        }
+        composition.realize(self, base)
     }
 
     pub(crate) fn resolve_buffer_default_face<B: LayoutBufferView>(
@@ -3988,12 +4260,13 @@ impl FaceResolver {
         buffer: &B,
     ) -> ResolvedFace {
         let mut remap_stack = Vec::new();
-        self.resolve_buffer_face_value_over_inner(
+        self.resolve_buffer_face_value_overlay_spec_inner(
             buffer,
-            &self.default_face,
             &Value::symbol("default"),
             &mut remap_stack,
+            0,
         )
+        .map(|attributes| self.apply_specified_face_over(&self.default_face, &attributes))
         .unwrap_or_else(|| self.default_face.clone())
     }
 
@@ -4002,41 +4275,20 @@ impl FaceResolver {
         base: &ResolvedFace,
         val: &Value,
     ) -> Option<ResolvedFace> {
-        match val.kind() {
-            ValueKind::Nil => None,
-            ValueKind::Symbol(_) => {
-                let name = val.as_symbol_name()?;
-                (name != "nil").then(|| self.apply_named_face_over(base, name))
-            }
-            ValueKind::Cons => {
-                let items = list_to_vec(val)?;
-                if items.is_empty() {
-                    return None;
-                }
-                match self.eval_filtered_face_spec(&items) {
-                    FilteredFaceSpec::Matched(filtered_spec) => {
-                        return self.resolve_face_value_over(base, &Value::list(filtered_spec));
-                    }
-                    FilteredFaceSpec::Rejected => return None,
-                    FilteredFaceSpec::NotFiltered => {}
-                }
-                if Self::face_spec_is_plist(&items) {
-                    let inline = NeoFace::from_plist("--inline--", &items);
-                    return Some(self.apply_inline_face_over(base, &inline));
-                }
+        self.resolve_face_value_overlay_spec(*val, 0)
+            .map(|attributes| self.apply_specified_face_over(base, &attributes))
+    }
 
-                let mut current = base.clone();
-                let mut changed = false;
-                for item in items.iter().rev() {
-                    if let Some(next) = self.resolve_face_value_over(&current, item) {
-                        current = next;
-                        changed = true;
-                    }
-                }
-                changed.then_some(current)
-            }
-            _ => None,
+    pub(crate) fn resolve_face_sources_over(
+        &self,
+        base: &ResolvedFace,
+        sources: &OrderedFaceSources,
+    ) -> Option<ResolvedFace> {
+        let mut composition = UnresolvedFaceComposition::default();
+        for value in sources.values() {
+            composition.merge_optional(self.resolve_face_value_overlay_spec(value, 0));
         }
+        composition.realize(self, base)
     }
 
     /// Resolve face attributes at a buffer position.
@@ -4055,8 +4307,7 @@ impl FaceResolver {
     ) -> ResolvedFace {
         let bytepos = buffer_charpos_to_emacs_byte_pos(buffer, CharPos0::new(charpos));
         let mut min_next = buffer.layout_point_max_char_pos().get();
-        let mut resolved = self.resolve_buffer_default_face(buffer);
-        let mut remap_stack = Vec::new();
+        let base = self.resolve_buffer_default_face(buffer);
 
         // GNU redisplay asks `Fget_text_property' for the effective `face':
         // direct value, category fallback, configured aliases such as
@@ -4064,35 +4315,22 @@ impl FaceResolver {
         let face_prop = LayoutCharPropertyLookup::new(buffer, Value::symbol("face"))
             .text_value_at(buffer, bytepos);
 
-        // 1. Effective text face property.
-        if let Some(val) = face_prop
-            && let Some(next) =
-                self.resolve_buffer_face_value_over_inner(buffer, &resolved, &val, &mut remap_stack)
-        {
-            resolved = next;
-        }
         // Update next_check from text property boundaries
         if let Some(nc) = buffer.layout_next_text_prop_change_after_emacs_byte_pos(bytepos) {
             min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, nc));
         }
 
-        // 2. Overlay faces — collected once by the shared resolver (ascending
+        // Overlay faces are collected once by the shared resolver (ascending
         //    priority, windowed overlays filtered to this window). Merge each in
         //    order; higher priority wins by being applied last.
         let overlays = overlay_faces_at(buffer, bytepos, self.current_window_id.get());
         if let Some(boundary) = overlays.next_boundary {
             min_next = min_next.min(buffer_emacs_byte_pos_to_charpos(buffer, boundary));
         }
-        for face_value in overlays.faces {
-            if let Some(next) = self.resolve_buffer_face_value_over_inner(
-                buffer,
-                &resolved,
-                &face_value,
-                &mut remap_stack,
-            ) {
-                resolved = next;
-            }
-        }
+        let sources = OrderedFaceSources::from_text_and_overlays(face_prop, overlays.faces);
+        let resolved = self
+            .resolve_buffer_face_sources_over(buffer, &base, &sources)
+            .unwrap_or(base);
 
         // Also consider overlay boundaries so next_check doesn't skip past
         // positions where an overlay starts or ends.
@@ -4123,16 +4361,10 @@ impl FaceResolver {
         let bytepos = buffer_charpos_to_emacs_byte_pos(buffer, CharPos0::new(anchor_charpos));
         let mut min_next = buffer.layout_point_max_char_pos().get();
         let mut resolved = self.resolve_buffer_default_face(buffer);
-        let mut remap_stack = Vec::new();
 
         if let Some(face_prop) = LayoutCharPropertyLookup::new(buffer, Value::symbol("face"))
             .text_value_at(buffer, bytepos)
-            && let Some(next) = self.resolve_buffer_face_value_over_inner(
-                buffer,
-                &resolved,
-                &face_prop,
-                &mut remap_stack,
-            )
+            && let Some(next) = self.resolve_buffer_face_value_over(buffer, &resolved, &face_prop)
         {
             resolved = next;
         }
@@ -4181,7 +4413,39 @@ impl FaceResolver {
                 self.face_at_pos(buffer, anchor_charpos.get(), next_check)
             }
             BaseFacePolicy::DefaultFace => self.default_face.clone(),
-            BaseFacePolicy::FixedBasicFace(face_id) => self.resolve_named_face(face_id.name()),
+            BaseFacePolicy::BufferRemappedBasicFace(face_id) => {
+                let buffer = buffer.expect("buffer-remapped basic face policy requires a buffer");
+                match self.buffer_basic_face_lookup(buffer, face_id) {
+                    BufferBasicFaceLookup::Canonical(face_id) => {
+                        let mut resolved = self.resolve_named_face(face_id.lisp_face_name());
+                        // Active mode/header slots intentionally realize Lisp
+                        // faces whose names differ from their cache-role name
+                        // (`mode-line`, not `mode-line-active`).  The enum is
+                        // the authoritative identity at this boundary.
+                        resolved.face_id = u32::from(face_id);
+                        resolved
+                    }
+                    BufferBasicFaceLookup::WindowNamed(face_id) => {
+                        let base = self.resolve_buffer_default_face(buffer);
+                        let mut resolved = self
+                            .resolve_buffer_face_value_over(
+                                buffer,
+                                &base,
+                                &Value::symbol(face_id.lisp_face_name()),
+                            )
+                            .unwrap_or(base);
+                        // Zero is the bridge's "allocate from the frame face
+                        // arena" marker.  The typed lookup above ensures only
+                        // the WindowNamed branch can erase a canonical id.
+                        resolved.face_id = 0;
+                        resolved.lisp_name = Some(face_id.lisp_face_name().to_string());
+                        resolved
+                    }
+                }
+            }
+            BaseFacePolicy::FrameBasicFace(face_id) => {
+                self.resolve_named_face(face_id.lisp_face_name())
+            }
         }
     }
 
@@ -4205,7 +4469,12 @@ impl FaceResolver {
     ) -> ResolvedFace {
         match origin.default_base_face_policy() {
             BaseFacePolicy::DefaultFace => self.default_face.clone(),
-            BaseFacePolicy::FixedBasicFace(face_id) => self.resolve_named_face(face_id.name()),
+            BaseFacePolicy::FrameBasicFace(face_id) => {
+                self.resolve_named_face(face_id.lisp_face_name())
+            }
+            BaseFacePolicy::BufferRemappedBasicFace(_) => {
+                panic!("display origin {origin:?} requires a buffer for basic-face remapping")
+            }
             policy => {
                 panic!(
                     "display origin {origin:?} requires a buffer for base face policy {policy:?}"
@@ -4292,14 +4561,7 @@ impl FaceResolver {
         }
         // Inverse video: swap fg and bg
         match face.inverse_video {
-            Some(true) => {
-                rf.terminal_inverse_video = rf.use_default_foreground && rf.use_default_background;
-                std::mem::swap(&mut rf.fg, &mut rf.bg);
-                std::mem::swap(
-                    &mut rf.use_default_foreground,
-                    &mut rf.use_default_background,
-                );
-            }
+            Some(true) => apply_resolved_face_inverse_video(&mut rf),
             Some(false) => rf.terminal_inverse_video = false,
             None => {}
         }

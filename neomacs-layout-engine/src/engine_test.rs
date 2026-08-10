@@ -14368,7 +14368,21 @@ fn layout_frame_rust_tab_line_unicode_uses_shared_display_row_builder() {
         .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '中' }))
         .expect("tab-line CJK glyph");
 
-    assert_eq!(glyphs_logical_text(glyphs), "A中👨‍👩");
+    assert_eq!(
+        glyphs_logical_text(glyphs),
+        format!("A中👨‍👩{}", " ".repeat(75)),
+        "GNU tab-line chrome fills the complete 80-column row"
+    );
+    let trailing_fill = glyphs.last().expect("tab-line trailing fill glyph");
+    assert_eq!(
+        trailing_fill.glyph_type,
+        GlyphType::Stretch { width_cols: 75 }
+    );
+    assert_eq!(
+        trailing_fill.charpos,
+        neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS
+    );
+    assert_eq!(trailing_fill.face_id, glyphs[0].face_id);
     assert!(
         cjk.wide,
         "tab-line chrome row should record CJK as a wide glyph through the shared builder: {glyphs:?}"

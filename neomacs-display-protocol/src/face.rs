@@ -266,6 +266,39 @@ impl BasicFaceId {
         self.into()
     }
 
+    /// Return the GNU Lisp face realized into this cache slot.
+    ///
+    /// Cache-role names and Lisp face names are deliberately distinct for the
+    /// active mode/header slots: GNU's `MODE_LINE_FACE_ID` realizes
+    /// `mode-line`, while only the inactive slot realizes
+    /// `mode-line-inactive` (likewise for `header-line`).  Keep this mapping
+    /// exhaustive so adding a cache role cannot silently select a made-up Lisp
+    /// face name.
+    pub const fn lisp_face_name(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::ModeLineActive => "mode-line",
+            Self::ModeLineInactive => "mode-line-inactive",
+            Self::ToolBar => "tool-bar",
+            Self::Fringe => "fringe",
+            Self::HeaderLineActive => "header-line",
+            Self::HeaderLineInactive => "header-line-inactive",
+            Self::ScrollBar => "scroll-bar",
+            Self::Border => "border",
+            Self::Cursor => "cursor",
+            Self::Mouse => "mouse",
+            Self::Menu => "menu",
+            Self::VerticalBorder => "vertical-border",
+            Self::WindowDivider => "window-divider",
+            Self::WindowDividerFirstPixel => "window-divider-first-pixel",
+            Self::WindowDividerLastPixel => "window-divider-last-pixel",
+            Self::InternalBorder => "internal-border",
+            Self::ChildFrameBorder => "child-frame-border",
+            Self::TabBar => "tab-bar",
+            Self::TabLine => "tab-line",
+        }
+    }
+
     /// Return GNU's fixed `enum face_id` value.
     pub fn gnu_code(self) -> u32 {
         self.into()

@@ -414,14 +414,12 @@ pub(crate) fn plan_row_face_segments<B: LayoutBufferView>(
 /// Whether the buffer pipeline's PER-RUN face chain would stamp a different
 /// face id on glyphs at `pos` than the checkpoint chain (`expected_face_id`).
 ///
-/// The pipeline resolves each run's face twice: `BufferTextSourceCursor::
-/// face_at` merges the effective `face` property over the DEFAULT face
-/// (`resolve_face_ref`, keeping the window base id when the merge lands on
-/// base content), while the loop checkpoint merges it over the BUFFER default
-/// face (`face_at_pos`). The results content-address to the same stable id
-/// except when the two default chains diverge (e.g. buffer face remapping of
-/// `default`); such rows must stay on the buffer pipeline, whose machinery
-/// expresses the divergent item face.
+/// The pipeline resolves each run's face twice: once while producing the item
+/// and once at the loop checkpoint.  Both paths are required to use the same
+/// buffer-aware logical resolver, including remapping inherited named faces,
+/// and therefore content-address to the same stable id.  Keep this explicit
+/// comparison at the route boundary so a future resolver split surfaces as a
+/// route refusal instead of silently stamping different faces on routed rows.
 pub(crate) fn routed_segment_item_face_diverges<B: LayoutBufferView>(
     buffer: &B,
     face_resolver: &FaceResolver,
@@ -440,36 +438,24 @@ pub(crate) fn routed_segment_item_face_diverges<B: LayoutBufferView>(
     let overlay_faces =
         crate::neovm_bridge::overlay_faces_at(buffer, bytepos, face_resolver.current_window_id())
             .faces;
-    if text_face.is_none() && overlay_faces.is_empty() {
+    let sources = OrderedFaceSources::from_text_and_overlays(text_face, overlay_faces);
+    if sources.is_empty() {
         // No face sources: the run resolves `Inherit` -> the active
         // (checkpoint) face id, which IS `expected_face_id`.
         return false;
     }
-    // Replay the run's `resolve_face_ref` chain: each merge that changes
-    // nothing keeps the current id (the window base id at the start), each
-    // effective merge mints the content-addressed stable id.
-    let mut current_id = default_face_id;
-    let mut current = std::borrow::Cow::Borrowed(default_resolved);
-    // A merge that resolves but changes nothing still pins the ref to the
-    // base id (`resolve_source_face_ref` returns `FaceId(base_face_id)`); a
-    // value that contributes nothing leaves the ref alone.
-    let mut pinned = false;
-    for value in text_face.iter().chain(overlay_faces.iter()) {
-        let Some(resolved) = face_resolver.resolve_buffer_face_value_over(buffer, &current, value)
-        else {
-            continue;
-        };
-        pinned = true;
-        if crate::display_source_resolver::same_resolved_face(&resolved, &current) {
-            continue;
-        }
-        current_id = stable_face_id_for_resolved(face_ids, &resolved);
-        current = std::borrow::Cow::Owned(resolved);
-    }
-    if !pinned {
+    let Some(resolved) =
+        face_resolver.resolve_buffer_face_sources_over(buffer, default_resolved, &sources)
+    else {
         // Every source contributed nothing: the ref stays `Inherit` ->
         // active (checkpoint) face id.
         return false;
-    }
+    };
+    let current_id =
+        if crate::display_source_resolver::same_resolved_face(&resolved, default_resolved) {
+            default_face_id
+        } else {
+            stable_face_id_for_resolved(face_ids, &resolved)
+        };
     current_id != expected_face_id
 }

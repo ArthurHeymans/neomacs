@@ -1896,6 +1896,14 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let Some((width_cols, pixel_width)) = self.stretch_width(&stretch.width) else {
             return;
         };
+        // GNU `produce_stretch_glyph` accepts zero as the result of valid
+        // `:width` and `:align-to` forms, but only appends a glyph when the
+        // computed width is positive (xdisp.c).  Keeping a zero-width Stretch
+        // in the matrix is not inert: terminal column accounting deliberately
+        // gives every materialized glyph at least one cell.
+        if pixel_width <= 0.0 {
+            return;
+        }
         let pixel_height = stretch
             .height
             .as_ref()

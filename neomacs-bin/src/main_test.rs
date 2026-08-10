@@ -56,6 +56,7 @@ use neovm_core::emacs_core::load::{
 };
 use neovm_core::emacs_core::print_value_with_eval;
 use neovm_core::emacs_core::terminal::pure::TerminalHost;
+use neovm_core::emacs_core::terminal::pure::{TerminalRuntimeConfig, configure_terminal_runtime};
 use neovm_core::emacs_core::value::list_to_vec;
 use neovm_core::face::FaceHeight;
 use neovm_core::heap_types::LispString;
@@ -2674,6 +2675,94 @@ fn configure_gnu_startup_state_clears_window_system_for_tty_boots() {
             .filter(|value| !value.is_empty())
             .map(Value::string)
     );
+}
+
+#[test]
+fn live_tty_defface_keeps_dark_color_parent_attributes_through_inverse_video() {
+    let mut eval = create_bootstrap_evaluator_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("bootstrap evaluator");
+    configure_terminal_runtime(TerminalRuntimeConfig::interactive(
+        Some("screen-256color".to_string()),
+        256,
+    ));
+    let display = bootstrap_display_config(FrontendKind::Tty, Interactivity::Interactive);
+    let _bootstrap = bootstrap_buffers(&mut eval, 160, 50, display);
+    let frame_id = eval
+        .frame_manager()
+        .selected_frame()
+        .expect("selected TTY frame")
+        .id;
+    let startup = StartupOptions {
+        frontend: FrontendKind::Tty,
+        forwarded_args: vec!["neomacs".to_string(), "-Q".to_string()],
+        terminal_device: None,
+        noninteractive: false,
+        temacs_mode: None,
+        dump_file_override: None,
+        no_site_lisp: true,
+        no_loadup: false,
+        no_build_details: false,
+    };
+    configure_gnu_startup_state(&mut eval, frame_id, &startup);
+
+    eval.eval_str(
+        r#"(progn
+             (defface neomacs-test-branch-local
+               '((((class color) (background light)) :foreground "SkyBlue4")
+                 (((class color) (background dark)) :foreground "LightSkyBlue1"))
+               "Parent face.")
+             (defface neomacs-test-branch-current
+               '((((supports (:box t)))
+                  :inherit neomacs-test-branch-local :box t)
+                 (t :inherit neomacs-test-branch-local :inverse-video t))
+               "Current face."))"#,
+    )
+    .expect("define Magit-shaped TTY faces");
+    eval.sync_runtime_faces_for_frame(frame_id);
+
+    let resolver = neomacs_layout_engine::neovm_bridge::FaceResolver::new(
+        eval.face_table(),
+        0x00e5e5e5,
+        0x00333333,
+        1.0,
+        None,
+    );
+    let current = resolver.resolve_named_face("neomacs-test-branch-current");
+    assert_eq!(
+        current.fg, 0x00333333,
+        "GNU realizes the inherited terminal-default background before inverse-video swaps it into the foreground slot"
+    );
+    assert!(
+        !current.use_default_foreground,
+        "a terminal-default background moved into the foreground slot is the concrete frame background, not terminal-default foreground"
+    );
+    assert_eq!(
+        current.bg, 0x00b0e2ff,
+        "the inverse face background must retain its inherited LightSkyBlue1 foreground"
+    );
+    assert!(!current.use_default_background);
+    assert!(
+        !current.terminal_inverse_video,
+        "one concrete inherited color must not collapse into default/default inverse video"
+    );
+
+    let composed = resolver
+        .resolve_face_value_over(
+            resolver.default_face(),
+            &Value::symbol("neomacs-test-branch-current"),
+        )
+        .expect("compose current-branch text-property face over the buffer base face");
+    assert_eq!(
+        composed.fg, 0x00333333,
+        "the text-property composition path must realize inverse-video with the inherited frame background"
+    );
+    assert!(!composed.use_default_foreground);
+    assert_eq!(
+        composed.bg, 0x00b0e2ff,
+        "the text-property composition path must retain the inherited LightSkyBlue1 foreground as its background"
+    );
+    assert!(!composed.use_default_background);
+    assert!(!composed.terminal_inverse_video);
 }
 
 #[test]

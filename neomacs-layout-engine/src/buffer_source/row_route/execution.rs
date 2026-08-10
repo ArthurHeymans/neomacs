@@ -315,10 +315,12 @@ impl<'rows, 'emit, 'surface>
                 return PlainRowRouteOutcome::NotRouted;
             }
             // The pipeline stamps glyphs with the PER-RUN face chain; refuse
-            // the row when it would diverge from the checkpoint chain (e.g.
-            // buffer face remapping of default). A replacement part's glyphs
-            // take the SESSION's base-face resolution instead — the run
-            // chain never applies there.
+            // the row if it ever diverges from the checkpoint chain.  Both
+            // currently share one buffer-aware resolver (including inherited
+            // default remapping), so divergence is an invariant violation we
+            // surface at this boundary. A replacement part's glyphs take the
+            // SESSION's base-face resolution instead — the run chain never
+            // applies there.
             if matches!(part.kind, RoutedRowPartKind::Text)
                 && routed_segment_item_face_diverges(
                     buffer,

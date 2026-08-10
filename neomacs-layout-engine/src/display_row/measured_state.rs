@@ -1,6 +1,7 @@
+use crate::display_row::finalizer::RowTrailingFaceFill;
 use crate::display_row::render_state::{DisplayRowOutputProgress, RenderedDisplayRow};
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{FaceId, Rect};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 // The shared `Line` suffix is domain-meaningful (tab/header/mode LINES); renaming
@@ -188,6 +189,25 @@ impl MeasuredDisplayRow {
             .ascent_px
             .max(0.0)
             .min(self.row_height())
+    }
+
+    /// Paint the owner-controlled background through the row's right edge
+    /// after intrinsic measurement has finished.  The fill updates output
+    /// progress but cannot feed synthetic geometry back into row height.
+    pub(crate) fn fill_trailing_background(&mut self, face_id: FaceId, char_width: f32) {
+        let remaining_width = (self.bounds.width - self.rendered.progress().end_x()).max(0.0);
+        self.rendered
+            .apply_trailing_face_fill(RowTrailingFaceFill::new(
+                face_id,
+                remaining_width,
+                self.row_height(),
+                self.row_ascent(),
+                char_width,
+            ));
+    }
+
+    pub(crate) fn reanchor_y(&mut self, y: f32) {
+        self.bounds.y = y;
     }
 
     pub(crate) fn output_progress(&self) -> DisplayRowOutputProgress {

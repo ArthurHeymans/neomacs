@@ -675,11 +675,19 @@ impl TtyRif {
         let char_w = state.char_width.max(1.0);
         let char_h = state.char_height.max(1.0);
         for band in state.frame_chrome.bands() {
-            let band_col = origin_col + (band.bounds().x() / char_w).round() as i64;
-            let band_row = origin_row + (band.bounds().y() / char_h).round() as i64;
+            let bounds = band.bounds().raw();
+            let band_col = origin_col + (bounds.x / char_w).round() as i64;
+            let band_row = origin_row + (bounds.y / char_h).round() as i64;
             match band.content() {
                 FrameChromeContent::DisplayRow(content) => {
-                    self.rasterize_glyph_row(band_col, band_row, content.row());
+                    self.rasterize_glyph_row(
+                        origin_col,
+                        band_col,
+                        band_row,
+                        content.row(),
+                        GlyphRowAreaLayout::unpartitioned(bounds, bounds),
+                        char_w,
+                    );
                 }
                 FrameChromeContent::MenuBar(content) => {
                     let cols = (band.bounds().width() / char_w).round().max(0.0) as usize;
@@ -712,6 +720,7 @@ impl TtyRif {
                 // margin reservation in dispnew.c: text-area glyph pointers are
                 // offset past left margin columns, chrome rows are not.
                 let row_bounds = entry.row_pixel_bounds(glyph_row.role);
+                let area_layout = state.glyph_row_area_layout(entry, glyph_row.role);
                 let row_col = origin_col + (row_bounds.x / char_w).round().max(0.0) as i64;
                 let row_base = origin_row + (row_bounds.y / char_h).round().max(0.0) as i64;
                 // GNU keeps two coordinate domains in each glyph row:
@@ -737,19 +746,29 @@ impl TtyRif {
                     && !self.force_full_render
                     && glyph_row.enabled
                     && grid_row >= 0
-                    && row_col >= 0
                 {
-                    let span_cols = (row_bounds.width / char_w).round().max(0.0) as usize;
-                    if self.desired.carry_row_span_from(
-                        &self.current,
-                        grid_row as usize,
-                        row_col as usize,
-                        span_cols,
-                    ) {
-                        continue;
+                    let coverage = area_layout.structural_coverage().unwrap_or(row_bounds);
+                    let carry_col = origin_col + (coverage.x / char_w).round() as i64;
+                    if carry_col >= 0 {
+                        let span_cols = (coverage.width / char_w).round().max(0.0) as usize;
+                        if self.desired.carry_row_span_from(
+                            &self.current,
+                            grid_row as usize,
+                            carry_col as usize,
+                            span_cols,
+                        ) {
+                            continue;
+                        }
                     }
                 }
-                self.rasterize_glyph_row(row_col, grid_row, glyph_row);
+                self.rasterize_glyph_row(
+                    origin_col,
+                    row_col,
+                    grid_row,
+                    glyph_row,
+                    area_layout,
+                    char_w,
+                );
             }
         }
 
@@ -1458,9 +1477,12 @@ impl TtyRif {
 
     fn rasterize_glyph_row(
         &mut self,
+        frame_origin_col: i64,
         screen_col_start: i64,
         screen_row: i64,
         glyph_row: &GlyphRow,
+        area_layout: GlyphRowAreaLayout,
+        char_width: f32,
     ) {
         let Some(screen_row) = visible_cell(screen_row, self.desired.height) else {
             return;
@@ -1475,8 +1497,15 @@ impl TtyRif {
         let mut col = screen_col_start.saturating_add(i64::from(glyph_row.start_col));
         let screen_width = usize_to_i64_saturating(self.desired.width);
 
-        for area_idx in 0..3 {
-            let glyphs = &glyph_row.glyphs[area_idx];
+        for area in GlyphArea::ALL {
+            if let GlyphAreaPlacement::Structural(geometry) = area_layout.placement(area) {
+                col = frame_origin_col
+                    .saturating_add((geometry.bounds().x / char_width).round() as i64);
+                if area == GlyphArea::Text {
+                    col = col.saturating_add(i64::from(glyph_row.start_col));
+                }
+            }
+            let glyphs = &glyph_row.glyphs[area.index()];
             let mut glyph_idx = 0;
             let mut preceding_wide_base_visible = None;
             while glyph_idx < glyphs.len() {

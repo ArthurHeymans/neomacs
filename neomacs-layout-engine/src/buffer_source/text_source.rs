@@ -15,7 +15,8 @@ use crate::display_source::{
     display_item_kind_for_text_source_char,
 };
 use crate::neovm_bridge::{
-    LayoutBufferView, LayoutCharPropertyLookup, OverlayDisplayString, RustTextPropAccess,
+    LayoutBufferView, LayoutCharPropertyLookup, OrderedFaceSources, OverlayDisplayString,
+    RustTextPropAccess,
 };
 use crate::unicode::decode_utf8;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
@@ -406,21 +407,13 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     fn face_at(&self, char_pos: CharPos0, context: &mut DisplaySourceContext<'_>) -> RenderFaceRef {
         let bytepos = self.byte_pos(char_pos);
         let text_face = self.face_property.text_value_at(self.buffer, bytepos);
-        let mut face = text_face
-            .map(|value| context.resolve_face_ref(self.base_face, value))
-            .unwrap_or(self.base_face);
-
-        // Overlay faces via the shared resolver — same ascending-priority order
-        // and `window`-property filter as every other face path. A windowed
-        // overlay (hl-line with a non-sticky flag) contributes its face only in
-        // its own window, so the same buffer in two windows highlights only the
-        // selected one.
-        for face_value in
-            crate::neovm_bridge::overlay_faces_at(self.buffer, bytepos, self.window_id).faces
-        {
-            face = context.resolve_face_ref(face, face_value);
-        }
-        face
+        // Overlay faces come from the shared ascending-priority collector.
+        // Preserve the complete logical source stack so the resolver merges
+        // every lface attribute before realizing inverse-video once.
+        let overlays =
+            crate::neovm_bridge::overlay_faces_at(self.buffer, bytepos, self.window_id).faces;
+        let sources = OrderedFaceSources::from_text_and_overlays(text_face, overlays);
+        context.resolve_face_sources(self.base_face, &sources)
     }
 
     /// GNU `get_char_property_and_overlay` semantics for `mouse-face`: the

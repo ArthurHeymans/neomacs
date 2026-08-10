@@ -169,10 +169,26 @@ fn display_glyph_visible_metrics(
         })
 }
 
-/// Geometry + face payload for GNU `extend_face_to_end_of_line`.
+/// Result of attempting to append an exact trailing face fill.
+///
+/// Keeping "already present" distinct from "appended" prevents callers that
+/// also advance row progress from advancing it twice when finalization is
+/// retried.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RowTrailingFaceFillResult {
+    Appended,
+    AlreadyPresent,
+    NotApplicable,
+}
+
+/// Exact trailing fill emitted by GNU `extend_face_to_end_of_line`.
+///
+/// This operation does not manufacture a text glyph.  GNU's empty-line face
+/// anchor is a separate step (`append_space_for_newline`); keeping that policy
+/// out of this primitive lets window chrome fill an empty row to exactly its
+/// bounds without adding one extra character cell.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct RowExtendFill {
-    bg: Color,
+pub(crate) struct RowTrailingFaceFill {
     face_id: FaceId,
     width_px: f32,
     height_px: f32,
@@ -180,9 +196,8 @@ pub(crate) struct RowExtendFill {
     char_width: f32,
 }
 
-impl RowExtendFill {
+impl RowTrailingFaceFill {
     pub(crate) fn new(
-        bg: Color,
         face_id: FaceId,
         width_px: f32,
         height_px: f32,
@@ -190,7 +205,6 @@ impl RowExtendFill {
         char_width: f32,
     ) -> Self {
         Self {
-            bg,
             face_id,
             width_px,
             height_px,
@@ -199,26 +213,16 @@ impl RowExtendFill {
         }
     }
 
-    /// Apply the fill to `row`. The operation is idempotent so the unified
-    /// item renderer can coexist with an older source caller while that caller
-    /// is migrated to the shared row-finalization seam.
-    pub(crate) fn apply_to(self, row: &mut GlyphRow) -> bool {
+    pub(crate) fn apply_to(self, row: &mut GlyphRow) -> RowTrailingFaceFillResult {
         if row.reversed_p || self.width_px <= 0.0 {
-            return false;
+            return RowTrailingFaceFillResult::NotApplicable;
         }
         let text_index = GlyphArea::Text.index();
         if row.glyphs[text_index]
             .last()
             .is_some_and(|glyph| self.matches_existing_fill(glyph))
         {
-            return true;
-        }
-        if row.glyphs[text_index].is_empty() {
-            row.glyphs[text_index].push(
-                Glyph::char(' ', self.face_id, NO_BUFFER_POSITION_CHARPOS)
-                    .with_pixel_width(self.char_width.max(1.0)),
-            );
-            row.displays_text = true;
+            return RowTrailingFaceFillResult::AlreadyPresent;
         }
         push_stretch_to_area(
             row,
@@ -228,14 +232,15 @@ impl RowExtendFill {
             self.width_px,
             self.height_px,
             self.ascent_px,
-            // Redisplay's own extend-to-end-of-line fill: it stands for no
-            // buffer character, so the blank-line cursor never latches to it.
+            // Redisplay's own fill stands for no buffer character, so the
+            // blank-line cursor never latches to it.
             NO_BUFFER_POSITION_CHARPOS,
         );
-        if let Some(last) = row.glyphs[text_index].last_mut() {
-            last.charpos = NO_BUFFER_POSITION_CHARPOS;
-        }
-        true
+        RowTrailingFaceFillResult::Appended
+    }
+
+    pub(crate) fn width_px(self) -> f32 {
+        self.width_px
     }
 
     pub(crate) fn width_cols(self) -> u16 {
@@ -254,6 +259,54 @@ impl RowExtendFill {
             && (glyph.pixel_width - self.width_px).abs() <= PIXEL_TOLERANCE
             && (glyph.pixel_height - self.height_px).abs() <= PIXEL_TOLERANCE
             && (glyph.pixel_ascent - self.ascent_px).abs() <= PIXEL_TOLERANCE
+    }
+}
+
+/// Newline face-extension policy around the exact trailing fill primitive.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct RowExtendFill {
+    bg: Color,
+    trailing: RowTrailingFaceFill,
+}
+
+impl RowExtendFill {
+    pub(crate) fn new(
+        bg: Color,
+        face_id: FaceId,
+        width_px: f32,
+        height_px: f32,
+        ascent_px: f32,
+        char_width: f32,
+    ) -> Self {
+        Self {
+            bg,
+            trailing: RowTrailingFaceFill::new(face_id, width_px, height_px, ascent_px, char_width),
+        }
+    }
+
+    /// Apply the fill to `row`. The operation is idempotent so the unified
+    /// item renderer can coexist with an older source caller while that caller
+    /// is migrated to the shared row-finalization seam.
+    pub(crate) fn apply_to(self, row: &mut GlyphRow) -> bool {
+        if row.reversed_p || self.trailing.width_px <= 0.0 {
+            return false;
+        }
+        let text_index = GlyphArea::Text.index();
+        if row.glyphs[text_index].is_empty() {
+            row.glyphs[text_index].push(
+                Glyph::char(' ', self.trailing.face_id, NO_BUFFER_POSITION_CHARPOS)
+                    .with_pixel_width(self.trailing.char_width.max(1.0)),
+            );
+            row.displays_text = true;
+        }
+        !matches!(
+            self.trailing.apply_to(row),
+            RowTrailingFaceFillResult::NotApplicable
+        )
+    }
+
+    pub(crate) fn width_cols(self) -> u16 {
+        self.trailing.width_cols()
     }
 }
 

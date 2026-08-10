@@ -821,6 +821,62 @@ fn materialize_produces_correct_glyph_count_from_grid() {
 }
 
 #[test]
+fn materialize_places_right_margin_glyphs_in_their_structural_area() {
+    let char_w = 8.0;
+    let char_h = 16.0;
+    let window = DisplayWindowId::new(1);
+    let outer = Rect::new(0.0, 0.0, 12.0 * char_w, char_h);
+    let text_body = Rect::new(0.0, 0.0, 10.0 * char_w, char_h);
+    let right_margin = Rect::new(10.0 * char_w, 0.0, 2.0 * char_w, char_h);
+    let mut state = FrameDisplayState::new(12, 1, char_w, char_h);
+    state
+        .faces
+        .insert(FaceId::new(0), Face::new(FaceId::new(0)));
+
+    let mut matrix = GlyphMatrix::new(1, 10);
+    let row = crate::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
+    row.enabled = true;
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('x', FaceId::new(0), 0));
+    row.glyphs[GlyphArea::RightMargin.index()].extend([
+        Glyph::char('R', FaceId::new(0), 0),
+        Glyph::char('M', FaceId::new(0), 0),
+    ]);
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: window,
+        matrix,
+        pixel_bounds: outer,
+        text_pixel_bounds: text_body,
+        text_clip_bounds: Some(text_body),
+        selected: true,
+    });
+    install_complete_window_geometry(&mut state, window, outer);
+    let crate::PresentedWindowGeometry::Complete { regions, .. } =
+        &mut state.window_infos[0].geometry
+    else {
+        panic!("complete window geometry");
+    };
+    regions.text_body = text_body;
+    regions.right_margin = Some(right_margin);
+    regions.right_margin_columns = 2;
+
+    let chars: Vec<(char, f32)> = state
+        .materialize()
+        .glyphs
+        .iter()
+        .filter_map(|glyph| match glyph {
+            FrameGlyph::Char { char, x, .. } => Some((*char, *x)),
+            _ => None,
+        })
+        .collect();
+
+    assert_eq!(
+        chars,
+        vec![('x', 0.0), ('R', 80.0), ('M', 88.0)],
+        "right-margin placement must not depend on the text area's used width"
+    );
+}
+
+#[test]
 fn materialize_emits_tab_line_row_at_window_top() {
     // Regression guard for the GUI "empty tab-line" bug: a window with a
     // tab-line (row 0, role TabLine) above its text (row 1, role Text) must

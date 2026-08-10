@@ -2,5 +2,6 @@
 
 mod helm_gitignore_test;
 mod helm_pydoc_test;
+mod magit_test;
 mod support;
 mod vertico_test;

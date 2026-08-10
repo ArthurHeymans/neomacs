@@ -1,4 +1,13 @@
 use super::*;
+
+fn window_chrome_test_face(face_resolver: &FaceResolver, origin: &DisplayOrigin) -> ResolvedFace {
+    let buffer = neovm_core::buffer::Buffer::new(
+        neovm_core::buffer::BufferId(999),
+        Value::string("*chrome-face-test*"),
+    );
+    let mut next_check = buffer.point_max_char_pos().get();
+    face_resolver.default_base_face_for_origin(Some(&buffer), origin, &mut next_check)
+}
 use crate::display_item::DisplaySourcePosition;
 use crate::display_row::DisplayRowFace;
 use crate::display_row::builder::DisplayRowGlyphSlot;
@@ -109,8 +118,8 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
     let _eval = Context::new();
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let base_face = face_resolver
-        .default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine { selected: true });
+    let base_face =
+        window_chrome_test_face(&face_resolver, &DisplayOrigin::ModeLine { selected: true });
     let mut font_metrics = None;
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let mut render_services =
@@ -153,11 +162,60 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
     assert_eq!(render.measured.output_progress().y(), 24.0);
 }
 
+#[test]
+fn header_line_fills_the_complete_window_width_with_its_base_face() {
+    let _eval = Context::new();
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let base_face = window_chrome_test_face(
+        &face_resolver,
+        &DisplayOrigin::HeaderLine { selected: true },
+    );
+    let mut font_metrics = None;
+    let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
+    let mut render_services =
+        ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
+
+    let render = WindowChromeDisplayRowRequest {
+        window_id: 42,
+        kind: WindowChromeKind::HeaderLine,
+        selected: true,
+        display_row_index: 0,
+        output: ChromeRowOutput::new(0, 0.0),
+        bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 96.0, 16.0),
+        text_area_left_px: 0.0,
+        metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        tab_policy: DisplayTabPolicy::every(4),
+        base_face: &base_face,
+        symbol_values: std::collections::HashMap::new(),
+        text: Value::string("header"),
+        image_scale_environment:
+            neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+    }
+    .into_render_request(render_services.face_ids())
+    .render_measured(&mut render_services, None)
+    .expect("header line should render");
+
+    let text = &render.measured.rendered().row().glyphs[GlyphArea::Text.index()];
+    assert_eq!(
+        text.iter().map(|glyph| glyph.pixel_width).sum::<f32>(),
+        96.0,
+        "GNU display_mode_line fills every header-line column"
+    );
+    let fill = text.last().expect("header-line trailing fill");
+    assert!(matches!(fill.glyph_type, GlyphType::Stretch { .. }));
+    assert_eq!(
+        fill.face_id,
+        text.first().expect("header text glyph").face_id,
+        "the trailing fill must use the realized buffer-remapped header-line face"
+    );
+}
+
 fn proportional_chrome_test_face(
     face_resolver: &FaceResolver,
     origin: &DisplayOrigin,
 ) -> ResolvedFace {
-    let mut face = face_resolver.default_base_face_for_origin_without_buffer(origin);
+    let mut face = window_chrome_test_face(face_resolver, origin);
     face.font_family = "Noto Sans".to_string();
     face.font_size = 9.12871;
     face.font_weight = 400;
@@ -769,8 +827,8 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
     let _eval = Context::new();
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let base_face = face_resolver
-        .default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine { selected: true });
+    let base_face =
+        window_chrome_test_face(&face_resolver, &DisplayOrigin::ModeLine { selected: true });
     let mut font_metrics = None;
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(1);
     let mut render_services =

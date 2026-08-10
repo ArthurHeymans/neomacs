@@ -129,7 +129,7 @@ where
         );
 
         let chrome_plan = state.with_face_services(|face_resolver, _font_metrics| {
-            WindowChromeRowsPlan::new(params, face_resolver)
+            WindowChromeRowsPlan::new(params, buffer, face_resolver)
         });
         let max_mini_window_rows = {
             let frame_rows = frame_params.height / char_h.max(1.0);

@@ -13,8 +13,8 @@ use super::face::{Face, FaceAttributes, UnderlineStyle};
 use super::frame_chrome::{FrameChrome, FrameChromeContent, PresentationId};
 use super::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, FringeBitmapData, FringeSide,
-    GlyphRowRole, MaterializedFaceData, PhysCursor, WindowCursor, WindowEffectHint, WindowInfo,
-    WindowTransitionHint,
+    GlyphRowRole, MaterializedFaceData, PhysCursor, PresentedWindowGeometry, WindowCursor,
+    WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use super::types::{
     Color, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId, XwidgetId,
@@ -112,6 +112,9 @@ pub enum GlyphArea {
 }
 
 impl GlyphArea {
+    pub const COUNT: usize = 3;
+    pub const ALL: [Self; Self::COUNT] = [Self::LeftMargin, Self::Text, Self::RightMargin];
+
     pub fn index(self) -> usize {
         usize::from(u8::from(self))
     }
@@ -122,6 +125,122 @@ impl GlyphArea {
 
     pub fn gnu_code(self) -> u8 {
         self.into()
+    }
+}
+
+/// Authoritative geometry for one of GNU's three glyph-row areas.
+///
+/// `bounds` determines the area's pen origin and horizontal extent. `clip`
+/// preserves the presentation's vertical body band (including vscroll
+/// clipping) independently of that origin.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GlyphAreaGeometry {
+    bounds: Rect,
+    clip: Rect,
+}
+
+impl GlyphAreaGeometry {
+    pub const fn new(bounds: Rect, clip: Rect) -> Self {
+        Self { bounds, clip }
+    }
+
+    pub const fn bounds(self) -> Rect {
+        self.bounds
+    }
+
+    pub const fn clip(self) -> Rect {
+        self.clip
+    }
+}
+
+/// How a glyph area obtains its horizontal pen position.
+///
+/// Real window margins are structural areas with independent GNU
+/// `window_box_left_offset` origins. `FollowingPreviousArea` is retained for
+/// unpartitioned chrome rows and the synthetic TTY right-border glyph, which
+/// deliberately flow in the row's single band rather than a configured display
+/// margin.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GlyphAreaPlacement {
+    FollowingPreviousArea,
+    Structural(GlyphAreaGeometry),
+}
+
+/// One immutable mapping from semantic [`GlyphArea`] to presentation geometry.
+///
+/// Both GUI materialization and the TTY RIF consume this mapping. Keeping the
+/// exhaustive area match here prevents either backend from silently flattening
+/// a newly routed margin area back into ordinary text flow.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GlyphRowAreaLayout {
+    left_margin: GlyphAreaPlacement,
+    text: GlyphAreaPlacement,
+    right_margin: GlyphAreaPlacement,
+}
+
+impl GlyphRowAreaLayout {
+    pub const fn unpartitioned(bounds: Rect, clip: Rect) -> Self {
+        Self {
+            left_margin: GlyphAreaPlacement::FollowingPreviousArea,
+            text: GlyphAreaPlacement::Structural(GlyphAreaGeometry::new(bounds, clip)),
+            right_margin: GlyphAreaPlacement::FollowingPreviousArea,
+        }
+    }
+
+    fn window_text(
+        text_bounds: Rect,
+        text_clip: Rect,
+        left_margin: Option<Rect>,
+        right_margin: Option<Rect>,
+    ) -> Self {
+        Self {
+            left_margin: left_margin
+                .map(|bounds| {
+                    GlyphAreaPlacement::Structural(GlyphAreaGeometry::new(bounds, bounds))
+                })
+                .unwrap_or(GlyphAreaPlacement::FollowingPreviousArea),
+            text: GlyphAreaPlacement::Structural(GlyphAreaGeometry::new(text_bounds, text_clip)),
+            right_margin: right_margin
+                .map(|bounds| {
+                    GlyphAreaPlacement::Structural(GlyphAreaGeometry::new(bounds, bounds))
+                })
+                .unwrap_or(GlyphAreaPlacement::FollowingPreviousArea),
+        }
+    }
+
+    pub const fn placement(self, area: GlyphArea) -> GlyphAreaPlacement {
+        match area {
+            GlyphArea::LeftMargin => self.left_margin,
+            GlyphArea::Text => self.text,
+            GlyphArea::RightMargin => self.right_margin,
+        }
+    }
+
+    /// Smallest rectangle covering every independently placed area.
+    ///
+    /// Incremental consumers use this to carry the complete row presentation,
+    /// not just TEXT_AREA. Gaps such as a fringe are intentionally included:
+    /// subsequent structural painters can overwrite them, while omitting a
+    /// margin here would erase reused marginal content before diffing.
+    pub fn structural_coverage(self) -> Option<Rect> {
+        let mut coverage: Option<Rect> = None;
+        for area in GlyphArea::ALL {
+            let GlyphAreaPlacement::Structural(geometry) = self.placement(area) else {
+                continue;
+            };
+            let bounds = geometry.bounds();
+            coverage = Some(match coverage {
+                None => bounds,
+                Some(current) => {
+                    let left = current.x.min(bounds.x);
+                    let top = current.y.min(bounds.y);
+                    let right = current.right().max(bounds.right());
+                    let bottom = current.bottom().max(bounds.bottom());
+                    Rect::new(left, top, right - left, bottom - top)
+                }
+            });
+        }
+        coverage
     }
 }
 
@@ -357,7 +476,7 @@ impl Glyph {
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GlyphRow {
     /// Glyphs per area: [left_margin, text, right_margin].
-    pub glyphs: [Vec<Glyph>; 3],
+    pub glyphs: [Vec<Glyph>; GlyphArea::COUNT],
     /// Pointer appearances referenced by compact glyph-local tokens.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pointer_appearances: Vec<GlyphPointerAppearance>,
@@ -444,7 +563,7 @@ pub struct FringeBitmapInfo {
 impl GlyphRow {
     pub fn new(role: GlyphRowRole) -> Self {
         Self {
-            glyphs: [Vec::new(), Vec::new(), Vec::new()],
+            glyphs: std::array::from_fn(|_| Vec::new()),
             pointer_appearances: Vec::new(),
             pointer_runs: Vec::new(),
             hash: 0,
@@ -570,11 +689,14 @@ impl GlyphRow {
         if self.pointer_runs != other.pointer_runs {
             return false;
         }
-        for i in 0..3 {
-            if self.glyphs[i].len() != other.glyphs[i].len() {
+        for area in GlyphArea::ALL {
+            if self.glyphs[area.index()].len() != other.glyphs[area.index()].len() {
                 return false;
             }
-            for (a, b) in self.glyphs[i].iter().zip(other.glyphs[i].iter()) {
+            for (a, b) in self.glyphs[area.index()]
+                .iter()
+                .zip(other.glyphs[area.index()].iter())
+            {
                 if a != b {
                     return false;
                 }
@@ -588,7 +710,7 @@ impl GlyphRow {
     }
 
     pub fn total_glyphs(&self) -> usize {
-        self.glyphs[0].len() + self.glyphs[1].len() + self.glyphs[2].len()
+        self.glyphs.iter().map(Vec::len).sum()
     }
 
     pub fn intern_pointer_appearance(
@@ -1149,6 +1271,49 @@ impl MaterializedRowCell {
 }
 
 impl FrameDisplayState {
+    /// Resolve GNU's three glyph-row areas from the immutable geometry sealed
+    /// for this presentation.
+    ///
+    /// Window rows store glyphs by semantic area, while consumers need backend-
+    /// specific pixel/cell coordinates. This is the single boundary that joins
+    /// those two models. A configured margin receives its own structural origin;
+    /// unpartitioned rows preserve their historical single-band flow.
+    pub fn glyph_row_area_layout(
+        &self,
+        entry: &WindowMatrixEntry,
+        role: GlyphRowRole,
+    ) -> GlyphRowAreaLayout {
+        let row_bounds = entry.row_pixel_bounds(role);
+        let row_clip = if role == GlyphRowRole::Text {
+            entry.text_area_clip_rect()
+        } else {
+            row_bounds
+        };
+        if role != GlyphRowRole::Text {
+            return GlyphRowAreaLayout::unpartitioned(row_bounds, row_clip);
+        }
+
+        let regions = self.window_infos.iter().find_map(|info| {
+            if info.window_id != entry.window_id {
+                return None;
+            }
+            match info.geometry {
+                PresentedWindowGeometry::Complete { regions, .. } => Some(regions),
+                PresentedWindowGeometry::Skipped { .. } => None,
+            }
+        });
+        let Some(regions) = regions else {
+            return GlyphRowAreaLayout::unpartitioned(row_bounds, row_clip);
+        };
+
+        GlyphRowAreaLayout::window_text(
+            row_bounds,
+            row_clip,
+            regions.left_margin,
+            regions.right_margin,
+        )
+    }
+
     /// Verify that window metadata and semantic hit regions are projections of
     /// the same immutable presentation geometry.
     ///
@@ -1743,7 +1908,7 @@ impl FrameDisplayState {
                 row_index,
                 content.row(),
                 bounds,
-                bounds,
+                GlyphRowAreaLayout::unpartitioned(bounds, bounds),
                 self.char_width,
                 self.char_height,
                 &mut push,
@@ -1753,14 +1918,9 @@ impl FrameDisplayState {
             // Body (`Text`) rows clip to the text-area band so a vscroll's
             // top-clipped first row / exposed bottom row do not bleed over the
             // header/tab-line or mode-line; chrome rows keep the window bounds.
-            let text_area_clip = entry.text_area_clip_rect();
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
                 let row_bounds = entry.row_pixel_bounds(glyph_row.role);
-                let row_clip = if glyph_row.role == GlyphRowRole::Text {
-                    text_area_clip
-                } else {
-                    row_bounds
-                };
+                let area_layout = self.glyph_row_area_layout(entry, glyph_row.role);
                 let char_w = if entry.matrix.ncols > 0 {
                     row_bounds.width / entry.matrix.ncols as f32
                 } else {
@@ -1771,7 +1931,7 @@ impl FrameDisplayState {
                     row_idx as u32,
                     glyph_row,
                     row_bounds,
-                    row_clip,
+                    area_layout,
                     char_w,
                     self.char_height,
                     &mut push,
@@ -1975,7 +2135,7 @@ impl FrameDisplayState {
         row_index: u32,
         glyph_row: &GlyphRow,
         pixel_bounds: Rect,
-        row_clip: Rect,
+        area_layout: GlyphRowAreaLayout,
         char_w: f32,
         char_h: f32,
         push: &mut impl FnMut(FrameGlyph),
@@ -1991,29 +2151,15 @@ impl FrameDisplayState {
         let y = row_cell.y;
         let row_height = row_cell.height;
         let row_role = glyph_row.role;
-        // For `Text` rows this is the text-area band (narrower than the window
-        // when a vscroll shifts content past the header/mode-line); for chrome
-        // rows the caller passes the window bounds, matching the historical
-        // `Some(pixel_bounds)`.
-        // A chrome row's measured cell is its authoritative clip.  The window
-        // rectangle is only its containing partition; using that container as
-        // the clip lets tall media bleed into adjacent rows.  Text rows already
-        // receive the authoritative text-area clip from the caller.
-        let clip_rect = Some(if row_role.is_chrome() {
-            intersect_rects(row_clip, Rect::new(win_x, y, win_w, row_height))
-        } else {
-            row_clip
-        });
         let mut col = usize::from(glyph_row.start_col);
         let mut x_cursor = win_x + glyph_row.pixel_x.max(0.0);
-
-        // GNU `reversed_p` rows (right-to-left paragraphs) are flush to the
-        // right margin: start the pen so the content ends at the right edge,
-        // leaving the empty space on the left (drawn as background). The pen
-        // then advances left-to-right as usual over the already visually
-        // reordered glyphs.
-        if glyph_row.reversed_p {
-            let used: f32 = glyph_row.glyphs[GlyphArea::Text.index()]
+        let mut current_geometry = GlyphAreaGeometry::new(pixel_bounds, pixel_bounds);
+        let chrome_clip_rect = Some(intersect_rects(
+            pixel_bounds,
+            Rect::new(win_x, y, win_w, row_height),
+        ));
+        let reversed_text_width = glyph_row.reversed_p.then(|| {
+            glyph_row.glyphs[GlyphArea::Text.index()]
                 .iter()
                 .filter(|glyph| !glyph.padding)
                 .map(|glyph| {
@@ -2027,12 +2173,34 @@ impl FrameDisplayState {
                         }
                     }
                 })
-                .sum();
-            x_cursor = win_x + (win_w - used).max(0.0);
-        }
+                .sum::<f32>()
+        });
 
-        for area_idx in 0..3 {
-            for glyph in &glyph_row.glyphs[area_idx] {
+        for area in GlyphArea::ALL {
+            if let GlyphAreaPlacement::Structural(geometry) = area_layout.placement(area) {
+                current_geometry = geometry;
+                let bounds = geometry.bounds();
+                x_cursor = bounds.x;
+                if area == GlyphArea::Text {
+                    x_cursor += glyph_row.pixel_x.max(0.0);
+                    // GNU's `reversed_p` applies only to TEXT_AREA. Marginal
+                    // glyphs keep their own left-to-right structural origins.
+                    if let Some(used) = reversed_text_width {
+                        x_cursor = bounds.x + (bounds.width - used).max(0.0);
+                    }
+                }
+            }
+            let area_bounds = current_geometry.bounds();
+            let clip_rect = Some(if row_role.is_chrome() {
+                intersect_rects(
+                    current_geometry.clip(),
+                    Rect::new(area_bounds.x, y, area_bounds.width, row_height),
+                )
+            } else {
+                current_geometry.clip()
+            });
+            let right_edge = area_bounds.right();
+            for glyph in &glyph_row.glyphs[area.index()] {
                 if glyph.padding {
                     continue;
                 }
@@ -2057,7 +2225,6 @@ impl FrameDisplayState {
                     fallback_width
                 };
                 let x = x_cursor;
-                let right_edge = win_x + win_w;
                 if x >= right_edge {
                     break;
                 }
@@ -2343,7 +2510,7 @@ impl FrameDisplayState {
             push(FrameGlyph::Stretch {
                 window_id,
                 row_role,
-                clip_rect,
+                clip_rect: chrome_clip_rect,
                 slot_id: DisplaySlotId {
                     window_id,
                     row: row_index,

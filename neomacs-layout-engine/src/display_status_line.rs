@@ -24,7 +24,6 @@ pub(crate) use crate::display_row::face_state::DisplayRowFaceRealizer;
 use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::measured_state::{
     DisplayRowBoundsPolicy, DisplayRowOwner, FrameChromeKind, MeasuredDisplayRow, WindowChromeKind,
-    measured_display_row_height,
 };
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 pub(crate) use crate::display_row::render_state::DisplayRowOutputProgress;
@@ -378,6 +377,7 @@ impl<'face> FrameTabBarDisplayRowRequest<'face> {
             display_row_index: self.row_index,
             bounds: self.bounds(),
             bounds_policy: DisplayRowBoundsPolicy::MeasureContent,
+            completion: ChromeRowCompletion::Intrinsic,
             render_request: self.lisp_string_source_request(face_ids),
         }
     }
@@ -580,19 +580,36 @@ pub(crate) struct WindowChromeRowsPlan {
 }
 
 impl WindowChromeRowsPlan {
-    pub(crate) fn new(params: &WindowParams, face_resolver: &FaceResolver) -> Self {
+    pub(crate) fn new<B: LayoutBufferView>(
+        params: &WindowParams,
+        buffer: &B,
+        face_resolver: &FaceResolver,
+    ) -> Self {
+        let mut next_check = buffer.layout_point_max_char_pos().get();
         let mode_line_face = (params.mode_line_height > 0.0).then(|| {
-            face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::ModeLine {
-                selected: params.mode_line_active,
-            })
+            face_resolver.default_base_face_for_origin(
+                Some(buffer),
+                &DisplayOrigin::ModeLine {
+                    selected: params.mode_line_active,
+                },
+                &mut next_check,
+            )
         });
         let header_line_face = (params.header_line_height > 0.0).then(|| {
-            face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::HeaderLine {
-                selected: params.mode_line_active,
-            })
+            face_resolver.default_base_face_for_origin(
+                Some(buffer),
+                &DisplayOrigin::HeaderLine {
+                    selected: params.mode_line_active,
+                },
+                &mut next_check,
+            )
         });
         let tab_line_face = (params.tab_line_height > 0.0).then(|| {
-            face_resolver.default_base_face_for_origin_without_buffer(&DisplayOrigin::TabLine)
+            face_resolver.default_base_face_for_origin(
+                Some(buffer),
+                &DisplayOrigin::TabLine,
+                &mut next_check,
+            )
         });
 
         // `WindowParams` carries the frame attempt's canonical assumed
@@ -854,6 +871,7 @@ struct ChromeDisplayRowRenderRequest<'face> {
     display_row_index: u32,
     bounds: Rect,
     bounds_policy: DisplayRowBoundsPolicy,
+    completion: ChromeRowCompletion,
     render_request: DisplayRowLispStringSourceRenderRequest<'face>,
 }
 
@@ -862,7 +880,30 @@ struct ChromeDisplayRowRenderedRequest {
     display_row_index: u32,
     bounds: Rect,
     bounds_policy: DisplayRowBoundsPolicy,
+    completion: ChromeRowCompletion,
     rendered: RenderedDisplayRow,
+}
+
+/// Owner-level completion policy for a chrome row.  Window chrome mirrors
+/// GNU `display_mode_line`: after formatting content it always paints the
+/// base face through the window's right edge.  Frame chrome retains its own
+/// content-sized lifecycle.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ChromeRowCompletion {
+    Intrinsic,
+    FillWindowWidthWithBaseFace { face_id: FaceId, char_width: f32 },
+}
+
+impl ChromeRowCompletion {
+    fn apply(self, measured: &mut MeasuredDisplayRow) {
+        match self {
+            Self::Intrinsic => {}
+            Self::FillWindowWidthWithBaseFace {
+                face_id,
+                char_width,
+            } => measured.fill_trailing_background(face_id, char_width),
+        }
+    }
 }
 
 impl<'face> ChromeDisplayRowRenderRequest<'face> {
@@ -879,6 +920,7 @@ impl<'face> ChromeDisplayRowRenderRequest<'face> {
             bounds: self.bounds,
             rendered,
             bounds_policy: self.bounds_policy,
+            completion: self.completion,
         })
     }
 }
@@ -889,13 +931,15 @@ impl ChromeDisplayRowRenderedRequest {
     }
 
     fn measure(self) -> MeasuredDisplayRow {
-        MeasuredDisplayRow::new(
+        let mut measured = MeasuredDisplayRow::new(
             self.owner,
             self.display_row_index,
             self.bounds,
             self.rendered,
             self.bounds_policy,
-        )
+        );
+        self.completion.apply(&mut measured);
+        measured
     }
 }
 
@@ -949,31 +993,17 @@ impl<'face> WindowChromeDisplayRowRenderRequest<'face> {
             &mut state.render_services,
             state.evaluator.display_host.as_deref(),
         )?;
-        // Measure the built row's real height (tallest glyph/media, but never
-        // below the reserved face estimate) without consuming it, so we can pin
-        // the bottom-anchored mode line before wrapping it for install.
-        let measured_height = measured_display_row_height(
-            &rendered.rendered,
-            rendered.bounds.height,
-            rendered.bounds_policy,
-        );
+        // Measure before owner-level width completion.  The fill is paint, not
+        // content: letting its synthetic ascent/descent participate here can
+        // combine maxima from different glyphs and spuriously grow a 16px row
+        // to 17px, forcing a second format-mode-line evaluation.
+        let mut measured = rendered.measure();
+        let measured_height = measured.row_height();
         let final_y = match anchor {
-            ChromeRowVerticalAnchor::Top => rendered.bounds.y,
+            ChromeRowVerticalAnchor::Top => measured.bounds().y,
             ChromeRowVerticalAnchor::Bottom(window_bottom) => window_bottom - measured_height,
         };
-        let bounds = Rect::new(
-            rendered.bounds.x,
-            final_y,
-            rendered.bounds.width,
-            measured_height,
-        );
-        let measured = MeasuredDisplayRow::new(
-            rendered.owner,
-            rendered.display_row_index,
-            bounds,
-            rendered.rendered,
-            rendered.bounds_policy,
-        );
+        measured.reanchor_y(final_y);
         let progress = measured.output_progress();
         state.output.install_measured_window_display_row(&measured);
         state.output_emitter.emit_chrome_progress(
@@ -1019,6 +1049,10 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             .with_symbol_values(self.symbol_values)
             .render_request(face_ids)
             .with_chrome_text_area_left_px(self.text_area_left_px);
+        let completion = ChromeRowCompletion::FillWindowWidthWithBaseFace {
+            face_id: render_request.base_face_id(),
+            char_width: self.metrics.char_width(),
+        };
         let row = ChromeDisplayRowRenderRequest {
             owner: DisplayRowOwner::WindowChrome {
                 window_id: self.window_id,
@@ -1027,6 +1061,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             display_row_index: self.display_row_index.min(u32::MAX as usize) as u32,
             bounds: self.bounds,
             bounds_policy: DisplayRowBoundsPolicy::MeasureIntrinsic,
+            completion,
             render_request,
         };
         WindowChromeDisplayRowRenderRequest {

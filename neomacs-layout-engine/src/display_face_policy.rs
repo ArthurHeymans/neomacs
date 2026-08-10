@@ -7,7 +7,11 @@ pub(crate) enum BaseFacePolicy {
     OverlayStringAtAnchor,
     DisplayPropertyUnderlyingFace,
     DefaultFace,
-    FixedBasicFace(BasicFaceId),
+    /// A window-owned basic face whose effective definition can be replaced
+    /// buffer-locally through `face-remapping-alist`.
+    BufferRemappedBasicFace(BasicFaceId),
+    /// A frame-owned basic face with no associated buffer remapping context.
+    FrameBasicFace(BasicFaceId),
 }
 
 impl From<DisplayOrigin> for BaseFacePolicy {
@@ -19,18 +23,18 @@ impl From<DisplayOrigin> for BaseFacePolicy {
             DisplayOrigin::LinePrefix { .. } | DisplayOrigin::WrapPrefix { .. } => {
                 Self::DefaultFace
             }
-            DisplayOrigin::ModeLine { selected } => Self::FixedBasicFace(if selected {
+            DisplayOrigin::ModeLine { selected } => Self::BufferRemappedBasicFace(if selected {
                 BasicFaceId::ModeLineActive
             } else {
                 BasicFaceId::ModeLineInactive
             }),
-            DisplayOrigin::HeaderLine { selected } => Self::FixedBasicFace(if selected {
+            DisplayOrigin::HeaderLine { selected } => Self::BufferRemappedBasicFace(if selected {
                 BasicFaceId::HeaderLineActive
             } else {
                 BasicFaceId::HeaderLineInactive
             }),
-            DisplayOrigin::TabLine => Self::FixedBasicFace(BasicFaceId::TabLine),
-            DisplayOrigin::TabBar => Self::FixedBasicFace(BasicFaceId::TabBar),
+            DisplayOrigin::TabLine => Self::BufferRemappedBasicFace(BasicFaceId::TabLine),
+            DisplayOrigin::TabBar => Self::FrameBasicFace(BasicFaceId::TabBar),
         }
     }
 }
@@ -95,11 +99,11 @@ mod tests {
     fn base_face_policy_derives_from_mode_line_origin() {
         assert_eq!(
             BaseFacePolicy::from(DisplayOrigin::ModeLine { selected: true }),
-            BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive)
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::ModeLineActive)
         );
         assert_eq!(
             BaseFacePolicy::from(DisplayOrigin::ModeLine { selected: false }),
-            BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineInactive)
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::ModeLineInactive)
         );
     }
 
@@ -107,11 +111,11 @@ mod tests {
     fn base_face_policy_derives_from_header_line_origin() {
         assert_eq!(
             BaseFacePolicy::from(DisplayOrigin::HeaderLine { selected: true }),
-            BaseFacePolicy::FixedBasicFace(BasicFaceId::HeaderLineActive)
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::HeaderLineActive)
         );
         assert_eq!(
             BaseFacePolicy::from(DisplayOrigin::HeaderLine { selected: false }),
-            BaseFacePolicy::FixedBasicFace(BasicFaceId::HeaderLineInactive)
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::HeaderLineInactive)
         );
     }
 
@@ -119,11 +123,11 @@ mod tests {
     fn base_face_policy_derives_from_tab_line_and_tab_bar_origins() {
         assert_eq!(
             BaseFacePolicy::from(DisplayOrigin::TabLine),
-            BaseFacePolicy::FixedBasicFace(BasicFaceId::TabLine)
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::TabLine)
         );
         assert_eq!(
             BaseFacePolicy::from(DisplayOrigin::TabBar),
-            BaseFacePolicy::FixedBasicFace(BasicFaceId::TabBar)
+            BaseFacePolicy::FrameBasicFace(BasicFaceId::TabBar)
         );
     }
 }

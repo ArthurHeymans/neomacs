@@ -5,6 +5,7 @@ use crate::display_row::builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
     apply_display_row_source_slot_bounds, merge_display_row_source_slot_bounds,
 };
+use crate::display_row::finalizer::{RowTrailingFaceFill, RowTrailingFaceFillResult};
 use crate::display_row::geometry::{DisplayRowGeometryState, DisplayRowMaxX};
 use crate::glyph_row_writer;
 use neomacs_display_protocol::face::Face;
@@ -140,6 +141,24 @@ impl RenderedDisplayRow {
 
     pub(crate) fn faces(&self) -> &[Face] {
         &self.faces
+    }
+
+    /// Complete a rendered row with an exact synthetic trailing fill and keep
+    /// its output progress consistent with the new glyph.  Source slots are
+    /// deliberately unchanged: the fill has no Lisp-string or buffer source.
+    pub(crate) fn apply_trailing_face_fill(
+        &mut self,
+        fill: RowTrailingFaceFill,
+    ) -> RowTrailingFaceFillResult {
+        let result = fill.apply_to(&mut self.row);
+        if result == RowTrailingFaceFillResult::Appended {
+            self.progress.end_x += fill.width_px();
+            self.progress.end_col = self
+                .progress
+                .end_col
+                .saturating_add(i64::from(fill.width_cols()));
+        }
+        result
     }
 
     #[cfg(test)]

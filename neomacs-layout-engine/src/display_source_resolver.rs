@@ -25,7 +25,7 @@ use crate::display_spec::{
 };
 use crate::font::metrics::FontMetricsService;
 use crate::frame_face_arena::FrameFaceAttempt;
-use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
+use crate::neovm_bridge::{FaceResolver, LayoutBufferView, OrderedFaceSources, ResolvedFace};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
 use neomacs_display_protocol::face::BasicFaceId;
@@ -680,6 +680,36 @@ fn resolve_source_face_ref(
     RenderFaceRef::FaceId(face_id)
 }
 
+fn resolve_source_face_sources(
+    state: &mut DisplaySourceResolveState,
+    face_ids: &mut FrameFaceAttempt,
+    pending_faces: &mut Vec<PendingDisplaySourceFace>,
+    face_basis: DisplaySourceFaceBasis<'_>,
+    base: RenderFaceRef,
+    sources: &OrderedFaceSources,
+    resolve: impl FnOnce(&ResolvedFace, &OrderedFaceSources) -> Option<ResolvedFace>,
+) -> RenderFaceRef {
+    if sources.is_empty() {
+        return base;
+    }
+
+    let base_face_id = render_face_ref_id(base, face_basis.base_face_id());
+    let base_resolved = state.resolved_face_for(base, face_basis.base_face());
+    let Some(resolved) = resolve(&base_resolved, sources) else {
+        return base;
+    };
+
+    if same_resolved_face(&resolved, &base_resolved) {
+        state.remember_face(base_face_id, &base_resolved);
+        return RenderFaceRef::FaceId(base_face_id);
+    }
+
+    let face_id = crate::display_row::face_state::stable_face_id_for_resolved(face_ids, &resolved);
+    state.remember_face(face_id, &resolved);
+    pending_faces.push(PendingDisplaySourceFace::new(face_id, resolved));
+    RenderFaceRef::FaceId(face_id)
+}
+
 impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
         let face_basis = self.params.face_basis();
@@ -694,6 +724,27 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
                 face_basis
                     .face_resolver()
                     .resolve_face_value_over(base_resolved, face_value)
+            },
+        )
+    }
+
+    fn resolve_face_sources(
+        &mut self,
+        base: RenderFaceRef,
+        sources: &OrderedFaceSources,
+    ) -> RenderFaceRef {
+        let face_basis = self.params.face_basis();
+        resolve_source_face_sources(
+            self.state,
+            self.face_ids,
+            self.pending_faces,
+            face_basis,
+            base,
+            sources,
+            |base_resolved, sources| {
+                face_basis
+                    .face_resolver()
+                    .resolve_face_sources_over(base_resolved, sources)
             },
         )
     }
@@ -731,6 +782,29 @@ impl<B: LayoutBufferView> DisplayItemFaceResolver for BufferDisplaySourcePropert
                     self.buffer,
                     base_resolved,
                     face_value,
+                )
+            },
+        )
+    }
+
+    fn resolve_face_sources(
+        &mut self,
+        base: RenderFaceRef,
+        sources: &OrderedFaceSources,
+    ) -> RenderFaceRef {
+        let face_basis = self.params.face_basis();
+        resolve_source_face_sources(
+            self.state,
+            self.face_ids,
+            self.pending_faces,
+            face_basis,
+            base,
+            sources,
+            |base_resolved, sources| {
+                face_basis.face_resolver().resolve_buffer_face_sources_over(
+                    self.buffer,
+                    base_resolved,
+                    sources,
                 )
             },
         )
@@ -1395,7 +1469,7 @@ mod tests {
             &buffer,
             &resolver,
             DisplayOrigin::ModeLine { selected: true },
-            BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive),
+            BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::ModeLineActive),
             None,
             DisplayDefaultFaceInstallPolicy::ReuseInstalledDefaultFace,
             &mut face_ids,

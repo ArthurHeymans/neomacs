@@ -2503,7 +2503,7 @@ fn face_policy_resolves_display_origin_base_faces() {
     let fixed_face = resolver.base_face_for_origin(
         Some(buf),
         &DisplayOrigin::ModeLine { selected: true },
-        BaseFacePolicy::FixedBasicFace(BasicFaceId::ModeLineActive),
+        BaseFacePolicy::BufferRemappedBasicFace(BasicFaceId::ModeLineActive),
         &mut next_check,
     );
     assert_eq!(fixed_face.face_id, u32::from(BasicFaceId::ModeLineActive));
@@ -2632,6 +2632,85 @@ fn test_face_resolver_buffer_local_named_face_remap_applies_to_face_prop() {
     assert_eq!(resolved.fg, color_to_pixel(&NeoColor::rgb(255, 69, 0)));
 }
 
+/// GNU applies `face-remapping-alist` while realizing the basic face of a
+/// window's header line.  Magit uses this exact mechanism to remap
+/// `header-line` to `magit-header-line` buffer-locally.
+#[test]
+fn header_line_base_face_uses_buffer_local_named_face_remap() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let mut table = FaceTable::new();
+
+    let mut header_line = NeoFace::new("header-line");
+    header_line.foreground = Some(NeoColor::rgb(220, 220, 220));
+    table.define("header-line", header_line);
+
+    let mut package_header = NeoFace::new("package-header");
+    package_header.foreground = Some(NeoColor::rgb(238, 220, 130));
+    package_header.weight = Some(FontWeight::BOLD);
+    table.define("package-header", package_header);
+
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut buf = test_buffer(54, "*header-remap*");
+    buf.set_buffer_local(
+        "face-remapping-alist",
+        Value::list(vec![Value::list(vec![
+            Value::symbol("header-line"),
+            Value::symbol("package-header"),
+            Value::symbol("header-line"),
+        ])]),
+    );
+
+    let mut next_check = buf.point_max_char_pos().get();
+    let resolved = resolver.default_base_face_for_origin(
+        Some(&buf),
+        &DisplayOrigin::HeaderLine { selected: true },
+        &mut next_check,
+    );
+
+    assert_eq!(resolved.fg, color_to_pixel(&NeoColor::rgb(238, 220, 130)));
+    assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
+}
+
+/// GNU `lookup_basic_face` performs a named lookup for an inheriting basic
+/// face whenever `face-remapping-alist` is active.  That makes remapping an
+/// inherited parent observable even when the basic face itself has no alist
+/// entry.
+#[test]
+fn header_line_base_face_uses_buffer_remap_of_inherited_mode_line() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let mut table = FaceTable::new();
+
+    let mut package_mode_line = NeoFace::new("package-mode-line");
+    package_mode_line.foreground = Some(NeoColor::rgb(238, 220, 130));
+    package_mode_line.weight = Some(FontWeight::BOLD);
+    table.define("package-mode-line", package_mode_line);
+
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
+    let mut buf = test_buffer(55, "*inherited-mode-line-remap*");
+    buf.set_buffer_local(
+        "face-remapping-alist",
+        Value::list(vec![Value::list(vec![
+            Value::symbol("mode-line"),
+            Value::symbol("package-mode-line"),
+            Value::symbol("mode-line"),
+        ])]),
+    );
+
+    let mut next_check = buf.point_max_char_pos().get();
+    let resolved = resolver.default_base_face_for_origin(
+        Some(&buf),
+        &DisplayOrigin::HeaderLine { selected: true },
+        &mut next_check,
+    );
+
+    assert_eq!(resolved.fg, color_to_pixel(&NeoColor::rgb(238, 220, 130)));
+    assert_eq!(resolved.font_weight, FontWeight::BOLD.css_weight());
+    assert_eq!(
+        resolved.face_id, 0,
+        "a buffer-remapped basic face must be assigned a dynamic frame face id"
+    );
+}
+
 #[test]
 fn test_face_resolver_inverse_video() {
     let _evaluator = neovm_core::emacs_core::Context::new();
@@ -2655,6 +2734,68 @@ fn test_face_resolver_inverse_video() {
     // Inverse: fg and bg should be swapped.
     assert_eq!(resolved.fg, 0x00000000); // was white, now black
     assert_eq!(resolved.bg, 0x00FFFFFF); // was black, now white
+}
+
+#[test]
+fn face_resolver_applies_inverse_video_after_text_and_overlay_faces_are_merged() {
+    let _evaluator = neovm_core::emacs_core::Context::new();
+    let mut table = FaceTable::new();
+
+    let mut branch_local = NeoFace::new("branch-local");
+    branch_local.foreground = Some(NeoColor::rgb(176, 226, 255));
+    table.define("branch-local", branch_local);
+
+    let mut branch_current = NeoFace::new("branch-current");
+    branch_current.inherit = Some(Value::symbol("branch-local"));
+    branch_current.inverse_video = Some(true);
+    table.define("branch-current", branch_current);
+
+    let mut section_highlight = NeoFace::new("section-highlight");
+    section_highlight.background = Some(NeoColor::rgb(51, 51, 51));
+    table.define("section-highlight", section_highlight);
+
+    let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00333333, 14.0, None);
+    let mut buf = test_buffer(61, "*inverse-overlay-order*");
+    set_buffer_text(&mut buf, "master");
+    buf.set_buffer_local(
+        "char-property-alias-alist",
+        Value::list(vec![Value::list(vec![
+            Value::symbol("face"),
+            Value::symbol("font-lock-face"),
+        ])]),
+    );
+    buf.put_text_property(
+        0,
+        6,
+        Value::symbol("font-lock-face"),
+        Value::symbol("branch-current"),
+    );
+    let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        serial: 0,
+        plist: Value::NIL,
+        buffer: Some(buf.id()),
+        start: 0,
+        end: 6,
+        front_advance: false,
+        rear_advance: false,
+    });
+    buf.overlays_mut().insert_overlay(overlay);
+    buf.overlays_mut()
+        .overlay_put(
+            overlay,
+            Value::symbol("font-lock-face"),
+            Value::symbol("section-highlight"),
+        )
+        .unwrap();
+
+    let mut next_check = buf.point_max_char_pos().get();
+    let resolved = resolver.face_at_pos(&buf, 0, &mut next_check);
+
+    assert_eq!(
+        resolved.fg, 0x00333333,
+        "GNU merges the overlay background before realizing the inherited inverse-video attribute"
+    );
+    assert_eq!(resolved.bg, 0x00b0e2ff);
 }
 
 #[test]

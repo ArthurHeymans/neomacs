@@ -19,7 +19,7 @@ use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan, DisplaySourceFallbackWidth,
 };
 use crate::display_spec::{DisplaySpaceKey, display_space_positive_number};
-use crate::neovm_bridge::LayoutBufferView;
+use crate::neovm_bridge::{LayoutBufferView, OrderedFaceSources};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
 use neomacs_display_protocol::types::FaceId;
@@ -87,6 +87,17 @@ impl<'a> DisplaySourceContext<'a> {
         self.face_resolver
             .as_mut()
             .map(|resolver| resolver.resolve_face_ref(base, face_value))
+            .unwrap_or(base)
+    }
+
+    pub(crate) fn resolve_face_sources(
+        &mut self,
+        base: RenderFaceRef,
+        sources: &OrderedFaceSources,
+    ) -> RenderFaceRef {
+        self.face_resolver
+            .as_mut()
+            .map(|resolver| resolver.resolve_face_sources(base, sources))
             .unwrap_or(base)
     }
 
@@ -209,6 +220,12 @@ impl DisplayItemSource for DisplayItemOnceSource {
 
 pub(crate) trait DisplayItemFaceResolver {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef;
+
+    fn resolve_face_sources(
+        &mut self,
+        base: RenderFaceRef,
+        sources: &OrderedFaceSources,
+    ) -> RenderFaceRef;
 
     fn resolve_pointer_face_ref(
         &mut self,

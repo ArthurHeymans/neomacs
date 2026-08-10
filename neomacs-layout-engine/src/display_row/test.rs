@@ -2924,6 +2924,41 @@ fn display_row_baseline_mode_line_display_space_align_expands_to_spaces() {
     assert_eq!(row_text_expanding_stretches(&row), "A   B");
 }
 
+/// GNU `produce_stretch_glyph` permits a valid `:align-to` expression to
+/// resolve to zero width.  Magit relies on that for the header prefix
+/// `(propertize " " 'display '(space :align-to 0))`: at column zero the
+/// source character is replaced, but no glyph is emitted.
+#[test]
+fn header_line_align_to_current_column_emits_no_glyph() {
+    let _eval = Context::new();
+    let rendered = Value::string_with_text_properties(
+        " C",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 0,
+            end: 1,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("space"),
+                    Value::keyword("align-to"),
+                    Value::fixnum(0),
+                ]),
+            ]),
+        }],
+    );
+
+    let row = render_lisp_display_row(rendered, GlyphRowRole::HeaderLine);
+
+    assert_eq!(row_text_expanding_stretches(&row), "C");
+    assert!(
+        row.glyphs[1]
+            .iter()
+            .all(|glyph| !matches!(glyph.glyph_type, GlyphType::Stretch { .. })),
+        "a zero-width align-to replacement must not materialize a terminal cell: {:?}",
+        row.glyphs[1]
+    );
+}
+
 #[test]
 fn display_row_baseline_header_line_display_space_relative_width_expands_to_stretch() {
     let _eval = Context::new();

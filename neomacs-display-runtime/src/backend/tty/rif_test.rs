@@ -1,7 +1,8 @@
 use super::*;
 use neomacs_display_protocol::face::{Face, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
+    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor, PresentedCellOrigin,
+    PresentedWindowGeometry, PresentedWindowRegions, WindowInfo,
 };
 use neomacs_display_protocol::glyph_matrix::{
     FaceFillItem, FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphRow, RowDamage,
@@ -341,6 +342,95 @@ fn rasterize_simple_text() {
     assert_eq!(rif.desired.cells[3].ch, 'l');
     assert_eq!(rif.desired.cells[4].ch, 'o');
     assert_eq!(rif.desired.cells[5].ch, ' '); // cleared to space
+}
+
+#[test]
+fn rasterize_places_each_right_margin_at_the_reserved_columns() {
+    let window = DisplayWindowId::new(1);
+    let outer = Rect::new(0.0, 0.0, 12.0, 2.0);
+    let text_body = Rect::new(0.0, 0.0, 10.0, 2.0);
+    let right_margin = Rect::new(10.0, 0.0, 2.0, 2.0);
+    let mut state = FrameDisplayState::new(12, 2, 1.0, 1.0);
+    let mut matrix = GlyphMatrix::new(2, 10);
+
+    for (row_index, text) in ["x", "long"].into_iter().enumerate() {
+        let mut row = GlyphRow::new(GlyphRowRole::Text);
+        row.enabled = true;
+        for (charpos, ch) in text.chars().enumerate() {
+            row.glyphs[GlyphArea::Text.index()].push(Glyph::char(ch, FaceId::new(0), charpos));
+        }
+        row.glyphs[GlyphArea::RightMargin.index()].extend([
+            Glyph::char('R', FaceId::new(0), 0),
+            Glyph::char('M', FaceId::new(0), 0),
+        ]);
+        matrix.rows[row_index] = neomacs_display_protocol::glyph_matrix::MatrixRow::new(row);
+    }
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: window,
+        matrix,
+        pixel_bounds: outer,
+        text_pixel_bounds: text_body,
+        text_clip_bounds: Some(text_body),
+        selected: true,
+    });
+    state.window_infos.push(WindowInfo {
+        window_id: window,
+        buffer_id: 1,
+        window_start: 1,
+        window_end: 1,
+        buffer_size: 1,
+        bounds: outer,
+        geometry: PresentedWindowGeometry::Complete {
+            cell_origin: PresentedCellOrigin::default(),
+            regions: PresentedWindowRegions {
+                outer,
+                text_body,
+                right_margin_columns: 2,
+                right_margin: Some(right_margin),
+                ..PresentedWindowRegions::default()
+            },
+        },
+        mode_line_height: 0.0,
+        header_line_height: 0.0,
+        tab_line_height: 0.0,
+        selected: true,
+        is_minibuffer: false,
+        char_height: 1.0,
+        buffer_name: String::new(),
+        buffer_file_name: String::new(),
+        modified: false,
+    });
+
+    let mut rif = TtyRif::new(12, 2);
+    rif.rasterize(&state);
+
+    assert_eq!(desired_char(&rif, 0, 10), 'R');
+    assert_eq!(desired_char(&rif, 0, 11), 'M');
+    assert_eq!(desired_char(&rif, 1, 10), 'R');
+    assert_eq!(desired_char(&rif, 1, 11), 'M');
+
+    let _ = render_output(&mut rif);
+    state.window_matrices[0]
+        .matrix
+        .set_row_damage(0, RowDamage::Reused);
+    state.window_matrices[0]
+        .matrix
+        .set_row_damage(1, RowDamage::Reused);
+    rif.rasterize(&state);
+
+    assert_eq!(
+        desired_char(&rif, 0, 10),
+        'R',
+        "a reused row must carry its structural right margin"
+    );
+    assert_eq!(desired_char(&rif, 0, 11), 'M');
+    assert_eq!(desired_char(&rif, 1, 10), 'R');
+    assert_eq!(desired_char(&rif, 1, 11), 'M');
+    assert!(
+        rif.plan_for_test().is_empty(),
+        "an unchanged structural margin must not be repainted"
+    );
 }
 
 #[test]

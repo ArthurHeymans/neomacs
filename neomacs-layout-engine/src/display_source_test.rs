@@ -344,6 +344,17 @@ impl DisplayItemFaceResolver for SymbolFaceResolver {
         }
     }
 
+    fn resolve_face_sources(
+        &mut self,
+        mut base: RenderFaceRef,
+        sources: &OrderedFaceSources,
+    ) -> RenderFaceRef {
+        for value in sources.values() {
+            base = self.resolve_face_ref(base, value);
+        }
+        base
+    }
+
     fn resolve_pointer_face_ref(
         &mut self,
         base: RenderFaceRef,
@@ -371,6 +382,17 @@ impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
             Some("bold") => RenderFaceRef::FaceId(FaceId::new(7)),
             _ => base,
         }
+    }
+
+    fn resolve_face_sources(
+        &mut self,
+        mut base: RenderFaceRef,
+        sources: &OrderedFaceSources,
+    ) -> RenderFaceRef {
+        for value in sources.values() {
+            base = self.resolve_face_ref(base, value);
+        }
+        base
     }
 
     fn resolve_display_media_replacement(

@@ -1442,7 +1442,7 @@ fn routed_segment_item_face_agrees_for_plain_face_spans() {
 }
 
 #[test]
-fn routed_segment_item_face_diverges_under_default_remapping() {
+fn routed_segment_item_face_agrees_under_default_remapping() {
     let mut eval = Context::new();
     let buf_id = buffer_with_text(&mut eval, "hello\n");
     eval.buffer_manager_mut().set_current(buf_id);
@@ -1456,20 +1456,20 @@ fn routed_segment_item_face_diverges_under_default_remapping() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let resolver = face_resolver_for(&eval);
     let mut face_ids = FrameFaceAttempt::for_test_with_next_id(0);
-    let default_resolved = resolver.default_face().clone();
+    let default_resolved = resolver.resolve_buffer_default_face(buffer);
     let default_face_id = crate::display_row::face_state::stable_face_id_for_resolved(
         &mut face_ids,
         &default_resolved,
     );
     let (checkpoint_id, checkpoint_resolved) =
         resolve_routed_position_face(buffer, &resolver, &mut face_ids, CharPos0::ZERO);
-    if checkpoint_resolved.font_weight == resolver.default_face().font_weight {
-        // The engine's face remapping is not applied through this seam in
-        // this build; the guard then has nothing to diverge on.
-        return;
-    }
+    assert_eq!(
+        checkpoint_resolved.font_weight,
+        neovm_core::face::FontWeight::BOLD.css_weight()
+    );
+    assert!(checkpoint_resolved.italic);
     assert!(
-        routed_segment_item_face_diverges(
+        !routed_segment_item_face_diverges(
             buffer,
             &resolver,
             &mut face_ids,
@@ -1478,7 +1478,7 @@ fn routed_segment_item_face_diverges_under_default_remapping() {
             CharPos0::ZERO,
             checkpoint_id,
         ),
-        "remapped default must force the row off the item route"
+        "checkpoint and per-run face chains must apply inherited default remapping identically"
     );
 }
 
