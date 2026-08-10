@@ -1144,6 +1144,151 @@ fn keymapp_rejects_non_keymap_integer_designators() {
     );
 }
 
+/// GNU's own `help--describe-vector/bug-9293-*` tests (test/src/keymap-tests.el),
+/// which pin that a key RANGE is only printed when every key in it is shadowed
+/// the same way. Pinned here because `help--describe-vector` was a no-op stub:
+/// `describe-map` reaches every dense keymap element through it, so while it
+/// returned nil every char-table binding -- `self-insert-command` over the whole
+/// printable range, all of `key-translation-map` -- was missing from
+/// `describe-bindings`.
+#[test]
+fn help_describe_vector_prints_ranges_only_where_shadowing_agrees() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::load::create_bootstrap_evaluator_cached;
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap evaluator");
+    let rendered = eval
+        .eval_str(
+            r#"(let ((orig-map (let ((map (make-keymap)))
+                                 (define-key map "e" 'foo)
+                                 (define-key map "f" 'foo)
+                                 (define-key map "g" 'foo)
+                                 (define-key map "h" 'foo)
+                                 map))
+                     (shadow-map (let ((map (make-keymap)))
+                                   (define-key map "f" 'bar)
+                                   map))
+                     (text-quoting-style 'grave)
+                     (describe-bindings-check-shadowing-in-ranges 'ignore-self-insert))
+                 (with-temp-buffer
+                   (help--describe-vector (cadr orig-map) nil
+                                          (lambda (def) (insert (symbol-name def) "\n"))
+                                          t shadow-map orig-map t)
+                   (buffer-substring-no-properties (point-min) (point-max))))"#,
+        )
+        .unwrap();
+    assert_eq!(
+        rendered.as_str_owned().as_deref(),
+        Some("\nefoo\nffoo  (currently shadowed by `bar')\ng .. hfoo\n"),
+        "GNU prints e and f singly (f is shadowed by a different command) and g..h as a range"
+    );
+}
+
+/// GNU `map_keymap_char_table_item` (keymap.c) copies a char-table range key
+/// before handing it on, with the comment "make a copy since map_char_table
+/// modifies it in place". `map-char-table` really does reuse ONE cons and mutate
+/// it as it walks -- our `for_each_char_table_mapping` mirrors that on purpose --
+/// so a keymap walk that plans all its pairs before calling FUNCTION hands every
+/// range the SAME cons, carrying the final post-walk `(LAST+1 . MAX_CHAR)`.
+///
+/// That is not cosmetic: `keymap-canonicalize` collects range keys during
+/// `map-keymap` and calls `define-key` on them afterwards, so every dense
+/// binding in the map lands on the wrong characters, and `describe-bindings`
+/// loses the whole printable range of the global map.
+#[test]
+fn map_keymap_copies_char_table_range_keys_before_the_shared_cons_moves() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    eval.eval_str(
+        r#"(progn
+             (setq p15-dense (make-keymap))
+             (define-key p15-dense [?a] 'p15-cmd)
+             (define-key p15-dense [?b] 'p15-cmd)
+             (define-key p15-dense [?c] 'p15-cmd)
+             (setq p15-seen nil)
+             (map-keymap (lambda (key def)
+                           (setq p15-seen (cons (cons key def) p15-seen)))
+                         p15-dense))"#,
+    )
+    .unwrap();
+    let seen = eval.eval_str("(prin1-to-string p15-seen)").unwrap();
+    assert_eq!(
+        seen.as_str_owned().as_deref(),
+        Some("(((97 . 99) . p15-cmd))"),
+        "map-keymap must report the bound range, not the shared cons's final value"
+    );
+}
+
+/// GNU `accessible_keymaps_1` resolves each binding with
+/// `get_keymap (get_keyelt (cmd, 0), 0, 0)`, so a prefix bound to a SYMBOL whose
+/// function cell is a keymap -- what `define-prefix-command` builds, and how
+/// every one of the global map's own prefixes (`C-x` -> `Control-X-prefix`,
+/// `C-c` -> `mode-specific-command-prefix`) is stored -- is a prefix like any
+/// other. Testing only cons-valued bindings hid that the entire global keymap
+/// tree was invisible to `describe-bindings`.
+#[test]
+fn accessible_keymaps_follows_a_prefix_bound_to_a_symbol_naming_a_keymap() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    eval.eval_str(
+        r#"(progn
+             (setq p15-root (make-sparse-keymap))
+             (setq p15-prefix-map (make-sparse-keymap))
+             ;; What `define-prefix-command' builds: the symbol's FUNCTION cell
+             ;; holds the keymap, and the key is bound to the symbol.
+             (fset 'p15-prefix p15-prefix-map)
+             (define-key p15-root "\C-x" 'p15-prefix)
+             (define-key p15-prefix-map "a" 'p15-cmd))"#,
+    )
+    .unwrap();
+
+    let all = eval.eval_str("(accessible-keymaps p15-root)").unwrap();
+    let items = list_to_vec(&all).expect("accessible-keymaps should return list");
+    let prefixes: Vec<Vec<Value>> = items
+        .iter()
+        .map(|entry| entry.cons_car().as_vector_data().unwrap().clone())
+        .collect();
+    assert_eq!(
+        prefixes,
+        vec![vec![], vec![Value::fixnum(24)]],
+        "the symbol-valued C-x prefix must be followed"
+    );
+}
+
+/// GNU `accessible_keymaps_1`: when the sequence so far ends in
+/// `meta-prefix-char`, the next key REPLACES that ESC rather than extending the
+/// sequence, and gains the meta bit. GNU reports `ESC s`-reachable maps under
+/// `[M-s]`, never under `[27 115]`.
+#[test]
+fn accessible_keymaps_metizes_a_key_following_meta_prefix_char() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    eval.eval_str(
+        r#"(progn
+             (setq p15-root (make-sparse-keymap))
+             (setq p15-esc (make-sparse-keymap))
+             (setq p15-sub (make-sparse-keymap))
+             (define-key p15-root [27] p15-esc)
+             (define-key p15-esc "s" p15-sub))"#,
+    )
+    .unwrap();
+
+    let all = eval.eval_str("(accessible-keymaps p15-root)").unwrap();
+    let items = list_to_vec(&all).expect("accessible-keymaps should return list");
+    let prefixes: Vec<Vec<Value>> = items
+        .iter()
+        .map(|entry| entry.cons_car().as_vector_data().unwrap().clone())
+        .collect();
+    assert_eq!(
+        prefixes,
+        vec![
+            vec![],
+            vec![Value::fixnum(27)],
+            vec![Value::fixnum(0x800_0000 | i64::from(b's'))],
+        ],
+        "ESC s must be reported as [M-s], not [27 115]"
+    );
+}
+
 #[test]
 fn accessible_keymaps_reports_root_and_prefix_paths() {
     crate::test_utils::init_test_tracing();
@@ -10948,22 +11093,6 @@ fn dispatch_builtin_pure_handles_gpm_help_and_init_image_placeholders() {
         .expect("gpm-mouse-stop should resolve")
         .expect("gpm-mouse-stop should evaluate");
     assert_eq!(stop, Value::NIL);
-
-    let help = dispatch_builtin_pure(
-        "help--describe-vector",
-        vec![
-            Value::NIL,
-            Value::NIL,
-            Value::NIL,
-            Value::NIL,
-            Value::NIL,
-            Value::NIL,
-            Value::NIL,
-        ],
-    )
-    .expect("help--describe-vector should resolve")
-    .expect("help--describe-vector should evaluate");
-    assert_eq!(help, Value::NIL);
 
     let init = dispatch_builtin_pure("init-image-library", vec![Value::symbol("png")])
         .expect("init-image-library should resolve")

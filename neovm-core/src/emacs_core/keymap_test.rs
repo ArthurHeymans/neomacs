@@ -688,7 +688,7 @@ fn list_keymap_accessible_descends_into_direct_sparse_parent() {
     list_keymap_set_parent(child, parent);
 
     let mut out = Vec::new();
-    list_keymap_accessible(&child, &mut out);
+    list_keymap_accessible(child, &[], None, &mut out);
 
     // GNU `accessible-keymaps` follows the parent (via map_keymap), so the
     // parent's `a` prefix map is listed under [?a]. GNU prints ([] [97]).

@@ -928,11 +928,6 @@ pub(crate) fn builtin_gpm_mouse_stop(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_help_describe_vector(args: Vec<Value>) -> EvalResult {
-    expect_args("help--describe-vector", &args, 7)?;
-    Ok(Value::NIL)
-}
-
 pub(crate) fn builtin_init_image_library(args: Vec<Value>) -> EvalResult {
     expect_args("init-image-library", &args, 1)?;
     let available = args[0]

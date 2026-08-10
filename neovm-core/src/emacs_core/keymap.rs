@@ -2276,6 +2276,44 @@ fn keymap_property_at_position(
     )
 }
 
+/// The two text properties GNU's `get_local_map` (keymap.c) consults, and the
+/// fallback each one carries when the property is absent or names no keymap.
+///
+/// Naming the property with a string instead let the two fallbacks drift apart:
+/// `keymap` has none, `local-map` falls back to the buffer's own keymap, and a
+/// caller that passes the wrong string gets the wrong fallback silently.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum LocalMapProperty {
+    /// `keymap`: consulted ahead of the minor-mode maps, with NO fallback.
+    Keymap,
+    /// `local-map`: consulted in place of the buffer's own keymap, which is its
+    /// fallback.
+    LocalMap,
+}
+
+/// GNU `get_local_map (BUF_PT (b), b, PROP)`: the keymap named by PROP at
+/// BUFFER's OWN point -- not the selected window's -- with PROP's fallback.
+///
+/// `describe-buffer-bindings` reports on a buffer that need not be current or
+/// displayed, so the position-based helpers that resolve through the selected
+/// window cannot answer this.
+pub(crate) fn local_map_property_at_buffer_point(
+    obarray: &Obarray,
+    buffers: &crate::buffer::BufferManager,
+    buffer_object: Value,
+    buffer_point: i64,
+    property: LocalMapProperty,
+    buffer_keymap: Value,
+) -> Result<Value, Flow> {
+    let (prop_name, fallback) = match property {
+        LocalMapProperty::Keymap => ("keymap", Value::NIL),
+        LocalMapProperty::LocalMap => ("local-map", buffer_keymap),
+    };
+    let found =
+        keymap_property_at_position(obarray, buffers, buffer_object, buffer_point, prop_name)?;
+    Ok(maybe_keymap_in_obarray(obarray, &found).unwrap_or(fallback))
+}
+
 fn current_local_map_for_position(
     obarray: &Obarray,
     frames: &crate::window::FrameManager,
@@ -3508,89 +3546,126 @@ fn copy_char_table_for_keymap(ct: &Value, depth: usize) -> Value {
     copied
 }
 
-/// Walk KEYMAP's own bindings and those of its parent chain, mirroring GNU
-/// `map_keymap`: it reports embedded/prefix keymaps as ordinary bindings
-/// (without descending into them) and then FOLLOWS the parent keymap. Bounded
-/// against self-referential parents by walking each map object at most once.
-fn map_keymap_following_parents<F>(keymap: &Value, mut f: F)
-where
-    F: FnMut(Value, Value),
-{
-    let mut map = *keymap;
-    let mut seen_maps: Vec<Value> = Vec::new();
-    while is_list_keymap(&map) {
-        if seen_maps.iter().any(|m| keymap_value_eq(m, &map)) {
-            break;
-        }
-        seen_maps.push(map);
+/// GNU's initial `meta-prefix-char` (ESC), used when no obarray is available to
+/// read the variable from -- a purely structural walk still has to know which
+/// event metizes the one after it.
+const KEY_META_PREFIX_CHAR_DEFAULT: i64 = 27;
 
-        let Some(mut cursor) = keymap_binding_spine(&map) else {
-            break;
+/// Collect all accessible sub-keymaps with their key sequences, mirroring GNU
+/// `Faccessible_keymaps` / `accessible_keymaps_1` (keymap.c).
+///
+/// Breadth-first over a growing queue of `(sequence, map)` pairs: each queued map
+/// is scanned with GNU `map_keymap` semantics (embedded submaps and the parent
+/// chain share the map's own sequence) and every binding that names a keymap is
+/// enqueued. Three GNU rules this walk must not drop:
+///
+/// * A binding is a prefix iff `get_keymap (get_keyelt (cmd, 0), 0, 0)` yields a
+///   keymap, so a SYMBOL whose function cell is a keymap counts. That is what
+///   `define-prefix-command` builds and how the global map stores every one of
+///   its own prefixes -- `C-x` as `Control-X-prefix`, `C-c` as
+///   `mode-specific-command-prefix`, `ESC` as `ESC-prefix`. Testing the raw
+///   binding for keymap-ness instead made the entire global keymap tree
+///   invisible, which is what emptied `describe-bindings`' global section.
+/// * When the sequence so far ends in `meta-prefix-char`, a character key
+///   REPLACES that ESC and gains the meta bit instead of extending the sequence,
+///   so `ESC s` is reported as `[M-s]`. The metized entry keeps its parent's
+///   length, so GNU splices it in directly after the map being scanned rather
+///   than appending it, and successive metized finds land in reverse discovery
+///   order.
+/// * A map already reached by a sequence that is a prefix of the current one is
+///   a cycle and is not re-enqueued; reaching it by an unrelated sequence is a
+///   legitimate second listing.
+///
+/// `prefix` restricts the walk the way GNU's PREFIX argument does -- the walk
+/// STARTS at the map that sequence reaches, rather than enumerating everything
+/// and filtering, because the metization rule makes those two differ: GNU
+/// deliberately does not metize the key after a PREFIX that itself ends in ESC.
+/// An empty `prefix` walks from KEYMAP itself. Yields nothing when PREFIX reaches
+/// no keymap, as GNU returns nil.
+pub fn list_keymap_accessible(
+    keymap: Value,
+    prefix: &[Value],
+    obarray: Option<&Obarray>,
+    out: &mut Vec<Value>,
+) {
+    let meta_prefix_char = obarray
+        .and_then(|o| o.symbol_value("meta-prefix-char"))
+        .and_then(|v| v.as_fixnum())
+        .unwrap_or(KEY_META_PREFIX_CHAR_DEFAULT);
+
+    let start = if prefix.is_empty() {
+        keymap
+    } else {
+        let reached = match obarray {
+            Some(obarray) => lookup_key_in_obarray(obarray, &keymap, prefix, true),
+            None => Value::NIL,
         };
-        while cursor.is_cons() {
-            if is_list_keymap(&cursor) {
-                break; // reached the parent keymap
-            }
-            let entry_car = cursor.cons_car();
-            let entry_cdr = cursor.cons_cdr();
-
-            if super::chartable::is_char_table(&entry_car) {
-                super::chartable::for_each_non_nil_char_table_run(&entry_car, &mut f);
-            }
-            if entry_car.is_cons() {
-                f(entry_car.cons_car(), entry_car.cons_cdr());
-            }
-
-            if is_list_keymap(&entry_cdr) {
-                break; // the parent follows; handled by the outer loop
-            }
-            cursor = entry_cdr;
+        match resolve_keymap(reached, obarray) {
+            Some(map) => map,
+            None => return,
         }
-        map = get_keymap_tail_parent(&map);
-    }
-}
+    };
 
-/// Collect all accessible sub-keymaps with their key prefixes, mirroring GNU
-/// `Faccessible_keymaps` (keymap.c). This is a breadth-first walk over a growing
-/// queue of `(prefix, map)` pairs: for each queued map we scan its bindings
-/// (following parents, per GNU `map_keymap`) and enqueue every prefix sub-map.
-/// A map is enqueued again under a longer/unrelated prefix, but skipped when an
-/// already-queued strict-prefix path reaches the same map (GNU's cycle rule),
-/// which both matches GNU's duplicate listings and terminates on cycles.
-pub fn list_keymap_accessible(keymap: &Value, out: &mut Vec<Value>) {
-    let mut maps: Vec<(Vec<Value>, Value)> = vec![(Vec::new(), *keymap)];
+    let prefixlen = prefix.len();
+    let mut maps: Vec<(Vec<Value>, Value)> = vec![(prefix.to_vec(), start)];
     let mut i = 0;
     while i < maps.len() {
         let thisseq = maps[i].0.clone();
         let thismap = maps[i].1;
+        // GNU's insertion point for a metized find: directly after the map being
+        // scanned, so the new same-length sequence stays in breadth order.
+        let splice_at = i + 1;
         i += 1;
 
-        let mut found: Vec<(Vec<Value>, Value)> = Vec::new();
-        map_keymap_following_parents(&thismap, |event, def| {
-            if is_list_keymap(&def) {
-                let mut newseq = thisseq.clone();
-                newseq.push(event);
-                found.push((newseq, def));
-            }
+        // "Does the current sequence end in the meta-prefix-char?", minus the
+        // last character of PREFIX itself, which GNU refuses to metize.
+        let seq_ends_in_meta_prefix = thisseq.len() > prefixlen
+            && thisseq.last().and_then(|event| event.as_fixnum()) == Some(meta_prefix_char);
+
+        let mut found: Vec<(Vec<Value>, Value, bool)> = Vec::new();
+        list_keymap_for_each_binding_recursive(&thismap, obarray, |key, def| {
+            let Some(submap) = resolve_keymap(get_keyelt(def), obarray) else {
+                return;
+            };
+            let mut newseq = thisseq.clone();
+            let metized = match (seq_ends_in_meta_prefix, key.as_fixnum()) {
+                (true, Some(code)) => {
+                    *newseq
+                        .last_mut()
+                        .expect("non-empty by seq_ends_in_meta_prefix") =
+                        Value::fixnum(code | KEY_CHAR_META);
+                    true
+                }
+                _ => {
+                    newseq.push(key);
+                    false
+                }
+            };
+            found.push((newseq, submap, metized));
         });
 
-        for (newseq, submap) in found {
-            let is_cycle = maps.iter().any(|(prefix, map)| {
-                keymap_value_eq(map, &submap)
-                    && prefix.len() < newseq.len()
-                    && prefix
+        for (newseq, submap, metized) in found {
+            let is_cycle = maps.iter().any(|(seen_seq, seen_map)| {
+                keymap_value_eq(seen_map, &submap)
+                    && seen_seq.len() <= thisseq.len()
+                    && seen_seq
                         .iter()
-                        .zip(newseq.iter())
+                        .zip(thisseq.iter())
                         .all(|(a, b)| a.bits() == b.bits())
             });
-            if !is_cycle {
+            if is_cycle {
+                continue;
+            }
+            if metized {
+                maps.insert(splice_at, (newseq, submap));
+            } else {
                 maps.push((newseq, submap));
             }
         }
     }
 
-    for (prefix, map) in &maps {
-        out.push(Value::cons(Value::vector(prefix.clone()), *map));
+    for (sequence, map) in &maps {
+        out.push(Value::cons(Value::vector(sequence.clone()), *map));
     }
 }
 

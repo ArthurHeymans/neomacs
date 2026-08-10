@@ -5492,7 +5492,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "help--describe-vector",
-        |_ctx, args| builtin_help_describe_vector(args),
+        keymaps::builtin_help_describe_vector,
         7,
         Some(7),
     );

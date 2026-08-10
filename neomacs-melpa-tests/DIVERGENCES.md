@@ -1697,7 +1697,62 @@ run cache, so the change needs a before/after measurement, not just a
 correctness test.
 
 
-## 45. `describe-bindings` omits global bindings and the function-key map
+## 45. `describe-bindings` omits global bindings and the function-key map — FIXED
+
+**Fixed on three independent causes**, each with its own root and its own
+regression test. The reduction below now answers
+`(:lines 2311 :has-global-binding t :has-function-key-map t)`; the residual 82
+lines against GNU's 2393 are entry 56 (raw 8-bit key descriptions), not this one.
+
+1. **`accessible-keymaps` did not follow a prefix bound to a SYMBOL.** GNU
+   `accessible_keymaps_1` resolves every binding with
+   `get_keymap (get_keyelt (cmd, 0), 0, 0)`; we tested the raw binding for
+   keymap-ness instead. The global map stores every one of its own prefixes as a
+   `define-prefix-command` symbol -- `C-x` as `Control-X-prefix`, `C-c` as
+   `mode-specific-command-prefix` -- so the whole global keymap tree was
+   invisible and `Global Bindings:` was filled from the root map alone (22
+   accessible maps against GNU's 135). The walk now goes through
+   `resolve_keymap`, the module's single answer to "does this name a keymap",
+   and also implements GNU's meta-ization rule (`ESC s` is reported as `[M-s]`,
+   spliced in at its parent's length) and GNU's PREFIX handling (start the walk
+   at the map PREFIX reaches rather than enumerating and filtering -- the two
+   differ, because GNU refuses to metize the key after a PREFIX ending in ESC).
+   `map_keymap_following_parents`, a second ad-hoc spine decoder, is gone in
+   favour of `list_keymap_for_each_binding_recursive`.
+2. **Four sections were never emitted, and one was shadowed that GNU never
+   shadows.** `describe-buffer-bindings` now emits GNU's full list in GNU's
+   order: overriding terminal/local map, `keymap` property bindings, minor
+   modes, `local-map` property vs major mode (distinguished, as GNU does),
+   global, `local-function-key-map`, `input-decode-map`. The sections are built
+   as data and emitted in one loop, with a `BindingSectionKind` enum carrying
+   the only axis the ten-argument `help--describe-map-tree` calls differ on:
+   real keymaps accumulate shadow, translation maps neither shadow nor are
+   shadowed. We had been consing `key-translation-map` onto the shadow list,
+   which GNU never does.
+3. **`help--describe-vector` was a no-op stub.** `describe-map` reaches every
+   dense keymap element through it, so every char-table binding was silently
+   dropped -- `self-insert-command` across the printable range, the whole of
+   `key-translation-map`. Ported from GNU `describe_vector` (keymap.c),
+   including the bug#9293 range/shadow rule; GNU's own
+   `help--describe-vector/bug-9293-*` tests now pass byte-for-byte.
+
+A fourth bug surfaced while verifying 3 and is fixed with it: `map-keymap`
+handed Lisp the char-table walk's SHARED range cons. `map-char-table`
+deliberately reuses and mutates one cons (GNU does too), and GNU's
+`map_keymap_char_table_item` copies it for exactly that reason -- "make a copy
+since map_char_table modifies it in place". We planned all pairs before calling
+FUNCTION, so every range key carried the final post-walk `(LAST+1 . MAX_CHAR)`.
+That broke `keymap-canonicalize`, which collects range keys during `map-keymap`
+and calls `define-key` on them afterwards: `(lookup-key (keymap-canonicalize m)
+[?b])` returned nil where GNU returns the binding.
+
+Regression tests: `accessible_keymaps_follows_a_prefix_bound_to_a_symbol_naming_a_keymap`,
+`accessible_keymaps_metizes_a_key_following_meta_prefix_char`,
+`help_describe_vector_prints_ranges_only_where_shadowing_agrees`,
+`map_keymap_copies_char_table_range_keys_before_the_shared_cons_moves`
+(neovm-core/src/emacs_core/builtins/tests.rs). `helm-descbinds` is green.
+
+Was:
 
 `describe-buffer-bindings` builds a much shorter report than GNU's. Two whole
 sections are wrong: user bindings made in the global map are missing from
@@ -2267,5 +2322,32 @@ with no properties anywhere -- GNU applies no fallback either, because
 `update_syntax_table` returns early when `interval_of` finds nothing. The fix
 is about coverage of an EXISTING partition, not about synthesizing intervals
 for propertyless text.
+
+Not yet attributed to a package suite.
+
+
+## 56. `key-description` renders a raw 8-bit character as the replacement char
+
+A character in the raw-byte range (`#x3FFF80`..`#x3FFFFF`, the codes Emacs uses
+for bytes that decode to nothing) comes back from `key-description` as U+FFFD
+instead of as itself.
+
+```elisp
+(list (key-description [4194208])
+      (mapcar #'identity (key-description [4194208])))
+;; GNU     => ("\240" (4194208))
+;; Neomacs => ("<?>" (65533))     ; the literal is U+FFFD REPLACEMENT CHARACTER
+```
+
+Found while closing entry 45: it is the whole of the remaining
+`describe-bindings` difference against GNU (82 lines of 2393). Two rows of the
+global map's `self-insert-command` char-table cover raw-byte ranges, and
+rendering their endpoints as U+FFFD both prints the wrong characters and
+narrows the section's widest key, which shifts `describe-map--align-section`'s
+column for every row under it -- so a one-character encoding bug accounts for
+hundreds of diff lines.
+
+Not a keymap bug: the corruption is in turning the character into a string, so
+anything that prints a raw byte through a key description is affected.
 
 Not yet attributed to a package suite.

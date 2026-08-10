@@ -10325,6 +10325,12 @@ fn vm_documentation_and_help_builtins_use_shared_runtime_state() {
         vm_eval_with_init_str(
             "(progn
                (put 'vm-doc-shared 'variable-documentation '(identity \"doc\"))
+               ;; `describe-buffer-bindings' now really walks the translation
+               ;; maps, and `help--describe-command' names each translated
+               ;; character with `char-to-name' (mule-cmds.el, which this
+               ;; deliberately minimal runtime does not load). Nil means \"no
+               ;; name known\", which is the branch GNU takes for most keys.
+               (fset 'char-to-name (lambda (_char) nil))
                (list
                  (stringp (documentation 'car))
                  (documentation-property 'vm-doc-shared 'variable-documentation)
@@ -10333,10 +10339,14 @@ fn vm_documentation_and_help_builtins_use_shared_runtime_state() {
                  (condition-case err
                      (describe-vector [1] 'display-buffer)
                    (wrong-type-argument (car err)))
-                 (help--describe-vector nil nil nil nil nil nil nil)))",
+                 (condition-case err
+                     (help--describe-vector nil nil nil nil nil nil nil)
+                   (wrong-type-argument (car err)))))",
             crate::test_utils::load_minimal_gnu_help_runtime,
         ),
-        "OK (t \"doc\" t nil wrong-type-argument nil)"
+        // GNU `Fhelp__describe_vector` starts with CHECK_VECTOR_OR_CHAR_TABLE,
+        // so nil signals rather than returning nil (verified against 31.0.90).
+        "OK (t \"doc\" t nil wrong-type-argument wrong-type-argument)"
     );
 }
 

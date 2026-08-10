@@ -129,6 +129,18 @@ pub(crate) fn bool_vector_ref_value(v: &Value, index: usize) -> Option<Value> {
     Some(Value::bool_val(truthy))
 }
 
+/// GNU `XCHAR_TABLE (table)->defalt`: the value characters with no entry of
+/// their own fall back to, or nil for a non-char-table.
+pub(crate) fn char_table_default(table: &Value) -> Value {
+    if !table.is_char_table() {
+        return Value::NIL;
+    }
+    table
+        .as_vector_data()
+        .and_then(|vec| vec.get(CT_DEFAULT).copied())
+        .unwrap_or(Value::NIL)
+}
+
 /// Return the logical sequence length if `v` is a char-table.
 pub(crate) fn char_table_length(v: &Value) -> Option<i64> {
     if v.is_char_table() {
