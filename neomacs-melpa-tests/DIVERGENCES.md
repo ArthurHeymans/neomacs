@@ -1959,7 +1959,41 @@ shape pin is the stronger of the three: it asserts GNU 31.0.90's exact
 so a fix that restores the text by accident cannot pass.
 
 
-## 48. An error message loses a text property that GNU keeps
+## 48. An error message loses a text property that GNU keeps — HALF FIXED
+
+Reduced below the package at last, into TWO independent links. The first is
+fixed; the second is filed as entry 57 and still fails the suite.
+
+**Link 1 (FIXED): `format`'s `%s` printed a symbol instead of using its NAME.**
+GNU `styled_format` (editfns.c) replaces a SYMBOL argument with `SYMBOL_NAME
+(arg)` -- the symbol's actual name STRING object -- before it decides anything
+else, so from that point the argument IS a string and its text properties
+propagate into the result like any string argument's. We printed the symbol
+afresh, which has no property origin.
+
+```elisp
+(let* ((name (propertize "p15zz" 'foo 'bar)) (sym (intern name)))
+  (list (text-properties-at 0 (format "%s" sym))
+        (text-properties-at 0 (format "%S" sym))))
+;; GNU          => ((foo bar) nil)
+;; Neomacs, was => (nil nil)
+```
+
+`%S` carries nothing in GNU either -- it prints a fresh representation -- so the
+two conversions must differ, and the test pins both. Pinned by
+`format_percent_s_takes_a_symbols_properties_from_its_name_string`
+(neovm-core/src/emacs_core/builtins/strings_test.rs). The whole error chain --
+`format`, `format-message`, `error`, `error-message-string` -- now matches GNU
+for a symbol interned from propertized text.
+
+**Link 2 (OPEN, entry 57): `intern` drops the properties of a MULTIBYTE name.**
+The package's symbol comes from buffer text, which is multibyte, and that is the
+case still broken. See entry 57 for the reduction.
+
+Because link 2 is still open, the suite still reports `:message-properties nil`.
+
+Was:
+
 
 `elisp-slime-nav`'s "Don't know how to find X" error carries `(fontified nil)`
 on the symbol name in GNU, inherited from the buffer text the symbol was read
@@ -2419,3 +2453,38 @@ Not a keymap bug: the corruption is in turning the character into a string, so
 anything that prints a raw byte through a key description is affected.
 
 Not yet attributed to a package suite.
+
+
+## 57. `intern` drops the text properties of a MULTIBYTE name string
+
+GNU `Fintern` stores the string it was handed as the new symbol's name, so
+`symbol-name` gives that string back with its text properties intact. Neomacs
+does this for a unibyte name and loses the properties for a multibyte one.
+
+```elisp
+(list (text-properties-at 0 (symbol-name (intern (propertize (string-to-multibyte "p15-mb-alpha") 'fontified nil))))
+      (text-properties-at 0 (symbol-name (intern (propertize "p15-ub-alpha" 'fontified nil)))))
+;; GNU     => ((fontified nil) (fontified nil))
+;; Neomacs => (nil             (fontified nil))
+```
+
+`make-symbol` keeps them in BOTH cases, which is the clue: our
+`make_uninterned_symbol_with_name_value` stores the exact name VALUE alongside
+the symbol, while `intern` stores only the interned name ATOM
+(`SymbolRegistry::alloc_symbol` receives `name_value: None`) and the unibyte case
+keeps its properties only incidentally. GNU has no such split -- a symbol's name
+is always the string object it was created from.
+
+The proposed fix is to make `intern` pass the given string as the new symbol's
+name value when it CREATES a symbol, exactly as `make-symbol` does, so both
+widths work by construction rather than by accident. It must apply only on
+creation: GNU keeps the existing name when the symbol already exists. Note the
+cost to weigh first -- that roots one more Lisp string per newly interned symbol
+in the registry's GC roots, on the interning path, so it wants a startup and
+byte-compile measurement before it lands.
+
+This is the remaining half of entry 48: an `elisp-slime-nav` error message built
+with `(error "..." SYM)` should carry the `fontified` property the symbol name
+was read from, and does not.
+
+Affects: `elisp-slime-nav` (1).

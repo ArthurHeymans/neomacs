@@ -1649,7 +1649,14 @@ fn format_string_spec_tracked(
 pub(crate) struct FormatPropSpan {
     pub result_char_start: usize,
     pub result_char_end: usize,
-    pub arg_idx: usize,
+    /// The STRING the copied properties come from -- not the argument index.
+    ///
+    /// GNU `styled_format` rewrites `spec_arguments[spec_index]` in place when it
+    /// normalizes an argument (a symbol becomes `SYMBOL_NAME (arg)`), so the
+    /// later interval copy reads the NORMALIZED value. Keeping an index here
+    /// instead re-read the original argument, which made a symbol's propertized
+    /// name impossible to express.
+    pub source: Value,
     pub arg_char_len: usize,
 }
 
@@ -1935,7 +1942,14 @@ fn do_format(
                 // is non-NULL. The string's content is measured with its own
                 // multibyteness (a unibyte raw byte is one column, a multibyte
                 // eight-bit char four), matching GNU's width.
-                let arg = args[this_arg_idx];
+                // GNU `styled_format`: a SYMBOL argument becomes its NAME
+                // STRING before anything else looks at it, so from here it is a
+                // string argument like any other and its own text properties
+                // propagate. A symbol interned from propertized text keeps those
+                // properties on its name, which is how an error message built
+                // with `(error "..." SYM)' carries them.
+                let arg = super::misc_pure::symbol_name_string_for_format(args[this_arg_idx])
+                    .unwrap_or(args[this_arg_idx]);
                 let arg_is_string = arg.is_string();
                 let (s, src_multibyte) = if let Some(ls) = arg.as_lisp_string() {
                     (ls.as_bytes().to_vec(), ls.is_multibyte())
@@ -1964,7 +1978,7 @@ fn do_format(
                         result_char_end: result_char_pos
                             + field_char_start_in_formatted
                             + span_char_len,
-                        arg_idx: this_arg_idx,
+                        source: arg,
                         arg_char_len,
                     });
                 }
@@ -2076,7 +2090,7 @@ fn build_format_result(
     // string — the bug that left Doom's dashboard menu items
     // uncolored (their button faces came from a `(buffer-string)`
     // that got flattened by `(format "%-37s" ...)`).
-    apply_format_prop_spans(result, args, spans);
+    apply_format_prop_spans(result, spans);
 
     result
 }
@@ -2214,7 +2228,7 @@ fn translate_format_source_position(pos: usize, spans: &[FormatSourceSpan]) -> O
     spans.last().map(|span| span.result_char_end)
 }
 
-fn apply_format_prop_spans(result: Value, args: &[Value], spans: &[FormatPropSpan]) {
+fn apply_format_prop_spans(result: Value, spans: &[FormatPropSpan]) {
     if spans.is_empty() {
         return;
     }
@@ -2225,11 +2239,8 @@ fn apply_format_prop_spans(result: Value, args: &[Value], spans: &[FormatPropSpa
         .unwrap_or_default();
     let mut touched = false;
     for span in spans {
-        let Some(arg) = args.get(span.arg_idx) else {
-            continue;
-        };
         let Some(src_table) =
-            crate::emacs_core::value::get_string_text_properties_table_for_value(*arg)
+            crate::emacs_core::value::get_string_text_properties_table_for_value(span.source)
         else {
             continue;
         };

@@ -12,6 +12,42 @@ fn put_string_property(
     table.put_property_in_char_range(CharRange::from_usize(start, end), name, value)
 }
 
+/// GNU `styled_format` (editfns.c) replaces a SYMBOL argument with
+/// `SYMBOL_NAME (arg)` -- the symbol's actual name STRING object -- before it
+/// decides anything else, so from that point the argument IS a string and its
+/// text properties propagate into the result like any string argument's.
+///
+/// A symbol interned from propertized text keeps those properties on its name
+/// (GNU `Fintern` stores the string it was given), which is how an error message
+/// built with `(error "..." SYM)` carries the `fontified` property the symbol was
+/// read from -- the elisp-slime-nav divergence. Printing the symbol afresh
+/// instead loses them.
+#[test]
+fn format_percent_s_takes_a_symbols_properties_from_its_name_string() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let rendered = eval
+        .eval_str(
+            r#"(prin1-to-string
+                 (let* ((name (propertize "p15-fmt-symbol" 'fontified nil))
+                        (sym (intern name)))
+                   (list (text-properties-at 0 (format "%s" sym))
+                         ;; `%S' prints a fresh representation in GNU too, so it
+                         ;; carries nothing -- the two conversions must differ.
+                         (text-properties-at 0 (format "%S" sym))
+                         ;; The offset case the package hits: the symbol lands in
+                         ;; the middle of a longer message.
+                         (text-properties-at 6 (format "find: %s" sym)))))"#,
+        )
+        .unwrap();
+    // One property only: with several, GNU's own plist ORDER differs between
+    // these two calls, so ordering is not a contract worth pinning.
+    assert_eq!(
+        rendered.as_str_owned().as_deref(),
+        Some("((fontified nil) nil (fontified nil))"),
+    );
+}
+
 #[test]
 fn substring_preserves_raw_unibyte_storage_semantics() {
     crate::test_utils::init_test_tracing();

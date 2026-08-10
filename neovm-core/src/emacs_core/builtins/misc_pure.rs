@@ -509,6 +509,19 @@ pub(crate) fn builtin_symbol_name_1(eval: &mut super::eval::Context, symbol: Val
     builtin_symbol_name_value(symbol, eval.symbols_with_pos_enabled)
 }
 
+/// GNU `SYMBOL_NAME (arg)`: a symbol's name as the STRING OBJECT it was interned
+/// from, carrying that string's text properties. `None` for a non-symbol.
+///
+/// `format`'s `%s` needs exactly this, and needs it to be the same object
+/// `symbol-name` returns -- printing the name afresh would drop the properties a
+/// symbol interned from buffer text carries.
+pub(crate) fn symbol_name_string_for_format(value: Value) -> Option<Value> {
+    // Plain symbols only: a symbol-with-position keeps `format`'s existing
+    // printed representation, as it does in GNU when symbols-with-pos are not
+    // enabled.
+    builtin_symbol_name_value(value, false).ok()
+}
+
 fn builtin_symbol_name_value(symbol: Value, symbols_with_pos_enabled: bool) -> EvalResult {
     match super::symbols::symbol_id_checked(&symbol, symbols_with_pos_enabled) {
         Some(id) => Ok(
