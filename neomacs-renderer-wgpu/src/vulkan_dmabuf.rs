@@ -593,6 +593,7 @@ mod hal_import {
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             },
+            wgpu::TextureUses::UNINITIALIZED,
         )
     }
 

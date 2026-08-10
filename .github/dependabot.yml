@@ -8,3 +8,8 @@ updates:
       cranelift:
         patterns:
           - "cranelift-*"
+      wgpu:
+        patterns:
+          - "wgpu"
+          - "wgpu-*"
+          - "naga"
