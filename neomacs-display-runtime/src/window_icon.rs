@@ -155,7 +155,7 @@ mod tests {
 
         assert!(
             dark_pixel_count(&icon, 125..200, 65..140) > 350,
-            "the blue lobe must retain its vector lambda mark"
+            "the purple lobe must retain its vector lambda mark"
         );
         assert!(
             dark_pixel_count(&icon, 45..130, 130..200) > 350,

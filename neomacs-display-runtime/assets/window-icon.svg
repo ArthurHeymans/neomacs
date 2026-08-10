@@ -1,17 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400" role="img" aria-labelledby="title desc">
   <title id="title">NEO Emacs taijitu window icon</title>
-  <desc id="desc">Blue and orange taijitu mark with two centrosymmetric lambda symbols.</desc>
+  <desc id="desc">Purple and orange taijitu mark with two centrosymmetric lambda symbols.</desc>
 
   <defs>
+    <linearGradient
+      id="emacsPurple"
+      x1="20"
+      y1="40"
+      x2="20"
+      y2="0"
+      gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#411f5d"/>
+      <stop offset="0.35" stop-color="#5b2a85"/>
+      <stop offset="0.7" stop-color="#7e55b3"/>
+      <stop offset="1" stop-color="#8381c5"/>
+    </linearGradient>
     <path
       id="lambdaMark"
       d="M10.9 7.6 C13.3 10.3 12.2 13.1 10 16.3 H11.6 C12.5 15 13.2 13.6 13.8 12.1 C14.4 13.6 15 15 15.6 16.3 H16.8 C15.7 12.6 14.3 9.4 12.8 7.6 Z"
       fill="#0d0d12"
-      transform="translate(6.6 -2) rotate(270 13.4 12) translate(13.4 12) scale(1.35) translate(-13.4 -12)"/>
+      transform="translate(4.1 -2) rotate(270 13.4 12) translate(13.4 12) scale(1.35) translate(-13.4 -12)"/>
   </defs>
 
   <g transform="scale(10) rotate(45 20 20)">
-    <circle cx="20" cy="20" r="20" fill="#16aee8"/>
+    <circle cx="20" cy="20" r="20" fill="url(#emacsPurple)"/>
     <path
       d="M20 0 a20 20 0 0 1 0 40 a10 10 0 0 1 0 -20 a10 10 0 0 0 0 -20 Z"
       fill="#ff9900"/>
