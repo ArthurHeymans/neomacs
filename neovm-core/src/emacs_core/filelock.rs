@@ -30,29 +30,30 @@ fn file_lock_error(context: &str, filename: &LispString, err: io::Error) -> Flow
     )
 }
 
-fn current_user_name() -> String {
-    std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "unknown".to_string())
+/// GNU `lock_file_1` takes the user from `Fuser_login_name (Qnil)` — the
+/// Lisp value, not the OS environment — substituting "" for a non-string.
+fn lock_user_name(eval: &super::eval::Context) -> String {
+    eval.visible_variable_value_or_nil("user-login-name")
+        .as_utf8_str()
+        .unwrap_or("")
+        .to_string()
 }
 
-fn current_host_name() -> String {
-    hostname::get()
-        .ok()
-        .and_then(|h| h.into_string().ok())
-        .filter(|s| !s.is_empty())
-        .or_else(|| std::env::var("HOSTNAME").ok())
-        .or_else(|| std::env::var("COMPUTERNAME").ok())
-        .unwrap_or_else(|| "unknown-host".to_string())
+/// GNU `lock_file_1` and `current_lock_owner` take the host from
+/// `Fsystem_name ()` — the Lisp variable, which a sandbox or
+/// --no-build-details can rebind — mapping '@' to '-' and substituting ""
+/// for a non-string.  Reading the OS hostname here instead makes a
+/// same-(system-name) lock look like a foreign host whose staleness can
+/// never be verified.
+fn lock_host_name(eval: &super::eval::Context) -> String {
+    eval.visible_variable_value_or_nil("system-name")
+        .as_utf8_str()
+        .unwrap_or("")
+        .replace('@', "-")
 }
 
-fn current_lock_info_string() -> String {
-    let prefix = format!(
-        "{}@{}.{}",
-        current_user_name(),
-        current_host_name(),
-        std::process::id()
-    );
+fn current_lock_info_string(user: &str, host: &str) -> String {
+    let prefix = format!("{}@{}.{}", user, host, std::process::id());
     let boot_time = system_boot_time_sec();
     if boot_time == 0 {
         prefix
@@ -175,7 +176,9 @@ fn read_lock_contents(lock_path: &Path) -> io::Result<String> {
     }
 }
 
-fn current_lock_owner(lock_path: &Path) -> Result<LockOwner, io::Error> {
+/// HOST is the Lisp `(system-name)` with '@' mapped to '-', exactly as
+/// lock files are written; staleness is decidable only for locks on it.
+fn current_lock_owner(lock_path: &Path, host: &str) -> Result<LockOwner, io::Error> {
     match fs::symlink_metadata(lock_path) {
         Ok(_) => {}
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(LockOwner::None),
@@ -209,7 +212,7 @@ fn current_lock_owner(lock_path: &Path) -> Result<LockOwner, io::Error> {
         host: info.host.clone(),
         pid: info.pid,
     };
-    if info.host != current_host_name() {
+    if info.host != host {
         return Ok(LockOwner::Other(clasher));
     }
     if info.pid == std::process::id() {
@@ -378,12 +381,12 @@ enum LockAttempt {
 /// GNU `lock_file` deliberately ignores the errno returned by `lock_if_free`:
 /// inability to publish an advisory lock must not replace the file operation's
 /// own result.
-fn lock_if_free(lock_path: &Path, contents: &str) -> LockAttempt {
+fn lock_if_free(lock_path: &Path, contents: &str, host: &str) -> LockAttempt {
     loop {
         match create_lock_file(lock_path, contents, false) {
             Ok(()) => return LockAttempt::Acquired,
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                match current_lock_owner(lock_path) {
+                match current_lock_owner(lock_path, host) {
                     Ok(LockOwner::None) => continue,
                     Ok(LockOwner::Current) => return LockAttempt::Acquired,
                     Ok(LockOwner::Other(clasher)) => return LockAttempt::OtherOwner(clasher),
@@ -428,8 +431,9 @@ fn lock_file_resolved(
         );
     }
 
-    let lock_info = current_lock_info_string();
-    match lock_if_free(&lock_path, &lock_info) {
+    let host = lock_host_name(eval);
+    let lock_info = current_lock_info_string(&lock_user_name(eval), &host);
+    match lock_if_free(&lock_path, &lock_info, &host) {
         LockAttempt::Acquired | LockAttempt::Unavailable => Ok(Value::NIL),
         LockAttempt::OtherOwner(clasher) => {
             // GNU calls ask-user-about-lock with calln: any signal it raises
@@ -460,7 +464,7 @@ fn unlock_file_resolved(
         return Ok(Value::NIL);
     };
 
-    match current_lock_owner(&lock_path)
+    match current_lock_owner(&lock_path, &lock_host_name(eval))
         .map_err(|err| file_lock_error("Unlocking file", filename, err))?
     {
         LockOwner::None | LockOwner::Other(_) => Ok(Value::NIL),
@@ -530,7 +534,7 @@ fn file_locked_p(eval: &mut super::eval::Context, filename: &LispString) -> Resu
         return Ok(Value::NIL);
     };
 
-    match current_lock_owner(&lock_path)
+    match current_lock_owner(&lock_path, &lock_host_name(eval))
         .map_err(|err| file_lock_error("Testing file lock", &filename, err))?
     {
         LockOwner::None => Ok(Value::NIL),

@@ -73,10 +73,22 @@ fn lock_and_unlock_file_dispatch_matching_file_name_handlers_like_gnu() {
 
 #[test]
 fn new_lock_info_contains_gnu_boot_time_suffix_when_available() {
-    let lock_info = current_lock_info_string();
+    let lock_info = current_lock_info_string("me", "testhost");
     let parsed = parse_lock_info(&lock_info).expect("parse current lock info");
+    assert_eq!(parsed.user, "me");
+    assert_eq!(parsed.host, "testhost");
     assert_eq!(parsed.pid, std::process::id());
     assert_eq!(parsed.boot_time, system_boot_time_sec());
+}
+
+/// Read a Lisp string expression from a context, "" when absent.
+#[cfg(unix)]
+fn lisp_string(eval: &mut super::super::eval::Context, expr: &str) -> String {
+    eval.eval_str(expr)
+        .ok()
+        .and_then(|v| v.as_utf8_str())
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// GNU gets the boot time from the utmp BOOT_TIME record (gnulib
@@ -113,11 +125,11 @@ fn windows_process_probe_recognizes_current_process() {
 fn current_lock_owner_recognizes_dangling_symlink_lockfiles() {
     let dir = tempfile::tempdir().expect("tempdir");
     let lock_path = dir.path().join(".#probe");
-    std::os::unix::fs::symlink(current_lock_info_string(), &lock_path)
+    std::os::unix::fs::symlink(current_lock_info_string("me", "testhost"), &lock_path)
         .expect("create lock symlink");
 
     assert!(matches!(
-        current_lock_owner(&lock_path).expect("read lock owner"),
+        current_lock_owner(&lock_path, "testhost").expect("read lock owner"),
         LockOwner::Current
     ));
 }
@@ -130,9 +142,9 @@ fn dead_pid_lock_on_this_host_is_zapped_and_reported_free() {
     // A pid from a crashed session: pid 1 is init (alive, but use an
     // impossible one). Recycle-proof choice: our own pid is alive, so use
     // a pid that cannot exist (> pid_max default of 4194304).
-    let contents = format!("someone@{}.999999999", current_host_name());
-    std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
-    match current_lock_owner(&lock_path).expect("owner check") {
+    let contents = "someone@testhost.999999999";
+    std::os::unix::fs::symlink(contents, &lock_path).expect("symlink lock");
+    match current_lock_owner(&lock_path, "testhost").expect("owner check") {
         LockOwner::None => {}
         LockOwner::Current => panic!("stale lock cannot be ours"),
         LockOwner::Other(clasher) => panic!("stale lock must be zapped, got owner {clasher:?}"),
@@ -150,16 +162,13 @@ fn live_pid_lock_on_this_host_names_the_other_owner() {
     let lock_path = dir.path().join(".#live");
     // pid 1 is always alive; kill(1, 0) fails with EPERM for non-root,
     // which GNU treats as alive.
-    let contents = format!("someone@{}.1", current_host_name());
-    std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
-    match current_lock_owner(&lock_path).expect("owner check") {
+    let contents = "someone@testhost.1";
+    std::os::unix::fs::symlink(contents, &lock_path).expect("symlink lock");
+    match current_lock_owner(&lock_path, "testhost").expect("owner check") {
         LockOwner::Other(clasher) => {
             assert_eq!(clasher.user, "someone");
             assert_eq!(clasher.pid, 1);
-            assert_eq!(
-                clasher.opponent(),
-                format!("someone@{} (pid 1)", current_host_name())
-            );
+            assert_eq!(clasher.opponent(), "someone@testhost (pid 1)");
         }
         _ => panic!("live-pid lock must report the other owner"),
     }
@@ -212,7 +221,8 @@ fn modifying_externally_locked_file_propagates_file_locked_and_leaves_buffer_unt
     // clean so the contested lock governs the NEXT (first) modification.
     eval.eval_str(r#"(progn (insert "hello\n") (set-buffer-modified-p nil))"#)
         .expect("seed visited buffer contents");
-    let contents = format!("someone@{}.{}", current_host_name(), owner.id());
+    let host = lisp_string(&mut eval, "(system-name)");
+    let contents = format!("someone@{}.{}", host, owner.id());
     std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
     eval.eval_str(
         r#"(fset 'ask-user-about-lock
@@ -229,7 +239,7 @@ fn modifying_externally_locked_file_propagates_file_locked_and_leaves_buffer_unt
         format!(
             "ERR (file-locked (\"{}\" \"someone@{} (pid {})\" \"Cannot resolve lock conflict in batch mode\"))",
             visited.display(),
-            current_host_name(),
+            host,
             owner.id(),
         ),
         "GNU propagates the ask-user-about-lock signal and refuses the edit"
@@ -264,16 +274,17 @@ fn ask_user_about_lock_steal_and_proceed_answers_match_gnu() {
     fs::write(&visited, b"hello\n").expect("write visited file");
     let lock_path = dir.path().join(".#note.txt");
     let mut owner = spawn_live_owner();
+
+    // Answer nil: proceed without taking the lock.
+    let mut eval = super::super::eval::Context::new();
+    let host = lisp_string(&mut eval, "(system-name)");
     let contents = format!(
         "someone@{}.{}:{}",
-        current_host_name(),
+        host,
         owner.id(),
         system_boot_time_sec().max(1),
     );
-
-    // Answer nil: proceed without taking the lock.
     std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
-    let mut eval = super::super::eval::Context::new();
     visit_file_in_current_buffer(&mut eval, &visited);
     eval.eval_str(
         r#"(progn
@@ -291,7 +302,7 @@ fn ask_user_about_lock_steal_and_proceed_answers_match_gnu() {
         format!(
             "OK (\"{}\" \"someone@{} (pid {})\")",
             visited.display(),
-            current_host_name(),
+            host,
             owner.id(),
         ),
         "opponent string must be USER@HOST (pid PID) with the boot time stripped"
@@ -306,6 +317,10 @@ fn ask_user_about_lock_steal_and_proceed_answers_match_gnu() {
 
     // Answer t: steal the lock, then edit.
     let mut eval = super::super::eval::Context::new();
+    let our_lock_info = current_lock_info_string(
+        &lisp_string(&mut eval, "(user-login-name)"),
+        &lisp_string(&mut eval, "(system-name)"),
+    );
     visit_file_in_current_buffer(&mut eval, &visited);
     eval.eval_str(r#"(fset 'ask-user-about-lock (lambda (file opponent) t))"#)
         .expect("define stealing ask-user-about-lock");
@@ -315,7 +330,7 @@ fn ask_user_about_lock_steal_and_proceed_answers_match_gnu() {
         fs::read_link(&lock_path)
             .expect("stolen lock")
             .to_string_lossy(),
-        current_lock_info_string(),
+        our_lock_info,
         "answer t forces the lock over to us"
     );
 
@@ -364,13 +379,57 @@ fn empty_lock_file_is_zapped_and_reported_free() {
     let dir = tempfile::tempdir().expect("tempdir");
     let lock_path = dir.path().join(".#empty");
     fs::write(&lock_path, b"").expect("write empty lock");
-    match current_lock_owner(&lock_path).expect("owner check") {
+    match current_lock_owner(&lock_path, "testhost").expect("owner check") {
         LockOwner::None => {}
         _ => panic!("empty lock file must be zapped and reported free"),
     }
     assert!(
         fs::symlink_metadata(&lock_path).is_err(),
         "GNU unlinks the empty lock file"
+    );
+}
+
+/// GNU lock_file_1 and current_lock_owner take the host from Lisp
+/// `(system-name)` and the user from `(user-login-name)`, not from the OS:
+/// a rebound system-name (the oracle sandbox, --no-build-details) must make
+/// a matching-host lock with a dead pid read as STALE, not as another host's
+/// lock that can never be verified.
+#[cfg(unix)]
+#[test]
+fn lock_host_comes_from_lisp_system_name_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+    let lock_path = dir.path().join(".#note.txt");
+    // Dead pid (over default pid_max) on the FAKED host.
+    std::os::unix::fs::symlink("someone@faked-host.999999999", &lock_path).expect("symlink lock");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.eval_str(r#"(setq system-name "faked-host")"#)
+        .expect("rebind system-name");
+    let locked_p = eval.eval_str(&format!("(file-locked-p \"{}\")", visited.display()));
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&locked_p),
+        "OK nil",
+        "a dead-pid lock on the (system-name) host is stale, like GNU"
+    );
+    assert!(
+        fs::symlink_metadata(&lock_path).is_err(),
+        "the stale lock must be zapped"
+    );
+
+    // And the lock we CREATE must carry the Lisp system-name.
+    visit_file_in_current_buffer(&mut eval, &visited);
+    eval.eval_str(r#"(insert "EDIT")"#)
+        .expect("edit locks the file");
+    let contents = fs::read_link(&lock_path)
+        .expect("our lock")
+        .to_string_lossy()
+        .into_owned();
+    assert!(
+        contents.contains("@faked-host."),
+        "created lock must use (system-name), got {contents}"
     );
 }
 
@@ -384,10 +443,11 @@ fn file_locked_p_names_only_the_user_for_another_owner() {
     fs::write(&visited, b"hello\n").expect("write visited file");
     let lock_path = dir.path().join(".#note.txt");
     let mut owner = spawn_live_owner();
-    let contents = format!("someone@{}.{}", current_host_name(), owner.id());
-    std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
 
     let mut eval = super::super::eval::Context::new();
+    let host = lisp_string(&mut eval, "(system-name)");
+    let contents = format!("someone@{}.{}", host, owner.id());
+    std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
     let locked_p = eval.eval_str(&format!("(file-locked-p \"{}\")", visited.display()));
     assert_eq!(
         crate::emacs_core::format_eval_result(&locked_p),
@@ -404,12 +464,12 @@ fn stale_boot_time_zaps_even_a_live_pid() {
     let dir = tempfile::tempdir().expect("tempdir");
     let lock_path = dir.path().join(".#reboot");
     // pid 1 alive, but a boot time of 12 (1970) cannot match this boot.
-    let contents = format!("someone@{}.1:12", current_host_name());
-    std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
+    let contents = "someone@testhost.1:12";
+    std::os::unix::fs::symlink(contents, &lock_path).expect("symlink lock");
     if system_boot_time_sec() == 0 {
         return; // GNU also omits the comparison when boot time is unavailable.
     }
-    match current_lock_owner(&lock_path).expect("owner check") {
+    match current_lock_owner(&lock_path, "testhost").expect("owner check") {
         LockOwner::None => {}
         _ => panic!("previous-boot lock must be stale"),
     }
