@@ -5209,6 +5209,59 @@ fn layout_frame_rust_line_number_cursor_tracks_first_text_column_after_c_n() {
 }
 
 #[test]
+fn line_number_phys_cursor_origin_matches_its_frame_grid_slot() {
+    let (eval, engine, frame_id) = backend_layout_with_buffer_and_window_setup(
+        BufferTextBackendKind::GapBuffer,
+        "layout-line-number-phys-cursor-origin",
+        "eabcdefghijk\n",
+        360,
+        140,
+        |buffer, _buf_id, _text| {
+            buffer.set_buffer_local("display-line-numbers", Value::T);
+            // Reproduce self-insert at BOB: point is immediately after the
+            // inserted `e`, over the original first buffer glyph.
+            buffer.goto_emacs_byte_pos(EmacsBytePos::new(1));
+        },
+        |window| {
+            if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+                *window_start = LispCharPos1::ONE;
+            }
+        },
+    );
+    let live_cursor = selected_window_layout_trace(&eval, &engine, frame_id)
+        .phys_cursor
+        .expect("selected live cursor");
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let cursor = state.phys_cursor.as_ref().expect("selected phys cursor");
+    let window = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == cursor.window_id)
+        .expect("cursor window matrix");
+    let materialized = state.materialize();
+    let slot = materialized
+        .slot_glyph(cursor.slot_id)
+        .expect("cursor frame-grid slot");
+    let (slot_x, _, _, _) = slot.cell_rect().expect("cursor glyph cell");
+
+    assert_eq!(
+        cursor.x,
+        slot_x,
+        "frame-absolute PhysCursor.x must already match its resolved grid slot; TTY consumes \
+         PhysCursor directly and cannot rely on the GUI materializer to repair it: {cursor:?}, \
+         window bounds={:?}, text bounds={:?}, matrix cols={} frame char width={}px, live={:?}",
+        window.pixel_bounds,
+        window.text_pixel_bounds,
+        window.matrix.ncols,
+        state.char_width,
+        live_cursor,
+    );
+}
+
+#[test]
 fn point_max_after_trailing_newline_stays_right_of_line_number_gutter() {
     let (eval, engine, frame_id) = backend_layout_with_buffer_and_window_setup(
         BufferTextBackendKind::GapBuffer,
@@ -6443,6 +6496,70 @@ fn assert_echo_message_renders_in_minibuffer_window(use_gui_metrics: bool) {
     assert!(
         !root_text.contains(echo),
         "echo text must not leak into the root window matrix"
+    );
+}
+
+#[test]
+fn minibuffer_echo_suppresses_line_numbers_enabled_in_its_buffer() {
+    let mut eval = Context::new();
+    let root_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    eval.buffer_manager_mut()
+        .get_mut(root_id)
+        .expect("root buffer")
+        .set_buffer_local("display-line-numbers", Value::T);
+    eval.ensure_echo_area_buffers();
+    let echo_buffer_id = eval
+        .buffer_manager()
+        .find_buffer_by_name(" *Echo Area 0*")
+        .expect("echo area buffer");
+    eval.buffer_manager_mut()
+        .get_mut(echo_buffer_id)
+        .expect("echo area buffer")
+        .set_buffer_local("display-line-numbers", Value::T);
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-minibuffer-line-number-gate",
+        640,
+        160,
+        root_id,
+    );
+    let echo = "Echo has no gutter";
+    eval.set_current_message(Some(LispString::from_utf8(echo)));
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let minibuffer_window_id = state
+        .window_infos
+        .iter()
+        .find(|info| info.is_minibuffer)
+        .expect("minibuffer window info")
+        .window_id;
+    let minibuffer_entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == minibuffer_window_id)
+        .expect("minibuffer matrix");
+    let echo_row = minibuffer_entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text && !row.mode_line)
+        .expect("echo row");
+    let rendered = glyphs_logical_text(&echo_row.glyphs[1]);
+
+    assert_eq!(
+        rendered.trim_end(),
+        echo,
+        "GNU should_produce_line_number rejects minibuffer windows even when their displayed \
+         buffer enables display-line-numbers"
     );
 }
 

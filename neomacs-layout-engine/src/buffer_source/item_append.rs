@@ -437,15 +437,19 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let item = append_item.into_item();
         let mut render_policy = source_text.append_render_policy();
         let mut face_ids = self.face_attempt.clone();
-        SingleDisplayItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
-            .render_with_policy(
-                state,
-                &mut face_ids,
-                item,
-                position,
-                kind,
-                &mut render_policy,
-            )
+        SingleDisplayItemAppendContext::for_source_walk(
+            self.active_face.resolved_face(),
+            face_id,
+            frame,
+        )
+        .render_with_policy(
+            state,
+            &mut face_ids,
+            item,
+            position,
+            kind,
+            &mut render_policy,
+        )
     }
 
     pub(crate) fn append_source_display_item_to_text_row(
@@ -461,15 +465,19 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let item_face = self.source_item_face(&item);
         let item = item_face.bind_item(item);
         let mut face_ids = self.face_attempt.clone();
-        SingleDisplayItemAppendContext::new(item_face.resolved_face(), item_face.face_id(), frame)
-            .render_with_policy(
-                state,
-                &mut face_ids,
-                item,
-                position,
-                fallback_kind,
-                render_policy,
-            )
+        SingleDisplayItemAppendContext::for_source_walk(
+            item_face.resolved_face(),
+            item_face.face_id(),
+            frame,
+        )
+        .render_with_policy(
+            state,
+            &mut face_ids,
+            item,
+            position,
+            fallback_kind,
+            render_policy,
+        )
     }
 
     /// Render every item a `DisplayItemSource` yields into the current text
@@ -498,18 +506,21 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         let face_id = self.active_face.face_id();
         let mut face_ids = self.face_attempt.clone();
         face_ids.reserve_after(face_id);
-        let outcome =
-            SingleDisplayItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
-                .render_source_with_policy(
-                state,
-                &mut face_ids,
-                source,
-                source_state,
-                position,
-                fallback_kind,
-                render_policy,
-                face_id,
-            )?;
+        let outcome = SingleDisplayItemAppendContext::for_source_walk(
+            self.active_face.resolved_face(),
+            face_id,
+            frame,
+        )
+        .render_source_with_policy(
+            state,
+            &mut face_ids,
+            source,
+            source_state,
+            position,
+            fallback_kind,
+            render_policy,
+            face_id,
+        )?;
         Some(outcome.into_append_progress(position))
     }
 
@@ -523,13 +534,17 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     ) -> Option<f32> {
         let frame = self.active_face_context(geometry).active_face_frame();
         let item_face = self.source_item_face(item);
-        SingleDisplayItemAppendContext::new(item_face.resolved_face(), item_face.face_id(), frame)
-            .measure_width_naturally(
-                state,
-                item_face.bind_item(item.clone()),
-                position,
-                fallback_kind,
-            )
+        SingleDisplayItemAppendContext::for_source_walk(
+            item_face.resolved_face(),
+            item_face.face_id(),
+            frame,
+        )
+        .measure_width_naturally(
+            state,
+            item_face.bind_item(item.clone()),
+            position,
+            fallback_kind,
+        )
     }
 
     /// Natural measurement returning the END position (x AND col) the append
@@ -545,13 +560,17 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
     ) -> Option<DisplayRowPosition> {
         let frame = self.active_face_context(geometry).active_face_frame();
         let item_face = self.source_item_face(item);
-        SingleDisplayItemAppendContext::new(item_face.resolved_face(), item_face.face_id(), frame)
-            .measure_advance_naturally(
-                state,
-                item_face.bind_item(item.clone()),
-                position,
-                fallback_kind,
-            )
+        SingleDisplayItemAppendContext::for_source_walk(
+            item_face.resolved_face(),
+            item_face.face_id(),
+            frame,
+        )
+        .measure_advance_naturally(
+            state,
+            item_face.bind_item(item.clone()),
+            position,
+            fallback_kind,
+        )
     }
 
     fn append_source_char_plan_to_text_row(

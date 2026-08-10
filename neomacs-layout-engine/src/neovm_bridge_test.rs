@@ -90,6 +90,45 @@ fn test_collect_layout_params_basic() {
 }
 
 #[test]
+fn collect_layout_params_suppresses_line_numbers_for_minibuffer_windows() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*line-number-window-kind*");
+    evaluator
+        .buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .set_buffer_local("display-line-numbers", Value::T);
+    let frame_id =
+        evaluator
+            .frame_manager_mut()
+            .create_frame("line-number-window-kind", 800, 600, buf_id);
+
+    let (_, windows) =
+        collect_layout_params(&evaluator, frame_id, None).expect("collect layout params");
+    let main = windows
+        .iter()
+        .find(|params| !params.is_minibuffer())
+        .expect("main window");
+    let minibuffer = windows
+        .iter()
+        .find(|params| params.is_minibuffer())
+        .expect("minibuffer window");
+
+    assert_eq!(
+        main.display_line_numbers,
+        DisplayLineNumbersMode::Absolute,
+        "the source buffer requests absolute line numbers"
+    );
+    assert_eq!(
+        minibuffer.display_line_numbers,
+        DisplayLineNumbersMode::Off,
+        "GNU maybe_produce_line_number rejects MINI_WINDOW_P before producing any gutter glyphs"
+    );
+}
+
+#[test]
 fn collect_layout_params_forwards_window_vscroll() {
     let mut evaluator = neovm_core::emacs_core::Context::new();
     let buf_id = evaluator.buffer_manager_mut().create_buffer("*vscroll*");

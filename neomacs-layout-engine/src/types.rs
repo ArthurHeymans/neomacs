@@ -70,6 +70,18 @@ impl DisplayLineNumbersMode {
         !matches!(self, Self::Off)
     }
 
+    /// Apply GNU's window-kind gate before line-number geometry enters layout.
+    ///
+    /// `maybe_produce_line_number` rejects minibuffer windows outright.  Keep
+    /// that invariant in the typed snapshot so downstream row planning cannot
+    /// reserve or paint a line-number gutter for a minibuffer.
+    pub const fn for_window_kind(self, kind: WindowKind) -> Self {
+        match kind {
+            WindowKind::Main => self,
+            WindowKind::Minibuffer => Self::Off,
+        }
+    }
+
     /// GNU `xdisp.c` point-motion invalidation expressed as layout data.
     pub const fn point_motion_body_dependency(self) -> PointMotionBodyDependency {
         match self {

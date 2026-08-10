@@ -102,7 +102,7 @@ where
         let char_w = params.char_width;
         let char_h = params.char_height;
         let window_metrics = DisplayRowFallbackMetrics::from_window_defaults(params);
-        let local_display_policy = BufferWindowLocalDisplayPolicy::from_buffer(buffer);
+        let local_display_policy = BufferWindowLocalDisplayPolicy::from_window(buffer, params);
 
         let default_face = state.with_face_services(|face_resolver, font_metrics| {
             BufferSourceDefaultFacePlan::new(

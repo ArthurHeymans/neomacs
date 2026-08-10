@@ -4,8 +4,7 @@ use crate::display_row::walk_state::LineNumberRenderState;
 use crate::display_row::width::DisplayRowCharWidthPolicy;
 use crate::neovm_bridge::LayoutVar;
 use crate::neovm_bridge::{
-    LayoutBufferView, RustBufferAccess, buffer_display_line_numbers_mode, buffer_local_bool,
-    buffer_local_int, buffer_local_value,
+    LayoutBufferView, RustBufferAccess, buffer_local_bool, buffer_local_int, buffer_local_value,
 };
 #[cfg(test)]
 use crate::types::LineWrapMode;
@@ -314,9 +313,16 @@ impl BufferWindowGeometryRequest {
 }
 
 impl BufferWindowLocalDisplayPolicy {
-    pub(crate) fn from_buffer(buffer: &impl LayoutBufferView) -> Self {
+    /// Build buffer-local display policy under the window snapshot's semantic
+    /// gates.
+    ///
+    /// The displayed buffer owns offsets, faces, and prefix variables, but the
+    /// typed window snapshot is the sole authority for whether line numbers
+    /// are allowed at all.  In particular, GNU forbids them in minibuffers even
+    /// when an echo-area buffer has `display-line-numbers` enabled.
+    pub(crate) fn from_window(buffer: &impl LayoutBufferView, params: &WindowParams) -> Self {
         Self {
-            line_number_mode: buffer_display_line_numbers_mode(buffer),
+            line_number_mode: params.display_line_numbers,
             line_number_offset: buffer_local_int(buffer, LayoutVar::DisplayLineNumbersOffset, 0),
             line_number_major_tick: buffer_local_int(
                 buffer,

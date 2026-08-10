@@ -1059,6 +1059,7 @@ pub(crate) fn resolve_fringe_indicator_bitmap_index<B: LayoutBufferView>(
     resolve_index(sym)
 }
 
+#[cfg(test)]
 pub(crate) fn buffer_display_line_numbers_mode<B: LayoutBufferView>(
     buffer: &B,
 ) -> DisplayLineNumbersMode {
@@ -1681,6 +1682,12 @@ pub fn window_params_from_neovm_with_font_sizing(
         .max(0.0);
     let text_bounds = Rect::new(text_x, bounds.y, text_width, bounds.height);
 
+    let window_kind = if is_minibuffer {
+        WindowKind::Minibuffer
+    } else {
+        WindowKind::Main
+    };
+
     // Read buffer-local variables.
     let wrap_mode = effective_wrap_mode(window, buffer, frame, obarray, hscroll);
     let word_wrap = effective_buffer_bool(buffer, obarray, LayoutVar::WordWrap);
@@ -1689,7 +1696,8 @@ pub fn window_params_from_neovm_with_font_sizing(
         buffer,
         obarray,
         LayoutVar::DisplayLineNumbers,
-    ));
+    ))
+    .for_window_kind(window_kind);
     // GNU `try_scrolling` reads `scroll-conservatively` / `scroll-margin`
     // (buffer-local with a global fallback) to choose between minimal scrolling
     // and recentering point when point jumps off-screen (src/xdisp.c).
@@ -1806,11 +1814,7 @@ pub fn window_params_from_neovm_with_font_sizing(
         text_bounds,
         selected: is_selected,
         mode_line_active,
-        kind: if is_minibuffer {
-            WindowKind::Minibuffer
-        } else {
-            WindowKind::Main
-        },
+        kind: window_kind,
         left_col: window.left_col(),
         top_line: window.top_line(),
         // Window::window_start tracks GNU marker positions (1-based).

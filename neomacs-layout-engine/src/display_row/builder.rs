@@ -753,6 +753,35 @@ fn append_start_position(
     }
 }
 
+/// Chooses which coordinate authority starts an append into an existing row.
+///
+/// Structural glyphs can share `TEXT_AREA` with source glyphs without belonging
+/// to the source walk.  GNU line numbers are the canonical example: they advance
+/// the glyph-row tail, while the buffer iterator has already moved its requested
+/// pixel origin past the reserved gutter.  Reconciling those two positions
+/// would count the gutter twice.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DisplayRowAppendStartPolicy {
+    /// Continue after every glyph already materialized in the target area.
+    ReconcileWithRowTail,
+    /// Trust the source walk's position; structural glyphs are already reflected
+    /// in that position's coordinate origin.
+    SourcePosition,
+}
+
+impl DisplayRowAppendStartPolicy {
+    fn resolve(
+        self,
+        requested: DisplayRowPosition,
+        current_tail: DisplayRowPosition,
+    ) -> DisplayRowPosition {
+        match self {
+            Self::ReconcileWithRowTail => append_start_position(requested, current_tail),
+            Self::SourcePosition => requested,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowAppendStatus {
     Complete,
@@ -1145,6 +1174,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn with_glyph_measurer_for_area(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
@@ -1153,10 +1183,30 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         max_x_px: f32,
         area: GlyphArea,
     ) -> Self {
+        Self::with_glyph_measurer_for_area_and_start_policy(
+            layout,
+            row,
+            glyph_measurer,
+            position,
+            max_x_px,
+            area,
+            DisplayRowAppendStartPolicy::ReconcileWithRowTail,
+        )
+    }
+
+    pub(crate) fn with_glyph_measurer_for_area_and_start_policy(
+        layout: &'layout DisplayRowLayout,
+        row: &'row mut GlyphRow,
+        glyph_measurer: &'measurer mut dyn DisplayGlyphMeasurer,
+        position: DisplayRowPosition,
+        max_x_px: f32,
+        area: GlyphArea,
+        start_policy: DisplayRowAppendStartPolicy,
+    ) -> Self {
         let mut writer =
             DisplayRowWriter::with_glyph_measurer_for_area(layout, row, glyph_measurer, area);
         writer.set_empty_row_start(position);
-        let position = append_start_position(position, writer.current_text_position());
+        let position = start_policy.resolve(position, writer.current_text_position());
         Self {
             writer,
             position,
@@ -1203,7 +1253,8 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         }
     }
 
-    pub(crate) fn with_text_run_measurement_and_glyph_measurer_for_area(
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn with_text_run_measurement_and_glyph_measurer_for_area_and_start_policy(
         layout: &'layout DisplayRowLayout,
         row: &'row mut GlyphRow,
         text_run_measurement: DisplayTextRunMeasurement,
@@ -1211,11 +1262,12 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         position: DisplayRowPosition,
         max_x_px: f32,
         area: GlyphArea,
+        start_policy: DisplayRowAppendStartPolicy,
     ) -> Self {
         let mut writer =
             DisplayRowWriter::with_glyph_measurer_for_area(layout, row, glyph_measurer, area);
         writer.set_empty_row_start(position);
-        let position = append_start_position(position, writer.current_text_position());
+        let position = start_policy.resolve(position, writer.current_text_position());
         Self {
             writer,
             position,

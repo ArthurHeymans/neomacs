@@ -4,7 +4,9 @@ use crate::display_row::append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendFrame, DisplayRowAppendKind,
     DisplayRowAppendSurface,
 };
-use crate::display_row::builder::{DisplayRowAppendProgress, DisplayRowPosition};
+use crate::display_row::builder::{
+    DisplayRowAppendProgress, DisplayRowAppendStartPolicy, DisplayRowPosition,
+};
 use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::geometry::DisplayRowGeometryState;
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
@@ -104,6 +106,7 @@ pub(crate) struct SingleDisplayItemAppendContext<'face> {
     base_face: &'face ResolvedFace,
     face_id: FaceId,
     frame: DisplayRowAppendFrame,
+    start_policy: DisplayRowAppendStartPolicy,
 }
 
 impl SyntheticTextSource {
@@ -506,6 +509,23 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
             base_face,
             face_id,
             frame,
+            start_policy: DisplayRowAppendStartPolicy::ReconcileWithRowTail,
+        }
+    }
+
+    /// Buffer-source progress already starts after structural TEXT_AREA
+    /// prefixes such as line numbers.  Keep that coordinate authority instead
+    /// of deriving a second start from the row's materialized glyph tail.
+    pub(crate) fn for_source_walk(
+        base_face: &'face ResolvedFace,
+        face_id: FaceId,
+        frame: DisplayRowAppendFrame,
+    ) -> Self {
+        Self {
+            base_face,
+            face_id,
+            frame,
+            start_policy: DisplayRowAppendStartPolicy::SourcePosition,
         }
     }
 
@@ -534,9 +554,10 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        let row_request =
-            self.frame
-                .source_append_render_request(position, face_id, self.base_face, kind);
+        let row_request = self
+            .frame
+            .source_append_render_request(position, face_id, self.base_face, kind)
+            .with_append_start_policy(self.start_policy);
         let outcome = state.render_display_item_source_into_current_text_row_and_emit(
             face_ids,
             source,
@@ -581,9 +602,10 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         S: DisplayItemSource,
         P: DisplayRowRenderPolicy,
     {
-        let row_request =
-            self.frame
-                .source_append_measure_request(position, face_id, self.base_face, kind);
+        let row_request = self
+            .frame
+            .source_append_measure_request(position, face_id, self.base_face, kind)
+            .with_append_start_policy(self.start_policy);
         state.measure_display_item_source_against_current_text_row(
             face_ids,
             source,

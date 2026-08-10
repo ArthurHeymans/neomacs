@@ -2,7 +2,9 @@ use crate::composition::{
     base_width_cols, continues_cluster, continues_complex_run, last_text_cluster_tail_in_glyphs,
 };
 use crate::display_row::DisplayRowSourceRenderRequest;
-use crate::display_row::builder::{DisplayRowPosition, DisplayTabPolicy};
+use crate::display_row::builder::{
+    DisplayRowAppendStartPolicy, DisplayRowPosition, DisplayTabPolicy,
+};
 use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::geometry::{DisplayRowGeometry, DisplayRowGeometryState, DisplayRowMaxX};
 use crate::display_row::metrics::{DisplayRowFallbackMetrics, DisplayRowMeasuredFaceMetrics};
@@ -657,6 +659,16 @@ impl<'face> DisplayRowAppendSourceRenderRequest<'face> {
         render: impl FnOnce(DisplayRowSourceRenderRequest<'face>) -> R,
     ) -> (R, TextRowOutput) {
         (render(self.row_request), self.output)
+    }
+
+    pub(crate) fn with_append_start_policy(
+        mut self,
+        append_start_policy: DisplayRowAppendStartPolicy,
+    ) -> Self {
+        self.row_request = self
+            .row_request
+            .with_append_start_policy(append_start_policy);
+        self
     }
 }
 

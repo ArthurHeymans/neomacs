@@ -3,8 +3,9 @@ use crate::display_item::{DisplayItemKind, RenderFaceRef};
 use crate::display_origin::DisplayOrigin;
 use crate::display_pixel_calc::PixelCalcContext;
 use crate::display_row::builder::{
-    DisplayRowAppendStatus, DisplayRowItemMeasurement, DisplayRowLayout, DisplayRowPosition,
-    DisplayRowProgressWriter, DisplayTabPolicy, new_display_row_for_role,
+    DisplayRowAppendStartPolicy, DisplayRowAppendStatus, DisplayRowItemMeasurement,
+    DisplayRowLayout, DisplayRowPosition, DisplayRowProgressWriter, DisplayTabPolicy,
+    new_display_row_for_role,
 };
 use crate::display_row::finalizer::DisplayRowLineEndFinalizer;
 use crate::display_row::geometry::DisplayRowGeometryState;
@@ -387,6 +388,7 @@ impl DisplayRowSourceRequestPolicy {
 struct DisplayRowRenderPlan<'a> {
     geometry: DisplayRowGeometry,
     render_bounds: DisplayRowRenderBounds,
+    append_start_policy: DisplayRowAppendStartPolicy,
     line_end_right_edge_x: f32,
     area: GlyphArea,
     base_face_id: FaceId,
@@ -400,6 +402,7 @@ struct DisplayRowRenderPlan<'a> {
 pub(crate) struct DisplayRowSourceRenderRequest<'a> {
     geometry: DisplayRowGeometry,
     render_bounds: DisplayRowRenderBounds,
+    append_start_policy: DisplayRowAppendStartPolicy,
     line_end_right_edge_x: f32,
     area: GlyphArea,
     base_face_id: FaceId,
@@ -421,6 +424,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         Self {
             geometry,
             render_bounds,
+            append_start_policy: DisplayRowAppendStartPolicy::ReconcileWithRowTail,
             line_end_right_edge_x: render_bounds.max_x().to_f32(),
             area: GlyphArea::Text,
             base_face_id,
@@ -449,6 +453,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         Self {
             geometry,
             render_bounds,
+            append_start_policy: DisplayRowAppendStartPolicy::ReconcileWithRowTail,
             line_end_right_edge_x: render_bounds.max_x().to_f32(),
             area: GlyphArea::Text,
             base_face_id,
@@ -507,6 +512,14 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
     pub(crate) fn with_render_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
         self.render_bounds = render_bounds;
         self.line_end_right_edge_x = render_bounds.max_x().to_f32();
+        self
+    }
+
+    pub(crate) fn with_append_start_policy(
+        mut self,
+        append_start_policy: DisplayRowAppendStartPolicy,
+    ) -> Self {
+        self.append_start_policy = append_start_policy;
         self
     }
 
@@ -698,6 +711,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         DisplayRowRenderPlan {
             geometry: self.geometry,
             render_bounds: self.render_bounds,
+            append_start_policy: self.append_start_policy,
             line_end_right_edge_x: self.line_end_right_edge_x,
             area: self.area,
             base_face_id: self.base_face_id,
@@ -889,6 +903,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         let DisplayRowRenderPlan {
             geometry,
             render_bounds,
+            append_start_policy,
             line_end_right_edge_x,
             area,
             base_face_id,
@@ -1031,14 +1046,16 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         crate::glyph_advance::GlyphAdvanceQuantization::PreserveLogicalPixels,
                         self.measurement_mode,
                     );
-                    let mut row_writer = DisplayRowProgressWriter::with_glyph_measurer_for_area(
-                        &row_layout,
-                        &mut *row,
-                        &mut glyph_measurer,
-                        position,
-                        render_bounds.max_x().to_f32(),
-                        area,
-                    );
+                    let mut row_writer =
+                        DisplayRowProgressWriter::with_glyph_measurer_for_area_and_start_policy(
+                            &row_layout,
+                            &mut *row,
+                            &mut glyph_measurer,
+                            position,
+                            render_bounds.max_x().to_f32(),
+                            area,
+                            append_start_policy,
+                        );
                     row_writer.push_item(render_item.row_item_for_write())
                 }
                 DisplayRowItemMeasurement::TextRun(measurement) => {
@@ -1050,7 +1067,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         self.measurement_mode,
                     );
                     let mut row_writer = DisplayRowProgressWriter::
-                        with_text_run_measurement_and_glyph_measurer_for_area(
+                        with_text_run_measurement_and_glyph_measurer_for_area_and_start_policy(
                             &row_layout,
                             &mut *row,
                             measurement,
@@ -1058,6 +1075,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                             position,
                             render_bounds.max_x().to_f32(),
                             area,
+                            append_start_policy,
                         );
                     row_writer.push_item(render_item.row_item_for_write())
                 }
