@@ -324,7 +324,7 @@ rank	package	downloads	status
 323	multi-line	331713	covered
 324	cond-let	331064	covered
 325	tern	328544	covered
-326	org-cliplink	328397	todo
+326	org-cliplink	328397	covered
 327	lsp-java	325659	todo
 328	toml-mode	323991	covered
 329	esh-help	323603	todo

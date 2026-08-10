@@ -2426,6 +2426,13 @@ pub const OPEN_JUNK_FILE_MELPA_PIN: (&str, &str) = ("open-junk-file", "20161210.
 /// commit `9ec0dbd30be7c6310804141ee952ac8c5f753557`.
 pub const ORG_BULLETS_MELPA_PIN: (&str, &str) = ("org-bullets", "20200317.1740");
 
+/// The exact Org Cliplink package selected for practical asynchronous link
+/// insertion, synchronous capture, HTML title normalization, authenticated
+/// retrieval, gzip, curl, customization, and failure parity. MELPA built this
+/// archive from upstream commit
+/// `13e0940b65d22bec34e2de4bc8cba1412a7abfbc`.
+pub const ORG_CLIPLINK_MELPA_PIN: (&str, &str) = ("org-cliplink", "20201126.1020");
+
 /// The exact Org Download package selected for practical heading-based image
 /// storage, local copy and link insertion, Org attachment, screenshot,
 /// content detection, rename/delete, and drag-and-drop parity. MELPA built
