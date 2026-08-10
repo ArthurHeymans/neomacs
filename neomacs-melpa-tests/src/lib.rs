@@ -2987,6 +2987,12 @@ pub const GIT_GUTTER_MELPA_PIN: (&str, &str) = ("git-gutter", "20241212.1415");
 /// `d1346a76122595aeeb7ebb292765841c6cfd417b`.
 pub const GIT_TIMEMACHINE_MELPA_PIN: (&str, &str) = ("git-timemachine", "20250128.940");
 
+/// The exact Gitignore Templates package selected for practical GitHub and
+/// gitignore.io edit, file-creation, provider-cache, transport-failure, and
+/// response-cleanup parity. MELPA built this archive from upstream commit
+/// `d28cd1cec00242b688861648d36d086818b06099`.
+pub const GITIGNORE_TEMPLATES_MELPA_PIN: (&str, &str) = ("gitignore-templates", "20210814.144");
+
 /// The exact Git Modes successor selected to cover the historical standalone
 /// `gitconfig-mode`, `gitignore-mode`, and `gitattributes-mode` Top-500 entries
 /// through practical file detection, rendering, editing, documentation, and

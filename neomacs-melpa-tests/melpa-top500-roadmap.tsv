@@ -341,7 +341,7 @@ rank	package	downloads	status
 340	erlang	309612	covered
 341	elisp-refs	309038	covered
 342	auto-dictionary	308744	covered
-343	gitignore-templates	307177	todo
+343	gitignore-templates	307177	covered
 344	ag	307059	covered
 345	julia-mode	303997	covered
 346	helm-css-scss	303862	todo

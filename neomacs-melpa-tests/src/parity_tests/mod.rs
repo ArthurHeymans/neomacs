@@ -400,6 +400,7 @@ mod git_timemachine;
 mod gitattributes_mode;
 mod gitconfig_mode;
 mod gitignore_mode;
+mod gitignore_templates;
 mod gntp;
 mod gnuplot;
 mod go_mode;
