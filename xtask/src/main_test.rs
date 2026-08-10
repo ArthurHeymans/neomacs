@@ -1223,8 +1223,27 @@ fn inject_no_byte_compile_matches_loaddefs_boot_intent() {
 ;; version-control: never
 ;; End:
 ";
-    let output = inject_no_byte_compile(input);
+    let output = inject_no_byte_compile(input).unwrap();
     assert!(output.contains(";; Local Variables:\n;; no-byte-compile: t\n"));
+}
+
+#[test]
+fn inject_no_byte_compile_preserves_windows_crlf() {
+    let input = concat!(
+        ";;; loaddefs.el --- generated -*- lexical-binding:t -*-\r\n",
+        ";; Local Variables:\r\n",
+        ";; version-control: never\r\n",
+        ";; End:\r\n",
+    );
+    let expected = concat!(
+        ";;; loaddefs.el --- generated -*- lexical-binding:t -*-\r\n",
+        ";; Local Variables:\r\n",
+        ";; no-byte-compile: t\r\n",
+        ";; version-control: never\r\n",
+        ";; End:\r\n",
+    );
+
+    assert_eq!(inject_no_byte_compile(input).unwrap(), expected);
 }
 
 #[test]
@@ -1244,6 +1263,45 @@ fn validate_primary_loaddefs_accepts_gnu_docstring_layout() {
     );
 
     validate_primary_loaddefs_contents(&contents).unwrap();
+}
+
+#[test]
+fn validate_primary_loaddefs_accepts_windows_crlf_gnu_layout() {
+    let contents = concat!(
+        ";;; loaddefs.el --- generated\r\n",
+        "\r\n",
+        "(autoload 'ebrowse-tags-find-declaration \"ebrowse\"\r\n",
+        "\"Find declaration of member at point.\" t)\r\n",
+        "\r\n",
+        "\x0c\r\n",
+        ";;; End of scraped data\r\n",
+        ";; Local Variables:\r\n",
+        ";; End:\r\n",
+    );
+
+    validate_primary_loaddefs_contents(contents).unwrap();
+}
+
+#[test]
+fn validate_primary_loaddefs_rejects_mixed_line_endings() {
+    let contents = concat!(
+        ";;; loaddefs.el --- generated\n",
+        ";; This line uses the other physical line ending.\r\n",
+        "\n",
+        "(autoload 'ebrowse-tags-find-declaration \"ebrowse\"\n",
+        "\"Find declaration of member at point.\" t)\n",
+        "\n",
+        "\x0c\n",
+        ";;; End of scraped data\n",
+        ";; Local Variables:\n",
+        ";; End:\n",
+    );
+
+    let err = validate_primary_loaddefs_contents(contents).unwrap_err();
+    assert!(
+        err.to_string().contains("mixed line endings"),
+        "unexpected error: {err}"
+    );
 }
 
 #[test]

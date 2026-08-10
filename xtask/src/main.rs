@@ -4069,7 +4069,7 @@ fn emit_lisp_source_paths(
 
 fn write_ldefs_boot(loaddefs_el: &Path, ldefs_boot: &Path) -> Result<()> {
     let input = fs::read_to_string(loaddefs_el)?;
-    let output = inject_no_byte_compile(&input);
+    let output = inject_no_byte_compile(&input)?;
     fs::write(ldefs_boot, output)?;
     Ok(())
 }
@@ -4086,6 +4086,74 @@ const GNU_EBROWSE_DECLARATION_AUTOLOAD: &str = concat!(
 const MISPLACED_EBROWSE_DECLARATION_DOCSTRING: &str =
     "Find declaration of member at point.\"\x0c\n;;; End of scraped data";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LoaddefsLineEnding {
+    Lf,
+    CrLf,
+}
+
+impl LoaddefsLineEnding {
+    fn detect(contents: &str) -> Result<Self> {
+        let bytes = contents.as_bytes();
+        let mut detected = None;
+        for newline in bytes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, byte)| (*byte == b'\n').then_some(index))
+        {
+            let current = if newline > 0 && bytes[newline - 1] == b'\r' {
+                Self::CrLf
+            } else {
+                Self::Lf
+            };
+            if let Some(previous) = detected {
+                if previous != current {
+                    return Err(format!(
+                        "generated loaddefs.el has mixed line endings: {previous:?} and {current:?}"
+                    )
+                    .into());
+                }
+            } else {
+                detected = Some(current);
+            }
+        }
+        detected.ok_or_else(|| "generated loaddefs.el contains no line endings".into())
+    }
+
+    fn encode(self, lf_fragment: &str) -> String {
+        match self {
+            Self::Lf => lf_fragment.to_string(),
+            Self::CrLf => lf_fragment.replace('\n', "\r\n"),
+        }
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Lf => "\n",
+            Self::CrLf => "\r\n",
+        }
+    }
+}
+
+struct LoaddefsDocument<'a> {
+    contents: &'a str,
+    line_ending: LoaddefsLineEnding,
+}
+
+impl<'a> LoaddefsDocument<'a> {
+    fn parse(contents: &'a str) -> Result<Self> {
+        Ok(Self {
+            contents,
+            line_ending: LoaddefsLineEnding::detect(contents)?,
+        })
+    }
+
+    fn contains_gnu_fragment(&self, lf_fragment: &str) -> bool {
+        self.contents
+            .contains(&self.line_ending.encode(lf_fragment))
+    }
+}
+
 fn validate_primary_loaddefs(loaddefs_el: &Path) -> Result<()> {
     let contents = fs::read_to_string(loaddefs_el)
         .map_err(|err| format!("read generated {}: {err}", loaddefs_el.display()))?;
@@ -4095,11 +4163,13 @@ fn validate_primary_loaddefs(loaddefs_el: &Path) -> Result<()> {
 }
 
 fn validate_primary_loaddefs_contents(contents: &str) -> Result<()> {
-    if contents.contains(MISPLACED_EBROWSE_DECLARATION_DOCSTRING) {
+    let document = LoaddefsDocument::parse(contents)?;
+
+    if document.contains_gnu_fragment(MISPLACED_EBROWSE_DECLARATION_DOCSTRING) {
         return Err("generated loaddefs.el moved an ebrowse docstring to the final page".into());
     }
 
-    if !contents.contains(LOADDEFS_END_BOUNDARY) {
+    if !document.contains_gnu_fragment(LOADDEFS_END_BOUNDARY) {
         return Err(format!(
             "generated loaddefs.el is missing GNU end boundary {:?}",
             LOADDEFS_END_BOUNDARY
@@ -4107,7 +4177,7 @@ fn validate_primary_loaddefs_contents(contents: &str) -> Result<()> {
         .into());
     }
 
-    if !contents.contains(GNU_EBROWSE_DECLARATION_AUTOLOAD) {
+    if !document.contains_gnu_fragment(GNU_EBROWSE_DECLARATION_AUTOLOAD) {
         return Err(
             "generated loaddefs.el is missing GNU ebrowse autoload docstring layout".into(),
         );
@@ -4116,26 +4186,32 @@ fn validate_primary_loaddefs_contents(contents: &str) -> Result<()> {
     Ok(())
 }
 
-fn inject_no_byte_compile(contents: &str) -> String {
+fn inject_no_byte_compile(contents: &str) -> Result<String> {
+    let line_ending = LoaddefsLineEnding::detect(contents)?;
+    let newline = line_ending.as_str();
     let needle = ";; Local Variables:";
-    if let Some(index) = contents.find(needle) {
+    let output = if let Some(index) = contents.find(needle) {
         let insert_at = index + needle.len();
         let mut output = String::with_capacity(contents.len() + 24);
         output.push_str(&contents[..insert_at]);
-        output.push('\n');
+        output.push_str(newline);
         output.push_str(";; no-byte-compile: t");
         output.push_str(&contents[insert_at..]);
         output
     } else {
         let mut output = contents.to_string();
-        if !output.ends_with('\n') {
-            output.push('\n');
+        if !output.ends_with(newline) {
+            output.push_str(newline);
         }
-        output.push_str(";; Local Variables:\n");
-        output.push_str(";; no-byte-compile: t\n");
-        output.push_str(";; End:\n");
+        output.push_str(";; Local Variables:");
+        output.push_str(newline);
+        output.push_str(";; no-byte-compile: t");
+        output.push_str(newline);
+        output.push_str(";; End:");
+        output.push_str(newline);
         output
-    }
+    };
+    Ok(output)
 }
 
 fn print_usage() {
