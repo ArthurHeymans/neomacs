@@ -348,7 +348,7 @@ rank	package	downloads	status
 347	eshell-z	302638	covered
 348	elfeed	301741	covered
 349	elisp-def	300903	covered
-350	ggtags	300868	todo
+350	ggtags	300868	covered
 351	git-gutter-fringe	299123	todo
 352	imenu-anywhere	299099	todo
 353	git-modes	297208	todo

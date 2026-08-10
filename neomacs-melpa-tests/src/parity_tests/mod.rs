@@ -390,6 +390,7 @@ mod fuzzy;
 mod game_2048;
 mod geiser;
 mod general;
+mod ggtags;
 mod gh;
 mod gh_md;
 mod ghub;

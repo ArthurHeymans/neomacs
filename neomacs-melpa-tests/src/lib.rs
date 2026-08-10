@@ -3004,6 +3004,12 @@ pub const GIT_TIMEMACHINE_MELPA_PIN: (&str, &str) = ("git-timemachine", "2025012
 /// `d28cd1cec00242b688861648d36d086818b06099`.
 pub const GITIGNORE_TEMPLATES_MELPA_PIN: (&str, &str) = ("gitignore-templates", "20210814.144");
 
+/// The exact Ggtags package selected for real GNU Global project lifecycle,
+/// compilation navigation, completion, Xref, incremental-update, and failure
+/// parity. MELPA built this archive from upstream commit
+/// `4e3630c30fb836872b5d8f2ae3e5d5ae003365d8`.
+pub const GGTAGS_MELPA_PIN: (&str, &str) = ("ggtags", "20230602.133");
+
 /// The exact Git Modes successor selected to cover the historical standalone
 /// `gitconfig-mode`, `gitignore-mode`, and `gitattributes-mode` Top-500 entries
 /// through practical file detection, rendering, editing, documentation, and
