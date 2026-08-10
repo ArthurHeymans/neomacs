@@ -1919,6 +1919,12 @@ pub const INDENT_GUIDE_MELPA_PIN: (&str, &str) = ("indent-guide", "20260629.918"
 /// `58ad6d8b645e6211c7c564a4fbebf39a72691c7e`.
 pub const IDO_VERTICAL_MODE_MELPA_PIN: (&str, &str) = ("ido-vertical-mode", "20260420.1855");
 
+/// The exact Impatient Mode package selected for practical public publishing,
+/// real loopback HTTP, long-poll, related-resource, filter, timer, and cleanup
+/// parity. MELPA built this archive from upstream commit
+/// `4bb8009c6c6a6339a8fd7b4dea4a165af3721812`.
+pub const IMPATIENT_MODE_MELPA_PIN: (&str, &str) = ("impatient-mode", "20260426.1323");
+
 /// The exact Leuven Theme package selected for practical light and dark
 /// theme lifecycle, real fontified Org/Elisp/diff rendering, display-gate,
 /// and scaling-customization parity. MELPA built this archive from upstream

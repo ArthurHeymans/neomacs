@@ -440,6 +440,7 @@ mod hydra;
 mod ido_vertical_mode;
 mod iedit;
 mod imenu_list;
+mod impatient_mode;
 mod indent_guide;
 mod inf_ruby;
 mod inflections;
