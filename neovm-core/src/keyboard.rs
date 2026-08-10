@@ -401,7 +401,10 @@ impl KeyEvent {
     /// Format as Emacs key description (e.g., "C-x", "M-f", "RET").
     pub fn to_description(&self) -> String {
         let emacs_event = self.to_emacs_event_value();
+        // A Rust-side label (logs, messages): decode here rather than making
+        // the shared builder lossy for the Lisp-facing callers.
         crate::emacs_core::keyboard::pure::describe_single_key_value(&emacs_event, false)
+            .map(|bytes| crate::emacs_core::emacs_char::to_utf8_lossy(&bytes))
             .unwrap_or_else(|_| format!("{:?}", emacs_event))
     }
 

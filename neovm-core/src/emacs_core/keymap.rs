@@ -3462,13 +3462,17 @@ fn describe_event_sequence(events: &[Value]) -> String {
     events
         .iter()
         .map(|e| {
-            describe_single_key_value(e, false).unwrap_or_else(|_| {
-                if let Some(name) = e.as_symbol_name() {
-                    format!("<{}>", name)
-                } else {
-                    format!("{:?}", e)
-                }
-            })
+            // An error message is Rust text, so decode here, where the loss is
+            // visible and harmless; the Lisp-facing builders keep the bytes.
+            describe_single_key_value(e, false)
+                .map(|bytes| crate::emacs_core::emacs_char::to_utf8_lossy(&bytes))
+                .unwrap_or_else(|_| {
+                    if let Some(name) = e.as_symbol_name() {
+                        format!("<{}>", name)
+                    } else {
+                        format!("{:?}", e)
+                    }
+                })
         })
         .collect::<Vec<_>>()
         .join(" ")

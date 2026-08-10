@@ -5,9 +5,9 @@ use super::*;
 #[test]
 fn describe_int_key_plain_char() {
     crate::test_utils::init_test_tracing();
-    assert_eq!(describe_int_key(65).unwrap(), "A");
-    assert_eq!(describe_int_key(120).unwrap(), "x");
-    assert_eq!(describe_int_key(48).unwrap(), "0");
+    assert_eq!(describe_int_key(65).unwrap(), b"A");
+    assert_eq!(describe_int_key(120).unwrap(), b"x");
+    assert_eq!(describe_int_key(48).unwrap(), b"0");
 }
 
 #[test]
@@ -16,7 +16,7 @@ fn describe_int_key_with_control() {
     // C-a: control bit + 'a' (97)
     let code = KEY_CHAR_CTRL | 97;
     let desc = describe_int_key(code).unwrap();
-    assert_eq!(desc, "C-a");
+    assert_eq!(desc, b"C-a");
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn describe_int_key_with_meta() {
     // M-x: meta bit + 'x' (120)
     let code = KEY_CHAR_META | 120;
     let desc = describe_int_key(code).unwrap();
-    assert_eq!(desc, "M-x");
+    assert_eq!(desc, b"M-x");
 }
 
 #[test]
@@ -34,17 +34,17 @@ fn describe_int_key_with_combined_modifiers() {
     // C-M-S-x: control + meta + shift + 'x' (120)
     let code = KEY_CHAR_CTRL | KEY_CHAR_META | KEY_CHAR_SHIFT | 120;
     let desc = describe_int_key(code).unwrap();
-    assert_eq!(desc, "C-M-S-x");
+    assert_eq!(desc, b"C-M-S-x");
 }
 
 #[test]
 fn describe_int_key_named_chars() {
     crate::test_utils::init_test_tracing();
-    assert_eq!(describe_int_key(9).unwrap(), "TAB");
-    assert_eq!(describe_int_key(13).unwrap(), "RET");
-    assert_eq!(describe_int_key(27).unwrap(), "ESC");
-    assert_eq!(describe_int_key(32).unwrap(), "SPC");
-    assert_eq!(describe_int_key(127).unwrap(), "DEL");
+    assert_eq!(describe_int_key(9).unwrap(), b"TAB");
+    assert_eq!(describe_int_key(13).unwrap(), b"RET");
+    assert_eq!(describe_int_key(27).unwrap(), b"ESC");
+    assert_eq!(describe_int_key(32).unwrap(), b"SPC");
+    assert_eq!(describe_int_key(127).unwrap(), b"DEL");
 }
 
 #[test]
@@ -52,10 +52,10 @@ fn describe_int_key_control_named() {
     crate::test_utils::init_test_tracing();
     // C-TAB
     let code = KEY_CHAR_CTRL | 9;
-    assert_eq!(describe_int_key(code).unwrap(), "C-TAB");
+    assert_eq!(describe_int_key(code).unwrap(), b"C-TAB");
     // C-RET
     let code = KEY_CHAR_CTRL | 13;
-    assert_eq!(describe_int_key(code).unwrap(), "C-RET");
+    assert_eq!(describe_int_key(code).unwrap(), b"C-RET");
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn describe_int_key_meta_tab_uses_control_notation() {
     // M-TAB → C-M-i (Emacs renders M-TAB through control notation)
     let code = KEY_CHAR_META | 9;
     let desc = describe_int_key(code).unwrap();
-    assert_eq!(desc, "C-M-i");
+    assert_eq!(desc, b"C-M-i");
 }
 
 // --- describe_single_key_value ---
@@ -73,15 +73,15 @@ fn describe_int_key_meta_tab_uses_control_notation() {
 fn describe_single_key_value_symbol() {
     crate::test_utils::init_test_tracing();
     let val = Value::symbol("left");
-    assert_eq!(describe_single_key_value(&val, false).unwrap(), "<left>");
-    assert_eq!(describe_single_key_value(&val, true).unwrap(), "left");
+    assert_eq!(describe_single_key_value(&val, false).unwrap(), b"<left>");
+    assert_eq!(describe_single_key_value(&val, true).unwrap(), b"left");
 }
 
 #[test]
 fn describe_single_key_value_string() {
     crate::test_utils::init_test_tracing();
     let val = Value::string("a");
-    assert_eq!(describe_single_key_value(&val, false).unwrap(), "a");
+    assert_eq!(describe_single_key_value(&val, false).unwrap(), b"a");
 }
 
 // --- key_sequence_values ---

@@ -1357,38 +1357,48 @@ pub(super) fn builtin_text_char_description(args: Vec<Value>) -> EvalResult {
         30 => "^^".to_string(),
         31 => "^_".to_string(),
         127 => "^?".to_string(),
-        _ => match char::from_u32(code as u32) {
-            Some(ch) => ch.to_string(),
-            None => {
-                if let Some(encoded) = {
-                    use crate::emacs_core::emacs_char;
-                    let c = code as u32;
-                    if c > emacs_char::MAX_UNICODE_CHAR && c <= emacs_char::MAX_CHAR {
-                        let mut buf = [0u8; emacs_char::MAX_MULTIBYTE_LENGTH];
-                        let len = emacs_char::char_string(c, &mut buf);
-                        Some(emacs_char::to_utf8_lossy(&buf[..len]))
-                    } else {
-                        None
-                    }
-                } {
-                    encoded
-                } else {
-                    return Err(signal(
-                        LispCondition::WrongTypeArgument,
-                        vec![Value::symbol("characterp"), args[0]],
-                    ));
-                }
-            }
-        },
+        // GNU splits on `ASCII_CHAR_P (c)` (keymap.c:2406): a printable ASCII
+        // character takes the `make_string` arm and is UNIBYTE.
+        32..=126 => (code as u8 as char).to_string(),
+        // GNU's non-ASCII arm: `CHAR_STRING (c, str)` then
+        // `make_multibyte_string (str, 1, len)` (keymap.c:2406-2411) -- one
+        // character, encoded, whether or not it is a Unicode scalar value. A
+        // raw byte therefore comes back as itself, not as U+FFFD.
+        _ => {
+            let Some(ch) = crate::emacs_core::emacs_char::EmacsChar::from_code(code as u32) else {
+                return Err(signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("characterp"), args[0]],
+                ));
+            };
+            return Ok(Value::heap_string(
+                crate::heap_types::LispString::from_emacs_bytes(ch.to_emacs_bytes()),
+            ));
+        }
     };
+    // The ASCII control arm: GNU returns `make_string (desc, len)`, a UNIBYTE
+    // string, so `(multibyte-string-p (text-char-description ?a))` is nil --
+    // unlike `key-description`, which is always multibyte.
     Ok(Value::string(rendered))
+}
+
+/// A key description as Lisp text.
+///
+/// GNU builds every key description with
+/// `make_specified_string (tem, -1, p - tem, 1)` (keymap.c:2339), so the result
+/// is MULTIBYTE whatever it contains -- `(multibyte-string-p (key-description
+/// [?a]))` is `t` on GNU 31.0.90. That matters beyond the flag: only a
+/// multibyte string can carry the eight-bit raw-byte character
+/// `push_key_description` emits for a raw byte.
+fn key_description_string(bytes: Vec<u8>) -> Value {
+    Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
 }
 
 /// `(single-key-description KEY &optional NO-ANGLES)` -> string
 pub(super) fn builtin_single_key_description(args: Vec<Value>) -> EvalResult {
     expect_args_range("single-key-description", &args, 1, 2)?;
     let no_angles = args.get(1).is_some_and(|v| v.is_truthy());
-    Ok(Value::string(describe_single_key_value(
+    Ok(key_description_string(describe_single_key_value(
         &args[0], no_angles,
     )?))
 }
@@ -1408,7 +1418,7 @@ pub(crate) fn builtin_key_description(args: Vec<Value>) -> EvalResult {
     // following event cannot absorb the meta bit (a non-fixnum, another ESC, or
     // an already-meta key), the ESC is rendered literally instead.
     const META_PREFIX_CHAR: i64 = 27;
-    let mut rendered: Vec<String> = Vec::with_capacity(events.len());
+    let mut rendered: Vec<Vec<u8>> = Vec::with_capacity(events.len());
     let mut add_meta = false;
     for event in &events {
         let event_fixnum = event.as_fixnum();
@@ -1450,7 +1460,7 @@ pub(crate) fn builtin_key_description(args: Vec<Value>) -> EvalResult {
             false,
         )?);
     }
-    Ok(Value::string(rendered.join(" ")))
+    Ok(key_description_string(rendered.join(&b' ')))
 }
 
 /// `(recent-keys &optional INCLUDE-CMDS)` -> vector of recent input events.

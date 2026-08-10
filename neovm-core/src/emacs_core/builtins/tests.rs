@@ -17509,3 +17509,78 @@ fn custom_obarray_intern_stores_the_name_string_object_it_was_handed() {
         "symbol-name must be eq to the string intern was handed"
     );
 }
+
+/// GNU's `push_key_description` ends in `CHAR_STRING (c, p)` (keymap.c:2298),
+/// and `char_string` maps the eight-bit raw-byte range through
+/// `CHAR_TO_BYTE8` + `BYTE8_STRING` (character.c:133-136) -- so a raw byte
+/// comes back as ONE character whose code is the byte's raw-byte code, not as
+/// a replacement character. `Fsingle_key_description` then wraps the buffer
+/// with `make_specified_string (..., multibyte=1)` (keymap.c:2339), so a key
+/// description is ALWAYS multibyte, even for plain ASCII.
+///
+/// Measured on GNU 31.0.90: `(key-description [4194208])` is "\240" with
+/// length 1 and `multibyte-string-p` t; `(key-description [4194208 4194303 ?a])`
+/// is "\240 \377 a"; `(multibyte-string-p (key-description [?a]))` is t.
+#[test]
+fn key_description_renders_a_raw_byte_as_that_byte() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_all(
+        r#"(list (append (key-description [4194208]) nil)
+                 (append (key-description [4194303]) nil)
+                 (append (key-description [4194208 4194303 ?a]) nil)
+                 (append (single-key-description 4194208) nil)
+                 (append (text-char-description 4194208) nil)
+                 (length (key-description [4194208]))
+                 (list (multibyte-string-p (key-description [?a]))
+                       (multibyte-string-p (single-key-description ?a))
+                       (multibyte-string-p (text-char-description ?a))
+                       (multibyte-string-p (text-char-description 4194208)))
+                 ;; a genuine multibyte character must be unaffected
+                 (append (key-description [?é]) nil)
+                 (append (key-description [?中]) nil)
+                 (key-description [?\C-x ?a]))"#,
+    )
+    .into_iter()
+    .next()
+    .expect("at least one form");
+    assert_eq!(
+        result,
+        concat!(
+            "OK ((4194208) (4194303) (4194208 32 4194303 32 97) (4194208) (4194208) 1 ",
+            "(t t nil t) (233) (20013) \"C-x a\")"
+        )
+    );
+}
+
+/// GNU `Fsingle_key_description` treats a cons of two fixnums as AN INTERVAL
+/// FROM A MAP-CHAR-TABLE and renders it `FROM..TO` (keymap.c:2322-2329):
+///
+///     if (CONSP (key) && FIXNUMP (XCAR (key)) && FIXNUMP (XCDR (key)))
+///       return concat3 (Fsingle_key_description (XCAR (key), no_angles),
+///                       dot_dot, Fsingle_key_description (XCDR (key), ...));
+///
+/// It has no "(MOD . CHAR) modifier event" case at all -- measured on GNU
+/// 31.0.90, `(single-key-description (cons 1 ?x))` is "C-a..x" and
+/// `(single-key-description (cons ?a ?z))` is "a..z", both plain ranges. A
+/// Lucid-style event LIST such as `(meta shift up)` is still converted first
+/// and is unaffected.
+///
+/// This is what sets `describe-bindings`' column: the widest key in the global
+/// section is a raw-byte range from the `self-insert-command` char-table, and
+/// mis-rendering it as a single modified character narrows the section and
+/// shifts `describe-map--align-section` for every row beneath it.
+#[test]
+fn single_key_description_renders_a_fixnum_cons_as_a_range() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_all(
+        r#"(list (single-key-description (cons ?a ?z))
+                 (single-key-description (cons 1 ?x))
+                 (key-description (vector (cons ?a ?z)))
+                 (string-width (single-key-description (cons 128 4194239)))
+                 (single-key-description '(meta shift up)))"#,
+    )
+    .into_iter()
+    .next()
+    .expect("at least one form");
+    assert_eq!(result, r#"OK ("a..z" "C-a..x" "a..z" 10 "M-S-<up>")"#);
+}

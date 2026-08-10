@@ -2428,7 +2428,72 @@ for propertyless text.
 Not yet attributed to a package suite.
 
 
-## 56. `key-description` renders a raw 8-bit character as the replacement char
+## 56. `key-description` renders a raw 8-bit character as the replacement char -- FIXED
+
+FIXED 2026-08-10. A raw byte now comes back as itself. GNU's
+`push_key_description` ends in `CHAR_STRING (c, p)` (keymap.c:2296-2301), and
+`char_string` sends the eight-bit range through `CHAR_TO_BYTE8` +
+`BYTE8_STRING` (character.c:133-136), so the description holds ONE character
+whose code is the raw byte; `Fsingle_key_description` then wraps the buffer with
+`make_specified_string (..., multibyte=1)` (keymap.c:2339).
+
+This was a TYPE problem, not a formatting one, which is why it produced a
+replacement character rather than a wrong escape. `describe_int_key` and
+`describe_single_key_value` returned a Rust `String`, which structurally cannot
+hold an eight-bit or non-Unicode Emacs character, so our `emacs_char::char_string`
+computed the right bytes and the `to_utf8_lossy` on the next line destroyed them
+into U+FFFD. The description pipeline now carries Emacs BYTES to the boundary
+and the builtins build a multibyte `LispString` from them, exactly as GNU does;
+this is the bug class `EmacsChar` was introduced for (issue #131), so the
+encoding step goes through `EmacsChar::char_string` rather than a bare `u32`.
+The two internal callers that genuinely want Rust text -- an error message in
+`describe_event_sequence` and a `KeyEvent` label for logs -- now decode lossily
+at their own call sites, where the loss is visible and harmless, instead of
+making the shared builder lossy for everyone.
+
+A second, quieter divergence was measured and fixed with it: GNU's key
+descriptions are ALWAYS multibyte, so `(multibyte-string-p (key-description
+[?a]))` is `t`, while ours were unibyte for ASCII. `text-char-description` keeps
+GNU's own split (`make_string` and unibyte for an ASCII character,
+`make_multibyte_string` for anything else, keymap.c:2406-2411), and had the same
+U+FFFD bug in its non-ASCII arm.
+
+Measured on GNU 31.0.90 and now matched byte-for-byte: `(key-description
+[4194208])` is `"\240"`, length 1, multibyte `t`; `(key-description [4194208
+4194303 ?a])` is `"\240 \377 a"`; `(single-key-description 4194208)` and
+`(text-char-description 4194208)` are `"\240"`. Genuine multibyte characters are
+untouched -- `(key-description [?é])` and `[?中]` still render as themselves --
+and `"C-x a"` is unchanged.
+
+The entry's claim that this raw byte was "the whole of the remaining
+`describe-bindings` difference (82 lines of 2393)" is WRONG, and checking it end
+to end is what showed that. With the encoding fixed, the three
+`self-insert-command` rows ARE byte-identical to GNU -- both outputs carry the
+same 24 raw bytes and no U+FFFD anywhere -- but the `--batch` diff against GNU
+31.0.90 is unchanged at 422 lines. Ignoring tab runs, the real residual is 77
+rows GNU emits and we do not, nearly all `touch-screen-*` bindings on
+window-part prefixes (`<bottom-divider> <touchscreen-begin>`,
+`<right-fringe> <touchscreen-end>`, and so on). Those keys are ~40 columns wide,
+which pushes GNU's section into a wider bucket of
+`describe-map--align-section`'s 16/24/32 quantization (help.el:1916-1931) and
+accounts for the one-tab column shift on every row beneath. So the column is a
+CONSEQUENCE of the missing bindings, not of key rendering, and it is a separate
+divergence from this entry -- filed rather than fixed here.
+
+A second, genuine `single-key-description` divergence was found while checking
+that, and is fixed. GNU treats a cons of two fixnums as an interval from a
+map-char-table and renders it `FROM..TO` (keymap.c:2322-2329); it has no
+"(MOD . CHAR) modifier event" case at all. We had one, added on the stated
+premise that "GNU Emacs treats dotted cons pairs as modifier+character key
+events". Measurement says otherwise: `(single-key-description (cons 1 ?x))` is
+`"C-a..x"` on GNU and was `"S-x"` here, and `(cons ?a ?z)` is `"a..z"` and was
+`"S-s-z"`. It is fixed, and the X11 modifier-bit conversion the false premise
+introduced is deleted. In fairness to the honest expectation: this did NOT move
+the `describe-bindings` column, which is why the paragraph above says what it
+says. Lucid-style event LISTS like `(meta shift up)` are unaffected, since GNU
+converts those first and we still do.
+
+Original report follows.
 
 A character in the raw-byte range (`#x3FFF80`..`#x3FFFFF`, the codes Emacs uses
 for bytes that decode to nothing) comes back from `key-description` as U+FFFD
@@ -2536,3 +2601,40 @@ with `(error "..." SYM)` should carry the `fontified` property the symbol name
 was read from, and does not.
 
 Affects: `elisp-slime-nav` (1).
+
+
+## 58. The global map is missing the `touch-screen-*` window-part bindings
+
+`describe-bindings` emits 77 rows that GNU does, and we do not. Nearly all of
+them bind a touch-screen event on a window-part prefix:
+
+```elisp
+;; GNU has, and neomacs does not:
+;;   <bottom-divider> <touchscreen-begin>   touch-screen-translate-touch
+;;   <bottom-divider> <touchscreen-end>     touch-screen-translate-touch
+;;   <right-fringe> <touchscreen-begin>     touch-screen-translate-touch
+;;   ... 77 rows over <left-fringe>, <right-fringe>, <left-margin>,
+;;   <right-margin>, <header-line>, <mode-line>, <vertical-line>,
+;;   <right-divider>, <bottom-divider>, <tab-line> ...
+(length (split-string (with-temp-buffer (describe-bindings) ...) "\n"))
+;; GNU     => 2402 lines
+;; Neomacs => 2320 lines
+```
+
+Found while closing entry 56, which had claimed the raw-byte rendering was the
+whole of the remaining `describe-bindings` gap. It is not: with entry 56 fixed
+the diff against GNU 31.0.90 is unchanged at 422 `--batch` diff lines, and these
+missing rows are what is left.
+
+They also explain the column shift entry 56 predicted, by a different route than
+that entry assumed. `describe-map--align-section` quantizes a section's key
+column to 16, 24 or 32 based on the widest key in it (help.el:1916-1931). These
+touch-screen keys are ~40 columns wide, so GNU's global section lands in the
+32-column bucket while ours lands in 24 -- one tab narrower on EVERY row of the
+section. So the alignment difference is a consequence of the missing bindings,
+and fixing them should close the column and most of the 422 lines at once.
+
+Not a rendering bug: the keys we do emit now render byte-identically to GNU,
+including the raw-byte ranges (entry 56).
+
+Not yet attributed to a package suite.

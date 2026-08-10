@@ -1,3 +1,4 @@
+use crate::emacs_core::emacs_char::EmacsChar;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::{
     error::{Flow, signal},
@@ -52,31 +53,6 @@ pub(crate) fn make_event_array_value(events: &[Value]) -> Value {
     }
 
     Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
-}
-
-/// Convert X11-style modifier bits (as stored in cons key events) to
-/// NeoMacs' internal modifier encoding.
-fn convert_input_mod_bits_to_internal(mod_bits: i64) -> i64 {
-    let mut result: i64 = 0;
-    if (mod_bits & 1) != 0 {
-        result |= KEY_CHAR_SHIFT;
-    } // shift   -> internal shift
-    if (mod_bits & 2) != 0 {
-        result |= KEY_CHAR_META;
-    } // meta    -> internal meta
-    if (mod_bits & 4) != 0 {
-        result |= KEY_CHAR_CTRL;
-    } // control -> internal ctrl
-    if (mod_bits & 8) != 0 {
-        result |= KEY_CHAR_ALT;
-    } // alt     -> internal alt
-    if (mod_bits & 16) != 0 {
-        result |= KEY_CHAR_HYPER;
-    } // hyper   -> internal hyper
-    if (mod_bits & 32) != 0 {
-        result |= KEY_CHAR_SUPER;
-    } // super   -> internal super
-    result
 }
 
 fn invalid_single_key_error() -> Flow {
@@ -171,15 +147,31 @@ pub(crate) fn split_symbol_modifiers(mut name: &str) -> (String, &str) {
     (prefix, name)
 }
 
-fn describe_symbol_key(name: &str, no_angles: bool) -> String {
+fn describe_symbol_key(name: &str, no_angles: bool) -> Vec<u8> {
     let (prefix, base) = split_symbol_modifiers(name);
     if no_angles {
-        return format!("{prefix}{base}");
+        return format!("{prefix}{base}").into_bytes();
     }
-    format!("{prefix}<{base}>")
+    format!("{prefix}<{base}>").into_bytes()
 }
 
-fn describe_int_key(code: i64) -> Result<String, Flow> {
+/// Append CODE to OUT in Emacs's internal multibyte encoding, GNU's
+/// `CHAR_STRING` (character.c:101-140).
+///
+/// A key description is Emacs TEXT, not a Rust `String`: an eight-bit
+/// raw-byte character (`#x3FFF80`..`#x3FFFFF`) and a non-Unicode code are
+/// perfectly good Emacs characters but are not Unicode scalar values, so
+/// pushing them through `char` or `String` is exactly the loss `EmacsChar`
+/// exists to prevent (issue #131). GNU encodes a raw byte back to its single
+/// byte via `CHAR_TO_BYTE8` + `BYTE8_STRING` and the description holds that
+/// one character.
+fn push_emacs_char(out: &mut Vec<u8>, code: EmacsChar) {
+    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+    let len = code.char_string(&mut buf);
+    out.extend_from_slice(&buf[..len]);
+}
+
+fn describe_int_key(code: i64) -> Result<Vec<u8>, Flow> {
     let mods = code & KEY_CHAR_MOD_MASK;
     let base = code & !KEY_CHAR_MOD_MASK;
     if !(0..=KEY_CHAR_CODE_MASK).contains(&base) {
@@ -191,77 +183,92 @@ fn describe_int_key(code: i64) -> Result<String, Flow> {
     let shift = (mods & KEY_CHAR_SHIFT) != 0;
     let super_ = (mods & KEY_CHAR_SUPER) != 0;
 
-    let push_prefixes = |out: &mut String, with_ctrl: bool| {
+    let push_prefixes = |out: &mut Vec<u8>, with_ctrl: bool| {
         if (mods & KEY_CHAR_ALT) != 0 {
-            out.push_str("A-");
+            out.extend_from_slice(b"A-");
         }
         if with_ctrl {
-            out.push_str("C-");
+            out.extend_from_slice(b"C-");
         }
         if (mods & KEY_CHAR_HYPER) != 0 {
-            out.push_str("H-");
+            out.extend_from_slice(b"H-");
         }
         if meta {
-            out.push_str("M-");
+            out.extend_from_slice(b"M-");
         }
         if shift {
-            out.push_str("S-");
+            out.extend_from_slice(b"S-");
         }
         if super_ {
-            out.push_str("s-");
+            out.extend_from_slice(b"s-");
         }
     };
 
-    let mut out = String::new();
+    let mut out = Vec::new();
 
     // Emacs renders M-TAB style integer events through control notation (`C-M-i`),
     // while plain/shift/super/alt TAB keeps named `TAB` rendering.
     let tab_meta_control_notation = base == 9 && meta;
     if !tab_meta_control_notation && let Some(name) = named_char_name(base) {
         push_prefixes(&mut out, ctrl);
-        out.push_str(name);
+        out.extend_from_slice(name.as_bytes());
         return Ok(out);
     }
 
     if let Some(sfx) = control_char_suffix(base) {
         push_prefixes(&mut out, true);
-        out.push(sfx.to_ascii_lowercase());
+        out.push(sfx.to_ascii_lowercase() as u8);
         return Ok(out);
     }
 
     push_prefixes(&mut out, ctrl);
-    if let Some(ch) = char::from_u32(base as u32) {
-        out.push(ch);
-    } else if (base as u32) <= crate::emacs_core::emacs_char::MAX_CHAR {
-        let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-        let len = crate::emacs_core::emacs_char::char_string(base as u32, &mut buf);
-        out.push_str(&crate::emacs_core::emacs_char::to_utf8_lossy(&buf[..len]));
-    } else {
+    // GNU reaches `CHAR_STRING` for every remaining code, raw byte or not
+    // (keymap.c:2296-2301); `base` is already range-checked above.
+    let Some(base_char) = EmacsChar::from_code(base as u32) else {
         return Err(invalid_single_key_error());
-    }
+    };
+    push_emacs_char(&mut out, base_char);
     Ok(out)
 }
 
-pub(crate) fn describe_single_key_value(value: &Value, no_angles: bool) -> Result<String, Flow> {
+/// A single key event's description, as Emacs-encoded BYTES.
+///
+/// Bytes rather than a `String` because a description can contain characters
+/// that are not Unicode scalar values -- an eight-bit raw byte is the whole
+/// point of ledger entry 56. Callers that need Lisp text build a multibyte
+/// string from these bytes, as GNU's `Fsingle_key_description` does with
+/// `make_specified_string (..., multibyte=1)`; callers that only want a Rust
+/// string for a message or a log convert lossily at their own call site, where
+/// the loss is visible.
+pub(crate) fn describe_single_key_value(value: &Value, no_angles: bool) -> Result<Vec<u8>, Flow> {
     match value.kind() {
         ValueKind::Fixnum(n) => describe_int_key(n),
         ValueKind::Symbol(id) => Ok(describe_symbol_key(resolve_sym(id), no_angles)),
         ValueKind::T => Ok(describe_symbol_key("t", no_angles)),
         ValueKind::Nil => Ok(describe_symbol_key("nil", no_angles)),
-        // A string key description is display text; decode lossily.
+        // A string key description is already Emacs text: pass its bytes
+        // through rather than decoding, so a raw byte in it survives too.
         ValueKind::String => Ok(value
             .as_lisp_string()
-            .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+            .map(|ls| ls.as_bytes().to_vec())
             .expect("ValueKind::String must carry LispString payload")),
         ValueKind::Cons => {
-            // Cons key event (MOD . CHAR): the car encodes X11-style modifier
-            // bits, the cdr is the base character code.  Convert to NeoMacs'
-            // internal modifier encoding and combine.
-            if let (Some(mod_bits), Some(base_char)) =
-                (value.cons_car().as_fixnum(), value.cons_cdr().as_fixnum())
+            // A cons of two fixnums is AN INTERVAL FROM A MAP-CHAR-TABLE, and
+            // GNU renders it FROM..TO (keymap.c:2322-2329). It has no
+            // "(MOD . CHAR) modifier event" case: measured on GNU 31.0.90,
+            // (single-key-description (cons 1 ?x)) is "C-a..x", not "S-x".
+            //
+            // describe-bindings depends on this. The widest key in the global
+            // section is a raw-byte range from the self-insert-command
+            // char-table, so rendering it as one modified character narrows
+            // the section and shifts describe-map--align-section's column for
+            // every row beneath it.
+            if let (Some(_), Some(_)) = (value.cons_car().as_fixnum(), value.cons_cdr().as_fixnum())
             {
-                let combined = convert_input_mod_bits_to_internal(mod_bits) | base_char;
-                return describe_int_key(combined);
+                let mut out = describe_single_key_value(&value.cons_car(), no_angles)?;
+                out.extend_from_slice(b"..");
+                out.extend_from_slice(&describe_single_key_value(&value.cons_cdr(), no_angles)?);
+                return Ok(out);
             }
             let items = list_to_vec(value).ok_or_else(invalid_single_key_error)?;
             if items.len() == 1 {

@@ -9,7 +9,7 @@ use crate::emacs_core::value::Value;
 fn describe_int_key_succeeds() {
     crate::test_utils::init_test_tracing();
     let value = Value::fixnum(97);
-    assert_eq!(describe_single_key_value(&value, false).unwrap(), "a");
+    assert_eq!(describe_single_key_value(&value, false).unwrap(), b"a");
 }
 
 #[test]
