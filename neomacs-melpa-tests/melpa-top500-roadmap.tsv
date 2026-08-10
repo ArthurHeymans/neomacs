@@ -328,7 +328,7 @@ rank	package	downloads	status
 327	lsp-java	325659	covered
 328	toml-mode	323991	covered
 329	esh-help	323603	covered
-330	helm-gitignore	323538	todo
+330	helm-gitignore	323538	covered
 331	pug-mode	319227	covered
 332	quelpa	318753	todo
 333	evil-easymotion	317517	todo

@@ -3022,6 +3022,12 @@ pub const HELM_DESCBINDS_MELPA_PIN: (&str, &str) = ("helm-descbinds", "20250705.
 /// commit `5220099e695a3586dba2d59640217fe378e66310`.
 pub const HELM_FLX_MELPA_PIN: (&str, &str) = ("helm-flx", "20221020.1739");
 
+/// The exact Helm Gitignore package selected for real interactive template
+/// lookup, single and ordered multi-selection, generated-buffer editing,
+/// saving, refresh, and HTTP failure parity. MELPA built this archive from
+/// upstream commit `85c34065e6fceac8fa7287e6ec79ea3d1182d654`.
+pub const HELM_GITIGNORE_MELPA_PIN: (&str, &str) = ("helm-gitignore", "20230310.1829");
+
 /// The exact helm-make package selected for practical nested-project target
 /// discovery, source saving, cache invalidation, Ninja, Projectile, and GNU
 /// make database workflows. MELPA built this archive from upstream commit
