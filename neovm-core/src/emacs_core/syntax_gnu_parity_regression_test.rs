@@ -859,6 +859,54 @@ fn buffer_regexp_matching_is_unaffected_by_the_string_object_path() {
     assert_eq!(result, "OK (3 nil)");
 }
 
+/// Once ANY text property exists anywhere in an object, GNU's interval tree
+/// partitions the WHOLE object, so `textget`'s `default-text-properties`
+/// fallback reaches every position in it -- not only the positions the property
+/// was actually put on. Both halves of that rule are pinned here, for a buffer
+/// and for a string:
+///
+/// * a position whose own interval carries an unrelated property, one before it,
+///   one after it, and one nowhere near it all take syntax from the fallback;
+/// * an object with NO property anywhere takes nothing, because
+///   `update_syntax_table` returns early when `interval_of` finds no interval.
+///
+/// Every expectation below was read off GNU 31.0.90. The second half is the
+/// boundary entry 44 pins and this must never cross: coverage of an existing
+/// partition, never synthesis of intervals for propertyless text.
+#[test]
+fn an_existing_partition_carries_default_text_properties_to_every_position() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (let ((probe (lambda (put)
+                       (with-temp-buffer
+                         (setq-local parse-sexp-lookup-properties t)
+                         (insert "a<b")
+                         (funcall put)
+                         (let ((default-text-properties '(syntax-table (4 . ?>))))
+                           (goto-char (point-min))
+                           (re-search-forward "\\s(" nil t))))))
+          (list
+           ;; Buffer: the interval on the character itself, on its neighbours,
+           ;; and one far away all reach the fallback; none at all does not.
+           (funcall probe (lambda () (put-text-property 2 3 'p15-unrelated 'x)))
+           (funcall probe (lambda () (put-text-property 1 2 'p15-unrelated 'x)))
+           (funcall probe (lambda () (put-text-property 3 4 'p15-unrelated 'x)))
+           (funcall probe (lambda () (insert "cccc")
+                            (put-text-property 5 6 'p15-unrelated 'x)))
+           (funcall probe (lambda () nil))
+           ;; String: the same rule, same boundary.
+           (let ((parse-sexp-lookup-properties t)
+                 (default-text-properties '(syntax-table (4 . ?>))))
+             (list (string-match "\\s(" (concat "a" (propertize "<" 'p15-unrelated 'x) "b"))
+                   (string-match "\\s(" (concat (propertize "a" 'p15-unrelated 'x) "<b"))
+                   (string-match "\\s(" (concat "a<" (propertize "b" 'p15-unrelated 'x)))
+                   (string-match "\\s(" "a<b")))))
+        "#,
+    );
+    assert_eq!(result, "OK (2 2 2 2 nil (0 0 0 nil))");
+}
+
 /// `default-text-properties` reaches a position that HAS an interval, even one
 /// whose plist says nothing about syntax -- the same `textget` fallback the
 /// buffer scanner applies. Contrast the propertyless string above, where there

@@ -2287,7 +2287,37 @@ and the instrumented real Magit case now reports GNU's exact line,
 GNU Emacs 31.0.90 also prompts there under load -- which is an environmental
 flake in the harness, not a neomacs divergence.
 
-## 55. `default-text-properties` does not reach a buffer position whose interval says nothing
+## 55. `default-text-properties` does not reach a buffer position whose interval says nothing — NOT A DIVERGENCE (stale)
+
+**Re-verified 2026-08-10 against GNU 31.0.90 and found already correct**, on the
+entry's own reduction and on the whole coverage space around it. This entry was
+recorded from the same session that fixed the string side and was never
+re-measured against a build carrying that fix; nothing has changed in the
+property path since (`git log 67e28525b..` touches it only through the two
+commits that closed entry 53).
+
+Both sides now agree everywhere:
+
+| where the unrelated property sits | GNU | neomacs |
+|---|---|---|
+| on the character being scanned | 2 | 2 |
+| on the character before it | 2 | 2 |
+| on the character after it | 2 | 2 |
+| four characters away | 2 | 2 |
+| nowhere in the object | nil | nil |
+
+and the string half of the same matrix answers `(0 0 0 nil)` on both. The last
+row is the boundary entry 44 pins, and it holds: where no interval exists
+anywhere, neither implementation applies a fallback.
+
+The one thing that was genuinely missing was a test. The buffer side had no
+pin at all -- only the string side did -- which is how this could have
+regressed silently. The whole matrix above is now pinned by
+`an_existing_partition_carries_default_text_properties_to_every_position`
+(neovm-core/src/emacs_core/syntax_gnu_parity_regression_test.rs), buffer and
+string together, including the no-interval boundary.
+
+Was:
 
 Found while fixing entry 53, and a different mechanism from it: entry 53 was
 about which OBJECT the property is read from, this is about which POSITIONS
