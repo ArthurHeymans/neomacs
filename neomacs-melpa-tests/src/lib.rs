@@ -2161,6 +2161,12 @@ pub const LSP_JAVA_MELPA_PIN: (&str, &str) = ("lsp-java", "20260510.647");
 /// `6bfc593d7b1bc0dd656f09ffce52cc085ebced05`.
 pub const LSP_MODE_MELPA_PIN: (&str, &str) = ("lsp-mode", "20260716.755");
 
+/// The exact LSP Pyright package selected for practical Python workspace
+/// startup, configuration, editing, import organization, environment
+/// discovery, and language-server failure parity. MELPA built this archive
+/// from upstream commit `187e08caee4e1630a9975f492274c739f325392f`.
+pub const LSP_PYRIGHT_MELPA_PIN: (&str, &str) = ("lsp-pyright", "20260507.1742");
+
 /// The exact LSP UI package selected for practical hover-documentation,
 /// sideline, peek, Imenu, diagnostics, reference-navigation, and lifecycle
 /// parity. MELPA built this archive from upstream commit
