@@ -117,7 +117,7 @@ fn dead_pid_lock_on_this_host_is_zapped_and_reported_free() {
     match current_lock_owner(&lock_path).expect("owner check") {
         LockOwner::None => {}
         LockOwner::Current => panic!("stale lock cannot be ours"),
-        LockOwner::Other(user) => panic!("stale lock must be zapped, got owner {user}"),
+        LockOwner::Other(clasher) => panic!("stale lock must be zapped, got owner {clasher:?}"),
     }
     assert!(
         std::fs::symlink_metadata(&lock_path).is_err(),
@@ -135,13 +135,244 @@ fn live_pid_lock_on_this_host_names_the_other_owner() {
     let contents = format!("someone@{}.1", current_host_name());
     std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
     match current_lock_owner(&lock_path).expect("owner check") {
-        LockOwner::Other(user) => assert_eq!(user, "someone"),
+        LockOwner::Other(clasher) => {
+            assert_eq!(clasher.user, "someone");
+            assert_eq!(clasher.pid, 1);
+            assert_eq!(
+                clasher.opponent(),
+                format!("someone@{} (pid 1)", current_host_name())
+            );
+        }
         _ => panic!("live-pid lock must report the other owner"),
     }
     assert!(
         std::fs::symlink_metadata(&lock_path).is_ok(),
         "live locks are never zapped"
     );
+}
+
+/// Spawn a definitely-live process this user owns, so liveness probes never
+/// depend on pid-1 EPERM subtleties.
+#[cfg(unix)]
+fn spawn_live_owner() -> std::process::Child {
+    std::process::Command::new("sleep")
+        .arg("60")
+        .spawn()
+        .expect("spawn sleep child")
+}
+
+#[cfg(unix)]
+fn visit_file_in_current_buffer(eval: &mut super::super::eval::Context, visited: &Path) {
+    let visited_value = Value::string(visited.to_string_lossy());
+    eval.set_variable("create-lockfiles", Value::T);
+    let current = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.buffers
+        .set_buffer_file_name(current, visited_value)
+        .expect("set buffer-file-name");
+    eval.buffers
+        .set_buffer_file_truename(current, visited_value)
+        .expect("set buffer-file-truename");
+}
+
+/// GNU lock_file (src/filelock.c) calls ask-user-about-lock when another
+/// process owns the lock, and any signal it raises — the batch-mode
+/// file-locked signal from userlock.el in particular — propagates and
+/// aborts the modification.
+#[cfg(unix)]
+#[test]
+fn modifying_externally_locked_file_propagates_file_locked_and_leaves_buffer_untouched() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+    let lock_path = dir.path().join(".#note.txt");
+    let mut owner = spawn_live_owner();
+
+    let mut eval = super::super::eval::Context::new();
+    visit_file_in_current_buffer(&mut eval, &visited);
+    // Load the visited contents like find-file would, then mark the buffer
+    // clean so the contested lock governs the NEXT (first) modification.
+    eval.eval_str(r#"(progn (insert "hello\n") (set-buffer-modified-p nil))"#)
+        .expect("seed visited buffer contents");
+    let contents = format!("someone@{}.{}", current_host_name(), owner.id());
+    std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
+    eval.eval_str(
+        r#"(fset 'ask-user-about-lock
+               (lambda (file opponent)
+                 (signal 'file-locked
+                         (list file opponent "Cannot resolve lock conflict in batch mode"))))"#,
+    )
+    .expect("define batch ask-user-about-lock");
+
+    let result = eval.eval_str(r#"(insert "EDIT")"#);
+    let formatted = crate::emacs_core::format_eval_result(&result);
+    assert_eq!(
+        formatted,
+        format!(
+            "ERR (file-locked (\"{}\" \"someone@{} (pid {})\" \"Cannot resolve lock conflict in batch mode\"))",
+            visited.display(),
+            current_host_name(),
+            owner.id(),
+        ),
+        "GNU propagates the ask-user-about-lock signal and refuses the edit"
+    );
+
+    let buffer_after = eval.eval_str("(buffer-string)");
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&buffer_after),
+        "OK \"hello\n\"",
+        "a refused edit must not modify the buffer"
+    );
+    assert_eq!(
+        fs::read_link(&lock_path).expect("lock survives").to_string_lossy(),
+        contents,
+        "a refused edit must not steal the other process's lock"
+    );
+
+    let _ = owner.kill();
+    let _ = owner.wait();
+}
+
+/// GNU lock_file rewrites the clasher info USER@HOST.PID:BOOT into
+/// "USER@HOST (pid PID)" before handing it to ask-user-about-lock.
+#[cfg(unix)]
+#[test]
+fn ask_user_about_lock_steal_and_proceed_answers_match_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+    let lock_path = dir.path().join(".#note.txt");
+    let mut owner = spawn_live_owner();
+    let contents = format!(
+        "someone@{}.{}:{}",
+        current_host_name(),
+        owner.id(),
+        system_boot_time_sec().max(1),
+    );
+
+    // Answer nil: proceed without taking the lock.
+    std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
+    let mut eval = super::super::eval::Context::new();
+    visit_file_in_current_buffer(&mut eval, &visited);
+    eval.eval_str(
+        r#"(progn
+             (setq neovm-lock-args nil)
+             (fset 'ask-user-about-lock
+                   (lambda (file opponent)
+                     (setq neovm-lock-args (list file opponent))
+                     nil)))"#,
+    )
+    .expect("define recording ask-user-about-lock");
+    eval.eval_str(r#"(insert "EDIT")"#).expect("proceed answer edits anyway");
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str("neovm-lock-args")),
+        format!(
+            "OK (\"{}\" \"someone@{} (pid {})\")",
+            visited.display(),
+            current_host_name(),
+            owner.id(),
+        ),
+        "opponent string must be USER@HOST (pid PID) with the boot time stripped"
+    );
+    assert_eq!(
+        fs::read_link(&lock_path).expect("lock survives").to_string_lossy(),
+        contents,
+        "answer nil edits the file but leaves the other lock in place"
+    );
+
+    // Answer t: steal the lock, then edit.
+    let mut eval = super::super::eval::Context::new();
+    visit_file_in_current_buffer(&mut eval, &visited);
+    eval.eval_str(r#"(fset 'ask-user-about-lock (lambda (file opponent) t))"#)
+        .expect("define stealing ask-user-about-lock");
+    eval.eval_str(r#"(insert "EDIT")"#).expect("steal answer edits");
+    assert_eq!(
+        fs::read_link(&lock_path).expect("stolen lock").to_string_lossy(),
+        current_lock_info_string(),
+        "answer t forces the lock over to us"
+    );
+
+    let _ = owner.kill();
+    let _ = owner.wait();
+}
+
+/// GNU current_lock_owner returns EINVAL for unparseable lock contents;
+/// lock_file deliberately ignores that errno (no prompt, edit proceeds),
+/// while file-locked-p reports it as a file-error.
+#[cfg(unix)]
+#[test]
+fn unparseable_lock_contents_are_an_error_not_another_owner() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+    let lock_path = dir.path().join(".#note.txt");
+    std::os::unix::fs::symlink("complete garbage", &lock_path).expect("symlink lock");
+
+    let mut eval = super::super::eval::Context::new();
+    visit_file_in_current_buffer(&mut eval, &visited);
+    eval.eval_str(
+        r#"(fset 'ask-user-about-lock
+               (lambda (file opponent)
+                 (signal 'file-locked (list file opponent))))"#,
+    )
+    .expect("define signalling ask-user-about-lock");
+
+    eval.eval_str(r#"(insert "EDIT")"#)
+        .expect("GNU ignores the EINVAL from lock_if_free and never prompts");
+
+    let locked_p = eval.eval_str(&format!(
+        "(file-locked-p \"{}\")",
+        visited.display()
+    ));
+    assert!(
+        crate::emacs_core::format_eval_result(&locked_p).starts_with("ERR (file-error"),
+        "GNU file-locked-p reports EINVAL via report_file_errno, got {}",
+        crate::emacs_core::format_eval_result(&locked_p),
+    );
+}
+
+/// GNU zaps an empty lock file (buggy-filesystem leftover) and reports the
+/// file free.
+#[cfg(unix)]
+#[test]
+fn empty_lock_file_is_zapped_and_reported_free() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let lock_path = dir.path().join(".#empty");
+    fs::write(&lock_path, b"").expect("write empty lock");
+    match current_lock_owner(&lock_path).expect("owner check") {
+        LockOwner::None => {}
+        _ => panic!("empty lock file must be zapped and reported free"),
+    }
+    assert!(
+        fs::symlink_metadata(&lock_path).is_err(),
+        "GNU unlinks the empty lock file"
+    );
+}
+
+/// GNU Ffile_locked_p returns only the USER part for another owner.
+#[cfg(unix)]
+#[test]
+fn file_locked_p_names_only_the_user_for_another_owner() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+    let lock_path = dir.path().join(".#note.txt");
+    let mut owner = spawn_live_owner();
+    let contents = format!("someone@{}.{}", current_host_name(), owner.id());
+    std::os::unix::fs::symlink(&contents, &lock_path).expect("symlink lock");
+
+    let mut eval = super::super::eval::Context::new();
+    let locked_p = eval.eval_str(&format!("(file-locked-p \"{}\")", visited.display()));
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&locked_p),
+        "OK \"someone\"",
+    );
+
+    let _ = owner.kill();
+    let _ = owner.wait();
 }
 
 #[cfg(unix)]

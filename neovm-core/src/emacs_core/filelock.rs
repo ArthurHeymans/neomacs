@@ -85,10 +85,38 @@ fn parse_lock_info(contents: &str) -> Option<ParsedLockInfo> {
     })
 }
 
+/// Identity of another process holding a lock, parsed from the
+/// USER@HOST.PID:BOOT lockfile contents.  GNU keeps the raw bytes plus
+/// parse offsets (`lock_info_type`); the two consumers need two different
+/// projections of it, so carry the parsed fields and derive each string.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct LockClasher {
+    user: String,
+    host: String,
+    pid: u32,
+}
+
+impl LockClasher {
+    /// GNU `lock_file` rewrites ".PID" into " (pid PID)" and drops the boot
+    /// time before handing the clasher to `ask-user-about-lock`.
+    fn opponent(&self) -> String {
+        format!("{}@{} (pid {})", self.user, self.host, self.pid)
+    }
+}
+
+/// GNU's literal answer enum from filelock.c: 0 (free) / I_OWN_IT /
+/// ANOTHER_OWNS_IT, with errno values carried separately as `io::Error`.
 enum LockOwner {
     None,
     Current,
-    Other(String),
+    Other(LockClasher),
+}
+
+/// GNU returns EINVAL for lock contents that do not parse as
+/// USER@HOST.PID:BOOT.  `lock_file` deliberately ignores that errno (no
+/// prompt), while file-locked-p and unlock-file report it as a file-error.
+fn invalid_lock_contents_error() -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, "Invalid argument")
 }
 
 /// GNU's `make-lock-file-name` (files.el) prepends ".#" to the non-directory
@@ -147,12 +175,17 @@ fn current_lock_owner(lock_path: &Path) -> Result<LockOwner, io::Error> {
     }
 
     let contents = read_lock_contents(lock_path)?;
+    if contents.is_empty() {
+        // GNU zaps an empty lock file (a buggy-filesystem leftover,
+        // <https://bugs.gnu.org/72641>) and reports the file free.
+        return match fs::remove_file(lock_path) {
+            Ok(()) => Ok(LockOwner::None),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(LockOwner::None),
+            Err(err) => Err(err),
+        };
+    }
     let Some(info) = parse_lock_info(&contents) else {
-        let owner = contents
-            .split_once('@')
-            .map(|(user, _)| user.to_string())
-            .unwrap_or(contents);
-        return Ok(LockOwner::Other(owner));
+        return Err(invalid_lock_contents_error());
     };
 
     // GNU filelock.c current_lock_owner: staleness is decidable only for
@@ -163,8 +196,13 @@ fn current_lock_owner(lock_path: &Path) -> Result<LockOwner, io::Error> {
     // crashed or killed session: zap the lockfile and report the file free,
     // NEVER prompt (an interactive session would otherwise hang every user
     // who reopens a file their crashed session had locked).
+    let clasher = LockClasher {
+        user: info.user.clone(),
+        host: info.host.clone(),
+        pid: info.pid,
+    };
     if info.host != current_host_name() {
-        return Ok(LockOwner::Other(info.user));
+        return Ok(LockOwner::Other(clasher));
     }
     if info.pid == std::process::id() {
         return Ok(LockOwner::Current);
@@ -172,7 +210,7 @@ fn current_lock_owner(lock_path: &Path) -> Result<LockOwner, io::Error> {
     let pid_alive = process_is_alive(info.pid);
     let boot_matches = info.boot_time == 0 || (info.boot_time - system_boot_time_sec()).abs() <= 1;
     if pid_alive && boot_matches {
-        return Ok(LockOwner::Other(info.user));
+        return Ok(LockOwner::Other(clasher));
     }
     match fs::remove_file(lock_path) {
         Ok(()) => Ok(LockOwner::None),
@@ -291,7 +329,7 @@ fn create_lock_file(lock_path: &Path, contents: &str, force: bool) -> io::Result
 
 enum LockAttempt {
     Acquired,
-    OtherOwner(String),
+    OtherOwner(LockClasher),
     Unavailable,
 }
 
@@ -310,7 +348,7 @@ fn lock_if_free(lock_path: &Path, contents: &str) -> LockAttempt {
                 match current_lock_owner(lock_path) {
                     Ok(LockOwner::None) => continue,
                     Ok(LockOwner::Current) => return LockAttempt::Acquired,
-                    Ok(LockOwner::Other(owner)) => return LockAttempt::OtherOwner(owner),
+                    Ok(LockOwner::Other(clasher)) => return LockAttempt::OtherOwner(clasher),
                     Err(_) => return LockAttempt::Unavailable,
                 }
             }
@@ -355,13 +393,17 @@ fn lock_file_resolved(
     let lock_info = current_lock_info_string();
     match lock_if_free(&lock_path, &lock_info) {
         LockAttempt::Acquired | LockAttempt::Unavailable => Ok(Value::NIL),
-        LockAttempt::OtherOwner(owner) => {
-            let attack = eval
-                .apply(
-                    Value::symbol("ask-user-about-lock"),
-                    vec![Value::heap_string(filename.clone()), Value::string(owner)],
-                )
-                .unwrap_or(Value::NIL);
+        LockAttempt::OtherOwner(clasher) => {
+            // GNU calls ask-user-about-lock with calln: any signal it raises
+            // — the batch-mode file-locked signal from userlock.el above all
+            // — propagates and aborts the modification.  Never swallow it.
+            let attack = eval.apply(
+                Value::symbol("ask-user-about-lock"),
+                vec![
+                    Value::heap_string(filename.clone()),
+                    Value::string(clasher.opponent()),
+                ],
+            )?;
             if attack.is_truthy() {
                 // GNU ignores the result of the forced `lock_file_1` too.  The
                 // advisory lock must never mask the operation that requested it.
@@ -455,7 +497,8 @@ fn file_locked_p(eval: &mut super::eval::Context, filename: &LispString) -> Resu
     {
         LockOwner::None => Ok(Value::NIL),
         LockOwner::Current => Ok(Value::T),
-        LockOwner::Other(user) => Ok(Value::string(user)),
+        // GNU Ffile_locked_p reports only the USER part of the clasher.
+        LockOwner::Other(clasher) => Ok(Value::string(clasher.user)),
     }
 }
 
