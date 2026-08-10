@@ -827,6 +827,7 @@ fn maybe_resolve_keyelt(binding: Value, resolve_keyelt: bool) -> Value {
 fn lookup_in_keymap_level_impl(
     keymap: &Value,
     event: &Value,
+    noinherit: bool,
     t_ok: bool,
     resolve_keyelt: bool,
     obarray: Option<&Obarray>,
@@ -911,13 +912,20 @@ fn lookup_in_keymap_level_impl(
         }
 
         // Sub-keymap embedded in spine: composed keymaps created by
-        // `internal-push-keymap` / `set-transient-map` look like
-        // (keymap <sub-keymap> ...).  When an entry in the spine is
-        // itself a keymap, GNU keymap.c `access_keymap_1` recursively
-        // looks up the event in that sub-keymap before continuing.
+        // `make-composed-keymap` / `internal-push-keymap` / `set-transient-map`
+        // look like (keymap <sub-keymap> ...).
+        //
+        // GNU `access_keymap_1` recurses into ITSELF here -- `access_keymap_1
+        // (submap, idx, t_ok, noinherit, autoload)` -- so the member is searched
+        // WITH its own parent chain, and a prefix it shares with that parent is
+        // merged before the composed map's own parent is considered. Searching
+        // the member one level deep instead loses everything it inherits, which
+        // is why `M-q` in a swiper minibuffer -- bound in `swiper-map`, the
+        // parent of the composed member `swiper-isearch-map` -- fell through to
+        // the global `fill-paragraph`.
         if entry_car.is_cons() && is_list_keymap(&entry_car) {
             if let Some(found) =
-                lookup_in_keymap_level_impl(&entry_car, event, t_ok, resolve_keyelt, obarray)
+                access_keymap_in_member(&entry_car, event, noinherit, t_ok, resolve_keyelt, obarray)
             {
                 if found.is_nil() {
                     nil_binding_found = true;
@@ -979,6 +987,48 @@ fn lookup_in_keymap_level_impl(
         Some(Value::NIL)
     } else {
         t_binding
+    }
+}
+
+/// One member of a composed keymap, searched the way GNU searches it: with its
+/// own parent chain, and reporting "no entry here" apart from "an entry that is
+/// nil".
+///
+/// That distinction is why this cannot just call [`list_keymap_access_impl`],
+/// which returns nil for both: an explicit nil entry SHADOWS the members and
+/// parents that follow, while no entry at all lets them through.
+fn access_keymap_in_member(
+    member: &Value,
+    event: &Value,
+    noinherit: bool,
+    t_ok: bool,
+    resolve_keyelt: bool,
+    obarray: Option<&Obarray>,
+) -> Option<Value> {
+    let found =
+        lookup_in_keymap_level_impl(member, event, noinherit, t_ok, resolve_keyelt, obarray);
+    if noinherit {
+        return found;
+    }
+    let parent = get_keymap_tail_parent(member);
+    match found {
+        // A prefix keymap merges with whatever the member's parent binds for the
+        // same event, exactly as it would if the member were looked up directly.
+        Some(binding) if is_list_keymap(&binding) && !parent.is_nil() => {
+            let parent_binding =
+                list_keymap_access_impl(&parent, event, false, t_ok, resolve_keyelt, obarray);
+            if is_list_keymap(&parent_binding) {
+                Some(compose_prefix_with_parent_keymap(&binding, &parent_binding))
+            } else {
+                Some(binding)
+            }
+        }
+        Some(binding) => Some(binding),
+        // Nothing at the member's own level: its parent chain still applies.
+        None if !parent.is_nil() => {
+            access_keymap_in_member(&parent, event, noinherit, t_ok, resolve_keyelt, obarray)
+        }
+        None => None,
     }
 }
 
@@ -1101,7 +1151,8 @@ fn list_keymap_access_impl(
         // Look up the event in the current keymap level only.
         // Some(val) means "found" (val may be nil for explicit nil binding).
         // None means "not found at this level".
-        match lookup_in_keymap_level_impl(&current, event, t_ok, resolve_keyelt, obarray) {
+        match lookup_in_keymap_level_impl(&current, event, noinherit, t_ok, resolve_keyelt, obarray)
+        {
             Some(binding) => {
                 if !noinherit && is_list_keymap(&binding) {
                     // Found a prefix keymap at this level. Check if parent

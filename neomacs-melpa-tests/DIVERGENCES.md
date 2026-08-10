@@ -1791,18 +1791,56 @@ parses the `*Help*` buffer, so anything `describe-bindings` does not print is
 simply not offered to the user.
 
 
-## 46. `swiper`'s query-replace replaces nothing
+## 46. `swiper`'s query-replace replaces nothing — FIXED
 
-Driving `swiper` to its query-replace (`M-q`) and answering `!` ("replace all")
-leaves the buffer untouched and point back where it started, where GNU performs
-every replacement.
+**Not a replace bug at all.** `swiper-query-replace` was never reached: `M-q` in
+the swiper minibuffer ran the global `fill-paragraph`. Tracing the session shows
+neomacs never entering `swiper-query-replace`, never calling
+`query-replace-compile-replacement`, and never calling `perform-replace` --
+where GNU calls all three.
 
-This one is **not yet reduced below the package**. It is recorded so the suite's
-failure is not mistaken for the `replace-match` match-data bug fixed in
-b20ec53b9: `swiper` installs each candidate's match data with `set-match-data`
-from `(match-data t)` -- plain integers -- and then replaces, which is exactly
-the shape that bug broke, but the suite still fails with it fixed, so the
-remaining cause is elsewhere in the ivy/swiper interactive path.
+The cause is in `lookup-key`. GNU `access_keymap_1` searches a keymap embedded
+in a composed keymap's spine by recursing into ITSELF -- `access_keymap_1
+(submap, idx, t_ok, noinherit, autoload)` -- so the member is searched WITH its
+own parent chain, and a prefix it shares with that parent is merged before the
+composed map's own parent is considered. neomacs searched the member ONE LEVEL
+deep, so every binding a composed map's member INHERITS was invisible.
+
+That is the shape of every ivy/swiper minibuffer: `read-from-minibuffer` is
+given `(make-composed-keymap swiper-isearch-map ivy-minibuffer-map)`, and `M-q`
+lives in `swiper-map`, the parent of the member `swiper-isearch-map`.
+
+Reduced below the package -- no ivy, no swiper, six keymaps:
+
+```elisp
+(let* ((grand (make-sparse-keymap))
+       (inner (make-sparse-keymap))
+       (outer-parent (make-sparse-keymap))
+       composed)
+  (define-key grand (kbd "M-q") 'from-grandparent)
+  (define-key inner (kbd "M-n") 'from-inner)
+  (set-keymap-parent inner grand)
+  (define-key outer-parent (kbd "M-o") 'from-outer-parent)
+  (setq composed (make-composed-keymap inner outer-parent))
+  (list (lookup-key inner (kbd "M-q"))
+        (lookup-key composed (kbd "M-q"))))
+;; GNU     => (from-grandparent from-grandparent)
+;; Neomacs => (from-grandparent nil)
+```
+
+All three maps must bind under the SAME prefix (here ESC, via the meta
+modifier): the lookup has to merge three submaps rather than take the first, and
+it is the member's inherited submap that was dropped.
+
+The scope is much wider than swiper. Composed keymaps are how minibuffer
+completion UIs, `set-transient-map`, `internal-push-keymap` and every
+`make-composed-keymap` caller layer their bindings, and any member of one that
+inherits from another map lost those inherited keys.
+
+Pinned by `lookup_key_follows_the_parent_of_a_composed_keymaps_member`
+(neovm-core/src/emacs_core/builtins/tests.rs). The `swiper` suite is green.
+
+Was:
 
 ```
 Neomacs: :text "ticket-417 state:failed\nticket-418 state:healthy\nticket-419 state:failed\n"

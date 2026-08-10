@@ -1144,6 +1144,54 @@ fn keymapp_rejects_non_keymap_integer_designators() {
     );
 }
 
+/// GNU `access_keymap_1` searches a keymap embedded in a composed keymap's spine
+/// by recursing into ITSELF -- `access_keymap_1 (submap, idx, t_ok, noinherit,
+/// autoload)` -- so the member is searched with its own parent chain, and a
+/// prefix it shares with that parent is merged before the composed map's own
+/// parent is considered.
+///
+/// Searching the member one level deep instead loses every binding a composed
+/// map's member inherits. That is the shape every ivy/swiper minibuffer has:
+/// `read-from-minibuffer` gets `(make-composed-keymap swiper-isearch-map
+/// ivy-minibuffer-map)`, and `swiper-isearch-map`'s parent `swiper-map` is where
+/// `M-q` lives -- so `M-q` fell through to the global `fill-paragraph` and
+/// swiper's query-replace was unreachable.
+#[test]
+fn lookup_key_follows_the_parent_of_a_composed_keymaps_member() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    eval.eval_str(
+        r#"(progn
+             (setq p15-grand (make-sparse-keymap))
+             (setq p15-inner (make-sparse-keymap))
+             (setq p15-outer-parent (make-sparse-keymap))
+             ;; Every map binds under the SAME prefix (ESC, the meta prefix), so
+             ;; the lookup has to merge three submaps rather than take the first.
+             (define-key p15-grand [27 ?q] 'p15-from-grandparent)
+             (define-key p15-inner [27 ?n] 'p15-from-inner)
+             (define-key p15-outer-parent [27 ?o] 'p15-from-outer-parent)
+             (set-keymap-parent p15-inner p15-grand)
+             ;; What `make-composed-keymap' builds: (keymap MEMBER... . PARENT).
+             (setq p15-composed (cons 'keymap (cons p15-inner p15-outer-parent))))"#,
+    )
+    .unwrap();
+
+    let looked_up = eval
+        .eval_str(
+            r#"(prin1-to-string
+                 (list (lookup-key p15-inner [27 ?q])
+                       (lookup-key p15-composed [27 ?q])
+                       (lookup-key p15-composed [27 ?n])
+                       (lookup-key p15-composed [27 ?o])))"#,
+        )
+        .unwrap();
+    assert_eq!(
+        looked_up.as_str_owned().as_deref(),
+        Some("(p15-from-grandparent p15-from-grandparent p15-from-inner p15-from-outer-parent)"),
+        "a composed map must reach its member's inherited bindings, not only the member's own"
+    );
+}
+
 /// GNU's own `help--describe-vector/bug-9293-*` tests (test/src/keymap-tests.el),
 /// which pin that a key RANGE is only printed when every key in it is shadowed
 /// the same way. Pinned here because `help--describe-vector` was a no-op stub:
