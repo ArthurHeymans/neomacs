@@ -3110,6 +3110,49 @@ fn bootstrap_runtime_preserves_gnu_minibuffer_completion_bindings() {
 }
 
 #[test]
+fn bootstrap_runtime_uses_gnu_minibuffer_completion_auto_choose_default() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+
+    let rendered = eval_rendered(
+        &mut eval,
+        r#"(list minibuffer-completion-auto-choose
+                  (default-value 'minibuffer-completion-auto-choose))"#,
+    );
+
+    assert_eq!(rendered, "OK (nil nil)");
+}
+
+#[test]
+fn bootstrap_runtime_next_completion_selects_without_choosing_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+
+    let rendered = eval_rendered(
+        &mut eval,
+        r#"(progn
+             (switch-to-buffer
+              (get-buffer-create "*issue-249-completion*"))
+             (erase-buffer)
+             (setq-local completion-at-point-functions
+                         (list
+                          (lambda ()
+                            (list (point-min)
+                                  (point)
+                                  '("test:a" "test:b")))))
+             (insert "test:")
+             (completion-help-at-point)
+             (minibuffer-next-completion)
+             (list (completion--selected-candidate)
+                   (buffer-string)))"#,
+    );
+
+    assert_eq!(rendered, "OK (\"test:a\" \"test:\")");
+}
+
+#[test]
 fn bootstrap_minibuffer_complete_and_exit_accepts_exact_must_match_input() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
@@ -4931,6 +4974,73 @@ fn bootstrap_runtime_command_loop_disabled_command_consumes_space_reply_once() {
     assert_eq!(
         observed,
         "OK (\"alpha line\nbeta line\n\" \"*disabled-command-target*\" \"*disabled-command-target*\" nil)",
+    );
+}
+
+#[test]
+fn bootstrap_runtime_gui_disabled_command_n_cancels_with_new_help_window() {
+    init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let scratch = eval.buffers.create_buffer("*disabled-command-gui-target*");
+    eval.buffers.set_current(scratch);
+    let frame_id = eval.frames.create_frame("F1", 960, 640, scratch);
+    assert!(eval.frames.select_frame(frame_id));
+    let selected_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame
+            .prepare_and_activate_display_presentation_for_test(
+                crate::window::geometry::PresentationId::new(1),
+                vec![crate::window::WindowDisplaySnapshot {
+                    window_id: selected_window,
+                    ..Default::default()
+                }],
+            )
+            .expect("initial GUI presentation");
+    }
+
+    eval.eval_str(
+        r#"(progn
+             (switch-to-buffer "*disabled-command-gui-target*")
+             (erase-buffer)
+             (insert "ALPHA LINE\n")
+             (goto-char (point-min)))"#,
+    )
+    .expect("setup GUI disabled-command probe");
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    for event in [
+        crate::keyboard::KeyEvent::char_with_mods('x', crate::keyboard::Modifiers::ctrl()),
+        crate::keyboard::KeyEvent::char_with_mods('l', crate::keyboard::Modifiers::ctrl()),
+        crate::keyboard::KeyEvent::char('n'),
+    ] {
+        tx.send(crate::keyboard::InputEvent::key_press(event))
+            .expect("queue disabled-command input");
+    }
+    drop(tx);
+
+    eval.input_rx = Some(rx);
+    eval.command_loop.running = true;
+
+    let result = eval
+        .recursive_edit_inner()
+        .expect("disabled-command cancellation should exit normally");
+    assert_eq!(result, Value::NIL);
+
+    let observed = eval_rendered(
+        &mut eval,
+        r#"(list
+             (with-current-buffer "*disabled-command-gui-target*"
+               (buffer-string))
+             (buffer-name (current-buffer))
+             (buffer-name (window-buffer (selected-window)))
+             (not (null (get-buffer "*Disabled Command*"))))"#,
+    );
+    assert_eq!(
+        observed,
+        "OK (\"ALPHA LINE\n\" \"*disabled-command-gui-target*\" \"*disabled-command-gui-target*\" nil)",
     );
 }
 

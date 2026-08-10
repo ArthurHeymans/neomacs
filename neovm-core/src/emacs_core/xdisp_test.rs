@@ -2357,6 +2357,58 @@ fn test_pos_visible_in_window_p_eval_returns_partial_geometry_for_live_window() 
 }
 
 #[test]
+fn pos_visible_in_new_live_window_falls_back_when_active_presentation_predates_it() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let original_buffer = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-new-window", 800, 600, original_buffer);
+    let original_window = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame
+            .prepare_and_activate_display_presentation_for_test(
+                crate::window::geometry::PresentationId::new(1),
+                vec![crate::window::WindowDisplaySnapshot {
+                    window_id: original_window,
+                    ..Default::default()
+                }],
+            )
+            .expect("initial presentation");
+    }
+
+    // Model the real Issue #249 ordering: help-mode creates a live window,
+    // then asks whether its point is visible before the asynchronous GUI has
+    // presented a frame containing that new window.
+    let help_buffer = eval.buffers.create_buffer("*Disabled Command*");
+    let help_window = eval
+        .frames
+        .split_window(
+            frame_id,
+            original_window,
+            crate::window::SplitDirection::Horizontal,
+            help_buffer,
+            None,
+            crate::window::SplitPlacement::AfterTarget,
+        )
+        .expect("help window");
+
+    let result = builtin_pos_visible_in_window_p_ctx(
+        &mut eval,
+        vec![
+            Value::fixnum(1),
+            Value::make_window(help_window.0),
+            Value::T,
+        ],
+    )
+    .expect("a live window must not expose presentation-lag as a Lisp error");
+
+    assert_eq!(super::super::print::print_value(&result), "(0 0)");
+}
+
+#[test]
 fn test_pos_visible_in_window_p_noninteractive_returns_nil_like_gnu_batch() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();

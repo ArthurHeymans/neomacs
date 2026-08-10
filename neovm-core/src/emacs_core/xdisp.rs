@@ -4997,6 +4997,51 @@ fn approximate_point_at_coords(
     })
 }
 
+/// Result of asking an immutable GUI presentation for one buffer position.
+///
+/// A live Emacs window and the renderer's active presentation are updated on
+/// different clocks. `Unavailable` therefore means the core window is newer
+/// than the active presentation, not that Lisp supplied an invalid window.
+/// Keeping that state distinct from `NotVisible` and invalid geometry prevents
+/// normal presentation lag from escaping through `pos-visible-in-window-p` as
+/// a Lisp error.
+enum PresentedBufferPosition {
+    Visible(crate::window::geometry::SnapshotPointGeometry),
+    NotVisible,
+    Unavailable,
+}
+
+fn resolve_presented_buffer_position(
+    publication: &crate::window::geometry::PresentationGeometry,
+    window: WindowId,
+    position: LispCharPos1,
+) -> Result<PresentedBufferPosition, crate::window::geometry::GeometryQueryError> {
+    use crate::window::geometry::GeometryQueryError;
+
+    match publication.resolve(crate::window::geometry::BufferPositionQuery::new(
+        publication.presentation(),
+        window,
+        position,
+    )) {
+        Ok(point) => Ok(PresentedBufferPosition::Visible(point)),
+        Err(GeometryQueryError::PositionNotVisible { .. }) => {
+            Ok(PresentedBufferPosition::NotVisible)
+        }
+        Err(
+            GeometryQueryError::NotYetActive { .. }
+            | GeometryQueryError::StalePresentation { .. }
+            | GeometryQueryError::MissingWindow(_)
+            | GeometryQueryError::MissingMaterializedGeometry(_),
+        ) => Ok(PresentedBufferPosition::Unavailable),
+        Err(
+            error @ (GeometryQueryError::MissingRegion { .. }
+            | GeometryQueryError::CoordinateNotVisible { .. }
+            | GeometryQueryError::VisualAnchorUnavailable(_)
+            | GeometryQueryError::InvalidGeometry(_)),
+        ) => Err(error),
+    }
+}
+
 fn resolve_exact_visible_metrics(
     frames: &crate::window::FrameManager,
     buffers: &crate::buffer::BufferManager,
@@ -5026,16 +5071,13 @@ fn resolve_exact_visible_metrics(
     let Some(publication) = frame.active_presentation_geometry() else {
         return Ok(None);
     };
-    let point = match publication.resolve(crate::window::geometry::BufferPositionQuery::new(
-        publication.presentation(),
-        wid,
-        pos_lisp,
-    )) {
-        Ok(point) => point,
-        Err(crate::window::geometry::GeometryQueryError::PositionNotVisible { .. }) => {
+    let point = match resolve_presented_buffer_position(publication, wid, pos_lisp)
+        .map_err(geometry_query_flow)?
+    {
+        PresentedBufferPosition::Visible(point) => point,
+        PresentedBufferPosition::NotVisible | PresentedBufferPosition::Unavailable => {
             return Ok(None);
         }
-        Err(error) => return Err(geometry_query_flow(error)),
     };
     Ok(Some((wid, exact_metrics_from_point(point))))
 }

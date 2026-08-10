@@ -4386,7 +4386,9 @@ impl Context {
         obarray.set_symbol_value("minibuffer-completion-table", Value::NIL);
         obarray.set_symbol_value("minibuffer-completion-predicate", Value::NIL);
         obarray.set_symbol_value("minibuffer-completion-confirm", Value::NIL);
-        obarray.set_symbol_value("minibuffer-completion-auto-choose", Value::T);
+        // `minibuffer-completion-auto-choose` belongs to minibuffer.el.  Do
+        // not pre-bind it here: `defcustom` preserves an existing value, so a
+        // Rust seed would override GNU Emacs's Lisp default.
         obarray.set_symbol_value("minibuffer-completion-base", Value::NIL);
         obarray.set_symbol_value("minibuffer-help-form", Value::NIL);
         obarray.set_symbol_value("minibuffer-completing-file-name", Value::NIL);
