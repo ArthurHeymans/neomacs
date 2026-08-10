@@ -455,6 +455,7 @@ mod json_snatcher;
 mod julia_mode;
 mod keyfreq;
 mod keytar;
+mod leuven_theme;
 mod link_hint;
 mod linum_relative;
 mod list_utils;

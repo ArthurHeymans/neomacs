@@ -1919,6 +1919,12 @@ pub const INDENT_GUIDE_MELPA_PIN: (&str, &str) = ("indent-guide", "20260629.918"
 /// `58ad6d8b645e6211c7c564a4fbebf39a72691c7e`.
 pub const IDO_VERTICAL_MODE_MELPA_PIN: (&str, &str) = ("ido-vertical-mode", "20260420.1855");
 
+/// The exact Leuven Theme package selected for practical light and dark
+/// theme lifecycle, real fontified Org/Elisp/diff rendering, display-gate,
+/// and scaling-customization parity. MELPA built this archive from upstream
+/// commit `c3546e6a84c138fd8cdbd33998fefcf834c45018`.
+pub const LEUVEN_THEME_MELPA_PIN: (&str, &str) = ("leuven-theme", "20260213.1052");
+
 /// The exact Iedit package selected by the practical symbol-refactoring,
 /// scoped replay, visibility, buffering/undo, and rectangle-editing corpus.
 /// MELPA built this archive from upstream commit

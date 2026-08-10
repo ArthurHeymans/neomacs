@@ -336,7 +336,7 @@ rank	package	downloads	status
 335	robe	316133	covered
 336	lsp-pyright	315668	covered
 337	ido-vertical-mode	312897	covered
-338	leuven-theme	310669	todo
+338	leuven-theme	310669	covered
 339	impatient-mode	309637	todo
 340	erlang	309612	covered
 341	elisp-refs	309038	covered
