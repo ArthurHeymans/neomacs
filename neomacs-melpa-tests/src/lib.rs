@@ -2136,6 +2136,12 @@ pub const LINUM_RELATIVE_MELPA_PIN: (&str, &str) = ("linum-relative", "20221025.
 /// archive from upstream commit `f666fba72b496c7750bb3f349771b07aa51714f0`.
 pub const LSP_DOCKER_MELPA_PIN: (&str, &str) = ("lsp-docker", "20260507.1750");
 
+/// The exact LSP Java package selected for practical JDT-LS startup, Java
+/// project build/configuration, source-action, hierarchy, class-file, and
+/// debugger/test workflow parity. MELPA built this archive from upstream
+/// commit `5294db2ac033a289e4878fa8386629b75cb3ccb6`.
+pub const LSP_JAVA_MELPA_PIN: (&str, &str) = ("lsp-java", "20260510.647");
+
 /// The exact LSP Mode package selected for practical JSON-RPC transport,
 /// Unicode position, workspace edit, completion, diagnostics, and URI parity.
 /// MELPA built this archive from upstream commit

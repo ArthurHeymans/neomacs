@@ -325,7 +325,7 @@ rank	package	downloads	status
 324	cond-let	331064	covered
 325	tern	328544	covered
 326	org-cliplink	328397	covered
-327	lsp-java	325659	todo
+327	lsp-java	325659	covered
 328	toml-mode	323991	covered
 329	esh-help	323603	todo
 330	helm-gitignore	323538	todo
