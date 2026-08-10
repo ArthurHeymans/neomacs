@@ -69,14 +69,22 @@ struct ParsedLockInfo {
     boot_time: i64,
 }
 
+/// Parse USER@HOST.PID:BOOT.  GNU (current_lock_owner) takes the LAST `@`
+/// (the user may contain one) and the last `.` after it, and rejects any
+/// trailing bytes after the pid or boot integer as EINVAL.
 fn parse_lock_info(contents: &str) -> Option<ParsedLockInfo> {
     let trimmed = contents.trim();
-    let (user, rest) = trimmed.split_once('@')?;
+    let (user, rest) = trimmed.rsplit_once('@')?;
     let (host, pid_and_boot) = rest.rsplit_once('.')?;
     let mut parts = pid_and_boot.split(':');
-    let pid_str = parts.next()?;
-    let pid = pid_str.parse().ok()?;
-    let boot_time = parts.next().and_then(|boot| boot.parse().ok()).unwrap_or(0);
+    let pid = parts.next()?.parse().ok()?;
+    let boot_time = match parts.next() {
+        None => 0,
+        Some(boot) => boot.parse().ok()?,
+    };
+    if parts.next().is_some() {
+        return None;
+    }
     Some(ParsedLockInfo {
         user: user.to_string(),
         host: host.to_string(),
