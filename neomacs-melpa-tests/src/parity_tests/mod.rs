@@ -339,6 +339,7 @@ mod ert_runner;
 mod es_lib;
 mod esh_help;
 mod eshell_prompt_extras;
+mod eshell_z;
 mod ess;
 mod eval_sexp_fu;
 mod evil;

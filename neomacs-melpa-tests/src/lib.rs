@@ -295,6 +295,11 @@ pub const EPC_MELPA_PIN: (&str, &str) = ("epc", "20140610.534");
 /// commit `36504072605a2044cf291d1c2ea987cb898c6394`.
 pub const ESHELL_PROMPT_EXTRAS_MELPA_PIN: (&str, &str) = ("eshell-prompt-extras", "20260402.1141");
 
+/// The exact eshell-z package selected for real Eshell navigation, ranking,
+/// persistence, completion, failure, and cleanup parity. MELPA built this
+/// archive from upstream commit `337cb241e17bd472bd3677ff166a0800f684213c`.
+pub const ESHELL_Z_MELPA_PIN: (&str, &str) = ("eshell-z", "20191116.333");
+
 /// The exact EPL package selected by the practical package metadata,
 /// descriptor, database, installation, deletion, and built-in discovery
 /// workflow corpus. MELPA built this archive from upstream commit
