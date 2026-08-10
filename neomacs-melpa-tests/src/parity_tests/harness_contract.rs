@@ -694,7 +694,7 @@ fn every_exact_package_has_a_complete_acyclic_source_plan() {
     let sources = locked_melpa_sources().expect("parse the source lock");
     assert_eq!(
         sources.len(),
-        659,
+        660,
         "every root package, exact dependency, and legacy all-ext dependency stays pinned"
     );
 

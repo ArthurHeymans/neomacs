@@ -1913,6 +1913,12 @@ pub const HIGHLIGHT_PARENTHESES_MELPA_PIN: (&str, &str) =
 /// `1332f95d6f08afee35f62621793e2622b9f86f27`.
 pub const INDENT_GUIDE_MELPA_PIN: (&str, &str) = ("indent-guide", "20260629.918");
 
+/// The exact Ido Vertical Mode package selected for real minibuffer rendering,
+/// candidate navigation, confirmation, mode lifecycle, and file-selection
+/// parity. MELPA built this archive from upstream commit
+/// `58ad6d8b645e6211c7c564a4fbebf39a72691c7e`.
+pub const IDO_VERTICAL_MODE_MELPA_PIN: (&str, &str) = ("ido-vertical-mode", "20260420.1855");
+
 /// The exact Iedit package selected by the practical symbol-refactoring,
 /// scoped replay, visibility, buffering/undo, and rectangle-editing corpus.
 /// MELPA built this archive from upstream commit
