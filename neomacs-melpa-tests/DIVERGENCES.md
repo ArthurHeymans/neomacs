@@ -2455,7 +2455,55 @@ anything that prints a raw byte through a key description is affected.
 Not yet attributed to a package suite.
 
 
-## 57. `intern` drops the text properties of a MULTIBYTE name string
+## 57. `intern` drops the text properties of a MULTIBYTE name string -- FIXED
+
+FIXED 2026-08-10. `intern` now adopts the string OBJECT it was handed as the
+new symbol's name whenever the call CREATES the symbol, for both the global and
+a custom obarray, exactly as GNU's `Fintern` -> `intern_driver` ->
+`Fmake_symbol (string)` does (lread.c:4705-4708, 4773-4806). `symbol-name`
+returns that object, so its text properties, its multibyteness and any later
+`aset` on it all survive; an already-interned symbol keeps the name it was
+created with, so the argument's properties stay invisible there, as in GNU.
+
+Measured on GNU 31.0.90 rather than assumed, and two of the measurements
+changed the fix. First, `(eq s (symbol-name (intern s)))` is `t` in GNU for a
+unibyte AND a multibyte name -- GNU shares, it does not copy, so sharing is both
+the faithful shape and the free one. Second, GNU does NOT canonicalize an
+ascii-only multibyte name:
+`(multibyte-string-p (symbol-name (intern (string-to-multibyte "/tmp/HELLO") ob)))`
+is `t` for a custom obarray and for the global one alike. Our custom-obarray
+path was rewriting such a name to unibyte, and since the reduction above uses
+`string-to-multibyte`, that rewrite WAS the property loss. Name IDENTITY is a
+separate question that GNU answers on chars and bytes only (`oblookup` never
+compares the multibyte flag), which our normalized name atom already reproduces.
+
+That separation is now explicit in the code, because conflating it was also
+hiding a latent memory-safety bug. A symbol's name ATOM is process-lifetime and
+is what identity, hashing and the `&'static` thread-local name cache use; a
+symbol's name OBJECT is an ordinary GC-managed heap string and is what Lisp
+observes (`symbol-name`, printing, obarray lookup). `resolve_lisp_string` used
+to prefer the name object, which was safe only by accident -- canonical symbols
+never had one, so the `&'static` cache never saw a heap pointer. Giving interned
+symbols a name object broke that invariant immediately (three tests died on a
+`slice::from_raw_parts` UB check against a freed string). `resolve_lisp_string`
+is now atom-only and a new `resolve_sym_lisp_name` serves the Lisp-visible name.
+`SymbolRegistry::alloc_symbol`'s `Option<SymbolNameValue>` became a named
+`NewSymbolName { AtomOnly, LispObject }` so every construction site states what
+the name is instead of passing the bare `None` that caused this.
+
+Cost gate (the entry asked for one): no cost. Release fresh-builds of both
+sides, `taskset -c 0-15 perf stat -e instructions:u`, 3 interleaved pairs --
+`--batch` startup 542,932,328 -> 542,643,463 (-0.053%) and a `cl-macs.el`
+byte-compile 3,105,142,573 -> 3,102,882,254 (-0.073%), both marginally negative
+and inside run-to-run spread. Structural reason: the reader interns through
+`intern_lisp_string(&LispString)` with no Lisp string object in hand, so it stays
+on the unchanged `AtomOnly` path; only Lisp-level `intern` calls gain a rooted
+name value, and those are not the byte-compile hot path.
+
+`elisp-slime-nav` (the one affected suite, and the remaining half of entry 48)
+now passes.
+
+Original report follows.
 
 GNU `Fintern` stores the string it was handed as the new symbol's name, so
 `symbol-name` gives that string back with its text properties intact. Neomacs

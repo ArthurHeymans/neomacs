@@ -5528,7 +5528,12 @@ fn custom_obarray_intern_reuses_ascii_multibyte_symbol_names() {
         .expect("symbol-name should return a string")
         .clone();
     assert_eq!(stored_name.as_bytes(), b"/tmp/HELLO");
-    assert!(!stored_name.is_multibyte());
+    // The name KEEPS the representation it was interned from. This assertion
+    // read `!is_multibyte` until it was checked against GNU 31.0.90, where
+    // `(multibyte-string-p (symbol-name (intern (string-to-multibyte "/tmp/HELLO") ob)))`
+    // is `t` for a custom obarray and for the global one alike: GNU stores the
+    // argument string and folds representation only when deciding IDENTITY.
+    assert!(stored_name.is_multibyte());
 }
 
 #[test]
@@ -17404,4 +17409,103 @@ fn define_fringe_bitmap_registers_the_symbol_in_fringe_bitmaps() {
     .next()
     .expect("at least one form");
     assert_eq!(result, "OK ((t 1) 1 (nil 0 nil) (t 1))");
+}
+
+/// GNU `Fintern` hands the argument straight to `intern_driver`, which calls
+/// `Fmake_symbol (string)` (lread.c:4705-4708, 4773-4806) -- so a symbol the
+/// caller created owns THE ARGUMENT STRING OBJECT as its name. `symbol-name`
+/// returns that object, with its text properties, its multibyteness and any
+/// later mutation, and is `eq` to what was interned. Measured on GNU 31.0.90:
+/// `(let ((s (propertize "x" 'p 1))) (eq s (symbol-name (intern s))))` is `t`
+/// for a unibyte AND a multibyte name, and
+/// `(multibyte-string-p (symbol-name (intern (string-to-multibyte "/tmp/H"))))`
+/// is `t` -- GNU does not canonicalize an ascii-only multibyte name.
+#[test]
+fn intern_stores_the_name_string_object_it_was_handed() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    for name in [
+        Value::multibyte_string("p16-intern-mb"),
+        Value::unibyte_string("p16-intern-ub"),
+        Value::multibyte_string("p16-intern-é"),
+    ] {
+        let sym = dispatch_builtin(&mut eval, "intern", vec![name])
+            .expect("builtin intern should resolve")
+            .expect("builtin intern should evaluate");
+        let roundtrip = dispatch_builtin(&mut eval, "symbol-name", vec![sym])
+            .expect("builtin symbol-name should resolve")
+            .expect("builtin symbol-name should evaluate");
+        // `Value`'s `PartialEq` is `equal`, not `eq` -- assert on the tagged
+        // word so this pins OBJECT identity the way GNU's `eq` does.
+        assert_eq!(
+            roundtrip.0, name.0,
+            "symbol-name must be eq to the string intern was handed"
+        );
+    }
+}
+
+/// The property-visible half of the same rule, at Lisp level: interning a
+/// propertized name makes those properties readable through `symbol-name`,
+/// for a multibyte name as much as a unibyte one. `make-symbol` already did
+/// both. Interning a name whose symbol ALREADY exists keeps the existing name
+/// object, so the argument's properties stay invisible (GNU returns `nil`
+/// there -- `intern_driver` only runs when `oblookup` found no symbol).
+#[test]
+fn intern_keeps_a_multibyte_name_strings_text_properties() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_all(
+        r#"(list (text-properties-at
+                  0 (symbol-name (intern (propertize (string-to-multibyte "p16-mb-alpha") 'fontified nil))))
+                 (text-properties-at
+                  0 (symbol-name (intern (propertize "p16-ub-alpha" 'fontified nil))))
+                 (text-properties-at
+                  0 (symbol-name (make-symbol (propertize (string-to-multibyte "p16-mb-beta") 'fontified nil))))
+                 (progn (intern "p16-existing")
+                        (text-properties-at
+                         0 (symbol-name (intern (propertize "p16-existing" 'p 1))))))"#,
+    )
+    .into_iter()
+    .next()
+    .expect("at least one form");
+    assert_eq!(
+        result,
+        "OK ((fontified nil) (fontified nil) (fontified nil) nil)"
+    );
+}
+
+/// A custom obarray interns through the same rule: GNU's `Fintern` has one
+/// creation path for both obarrays. Measured on GNU 31.0.90,
+/// `(multibyte-string-p (symbol-name (intern (string-to-multibyte "/tmp/HELLO") ob)))`
+/// is `t`, and interning the unibyte spelling finds that same symbol -- name
+/// IDENTITY is byte-wise (our normalized name atom), while the name OBJECT is
+/// whatever created the symbol.
+#[test]
+fn custom_obarray_intern_stores_the_name_string_object_it_was_handed() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let obarray = dispatch_builtin(&mut eval, "obarray-make", vec![Value::fixnum(17)])
+        .expect("builtin obarray-make should resolve")
+        .expect("builtin obarray-make should evaluate");
+    let ascii_multibyte = Value::multibyte_string("/tmp/HELLO");
+
+    let first = dispatch_builtin(&mut eval, "intern", vec![ascii_multibyte, obarray])
+        .expect("builtin intern should resolve")
+        .expect("builtin intern should evaluate");
+    let soft = dispatch_builtin(
+        &mut eval,
+        "intern-soft",
+        vec![Value::unibyte_string("/tmp/HELLO"), obarray],
+    )
+    .expect("builtin intern-soft should resolve")
+    .expect("builtin intern-soft should evaluate");
+    assert_eq!(soft, first, "byte-equal spellings name the same symbol");
+
+    let stored = dispatch_builtin(&mut eval, "symbol-name", vec![first])
+        .expect("builtin symbol-name should resolve")
+        .expect("builtin symbol-name should evaluate");
+    assert_eq!(
+        stored.0, ascii_multibyte.0,
+        "symbol-name must be eq to the string intern was handed"
+    );
 }

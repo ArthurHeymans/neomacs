@@ -148,13 +148,27 @@ impl Default for StringInterner {
     }
 }
 
+/// Fold a symbol name to the representation symbol IDENTITY is decided on.
+///
+/// GNU's `oblookup` compares a name's char count, byte count and bytes, never
+/// its multibyte FLAG (lread.c), so an ascii-only multibyte spelling and its
+/// unibyte spelling name the same symbol. Folding ascii-only multibyte names to
+/// unibyte reproduces that on our flag-sensitive `LispString` comparison.
+///
+/// This is about identity ONLY. Which string object `symbol-name` returns is a
+/// separate question, answered by the name object a symbol was created from --
+/// GNU keeps that unfolded, multibyte flag and all.
+pub(crate) fn normalize_symbol_name_lisp_string(s: &LispString) -> Cow<'_, LispString> {
+    if s.is_ascii() && s.is_multibyte() {
+        Cow::Owned(LispString::from_unibyte(s.as_bytes().to_vec()))
+    } else {
+        Cow::Borrowed(s)
+    }
+}
+
 impl StringInterner {
     fn normalize_symbol_name_lisp_string<'a>(s: &'a LispString) -> Cow<'a, LispString> {
-        if s.is_ascii() && s.is_multibyte() {
-            Cow::Owned(LispString::from_unibyte(s.as_bytes().to_vec()))
-        } else {
-            Cow::Borrowed(s)
-        }
+        normalize_symbol_name_lisp_string(s)
     }
 
     pub fn new() -> Self {
@@ -264,6 +278,35 @@ struct SymbolNameValue {
     heap_id: usize,
 }
 
+/// The name a freshly allocated symbol carries, stated at every construction
+/// site so "no Lisp name object" is a claim rather than a forgotten argument.
+///
+/// GNU has only the second case: `intern_driver` and `Fmake_symbol` both store
+/// THE STRING OBJECT they were handed (lread.c:4705-4708), so `symbol-name`
+/// returns it with its text properties, its multibyteness and any later
+/// mutation intact. We additionally construct symbols from Rust text -- the
+/// reader, the dumper, bootstrap -- where no Lisp object exists to store; those
+/// sites say `AtomOnly` and `symbol-name` materializes a string from the name
+/// atom instead.
+#[derive(Clone, Copy, Debug)]
+enum NewSymbolName {
+    /// No Lisp string object was involved; the interned name atom is the whole
+    /// of the symbol's name.
+    AtomOnly,
+    /// GNU's case: this string object IS the symbol's name.
+    LispObject(SymbolNameValue),
+}
+
+impl NewSymbolName {
+    /// Adopt a Lisp string object as a new symbol's name, as GNU's
+    /// `Fmake_symbol (string)` does.
+    fn from_lisp_object(value: TaggedValue) -> Self {
+        let heap_id = crate::tagged::gc::current_tagged_heap_identity()
+            .expect("a Lisp symbol name value requires an installed tagged heap");
+        Self::LispObject(SymbolNameValue { value, heap_id })
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct SymbolSlot {
     name: NameId,
@@ -319,29 +362,24 @@ impl SymbolRegistry {
             name_value_syms_by_heap: FxHashMap::default(),
         };
         let nil_name = registry.names.intern("nil");
-        let nil_id = registry.alloc_symbol(nil_name, true, None);
+        let nil_id = registry.alloc_symbol(nil_name, true, NewSymbolName::AtomOnly);
         debug_assert_eq!(nil_id, NIL_SYM_ID);
 
         let t_name = registry.names.intern("t");
-        let t_id = registry.alloc_symbol(t_name, true, None);
+        let t_id = registry.alloc_symbol(t_name, true, NewSymbolName::AtomOnly);
         debug_assert_eq!(t_id, T_SYM_ID);
 
         let unbound_name = registry.names.intern("unbound");
-        let unbound_id = registry.alloc_symbol(unbound_name, false, None);
+        let unbound_id = registry.alloc_symbol(unbound_name, false, NewSymbolName::AtomOnly);
         debug_assert_eq!(unbound_id, UNBOUND_SYM_ID);
 
         registry
     }
 
-    fn alloc_symbol(
-        &mut self,
-        name: NameId,
-        canonical: bool,
-        name_value: Option<SymbolNameValue>,
-    ) -> SymId {
+    fn alloc_symbol(&mut self, name: NameId, canonical: bool, name_value: NewSymbolName) -> SymId {
         let id = SymId(self.symbols.len() as u32);
         self.symbols.push(SymbolSlot { name, canonical });
-        if let Some(name_value) = name_value {
+        if let NewSymbolName::LispObject(name_value) = name_value {
             let old = self.name_values.insert(id, name_value);
             debug_assert!(old.is_none(), "new symbol id already had a name value");
             self.name_value_syms_by_heap
@@ -364,7 +402,7 @@ impl SymbolRegistry {
         if let Some(existing) = self.canonical_by_name.get(&name) {
             return *existing;
         }
-        self.alloc_symbol(name, true, None)
+        self.alloc_symbol(name, true, NewSymbolName::AtomOnly)
     }
 
     fn intern_lisp_string(&mut self, s: &LispString) -> SymId {
@@ -372,33 +410,44 @@ impl SymbolRegistry {
         if let Some(existing) = self.canonical_by_name.get(&name) {
             return *existing;
         }
-        self.alloc_symbol(name, true, None)
+        self.alloc_symbol(name, true, NewSymbolName::AtomOnly)
     }
 
     fn intern_uninterned(&mut self, s: &str) -> SymId {
         let name = self.names.intern(s);
-        self.alloc_symbol(name, false, None)
+        self.alloc_symbol(name, false, NewSymbolName::AtomOnly)
     }
 
     fn intern_uninterned_lisp_string(&mut self, s: &LispString) -> SymId {
         let name = self.names.intern_lisp_string(s);
-        self.alloc_symbol(name, false, None)
+        self.alloc_symbol(name, false, NewSymbolName::AtomOnly)
+    }
+
+    /// GNU `Fintern` on a Lisp string: return the canonical symbol of that
+    /// name, and when this call is the one that CREATES it, adopt the argument
+    /// as the symbol's name object (lread.c:4796-4805 -> `intern_driver` ->
+    /// `Fmake_symbol (string)`). An already-interned symbol keeps the name it
+    /// was created with, so the argument's text properties stay invisible --
+    /// GNU reaches `intern_driver` only when `oblookup` found nothing.
+    ///
+    /// Name IDENTITY still runs through the normalized name atom, so a unibyte
+    /// and an ascii-only multibyte spelling name the same symbol either way;
+    /// only which string object `symbol-name` hands back is at stake here.
+    fn intern_lisp_value(&mut self, name_value: TaggedValue) -> SymId {
+        let name = self
+            .names
+            .intern_lisp_string(name_value.as_lisp_string().expect("string name"));
+        if let Some(existing) = self.canonical_by_name.get(&name) {
+            return *existing;
+        }
+        self.alloc_symbol(name, true, NewSymbolName::from_lisp_object(name_value))
     }
 
     fn make_uninterned_symbol_with_name_value(&mut self, name_value: TaggedValue) -> SymId {
         let name = self
             .names
             .intern_lisp_string(name_value.as_lisp_string().expect("string name"));
-        let heap_id = crate::tagged::gc::current_tagged_heap_identity()
-            .expect("make-symbol name value requires an installed tagged heap");
-        self.alloc_symbol(
-            name,
-            false,
-            Some(SymbolNameValue {
-                value: name_value,
-                heap_id,
-            }),
-        )
+        self.alloc_symbol(name, false, NewSymbolName::from_lisp_object(name_value))
     }
 
     fn lookup(&self, s: &str) -> Option<SymId> {
@@ -423,19 +472,20 @@ impl SymbolRegistry {
             .unwrap_or_else(|| panic!("symbol name {:?} is not valid UTF-8", id))
     }
 
+    /// A symbol's NAME ATOM: process-lifetime, byte-exact, and the footing
+    /// symbol identity is decided on. Never the Lisp name object.
+    ///
+    /// The two must not be conflated. The atom lives for the process, so
+    /// callers may cache it as `&'static` (`thread_local_resolve` does); the
+    /// name object is an ordinary GC-managed heap string belonging to one heap,
+    /// and handing it out here would let a `&'static` outlive it. Lisp-visible
+    /// name reads go through [`Self::resolve_name_value`] instead, which is
+    /// what `symbol-name` prefers.
     #[inline]
     fn resolve_lisp_string(&self, id: SymId) -> &'static LispString {
         let slot = self
             .slot(id)
             .unwrap_or_else(|| panic!("invalid symbol id {:?}", id));
-        if let Some(name_value) = self.name_values.get(&id).copied()
-            && crate::tagged::gc::current_tagged_heap_identity() == Some(name_value.heap_id)
-        {
-            return name_value
-                .value
-                .as_lisp_string()
-                .expect("symbol name value must remain a string");
-        }
         self.names.resolve_lisp_string(slot.name)
     }
 
@@ -556,10 +606,16 @@ impl SymbolRegistry {
                         self.canonical_by_name
                             .get(&runtime_name)
                             .copied()
-                            .unwrap_or_else(|| self.alloc_symbol(runtime_name, true, None)),
+                            .unwrap_or_else(|| {
+                                self.alloc_symbol(runtime_name, true, NewSymbolName::AtomOnly)
+                            }),
                     )
                 } else {
-                    Ok::<SymId, String>(self.alloc_symbol(runtime_name, false, None))
+                    Ok::<SymId, String>(self.alloc_symbol(
+                        runtime_name,
+                        false,
+                        NewSymbolName::AtomOnly,
+                    ))
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -706,6 +762,19 @@ pub fn intern_uninterned(s: &str) -> SymId {
 pub fn intern_uninterned_lisp_string(s: &LispString) -> SymId {
     let mut registry = global_symbol_registry().write();
     registry.intern_uninterned_lisp_string(s)
+}
+
+/// Intern NAME_VALUE in the global obarray, adopting it as the new symbol's
+/// exact name object when this call creates the symbol, matching GNU `intern`.
+///
+/// Prefer this over [`intern_lisp_string`] wherever the caller holds the Lisp
+/// string OBJECT a symbol is being named from: `intern_lisp_string` keeps only
+/// the name atom, which drops the string's text properties and its
+/// multibyteness.
+#[inline]
+pub fn intern_lisp_value(name_value: TaggedValue) -> SymId {
+    let mut registry = global_symbol_registry().write();
+    registry.intern_lisp_value(name_value)
 }
 
 /// Create an uninterned symbol that stores NAME_VALUE as its exact name
@@ -875,6 +944,24 @@ pub(crate) fn unintern_canonical_id(id: SymId) -> bool {
         ensure_thread_local_cache_epoch_current();
     }
     changed
+}
+
+/// The string a symbol's name READS as from Lisp: the name object the symbol
+/// was created from when it has one on the current heap, else its name atom.
+///
+/// GNU has only the first case -- a symbol's name is the string object it was
+/// created from -- so everything Lisp can observe follows the object:
+/// `symbol-name`, printing, and obarray lookup, including through a later
+/// `aset` on that string.
+///
+/// Do NOT cache the result. Unlike the process-lifetime atom from
+/// [`resolve_sym_lisp_string`], a name object is an ordinary GC-managed heap
+/// string owned by one heap.
+#[inline]
+pub fn resolve_sym_lisp_name(id: SymId) -> &'static LispString {
+    resolve_sym_name_value(id)
+        .and_then(|name_value| name_value.as_lisp_string())
+        .unwrap_or_else(|| resolve_sym_lisp_string(id))
 }
 
 #[inline]

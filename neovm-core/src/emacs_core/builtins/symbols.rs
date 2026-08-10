@@ -1476,13 +1476,7 @@ pub(crate) fn builtin_macrop(eval: &mut super::eval::Context, args: Vec<Value>) 
 
 /// Hash a string for custom obarray bucket index.
 pub(crate) fn obarray_hash_lisp_string(s: &crate::heap_types::LispString, len: usize) -> usize {
-    let normalized = if s.is_ascii() && s.is_multibyte() {
-        std::borrow::Cow::Owned(crate::heap_types::LispString::from_unibyte(
-            s.as_bytes().to_vec(),
-        ))
-    } else {
-        std::borrow::Cow::Borrowed(s)
-    };
+    let normalized = crate::emacs_core::intern::normalize_symbol_name_lisp_string(s);
     obarray_hash_bytes(normalized.as_bytes(), len)
 }
 
@@ -1537,19 +1531,27 @@ pub(crate) fn global_obarray_symbols_in_bucket_order(
     ids.into_iter().map(Value::from_sym_id).collect()
 }
 
+/// The name string a symbol answers to in an obarray.
+///
+/// GNU compares against the symbol's NAME OBJECT, which Lisp can mutate in
+/// place -- `(aset name 0 ?X)` after `(intern name ob)` makes the symbol answer
+/// to the new spelling and not the old one.
+fn obarray_lookup_name(sym: Value) -> Option<&'static crate::heap_types::LispString> {
+    sym.as_symbol_id()
+        .map(crate::emacs_core::intern::resolve_sym_lisp_name)
+}
+
 /// Search a bucket chain (cons list) for a symbol with the given name.
 /// Returns the symbol Value if found.
 pub(crate) fn obarray_bucket_find(
     bucket: Value,
     name: &crate::heap_types::LispString,
 ) -> Option<Value> {
-    let normalized = if name.is_ascii() && name.is_multibyte() {
-        std::borrow::Cow::Owned(crate::heap_types::LispString::from_unibyte(
-            name.as_bytes().to_vec(),
-        ))
-    } else {
-        std::borrow::Cow::Borrowed(name)
-    };
+    // Normalize BOTH sides: a symbol created from an ascii-only multibyte name
+    // keeps that multibyte string as its name object (GNU `intern_driver`), so
+    // the stored name can carry a representation the query does not. GNU's
+    // `oblookup` never compares the multibyte flag, only chars and bytes.
+    let normalized = crate::emacs_core::intern::normalize_symbol_name_lisp_string(name);
     let mut current = bucket;
     loop {
         match current.kind() {
@@ -1557,8 +1559,10 @@ pub(crate) fn obarray_bucket_find(
             ValueKind::Cons => {
                 let car = current.cons_car();
                 let cdr = current.cons_cdr();
-                if let Some(sym_name) = car.as_symbol_lisp_string()
-                    && sym_name == normalized.as_ref()
+                if let Some(sym_name) = obarray_lookup_name(car)
+                    && crate::emacs_core::intern::normalize_symbol_name_lisp_string(sym_name)
+                        .as_ref()
+                        == normalized.as_ref()
                 {
                     return Some(car);
                 }
@@ -1600,7 +1604,9 @@ fn grow_obarray_vector_if_needed(obarray_val: Value) {
     let mut new_buckets = vec![Value::NIL; old_len.saturating_mul(2).max(1)];
     for bucket in buckets.iter().copied() {
         for sym in obarray_bucket_symbols(bucket) {
-            let Some(name) = sym.as_symbol_lisp_string() else {
+            // Rehash on the same name a lookup will hash: the name object when
+            // the symbol has one, so a grown obarray still finds its symbols.
+            let Some(name) = obarray_lookup_name(sym) else {
                 continue;
             };
             let idx = obarray_hash_lisp_string(name, new_buckets.len());
@@ -1688,18 +1694,17 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
             return Ok(sym);
         }
 
-        // Not found: create symbol and prepend to bucket chain.  GNU
-        // canonicalizes ascii-only multibyte symbol names to unibyte before
-        // interning; non-ascii/raw names keep their exact Lisp string object.
-        let symbol_name_value = if name.is_ascii() && name.is_multibyte() {
-            Value::heap_string(crate::heap_types::LispString::from_unibyte(
-                name.as_bytes().to_vec(),
-            ))
-        } else {
-            args[0]
-        };
+        // Not found: create the symbol from the string we were handed and
+        // prepend it to the bucket chain. GNU has ONE creation path for both
+        // obarrays -- `intern_driver (string, ...)` -> `Fmake_symbol (string)`
+        // (lread.c:4705-4708) -- so the argument becomes the name object here
+        // exactly as it does globally, keeping its text properties and its
+        // multibyteness. Lookup already normalizes an ascii-only multibyte
+        // spelling to its unibyte bytes (`obarray_hash_lisp_string`,
+        // `obarray_bucket_find`), so identity does not depend on the name
+        // object's representation.
         let sym = Value::from_sym_id(
-            crate::emacs_core::intern::make_uninterned_symbol_with_name_value(symbol_name_value),
+            crate::emacs_core::intern::make_uninterned_symbol_with_name_value(args[0]),
         );
         let new_bucket = Value::cons(sym, bucket);
         let _ = set_obarray_bucket(obarray_val, bucket_idx, new_bucket);
@@ -1708,8 +1713,10 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
         return Ok(sym);
     }
 
-    // Global obarray path
-    let sym = eval.obarray_mut().intern_lisp_string(name);
+    // Global obarray path. Pass the string OBJECT, not just its bytes: when
+    // this call creates the symbol that object becomes its name, so
+    // `symbol-name` returns it with the text properties it was read from.
+    let sym = eval.obarray_mut().intern_lisp_value(args[0]);
     Ok(Value::from_sym_id(sym))
 }
 
@@ -1728,14 +1735,16 @@ pub(crate) fn intern_soft_impl(eval: &super::eval::Context, args: Vec<Value>) ->
         let obarray_val = check_obarray_value(effective_obarray)?;
         let name = match args[0].kind() {
             ValueKind::String => std::borrow::Cow::Borrowed(args[0].as_lisp_string().unwrap()),
+            // GNU searches for `SYMBOL_NAME (name)` -- the name OBJECT, the
+            // same string the bucket chain is compared on.
             ValueKind::Symbol(id) => {
-                std::borrow::Cow::Borrowed(crate::emacs_core::intern::resolve_sym_lisp_string(id))
+                std::borrow::Cow::Borrowed(crate::emacs_core::intern::resolve_sym_lisp_name(id))
             }
             ValueKind::Nil => std::borrow::Cow::Borrowed(
-                crate::emacs_core::intern::resolve_sym_lisp_string(NIL_SYM_ID),
+                crate::emacs_core::intern::resolve_sym_lisp_name(NIL_SYM_ID),
             ),
             ValueKind::T => std::borrow::Cow::Borrowed(
-                crate::emacs_core::intern::resolve_sym_lisp_string(T_SYM_ID),
+                crate::emacs_core::intern::resolve_sym_lisp_name(T_SYM_ID),
             ),
             _other => {
                 // Transparently unwrap symbol-with-pos → bare symbol name.

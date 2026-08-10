@@ -1370,6 +1370,17 @@ impl Obarray {
         id
     }
 
+    /// Intern a symbol from a Lisp string OBJECT, which becomes the symbol's
+    /// name when this call creates it -- GNU `intern`. Use this rather than
+    /// [`Self::intern_lisp_string`] whenever the name came from Lisp, so
+    /// `symbol-name` gives that object back with its text properties.
+    pub fn intern_lisp_value(&mut self, name_value: crate::tagged::value::TaggedValue) -> SymId {
+        let id = crate::emacs_core::intern::intern_lisp_value(name_value);
+        self.ensure_symbol_id(id);
+        self.mark_global_member(id);
+        id
+    }
+
     /// Materialize a canonical symbol in the global obarray.
     ///
     /// GNU does this as part of interning into the initial obarray. Neomacs

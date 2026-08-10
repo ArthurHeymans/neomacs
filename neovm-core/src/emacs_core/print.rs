@@ -2213,8 +2213,11 @@ fn append_symbol_with_pos_bytes(value: &Value, out: &mut Vec<u8>, options: Print
 }
 
 fn symbol_bytes(id: super::intern::SymId, options: PrintOptions) -> Vec<u8> {
-    let name = resolve_sym_lisp_string(id);
-    let canonical = lookup_interned_lisp_string(name);
+    // Identity is decided on the name ATOM, the printed spelling on the name
+    // OBJECT: GNU prints the string the symbol was created from, which Lisp can
+    // have mutated in place since.
+    let canonical = lookup_interned_lisp_string(resolve_sym_lisp_string(id));
+    let name = super::intern::resolve_sym_lisp_name(id);
     let mut out = Vec::new();
     if canonical == Some(id) {
         append_symbol_name_bytes_with_escape(name, &mut out, !options.print_noescape);
