@@ -2,6 +2,20 @@ use super::*;
 use flate2::{Compression, write::GzEncoder};
 
 #[test]
+fn nix_runtime_closure_includes_the_cxx_standard_library() {
+    let flake = include_str!("../../flake.nix");
+
+    assert!(
+        flake.contains("stdenv.cc.cc.lib"),
+        "Neomacs links libstdc++, so the Nix runtime closure must own it"
+    );
+    assert!(
+        flake.contains("lib.remove pkgs.ncurses (commonBuildInputsFor pkgs)"),
+        "the development LD_LIBRARY_PATH must derive from the packaged runtime closure"
+    );
+}
+
+#[test]
 #[cfg(unix)]
 fn linux_desktop_assets_install_the_runtime_window_identity() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

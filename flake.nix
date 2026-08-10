@@ -82,6 +82,10 @@
         tree-sitter
         gmp
       ] ++ lib.optionals pkgs.stdenv.isLinux (with pkgs; [
+        # Rust dependencies may link C++ libraries even though Neomacs itself
+        # is Rust. Keep libstdc++ in both the package and development runtime
+        # closure so freshly linked bootstrap executables are runnable.
+        stdenv.cc.cc.lib
         alsa-lib
         gst_all_1.gst-vaapi
         libva
@@ -222,6 +226,12 @@
           pkgs = pkgsFor system;
           isLinux = pkgs.stdenv.isLinux;
           isDarwin = pkgs.stdenv.isDarwin;
+          # Share one runtime-closure definition with the packaged wrapper.
+          # ncurses remains RPATH-resolved because putting it in the shell's
+          # global library path can contaminate the system shell\'s glibc.
+          runtimeLibraryPath = pkgs.lib.makeLibraryPath (
+            lib.remove pkgs.ncurses (commonBuildInputsFor pkgs)
+          );
         in {
           default = pkgs.mkShell {
             name = "neomacs-dev";
@@ -308,48 +318,7 @@
               # Library path for runtime — DO NOT include ncurses here,
               # it causes glibc version contamination with system shell.
               # The linker adds RPATH for ncurses during compilation.
-              export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath (with pkgs; [
-                glib
-                cairo
-                pango
-                gst_all_1.gstreamer
-                gst_all_1.gst-plugins-base
-                fontconfig
-                freetype
-                harfbuzz
-                libotf
-                libxml2
-                gnutls
-                zlib
-                libjpeg
-                libtiff
-                giflib
-                libpng
-                librsvg
-                libwebp
-                dbus
-                sqlite
-                gmp
-                alsa-lib
-                libsoup_3
-                libGL
-                vulkan-loader
-                mesa
-                libdrm
-                libxkbcommon
-                libgbm
-                # Display libs dynamically loaded by winit
-                wayland
-                libx11
-                libxpm
-                libxcursor
-                libxrandr
-                libxi
-                libxinerama
-                wpewebkit
-                libwpe
-                libwpe-fdo
-              ])}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+              export LD_LIBRARY_PATH="${runtimeLibraryPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
               # Vulkan ICD discovery — tell the Vulkan loader where Mesa's
               # driver JSON files are (e.g. intel_icd.x86_64.json for anv).
