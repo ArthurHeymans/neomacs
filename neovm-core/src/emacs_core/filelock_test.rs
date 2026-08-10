@@ -242,7 +242,9 @@ fn modifying_externally_locked_file_propagates_file_locked_and_leaves_buffer_unt
         "a refused edit must not modify the buffer"
     );
     assert_eq!(
-        fs::read_link(&lock_path).expect("lock survives").to_string_lossy(),
+        fs::read_link(&lock_path)
+            .expect("lock survives")
+            .to_string_lossy(),
         contents,
         "a refused edit must not steal the other process's lock"
     );
@@ -282,7 +284,8 @@ fn ask_user_about_lock_steal_and_proceed_answers_match_gnu() {
                      nil)))"#,
     )
     .expect("define recording ask-user-about-lock");
-    eval.eval_str(r#"(insert "EDIT")"#).expect("proceed answer edits anyway");
+    eval.eval_str(r#"(insert "EDIT")"#)
+        .expect("proceed answer edits anyway");
     assert_eq!(
         crate::emacs_core::format_eval_result(&eval.eval_str("neovm-lock-args")),
         format!(
@@ -294,7 +297,9 @@ fn ask_user_about_lock_steal_and_proceed_answers_match_gnu() {
         "opponent string must be USER@HOST (pid PID) with the boot time stripped"
     );
     assert_eq!(
-        fs::read_link(&lock_path).expect("lock survives").to_string_lossy(),
+        fs::read_link(&lock_path)
+            .expect("lock survives")
+            .to_string_lossy(),
         contents,
         "answer nil edits the file but leaves the other lock in place"
     );
@@ -304,9 +309,12 @@ fn ask_user_about_lock_steal_and_proceed_answers_match_gnu() {
     visit_file_in_current_buffer(&mut eval, &visited);
     eval.eval_str(r#"(fset 'ask-user-about-lock (lambda (file opponent) t))"#)
         .expect("define stealing ask-user-about-lock");
-    eval.eval_str(r#"(insert "EDIT")"#).expect("steal answer edits");
+    eval.eval_str(r#"(insert "EDIT")"#)
+        .expect("steal answer edits");
     assert_eq!(
-        fs::read_link(&lock_path).expect("stolen lock").to_string_lossy(),
+        fs::read_link(&lock_path)
+            .expect("stolen lock")
+            .to_string_lossy(),
         current_lock_info_string(),
         "answer t forces the lock over to us"
     );
@@ -340,10 +348,7 @@ fn unparseable_lock_contents_are_an_error_not_another_owner() {
     eval.eval_str(r#"(insert "EDIT")"#)
         .expect("GNU ignores the EINVAL from lock_if_free and never prompts");
 
-    let locked_p = eval.eval_str(&format!(
-        "(file-locked-p \"{}\")",
-        visited.display()
-    ));
+    let locked_p = eval.eval_str(&format!("(file-locked-p \"{}\")", visited.display()));
     assert!(
         crate::emacs_core::format_eval_result(&locked_p).starts_with("ERR (file-error"),
         "GNU file-locked-p reports EINVAL via report_file_errno, got {}",
