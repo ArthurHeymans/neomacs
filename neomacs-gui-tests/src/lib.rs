@@ -7,6 +7,7 @@
 use std::fs;
 use std::io;
 use std::io::Read;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::thread;
@@ -85,7 +86,7 @@ impl DisplayHarness {
     pub fn start_session(&self, artifact_root: impl AsRef<Path>) -> io::Result<DisplaySession> {
         match self.backend {
             GuiBackend::LinuxWayland => start_weston_headless(artifact_root.as_ref()),
-            GuiBackend::LinuxX11 => start_xvfb(),
+            GuiBackend::LinuxX11 => start_xvfb(artifact_root.as_ref()),
             GuiBackend::Macos | GuiBackend::Windows => Ok(DisplaySession {
                 child: None,
                 env: Vec::new(),
@@ -530,18 +531,17 @@ fn start_weston_headless(artifact_root: &Path) -> io::Result<DisplaySession> {
     }
 }
 
-fn start_xvfb() -> io::Result<DisplaySession> {
-    // A crashed earlier run leaves /tmp/.X11-unix/X<N> and /tmp/.X<N>-lock
-    // behind (DisplaySession::drop SIGKILLs Xvfb, which never unlinks them).
-    // A stale socket makes a file-existence readiness check pass instantly
-    // for a DEAD display, so: pick a few candidate display numbers, remove
-    // provably-stale leftovers, and require that OUR Xvfb is still alive
-    // once the socket exists.
+fn start_xvfb(artifact_root: &Path) -> io::Result<DisplaySession> {
+    // X's conventional Unix socket and lock live below system /tmp. Package
+    // and GUI tests deliberately never use that filesystem. Run Xvfb over
+    // loopback TCP without a lock instead, and keep its cwd/logs in one exact
+    // owned directory below the caller-provided workspace-local root.
+    fs::create_dir_all(artifact_root)?;
     let base = 90 + (std::process::id() % 1000);
     let mut last_err = None;
     for offset in 0..8u32 {
         let display_number = base + offset * 1000;
-        match start_xvfb_on(display_number) {
+        match start_xvfb_on(artifact_root, display_number) {
             Ok(session) => return Ok(session),
             Err(err) => last_err = Some(err),
         }
@@ -549,63 +549,135 @@ fn start_xvfb() -> io::Result<DisplaySession> {
     Err(last_err.unwrap_or_else(|| io::Error::other("no Xvfb display candidate worked")))
 }
 
-fn start_xvfb_on(display_number: u32) -> io::Result<DisplaySession> {
-    let display = format!(":{display_number}");
-    let socket_path = PathBuf::from(format!("/tmp/.X11-unix/X{display_number}"));
-    let lock_path = PathBuf::from(format!("/tmp/.X{display_number}-lock"));
-
-    // Remove stale leftovers so Xvfb can bind; never touch a LIVE display's
-    // socket (a live server holds its socket open — fuser-style check via
-    // connect would race, so use the lock file's pid instead).
-    if socket_path.exists() && !x_lock_pid_alive(&lock_path) {
-        let _ = fs::remove_file(&socket_path);
-        let _ = fs::remove_file(&lock_path);
-    }
-
-    let mut child = Command::new("Xvfb")
+fn start_xvfb_on(artifact_root: &Path, display_number: u32) -> io::Result<DisplaySession> {
+    let port_number = u16::try_from(6000 + display_number)
+        .map_err(|_| io::Error::other(format!("X display {display_number} has no TCP port")))?;
+    let endpoint = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port_number);
+    let display = format!("127.0.0.1:{display_number}");
+    let session_dir = artifact_root.join(format!("xvfb-{}-{display_number}", std::process::id()));
+    fs::create_dir(&session_dir)?;
+    let mut pending = PendingXvfbSession::new(session_dir.clone());
+    set_owner_only_dir_permissions(&session_dir)?;
+    let stdout_path = session_dir.join("xvfb.stdout");
+    let stderr_path = session_dir.join("xvfb.stderr");
+    let authority_path = session_dir.join("Xauthority");
+    let mut cookie = [0_u8; 16];
+    getrandom::fill(&mut cookie).map_err(|error| {
+        io::Error::other(format!("failed to create Xauthority cookie: {error}"))
+    })?;
+    let cookie = cookie
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let xauth = Command::new("xauth")
+        .arg("-f")
+        .arg(&authority_path)
+        .arg("add")
         .arg(&display)
+        .arg("MIT-MAGIC-COOKIE-1")
+        .arg(cookie)
+        .output()?;
+    if !xauth.status.success() {
+        let diagnostic = String::from_utf8_lossy(&xauth.stderr);
+        return Err(io::Error::other(format!(
+            "xauth failed for owned display {display}: {diagnostic}"
+        )));
+    }
+    let stdout = fs::File::create(&stdout_path)?;
+    let stderr = fs::File::create(&stderr_path)?;
+    let child = Command::new("Xvfb")
+        .arg(format!(":{display_number}"))
         .arg("-screen")
         .arg("0")
         .arg("1280x800x24")
         .arg("-nolisten")
+        .arg("unix")
+        .arg("-listen")
         .arg("tcp")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .arg("-nolock")
+        .arg("-auth")
+        .arg(&authority_path)
+        .current_dir(&session_dir)
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
         .spawn()?;
+    pending.child = Some(child);
 
-    if wait_for_path(&socket_path, Duration::from_secs(5)) {
-        // The socket exists — but a stale one plus an instantly-dead Xvfb
-        // (e.g. lock held by a live server we must not disturb) looks
-        // identical. Ready means: socket present AND our child still runs.
-        if child.try_wait()?.is_none() {
-            return Ok(DisplaySession {
-                child: Some(child),
-                env: vec![("DISPLAY".to_string(), display)],
-                cleanup_dir: None,
-            });
-        }
+    if wait_for_tcp_display(
+        pending
+            .child
+            .as_mut()
+            .expect("pending Xvfb owns its spawned child"),
+        endpoint,
+        Duration::from_secs(5),
+    )? {
+        return Ok(pending.into_session(vec![
+            ("DISPLAY".to_string(), display),
+            ("XAUTHORITY".to_string(), path_to_string(&authority_path)),
+        ]));
     }
-    let _ = child.kill();
-    let _ = child.wait();
+    let diagnostics = read_log_tail(&stderr_path);
     Err(io::Error::new(
         io::ErrorKind::TimedOut,
         format!(
-            "Xvfb did not come up on display {display} (socket {})",
-            socket_path.display()
+            "Xvfb did not come up on loopback display {display} ({endpoint}); stderr: {diagnostics}"
         ),
     ))
 }
 
-/// True when the X lock file names a live process (i.e. the display is
-/// genuinely in use). Lock format: "      <pid>\n".
-fn x_lock_pid_alive(lock_path: &Path) -> bool {
-    let Ok(contents) = fs::read_to_string(lock_path) else {
-        return false;
-    };
-    let Ok(pid) = contents.trim().parse::<i32>() else {
-        return false;
-    };
-    PathBuf::from(format!("/proc/{pid}")).exists()
+/// Own every partially-created Xvfb resource until startup transfers them to
+/// a live `DisplaySession`. `std::process::Child` does not reap on drop, so the
+/// explicit guard is required on every fallible setup/readiness edge.
+struct PendingXvfbSession {
+    child: Option<Child>,
+    cleanup_dir: Option<PathBuf>,
+}
+
+impl PendingXvfbSession {
+    fn new(cleanup_dir: PathBuf) -> Self {
+        Self {
+            child: None,
+            cleanup_dir: Some(cleanup_dir),
+        }
+    }
+
+    fn into_session(mut self, env: Vec<(String, String)>) -> DisplaySession {
+        DisplaySession {
+            child: self.child.take(),
+            env,
+            cleanup_dir: self.cleanup_dir.take(),
+        }
+    }
+}
+
+impl Drop for PendingXvfbSession {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        if let Some(cleanup_dir) = self.cleanup_dir.take() {
+            let _ = fs::remove_dir_all(cleanup_dir);
+        }
+    }
+}
+
+fn wait_for_tcp_display(
+    child: &mut Child,
+    endpoint: SocketAddr,
+    timeout: Duration,
+) -> io::Result<bool> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if child.try_wait()?.is_some() {
+            return Ok(false);
+        }
+        if TcpStream::connect_timeout(&endpoint, Duration::from_millis(100)).is_ok() {
+            return Ok(child.try_wait()?.is_none());
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    Ok(false)
 }
 
 fn wait_for_path(path: &Path, timeout: Duration) -> bool {

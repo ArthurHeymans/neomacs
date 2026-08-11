@@ -349,7 +349,7 @@ rank	package	downloads	status
 348	elfeed	301741	covered
 349	elisp-def	300903	covered
 350	ggtags	300868	covered
-351	git-gutter-fringe	299123	todo
+351	git-gutter-fringe	299123	covered
 352	imenu-anywhere	299099	todo
 353	git-modes	297208	todo
 354	company-c-headers	296277	todo

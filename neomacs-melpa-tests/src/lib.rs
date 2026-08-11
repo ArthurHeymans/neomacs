@@ -2992,6 +2992,12 @@ pub const GIT_MESSENGER_MELPA_PIN: (&str, &str) = ("git-messenger", "20201202.16
 /// `3bdead17db7b84270c00e5a6b5ad02fa87ddd52e`.
 pub const GIT_GUTTER_MELPA_PIN: (&str, &str) = ("git-gutter", "20241212.1415");
 
+/// The exact Git Gutter Fringe adapter selected for real repository,
+/// asynchronous refresh, fringe overlay ownership, and graphical row parity.
+/// MELPA built this archive from upstream commit
+/// `648cb5b57faec55711803cdc9434e55a733c3eba`.
+pub const GIT_GUTTER_FRINGE_MELPA_PIN: (&str, &str) = ("git-gutter-fringe", "20211003.2228");
+
 /// The exact Git Timemachine package selected for practical revision
 /// navigation, renamed-file, branch, introduction-search, hash-copy, and
 /// validation parity. MELPA built this archive from upstream commit
@@ -6651,6 +6657,9 @@ mod parity_tests;
 
 #[cfg(test)]
 mod direct_adapter_tests;
+
+#[cfg(all(test, target_os = "linux"))]
+mod gui_parity_tests;
 
 #[cfg(all(test, unix))]
 mod tui_parity_tests;

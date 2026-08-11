@@ -3629,6 +3629,7 @@ dependencies = [
 name = "neomacs-gui-tests"
 version = "0.0.15"
 dependencies = [
+ "getrandom 0.4.3",
  "serde_json",
 ]
 
@@ -3678,6 +3679,7 @@ dependencies = [
  "expect-test",
  "fs4",
  "libc",
+ "neomacs-gui-tests",
  "neomacs-melpa-test-support",
  "neomacs-test-oracle",
  "neomacs-tui-tests",

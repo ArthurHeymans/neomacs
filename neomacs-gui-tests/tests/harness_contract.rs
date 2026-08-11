@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::Command;
 use std::time::Duration;
 
 use neomacs_gui_tests::{
@@ -209,6 +210,68 @@ fn display_harness_reports_missing_linux_display_inputs() {
         wayland.required_env(),
         &["XDG_RUNTIME_DIR", "WAYLAND_DISPLAY"]
     );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn x11_session_owns_authenticated_tcp_display_below_workspace_tmp() {
+    let workspace = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("GUI test crate is a workspace member")
+        .to_path_buf();
+    let root = workspace.join("tmp/neomacs-gui-tests-xvfb-contract");
+    assert!(
+        !root.exists(),
+        "refusing pre-existing owned test root {root:?}"
+    );
+
+    let session = DisplayHarness::for_backend(GuiBackend::LinuxX11)
+        .start_session(&root)
+        .expect("start authenticated TCP-only Xvfb");
+    let display = session
+        .env()
+        .iter()
+        .find_map(|(name, value)| (name == "DISPLAY").then_some(value.clone()))
+        .expect("session publishes DISPLAY");
+    let authority = session
+        .env()
+        .iter()
+        .find_map(|(name, value)| (name == "XAUTHORITY").then_some(PathBuf::from(value)))
+        .expect("session publishes XAUTHORITY");
+    assert!(display.starts_with("127.0.0.1:"), "DISPLAY was {display}");
+    assert!(authority.starts_with(&root));
+    assert!(authority.is_file());
+    let owned_session_root = authority
+        .parent()
+        .expect("Xauthority is below an owned session root")
+        .to_path_buf();
+
+    let authenticated = Command::new("xdpyinfo")
+        .env("DISPLAY", &display)
+        .env("XAUTHORITY", &authority)
+        .output()
+        .expect("launch authenticated X11 client");
+    assert!(
+        authenticated.status.success(),
+        "authenticated X11 client failed: {}",
+        String::from_utf8_lossy(&authenticated.stderr)
+    );
+
+    let unauthorized_authority = owned_session_root.join("unauthorized-Xauthority");
+    std::fs::write(&unauthorized_authority, []).expect("create empty unauthorized authority");
+    let unauthorized = Command::new("xdpyinfo")
+        .env("DISPLAY", &display)
+        .env("XAUTHORITY", &unauthorized_authority)
+        .output()
+        .expect("launch unauthorized X11 client");
+    assert!(
+        !unauthorized.status.success(),
+        "X11 server accepted a client without its generated cookie"
+    );
+
+    drop(session);
+    assert!(!owned_session_root.exists());
+    std::fs::remove_dir(&root).expect("remove exact empty contract root");
 }
 
 #[test]

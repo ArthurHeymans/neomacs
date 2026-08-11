@@ -25,5 +25,8 @@ windows-sys = { workspace = true, features = ["Win32_System_Diagnostics_ToolHelp
 [dev-dependencies]
 expect-test.workspace = true
 
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+neomacs-gui-tests.workspace = true
+
 [target.'cfg(unix)'.dev-dependencies]
 neomacs-tui-tests.workspace = true
