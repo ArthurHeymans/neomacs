@@ -2701,3 +2701,77 @@ Not a rendering bug: the keys we do emit now render byte-identically to GNU,
 including the raw-byte ranges (entry 56).
 
 Not yet attributed to a package suite.
+
+## 60. Aborting a minibuffer signalled plain `quit` instead of `minibuffer-quit` -- FIXED
+
+FIXED 2026-08-10 (task #35), found by the `ido_vertical_mode` suite, whose
+entire diff was one atom: `(:signal quit)` where GNU records
+`(:signal minibuffer-quit)` after a `C-g` in an ido prompt.
+
+Since Emacs 28 a minibuffer abort signals `minibuffer-quit`, a condition that
+inherits from `quit` (`(minibuffer-quit quit)`, `PUT_ERROR` at
+`src/data.c:4125`) so existing `quit` handlers still catch it, while packages
+that want to tell "the user cancelled the prompt" apart from "the user
+interrupted a computation" can dispatch on it. We already defined the
+condition correctly and already vendored the Lisp that raises it; what was
+missing was the route between them.
+
+GNU never throws `exit` from `abort-minibuffers` itself. `Fabort_minibuffers`
+(`src/minibuf.c:472`) resolves the current buffer's minibuffer level, confirms
+with `yes-or-no-p` when aborting also discards nested minibuffers, and then
+calls the Lisp `minibuffer-quit-recursive-edit` (`lisp/minibuffer.el:3050`),
+which throws a *function* to `exit`:
+
+```elisp
+(throw 'exit (lambda () (signal 'minibuffer-quit nil)))
+```
+
+`recursive_edit_1` (`src/keyboard.c:749-758`) then dispatches on the thrown
+value's TYPE, not its truthiness:
+
+| thrown value | GNU does            | raised by                  |
+|--------------|---------------------|----------------------------|
+| `t`          | `quit ()`           | `abort-recursive-edit`     |
+| a string     | `xsignal1 (Qerror,)`| `read_minibuf` cross-window|
+| a function   | `call0 (val)`       | minibuffer abort           |
+| anything else| returns normally    | `exit-recursive-edit`      |
+
+Neomacs collapsed all of that into one boolean test -- `if value.is_truthy()`
+-> signal `quit` -- and `abort-minibuffers` threw `t` directly, skipping the
+Lisp entirely. So a thrown thunk (truthy) became a plain `quit`, and a thrown
+string would have too.
+
+The fix restores both halves. `CommandLoopExit`
+(neovm-core/src/emacs_core/eval.rs) makes GNU's four outcomes an enum the
+match must cover, so no future edit can silently fold a new exit kind into
+"truthy means quit"; classification follows GNU's order (`t`, then string,
+then function). `builtin_abort_minibuffers_ctx`
+(neovm-core/src/emacs_core/minibuffer.rs) now mirrors `Fabort_minibuffers`,
+including the `this_minibuffer_depth` level lookup, the "Not in a minibuffer"
+and "Not in most nested command loop" errors, and the
+`Abort N minibuffer levels?` confirmation before quitting several recursive
+edits at once. It delegates to the vendored `minibuffer-quit-recursive-edit`
+rather than reimplementing the throw in Rust.
+
+One follow-on came with it: GNU guards its stderr-then-`kill-emacs` branch in
+`command-error-default-function` with `!is_minibuffer_quit`
+(`src/keyboard.c:1064`), so aborting a minibuffer never takes down a session
+that has no frame yet. We had no such guard -- harmless only because
+`minibuffer-quit` was unreachable, which this entry changes. Both halves are
+mirrored now.
+
+Not display-visible: `error-message` is the string `"Quit"` for both
+conditions, so the echo area reads identically. GNU's other asymmetry there is
+`Fding (Qt)` instead of `discard-input` + `bitch_at_user`, and we implement
+neither side of that ding, before or after -- so it is unchanged, and left as
+a separate gap.
+
+Pinned by 3 tests: the abort delegation and the inheritance boundary (a
+`minibuffer-quit` handler catches it, a `quit` handler still catches it, an
+`error` handler must NOT -- it inherits from `quit` only) in vm_test.rs, the
+four-way exit classification in eval_test.rs, and the noninteractive guard in
+error_test.rs.
+
+Affects: `ido_vertical_mode` (now green). Any package that dispatches on a
+cancelled prompt -- the `ido`, `helm` and `consult` families -- was seeing the
+wrong condition.

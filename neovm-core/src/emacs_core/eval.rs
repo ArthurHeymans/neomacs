@@ -1595,6 +1595,25 @@ pub(crate) struct OverlayModificationHook {
     pub(crate) overlay: Value,
 }
 
+/// How a `(throw 'exit VALUE)` unwinds a recursive command loop.
+///
+/// GNU's `recursive_edit_1` (keyboard.c:749-758) dispatches on the thrown
+/// value's type, not on its truthiness: only `t` means "abort with a plain
+/// `quit`".  A function is *called*, which is how
+/// `minibuffer-quit-recursive-edit` raises `minibuffer-quit` rather than the
+/// plain `quit` that `abort-recursive-edit` raises.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CommandLoopExit {
+    /// Any other value, notably `nil` (`exit-recursive-edit`).
+    Normal,
+    /// `t` — `abort-recursive-edit`.
+    Quit,
+    /// A string, re-signaled as `error` with the string as its datum.
+    Error(Value),
+    /// A function, called for effect.
+    Call(Value),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(dead_code)]
 pub(crate) enum ResumeTarget {
@@ -6142,6 +6161,24 @@ impl Context {
         self.run_exit_wrapped_command_loop(false)
     }
 
+    /// Classify the value carried by a `(throw 'exit VALUE)` that unwound a
+    /// recursive command loop.
+    ///
+    /// Mirrors GNU `recursive_edit_1` (keyboard.c:749-758), which dispatches on
+    /// the thrown value's *type* rather than its truthiness.
+    fn classify_command_loop_exit(&mut self, value: Value) -> Result<CommandLoopExit, Flow> {
+        if value == Value::T {
+            return Ok(CommandLoopExit::Quit);
+        }
+        if value.is_string() {
+            return Ok(CommandLoopExit::Error(value));
+        }
+        if super::builtins::types::builtin_functionp_1(self, value)?.is_truthy() {
+            return Ok(CommandLoopExit::Call(value));
+        }
+        Ok(CommandLoopExit::Normal)
+    }
+
     fn run_exit_wrapped_command_loop(&mut self, increment_depth: bool) -> EvalResult {
         // Interactive command loops need an input source. Batch mode is
         // different: GNU still runs `top-level`/`normal-top-level` and lets
@@ -6196,11 +6233,21 @@ impl Context {
             Err(Flow::Throw { ref tag, ref value })
                 if catches_exit && tag.is_symbol_named("exit") =>
             {
-                if value.is_truthy() {
+                let value = *value;
+                match self.classify_command_loop_exit(value)? {
                     // abort-recursive-edit: throw 'exit t → signal quit
-                    Err(super::error::signal(LispCondition::Quit, vec![]))
-                } else {
-                    Ok(Value::NIL)
+                    CommandLoopExit::Quit => Err(super::error::signal(LispCondition::Quit, vec![])),
+                    // read_minibuf's cross-window abort (minibuf.c:646).
+                    CommandLoopExit::Error(message) => {
+                        Err(super::error::signal(LispCondition::Error, vec![message]))
+                    }
+                    // minibuffer-quit-recursive-edit throws a thunk that
+                    // signals `minibuffer-quit`; GNU calls it here.
+                    CommandLoopExit::Call(function) => {
+                        self.apply(function, vec![])?;
+                        Ok(Value::NIL)
+                    }
+                    CommandLoopExit::Normal => Ok(Value::NIL),
                 }
             }
             Err(flow) => Err(flow),

@@ -1587,7 +1587,14 @@ impl super::eval::Context {
     ) -> Result<(), Flow> {
         let context_text = context.as_utf8_str().unwrap_or_default().to_string();
         let rendered = self.error_data_message(data);
-        if self.noninteractive() {
+        // GNU guards this branch with `!is_minibuffer_quit` (keyboard.c:1064):
+        // aborting a minibuffer reports like any other quit but must never take
+        // the session down, not even before the first frame is displayed.
+        let is_minibuffer_quit = data.is_cons()
+            && data.cons_car().as_symbol_name().is_some_and(|symbol| {
+                super::errors::signal_matches_hierarchical(&self.obarray, symbol, "minibuffer-quit")
+            });
+        if !is_minibuffer_quit && self.noninteractive() {
             eprintln!("{context_text}{rendered}");
             // GNU calls Fkill_emacs (-1) here, which runs kill-emacs-hook and
             // exits with status 255. Same path as the kill-emacs builtin, so

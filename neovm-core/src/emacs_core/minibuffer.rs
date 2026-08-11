@@ -1426,22 +1426,58 @@ pub(crate) fn builtin_abort_minibuffers(args: Vec<Value>) -> EvalResult {
     Err(signal("error", vec![Value::string("Not in a minibuffer")]))
 }
 
+/// GNU minibuf.c `this_minibuffer_depth`: the 1-based minibuffer level of the
+/// current buffer, or 0 when it is not one of the active minibuffers.
+fn this_minibuffer_depth(eval: &super::eval::Context) -> usize {
+    let Some(buffer_id) = eval.buffers.current_buffer_id() else {
+        return 0;
+    };
+    eval.minibuffers
+        .state_stack
+        .iter()
+        .position(|state| state.buffer_id == buffer_id)
+        .map_or(0, |index| index + 1)
+}
+
+/// Mirrors GNU minibuf.c `Fabort_minibuffers`.
+///
+/// It deliberately does not throw to `exit` itself: that is
+/// `abort-recursive-edit`, whose `t` means a plain `quit`.  Aborting a
+/// minibuffer instead delegates to `minibuffer-quit-recursive-edit`, which
+/// throws a thunk signaling the distinguishable `minibuffer-quit`.
 pub(crate) fn builtin_abort_minibuffers_ctx(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("abort-minibuffers", &args, 0)?;
-    let in_active_minibuffer = eval
-        .buffers
-        .current_buffer_id()
-        .is_some_and(|buffer_id| eval.minibuffers.has_buffer(buffer_id));
-    if !in_active_minibuffer {
+    let minibuf_depth = this_minibuffer_depth(eval);
+    if minibuf_depth == 0 {
         return Err(signal("error", vec![Value::string("Not in a minibuffer")]));
     }
-    Err(Flow::Throw {
-        tag: Value::symbol("exit"),
-        value: Value::T,
-    })
+    if builtin_minibuffer_innermost_command_loop_p_ctx(eval, vec![])?.is_nil() {
+        return Err(signal(
+            "error",
+            vec![Value::string("Not in most nested command loop")],
+        ));
+    }
+
+    let minibuf_level = eval.minibuffers.depth();
+    let quit_recursive_edit = Value::symbol("minibuffer-quit-recursive-edit");
+    if minibuf_depth < minibuf_level {
+        // Aborting this minibuffer also aborts every one nested inside it, so
+        // GNU confirms first and then quits that many recursive edits at once.
+        let levels = minibuf_level - minibuf_depth + 1;
+        let prompt = Value::string(&format!("Abort {levels} minibuffer levels? "));
+        if eval
+            .apply(Value::symbol("yes-or-no-p"), vec![prompt])?
+            .is_truthy()
+        {
+            eval.apply(quit_recursive_edit, vec![Value::fixnum(levels as i64)])?;
+        }
+    } else {
+        eval.apply(quit_recursive_edit, vec![])?;
+    }
+    Ok(Value::NIL)
 }
 
 pub(crate) fn minibuffer_contents_lisp_string_in_state(

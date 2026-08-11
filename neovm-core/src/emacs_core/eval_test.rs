@@ -22178,3 +22178,40 @@ fn a_buffer_change_during_redisplay_is_not_recorded_as_already_displayed() {
         painted.borrow()[1]
     );
 }
+
+#[test]
+fn command_loop_exit_classifies_thrown_value_by_type_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    // GNU `recursive_edit_1' (keyboard.c:749-758) dispatches on the thrown
+    // value's type, in this order: EQ t, then STRINGP, then FUNCTIONP.
+    // Collapsing that into a truthiness test is what made every minibuffer
+    // abort surface as a plain `quit'.
+    assert_eq!(
+        eval.classify_command_loop_exit(Value::T).unwrap(),
+        CommandLoopExit::Quit,
+        "`abort-recursive-edit' throws t and must stay a plain quit"
+    );
+    assert_eq!(
+        eval.classify_command_loop_exit(Value::NIL).unwrap(),
+        CommandLoopExit::Normal,
+        "`exit-recursive-edit' throws nil and returns normally"
+    );
+
+    let message = Value::string("Cross-window minibuffer abort");
+    assert_eq!(
+        eval.classify_command_loop_exit(message).unwrap(),
+        CommandLoopExit::Error(message),
+        "read_minibuf (minibuf.c:646) throws a string to be re-signaled as `error'"
+    );
+
+    let thunk = eval
+        .eval_str("(lambda () (signal 'minibuffer-quit nil))")
+        .expect("thunk should evaluate");
+    assert_eq!(
+        eval.classify_command_loop_exit(thunk).unwrap(),
+        CommandLoopExit::Call(thunk),
+        "a thrown function must be called, not collapsed into a plain quit"
+    );
+}

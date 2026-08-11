@@ -1021,9 +1021,13 @@ fn eval_minibuffer_runtime_state_tracks_active_prompt_and_contents() {
         builtin_minibufferp_ctx(&mut eval, vec![Value::NIL, Value::T]).unwrap(),
         Value::T
     );
+    // GNU's `abort-minibuffers` does not throw `exit` itself (that is
+    // `abort-recursive-edit`, meaning a plain `quit`).  It delegates to the
+    // Lisp `minibuffer-quit-recursive-edit`, which is undefined in this bare
+    // harness -- so the void-function signal names the delegation target.
     assert!(matches!(
         builtin_abort_minibuffers_ctx(&mut eval, vec![]),
-        Err(Flow::Throw { tag, value }) if tag.is_symbol_named("exit") && value == Value::T
+        Err(flow) if format!("{flow:?}").contains("minibuffer-quit-recursive-edit")
     ));
 }
 

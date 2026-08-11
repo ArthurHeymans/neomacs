@@ -4736,7 +4736,12 @@ fn vm_minibuffer_builtins_use_shared_runtime_state() {
                   (minibufferp)
                   (minibufferp nil t)
                   (minibufferp "x" nil)
-                  (catch 'exit (abort-minibuffers))))"#,
+                  ;; `abort-minibuffers' resolves its minibuffer level from the
+                  ;; same shared state, then hands off to the Lisp
+                  ;; `minibuffer-quit-recursive-edit' (undefined in this bare
+                  ;; harness, which is exactly what makes the hand-off visible).
+                  (condition-case err (catch 'exit (abort-minibuffers))
+                    (void-function (car (cdr err))))))"#,
             |eval| {
                 let minibuf_id = eval.buffers.create_buffer(" *Minibuf-1*");
                 crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
@@ -4752,7 +4757,53 @@ fn vm_minibuffer_builtins_use_shared_runtime_state() {
                     .expect("enter minibuffer");
             },
         ),
-        r#"OK ("vm-mini" "vm-mini" 1 "Prompt: " t t nil t)"#
+        r#"OK ("vm-mini" "vm-mini" 1 "Prompt: " t t nil minibuffer-quit-recursive-edit)"#
+    );
+}
+
+#[test]
+fn vm_abort_minibuffers_throws_a_minibuffer_quit_thunk_to_exit() {
+    crate::test_utils::init_test_tracing();
+    // GNU minibuf.c `Fabort_minibuffers` does not throw `t` (that is
+    // `abort-recursive-edit`, which means plain `quit`).  It calls
+    // `minibuffer-quit-recursive-edit`, which throws a *function* to `exit`;
+    // `recursive_edit_1` then calls it, signaling `minibuffer-quit`.
+    assert_eq!(
+        vm_eval_with_init_str(
+            r#"(progn
+                 (fset 'minibuffer-quit-recursive-edit
+                       (lambda (&optional levels)
+                         (setq levels (or levels 1))
+                         (if (> levels 1)
+                             (throw 'exit (lambda () (minibuffer-quit-recursive-edit (1- levels))))
+                           (throw 'exit (lambda () (signal 'minibuffer-quit nil))))))
+                 (let ((thrown (catch 'exit (abort-minibuffers))))
+                   (list (functionp thrown)
+                         ;; A specific handler distinguishes it ...
+                         (condition-case err (funcall thrown) (minibuffer-quit (car err)))
+                         ;; ... a plain `quit' handler still catches it ...
+                         (condition-case err (funcall thrown) (quit (car err)))
+                         ;; ... but it is not an `error': it inherits from
+                         ;; `quit' only, so `error' must not swallow it.
+                         (condition-case err (funcall thrown)
+                           (error 'wrongly-caught-by-error)
+                           (quit 'not-an-error)))))"#,
+            |eval| {
+                let minibuf_id = eval.buffers.create_buffer(" *Minibuf-1*");
+                crate::emacs_core::minibuffer::install_minibuffer_buffer_text(
+                    &mut eval.buffers,
+                    minibuf_id,
+                    &crate::heap_types::LispString::from_utf8("Prompt: "),
+                    Some(&crate::heap_types::LispString::from_utf8("vm-mini")),
+                    crate::emacs_core::minibuffer::default_minibuffer_prompt_properties(),
+                );
+                eval.buffers.set_current(minibuf_id);
+                eval.minibuffers
+                    .read_from_minibuffer(minibuf_id, "Prompt: ", Some("vm-mini"), None)
+                    .expect("enter minibuffer");
+            },
+        ),
+        "OK (t minibuffer-quit minibuffer-quit not-an-error)"
     );
 }
 

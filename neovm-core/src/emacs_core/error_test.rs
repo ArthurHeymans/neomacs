@@ -1,4 +1,4 @@
-use super::{EvalError, PrintShorthandSymbol, format_flow_with_eval, quote_payload, signal};
+use super::{EvalError, Flow, PrintShorthandSymbol, format_flow_with_eval, quote_payload, signal};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::{Context, Value, print_value_bytes_with_eval, print_value_with_eval};
 
@@ -222,4 +222,32 @@ fn eval_context_printer_handles_default_circular_cons_backreference() {
 
     assert_eq!(print_value_with_eval(&eval, &cell), "(nil . #0)");
     assert_eq!(print_value_bytes_with_eval(&eval, &cell), b"(nil . #0)");
+}
+
+#[test]
+fn minibuffer_quit_does_not_take_down_a_noninteractive_session() {
+    crate::test_utils::init_test_tracing();
+    // GNU's `command-error-default-function` guards its
+    // stderr-then-kill-emacs branch with `!is_minibuffer_quit`
+    // (keyboard.c:1064).  A plain `quit' still takes that branch.
+    let mut eval = Context::new();
+    eval.set_variable("noninteractive", Value::T);
+
+    let minibuffer_quit = Value::list(vec![Value::symbol("minibuffer-quit")]);
+    let reported = eval.command_error_default_report(minibuffer_quit, Value::string(""));
+    assert!(
+        reported.is_ok(),
+        "aborting a minibuffer must not unwind the session: {reported:?}"
+    );
+    assert!(
+        eval.shutdown_request().is_none(),
+        "aborting a minibuffer must not request shutdown"
+    );
+
+    let plain_quit = Value::list(vec![Value::symbol("quit")]);
+    let reported = eval.command_error_default_report(plain_quit, Value::string(""));
+    assert!(
+        matches!(reported, Err(Flow::Shutdown(_))),
+        "a plain quit keeps GNU's stderr-then-exit behavior: {reported:?}"
+    );
 }
