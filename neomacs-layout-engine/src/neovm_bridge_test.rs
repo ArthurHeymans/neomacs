@@ -1874,7 +1874,7 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
         let buf = evaluator.buffer_manager_mut().get_mut(buf_id).unwrap();
         buf.insert("prompt");
 
-        let bob_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let bob_overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -1893,7 +1893,7 @@ fn overlay_strings_at_collects_zero_length_boundary_strings_like_gnu() {
             .unwrap();
 
         let eob = buf.point_max_emacs_byte_pos().get();
-        let eob_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let eob_overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -1960,7 +1960,7 @@ fn overlay_strings_at_filters_window_specific_overlays_like_gnu() {
             (Some(2_u64), "OTHER"),
             (None, "GLOBAL"),
         ] {
-            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
                 serial: 0,
                 plist: Value::NIL,
                 buffer: Some(buf_id),
@@ -2032,7 +2032,7 @@ fn overlay_strings_at_orders_like_gnu_compare_overlay_entries() {
             (5, None, Some("a5")),
         ];
         for (prio, before, after) in specs {
-            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
                 serial: 0,
                 plist: Value::NIL,
                 buffer: Some(buf_id),
@@ -2447,7 +2447,7 @@ fn face_for_overlay_string_uses_text_property_but_ignores_overlay_face() {
         set_buffer_text(buf, "anchor");
         buf.put_text_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
 
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf.id()),
@@ -2500,7 +2500,7 @@ fn face_policy_resolves_display_origin_base_faces() {
         set_buffer_text(buf, "anchor");
         buf.put_text_property(0, 1, Value::symbol("face"), Value::symbol("bold"));
 
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf.id()),
@@ -2838,7 +2838,7 @@ fn face_resolver_applies_inverse_video_after_text_and_overlay_faces_are_merged()
         Value::symbol("font-lock-face"),
         Value::symbol("branch-current"),
     );
-    let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+    let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
         serial: 0,
         plist: Value::NIL,
         buffer: Some(buf.id()),
@@ -3305,7 +3305,7 @@ fn face_resolver_honors_overlay_window_property() {
     let mut buf = test_buffer(1, "*hl*");
     set_buffer_text(&mut buf, "line");
     buf.widen();
-    let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+    let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
         serial: 0,
         plist: Value::NIL,
         buffer: None,

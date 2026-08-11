@@ -1721,16 +1721,14 @@ fn format_overlay_handle(
         return None;
     };
 
-    let overlay = value.as_overlay_data().unwrap().clone();
+    let overlay = value.as_overlay_data().unwrap();
     let Some(buffer_id) = overlay.buffer else {
         return Some("#<overlay in no buffer>".to_string());
     };
+    let (start, end) = overlay.current_range();
 
     let Some(buffers) = buffers else {
-        return Some(format!(
-            "#<overlay from {} to {}>",
-            overlay.start, overlay.end
-        ));
+        return Some(format!("#<overlay from {} to {}>", start, end));
     };
 
     let Some(buffer) = buffers.get(buffer_id) else {
@@ -1740,10 +1738,10 @@ fn format_overlay_handle(
     Some(format!(
         "#<overlay from {} to {} in {}>",
         buffer
-            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(overlay.start))
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(start))
             .as_i64(),
         buffer
-            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(overlay.end))
+            .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
             .as_i64(),
         buffer.name_runtime_string_owned()
     ))

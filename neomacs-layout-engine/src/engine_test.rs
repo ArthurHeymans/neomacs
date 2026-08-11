@@ -5591,7 +5591,7 @@ fn overlay_string_extend_fill_reaches_tty_reserved_right_column() {
     {
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buffer.insert("anchor\n");
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -5946,7 +5946,7 @@ fn multiline_overlay_backend_layout_trace(kind: BufferTextBackendKind) -> Backen
         360,
         140,
         |buffer, buf_id, _text| {
-            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
                 serial: 0,
                 plist: Value::NIL,
                 buffer: Some(buf_id),
@@ -5976,7 +5976,7 @@ fn layout_frame_rust_renders_overlay_display_property() {
     let setup = |buffer: &mut neovm_core::buffer::Buffer, buf_id: BufferId, text: &str| {
         let start = text.find("HIDE").expect("HIDE");
         let end = start + "HIDE".len();
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -9359,7 +9359,7 @@ fn layout_frame_rust_applies_display_height_to_overlay_strings() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("x\n");
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -9435,7 +9435,7 @@ fn layout_frame_rust_advances_overlay_newline_by_measured_row_height() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("x");
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -17767,7 +17767,7 @@ fn layout_frame_rust_preserves_multiline_overlay_output_rows() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("x");
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -17837,7 +17837,7 @@ fn layout_frame_rust_renders_overlay_string_tabs_as_stretches() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("x");
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -17975,7 +17975,7 @@ fn layout_frame_rust_aligns_dired_filenames_after_nerd_icon_tabs() {
                     },
                 ],
             );
-            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
                 serial: serial as u64,
                 plist: Value::NIL,
                 buffer: Some(buf_id),
@@ -18096,7 +18096,7 @@ fn layout_frame_rust_nerd_font_alias_icon_uses_resolved_monospace_cell_width() {
                 Value::symbol("default"),
             ])]),
         );
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -18219,7 +18219,7 @@ fn layout_frame_rust_overlay_after_string_display_replacement_renders_once() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("x");
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -18317,7 +18317,7 @@ fn layout_frame_rust_renders_overlay_string_glyphless_chars_as_glyphless() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("x");
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -18382,7 +18382,7 @@ fn layout_frame_rust_places_cursor_inside_overlay_string_text_run() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("x");
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -18449,7 +18449,7 @@ fn layout_frame_rust_renders_zero_length_eob_before_string_rows() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("Find file: ~/.config/doom/");
         let eob = buf.point_max_emacs_byte_pos().get();
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -18519,7 +18519,7 @@ fn layout_frame_rust_renders_row_start_before_string_at_point_min() {
         // Zero-length overlay anchored at point-min carrying the count in its
         // before-string, mirroring vertico's overlay (vertico.el:444-448/614).
         let bob = 0;
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -18631,7 +18631,7 @@ fn child_frame_redisplay_after_eob_delete_keeps_vertico_prompt_row() {
             .expect("minibuffer");
         buffer.insert(input);
 
-        let count_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let count_overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(minibuffer),
@@ -18648,7 +18648,7 @@ fn child_frame_redisplay_after_eob_delete_keeps_vertico_prompt_row() {
         );
 
         let eob = buffer.point_max_emacs_byte_pos().get();
-        let candidates_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let candidates_overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(minibuffer),
@@ -18797,7 +18797,7 @@ fn layout_frame_rust_renders_magit_blame_heading_before_string_with_trailing_new
              second line remains visible\n\
              third line for blame metadata\n",
         );
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -18879,7 +18879,7 @@ fn layout_frame_rust_resolves_overlay_face_through_char_property_aliases() {
                 Value::symbol("font-lock-face"),
             ])]),
         );
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -18958,7 +18958,7 @@ fn layout_frame_rust_canonical_nil_overlay_face_blocks_its_alias() {
                 Value::symbol("font-lock-face"),
             ])]),
         );
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -19043,7 +19043,7 @@ fn layout_frame_rust_line_height_t_lets_overlay_string_content_define_row_height
     {
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buffer.insert("source line below separator\n");
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -19134,7 +19134,7 @@ fn layout_frame_rust_extends_overlay_string_face_across_content_only_row() {
                 Value::symbol("font-lock-face"),
             ])]),
         );
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -19221,7 +19221,7 @@ fn overlay_newline_continuation_reserves_a_blank_line_number_text_prefix() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("code\nnext\n");
         buf.set_buffer_local("display-line-numbers", Value::T);
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -19324,7 +19324,7 @@ fn overlay_newline_at_visible_row_limit_does_not_overflow_an_ended_row() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert(&format!("{}\n", "x".repeat(200)));
         buf.set_buffer_local("display-line-numbers", Value::T);
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -19410,7 +19410,7 @@ fn layout_frame_rust_suppresses_left_fringe_display_spec_before_string() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("Head:");
         let bob = 0;
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -19505,7 +19505,7 @@ fn layout_overlay_before_string_in_left_margin_area(
         if display_line_numbers {
             buf.set_buffer_local("display-line-numbers", Value::T);
         }
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -19615,7 +19615,7 @@ fn layout_frame_rust_renders_left_margin_marker_in_nested_split_window() {
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buffer.insert("changed line\nnext line\n");
         buffer.set_buffer_local("display-line-numbers", Value::T);
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -19889,7 +19889,7 @@ fn layout_frame_rust_resolves_standard_fringe_bitmap_spec() {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         buf.insert("Standard:");
         let bob = 0;
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -20123,7 +20123,7 @@ fn layout_frame_rust_renders_eob_overlay_strings_in_gnu_interleaved_order() {
         buf.insert("x");
         let eob = buf.point_max_emacs_byte_pos().get();
 
-        let after_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let after_overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -20139,7 +20139,7 @@ fn layout_frame_rust_renders_eob_overlay_strings_in_gnu_interleaved_order() {
             Value::string("A"),
         );
 
-        let before_overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let before_overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -20214,7 +20214,7 @@ fn layout_frame_rust_overlay_before_string_uses_overlay_string_base_face() {
         );
 
         let eob = buf.point_max_emacs_byte_pos().get();
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -20326,7 +20326,7 @@ fn layout_frame_rust_merges_overlay_face_with_text_property_face() {
         // face sets weight but not background.
         buf.put_text_property(0, len, Value::symbol("face"), Value::symbol("bold"));
         // Overlay face spanning the same text: distinctive BACKGROUND only.
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -20625,7 +20625,7 @@ fn layout_frame_rust_applies_face_only_overlay_starting_mid_run() {
         buf.put_text_property(0, len, Value::symbol("face"), Value::symbol("bold"));
         // Face-only overlay (distinctive background) over "cd" — text before
         // ('ab') and after ('ef'), so it begins AND ends mid-run.
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -20713,7 +20713,7 @@ fn layout_frame_rust_continues_eob_before_string_after_overlong_line() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         let eob = buf.point_max_emacs_byte_pos().get();
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -20784,7 +20784,7 @@ fn layout_frame_rust_honors_display_space_align_in_overlay_strings() {
     {
         let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
         let eob = buf.point_max_emacs_byte_pos().get();
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(buf_id),
@@ -20895,7 +20895,7 @@ fn layout_frame_rust_grows_minibuffer_for_eob_before_string_like_gnu() {
             .expect("buffer");
         buf.insert("Find file: ~/.config/doom/");
         let eob = buf.point_max_emacs_byte_pos().get();
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 0,
             plist: Value::NIL,
             buffer: Some(minibuf_id),
@@ -25130,7 +25130,7 @@ fn overlay_string_shadow_cursor_lands_on_the_buffer_char_after_an_inserted_strin
                 // setup closure keeps its `&mut Buffer` shape.
                 let start = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(3));
                 let end = buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(8));
-                let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+                let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
                     serial: 0,
                     plist: Value::NIL,
                     buffer: Some(buf_id),
@@ -25365,7 +25365,7 @@ fn overlay_string_newline_leaves_row_bounds_on_the_anchor_boundary() {
                     buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(anchor_charpos0));
                 let end =
                     buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(anchor_charpos0 + 1));
-                let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+                let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
                     serial: 0,
                     plist: Value::NIL,
                     buffer: Some(buf_id),

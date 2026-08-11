@@ -396,12 +396,12 @@ pub(crate) fn signal_after_change(
     // modification hooks are inhibited.
     ctx.sync_window_positions(current_id);
 
-    // GNU evaporates overlays that a deletion left empty, independent of the
-    // modification hooks, so do it up front. A pure insertion (old_len == 0)
-    // cannot empty an overlay, so skip it; likewise skip buffers with no
-    // overlays to keep the hot path allocation-free.
+    // GNU `adjust_overlays_for_delete_in_buffer` queries only the deletion
+    // boundary after shifting the interval tree.  Do the category-resolving
+    // evaporation pass at that same boundary; enumerating the whole buffer
+    // here makes every localized deletion O(number of overlays).
     if old_len.get() > 0 && buffer_has_overlays(ctx, current_id) {
-        evaporate_emptied_overlays(ctx, current_id);
+        evaporate_emptied_overlays_at(ctx, current_id, byte_range.start());
     }
 
     if inhibit_modification_hooks(ctx) {
@@ -572,16 +572,17 @@ pub(crate) fn insert_lisp_string_with_change_hooks_in_buffer(
 /// through the overlay's `category` symbol (GNU `overlay-get` semantics), so a
 /// category-inherited evaporate flag is honored. Mirrors GNU deleting empty
 /// evaporate overlays during a buffer deletion.
-fn evaporate_emptied_overlays(
+fn evaporate_emptied_overlays_at(
     ctx: &mut crate::emacs_core::eval::Context,
     buffer_id: crate::buffer::BufferId,
+    position: EmacsBytePos,
 ) {
     let empty: Vec<Value> = {
         let Some(buf) = ctx.buffers.get(buffer_id) else {
             return;
         };
         buf.overlays
-            .overlays_in_gnu_lists_order()
+            .overlays_in_emacs_byte_range(EmacsByteRange::new(position, position))
             .into_iter()
             .filter(|overlay| {
                 let start = buf.overlays.overlay_start_emacs_byte_pos(*overlay);

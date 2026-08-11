@@ -241,8 +241,9 @@ fn emacs_sxhash_marker(value: &Value) -> Option<u64> {
 
 fn emacs_sxhash_overlay(value: &Value, depth: usize) -> Option<u64> {
     let overlay = value.as_overlay_data()?;
-    let mut hash = overlay.start as u64;
-    hash = sxhash_combine(hash, overlay.end as u64);
+    let (start, end) = overlay.current_range();
+    let mut hash = start as u64;
+    hash = sxhash_combine(hash, end as u64);
     hash = sxhash_combine(hash, emacs_sxhash_obj_with_fallback(&overlay.plist, depth));
     Some(hash)
 }
@@ -449,9 +450,10 @@ fn hash_value_for_equal(value: &Value, hasher: &mut DefaultHasher, depth: usize)
         ValueKind::Veclike(VecLikeType::Overlay) => {
             19_u8.hash(hasher);
             if let Some(overlay) = value.as_overlay_data() {
+                let (start, end) = overlay.current_range();
                 overlay.buffer.map(|buffer| buffer.0).hash(hasher);
-                overlay.start.hash(hasher);
-                overlay.end.hash(hasher);
+                start.hash(hasher);
+                end.hash(hasher);
                 hash_value_for_equal(&overlay.plist, hasher, depth + 1);
             } else {
                 value.bits().hash(hasher);

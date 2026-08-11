@@ -1985,11 +1985,12 @@ pub(crate) fn builtin_set_buffer_multibyte(
                 .into_iter()
                 .filter_map(|overlay| {
                     let data = overlay.as_overlay_data()?;
+                    let (start, end) = data.current_range();
                     let total_end = buffer.total_emacs_byte_end_pos();
                     Some(OverlaySnapshot {
                         overlay,
-                        start_old_emacs_byte: EmacsBytePos::new(data.start).min(total_end),
-                        end_old_emacs_byte: EmacsBytePos::new(data.end).min(total_end),
+                        start_old_emacs_byte: EmacsBytePos::new(start).min(total_end),
+                        end_old_emacs_byte: EmacsBytePos::new(end).min(total_end),
                     })
                 })
                 .collect();
@@ -4947,6 +4948,7 @@ pub(crate) fn builtin_make_overlay_in_buffers(
         buffer: Some(buf_id),
         start: byte_range.start().get(),
         end: byte_range.end().get(),
+        position_handle: None,
         front_advance,
         rear_advance,
     });

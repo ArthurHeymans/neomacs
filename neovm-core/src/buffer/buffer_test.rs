@@ -690,6 +690,66 @@ fn cloned_indirect_buffers_do_not_share_base_mark_marker() {
 }
 
 #[test]
+fn cloned_indirect_buffers_copy_overlay_objects_and_indexes() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = BufferManager::new();
+    let base_id = mgr.current_buffer_id().expect("scratch buffer");
+    let _ = mgr.insert_into_buffer(base_id, "abcdef");
+    let original = Value::make_overlay(OverlayData {
+        serial: 0,
+        plist: Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
+        buffer: Some(base_id),
+        start: 1,
+        end: 4,
+        position_handle: None,
+        front_advance: true,
+        rear_advance: false,
+    });
+    mgr.get_mut(base_id)
+        .expect("base buffer")
+        .overlays
+        .insert_overlay(original);
+
+    let indirect_id = mgr
+        .create_indirect_buffer(base_id, "*indirect-overlay-clone*", true)
+        .expect("indirect buffer");
+    let copied = mgr
+        .get(indirect_id)
+        .expect("indirect buffer")
+        .overlays
+        .overlays_in_gnu_lists_order();
+    assert_eq!(copied.len(), 1);
+    let copied = copied[0];
+    assert!(!crate::emacs_core::value::eq_value(&original, &copied));
+    assert_eq!(copied.as_overlay_data().unwrap().buffer, Some(indirect_id));
+    assert!(!crate::emacs_core::value::eq_value(
+        &original.as_overlay_data().unwrap().plist,
+        &copied.as_overlay_data().unwrap().plist,
+    ));
+    assert_eq!(
+        overlay_start_for_test(mgr.get(indirect_id).unwrap(), copied),
+        Some(1)
+    );
+    assert_eq!(
+        overlay_end_for_test(mgr.get(indirect_id).unwrap(), copied),
+        Some(4)
+    );
+
+    mgr.get_mut(indirect_id)
+        .unwrap()
+        .overlays
+        .move_overlay_to_emacs_byte_range(copied, EmacsByteRange::from_usize(2, 5));
+    assert_eq!(
+        overlay_start_for_test(mgr.get(base_id).unwrap(), original),
+        Some(1)
+    );
+    assert_eq!(
+        overlay_start_for_test(mgr.get(indirect_id).unwrap(), copied),
+        Some(2)
+    );
+}
+
+#[test]
 fn indirect_buffer_overlays_track_shared_edits() {
     crate::test_utils::init_test_tracing();
     for kind in implemented_text_backends() {
@@ -706,6 +766,7 @@ fn indirect_buffer_overlays_track_shared_edits() {
             buffer: Some(indirect_id),
             start: 2,
             end: 4,
+            position_handle: None,
             front_advance: false,
             rear_advance: false,
         });
@@ -834,6 +895,7 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
                 buffer: Some(left_id),
                 start: left_overlay_start,
                 end: left_overlay_end,
+                position_handle: None,
                 front_advance: false,
                 rear_advance: true,
             });
@@ -850,6 +912,7 @@ fn implemented_text_backends_match_buffer_swap_text_side_effects() {
                 buffer: Some(right_id),
                 start: right_overlay_start,
                 end: right_overlay_end,
+                position_handle: None,
                 front_advance: true,
                 rear_advance: false,
             });
@@ -2239,6 +2302,7 @@ fn run_shared_insert_policy_script(kind: BufferTextBackendKind) -> SharedInsertP
         buffer: Some(indirect_id),
         start: insert_pos,
         end: overlay_end,
+        position_handle: None,
         front_advance: false,
         rear_advance: true,
     });
@@ -2359,6 +2423,7 @@ fn run_backend_migration_script(
         buffer: Some(buf.id),
         start: 3,
         end: 8,
+        position_handle: None,
         front_advance: false,
         rear_advance: true,
     });

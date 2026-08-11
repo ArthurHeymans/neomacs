@@ -557,6 +557,19 @@ impl DisplayRowWriteMetrics {
         self.width_px += other.width_px;
         self.width_cols += other.width_cols;
     }
+
+    /// Growth of one materialized glyph area since `before`.
+    ///
+    /// Most characters append a new tail glyph, but a contextual-script run
+    /// grows the earlier Composite base and appends a zero-accounting padding
+    /// cell.  Taking the whole-area delta makes both representations report
+    /// the same incremental progress to the source-position authority.
+    fn growth_since(self, before: Self) -> Self {
+        Self::new(
+            (self.width_px - before.width_px).max(0.0),
+            self.width_cols.saturating_sub(before.width_cols),
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1423,6 +1436,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             }
 
             let before_len = self.area_len();
+            let before_metrics = self.writer.current_text_metrics();
             let slot_start = self.position;
             self.writer.push_text_char_state_with_advance_request(
                 source_mapping.charpos(start_char, char_offset),
@@ -1445,7 +1459,10 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             for glyph in &mut self.writer.row.glyphs[area_index][before_len..] {
                 glyph.pointer_appearance = pointer_metadata;
             }
-            let written = self.metrics_since(before_len);
+            let written = self
+                .writer
+                .current_text_metrics()
+                .growth_since(before_metrics);
             slots.push(DisplayRowGlyphSlot::with_pointer_appearance(
                 source_mapping.slot_source(&span.start, char_offset, byte_offset),
                 slot_start.x_px(),

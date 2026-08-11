@@ -1301,7 +1301,7 @@ fn overlay_mouse_face_uses_the_highest_priority_effective_property() {
             .expect("buffer");
         buffer.insert("x");
         for (serial, priority, face) in [(1, 1, "low-mouse"), (2, 20, "high-mouse")] {
-            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
                 serial,
                 plist: Value::NIL,
                 buffer: Some(buffer_id),
@@ -1364,7 +1364,7 @@ fn unrelated_property_and_overlay_boundaries_keep_one_mouse_face_extent() {
             Value::symbol("invisible"),
             Value::T,
         );
-        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+        let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
             serial: 9,
             plist: Value::NIL,
             buffer: Some(buffer_id),
@@ -1468,7 +1468,7 @@ fn cons_priority_uses_gnu_primary_before_nested_subpriority() {
                 "high-mouse",
             ),
         ] {
-            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
                 serial,
                 plist: Value::NIL,
                 buffer: Some(buffer_id),
@@ -1518,7 +1518,7 @@ fn nested_equal_priority_overlay_owns_only_its_effective_segment() {
         let buffer = eval.buffer_manager_mut().get_mut(buffer_id).unwrap();
         buffer.insert("abcd");
         for (serial, start, end, face) in [(1, 0, 4, "low-mouse"), (2, 1, 3, "high-mouse")] {
-            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
                 serial,
                 plist: Value::NIL,
                 buffer: Some(buffer_id),
@@ -1583,7 +1583,7 @@ fn equal_priority_tie_and_nil_overlay_match_shared_gnu_selection() {
             (11, Value::symbol("high-mouse")),
             (12, Value::NIL),
         ] {
-            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayData {
+            let overlay = Value::make_overlay(neovm_core::heap_types::OverlayDataInit {
                 serial,
                 plist: Value::NIL,
                 buffer: Some(buffer_id),

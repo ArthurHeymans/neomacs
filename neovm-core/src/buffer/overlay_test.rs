@@ -8,6 +8,7 @@ fn alloc_overlay(start: usize, end: usize) -> Value {
         buffer: Some(BufferId(1)),
         start,
         end,
+        position_handle: None,
         front_advance: false,
         rear_advance: false,
     })
@@ -101,6 +102,30 @@ fn raw_overlays_at_matches_gnu_same_start_itree_order() {
 }
 
 #[test]
+fn dump_round_trip_preserves_gnu_same_start_itree_order() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let first = alloc_overlay(2, 5);
+    let second = alloc_overlay(2, 5);
+    let third = alloc_overlay(2, 5);
+    list.insert_overlay(first);
+    list.insert_overlay(second);
+    list.insert_overlay(third);
+
+    let dumped = list.dump_overlays();
+    drop(list);
+    let restored = OverlayList::from_dump(dumped);
+
+    assert_eq!(
+        overlays_at(&restored, 3)
+            .into_iter()
+            .map(Value::bits)
+            .collect::<Vec<_>>(),
+        vec![third.bits(), second.bits(), first.bits()]
+    );
+}
+
+#[test]
 fn text_edit_relocation_preserves_same_start_itree_order() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();
@@ -132,6 +157,25 @@ fn overlays_at_prunes_right_subtree_when_all_starts_are_after_position() {
     assert!(
         visits < 8,
         "overlays_at should prune right subtrees that start after the queried position; visited {visits} nodes"
+    );
+}
+
+#[test]
+fn overlays_at_midpoint_skips_disjoint_prefix_and_suffix_nodes() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    for index in 0..2_000 {
+        let start = 10 + index * 2;
+        list.insert_overlay(alloc_overlay(start, start + 1));
+    }
+
+    reset_overlays_at_node_visit_count();
+    assert_eq!(overlays_at(&list, 2_010).len(), 1);
+
+    let visits = overlays_at_node_visit_count();
+    assert!(
+        visits <= 8,
+        "overlays_at should descend directly to disjoint midpoint matches; visited {visits} nodes"
     );
 }
 
@@ -231,6 +275,179 @@ fn tail_deletion_inspects_only_overlays_with_affected_endpoints() {
 }
 
 #[test]
+fn prefix_edit_shifts_large_suffix_without_visiting_each_overlay() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let first = alloc_overlay(100, 101);
+    let last = alloc_overlay(4_098, 4_099);
+    list.insert_overlay(first);
+    for index in 1..1_999 {
+        let start = 100 + index * 2;
+        list.insert_overlay(alloc_overlay(start, start + 1));
+    }
+    list.insert_overlay(last);
+
+    reset_overlay_edit_candidate_inspection_count();
+    reset_overlay_shift_node_visit_count();
+    list.adjust_for_insert_at_emacs_byte_pos(emacs_byte_pos(1), emacs_byte_len(3), true);
+    assert_eq!(overlay_start(&list, first), Some(103));
+    assert_eq!(overlay_end(&list, last), Some(4_102));
+
+    list.adjust_for_delete_emacs_byte_range(emacs_byte_range(1, 4));
+    assert_eq!(overlay_start(&list, first), Some(100));
+    assert_eq!(overlay_end(&list, last), Some(4_099));
+
+    let inspections = overlay_edit_candidate_inspection_count();
+    assert!(
+        inspections < 64,
+        "a wholly affected suffix should be shifted lazily; inspected {inspections} overlays"
+    );
+    let shift_visits = overlay_shift_node_visit_count();
+    assert_eq!(
+        shift_visits, 2,
+        "a prefix insert/delete pair should tag the authoritative interval root once per edit"
+    );
+}
+
+#[test]
+fn lazy_suffix_positions_are_authoritative_on_overlay_objects() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let overlay = alloc_overlay(100, 101);
+    list.insert_overlay(overlay);
+
+    list.adjust_for_insert_at_emacs_byte_pos(emacs_byte_pos(1), emacs_byte_len(3), true);
+
+    let data = overlay.as_overlay_data().expect("overlay object");
+    assert_eq!(data.current_range(), (103, 104));
+    let materialized = list.get(overlay).expect("live overlay");
+    assert_eq!((materialized.start, materialized.end), (103, 104));
+    let equal_at_current_range = alloc_overlay(103, 104);
+    assert!(crate::emacs_core::value::equal_value(
+        &overlay,
+        &equal_at_current_range,
+        0,
+    ));
+}
+
+#[test]
+fn lazy_edit_index_matches_simple_overlay_reference_model() {
+    crate::test_utils::init_test_tracing();
+
+    #[derive(Clone, Copy)]
+    struct ReferenceOverlay {
+        value: Value,
+        start: usize,
+        end: usize,
+        front_advance: bool,
+        rear_advance: bool,
+    }
+
+    let mut list = OverlayList::new();
+    let mut model = Vec::new();
+    for index in 0..64 {
+        let start = 5 + index * 3;
+        let end = start + index % 7;
+        let value = alloc_overlay(start, end);
+        let front_advance = index % 3 == 0;
+        let rear_advance = index % 4 == 0;
+        list.insert_overlay(value);
+        list.set_front_advance(value, front_advance);
+        list.set_rear_advance(value, rear_advance);
+        model.push(ReferenceOverlay {
+            value,
+            start,
+            end,
+            front_advance,
+            rear_advance,
+        });
+    }
+
+    let mut random = 0x7a5b_49d3_u64;
+    for step in 0..300 {
+        random = random
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let position = 1 + (random as usize % 180);
+        let length = 1 + ((random >> 16) as usize % 5);
+        if step % 3 != 2 {
+            let before_markers = step % 2 == 0;
+            list.adjust_for_insert_at_emacs_byte_pos(
+                emacs_byte_pos(position),
+                emacs_byte_len(length),
+                before_markers,
+            );
+            for overlay in &mut model {
+                let empty = overlay.start == overlay.end;
+                if before_markers {
+                    if overlay.start >= position {
+                        overlay.start += length;
+                    }
+                    if overlay.end >= position {
+                        overlay.end += length;
+                    }
+                } else {
+                    if overlay.start > position
+                        || (overlay.start == position
+                            && overlay.front_advance
+                            && (!empty || overlay.rear_advance))
+                    {
+                        overlay.start += length;
+                    }
+                    if overlay.end > position || (overlay.end == position && overlay.rear_advance) {
+                        overlay.end += length;
+                    }
+                }
+            }
+        } else {
+            let end = position + length;
+            list.adjust_for_delete_emacs_byte_range(emacs_byte_range(position, end));
+            for overlay in &mut model {
+                if overlay.start >= end {
+                    overlay.start -= length;
+                } else if overlay.start > position {
+                    overlay.start = position;
+                }
+                if overlay.end >= end {
+                    overlay.end -= length;
+                } else if overlay.end > position {
+                    overlay.end = position;
+                }
+            }
+        }
+
+        list.index.assert_invariants();
+        for expected in &model {
+            assert_eq!(
+                list.index.range(expected.value),
+                Some(emacs_byte_range(expected.start, expected.end)),
+                "range diverged at edit step {step}, position {position}, length {length}, serial {}",
+                expected.value.as_overlay_data().unwrap().serial,
+            );
+            assert_eq!(
+                expected.value.as_overlay_data().unwrap().current_range(),
+                (expected.start, expected.end),
+                "object range diverged at edit step {step}"
+            );
+        }
+        for point in [1, 17, 63, 127, 191] {
+            let mut actual: Vec<usize> = overlays_at(&list, point)
+                .into_iter()
+                .map(Value::bits)
+                .collect();
+            actual.sort_unstable();
+            let mut expected: Vec<usize> = model
+                .iter()
+                .filter(|overlay| overlay.start <= point && point < overlay.end)
+                .map(|overlay| overlay.value.bits())
+                .collect();
+            expected.sort_unstable();
+            assert_eq!(actual, expected, "point query diverged at edit step {step}");
+        }
+    }
+}
+
+#[test]
 fn raw_overlays_in_matches_gnu_same_start_itree_order() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();
@@ -245,6 +462,27 @@ fn raw_overlays_in_matches_gnu_same_start_itree_order() {
 }
 
 #[test]
+fn next_boundary_uses_one_logarithmic_endpoint_search() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    for index in 0..2_000 {
+        let start = 100 + index * 2;
+        list.insert_overlay(alloc_overlay(start, start + 1));
+    }
+
+    reset_endpoint_search_node_visit_count();
+    assert_eq!(
+        list.next_boundary_after_emacs_byte_pos(emacs_byte_pos(1_999)),
+        Some(emacs_byte_pos(2_000))
+    );
+    let visits = endpoint_search_node_visit_count();
+    assert!(
+        visits <= 13,
+        "next-boundary should traverse one balanced endpoint index; visited {visits} nodes"
+    );
+}
+
+#[test]
 fn sorted_overlay_precedence_matches_gnu_same_range_identity_order() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();
@@ -256,6 +494,62 @@ fn sorted_overlay_precedence_matches_gnu_same_range_identity_order() {
     let mut overlays = overlays_at(&list, 3);
     list.sort_overlay_ids_by_priority_desc(&mut overlays);
     assert_eq!(overlays, vec![second, first]);
+}
+
+#[test]
+fn snapshot_clone_preserves_same_range_precedence_identity() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("mouse-face");
+    for value in [
+        Value::symbol("low-mouse"),
+        Value::symbol("high-mouse"),
+        Value::NIL,
+    ] {
+        let overlay = alloc_overlay(0, 2);
+        list.insert_overlay(overlay);
+        list.overlay_put(overlay, property, value).unwrap();
+        list.overlay_put(overlay, Value::symbol("priority"), Value::fixnum(7))
+            .unwrap();
+    }
+
+    let snapshot = list.snapshot_clone();
+    let winner = snapshot
+        .highest_priority_overlay_at_emacs_byte_pos(emacs_byte_pos(0), property)
+        .expect("snapshot should preserve the highest non-nil carrier");
+
+    assert_eq!(
+        snapshot.overlay_get_named(winner, property),
+        Some(Value::symbol("high-mouse"))
+    );
+}
+
+#[test]
+fn snapshot_clone_preserves_raw_same_start_query_order() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let label = Value::symbol("snapshot-order");
+    for name in ["first", "second", "third"] {
+        let overlay = alloc_overlay(0, 2);
+        list.insert_overlay(overlay);
+        list.overlay_put(overlay, label, Value::symbol(name))
+            .unwrap();
+    }
+
+    let snapshot = list.snapshot_clone();
+    let labels = overlays_at(&snapshot, 0)
+        .into_iter()
+        .map(|overlay| snapshot.overlay_get_named(overlay, label).unwrap())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        labels,
+        vec![
+            Value::symbol("third"),
+            Value::symbol("second"),
+            Value::symbol("first"),
+        ]
+    );
 }
 
 #[test]

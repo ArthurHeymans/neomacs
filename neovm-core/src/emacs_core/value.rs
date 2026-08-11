@@ -1690,7 +1690,8 @@ impl TaggedValue {
     }
 
     /// Allocate an overlay.
-    pub fn make_overlay(mut data: crate::heap_types::OverlayData) -> Self {
+    pub fn make_overlay(data: impl Into<crate::heap_types::OverlayData>) -> Self {
+        let mut data = data.into();
         if data.serial == 0 {
             data.serial = crate::heap_types::next_overlay_serial();
         } else {
@@ -2564,10 +2565,11 @@ impl TaggedValue {
             }
             ValueKind::Veclike(VecLikeType::Overlay) => {
                 if let Some(overlay) = self.as_overlay_data() {
+                    let (start, end) = overlay.current_range();
                     HashKey::Overlay(Box::new((
                         overlay.buffer.map(|buffer| buffer.0),
-                        overlay.start,
-                        overlay.end,
+                        start,
+                        end,
                         overlay.plist.to_equal_key_depth_swp(
                             depth + 1,
                             seen,
@@ -3004,9 +3006,10 @@ fn equal_value_inner(
             let Some(right_overlay) = right.as_overlay_data() else {
                 return false;
             };
+            let left_range = left_overlay.current_range();
+            let right_range = right_overlay.current_range();
             left_overlay.buffer == right_overlay.buffer
-                && left_overlay.start == right_overlay.start
-                && left_overlay.end == right_overlay.end
+                && left_range == right_range
                 && equal_value_inner(
                     &left_overlay.plist,
                     &right_overlay.plist,
@@ -3302,9 +3305,10 @@ fn try_equal_value_inner(
             let Some(right_overlay) = right.as_overlay_data() else {
                 return Ok(false);
             };
+            let left_range = left_overlay.current_range();
+            let right_range = right_overlay.current_range();
             Ok(left_overlay.buffer == right_overlay.buffer
-                && left_overlay.start == right_overlay.start
-                && left_overlay.end == right_overlay.end
+                && left_range == right_range
                 && try_equal_value_inner(
                     &left_overlay.plist,
                     &right_overlay.plist,

@@ -10958,6 +10958,52 @@ fn overlay_modification_hooks_are_collected_after_before_change_functions() {
 }
 
 #[test]
+fn deleting_before_a_large_overlay_suffix_does_not_enumerate_every_overlay() {
+    crate::test_utils::init_test_tracing();
+    crate::buffer::overlay::reset_overlay_full_enumeration_visit_count();
+
+    let result = eval_one(
+        r#"(progn
+             (insert (make-string 10050 ?x))
+             (let ((index 0))
+               (while (< index 4000)
+               (let ((start (+ 100 (* index 2))))
+                   (make-overlay start (1+ start)))
+                 (setq index (1+ index))))
+             (goto-char 1)
+             (insert "abc")
+             (delete-region 1 4)
+             (length (overlays-at 100)))"#,
+    );
+
+    assert_eq!(result, "OK 1");
+    assert_eq!(
+        crate::buffer::overlay::overlay_full_enumeration_visit_count(),
+        0,
+        "a localized deletion must not walk all live overlays"
+    );
+}
+
+#[test]
+fn deletion_evaporates_only_collapsed_boundary_overlays_via_category() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (insert "abcdef")
+             (put 'neo-evaporating-category 'evaporate t)
+             (let ((collapsed (make-overlay 2 3))
+                   (unrelated (make-overlay 5 5)))
+               (overlay-put collapsed 'category 'neo-evaporating-category)
+               (overlay-put unrelated 'category 'neo-evaporating-category)
+               (delete-region 2 3)
+               (list (overlay-buffer collapsed)
+                     (overlay-start collapsed)
+                     (null (overlay-buffer unrelated)))))"#,
+    );
+    assert_eq!(result, "OK (nil nil nil)");
+}
+
+#[test]
 fn before_change_functions_reset_to_nil_on_error() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(

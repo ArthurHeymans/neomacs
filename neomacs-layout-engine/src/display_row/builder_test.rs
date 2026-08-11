@@ -1300,6 +1300,47 @@ fn resumed_writer_counts_live_run_member_padding_once() {
     );
 }
 
+/// The buffer walk owns its requested position because structural text-area
+/// prefixes (line numbers) are already included in that coordinate.  Extending
+/// a contextual run mutates the earlier Composite glyph instead of adding a
+/// normal-width glyph at the tail, so its per-item progress must still advance
+/// by the Composite's growth.  Otherwise the following HELLO-file TAB sees
+/// column 10 instead of 16 and emits 32 spaces instead of GNU's 26.
+#[test]
+fn source_position_progress_counts_complex_run_growth_before_tab() {
+    let mut row_layout = layout();
+    row_layout.tab_policy = DisplayTabPolicy::every(42);
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    row.enabled = true;
+    let mut glyph_advances = FixedGlyphAdvances::new();
+    let mut writer =
+        DisplayRowProgressWriter::with_text_run_measurement_and_glyph_measurer_for_area_and_start_policy(
+            &row_layout,
+            &mut row,
+            DisplayTextRunMeasurement::PerChar,
+            &mut glyph_advances,
+            DisplayRowPosition::new(0.0, 0),
+            1280.0,
+            GlyphArea::Text,
+            DisplayRowAppendStartPolicy::SourcePosition,
+        );
+
+    let progress = writer.push_item(text_item("Arabic (العربيّة)\tx"));
+
+    assert_eq!(
+        progress.end().col,
+        43,
+        "GNU lands the TAB at column 42, then advances once for `x`"
+    );
+    let stretch_width = row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find_map(|glyph| match glyph.glyph_type {
+            GlyphType::Stretch { width_cols } => Some(width_cols),
+            _ => None,
+        });
+    assert_eq!(stretch_width, Some(26));
+}
+
 #[test]
 fn display_row_progress_writer_uses_position_for_tabs() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);

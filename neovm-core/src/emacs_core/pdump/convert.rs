@@ -1425,6 +1425,7 @@ impl<'a> LoadDecoder<'a> {
                     buffer: overlay.buffer.map(|id| BufferId(id.0)),
                     start: overlay.start,
                     end: overlay.end,
+                    position_handle: None,
                     front_advance: overlay.front_advance,
                     rear_advance: overlay.rear_advance,
                 };
@@ -2756,12 +2757,13 @@ fn dump_text_property_table(
 }
 
 fn dump_overlay(encoder: &mut DumpEncoder, o: &Overlay) -> DumpOverlay {
+    let (start, end) = o.current_range();
     DumpOverlay {
         serial: o.serial,
         plist: encoder.dump_value(&o.plist),
         buffer: o.buffer.map(|id| DumpBufferId(id.0)),
-        start: o.start,
-        end: o.end,
+        start,
+        end,
         front_advance: o.front_advance,
         rear_advance: o.rear_advance,
     }
@@ -4736,6 +4738,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
                         buffer: d.buffer.map(|id| BufferId(id.0)),
                         start: d.start,
                         end: d.end,
+                        position_handle: None,
                         front_advance: d.front_advance,
                         rear_advance: d.rear_advance,
                     })

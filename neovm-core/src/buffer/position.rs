@@ -532,6 +532,25 @@ impl EmacsByteDelta {
     pub(in crate::buffer) fn apply_to_pos(self, pos: EmacsBytePos) -> EmacsBytePos {
         EmacsBytePos::new(apply_signed_delta(pos.get(), self.0))
     }
+
+    pub(in crate::buffer) const fn is_zero(self) -> bool {
+        self.0 == 0
+    }
+
+    pub(in crate::buffer) fn combine(self, other: Self) -> Self {
+        Self(
+            self.0
+                .checked_add(other.0)
+                .expect("buffer text edit delta overflow"),
+        )
+    }
+
+    pub(in crate::buffer) fn apply_to_range(self, range: EmacsByteRange) -> EmacsByteRange {
+        EmacsByteRange::new(
+            self.apply_to_pos(range.start()),
+            self.apply_to_pos(range.end()),
+        )
+    }
 }
 
 fn apply_signed_delta(value: usize, delta: isize) -> usize {

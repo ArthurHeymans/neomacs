@@ -440,13 +440,14 @@ fn format_opaque_handle_in_state(
         if let Some(buffer_id) = overlay.buffer
             && let Some(buffer) = buffers.get(buffer_id)
         {
+            let (start, end) = overlay.current_range();
             return Some(format!(
                 "#<overlay from {} to {} in {}>",
                 buffer
-                    .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(overlay.start))
+                    .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(start))
                     .as_i64(),
                 buffer
-                    .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(overlay.end))
+                    .emacs_byte_pos_to_lisp_char_pos(EmacsBytePos::new(end))
                     .as_i64(),
                 buffer.name_runtime_string_owned()
             ));

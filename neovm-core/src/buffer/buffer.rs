@@ -4607,6 +4607,7 @@ impl BufferManager {
         let mut indirect = if clone {
             let mut cloned = root.clone();
             cloned.id = id;
+            cloned.overlays.retarget_buffer(root_id, id);
             cloned.set_name_value(Value::string(name));
             cloned.local_var_alist = clone_lisp_local_variables(root.local_var_alist);
             // GNU `clone_per_buffer_values` copies marker-valued per-buffer

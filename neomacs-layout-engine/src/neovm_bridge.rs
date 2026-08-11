@@ -169,7 +169,7 @@ impl LayoutBufferSnapshot {
             vars: resolve_layout_vars(local_var_alist, &slots, None),
             local_var_alist,
             slots,
-            overlays: buffer.overlays().clone(),
+            overlays: buffer.overlays().snapshot_clone(),
             category_symbol_plists: FxHashMap::default(),
         }
     }
@@ -2514,7 +2514,7 @@ pub(crate) fn overlay_faces_at<B: LayoutBufferView + ?Sized>(
     // GNU `face_at_buffer_position` narrows its `endptr` at EVERY overlay end at
     // this position, not only at those carrying `face`, so a resolved-face cache
     // re-resolves at every overlay boundary.
-    for oid in overlays.overlays_at_emacs_byte_pos(bytepos) {
+    for oid in overlays.iter_overlays_at_emacs_byte_pos(bytepos) {
         if let Some(end) = overlays.overlay_end_emacs_byte_pos(oid)
             && end.get() > bytepos.get()
         {

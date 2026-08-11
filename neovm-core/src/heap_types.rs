@@ -1114,7 +1114,7 @@ mod tests {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct OverlayData {
     /// Stable allocation identity used where GNU compares overlay Lisp object
     /// identity (`XLI (overlay)`).  Rust heap addresses are not monotonic, so
@@ -1125,8 +1125,69 @@ pub struct OverlayData {
     pub buffer: Option<BufferId>,
     pub start: usize,
     pub end: usize,
+    /// Runtime-only authority for lazily shifted live endpoints. Detached and
+    /// deserialized overlays materialize `start`/`end` and carry no handle.
+    pub(crate) position_handle: Option<crate::buffer::overlay_index::OverlayPositionHandle>,
     pub front_advance: bool,
     pub rear_advance: bool,
+}
+
+/// Public construction state for an overlay that has not yet been attached to
+/// an [`OverlayList`](crate::buffer::overlay::OverlayList).
+///
+/// Keeping this distinct from [`OverlayData`] makes it impossible for callers
+/// outside `neovm-core` to forge or retain the runtime-only position handle.
+/// [`Value::make_overlay`](crate::emacs_core::value::Value::make_overlay)
+/// converts this value into the live heap representation with no position
+/// authority until an overlay list attaches it.
+#[derive(Clone, Debug)]
+pub struct OverlayDataInit {
+    pub serial: u64,
+    pub plist: crate::emacs_core::value::Value,
+    pub buffer: Option<BufferId>,
+    pub start: usize,
+    pub end: usize,
+    pub front_advance: bool,
+    pub rear_advance: bool,
+}
+
+impl From<OverlayDataInit> for OverlayData {
+    fn from(init: OverlayDataInit) -> Self {
+        Self {
+            serial: init.serial,
+            plist: init.plist,
+            buffer: init.buffer,
+            start: init.start,
+            end: init.end,
+            position_handle: None,
+            front_advance: init.front_advance,
+            rear_advance: init.rear_advance,
+        }
+    }
+}
+
+impl Clone for OverlayData {
+    fn clone(&self) -> Self {
+        let (start, end) = self.current_range();
+        Self {
+            serial: self.serial,
+            plist: self.plist,
+            buffer: self.buffer,
+            start,
+            end,
+            position_handle: None,
+            front_advance: self.front_advance,
+            rear_advance: self.rear_advance,
+        }
+    }
+}
+
+impl OverlayData {
+    pub(crate) fn current_range(&self) -> (usize, usize) {
+        crate::buffer::overlay_index::current_overlay_range(self)
+            .map(|range| (range.start().get(), range.end().get()))
+            .unwrap_or((self.start, self.end))
+    }
 }
 
 static NEXT_OVERLAY_SERIAL: AtomicU64 = AtomicU64::new(1);

@@ -45,7 +45,7 @@ use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsByteRange};
 use neovm_core::emacs_core::{Context, Value};
 use neovm_core::face::FaceTable;
-use neovm_core::heap_types::OverlayData;
+use neovm_core::heap_types::OverlayDataInit;
 
 const BASE_FACE: FaceId = FaceId::new(1);
 
@@ -523,7 +523,7 @@ impl Fixture {
                     buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(overlay.start_char));
                 let end =
                     buffer.char_pos_to_emacs_byte_pos_clamped(CharPos0::new(overlay.end_char));
-                let value = Value::make_overlay(OverlayData {
+                let value = Value::make_overlay(OverlayDataInit {
                     serial: 0,
                     plist: Value::NIL,
                     buffer: Some(buffer_id),

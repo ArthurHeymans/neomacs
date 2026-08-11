@@ -879,6 +879,7 @@ fn file_pdump_loads_overlay_object_from_mmap_image() {
             buffer: None,
             start: 2,
             end: 9,
+            position_handle: None,
             front_advance: true,
             rear_advance: false,
         }),
