@@ -4185,14 +4185,8 @@ impl Context {
             Value::list(vec![Value::symbol("completion-setup-function")]),
         );
         obarray.set_symbol_value("completion-list-mode-hook", Value::NIL);
-        obarray.set_symbol_value(
-            "completion-ignored-extensions",
-            Value::list(vec![
-                Value::string(".o"),
-                Value::string("~"),
-                Value::string(".elc"),
-            ]),
-        );
+        // completion-ignored-extensions is a dired.c DEFVAR_LISP; see
+        // `dired::register_bootstrap_vars' below.
         obarray.set_symbol_value(
             "completion-styles",
             Value::list(vec![
@@ -4658,6 +4652,7 @@ impl Context {
         super::keyboard::pure::register_bootstrap_vars(obarray);
         super::composite::register_bootstrap_vars(obarray);
         super::coding::register_bootstrap_vars(obarray);
+        super::dired::register_bootstrap_vars(obarray);
         super::xdisp::register_bootstrap_vars(obarray);
         super::textprop::register_bootstrap_vars(obarray);
         super::xfaces::register_bootstrap_vars(obarray);

@@ -1331,3 +1331,26 @@ fn directory_files_and_attributes_match_reads_current_buffer_syntax_table() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn completion_ignored_extensions_is_special_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    // GNU `syms_of_dired` (src/dired.c) registers this with DEFVAR_LISP and
+    // initializes it to nil; lisp/bindings.el then `setq's the real list.
+    // DEFVAR_LISP makes the symbol special, so a `let' around it under
+    // lexical binding is seen by callees such as
+    // `completion-pcm--filename-try-filter'. Without the declaration the
+    // `let' binds lexically and file-name completion silently consults the
+    // global list instead.
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str(
+            "(list (special-variable-p 'completion-ignored-extensions)
+                   (default-value 'completion-ignored-extensions)
+                   (let ((completion-ignored-extensions '(\".bak\")))
+                     (default-value 'completion-ignored-extensions)))"
+        )),
+        "OK (t nil (\".bak\"))"
+    );
+}
