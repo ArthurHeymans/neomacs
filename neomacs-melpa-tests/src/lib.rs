@@ -443,6 +443,12 @@ pub const REFORMATTER_MELPA_PIN: (&str, &str) = ("reformatter", "20241204.1051")
 /// upstream commit `6f419b5cdd2dfa83675ae53f04d8463d00a533f8`.
 pub const REQUEST_MELPA_PIN: (&str, &str) = ("request", "20250219.2213");
 
+/// The exact RSpec Mode package selected for practical source/spec navigation,
+/// pending-example editing, compilation, failure navigation, rerun, and
+/// session-state parity. MELPA built this archive from upstream commit
+/// `b5d48de9b56a0070d7a0d3e642b139992a1ce3f0`.
+pub const RSPEC_MODE_MELPA_PIN: (&str, &str) = ("rspec-mode", "20260618.548");
+
 /// The exact rtags package selected by the practical rc transport,
 /// navigation, source-extraction, diagnostics, result-buffer, and completion
 /// parity corpus. MELPA built this archive from upstream commit

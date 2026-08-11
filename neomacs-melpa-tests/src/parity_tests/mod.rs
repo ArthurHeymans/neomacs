@@ -578,6 +578,7 @@ mod request;
 mod restart_emacs;
 mod restclient;
 mod robe;
+mod rspec_mode;
 mod rtags;
 mod rust_mode;
 mod s;

@@ -358,7 +358,7 @@ rank	package	downloads	status
 357	gruvbox-theme	295145	covered
 358	mwim	293670	covered
 359	beacon	292634	covered
-360	rspec-mode	291748	todo
+360	rspec-mode	291748	covered
 361	company-statistics	290858	todo
 362	org-ref	290570	todo
 363	git-commit-mode	287680	todo
