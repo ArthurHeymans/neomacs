@@ -360,7 +360,7 @@ rank	package	downloads	status
 359	beacon	292634	covered
 360	rspec-mode	291748	covered
 361	company-statistics	290858	covered
-362	org-ref	290570	todo
+362	org-ref	290570	covered
 363	git-commit-mode	287680	todo
 364	reformatter	285344	covered
 365	scala-mode	284088	todo

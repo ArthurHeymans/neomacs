@@ -526,6 +526,7 @@ mod org_mime;
 mod org_pomodoro;
 mod org_present;
 mod org_projectile;
+mod org_ref;
 mod org_roam;
 mod org_superstar;
 mod orgit;

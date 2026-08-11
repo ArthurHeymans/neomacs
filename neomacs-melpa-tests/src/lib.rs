@@ -2531,6 +2531,12 @@ pub const ORG_POMODORO_MELPA_PIN: (&str, &str) = ("org-pomodoro", "20220318.1618
 /// commit `4ec04e1b77dea76d7c30066ccf3200d2e0b7bee9`.
 pub const ORG_PRESENT_MELPA_PIN: (&str, &str) = ("org-present", "20220806.1847");
 
+/// The exact Org Ref package selected for practical Org/BibTeX activation,
+/// documented insertion, citation and reference navigation, browser dispatch,
+/// citeproc export, analysis, and failure-recovery parity. MELPA built this
+/// archive from upstream commit `dc2481d430906fe2552f9318f4405242e6d37396`.
+pub const ORG_REF_MELPA_PIN: (&str, &str) = ("org-ref", "20251206.1422");
+
 /// The exact Org-roam package selected for practical plain-text knowledge-base
 /// synchronization, node metadata and lookup, links and backlinks, node
 /// editing, dedicated buffers, and autosync lifecycle parity. MELPA built
