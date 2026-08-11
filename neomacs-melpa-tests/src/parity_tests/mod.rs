@@ -587,6 +587,7 @@ mod rust_mode;
 mod s;
 mod sage_shell_mode;
 mod sass_mode;
+mod scala_mode;
 mod scss_mode;
 mod sesman;
 mod seven_fifty_words;
