@@ -2037,6 +2037,12 @@ pub const MULTI_LINE_MELPA_PIN: (&str, &str) = ("multi-line", "20230721.1814");
 /// `94b8b07a4bab87f803123723b68227565429dfa1`.
 pub const MULTIPLE_CURSORS_MELPA_PIN: (&str, &str) = ("multiple-cursors", "20260419.931");
 
+/// The exact MWIM package selected for practical logical, visual, comment,
+/// prefix, configurable-cycle, Shift Selection, and composed editing parity.
+/// MELPA built this archive from upstream commit
+/// `e44a7a0a76262d7000b726bfa848cc62e21d7985`.
+pub const MWIM_MELPA_PIN: (&str, &str) = ("mwim", "20260227.705");
+
 /// The exact Nameless package selected for practical namespace discovery,
 /// font-lock presentation, filtered copying, alias insertion, private and
 /// non-hyphen namespaces, file-local refresh, and mode-lifecycle parity.

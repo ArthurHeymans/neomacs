@@ -508,6 +508,7 @@ mod mozc;
 mod multi_line;
 mod multi_term;
 mod multiple_cursors;
+mod mwim;
 mod nameless;
 mod names;
 mod navi2ch;

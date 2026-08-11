@@ -356,7 +356,7 @@ rank	package	downloads	status
 355	browse-at-remote	296006	covered
 356	find-file-in-project	295263	covered
 357	gruvbox-theme	295145	covered
-358	mwim	293670	todo
+358	mwim	293670	covered
 359	beacon	292634	todo
 360	rspec-mode	291748	todo
 361	company-statistics	290858	todo
