@@ -416,6 +416,7 @@ mod golden_ratio;
 mod google_translate;
 mod goto_chg;
 mod groovy_mode;
+mod gruvbox_theme;
 mod haml_mode;
 mod harness_contract;
 mod haskell_mode;

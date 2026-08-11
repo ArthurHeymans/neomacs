@@ -2982,6 +2982,12 @@ pub const FANCY_BATTERY_MELPA_PIN: (&str, &str) = ("fancy-battery", "20150101.12
 /// `6d6e132f5e9ebcbe5b475df939c556794dd1ce64`.
 pub const FIND_FILE_IN_PROJECT_MELPA_PIN: (&str, &str) = ("find-file-in-project", "20250612.234");
 
+/// The exact Gruvbox Theme package selected for practical public variant,
+/// palette, fontification, option, failure, display-gate, and restoration
+/// parity. MELPA built this archive from upstream commit
+/// `6cbf80b6cde3c2390502dc94a911ab7378495249`.
+pub const GRUVBOX_THEME_MELPA_PIN: (&str, &str) = ("gruvbox-theme", "20250117.222");
+
 /// The exact gh.el API client selected for practical authenticated repository,
 /// issue, gist, paging, mutation, and cache workflow parity. MELPA built this
 /// archive from upstream commit `b1551245d3404eac6394abaebe1a9e0b2c504235`.
