@@ -114,16 +114,32 @@ fn dependency_regeneration_preserves_every_source_lock_field() {
     let manifest = fixture.root().join("melpa-package-lock.tsv");
     let cache = fixture.root().join("package-cache");
     let dependency_dir = cache.join("dependency-1.0");
+    let dash_dir = cache.join("dash-1.0");
+    let git_commit_mode_dir = cache.join("git-commit-mode-20141106.1722");
     let multiline_dir = cache.join("multiline-3.0");
     let root_dir = cache.join("root-2.0");
+    let with_editor_dir = cache.join("with-editor-1.0");
     fs::create_dir_all(&dependency_dir).expect("create dependency cache fixture");
+    fs::create_dir_all(&dash_dir).expect("create dash cache fixture");
+    fs::create_dir_all(&git_commit_mode_dir).expect("create git-commit-mode cache fixture");
     fs::create_dir_all(&multiline_dir).expect("create multiline cache fixture");
     fs::create_dir_all(&root_dir).expect("create root cache fixture");
+    fs::create_dir_all(&with_editor_dir).expect("create with-editor cache fixture");
     fs::write(
         dependency_dir.join("dependency.el"),
         ";;; dependency.el --- fixture\n",
     )
     .expect("write dependency package fixture");
+    fs::write(dash_dir.join("dash.el"), ";;; dash.el --- fixture\n")
+        .expect("write dash package fixture");
+    fs::write(
+        git_commit_mode_dir.join("git-commit-mode.el"),
+        ";;; git-commit-mode.el --- historical fixture\n\
+         (require 'dash)\n\
+         (require 'log-edit)\n\
+         (require 'with-editor)\n",
+    )
+    .expect("write git-commit-mode package fixture");
     fs::write(
         multiline_dir.join("multiline.el"),
         ";;; multiline.el --- fixture\n\
@@ -137,11 +153,19 @@ fn dependency_regeneration_preserves_every_source_lock_field() {
         ";;; root.el --- fixture\n;; Package-Requires: ((dependency \"1.0\"))\n",
     )
     .expect("write root package fixture");
+    fs::write(
+        with_editor_dir.join("with-editor.el"),
+        ";;; with-editor.el --- fixture\n",
+    )
+    .expect("write with-editor package fixture");
 
     let before = "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+                  dash\t1.0\thttps://upstream.invalid/dash\taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\thttps://mirror.invalid/dash\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\t\tsource-default\t-\n\
                   dependency\t1.0\thttps://upstream.invalid/dependency\t0123456789abcdef0123456789abcdef01234567\thttps://mirror.invalid/dependency\t89abcdef0123456789abcdef0123456789abcdef\t\tsource-default\t-\n\
+                  git-commit-mode\t20141106.1722\thttps://upstream.invalid/git-modes\t7138eecb882e58466079d79925ccf85e3c24e866\thttps://mirror.invalid/git-modes\t7138eecb882e58466079d79925ccf85e3c24e866\thttps://fallback.invalid/git-modes\tsource-glob:git-commit-mode.el\t-\n\
                   multiline\t3.0\thttps://upstream.invalid/multiline\t3333333333333333333333333333333333333333\thttps://mirror.invalid/multiline\t4444444444444444444444444444444444444444\t\tsource-default\t-\n\
-                  root\t2.0\thttps://upstream.invalid/root\t1111111111111111111111111111111111111111\thttps://mirror.invalid/root\t2222222222222222222222222222222222222222\thttps://fallback.invalid/root\tmelpa-recipe\t-\n";
+                  root\t2.0\thttps://upstream.invalid/root\t1111111111111111111111111111111111111111\thttps://mirror.invalid/root\t2222222222222222222222222222222222222222\thttps://fallback.invalid/root\tmelpa-recipe\t-\n\
+                  with-editor\t1.0\thttps://upstream.invalid/with-editor\tcccccccccccccccccccccccccccccccccccccccc\thttps://mirror.invalid/with-editor\tdddddddddddddddddddddddddddddddddddddddd\t\tsource-default\t-\n";
     fs::write(&manifest, before).expect("write package-lock fixture");
 
     let output = Command::new("python3")
@@ -161,12 +185,31 @@ fn dependency_regeneration_preserves_every_source_lock_field() {
         String::from_utf8_lossy(&output.stderr)
     );
     let after = "package\tversion\tupstream\tupstream-revision\trepository\trevision\tfallback-repository\tbuild\tdependencies\n\
+                 dash\t1.0\thttps://upstream.invalid/dash\taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\thttps://mirror.invalid/dash\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\t\tsource-default\t-\n\
                  dependency\t1.0\thttps://upstream.invalid/dependency\t0123456789abcdef0123456789abcdef01234567\thttps://mirror.invalid/dependency\t89abcdef0123456789abcdef0123456789abcdef\t\tsource-default\t-\n\
+                 git-commit-mode\t20141106.1722\thttps://upstream.invalid/git-modes\t7138eecb882e58466079d79925ccf85e3c24e866\thttps://mirror.invalid/git-modes\t7138eecb882e58466079d79925ccf85e3c24e866\thttps://fallback.invalid/git-modes\tsource-glob:git-commit-mode.el\tdash,with-editor\n\
                  multiline\t3.0\thttps://upstream.invalid/multiline\t3333333333333333333333333333333333333333\thttps://mirror.invalid/multiline\t4444444444444444444444444444444444444444\t\tsource-default\tdependency\n\
-                 root\t2.0\thttps://upstream.invalid/root\t1111111111111111111111111111111111111111\thttps://mirror.invalid/root\t2222222222222222222222222222222222222222\thttps://fallback.invalid/root\tmelpa-recipe\tdependency\n";
+                 root\t2.0\thttps://upstream.invalid/root\t1111111111111111111111111111111111111111\thttps://mirror.invalid/root\t2222222222222222222222222222222222222222\thttps://fallback.invalid/root\tmelpa-recipe\tdependency\n\
+                 with-editor\t1.0\thttps://upstream.invalid/with-editor\tcccccccccccccccccccccccccccccccccccccccc\thttps://mirror.invalid/with-editor\tdddddddddddddddddddddddddddddddddddddddd\t\tsource-default\t-\n";
     assert_eq!(
         fs::read_to_string(&manifest).expect("read regenerated package lock"),
         after
+    );
+
+    let second = Command::new("python3")
+        .arg(workspace_root().join("scripts/melpa-derive-dependencies.py"))
+        .args(["--manifest"])
+        .arg(&manifest)
+        .args(["--cache"])
+        .arg(&cache)
+        .arg("--write")
+        .output()
+        .expect("rerun dependency regeneration");
+    assert!(second.status.success(), "second regeneration failed");
+    assert_eq!(
+        fs::read_to_string(&manifest).expect("read idempotent package lock"),
+        after,
+        "source-backed dependency regeneration must be idempotent"
     );
 }
 
@@ -694,7 +737,7 @@ fn every_exact_package_has_a_complete_acyclic_source_plan() {
     let sources = locked_melpa_sources().expect("parse the source lock");
     assert_eq!(
         sources.len(),
-        684,
+        685,
         "every root package, exact dependency, and legacy all-ext dependency stays pinned"
     );
 

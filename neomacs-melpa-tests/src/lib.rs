@@ -3034,6 +3034,14 @@ pub const GH_MD_MELPA_PIN: (&str, &str) = ("gh-md", "20220316.1432");
 /// comprehensive API parity corpus.
 pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 
+/// The terminal historical git-commit-mode package selected for practical
+/// activation, fontification, editing, history, and editor-session parity.
+/// MELPA built version 20141106.1722 from the exact recipe-selected
+/// `git-commit-mode.el` at upstream commit
+/// `7138eecb882e58466079d79925ccf85e3c24e866` before replacing the retired
+/// package with modern `git-commit`.
+pub const GIT_COMMIT_MODE_MELPA_PIN: (&str, &str) = ("git-commit-mode", "20141106.1722");
+
 /// The exact Git Link package selected for practical repository file, region,
 /// commit, homepage, remote-resolution, hosting-provider, and error parity.
 /// MELPA built version 0.11.0 from upstream commit

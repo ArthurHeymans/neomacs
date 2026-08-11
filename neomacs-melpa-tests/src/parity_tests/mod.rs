@@ -401,6 +401,7 @@ mod gh_md;
 mod ghub;
 mod git;
 mod git_commit;
+mod git_commit_mode;
 mod git_gutter;
 mod git_gutter_fringe;
 mod git_link;

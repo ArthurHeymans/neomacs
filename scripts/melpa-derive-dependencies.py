@@ -12,6 +12,13 @@ requirement that is not pinned is either built into Emacs (`cl-lib`, `json`,
 `flymake`, `seq`) or is something the suite never installs, and in both cases
 package.el resolves it without our help.
 
+The retired `git-commit-mode` archive predates its operational dependency
+metadata.  Its frozen source has no `Package-Requires` header but does contain
+hard top-level `require` forms for Dash and With-Editor.  For that one named
+historical package, derive requirements from those source forms and apply the
+same pinned-package filter.  This keeps the exception source-backed and avoids
+silently treating arbitrary metadata-less packages as dependency declarations.
+
 Usage:
     scripts/melpa-derive-dependencies.py            # report differences
     scripts/melpa-derive-dependencies.py --write    # rewrite the manifest
@@ -47,6 +54,10 @@ HEADER = (
 REQUIRES = re.compile(r"^;;\s*Package-Requires:\s*(.*)$", re.M)
 COMMENT_CONTINUATION = re.compile(r"^;;\s?(.*)$")
 REQUIREMENT = re.compile(r"\(\s*([A-Za-z0-9@_.+-]+)\s")
+TOP_LEVEL_REQUIRE = re.compile(
+    r"^\(require\s+'([A-Za-z0-9@_.+-]+)(?:\s+[^)]*)?\)\s*(?:;.*)?$", re.M
+)
+SOURCE_BACKED_REQUIRE_PACKAGES = frozenset({"git-commit-mode"})
 
 
 def read_manifest(
@@ -110,6 +121,15 @@ def package_requirements(path: pathlib.Path) -> list[str]:
     return REQUIREMENT.findall(form)
 
 
+def source_requirements(package: str, path: pathlib.Path) -> list[str]:
+    """Return declared requirements, plus the one frozen legacy exception."""
+    requirements = package_requirements(path)
+    if requirements or package not in SOURCE_BACKED_REQUIRE_PACKAGES:
+        return requirements
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return TOP_LEVEL_REQUIRE.findall(text)
+
+
 def derived_edges(
     versions: dict[str, str], sources: dict[str, pathlib.Path]
 ) -> tuple[dict[str, set[str]], dict[str, set[str]]]:
@@ -117,7 +137,7 @@ def derived_edges(
     edges: dict[str, set[str]] = collections.defaultdict(set)
     unpinned: dict[str, set[str]] = collections.defaultdict(set)
     for name, path in sorted(sources.items()):
-        for requirement in package_requirements(path):
+        for requirement in source_requirements(name, path):
             if requirement == "emacs" or requirement == name:
                 continue
             if requirement in versions:
@@ -168,7 +188,7 @@ def main() -> int:
 
     print(f"pinned packages           : {len(versions)}")
     print(f"main .el readable in cache: {len(sources)}")
-    print(f"declaring Package-Requires: {len(derived) + len(unpinned)}")
+    print(f"declaring requirements    : {len(derived) + len(unpinned)}")
     print(f"packages with pinned edges: {len(derived)}")
 
     if missing:
