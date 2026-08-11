@@ -6824,6 +6824,43 @@ fn bootstrap_preloads_touch_screen_translations_like_gnu_gui_builds() {
 }
 
 #[test]
+fn describe_buffer_bindings_expands_autoloaded_prefix_keymaps_like_gnu() {
+    // GNU 31.0.90 emacs -Q --batch does NOT preload kmacro.el ((featurep
+    // 'kmacro) is nil and kmacro-keymap's function cell is an autoload form),
+    // yet describe-buffer-bindings lists the C-x C-k sub-bindings.  The
+    // mechanism, end to end: get_keymap (OBJECT, 0, 0) treats the autoload
+    // keymap symbol as a keymap, accessible-keymaps lists it unexpanded, and
+    // help.el's describe-map -> keymap-canonicalize -> map-keymap (keymap.c
+    // map_keymap, autoload=1) performs the load and descends.  The same arc
+    // covers C-x 6 / <f2> (2C-command) and C-<down-mouse-2> (facemenu-menu).
+    // Ledger entry 61.
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+
+    assert_eq!(
+        eval_rendered(&mut eval, "(autoloadp (symbol-function 'kmacro-keymap))"),
+        "OK t",
+        "precondition: kmacro must NOT be preloaded, like GNU emacs -Q batch"
+    );
+
+    let rendered = eval_rendered(
+        &mut eval,
+        r#"(let ((target (generate-new-buffer "p61-target")))
+             (with-temp-buffer
+               (describe-buffer-bindings target)
+               (let ((text (buffer-substring-no-properties (point-min) (point-max))))
+                 (list (and (string-search "kmacro-add-counter" text) t)
+                       (and (string-search "2C-two-columns" text) t)
+                       (and (string-search "facemenu-remove-all" text) t)))))"#,
+    );
+    assert_eq!(
+        rendered, "OK (t t t)",
+        "autoloaded prefix keymaps (kmacro-keymap, 2C-command, facemenu-menu) must be expanded"
+    );
+}
+
+#[test]
 fn bootstrap_neomacs_x_runtime_keeps_neo_term_layer_runtime_only() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_with_features(&["neomacs", "x"])

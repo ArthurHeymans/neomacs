@@ -1337,6 +1337,76 @@ fn accessible_keymaps_metizes_a_key_following_meta_prefix_char() {
     );
 }
 
+/// GNU `Fkeymap__get_keyelt` (keymap.c) delegates to `get_keyelt`: a
+/// `(menu-item NAME DEFN ...)` wrapper and an old-style `(STRING . DEFN)` menu
+/// label both reduce to DEFN.  help.el's describe-map keeps a row only when
+/// this reduction equals `(lookup-key tail (vector event) t)`, so an identity
+/// stub here empties every menu keymap section.  Verified against GNU 31.0.90.
+#[test]
+fn keymap_get_keyelt_strips_menu_item_and_string_label_wrappers() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    for (form, expected) in [
+        (
+            "(keymap--get-keyelt '(menu-item \"Name\" p61-cmd :enable t) nil)",
+            "p61-cmd",
+        ),
+        ("(keymap--get-keyelt '(\"Label\" . p61-cmd) nil)", "p61-cmd"),
+        (
+            "(keymap--get-keyelt '(\"Label\" \"Help\" . p61-cmd) nil)",
+            "p61-cmd",
+        ),
+        ("(keymap--get-keyelt 'p61-cmd nil)", "p61-cmd"),
+    ] {
+        let result = eval.eval_str(form).unwrap();
+        assert_eq!(result.as_symbol_name(), Some(expected), "{form}");
+    }
+}
+
+/// GNU `get_keymap (OBJECT, 0, 0)` (keymap.c) treats a symbol whose function
+/// cell is an `(autoload FILE DOC INTERACTIVE keymap)` form as a keymap
+/// WITHOUT loading it: `keymapp` answers t, and `accessible_keymaps_1` lists
+/// the symbol itself as the map the prefix reaches.  Descending is deferred to
+/// `map-keymap` (autoload=1), which help.el's describe-map reaches through
+/// keymap-canonicalize -- that is how describe-buffer-bindings expands the
+/// C-x C-k kmacro-keymap section in an emacs -Q batch where kmacro.el is not
+/// loaded.  Verified against GNU 31.0.90:
+///   (keymapp 'kmacro-keymap) => t  (while still an autoload form)
+///   (accessible-keymaps (list 'keymap (cons ?a 'kmacro-keymap)))
+///     => (([] keymap (97 . kmacro-keymap)) ([97] . kmacro-keymap))
+#[test]
+fn accessible_keymaps_lists_an_autoloaded_keymap_symbol_without_loading_it() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    eval.eval_str(
+        r#"(progn
+             (setq p61-root (make-sparse-keymap))
+             (fset 'p61-prefix '(autoload "p61-missing-file" "doc" t keymap))
+             (define-key p61-root "\C-k" 'p61-prefix))"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+        eval.eval_str("(keymapp 'p61-prefix)").unwrap(),
+        Value::T,
+        "an unloaded autoload keymap symbol satisfies keymapp in GNU"
+    );
+
+    let all = eval.eval_str("(accessible-keymaps p61-root)").unwrap();
+    let items = list_to_vec(&all).expect("accessible-keymaps should return list");
+    assert_eq!(items.len(), 2, "{items:?}");
+    let second = &items[1];
+    assert_eq!(
+        second.cons_car().as_vector_data().unwrap().as_slice(),
+        &[Value::fixnum(11)]
+    );
+    assert_eq!(
+        second.cons_cdr().as_symbol_name(),
+        Some("p61-prefix"),
+        "the symbol itself is listed unexpanded; map-keymap autoloads it later"
+    );
+}
+
 #[test]
 fn accessible_keymaps_reports_root_and_prefix_paths() {
     crate::test_utils::init_test_tracing();

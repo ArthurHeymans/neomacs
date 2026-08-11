@@ -6385,9 +6385,18 @@ pub(crate) fn builtin_iso_charset(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_keymap_get_keyelt(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_keymap_get_keyelt(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("keymap--get-keyelt", &args, 2)?;
-    Ok(args[0])
+    // GNU Fkeymap__get_keyelt (keymap.c) delegates to get_keyelt: strip
+    // `(menu-item NAME DEFN ...)` wrappers and `(STRING . DEFN)` menu labels
+    // down to the definition.  Returning the element unreduced made help.el's
+    // describe-map `(eq definition (lookup-key tail (vector event) t))` guard
+    // fail for every wrapped menu binding, which silently emptied menu keymap
+    // sections such as C-<down-mouse-2> facemenu-menu (ledger entry 61).
+    crate::emacs_core::keymap::get_keyelt_runtime(eval, args[0], !args[1].is_nil())
 }
 
 pub(crate) fn builtin_keymap_prompt(

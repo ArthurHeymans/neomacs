@@ -1308,9 +1308,18 @@ pub(super) fn builtin_keymapp(eval: &mut super::eval::Context, args: Vec<Value>)
 
 pub(crate) fn builtin_keymapp_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
     expect_args("keymapp", args, 1)?;
-    Ok(maybe_keymap_in_obarray(obarray, &args[0])
-        .map(|_| Value::T)
-        .unwrap_or(Value::NIL))
+    // GNU Fkeymapp is `!NILP (get_keymap (object, false, false))`, and
+    // get_keymap with error_if_not_keymap=false answers a symbol whose
+    // function cell is an unloaded (autoload ... keymap) form with the symbol
+    // ITSELF -- so keymapp is t for e.g. kmacro-keymap before kmacro.el
+    // loads.  help.el's describe-map relies on that to suppress the bare
+    // prefix row and descend via map-keymap instead (ledger entry 61).
+    let resolved = get_keymap_in_obarray(obarray, &args[0], false)?;
+    Ok(if resolved.is_nil() {
+        Value::NIL
+    } else {
+        Value::T
+    })
 }
 
 /// `(event-convert-list EVENT-DESC)` -> event object or nil

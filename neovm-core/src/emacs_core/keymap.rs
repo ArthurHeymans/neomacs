@@ -3649,24 +3649,32 @@ pub fn list_keymap_accessible(
         .unwrap_or(KEY_META_PREFIX_CHAR_DEFAULT);
 
     let start = if prefix.is_empty() {
-        keymap
+        KeymapResolution::Loaded(keymap)
     } else {
         let reached = match obarray {
             Some(obarray) => lookup_key_in_obarray(obarray, &keymap, prefix, true),
             None => Value::NIL,
         };
-        match resolve_keymap(reached, obarray) {
-            Some(map) => map,
+        // GNU keeps an autoload symbol the prefix reaches: "If the keymap is
+        // autoloaded `tem' is not a cons-cell, but we still want to return it."
+        match resolve_keymap_or_autoload(reached, obarray) {
+            Some(resolution) => resolution,
             None => return,
         }
     };
 
     let prefixlen = prefix.len();
-    let mut maps: Vec<(Vec<Value>, Value)> = vec![(prefix.to_vec(), start)];
+    let mut maps: Vec<(Vec<Value>, KeymapResolution)> = vec![(prefix.to_vec(), start)];
     let mut i = 0;
     while i < maps.len() {
         let thisseq = maps[i].0.clone();
-        let thismap = maps[i].1;
+        // GNU scans only loaded maps: "Since we can't run lisp code, we can't
+        // scan autoloaded maps." (`if (CONSP (thismap))`).  An unloaded
+        // autoload symbol stays LISTED but contributes no descent.
+        let KeymapResolution::Loaded(thismap) = maps[i].1 else {
+            i += 1;
+            continue;
+        };
         // GNU's insertion point for a metized find: directly after the map being
         // scanned, so the new same-length sequence stays in breadth order.
         let splice_at = i + 1;
@@ -3677,9 +3685,9 @@ pub fn list_keymap_accessible(
         let seq_ends_in_meta_prefix = thisseq.len() > prefixlen
             && thisseq.last().and_then(|event| event.as_fixnum()) == Some(meta_prefix_char);
 
-        let mut found: Vec<(Vec<Value>, Value, bool)> = Vec::new();
+        let mut found: Vec<(Vec<Value>, KeymapResolution, bool)> = Vec::new();
         list_keymap_for_each_binding_recursive(&thismap, obarray, |key, def| {
-            let Some(submap) = resolve_keymap(get_keyelt(def), obarray) else {
+            let Some(submap) = resolve_keymap_or_autoload(get_keyelt(def), obarray) else {
                 return;
             };
             let mut newseq = thisseq.clone();
@@ -3701,7 +3709,9 @@ pub fn list_keymap_accessible(
 
         for (newseq, submap, metized) in found {
             let is_cycle = maps.iter().any(|(seen_seq, seen_map)| {
-                keymap_value_eq(seen_map, &submap)
+                // GNU's cycle test is Frassq, i.e. EQ on the reached map --
+                // which may be a cons OR an autoload symbol.
+                seen_map.as_value().bits() == submap.as_value().bits()
                     && seen_seq.len() <= thisseq.len()
                     && seen_seq
                         .iter()
@@ -3720,11 +3730,15 @@ pub fn list_keymap_accessible(
     }
 
     for (sequence, map) in &maps {
-        out.push(Value::cons(Value::vector(sequence.clone()), *map));
+        out.push(Value::cons(Value::vector(sequence.clone()), map.as_value()));
     }
 }
 
 /// Check if two keymap values are the same object (by cons cell identity).
+/// The accessible walk itself now compares through
+/// [`KeymapResolution::as_value`] bits (GNU Frassq EQ, which must also match
+/// autoload symbols); this cons-only helper remains for tests.
+#[cfg(test)]
 fn keymap_value_eq(a: &Value, b: &Value) -> bool {
     match (a.kind(), b.kind()) {
         (ValueKind::Cons, ValueKind::Cons) => *a == *b,
@@ -3794,15 +3808,63 @@ pub(crate) enum KeymapElement {
 /// Autoloading (GNU's third argument) is deliberately not performed here: it
 /// evaluates Lisp, so it belongs to a context-taking caller.
 pub(crate) fn resolve_keymap(value: Value, obarray: Option<&Obarray>) -> Option<Value> {
+    match resolve_keymap_or_autoload(value, obarray)? {
+        KeymapResolution::Loaded(map) => Some(map),
+        // GNU's spine loops retry `get_keymap` and then test CONSP on the
+        // result, so an autoload symbol -- returned as itself -- ends the
+        // walk exactly like a non-keymap does.
+        KeymapResolution::UnloadedAutoload(_) => None,
+    }
+}
+
+/// The two shapes GNU `get_keymap (OBJECT, 0, 0)` can answer with, kept apart
+/// in the type instead of collapsed into one `Value` the caller re-inspects.
+pub(crate) enum KeymapResolution {
+    /// A loaded `(keymap . ...)` list keymap: scannable.
+    Loaded(Value),
+    /// A SYMBOL whose function cell is an `(autoload FILE DOC INTERACTIVE
+    /// keymap)` form that has not been loaded.  GNU's `get_keymap` returns the
+    /// symbol itself here: it IS a keymap for listing purposes -- `keymapp`
+    /// answers t and `Faccessible_keymaps` reports it as the map a prefix
+    /// reaches -- but its bindings cannot be scanned without running Lisp
+    /// ("Since we can't run lisp code, we can't scan autoloaded maps.",
+    /// keymap.c Faccessible_keymaps).  Only a Context-taking caller such as
+    /// `map-keymap` (GNU `map_keymap`, autoload=1) may load and descend, which
+    /// is how help.el's describe-map expands e.g. the `C-x C-k` kmacro-keymap
+    /// section in a batch session where kmacro.el is not yet loaded.
+    UnloadedAutoload(Value),
+}
+
+impl KeymapResolution {
+    /// The Value GNU's `get_keymap (OBJECT, 0, 0)` returns for this answer:
+    /// the list keymap itself, or the autoload symbol standing in for one.
+    pub(crate) fn as_value(&self) -> Value {
+        match self {
+            Self::Loaded(value) | Self::UnloadedAutoload(value) => *value,
+        }
+    }
+}
+
+/// GNU `get_keymap (OBJECT, 0, 0)` with both possible keymap answers: a loaded
+/// list keymap, or the unloaded-autoload symbol standing for one.  Callers that
+/// only ever scan use [`resolve_keymap`]; callers that LIST keymaps the way GNU
+/// does (`accessible-keymaps`, `keymapp`) must face both arms.
+pub(crate) fn resolve_keymap_or_autoload(
+    value: Value,
+    obarray: Option<&Obarray>,
+) -> Option<KeymapResolution> {
     if value.is_nil() {
         return None;
     }
     if is_list_keymap(&value) {
-        return Some(value);
+        return Some(KeymapResolution::Loaded(value));
     }
     let name = value.as_symbol_name()?;
     let function = obarray?.indirect_function(name)?;
-    is_list_keymap(&function).then_some(function)
+    if is_list_keymap(&function) {
+        return Some(KeymapResolution::Loaded(function));
+    }
+    is_keymap_autoload_form(&function).then_some(KeymapResolution::UnloadedAutoload(value))
 }
 
 /// GNU `map_keymap_item`: a `t` binding shadows lower-precedence keymaps exactly
