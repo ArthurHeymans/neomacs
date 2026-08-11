@@ -271,6 +271,7 @@ mod bind_key;
 mod bind_map;
 mod browse_at_remote;
 mod browse_kill_ring;
+mod buffer_move;
 mod bui;
 mod casual;
 mod ccc;

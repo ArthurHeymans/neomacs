@@ -2775,6 +2775,12 @@ pub const BROWSE_AT_REMOTE_MELPA_PIN: (&str, &str) = ("browse-at-remote", "20260
 /// `39d65a830b93530c9bd68a7dc14353cbffd1d01f`.
 pub const BROWSE_KILL_RING_MELPA_PIN: (&str, &str) = ("browse-kill-ring", "20260503.1620");
 
+/// The exact Buffer Move package selected for practical multi-window swap,
+/// move-history, transient-arrow, failure-ordering, and recovery parity.
+/// MELPA built this archive from upstream commit
+/// `e7800b3ab1bd76ee475ef35507ec51ecd5a3f065`.
+pub const BUFFER_MOVE_MELPA_PIN: (&str, &str) = ("buffer-move", "20220512.755");
+
 /// The exact Casual package selected by the practical EditKit, Elisp, CSV,
 /// Dired, and Ibuffer menu-command parity corpus.
 pub const CASUAL_MELPA_PIN: (&str, &str) = ("casual", "20260718.1803");

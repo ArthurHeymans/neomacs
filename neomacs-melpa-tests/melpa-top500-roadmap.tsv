@@ -364,7 +364,7 @@ rank	package	downloads	status
 363	git-commit-mode	287680	covered
 364	reformatter	285344	covered
 365	scala-mode	284088	covered
-366	buffer-move	282179	todo
+366	buffer-move	282179	covered
 367	dracula-theme	281412	covered
 368	tide	279725	todo
 369	livid-mode	276850	todo
