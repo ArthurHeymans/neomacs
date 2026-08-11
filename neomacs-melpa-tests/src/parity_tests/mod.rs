@@ -377,6 +377,7 @@ mod eyebrowse;
 mod f;
 mod fancy_battery;
 mod fill_column_indicator;
+mod find_file_in_project;
 mod flx;
 mod flx_ido;
 mod flycheck;
