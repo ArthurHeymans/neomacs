@@ -2745,6 +2745,12 @@ pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
 /// aurel's runtime buffer-interface dependency.
 pub const BUI_MELPA_PIN: (&str, &str) = ("bui", "20260502.730");
 
+/// The exact Browse At Remote package selected for real Git repository,
+/// public browser/clipboard, remote-routing, and Gitea URL parity. MELPA
+/// built this archive from upstream commit
+/// `38e5ffd77493c17c821fd88f938dbf42705a5158`.
+pub const BROWSE_AT_REMOTE_MELPA_PIN: (&str, &str) = ("browse-at-remote", "20260126.608");
+
 /// The exact browse-kill-ring package selected for practical kill-ring browser
 /// display, elision, insertion helpers, and default keybinding setup. MELPA
 /// built this archive from upstream commit

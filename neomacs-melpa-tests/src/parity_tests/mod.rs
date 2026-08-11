@@ -268,6 +268,7 @@ mod avy_menu;
 mod bert;
 mod bind_key;
 mod bind_map;
+mod browse_at_remote;
 mod browse_kill_ring;
 mod bui;
 mod casual;
