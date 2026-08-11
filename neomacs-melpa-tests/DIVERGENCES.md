@@ -2887,3 +2887,126 @@ Reduction: `cargo nextest run -p neomacs-melpa-tests -E
 failures, now 18.
 
 Status: FIXED.
+
+## 64. `completion-ignored-extensions` was never made special, so every `let` of it bound lexically -- FIXED
+
+GNU installs this variable in C: `syms_of_dired` (`src/dired.c:1206`) declares
+it with `DEFVAR_LISP` and initializes it to nil, and `lisp/bindings.el:989`
+then `setq`s the real 67-element list. We instead seeded a three-element
+placeholder from `eval.rs` with a plain `set_symbol_value` and never called
+`make_special`.
+
+`DEFVAR_LISP` is what marks a symbol special. Without it, a `let` around the
+variable in a lexical-binding file creates a LEXICAL binding, which the
+callees that read the value never see:
+
+```elisp
+;; inside a lexical-binding form that let-binds the variable to '(".bak")
+(special-variable-p 'completion-ignored-extensions)
+;; GNU     => t     ; the let is dynamic, callees observe (".bak")
+;; Neomacs => nil   ; the let is lexical, callees observe the global list
+
+(completion-pcm--filename-try-filter '("production.bak" "production.toml"))
+;; GNU     => ("production.toml")
+;; Neomacs => ("production.bak" "production.toml")
+```
+
+This was not one package's bug. Every Elisp caller that rebinds the variable
+this way -- `hexl.el`, `comint.el`, `term.el` and `files.el` all do -- was
+silently completing against the global list instead of its own.
+
+It surfaced as the `vertico` melpa batch, where it was first read as fixture
+pollution because the failing case creates a `configs/production.bak` fixture
+on purpose. It is not pollution: `MelpaSandbox::new` makes a fresh tempdir per
+case and `run_elisp_oracle_batch` gives each editor its own, so both engines
+saw an identical three-file directory. Vertico filters ignored extensions
+itself -- `vertico--compute` calls `completion-pcm--filename-try-filter` when
+the completion category is `file` -- so the case's `let` of `'(".bak")` was
+invisible and `production.bak` stayed in the candidate list where GNU dropped
+it (`:total 3` vs GNU's `:total 2`).
+
+What isolated it was that every intermediate layer agreed between the engines:
+`file-name-all-completions`, `file-name-completion`, the completion metadata
+category, `completion-all-completions` under all four completion styles,
+`regexp-opt`, `string-match-p`, and even
+`completion-pcm--filename-try-filter` called standalone. Only inside the real
+batch run did the two diverge, and the discriminator was
+`special-variable-p`.
+
+Fixed by mirroring `syms_of_dired`: a `dired::register_bootstrap_vars` that
+sets the variable to nil and calls `make_special`, wired into the bootstrap
+registration list in `eval.rs`, with the placeholder deleted so
+`lisp/bindings.el` supplies the list exactly as upstream. A bare `Context`
+now starts it at nil, which is GNU's real pre-`bindings.el` state, and the
+running editor's value is byte-identical to GNU's 67-element list.
+
+Pinned by `completion_ignored_extensions_is_special_like_gnu` in
+`neovm-core/src/emacs_core/dired_test.rs`, written red first.
+
+### The same class, swept: 113 more variables are special in GNU but not here
+
+This is a bug class, not a one-off. Comparing `special-variable-p` in both
+editors over every name that GNU declares with a C `DEFVAR_*` and that we set
+without `make_special`, 113 variables are special in real GNU Emacs 31.0.90
+and plain in ours. Any lexical-binding `let` of one of these is invisible to
+its callees, exactly as above. Several are routinely let-bound in the wild --
+`scroll-margin`, `scroll-conservatively`, `resize-mini-windows`,
+`max-mini-window-height`, `face-remapping-alist`,
+`write-region-annotate-functions`, `after-insert-file-functions`,
+`last-nonmenu-event`, `function-key-map`, `key-translation-map`,
+`truncate-partial-width-windows`, `inhibit-load-charset-map`.
+
+Reproduce the inventory by evaluating `special-variable-p` for each name in
+both editors and diffing; the full list as measured on 2026-08-11:
+
+`after-delete-frame-select-mru-frame`, `after-insert-file-functions`,
+`auto-composition-mode`, `auto-fill-chars`, `auto-raise-tab-bar-buttons`,
+`auto-raise-tool-bar-buttons`, `auto-resize-tab-bars`,
+`auto-resize-tool-bars`, `auto-save-include-big-deletions`,
+`auto-save-interval`, `auto-save-timeout`, `auto-window-vscroll`,
+`baud-rate`, `case-symbols-as-words`, `char-code-property-alist`,
+`charset-map-path`, `current-iso639-language`,
+`current-key-remap-sequence`, `current-time-list`, `debug-on-event`,
+`default-frame-scroll-bars`, `default-process-coding-system`,
+`defining-kbd-macro`, `delete-terminal-functions`,
+`display-monitors-changed-functions`, `double-click-fuzz`,
+`double-click-time`, `enable-disabled-menus-and-buttons`,
+`extra-keyboard-modifiers`, `face-default-stipple`,
+`face-filters-always-match`, `face-font-lax-matched-attributes`,
+`face-font-rescale-alist`, `face-ignored-fonts`,
+`face-near-same-color-threshold`, `face-remapping-alist`,
+`frame-inhibit-implied-resize`, `frame-title-format`, `function-key-map`,
+`hourglass-delay`, `hscroll-margin`, `hscroll-step`, `iconify-child-frame`,
+`icon-title-format`, `image-cache-eviction-delay`, `image-types`,
+`inhibit-load-charset-map`, `inhibit-try-cursor-movement`,
+`inhibit-x-resources`, `initial-window-system`, `key-translation-map`,
+`last-event-device`, `last-event-frame`, `last-kbd-macro`,
+`last-nonmenu-event`, `last-repeatable-command`,
+`line-number-display-limit-width`, `load-in-progress`, `main-thread`,
+`max-image-size`, `maximum-scroll-margin`, `max-mini-window-height`,
+`messages-buffer-name`, `message-truncate-lines`, `meta-prefix-char`,
+`minibuffer-follows-selected-frame`, `minibuffer-message-timeout`,
+`next-screen-context-lines`, `nobreak-char-display`, `num-input-keys`,
+`num-nonmacro-input-events`, `overline-margin`,
+`overriding-text-conversion-style`, `polling-period`,
+`post-select-region-hook`, `pre-redisplay-function`,
+`read-buffer-function`, `read-expression-history`,
+`redisplay--inhibit-bidi`, `resize-mini-windows`, `resume-tty-functions`,
+`saved-region-selection`, `scroll-conservatively`, `scroll-margin`,
+`scroll-step`, `set-auto-coding-function`, `special-event-map`,
+`suspend-tty-functions`, `system-uses-terminfo`, `tab-bar-border`,
+`tab-bar-button-margin`, `tab-bar-button-relief`, `tab-bar-truncate`,
+`terminal-frame`, `this-original-command`, `timer-idle-list`, `timer-list`,
+`tool-bar-border`, `tool-bar-button-margin`, `tool-bar-button-relief`,
+`tool-bar-max-label-size`, `translation-hash-table-vector`,
+`truncate-partial-width-windows`, `tty-defined-color-alist`,
+`tty-erase-char`, `underline-minimum-offset`, `unicode-category-table`,
+`void-text-area-pointer`, `window-point-insertion-type`,
+`write-region-annotate-functions`, `write-region-annotations-so-far`,
+`write-region-post-annotation-function`, `yes-or-no-prompt`.
+
+Reduction: `cargo nextest run -p neomacs-melpa-tests -E 'test(vertico)'` --
+both the parity batch and the TUI case now pass.
+
+Status: FIXED (this variable). The 113 siblings above are untouched and want
+a rung of their own.
