@@ -9,9 +9,10 @@ use std::cmp::Ordering;
 use std::sync::{Arc, OnceLock, Weak};
 
 use parking_lot::{RwLock, RwLockReadGuard};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::overlay_bplus::{OrderedShiftRecord, OrderedShiftTree, OrderedTreeQuery};
+use super::overlay_order::GnuOverlayOrder;
 use crate::emacs_core::plist;
 use crate::emacs_core::value::Value;
 use crate::heap_types::OverlayData;
@@ -43,6 +44,68 @@ pub(super) enum OverlayEditEffect {
         overlay: Value,
         collapsed_at: EmacsBytePos,
     },
+}
+
+/// Structural consequence of changing one indexed overlay region.
+///
+/// GNU's itree preserves tree position when only the end changes, but removes
+/// and reinserts a node when its start changes.  Encoding that distinction as
+/// an exhaustive enum prevents callers from accidentally routing both cases
+/// through the same ordering operation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IndexedRegionChange {
+    Unchanged,
+    EndOnly,
+    StartChanged,
+}
+
+impl IndexedRegionChange {
+    fn between(old: EmacsByteRange, new: EmacsByteRange) -> Self {
+        if old == new {
+            Self::Unchanged
+        } else if old.start() == new.start() {
+            Self::EndOnly
+        } else {
+            Self::StartChanged
+        }
+    }
+}
+
+/// Whether an insertion changes GNU's structural ordering for an overlay.
+///
+/// This is intentionally separate from endpoint movement: several overlays
+/// have their end changed in place, while only the exact-start,
+/// front-advancing subset is removed and reinserted by GNU's itree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InsertionOrderChange {
+    PreservePlace,
+    ReinsertFromPreorderStack,
+}
+
+impl InsertionOrderChange {
+    fn for_overlay(
+        range: EmacsByteRange,
+        position: EmacsBytePos,
+        before_markers: bool,
+        front_advance: bool,
+        rear_advance: bool,
+    ) -> Self {
+        if !before_markers
+            && range.start() == position
+            && front_advance
+            && (!range.is_empty() || rear_advance)
+        {
+            Self::ReinsertFromPreorderStack
+        } else {
+            Self::PreservePlace
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TextEditReattachment {
+    PreservePlace { attachment_order: u64 },
+    Reinsert,
 }
 
 /// Meaning of the order in which a bulk publisher supplies overlay records.
@@ -303,6 +366,10 @@ pub(crate) fn current_overlay_range(data: &OverlayData) -> Option<EmacsByteRange
 #[derive(Debug)]
 pub(super) struct OverlayIndex {
     intervals: Arc<RwLock<IntervalBPlusTree>>,
+    /// Topology-only mirror for the one GNU red-black-tree detail observable
+    /// during front-advancing insertion.  Positions remain authoritative in
+    /// `intervals`; this field stores only identity and tree shape.
+    gnu_order: GnuOverlayOrder<OverlayIdentity>,
     /// Published lazily on the first boundary query.  `OnceLock` makes the
     /// ready-state read path one atomic load; mutations already require
     /// `&mut OverlayIndex`, so they can update the tree through `get_mut`
@@ -314,6 +381,7 @@ impl OverlayIndex {
     pub(super) fn new() -> Self {
         Self {
             intervals: Arc::new(RwLock::new(IntervalBPlusTree::new())),
+            gnu_order: GnuOverlayOrder::new(),
             endpoints: OnceLock::new(),
         }
     }
@@ -324,9 +392,21 @@ impl OverlayIndex {
     /// attached.  Keeping all three writes here prevents membership and query
     /// indexes from drifting apart.
     pub(super) fn attach(&mut self, overlay: Value, range: EmacsByteRange) -> bool {
-        if !self.intervals.write().insert(overlay, range) {
+        let mut intervals = self.intervals.write();
+        if !intervals.insert(overlay, range) {
             return false;
         }
+        let identity = OverlayIdentity::of(overlay);
+        let inserted = self.gnu_order.insert_by(identity, |existing| {
+            range.start().cmp(
+                &intervals
+                    .range_by_identity(existing)
+                    .expect("GNU order mirror contains an unindexed overlay")
+                    .start(),
+            )
+        });
+        assert!(inserted, "new interval already existed in GNU order mirror");
+        drop(intervals);
         if let Some(endpoints) = self.endpoints.get_mut() {
             assert!(endpoints.insert(range.start(), EndpointKind::Start, overlay));
             assert!(endpoints.insert(range.end(), EndpointKind::End, overlay));
@@ -351,7 +431,35 @@ impl OverlayIndex {
                 return false;
             }
         }
-        self.intervals = Arc::new(RwLock::new(IntervalBPlusTree::from_entries(entries, order)));
+        let intervals = IntervalBPlusTree::from_entries(entries, order);
+        let mut gnu_order = GnuOverlayOrder::new();
+        let mut starts = FxHashMap::default();
+        let mut attach = |overlay: Value, range: EmacsByteRange| {
+            let identity = OverlayIdentity::of(overlay);
+            let inserted = gnu_order.insert_by(identity, |existing| {
+                range.start().cmp(
+                    starts
+                        .get(&existing)
+                        .expect("batch GNU order references an unattached overlay"),
+                )
+            });
+            assert!(inserted, "validated batch contains duplicate identity");
+            starts.insert(identity, range.start());
+        };
+        match order {
+            OverlayBatchOrder::AttachmentSequence => {
+                for (overlay, range) in entries.iter().copied() {
+                    attach(overlay, range);
+                }
+            }
+            OverlayBatchOrder::AscendingQueryOrder => {
+                for (overlay, range) in entries.iter().rev().copied() {
+                    attach(overlay, range);
+                }
+            }
+        }
+        self.intervals = Arc::new(RwLock::new(intervals));
+        self.gnu_order = gnu_order;
         self.endpoints = OnceLock::new();
         for (overlay, _) in entries {
             set_overlay_position_handle(*overlay, &self.intervals);
@@ -373,6 +481,10 @@ impl OverlayIndex {
     /// Detach an overlay and return its indexed range.
     pub(super) fn detach(&mut self, overlay: Value) -> Option<EmacsByteRange> {
         let (range, _) = self.intervals.write().take(overlay)?;
+        assert!(
+            self.gnu_order.remove(OverlayIdentity::of(overlay)),
+            "indexed overlay missing from GNU order mirror"
+        );
         if let Some(endpoints) = self.endpoints.get_mut() {
             assert_eq!(
                 endpoints.remove(overlay, EndpointKind::Start),
@@ -394,21 +506,61 @@ impl OverlayIndex {
         new_range: EmacsByteRange,
     ) -> Option<EmacsByteRange> {
         let mut intervals = self.intervals.write();
-        let (old_range, _) = intervals.take(overlay)?;
-        if let Some(endpoints) = self.endpoints.get_mut() {
-            assert_eq!(
-                endpoints.remove(overlay, EndpointKind::Start),
-                Some(old_range.start())
-            );
-            assert_eq!(
-                endpoints.remove(overlay, EndpointKind::End),
-                Some(old_range.end())
-            );
-            assert!(endpoints.insert(new_range.start(), EndpointKind::Start, overlay));
-            assert!(endpoints.insert(new_range.end(), EndpointKind::End, overlay));
+        let old_range = intervals.range_by_identity(OverlayIdentity::of(overlay))?;
+        match IndexedRegionChange::between(old_range, new_range) {
+            IndexedRegionChange::Unchanged => {}
+            IndexedRegionChange::EndOnly => {
+                if let Some(endpoints) = self.endpoints.get_mut() {
+                    assert_eq!(
+                        endpoints.remove(overlay, EndpointKind::End),
+                        Some(old_range.end())
+                    );
+                    assert!(endpoints.insert(new_range.end(), EndpointKind::End, overlay));
+                }
+                let previous = intervals
+                    .update_end_preserving_order(overlay, new_range)
+                    .expect("indexed overlay disappeared during end-only move");
+                debug_assert_eq!(previous, old_range);
+            }
+            IndexedRegionChange::StartChanged => {
+                let taken = intervals
+                    .take(overlay)
+                    .expect("indexed overlay disappeared during relocation");
+                debug_assert_eq!(taken.0, old_range);
+                assert!(
+                    self.gnu_order.remove(OverlayIdentity::of(overlay)),
+                    "relocated overlay missing from GNU order mirror"
+                );
+                if let Some(endpoints) = self.endpoints.get_mut() {
+                    assert_eq!(
+                        endpoints.remove(overlay, EndpointKind::Start),
+                        Some(old_range.start())
+                    );
+                    assert_eq!(
+                        endpoints.remove(overlay, EndpointKind::End),
+                        Some(old_range.end())
+                    );
+                    assert!(endpoints.insert(new_range.start(), EndpointKind::Start, overlay));
+                    assert!(endpoints.insert(new_range.end(), EndpointKind::End, overlay));
+                }
+                let inserted = intervals.insert(overlay, new_range);
+                debug_assert!(inserted, "removed overlay retained an interval node");
+                let order_inserted =
+                    self.gnu_order
+                        .insert_by(OverlayIdentity::of(overlay), |existing| {
+                            new_range.start().cmp(
+                                &intervals
+                                    .range_by_identity(existing)
+                                    .expect("GNU order mirror contains an unindexed overlay")
+                                    .start(),
+                            )
+                        });
+                assert!(
+                    order_inserted,
+                    "relocated overlay retained a GNU order node"
+                );
+            }
         }
-        let inserted = intervals.insert(overlay, new_range);
-        debug_assert!(inserted, "removed overlay retained an interval node");
         Some(old_range)
     }
 
@@ -442,6 +594,30 @@ impl OverlayIndex {
         let mut exceptions = self.overlays_touching(position);
         sort_and_dedup_overlay_identities(&mut exceptions);
 
+        let front_candidates: Vec<_> = exceptions
+            .iter()
+            .filter_map(|overlay| {
+                let range = self.range(*overlay)?;
+                let data = overlay.as_overlay_data()?;
+                (InsertionOrderChange::for_overlay(
+                    range,
+                    position,
+                    before_markers,
+                    data.front_advance,
+                    data.rear_advance,
+                ) == InsertionOrderChange::ReinsertFromPreorderStack)
+                    .then(|| OverlayIdentity::of(*overlay))
+            })
+            .collect();
+        let front_preorder = self.gnu_order.subset_in_preorder(&front_candidates);
+        for identity in &front_preorder {
+            assert!(
+                self.gnu_order.remove(*identity),
+                "front-advancing overlay missing from GNU order mirror"
+            );
+        }
+        let front_set: FxHashSet<_> = front_candidates.into_iter().collect();
+
         let mut detached = Vec::with_capacity(exceptions.len());
         for overlay in exceptions {
             if let Some((range, attachment_order)) = self.take_for_text_edit(overlay) {
@@ -458,6 +634,7 @@ impl OverlayIndex {
         }
 
         let mut effects = Vec::with_capacity(detached.len());
+        let mut front_updates = FxHashMap::default();
         for (overlay, old_range, attachment_order) in detached {
             #[cfg(test)]
             super::overlay::record_overlay_edit_candidate_inspection();
@@ -465,12 +642,18 @@ impl OverlayIndex {
                 .as_overlay_data()
                 .map(|data| (data.front_advance, data.rear_advance))
                 .unwrap_or((false, false));
-            let empty = old_range.is_empty();
+            let order_change = InsertionOrderChange::for_overlay(
+                old_range,
+                position,
+                before_markers,
+                front_advance,
+                rear_advance,
+            );
             let move_start = if before_markers {
                 old_range.start() >= position
             } else {
                 old_range.start() > position
-                    || (old_range.start() == position && front_advance && (!empty || rear_advance))
+                    || order_change == InsertionOrderChange::ReinsertFromPreorderStack
             };
             let move_end = if before_markers {
                 old_range.end() >= position
@@ -489,7 +672,17 @@ impl OverlayIndex {
                     old_range.end()
                 },
             );
-            self.restore_after_text_edit(overlay, new_range, attachment_order);
+            let identity = OverlayIdentity::of(overlay);
+            if front_set.contains(&identity) {
+                let previous = front_updates.insert(identity, (overlay, new_range));
+                debug_assert!(previous.is_none(), "duplicate front-advance update");
+            } else {
+                self.restore_after_text_edit(
+                    overlay,
+                    new_range,
+                    TextEditReattachment::PreservePlace { attachment_order },
+                );
+            }
             if new_range != old_range {
                 effects.push(OverlayEditEffect::Resized {
                     overlay,
@@ -497,6 +690,16 @@ impl OverlayIndex {
                 });
             }
         }
+        // GNU pushes candidates in tree pre-order and pops the stack for
+        // reinsertion.  Both the B+ precedence serial and topology mirror must
+        // observe that reverse order.
+        for identity in front_preorder.into_iter().rev() {
+            let (overlay, new_range) = front_updates
+                .remove(&identity)
+                .expect("front-advance candidate disappeared during insertion");
+            self.restore_after_text_edit(overlay, new_range, TextEditReattachment::Reinsert);
+        }
+        debug_assert!(front_updates.is_empty());
         effects
     }
 
@@ -522,6 +725,7 @@ impl OverlayIndex {
         }
 
         let mut effects = Vec::with_capacity(detached.len());
+        let mut evaporated = Vec::new();
         for (overlay, old_range, attachment_order) in detached {
             #[cfg(test)]
             super::overlay::record_overlay_edit_candidate_inspection();
@@ -546,13 +750,24 @@ impl OverlayIndex {
                         .is_some_and(|value| value.is_truthy())
                 });
             if evaporates {
+                evaporated.push((
+                    IntervalKey {
+                        start: new_range.start(),
+                        attachment_order,
+                    },
+                    OverlayIdentity::of(overlay),
+                ));
                 materialize_overlay_position(overlay, new_range);
                 effects.push(OverlayEditEffect::Evaporated {
                     overlay,
                     collapsed_at: new_range.start(),
                 });
             } else {
-                self.restore_after_text_edit(overlay, new_range, attachment_order);
+                self.restore_after_text_edit(
+                    overlay,
+                    new_range,
+                    TextEditReattachment::PreservePlace { attachment_order },
+                );
                 if new_range != old_range {
                     effects.push(OverlayEditEffect::Resized {
                         overlay,
@@ -560,6 +775,16 @@ impl OverlayIndex {
                     });
                 }
             }
+        }
+        // GNU discovers evaporated overlays in ascending itree order, conses
+        // them, then deletes the resulting reversed list.  Preserve that
+        // removal order because red-black topology affects later insertion.
+        evaporated.sort_unstable_by_key(|(key, _)| *key);
+        for (_, identity) in evaporated.into_iter().rev() {
+            assert!(
+                self.gnu_order.remove(identity),
+                "evaporated overlay missing from GNU order mirror"
+            );
         }
         effects
     }
@@ -596,17 +821,37 @@ impl OverlayIndex {
         &mut self,
         overlay: Value,
         range: EmacsByteRange,
-        attachment_order: u64,
+        reattachment: TextEditReattachment,
     ) {
-        let inserted = self
-            .intervals
-            .write()
-            .insert_with_order(overlay, range, attachment_order);
+        let inserted = match reattachment {
+            TextEditReattachment::PreservePlace { attachment_order } => self
+                .intervals
+                .write()
+                .insert_with_order(overlay, range, attachment_order),
+            TextEditReattachment::Reinsert => self.intervals.write().insert(overlay, range),
+        };
         if let Some(endpoints) = self.endpoints.get_mut() {
             assert!(endpoints.insert(range.start(), EndpointKind::Start, overlay));
             assert!(endpoints.insert(range.end(), EndpointKind::End, overlay));
         }
         debug_assert!(inserted, "detached overlay retained an interval node");
+        if reattachment == TextEditReattachment::Reinsert {
+            let intervals = self.intervals.read();
+            let order_inserted =
+                self.gnu_order
+                    .insert_by(OverlayIdentity::of(overlay), |existing| {
+                        range.start().cmp(
+                            &intervals
+                                .range_by_identity(existing)
+                                .expect("GNU order mirror contains an unindexed overlay")
+                                .start(),
+                        )
+                    });
+            assert!(
+                order_inserted,
+                "reinserted overlay retained a GNU order node"
+            );
+        }
     }
 
     pub(super) fn clear(&mut self) {
@@ -615,6 +860,7 @@ impl OverlayIndex {
             materialize_overlay_position(overlay, range);
         }
         self.intervals = Arc::new(RwLock::new(IntervalBPlusTree::new()));
+        self.gnu_order = GnuOverlayOrder::new();
         self.endpoints = OnceLock::new();
     }
 
@@ -740,6 +986,8 @@ impl OverlayIndex {
             endpoints.assert_invariants();
             assert_eq!(interval_len * 2, endpoints.len());
         }
+        self.gnu_order.assert_invariants();
+        assert_eq!(interval_len, self.gnu_order.len());
     }
 }
 
@@ -954,6 +1202,20 @@ impl IntervalBPlusTree {
     fn take(&mut self, overlay: Value) -> Option<(EmacsByteRange, u64)> {
         let record = self.records.remove(OverlayIdentity::of(overlay))?;
         Some((record.range, record.key.attachment_order))
+    }
+
+    fn update_end_preserving_order(
+        &mut self,
+        overlay: Value,
+        range: EmacsByteRange,
+    ) -> Option<EmacsByteRange> {
+        let identity = OverlayIdentity::of(overlay);
+        let current = self.records.record(identity)?;
+        debug_assert_eq!(current.range.start(), range.start());
+        let previous = self
+            .records
+            .replace_same_key(IntervalRecord { range, ..current })?;
+        Some(previous.range)
     }
 
     fn range_by_identity(&self, identity: OverlayIdentity) -> Option<EmacsByteRange> {

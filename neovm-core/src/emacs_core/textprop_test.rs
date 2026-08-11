@@ -1922,6 +1922,67 @@ fn overlays_at_unsorted_matches_gnu_same_start_itree_order() {
 }
 
 #[test]
+fn move_overlay_end_only_preserves_gnu_equal_start_order() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (insert "abcdef")
+                 (let ((a (make-overlay 1 3))
+                       (b (make-overlay 1 4)))
+                   (move-overlay a 1 5)
+                   (mapcar (lambda (overlay)
+                             (if (eq overlay a) 'a 'b))
+                           (overlays-at 2))))"#,
+        )
+        .expect("end-only move-overlay succeeds");
+
+    let order: Vec<_> = list_to_vec(&result)
+        .expect("overlays-at returns a proper list")
+        .into_iter()
+        .map(|value| value.as_symbol_name().expect("label is a symbol"))
+        .collect();
+    assert_eq!(order, vec!["b", "a"]);
+}
+
+#[test]
+fn insert_reorders_equal_start_front_advancing_overlays_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (insert "abcdef")
+                 (let ((a (make-overlay 1 4 nil t nil))
+                       (b (make-overlay 1 4 nil t nil))
+                       (c (make-overlay 1 4 nil t nil)))
+                   (let ((label (lambda (overlay)
+                                  (cond ((eq overlay a) 'a)
+                                        ((eq overlay b) 'b)
+                                        (t 'c)))))
+                     (list (mapcar label (overlays-at 2))
+                           (progn
+                             (goto-char 1)
+                             (insert "X")
+                             (mapcar label (overlays-at 2)))))))"#,
+        )
+        .expect("insertion at front-advancing overlays succeeds");
+
+    let observations = list_to_vec(&result).expect("result is a proper list");
+    assert_eq!(observations.len(), 2);
+    let labels = |value: &Value| {
+        list_to_vec(value)
+            .expect("overlay order is a proper list")
+            .into_iter()
+            .map(|item| item.as_symbol_name().expect("label is a symbol"))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(labels(&observations[0]), vec!["c", "b", "a"]);
+    assert_eq!(labels(&observations[1]), vec!["b", "c", "a"]);
+}
+
+#[test]
 fn overlays_at_sorted_matches_gnu_same_range_identity_order() {
     crate::test_utils::init_test_tracing();
     let mut eval = eval_with_text("hello world");

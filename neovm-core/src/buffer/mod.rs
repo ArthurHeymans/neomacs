@@ -8,6 +8,7 @@ mod marker_data;
 pub mod overlay;
 mod overlay_bplus;
 pub(crate) mod overlay_index;
+mod overlay_order;
 pub mod position;
 pub mod shared;
 pub mod text;

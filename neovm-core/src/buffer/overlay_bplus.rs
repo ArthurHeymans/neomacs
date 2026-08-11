@@ -409,6 +409,33 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
         Some(removed)
     }
 
+    /// Replace a record whose ordered key is unchanged.
+    ///
+    /// This is the mutation analogue of GNU itree's end-only region update:
+    /// interval augmentation changes, but membership and equal-start order do
+    /// not.  Requiring the complete replacement record lets the record and key
+    /// types enforce identity/key preservation at this single seam.
+    pub(super) fn replace_same_key(&mut self, replacement: R) -> Option<R> {
+        let identity = replacement.identity();
+        let leaf = *self.by_identity.get(&identity)?;
+        self.normalize_path(leaf);
+        let index = self
+            .leaf_records(leaf)
+            .iter()
+            .position(|record| record.identity() == identity)
+            .expect("overlay B+ identity map pointed to the wrong leaf");
+        let previous = self.leaf_records(leaf)[index];
+        assert_eq!(
+            previous.key(),
+            replacement.key(),
+            "same-key replacement changed ordered position"
+        );
+        self.leaf_records_mut(leaf)[index] = replacement;
+        self.refresh(leaf);
+        self.refresh_ancestors(self.node(leaf).parent);
+        Some(previous)
+    }
+
     pub(super) fn record(&self, identity: R::Identity) -> Option<R> {
         let leaf = *self.by_identity.get(&identity)?;
         let record = self
