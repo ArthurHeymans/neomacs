@@ -76,6 +76,34 @@ filter = 'package(neovm-oracle-tests) and test(regex_parity_proptest_full)'
 threads-required = "num-test-threads"
 slow-timeout = { period = "120s", terminate-after = 1 }
 
+# The two expanded-cache replay tests each run TWO full partial bootstraps (the
+# replay is the point: the second load must reproduce the first), source-loading
+# 73 and 82 loadup files respectively with no compiled or pdumped shortcut.
+# Measured on an otherwise idle machine: 134s (oclosure) and 144s (nadvice);
+# 220s for the same nadvice test with other builds running. They are heavy, not
+# hung, and the profile-wide 600s watchdog trips on them only under parallel
+# build load.
+#
+# More than half of each run is one file: lisp/ldefs-boot.el costs 45-68s per
+# bootstrap. That file is 1.6MB with 1369 non-ASCII bytes, so SCHARS != SBYTES
+# and LispString's byte<->char conversion fast path is off; the loader then pays
+# an O(n) scan from string start per top-level form, which is quadratic over the
+# file. A profile of the nadvice test attributes ~48% of all cycles to
+# `count_lead_bytes` under those conversions. Confirmed by scaling: an all-ASCII
+# synthetic autoload file loads linearly (1000 to 8000 forms, 0.026s -> 0.121s
+# release) while the same file with one non-ASCII char per form goes superlinear
+# (0.034s -> 0.917s). Fixing that in the loader is an engine change, tracked
+# separately -- it would speed up every bootstrap-heavy test, not just these two.
+#
+# Widen the watchdog for these two rather than reserving the whole machine with
+# threads-required: the contention comes from processes outside nextest's
+# control, and serializing two ~140s tests would add minutes of otherwise-idle
+# time to every full run. 1200s keeps a bounded watchdog with room over the
+# worst observed 220s. If one exceeds 1200s, that is a real regression.
+[[profile.default.overrides]]
+filter = 'package(neovm-core) and (test(expanded_cache_replay_preserves_nadvice_eval_and_compile_helpers) or test(expanded_cache_replay_preserves_oclosure_define_class_registration))'
+slow-timeout = { period = "1200s", terminate-after = 1 }
+
 # A couple of subprocess probes are timing sensitive rather than divergent:
 # `process_attributes_running_child` reads `process-running-child-p' while a
 # 0.2s child is alive, and `quit_process_sentinel_message' waits (a bounded
