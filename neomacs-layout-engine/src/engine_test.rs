@@ -7233,6 +7233,62 @@ fn arabic_run_composes_into_one_glyph_in_layout() {
     );
 }
 
+/// A TAB after a complex-script run must start from the run's FULL
+/// `string-width` column, exactly as GNU advances by the composition's
+/// `cmp->width`. The etc/HELLO language lines are this shape:
+/// `Arabic (<composed run>)\t<greeting>`.
+///
+/// The run materializes as one `Composite` glyph carrying the whole cluster's
+/// column width plus zero-column run-member padding cells, while the source
+/// walk's requested position advances per member. If the walk's position and
+/// the row tail ever disagree about the run's width (the 2f008a37a
+/// SourcePosition regression: reconciliation off, member advances 0 cols), the
+/// TAB starts short and over-fills — Arabic drifted +6 columns in the TUI
+/// HELLO tests.
+///
+/// `"Arabic ("` = 8 cols, the composed word = string-width 7 (six letters +
+/// teh marbuta; the shadda U+0651 is a zero-width combining mark), `")"` = 1
+/// → the TAB begins at col 16 and must stretch 8 cols to the tab stop at 24.
+#[test]
+fn tab_after_complex_script_run_fills_from_full_composite_width() {
+    let trace = backend_layout_trace_with_buffer_setup(
+        BufferTextBackendKind::GapBuffer,
+        "layout-backend-complex-run-tab",
+        "Arabic (\u{627}\u{644}\u{639}\u{631}\u{628}\u{64A}\u{651}\u{629})\tX\n",
+        640,
+        140,
+        |_buffer, _buf_id, _text| {},
+    );
+    let composites = trace_composite_texts(&trace);
+    assert!(
+        composites.iter().any(|t| t.contains('\u{627}')),
+        "the Arabic word should compose into a Composite run, composites={composites:?}"
+    );
+    let run_row = trace
+        .matrix_rows
+        .iter()
+        .find(|row| {
+            row.glyph_areas[1]
+                .iter()
+                .any(|glyph| matches!(&glyph.kind, GlyphKindTrace::Composite(_)))
+        })
+        .expect("row containing the composed run");
+    let stretch_cols: Vec<u16> = run_row.glyph_areas[1]
+        .iter()
+        .filter_map(|glyph| match glyph.kind {
+            GlyphKindTrace::Stretch(width_cols) => Some(width_cols),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        stretch_cols,
+        vec![8],
+        "the TAB must start at col 16 (8 + string-width 7 + 1) and stretch 8 \
+         cols to the stop at 24; a short start over-fills the stretch \
+         (regression: complex-run width lost from the walk position)"
+    );
+}
+
 #[test]
 fn implemented_text_backends_match_selective_display_output() {
     let baseline = selective_display_backend_layout_trace(BufferTextBackendKind::GapBuffer);
