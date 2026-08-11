@@ -11248,10 +11248,9 @@ fn dispatch_builtin_pure_handles_describe_and_delete_terminal_placeholders() {
 #[test]
 fn dispatch_builtin_pure_handles_fringe_and_garbage_placeholders() {
     crate::test_utils::init_test_tracing();
-    let fringe = dispatch_builtin_pure("fringe-bitmaps-at-pos", vec![Value::NIL, Value::NIL])
-        .expect("fringe-bitmaps-at-pos should resolve")
-        .expect("fringe-bitmaps-at-pos should evaluate");
-    assert_eq!(fringe, Value::NIL);
+    // `fringe-bitmaps-at-pos` answers from the window's redisplay output, so
+    // it needs the evaluator's frame state and cannot be dispatched purely.
+    assert!(dispatch_builtin_pure("fringe-bitmaps-at-pos", vec![Value::NIL, Value::NIL]).is_none());
 
     let gc = dispatch_builtin_pure("garbage-collect-maybe", vec![Value::fixnum(0)])
         .expect("garbage-collect-maybe should resolve")

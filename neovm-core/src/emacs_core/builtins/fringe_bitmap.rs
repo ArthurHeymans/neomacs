@@ -189,6 +189,12 @@ impl FringeBitmapRegistry {
         self.user_bitmaps.get(sym)
     }
 
+    /// The symbol a resolved integer index names, if any. GNU's
+    /// `get_fringe_bitmap_name`, used to report laid-out rows back to Lisp.
+    pub fn symbol_for_index(&self, index: u32) -> Option<SymId> {
+        self.by_index.get(&index).copied()
+    }
+
     /// The index a symbol's bitmap is stored at, if any.
     pub fn index_of(&self, sym: SymId) -> Option<u32> {
         self.by_index

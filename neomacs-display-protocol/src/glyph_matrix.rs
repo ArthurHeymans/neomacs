@@ -549,6 +549,15 @@ pub struct GlyphRow {
     /// Fringe bitmap to draw in this row's RIGHT fringe, if any. Reserved for
     /// the right-fringe path (not yet emitted downstream).
     pub right_fringe_bitmap: Option<FringeBitmapInfo>,
+    /// Overlay-arrow bitmap for this row, drawn in the LEFT fringe.
+    ///
+    /// Mirrors GNU `struct glyph_row::overlay_arrow_bitmap`, which is a slot
+    /// of its own rather than a second writer of `left_fringe_bitmap`: GNU
+    /// draws the arrow *in addition to* the row's left fringe bitmap
+    /// (`src/fringe.c` `draw_fringe_bitmap`, the trailing
+    /// `if (left_p && row->overlay_arrow_bitmap != NO_FRINGE_BITMAP)`), and
+    /// `fringe-bitmaps-at-pos` reports the two independently.
+    pub overlay_arrow_bitmap: Option<FringeBitmapInfo>,
 }
 
 /// Per-row fringe-bitmap reference: the resolved registry index and the face id
@@ -586,6 +595,7 @@ impl GlyphRow {
             end_charpos: 0,
             left_fringe_bitmap: None,
             right_fringe_bitmap: None,
+            overlay_arrow_bitmap: None,
         }
     }
 
@@ -1990,7 +2000,9 @@ impl FrameDisplayState {
                 if !glyph_row.enabled {
                     continue;
                 }
-                if glyph_row.left_fringe_bitmap.is_none() && glyph_row.right_fringe_bitmap.is_none()
+                if glyph_row.left_fringe_bitmap.is_none()
+                    && glyph_row.right_fringe_bitmap.is_none()
+                    && glyph_row.overlay_arrow_bitmap.is_none()
                 {
                     continue;
                 }
@@ -2022,6 +2034,23 @@ impl FrameDisplayState {
                 };
 
                 if let Some(info) = glyph_row.left_fringe_bitmap {
+                    push(FrameGlyph::FringeBitmap {
+                        window_id,
+                        row_role: glyph_row.role,
+                        clip_rect,
+                        x: left_fringe_x,
+                        y,
+                        width: left_fringe_width,
+                        height,
+                        bitmap_index: info.bitmap_index,
+                        face_id: info.face_id,
+                        side: FringeSide::Left,
+                    });
+                }
+                // GNU draws the overlay arrow over the left fringe after the
+                // row's own left bitmap, never instead of it (`src/fringe.c`
+                // `draw_fringe_bitmap`).
+                if let Some(info) = glyph_row.overlay_arrow_bitmap {
                     push(FrameGlyph::FringeBitmap {
                         window_id,
                         row_role: glyph_row.role,

@@ -49,6 +49,7 @@ pub mod font_backend;
 pub(crate) mod frame_face_arena;
 pub(crate) mod frame_layout_transaction;
 pub(crate) mod frame_presentation;
+mod fringe_snapshot;
 pub(crate) mod glyph_advance;
 pub(crate) mod glyph_row_writer;
 pub mod gui_chrome;

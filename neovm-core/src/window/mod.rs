@@ -1639,6 +1639,51 @@ pub struct DisplayRowSnapshot {
     pub start_buffer_pos: Option<LispCharPos1>,
     /// Last visible/source position associated with this row, if any.
     pub end_buffer_pos: Option<LispCharPos1>,
+    /// Fringe bitmaps redisplay laid out on this row.
+    pub fringe: RowFringeBitmaps,
+}
+
+/// Registry index of a fringe bitmap, as handed out by `define-fringe-bitmap`
+/// and stored in a bitmap symbol's `fringe` property.
+///
+/// GNU uses a bare `int` with `0` meaning `NO_FRINGE_BITMAP`; the absent case
+/// is `Option`/`RowOverlayArrowBitmap::Absent` here, so every value of this
+/// type names a bitmap that really is registered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FringeBitmapIndex(pub u16);
+
+/// The overlay-arrow fringe slot of a display row.
+///
+/// GNU packs three states into the signed `struct glyph_row::overlay_arrow_bitmap`
+/// and `Ffringe_bitmaps_at_pos` decodes them as `0 => nil`, `< 0 => t`,
+/// `> 0 => the bitmap's symbol` (src/fringe.c). Naming the three states makes
+/// that decode an exhaustive match instead of a sign test.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RowOverlayArrowBitmap {
+    /// No overlay arrow on this row (GNU `NO_FRINGE_BITMAP`).
+    #[default]
+    Absent,
+    /// An overlay arrow is present but its bitmap was never resolved to a
+    /// registry index (GNU's negative encoding, reported as `t`).
+    Unresolved,
+    /// An overlay arrow drawn with this bitmap.
+    Bitmap(FringeBitmapIndex),
+}
+
+/// The fringe bitmaps one display row carried out of the last redisplay.
+///
+/// Mirrors exactly the three `struct glyph_row` slots that
+/// `fringe-bitmaps-at-pos` reports: `left_fringe_bitmap`,
+/// `right_fringe_bitmap` and `overlay_arrow_bitmap`. The arrow is a slot of
+/// its own because GNU draws it *in addition to* the left bitmap.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RowFringeBitmaps {
+    /// Bitmap in the row's left fringe.
+    pub left: Option<FringeBitmapIndex>,
+    /// Bitmap in the row's right fringe.
+    pub right: Option<FringeBitmapIndex>,
+    /// Overlay arrow, drawn in the left fringe beside `left`.
+    pub overlay_arrow: RowOverlayArrowBitmap,
 }
 
 /// Last authoritative physical cursor kind for a window.
@@ -1884,6 +1929,16 @@ impl WindowDisplaySnapshot {
             };
             start <= pos && pos <= end
         })
+    }
+
+    /// Fringe bitmaps of the display row containing POS.
+    ///
+    /// `None` means POS is not on any row of this snapshot, which is GNU's
+    /// "no row containing pos" case — `fringe-bitmaps-at-pos` returns nil.
+    /// A row that simply carries no bitmaps yields a default (all-absent)
+    /// record, which GNU reports as `(nil nil nil)`.
+    pub fn fringe_bitmaps_for_buffer_pos(&self, pos: LispCharPos1) -> Option<RowFringeBitmaps> {
+        self.row_for_buffer_pos(pos).map(|row| row.fringe)
     }
 
     /// Return the visible point for POS, or the nearest visible neighbor when

@@ -5335,9 +5335,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "fringe-bitmaps-at-pos",
-        |_ctx, args| builtin_fringe_bitmaps_at_pos(args),
+        super::xdisp::builtin_fringe_bitmaps_at_pos,
         0,
         Some(2),
+    );
+    record_builtin_no_eval_policy(
+        "fringe-bitmaps-at-pos",
+        BuiltinNoEvalPolicy::RequiresEvalState,
     );
     ctx.defsubr("gap-position", builtin_gap_position, 0, Some(0));
     record_builtin_no_eval_policy("gap-position", BuiltinNoEvalPolicy::RequiresEvalState);

@@ -2509,6 +2509,7 @@ fn test_window_line_height_eval_uses_exact_chrome_rows() {
                             end_col: 2,
                             start_buffer_pos: None,
                             end_buffer_pos: None,
+                            fringe: Default::default(),
                         },
                         crate::window::DisplayRowSnapshot {
                             row: 1,
@@ -2520,6 +2521,7 @@ fn test_window_line_height_eval_uses_exact_chrome_rows() {
                             end_col: 2,
                             start_buffer_pos: None,
                             end_buffer_pos: None,
+                            fringe: Default::default(),
                         },
                         crate::window::DisplayRowSnapshot {
                             row: 2,
@@ -2531,6 +2533,7 @@ fn test_window_line_height_eval_uses_exact_chrome_rows() {
                             end_col: 2,
                             start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
                             end_buffer_pos: Some(crate::buffer::LispCharPos1::new(3)),
+                            fringe: Default::default(),
                         },
                         crate::window::DisplayRowSnapshot {
                             row: 3,
@@ -2542,6 +2545,7 @@ fn test_window_line_height_eval_uses_exact_chrome_rows() {
                             end_col: 2,
                             start_buffer_pos: None,
                             end_buffer_pos: None,
+                            fringe: Default::default(),
                         },
                     ],
                     ..crate::window::WindowDisplaySnapshot::default()
@@ -2606,6 +2610,7 @@ fn test_window_line_height_eval_reports_text_rows_relative_to_text_area() {
                     end_col: 2,
                     start_buffer_pos: None,
                     end_buffer_pos: None,
+                    fringe: Default::default(),
                 },
                 crate::window::DisplayRowSnapshot {
                     row: 1,
@@ -2617,6 +2622,7 @@ fn test_window_line_height_eval_reports_text_rows_relative_to_text_area() {
                     end_col: 2,
                     start_buffer_pos: None,
                     end_buffer_pos: None,
+                    fringe: Default::default(),
                 },
                 crate::window::DisplayRowSnapshot {
                     row: 2,
@@ -2628,6 +2634,7 @@ fn test_window_line_height_eval_reports_text_rows_relative_to_text_area() {
                     end_col: 2,
                     start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
                     end_buffer_pos: Some(crate::buffer::LispCharPos1::new(3)),
+                    fringe: Default::default(),
                 },
                 crate::window::DisplayRowSnapshot {
                     row: 3,
@@ -2639,6 +2646,7 @@ fn test_window_line_height_eval_reports_text_rows_relative_to_text_area() {
                     end_col: 2,
                     start_buffer_pos: Some(crate::buffer::LispCharPos1::new(4)),
                     end_buffer_pos: Some(crate::buffer::LispCharPos1::new(6)),
+                    fringe: Default::default(),
                 },
             ],
             ..crate::window::WindowDisplaySnapshot::default()
@@ -2730,6 +2738,7 @@ fn test_posn_at_point_eval_uses_exact_redisplay_snapshot() {
                         end_col: 0,
                         start_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
                         end_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
+                        fringe: Default::default(),
                     }],
                     ..crate::window::WindowDisplaySnapshot::default()
                 }],
@@ -2786,6 +2795,7 @@ fn test_posn_at_point_reports_text_area_relative_y_below_window_chrome() {
                 end_col: 1,
                 start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
                 end_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                fringe: Default::default(),
             }],
             ..crate::window::WindowDisplaySnapshot::default()
         }]);
@@ -2966,6 +2976,7 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
                 end_col: 0,
                 start_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
                 end_buffer_pos: Some(crate::buffer::LispCharPos1::new(5)),
+                fringe: Default::default(),
             }],
             ..crate::window::WindowDisplaySnapshot::default()
         }]);
@@ -3116,6 +3127,7 @@ fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
                 end_col: 0,
                 start_buffer_pos: Some(crate::buffer::LispCharPos1::new(10)),
                 end_buffer_pos: Some(crate::buffer::LispCharPos1::new(14)),
+                fringe: Default::default(),
             }],
             ..crate::window::WindowDisplaySnapshot::default()
         }]);
@@ -3205,6 +3217,7 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
                     end_col: 0,
                     start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
                     end_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    fringe: Default::default(),
                 },
                 crate::window::DisplayRowSnapshot {
                     row: 1,
@@ -3216,6 +3229,7 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
                     end_col: 0,
                     start_buffer_pos: Some(crate::buffer::LispCharPos1::new(4)),
                     end_buffer_pos: Some(crate::buffer::LispCharPos1::new(4)),
+                    fringe: Default::default(),
                 },
             ],
             ..crate::window::WindowDisplaySnapshot::default()
@@ -3266,6 +3280,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_rows() {
                     end_col: 1,
                     start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
                     end_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    fringe: Default::default(),
                 },
                 crate::window::DisplayRowSnapshot {
                     row: 1,
@@ -3277,6 +3292,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_rows() {
                     end_col: 1,
                     start_buffer_pos: Some(crate::buffer::LispCharPos1::new(40)),
                     end_buffer_pos: Some(crate::buffer::LispCharPos1::new(40)),
+                    fringe: Default::default(),
                 },
                 crate::window::DisplayRowSnapshot {
                     row: 2,
@@ -3288,6 +3304,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_rows() {
                     end_col: 1,
                     start_buffer_pos: Some(crate::buffer::LispCharPos1::new(80)),
                     end_buffer_pos: Some(crate::buffer::LispCharPos1::new(80)),
+                    fringe: Default::default(),
                 },
             ],
             ..crate::window::WindowDisplaySnapshot::default()
@@ -3362,6 +3379,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
                     end_col: 1,
                     start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
                     end_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    fringe: Default::default(),
                 },
                 crate::window::DisplayRowSnapshot {
                     row: 1,
@@ -3373,6 +3391,7 @@ fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
                     end_col: 6,
                     start_buffer_pos: Some(crate::buffer::LispCharPos1::new(40)),
                     end_buffer_pos: Some(crate::buffer::LispCharPos1::new(45)),
+                    fringe: Default::default(),
                 },
             ],
             ..crate::window::WindowDisplaySnapshot::default()
@@ -4028,4 +4047,181 @@ fn line_number_anchor_counts_from_recent_line_and_survives_edits_below() {
     let buf = eval.buffers.current_buffer().expect("buffer");
     let p = point_at(&eval, 5001);
     assert_eq!(super::prefix_line_and_column(buf, p).line, 1002);
+}
+
+/// Build a frame whose single window has a committed redisplay snapshot with
+/// three text rows, and register two fringe bitmaps so index->symbol resolves.
+///
+/// Expectations below are measured against GNU Emacs (src/fringe.c
+/// `Ffringe_bitmaps_at_pos`): every row that redisplay laid out answers a
+/// three-element list, and only a position on no row at all answers nil.
+fn fringe_bitmaps_at_pos_fixture() -> (Context, crate::window::FrameId) {
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("current buffer")
+        .insert("alpha\nbeta\ngamma\n");
+    let frame_id = eval
+        .frames
+        .create_frame("xdisp-fringe-bitmaps-at-pos", 160, 80, buf_id);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+
+    let bitmap = |bits: u16| crate::emacs_core::builtins::fringe_bitmap::FringeBitmap {
+        bits: vec![bits],
+        height: 1,
+        width: 8,
+        period: 0,
+        align: crate::emacs_core::builtins::fringe_bitmap::FringeBitmapAlign::Center,
+        face: None,
+    };
+    let left = eval
+        .fringe_bitmaps
+        .define(intern("p39-left"), None, bitmap(255));
+    let right = eval
+        .fringe_bitmaps
+        .define(intern("p39-right"), None, bitmap(129));
+
+    let row = |row: i64, start: usize, end: usize, fringe: crate::window::RowFringeBitmaps| {
+        crate::window::DisplayRowSnapshot {
+            row,
+            y: row * 10,
+            height: 10,
+            start_x: 0,
+            start_col: 0,
+            end_x: 20,
+            end_col: 5,
+            start_buffer_pos: Some(LispCharPos1::new(start as i64)),
+            end_buffer_pos: Some(LispCharPos1::new(end as i64)),
+            fringe,
+        }
+    };
+    let frame = eval.frames.get_mut(frame_id).expect("frame");
+    frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+        window_id,
+        rows: vec![
+            row(0, 1, 6, crate::window::RowFringeBitmaps::default()),
+            row(
+                1,
+                7,
+                11,
+                crate::window::RowFringeBitmaps {
+                    left: Some(crate::window::FringeBitmapIndex(left as u16)),
+                    right: None,
+                    overlay_arrow: crate::window::RowOverlayArrowBitmap::Absent,
+                },
+            ),
+            row(
+                2,
+                12,
+                17,
+                crate::window::RowFringeBitmaps {
+                    left: None,
+                    right: Some(crate::window::FringeBitmapIndex(right as u16)),
+                    overlay_arrow: crate::window::RowOverlayArrowBitmap::Bitmap(
+                        crate::window::FringeBitmapIndex(left as u16),
+                    ),
+                },
+            ),
+        ],
+        ..Default::default()
+    }]);
+    (eval, frame_id)
+}
+
+fn fringe_bitmaps_at_pos_call(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    builtin_fringe_bitmaps_at_pos(eval, args)
+}
+
+/// The `(LEFT RIGHT OVERLAY)` triple as three values, asserting the shape GNU
+/// documents (exactly three elements) along the way.
+fn fringe_triple(value: Value) -> [Value; 3] {
+    let mut rest = value;
+    let mut out = [Value::NIL; 3];
+    for slot in &mut out {
+        assert!(
+            !rest.is_nil(),
+            "fringe-bitmaps-at-pos must return 3 elements"
+        );
+        *slot = rest.cons_car();
+        rest = rest.cons_cdr();
+    }
+    assert!(rest.is_nil(), "fringe-bitmaps-at-pos must return exactly 3");
+    out
+}
+
+#[test]
+fn test_fringe_bitmaps_at_pos_reports_gnu_left_right_overlay_triple() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, _frame_id) = fringe_bitmaps_at_pos_fixture();
+
+    // A laid-out row with no bitmaps is `(nil nil nil)`, never nil: GNU only
+    // answers nil when no row contains POS.
+    let bare = fringe_bitmaps_at_pos_call(&mut eval, vec![Value::fixnum(1)])
+        .expect("bare row answers a triple");
+    assert_eq!(fringe_triple(bare), [Value::NIL, Value::NIL, Value::NIL]);
+
+    let left_sym = Value::from_sym_id(intern("p39-left"));
+    let right_sym = Value::from_sym_id(intern("p39-right"));
+    let left = fringe_bitmaps_at_pos_call(&mut eval, vec![Value::fixnum(7)])
+        .expect("left-fringe row answers a triple");
+    assert_eq!(fringe_triple(left), [left_sym, Value::NIL, Value::NIL]);
+
+    // The overlay arrow occupies its own slot, so it is reported beside the
+    // right-fringe bitmap rather than displacing it.
+    let right_and_arrow = fringe_bitmaps_at_pos_call(&mut eval, vec![Value::fixnum(12)])
+        .expect("right-fringe row answers a triple");
+    assert_eq!(
+        fringe_triple(right_and_arrow),
+        [Value::NIL, right_sym, left_sym]
+    );
+}
+
+#[test]
+fn test_fringe_bitmaps_at_pos_defaults_pos_to_point_in_selected_window() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, _frame_id) = fringe_bitmaps_at_pos_fixture();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let buffer = eval.buffers.get_mut(buf_id).expect("current buffer");
+    // The fixture text is ASCII, so char and byte offsets coincide; Lisp
+    // position 7 is the start of the second row.
+    buffer.set_point_anchor(crate::buffer::TextPositionAnchor::new(
+        CharPos0::new(6),
+        crate::buffer::EmacsBytePos::new(6),
+    ));
+
+    let defaulted =
+        fringe_bitmaps_at_pos_call(&mut eval, Vec::new()).expect("nil POS defaults to point");
+    assert_eq!(
+        fringe_triple(defaulted),
+        [
+            Value::from_sym_id(intern("p39-left")),
+            Value::NIL,
+            Value::NIL
+        ]
+    );
+}
+
+#[test]
+fn test_fringe_bitmaps_at_pos_returns_nil_for_a_position_no_row_displays() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, _frame_id) = fringe_bitmaps_at_pos_fixture();
+    // Position 18 is inside the buffer but past the last row of the snapshot,
+    // which is GNU's `row_containing_pos` miss.
+    let missing = fringe_bitmaps_at_pos_call(&mut eval, vec![Value::fixnum(18)])
+        .expect("an undisplayed position answers nil, not an error");
+    assert!(missing.is_nil(), "expected nil for an undisplayed position");
+}
+
+#[test]
+fn test_fringe_bitmaps_at_pos_signals_args_out_of_range_beyond_accessible_portion() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, _frame_id) = fringe_bitmaps_at_pos_fixture();
+    let error = fringe_bitmaps_at_pos_call(&mut eval, vec![Value::fixnum(9999)])
+        .expect_err("POS past ZV signals like GNU's args_out_of_range");
+    let rendered = format!("{error:?}");
+    assert!(
+        rendered.contains("args-out-of-range") || rendered.contains("ArgsOutOfRange"),
+        "expected args-out-of-range, got {rendered}"
+    );
 }

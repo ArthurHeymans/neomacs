@@ -3704,6 +3704,113 @@ fn pos_visible_in_window_p_impl(
     Ok(Value::list(out))
 }
 
+/// `(fringe-bitmaps-at-pos &optional POS WINDOW)`.
+///
+/// GNU keeps this in `src/fringe.c` (`Ffringe_bitmaps_at_pos`), but it is a
+/// pure reader of the window's current matrix, so it lives here beside the
+/// other matrix readers (`pos-visible-in-window-p`, `window-line-height`) that
+/// share the redisplay-snapshot seam.
+///
+/// GNU locates the glyph row containing POS via `row_containing_pos` and
+/// returns `(LEFT RIGHT OVERLAY)` from that row's three fringe slots, or nil
+/// when no row contains POS. A row that carries no bitmaps still answers
+/// `(nil nil nil)` — only an off-window POS gives nil.
+pub(crate) fn builtin_fringe_bitmaps_at_pos(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args_range("fringe-bitmaps-at-pos", &args, 0, 2)?;
+    let window_arg = args.get(1).copied().unwrap_or(Value::NIL);
+    validate_optional_window_designator_in_state(&eval.frames, args.get(1), "window-live-p")?;
+    let Some((frame_id, window_id)) = resolve_live_window_identity(&eval.frames, args.get(1))?
+    else {
+        return Ok(Value::NIL);
+    };
+    // GNU reports the error against the window OBJECT, not the argument as
+    // written, so a nil WINDOW still names the selected window.
+    let window_value = if window_arg.is_nil() {
+        Value::make_window(window_id.0)
+    } else {
+        window_arg
+    };
+
+    let Some(buffer_id) = eval
+        .frames
+        .get(frame_id)
+        .and_then(|frame| frame.find_window(window_id))
+        .and_then(|window| window.buffer_id())
+    else {
+        return Ok(Value::NIL);
+    };
+    let Some((begv, zv, buffer_point)) = eval.buffers.get(buffer_id).map(|buffer| {
+        (
+            buffer.point_min_lisp_char_pos(),
+            buffer.point_max_lisp_char_pos(),
+            buffer.point_lisp_char_pos(),
+        )
+    }) else {
+        return Ok(Value::NIL);
+    };
+
+    let textpos = match args.first() {
+        Some(pos) if !pos.is_nil() => {
+            let raw = super::buffer::expect_integer_or_marker_in_buffers(&eval.buffers, pos)?;
+            if raw < begv.to_one_based_usize() as i64 || raw > zv.to_one_based_usize() as i64 {
+                return Err(signal(
+                    LispCondition::ArgsOutOfRange,
+                    vec![window_value, *pos],
+                ));
+            }
+            LispCharPos1::from_one_based_usize(raw as usize)
+        }
+        // GNU: the selected window tracks the live buffer point, any other
+        // window its own stored `w->pointm`.
+        _ => {
+            let is_selected = eval
+                .frames
+                .selected_frame()
+                .is_some_and(|frame| frame.selected_window == window_id);
+            if is_selected {
+                buffer_point
+            } else {
+                eval.frames
+                    .get(frame_id)
+                    .and_then(|frame| frame.find_window(window_id))
+                    .and_then(|window| match window {
+                        crate::window::Window::Leaf { point, .. } => Some(*point),
+                        _other => None,
+                    })
+                    .unwrap_or(begv)
+            }
+        }
+    };
+
+    let Some(fringe) = eval
+        .frames
+        .get(frame_id)
+        .and_then(|frame| frame.redisplay_snapshot(window_id))
+        .and_then(|snapshot| snapshot.fringe_bitmaps_for_buffer_pos(textpos))
+    else {
+        return Ok(Value::NIL);
+    };
+
+    let name = |index: crate::window::FringeBitmapIndex| {
+        eval.fringe_bitmap_registry()
+            .symbol_for_index(u32::from(index.0))
+            .map(Value::from_sym_id)
+            .unwrap_or(Value::NIL)
+    };
+    Ok(Value::list(vec![
+        fringe.left.map(name).unwrap_or(Value::NIL),
+        fringe.right.map(name).unwrap_or(Value::NIL),
+        match fringe.overlay_arrow {
+            crate::window::RowOverlayArrowBitmap::Absent => Value::NIL,
+            crate::window::RowOverlayArrowBitmap::Unresolved => Value::T,
+            crate::window::RowOverlayArrowBitmap::Bitmap(index) => name(index),
+        },
+    ]))
+}
+
 /// `(window-line-height &optional LINE WINDOW)` evaluator-backed variant.
 ///
 /// GNU Emacs returns `(HEIGHT VPOS YPOS OFFBOT)` for a live GUI window.  We

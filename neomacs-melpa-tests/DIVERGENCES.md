@@ -2791,3 +2791,53 @@ GNU reference: src/keymap.c describe_map_tree + get_keymap's autoload
 handling. Evidence transcripts: the entry-59 worktree's tmp/descb-*.txt.
 
 Status: OPEN.
+
+## 62. `fringe-bitmaps-at-pos` was a stub that always returned nil -- FIXED
+
+`git-gutter-fringe` puts its hunk indicators in the fringe by hanging an
+overlay `before-string` carrying a `(left-fringe BITMAP FACE)` display spec on
+each changed line, and the package's own tests read them back with
+`fringe-bitmaps-at-pos`. Our builtin validated its two arguments and then
+returned nil unconditionally, so every row reported no bitmaps:
+
+```elisp
+;; after (git-gutter-mode 1) on a file with three hunks, per line:
+(fringe-bitmaps-at-pos (point) (selected-window))
+;; GNU     => (git-gutter-fr:modified nil nil)   ; and (nil nil nil) elsewhere
+;; Neomacs => nil                                ; every row
+```
+
+Everything else in the payload already matched GNU byte-exactly -- window and
+frame fringe geometry, the three bitmap registrations, the decoded bitmap
+vectors and their sha256, the `display` properties, and the resolved faces --
+which located the gap precisely at the introspection builtin rather than in
+the display pipeline.
+
+Note the shape: GNU answers a three-element list for every row redisplay laid
+out, and nil ONLY when no row contains POS. A row with no bitmaps is
+`(nil nil nil)`, not nil.
+
+GNU reference: `src/fringe.c` `Ffringe_bitmaps_at_pos`, which reads the
+window's CURRENT MATRIX -- it locates the row with `row_containing_pos` and
+returns `(left_fringe_bitmap right_fringe_bitmap overlay_arrow_bitmap)`, the
+last decoded as `0 => nil`, `< 0 => t`, `> 0 => the bitmap's symbol`.
+
+The fix follows that structure rather than re-deriving bitmaps from text
+properties, which would have missed every indicator redisplay puts in the
+fringe itself (truncation, continuation, empty-line, overlay arrows).
+neovm-core cannot see the layout engine's matrices, so the three fringe slots
+now travel out on the per-window `WindowDisplaySnapshot` that already carries
+each row's buffer-position span, and the builtin reads them there -- the same
+seam `pos-visible-in-window-p` and `window-line-height` already use.
+
+This also corrected the overlay arrow, which the layout engine had been
+stamping into the row's `left_fringe_bitmap` (and suppressing when that slot
+was taken). GNU keeps `overlay_arrow_bitmap` as a slot of its own and draws it
+in addition to the row's left bitmap, so the two are now independent in the
+matrix, in the painter, and in what this builtin reports.
+
+Reduction: `cargo nextest run -p neomacs-melpa-tests -E
+'test(git_gutter_fringe_real_gui_rows_match_gnu)' -j1` -- was 19 melpa
+failures, now 18.
+
+Status: FIXED.

@@ -1576,6 +1576,10 @@ impl WindowOutputEmitter {
             end_col: row_progress.col,
             start_buffer_pos: self.current_row_first_display_pos.take(),
             end_buffer_pos: self.current_row_last_display_pos.take(),
+            // Fringe bitmaps are stamped onto the matrix row after the walk
+            // that pushes this snapshot row, so they are filled in later from
+            // the finished matrix (`fringe_snapshot::publish_row_fringe_bitmaps`).
+            fringe: Default::default(),
         });
         self.row_metrics.push(RowMetricsSnapshot::new(
             row_progress
@@ -1614,6 +1618,7 @@ impl WindowOutputEmitter {
             end_col: row_progress.col,
             start_buffer_pos: None,
             end_buffer_pos: None,
+            fringe: Default::default(),
         });
     }
 

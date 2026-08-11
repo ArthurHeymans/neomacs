@@ -12950,6 +12950,7 @@ fn next_window_start_from_visible_rows_uses_visual_row_boundaries() {
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(1)),
             end_buffer_pos: Some(LispCharPos1::new(8)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 1,
@@ -12961,6 +12962,7 @@ fn next_window_start_from_visible_rows_uses_visual_row_boundaries() {
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(9)),
             end_buffer_pos: Some(LispCharPos1::new(16)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 2,
@@ -12972,6 +12974,7 @@ fn next_window_start_from_visible_rows_uses_visual_row_boundaries() {
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(17)),
             end_buffer_pos: Some(LispCharPos1::new(24)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 3,
@@ -12983,6 +12986,7 @@ fn next_window_start_from_visible_rows_uses_visual_row_boundaries() {
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(25)),
             end_buffer_pos: Some(LispCharPos1::new(32)),
+            fringe: Default::default(),
         },
     ];
 
@@ -13026,6 +13030,7 @@ fn next_window_start_for_partially_visible_point_row_scrolls_enough_to_fit_row()
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(1)),
             end_buffer_pos: Some(LispCharPos1::new(10)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 1,
@@ -13037,6 +13042,7 @@ fn next_window_start_for_partially_visible_point_row_scrolls_enough_to_fit_row()
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(11)),
             end_buffer_pos: Some(LispCharPos1::new(20)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 2,
@@ -13048,6 +13054,7 @@ fn next_window_start_for_partially_visible_point_row_scrolls_enough_to_fit_row()
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(21)),
             end_buffer_pos: Some(LispCharPos1::new(30)),
+            fringe: Default::default(),
         },
     ];
 
@@ -13092,6 +13099,7 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(1)),
             end_buffer_pos: Some(LispCharPos1::new(10)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 1,
@@ -13103,6 +13111,7 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(11)),
             end_buffer_pos: Some(LispCharPos1::new(20)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 2,
@@ -13114,6 +13123,7 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(21)),
             end_buffer_pos: Some(LispCharPos1::new(25)),
+            fringe: Default::default(),
         },
     ];
 
@@ -13134,6 +13144,7 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(1)),
             end_buffer_pos: Some(LispCharPos1::new(10)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 1,
@@ -13145,6 +13156,7 @@ fn next_window_start_for_point_line_continuation_advances_last_visible_row() {
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(11)),
             end_buffer_pos: Some(LispCharPos1::new(27)),
+            fringe: Default::default(),
         },
     ];
     assert_eq!(
@@ -13188,6 +13200,7 @@ fn next_window_start_for_point_line_continuation_ignores_newline_terminated_rows
         end_col: 0,
         start_buffer_pos: Some(LispCharPos1::new(1)),
         end_buffer_pos: Some(LispCharPos1::new(14)),
+        fringe: Default::default(),
     }];
 
     assert_eq!(
@@ -13227,6 +13240,7 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(1)),
             end_buffer_pos: Some(LispCharPos1::new(10)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 1,
@@ -13238,6 +13252,7 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(11)),
             end_buffer_pos: Some(LispCharPos1::new(20)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 2,
@@ -13249,6 +13264,7 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(21)),
             end_buffer_pos: Some(LispCharPos1::new(30)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 3,
@@ -13260,6 +13276,7 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(31)),
             end_buffer_pos: Some(LispCharPos1::new(40)),
+            fringe: Default::default(),
         },
         DisplayRowSnapshot {
             row: 4,
@@ -13271,6 +13288,7 @@ fn next_window_start_for_point_line_continuation_ignores_tail_clipping_when_poin
             end_col: 0,
             start_buffer_pos: Some(LispCharPos1::new(41)),
             end_buffer_pos: Some(LispCharPos1::new(50)),
+            fringe: Default::default(),
         },
     ];
 
@@ -24314,9 +24332,16 @@ fn gui_overlay_arrow_draws_left_fringe_bitmap_not_text() {
         .find(|row| row.enabled && row.role == GlyphRowRole::Text && row.start_charpos == 6)
         .unwrap_or_else(|| panic!("no beta row: {:#?}", entry.matrix.rows));
     assert_eq!(
-        beta.left_fringe_bitmap.map(|i| i.bitmap_index),
+        beta.overlay_arrow_bitmap.map(|i| i.bitmap_index),
         Some(right_triangle_index),
-        "the marked row must carry the overlay-arrow (right-triangle) left-fringe bitmap"
+        "the marked row must carry the overlay-arrow (right-triangle) bitmap"
+    );
+    // GNU keeps the arrow in `overlay_arrow_bitmap`, a slot of its own, so the
+    // row's own left-fringe slot stays free for an explicit (left-fringe …)
+    // spec or an indicator. `fringe-bitmaps-at-pos` reports the two apart.
+    assert_eq!(
+        beta.left_fringe_bitmap, None,
+        "the overlay arrow must not occupy the row's own left-fringe slot"
     );
     // The text is untouched — the GUI branch does not overwrite it.
     let text: String = beta.glyphs[GlyphArea::Text.index()]

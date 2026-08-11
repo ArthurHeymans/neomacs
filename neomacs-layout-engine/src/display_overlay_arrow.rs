@@ -12,9 +12,12 @@
 //!
 //! Both branches live here. The string branch overwrites leading glyphs in
 //! place, which reproduces GNU's glyph copy on the frames that take it
-//! (uniform cell widths). The fringe branch stamps `left_fringe_bitmap`, which
-//! the renderer already draws for the truncation/continuation and empty-line
-//! indicators. The frame gate (`window_system` + `left_fringe_width > 0`) is
+//! (uniform cell widths). The fringe branch stamps `overlay_arrow_bitmap`, the
+//! row slot GNU keeps separate from `left_fringe_bitmap` so the arrow draws in
+//! addition to — not instead of — a truncation/continuation, empty-line or
+//! user `(left-fringe …)` bitmap on the same row, and so that
+//! `fringe-bitmaps-at-pos` can report the two apart.
+//! The frame gate (`window_system` + `left_fringe_width > 0`) is
 //! GNU's `FRAME_WINDOW_P (it->f) && WINDOW_LEFT_FRINGE_WIDTH (it->w) > 0`.
 
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, resolve_fringe_indicator_bitmap_index};
@@ -93,7 +96,7 @@ pub(crate) fn draw_overlay_arrows<B: LayoutBufferView>(
         let drawn = match style {
             OverlayArrowStyle::Fringe => {
                 match resolve_fringe_bitmap_index(evaluator, buffer, var) {
-                    Some(bitmap_index) => stamp_left_fringe_bitmap(
+                    Some(bitmap_index) => stamp_overlay_arrow_bitmap(
                         &mut output,
                         row_index,
                         bitmap_index,
@@ -215,10 +218,14 @@ fn resolve_fringe_bitmap_index<B: LayoutBufferView>(
     )
 }
 
-/// Stamp the overlay arrow's fringe bitmap onto the marked row's left fringe,
-/// respecting GNU's user-fringe precedence: an explicit `(left-fringe …)` spec
-/// or an empty-line filler already occupying the slot is not clobbered.
-fn stamp_left_fringe_bitmap(
+/// Stamp the overlay arrow's fringe bitmap onto the marked row's dedicated
+/// overlay-arrow slot.
+///
+/// GNU keeps `overlay_arrow_bitmap` independent of `left_fringe_bitmap` and
+/// draws both into the left fringe, so an explicit `(left-fringe …)` spec or an
+/// empty-line filler occupying the row's left slot neither suppresses the arrow
+/// nor is clobbered by it.
+fn stamp_overlay_arrow_bitmap(
     output: &mut TextWindowOutputTarget<'_>,
     row_index: usize,
     bitmap_index: u16,
@@ -227,10 +234,7 @@ fn stamp_left_fringe_bitmap(
     let Some(mut row) = output.builder().current_window_row(row_index).cloned() else {
         return false;
     };
-    if row.left_fringe_bitmap.is_some() {
-        return false;
-    }
-    row.left_fringe_bitmap = Some(FringeBitmapInfo {
+    row.overlay_arrow_bitmap = Some(FringeBitmapInfo {
         bitmap_index,
         face_id,
     });

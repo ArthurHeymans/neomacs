@@ -1822,6 +1822,17 @@ impl LayoutEngine {
 
         self.prev_window_infos = curr_window_infos;
 
+        // Fringe bitmaps are stamped onto matrix rows after the row walk has
+        // pushed their snapshot rows, so pair the two up now that both are
+        // final — this is what makes `fringe-bitmaps-at-pos` readable from the
+        // evaluator at all.
+        if let Some(sealed) = self.last_frame_display_state.as_ref() {
+            crate::fringe_snapshot::publish_row_fringe_bitmaps(
+                &sealed.window_matrices,
+                &mut self.window_snapshots,
+            );
+        }
+
         let snapshots = std::mem::take(&mut self.window_snapshots);
         if let Some(frame) = evaluator.frame_manager_mut().get_mut(frame_id) {
             frame

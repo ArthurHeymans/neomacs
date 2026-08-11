@@ -1309,25 +1309,6 @@ pub(crate) fn builtin_mouse_position_in_root_frame(args: Vec<Value>) -> EvalResu
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_fringe_bitmaps_at_pos(args: Vec<Value>) -> EvalResult {
-    expect_args_range("fringe-bitmaps-at-pos", &args, 0, 2)?;
-    if let Some(pos) = args.first()
-        && !pos.is_nil()
-    {
-        let _ = expect_integer_or_marker(pos)?;
-    }
-    if let Some(window) = args.get(1)
-        && !window.is_nil()
-        && !window.is_window()
-    {
-        return Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("window-live-p"), *window],
-        ));
-    }
-    Ok(Value::NIL)
-}
-
 pub(crate) fn builtin_gap_position(
     ctx: &mut crate::emacs_core::eval::Context,
     args: Vec<Value>,
