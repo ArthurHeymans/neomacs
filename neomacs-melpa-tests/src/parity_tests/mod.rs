@@ -265,6 +265,7 @@ mod auto_space_mode;
 mod auto_yasnippet;
 mod avy;
 mod avy_menu;
+mod beacon;
 mod bert;
 mod bind_key;
 mod bind_map;

@@ -1,5 +1,6 @@
 //! Interactive package parity through the shared PTY/grid adapter.
 
+mod beacon_test;
 mod gruvbox_theme_test;
 mod helm_css_scss_test;
 mod helm_gitignore_test;

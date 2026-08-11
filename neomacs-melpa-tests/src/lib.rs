@@ -2847,6 +2847,12 @@ pub const LOREM_IPSUM_MELPA_PIN: (&str, &str) = ("lorem-ipsum", "20221214.1857")
 /// multi-level selection, inactive item, and cancellation lifecycle corpus.
 pub const AVY_MENU_MELPA_PIN: (&str, &str) = ("avy-menu", "20230606.1519");
 
+/// The exact Beacon package selected for practical command-loop movement,
+/// scrolling, overlay, timer, suppression, mark, and display parity. MELPA
+/// built this archive from upstream commit
+/// `85261a928ae0ec3b41e639f05291ffd6bf7c231c`.
+pub const BEACON_MELPA_PIN: (&str, &str) = ("beacon", "20220730.100");
+
 /// The exact BERT package selected by the practical external-term fixture,
 /// RPC, signed metric, UTF-8 binary, and bulk tuple parity corpus.
 pub const BERT_MELPA_PIN: (&str, &str) = ("bert", "20131117.1014");
