@@ -2666,7 +2666,7 @@ expectation measured on GNU 31.
 Affects: found by audit during entry 53, not by a package failure; the
 exposed surfaces (completion filtering, dired, file handlers) are
 package-facing.
-## 59. The global map is missing the `touch-screen-*` window-part bindings
+## 59. The global map is missing the `touch-screen-*` window-part bindings -- FIXED
 
 `describe-bindings` emits 77 rows that GNU does, and we do not. Nearly all of
 them bind a touch-screen event on a window-part prefix:
@@ -2775,3 +2775,19 @@ error_test.rs.
 Affects: `ido_vertical_mode` (now green). Any package that dispatches on a
 cancelled prompt -- the `ido`, `helm` and `consult` families -- was seeing the
 wrong condition.
+
+## 61. describe-map-tree does not autoload-and-descend prefix keymaps
+
+The residue left after entry 59: the batch describe-buffer-bindings diff vs
+GNU 31.0.90 is 45 lines, all one mechanism. A prefix key bound to an
+AUTOLOADED keymap (C-x C-k kmacro-keymap, C-x 6 and <f2> 2C-command,
+C-<down-mouse-2> facemenu-menu) is printed by us as the unexpanded prefix
+command row, while GNU's describe_map_tree autoloads the keymap and descends
+into its sub-bindings, emitting the kmacro/2C/facemenu rows.
+
+Reduction: compare (describe-buffer-bindings (current-buffer)) output around
+"C-x C-k" between editors; GNU emits the kmacro sub-rows, we emit one row.
+GNU reference: src/keymap.c describe_map_tree + get_keymap's autoload
+handling. Evidence transcripts: the entry-59 worktree's tmp/descb-*.txt.
+
+Status: OPEN.
