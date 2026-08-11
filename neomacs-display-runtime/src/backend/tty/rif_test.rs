@@ -1449,6 +1449,44 @@ fn first_diff_writes_the_full_width_of_nonempty_rows() {
 }
 
 #[test]
+fn first_diff_erases_wholly_blank_rows_instead_of_writing_spaces() {
+    // GNU never touches the rows below the last content row: after the
+    // initial clear (ED) their current-matrix rows compare blank, and a
+    // wholly blank desired line is finished with EL (dispnew.c write_row's
+    // just_erase path), so the physical terminal cells stay UNWRITTEN.
+    // Writing explicit spaces instead is observable terminal state — a
+    // pty capture sees " " where GNU's screen has never-written cells
+    // (the magit_log_buffer_file_margin_columns_match_gnu_full_screen
+    // fixture compares exactly this below-content region).
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(5, 3, caps);
+    rif.desired.set(0, 0, 'A', CellAttrs::default(), false);
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![
+            TermOp::WriteRun {
+                row: 0,
+                start: 0,
+                end: 5,
+            },
+            TermOp::EraseToEol {
+                row: 1,
+                from: 0,
+                bg: None,
+            },
+            TermOp::EraseToEol {
+                row: 2,
+                from: 0,
+                bg: None,
+            },
+        ],
+        "blank rows below content must be erased (unwritten cells), never space-filled",
+    );
+}
+
+#[test]
 fn first_content_written_into_an_erased_row_writes_its_full_tail() {
     let mut caps = TermCaps::default();
     caps.synchronized_output = false;
