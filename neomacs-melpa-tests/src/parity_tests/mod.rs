@@ -445,6 +445,7 @@ mod hungry_delete;
 mod hydra;
 mod ido_vertical_mode;
 mod iedit;
+mod imenu_anywhere;
 mod imenu_list;
 mod impatient_mode;
 mod indent_guide;

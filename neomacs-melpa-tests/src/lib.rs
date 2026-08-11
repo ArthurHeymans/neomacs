@@ -1968,6 +1968,12 @@ pub const INF_RUBY_MELPA_PIN: (&str, &str) = ("inf-ruby", "20251224.216");
 /// `76f2335ee6f2f066d87fe4e4729219d70c9bc70d`.
 pub const IMENU_LIST_MELPA_PIN: (&str, &str) = ("imenu-list", "20210420.1200");
 
+/// The exact Imenu Anywhere package selected for practical cross-buffer
+/// completion, real Imenu indexing, Xref round trips, cache invalidation,
+/// narrowing, and failure-lifecycle parity. MELPA built this archive from
+/// upstream commit `06ec33d79e33edf01b9118aead1eabeae8ee08b1`.
+pub const IMENU_ANYWHERE_MELPA_PIN: (&str, &str) = ("imenu-anywhere", "20210201.1704");
+
 /// The exact iter2 package selected by the practical resumable-workflow,
 /// composition, resource-cleanup, editor-state, nonlocal-exit, and tracing
 /// parity corpus. MELPA built this archive from upstream commit
