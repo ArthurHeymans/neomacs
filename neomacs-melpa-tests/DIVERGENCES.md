@@ -2359,6 +2359,49 @@ and the instrumented real Magit case now reports GNU's exact line,
 GNU Emacs 31.0.90 also prompts there under load -- which is an environmental
 flake in the harness, not a neomacs divergence.
 
+### GNU-side residue, re-measured 2026-08-11 -- still GNU-only, and worse
+
+The "two of ten" above is stale. On the same ten-serial-run protocol, on a
+machine loaded by concurrent builds, `magit_package_batch` failed **6 of 10**
+runs -- every one of them on the GNU baseline, in
+`magit_blame_cycle_style_rewrites_real_blame_details_for_every_visualization`,
+and **0 of 10** on the neomacs side. Twenty further runs across two protocol
+rounds never produced a neomacs-side failure. The neomacs fix above holds; only
+the GNU-side residue remains, and its rate scales with machine load.
+
+The failure is GNU exiting 255 during `RestartProbe`. Magit's process sentinel
+kills `" *git-stderr*"` while the stderr pipe process is still live, so
+`process-kill-buffer-query-function` asks `Buffer " *git-stderr*" has a running
+process; kill it? (yes or no)`; in batch that reads a stdin already at EOF and
+dies with `End of file during parsing: Error reading from stdin`.
+
+Three levers were assessed and all three rejected:
+
+- **Raise the `RestartProbe` readiness allowance for the GNU side.** Wrong
+  diagnosis. GNU is not slow to become ready -- it aborts immediately on an
+  interactive prompt at EOF. No readiness budget changes that.
+- **Retry the GNU baseline phase.** Mechanically it would work, and scoped to
+  "the GNU phase produced no valid outcome" (never to an outcome *mismatch*) it
+  could not hide a neomacs regression. It was still rejected: at a 60% failure
+  rate a retry is not papering over a rare blip, it is running the baseline
+  until it agrees, and it would keep a loud-but-ignorable log line in front of a
+  race nobody then fixes.
+- **Bind `kill-buffer-query-functions` to nil in the case.** Tried and
+  measured, because it is symmetric across both editors and the case asserts
+  blame overlays and styles rather than kill-buffer prompting. It removes the
+  prompt -- GNU's stdout comes back clean -- but the rate stays exactly 6 of 10:
+  the run then dies as `error in process sentinel: Process git is not active`.
+  Reverted, because it changes the symptom without moving the number.
+
+That second failure mode names the real bug. The scenario's own teardown
+(`(dolist (process (process-list)) ... delete-process)`) deletes git processes
+out from under Magit's still-running sentinels, so the prompt and the dead-
+process error are two faces of one race between the teardown and Magit's
+cleanup. The fix belongs in the case -- let Magit finish its own reaping, or
+wait for the stderr pipe to close before tearing down -- not in a harness-level
+timeout or retry. Until then this stays a known GNU-side environmental flake,
+recorded here rather than hidden behind a retry.
+
 ## 55. `default-text-properties` does not reach a buffer position whose interval says nothing — NOT A DIVERGENCE (stale)
 
 **Re-verified 2026-08-10 against GNU 31.0.90 and found already correct**, on the
