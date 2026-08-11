@@ -2776,7 +2776,7 @@ Affects: `ido_vertical_mode` (now green). Any package that dispatches on a
 cancelled prompt -- the `ido`, `helm` and `consult` families -- was seeing the
 wrong condition.
 
-## 61. describe-map-tree does not autoload-and-descend prefix keymaps
+## 61. describe-map-tree does not autoload-and-descend prefix keymaps -- FIXED
 
 The residue left after entry 59: the batch describe-buffer-bindings diff vs
 GNU 31.0.90 is 45 lines, all one mechanism. A prefix key bound to an
@@ -2790,7 +2790,10 @@ Reduction: compare (describe-buffer-bindings (current-buffer)) output around
 GNU reference: src/keymap.c describe_map_tree + get_keymap's autoload
 handling. Evidence transcripts: the entry-59 worktree's tmp/descb-*.txt.
 
-Status: OPEN.
+Status: FIXED (4d3fea4b4): accessible-keymaps lists autoload-keymap symbols
+without loading; keymapp matches GNU; the keymap--get-keyelt identity stub
+(which emptied menu keymap sections) wired to get_keyelt_runtime. The batch
+describe-buffer-bindings diff vs GNU 31.0.90 is now ZERO lines.
 
 ## 62. `fringe-bitmaps-at-pos` was a stub that always returned nil -- FIXED
 
