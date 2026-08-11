@@ -6,7 +6,7 @@
 //! those objects efficiently.
 
 use std::cmp::Ordering;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 
 use parking_lot::{RwLock, RwLockReadGuard};
 use rustc_hash::FxHashSet;
@@ -249,15 +249,6 @@ impl EndpointBPlusTree {
     }
 }
 
-#[derive(Clone, Debug)]
-enum EndpointIndexState {
-    /// No endpoint query has made the secondary ordering observable yet.
-    /// Attach/move/detach operations only update the authoritative interval
-    /// records; the first endpoint query publishes a linear bulk build.
-    Deferred,
-    Ready(EndpointBPlusTree),
-}
-
 /// Runtime-only link from an overlay object to the buffer-owned position
 /// index that currently owns its endpoints.
 ///
@@ -312,14 +303,18 @@ pub(crate) fn current_overlay_range(data: &OverlayData) -> Option<EmacsByteRange
 #[derive(Debug)]
 pub(super) struct OverlayIndex {
     intervals: Arc<RwLock<IntervalBPlusTree>>,
-    endpoints: RwLock<EndpointIndexState>,
+    /// Published lazily on the first boundary query.  `OnceLock` makes the
+    /// ready-state read path one atomic load; mutations already require
+    /// `&mut OverlayIndex`, so they can update the tree through `get_mut`
+    /// without a second runtime lock.
+    endpoints: OnceLock<EndpointBPlusTree>,
 }
 
 impl OverlayIndex {
     pub(super) fn new() -> Self {
         Self {
             intervals: Arc::new(RwLock::new(IntervalBPlusTree::new())),
-            endpoints: RwLock::new(EndpointIndexState::Deferred),
+            endpoints: OnceLock::new(),
         }
     }
 
@@ -332,7 +327,7 @@ impl OverlayIndex {
         if !self.intervals.write().insert(overlay, range) {
             return false;
         }
-        if let EndpointIndexState::Ready(endpoints) = &mut *self.endpoints.write() {
+        if let Some(endpoints) = self.endpoints.get_mut() {
             assert!(endpoints.insert(range.start(), EndpointKind::Start, overlay));
             assert!(endpoints.insert(range.end(), EndpointKind::End, overlay));
         }
@@ -357,7 +352,7 @@ impl OverlayIndex {
             }
         }
         self.intervals = Arc::new(RwLock::new(IntervalBPlusTree::from_entries(entries, order)));
-        *self.endpoints.write() = EndpointIndexState::Deferred;
+        self.endpoints = OnceLock::new();
         for (overlay, _) in entries {
             set_overlay_position_handle(*overlay, &self.intervals);
         }
@@ -365,23 +360,20 @@ impl OverlayIndex {
     }
 
     fn with_endpoint_index<T>(&self, use_index: impl FnOnce(&EndpointBPlusTree) -> T) -> T {
-        let intervals = self.intervals.read();
-        let mut state = self.endpoints.write();
-        if matches!(*state, EndpointIndexState::Deferred) {
+        let index = self.endpoints.get_or_init(|| {
+            #[cfg(test)]
+            super::overlay::record_endpoint_publication_interval_read();
+            let intervals = self.intervals.read();
             let entries = intervals.endpoint_entries_in_attachment_order();
-            *state = EndpointIndexState::Ready(EndpointBPlusTree::from_entries(&entries));
-        }
-        drop(intervals);
-        let EndpointIndexState::Ready(index) = &*state else {
-            unreachable!("deferred endpoint index was just published")
-        };
+            EndpointBPlusTree::from_entries(&entries)
+        });
         use_index(index)
     }
 
     /// Detach an overlay and return its indexed range.
     pub(super) fn detach(&mut self, overlay: Value) -> Option<EmacsByteRange> {
         let (range, _) = self.intervals.write().take(overlay)?;
-        if let EndpointIndexState::Ready(endpoints) = &mut *self.endpoints.write() {
+        if let Some(endpoints) = self.endpoints.get_mut() {
             assert_eq!(
                 endpoints.remove(overlay, EndpointKind::Start),
                 Some(range.start())
@@ -403,7 +395,7 @@ impl OverlayIndex {
     ) -> Option<EmacsByteRange> {
         let mut intervals = self.intervals.write();
         let (old_range, _) = intervals.take(overlay)?;
-        if let EndpointIndexState::Ready(endpoints) = &mut *self.endpoints.write() {
+        if let Some(endpoints) = self.endpoints.get_mut() {
             assert_eq!(
                 endpoints.remove(overlay, EndpointKind::Start),
                 Some(old_range.start())
@@ -461,7 +453,7 @@ impl OverlayIndex {
         self.intervals
             .write()
             .shift_at_or_after(position, before_markers, delta);
-        if let EndpointIndexState::Ready(endpoints) = &mut *self.endpoints.write() {
+        if let Some(endpoints) = self.endpoints.get_mut() {
             endpoints.shift_at_or_after(position, before_markers, delta);
         }
 
@@ -525,7 +517,7 @@ impl OverlayIndex {
         self.intervals
             .write()
             .shift_at_or_after(range.end(), true, delta);
-        if let EndpointIndexState::Ready(endpoints) = &mut *self.endpoints.write() {
+        if let Some(endpoints) = self.endpoints.get_mut() {
             endpoints.shift_at_or_after(range.end(), true, delta);
         }
 
@@ -587,7 +579,7 @@ impl OverlayIndex {
     fn take_for_text_edit(&mut self, overlay: Value) -> Option<(EmacsByteRange, u64)> {
         let taken = self.intervals.write().take(overlay)?;
         let range = taken.0;
-        if let EndpointIndexState::Ready(endpoints) = &mut *self.endpoints.write() {
+        if let Some(endpoints) = self.endpoints.get_mut() {
             assert_eq!(
                 endpoints.remove(overlay, EndpointKind::Start),
                 Some(range.start())
@@ -610,7 +602,7 @@ impl OverlayIndex {
             .intervals
             .write()
             .insert_with_order(overlay, range, attachment_order);
-        if let EndpointIndexState::Ready(endpoints) = &mut *self.endpoints.write() {
+        if let Some(endpoints) = self.endpoints.get_mut() {
             assert!(endpoints.insert(range.start(), EndpointKind::Start, overlay));
             assert!(endpoints.insert(range.end(), EndpointKind::End, overlay));
         }
@@ -623,7 +615,7 @@ impl OverlayIndex {
             materialize_overlay_position(overlay, range);
         }
         self.intervals = Arc::new(RwLock::new(IntervalBPlusTree::new()));
-        *self.endpoints.write() = EndpointIndexState::Deferred;
+        self.endpoints = OnceLock::new();
     }
 
     pub(super) fn contains(&self, overlay: Value) -> bool {
@@ -650,9 +642,15 @@ impl OverlayIndex {
             .map(|record| record.overlay)
     }
 
-    #[cfg(test)]
     pub(super) fn overlays_at(&self, pos: EmacsBytePos) -> Vec<Value> {
-        self.overlays_at_iter(pos).collect()
+        let intervals = self.intervals.read();
+        let mut overlays = Vec::new();
+        intervals
+            .records
+            .for_each_match(IntervalBPlusQuery::Point(pos), |record| {
+                overlays.push(record.overlay);
+            });
+        overlays
     }
 
     pub(super) fn overlays_at_iter(&self, pos: EmacsBytePos) -> impl Iterator<Item = Value> + '_ {
@@ -738,7 +736,7 @@ impl OverlayIndex {
             intervals.assert_invariants();
             intervals.len()
         };
-        if let EndpointIndexState::Ready(endpoints) = &*self.endpoints.read() {
+        if let Some(endpoints) = self.endpoints.get() {
             endpoints.assert_invariants();
             assert_eq!(interval_len * 2, endpoints.len());
         }
@@ -858,6 +856,10 @@ impl OrderedTreeQuery<IntervalRecord> for IntervalBPlusQuery {
             } => ranges_overlap_region(record.range, range, accessible_end),
             Self::All => true,
         }
+    }
+
+    fn can_use_non_overlapping_single_path(self) -> bool {
+        matches!(self, Self::Point(_))
     }
 
     fn maximum_end_is_too_small(self, maximum_end: EmacsBytePos) -> bool {

@@ -23,8 +23,30 @@ const MIN_ENTRIES: usize = MAX_ENTRIES / 2;
 // array implementation (rather than arbitrary const-generic lengths).  Four
 // spare slots also keep split insertion entirely inline.
 const INLINE_ENTRIES: usize = 36;
-const MAX_TREE_DEPTH: usize = 32;
+// A non-root branch has at least 16 children and the root has at least two.
+// With u32 arena identities, a ten-level tree would require more live nodes
+// than can be represented; nine frames therefore cover every constructible
+// tree while avoiding a 32-frame zero-fill on every query.
+const MAX_TREE_DEPTH: usize = 9;
 const ARENA_PAGE_NODES: usize = 64;
+
+const fn minimum_nodes_for_depth(depth: usize) -> u64 {
+    if depth <= 1 {
+        return 1;
+    }
+    let mut total = 1_u64;
+    let mut level_nodes = 2_u64;
+    let mut level = 1;
+    while level < depth {
+        total += level_nodes;
+        level_nodes *= MIN_ENTRIES as u64;
+        level += 1;
+    }
+    total
+}
+
+const _: () = assert!(minimum_nodes_for_depth(MAX_TREE_DEPTH) <= u32::MAX as u64);
+const _: () = assert!(minimum_nodes_for_depth(MAX_TREE_DEPTH + 1) > u32::MAX as u64);
 
 pub(super) trait OrderedShiftRecord: Copy + Debug {
     type Identity: Copy + Debug + Eq + Hash;
@@ -59,10 +81,13 @@ struct OrderedSummary<K> {
     max_position: EmacsBytePos,
     max_end: EmacsBytePos,
     count: usize,
+    non_overlapping: bool,
 }
 
 impl<K: Copy> OrderedSummary<K> {
     fn shifted<R: OrderedShiftRecord<Key = K>>(self, delta: EmacsByteDelta) -> Self {
+        #[cfg(test)]
+        super::overlay::record_endpoint_search_summary_shift();
         Self {
             first_key: R::shifted_key(self.first_key, delta),
             last_key: R::shifted_key(self.last_key, delta),
@@ -70,6 +95,7 @@ impl<K: Copy> OrderedSummary<K> {
             max_position: delta.apply_to_pos(self.max_position),
             max_end: delta.apply_to_pos(self.max_end),
             count: self.count,
+            non_overlapping: self.non_overlapping,
         }
     }
 }
@@ -92,6 +118,10 @@ struct OrderedNode<R: OrderedShiftRecord> {
     /// maxima turn the lower edge of a query into one binary search while the
     /// ordinary start ordering supplies the upper edge.
     prefix_max_end: SmallVec<[EmacsBytePos; INLINE_ENTRIES]>,
+    /// First start position for each branch child, stored beside the branch.
+    /// B+ separator searches must stay contiguous instead of dereferencing an
+    /// arena node for every binary-search comparison.  Leaves keep this empty.
+    branch_min_positions: SmallVec<[EmacsBytePos; INLINE_ENTRIES]>,
     kind: OrderedNodeKind<R>,
 }
 
@@ -102,6 +132,7 @@ impl<R: OrderedShiftRecord> OrderedNode<R> {
             pending_shift: EmacsByteDelta::ZERO,
             summary: None,
             prefix_max_end: SmallVec::new(),
+            branch_min_positions: SmallVec::new(),
             kind: OrderedNodeKind::Leaf(records),
         }
     }
@@ -115,6 +146,7 @@ impl<R: OrderedShiftRecord> OrderedNode<R> {
             pending_shift: EmacsByteDelta::ZERO,
             summary: None,
             prefix_max_end: SmallVec::new(),
+            branch_min_positions: SmallVec::new(),
             kind: OrderedNodeKind::Branch(children),
         }
     }
@@ -334,6 +366,7 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
             pending_shift: EmacsByteDelta::ZERO,
             summary: None,
             prefix_max_end: SmallVec::new(),
+            branch_min_positions: SmallVec::new(),
             kind: right_kind,
         });
         match &self.node(right).kind {
@@ -457,12 +490,125 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
         OrderedTreeMatches::new(self, query)
     }
 
+    #[inline(always)]
     pub(super) fn matches_owned<T, Q>(tree: T, query: Q) -> OrderedTreeMatches<T, R, Q>
     where
         T: Deref<Target = Self>,
         Q: OrderedTreeQuery<R>,
     {
         OrderedTreeMatches::new(tree, query)
+    }
+
+    /// Visit every matching record without constructing resumable iterator
+    /// state.  Materialized Lisp queries consume the complete result in one
+    /// call, so a bounded recursive walk avoids copying the fixed frame stack
+    /// while streaming layout consumers retain `matches_owned`.
+    #[inline(always)]
+    pub(super) fn for_each_match<Q, F>(&self, query: Q, mut visit: F)
+    where
+        Q: OrderedTreeQuery<R>,
+        F: FnMut(R),
+    {
+        if let Some(root) = self.root {
+            if query.can_use_non_overlapping_single_path() && self.summary(root).non_overlapping {
+                if let Some(record) = self.match_in_non_overlapping_tree(root, query) {
+                    visit(record);
+                }
+                return;
+            }
+            self.for_each_match_in_node(root, EmacsByteDelta::ZERO, query, &mut visit);
+        }
+    }
+
+    fn match_in_non_overlapping_tree<Q>(&self, mut id: OrderedNodeId, query: Q) -> Option<R>
+    where
+        Q: OrderedTreeQuery<R>,
+    {
+        let mut inherited = EmacsByteDelta::ZERO;
+        loop {
+            #[cfg(test)]
+            query.record_subtree_visit();
+            let node = self.node(id);
+            let record_delta = inherited.combine(node.pending_shift);
+            match &node.kind {
+                OrderedNodeKind::Leaf(records) => {
+                    let past_candidate = records.partition_point(|record| {
+                        !query.minimum_start_is_too_large(
+                            record_delta.apply_to_pos(record.key_position()),
+                        )
+                    });
+                    let record = *records.get(past_candidate.checked_sub(1)?)?;
+                    let record = if record_delta.is_zero() {
+                        record
+                    } else {
+                        record.shifted(record_delta)
+                    };
+                    return query.record_matches(record).then_some(record);
+                }
+                OrderedNodeKind::Branch(children) => {
+                    let past_candidate = node.branch_min_positions.partition_point(|minimum| {
+                        !query.minimum_start_is_too_large(record_delta.apply_to_pos(*minimum))
+                    });
+                    id = *children.get(past_candidate.checked_sub(1)?)?;
+                    inherited = record_delta;
+                }
+            }
+        }
+    }
+
+    fn for_each_match_in_node<Q, F>(
+        &self,
+        id: OrderedNodeId,
+        inherited: EmacsByteDelta,
+        query: Q,
+        visit: &mut F,
+    ) where
+        Q: OrderedTreeQuery<R>,
+        F: FnMut(R),
+    {
+        #[cfg(test)]
+        query.record_subtree_visit();
+        let summary = self.summary(id);
+        if !query.subtree_may_match(
+            inherited.apply_to_pos(summary.min_position),
+            inherited.apply_to_pos(summary.max_position),
+            inherited.apply_to_pos(summary.max_end),
+        ) {
+            return;
+        }
+
+        let node = self.node(id);
+        let record_delta = inherited.combine(node.pending_shift);
+        let cursor = node.prefix_max_end.partition_point(|maximum_end| {
+            query.maximum_end_is_too_small(inherited.apply_to_pos(*maximum_end))
+        });
+        match &node.kind {
+            OrderedNodeKind::Leaf(records) => {
+                let end = records.partition_point(|record| {
+                    !query.minimum_start_is_too_large(
+                        record_delta.apply_to_pos(record.key_position()),
+                    )
+                });
+                for record in &records[cursor.min(end)..end] {
+                    let record = if record_delta.is_zero() {
+                        *record
+                    } else {
+                        record.shifted(record_delta)
+                    };
+                    if query.record_matches(record) {
+                        visit(record);
+                    }
+                }
+            }
+            OrderedNodeKind::Branch(children) => {
+                let end = node.branch_min_positions.partition_point(|minimum| {
+                    !query.minimum_start_is_too_large(record_delta.apply_to_pos(*minimum))
+                });
+                for child in &children[cursor.min(end)..end] {
+                    self.for_each_match_in_node(*child, record_delta, query, visit);
+                }
+            }
+        }
     }
 
     pub(super) fn next_position_after(
@@ -476,37 +622,39 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
 
     fn next_in_node(
         &self,
-        id: OrderedNodeId,
+        mut id: OrderedNodeId,
         position: EmacsBytePos,
         limit: EmacsBytePos,
-        inherited: EmacsByteDelta,
+        mut inherited: EmacsByteDelta,
     ) -> Option<EmacsBytePos> {
-        #[cfg(test)]
-        super::overlay::record_endpoint_search_node_visit();
-        let node = self.node(id);
-        let record_delta = inherited.combine(node.pending_shift);
-        match &node.kind {
-            OrderedNodeKind::Leaf(records) => {
-                let candidate_index = records.partition_point(|record| {
-                    record_delta.apply_to_pos(record.key_position()) <= position
-                });
-                records.get(candidate_index).and_then(|record| {
-                    let candidate = record_delta.apply_to_pos(record.key_position());
-                    (candidate <= limit).then_some(candidate)
-                })
-            }
-            OrderedNodeKind::Branch(children) => {
-                let first_candidate = children.partition_point(|child| {
-                    self.summary(*child).shifted::<R>(record_delta).max_position <= position
-                });
-                children[first_candidate..].iter().find_map(|child| {
-                    let summary = self.summary(*child).shifted::<R>(record_delta);
-                    if summary.min_position > limit {
-                        None
-                    } else {
-                        self.next_in_node(*child, position, limit, record_delta)
-                    }
-                })
+        loop {
+            #[cfg(test)]
+            super::overlay::record_endpoint_search_node_visit();
+            let node = self.node(id);
+            let record_delta = inherited.combine(node.pending_shift);
+            match &node.kind {
+                OrderedNodeKind::Leaf(records) => {
+                    let candidate_index = records.partition_point(|record| {
+                        record_delta.apply_to_pos(record.key_position()) <= position
+                    });
+                    return records.get(candidate_index).and_then(|record| {
+                        let candidate = record_delta.apply_to_pos(record.key_position());
+                        (candidate <= limit).then_some(candidate)
+                    });
+                }
+                OrderedNodeKind::Branch(children) => {
+                    // The prefix maxima are contiguous branch separators.  A
+                    // full child-summary lookup here defeats the cache-local
+                    // B+ shape and shifts fields the endpoint search does not
+                    // need.  This node's pending shift is already reflected
+                    // in the prefix cache, so only the inherited delta applies.
+                    let first_candidate = node
+                        .prefix_max_end
+                        .partition_point(|maximum| inherited.apply_to_pos(*maximum) <= position);
+                    let child = *children.get(first_candidate)?;
+                    id = child;
+                    inherited = record_delta;
+                }
             }
         }
     }
@@ -522,46 +670,43 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
 
     fn previous_in_node(
         &self,
-        id: OrderedNodeId,
+        mut id: OrderedNodeId,
         position: EmacsBytePos,
         limit: EmacsBytePos,
-        inherited: EmacsByteDelta,
+        mut inherited: EmacsByteDelta,
     ) -> Option<EmacsBytePos> {
-        #[cfg(test)]
-        super::overlay::record_endpoint_search_node_visit();
-        let node = self.node(id);
-        let record_delta = inherited.combine(node.pending_shift);
-        match &node.kind {
-            OrderedNodeKind::Leaf(records) => {
-                let past_last_candidate = records.partition_point(|record| {
-                    record_delta.apply_to_pos(record.key_position()) < position
-                });
-                past_last_candidate.checked_sub(1).and_then(|index| {
-                    let candidate = record_delta.apply_to_pos(records[index].key_position());
-                    (candidate >= limit).then_some(candidate)
-                })
-            }
-            OrderedNodeKind::Branch(children) => {
-                let past_last_candidate = children.partition_point(|child| {
-                    self.summary(*child).shifted::<R>(record_delta).min_position < position
-                });
-                children[..past_last_candidate]
-                    .iter()
-                    .rev()
-                    .find_map(|child| {
-                        let summary = self.summary(*child).shifted::<R>(record_delta);
-                        if summary.max_position < limit {
-                            None
-                        } else {
-                            self.previous_in_node(*child, position, limit, record_delta)
-                        }
-                    })
+        loop {
+            #[cfg(test)]
+            super::overlay::record_endpoint_search_node_visit();
+            let node = self.node(id);
+            let record_delta = inherited.combine(node.pending_shift);
+            match &node.kind {
+                OrderedNodeKind::Leaf(records) => {
+                    let past_last_candidate = records.partition_point(|record| {
+                        record_delta.apply_to_pos(record.key_position()) < position
+                    });
+                    return past_last_candidate.checked_sub(1).and_then(|index| {
+                        let candidate = record_delta.apply_to_pos(records[index].key_position());
+                        (candidate >= limit).then_some(candidate)
+                    });
+                }
+                OrderedNodeKind::Branch(children) => {
+                    let past_last_candidate = children.partition_point(|child| {
+                        record_delta.apply_to_pos(self.summary(*child).min_position) < position
+                    });
+                    let child = *children.get(past_last_candidate.checked_sub(1)?)?;
+                    if record_delta.apply_to_pos(self.summary(child).max_position) < limit {
+                        return None;
+                    }
+                    id = child;
+                    inherited = record_delta;
+                }
             }
         }
     }
 
     fn normalize_path(&mut self, id: OrderedNodeId) {
-        let mut path = SmallVec::<[OrderedNodeId; MAX_TREE_DEPTH]>::new();
+        let mut path = SmallVec::<[OrderedNodeId; 16]>::new();
         let mut current = Some(id);
         while let Some(node) = current {
             path.push(node);
@@ -750,6 +895,9 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                 for child in children {
                     self.apply_shift(child, shift);
                 }
+                for minimum in &mut self.node_mut(id).branch_min_positions {
+                    *minimum = shift.apply_to_pos(*minimum);
+                }
             }
         }
         self.node_mut(id).pending_shift = EmacsByteDelta::ZERO;
@@ -757,11 +905,15 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
 
     fn refresh(&mut self, id: OrderedNodeId) {
         debug_assert!(self.node(id).pending_shift.is_zero());
-        let (summary, prefix_max_end) = match &self.node(id).kind {
+        let (summary, prefix_max_end, branch_min_positions) = match &self.node(id).kind {
             OrderedNodeKind::Leaf(records) => {
                 let mut prefix = SmallVec::with_capacity(records.len());
                 let mut maximum: Option<EmacsBytePos> = None;
+                let mut non_overlapping = true;
                 for record in records {
+                    if maximum.is_some_and(|previous_end| previous_end > record.key_position()) {
+                        non_overlapping = false;
+                    }
                     maximum = Some(maximum.map_or(record.end_position(), |current| {
                         current.max(record.end_position())
                     }));
@@ -774,14 +926,25 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                     max_position: records.last().expect("first record existed").key_position(),
                     max_end: *prefix.last().expect("first record existed"),
                     count: records.len(),
+                    non_overlapping,
                 });
-                (summary, prefix)
+                (summary, prefix, SmallVec::new())
             }
             OrderedNodeKind::Branch(children) => {
                 let mut prefix = SmallVec::with_capacity(children.len());
+                let mut minimums = SmallVec::with_capacity(children.len());
                 let mut maximum: Option<EmacsBytePos> = None;
+                let mut non_overlapping = true;
                 for child in children {
-                    let child_end = self.summary(*child).max_end;
+                    let child_summary = self.summary(*child);
+                    if !child_summary.non_overlapping
+                        || maximum
+                            .is_some_and(|previous_end| previous_end > child_summary.min_position)
+                    {
+                        non_overlapping = false;
+                    }
+                    minimums.push(child_summary.min_position);
+                    let child_end = child_summary.max_end;
                     maximum = Some(maximum.map_or(child_end, |current| current.max(child_end)));
                     prefix.push(maximum.expect("child just established a maximum"));
                 }
@@ -799,13 +962,15 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                         .iter()
                         .map(|child| self.summary(*child).count)
                         .sum(),
+                    non_overlapping,
                 });
-                (summary, prefix)
+                (summary, prefix, minimums)
             }
         };
         let node = self.node_mut(id);
         node.summary = summary;
         node.prefix_max_end = prefix_max_end;
+        node.branch_min_positions = branch_min_positions;
     }
 
     /// Update the summary after one record was inserted below `changed`.
@@ -818,13 +983,17 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
         debug_assert!(self.node(id).pending_shift.is_zero());
         if matches!(self.node(id).kind, OrderedNodeKind::Leaf(_)) {
             let node = self.node_mut(id);
-            let old_count = node.summary.expect("live B+ leaf has a summary").count;
+            let old_summary = node.summary.expect("live B+ leaf has a summary");
             let OrderedNodeKind::Leaf(records) = &node.kind else {
                 unreachable!("node kind was checked above")
             };
             node.prefix_max_end.truncate(changed);
             let mut maximum = node.prefix_max_end.last().copied();
+            let mut non_overlapping = old_summary.non_overlapping;
             for record in &records[changed..] {
+                if maximum.is_some_and(|previous_end| previous_end > record.key_position()) {
+                    non_overlapping = false;
+                }
                 let end = record.end_position();
                 maximum = Some(maximum.map_or(end, |current| current.max(end)));
                 node.prefix_max_end
@@ -841,25 +1010,35 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                     .prefix_max_end
                     .last()
                     .expect("inserted B+ leaf is nonempty"),
-                count: old_count + 1,
+                count: old_summary.count + 1,
+                non_overlapping,
             });
             return;
         }
 
         // Branch summaries live in separate arena slots, so copy only the
         // changed suffix's scalar maxima before mutably borrowing this node.
-        let old_count = self.summary(id).count;
+        let old_summary = self.summary(id);
         let children = self.branch_children(id);
         let first = self.summary(*children.first().expect("B+ branch is nonempty"));
         let last = self.summary(*children.last().expect("B+ branch is nonempty"));
-        let changed_ends = children[changed..]
+        let changed_summaries = children[changed..]
             .iter()
-            .map(|child| self.summary(*child).max_end)
+            .map(|child| self.summary(*child))
             .collect::<SmallVec<[_; INLINE_ENTRIES]>>();
         let node = self.node_mut(id);
         node.prefix_max_end.truncate(changed);
+        node.branch_min_positions.truncate(changed);
         let mut maximum = node.prefix_max_end.last().copied();
-        for end in changed_ends {
+        let mut non_overlapping = old_summary.non_overlapping;
+        for summary in changed_summaries {
+            if !summary.non_overlapping
+                || maximum.is_some_and(|previous_end| previous_end > summary.min_position)
+            {
+                non_overlapping = false;
+            }
+            node.branch_min_positions.push(summary.min_position);
+            let end = summary.max_end;
             maximum = Some(maximum.map_or(end, |current| current.max(end)));
             node.prefix_max_end
                 .push(maximum.expect("child just established a maximum"));
@@ -873,10 +1052,12 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                 .prefix_max_end
                 .last()
                 .expect("inserted B+ branch is nonempty"),
-            count: old_count + 1,
+            count: old_summary.count + 1,
+            non_overlapping,
         });
     }
 
+    #[inline(always)]
     fn summary(&self, id: OrderedNodeId) -> OrderedSummary<R::Key> {
         self.node(id)
             .summary
@@ -957,6 +1138,7 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
         &mut self.pages[index / ARENA_PAGE_NODES][index % ARENA_PAGE_NODES]
     }
 
+    #[inline(always)]
     fn node(&self, id: OrderedNodeId) -> &OrderedNode<R> {
         self.slot(id)
             .as_ref()
@@ -1066,7 +1248,7 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
         assert!(reachable_nodes.insert(id), "B+ node is reachable twice");
         assert_eq!(node.parent, parent);
         let record_delta = inherited.combine(node.pending_shift);
-        let (expected, expected_prefix) = match &node.kind {
+        let (expected, expected_prefix, expected_branch_minimums) = match &node.kind {
             OrderedNodeKind::Leaf(raw) => {
                 if Some(id) != self.root {
                     assert!((MIN_ENTRIES..=MAX_ENTRIES).contains(&raw.len()));
@@ -1083,9 +1265,14 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                 records.extend(logical.iter().copied());
                 let first = logical.first().expect("live B+ leaf is nonempty");
                 let mut maximum: Option<EmacsBytePos> = None;
+                let mut non_overlapping = true;
                 let prefix = logical
                     .iter()
                     .map(|record| {
+                        if maximum.is_some_and(|previous_end| previous_end > record.key_position())
+                        {
+                            non_overlapping = false;
+                        }
                         let end = record.end_position();
                         maximum = Some(maximum.map_or(end, |current| current.max(end)));
                         maximum.expect("record just established a maximum")
@@ -1099,8 +1286,10 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                         max_position: logical.last().expect("first existed").key_position(),
                         max_end: *prefix.last().expect("first existed"),
                         count: logical.len(),
+                        non_overlapping,
                     },
                     prefix,
+                    SmallVec::new(),
                 )
             }
             OrderedNodeKind::Branch(children) => {
@@ -1125,14 +1314,25 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                     .collect();
                 let first = child_summaries.first().expect("branch has children");
                 let mut maximum: Option<EmacsBytePos> = None;
+                let mut non_overlapping = true;
                 let prefix = child_summaries
                     .iter()
                     .map(|summary| {
+                        if !summary.non_overlapping
+                            || maximum
+                                .is_some_and(|previous_end| previous_end > summary.min_position)
+                        {
+                            non_overlapping = false;
+                        }
                         maximum = Some(
                             maximum.map_or(summary.max_end, |current| current.max(summary.max_end)),
                         );
                         maximum.expect("child just established a maximum")
                     })
+                    .collect::<SmallVec<[_; INLINE_ENTRIES]>>();
+                let minimums = child_summaries
+                    .iter()
+                    .map(|summary| summary.min_position)
                     .collect::<SmallVec<[_; INLINE_ENTRIES]>>();
                 (
                     OrderedSummary {
@@ -1142,8 +1342,10 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
                         max_position: child_summaries.last().expect("first existed").max_position,
                         max_end: *prefix.last().expect("first existed"),
                         count: child_summaries.iter().map(|summary| summary.count).sum(),
+                        non_overlapping,
                     },
                     prefix,
+                    minimums,
                 )
             }
         };
@@ -1161,6 +1363,15 @@ impl<R: OrderedShiftRecord> OrderedShiftTree<R> {
             stored_prefix, expected_prefix,
             "B+ prefix maximum-end summary drifted"
         );
+        let stored_branch_minimums = node
+            .branch_min_positions
+            .iter()
+            .map(|minimum| record_delta.apply_to_pos(*minimum))
+            .collect::<SmallVec<[_; INLINE_ENTRIES]>>();
+        assert_eq!(
+            stored_branch_minimums, expected_branch_minimums,
+            "B+ branch separator positions drifted"
+        );
         expected
     }
 }
@@ -1173,6 +1384,12 @@ pub(super) trait OrderedTreeQuery<R: OrderedShiftRecord>: Copy {
         maximum_end: EmacsBytePos,
     ) -> bool;
     fn record_matches(self, record: R) -> bool;
+
+    /// A point query over a globally non-overlapping tree has at most one
+    /// result and may descend through one start separator per level.
+    fn can_use_non_overlapping_single_path(self) -> bool {
+        false
+    }
 
     /// Whether a prefix whose greatest interval end is `maximum_end` cannot
     /// contain a match.  Implementations must be monotone: once this becomes
@@ -1199,6 +1416,13 @@ struct OrderedTraversalFrame {
     inherited: EmacsByteDelta,
 }
 
+const EMPTY_TRAVERSAL_FRAME: OrderedTraversalFrame = OrderedTraversalFrame {
+    id: OrderedNodeId(0),
+    cursor: 0,
+    end: 0,
+    inherited: EmacsByteDelta::ZERO,
+};
+
 pub(super) struct OrderedTreeMatches<T, R, Q>
 where
     T: Deref<Target = OrderedShiftTree<R>>,
@@ -1207,7 +1431,7 @@ where
 {
     tree: T,
     query: Q,
-    frames: [Option<OrderedTraversalFrame>; MAX_TREE_DEPTH],
+    frames: [OrderedTraversalFrame; MAX_TREE_DEPTH],
     len: usize,
 }
 
@@ -1217,12 +1441,13 @@ where
     R: OrderedShiftRecord,
     Q: OrderedTreeQuery<R>,
 {
+    #[inline(always)]
     fn new(tree: T, query: Q) -> Self {
         let root = tree.root;
         let mut matches = Self {
             tree,
             query,
-            frames: [None; MAX_TREE_DEPTH],
+            frames: [EMPTY_TRAVERSAL_FRAME; MAX_TREE_DEPTH],
             len: 0,
         };
         if let Some(root) = root {
@@ -1231,14 +1456,17 @@ where
         matches
     }
 
+    #[inline(always)]
     fn push_if_relevant(&mut self, id: OrderedNodeId, inherited: EmacsByteDelta) {
         #[cfg(test)]
+        super::overlay::record_overlay_iterator_frame_push();
+        #[cfg(test)]
         self.query.record_subtree_visit();
-        let summary = self.tree.summary(id).shifted::<R>(inherited);
+        let summary = self.tree.summary(id);
         if !self.query.subtree_may_match(
-            summary.min_position,
-            summary.max_position,
-            summary.max_end,
+            inherited.apply_to_pos(summary.min_position),
+            inherited.apply_to_pos(summary.max_position),
+            inherited.apply_to_pos(summary.max_end),
         ) {
             return;
         }
@@ -1261,24 +1489,21 @@ where
                     .query
                     .minimum_start_is_too_large(record_delta.apply_to_pos(record.key_position()))
             }),
-            OrderedNodeKind::Branch(children) => children.partition_point(|child| {
-                !self.query.minimum_start_is_too_large(
-                    self.tree
-                        .summary(*child)
-                        .shifted::<R>(record_delta)
-                        .min_position,
-                )
+            OrderedNodeKind::Branch(_) => node.branch_min_positions.partition_point(|minimum| {
+                !self
+                    .query
+                    .minimum_start_is_too_large(record_delta.apply_to_pos(*minimum))
             }),
         };
         if cursor >= end {
             return;
         }
-        self.frames[self.len] = Some(OrderedTraversalFrame {
+        self.frames[self.len] = OrderedTraversalFrame {
             id,
             cursor,
             end,
             inherited,
-        });
+        };
         self.len += 1;
     }
 }
@@ -1291,35 +1516,38 @@ where
 {
     type Item = R;
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         while self.len > 0 {
             let frame_index = self.len - 1;
-            let mut frame = self.frames[frame_index].expect("active traversal frame");
+            let mut frame = self.frames[frame_index];
             let node = self.tree.node(frame.id);
             let record_delta = frame.inherited.combine(node.pending_shift);
             match &node.kind {
                 OrderedNodeKind::Leaf(records) => {
                     if frame.cursor == frame.end {
-                        self.frames[frame_index] = None;
                         self.len -= 1;
                         continue;
                     }
-                    let record = records[frame.cursor].shifted(record_delta);
+                    let record = if record_delta.is_zero() {
+                        records[frame.cursor]
+                    } else {
+                        records[frame.cursor].shifted(record_delta)
+                    };
                     frame.cursor += 1;
-                    self.frames[frame_index] = Some(frame);
+                    self.frames[frame_index] = frame;
                     if self.query.record_matches(record) {
                         return Some(record);
                     }
                 }
                 OrderedNodeKind::Branch(children) => {
                     if frame.cursor == frame.end {
-                        self.frames[frame_index] = None;
                         self.len -= 1;
                         continue;
                     }
                     let child = children[frame.cursor];
                     frame.cursor += 1;
-                    self.frames[frame_index] = Some(frame);
+                    self.frames[frame_index] = frame;
                     self.push_if_relevant(child, record_delta);
                 }
             }

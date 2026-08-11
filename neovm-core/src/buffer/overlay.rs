@@ -45,6 +45,25 @@ pub(super) fn record_overlays_at_node_visit() {
 }
 
 #[cfg(test)]
+static OVERLAY_ITERATOR_FRAME_PUSHES: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_overlay_iterator_frame_push_count() {
+    OVERLAY_ITERATOR_FRAME_PUSHES.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) fn overlay_iterator_frame_push_count() -> usize {
+    OVERLAY_ITERATOR_FRAME_PUSHES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[cfg(test)]
+pub(super) fn record_overlay_iterator_frame_push() {
+    OVERLAY_ITERATOR_FRAME_PUSHES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
 static OVERLAY_PROPERTY_EXTENT_INSPECTIONS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
@@ -127,6 +146,44 @@ pub(crate) fn endpoint_search_node_visit_count() -> usize {
 #[cfg(test)]
 pub(super) fn record_endpoint_search_node_visit() {
     ENDPOINT_SEARCH_NODE_VISITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+static ENDPOINT_SEARCH_SUMMARY_SHIFTS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_endpoint_search_summary_shift_count() {
+    ENDPOINT_SEARCH_SUMMARY_SHIFTS.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) fn endpoint_search_summary_shift_count() -> usize {
+    ENDPOINT_SEARCH_SUMMARY_SHIFTS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[cfg(test)]
+pub(super) fn record_endpoint_search_summary_shift() {
+    ENDPOINT_SEARCH_SUMMARY_SHIFTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+static ENDPOINT_PUBLICATION_INTERVAL_READS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_endpoint_publication_interval_read_count() {
+    ENDPOINT_PUBLICATION_INTERVAL_READS.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) fn endpoint_publication_interval_read_count() -> usize {
+    ENDPOINT_PUBLICATION_INTERVAL_READS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[cfg(test)]
+pub(super) fn record_endpoint_publication_interval_read() {
+    ENDPOINT_PUBLICATION_INTERVAL_READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[cfg(test)]
@@ -450,7 +507,7 @@ impl OverlayList {
     }
 
     pub fn overlays_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Vec<Value> {
-        self.iter_overlays_at_emacs_byte_pos(pos).collect()
+        self.index.overlays_at(pos)
     }
 
     /// Borrow matching overlays without allocating an intermediate vector.

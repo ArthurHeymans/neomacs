@@ -529,7 +529,11 @@ impl EmacsByteDelta {
         Self(new_len.get() as isize - old_len.get() as isize)
     }
 
+    #[inline(always)]
     pub(in crate::buffer) fn apply_to_pos(self, pos: EmacsBytePos) -> EmacsBytePos {
+        if self.is_zero() {
+            return pos;
+        }
         EmacsBytePos::new(apply_signed_delta(pos.get(), self.0))
     }
 
@@ -537,7 +541,14 @@ impl EmacsByteDelta {
         self.0 == 0
     }
 
+    #[inline(always)]
     pub(in crate::buffer) fn combine(self, other: Self) -> Self {
+        if self.is_zero() {
+            return other;
+        }
+        if other.is_zero() {
+            return self;
+        }
         Self(
             self.0
                 .checked_add(other.0)

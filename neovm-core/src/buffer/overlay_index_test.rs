@@ -173,24 +173,33 @@ fn batch_order_type_distinguishes_attachment_from_query_order() {
 #[test]
 fn deferred_endpoint_index_publishes_once_then_tracks_mutations() {
     crate::test_utils::init_test_tracing();
+    crate::buffer::overlay::reset_endpoint_publication_interval_read_count();
     let mut index = OverlayIndex::new();
     let first = overlay(10, 12);
     let second = overlay(20, 23);
     assert!(index.attach(first, range(10, 12)));
     assert!(index.attach(second, range(20, 23)));
-    assert!(matches!(
-        *index.endpoints.read(),
-        EndpointIndexState::Deferred
-    ));
+    assert!(index.endpoints.get().is_none());
 
     assert_eq!(
         index.next_boundary_after(EmacsBytePos::new(1), EmacsBytePos::new(100)),
         Some(EmacsBytePos::new(10))
     );
-    assert!(matches!(
-        *index.endpoints.read(),
-        EndpointIndexState::Ready(_)
-    ));
+    assert!(index.endpoints.get().is_some());
+    assert_eq!(
+        crate::buffer::overlay::endpoint_publication_interval_read_count(),
+        1
+    );
+
+    assert_eq!(
+        index.next_boundary_after(EmacsBytePos::new(10), EmacsBytePos::new(100)),
+        Some(EmacsBytePos::new(12))
+    );
+    assert_eq!(
+        crate::buffer::overlay::endpoint_publication_interval_read_count(),
+        1,
+        "a published endpoint index must not touch the interval tree"
+    );
 
     let third = overlay(30, 34);
     assert!(index.attach(third, range(30, 34)));

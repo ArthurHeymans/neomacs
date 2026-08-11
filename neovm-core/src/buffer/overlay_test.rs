@@ -170,12 +170,24 @@ fn overlays_at_midpoint_skips_disjoint_prefix_and_suffix_nodes() {
     }
 
     reset_overlays_at_node_visit_count();
+    reset_endpoint_search_summary_shift_count();
+    reset_overlay_iterator_frame_push_count();
     assert_eq!(overlays_at(&list, 2_010).len(), 1);
 
     let visits = overlays_at_node_visit_count();
     assert!(
         visits <= 8,
         "overlays_at should descend directly to disjoint midpoint matches; visited {visits} nodes"
+    );
+    assert_eq!(
+        endpoint_search_summary_shift_count(),
+        0,
+        "point search should shift only compared scalars, not rebuild node summaries"
+    );
+    assert_eq!(
+        overlay_iterator_frame_push_count(),
+        0,
+        "materialized point queries should not construct a resumable iterator stack"
     );
 }
 
@@ -470,7 +482,12 @@ fn next_boundary_uses_one_logarithmic_endpoint_search() {
         list.insert_overlay(alloc_overlay(start, start + 1));
     }
 
+    assert_eq!(
+        list.next_boundary_after_emacs_byte_pos(emacs_byte_pos(0)),
+        Some(emacs_byte_pos(100))
+    );
     reset_endpoint_search_node_visit_count();
+    reset_endpoint_search_summary_shift_count();
     assert_eq!(
         list.next_boundary_after_emacs_byte_pos(emacs_byte_pos(1_999)),
         Some(emacs_byte_pos(2_000))
@@ -479,6 +496,11 @@ fn next_boundary_uses_one_logarithmic_endpoint_search() {
     assert!(
         visits <= 13,
         "next-boundary should traverse one balanced endpoint index; visited {visits} nodes"
+    );
+    assert_eq!(
+        endpoint_search_summary_shift_count(),
+        0,
+        "boundary search should compare the needed shifted scalar, not rebuild summaries"
     );
 }
 
