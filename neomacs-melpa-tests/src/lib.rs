@@ -2861,6 +2861,12 @@ pub const SQLITE3_MELPA_PIN: (&str, &str) = ("sqlite3", "20251014.536");
 /// completion, CAPF, asynchronous backend, and file workflow parity corpus.
 pub const COMPANY_MELPA_PIN: (&str, &str) = ("company", "20260721.100");
 
+/// The exact Company C Headers package selected for real C/C++/Objective-C
+/// header completion, nested include, location-preview, and delimiter parity.
+/// MELPA built this archive from upstream commit
+/// `986cef8c7aae821ae65b193ea15e7f4a7097821c`.
+pub const COMPANY_C_HEADERS_MELPA_PIN: (&str, &str) = ("company-c-headers", "20260511.1117");
+
 /// The exact company-quickhelp package selected for practical frontend enable,
 /// docstring truncation, timer arm/cancel, and doc-buffer extraction. MELPA
 /// built this archive from upstream commit
