@@ -2888,6 +2888,43 @@ failures, now 18.
 
 Status: FIXED.
 
+## 63. Editing a file locked by ANOTHER live Emacs proceeds silently -- FIXED
+
+Divergence #26 fixed lock CREATION; the CONTESTED case was still broken in
+three stacked ways, found by running a real GNU Emacs holder against the
+neomacs release binary:
+
+1. `lock_file_resolved` called `ask-user-about-lock` but swallowed its result
+   with `unwrap_or(nil)`. GNU's `calln` propagates: in batch, userlock.el
+   signals `(file-locked FILE "USER@HOST (pid PID)" "Cannot resolve lock
+   conflict in batch mode")` and the edit is refused. Neomacs edited the
+   buffer anyway.
+2. Before even reaching the prompt, neomacs ZAPPED the live GNU lock as
+   stale: GNU stamps locks with the utmp BOOT_TIME boot time (gnulib
+   boot-time.c), which systemd writes seconds after the kernel btime that
+   sysinfo reports, and `current_lock_owner` tolerates only 1s of skew.
+   The boot-time SOURCE must be utmp.
+3. The opponent string passed to `ask-user-about-lock` was the bare user
+   name; GNU passes `USER@HOST (pid PID)`. `file-locked-p` conversely
+   reports only USER. Unparseable lock contents are EINVAL (no prompt from
+   `lock_file`; a file-error from `file-locked-p`/`unlock-file`), and an
+   empty lock file is zapped as a buggy-filesystem leftover.
+
+```
+; GNU holder: emacs -Q -batch visiting note.txt, buffer modified, lock held
+; second GNU: (insert "EDIT") =>
+;   (file-locked ".../note.txt" "exec@Matrix (pid 1775960)"
+;                "Cannot resolve lock conflict in batch mode"), buffer clean
+; neomacs before fix: file-locked-p => nil (live lock zapped!),
+;   insert proceeds, buffer modified, lock stolen
+```
+
+Fixed on the ask-user-about-lock rung: propagate the signal, type the answer
+as GNU's enum (`LockOwner::{None,Current,Other(LockClasher)}`), read boot
+time from utmp first, parse from the last `@` with EINVAL strictness.
+
+Affects: any two-editor workflow; found during P8's lock-race diagnosis.
+
 ## 64. `completion-ignored-extensions` was never made special, so every `let` of it bound lexically -- FIXED
 
 GNU installs this variable in C: `syms_of_dired` (`src/dired.c:1206`) declares
