@@ -101,6 +101,22 @@ fn raw_overlays_at_matches_gnu_same_start_itree_order() {
 }
 
 #[test]
+fn text_edit_relocation_preserves_same_start_itree_order() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let first = alloc_overlay(2, 5);
+    let second = alloc_overlay(2, 5);
+    let third = alloc_overlay(2, 5);
+    list.insert_overlay(first);
+    list.insert_overlay(second);
+    list.insert_overlay(third);
+
+    list.adjust_for_insert_at_emacs_byte_pos(emacs_byte_pos(1), emacs_byte_len(3), true);
+
+    assert_eq!(overlays_at(&list, 6), vec![third, second, first]);
+}
+
+#[test]
 fn overlays_at_prunes_right_subtree_when_all_starts_are_after_position() {
     crate::test_utils::init_test_tracing();
     let mut list = OverlayList::new();
@@ -116,6 +132,101 @@ fn overlays_at_prunes_right_subtree_when_all_starts_are_after_position() {
     assert!(
         visits < 8,
         "overlays_at should prune right subtrees that start after the queried position; visited {visits} nodes"
+    );
+}
+
+#[test]
+fn monotonic_overlay_insertion_keeps_interval_index_logarithmic() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let overlay_count = 2_000usize;
+    for index in 0..overlay_count {
+        let start = 10 + index * 2;
+        list.insert_overlay(alloc_overlay(start, start + 1));
+    }
+
+    // GNU's red-black interval tree has height <= 2 * log2(n + 1).  This is
+    // an interface performance guarantee, not a test of a particular balancing
+    // algorithm: AVL, red-black, and a high-fanout tree all satisfy it.
+    let logarithmic_height_bound = 2 * (usize::BITS - overlay_count.leading_zeros()) as usize;
+    assert!(
+        list.interval_index_height() <= logarithmic_height_bound,
+        "sorted insertion produced interval-index height {}; expected at most {} for {} overlays",
+        list.interval_index_height(),
+        logarithmic_height_bound,
+        overlay_count
+    );
+}
+
+#[test]
+fn inserted_position_property_lookup_inspects_only_nearby_overlays() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    let property = Value::symbol("face");
+    let target = alloc_overlay(2, 8);
+    list.insert_overlay(target);
+    list.overlay_put(target, property, Value::symbol("bold"))
+        .unwrap();
+    for index in 0..2_000 {
+        let start = 100 + index * 2;
+        list.insert_overlay(alloc_overlay(start, start + 1));
+    }
+
+    reset_best_overlay_candidate_inspection_count();
+    assert_eq!(
+        list.highest_priority_overlay_for_inserted_emacs_byte_pos(emacs_byte_pos(4), &property,),
+        Some(target)
+    );
+    let inspections = best_overlay_candidate_inspection_count();
+    assert!(
+        inspections < 32,
+        "an inserted-position lookup should inspect only interval-tree candidates; inspected {inspections} overlays"
+    );
+}
+
+#[test]
+fn tail_insertion_inspects_only_overlays_with_affected_endpoints() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    for index in 0..2_000 {
+        let start = index * 2;
+        list.insert_overlay(alloc_overlay(start, start + 1));
+    }
+    let affected = alloc_overlay(5_000, 5_010);
+    list.insert_overlay(affected);
+
+    reset_overlay_edit_candidate_inspection_count();
+    list.adjust_for_insert_at_emacs_byte_pos(emacs_byte_pos(5_000), emacs_byte_len(3), true);
+
+    assert_eq!(overlay_start(&list, affected), Some(5_003));
+    assert_eq!(overlay_end(&list, affected), Some(5_013));
+    let inspections = overlay_edit_candidate_inspection_count();
+    assert!(
+        inspections < 32,
+        "a tail insertion should inspect only overlays with affected endpoints; inspected {inspections} overlays"
+    );
+}
+
+#[test]
+fn tail_deletion_inspects_only_overlays_with_affected_endpoints() {
+    crate::test_utils::init_test_tracing();
+    let mut list = OverlayList::new();
+    for index in 0..2_000 {
+        let start = index * 2;
+        list.insert_overlay(alloc_overlay(start, start + 1));
+    }
+    let affected = alloc_overlay(5_000, 5_010);
+    list.insert_overlay(affected);
+
+    reset_overlay_edit_candidate_inspection_count();
+    list.adjust_for_delete_emacs_byte_range(emacs_byte_range(4_997, 5_000));
+
+    assert_eq!(overlay_start(&list, affected), Some(4_997));
+    assert_eq!(overlay_end(&list, affected), Some(5_007));
+    let inspections = overlay_edit_candidate_inspection_count();
+    assert!(
+        inspections < 32,
+        "a tail deletion should inspect only overlays with affected endpoints; inspected {inspections} overlays"
     );
 }
 

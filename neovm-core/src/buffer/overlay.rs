@@ -7,8 +7,7 @@
 //! ids in each buffer's overlay index.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
-use std::ops::Bound::{Excluded, Unbounded};
+use std::collections::{BTreeSet, BinaryHeap};
 
 use crate::buffer::BufferId;
 use crate::emacs_core::error::Flow;
@@ -17,6 +16,7 @@ use crate::emacs_core::value::{Value, ValueKind, eq_value};
 use crate::gc_trace::GcTrace;
 use crate::heap_types::OverlayData;
 
+use super::overlay_index::OverlayIndex;
 use super::position::{EmacsByteLen, EmacsBytePos, EmacsByteRange};
 use super::text::{TextEditRange, TextInsertion, TextReplacement};
 
@@ -37,6 +37,11 @@ pub(crate) fn overlays_at_node_visit_count() -> usize {
 }
 
 #[cfg(test)]
+pub(super) fn record_overlays_at_node_visit() {
+    OVERLAYS_AT_NODE_VISITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(test)]
 static OVERLAY_PROPERTY_EXTENT_INSPECTIONS: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(0);
 
@@ -50,254 +55,37 @@ pub(crate) fn overlay_property_extent_inspection_count() -> usize {
     OVERLAY_PROPERTY_EXTENT_INSPECTIONS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// Augmented interval tree node for O(log n + k) overlay queries.
-#[derive(Clone, Debug)]
-struct ItreeNode {
-    range: EmacsByteRange,
-    /// Maximum `end` value in this subtree (augmented).
-    max_end: EmacsBytePos,
-    /// The overlay object.
-    overlay: Value,
-    left: Option<Box<ItreeNode>>,
-    right: Option<Box<ItreeNode>>,
+#[cfg(test)]
+static BEST_OVERLAY_CANDIDATE_INSPECTIONS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_best_overlay_candidate_inspection_count() {
+    BEST_OVERLAY_CANDIDATE_INSPECTIONS.store(0, std::sync::atomic::Ordering::Relaxed);
 }
 
-impl ItreeNode {
-    fn new(range: EmacsByteRange, overlay: Value) -> Self {
-        Self {
-            range,
-            max_end: range.end(),
-            overlay,
-            left: None,
-            right: None,
-        }
-    }
-
-    fn start(&self) -> EmacsBytePos {
-        self.range.start()
-    }
-
-    fn end(&self) -> EmacsBytePos {
-        self.range.end()
-    }
-
-    fn set_range(&mut self, range: EmacsByteRange) {
-        self.range = range;
-        self.update_max_end();
-    }
-
-    fn update_max_end(&mut self) {
-        self.max_end = self.end();
-        if let Some(ref left) = self.left {
-            self.max_end = self.max_end.max(left.max_end);
-        }
-        if let Some(ref right) = self.right {
-            self.max_end = self.max_end.max(right.max_end);
-        }
-    }
+#[cfg(test)]
+pub(crate) fn best_overlay_candidate_inspection_count() -> usize {
+    BEST_OVERLAY_CANDIDATE_INSPECTIONS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// BST-based augmented interval tree.  Not self-balancing, but overlay
-/// counts are typically small (< 1000), so depth is acceptable.
-#[derive(Clone, Debug)]
-struct Itree {
-    root: Option<Box<ItreeNode>>,
+#[cfg(test)]
+static OVERLAY_EDIT_CANDIDATE_INSPECTIONS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_overlay_edit_candidate_inspection_count() {
+    OVERLAY_EDIT_CANDIDATE_INSPECTIONS.store(0, std::sync::atomic::Ordering::Relaxed);
 }
 
-impl Itree {
-    fn new() -> Self {
-        Self { root: None }
-    }
-
-    /// Collect all overlays that cover `pos` into `out`.
-    fn overlays_at(&self, pos: EmacsBytePos, out: &mut Vec<Value>) {
-        Self::overlays_at_node(&self.root, pos, out);
-    }
-
-    /// Collect every overlay in the tree in ascending `begin` (start) order.
-    ///
-    /// GNU's `Foverlay_lists` walks `current_buffer->overlays` with
-    /// `ITREE_FOREACH (node, ..., BEG, Z, DESCENDING)` and conses each node
-    /// onto the result, which reverses the descending walk back into ascending
-    /// `begin` order. An in-order (left, self, right) traversal of this
-    /// `begin`-keyed BST yields the same ascending sequence directly.
-    fn all_overlays_ascending(&self, out: &mut Vec<Value>) {
-        Self::all_overlays_ascending_node(&self.root, out);
-    }
-
-    fn all_overlays_ascending_node(node: &Option<Box<ItreeNode>>, out: &mut Vec<Value>) {
-        let Some(n) = node.as_ref() else { return };
-        Self::all_overlays_ascending_node(&n.left, out);
-        out.push(n.overlay);
-        Self::all_overlays_ascending_node(&n.right, out);
-    }
-
-    /// Collect all overlays overlapping `start..end` in GNU's interval-tree
-    /// ascending traversal order.
-    fn overlays_in_region(
-        &self,
-        range: EmacsByteRange,
-        accessible_end: EmacsBytePos,
-        out: &mut Vec<Value>,
-    ) {
-        Self::overlays_in_region_node(&self.root, range, accessible_end, out);
-    }
-
-    fn overlays_at_node(node: &Option<Box<ItreeNode>>, pos: EmacsBytePos, out: &mut Vec<Value>) {
-        let Some(n) = node.as_ref() else { return };
-        #[cfg(test)]
-        OVERLAYS_AT_NODE_VISITS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-        // If left child's max_end > pos, it might contain covering intervals
-        if let Some(left) = n.left.as_ref()
-            && left.max_end > pos
-        {
-            Self::overlays_at_node(&n.left, pos, out);
-        }
-        // Check current node
-        if n.start() <= pos && pos < n.end() {
-            out.push(n.overlay);
-        }
-        if let Some(right) = n.right.as_ref()
-            && n.start() <= pos
-            && right.max_end > pos
-        {
-            Self::overlays_at_node(&n.right, pos, out);
-        }
-    }
-
-    fn overlays_in_region_node(
-        node: &Option<Box<ItreeNode>>,
-        range: EmacsByteRange,
-        accessible_end: EmacsBytePos,
-        out: &mut Vec<Value>,
-    ) {
-        let Some(n) = node.as_ref() else { return };
-
-        if let Some(left) = n.left.as_ref()
-            && left.max_end >= range.start()
-        {
-            Self::overlays_in_region_node(&n.left, range, accessible_end, out);
-        }
-
-        if n.start() > range.end() {
-            return;
-        }
-
-        if overlay_overlaps_region(n.overlay, range, accessible_end) {
-            out.push(n.overlay);
-        }
-
-        Self::overlays_in_region_node(&n.right, range, accessible_end, out);
-    }
-
-    /// Insert an interval.  Returns false if already present.
-    fn insert(&mut self, range: EmacsByteRange, overlay: Value) -> bool {
-        Self::insert_node(&mut self.root, range, overlay)
-    }
-
-    fn insert_node(
-        node: &mut Option<Box<ItreeNode>>,
-        range: EmacsByteRange,
-        overlay: Value,
-    ) -> bool {
-        match node {
-            None => {
-                *node = Some(Box::new(ItreeNode::new(range, overlay)));
-                true
-            }
-            Some(n) => {
-                if eq_value(&n.overlay, &overlay) {
-                    n.set_range(range);
-                    return false;
-                }
-                // GNU's `itree_insert_node` descends left for
-                // `node->begin <= child->begin`, so same-begin overlays are
-                // visited newest-first by the ascending iterator used by
-                // `overlays-at`.
-                if range.start() <= n.start() {
-                    let inserted = Self::insert_node(&mut n.left, range, overlay);
-                    if inserted {
-                        n.update_max_end();
-                    }
-                    inserted
-                } else {
-                    let inserted = Self::insert_node(&mut n.right, range, overlay);
-                    if inserted {
-                        n.update_max_end();
-                    }
-                    inserted
-                }
-            }
-        }
-    }
-
-    /// Remove an overlay from the tree.
-    fn remove(&mut self, overlay: Value) -> bool {
-        let Some(range) = overlay_range(overlay) else {
-            return false;
-        };
-        self.remove_at(range.start(), overlay)
-    }
-
-    fn remove_at(&mut self, start: EmacsBytePos, overlay: Value) -> bool {
-        Self::remove_node(&mut self.root, start, overlay)
-    }
-
-    fn remove_node(node: &mut Option<Box<ItreeNode>>, start: EmacsBytePos, overlay: Value) -> bool {
-        // Take ownership of the node, operate on it, put back
-        let Some(mut boxed) = node.take() else {
-            return false;
-        };
-
-        if boxed.start() == start && eq_value(&boxed.overlay, &overlay) {
-            // Remove this node, replace with merged children.
-            let left = boxed.left.take();
-            let right = boxed.right.take();
-            *node = match (left, right) {
-                (None, None) => None,
-                (Some(child), None) | (None, Some(child)) => Some(child),
-                (Some(left), Some(right)) => {
-                    let mut merged = left;
-                    Self::attach_rightmost(&mut merged, right);
-                    Some(merged)
-                }
-            };
-            return true;
-        }
-
-        let found = if start < boxed.start() {
-            Self::remove_node(&mut boxed.left, start, overlay)
-        } else if start > boxed.start() {
-            Self::remove_node(&mut boxed.right, start, overlay)
-        } else {
-            Self::remove_node(&mut boxed.left, start, overlay)
-                || Self::remove_node(&mut boxed.right, start, overlay)
-        };
-        if found {
-            boxed.update_max_end();
-        }
-        *node = Some(boxed);
-        found
-    }
-
-    fn attach_rightmost(node: &mut Box<ItreeNode>, child: Box<ItreeNode>) {
-        if let Some(right) = node.right.as_mut() {
-            Self::attach_rightmost(right, child);
-        } else {
-            node.right = Some(child);
-        }
-        node.update_max_end();
-    }
+#[cfg(test)]
+pub(crate) fn overlay_edit_candidate_inspection_count() -> usize {
+    OVERLAY_EDIT_CANDIDATE_INSPECTIONS.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 #[derive(Clone)]
 pub struct OverlayList {
-    overlays: BTreeSet<Value>,
-    by_start: BTreeMap<EmacsBytePos, BTreeSet<Value>>,
-    by_end: BTreeMap<EmacsBytePos, BTreeSet<Value>>,
-    /// Augmented interval tree for O(log n + k) overlays_at queries.
-    itree: Itree,
+    index: OverlayIndex,
 }
 
 /// The effective contiguous range of an overlay-supplied property winner.
@@ -400,34 +188,23 @@ impl ActivePropertyOverlays {
 impl OverlayList {
     pub fn new() -> Self {
         Self {
-            overlays: BTreeSet::new(),
-            by_start: BTreeMap::new(),
-            by_end: BTreeMap::new(),
-            itree: Itree::new(),
+            index: OverlayIndex::new(),
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn interval_index_height(&self) -> usize {
+        self.index.interval_height()
     }
 
     pub fn insert_overlay(&mut self, overlay: Value) {
         let data = overlay.as_overlay_data().unwrap();
         let range = overlay_data_range(data);
-        if !self.overlays.insert(overlay) {
-            return;
-        }
-        Self::insert_index_entry(&mut self.by_start, range.start(), overlay);
-        Self::insert_index_entry(&mut self.by_end, range.end(), overlay);
-        self.itree.insert(range, overlay);
+        self.index.attach(overlay, range);
     }
 
     pub fn detach_overlay(&mut self, overlay: Value) -> bool {
-        if !self.overlays.remove(&overlay) {
-            return false;
-        }
-        if let Some(range) = overlay_range(overlay) {
-            Self::remove_index_entry(&mut self.by_start, range.start(), overlay);
-            Self::remove_index_entry(&mut self.by_end, range.end(), overlay);
-        }
-        self.itree.remove(overlay);
-        true
+        self.index.detach(overlay).is_some()
     }
 
     pub fn delete_overlay(&mut self, overlay: Value) -> bool {
@@ -441,20 +218,17 @@ impl OverlayList {
     }
 
     pub fn delete_all_overlays(&mut self) {
-        let live: Vec<Value> = self.overlays.iter().copied().collect();
+        let live: Vec<Value> = self.index.values().collect();
         for overlay in live {
             let _ = overlay.with_overlay_data_mut(|data| {
                 data.buffer = None;
             });
         }
-        self.overlays.clear();
-        self.by_start.clear();
-        self.by_end.clear();
-        self.itree = Itree::new();
+        self.index.clear();
     }
 
     pub(crate) fn retarget_buffer(&mut self, from: BufferId, to: BufferId) {
-        for overlay in self.overlays.iter().copied() {
+        for overlay in self.index.values() {
             let _ = overlay.with_overlay_data_mut(|data| {
                 if data.buffer == Some(from) {
                     data.buffer = Some(to);
@@ -495,7 +269,7 @@ impl OverlayList {
     }
 
     pub fn overlay_plist(&self, overlay: Value) -> Option<Value> {
-        if self.overlays.contains(&overlay) || overlay_live_buffer(overlay).is_none() {
+        if self.index.contains(overlay) || overlay_live_buffer(overlay).is_none() {
             return Some(overlay.as_overlay_data().unwrap().plist);
         }
         None
@@ -512,19 +286,13 @@ impl OverlayList {
     }
 
     pub fn move_overlay_to_emacs_byte_range(&mut self, overlay: Value, range: EmacsByteRange) {
-        let Some(old_range) = overlay_range(overlay) else {
+        if self.index.move_to(overlay, range).is_none() {
             return;
-        };
-        Self::remove_index_entry(&mut self.by_start, old_range.start(), overlay);
-        Self::remove_index_entry(&mut self.by_end, old_range.end(), overlay);
-        Self::insert_index_entry(&mut self.by_start, range.start(), overlay);
-        Self::insert_index_entry(&mut self.by_end, range.end(), overlay);
-        self.itree.remove_at(old_range.start(), overlay);
+        }
         let _ = overlay.with_overlay_data_mut(|data| {
             data.start = range.start().get();
             data.end = range.end().get();
         });
-        self.itree.insert(range, overlay);
         // GNU Emacs drops empty overlays created by move-overlay when
         // `evaporate' is non-nil. Minibuffer shadow overlays depend on this
         // to avoid leaking stale before/after-strings into later prompts.
@@ -538,9 +306,7 @@ impl OverlayList {
     }
 
     pub fn overlays_at_emacs_byte_pos(&self, pos: EmacsBytePos) -> Vec<Value> {
-        let mut overlays = Vec::new();
-        self.itree.overlays_at(pos, &mut overlays);
-        overlays
+        self.index.overlays_at(pos)
     }
 
     pub fn overlays_in_emacs_byte_range(&self, range: EmacsByteRange) -> Vec<Value> {
@@ -556,9 +322,7 @@ impl OverlayList {
     /// so every overlay lands in the `BEFORE` (car) list and the `AFTER` (cdr)
     /// list is always empty.
     pub fn overlays_in_gnu_lists_order(&self) -> Vec<Value> {
-        let mut overlays = Vec::with_capacity(self.overlays.len());
-        self.itree.all_overlays_ascending(&mut overlays);
-        overlays
+        self.index.all_ascending()
     }
 
     pub fn overlays_in_accessible_emacs_byte_range(
@@ -566,10 +330,7 @@ impl OverlayList {
         range: EmacsByteRange,
         accessible_end: EmacsBytePos,
     ) -> Vec<Value> {
-        let mut overlays = Vec::new();
-        self.itree
-            .overlays_in_region(range, accessible_end, &mut overlays);
-        overlays
+        self.index.overlays_in_region(range, accessible_end)
     }
 
     pub fn highest_priority_overlay_at_emacs_byte_pos(
@@ -577,7 +338,9 @@ impl OverlayList {
         pos: EmacsBytePos,
         property: Value,
     ) -> Option<Value> {
-        self.best_overlay_for(property, |overlay| overlay_covers_pos(overlay, pos))
+        self.best_overlay_among(property, self.index.overlays_at(pos), |overlay| {
+            overlay_covers_pos(overlay, pos)
+        })
     }
 
     /// GNU `get_char_property_and_overlay` (src/textprop.c): PROPERTY's value from
@@ -724,12 +487,12 @@ impl OverlayList {
             if boundary <= bounds.start() {
                 break;
             }
-            if let Some(starts) = self.by_start.get(&boundary) {
+            if let Some(starts) = self.index.starts_at(boundary) {
                 for overlay in starts {
                     backward.remove(*overlay);
                 }
             }
-            if let Some(ends) = self.by_end.get(&boundary) {
+            if let Some(ends) = self.index.ends_at(boundary) {
                 for overlay in ends {
                     if overlay_range(*overlay).is_some_and(|range| !range.is_empty()) {
                         backward.inspect_and_insert(*overlay);
@@ -752,12 +515,12 @@ impl OverlayList {
             if boundary >= bounds.end() {
                 break;
             }
-            if let Some(ends) = self.by_end.get(&boundary) {
+            if let Some(ends) = self.index.ends_at(boundary) {
                 for overlay in ends {
                     forward.remove(*overlay);
                 }
             }
-            if let Some(starts) = self.by_start.get(&boundary) {
+            if let Some(starts) = self.index.starts_at(boundary) {
                 for overlay in starts {
                     if overlay_range(*overlay).is_some_and(|range| !range.is_empty()) {
                         forward.inspect_and_insert(*overlay);
@@ -786,7 +549,7 @@ impl OverlayList {
         pos: EmacsBytePos,
         property: &Value,
     ) -> Option<Value> {
-        self.best_overlay_for(*property, |overlay| {
+        self.best_overlay_among(*property, self.index.overlays_touching(pos), |overlay| {
             let Some(data) = overlay.as_overlay_data() else {
                 return false;
             };
@@ -814,9 +577,11 @@ impl OverlayList {
         if len.is_empty() {
             return;
         }
-        let live: Vec<Value> = self.overlays.iter().copied().collect();
-        for overlay in &live {
-            let _ = overlay.with_overlay_data_mut(|object| {
+        let candidates = self.index.insertion_candidates(pos);
+        for overlay in candidates {
+            #[cfg(test)]
+            OVERLAY_EDIT_CANDIDATE_INSPECTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let new_range = overlay.with_overlay_data_mut(|object| {
                 let start = EmacsBytePos::new(object.start);
                 let end = EmacsBytePos::new(object.end);
                 let empty = start == end;
@@ -828,21 +593,23 @@ impl OverlayList {
                     if end >= pos {
                         object.end += len.get();
                     }
-                    return;
-                }
+                } else {
+                    if start > pos
+                        || (start == pos && object.front_advance && (!empty || object.rear_advance))
+                    {
+                        object.start += len.get();
+                    }
 
-                if start > pos
-                    || (start == pos && object.front_advance && (!empty || object.rear_advance))
-                {
-                    object.start += len.get();
+                    if end > pos || (end == pos && object.rear_advance) {
+                        object.end += len.get();
+                    }
                 }
-
-                if end > pos || (end == pos && object.rear_advance) {
-                    object.end += len.get();
-                }
+                overlay_data_range(object)
             });
+            if let Some(new_range) = new_range {
+                self.index.relocate_for_text_edit(overlay, new_range);
+            }
         }
-        self.rebuild_indexes();
     }
 
     pub fn adjust_for_inserted_text(&mut self, insertion: TextInsertion, before_markers: bool) {
@@ -860,45 +627,44 @@ impl OverlayList {
         let start = range.start();
         let end = range.end();
         let len = range.len();
-        let live: Vec<Value> = self.overlays.iter().copied().collect();
-        let mut evaporated = Vec::new();
-        for overlay in &live {
-            let should_evaporate = overlay
-                .with_overlay_data_mut(|object| {
-                    let object_start = EmacsBytePos::new(object.start);
-                    let object_end = EmacsBytePos::new(object.end);
-                    if object_start >= end {
-                        object.start -= len.get();
-                    } else if object_start > start {
-                        object.start = start.get();
-                    }
+        let candidates = self.index.deletion_candidates(range);
+        for overlay in candidates {
+            #[cfg(test)]
+            OVERLAY_EDIT_CANDIDATE_INSPECTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let adjustment = overlay.with_overlay_data_mut(|object| {
+                let object_start = EmacsBytePos::new(object.start);
+                let object_end = EmacsBytePos::new(object.end);
+                if object_start >= end {
+                    object.start -= len.get();
+                } else if object_start > start {
+                    object.start = start.get();
+                }
 
-                    if object_end >= end {
-                        object.end -= len.get();
-                    } else if object_end > start {
-                        object.end = start.get();
-                    }
+                if object_end >= end {
+                    object.end -= len.get();
+                } else if object_end > start {
+                    object.end = start.get();
+                }
 
-                    if object.start == object.end
-                        && plist::plist_get(object.plist, &Value::symbol("evaporate"))
-                            .is_some_and(|v| v.is_truthy())
-                    {
-                        object.buffer = None;
-                        true
-                    } else {
-                        false
-                    }
-                })
-                .unwrap_or(false);
+                if object.start == object.end
+                    && plist::plist_get(object.plist, &Value::symbol("evaporate"))
+                        .is_some_and(|v| v.is_truthy())
+                {
+                    object.buffer = None;
+                    (overlay_data_range(object), true)
+                } else {
+                    (overlay_data_range(object), false)
+                }
+            });
+            let Some((new_range, should_evaporate)) = adjustment else {
+                continue;
+            };
             if should_evaporate {
-                evaporated.push(*overlay);
+                self.index.detach(overlay);
+            } else {
+                self.index.relocate_for_text_edit(overlay, new_range);
             }
         }
-
-        for overlay in evaporated {
-            self.overlays.remove(&overlay);
-        }
-        self.rebuild_indexes();
     }
 
     pub fn adjust_for_deleted_text(&mut self, range: TextEditRange) {
@@ -941,17 +707,17 @@ impl OverlayList {
     }
 
     pub fn get(&self, overlay: Value) -> Option<Overlay> {
-        self.overlays
-            .contains(&overlay)
+        self.index
+            .contains(overlay)
             .then(|| overlay.as_overlay_data().unwrap().clone())
     }
 
     pub fn len(&self) -> usize {
-        self.overlays.len()
+        self.index.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.overlays.is_empty()
+        self.index.is_empty()
     }
 
     pub fn next_boundary_after_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<EmacsBytePos> {
@@ -963,26 +729,7 @@ impl OverlayList {
         pos: EmacsBytePos,
         limit: EmacsBytePos,
     ) -> Option<EmacsBytePos> {
-        if pos >= limit {
-            return None;
-        }
-        let next_start = self
-            .by_start
-            .range((Excluded(pos), Unbounded))
-            .next()
-            .map(|(boundary, _)| *boundary);
-        let next_end = self
-            .by_end
-            .range((Excluded(pos), Unbounded))
-            .next()
-            .map(|(boundary, _)| *boundary);
-        let boundary = match (next_start, next_end) {
-            (Some(start), Some(end)) => Some(start.min(end)),
-            (Some(start), None) => Some(start),
-            (None, Some(end)) => Some(end),
-            (None, None) => None,
-        };
-        boundary.filter(|boundary| *boundary <= limit)
+        self.index.next_boundary_after(pos, limit)
     }
 
     pub fn previous_boundary_before_emacs_byte_pos(
@@ -997,30 +744,11 @@ impl OverlayList {
         pos: EmacsBytePos,
         limit: EmacsBytePos,
     ) -> Option<EmacsBytePos> {
-        if pos <= limit {
-            return None;
-        }
-        let prev_start = self
-            .by_start
-            .range(..pos)
-            .next_back()
-            .map(|(boundary, _)| *boundary);
-        let prev_end = self
-            .by_end
-            .range(..pos)
-            .next_back()
-            .map(|(boundary, _)| *boundary);
-        let boundary = match (prev_start, prev_end) {
-            (Some(start), Some(end)) => Some(start.max(end)),
-            (Some(start), None) => Some(start),
-            (None, Some(end)) => Some(end),
-            (None, None) => None,
-        };
-        boundary.filter(|boundary| *boundary >= limit)
+        self.index.previous_boundary_before(pos, limit)
     }
 
     pub(crate) fn dump_overlays(&self) -> Vec<Value> {
-        self.overlays.iter().copied().collect()
+        self.index.values().collect()
     }
 
     pub(crate) fn from_dump(overlays: Vec<Value>) -> Self {
@@ -1033,71 +761,38 @@ impl OverlayList {
         list
     }
 
-    fn best_overlay_for<F>(&self, property: Value, predicate: F) -> Option<Value>
+    fn best_overlay_among<I, F>(
+        &self,
+        property: Value,
+        candidates: I,
+        predicate: F,
+    ) -> Option<Value>
     where
+        I: IntoIterator<Item = Value>,
         F: Fn(Value) -> bool,
     {
         let mut best: Option<Value> = None;
-        for overlay in &self.overlays {
-            if !predicate(*overlay) {
+        for overlay in candidates {
+            #[cfg(test)]
+            BEST_OVERLAY_CANDIDATE_INSPECTIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if !predicate(overlay) {
                 continue;
             }
-            let Some(value) = overlay_property_named(*overlay, property) else {
+            let Some(value) = overlay_property_named(overlay, property) else {
                 continue;
             };
             if value.is_nil() {
                 continue;
             }
             match best {
-                None => best = Some(*overlay),
-                Some(current)
-                    if compare_overlay_precedence(current, *overlay) == Ordering::Less =>
-                {
-                    best = Some(*overlay);
+                None => best = Some(overlay),
+                Some(current) if compare_overlay_precedence(current, overlay) == Ordering::Less => {
+                    best = Some(overlay);
                 }
                 _ => {}
             }
         }
         best
-    }
-
-    fn insert_index_entry(
-        index: &mut BTreeMap<EmacsBytePos, BTreeSet<Value>>,
-        boundary: EmacsBytePos,
-        overlay: Value,
-    ) {
-        index.entry(boundary).or_default().insert(overlay);
-    }
-
-    fn remove_index_entry(
-        index: &mut BTreeMap<EmacsBytePos, BTreeSet<Value>>,
-        boundary: EmacsBytePos,
-        overlay: Value,
-    ) {
-        if let Some(ids) = index.get_mut(&boundary) {
-            ids.remove(&overlay);
-            if ids.is_empty() {
-                index.remove(&boundary);
-            }
-        }
-    }
-
-    fn rebuild_indexes(&mut self) {
-        self.by_start.clear();
-        self.by_end.clear();
-        self.itree = Itree::new();
-        let live: Vec<Value> = self.overlays.iter().copied().collect();
-        for overlay in live {
-            if overlay_live_buffer(overlay).is_none() {
-                self.overlays.remove(&overlay);
-                continue;
-            }
-            if let Some(range) = overlay_range(overlay) {
-                Self::insert_index_entry(&mut self.by_start, range.start(), overlay);
-                Self::insert_index_entry(&mut self.by_end, range.end(), overlay);
-                self.itree.insert(range, overlay);
-            }
-        }
     }
 }
 
@@ -1131,29 +826,6 @@ fn same_overlay_identity(left: Option<Value>, right: Option<Value>) -> bool {
         (None, None) => true,
         _ => false,
     }
-}
-
-fn overlay_overlaps_region(
-    overlay: Value,
-    range: EmacsByteRange,
-    accessible_end: EmacsBytePos,
-) -> bool {
-    let Some(data) = overlay.as_overlay_data() else {
-        return false;
-    };
-    if data.buffer.is_none() {
-        return false;
-    }
-    let overlay_range = overlay_data_range(data);
-    if overlay_range.is_empty() {
-        return overlay_range.start() == range.start()
-            || (range.start() < overlay_range.start() && overlay_range.start() < range.end())
-            || (overlay_range.start() == range.end() && range.end() == accessible_end);
-    }
-    if range.is_empty() {
-        return overlay_range.start() < range.start() && range.start() < overlay_range.end();
-    }
-    overlay_range.start() < range.end() && overlay_range.end() > range.start()
 }
 
 fn overlay_property_named(overlay: Value, prop_name: Value) -> Option<Value> {
@@ -1323,8 +995,8 @@ impl Default for OverlayList {
 
 impl GcTrace for OverlayList {
     fn trace_roots(&self, roots: &mut Vec<Value>) {
-        for overlay in &self.overlays {
-            roots.push(*overlay);
+        for overlay in self.index.values() {
+            roots.push(overlay);
         }
     }
 }

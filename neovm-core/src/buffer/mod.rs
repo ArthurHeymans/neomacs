@@ -6,6 +6,7 @@ mod edit_transaction;
 pub(crate) mod gap_buffer;
 mod marker_data;
 pub mod overlay;
+mod overlay_index;
 pub mod position;
 pub mod shared;
 pub mod text;
