@@ -2897,6 +2897,12 @@ pub const COMPANY_C_HEADERS_MELPA_PIN: (&str, &str) = ("company-c-headers", "202
 /// `5bda859577582cc42d16fc0eaf5f7c8bedfd9e69`.
 pub const COMPANY_QUICKHELP_MELPA_PIN: (&str, &str) = ("company-quickhelp", "20231026.1714");
 
+/// The exact Company Statistics package selected for practical real-Company
+/// learning, contextual ranking, bounded decay, persistence, and failure
+/// recovery parity. MELPA built this archive from upstream commit
+/// `120e982f47e01945c044e0762ba376741c41b76c`.
+pub const COMPANY_STATISTICS_MELPA_PIN: (&str, &str) = ("company-statistics", "20250805.1524");
+
 /// The exact Company Web package selected for practical HTML, Pug, and Slim
 /// completion, candidate metadata, documentation, CSS delegation, and invalid
 /// source parity. MELPA built this archive from upstream commit

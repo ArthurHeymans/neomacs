@@ -293,6 +293,7 @@ mod company;
 mod company_anaconda;
 mod company_c_headers;
 mod company_quickhelp;
+mod company_statistics;
 mod company_web;
 mod compat;
 mod concurrent;
