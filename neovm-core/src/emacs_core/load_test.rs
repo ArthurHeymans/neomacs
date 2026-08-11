@@ -6782,6 +6782,48 @@ fn bootstrap_neomacs_runtime_keeps_gui_term_layer_out_of_dump() {
 }
 
 #[test]
+fn bootstrap_preloads_touch_screen_translations_like_gnu_gui_builds() {
+    // Every GUI-capable GNU build (X, pgtk, w32, android) preloads
+    // lisp/touch-screen.el from its loadup.el window-system branch, so the
+    // dumped function-key-map carries the touchscreen event translations even
+    // in batch and TTY sessions (verified against GNU 31.0.90 emacs -Q
+    // --batch: (lookup-key function-key-map [bottom-divider touchscreen-begin])
+    // => touch-screen-translate-touch).  Neomacs' always-GUI-capable build
+    // must match, otherwise describe-buffer-bindings drops these rows and the
+    // whole global section quantizes one tab column narrower than GNU's.
+    crate::test_utils::init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    assert!(
+        eval.feature_present("touch-screen"),
+        "touch-screen must be preloaded like in GNU's GUI-capable builds"
+    );
+    for key in [
+        "[touchscreen-begin]",
+        "[touchscreen-update]",
+        "[touchscreen-end]",
+        "[mode-line touchscreen-begin]",
+        "[header-line touchscreen-end]",
+        "[bottom-divider touchscreen-begin]",
+        "[right-divider touchscreen-end]",
+        "[left-fringe touchscreen-begin]",
+        "[right-fringe touchscreen-end]",
+        "[left-margin touchscreen-begin]",
+        "[right-margin touchscreen-end]",
+        "[tool-bar touchscreen-begin]",
+        "[tab-bar touchscreen-end]",
+        "[tab-line touchscreen-begin]",
+        "[vertical-line touchscreen-end]",
+        "[nil touchscreen-begin]",
+    ] {
+        assert_eq!(
+            eval_rendered(&mut eval, &format!("(lookup-key function-key-map {key})")),
+            "OK touch-screen-translate-touch",
+            "GNU-measured function-key-map entry missing for {key}"
+        );
+    }
+}
+
+#[test]
 fn bootstrap_neomacs_x_runtime_keeps_neo_term_layer_runtime_only() {
     crate::test_utils::init_test_tracing();
     let mut eval = create_bootstrap_evaluator_with_features(&["neomacs", "x"])

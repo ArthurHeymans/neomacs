@@ -305,9 +305,16 @@
 (if (featurep 'dynamic-setting)
     (load "dynamic-setting"))
 
+;; Every GUI-capable GNU build (X, pgtk, w32 and android) preloads
+;; touch-screen from its window-system branch here, so the dumped
+;; function-key-map carries the touchscreen event translations even in
+;; batch and TTY sessions.  Neomacs is always GUI-capable but reaches
+;; none of those branches, so preload it unconditionally at GNU's
+;; relative position.
+(load "touch-screen")
+
 (if (featurep 'x)
     (progn
-      (load "touch-screen")
       (load "x-dnd")
       (load "term/common-win")
       (load "term/x-win")))
@@ -323,8 +330,7 @@
         (load "term/w32-nt")
         (load "w32-fns")
         (load "ls-lisp")
-        (load "dos-w32"))
-      (load "touch-screen")))
+        (load "dos-w32"))))
 
 (if (fboundp 'x-create-frame)
     ;; Do it after loading term/foo-win.el since the value of the
