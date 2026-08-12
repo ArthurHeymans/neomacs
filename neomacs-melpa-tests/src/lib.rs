@@ -3619,6 +3619,12 @@ pub const USE_PACKAGE_GNU_ELPA_PIN: (&str, &str) = ("use-package", "2.4.6");
 /// this archive from upstream commit `cebbe09d27c63abe61fe8c2e2248587d90265b59`.
 pub const UUIDGEN_MELPA_PIN: (&str, &str) = ("uuidgen", "20240201.2318");
 
+/// The exact Undercover package selected for practical Edebug instrumentation,
+/// wildcard/configuration, text/LCOV/SimpleCov report, merge, lifecycle, and
+/// failure-recovery parity. MELPA built this archive from upstream commit
+/// `1d3587f1fad66a747688f36636b67b33b73447d3`.
+pub const UNDERCOVER_MELPA_PIN: (&str, &str) = ("undercover", "20210602.2119");
+
 /// The exact unfill package selected for practical paragraph/region unwrap and
 /// fill/unfill toggle against filled prose. MELPA built this archive from
 /// upstream commit `075052ce0b4451d7d3ede013ce5a77e6a7a92360`.

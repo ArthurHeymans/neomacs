@@ -636,6 +636,7 @@ mod treemacs_projectile;
 mod treepy;
 mod two_bit;
 mod typescript_mode;
+mod undercover;
 mod undo_tree;
 mod unfill;
 mod upstream_package_ert;
