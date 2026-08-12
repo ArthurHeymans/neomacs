@@ -328,6 +328,7 @@ mod dracula_theme;
 mod drag_stuff;
 mod dumb_jump;
 mod editorconfig;
+mod ein;
 mod elfeed;
 mod elisp_def;
 mod elisp_refs;

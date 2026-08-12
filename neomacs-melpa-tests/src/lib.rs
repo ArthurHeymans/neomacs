@@ -234,6 +234,12 @@ pub const CONCURRENT_MELPA_PIN: (&str, &str) = ("concurrent", "20170601.435");
 /// commit `1e9931d5f38a8d8cb8a92cf726d64696550bfc95`.
 pub const EDITORCONFIG_MELPA_PIN: (&str, &str) = ("editorconfig", "20260118.718");
 
+/// The exact EIN package selected for practical notebook parsing, rendered
+/// cell editing, output lifecycle, serialization, notebook-list UI, and
+/// failure-recovery parity. MELPA built this archive from upstream commit
+/// `8fa836fcd1c22f45d36249b09590b32a890f2b9e`.
+pub const EIN_MELPA_PIN: (&str, &str) = ("ein", "20251212.1623");
+
 /// The exact Move Text package selected for practical line and active-region
 /// reordering, boundary, narrowing, undo, point/mark, and global-key parity.
 /// MELPA built this archive from upstream commit
@@ -2840,6 +2846,11 @@ pub const GOOGLE_TRANSLATE_MELPA_PIN: (&str, &str) = ("google-translate", "20260
 /// and version-maintenance parity corpus. MELPA built this archive from
 /// upstream commit `35996f478d81e51dae4fa30d051f741895d07399`.
 pub const PACKAGE_LINT_MELPA_PIN: (&str, &str) = ("package-lint", "20260619.1246");
+
+/// The exact Polymode package selected as EIN's rendered multi-mode notebook
+/// dependency. MELPA built this archive from upstream commit
+/// `8cb72fa5dcc0d98746c680043dc121edc7621e3a`.
+pub const POLYMODE_MELPA_PIN: (&str, &str) = ("polymode", "20260505.1803");
 
 /// The exact CSV Mode release selected from GNU ELPA by the practical quoted
 /// row, column editing, sorting, alignment, and transpose parity corpus.

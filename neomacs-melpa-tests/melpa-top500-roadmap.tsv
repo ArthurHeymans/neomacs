@@ -374,7 +374,7 @@ rank	package	downloads	status
 373	lsp-python-ms	271010	covered
 374	blacken	267883	covered
 375	undercover	267832	covered
-376	ein	266758	todo
+376	ein	266758	covered
 377	polymode	264721	todo
 378	ace-jump-mode	263868	covered
 379	flycheck-rust	263623	todo
