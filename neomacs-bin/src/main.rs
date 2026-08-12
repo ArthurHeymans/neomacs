@@ -3233,6 +3233,7 @@ fn build_metrics_snapshot() -> neomacs_diagnostics::MetricsSnapshot {
             presents: f.presents,
             scene_commits: f.scene_commits,
             wakeups: f.wakeups,
+            deadline_serviced_redraws: f.deadline_serviced_redraws,
             last_commit_to_present_us: f.last_commit_to_present_us,
             max_commit_to_present_us: f.max_commit_to_present_us,
             frame_p50_us: neomacs_diagnostics::metrics::percentile_from_buckets(

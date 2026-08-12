@@ -20,6 +20,13 @@ pub struct FrameMetrics {
     pub presents: u64,
     pub scene_commits: u64,
     pub wakeups: u64,
+    /// Redraw requests issued because a scheduled frame deadline came due,
+    /// rather than because a producer re-declared its demand. The engagement
+    /// counter for the event loop's deadline-service step: demands with no
+    /// per-pass producer (the bounded retry after a present produces nothing)
+    /// reach the screen only through this path.
+    #[serde(default)]
+    pub deadline_serviced_redraws: u64,
     /// Latency from scene commit to present for the last frame (microseconds).
     pub last_commit_to_present_us: u64,
     /// Worst commit-to-present latency observed (microseconds).

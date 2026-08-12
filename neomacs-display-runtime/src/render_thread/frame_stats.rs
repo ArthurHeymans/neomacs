@@ -21,6 +21,13 @@ use super::frame_sched::{DemandReason, DemandReasonSet, FramePlan, NativeWindowI
 pub(super) static EVENT_LOOP_WAKEUPS: AtomicU64 = AtomicU64::new(0);
 /// Redraw requests issued to winit windows.
 pub(super) static REDRAW_REQUESTS: AtomicU64 = AtomicU64::new(0);
+/// Redraw requests the loop issued because a scheduled deadline came due
+/// rather than because a producer re-declared its demand. Proof that the
+/// deadline-service step engages: demands with no per-pass producer (the
+/// bounded Expose retry after a present produces nothing) reach the screen
+/// only through this path, and before it existed their elapsed deadline was
+/// re-armed as a zero-length wait on every pass -- a busy spin.
+pub(super) static DEADLINE_SERVICED_REDRAWS: AtomicU64 = AtomicU64::new(0);
 /// RedrawRequested events received from winit.
 pub(super) static REDRAW_EVENTS: AtomicU64 = AtomicU64::new(0);
 /// Editor scene commits ingested from the evaluator channel.
@@ -198,6 +205,9 @@ pub(super) fn note_present(now: Instant) {
 pub struct FrameSchedSnapshot {
     pub wakeups: u64,
     pub redraw_requests: u64,
+    /// Subset of `redraw_requests` issued by the event loop's deadline
+    /// service (see [`DEADLINE_SERVICED_REDRAWS`]).
+    pub deadline_serviced_redraws: u64,
     pub redraw_events: u64,
     pub scene_commits: u64,
     pub root_glyph_passes: u64,
@@ -264,6 +274,7 @@ pub fn snapshot() -> FrameSchedSnapshot {
     FrameSchedSnapshot {
         wakeups: EVENT_LOOP_WAKEUPS.load(Ordering::Relaxed),
         redraw_requests: REDRAW_REQUESTS.load(Ordering::Relaxed),
+        deadline_serviced_redraws: DEADLINE_SERVICED_REDRAWS.load(Ordering::Relaxed),
         redraw_events: REDRAW_EVENTS.load(Ordering::Relaxed),
         scene_commits: SCENE_COMMITS.load(Ordering::Relaxed),
         root_glyph_passes: ROOT_GLYPH_PASSES.load(Ordering::Relaxed),
@@ -316,6 +327,7 @@ pub(super) fn maybe_log_snapshot(now: Instant) {
         wakeups = snap.wakeups,
         wakeups_per_s = format!("{:.1}", (snap.wakeups - last_wakeups) as f64 / elapsed_s),
         redraw_requests = snap.redraw_requests,
+        deadline_serviced_redraws = snap.deadline_serviced_redraws,
         redraw_events = snap.redraw_events,
         scene_commits = snap.scene_commits,
         root_glyph_passes = snap.root_glyph_passes,
