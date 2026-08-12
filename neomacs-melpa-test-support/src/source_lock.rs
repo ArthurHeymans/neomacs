@@ -1309,7 +1309,7 @@ pub fn prepare_cached_locked_package_plan(
         return Err(error.to_string());
     }
 
-    for directory in [&home, &editor_tmp, &root.join("xdg")] {
+    for directory in [&home, &editor_tmp, &root.join("xdg"), &root.join("install")] {
         if directory.exists() {
             fs::remove_dir_all(directory).map_err(|error| {
                 format!(
@@ -1329,6 +1329,7 @@ pub fn prepare_cached_locked_package_plan(
             })?;
         }
     }
+    let install_dir = root.join("install");
     for directory in [
         home.join(".emacs.d"),
         editor_tmp.clone(),
@@ -1336,6 +1337,7 @@ pub fn prepare_cached_locked_package_plan(
         root.join("xdg/cache"),
         root.join("xdg/data"),
         root.join("xdg/state"),
+        install_dir.clone(),
     ] {
         fs::create_dir_all(&directory).map_err(|error| {
             format!(
@@ -1344,6 +1346,36 @@ pub fn prepare_cached_locked_package_plan(
             )
         })?;
     }
+
+    // `package-install-file' VISITS the file it installs -- it calls
+    // `set-visited-file-name', and tar-mode then touches the modified bit
+    // (lisp/emacs-lisp/package.el:2316-2338) -- so Emacs takes a lock beside
+    // that file. Handing it a path inside the shared artifact cache therefore
+    // makes every plan lock the same tar, and two plans sharing a dependency
+    // race: the loser signals `file-locked', which is correct behaviour and
+    // must not be suppressed.
+    //
+    // The artifact cache is a build output, so keep it read-only for consumers
+    // and install from a private copy instead. Only the builder writes there,
+    // under the lock in `prepare_cached_source_artifact_with_tools'. This
+    // removes the shared mutable path rather than scheduling access to it, so
+    // there is no cross-plan lock order to get wrong.
+    let artifacts = artifacts
+        .iter()
+        .map(|(source, artifact)| {
+            let file_name = artifact.file_name().ok_or_else(|| {
+                format!("source artifact {} has no file name", artifact.display())
+            })?;
+            let private = install_dir.join(file_name);
+            fs::copy(artifact, &private).map_err(|error| {
+                format!(
+                    "failed to stage source artifact {} for install: {error}",
+                    artifact.display()
+                )
+            })?;
+            Ok((*source, private))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
 
     let install_steps = artifacts
         .iter()
