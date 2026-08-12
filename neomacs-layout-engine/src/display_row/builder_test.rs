@@ -1,5 +1,8 @@
 use super::*;
-use crate::buffer_source::producer::vocabulary::GlyphProvenance;
+use crate::buffer_source::producer::vocabulary::{
+    ProducedGlyphProvenance, covered_text_glyph, natural_text_glyph,
+    provenance_from_source_position,
+};
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplaySourceMappedText,
     DisplaySourcePosition, DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod,
@@ -16,7 +19,8 @@ use crate::output::builder::DisplayOutputBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphPointerAppearance, GlyphPointerOccurrenceIdentity,
-    GlyphPointerSourceIdentity, GlyphPointerSourceKind, GlyphRow, GlyphType,
+    GlyphPointerSourceIdentity, GlyphPointerSourceKind, GlyphProvenance, GlyphRow, GlyphStringId,
+    GlyphStringSource, GlyphType,
 };
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
@@ -69,21 +73,35 @@ fn pointer_appearance(source_id: u64) -> GlyphPointerAppearance {
 #[test]
 fn glyph_checkpoint_restores_pointer_table_for_wrap_boundaries() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let first_source = row
+        .push_string_source(GlyphStringSource::new(GlyphStringId::new(11)))
+        .expect("first string source");
     let first = row
         .intern_pointer_appearance(pointer_appearance(1))
         .expect("first pointer token");
     row.glyphs[GlyphArea::Text.index()].push(Glyph {
         pointer_appearance: Some(first),
-        ..Glyph::char('a', FaceId::new(0), 0)
+        ..Glyph::char_with_provenance(
+            'a',
+            FaceId::new(0),
+            GlyphProvenance::string(first_source, 0),
+        )
     });
     let before_run = DisplayRowGlyphCheckpoint::capture(&row);
 
+    let second_source = row
+        .push_string_source(GlyphStringSource::new(GlyphStringId::new(12)))
+        .expect("second string source");
     let second = row
         .intern_pointer_appearance(pointer_appearance(2))
         .expect("second pointer token");
     row.glyphs[GlyphArea::Text.index()].push(Glyph {
         pointer_appearance: Some(second),
-        ..Glyph::char('b', FaceId::new(0), 1)
+        ..Glyph::char_with_provenance(
+            'b',
+            FaceId::new(0),
+            GlyphProvenance::string(second_source, 0),
+        )
     });
     let after_run = DisplayRowGlyphCheckpoint::capture(&row);
 
@@ -92,6 +110,7 @@ fn glyph_checkpoint_restores_pointer_table_for_wrap_boundaries() {
         .with_added_text_glyphs(1, after_run)
         .restore(&mut keep_run_prefix);
     assert_eq!(keep_run_prefix.pointer_appearances().len(), 2);
+    assert_eq!(keep_run_prefix.string_sources().len(), 2);
     let token = keep_run_prefix.glyphs[GlyphArea::Text.index()][1]
         .pointer_appearance
         .expect("retained prefix pointer token");
@@ -103,7 +122,12 @@ fn glyph_checkpoint_restores_pointer_table_for_wrap_boundaries() {
     before_run.restore(&mut row);
     assert_eq!(row.glyphs[GlyphArea::Text.index()].len(), 1);
     assert_eq!(row.pointer_appearances().len(), 1);
+    assert_eq!(row.string_sources().len(), 1);
     assert_eq!(row.pointer_appearance(first), Some(&pointer_appearance(1)));
+    assert_eq!(
+        row.string_source(first_source),
+        Some(&GlyphStringSource::new(GlyphStringId::new(11)))
+    );
 }
 
 fn glyphless_item(ch: char, method: GlyphlessMethod) -> DisplayItem {
@@ -308,7 +332,7 @@ fn display_row_builder_renders_control_char_as_caret_notation() {
 
     assert_eq!(row_text(&row), "^A");
     assert_eq!(glyphs.len(), 2);
-    assert!(glyphs.iter().all(|glyph| glyph.charpos == 0));
+    assert!(glyphs.iter().all(|glyph| glyph.legacy_charpos() == 0));
 }
 
 #[test]
@@ -676,7 +700,7 @@ fn display_row_builder_renders_source_mapped_text_with_one_source_charpos() {
 
     assert_eq!(row_text(&row), "\\ ");
     assert_eq!(glyphs.len(), 2);
-    assert!(glyphs.iter().all(|glyph| glyph.charpos == 0));
+    assert!(glyphs.iter().all(|glyph| glyph.legacy_charpos() == 0));
 }
 
 #[test]
@@ -876,6 +900,76 @@ fn tab_advance_targets_gnu_pixel_grid_without_rounding_the_renderer_pen() {
         "GNU rounds the 12.15px pen and space advance to integer pixel 12, then targets pixel 24"
     );
     assert_eq!(advance.width_cols, 1);
+}
+
+#[test]
+fn tab_advance_has_typed_screen_and_continued_physical_line_coordinates() {
+    let policy = DisplayTabPolicy::every(8);
+    let mut physical_line = DisplayPhysicalLineTabState::default();
+    physical_line.continue_after_visual_row(624.0);
+
+    let screen_position = DisplayRowPosition::new(176.0, 22);
+    let continued_position = screen_position.with_tab_coordinates(physical_line.coordinates());
+
+    assert_eq!(policy.advance_from(screen_position, 8.0).pixel_width, 16.0);
+    assert_eq!(
+        policy.advance_from(continued_position, 8.0).pixel_width,
+        32.0,
+        "physical column 100 advances to GNU's column-104 tab stop"
+    );
+
+    // A wrap prefix is measured on the screen-line grid, then excluded from
+    // the ordinary buffer text's physical-line coordinate.
+    physical_line.record_wrap_prefix(16.0);
+    let after_prefix =
+        DisplayRowPosition::new(192.0, 24).with_tab_coordinates(physical_line.coordinates());
+    assert_eq!(policy.advance_from(after_prefix, 8.0).pixel_width, 32.0);
+    assert_eq!(
+        policy
+            .advance_from(after_prefix.on_screen_line_tab_grid(), 8.0)
+            .pixel_width,
+        64.0
+    );
+
+    // GNU keeps the signed `continuation_lines_width - wrap_prefix_width`
+    // term even when a wide prefix exceeds the preceding visual row. Losing
+    // that negative offset would silently fall back to the screen-line grid.
+    let mut narrow_physical_line = DisplayPhysicalLineTabState::default();
+    narrow_physical_line.continue_after_visual_row(24.0);
+    narrow_physical_line.record_wrap_prefix(32.0);
+    let after_wide_prefix =
+        DisplayRowPosition::new(32.0, 4).with_tab_coordinates(narrow_physical_line.coordinates());
+    assert_eq!(
+        policy.advance_from(after_wide_prefix, 8.0).pixel_width,
+        40.0,
+        "physical pixel 24 advances to 64 despite the wider wrap prefix"
+    );
+
+    physical_line.reset_for_physical_line();
+    assert_eq!(
+        policy
+            .advance_from(
+                screen_position.with_tab_coordinates(physical_line.coordinates()),
+                8.0,
+            )
+            .pixel_width,
+        16.0
+    );
+}
+
+#[test]
+fn row_tail_reconciliation_preserves_the_walks_tab_coordinate_space() {
+    let mut physical_line = DisplayPhysicalLineTabState::default();
+    physical_line.continue_after_visual_row(624.0);
+    let requested =
+        DisplayRowPosition::new(8.0, 1).with_tab_coordinates(physical_line.coordinates());
+    let row_tail = DisplayRowPosition::new(24.0, 3);
+
+    assert_eq!(
+        append_start_position(requested, row_tail),
+        requested.at_screen_position(24.0, 3),
+        "a structural row prefix may move the pen but must not erase continuation_lines_width"
+    );
 }
 
 #[test]
@@ -1193,7 +1287,7 @@ fn resumed_writer_counts_composed_cluster_by_string_width() {
         let mut writer = DisplayRowProgressWriter::new(
             &row_layout,
             &mut row,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
             1280.0,
         );
         writer.push_item(text_item("\t"))
@@ -1282,7 +1376,7 @@ fn resumed_writer_counts_live_run_member_padding_once() {
         let mut writer = DisplayRowProgressWriter::new(
             &row_layout,
             &mut row,
-            DisplayRowPosition { x_px: 0.0, col: 0 },
+            DisplayRowPosition::new(0.0, 0),
             1280.0,
         );
         writer.push_item(text_item("\t"))
@@ -1651,15 +1745,9 @@ fn display_row_builder_ceil_pixel_stretch_columns() {
     assert_eq!(glyph.pixel_width, 9.0);
 }
 
-// ---- Increment 2i rung 1: covered-provenance stamping on the append path.
-// The renderer's stamping rule (`DisplayTextSourceMapping`): a `TextRun`
-// advances the glyph charpos per char (NaturalText); a `SourceMappedText`
-// stamps EVERY glyph -- and every slot source -- with the span START
-// (SourceMapped). A display-property replacement string therefore produces N
-// glyphs for M covered buffer chars, all carrying the covered start position,
-// which is the shape `set_cursor_from_row`-style consumers rely on (neomacs's
-// one-field mirror of GNU's charpos+object pair; the pipeline stamps the
-// covered BUFFER position where GNU stamps a string index plus the string).
+// Generic source-mapped text has buffer-anchor provenance. A real Lisp-string
+// replacement carries a separate string-source start and therefore takes the
+// GNU string-index arm tested below.
 
 fn covered_buffer_span(start_char: usize, end_char: usize) -> SourceSpan {
     SourceSpan::new(
@@ -1678,8 +1766,8 @@ fn covered_buffer_span(start_char: usize, end_char: usize) -> SourceSpan {
 
 #[test]
 fn covered_provenance_run_stamps_every_glyph_with_covered_start() {
-    // "STR" replacing covered buffer chars [5, 7): 3 glyphs for 2 covered
-    // chars, every glyph charpos == 5, every slot source == the span start.
+    // Generic mapped text standing for covered buffer chars [5, 7): 3 glyphs
+    // for 2 covered chars, every glyph maps to 5 and every slot to span start.
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     let row_layout = layout();
     let mut writer =
@@ -1696,17 +1784,15 @@ fn covered_provenance_run_stamps_every_glyph_with_covered_start() {
     assert_eq!(glyphs.len(), 3, "N string glyphs for M covered chars");
     for glyph in glyphs {
         assert_eq!(
-            glyph.charpos, 5,
-            "every replacement glyph carries the covered START charpos"
+            glyph.provenance,
+            GlyphProvenance::buffer(5),
+            "every generic mapped glyph carries the covered START charpos"
         );
     }
     assert_eq!(row_text(&row), "STR");
 }
 
-/// P4.1 vocabulary pin: the typed provenance agrees with what the append path
-/// actually stamps. `GlyphProvenance::covered_text_glyph` is the covered rule,
-/// `natural_text_glyph` the per-char one -- the same two arms as the private
-/// `DisplayTextSourceMapping`, now nameable outside the builder.
+/// The typed producer vocabulary agrees with generic source-mapped append.
 #[test]
 fn covered_provenance_glyph_stamps_match_the_typed_vocabulary() {
     let span = covered_buffer_span(5, 7);
@@ -1725,14 +1811,14 @@ fn covered_provenance_glyph_stamps_match_the_typed_vocabulary() {
     assert_eq!(glyphs.len(), 3);
     for glyph in glyphs {
         assert_eq!(
-            glyph.charpos,
-            GlyphProvenance::covered_text_glyph(&span.start).glyph_charpos(),
+            glyph.provenance,
+            GlyphProvenance::buffer(5),
             "the covered rule is what the append path stamps"
         );
     }
     assert_eq!(
-        GlyphProvenance::covered_text_glyph(&span.start),
-        GlyphProvenance::buffer(neovm_core::buffer::CharPos0::new(5))
+        covered_text_glyph(&span.start),
+        ProducedGlyphProvenance::buffer(5)
     );
 }
 
@@ -1755,9 +1841,10 @@ fn natural_text_glyph_stamps_match_the_typed_vocabulary() {
     let glyphs = &row.glyphs[GlyphArea::Text.index()];
     assert_eq!(glyphs.len(), 3);
     for (offset, glyph) in glyphs.iter().enumerate() {
+        assert_eq!(glyph.provenance, GlyphProvenance::buffer(5 + offset));
         assert_eq!(
-            glyph.charpos,
-            GlyphProvenance::natural_text_glyph(&span.start, offset).glyph_charpos()
+            natural_text_glyph(&span.start, offset),
+            ProducedGlyphProvenance::buffer(5 + offset)
         );
     }
 }
@@ -1808,19 +1895,18 @@ fn natural_text_run_stamps_glyphs_per_char_by_contrast() {
 
     let glyphs = &row.glyphs[GlyphArea::Text.index()];
     assert_eq!(
-        glyphs.iter().map(|glyph| glyph.charpos).collect::<Vec<_>>(),
+        glyphs.iter().map(Glyph::legacy_charpos).collect::<Vec<_>>(),
         vec![5, 6, 7]
     );
 }
 
 #[test]
-fn replacement_string_session_source_emits_covered_provenance_runs() {
+fn replacement_string_session_stamps_gnu_string_indices() {
     // The producer seam the display-replacement session drives
     // (`BufferDisplayReplacementStringRequest` -> `LispStringSourceCursor`
     // wrapped in the covered rewrite): for string "STR" covering buffer
-    // [2, 4), the produced item IS the covered-provenance run, and appending
-    // it stamps the covered start on every glyph -- the stamped shape equals
-    // what the pipeline's replacement session appends for the same content.
+    // [2, 4), GNU stamps glyphs with indices in the STRING, not with the
+    // covered buffer start.  Buffer coverage remains on the row/item track.
     let _eval = Context::new();
     let covered = crate::display_item::BufferDisplayReplacementSource::spanning(
         neovm_core::buffer::BufferId(1),
@@ -1843,10 +1929,15 @@ fn replacement_string_session_source_emits_covered_provenance_runs() {
         source.next_item(&mut context).is_none(),
         "a plain (property-less) string yields exactly one covered run"
     );
-    assert_eq!(
-        item.kind,
-        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("STR"))
-    );
+    let DisplayItemKind::SourceMappedText(mapped) = &item.kind else {
+        panic!("replacement source must yield source-mapped text");
+    };
+    assert_eq!(&*mapped.text, "STR");
+    let glyph_string_start = mapped
+        .glyph_string_start
+        .as_ref()
+        .expect("replacement preserves its string coordinate space")
+        .clone();
     assert_eq!(
         item.span.buffer_end_charpos(),
         Some(neovm_core::buffer::CharPos0::new(4))
@@ -1859,5 +1950,33 @@ fn replacement_string_session_source_emits_covered_provenance_runs() {
     writer.push_item(item);
     let glyphs = &row.glyphs[GlyphArea::Text.index()];
     assert_eq!(glyphs.len(), 3);
-    assert!(glyphs.iter().all(|glyph| glyph.charpos == 2));
+    assert_eq!(
+        glyphs.iter().map(Glyph::legacy_charpos).collect::<Vec<_>>(),
+        vec![0, 1, 2]
+    );
+    let covered_range = neomacs_display_protocol::glyph_matrix::GlyphStringBufferRange::new(2, 4);
+    let ProducedGlyphProvenance::Str {
+        string: expected_string,
+        ..
+    } = provenance_from_source_position(&glyph_string_start)
+    else {
+        panic!("expected producer-side Lisp-string provenance")
+    };
+    let mut expected_source = None;
+    for (index, glyph) in glyphs.iter().enumerate() {
+        let GlyphProvenance::Str {
+            source,
+            index: actual,
+        } = glyph.provenance
+        else {
+            panic!("expected row-local Lisp-string provenance")
+        };
+        assert_eq!(actual, index);
+        assert_eq!(*expected_source.get_or_insert(source), source);
+    }
+    let source = row
+        .string_source(expected_source.expect("replacement source token"))
+        .expect("replacement source metadata");
+    assert_eq!(source.string(), expected_string);
+    assert_eq!(source.covered_buffer_range(), Some(covered_range));
 }

@@ -31,9 +31,7 @@ use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::finalizer::RowExtendFill;
 use crate::display_row::trailing_whitespace::HighlightTrailingWhitespaceMutation;
 use crate::glyph_row_writer::push_stretch_to_area;
-use neomacs_display_protocol::glyph_matrix::{
-    Glyph, GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
-};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphProvenance, GlyphRow};
 use neomacs_display_protocol::types::{Color, FaceId};
 
 /// `display-fill-column-indicator` configuration relevant at a line end.
@@ -423,7 +421,7 @@ impl DisplayCurrentRowMutation for AppendNewlineGlyphMutation {
         }
         let text_index = GlyphArea::Text.index();
         row.glyphs[text_index].push(
-            Glyph::char(self.ch, self.face_id, NO_BUFFER_POSITION_CHARPOS)
+            Glyph::char_with_provenance(self.ch, self.face_id, GlyphProvenance::line_end())
                 .with_pixel_width(self.char_width.max(1.0)),
         );
         true
@@ -478,16 +476,16 @@ impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
                 f.gap_px,
                 f.height_px,
                 f.ascent_px,
-                NO_BUFFER_POSITION_CHARPOS,
+                GlyphProvenance::line_end(),
             );
         }
         // The indicator character itself. It maps to no buffer position, so the
         // blank-line cursor never latches onto it.
         row.glyphs[text_index].push(
-            Glyph::char(
+            Glyph::char_with_provenance(
                 f.indicator_char,
                 f.indicator_face_id,
-                NO_BUFFER_POSITION_CHARPOS,
+                GlyphProvenance::line_end(),
             )
             .with_pixel_width(f.char_width.max(1.0)),
         );
@@ -501,7 +499,7 @@ impl DisplayCurrentRowMutation for FillColumnIndicatorMutation {
                 f.tail_px,
                 f.height_px,
                 f.ascent_px,
-                NO_BUFFER_POSITION_CHARPOS,
+                GlyphProvenance::line_end(),
             );
         }
         row.displays_text = true;
@@ -571,8 +569,8 @@ mod tests {
     /// though the glyph field cannot tell them apart.
     #[test]
     fn appended_newline_glyph_carries_line_end_provenance() {
-        use crate::buffer_source::producer::vocabulary::GlyphProvenance;
         use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+        use neomacs_display_protocol::glyph_matrix::GlyphProvenance;
 
         let mut row = GlyphRow::new(GlyphRowRole::Text);
         let appended = AppendNewlineGlyphMutation {
@@ -584,7 +582,7 @@ mod tests {
 
         assert!(appended);
         let glyph = &row.glyphs[GlyphArea::Text.index()][0];
-        assert_eq!(glyph.charpos, GlyphProvenance::line_end().glyph_charpos());
+        assert_eq!(glyph.provenance, GlyphProvenance::line_end());
         assert_eq!(GlyphProvenance::line_end().buffer_charpos(), None);
     }
 

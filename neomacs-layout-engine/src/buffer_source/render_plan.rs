@@ -167,7 +167,7 @@ fn replay_cursor_paint(
         .and_then(|row| {
             row.glyphs[GlyphArea::Text.index()]
                 .iter()
-                .find(|glyph| glyph.charpos == point)
+                .find(|glyph| row.glyph_covers_buffer_charpos(glyph, point))
                 .map(|glyph| glyph.face_id)
         });
     let glyph_face = glyph_face_id
@@ -210,7 +210,7 @@ fn decorate_window_cursor(
             Some(row) => {
                 let mut width = char_w;
                 for glyph in &row.glyphs[GlyphArea::Text.index()] {
-                    if glyph.charpos == point {
+                    if row.glyph_covers_buffer_charpos(glyph, point) {
                         width = glyph.pixel_width;
                         break;
                     }
@@ -607,7 +607,7 @@ impl BufferSourceOutputSetup {
                     cursor_height = row.height_px;
                     cursor_ascent = row.ascent_px;
                     for glyph in &row.glyphs[GlyphArea::Text.index()] {
-                        if glyph.charpos == replay.new_point as usize {
+                        if row.glyph_covers_buffer_charpos(glyph, replay.new_point as usize) {
                             cursor_width = glyph.pixel_width;
                             break;
                         }

@@ -31,7 +31,9 @@
 //! producer-owned stop state are landed `#[ignore]` naming the rung that will
 //! un-ignore them, so the checklist lives in the code rather than a document.
 
-use super::vocabulary::{BufferScanPos, GlyphProvenance, ProducedElement};
+use super::vocabulary::{
+    BufferScanPos, ProducedElement, ProducedGlyphProvenance as GlyphProvenance,
+};
 use super::*;
 use crate::buffer_source::consumption::BufferSourceConsumedItem;
 use crate::display_item::RenderFaceRef;
@@ -373,7 +375,7 @@ fn observe(item: &BufferSourceConsumedItem, scan_before: BufferScanPos) -> Vec<C
         return vec![CharObservation {
             class: ElementClass::OverlayStrings,
             ch: None,
-            provenance: GlyphProvenance::buffer(strings.anchor_charpos()),
+            provenance: GlyphProvenance::buffer(strings.anchor_charpos().get()),
             scan_before,
             scan_after: scan_before,
             face: RenderFaceRef::Inherit,
@@ -385,9 +387,7 @@ fn observe(item: &BufferSourceConsumedItem, scan_before: BufferScanPos) -> Vec<C
         return vec![CharObservation {
             class: ElementClass::Replacement,
             ch: None,
-            provenance: GlyphProvenance::buffer(CharPos0::new(
-                scan_before.charpos().max(0) as usize
-            )),
+            provenance: GlyphProvenance::buffer(scan_before.charpos().max(0) as usize),
             scan_before,
             scan_after: scan_before,
             face: RenderFaceRef::Inherit,
@@ -823,7 +823,7 @@ fn negative_control_the_harness_detects_a_perturbed_stream() {
     let stream = producer_stream(&case);
 
     let mut wrong_provenance = stream.clone();
-    wrong_provenance[2].provenance = GlyphProvenance::buffer(CharPos0::new(99));
+    wrong_provenance[2].provenance = GlyphProvenance::buffer(99);
     assert_ne!(stream, wrong_provenance, "provenance must be compared");
 
     let mut wrong_scan = stream.clone();
@@ -857,7 +857,7 @@ fn c1_plain_ascii_single_face() {
     for (index, observation) in stream.iter().enumerate() {
         assert_eq!(
             observation.provenance,
-            GlyphProvenance::buffer(CharPos0::new(index)),
+            GlyphProvenance::buffer(index),
             "every buffer char stamps its own charpos"
         );
         assert_eq!(observation.scan_before.charpos(), index as i64);
@@ -1227,14 +1227,8 @@ fn c15_empty_lines_produce_row_breaks_and_no_empty_line_glyph() {
             .iter()
             .all(|observation| observation.class == ElementClass::RowBreak)
     );
-    assert_eq!(
-        stream[0].provenance,
-        GlyphProvenance::buffer(CharPos0::new(0))
-    );
-    assert_eq!(
-        stream[1].provenance,
-        GlyphProvenance::buffer(CharPos0::new(1))
-    );
+    assert_eq!(stream[0].provenance, GlyphProvenance::buffer(0));
+    assert_eq!(stream[1].provenance, GlyphProvenance::buffer(1));
     // The empty-line cursor glyph is Redisplay(EmptyLineNewline) and is
     // renderer-owned (row-level in this engine, e772f82ed) — never a produced
     // element.

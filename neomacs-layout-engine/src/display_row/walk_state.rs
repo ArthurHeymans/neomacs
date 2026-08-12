@@ -1,5 +1,5 @@
 use crate::coords::lisp_char_pos_to_layout_i64;
-use crate::display_row::builder::DisplayRowGlyphCheckpoint;
+use crate::display_row::builder::{DisplayRowGlyphCheckpoint, DisplayRowPosition};
 #[cfg(test)]
 use crate::display_row::geometry::DisplayRowGeometryState;
 use crate::display_row::geometry::{DisplayRowHitRange, DisplayRowMarker, DisplayRowStartMarker};
@@ -10,7 +10,7 @@ use neomacs_display_protocol::types::Color;
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::window::DisplayRowSnapshot;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct WordWrapBreakCandidate {
     byte_idx: usize,
     charpos: i64,
@@ -22,10 +22,11 @@ pub(crate) struct WordWrapBreakCandidate {
     /// pushed. The word-wrap break restores it so the partial word that already
     /// fit on the current row is rolled off and re-rendered on the next row.
     glyph_checkpoint: DisplayRowGlyphCheckpoint,
+    row_position: DisplayRowPosition,
     available: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct WordWrapRenderState {
     enabled: bool,
     may_wrap: bool,
@@ -273,6 +274,7 @@ pub(crate) struct TextRowTransitionStatePolicy {
 }
 
 impl WordWrapBreakCandidate {
+    #[cfg(test)]
     pub(crate) fn record(
         &mut self,
         byte_idx: usize,
@@ -281,12 +283,32 @@ impl WordWrapBreakCandidate {
         row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
         glyph_checkpoint: DisplayRowGlyphCheckpoint,
     ) {
+        self.record_at(
+            byte_idx,
+            charpos,
+            display_point_count,
+            row_display_positions,
+            glyph_checkpoint,
+            DisplayRowPosition::default(),
+        );
+    }
+
+    pub(crate) fn record_at(
+        &mut self,
+        byte_idx: usize,
+        charpos: i64,
+        display_point_count: usize,
+        row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
+        glyph_checkpoint: DisplayRowGlyphCheckpoint,
+        row_position: DisplayRowPosition,
+    ) {
         self.byte_idx = byte_idx;
         self.charpos = charpos;
         self.display_point_count = display_point_count;
         self.row_first_display_pos = row_display_positions.0;
         self.row_last_display_pos = row_display_positions.1;
         self.glyph_checkpoint = glyph_checkpoint;
+        self.row_position = row_position;
         self.available = true;
     }
 
@@ -316,6 +338,10 @@ impl WordWrapBreakCandidate {
 
     pub(crate) fn glyph_checkpoint(&self) -> DisplayRowGlyphCheckpoint {
         self.glyph_checkpoint
+    }
+
+    pub(crate) fn row_position(&self) -> DisplayRowPosition {
+        self.row_position
     }
 }
 
@@ -498,6 +524,7 @@ impl WordWrapRenderState {
         self.enabled && self.may_wrap && char_can_wrap_before_basic(ch)
     }
 
+    #[cfg(test)]
     pub(crate) fn record_candidate(
         &mut self,
         ch: char,
@@ -507,13 +534,35 @@ impl WordWrapRenderState {
         row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
         glyph_checkpoint: DisplayRowGlyphCheckpoint,
     ) {
+        self.record_candidate_at(
+            ch,
+            byte_idx,
+            charpos,
+            display_point_count,
+            row_display_positions,
+            glyph_checkpoint,
+            DisplayRowPosition::default(),
+        );
+    }
+
+    pub(crate) fn record_candidate_at(
+        &mut self,
+        ch: char,
+        byte_idx: usize,
+        charpos: i64,
+        display_point_count: usize,
+        row_display_positions: (Option<LispCharPos1>, Option<LispCharPos1>),
+        glyph_checkpoint: DisplayRowGlyphCheckpoint,
+        row_position: DisplayRowPosition,
+    ) {
         if self.can_record_candidate(ch) {
-            self.candidate.record(
+            self.candidate.record_at(
                 byte_idx,
                 charpos,
                 display_point_count,
                 row_display_positions,
                 glyph_checkpoint,
+                row_position,
             );
         }
     }

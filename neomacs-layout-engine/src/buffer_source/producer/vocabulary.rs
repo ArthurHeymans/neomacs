@@ -5,28 +5,111 @@
 //! dispextern.h:460-483) and two position tracks on the iterator —
 //! `it->current.pos`, the honest buffer position that feeds row min/max, versus
 //! `it->position`, what actually lands on the glyph (a string index while a
-//! string is being displayed, xdisp.c:9609-9613). This engine collapses both
-//! into one `usize` per glyph with `NO_BUFFER_POSITION_CHARPOS` standing in for
-//! every non-buffer case, so a truncation mark, a line-end space and a
-//! `display`-string glyph are indistinguishable once written. The types here
-//! restore the distinction ahead of the consumers that will need it, without
-//! changing a single stamped VALUE.
-//!
-//! Scope freeze (design section 4.7): phase 4 makes provenance TYPED, not
-//! GNU-VALUED. String glyphs keep this engine's covered/anchor buffer stamps,
-//! which is what lets every rung shadow-prove glyph-for-glyph equality.
+//! string is being displayed, xdisp.c:9609-9613). [`ProducedGlyphProvenance`]
+//! keeps that coordinate space and its source object inseparable. The final
+//! row representation registers the string occurrence once and gives each glyph
+//! a compact typed token plus its string index.
 
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourceId, DisplaySourcePosition,
-    DisplayStretchWidth, RenderFaceRef,
+    DisplayItem, DisplayItemKind, DisplayRowBreakReason, DisplaySourcePosition,
+    DisplayStretchWidth, RenderFaceRef, SourceSpan,
 };
 use crate::display_source::{DisplaySourceStepItem, DisplaySourceTextPosition};
-use neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS;
-use neovm_core::buffer::CharPos0;
+pub(crate) use neomacs_display_protocol::glyph_matrix::{
+    GlyphStringBufferRange, GlyphStringId as ProducedStringId, RedisplayGlyphProvenance,
+};
 
-/// Identifies the Lisp string a [`GlyphProvenance::Str`] index is relative to.
-/// The engine's existing source-id handle; GNU stores the string object itself.
-pub(crate) type ProducedStringId = DisplaySourceId;
+/// Producer-side provenance before a string occurrence is assigned its
+/// compact row-local token.
+///
+/// This is the layout equivalent of GNU's `(charpos, object)` pair.  It keeps
+/// the VM/session string identity and exact replacement coverage while an item
+/// is in flight; row construction moves those occurrence-wide fields into one
+/// side-table entry and stores only the token plus index on each glyph.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ProducedGlyphProvenance {
+    Buffer {
+        charpos: usize,
+    },
+    Str {
+        string: ProducedStringId,
+        index: usize,
+        covered_buffer: Option<GlyphStringBufferRange>,
+    },
+    Redisplay(RedisplayGlyphProvenance),
+}
+
+impl ProducedGlyphProvenance {
+    pub(crate) const fn buffer(charpos: usize) -> Self {
+        Self::Buffer { charpos }
+    }
+
+    pub(crate) const fn string(string: ProducedStringId, index: usize) -> Self {
+        Self::Str {
+            string,
+            index,
+            covered_buffer: None,
+        }
+    }
+
+    pub(crate) const fn string_replacement(
+        string: ProducedStringId,
+        index: usize,
+        covered_buffer: GlyphStringBufferRange,
+    ) -> Self {
+        Self::Str {
+            string,
+            index,
+            covered_buffer: Some(covered_buffer),
+        }
+    }
+
+    pub(crate) const fn line_end() -> Self {
+        Self::Redisplay(RedisplayGlyphProvenance::LineEnd)
+    }
+
+    pub(crate) const fn mark() -> Self {
+        Self::Redisplay(RedisplayGlyphProvenance::Mark)
+    }
+
+    pub(crate) const fn empty_line_newline(charpos: usize) -> Self {
+        Self::Redisplay(RedisplayGlyphProvenance::EmptyLineNewline { charpos })
+    }
+
+    pub(crate) const fn buffer_charpos(self) -> Option<usize> {
+        match self {
+            Self::Buffer { charpos } => Some(charpos),
+            Self::Str { .. } | Self::Redisplay(_) => None,
+        }
+    }
+
+    pub(crate) const fn advanced_by(self, char_offset: usize) -> Self {
+        match self {
+            Self::Buffer { charpos } => Self::buffer(charpos.saturating_add(char_offset)),
+            Self::Str {
+                string,
+                index,
+                covered_buffer,
+            } => Self::Str {
+                string,
+                index: index.saturating_add(char_offset),
+                covered_buffer,
+            },
+            Self::Redisplay(provenance) => Self::Redisplay(provenance),
+        }
+    }
+
+    pub(crate) const fn legacy_charpos(self) -> usize {
+        match self {
+            Self::Buffer { charpos } => charpos,
+            Self::Str { index, .. } => index,
+            Self::Redisplay(RedisplayGlyphProvenance::EmptyLineNewline { charpos }) => charpos,
+            Self::Redisplay(RedisplayGlyphProvenance::LineEnd | RedisplayGlyphProvenance::Mark) => {
+                neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS
+            }
+        }
+    }
+}
 
 /// The producer's scan track: charpos plus byte index, ALWAYS through buffer
 /// text (GNU `it->current.pos`). The walk's existing position type — the
@@ -36,50 +119,6 @@ pub(crate) type BufferScanPos = DisplaySourceTextPosition;
 /// What a produced element, and every glyph it makes, is attributed to. GNU's
 /// `(charpos, object)` pair as one value, so a charpos can never be read in the
 /// wrong coordinate space.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum GlyphProvenance {
-    /// Buffer text, and the stretch exception (design section 4.3): `charpos`
-    /// is an honest buffer position. Today's covered-charpos replacement
-    /// glyphs are `Buffer(covered_start)` — representable unchanged.
-    Buffer { charpos: CharPos0 },
-    /// A Lisp string element: `index` is relative to THAT string.
-    ///
-    /// UNPOPULATED in phase 4 by design (section 4.7). Nothing the producer
-    /// yields and nothing the append path stamps carries this arm; the only
-    /// way to reach it is [`GlyphProvenance::from_source_position`] on a raw
-    /// `LispString` item position, because replacement strings are rewritten to
-    /// covered buffer provenance before they are appended (the
-    /// `DisplayTextSourceMapping::SourceMapped` arm in display_row/builder.rs).
-    /// Adopting GNU's string-index stamps means migrating the cursor and mouse
-    /// two-step lookups with it, which is a post-phase parity project — doing
-    /// it inside phase 4 would change stamp VALUES and break glyph-for-glyph
-    /// shadowing by definition.
-    Str {
-        string: ProducedStringId,
-        index: usize,
-    },
-    /// Redisplay's own glyph: truncation and continuation marks, the appended
-    /// newline space, extend fill, prefix glyphs. Carries the GNU sentinel
-    /// semantics explicitly instead of one magic charpos.
-    Redisplay(RedisplaySentinel),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum RedisplaySentinel {
-    /// GNU charpos 0: the `append_space_for_newline` glyph at a real line end,
-    /// extend-to-end-of-line stretches, the fill-column indicator.
-    LineEnd,
-    /// GNU charpos -1: truncation and continuation marks, line numbers, the
-    /// TTY overlay arrow.
-    Mark,
-    /// GNU's empty-line patch (xdisp.c:26535-26537): redisplay's own glyph, but
-    /// stamped with the newline's REAL buffer position. This engine does the
-    /// same at row level — an empty line's row reports its newline's charpos
-    /// rather than a positionless (0,0), which is what closed the scroll and
-    /// edit-reuse corruption class (e772f82ed).
-    EmptyLineNewline { charpos: CharPos0 },
-}
-
 /// Mirrors the renderer's private `DisplayTextSourceMapping` (builder.rs): do a
 /// run's glyphs advance the stamp per character, or does every glyph carry the
 /// run's start?
@@ -87,101 +126,72 @@ pub(crate) enum RedisplaySentinel {
 pub(crate) enum RunStamping {
     /// Buffer text: glyph N carries start + N.
     NaturalText,
-    /// A replacement's covered range: every glyph carries the covered start,
-    /// however many glyphs the replacement text produced.
+    /// Generic mapped text without a Lisp-string source: every glyph carries
+    /// the covered start, however many glyphs the replacement produced.
     Covered,
 }
 
-impl GlyphProvenance {
-    pub(crate) const fn buffer(charpos: CharPos0) -> Self {
-        Self::Buffer { charpos }
-    }
-
-    pub(crate) const fn line_end() -> Self {
-        Self::Redisplay(RedisplaySentinel::LineEnd)
-    }
-
-    pub(crate) const fn mark() -> Self {
-        Self::Redisplay(RedisplaySentinel::Mark)
-    }
-
-    pub(crate) const fn empty_line_newline(charpos: CharPos0) -> Self {
-        Self::Redisplay(RedisplaySentinel::EmptyLineNewline { charpos })
-    }
-
-    /// The legacy bridge from an item's span position. Synthetic spans are
-    /// redisplay's own glyph sources (special_glyphs.rs, the hscroll marker),
-    /// so they carry the `Mark` sentinel rather than their synthetic offset.
-    pub(crate) fn from_source_position(position: &DisplaySourcePosition) -> Self {
-        match position {
-            DisplaySourcePosition::Buffer { char_pos, .. } => Self::buffer(*char_pos),
-            DisplaySourcePosition::LispString {
-                source_id,
-                char_index,
-                ..
-            } => Self::Str {
-                string: *source_id,
-                index: *char_index,
-            },
-            DisplaySourcePosition::Synthetic { .. } => Self::mark(),
+/// Convert an item source position into the producer's closed glyph source.
+pub(crate) fn provenance_from_source_position(
+    position: &DisplaySourcePosition,
+) -> ProducedGlyphProvenance {
+    match position {
+        DisplaySourcePosition::Buffer { char_pos, .. } => {
+            ProducedGlyphProvenance::buffer(char_pos.get())
         }
+        DisplaySourcePosition::LispString {
+            source_id,
+            char_index,
+            ..
+        } => ProducedGlyphProvenance::string(ProducedStringId::new(source_id.get()), *char_index),
+        DisplaySourcePosition::Synthetic { .. } => ProducedGlyphProvenance::mark(),
     }
+}
 
-    /// Advance a stamp by whole characters. Redisplay sentinels do not advance:
-    /// every glyph of a mark or a line-end fill carries the same sentinel.
-    pub(crate) fn advanced_by(self, char_offset: usize) -> Self {
-        match self {
-            Self::Buffer { charpos } => Self::buffer(CharPos0::new(charpos.get() + char_offset)),
-            Self::Str { string, index } => Self::Str {
-                string,
-                index: index + char_offset,
-            },
-            Self::Redisplay(sentinel) => Self::Redisplay(sentinel),
-        }
-    }
+pub(crate) fn natural_text_glyph(
+    span_start: &DisplaySourcePosition,
+    char_offset: usize,
+) -> ProducedGlyphProvenance {
+    provenance_from_source_position(span_start).advanced_by(char_offset)
+}
 
-    /// Provenance of glyph `char_offset` of an ordinary buffer-text run.
-    pub(crate) fn natural_text_glyph(
-        span_start: &DisplaySourcePosition,
-        char_offset: usize,
-    ) -> Self {
-        Self::from_source_position(span_start).advanced_by(char_offset)
-    }
+pub(crate) fn covered_text_glyph(span_start: &DisplaySourcePosition) -> ProducedGlyphProvenance {
+    provenance_from_source_position(span_start)
+}
 
-    /// Provenance of EVERY glyph of a covered replacement run.
-    pub(crate) fn covered_text_glyph(span_start: &DisplaySourcePosition) -> Self {
-        Self::from_source_position(span_start)
-    }
-
-    /// The value this provenance writes into a glyph's single `charpos` field.
-    /// Lossy on purpose — it is the field the vocabulary exists to disambiguate.
-    pub(crate) fn glyph_charpos(self) -> usize {
-        match self {
-            Self::Buffer { charpos } => charpos.get(),
-            Self::Redisplay(RedisplaySentinel::EmptyLineNewline { charpos }) => charpos.get(),
-            Self::Redisplay(RedisplaySentinel::LineEnd | RedisplaySentinel::Mark) => {
-                NO_BUFFER_POSITION_CHARPOS
-            }
-            Self::Str { .. } => {
-                debug_assert!(
-                    false,
-                    "phase 4 never stamps Str provenance (design section 4.7); \
-                     replacement strings are rewritten to covered buffer provenance"
-                );
-                NO_BUFFER_POSITION_CHARPOS
-            }
-        }
-    }
-
-    /// The buffer position this element is attributed to, for consumers that
-    /// need an honest one (cursor placement, row min/max). Redisplay's own
-    /// glyphs have none even when they carry a real charpos for row bounds.
-    pub(crate) fn buffer_charpos(self) -> Option<CharPos0> {
-        match self {
-            Self::Buffer { charpos } => Some(charpos),
-            Self::Str { .. } | Self::Redisplay(_) => None,
-        }
-    }
+/// Provenance for one glyph from source-mapped text.
+///
+/// Generic mapped text is frozen at its buffer anchor. A Lisp replacement
+/// string advances in string coordinates while retaining its exact covered
+/// buffer range as a separate, typed field.
+pub(crate) fn source_mapped_text_glyph(
+    span: &SourceSpan,
+    glyph_string_start: Option<&DisplaySourcePosition>,
+    char_offset: usize,
+) -> ProducedGlyphProvenance {
+    let Some(glyph_string_start) = glyph_string_start else {
+        return covered_text_glyph(&span.start);
+    };
+    let provenance = provenance_from_source_position(glyph_string_start).advanced_by(char_offset);
+    let (
+        ProducedGlyphProvenance::Str { string, index, .. },
+        DisplaySourcePosition::Buffer {
+            char_pos: covered_start,
+            ..
+        },
+        DisplaySourcePosition::Buffer {
+            char_pos: covered_end,
+            ..
+        },
+    ) = (provenance, &span.start, &span.end)
+    else {
+        return provenance;
+    };
+    ProducedGlyphProvenance::string_replacement(
+        string,
+        index,
+        GlyphStringBufferRange::new(covered_start.get(), covered_end.get()),
+    )
 }
 
 /// GNU `it->current.pos` and `it->position` as one struct, so they can never be
@@ -191,7 +201,7 @@ impl GlyphProvenance {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ProducerPosition {
     scan: BufferScanPos,
-    stamp: GlyphProvenance,
+    stamp: ProducedGlyphProvenance,
 }
 
 impl ProducerPosition {
@@ -199,11 +209,11 @@ impl ProducerPosition {
     pub(crate) fn buffer_at(scan: BufferScanPos) -> Self {
         Self {
             scan,
-            stamp: GlyphProvenance::buffer(CharPos0::new(scan.charpos().max(0) as usize)),
+            stamp: ProducedGlyphProvenance::buffer(scan.charpos().max(0) as usize),
         }
     }
 
-    pub(crate) const fn with_stamp(scan: BufferScanPos, stamp: GlyphProvenance) -> Self {
+    pub(crate) const fn with_stamp(scan: BufferScanPos, stamp: ProducedGlyphProvenance) -> Self {
         Self { scan, stamp }
     }
 
@@ -211,7 +221,7 @@ impl ProducerPosition {
         self.scan
     }
 
-    pub(crate) const fn stamp(self) -> GlyphProvenance {
+    pub(crate) const fn stamp(self) -> ProducedGlyphProvenance {
         self.stamp
     }
 
@@ -221,7 +231,7 @@ impl ProducerPosition {
         let scan = BufferScanPos::new(step_char.start_byte_idx(), step_char.start_charpos());
         Self::with_stamp(
             scan,
-            GlyphProvenance::from_source_position(&item.item().span.start),
+            provenance_from_source_position(&item.item().span.start),
         )
     }
 }
@@ -313,7 +323,7 @@ impl ProducedRun {
 
     /// Provenance of the run's `char_offset`-th glyph, following the same rule
     /// the append path uses.
-    pub(crate) fn glyph_provenance(&self, char_offset: usize) -> GlyphProvenance {
+    pub(crate) fn glyph_provenance(&self, char_offset: usize) -> ProducedGlyphProvenance {
         match self.stamping {
             RunStamping::NaturalText => self.position.stamp().advanced_by(char_offset),
             RunStamping::Covered => self.position.stamp(),
@@ -355,35 +365,43 @@ impl ProducedElement {
     /// return `None` and keep flowing through the legacy item path until their
     /// rung, rather than being given an invented element shape.
     pub(crate) fn from_item(item: &DisplayItem, scan: BufferScanPos) -> Option<Self> {
-        let stamp = GlyphProvenance::from_source_position(&item.span.start);
-        let position = ProducerPosition::with_stamp(scan, stamp);
+        let buffer_position = || {
+            ProducerPosition::with_stamp(scan, provenance_from_source_position(&item.span.start))
+        };
         match &item.kind {
             DisplayItemKind::TextRun(run) => Some(Self::Run(ProducedRun {
-                position,
+                position: buffer_position(),
                 text: run.text.clone(),
                 face: item.face,
                 stamping: RunStamping::NaturalText,
             })),
             DisplayItemKind::SourceMappedText(text) => Some(Self::Run(ProducedRun {
-                position,
+                position: ProducerPosition::with_stamp(
+                    scan,
+                    source_mapped_text_glyph(&item.span, text.glyph_string_start.as_ref(), 0),
+                ),
                 text: text.text.clone(),
                 face: item.face,
-                stamping: RunStamping::Covered,
+                stamping: if text.glyph_string_start.is_some() {
+                    RunStamping::NaturalText
+                } else {
+                    RunStamping::Covered
+                },
             })),
             DisplayItemKind::ControlChar { ch } => Some(Self::Char(ProducedChar {
-                position,
+                position: buffer_position(),
                 ch: *ch,
                 face: item.face,
                 avoid_cursor: false,
             })),
             DisplayItemKind::Stretch(stretch) => Some(Self::Stretch(ProducedStretch {
-                position,
+                position: buffer_position(),
                 width: stretch.width.clone(),
                 face: item.face,
                 avoid_cursor: false,
             })),
             DisplayItemKind::RowBreak(row_break) => Some(Self::RowBreak(ProducedRowBreak {
-                position,
+                position: buffer_position(),
                 reason: row_break.reason,
             })),
             DisplayItemKind::Glyphless(_) | DisplayItemKind::MediaReplacement(_) => None,

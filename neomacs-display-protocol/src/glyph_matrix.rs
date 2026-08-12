@@ -261,6 +261,242 @@ impl GlyphRowAreaLayout {
 /// 0-based `charpos` `0`, so `0` is a valid position for the first glyph.
 pub const NO_BUFFER_POSITION_CHARPOS: usize = usize::MAX;
 
+/// Stable identity of a Lisp string in the producing layout session.
+///
+/// GNU stores the Lisp object itself in `struct glyph::object`.  The display
+/// protocol cannot transport VM objects, so layout assigns the corresponding
+/// source identity to a row-local [`GlyphStringSource`].  Glyphs refer to that
+/// entry through [`GlyphStringSourceId`], which keeps this comparatively large
+/// identity out of every cell.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct GlyphStringId(u64);
+
+impl GlyphStringId {
+    pub const fn new(value: u64) -> Self {
+        Self(value)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// Exact buffer range replaced by a string-valued `display` property.
+///
+/// GNU recovers this association by scanning `display` properties from the
+/// row bounds (`string_buffer_position_lim`).  Layout already owns the exact
+/// covered range, so transporting it avoids a bounded heuristic rescan while
+/// retaining GNU's separate string-index and buffer-coverage tracks.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct GlyphStringBufferRange {
+    start: usize,
+    end: usize,
+}
+
+impl GlyphStringBufferRange {
+    pub const fn new(start: usize, end: usize) -> Self {
+        Self {
+            start,
+            end: if end < start { start } else { end },
+        }
+    }
+
+    pub const fn start(self) -> usize {
+        self.start
+    }
+
+    pub const fn end(self) -> usize {
+        self.end
+    }
+
+    pub const fn contains(self, charpos: usize) -> bool {
+        self.start <= charpos && charpos < self.end
+    }
+
+    fn shifted(self, from: usize, delta: i64) -> Self {
+        Self::new(
+            shifted_buffer_position(self.start, from, delta),
+            shifted_buffer_position(self.end, from, delta),
+        )
+    }
+}
+
+/// One string occurrence referenced by glyphs in a row.
+///
+/// GNU leaves replacement coverage out of `struct glyph` and recovers it by
+/// scanning display properties.  NeoMacs already knows the exact range while
+/// constructing the row, so it records that range once here.  Keeping the
+/// occurrence in a side table avoids duplicating two buffer positions in every
+/// glyph while preserving exact cursor and incremental-redisplay semantics.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct GlyphStringSource {
+    string: GlyphStringId,
+    covered_buffer: Option<GlyphStringBufferRange>,
+}
+
+impl GlyphStringSource {
+    pub const fn new(string: GlyphStringId) -> Self {
+        Self {
+            string,
+            covered_buffer: None,
+        }
+    }
+
+    pub const fn replacement(
+        string: GlyphStringId,
+        covered_buffer: GlyphStringBufferRange,
+    ) -> Self {
+        Self {
+            string,
+            covered_buffer: Some(covered_buffer),
+        }
+    }
+
+    pub const fn string(self) -> GlyphStringId {
+        self.string
+    }
+
+    pub const fn covered_buffer_range(self) -> Option<GlyphStringBufferRange> {
+        self.covered_buffer
+    }
+
+    pub const fn covers_buffer_charpos(self, charpos: usize) -> bool {
+        match self.covered_buffer {
+            Some(range) => range.contains(charpos),
+            None => false,
+        }
+    }
+
+    fn shift_buffer_positions(&mut self, from: usize, delta: i64) {
+        if let Some(range) = self.covered_buffer {
+            self.covered_buffer = Some(range.shifted(from, delta));
+        }
+    }
+}
+
+/// Compact row-local handle to a [`GlyphStringSource`].
+///
+/// The non-zero representation gives `Option<GlyphStringSourceId>` the same
+/// four-byte layout, and makes an arbitrary integer unusable as a string
+/// source without an explicit checked conversion.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct GlyphStringSourceId(std::num::NonZeroU32);
+
+impl GlyphStringSourceId {
+    pub fn from_index(index: usize) -> Option<Self> {
+        let value = u32::try_from(index.checked_add(1)?).ok()?;
+        std::num::NonZeroU32::new(value).map(Self)
+    }
+
+    pub fn index(self) -> usize {
+        self.0.get() as usize - 1
+    }
+}
+
+/// The coordinate space and source of one glyph's position.
+///
+/// This is GNU's `(glyph->charpos, glyph->object)` pair as one closed value.
+/// A bare integer is deliberately unavailable: consumers must distinguish a
+/// buffer position, an index in a particular string, and redisplay-owned
+/// output before interpreting it.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum GlyphProvenance {
+    Buffer {
+        charpos: usize,
+    },
+    Str {
+        source: GlyphStringSourceId,
+        index: usize,
+    },
+    Redisplay(RedisplayGlyphProvenance),
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum RedisplayGlyphProvenance {
+    LineEnd,
+    Mark,
+    EmptyLineNewline { charpos: usize },
+}
+
+impl GlyphProvenance {
+    pub const fn buffer(charpos: usize) -> Self {
+        Self::Buffer { charpos }
+    }
+
+    pub const fn string(source: GlyphStringSourceId, index: usize) -> Self {
+        Self::Str { source, index }
+    }
+
+    pub const fn line_end() -> Self {
+        Self::Redisplay(RedisplayGlyphProvenance::LineEnd)
+    }
+
+    pub const fn mark() -> Self {
+        Self::Redisplay(RedisplayGlyphProvenance::Mark)
+    }
+
+    pub const fn empty_line_newline(charpos: usize) -> Self {
+        Self::Redisplay(RedisplayGlyphProvenance::EmptyLineNewline { charpos })
+    }
+
+    pub const fn buffer_charpos(self) -> Option<usize> {
+        match self {
+            Self::Buffer { charpos } => Some(charpos),
+            Self::Str { .. } | Self::Redisplay(_) => None,
+        }
+    }
+
+    pub const fn string_index(self) -> Option<(GlyphStringSourceId, usize)> {
+        match self {
+            Self::Str { source, index } => Some((source, index)),
+            Self::Buffer { .. } | Self::Redisplay(_) => None,
+        }
+    }
+
+    pub fn shifted_buffer_positions(self, from: usize, delta: i64) -> Self {
+        match self {
+            Self::Buffer { charpos } => Self::buffer(shifted_buffer_position(charpos, from, delta)),
+            Self::Redisplay(RedisplayGlyphProvenance::EmptyLineNewline { charpos }) => {
+                Self::empty_line_newline(shifted_buffer_position(charpos, from, delta))
+            }
+            Self::Str { .. } | Self::Redisplay(_) => self,
+        }
+    }
+
+    pub const fn advanced_by(self, char_offset: usize) -> Self {
+        match self {
+            Self::Buffer { charpos } => Self::buffer(charpos.saturating_add(char_offset)),
+            Self::Str { source, index } => Self::Str {
+                source,
+                index: index.saturating_add(char_offset),
+            },
+            Self::Redisplay(sentinel) => Self::Redisplay(sentinel),
+        }
+    }
+
+    /// Legacy numeric stamp for diagnostics and parity snapshots only.
+    /// Behavioral consumers should match the enum instead.
+    pub const fn legacy_charpos(self) -> usize {
+        match self {
+            Self::Buffer { charpos } => charpos,
+            Self::Str { index, .. } => index,
+            Self::Redisplay(RedisplayGlyphProvenance::EmptyLineNewline { charpos }) => charpos,
+            Self::Redisplay(RedisplayGlyphProvenance::LineEnd | RedisplayGlyphProvenance::Mark) => {
+                NO_BUFFER_POSITION_CHARPOS
+            }
+        }
+    }
+}
+
+fn shifted_buffer_position(value: usize, from: usize, delta: i64) -> usize {
+    if value < from {
+        return value;
+    }
+    (value as i64).saturating_add(delta).max(0) as usize
+}
+
 /// One character cell on screen.
 /// Equivalent to GNU's `struct glyph` in `dispextern.h`.
 ///
@@ -272,8 +508,9 @@ pub struct Glyph {
     pub glyph_type: GlyphType,
     /// Face ID for looking up colors, font, and decoration.
     pub face_id: FaceId,
-    /// Buffer position this glyph maps to (for cursor placement, mouse clicks).
-    pub charpos: usize,
+    /// Typed source position.  The number cannot be interpreted without its
+    /// buffer/string/redisplay discriminator.
+    pub provenance: GlyphProvenance,
     /// Bidirectional resolved level (0 = LTR base, 1 = RTL, etc.).
     pub bidi_level: u8,
     /// True for double-width characters (CJK, etc.).
@@ -357,10 +594,15 @@ pub enum GlyphPointerOccurrenceIdentity {
 impl Glyph {
     /// Create a simple character glyph with default attributes.
     pub fn char(ch: char, face_id: FaceId, charpos: usize) -> Self {
+        Self::char_with_provenance(ch, face_id, GlyphProvenance::buffer(charpos))
+    }
+
+    /// Create a simple character glyph with typed source provenance.
+    pub fn char_with_provenance(ch: char, face_id: FaceId, provenance: GlyphProvenance) -> Self {
         Self {
             glyph_type: GlyphType::Char { ch },
             face_id,
-            charpos,
+            provenance,
             bidi_level: 0,
             wide: false,
             pixel_width: 0.0,
@@ -374,10 +616,19 @@ impl Glyph {
 
     /// Create a stretch (whitespace) glyph.
     pub fn stretch(width_cols: u16, face_id: FaceId) -> Self {
+        Self::stretch_with_provenance(width_cols, face_id, GlyphProvenance::buffer(0))
+    }
+
+    /// Create a stretch glyph with typed source provenance.
+    pub fn stretch_with_provenance(
+        width_cols: u16,
+        face_id: FaceId,
+        provenance: GlyphProvenance,
+    ) -> Self {
         Self {
             glyph_type: GlyphType::Stretch { width_cols },
             face_id,
-            charpos: 0,
+            provenance,
             bidi_level: 0,
             wide: false,
             pixel_width: 0.0,
@@ -391,10 +642,15 @@ impl Glyph {
 
     /// Create a padding glyph (second cell of a wide character).
     pub fn padding_for(face_id: FaceId, charpos: usize) -> Self {
+        Self::padding_with_provenance(face_id, GlyphProvenance::buffer(charpos))
+    }
+
+    /// Create a padding glyph with typed source provenance.
+    pub fn padding_with_provenance(face_id: FaceId, provenance: GlyphProvenance) -> Self {
         Self {
             glyph_type: GlyphType::Char { ch: ' ' },
             face_id,
-            charpos,
+            provenance,
             bidi_level: 0,
             wide: false,
             pixel_width: 0.0,
@@ -450,6 +706,19 @@ impl Glyph {
         self
     }
 
+    pub const fn with_provenance(mut self, provenance: GlyphProvenance) -> Self {
+        self.provenance = provenance;
+        self
+    }
+
+    /// Numeric projection retained for diagnostics and parity snapshots.
+    ///
+    /// Layout behavior must inspect [`Self::provenance`] instead so a string
+    /// index can never be mistaken for a buffer position.
+    pub const fn legacy_charpos(&self) -> usize {
+        self.provenance.legacy_charpos()
+    }
+
     /// Number of source-identity slots occupied by this displayed primitive.
     ///
     /// Pixel-sized stretch glyphs can be narrower than one nominal character
@@ -486,6 +755,9 @@ pub struct GlyphRow {
     /// Pointer appearances referenced by compact glyph-local tokens.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pointer_appearances: Vec<GlyphPointerAppearance>,
+    /// String occurrences referenced by compact glyph-local source tokens.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    string_sources: Vec<GlyphStringSource>,
     /// Coalesced visual-order pointer runs derived once at row finalization.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pointer_runs: Vec<GlyphPointerRun>,
@@ -580,6 +852,7 @@ impl GlyphRow {
         Self {
             glyphs: std::array::from_fn(|_| Vec::new()),
             pointer_appearances: Vec::new(),
+            string_sources: Vec::new(),
             pointer_runs: Vec::new(),
             hash: 0,
             enabled: true,
@@ -702,6 +975,9 @@ impl GlyphRow {
         if self.pointer_appearances != other.pointer_appearances {
             return false;
         }
+        if self.string_sources != other.string_sources {
+            return false;
+        }
         if self.pointer_runs != other.pointer_runs {
             return false;
         }
@@ -754,6 +1030,46 @@ impl GlyphRow {
 
     pub fn pointer_appearances(&self) -> &[GlyphPointerAppearance] {
         &self.pointer_appearances
+    }
+
+    /// Register one displayed string occurrence in this row.
+    ///
+    /// Entries are intentionally not interned: the same Lisp string object may
+    /// be displayed more than once with different replacement coverage, and a
+    /// token denotes the occurrence rather than merely the object.
+    pub fn push_string_source(&mut self, source: GlyphStringSource) -> Option<GlyphStringSourceId> {
+        let id = GlyphStringSourceId::from_index(self.string_sources.len())?;
+        self.string_sources.push(source);
+        Some(id)
+    }
+
+    pub fn string_source(&self, id: GlyphStringSourceId) -> Option<&GlyphStringSource> {
+        self.string_sources.get(id.index())
+    }
+
+    pub fn string_sources(&self) -> &[GlyphStringSource] {
+        &self.string_sources
+    }
+
+    /// Whether this row maps `glyph` to the requested buffer character.
+    ///
+    /// String indices are deliberately never compared with buffer positions;
+    /// their optional replacement coverage is resolved through the row-local
+    /// source table instead.
+    pub fn glyph_covers_buffer_charpos(&self, glyph: &Glyph, charpos: usize) -> bool {
+        match glyph.provenance {
+            GlyphProvenance::Buffer { charpos: source } => source == charpos,
+            GlyphProvenance::Str { source, .. } => self
+                .string_source(source)
+                .is_some_and(|source| source.covers_buffer_charpos(charpos)),
+            GlyphProvenance::Redisplay(_) => false,
+        }
+    }
+
+    pub fn shift_string_source_buffer_positions(&mut self, from: usize, delta: i64) {
+        for source in &mut self.string_sources {
+            source.shift_buffer_positions(from, delta);
+        }
     }
 
     /// Every face definition required to replay this row faithfully.
@@ -853,12 +1169,17 @@ impl GlyphRow {
         self.pointer_appearances.truncate(len);
     }
 
+    pub fn truncate_string_sources(&mut self, len: usize) {
+        self.string_sources.truncate(len);
+    }
+
     pub fn clear(&mut self) {
         for area in &mut self.glyphs {
             area.clear();
         }
         self.hash = 0;
         self.pointer_appearances.clear();
+        self.string_sources.clear();
         self.pointer_runs.clear();
         self.cursor_col = None;
         self.cursor_type = None;

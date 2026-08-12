@@ -12,9 +12,7 @@
 use super::HighlightTrailingWhitespaceMutation;
 use crate::output::row_request::DisplayCurrentRowMutation;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{
-    Glyph, GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
-};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphProvenance, GlyphRow};
 use neomacs_display_protocol::types::FaceId;
 
 const TEXT_FACE: FaceId = FaceId::new(1);
@@ -29,16 +27,13 @@ fn push_tab(row: &mut GlyphRow) {
 }
 
 fn push_positionless_space(row: &mut GlyphRow) {
-    row.glyphs[GlyphArea::Text.index()].push(Glyph::char(
-        ' ',
-        TEXT_FACE,
-        NO_BUFFER_POSITION_CHARPOS,
-    ));
+    row.glyphs[GlyphArea::Text.index()]
+        .push(Glyph::char(' ', TEXT_FACE, 0).with_provenance(GlyphProvenance::mark()));
 }
 
 fn push_positionless_stretch(row: &mut GlyphRow) {
     let mut glyph = Glyph::stretch(4, TEXT_FACE);
-    glyph.charpos = NO_BUFFER_POSITION_CHARPOS;
+    glyph.provenance = GlyphProvenance::mark();
     row.glyphs[GlyphArea::Text.index()].push(glyph);
 }
 

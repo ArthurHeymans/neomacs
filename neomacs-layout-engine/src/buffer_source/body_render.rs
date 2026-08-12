@@ -20,6 +20,7 @@ use crate::buffer_source::window_geometry::{BufferWindowGeometry, BufferWindowLo
 use crate::buffer_source::window_source::BufferWindowSource;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_row::append_context::DisplayRowAppendSurface;
+use crate::display_row::builder::DisplayPhysicalLineTabState;
 use crate::display_row::face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementMode};
 use crate::display_row::geometry::{
     DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowScopedValue,
@@ -91,6 +92,7 @@ pub(crate) struct BufferSourceWalkSetup {
     pub(crate) row_flags: DisplayRowFlags,
     pub(crate) hscroll_skip: HorizontalScrollSkipState,
     pub(crate) word_wrap: WordWrapRenderState,
+    pub(crate) physical_line_tabs: DisplayPhysicalLineTabState,
     pub(crate) prefix_request: DisplayRowPrefixRequest,
     pub(crate) text_append_surface: DisplayRowAppendSurface,
     pub(crate) row_geometry_defaults: DisplayRowGeometryDefaults,
@@ -267,6 +269,7 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             row_flags: DisplayRowFlags::new(self.max_rows),
             hscroll_skip: HorizontalScrollSkipState::new(self.wrap_mode, self.hscroll),
             word_wrap: WordWrapRenderState::new(self.word_wrap),
+            physical_line_tabs: DisplayPhysicalLineTabState::default(),
             prefix_request: DisplayRowPrefixRequest::initial(
                 self.has_prefix,
                 self.has_line_default_prefix,
@@ -336,7 +339,8 @@ impl BufferSourceWalkSetup {
                 &mut self.charpos,
                 &mut self.x,
                 &mut self.col,
-            ),
+            )
+            .with_physical_line_tabs(&mut self.physical_line_tabs),
             state.source_render.reborrow(),
             BufferSourceRowBuildState::new(
                 &mut self.row_geometry,

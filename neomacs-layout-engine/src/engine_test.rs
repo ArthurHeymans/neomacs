@@ -9,7 +9,8 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_item::RenderFaceRef;
 use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::builder::{
-    DisplayGlyphMeasurer, DisplayRowGlyphCheckpoint, DisplayRowPosition, DisplayTabPolicy,
+    DisplayGlyphMeasurer, DisplayPhysicalLineTabState, DisplayRowGlyphCheckpoint,
+    DisplayRowPosition, DisplayTabPolicy,
 };
 use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::geometry::DisplayRowMaxX;
@@ -37,7 +38,8 @@ use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_chrome::{FrameChromeContent, FrameChromeKind};
 use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, FrameGlyph, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{
-    Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
+    Glyph, GlyphArea, GlyphProvenance, GlyphRow, GlyphStringBufferRange, GlyphType,
+    NO_BUFFER_POSITION_CHARPOS,
 };
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{
@@ -1662,7 +1664,8 @@ fn strip_appended_newline_space(
 ) -> Vec<neomacs_display_protocol::glyph_matrix::Glyph> {
     let mut out = glyphs.to_vec();
     if let Some(last) = out.last()
-        && last.charpos == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS
+        && last.legacy_charpos()
+            == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS
         && matches!(
             last.glyph_type,
             neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: ' ' }
@@ -2486,7 +2489,7 @@ impl GlyphTrace {
                     format!("{f:?}")
                 })
                 .unwrap_or_else(|| format!("UNREGISTERED#{}", glyph.face_id)),
-            charpos: glyph.charpos,
+            charpos: glyph.legacy_charpos(),
             bidi_level: glyph.bidi_level,
             wide: glyph.wide,
             padding: glyph.padding,
@@ -4464,7 +4467,7 @@ fn layout_frame_rust_fills_rows_beyond_eob_with_line_number_text_prefix() {
                 && !row.glyphs[GlyphArea::Text.index()].is_empty()
                 && row.glyphs[GlyphArea::Text.index()].iter().all(|glyph| {
                     matches!(glyph.glyph_type, GlyphType::Char { ch: ' ' })
-                        && glyph.charpos == NO_BUFFER_POSITION_CHARPOS
+                        && glyph.legacy_charpos() == NO_BUFFER_POSITION_CHARPOS
                 })
         })
         .map(|row| &row.glyphs[GlyphArea::Text.index()])
@@ -14802,7 +14805,7 @@ fn layout_frame_rust_tab_line_unicode_uses_shared_display_row_builder() {
         GlyphType::Stretch { width_cols: 75 }
     );
     assert_eq!(
-        trailing_fill.charpos,
+        trailing_fill.legacy_charpos(),
         neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS
     );
     assert_eq!(trailing_fill.face_id, glyphs[0].face_id);
@@ -15090,7 +15093,8 @@ fn buffer_text_source_shadow_matches_main_buffer_trailing_whitespace_row() {
     let last = raw_main.last().expect("main row glyphs");
     assert!(
         matches!(last.glyph_type, GlyphType::Char { ch: ' ' })
-            && last.charpos == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS,
+            && last.legacy_charpos()
+                == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS,
         "expected the appended positionless newline space last, got {last:?}"
     );
 
@@ -15112,15 +15116,15 @@ fn buffer_text_source_shadow_matches_main_buffer_trailing_whitespace_row() {
     assert_eq!(
         main_glyphs
             .iter()
-            .map(|glyph| (glyph.glyph_type.clone(), glyph.charpos))
+            .map(|glyph| (glyph.glyph_type.clone(), glyph.legacy_charpos()))
             .collect::<Vec<_>>(),
         shadow_glyphs
             .iter()
-            .map(|glyph| (glyph.glyph_type.clone(), glyph.charpos))
+            .map(|glyph| (glyph.glyph_type.clone(), glyph.legacy_charpos()))
             .collect::<Vec<_>>()
     );
     assert!(
-        main_glyphs.iter().all(|glyph| glyph.charpos
+        main_glyphs.iter().all(|glyph| glyph.legacy_charpos()
             != neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS),
         "text glyphs of the trailing-whitespace row must all carry buffer positions"
     );
@@ -15193,6 +15197,33 @@ fn render_buffer_plain_item_prefix_shadow_row(
     ascent_px: f32,
     char_width_px: f32,
 ) -> GlyphRow {
+    render_buffer_plain_item_prefix_shadow_row_at(
+        buf_id,
+        snapshot,
+        start,
+        end,
+        base_face_id,
+        width_px,
+        height_px,
+        ascent_px,
+        char_width_px,
+        DisplayRowPosition::new(0.0, 0),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_buffer_plain_item_prefix_shadow_row_at(
+    buf_id: BufferId,
+    snapshot: &LayoutBufferSnapshot,
+    start: CharPos0,
+    end: CharPos0,
+    base_face_id: FaceId,
+    width_px: f32,
+    height_px: f32,
+    ascent_px: f32,
+    char_width_px: f32,
+    start_position: DisplayRowPosition,
+) -> GlyphRow {
     let mut source = crate::buffer_source::row_route::BufferPlainItemSource::text_only(
         buf_id,
         snapshot,
@@ -15220,7 +15251,7 @@ fn render_buffer_plain_item_prefix_shadow_row(
         resolver.default_face(),
     )
     .render_request(DisplayRowRenderBounds::new(
-        DisplayRowPosition::new(0.0, 0),
+        start_position,
         DisplayRowMaxX::Bounded(width_px),
     ))
     .render(&mut renderer, &mut source, &resolver, &mut face_ids)
@@ -15258,6 +15289,21 @@ fn layout_main_text_rows_with(
     f32,
     f32,
 ) {
+    layout_main_text_rows_with_width(text, 640, setup)
+}
+
+fn layout_main_text_rows_with_width(
+    text: &str,
+    frame_width_px: u32,
+    setup: impl FnOnce(&mut Context, BufferId),
+) -> (
+    Context,
+    BufferId,
+    neovm_core::window::FrameId,
+    Vec<neomacs_display_protocol::glyph_matrix::MatrixRow>,
+    f32,
+    f32,
+) {
     let mut eval = Context::new();
     let buf_id = eval
         .buffer_manager()
@@ -15269,9 +15315,12 @@ fn layout_main_text_rows_with(
         buf.insert(text);
     }
     setup(&mut eval, buf_id);
-    let frame_id =
-        eval.frame_manager_mut()
-            .create_frame("layout-ascii-route-shadow", 640, 160, buf_id);
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-ascii-route-shadow",
+        frame_width_px,
+        160,
+        buf_id,
+    );
     let selected_window = eval
         .frame_manager()
         .get(frame_id)
@@ -15343,8 +15392,7 @@ fn plain_route_classification<B: crate::neovm_bridge::LayoutBufferView>(
                 text_start_byte: 0,
             },
             crate::buffer_source::row_route::RowRouteFit {
-                start_x_px: 0.0,
-                start_col: 0,
+                start_position: DisplayRowPosition::new(0.0, 0),
                 char_width_px: char_width,
                 right_edge_px,
                 tab_policy: &DisplayTabPolicy::every(8),
@@ -15750,13 +15798,13 @@ fn continuation_resume_shadow_matches_tab_after_wrap_row() {
     let start = continuation_glyphs
         .first()
         .expect("continuation row has glyphs")
-        .charpos;
+        .legacy_charpos();
     assert!(start > 0, "row 1 resumes mid-line");
     // 100 x's + tab + "end": the newline sits at charpos 104.
     let newline_charpos = 104;
     let covered: Vec<_> = continuation_glyphs
         .iter()
-        .take_while(|glyph| glyph.charpos < newline_charpos)
+        .take_while(|glyph| glyph.legacy_charpos() < newline_charpos)
         .cloned()
         .collect();
     assert!(
@@ -15765,8 +15813,17 @@ fn continuation_resume_shadow_matches_tab_after_wrap_row() {
             .any(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. })),
         "the continuation row must contain the tab's stretch glyph"
     );
-    let end = covered.last().expect("covered glyphs").charpos + 1;
-    let shadow_row = render_buffer_plain_item_prefix_shadow_row(
+    let end = covered.last().expect("covered glyphs").legacy_charpos() + 1;
+    let continued_width: f32 = rows[0].glyphs[GlyphArea::Text.index()]
+        .iter()
+        .filter(|glyph| {
+            matches!(glyph.provenance, GlyphProvenance::Buffer { charpos } if charpos < start)
+        })
+        .map(|glyph| glyph.pixel_width)
+        .sum();
+    let mut physical_line_tabs = DisplayPhysicalLineTabState::default();
+    physical_line_tabs.continue_after_visual_row(continued_width);
+    let shadow_row = render_buffer_plain_item_prefix_shadow_row_at(
         buf_id,
         &snapshot,
         CharPos0::new(start),
@@ -15776,12 +15833,83 @@ fn continuation_resume_shadow_matches_tab_after_wrap_row() {
         char_height,
         char_height,
         char_width,
+        DisplayRowPosition::new(0.0, 0).with_tab_coordinates(physical_line_tabs.coordinates()),
     );
     assert_eq!(
         shadow_row.glyphs[1][..covered.len()],
         covered[..],
         "continuation row must equal the shadow item-render of the resumed \
          range glyph-for-glyph, tab stretch included"
+    );
+}
+
+#[test]
+fn tab_on_a_continuation_row_uses_the_physical_line_tab_grid() {
+    // At buffer column 100 and tab-width 8, GNU's xdisp.c:33834-33866 uses
+    // current_x + continuation_lines_width and advances to physical column
+    // 104. A deliberately non-8-column frame makes row-local and physical
+    // grids disagree.
+    let text = format!("{}\tend\n", "x".repeat(100));
+    let (_eval, _buffer, _frame, rows, char_width, _char_height) =
+        layout_main_text_rows_with_width(&text, 632, |_, _| {});
+    let continuation = rows.get(1).expect("line wraps onto a second row");
+    assert_ne!(
+        continuation.start_charpos % 8,
+        0,
+        "fixture must distinguish row-local and physical tab grids"
+    );
+    let tab = continuation.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find(|glyph| {
+            glyph.provenance == GlyphProvenance::buffer(100)
+                && matches!(glyph.glyph_type, GlyphType::Stretch { .. })
+        })
+        .expect("continuation row tab glyph");
+
+    assert_eq!(
+        tab.pixel_width,
+        4.0 * char_width,
+        "GNU advances physical column 100 to tab stop 104"
+    );
+}
+
+#[test]
+fn wrap_prefix_tabs_use_the_screen_grid_without_shifting_buffer_tabs() {
+    let text = format!("{}\tend\n", "x".repeat(100));
+    let (_eval, _buffer, _frame, rows, char_width, _char_height) =
+        layout_main_text_rows_with_width(&text, 632, |eval, buffer_id| {
+            eval.buffer_manager_mut()
+                .get_mut(buffer_id)
+                .expect("buffer")
+                .set_buffer_local("wrap-prefix", Value::string(">\t"));
+        });
+    let continuation = rows.get(1).expect("line wraps onto a second row");
+    let glyphs = &continuation.glyphs[GlyphArea::Text.index()];
+
+    let prefix_tab = glyphs
+        .iter()
+        .find(|glyph| {
+            matches!(glyph.glyph_type, GlyphType::Stretch { .. })
+                && matches!(glyph.provenance, GlyphProvenance::Str { .. })
+        })
+        .expect("wrap-prefix tab");
+    assert_eq!(
+        prefix_tab.pixel_width,
+        7.0 * char_width,
+        "the prefix's tab follows its own screen-row '>' character"
+    );
+
+    let buffer_tab = glyphs
+        .iter()
+        .find(|glyph| {
+            matches!(glyph.glyph_type, GlyphType::Stretch { .. })
+                && glyph.provenance == GlyphProvenance::buffer(100)
+        })
+        .expect("buffer tab");
+    assert_eq!(
+        buffer_tab.pixel_width,
+        4.0 * char_width,
+        "prefix width must cancel out of GNU's physical-line tab coordinate"
     );
 }
 
@@ -16161,12 +16289,12 @@ fn plain_item_source_shadow_matches_wide_char_row() {
     let glyphs = &rows[0].glyphs[1];
     let wide: Vec<_> = glyphs.iter().filter(|glyph| glyph.wide).collect();
     assert_eq!(wide.len(), 2, "two wide base glyphs");
-    assert_eq!(wide[0].charpos, 2);
-    assert_eq!(wide[1].charpos, 3);
+    assert_eq!(wide[0].legacy_charpos(), 2);
+    assert_eq!(wide[1].legacy_charpos(), 3);
     let padding: Vec<_> = glyphs.iter().filter(|glyph| glyph.padding).collect();
     assert_eq!(padding.len(), 2, "one padding glyph per wide char");
-    assert_eq!(padding[0].charpos, 2);
-    assert_eq!(padding[1].charpos, 3);
+    assert_eq!(padding[0].legacy_charpos(), 2);
+    assert_eq!(padding[1].legacy_charpos(), 3);
 }
 
 /// Phase 2g audit scenario (permanent guard): an RTL-only Hebrew line ALREADY
@@ -16362,7 +16490,7 @@ fn plain_item_source_shadow_matches_mixed_tab_wide_multiface_row() {
     assert!(
         rows[0].glyphs[1]
             .iter()
-            .any(|glyph| glyph.wide && glyph.charpos == 2),
+            .any(|glyph| glyph.wide && glyph.legacy_charpos() == 2),
         "expected the CJK char to render as a wide glyph"
     );
 }
@@ -16515,8 +16643,7 @@ fn assert_segmented_plain_shadow_row(
             text_start_byte: 0,
         },
         rr::RowRouteFit {
-            start_x_px: 0.0,
-            start_col: 0,
+            start_position: DisplayRowPosition::new(0.0, 0),
             char_width_px: char_width,
             right_edge_px: 640.0,
             tab_policy: &DisplayTabPolicy::every(8),
@@ -16584,18 +16711,25 @@ fn assert_segmented_plain_shadow_row(
         // (both paths leave it unset, proven by the full-equality shadow
         // rows); char glyphs and wide-char padding glyphs do.
         !matches!(glyph.glyph_type, GlyphType::Stretch { .. })
-            && (line_start_chars..line_end).contains(&glyph.charpos)
+            && (line_start_chars..line_end).contains(&glyph.legacy_charpos())
     }) {
         let expected = segments
             .iter()
             .find(|segment| {
-                segment.start.get() <= glyph.charpos && glyph.charpos < segment.end.get()
+                segment.start.get() <= glyph.legacy_charpos()
+                    && glyph.legacy_charpos() < segment.end.get()
             })
-            .unwrap_or_else(|| panic!("no planned segment covers charpos {}", glyph.charpos));
+            .unwrap_or_else(|| {
+                panic!(
+                    "no planned segment covers charpos {}",
+                    glyph.legacy_charpos()
+                )
+            });
         assert_eq!(
-            glyph.face_id, expected.face_id,
+            glyph.face_id,
+            expected.face_id,
             "routed segment face id must equal the buffer-pipeline glyph face id at charpos {}",
-            glyph.charpos
+            glyph.legacy_charpos()
         );
     }
 
@@ -17120,7 +17254,7 @@ fn plain_item_source_shadow_matches_mid_line_elision_row() {
     let charposes: Vec<usize> = rows[0].glyphs[1]
         .iter()
         .filter(|glyph| matches!(glyph.glyph_type, GlyphType::Char { .. }))
-        .map(|glyph| glyph.charpos)
+        .map(|glyph| glyph.legacy_charpos())
         .collect();
     assert_eq!(
         charposes,
@@ -17160,7 +17294,7 @@ fn plain_item_source_shadow_matches_trailing_elision_row() {
     assert_eq!(glyphs_logical_text(&rows[0].glyphs[1]), "abc ");
     let appended = rows[0].glyphs[1].last().expect("appended newline space");
     assert_eq!(
-        appended.charpos,
+        appended.legacy_charpos(),
         usize::MAX,
         "the appended newline space stays GNU's positionless append_space_for_newline glyph"
     );
@@ -17237,7 +17371,7 @@ fn plain_route_refuses_zwj_emoji_row_and_pipeline_composes() {
     let composite = rows[0].glyphs[1]
         .iter()
         .find_map(|glyph| match &glyph.glyph_type {
-            GlyphType::Composite { text } => Some((text.to_string(), glyph.charpos)),
+            GlyphType::Composite { text } => Some((text.to_string(), glyph.legacy_charpos())),
             _ => None,
         })
         .expect("the pipeline must compose the ZWJ sequence into a Composite glyph");
@@ -17278,13 +17412,13 @@ fn plain_item_source_shadow_matches_combining_mark_cluster_row() {
         .iter()
         .position(|glyph| matches!(&glyph.glyph_type, GlyphType::Composite { text } if text.as_ref() == "e\u{0301}"))
         .expect("the pipeline must merge the mark into a Composite glyph");
-    assert_eq!(glyphs[composite_at].charpos, 1);
+    assert_eq!(glyphs[composite_at].legacy_charpos(), 1);
     assert!(
         !glyphs[composite_at].wide && !glyphs[composite_at].padding,
         "the composed cluster keeps its base's 1-col non-padding shape"
     );
     assert_eq!(
-        glyphs[composite_at + 1].charpos,
+        glyphs[composite_at + 1].legacy_charpos(),
         3,
         "the glyph after the cluster jumps the absorbed mark's charpos"
     );
@@ -17639,9 +17773,9 @@ fn overlay_invisible_rows_stay_on_buffer_pipeline_under_item_route() {
 /// Increment 2i rung 2 shadow proof (flipping the former 2d rung-2 refusal
 /// pin): a plain single-line string-valued `display` property now ROUTES,
 /// and the routed row is glyph-for-glyph identical to the buffer pipeline's
-/// — including the covered-charpos provenance (every replacement glyph
-/// stamped with the covered span's START, GNU-style N string glyphs for M
-/// covered chars) and the string session's base-face resolution, because the
+/// — including GNU string-index provenance plus its exact covered buffer range
+/// (N string glyphs for M covered chars) and the string session's base-face
+/// resolution, because the
 /// routed commit drives the pipeline's OWN replacement session. The
 /// pipeline side is produced in the same process by putting point on the
 /// row (the PointInRow refusal), which changes cursor capture only, never
@@ -17688,12 +17822,25 @@ fn display_string_replacement_row_routes_and_matches_pipeline() {
         rows_routed[0].glyphs[1], rows_pipeline[0].glyphs[1],
         "routed replacement row must equal the pipeline row glyph-for-glyph"
     );
-    // The covered-provenance shape explicitly: glyphs 'S','T','R' all carry
-    // the covered START (0-based charpos 2 = buffer char 3).
-    for glyph in &rows_routed[0].glyphs[1][2..5] {
+    // The GNU shape explicitly: glyphs 'S','T','R' carry indices 0,1,2 in one
+    // string object, while the separate buffer range remains [2,4).
+    let replacement = &rows_routed[0].glyphs[1][2..5];
+    let GlyphProvenance::Str { source, .. } = replacement[0].provenance else {
+        panic!("replacement glyph must be string-sourced");
+    };
+    let covered = GlyphStringBufferRange::new(2, 4);
+    assert_eq!(
+        rows_routed[0]
+            .string_source(source)
+            .and_then(|source| source.covered_buffer_range()),
+        Some(covered),
+        "replacement coverage belongs to the row occurrence"
+    );
+    for (index, glyph) in replacement.iter().enumerate() {
         assert_eq!(
-            glyph.charpos, 2,
-            "every replacement glyph carries the covered start"
+            glyph.provenance,
+            GlyphProvenance::string(source, index),
+            "replacement glyphs advance in string coordinates"
         );
     }
     // Direct classification agrees with production (point on row 1's text).
@@ -17718,7 +17865,8 @@ fn display_string_replacement_row_routes_and_matches_pipeline() {
 /// at engine level with identical output either way: a display string
 /// carrying its own text properties (per-run string faces) and a display
 /// string containing a newline (multi-row session). Provenance now EXISTS
-/// (the covered-provenance vocabulary + session reuse); these remain outside
+/// (the typed string-index + covered-range vocabulary and session reuse);
+/// these remain outside
 /// the routed class because the plan's single-run width prediction does not
 /// model per-run string faces, and a mid-string row break hands mid-line
 /// state back to the walk.
@@ -17755,7 +17903,7 @@ fn propertized_display_string_rows_stay_on_buffer_pipeline_under_item_route() {
 /// Increment 2i rung 3 shadow proof (flipping the former 2d rung-3 refusal
 /// pin): a plain `(space :width N)` display spec now ROUTES, rendering
 /// through the pipeline's replacement session — one stretch glyph of exactly
-/// N canonical char widths with covered-charpos provenance (GNU stamps the
+/// N canonical char widths with covered-buffer provenance (GNU stamps the
 /// covered buffer position on stretch glyphs, xdisp.c 6604 + 32684). The
 /// routed row is glyph-for-glyph identical to the buffer-pipeline row (same
 /// process, point placement toggles the route).
@@ -17810,7 +17958,8 @@ fn space_width_spec_row_routes_and_matches_pipeline() {
         .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
         .expect("routed stretch glyph");
     assert_eq!(
-        routed_stretch.charpos, 2,
+        routed_stretch.legacy_charpos(),
+        2,
         "the stretch stamps the covered range's start on both paths"
     );
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
@@ -19356,7 +19505,7 @@ fn overlay_newline_continuation_reserves_a_blank_line_number_text_prefix() {
         let text = &row.glyphs[GlyphArea::Text.index()];
         let len = text
             .iter()
-            .take_while(|glyph| glyph.charpos == NO_BUFFER_POSITION_CHARPOS)
+            .take_while(|glyph| glyph.legacy_charpos() == NO_BUFFER_POSITION_CHARPOS)
             .count();
         &text[..len]
     }
@@ -24481,17 +24630,19 @@ fn assert_truncated_row_shape(
     // visible text happens to survive.
     let mut previous: Option<usize> = None;
     for glyph in &glyphs[..n - 1] {
-        if glyph.charpos == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS {
+        if glyph.legacy_charpos()
+            == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS
+        {
             continue;
         }
         if let Some(previous) = previous {
             assert!(
-                glyph.charpos >= previous,
+                glyph.legacy_charpos() >= previous,
                 "{label}: glyph charpos stamps must not go backwards ({previous} then {})",
-                glyph.charpos
+                glyph.legacy_charpos()
             );
         }
-        previous = Some(glyph.charpos);
+        previous = Some(glyph.legacy_charpos());
     }
 }
 
@@ -24591,10 +24742,10 @@ fn truncate_shadow_multibyte_at_the_fit_boundary() {
     let mut text = String::new();
     let mut previous_charpos: Option<usize> = None;
     for glyph in &glyphs[..n - 1] {
-        if previous_charpos == Some(glyph.charpos) {
+        if previous_charpos == Some(glyph.legacy_charpos()) {
             continue;
         }
-        previous_charpos = Some(glyph.charpos);
+        previous_charpos = Some(glyph.legacy_charpos());
         if let GlyphType::Char { ch } = glyph.glyph_type {
             text.push(ch);
         }
@@ -24609,13 +24760,18 @@ fn truncate_shadow_multibyte_at_the_fit_boundary() {
     );
     let mut previous: Option<usize> = None;
     for glyph in &glyphs[..n - 1] {
-        if glyph.charpos == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS {
+        if glyph.legacy_charpos()
+            == neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS
+        {
             continue;
         }
         if let Some(previous) = previous {
-            assert!(glyph.charpos >= previous, "charpos stamps must not regress");
+            assert!(
+                glyph.legacy_charpos() >= previous,
+                "charpos stamps must not regress"
+            );
         }
-        previous = Some(glyph.charpos);
+        previous = Some(glyph.legacy_charpos());
     }
 }
 
@@ -25458,10 +25614,11 @@ fn overlay_string_newline_behaves_identically_under_truncation() {
 ///
 /// GNU instead fabricates one past the end for such a row ("Line ends in a
 /// newline from string: max_pos + 1", xdisp.c:25248-25263), because its rows
-/// carry the string's own positions. This engine stamps covered/anchor BUFFER
-/// positions (the rung-1 scope decision), so the +1 has nothing to compensate
-/// for and is not adopted; changing it belongs with adopting GNU string-index
-/// stamps, not with this rung.
+/// carry the string's own positions. Glyphs now retain those string indices,
+/// but row bounds remain the independent buffer-scan track: adopting the
+/// provenance pair does not by itself implement GNU's once-per-string `+1`
+/// synthesis for a string-supplied newline. This test records that separate
+/// row-lifecycle divergence.
 #[test]
 fn overlay_string_newline_leaves_row_bounds_on_the_anchor_boundary() {
     fn bounds(anchor_charpos0: usize) -> Vec<(Option<usize>, Option<usize>)> {
@@ -25800,12 +25957,14 @@ fn a_space_display_spec_stamps_the_covered_buffer_position() {
         glyphs[3].glyph_type
     );
     assert_eq!(
-        glyphs[3].charpos, 3,
+        glyphs[3].legacy_charpos(),
+        3,
         "the stretch stamps the COVERED START - a genuine buffer position \
          (GNU append_stretch_glyph charpos = B), not a redisplay sentinel"
     );
     assert_eq!(
-        glyphs[4].charpos, 5,
+        glyphs[4].legacy_charpos(),
+        5,
         "the character after the stretch is the covered range's end"
     );
 }
@@ -25840,7 +25999,8 @@ fn a_tab_stretch_carries_its_own_buffer_position() {
         glyphs[2].glyph_type
     );
     assert_eq!(
-        glyphs[2].charpos, 2,
+        glyphs[2].legacy_charpos(),
+        2,
         "the tab's stretch glyph carries the tab character's own position"
     );
 }

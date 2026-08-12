@@ -557,6 +557,7 @@ impl<'a> BufferSourceHscrollSkipRenderContext<'a> {
         };
 
         if hscroll_action.is_line_break() {
+            progress.reset_physical_line_tabs();
             hscroll_action.apply_line_break_before_row_transition(
                 row_build.row_extend,
                 source_render.output_emitter(),
@@ -845,6 +846,7 @@ impl<'a> BufferSourceSelectiveDisplayTailRenderRequest<'a> {
             return BufferSourceSelectiveDisplayTailRenderOutcome::ContinueBufferWalk;
         }
 
+        progress.reset_physical_line_tabs();
         tail_action.apply_hidden_line_break_row_state(
             row_build.row_geometry,
             row_build.row_extend,
@@ -1854,6 +1856,7 @@ impl BufferSourceLineBreakSourceAction {
         content_x: f32,
         progress: &mut DisplaySourceProgressState<'_>,
     ) {
+        progress.reset_physical_line_tabs();
         trailing_whitespace.reset_after_row_transition();
         row_extend.clear();
         box_face.continue_on_row(row_geometry.current_row_marker(), content_x);

@@ -53,7 +53,12 @@ fn install_complete_window_geometry(
 #[test]
 fn glyph_pointer_token_has_small_niche_sized_overhead() {
     assert_eq!(std::mem::size_of::<Option<GlyphPointerAppearanceId>>(), 4);
-    assert!(std::mem::size_of::<Glyph>() <= 80);
+    assert_eq!(std::mem::size_of::<Option<GlyphStringSourceId>>(), 4);
+    assert!(
+        std::mem::size_of::<Glyph>() <= 80,
+        "row-side provenance must keep Glyph compact; actual size is {}",
+        std::mem::size_of::<Glyph>()
+    );
 }
 
 #[test]
@@ -63,8 +68,10 @@ fn ordinary_glyph_and_row_omit_empty_pointer_metadata_from_json() {
 
     let row_json = serde_json::to_string(&GlyphRow::new(GlyphRowRole::Text)).unwrap();
     assert!(!row_json.contains("pointer_appearances"));
+    assert!(!row_json.contains("string_sources"));
     let round_trip: GlyphRow = serde_json::from_str(&row_json).unwrap();
     assert!(round_trip.pointer_appearances().is_empty());
+    assert!(round_trip.string_sources().is_empty());
 }
 
 #[test]
@@ -2659,4 +2666,124 @@ fn semantic_hit_index_survives_transport_and_materialization() {
 
     let round_trip = FrameDisplayState::from_frame_glyph_buffer(&frame);
     assert_eq!(round_trip.presented_hit_index, state.presented_hit_index);
+}
+
+#[test]
+fn glyph_provenance_keeps_string_and_buffer_coordinates_disjoint() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let string = GlyphStringId::new(7);
+    let covered = GlyphStringBufferRange::new(20, 24);
+    let source = row
+        .push_string_source(GlyphStringSource::replacement(string, covered))
+        .expect("row-local string source");
+    let provenance = GlyphProvenance::string(source, 2);
+
+    assert_eq!(provenance.string_index(), Some((source, 2)));
+    assert_eq!(provenance.buffer_charpos(), None);
+    let source = row
+        .string_source(source)
+        .expect("source resolves in its row");
+    assert_eq!(source.string(), string);
+    assert_eq!(source.covered_buffer_range(), Some(covered));
+    assert!(source.covers_buffer_charpos(22));
+    assert!(!source.covers_buffer_charpos(24));
+}
+
+#[test]
+fn identical_string_objects_can_have_distinct_row_occurrences() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let string = GlyphStringId::new(7);
+    let first = row
+        .push_string_source(GlyphStringSource::replacement(
+            string,
+            GlyphStringBufferRange::new(10, 12),
+        ))
+        .expect("first occurrence");
+    let second = row
+        .push_string_source(GlyphStringSource::replacement(
+            string,
+            GlyphStringBufferRange::new(20, 22),
+        ))
+        .expect("second occurrence");
+
+    assert_ne!(first, second);
+    assert_eq!(
+        row.string_source(first).map(|source| source.string()),
+        Some(string)
+    );
+    assert_eq!(
+        row.string_source(second).map(|source| source.string()),
+        Some(string)
+    );
+    assert!(
+        row.string_source(first)
+            .is_some_and(|source| source.covers_buffer_charpos(10))
+    );
+    assert!(
+        row.string_source(second)
+            .is_some_and(|source| source.covers_buffer_charpos(20))
+    );
+}
+
+#[test]
+fn rebasing_a_row_moves_string_coverage_but_not_glyph_string_indices() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let string = GlyphStringId::new(7);
+    let source = row
+        .push_string_source(GlyphStringSource::replacement(
+            string,
+            GlyphStringBufferRange::new(20, 24),
+        ))
+        .expect("row-local string source");
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char_with_provenance(
+        'S',
+        FaceId::new(0),
+        GlyphProvenance::string(source, 2),
+    ));
+
+    row.shift_string_source_buffer_positions(10, 3);
+    assert_eq!(
+        row.glyphs[GlyphArea::Text.index()][0].provenance,
+        GlyphProvenance::string(source, 2),
+        "a string index is not a buffer position"
+    );
+    assert_eq!(
+        row.string_source(source)
+            .and_then(|source| source.covered_buffer_range()),
+        Some(GlyphStringBufferRange::new(23, 27))
+    );
+}
+
+#[test]
+fn row_string_provenance_survives_json_without_losing_its_coordinate_space() {
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    let source = row
+        .push_string_source(GlyphStringSource::replacement(
+            GlyphStringId::new(9),
+            GlyphStringBufferRange::new(3, 5),
+        ))
+        .expect("row-local string source");
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char_with_provenance(
+        'x',
+        FaceId::new(0),
+        GlyphProvenance::string(source, 1),
+    ));
+
+    let json = serde_json::to_string(&row).expect("serialize row provenance");
+    let decoded: GlyphRow = serde_json::from_str(&json).expect("deserialize row provenance");
+
+    assert_eq!(decoded, row);
+    let GlyphProvenance::Str { source, index } =
+        decoded.glyphs[GlyphArea::Text.index()][0].provenance
+    else {
+        panic!("decoded glyph lost string coordinate space")
+    };
+    assert_eq!(index, 1);
+    assert_eq!(
+        decoded.string_source(source).copied(),
+        Some(GlyphStringSource::replacement(
+            GlyphStringId::new(9),
+            GlyphStringBufferRange::new(3, 5),
+        ))
+    );
 }

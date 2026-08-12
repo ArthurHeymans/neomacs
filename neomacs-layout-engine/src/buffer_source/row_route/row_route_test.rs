@@ -51,8 +51,7 @@ fn wide_fit() -> RowRouteFit<'static> {
 
 fn fit_to(right_edge_px: f32) -> RowRouteFit<'static> {
     RowRouteFit {
-        start_x_px: 0.0,
-        start_col: 0,
+        start_position: DisplayRowPosition::new(0.0, 0),
         char_width_px: 8.0,
         right_edge_px,
         tab_policy: &TAB_EVERY_8,
@@ -380,8 +379,7 @@ fn classifier_refuses_a_mid_line_start_whose_first_char_does_not_fit() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     // The pen stands ON the right edge: the handoff char cannot fit.
     let fit = RowRouteFit {
-        start_x_px: 24.0,
-        start_col: 3,
+        start_position: DisplayRowPosition::new(24.0, 3),
         char_width_px: 8.0,
         right_edge_px: 24.0,
         tab_policy: &TAB_EVERY_8,
@@ -423,8 +421,7 @@ fn continuation_resume_tab_expands_from_carried_column() {
     let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
     let row = row_start(text.as_bytes(), 3, 3);
     let carried = RowRouteFit {
-        start_x_px: 24.0,
-        start_col: 3,
+        start_position: DisplayRowPosition::new(24.0, 3),
         char_width_px: 8.0,
         right_edge_px: 72.0,
         tab_policy: &TAB_EVERY_8,
@@ -446,6 +443,30 @@ fn continuation_resume_tab_expands_from_carried_column() {
         .expect("wider carried tab tail plans");
     assert_eq!(plan.line_end(), RoutedRowLineEnd::Newline);
     assert_eq!(plan.line_char_len(), 3);
+}
+
+#[test]
+fn continuation_route_preserves_the_physical_line_tab_grid() {
+    let mut eval = Context::new();
+    let text = "abc\txy\n";
+    let buf_id = buffer_with_text(&mut eval, text);
+    let buffer = eval.buffer_manager().get(buf_id).expect("buffer");
+    let row = row_start(text.as_bytes(), 3, 3);
+    let mut physical_line = crate::display_row::builder::DisplayPhysicalLineTabState::default();
+    physical_line.continue_after_visual_row(24.0);
+    let fit = RowRouteFit {
+        start_position: DisplayRowPosition::new(24.0, 3)
+            .with_tab_coordinates(physical_line.coordinates()),
+        char_width_px: 8.0,
+        right_edge_px: 48.0,
+        tab_policy: &TAB_EVERY_8,
+    };
+
+    let plan = plan_plain_row_classified(buffer, row, fit, wrap_policy())
+        .expect("the physical-grid tab and one following char fit");
+
+    assert_eq!(plan.line_end(), RoutedRowLineEnd::OverflowHandoff);
+    assert_eq!(plan.line_char_len(), 2);
 }
 
 /// Cursor capture stays a buffer-pipeline responsibility on the resume entry
@@ -1816,11 +1837,10 @@ fn classifier_routes_display_string_replacement() {
     // Increment 2i rung 2 (flipping the former 2d refusal pin): a plain
     // property-less single-line string-valued `display` property is now
     // ROUTED. The plan records the covered span; production renders it
-    // through the pipeline's OWN replacement session (covered-charpos glyph
-    // provenance, string base-face policy), so the vocabulary limitation
-    // that forced the 2d refusal — TextRun's per-char charpos advance — no
-    // longer applies: the session emits covered-provenance SourceMappedText
-    // runs (see the rung 1 pins in builder_test.rs).
+    // through the pipeline's OWN replacement session (typed string-index
+    // provenance with a covered buffer range, string base-face policy), so
+    // the vocabulary limitation that forced the 2d refusal — TextRun's plain
+    // buffer-charpos advance — no longer applies.
     let text = "abXXcd\n";
     let buf_id = buffer_with_text(&mut eval, text);
     eval.buffer_manager_mut().set_current(buf_id);
@@ -2136,7 +2156,7 @@ fn classifier_routes_plain_space_width_spec() {
     // Increment 2i rung 3 (flipping the former 2d rung-3 refusal pin): a
     // plain `(space :width N)` spec with a positive fixnum N now ROUTES.
     // Production renders it through the pipeline's replacement session
-    // (one stretch glyph with covered-charpos provenance — GNU stamps the
+    // (one stretch glyph with covered-buffer provenance — GNU stamps the
     // covered buffer position on stretch glyphs, xdisp.c 6604+32684); the
     // plan credits the covered span with N columns for the fit walk.
     let text = "ab cd\n";

@@ -394,6 +394,10 @@ impl DisplayRowPrefixRequest {
         !matches!(self, Self::None)
     }
 
+    pub(crate) fn is_wrap(self) -> bool {
+        matches!(self, Self::Wrap)
+    }
+
     pub(crate) fn apply_transition_prefix_action(
         &mut self,
         _has_prefix: bool,

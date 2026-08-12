@@ -1,5 +1,7 @@
 use crate::bidi::{self, BidiDir};
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{
+    Glyph, GlyphArea, GlyphProvenance, GlyphRow, GlyphType,
+};
 use neomacs_display_protocol::types::FaceId;
 
 #[derive(Clone)]
@@ -239,7 +241,7 @@ pub(crate) fn push_char_to_row(
         GlyphArea::Text.index(),
         ch,
         face_id,
-        charpos,
+        GlyphProvenance::buffer(charpos),
         pixel_width,
     );
 }
@@ -249,14 +251,14 @@ pub(crate) fn push_char_to_area(
     area_index: usize,
     ch: char,
     face_id: FaceId,
-    charpos: usize,
+    provenance: GlyphProvenance,
     pixel_width: f32,
 ) {
     let area = &mut row.glyphs[area_index];
     if crate::unicode::is_cluster_extender(ch) && merge_extender_into_last_glyph(area, ch) {
         return;
     }
-    area.push(Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width));
+    area.push(Glyph::char_with_provenance(ch, face_id, provenance).with_pixel_width(pixel_width));
     mark_displays_text_if_text_area(row, area_index);
 }
 
@@ -273,7 +275,7 @@ pub(crate) fn push_wide_char_to_row(
         GlyphArea::Text.index(),
         ch,
         face_id,
-        charpos,
+        GlyphProvenance::buffer(charpos),
         pixel_width,
     );
 }
@@ -283,14 +285,14 @@ pub(crate) fn push_wide_char_to_area(
     area_index: usize,
     ch: char,
     face_id: FaceId,
-    charpos: usize,
+    provenance: GlyphProvenance,
     pixel_width: f32,
 ) {
     let area = &mut row.glyphs[area_index];
     if crate::unicode::is_cluster_extender(ch) && merge_extender_into_last_glyph(area, ch) {
         return;
     }
-    let mut glyph = Glyph::char(ch, face_id, charpos);
+    let mut glyph = Glyph::char_with_provenance(ch, face_id, provenance);
     glyph.wide = true;
     glyph.pixel_width = if pixel_width.is_finite() && pixel_width > 0.0 {
         pixel_width
@@ -298,7 +300,7 @@ pub(crate) fn push_wide_char_to_area(
         0.0
     };
     area.push(glyph);
-    area.push(Glyph::padding_for(face_id, charpos));
+    area.push(Glyph::padding_with_provenance(face_id, provenance));
     mark_displays_text_if_text_area(row, area_index);
 }
 
@@ -314,7 +316,13 @@ pub(crate) fn push_cluster_continuation_to_row(
     face_id: FaceId,
     charpos: usize,
 ) {
-    push_cluster_continuation_to_area(row, GlyphArea::Text.index(), ch, face_id, charpos);
+    push_cluster_continuation_to_area(
+        row,
+        GlyphArea::Text.index(),
+        ch,
+        face_id,
+        GlyphProvenance::buffer(charpos),
+    );
 }
 
 pub(crate) fn push_cluster_continuation_to_area(
@@ -322,7 +330,7 @@ pub(crate) fn push_cluster_continuation_to_area(
     area_index: usize,
     ch: char,
     face_id: FaceId,
-    charpos: usize,
+    provenance: GlyphProvenance,
 ) {
     let area = &mut row.glyphs[area_index];
     if let Some(last) = area.last_mut()
@@ -333,7 +341,7 @@ pub(crate) fn push_cluster_continuation_to_area(
     if merge_extender_into_last_glyph(area, ch) {
         return;
     }
-    area.push(Glyph::char(ch, face_id, charpos));
+    area.push(Glyph::char_with_provenance(ch, face_id, provenance));
     mark_displays_text_if_text_area(row, area_index);
 }
 
@@ -353,7 +361,7 @@ pub(crate) fn push_run_member_to_row(
         GlyphArea::Text.index(),
         ch,
         face_id,
-        charpos,
+        GlyphProvenance::buffer(charpos),
         pixel_width,
     );
 }
@@ -363,7 +371,7 @@ pub(crate) fn push_run_member_to_area(
     area_index: usize,
     ch: char,
     face_id: FaceId,
-    charpos: usize,
+    provenance: GlyphProvenance,
     pixel_width: f32,
 ) {
     let area = &mut row.glyphs[area_index];
@@ -376,13 +384,13 @@ pub(crate) fn push_run_member_to_area(
         if let Some(base) = area.iter_mut().rev().find(|g| !g.padding) {
             base.pixel_width += member_width;
         }
-        let mut pad = Glyph::padding_for(face_id, charpos);
+        let mut pad = Glyph::padding_with_provenance(face_id, provenance);
         pad.glyph_type = GlyphType::Char { ch };
         pad.pixel_width = member_width;
         area.push(pad);
         return;
     }
-    area.push(Glyph::char(ch, face_id, charpos).with_pixel_width(pixel_width));
+    area.push(Glyph::char_with_provenance(ch, face_id, provenance).with_pixel_width(pixel_width));
     mark_displays_text_if_text_area(row, area_index);
 }
 
@@ -404,7 +412,7 @@ pub(crate) fn push_stretch_to_row(
         pixel_width,
         pixel_height,
         pixel_ascent,
-        charpos,
+        GlyphProvenance::buffer(charpos),
     );
 }
 
@@ -417,14 +425,10 @@ pub(crate) fn push_stretch_to_area(
     pixel_width: f32,
     pixel_height: f32,
     pixel_ascent: f32,
-    charpos: usize,
+    provenance: GlyphProvenance,
 ) {
-    let mut glyph = Glyph::stretch(width_cols, face_id).with_pixel_geometry(
-        pixel_width,
-        pixel_height,
-        pixel_ascent,
-    );
-    glyph.charpos = charpos;
+    let glyph = Glyph::stretch_with_provenance(width_cols, face_id, provenance)
+        .with_pixel_geometry(pixel_width, pixel_height, pixel_ascent);
     row.glyphs[area_index].push(glyph);
     mark_displays_text_if_text_area(row, area_index);
 }

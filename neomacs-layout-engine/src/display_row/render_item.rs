@@ -1,9 +1,9 @@
 use crate::display_item::{
-    DisplayItem, DisplayItemKind, DisplaySourceMappedText, DisplaySourcePosition, DisplayTextRun,
-    RenderFaceRef, SourceSpan,
+    DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
+#[cfg(test)]
+use crate::display_item::{DisplaySourceMappedText, DisplaySourcePosition};
 use crate::display_row::builder::DisplayRowAppendProgress;
-use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
 pub(crate) struct DisplayRowRenderItem {
     source_item: DisplayItem,
@@ -49,6 +49,13 @@ fn clipped_display_item_remainder(
     item: DisplayItem,
     progress: &DisplayRowAppendProgress,
 ) -> Option<DisplayItem> {
+    clipped_display_item_remainder_after_chars(item, progress.slots().len())
+}
+
+fn clipped_display_item_remainder_after_chars(
+    item: DisplayItem,
+    emitted_chars: usize,
+) -> Option<DisplayItem> {
     let DisplayItem {
         span,
         face,
@@ -56,15 +63,11 @@ fn clipped_display_item_remainder(
         layout,
         pointer_appearance,
     } = item;
-    let emitted_chars = progress.slots().len();
     match kind {
         DisplayItemKind::TextRun(run) => {
             let (split_byte, remaining) = clipped_text_remainder(run.text.as_ref(), emitted_chars)?;
             Some(DisplayItem {
-                span: SourceSpan::new(
-                    display_source_position_advance(&span.start, emitted_chars, split_byte),
-                    span.end,
-                ),
+                span: SourceSpan::new(span.start.advanced_by(emitted_chars, split_byte), span.end),
                 face,
                 kind: DisplayItemKind::TextRun(DisplayTextRun::new(remaining)),
                 layout,
@@ -72,11 +75,11 @@ fn clipped_display_item_remainder(
             })
         }
         DisplayItemKind::SourceMappedText(text) => {
-            let (_, remaining) = clipped_text_remainder(text.text.as_ref(), emitted_chars)?;
+            let remainder = text.into_remainder_after(emitted_chars)?;
             Some(DisplayItem {
                 span,
                 face,
-                kind: DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(remaining)),
+                kind: DisplayItemKind::SourceMappedText(remainder),
                 layout,
                 pointer_appearance,
             })
@@ -143,6 +146,32 @@ mod tests {
             DisplayItemKind::MediaReplacement(actual) if actual == replacement
         ));
     }
+
+    #[test]
+    fn clipped_string_mapped_text_preserves_and_advances_its_string_origin() {
+        let source = DisplayItem {
+            span: SourceSpan::synthetic(1, 10, 12),
+            face: RenderFaceRef::FaceId(neomacs_display_protocol::types::FaceId::new(1)),
+            kind: DisplayItemKind::SourceMappedText(DisplaySourceMappedText::from_string_run(
+                "αbc",
+                DisplaySourcePosition::lisp_string(7, 4, 8),
+            )),
+            layout: Default::default(),
+            pointer_appearance: None,
+        };
+
+        let remainder = clipped_display_item_remainder_after_chars(source, 1)
+            .expect("two string characters remain");
+
+        assert_eq!(
+            remainder.kind,
+            DisplayItemKind::SourceMappedText(DisplaySourceMappedText::from_string_run(
+                "bc",
+                DisplaySourcePosition::lisp_string(7, 5, 10),
+            )),
+            "the next row must continue in the same string coordinate space"
+        );
+    }
 }
 
 fn clipped_text_remainder(text: &str, emitted_chars: usize) -> Option<(usize, String)> {
@@ -155,34 +184,4 @@ fn clipped_text_remainder(text: &str, emitted_chars: usize) -> Option<(usize, St
         .map(|(byte, _)| byte)
         .unwrap_or(text.len());
     Some((split_byte, text[split_byte..].to_string()))
-}
-
-fn display_source_position_advance(
-    start: &DisplaySourcePosition,
-    char_offset: usize,
-    byte_offset: usize,
-) -> DisplaySourcePosition {
-    match start {
-        DisplaySourcePosition::Buffer {
-            buffer_id,
-            char_pos,
-            byte_pos,
-        } => DisplaySourcePosition::buffer(
-            *buffer_id,
-            CharPos0::new(char_pos.get() + char_offset),
-            EmacsBytePos::new(byte_pos.get() + byte_offset),
-        ),
-        DisplaySourcePosition::LispString {
-            source_id,
-            char_index,
-            byte_index,
-        } => DisplaySourcePosition::lisp_string(
-            source_id.get(),
-            char_index + char_offset,
-            byte_index + byte_offset,
-        ),
-        DisplaySourcePosition::Synthetic { source_id, offset } => {
-            DisplaySourcePosition::synthetic(source_id.get(), offset + char_offset)
-        }
-    }
 }

@@ -2,6 +2,7 @@ use super::*;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
+use neomacs_display_protocol::glyph_matrix::GlyphProvenance;
 use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
 
@@ -76,6 +77,20 @@ fn write_char_to_current_row(
     charpos: usize,
 ) {
     write_char_to_current_row_with_width(builder, ch, face_id, charpos, 0.0);
+}
+
+fn write_char_to_current_row_with_provenance(
+    builder: &mut DisplayOutputBuilder,
+    ch: char,
+    face_id: FaceId,
+    provenance: GlyphProvenance,
+) {
+    builder
+        .edit_current_row_for_test(|row| {
+            row.glyphs[GlyphArea::Text.index()]
+                .push(Glyph::char(ch, face_id, 0).with_provenance(provenance));
+        })
+        .expect("current row");
 }
 
 fn write_char_to_current_row_with_width(
@@ -253,11 +268,11 @@ fn builder_tracks_single_window_single_row() {
     let g0 = &matrix.rows[0].glyphs[GlyphArea::Text as usize][0];
     assert_eq!(g0.glyph_type, GlyphType::Char { ch: 'H' });
     assert_eq!(g0.face_id, FaceId::new(0));
-    assert_eq!(g0.charpos, 0);
+    assert_eq!(g0.provenance, GlyphProvenance::buffer(0));
 
     let g1 = &matrix.rows[0].glyphs[GlyphArea::Text as usize][1];
     assert_eq!(g1.glyph_type, GlyphType::Char { ch: 'i' });
-    assert_eq!(g1.charpos, 1);
+    assert_eq!(g1.provenance, GlyphProvenance::buffer(1));
 }
 
 #[test]
@@ -1078,6 +1093,113 @@ fn resolve_cursor_visual_col_is_the_single_resolution_authority() {
 }
 
 #[test]
+fn cursor_does_not_treat_an_unmapped_string_index_as_a_buffer_position() {
+    use neomacs_display_protocol::glyph_matrix::{GlyphStringId, GlyphStringSource};
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 80, Rect::new(0.0, 0.0, 640.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 's', FaceId::new(0), 0);
+    write_char_to_current_row(&mut builder, 'b', FaceId::new(0), 10);
+    builder
+        .edit_current_row_for_test(|row| {
+            let source = row
+                .push_string_source(GlyphStringSource::new(GlyphStringId::new(4)))
+                .expect("row-local string source");
+            row.glyphs[GlyphArea::Text.index()][0].provenance = GlyphProvenance::string(source, 5);
+        })
+        .expect("current row");
+    builder.end_row();
+
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 0, 5)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(1),
+        "string index 5 must not masquerade as buffer charpos 5"
+    );
+    builder.end_window();
+}
+
+#[test]
+fn cursor_on_a_replacement_chooses_the_smallest_string_index_after_bidi_reorder() {
+    use neomacs_display_protocol::glyph_matrix::{
+        GlyphStringBufferRange, GlyphStringId, GlyphStringSource,
+    };
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 80, Rect::new(0.0, 0.0, 640.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    for ch in ['c', 'a', 'b'] {
+        write_char_to_current_row(&mut builder, ch, FaceId::new(0), 0);
+    }
+    builder
+        .edit_current_row_for_test(|row| {
+            let string = GlyphStringId::new(8);
+            let covered = GlyphStringBufferRange::new(20, 22);
+            let source = row
+                .push_string_source(GlyphStringSource::replacement(string, covered))
+                .expect("row-local replacement source");
+            for (glyph, index) in row.glyphs[GlyphArea::Text.index()]
+                .iter_mut()
+                .zip([2, 0, 1])
+            {
+                glyph.provenance = GlyphProvenance::string(source, index);
+            }
+        })
+        .expect("current row");
+    builder.end_row();
+
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 0, 20)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(1),
+        "GNU step 2 chooses string index 0, not the first visual glyph"
+    );
+    builder.end_window();
+}
+
+#[test]
+fn cursor_resolves_the_exact_occurrence_when_one_string_is_displayed_twice() {
+    use neomacs_display_protocol::glyph_matrix::{
+        GlyphStringBufferRange, GlyphStringId, GlyphStringSource,
+    };
+
+    let mut builder = DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 80, Rect::new(0.0, 0.0, 640.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+    write_char_to_current_row(&mut builder, 'a', FaceId::new(0), 0);
+    write_char_to_current_row(&mut builder, 'b', FaceId::new(0), 0);
+    builder
+        .edit_current_row_for_test(|row| {
+            let string = GlyphStringId::new(8);
+            let first = row
+                .push_string_source(GlyphStringSource::replacement(
+                    string,
+                    GlyphStringBufferRange::new(10, 12),
+                ))
+                .expect("first string occurrence");
+            let second = row
+                .push_string_source(GlyphStringSource::replacement(
+                    string,
+                    GlyphStringBufferRange::new(20, 22),
+                ))
+                .expect("second string occurrence");
+            row.glyphs[GlyphArea::Text.index()][0].provenance = GlyphProvenance::string(first, 0);
+            row.glyphs[GlyphArea::Text.index()][1].provenance = GlyphProvenance::string(second, 0);
+        })
+        .expect("current row");
+    builder.end_row();
+
+    assert_eq!(
+        CursorVisualColumnResolutionRequest::new(1, 0, 20)
+            .resolve(builder.cursor_visual_column_context()),
+        Some(1),
+        "the first occurrence of the same string object must not capture point"
+    );
+    builder.end_window();
+}
+
+#[test]
 fn resolve_cursor_on_blank_gutter_line_lands_past_the_gutter() {
     // Regression for the "cursor in the line-number column on the blank line
     // after an org #+title" bug. That row carries only line-number gutter
@@ -1132,11 +1254,11 @@ fn resolve_eol_cursor_excludes_positionless_newline_glyph() {
     builder.begin_row(0, GlyphRowRole::Text);
     write_char_to_current_row(&mut builder, 'H', FaceId::new(0), 40);
     write_char_to_current_row(&mut builder, 'i', FaceId::new(0), 41);
-    write_char_to_current_row(
+    write_char_to_current_row_with_provenance(
         &mut builder,
         ' ',
         FaceId::new(0),
-        NO_BUFFER_POSITION_CHARPOS,
+        GlyphProvenance::line_end(),
     );
     builder
         .edit_current_row_for_test(|row| {
@@ -1165,20 +1287,28 @@ fn resolve_empty_line_cursor_preserves_gutter_before_line_end_fill() {
     builder.begin_window(1, 1, 80, Rect::new(0.0, 0.0, 640.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     for _ in 0..3 {
-        write_char_to_current_row(
+        write_char_to_current_row_with_provenance(
             &mut builder,
             ' ',
             FaceId::new(1),
-            NO_BUFFER_POSITION_CHARPOS,
+            GlyphProvenance::mark(),
         );
     }
-    write_char_to_current_row(
+    write_char_to_current_row_with_provenance(
         &mut builder,
         ' ',
         FaceId::new(0),
-        NO_BUFFER_POSITION_CHARPOS,
+        GlyphProvenance::line_end(),
     );
     write_stretch_to_current_row(&mut builder, 20, FaceId::new(2));
+    builder
+        .edit_current_row_for_test(|row| {
+            row.glyphs[GlyphArea::Text.index()]
+                .last_mut()
+                .expect("fill stretch")
+                .provenance = GlyphProvenance::line_end();
+        })
+        .expect("current row");
     builder
         .edit_current_row_for_test(|row| {
             row.start_charpos = 4;
@@ -1521,9 +1651,9 @@ fn complex_run_grows_into_one_composite_with_per_char_padding() {
     assert!(!area[0].padding);
     assert!(area[1].padding && area[2].padding);
     // Per-letter cursor: each column carries its own buffer position.
-    assert_eq!(area[0].charpos, 10);
-    assert_eq!(area[1].charpos, 11);
-    assert_eq!(area[2].charpos, 12);
+    assert_eq!(area[0].provenance, GlyphProvenance::buffer(10));
+    assert_eq!(area[1].provenance, GlyphProvenance::buffer(11));
+    assert_eq!(area[2].provenance, GlyphProvenance::buffer(12));
 }
 
 #[test]
@@ -1547,7 +1677,7 @@ fn lone_rtl_run_stays_in_place_in_ltr_paragraph() {
         text.push(Glyph {
             glyph_type: GlyphType::Composite { text: word.into() },
             face_id: FaceId::new(0),
-            charpos: cp,
+            provenance: GlyphProvenance::buffer(cp),
             bidi_level: 0,
             wide: false,
             pixel_width: 0.0,
@@ -1593,7 +1723,7 @@ fn rtl_paragraph_row_is_marked_reversed() {
                 text: "\u{0627}\u{0644}\u{0645}".into(),
             },
             face_id: FaceId::new(0),
-            charpos: 0,
+            provenance: GlyphProvenance::buffer(0),
             bidi_level: 0,
             wide: false,
             pixel_width: 40.0,

@@ -16,7 +16,7 @@ use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::glyph_row_writer::push_stretch_to_area;
 use neomacs_display_protocol::frame_glyphs::PhysCursor;
 use neomacs_display_protocol::glyph_matrix::{
-    Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
+    Glyph, GlyphArea, GlyphProvenance, GlyphRow, GlyphType, RedisplayGlyphProvenance,
 };
 use neomacs_display_protocol::types::{Color, FaceId, Rect};
 
@@ -234,7 +234,7 @@ impl RowTrailingFaceFill {
             self.ascent_px,
             // Redisplay's own fill stands for no buffer character, so the
             // blank-line cursor never latches to it.
-            NO_BUFFER_POSITION_CHARPOS,
+            GlyphProvenance::line_end(),
         );
         RowTrailingFaceFillResult::Appended
     }
@@ -250,8 +250,10 @@ impl RowTrailingFaceFill {
 
     fn matches_existing_fill(self, glyph: &Glyph) -> bool {
         const PIXEL_TOLERANCE: f32 = 0.01;
-        glyph.charpos == NO_BUFFER_POSITION_CHARPOS
-            && glyph.face_id == self.face_id
+        matches!(
+            glyph.provenance,
+            GlyphProvenance::Redisplay(RedisplayGlyphProvenance::LineEnd)
+        ) && glyph.face_id == self.face_id
             && matches!(
                 glyph.glyph_type,
                 GlyphType::Stretch { width_cols } if width_cols == self.width_cols()
@@ -294,8 +296,12 @@ impl RowExtendFill {
         let text_index = GlyphArea::Text.index();
         if row.glyphs[text_index].is_empty() {
             row.glyphs[text_index].push(
-                Glyph::char(' ', self.trailing.face_id, NO_BUFFER_POSITION_CHARPOS)
-                    .with_pixel_width(self.trailing.char_width.max(1.0)),
+                Glyph::char_with_provenance(
+                    ' ',
+                    self.trailing.face_id,
+                    GlyphProvenance::line_end(),
+                )
+                .with_pixel_width(self.trailing.char_width.max(1.0)),
             );
             row.displays_text = true;
         }

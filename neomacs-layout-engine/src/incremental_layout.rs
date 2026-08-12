@@ -19,7 +19,7 @@ use neomacs_display_protocol::frame_glyphs::{CursorStyle, PhysCursor};
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::glyph_matrix::{
     GlyphArea, GlyphMatrix, GlyphPointerOccurrenceIdentity, GlyphPointerSourceKind, GlyphRow,
-    MatrixRow, NO_BUFFER_POSITION_CHARPOS,
+    MatrixRow,
 };
 use neomacs_display_protocol::types::FaceId;
 #[cfg(test)]
@@ -1239,11 +1239,15 @@ impl RetainedWindowMatrix {
                     row.end_charpos = (row.end_charpos as i64 + delta) as usize;
                     for area in row.glyphs.iter_mut() {
                         for g in area.iter_mut() {
-                            if g.charpos != NO_BUFFER_POSITION_CHARPOS {
-                                g.charpos = (g.charpos as i64 + delta) as usize;
-                            }
+                            g.provenance = g
+                                .provenance
+                                .shifted_buffer_positions(dirty_start.max(0) as usize, delta);
                         }
                     }
+                    // String indices are row-local string coordinates and do
+                    // not move. Replacement coverage is occurrence-wide, so
+                    // shift each row side-table entry exactly once.
+                    row.shift_string_source_buffer_positions(dirty_start.max(0) as usize, delta);
                     // Pointer identities carry buffer positions too (mouse-face
                     // source ranges, display-replacement anchors); a range that
                     // crosses the relaid row into these reused rows must key
@@ -1640,7 +1644,9 @@ mod scroll_classifier_tests {
     /// `allow_below_reuse`; with it off the plan is the above-only edit replay.
     #[test]
     fn edit_replay_below_reuse_shifts_rows_below_by_inserted_count() {
-        use neomacs_display_protocol::glyph_matrix::Glyph;
+        use neomacs_display_protocol::glyph_matrix::{
+            Glyph, GlyphProvenance, GlyphStringBufferRange, GlyphStringId, GlyphStringSource,
+        };
         let mut m = synthetic_matrix(0, 5); // rows start at 0,10,20,30,40
         // Give the edited row (row 2, chars [20,29]) 10 monospace (8px) glyphs.
         for c in 0..10 {
@@ -1648,6 +1654,17 @@ mod scroll_classifier_tests {
             g.pixel_width = 8.0;
             MatrixRow::make_mut(&mut m.matrix.rows[2]).glyphs[GlyphArea::Text.index()].push(g);
         }
+        let row3 = MatrixRow::make_mut(&mut m.matrix.rows[3]);
+        let string_source = row3
+            .push_string_source(GlyphStringSource::replacement(
+                GlyphStringId::new(7),
+                GlyphStringBufferRange::new(30, 35),
+            ))
+            .expect("row-local string source");
+        row3.glyphs[GlyphArea::Text.index()].push(
+            Glyph::char('S', FaceId::new(0), 30)
+                .with_provenance(GlyphProvenance::string(string_source, 4)),
+        );
         // A 1-char insert at charpos 25 (inside row 2): chars tick moved, point +
         // buffer_size grew by 1, everything else equal.
         let mut curr = synthetic_key(0, 25);
@@ -1670,6 +1687,19 @@ mod scroll_classifier_tests {
         let below3 = r.reused_rows.iter().find(|(i, _)| *i == 3).unwrap();
         assert_eq!(below3.1.start_charpos, 31, "row 3 start 30 -> 31");
         assert_eq!(below3.1.end_charpos, 40, "row 3 end 39 -> 40");
+        assert_eq!(
+            below3.1.glyphs[GlyphArea::Text.index()][0].provenance,
+            GlyphProvenance::string(string_source, 4),
+            "reuse shifts the covered buffer range but never the string index"
+        );
+        assert_eq!(
+            below3
+                .1
+                .string_source(string_source)
+                .and_then(|source| source.covered_buffer_range()),
+            Some(GlyphStringBufferRange::new(31, 36)),
+            "reuse shifts the occurrence-wide range exactly once"
+        );
         let below4 = r.reused_rows.iter().find(|(i, _)| *i == 4).unwrap();
         assert_eq!(below4.1.start_charpos, 41, "row 4 start 40 -> 41");
 

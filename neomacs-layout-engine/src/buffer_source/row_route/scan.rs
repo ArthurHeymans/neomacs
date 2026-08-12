@@ -173,8 +173,8 @@ pub(super) fn routed_line_scan(
     let mut has_tab = false;
     let mut has_wide = false;
     let mut composed = Vec::new();
-    let mut x_px = fit.start_x_px;
-    let mut col = fit.start_col;
+    let mut x_px = fit.start_position.x_px();
+    let mut col = fit.start_position.col();
     let mut tail: Option<(char, bool)> = None;
     let mut merge_target = RoutedScanMergeTarget::None;
     let mut next_replacement = replacements.iter().peekable();
@@ -300,9 +300,10 @@ pub(super) fn routed_line_scan(
         }
         match classify_routed_row_char(ch).ok_or(RouteRefusal::ScanChar)? {
             RoutedRowCharAdvance::Tab => {
-                let tab = fit
-                    .tab_policy
-                    .advance_from(DisplayRowPosition::new(x_px, col), fit.char_width_px);
+                let tab = fit.tab_policy.advance_from(
+                    fit.start_position.at_screen_position(x_px, col),
+                    fit.char_width_px,
+                );
                 // A tab crossing the right edge is clipped in place by the
                 // pipeline (GNU xdisp.c:26390, tab never split): end the
                 // routed prefix BEFORE it and let the pipeline append it.

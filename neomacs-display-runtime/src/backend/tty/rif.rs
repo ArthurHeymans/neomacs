@@ -2729,7 +2729,7 @@ impl TtyRif {
                     row.used(GlyphArea::RightMargin),
                     row.glyphs[GlyphArea::Text.index()].last().map(|glyph| (
                         glyph.face_id,
-                        glyph.charpos,
+                        glyph.legacy_charpos(),
                         &glyph.glyph_type,
                     )),
                     glyph_row_debug_text(row)

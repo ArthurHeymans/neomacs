@@ -7,18 +7,15 @@
 //! newline space, face-extension stretches, truncation and continuation
 //! glyphs), then walks backward re-facing while the glyph's object is the
 //! buffer and the glyph is a space `Char` or a `Stretch` (a tab). Neomacs
-//! glyphs carry no object; [`NO_BUFFER_POSITION_CHARPOS`] deliberately
-//! mirrors GNU's `NILP (glyph->object)` test (see its doc), so "has a buffer
-//! position" stands in for `BUFFERP (glyph->object)`.
+//! glyph provenance carries the same discriminator, so this mutation can
+//! require the `Buffer` arm directly instead of inferring it from a sentinel.
 //!
 //! WHEN the highlight runs is not decided here: [`super::line_end::plan`] is
 //! the one place that orders it (first, at a true line end only) for every
 //! row producer.
 
 use crate::display_current_row_output::DisplayCurrentRowMutation;
-use neomacs_display_protocol::glyph_matrix::{
-    Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
-};
+use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::FaceId;
 
 /// Re-face the current row's trailing whitespace glyphs with the
@@ -46,7 +43,7 @@ fn is_whitespace_glyph(glyph: &Glyph) -> bool {
 }
 
 fn has_buffer_position(glyph: &Glyph) -> bool {
-    glyph.charpos != NO_BUFFER_POSITION_CHARPOS
+    glyph.provenance.buffer_charpos().is_some()
 }
 
 impl DisplayCurrentRowMutation for HighlightTrailingWhitespaceMutation {

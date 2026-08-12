@@ -81,8 +81,9 @@
 //!   increment 2i for the narrow routable class — a plain property-less
 //!   single-line string (rung 2) or a plain `(space :width N)` spec
 //!   (rung 3) anchored strictly inside the line — by rendering through the
-//!   pipeline's OWN replacement session at commit (covered-charpos glyph
-//!   provenance, string base-face policy, session walk bookkeeping); every
+//!   pipeline's OWN replacement session at commit (typed string-index glyph
+//!   provenance plus covered buffer range, string base-face policy, session
+//!   walk bookkeeping); every
 //!   other display shape refuses through [`routed_row_replacement_scan`].
 //! * [`BufferPlainItemSource`] is the `DisplayItemSource` for such a row: it
 //!   produces exactly the items `BufferTextSourceCursor` would — one plain
@@ -336,11 +337,12 @@ pub(crate) struct RowRouteRowStart<'a> {
 /// policy is the append surface's (buffer `tab-width` / `tab-stop-list`), so
 /// the classifier's tab expansion is the SAME `DisplayTabPolicy::advance_from`
 /// the pipeline's per-char advance resolves (GNU `gui_produce_glyphs`
-/// `next_tab_x`); `start_col` is the walk column the first tab expands from.
+/// `next_tab_x`). `start_position` carries both the live screen-row pen and
+/// the typed physical-line TAB coordinate space; keeping them atomic prevents
+/// a continuation route from silently reconstructing a row-local TAB origin.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RowRouteFit<'a> {
-    pub(crate) start_x_px: f32,
-    pub(crate) start_col: usize,
+    pub(crate) start_position: DisplayRowPosition,
     pub(crate) char_width_px: f32,
     pub(crate) right_edge_px: f32,
     pub(crate) tab_policy: &'a DisplayTabPolicy,
@@ -380,11 +382,12 @@ pub(crate) struct PlainRowPlan {
 /// A routed `display` replacement (increment 2i rung 2): the covered CHAR
 /// range `[start, end)` of the line renders as the display value through the
 /// pipeline's OWN replacement session (`display_property_render.rs` ->
-/// `replacement.rs`), producing covered-provenance glyphs (every glyph
-/// stamped with the covered start — the rung 1 vocabulary pins). The routed
-/// class accepts only single-line property-less strings whose chars have
-/// unambiguous column widths, so `advance_cols` is the exact logical-cell
-/// advance the classifier's fit walk credits in place of the covered chars.
+/// `replacement.rs`). String text glyphs carry their GNU string indices plus
+/// the exact covered buffer range; non-string display specs retain buffer
+/// provenance. The routed class accepts only single-line property-less strings
+/// whose chars have unambiguous column widths, so `advance_cols` is the exact
+/// logical-cell advance the classifier's fit walk credits in place of the
+/// covered chars.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RoutedRowReplacement {
     /// CHAR offset of the covered range start within the line.
@@ -415,7 +418,7 @@ pub(crate) enum RoutedReplacementContent {
     /// Rung 2: a plain, property-less, single-line string.
     String { text: Box<str> },
     /// Rung 3: a plain `(space :width N)` spec, N a positive fixnum — one
-    /// stretch glyph of N columns with covered-charpos provenance (GNU
+    /// stretch glyph of N columns with covered-buffer provenance (GNU
     /// stamps the covered buffer position on stretch glyphs; xdisp.c
     /// handle_single_display_spec 6604 + append_stretch_glyph 32684).
     SpaceWidth,

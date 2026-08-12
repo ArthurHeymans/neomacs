@@ -158,6 +158,7 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
         ) {
             DisplaySourceTextCharOverflowAction::Fits => BufferSourceOverflowRenderOutcome::Fits,
             DisplaySourceTextCharOverflowAction::Truncate { transition } => {
+                progress.reset_physical_line_tabs();
                 let truncation_skip = source_walk
                     .consume_truncation_skip(text, progress.source_position())
                     .apply_to_progress(&mut progress);
@@ -195,6 +196,10 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 transition,
             } => {
                 let word_wrap_action = BufferSourceWordWrapAction::new(wrap_break);
+                progress.continue_physical_line_after_visual_row(
+                    word_wrap_action.row_position().x_px(),
+                    context.content_x,
+                );
                 let mut source_position = progress.source_position();
                 // Roll the current row's drawn glyphs back to the word-wrap
                 // candidate (the word boundary) before extending the trailing
@@ -282,6 +287,12 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
             DisplaySourceTextCharOverflowAction::CharacterWrap { transition } => {
                 let character_wrap_action =
                     BufferSourceCharacterWrapAction::from_source_step_char(self.source_step_char);
+                let row_end_x = if context.ch == '\t' {
+                    context.right_edge_px
+                } else {
+                    progress.row_progress().x()
+                };
+                progress.continue_physical_line_after_visual_row(row_end_x, context.content_x);
                 {
                     let metrics = context.active_face_metrics;
                     // R2L (reversed_p) handled inside the mutation; pass `false`.
@@ -425,7 +436,7 @@ impl BufferSourceTruncationSkipAction {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct BufferSourceWordWrapAction {
     break_candidate: WordWrapBreakCandidate,
 }
@@ -437,6 +448,10 @@ impl BufferSourceWordWrapAction {
 
     pub(crate) fn glyph_checkpoint(self) -> DisplayRowGlyphCheckpoint {
         self.break_candidate.glyph_checkpoint()
+    }
+
+    pub(crate) fn row_position(self) -> crate::display_row::builder::DisplayRowPosition {
+        self.break_candidate.row_position()
     }
 
     pub(crate) fn restore_row_output_progress(self, output_emitter: &mut WindowOutputEmitter) {
@@ -760,6 +775,7 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
                 BufferSourceSpecialOverflowRenderOutcome::Fits
             }
             Some(DisplaySourceSpecialCharOverflowAction::Truncate { transition }) => {
+                progress.reset_physical_line_tabs();
                 let truncation_skip = source_walk
                     .consume_truncation_skip(context.text, progress.source_position())
                     .apply_to_progress(&mut progress);
@@ -807,6 +823,10 @@ impl<'a> BufferSourceSpecialOverflowRenderRequest<'a> {
             }
             Some(DisplaySourceSpecialCharOverflowAction::Wrap { transition }) => {
                 let special_wrap_action = BufferSourceSpecialWrapAction::new(progress.charpos());
+                progress.continue_physical_line_after_visual_row(
+                    progress.row_progress().x(),
+                    context.content_x,
+                );
                 special_wrap_action.apply_before_row_transition(
                     row_build.row_extend,
                     progress.row_progress_mut().x_mut(),

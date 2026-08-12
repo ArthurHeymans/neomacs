@@ -116,7 +116,7 @@ fn applying_the_same_fill_twice_is_idempotent() {
 fn a_different_synthetic_stretch_with_the_same_face_does_not_suppress_fill() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     let mut existing = Glyph::stretch(1, EXTEND_FACE_ID).with_pixel_geometry(3.0, 2.0, 1.0);
-    existing.charpos = neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS;
+    existing.provenance = neomacs_display_protocol::glyph_matrix::GlyphProvenance::line_end();
     row.glyphs[GlyphArea::Text.index()].push(existing);
 
     assert!(fill().apply_to(&mut row));

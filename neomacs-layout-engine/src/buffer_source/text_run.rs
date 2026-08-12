@@ -349,7 +349,7 @@ fn apply_whole_text_run_word_wrap_state(
             let row_first =
                 first_run_charpos.or_else(|| Some(layout_i64_char_pos_to_lisp_char_pos(charpos)));
             if word_wrap.can_record_candidate(ch) {
-                word_wrap.record_candidate(
+                word_wrap.record_candidate_at(
                     ch,
                     byte_idx,
                     charpos,
@@ -360,6 +360,7 @@ fn apply_whole_text_run_word_wrap_state(
                     // the pre-run snapshot advanced by `char_offset`.
                     row_glyph_checkpoint_start
                         .with_added_text_glyphs(char_offset, row_glyph_checkpoint_after_append),
+                    slot.start_position(),
                 );
             }
             first_run_charpos = row_first;

@@ -106,6 +106,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 boundary.first(),
                 self.state.progress.source_position(),
                 &self.state.source_render,
+                self.state.progress.row_position(),
             );
         }
         let anchor_charpos = strings.anchor_charpos().get() as i64;

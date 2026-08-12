@@ -109,8 +109,7 @@ impl<'rows, 'emit, 'surface>
             text_start_byte: loop_context.text_start_byte(),
         };
         let fit = RowRouteFit {
-            start_x_px: position.x_px(),
-            start_col: position.col(),
+            start_position: position,
             char_width_px: params.char_width,
             right_edge_px: self.surface.append_surface.right_edge(),
             tab_policy: self.surface.append_surface.tab_policy(),
@@ -525,7 +524,7 @@ impl<'rows, 'emit, 'surface>
                                 // (the session's from_stretch Empty arm).
                                 probe_position
                             } else {
-                                DisplayRowPosition::new(
+                                probe_position.at_screen_position(
                                     probe_position.x_px() + width_px,
                                     probe_position.col()
                                         + (width_px / params.char_width.max(1.0)).round() as usize,

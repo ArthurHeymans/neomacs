@@ -75,6 +75,37 @@ impl DisplaySourcePosition {
             _ => None,
         }
     }
+
+    /// Advance within this source without changing its coordinate space.
+    ///
+    /// Buffer positions, Lisp-string indices, and synthetic offsets are
+    /// intentionally separate enum arms.  Fragmentation code therefore
+    /// cannot advance a string remainder as though it were buffer text.
+    pub(crate) fn advanced_by(&self, char_offset: usize, byte_offset: usize) -> Self {
+        match self {
+            Self::Buffer {
+                buffer_id,
+                char_pos,
+                byte_pos,
+            } => Self::buffer(
+                *buffer_id,
+                CharPos0::new(char_pos.get().saturating_add(char_offset)),
+                EmacsBytePos::new(byte_pos.get().saturating_add(byte_offset)),
+            ),
+            Self::LispString {
+                source_id,
+                char_index,
+                byte_index,
+            } => Self::lisp_string(
+                source_id.get(),
+                char_index.saturating_add(char_offset),
+                byte_index.saturating_add(byte_offset),
+            ),
+            Self::Synthetic { source_id, offset } => {
+                Self::synthetic(source_id.get(), offset.saturating_add(char_offset))
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -464,10 +495,11 @@ impl BufferDisplayReplacementSource {
     }
 
     pub(crate) fn item_from_replacement_string_item(self, item: DisplayItem) -> DisplayItem {
+        let glyph_string_start = item.span.start.clone();
         let kind = match item.kind {
-            DisplayItemKind::TextRun(run) => {
-                DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new(run.text))
-            }
+            DisplayItemKind::TextRun(run) => DisplayItemKind::SourceMappedText(
+                DisplaySourceMappedText::from_string_run(run.text, glyph_string_start),
+            ),
             kind => kind,
         };
         self.item_with_face(item.face, kind)
@@ -682,11 +714,49 @@ impl DisplayTextRun {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DisplaySourceMappedText {
     pub(crate) text: Box<str>,
+    /// Source of glyph indices when buffer coverage and glyph provenance are
+    /// intentionally different (a string-valued `display` replacement).
+    /// `None` retains the covered-start rule used by escape/composition
+    /// expansions.
+    pub(crate) glyph_string_start: Option<DisplaySourcePosition>,
 }
 
 impl DisplaySourceMappedText {
     pub(crate) fn new(text: impl Into<Box<str>>) -> Self {
-        Self { text: text.into() }
+        Self {
+            text: text.into(),
+            glyph_string_start: None,
+        }
+    }
+
+    pub(crate) fn from_string_run(
+        text: impl Into<Box<str>>,
+        glyph_string_start: DisplaySourcePosition,
+    ) -> Self {
+        debug_assert!(matches!(
+            glyph_string_start,
+            DisplaySourcePosition::LispString { .. }
+        ));
+        Self {
+            text: text.into(),
+            glyph_string_start: Some(glyph_string_start),
+        }
+    }
+
+    /// Keep the displayed text and its glyph-coordinate origin transactional
+    /// when a row clips this item and carries the remainder forward.
+    pub(crate) fn into_remainder_after(self, emitted_chars: usize) -> Option<Self> {
+        let split_byte = self
+            .text
+            .char_indices()
+            .nth(emitted_chars)
+            .map(|(byte, _)| byte)?;
+        Some(Self {
+            text: self.text[split_byte..].into(),
+            glyph_string_start: self
+                .glyph_string_start
+                .map(|start| start.advanced_by(emitted_chars, split_byte)),
+        })
     }
 }
 

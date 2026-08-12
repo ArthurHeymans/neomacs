@@ -5,8 +5,8 @@ use neomacs_display_protocol::frame_glyphs::{
     PresentedWindowGeometry, PresentedWindowRegions, WindowInfo,
 };
 use neomacs_display_protocol::glyph_matrix::{
-    FaceFillItem, FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphRow, RowDamage,
-    WindowMatrixEntry,
+    FaceFillItem, FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphProvenance, GlyphRow,
+    RowDamage, WindowMatrixEntry,
 };
 use neomacs_display_protocol::tty_capabilities::TtyNoColorVideo;
 use neomacs_display_protocol::types::Px;
@@ -131,7 +131,7 @@ fn glyph_to_char_returns_first_char_for_composite() {
     let g = Glyph {
         glyph_type: GlyphType::Composite { text: "ab".into() },
         face_id: FaceId::new(0),
-        charpos: 0,
+        provenance: GlyphProvenance::buffer(0),
         bidi_level: 0,
         wide: false,
         pixel_width: 0.0,
@@ -2256,7 +2256,7 @@ fn run_composite(text: &str, bidi_level: u8) -> Glyph {
     Glyph {
         glyph_type: GlyphType::Composite { text: text.into() },
         face_id: FaceId::new(0),
-        charpos: 0,
+        provenance: GlyphProvenance::buffer(0),
         bidi_level,
         wide: false,
         pixel_width: 0.0,
@@ -2323,7 +2323,7 @@ fn run_member_padding_cluster(text: &str, charpos: usize) -> Glyph {
     let mut g = Glyph {
         glyph_type: GlyphType::Composite { text: text.into() },
         face_id: FaceId::new(0),
-        charpos,
+        provenance: GlyphProvenance::buffer(charpos),
         bidi_level: 1,
         wide: false,
         pixel_width: 0.0,

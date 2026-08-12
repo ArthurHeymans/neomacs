@@ -1,3 +1,4 @@
+use super::ProducedGlyphProvenance as GlyphProvenance;
 use super::*;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplayRowBreak,
@@ -5,8 +6,9 @@ use crate::display_item::{
     SourceSpan,
 };
 use crate::display_source::DisplaySourceItem;
+use neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS;
 use neomacs_display_protocol::types::FaceId;
-use neovm_core::buffer::{BufferId, EmacsBytePos};
+use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
 const BUFFER: BufferId = BufferId(1);
 
@@ -47,28 +49,28 @@ fn step_item(
 
 #[test]
 fn buffer_provenance_carries_the_buffer_charpos_through_to_the_glyph_stamp() {
-    let provenance = GlyphProvenance::buffer(CharPos0::new(17));
+    let provenance = GlyphProvenance::buffer(17);
 
-    assert_eq!(provenance.buffer_charpos(), Some(CharPos0::new(17)));
-    assert_eq!(provenance.glyph_charpos(), 17);
+    assert_eq!(provenance.buffer_charpos(), Some(17));
+    assert_eq!(provenance.legacy_charpos(), 17);
 }
 
 #[test]
 fn covered_replacement_glyphs_map_to_buffer_provenance_at_the_covered_start() {
-    // The `DisplayTextSourceMapping::SourceMapped` rule (builder.rs): every
-    // glyph of a replacement run carries the covered START, no matter how many
-    // glyphs the string produced. The natural-text rule advances per char.
+    // A generic `SourceMappedText` without a Lisp-string source freezes every
+    // glyph at the covered START. String-backed replacements instead use the
+    // separate string-index plus row-occurrence path tested below.
     let covered_start = buffer_position(5);
 
     for offset in 0..4 {
         assert_eq!(
-            GlyphProvenance::covered_text_glyph(&covered_start),
-            GlyphProvenance::buffer(CharPos0::new(5)),
+            covered_text_glyph(&covered_start),
+            GlyphProvenance::buffer(5),
             "covered glyph {offset} must stamp the covered start"
         );
         assert_eq!(
-            GlyphProvenance::natural_text_glyph(&covered_start, offset),
-            GlyphProvenance::buffer(CharPos0::new(5 + offset)),
+            natural_text_glyph(&covered_start, offset),
+            GlyphProvenance::buffer(5 + offset),
         );
     }
 }
@@ -81,7 +83,7 @@ fn appended_newline_space_maps_to_the_line_end_sentinel() {
     // the mutation in display_row/line_end.rs.
     let provenance = GlyphProvenance::line_end();
 
-    assert_eq!(provenance.glyph_charpos(), NO_BUFFER_POSITION_CHARPOS);
+    assert_eq!(provenance.legacy_charpos(), NO_BUFFER_POSITION_CHARPOS);
     assert_eq!(provenance.buffer_charpos(), None);
 }
 
@@ -93,11 +95,11 @@ fn truncation_marks_map_to_the_mark_sentinel() {
     let marker_start = DisplaySourcePosition::synthetic(0x7265_6467, 0);
 
     assert_eq!(
-        GlyphProvenance::from_source_position(&marker_start),
+        provenance_from_source_position(&marker_start),
         GlyphProvenance::mark()
     );
     assert_eq!(
-        GlyphProvenance::mark().glyph_charpos(),
+        GlyphProvenance::mark().legacy_charpos(),
         NO_BUFFER_POSITION_CHARPOS
     );
     assert_eq!(GlyphProvenance::mark().buffer_charpos(), None);
@@ -110,8 +112,8 @@ fn line_end_and_mark_are_distinct_provenances_behind_one_glyph_sentinel() {
     // the provenance can.
     assert_ne!(GlyphProvenance::line_end(), GlyphProvenance::mark());
     assert_eq!(
-        GlyphProvenance::line_end().glyph_charpos(),
-        GlyphProvenance::mark().glyph_charpos()
+        GlyphProvenance::line_end().legacy_charpos(),
+        GlyphProvenance::mark().legacy_charpos()
     );
 }
 
@@ -121,10 +123,10 @@ fn empty_line_newline_maps_to_the_real_buffer_position_of_its_newline() {
     // engine_test.rs::empty_line_row_carries_real_buffer_position: an empty
     // line reports its own newline's charpos, NOT the (0,0) / no-position
     // sentinel that caused the scroll and edit-reuse corruption class.
-    let provenance = GlyphProvenance::empty_line_newline(CharPos0::new(6));
+    let provenance = GlyphProvenance::empty_line_newline(6);
 
-    assert_eq!(provenance.glyph_charpos(), 6);
-    assert_ne!(provenance.glyph_charpos(), NO_BUFFER_POSITION_CHARPOS);
+    assert_eq!(provenance.legacy_charpos(), 6);
+    assert_ne!(provenance.legacy_charpos(), NO_BUFFER_POSITION_CHARPOS);
     assert_ne!(provenance, GlyphProvenance::line_end());
     // It is redisplay's own glyph, so it is not buffer-text provenance even
     // though it carries a real buffer charpos.
@@ -132,18 +134,15 @@ fn empty_line_newline_maps_to_the_real_buffer_position_of_its_newline() {
 }
 
 #[test]
-fn a_lisp_string_position_maps_to_the_str_arm_no_produced_element_uses_yet() {
-    // Phase-4 freeze (design section 4.7): the arm is expressible, and the
-    // legacy bridge below is the ONLY way to reach it. Produced elements and
-    // glyph stamps stay on covered buffer provenance so shadow proofs compare
-    // byte-identical stamps.
+fn a_lisp_string_position_maps_to_the_str_arm() {
     let position = DisplaySourcePosition::lisp_string(42, 3, 3);
 
     assert_eq!(
-        GlyphProvenance::from_source_position(&position),
+        provenance_from_source_position(&position),
         GlyphProvenance::Str {
             string: ProducedStringId::new(42),
             index: 3,
+            covered_buffer: None,
         }
     );
 }
@@ -156,7 +155,7 @@ fn producer_position_defaults_its_stamp_to_the_scan_position() {
     let position = ProducerPosition::buffer_at(scan);
 
     assert_eq!(position.scan(), scan);
-    assert_eq!(position.stamp(), GlyphProvenance::buffer(CharPos0::new(9)));
+    assert_eq!(position.stamp(), GlyphProvenance::buffer(9));
 }
 
 #[test]
@@ -183,7 +182,7 @@ fn producer_position_reads_a_step_items_scan_and_stamp() {
     let position = ProducerPosition::from_step_item(&item);
 
     assert_eq!(position.scan(), BufferScanPos::new(9, 9));
-    assert_eq!(position.stamp(), GlyphProvenance::buffer(CharPos0::new(9)));
+    assert_eq!(position.stamp(), GlyphProvenance::buffer(9));
 }
 
 // ---- ProducedElement: typed it_method output, bridged from today's items.
@@ -203,26 +202,22 @@ fn a_text_run_step_item_becomes_a_run_with_natural_buffer_provenance() {
 
     assert_eq!(run.text(), "abc");
     assert_eq!(run.face(), RenderFaceRef::FaceId(FaceId::new(2)));
-    assert_eq!(
-        run.position().stamp(),
-        GlyphProvenance::buffer(CharPos0::new(9))
-    );
+    assert_eq!(run.position().stamp(), GlyphProvenance::buffer(9));
     assert!(!run.is_covered_provenance());
     // A run is batching, not a different meaning: glyph N is what a Char at
     // start + N would have carried.
     for offset in 0..3 {
         assert_eq!(
             run.glyph_provenance(offset),
-            GlyphProvenance::buffer(CharPos0::new(9 + offset))
+            GlyphProvenance::buffer(9 + offset)
         );
     }
 }
 
 #[test]
 fn a_source_mapped_step_item_becomes_a_run_with_covered_provenance() {
-    // "STR" replacing covered chars [5,7): the run is covered-stamped, so every
-    // glyph it produces carries charpos 5 (pinned against the real append path
-    // in display_row/builder_test.rs).
+    // Generic source-mapped text has no Lisp-string coordinate space, so it is
+    // frozen at the covered buffer anchor.
     let item = step_item(
         buffer_span(5, 7),
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("STR")),
@@ -237,9 +232,36 @@ fn a_source_mapped_step_item_becomes_a_run_with_covered_provenance() {
     assert_eq!(run.text(), "STR");
     assert!(run.is_covered_provenance());
     for offset in 0..run.text().chars().count() {
+        assert_eq!(run.glyph_provenance(offset), GlyphProvenance::buffer(5));
+    }
+}
+
+#[test]
+fn a_replacement_string_run_advances_string_indices_and_keeps_buffer_coverage() {
+    let string_start = DisplaySourcePosition::lisp_string(42, 3, 3);
+    let item = step_item(
+        buffer_span(5, 7),
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::from_string_run(
+            "STR",
+            string_start,
+        )),
+        5,
+        Some('x'),
+    );
+
+    let ProducedElement::Run(run) = ProducedElement::from_step_item(&item).expect("run") else {
+        panic!("a SourceMappedText item must produce a Run element");
+    };
+
+    assert!(!run.is_covered_provenance());
+    for offset in 0..3 {
         assert_eq!(
             run.glyph_provenance(offset),
-            GlyphProvenance::buffer(CharPos0::new(5))
+            GlyphProvenance::string_replacement(
+                ProducedStringId::new(42),
+                3 + offset,
+                GlyphStringBufferRange::new(5, 7),
+            )
         );
     }
 }
@@ -263,10 +285,7 @@ fn a_row_break_step_item_becomes_a_row_break_element() {
     };
 
     assert_eq!(row_break.reason(), DisplayRowBreakReason::ExplicitNewline);
-    assert_eq!(
-        row_break.position().stamp(),
-        GlyphProvenance::buffer(CharPos0::new(12))
-    );
+    assert_eq!(row_break.position().stamp(), GlyphProvenance::buffer(12));
 }
 
 #[test]
@@ -290,10 +309,7 @@ fn a_stretch_step_item_becomes_a_buffer_stamped_stretch_element() {
         panic!("a Stretch item must produce a Stretch element");
     };
 
-    assert_eq!(
-        stretch.position().stamp(),
-        GlyphProvenance::buffer(CharPos0::new(3))
-    );
+    assert_eq!(stretch.position().stamp(), GlyphProvenance::buffer(3));
     assert_eq!(
         stretch.width(),
         &DisplayStretchWidth::Length(DisplayLength::Pixels(16.0))
@@ -318,10 +334,7 @@ fn a_control_char_step_item_becomes_a_char_element() {
 
     assert_eq!(produced.ch(), '\u{1}');
     assert_eq!(produced.face(), RenderFaceRef::FaceId(FaceId::new(2)));
-    assert_eq!(
-        produced.position().stamp(),
-        GlyphProvenance::buffer(CharPos0::new(3))
-    );
+    assert_eq!(produced.position().stamp(), GlyphProvenance::buffer(3));
     assert!(!produced.avoid_cursor());
 }
 

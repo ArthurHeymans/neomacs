@@ -373,15 +373,26 @@ impl DisplaySourceAppendRenderPlanResolver {
 }
 
 impl DisplaySourceStepChar {
+    #[cfg(test)]
     pub(crate) fn record_word_wrap_candidate(
         self,
         word_wrap: &mut WordWrapRenderState,
         source_render: &TextRowSourceRenderState<'_>,
     ) {
+        self.record_word_wrap_candidate_at(word_wrap, source_render, DisplayRowPosition::default());
+    }
+
+    pub(crate) fn record_word_wrap_candidate_at(
+        self,
+        word_wrap: &mut WordWrapRenderState,
+        source_render: &TextRowSourceRenderState<'_>,
+        row_position: DisplayRowPosition,
+    ) {
         word_wrap.record_source_candidate(
             self.ch(),
             DisplaySourceTextPosition::new(self.start_byte_idx(), self.start_charpos()),
             source_render,
+            row_position,
         );
     }
 }
@@ -396,6 +407,7 @@ impl WordWrapRenderState {
         ch: char,
         position: DisplaySourceTextPosition,
         source_render: &TextRowSourceRenderState<'_>,
+        row_position: DisplayRowPosition,
     ) {
         if self.can_record_candidate(ch) {
             // The candidate char has not yet been pushed to the row, so this
@@ -403,13 +415,14 @@ impl WordWrapRenderState {
             // whitespace.  GNU's SAVE_IT sits at this same point.
             let glyph_checkpoint = source_render.capture_glyph_checkpoint();
             let output_emitter = source_render.output_emitter_ref();
-            self.record_candidate(
+            self.record_candidate_at(
                 ch,
                 position.byte_idx(),
                 position.charpos(),
                 output_emitter.display_point_len(),
                 output_emitter.current_row_display_positions(),
                 glyph_checkpoint,
+                row_position,
             );
         }
     }

@@ -1,3 +1,6 @@
+use crate::buffer_source::producer::vocabulary::{
+    ProducedGlyphProvenance, natural_text_glyph, source_mapped_text_glyph,
+};
 use crate::composition::base_width_cols;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
@@ -17,10 +20,10 @@ use crate::glyph_row_writer;
 use crate::output::builder::DisplayOutputBuilder;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{
-    Glyph, GlyphArea, GlyphRow, GlyphType, NO_BUFFER_POSITION_CHARPOS,
+    Glyph, GlyphArea, GlyphProvenance, GlyphRow, GlyphStringSource, GlyphType,
+    NO_BUFFER_POSITION_CHARPOS,
 };
 use neomacs_display_protocol::types::FaceId;
-use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
 use crate::display_text_run_measurement::DisplayTextRunMeasurement;
 
@@ -280,7 +283,8 @@ impl DisplayTabPolicy {
     ) -> DisplayTabAdvance {
         let char_width = TabGridPixel::from_renderer_px(char_width_px.max(1.0));
         let tab_width = char_width * i64::from(self.width_cols.max(1));
-        let tab_x = TabGridPixel::from_renderer_px((position.x_px - self.origin_x_px).max(0.0));
+        let row_x = TabGridPixel::from_renderer_px((position.x_px - self.origin_x_px).max(0.0));
+        let tab_x = row_x + position.tab_coordinates.offset();
         let next_tab_x = if !self.stop_cols.is_empty() {
             self.stop_cols
                 .iter()
@@ -312,12 +316,18 @@ impl DisplayTabPolicy {
         } else {
             next_tab_x
         };
-        let target_x_px = self.origin_x_px + next_tab_x.to_renderer_px();
+        // `next_tab_x` is in the physical-line coordinate. Translate its
+        // target back to this screen row before subtracting the renderer's
+        // unrounded f32 pen. This preserves GNU's integer tab grid without
+        // introducing subpixel drift (12.15px still lands at pixel 24), and
+        // it keeps the logical column target local to the current row.
+        let screen_target_x = next_tab_x - position.tab_coordinates.offset();
+        let target_x_px = self.origin_x_px + screen_target_x.to_renderer_px();
         let pixel_width = (target_x_px - position.x_px).max(0.0);
         let next_col =
-            usize::try_from((next_tab_x.raw() + char_width.raw() / 2) / char_width.raw())
+            usize::try_from((screen_target_x.raw() + char_width.raw() / 2) / char_width.raw())
                 .unwrap_or(usize::MAX)
-                .max(position.col + 1);
+                .max(position.col.saturating_add(1));
         DisplayTabAdvance {
             pixel_width,
             width_cols: next_col.saturating_sub(position.col).max(1),
@@ -332,7 +342,7 @@ impl DisplayTabPolicy {
 /// this as a separate type prevents a deterministic fixed-point coordinate
 /// from being mistaken for GNU's integer-pixel domain.
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-struct TabGridPixel(i64);
+pub(crate) struct TabGridPixel(i64);
 
 impl TabGridPixel {
     const ZERO: Self = Self(0);
@@ -347,6 +357,62 @@ impl TabGridPixel {
 
     fn to_renderer_px(self) -> f32 {
         self.0 as f32
+    }
+}
+
+/// Which horizontal coordinate system a TAB uses.
+///
+/// GNU measures ordinary continuation-row tabs in the physical line, but
+/// measures tabs inside a wrap-prefix string from the current screen row.
+/// Making the choice explicit prevents a row-local x coordinate from silently
+/// standing in for `continuation_lines_width`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum DisplayTabCoordinates {
+    #[default]
+    ScreenLine,
+    ContinuedPhysicalLine {
+        offset: TabGridPixel,
+    },
+}
+
+impl DisplayTabCoordinates {
+    const fn offset(self) -> TabGridPixel {
+        match self {
+            Self::ScreenLine => TabGridPixel::ZERO,
+            Self::ContinuedPhysicalLine { offset } => offset,
+        }
+    }
+}
+
+/// Walk-scoped GNU `continuation_lines_width` / `wrap_prefix_width` state.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct DisplayPhysicalLineTabState {
+    continuation_width: TabGridPixel,
+    wrap_prefix_width: TabGridPixel,
+}
+
+impl DisplayPhysicalLineTabState {
+    pub(crate) fn coordinates(self) -> DisplayTabCoordinates {
+        let offset = self.continuation_width - self.wrap_prefix_width;
+        if offset != TabGridPixel::ZERO {
+            DisplayTabCoordinates::ContinuedPhysicalLine { offset }
+        } else {
+            DisplayTabCoordinates::ScreenLine
+        }
+    }
+
+    pub(crate) fn continue_after_visual_row(&mut self, width_px: f32) {
+        self.continuation_width =
+            self.continuation_width + TabGridPixel::from_renderer_px(width_px.max(0.0));
+        self.wrap_prefix_width = TabGridPixel::ZERO;
+    }
+
+    pub(crate) fn record_wrap_prefix(&mut self, width_px: f32) {
+        self.wrap_prefix_width = TabGridPixel::from_renderer_px(width_px.max(0.0));
+    }
+
+    pub(crate) fn reset_for_physical_line(&mut self) {
+        *self = Self::default();
     }
 }
 
@@ -577,6 +643,7 @@ pub(crate) struct DisplayRowGlyphCheckpoint {
     area_lengths: [usize; 3],
     displays_text: bool,
     pointer_appearances_len: usize,
+    string_sources_len: usize,
 }
 
 impl DisplayRowGlyphCheckpoint {
@@ -589,6 +656,7 @@ impl DisplayRowGlyphCheckpoint {
             ],
             displays_text: row.displays_text,
             pointer_appearances_len: row.pointer_appearances().len(),
+            string_sources_len: row.string_sources().len(),
         }
     }
 
@@ -598,6 +666,7 @@ impl DisplayRowGlyphCheckpoint {
         row.glyphs[GlyphArea::RightMargin.index()].truncate(self.area_lengths[2]);
         row.displays_text = self.displays_text;
         row.truncate_pointer_appearances(self.pointer_appearances_len);
+        row.truncate_string_sources(self.string_sources_len);
     }
 
     /// Derive a checkpoint `added` text glyphs further along than `self`. Used by
@@ -620,6 +689,11 @@ impl DisplayRowGlyphCheckpoint {
                 after_append.pointer_appearances_len
             } else {
                 self.pointer_appearances_len
+            },
+            string_sources_len: if added > 0 {
+                after_append.string_sources_len
+            } else {
+                self.string_sources_len
             },
         }
     }
@@ -725,11 +799,16 @@ fn set_display_row_buffer_source_bounds(row: &mut GlyphRow, start: usize, end: u
 pub(crate) struct DisplayRowPosition {
     x_px: f32,
     col: usize,
+    tab_coordinates: DisplayTabCoordinates,
 }
 
 impl DisplayRowPosition {
     pub(crate) const fn new(x_px: f32, col: usize) -> Self {
-        Self { x_px, col }
+        Self {
+            x_px,
+            col,
+            tab_coordinates: DisplayTabCoordinates::ScreenLine,
+        }
     }
 
     pub(crate) fn x_px(self) -> f32 {
@@ -740,10 +819,35 @@ impl DisplayRowPosition {
         self.col
     }
 
+    pub(crate) const fn with_tab_coordinates(
+        mut self,
+        tab_coordinates: DisplayTabCoordinates,
+    ) -> Self {
+        self.tab_coordinates = tab_coordinates;
+        self
+    }
+
+    pub(crate) const fn on_screen_line_tab_grid(mut self) -> Self {
+        self.tab_coordinates = DisplayTabCoordinates::ScreenLine;
+        self
+    }
+
+    /// Move the renderer pen while retaining the TAB coordinate space.
+    ///
+    /// A continued physical line's TAB origin is walk state, not a property
+    /// of its current screen-row x/column.  Fit probes and alternate row
+    /// routes use this instead of reconstructing a screen-local position.
+    pub(crate) const fn at_screen_position(mut self, x_px: f32, col: usize) -> Self {
+        self.x_px = x_px;
+        self.col = col;
+        self
+    }
+
     pub(crate) fn advance_by(self, metrics: DisplayRowWriteMetrics) -> Self {
         Self {
             x_px: self.x_px + metrics.width_px,
             col: self.col + metrics.width_cols,
+            tab_coordinates: self.tab_coordinates,
         }
     }
 
@@ -760,7 +864,10 @@ fn append_start_position(
     current_tail: DisplayRowPosition,
 ) -> DisplayRowPosition {
     if current_tail.col > requested.col || current_tail.x_px > requested.x_px {
-        current_tail
+        // Row-local structural glyphs may advance the screen pen, but the
+        // source walk remains the authority for GNU's physical-line TAB
+        // coordinate. Reconcile geometry without replacing that typed state.
+        requested.at_screen_position(current_tail.x_px, current_tail.col)
     } else {
         requested
     }
@@ -933,20 +1040,46 @@ impl DisplayRowAppendProgress {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DisplayTextSourceMapping {
+enum DisplayTextSourceMapping<'a> {
     NaturalText,
-    SourceMapped,
+    SourceMapped {
+        glyph_string_start: Option<&'a DisplaySourcePosition>,
+    },
 }
 
-impl DisplayTextSourceMapping {
-    fn charpos(self, start_char: usize, char_offset: usize) -> usize {
-        if start_char == NO_BUFFER_POSITION_CHARPOS {
-            return NO_BUFFER_POSITION_CHARPOS;
-        }
-        match self {
-            Self::NaturalText => start_char + char_offset,
-            Self::SourceMapped => start_char,
-        }
+impl DisplayTextSourceMapping<'_> {
+    fn resolve(self, span: &SourceSpan, row: &mut GlyphRow) -> ResolvedDisplayTextSourceMapping {
+        let provenance = match self {
+            Self::NaturalText => natural_text_glyph(&span.start, 0),
+            Self::SourceMapped { glyph_string_start } => {
+                source_mapped_text_glyph(span, glyph_string_start, 0)
+            }
+        };
+        let advances = match self {
+            Self::NaturalText => true,
+            Self::SourceMapped { glyph_string_start } => glyph_string_start.is_some(),
+        };
+        let start = match provenance {
+            ProducedGlyphProvenance::Buffer { charpos } => GlyphProvenance::buffer(charpos),
+            ProducedGlyphProvenance::Str {
+                string,
+                index,
+                covered_buffer,
+            } => {
+                let source = match covered_buffer {
+                    Some(range) => GlyphStringSource::replacement(string, range),
+                    None => GlyphStringSource::new(string),
+                };
+                let source = row
+                    .push_string_source(source)
+                    .expect("display row string-source table exhausted");
+                GlyphProvenance::string(source, index)
+            }
+            ProducedGlyphProvenance::Redisplay(provenance) => {
+                GlyphProvenance::Redisplay(provenance)
+            }
+        };
+        ResolvedDisplayTextSourceMapping { start, advances }
     }
 
     fn slot_source(
@@ -956,8 +1089,24 @@ impl DisplayTextSourceMapping {
         byte_offset: usize,
     ) -> DisplaySourcePosition {
         match self {
-            Self::NaturalText => source_position_advance(span_start, char_offset, byte_offset),
-            Self::SourceMapped => span_start.clone(),
+            Self::NaturalText => span_start.advanced_by(char_offset, byte_offset),
+            Self::SourceMapped { .. } => span_start.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ResolvedDisplayTextSourceMapping {
+    start: GlyphProvenance,
+    advances: bool,
+}
+
+impl ResolvedDisplayTextSourceMapping {
+    const fn provenance(self, char_offset: usize) -> GlyphProvenance {
+        if self.advances {
+            self.start.advanced_by(char_offset)
+        } else {
+            self.start
         }
     }
 }
@@ -1322,7 +1471,9 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
                 face,
                 item_layout,
                 text.text.as_ref(),
-                DisplayTextSourceMapping::SourceMapped,
+                DisplayTextSourceMapping::SourceMapped {
+                    glyph_string_start: text.glyph_string_start.as_ref(),
+                },
                 pointer_appearance.as_ref(),
                 &mut metrics,
                 &mut slots,
@@ -1398,17 +1549,17 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         face: RenderFaceRef,
         item_layout: DisplayItemLayout,
         text: &str,
-        source_mapping: DisplayTextSourceMapping,
+        source_mapping: DisplayTextSourceMapping<'_>,
         pointer_appearance: Option<&crate::display_item::DisplayPointerAppearance>,
         metrics: &mut DisplayRowWriteMetrics,
         slots: &mut Vec<DisplayRowGlyphSlot>,
     ) -> DisplayRowAppendStatus {
         let face_id = self.writer.face_id(face);
         let measurement = self.text_run_measurement(text, face_id);
-        let start_char = source_span_start_char(span);
         let glyph_pointer_appearance =
             pointer_appearance.and_then(|appearance| appearance.glyph_metadata());
         let mut pointer_metadata = None;
+        let mut resolved_source_mapping = None;
         let mut status = DisplayRowAppendStatus::Complete;
         let mut byte_offset = 0usize;
         for (char_offset, ch) in text.chars().enumerate() {
@@ -1438,8 +1589,13 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             let before_len = self.area_len();
             let before_metrics = self.writer.current_text_metrics();
             let slot_start = self.position;
+            if resolved_source_mapping.is_none() {
+                resolved_source_mapping = Some(source_mapping.resolve(span, self.writer.row));
+            }
             self.writer.push_text_char_state_with_advance_request(
-                source_mapping.charpos(start_char, char_offset),
+                resolved_source_mapping
+                    .expect("text source mapping resolved before glyph emission")
+                    .provenance(char_offset),
                 advance_request,
             );
             self.writer
@@ -1614,7 +1770,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     text.text.as_ref(),
                     face_id,
                     &item.span,
-                    DisplayTextSourceMapping::SourceMapped,
+                    DisplayTextSourceMapping::SourceMapped {
+                        glyph_string_start: text.glyph_string_start.as_ref(),
+                    },
                 );
             }
             DisplayItemKind::Stretch(stretch) => {
@@ -1664,17 +1822,20 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         text: &str,
         face_id: FaceId,
         span: &SourceSpan,
-        source_mapping: DisplayTextSourceMapping,
+        source_mapping: DisplayTextSourceMapping<'_>,
     ) {
+        if text.is_empty() {
+            return;
+        }
+        let source_mapping = source_mapping.resolve(span, self.row);
         let measurement = self.text_run_measurement(text, face_id);
-        let start_char = source_span_start_char(span);
         let mut byte_offset = 0usize;
         for (char_offset, ch) in text.chars().enumerate() {
             let char_state = self.text_char_state(ch);
             self.push_text_char_with_measurement(
                 char_state,
                 face_id,
-                source_mapping.charpos(start_char, char_offset),
+                source_mapping.provenance(char_offset),
                 char_offset,
                 byte_offset,
                 &measurement,
@@ -1688,7 +1849,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         self.push_text_char_state_at_position(
             char_state,
             face_id,
-            charpos,
+            GlyphProvenance::buffer(charpos),
             self.current_text_position(),
         );
     }
@@ -1697,13 +1858,13 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         &mut self,
         char_state: DisplayRowTextCharState,
         face_id: FaceId,
-        charpos: usize,
+        provenance: GlyphProvenance,
         char_offset: usize,
         byte_offset: usize,
         measurement: &DisplayTextRunMeasurement,
     ) {
         self.push_text_char_state_with_advance_request(
-            charpos,
+            provenance,
             DisplayRowTextCharAdvanceRequest::new(
                 char_state,
                 face_id,
@@ -1719,19 +1880,19 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         &mut self,
         char_state: DisplayRowTextCharState,
         face_id: FaceId,
-        charpos: usize,
+        provenance: GlyphProvenance,
         position: DisplayRowPosition,
     ) {
         let measurement = DisplayTextRunMeasurement::PerChar;
         self.push_text_char_state_with_advance_request(
-            charpos,
+            provenance,
             DisplayRowTextCharAdvanceRequest::per_char(char_state, face_id, position, &measurement),
         );
     }
 
     fn push_text_char_state_with_advance_request(
         &mut self,
-        charpos: usize,
+        provenance: GlyphProvenance,
         advance_request: DisplayRowTextCharAdvanceRequest<'_>,
     ) {
         let ch = advance_request.ch();
@@ -1743,7 +1904,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 self.push_tab_at_position(
                     advance_request.face_id,
                     advance_request.position,
-                    charpos,
+                    provenance,
                 );
             }
             DisplayRowTextNaturalAdvanceKind::ClusterContinuation => {
@@ -1752,7 +1913,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     area_index,
                     ch,
                     advance_request.face_id,
-                    charpos,
+                    provenance,
                 );
             }
             DisplayRowTextNaturalAdvanceKind::ComplexRunMember => {
@@ -1762,7 +1923,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     area_index,
                     ch,
                     advance_request.face_id,
-                    charpos,
+                    provenance,
                     advance,
                 );
             }
@@ -1773,7 +1934,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     area_index,
                     ch,
                     advance_request.face_id,
-                    charpos,
+                    provenance,
                     advance,
                 );
             }
@@ -1784,7 +1945,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     area_index,
                     ch,
                     advance_request.face_id,
-                    charpos,
+                    provenance,
                     advance,
                 );
             }
@@ -1893,7 +2054,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         &mut self,
         face_id: FaceId,
         position: DisplayRowPosition,
-        charpos: usize,
+        provenance: GlyphProvenance,
     ) {
         // GNU's gui_produce_glyphs uses the TAB face's primary font
         // `space_width`, not character fallback selection for U+0020.
@@ -1918,7 +2079,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             0.0,
             // A TAB is a buffer character that happens to render as a
             // stretch; its glyph addresses the tab itself.
-            charpos,
+            provenance,
         );
     }
 
@@ -2001,7 +2162,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             pixel_width,
             pixel_height,
             pixel_ascent,
-            charpos,
+            GlyphProvenance::buffer(charpos),
         );
         self.promote_row_metrics_for_explicit_stretch();
     }
@@ -2050,7 +2211,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             media.ascent,
         );
         glyph.glyph_type = glyph_type;
-        glyph.charpos = charpos;
+        glyph.provenance = GlyphProvenance::buffer(charpos);
         let area_index = self.area_index();
         self.row.glyphs[area_index].push(glyph);
         if self.area == GlyphArea::Text {
@@ -2088,7 +2249,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let glyph = Glyph {
             glyph_type: GlyphType::Glyphless { ch: glyphless.ch },
             face_id,
-            charpos,
+            provenance: GlyphProvenance::buffer(charpos),
             bidi_level: 0,
             wide: false,
             pixel_width,
@@ -2234,36 +2395,6 @@ fn source_span_start_char(span: &SourceSpan) -> usize {
         // line-number glyphs with position -1 before copying them into
         // TEXT_AREA; the protocol sentinel is the typed Rust equivalent.
         DisplaySourcePosition::Synthetic { .. } => NO_BUFFER_POSITION_CHARPOS,
-    }
-}
-
-fn source_position_advance(
-    start: &DisplaySourcePosition,
-    char_offset: usize,
-    byte_offset: usize,
-) -> DisplaySourcePosition {
-    match start {
-        DisplaySourcePosition::Buffer {
-            buffer_id,
-            char_pos,
-            byte_pos,
-        } => DisplaySourcePosition::buffer(
-            *buffer_id,
-            CharPos0::new(char_pos.get() + char_offset),
-            EmacsBytePos::new(byte_pos.get() + byte_offset),
-        ),
-        DisplaySourcePosition::LispString {
-            source_id,
-            char_index,
-            byte_index,
-        } => DisplaySourcePosition::lisp_string(
-            source_id.get(),
-            char_index + char_offset,
-            byte_index + byte_offset,
-        ),
-        DisplaySourcePosition::Synthetic { source_id, offset } => {
-            DisplaySourcePosition::synthetic(source_id.get(), offset + char_offset)
-        }
     }
 }
 

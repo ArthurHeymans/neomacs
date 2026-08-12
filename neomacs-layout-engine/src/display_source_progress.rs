@@ -1,4 +1,4 @@
-use crate::display_row::builder::DisplayRowPosition;
+use crate::display_row::builder::{DisplayPhysicalLineTabState, DisplayRowPosition};
 use crate::display_source::DisplaySourceTextPosition;
 
 pub(crate) struct DisplaySourceRowProgressState<'emit> {
@@ -52,6 +52,7 @@ pub(crate) struct DisplaySourceProgressState<'emit> {
     byte_idx: &'emit mut usize,
     charpos: &'emit mut i64,
     row: DisplaySourceRowProgressState<'emit>,
+    physical_line_tabs: Option<&'emit mut DisplayPhysicalLineTabState>,
 }
 
 impl<'emit> DisplaySourceProgressState<'emit> {
@@ -65,11 +66,24 @@ impl<'emit> DisplaySourceProgressState<'emit> {
             byte_idx,
             charpos,
             row: DisplaySourceRowProgressState::new(x, col),
+            physical_line_tabs: None,
         }
     }
 
+    pub(crate) fn with_physical_line_tabs(
+        mut self,
+        physical_line_tabs: &'emit mut DisplayPhysicalLineTabState,
+    ) -> Self {
+        self.physical_line_tabs = Some(physical_line_tabs);
+        self
+    }
+
     pub(crate) fn row_position(&self) -> DisplayRowPosition {
-        self.row.row_position()
+        self.row.row_position().with_tab_coordinates(
+            self.physical_line_tabs
+                .as_deref()
+                .map_or_else(Default::default, |state| state.coordinates()),
+        )
     }
 
     pub(crate) fn row_progress(&self) -> &DisplaySourceRowProgressState<'emit> {
@@ -117,11 +131,34 @@ impl<'emit> DisplaySourceProgressState<'emit> {
         *self.charpos = position.charpos();
     }
 
+    pub(crate) fn continue_physical_line_after_visual_row(
+        &mut self,
+        row_end_x: f32,
+        content_x: f32,
+    ) {
+        if let Some(state) = self.physical_line_tabs.as_deref_mut() {
+            state.continue_after_visual_row((row_end_x - content_x).max(0.0));
+        }
+    }
+
+    pub(crate) fn record_wrap_prefix_width(&mut self, width_px: f32) {
+        if let Some(state) = self.physical_line_tabs.as_deref_mut() {
+            state.record_wrap_prefix(width_px);
+        }
+    }
+
+    pub(crate) fn reset_physical_line_tabs(&mut self) {
+        if let Some(state) = self.physical_line_tabs.as_deref_mut() {
+            state.reset_for_physical_line();
+        }
+    }
+
     pub(crate) fn reborrow(&mut self) -> DisplaySourceProgressState<'_> {
         DisplaySourceProgressState {
             byte_idx: self.byte_idx,
             charpos: self.charpos,
             row: self.row.reborrow(),
+            physical_line_tabs: self.physical_line_tabs.as_deref_mut(),
         }
     }
 }

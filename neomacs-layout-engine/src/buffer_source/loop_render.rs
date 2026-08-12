@@ -138,27 +138,42 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
     ) {
         self.render_pending_line_number_prefix(context);
 
-        let row_position = self.progress.row_position();
+        let wrap_prefix = self.row_carryover.prefix_request.is_wrap();
+        let row_position = if wrap_prefix {
+            // GNU computes TABs inside a wrap-prefix from the current screen
+            // row, not from the continued physical line.
+            self.progress.row_position().on_screen_line_tab_grid()
+        } else {
+            self.progress.row_position()
+        };
+        let prefix_start_x = row_position.x_px();
         let charpos = self.progress.charpos();
-        let (x, col) = self.progress.row_progress_mut().coordinates_mut();
-        context
-            .line_prefix_request(
-                self.surface.append_surface,
-                self.row_build.row_geometry,
-                active_face_state,
-                0.0,
-                row_position,
-                params,
-            )
-            .render_requested_with_source_state_and_apply(
-                self.row_carryover.prefix_request,
-                &mut self.source_render,
-                buffer,
-                charpos,
-                self.face_ids,
-                x,
-                col,
-            );
+        let prefix_end_x = {
+            let (x, col) = self.progress.row_progress_mut().coordinates_mut();
+            context
+                .line_prefix_request(
+                    self.surface.append_surface,
+                    self.row_build.row_geometry,
+                    active_face_state,
+                    0.0,
+                    row_position,
+                    params,
+                )
+                .render_requested_with_source_state_and_apply(
+                    self.row_carryover.prefix_request,
+                    &mut self.source_render,
+                    buffer,
+                    charpos,
+                    self.face_ids,
+                    x,
+                    col,
+                );
+            *x
+        };
+        if wrap_prefix {
+            self.progress
+                .record_wrap_prefix_width((prefix_end_x - prefix_start_x).max(0.0));
+        }
     }
 
     fn render_pending_line_number_prefix(&mut self, context: BufferSourceRowPreludeRequestContext) {

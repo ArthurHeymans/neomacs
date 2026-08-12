@@ -214,18 +214,14 @@ fn glyphless_method_keeps_non_ignorable_format_controls_visible() {
     assert_eq!(m('\u{061c}'), Some(GlyphlessMethod::ZeroWidth));
 }
 
-// ---- Increment 2i rung 1: covered-provenance vocabulary (string-glyph
-// provenance). The pipeline expresses "N glyphs standing for M covered buffer
-// chars" as a `SourceMappedText` item whose span is the COVERED buffer range:
-// every produced glyph is stamped with the covered START charpos (the
-// `DisplayTextSourceMapping::SourceMapped` stamping in builder.rs), which is
-// neomacs's simpler mirror of GNU's charpos+object pair (neomacs glyphs carry
-// one `charpos` field; the pipeline stamps the covered BUFFER position where
-// GNU stamps a string index plus the string object -- see
-// tmp/gnu-study-string-provenance.md section 0). These pins prove the item
-// producer surface: `item_from_replacement_string_item` is the exact seam the
-// display-replacement session uses to convert the string's own items into
-// covered-provenance runs.
+// ---- Increment 2i rung 1: replacement-source vocabulary. The pipeline
+// expresses "N string glyphs standing for M covered buffer chars" as a
+// `SourceMappedText` whose span is the covered buffer range and whose separate
+// `glyph_string_start` retains GNU's string object/index coordinate. The
+// builder therefore stamps indices 0..N while registering the exact covered
+// buffer range once on the row's typed string-source occurrence. These pins
+// prove the item producer surface: `item_from_replacement_string_item` is the
+// seam where the replacement session preserves both coordinate systems.
 
 #[test]
 fn replacement_source_converts_string_text_run_to_covered_provenance_run() {
@@ -256,8 +252,11 @@ fn replacement_source_converts_string_text_run_to_covered_provenance_run() {
 
     assert_eq!(
         item.kind,
-        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("STR")),
-        "a replacement string's TextRun becomes a covered-provenance run"
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::from_string_run(
+            "STR",
+            DisplaySourcePosition::lisp_string(11, 0, 0),
+        )),
+        "a replacement run keeps its string start separate from buffer coverage"
     );
     assert_eq!(
         item.span,
@@ -298,6 +297,6 @@ fn replacement_source_keeps_non_text_kinds_with_covered_span() {
     assert_eq!(
         item.span.buffer_end_charpos(),
         Some(CharPos0::new(6)),
-        "covered provenance applies to every item kind the string yields"
+        "the covered buffer span applies to every item kind the string yields"
     );
 }

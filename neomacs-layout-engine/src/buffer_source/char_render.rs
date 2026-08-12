@@ -65,8 +65,11 @@ pub(crate) fn render_source_char_and_apply<B: LayoutBufferView>(
     // call used to implement by probing every character.
     let append_position = state.progress.row_position();
     let append_geometry = *state.row_build.row_geometry;
-    source_step_char
-        .record_word_wrap_candidate(state.row_carryover.word_wrap, &state.source_render);
+    source_step_char.record_word_wrap_candidate_at(
+        state.row_carryover.word_wrap,
+        &state.source_render,
+        append_position,
+    );
 
     let buffer_source_char = source_step_char.source_char(params.nobreak_char_display);
     let prepared_append = append_context.prepare_source_item_for_current_text_row(

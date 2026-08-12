@@ -2168,7 +2168,10 @@ fn buffer_text_source_cursor_reports_nested_replacement_source_position() {
 
     assert_eq!(
         item.kind,
-        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("Y"))
+        DisplayItemKind::SourceMappedText(DisplaySourceMappedText::from_string_run(
+            "Y",
+            DisplaySourcePosition::lisp_string(1, 0, 0),
+        ))
     );
     assert_eq!(
         item.span.start,

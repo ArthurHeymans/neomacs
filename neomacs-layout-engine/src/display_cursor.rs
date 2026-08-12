@@ -10,7 +10,9 @@ use crate::window_output::{
     WindowOutputEmitter, publish_text_window_cursor, publish_text_window_decorative_cursor,
 };
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId};
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS};
+use neomacs_display_protocol::glyph_matrix::{
+    GlyphArea, GlyphProvenance, GlyphRow, RedisplayGlyphProvenance,
+};
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::window::{DisplayPointSnapshot, WindowCursorPos};
 
@@ -249,9 +251,8 @@ impl CursorVisualColumnResolutionRequest {
         // Trim the trailing redisplay-owned LINE-END suffix from the Text
         // area. GNU set_cursor_from_row walks `end` backwards while object is
         // nil and charpos <= 0 (xdisp.c), but first advances over leading
-        // redisplay glyphs such as a line-number prefix. This protocol does
-        // not yet retain GNU's object identity, so preserve the leading prefix
-        // by identifying the two line-end products we emit:
+        // redisplay glyphs such as a line-number prefix. Typed provenance lets
+        // us identify exactly the two line-end products we emit:
         //
         // 1. the same-face `:extend` suffix ending in a stretch glyph;
         // 2. append_space_for_newline's one terminal space on a row that
@@ -259,7 +260,10 @@ impl CursorVisualColumnResolutionRequest {
         let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
         let mut text_end = text_glyphs.len();
         if let Some(fill) = text_glyphs.last()
-            && fill.charpos == NO_BUFFER_POSITION_CHARPOS
+            && matches!(
+                fill.provenance,
+                GlyphProvenance::Redisplay(RedisplayGlyphProvenance::LineEnd)
+            )
             && matches!(
                 fill.glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Stretch { .. }
@@ -267,7 +271,10 @@ impl CursorVisualColumnResolutionRequest {
         {
             let fill_face = fill.face_id;
             while text_end > 0
-                && text_glyphs[text_end - 1].charpos == NO_BUFFER_POSITION_CHARPOS
+                && matches!(
+                    text_glyphs[text_end - 1].provenance,
+                    GlyphProvenance::Redisplay(RedisplayGlyphProvenance::LineEnd)
+                )
                 && text_glyphs[text_end - 1].face_id == fill_face
             {
                 text_end -= 1;
@@ -275,7 +282,10 @@ impl CursorVisualColumnResolutionRequest {
         }
         if row.end_charpos > row.start_charpos
             && text_end > 0
-            && text_glyphs[text_end - 1].charpos == NO_BUFFER_POSITION_CHARPOS
+            && matches!(
+                text_glyphs[text_end - 1].provenance,
+                GlyphProvenance::Redisplay(RedisplayGlyphProvenance::LineEnd)
+            )
             && matches!(
                 text_glyphs[text_end - 1].glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: ' ' }
@@ -285,24 +295,37 @@ impl CursorVisualColumnResolutionRequest {
         }
 
         let mut nearest_after: Option<(usize, u16)> = None;
+        let mut replacement_candidate: Option<(usize, u16)> = None;
         for glyph in &text_glyphs[..text_end] {
             if glyph.padding {
                 continue;
             }
-            if glyph.charpos == NO_BUFFER_POSITION_CHARPOS {
-                // GNU's line-number TEXT_AREA prefix has object=nil and
-                // position=-1.  It consumes visual columns but can never be a
-                // cursor candidate (exact or nearest-after).
-                col_acc = col_acc.saturating_add(glyph.materialized_slot_span());
-                continue;
-            }
-            if glyph.charpos == self.charpos {
-                return Some(col_acc);
-            }
-            if glyph.charpos > self.charpos
-                && nearest_after.is_none_or(|(after, _)| glyph.charpos < after)
-            {
-                nearest_after = Some((glyph.charpos, col_acc));
+            match glyph.provenance {
+                GlyphProvenance::Buffer { charpos } => {
+                    if charpos == self.charpos {
+                        return Some(col_acc);
+                    }
+                    if charpos > self.charpos
+                        && nearest_after.is_none_or(|(after, _)| charpos < after)
+                    {
+                        nearest_after = Some((charpos, col_acc));
+                    }
+                }
+                GlyphProvenance::Str { index, .. }
+                    if row.glyph_covers_buffer_charpos(glyph, self.charpos) =>
+                {
+                    // GNU set_cursor_from_row Step 2 chooses the smallest
+                    // string index, not the first glyph in visual order (bidi
+                    // can reorder the string).  The exact covered range is
+                    // carried once by the row's source occurrence instead of
+                    // recovered heuristically or duplicated on every glyph.
+                    if replacement_candidate
+                        .is_none_or(|(candidate_index, _)| index < candidate_index)
+                    {
+                        replacement_candidate = Some((index, col_acc));
+                    }
+                }
+                GlyphProvenance::Str { .. } | GlyphProvenance::Redisplay(_) => {}
             }
             col_acc = col_acc.saturating_add(glyph.materialized_slot_span());
         }
@@ -314,7 +337,11 @@ impl CursorVisualColumnResolutionRequest {
         // rather than None keeps a blank/EOL cursor out of the line-number
         // gutter (where the captured Text-index 0 would land it), matching GNU
         // set_cursor_from_row placing the cursor in the empty area after a row.
-        Some(nearest_after.map_or(col_acc, |(_, col)| col))
+        Some(
+            replacement_candidate
+                .or(nearest_after)
+                .map_or(col_acc, |(_, col)| col),
+        )
     }
 
     pub(crate) fn resolve_phys_cursor_placement(
