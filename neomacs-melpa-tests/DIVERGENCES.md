@@ -4380,3 +4380,41 @@ A fresh release build produces a 13,616,018-byte pdump and all 1,651 Lisp byte
 compiles, and the release TUI suite passes all 908 tests.
 
 Status: FIXED.
+
+## 84. TUI fixtures escaped their owning tests; the idle-wakeup report was stale -- FIXED
+
+Task 29's remaining item contained two independent claims.  Re-measuring the
+GUI first refuted the old "8 wakeups/s versus 2 presents/s" snapshot: after
+startup settled, the current release produced 53.0 event-loop wakeups/s and
+13.2 presents/s over 17.4 seconds.  The active demand was the intentional 12 Hz
+cursor-color cycle plus the 2 Hz cursor animation; no expose reason was active,
+no deadline needed recovery, and scene commits stayed flat.  Task 48 had
+already made a ripe deadline into work before constructing a future wake, so
+there was no residual zero-wait spin to fix.
+
+The TUI storage half did reproduce.  One focused `project-find-file` test left
+its complete 168 KiB temporary Git repository behind after passing.  Session
+HOME and TMPDIR paths had acquired manual best-effort cleanup earlier, but
+project, Dired, strict-grid, shell, mode, child-frame, and shared-file fixtures
+still returned bare `PathBuf`s.  Once the path escaped its constructor, Rust no
+longer represented who owned the directory, so normal test completion had
+nothing to drop.
+
+GNU's test contract makes the missing lifetime explicit:
+`ert-with-temp-directory` creates the resource inside `unwind-protect` and
+recursively deletes it on normal or nonlocal exit
+(`lisp/emacs-lisp/ert-x.el:281-376`).  Interactive Org separately removes both
+Babel temporary directories from `kill-emacs-hook`
+(`lisp/org/ob-core.el:3630-3650`).
+
+The harness now represents session paths as the exhaustive
+`SessionDirectory::{Owned, Borrowed}` choice.  `Owned` contains a
+`TuiTempDirectory` RAII guard; `Borrowed` contains only the caller's path and
+cannot enter harness cleanup.  `TuiTempDirectory` and `TuiTempFile` carry the
+same ownership token through every fixture constructor, and no raw
+`std::env::temp_dir()` fixture creator remains in the crate.  The failed-first
+drop-contract test observed the leaked project tree, then passed with the typed
+owner.  All-target compilation succeeds, the complete TUI suite passes 911 of
+911 tests, and its isolated TMPDIR has zero descendants after the suite exits.
+
+Status: FIXED.
