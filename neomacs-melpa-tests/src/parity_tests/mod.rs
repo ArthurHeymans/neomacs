@@ -480,6 +480,7 @@ mod json_snatcher;
 mod julia_mode;
 mod keyfreq;
 mod keytar;
+mod leaf;
 mod ledger_mode;
 mod leuven_theme;
 mod link_hint;

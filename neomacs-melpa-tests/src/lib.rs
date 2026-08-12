@@ -2216,6 +2216,12 @@ pub const JS2_REFACTOR_MELPA_PIN: (&str, &str) = ("js2-refactor", "20250210.1811
 /// `c6955162307f37c2ac631d9daf118781009f8dda`.
 pub const KEYFREQ_MELPA_PIN: (&str, &str) = ("keyfreq", "20231107.106");
 
+/// The exact Leaf package selected for practical declarative expansion,
+/// deferred autoload, mode/hook/key dispatch, variable configuration,
+/// protected-failure recovery, and definition-navigation parity. MELPA built
+/// this archive from upstream merge `b49e68613b8efba89c702141f49ad9b4460a7204`.
+pub const LEAF_MELPA_PIN: (&str, &str) = ("leaf", "20260302.652");
+
 /// The exact linum-relative package selected for practical relative-number
 /// rendering, customization, backend ownership, and global-mode lifecycle
 /// parity. MELPA built this archive from upstream commit
