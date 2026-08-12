@@ -613,6 +613,58 @@ fn supersession_threat_is_skipped_when_we_own_the_lock_like_gnu() {
     );
 }
 
+/// GNU expands FN in exactly one place: `make_lock_file_name`
+/// (filelock.c:543, `fn = Fexpand_file_name (fn, Qnil)`).  Every other
+/// consumer — Fget_truename_buffer (:603), Fverify_visited_file_modtime
+/// (:605), Ffile_exists_p (:606), the supersession calln (:608) — receives
+/// the caller's string verbatim.  Expanding earlier breaks the truename
+/// lookup, because find-file stores `buffer-file-truename` abbreviated
+/// ("~/..."), so the expanded name never matches its own buffer.
+#[cfg(unix)]
+#[test]
+fn only_the_lock_file_name_expands_the_filename_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.set_variable("create-lockfiles", Value::T);
+    eval.eval_str(&format!(
+        r#"(progn
+             (setq default-directory "{}/")
+             (setq neovm-lock-args nil)
+             (fset 'make-lock-file-name
+                   (lambda (f)
+                     (setq neovm-lock-args
+                           (cons (cons 'make-lock-file-name f) neovm-lock-args))
+                     (concat "{}/.#note.txt")))
+             (fset 'get-truename-buffer
+                   (lambda (f)
+                     (setq neovm-lock-args
+                           (cons (cons 'get-truename-buffer f) neovm-lock-args))
+                     nil)))"#,
+        dir.path().display(),
+        dir.path().display(),
+    ))
+    .expect("install recording stubs");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str(r#"(lock-file "note.txt")"#)),
+        "OK nil",
+    );
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str("(reverse neovm-lock-args)")),
+        format!(
+            "OK ((make-lock-file-name . \"{}/note.txt\") (get-truename-buffer . \"note.txt\"))",
+            dir.path().display()
+        ),
+        "only make-lock-file-name sees an expanded name"
+    );
+
+    let _ = fs::remove_file(dir.path().join(".#note.txt"));
+}
+
 /// GNU reports lock failures through report_file_errno, whose DATA is
 /// (ACTION STRERROR FILENAME) — fileio.c get_file_errno_data, filelock.c:648.
 /// The bare strerror text carries no Rust "(os error N)" suffix.

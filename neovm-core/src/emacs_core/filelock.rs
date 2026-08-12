@@ -149,10 +149,18 @@ fn fallback_make_lock_file_name(path: &Path) -> Option<PathBuf> {
     Some(out)
 }
 
+/// GNU `make_lock_file_name` (filelock.c:535-560) is the ONLY place in the
+/// lock path that expands FN: `fn = Fexpand_file_name (fn, Qnil)` at :543.
+/// Everything else — Fget_truename_buffer, Fverify_visited_file_modtime,
+/// Ffile_exists_p, the supersession calln, and the file name reported by
+/// report_file_errno — sees the caller's string verbatim.  That matters
+/// because `buffer-file-truename` is stored abbreviated ("~/..."), so
+/// expanding before the truename lookup makes it miss its own buffer.
 fn make_lock_file_name(
     eval: &mut super::eval::Context,
     filename: &LispString,
 ) -> Result<Option<PathBuf>, Flow> {
+    let filename = resolve_filename_lisp_for_eval(eval, filename);
     let file = Value::heap_string(filename.clone());
     match eval.apply(Value::symbol("make-lock-file-name"), vec![file]) {
         Ok(v) if v.is_nil() => Ok(None),
@@ -165,7 +173,7 @@ fn make_lock_file_name(
             vec![Value::symbol("stringp"), other],
         )),
         Err(_) => Ok(fallback_make_lock_file_name(&lisp_file_name_to_path_buf(
-            filename,
+            &filename,
         ))),
     }
 }
@@ -559,8 +567,7 @@ pub(crate) fn lock_file(
         );
     }
 
-    let filename = resolve_filename_lisp_for_eval(eval, filename);
-    lock_file_resolved(eval, &filename)
+    lock_file_resolved(eval, filename)
 }
 
 /// Handler-aware `unlock-file` operation, corresponding to GNU
@@ -585,8 +592,7 @@ pub(crate) fn unlock_file(
         return Ok(Value::NIL);
     }
 
-    let resolved = resolve_filename_lisp_for_eval(eval, filename);
-    match unlock_file_resolved(eval, &resolved) {
+    match unlock_file_resolved(eval, filename) {
         Err(Flow::Signal(sig))
             if super::errors::signal_matches_condition_value_sym(
                 &eval.obarray,
@@ -627,13 +633,12 @@ fn file_locked_p(eval: &mut super::eval::Context, filename: &LispString) -> Resu
         );
     }
 
-    let filename = resolve_filename_lisp_for_eval(eval, filename);
-    let Some(lock_path) = make_lock_file_name(eval, &filename)? else {
+    let Some(lock_path) = make_lock_file_name(eval, filename)? else {
         return Ok(Value::NIL);
     };
 
     match current_lock_owner(&lock_path, &lock_host_name(eval))
-        .map_err(|err| file_lock_error("Testing file lock", &filename, err))?
+        .map_err(|err| file_lock_error("Testing file lock", filename, err))?
     {
         LockOwner::None => Ok(Value::NIL),
         LockOwner::Current => Ok(Value::T),
@@ -695,7 +700,8 @@ pub(crate) fn sync_modified_buffer_file_lock(
         return Ok(());
     };
 
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    // No expansion here: GNU's restore_buffer_modified_p hands
+    // BVAR (b, file_truename) to Flock_file / Funlock_file untouched.
     if !was_modified && !flag.is_nil() {
         let _ = lock_file(eval, &filename)?;
     } else if was_modified && flag.is_nil() {
@@ -734,8 +740,7 @@ pub(crate) fn builtin_lock_buffer(eval: &mut super::eval::Context, args: Vec<Val
         if filename.is_nil() {
             None
         } else {
-            let filename = super::builtins::expect_lisp_string(filename)?;
-            Some(resolve_filename_lisp_for_eval(eval, filename))
+            Some(super::builtins::expect_lisp_string(filename)?.clone())
         }
     } else {
         let current = eval
@@ -748,7 +753,6 @@ pub(crate) fn builtin_lock_buffer(eval: &mut super::eval::Context, args: Vec<Val
                 ValueKind::String => value.as_lisp_string().cloned(),
                 _ => None,
             })
-            .map(|filename| resolve_filename_lisp_for_eval(eval, &filename))
     };
 
     let modified = eval
@@ -775,8 +779,8 @@ pub(crate) fn builtin_unlock_buffer(
     {
         let filename = truename
             .as_lisp_string()
-            .expect("ValueKind::String must carry LispString payload");
-        let filename = resolve_filename_lisp_for_eval(eval, filename);
+            .expect("ValueKind::String must carry LispString payload")
+            .clone();
         let _ = unlock_file(eval, &filename)?;
     }
     Ok(Value::NIL)
