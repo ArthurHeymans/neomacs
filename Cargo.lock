@@ -3676,6 +3676,7 @@ dependencies = [
 name = "neomacs-melpa-tests"
 version = "0.0.15"
 dependencies = [
+ "base64",
  "expect-test",
  "fs4",
  "libc",
@@ -3683,6 +3684,7 @@ dependencies = [
  "neomacs-melpa-test-support",
  "neomacs-test-oracle",
  "neomacs-tui-tests",
+ "serde_json",
  "sha2",
  "tempfile",
  "windows-sys 0.61.2",

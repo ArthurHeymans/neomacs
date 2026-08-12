@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+base64.workspace = true
 # Both frozen and live packages are installed through the editor's own
 # `package-install`; Rust only orchestrates isolated processes and verifies
 # pinned fixture checksums.
@@ -14,6 +15,7 @@ neomacs-test-oracle.workspace = true
 neomacs-melpa-test-support.workspace = true
 fs4.workspace = true
 sha2.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
 tempfile.workspace = true
 
 [target.'cfg(unix)'.dependencies]

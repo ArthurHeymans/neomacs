@@ -543,6 +543,13 @@ pub const TABLIST_MELPA_PIN: (&str, &str) = ("tablist", "20260623.1855");
 /// `fab80daebd798b233a9a40d5a8b99359ace63b5e`.
 pub const TERN_MELPA_PIN: (&str, &str) = ("tern", "20260514.1348");
 
+/// The exact Tide package selected for practical JavaScript setup, external
+/// TypeScript-server lifecycle, Eldoc/Imenu/Xref navigation, references,
+/// Flycheck diagnostics, code edits, rename, framing, and recovery parity.
+/// MELPA built this archive from upstream commit
+/// `9498c4c7fc97d8042fdff532f47f1dc79ebd163a`.
+pub const TIDE_MELPA_PIN: (&str, &str) = ("tide", "20260219.336");
+
 /// The exact TinySegmenter package selected by the practical Japanese text,
 /// mixed-script release-note, document-indexing, buffer-editing, and boundary
 /// parity corpus. MELPA built this archive from upstream commit

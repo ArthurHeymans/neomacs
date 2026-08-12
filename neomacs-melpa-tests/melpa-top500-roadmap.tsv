@@ -366,7 +366,7 @@ rank	package	downloads	status
 365	scala-mode	284088	covered
 366	buffer-move	282179	covered
 367	dracula-theme	281412	covered
-368	tide	279725	todo
+368	tide	279725	covered
 369	livid-mode	276850	todo
 370	parsebib	276258	covered
 371	groovy-mode	275480	covered

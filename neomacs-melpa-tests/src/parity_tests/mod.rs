@@ -618,6 +618,7 @@ mod symon;
 mod tablist;
 mod tagedit;
 mod tern;
+mod tide;
 mod tinysegmenter;
 mod toc_org;
 mod toml_mode;
