@@ -4004,3 +4004,49 @@ rebuilt dumped runtime matches GNU's constructor/storage-kind identity matrix,
 and the original `auto_yasnippet_package_batch` oracle is green.
 
 Status: FIXED.
+
+## 76. `error-message-string` used `prin1` for objects GNU sends through `princ` -- FIXED
+
+An incomplete form in `flycheck-package` correctly signalled `end-of-file`,
+but the rendered error data exposed a different buffer representation:
+
+```elisp
+(let ((buffer (generate-new-buffer " *error-source*")))
+  (unwind-protect
+      (error-message-string (list 'end-of-file buffer))
+    (kill-buffer buffer)))
+;; GNU     => "End of file during parsing:  *error-source*"
+;; Neomacs => "End of file during parsing: #<buffer  *error-source*>" ; before
+```
+
+The generic printers were already correct: `(format "%s" buffer)` returned
+the live buffer name and `(prin1-to-string buffer)` returned the readable
+`#<buffer ...>` form in both editors.  The divergence was in how
+`error-message-string` chose between them.
+
+GNU's `print_error_message` makes that choice for the whole datum in
+`src/print.c:1128-1162`.  Data belonging to a file-error, `end-of-file`, or
+`user-error` goes through `Fprinc`; ordinary condition data goes through
+`Fprin1`.  Neomacs represented the choice as a `quote_strings` boolean.  That
+could remove quotes from a string but could not express `princ` semantics for
+a buffer, so all non-string data still passed through the readable printer.
+
+The replacement is the exhaustive `ErrorDatumPrintMode::{Princ, Prin1}`.
+Every error branch now selects a complete object-printing protocol, and both
+arms reuse the same byte printers as the public Lisp operations.  The
+destination is part of the protocol too: GNU prints into its multibyte
+`Vprin1_to_string_buffer`, where `Fprinc` octal-escapes a raw unibyte 0xFF as
+the four characters `\377`; this differs from `(format "%s" ...)`, which
+preserves the raw byte.  A dedicated multibyte-buffer `princ` seam records
+that distinction instead of making callers reconstruct it.
+
+The public Lisp regression
+`error_message_string_end_of_file_prints_live_buffer_name_like_gnu` failed
+first with the package's exact `#<buffer ...>` excess.  While gating the fix,
+an older raw-unibyte unit expectation was measured against GNU and found
+stale; it now pins GNU's multibyte `\377: foo` result.  All 29
+`error-message-string` tests pass, the complete `neovm-core` gate passes 8,814
+tests, a fresh release build and pdump succeed, and the original
+`flycheck_package_package_batch` oracle is green.
+
+Status: FIXED.
