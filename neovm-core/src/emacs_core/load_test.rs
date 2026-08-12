@@ -3488,6 +3488,127 @@ fn bootstrap_runtime_command_loop_executes_meta_x_command_on_ret() {
     );
 }
 
+#[test]
+fn bootstrap_runtime_rejected_nested_mx_leaves_outer_mx_usable() {
+    init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let scratch = eval.buffers.create_buffer("*nested-m-x-recovery*");
+    eval.buffers.set_current(scratch);
+    eval.buffers
+        .get_mut(scratch)
+        .expect("scratch buffer")
+        .insert("ab");
+    let frame_id = eval.frames.create_frame("F1", 960, 640, scratch);
+    assert!(eval.frames.select_frame(frame_id));
+
+    eval.eval_str(
+        r#"(progn
+             (goto-char (point-min))
+             (setq enable-recursive-minibuffers nil
+                   neo-nested-mx-finished nil)
+             (defun neo-nested-mx-finish ()
+               (interactive)
+               (setq neo-nested-mx-finished t)
+               (kill-emacs))
+             (global-set-key (kbd "C-c q") #'neo-nested-mx-finish))"#,
+    )
+    .expect("install nested M-x recovery probe");
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    let send = |event| tx.send(crate::keyboard::InputEvent::key_press(event));
+    send(crate::keyboard::KeyEvent::char_with_mods(
+        'x',
+        crate::keyboard::Modifiers::meta(),
+    ))
+    .expect("queue outer M-x");
+    send(crate::keyboard::KeyEvent::char_with_mods(
+        'x',
+        crate::keyboard::Modifiers::meta(),
+    ))
+    .expect("queue rejected nested M-x");
+    for ch in "forward-char".chars() {
+        send(crate::keyboard::KeyEvent::char(ch)).expect("queue outer M-x command text");
+    }
+    send(crate::keyboard::KeyEvent::named(
+        crate::keyboard::NamedKey::Return,
+    ))
+    .expect("queue outer M-x RET");
+    send(crate::keyboard::KeyEvent::char_with_mods(
+        'c',
+        crate::keyboard::Modifiers::ctrl(),
+    ))
+    .expect("queue command-loop exit prefix");
+    send(crate::keyboard::KeyEvent::char('q')).expect("queue command-loop exit key");
+    drop(tx);
+
+    eval.input_rx = Some(rx);
+    eval.command_loop.running = true;
+    let result = command_loop_end_value(
+        eval.recursive_edit_inner(),
+        "rejected nested M-x must not corrupt the outer command loop",
+    );
+
+    assert_eq!(result, Value::NIL);
+    assert_eq!(
+        eval.eval_str("(list (point) neo-nested-mx-finished (minibuffer-depth))")
+            .expect("collect nested M-x recovery observations")
+            .to_string(),
+        "(2 t 0)"
+    );
+}
+
+#[test]
+fn bootstrap_runtime_read_only_local_default_binding_handles_character_input() {
+    init_test_tracing();
+    let mut eval = create_bootstrap_evaluator_cached().expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let scratch = eval.buffers.create_buffer("*read-only-default-binding*");
+    eval.buffers.set_current(scratch);
+    eval.buffers
+        .get_mut(scratch)
+        .expect("read-only target buffer")
+        .insert("terminal finished");
+    let frame_id = eval.frames.create_frame("F1", 960, 640, scratch);
+    assert!(eval.frames.select_frame(frame_id));
+
+    eval.eval_str(
+        r#"(progn
+             (setq neo-default-binding-event nil
+                   buffer-read-only t)
+             (defun neo-default-binding-probe ()
+               (interactive)
+               (setq neo-default-binding-event last-command-event)
+               (kill-emacs))
+             (let ((map (make-sparse-keymap)))
+               (define-key map [t] #'neo-default-binding-probe)
+               (use-local-map map)))"#,
+    )
+    .expect("install read-only catch-all local binding");
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char('a'),
+    ))
+    .expect("queue catch-all character");
+    drop(tx);
+    eval.input_rx = Some(rx);
+    eval.command_loop.running = true;
+
+    let result = command_loop_end_value(
+        eval.recursive_edit_inner(),
+        "[t] command should run instead of attempting read-only self-insertion",
+    );
+
+    assert_eq!(result, Value::NIL);
+    assert_eq!(
+        eval.eval_str("(list neo-default-binding-event buffer-read-only (buffer-string))")
+            .expect("collect default-binding observations")
+            .to_string(),
+        "(97 t \"terminal finished\")"
+    );
+}
+
 /// End of a scripted command loop: either the loop returned, or the exhausted
 /// input script ended the session with `kill-emacs` (GNU exits on terminal
 /// EOF, and `kill-emacs` is control flow, so it unwinds here rather than

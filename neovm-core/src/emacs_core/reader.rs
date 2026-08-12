@@ -3,6 +3,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, intern, resolve_sym};
+use super::minibuffer::{MinibufferEntryRejection, RecursiveMinibufferPolicy};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 // storage imports removed — now using emacs_char directly
@@ -1241,6 +1242,21 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     let history_spec = minibuffer_history_spec(args.get(4));
     let default_val = args.get(5).copied().unwrap_or(Value::NIL);
 
+    let recursive_policy = if obarray
+        .symbol_value("enable-recursive-minibuffers")
+        .is_some_and(|value| value.is_truthy())
+    {
+        RecursiveMinibufferPolicy::Allow
+    } else {
+        RecursiveMinibufferPolicy::Reject
+    };
+    // GNU checks this before selecting, clearing, or changing the mode of a
+    // minibuffer buffer. Keep admission before every externally visible setup
+    // mutation so rejection leaves the active level untouched.
+    let entry_permit = minibuffers
+        .prepare_entry(recursive_policy)
+        .map_err(MinibufferEntryRejection::into_flow)?;
+
     // Save state.  GNU read_minibuf saves Vcurrent_prefix_arg in
     // minibuf_save_list and restores it during read_minibuf_unwind;
     // minibuffer commands may clobber it while reading input.
@@ -1265,7 +1281,7 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
     let ambient_directory = minibuffer_ambient_directory_in_state(buffers);
 
     // Find or create *Minibuf-N* buffer
-    let minibuf_depth = minibuffers.depth() + 1;
+    let minibuf_depth = entry_permit.depth();
     let minibuf_id = find_or_create_minibuffer_buffer_in_state(buffers, minibuf_depth);
 
     let active_window_state = activate_minibuffer_window_in_state(
@@ -1304,18 +1320,13 @@ pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
         frames.selected_frame().map(|frame| frame.selected_window)
     );
 
-    let enable_recursive = obarray
-        .symbol_value("enable-recursive-minibuffers")
-        .copied()
-        .unwrap_or(Value::NIL)
-        .is_truthy();
-    minibuffers.set_enable_recursive(enable_recursive);
-    let state = minibuffers.read_from_minibuffer_lisp(
+    let state = minibuffers.enter_with_permit(
+        entry_permit,
         minibuf_id,
         &prompt,
         initial_input.as_ref(),
         history_spec.history_name,
-    )?;
+    );
     state.command_loop_depth = recursive_depth;
 
     // Set local keymap: use KEYMAP arg if provided, otherwise minibuffer-local-map
@@ -1756,6 +1767,20 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     let history_spec = minibuffer_history_spec(args.get(4));
     let default_val = args.get(5).copied().unwrap_or(Value::NIL);
 
+    let recursive_policy = if shared
+        .obarray
+        .symbol_value("enable-recursive-minibuffers")
+        .is_some_and(|value| value.is_truthy())
+    {
+        RecursiveMinibufferPolicy::Allow
+    } else {
+        RecursiveMinibufferPolicy::Reject
+    };
+    let entry_permit = shared
+        .minibuffers
+        .prepare_entry(recursive_policy)
+        .map_err(MinibufferEntryRejection::into_flow)?;
+
     // Save state.  GNU read_minibuf saves Vcurrent_prefix_arg in
     // minibuf_save_list and restores it during read_minibuf_unwind;
     // minibuffer commands may clobber it while reading input.
@@ -1796,7 +1821,7 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     // *Minibuf-N*, then installs it after minibuffer-mode has reset locals.
     let ambient_directory = minibuffer_ambient_directory_in_state(&shared.buffers);
 
-    let minibuf_depth = shared.minibuffers.depth() + 1;
+    let minibuf_depth = entry_permit.depth();
     let minibuf_id = find_or_create_minibuffer_buffer_in_state(&mut shared.buffers, minibuf_depth);
 
     let active_window_state = activate_minibuffer_window_in_state(
@@ -1840,20 +1865,14 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
             .map(|frame| frame.selected_window)
     );
 
-    let enable_recursive = shared
-        .obarray
-        .symbol_value("enable-recursive-minibuffers")
-        .copied()
-        .unwrap_or(Value::NIL)
-        .is_truthy();
-    shared.minibuffers.set_enable_recursive(enable_recursive);
     {
-        let state = shared.minibuffers.read_from_minibuffer_lisp(
+        let state = shared.minibuffers.enter_with_permit(
+            entry_permit,
             minibuf_id,
             &prompt,
             initial_input.as_ref(),
             history_spec.history_name,
-        )?;
+        );
         state.command_loop_depth = recursive_depth;
     }
 

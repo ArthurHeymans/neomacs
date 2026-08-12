@@ -468,12 +468,14 @@ fn abort_recursive_edit_rejects_top_level_command_loop_like_gnu() {
 fn recursive_disabled() {
     crate::test_utils::init_test_tracing();
     let mut mgr = MinibufferManager::new();
-    mgr.set_enable_recursive(false);
 
     mgr.read_from_minibuffer(BufferId(1), "1: ", None, None)
         .unwrap();
-    let result = mgr.read_from_minibuffer(BufferId(2), "2: ", None, None);
-    assert!(result.is_err());
+    assert_eq!(
+        mgr.prepare_entry(RecursiveMinibufferPolicy::Reject)
+            .expect_err("nested entry should be rejected"),
+        MinibufferEntryRejection::RecursiveDisabled
+    );
 }
 
 // -- Minibuffer enter/exit lifecycle --------------------------------------

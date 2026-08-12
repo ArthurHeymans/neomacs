@@ -9,6 +9,7 @@
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
 
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::heap_types::LispString;
@@ -435,12 +436,59 @@ impl Default for MinibufferHistory {
 // MinibufferManager
 // ---------------------------------------------------------------------------
 
+/// Whether a new minibuffer may be entered while another one is active.
+///
+/// Keeping the Lisp option out of `MinibufferManager` makes admission an
+/// explicit operation for each read instead of mutable ambient state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RecursiveMinibufferPolicy {
+    Allow,
+    Reject,
+}
+
+/// The exhaustive reasons a minibuffer entry can be rejected before it has
+/// changed any buffer, window, or command-loop state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MinibufferEntryRejection {
+    RecursiveDisabled,
+    #[cfg(test)]
+    TestDepthLimit,
+}
+
+impl MinibufferEntryRejection {
+    pub(crate) fn into_flow(self) -> Flow {
+        let message = match self {
+            Self::RecursiveDisabled => "Command attempted to use minibuffer while in minibuffer",
+            #[cfg(test)]
+            Self::TestDepthLimit => "Command attempted to use minibuffer while in minibuffer",
+        };
+        signal(LispCondition::UserError, vec![Value::string(message)])
+    }
+}
+
+/// Single-use proof that entering the next minibuffer level is allowed.
+///
+/// The private fields prevent callers from manufacturing a permit. Consuming
+/// it at entry and checking its parent depth keep admission and stack mutation
+/// paired even as the setup path evolves.
+#[must_use = "minibuffer admission must be consumed by enter_with_permit"]
+#[derive(Debug)]
+pub(crate) struct MinibufferEntryPermit {
+    parent_depth: usize,
+    depth: NonZeroUsize,
+}
+
+impl MinibufferEntryPermit {
+    pub(crate) fn depth(&self) -> usize {
+        self.depth.get()
+    }
+}
+
 /// Owns all minibuffer state, including the recursive-edit stack.
 pub struct MinibufferManager {
     state_stack: Vec<MinibufferState>,
     history: MinibufferHistory,
     completion_style: CompletionStyle,
-    enable_recursive: bool,
     #[cfg(test)]
     max_depth: usize,
 }
@@ -451,10 +499,71 @@ impl MinibufferManager {
             state_stack: Vec::new(),
             history: MinibufferHistory::new(),
             completion_style: CompletionStyle::Prefix,
-            enable_recursive: true,
             #[cfg(test)]
             max_depth: 10,
         }
+    }
+
+    /// Decide whether the next minibuffer level may be entered.
+    ///
+    /// This is deliberately side-effect free. GNU `read_minibuf` rejects a
+    /// prohibited recursive read before selecting or clearing a minibuffer
+    /// window; callers must obtain this permit before doing either.
+    pub(crate) fn prepare_entry(
+        &self,
+        policy: RecursiveMinibufferPolicy,
+    ) -> Result<MinibufferEntryPermit, MinibufferEntryRejection> {
+        let parent_depth = self.state_stack.len();
+        let depth = NonZeroUsize::new(
+            parent_depth
+                .checked_add(1)
+                .expect("minibuffer depth overflow"),
+        )
+        .expect("next minibuffer depth is nonzero");
+        #[cfg(test)]
+        if depth.get() > self.max_depth {
+            return Err(MinibufferEntryRejection::TestDepthLimit);
+        }
+        if policy == RecursiveMinibufferPolicy::Reject && parent_depth != 0 {
+            return Err(MinibufferEntryRejection::RecursiveDisabled);
+        }
+        Ok(MinibufferEntryPermit {
+            parent_depth,
+            depth,
+        })
+    }
+
+    pub(crate) fn enter_with_permit(
+        &mut self,
+        permit: MinibufferEntryPermit,
+        buffer_id: BufferId,
+        prompt: &LispString,
+        initial: Option<&LispString>,
+        history_name: Option<SymId>,
+    ) -> &mut MinibufferState {
+        assert_eq!(
+            self.state_stack.len(),
+            permit.parent_depth,
+            "minibuffer stack changed after entry was admitted"
+        );
+        let initial_string = initial
+            .cloned()
+            .unwrap_or_else(|| LispString::from_utf8(""));
+        let mut state = MinibufferState::new(
+            buffer_id,
+            prompt.clone(),
+            initial_string,
+            permit.depth.get(),
+        );
+
+        if let Some(name) = history_name {
+            state.history = self.history.get(name).to_vec();
+        }
+
+        self.state_stack.push(state);
+        self.state_stack
+            .last_mut()
+            .expect("admitted minibuffer state was just pushed")
     }
 
     /// Enter the minibuffer with the given prompt and optional initial input / history name.
@@ -468,38 +577,10 @@ impl MinibufferManager {
         initial: Option<&LispString>,
         history_name: Option<SymId>,
     ) -> Result<&mut MinibufferState, Flow> {
-        let new_depth = self.state_stack.len() + 1;
-        #[cfg(test)]
-        if new_depth > self.max_depth {
-            return Err(signal(
-                "error",
-                vec![Value::string(
-                    "Command attempted to use minibuffer while in minibuffer",
-                )],
-            ));
-        }
-        if !self.enable_recursive && !self.state_stack.is_empty() {
-            return Err(signal(
-                "error",
-                vec![Value::string(
-                    "Command attempted to use minibuffer while in minibuffer",
-                )],
-            ));
-        }
-
-        let initial_string = initial
-            .cloned()
-            .unwrap_or_else(|| LispString::from_utf8(""));
-        let mut state = MinibufferState::new(buffer_id, prompt.clone(), initial_string, new_depth);
-
-        // Pre-populate history from the named list.
-        if let Some(name) = history_name {
-            state.history = self.history.get(name).to_vec();
-        }
-
-        self.state_stack.push(state);
-        // Safety: we just pushed, so unwrap is fine.
-        Ok(self.state_stack.last_mut().unwrap())
+        let permit = self
+            .prepare_entry(RecursiveMinibufferPolicy::Allow)
+            .map_err(MinibufferEntryRejection::into_flow)?;
+        Ok(self.enter_with_permit(permit, buffer_id, prompt, initial, history_name))
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -684,11 +765,6 @@ impl MinibufferManager {
     /// Set the completion style.
     pub fn set_completion_style(&mut self, style: CompletionStyle) {
         self.completion_style = style;
-    }
-
-    /// Set whether recursive minibuffers are allowed.
-    pub fn set_enable_recursive(&mut self, enable: bool) {
-        self.enable_recursive = enable;
     }
 }
 

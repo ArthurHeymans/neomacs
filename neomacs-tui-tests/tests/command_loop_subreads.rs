@@ -27,6 +27,7 @@
 //! registers_bookmarks.rs / replace_sort.rs).
 
 mod support;
+use neomacs_tui_tests::{StrictGridOptions, assert_grids_strict};
 use std::time::Duration;
 use support::*;
 
@@ -300,6 +301,83 @@ fn recursive_minibuffer_eval_then_mx() {
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
 
     assert_pair_nearly_matches("recursive_minibuffer_eval_then_mx/unwound", &gnu, &neo, 2);
+}
+
+/// Rejecting a nested `M-x` when recursive minibuffers are disabled must be
+/// atomic: the outer `M-x` remains active and can still execute its command.
+/// Issue #251 left Neomacs in an orphaned `*Minibuf-2*`, so the command name
+/// self-inserted there instead. Inserting `X` after `forward-char` proves that
+/// the outer command completed and moved point between `a` and `b`.
+#[test]
+fn rejected_nested_mx_keeps_outer_mx_usable() {
+    let (mut gnu, mut neo) = boot_pair("");
+    open_home_file(&mut gnu, &mut neo, "issue-251.txt", "ab", "C-x C-f");
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        r#"(progn (setq enable-recursive-minibuffers nil) (set-buffer-file-coding-system 'utf-8-unix) (set-frame-name "issue-251-frame") nil)"#,
+    );
+    let recursion_disabled = |grid: &[String]| {
+        grid.last()
+            .is_some_and(|row| row.trim_end().ends_with("nil"))
+    };
+    wait_for_both(
+        &mut gnu,
+        &mut neo,
+        Duration::from_secs(8),
+        recursion_disabled,
+    );
+    send_both(&mut gnu, &mut neo, "M-<");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    // Establish a strict, whole-screen baseline before the operation under
+    // test. This prevents unrelated startup state from being mistaken for a
+    // nested-minibuffer regression while still forbidding every grid mismatch.
+    assert_grids_strict(
+        "rejected nested M-x baseline",
+        gnu.screen(),
+        neo.screen(),
+        &StrictGridOptions::default(),
+    );
+
+    send_both(&mut gnu, &mut neo, "M-x");
+    let outer_mx = |grid: &[String]| grid.last().is_some_and(|row| row.contains("M-x"));
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), outer_mx);
+
+    // A second M-x must report GNU's rejection without changing the selected
+    // window, current buffer, minibuffer contents, or minibuffer depth.
+    send_both(&mut gnu, &mut neo, "M-x");
+    let rejected = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("Command attempted to use minibuffer while in minibuffer"))
+    };
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), rejected);
+
+    send_both_raw(&mut gnu, &mut neo, b"forward-char");
+    send_both(&mut gnu, &mut neo, "RET");
+    send_both_raw(&mut gnu, &mut neo, b"X");
+
+    let recovered = |grid: &[String]| grid.iter().any(|row| row.contains("aXb"));
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), recovered);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(500));
+
+    assert!(
+        recovered(&gnu.text_grid()),
+        "GNU outer M-x did not recover:\n{}",
+        gnu.text_grid().join("\n")
+    );
+    assert!(
+        recovered(&neo.text_grid()),
+        "Neomacs outer M-x did not recover:\n{}",
+        neo.text_grid().join("\n")
+    );
+    assert_grids_strict(
+        "rejected nested M-x recovery",
+        gnu.screen(),
+        neo.screen(),
+        &StrictGridOptions::default(),
+    );
 }
 
 // ── 5. Prefix args into reading commands ───────────────────────────────
