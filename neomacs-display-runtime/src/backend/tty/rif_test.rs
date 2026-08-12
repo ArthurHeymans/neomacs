@@ -2858,6 +2858,32 @@ fn deleting_one_char_mid_line_uses_delete_cells() {
 }
 
 #[test]
+fn a_row_going_wholly_blank_erases_instead_of_shifting() {
+    // GNU's update_frame_line (dispnew.c) strips trailing spaces from both the
+    // old and the new row before any insert/delete-char reasoning, so a row
+    // that becomes wholly blank has nlen == 0, no begmatch/endmatch to save,
+    // and reaches just_erase -> clear_end_of_line. Shifting blanks onto blanks
+    // is a degenerate match that preserves no content, and it costs both more
+    // bytes than EL and a physically different terminal state: DCH shifts
+    // written blanks in where EL leaves the cells unwritten.
+    let mut rif = TtyRif::new(60, 4);
+    set_row(&mut rif, 1, "tup.el\".");
+    let _ = render_output(&mut rif);
+
+    set_row(&mut rif, 1, &" ".repeat(60));
+    let out = render_output(&mut rif);
+    let text = String::from_utf8_lossy(&out);
+    assert!(
+        !text.contains("\x1b[8P"),
+        "a wholly blank desired row must not be produced by DCH: {text:?}"
+    );
+    assert!(
+        text.contains("\x1b[K"),
+        "a wholly blank desired row is erased to end of line: {text:?}"
+    );
+}
+
+#[test]
 fn rows_with_wide_chars_refuse_horizontal_shifts() {
     let mut rif = TtyRif::new(30, 4);
     // A wide char occupies a base cell plus a padding cell.

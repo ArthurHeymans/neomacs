@@ -1887,6 +1887,7 @@ fn detect_row_shift(
         let suffix = width - first_changed - d;
         if suffix >= MIN_SAVED_CELLS
             && desired_row[first_changed + d..] == current_row[first_changed..width - d]
+            && carries_shiftable_content(&current_row[first_changed..width - d])
         {
             let mut shifted = current_row.to_vec();
             // TtyCell is not Copy (cluster extenders); rotate moves.
@@ -1905,6 +1906,7 @@ fn detect_row_shift(
         // Deletion: desired[first..width-d] == current[first+d..].
         if suffix >= MIN_SAVED_CELLS
             && desired_row[first_changed..width - d] == current_row[first_changed + d..]
+            && carries_shiftable_content(&current_row[first_changed + d..])
         {
             let mut shifted = current_row.to_vec();
             shifted[first_changed..].rotate_left(d);
@@ -1988,6 +1990,23 @@ fn erasable_blank(cell: &TtyCell) -> bool {
         && cell.attrs.underline == 0
         && !cell.attrs.strikethrough
         && !cell.attrs.inverse
+}
+
+/// Whether a run a horizontal shift would preserve is worth preserving.
+///
+/// GNU's `update_frame_line` (dispnew.c) strips trailing spaces from both the
+/// old and the new row before it computes `begmatch`/`endmatch`, so blanks past
+/// a row's logical end never count toward what an insert/delete-char saves. A
+/// run of default blanks trivially matches any other run of default blanks, so
+/// without this the detector "saves" a suffix carrying nothing: a row going
+/// wholly blank matches as a left shift of exactly its old content's width.
+/// That costs more bytes than the erase GNU emits and leaves a physically
+/// different terminal — DCH shifts written blanks in, EL leaves cells
+/// unwritten. A space that carries a background is real content and still
+/// shifts, matching GNU's `colored_spaces_p`.
+fn carries_shiftable_content(run: &[TtyCell]) -> bool {
+    run.iter()
+        .any(|cell| !erasable_blank(cell) || cell.attrs.bg.is_some())
 }
 
 /// Return the start and background of the physical row's uniform erasable
