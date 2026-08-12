@@ -2732,6 +2732,15 @@ const BOOTSTRAP_FINGERPRINT_MEMO_ENTRIES: usize = 16;
 
 const BOOTSTRAP_FINGERPRINT_MEMO_FILE: &str = "neovm-bootstrap-fingerprint-memo-v1";
 
+/// How far a source's mtime must precede a memo entry before that entry is
+/// trusted.
+///
+/// Covers filesystems whose timestamps are coarse (one second is still common)
+/// plus room for a write landing either side of the record, so a same-length
+/// edit cannot slip through unseen. See
+/// [`bootstrap_fingerprint_memo_lookup`].
+const BOOTSTRAP_FINGERPRINT_MEMO_RACE_MARGIN: u128 = 2_000_000_000;
+
 /// The cheap facts about one bootstrap source file that decide whether its
 /// contents still need to be read.
 ///
@@ -2796,14 +2805,32 @@ fn bootstrap_source_fingerprint(runtime_root: &Path) -> String {
 
     let stats = bootstrap_source_stats(&files);
     let stat_key = bootstrap_source_stat_key(runtime_root, &stats);
+    let newest = bootstrap_source_newest_mtime(&stats);
     let memo_path = bootstrap_cache_dir(runtime_root).join(BOOTSTRAP_FINGERPRINT_MEMO_FILE);
-    if let Some(fingerprint) = bootstrap_fingerprint_memo_lookup(&memo_path, &stat_key) {
+    if let Some(fingerprint) = bootstrap_fingerprint_memo_lookup(&memo_path, &stat_key, newest) {
         return fingerprint;
     }
 
     let fingerprint = bootstrap_content_fingerprint(runtime_root, &files);
     bootstrap_fingerprint_memo_store(&memo_path, &stat_key, &fingerprint);
     fingerprint
+}
+
+/// The most recent modification time across the collected sources, in
+/// nanoseconds since the epoch.
+fn bootstrap_source_newest_mtime(stats: &[BootstrapSourceStat]) -> u128 {
+    stats
+        .iter()
+        .map(|stat| {
+            u128::from(stat.modified_secs) * 1_000_000_000 + u128::from(stat.modified_nanos)
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+fn system_time_nanos(time: std::time::SystemTime) -> u128 {
+    time.duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos())
 }
 
 /// Read the cheap stat facts for each already-collected source file.
@@ -2909,13 +2936,35 @@ fn hex_digest_prefix(hasher: Sha256) -> String {
 
 /// Look up a previously computed content fingerprint for this exact stat key.
 ///
+/// An entry is only trusted when every source it describes is comfortably older
+/// than the moment it was recorded. An edit that keeps a file's length and
+/// lands in the same timestamp tick as the previous write moves nothing in the
+/// stat key, so the memo would otherwise answer for the wrong tree -- two
+/// same-length writes in quick succession are enough to do it. This is the
+/// racily-clean problem Git solves the same way: a record cannot vouch for a
+/// file that was written around the time the record was taken, because a
+/// further write in that same tick would be invisible. Anything modified within
+/// [`BOOTSTRAP_FINGERPRINT_MEMO_RACE_MARGIN`] of the record is therefore
+/// refused, and the caller falls back to hashing contents. Sources in a real
+/// checkout are minutes or hours old, so the fast path is unaffected; the cost
+/// lands only on someone who edits Lisp and runs within the margin.
+///
 /// Any unreadable or malformed memo is treated as a miss: the memo is a cache,
 /// never a source of truth, so a bad one costs time and nothing else.
-fn bootstrap_fingerprint_memo_lookup(memo_path: &Path, stat_key: &str) -> Option<String> {
+fn bootstrap_fingerprint_memo_lookup(
+    memo_path: &Path,
+    stat_key: &str,
+    newest_source_nanos: u128,
+) -> Option<String> {
     let contents = fs::read_to_string(memo_path).ok()?;
     contents.lines().find_map(|line| {
-        let (key, fingerprint) = line.split_once('\t')?;
-        (key == stat_key).then(|| fingerprint.to_string())
+        let mut fields = line.split('\t');
+        let key = fields.next()?;
+        let recorded = fields.next()?.parse::<u128>().ok()?;
+        let fingerprint = fields.next()?;
+        let settled =
+            newest_source_nanos.saturating_add(BOOTSTRAP_FINGERPRINT_MEMO_RACE_MARGIN) <= recorded;
+        (key == stat_key && settled).then(|| fingerprint.to_string())
     })
 }
 
@@ -2925,7 +2974,8 @@ fn bootstrap_fingerprint_memo_lookup(memo_path: &Path, stat_key: &str) -> Option
 /// test processes race here; a loser simply overwrites with its own equally
 /// valid view, and a reader only ever sees a complete file.
 fn bootstrap_fingerprint_memo_store(memo_path: &Path, stat_key: &str, fingerprint: &str) {
-    let mut lines = vec![format!("{stat_key}\t{fingerprint}")];
+    let recorded = system_time_nanos(std::time::SystemTime::now());
+    let mut lines = vec![format!("{stat_key}\t{recorded}\t{fingerprint}")];
     if let Ok(existing) = fs::read_to_string(memo_path) {
         for line in existing.lines() {
             if line

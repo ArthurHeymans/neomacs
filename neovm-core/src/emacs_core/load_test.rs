@@ -14520,10 +14520,42 @@ impl FingerprintTree {
         // A non-Lisp sibling must stay outside the fingerprint entirely.
         fs::write(root.join("lisp/README"), b"not lisp\n").expect("readme");
         unsafe { std::env::set_var(BOOTSTRAP_CACHE_DIR_ENV, &cache) };
-        Self {
+        let tree = Self {
             _dir: dir,
             root,
             cache,
+        };
+        tree.age_sources();
+        tree
+    }
+
+    /// Backdate every source so the memo is allowed to vouch for it.
+    ///
+    /// A memo entry is refused while its sources are younger than
+    /// `BOOTSTRAP_FINGERPRINT_MEMO_RACE_MARGIN`, because a same-length rewrite
+    /// in that window would be invisible. A real checkout is minutes or hours
+    /// old and clears that bar; files this fixture just wrote do not, so tests
+    /// about memo HITS have to age them or they would be measuring the race
+    /// guard instead.
+    fn age_sources(&self) {
+        let aged =
+            std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_600_000_000);
+        let times = fs::FileTimes::new().set_accessed(aged).set_modified(aged);
+        let mut stack = vec![self.root.join("lisp")];
+        while let Some(directory) = stack.pop() {
+            for entry in fs::read_dir(&directory).expect("read lisp dir") {
+                let path = entry.expect("entry").path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else {
+                    fs::File::options()
+                        .write(true)
+                        .open(&path)
+                        .expect("open to age")
+                        .set_times(times)
+                        .expect("age");
+                }
+            }
         }
     }
 
@@ -14669,5 +14701,28 @@ fn bootstrap_fingerprint_memo_keeps_a_bounded_number_of_tree_states() {
     assert!(
         entries <= BOOTSTRAP_FINGERPRINT_MEMO_ENTRIES,
         "the memo must stay bounded, found {entries} entries"
+    );
+}
+
+#[test]
+fn bootstrap_source_fingerprint_catches_a_same_length_edit_in_one_mtime_tick() {
+    // The stat key is (path, length, mtime). An edit that preserves the length
+    // and lands in the same coarse mtime tick as the previous write moves none
+    // of them, so the memo would answer with the previous tree's fingerprint
+    // and hand back a stale pdump. Two same-length writes back to back are all
+    // it takes -- which is exactly what
+    // `bootstrap_dump_path_changes_when_runtime_lisp_changes' does.
+    let tree = FingerprintTree::new();
+    let alpha = tree.root.join("lisp/alpha.el");
+
+    fs::write(&alpha, b"(provide 'one)\n").expect("first");
+    let first = tree.fingerprint();
+    fs::write(&alpha, b"(provide 'two)\n").expect("second");
+    let second = tree.fingerprint();
+
+    assert_ne!(
+        first, second,
+        "a same-length edit must change the fingerprint even when the \
+         filesystem reports an unchanged mtime"
     );
 }
