@@ -379,7 +379,7 @@ rank	package	downloads	status
 378	ace-jump-mode	263868	covered
 379	flycheck-rust	263623	covered
 380	corfu	260657	covered
-381	python-mode	260655	todo
+381	python-mode	260655	covered
 382	w3m	257225	todo
 383	git-rebase-mode	255634	todo
 384	pipenv	255250	todo

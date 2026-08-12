@@ -578,6 +578,7 @@ mod py_isort;
 mod pyenv_mode;
 mod pyim;
 mod pytest;
+mod python_mode;
 mod pythonic;
 mod pyvenv;
 mod quelpa;

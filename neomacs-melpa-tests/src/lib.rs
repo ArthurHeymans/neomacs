@@ -404,6 +404,12 @@ pub const PYIM_MELPA_PIN: (&str, &str) = ("pyim", "20251230.809");
 /// this archive from upstream commit `6820aa6673e6a51ace88611a58b423b5b1effb19`.
 pub const PYENV_MODE_MELPA_PIN: (&str, &str) = ("pyenv-mode", "20230821.1645");
 
+/// The exact Python Mode package selected for practical editing, structural
+/// navigation, completion, and interpreter-process parity. MELPA built this
+/// archive from upstream commit
+/// `dbbfaa9bbfa1e330f4d9ec81b3793fbb2a297ecd`.
+pub const PYTHON_MODE_MELPA_PIN: (&str, &str) = ("python-mode", "20260710.1059");
+
 /// commit f6e0bec552319341f260a5c4740288799c2b3a5b.
 pub const PYTHONIC_MELPA_PIN: (&str, &str) = ("pythonic", "20230821.1733");
 
