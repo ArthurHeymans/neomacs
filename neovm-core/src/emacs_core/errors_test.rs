@@ -914,7 +914,7 @@ fn builtin_error_message_string_file_missing_string_payload() {
 }
 
 #[test]
-fn builtin_error_message_string_preserves_raw_unibyte_leading_payload() {
+fn builtin_error_message_string_escapes_raw_unibyte_payload_in_multibyte_buffer_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut evaluator = super::super::eval::Context::new();
     init_standard_errors(&mut evaluator.obarray);
@@ -926,8 +926,8 @@ fn builtin_error_message_string_preserves_raw_unibyte_leading_payload() {
     let text = result
         .as_lisp_string()
         .expect("error-message-string should return a LispString");
-    assert!(!text.is_multibyte());
-    assert_eq!(text.as_bytes(), &[0xFF, b':', b' ', b'f', b'o', b'o']);
+    assert!(text.is_multibyte());
+    assert_eq!(text.as_bytes(), br#"\377: foo"#);
 }
 
 #[test]
@@ -1046,6 +1046,22 @@ fn builtin_error_message_string_end_of_file_does_not_quote_string_payload() {
     assert_eq!(
         result.unwrap().as_utf8_str(),
         Some("End of file during parsing: EOF while reading")
+    );
+}
+
+#[test]
+fn error_message_string_end_of_file_prints_live_buffer_name_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        r#"(let ((source (generate-new-buffer " *end-of-file-source*")))
+              (unwind-protect
+                  (error-message-string (list 'end-of-file source))
+                (kill-buffer source)))"#,
+    );
+
+    assert_eq!(
+        results,
+        vec![r#"OK "End of file during parsing:  *end-of-file-source*""#]
     );
 }
 

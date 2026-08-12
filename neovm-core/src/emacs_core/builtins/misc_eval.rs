@@ -1636,6 +1636,28 @@ pub(crate) fn print_value_princ_bytes(
     print_value_princ_bytes_inner(ctx, value, false)
 }
 
+/// Render `value` as GNU `Fprinc` does when its print target is a multibyte
+/// buffer, notably `Vprin1_to_string_buffer` in `error-message-string`.
+///
+/// A top-level unibyte string is the one destination-sensitive case: `%s`
+/// returns its raw bytes, while `Fprinc` into a multibyte buffer octal-escapes
+/// eight-bit bytes.  Every non-string object follows the ordinary recursive
+/// `princ` printer, which already gives live buffers their names and applies
+/// nested no-escape semantics.
+pub(crate) fn print_value_princ_bytes_to_multibyte_buffer(
+    ctx: &crate::emacs_core::eval::Context,
+    value: &Value,
+) -> Vec<u8> {
+    if let Some(string) = value.as_lisp_string() {
+        return if string.is_multibyte() {
+            string.as_bytes().to_vec()
+        } else {
+            crate::emacs_core::string_escape::octal_escape_unibyte_eight_bit(string.as_bytes())
+        };
+    }
+    print_value_princ_bytes_inner(ctx, value, false)
+}
+
 /// `nested` is true for elements reached through an aggregate (list, vector,
 /// record, byte-code object, …), i.e. printed by GNU's
 /// `print_object (…, escapeflag=false)`. In that path, GNU's `print_string`

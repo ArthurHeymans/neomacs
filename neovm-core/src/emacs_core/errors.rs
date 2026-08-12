@@ -824,7 +824,9 @@ fn error_message_string_rendered(
             return Ok(Value::heap_string(lisp_lit("peculiar error")));
         }
         let detail = join_lisp(
-            data.iter().map(|v| error_arg_lisp(eval, v, true)).collect(),
+            data.iter()
+                .map(|v| error_arg_lisp(eval, v, ErrorDatumPrintMode::Prin1))
+                .collect(),
             ", ",
         );
         return Ok(Value::heap_string(
@@ -859,18 +861,21 @@ fn error_message_string_rendered(
         base_message_value
     };
 
-    let Some(base_message) = base_message_value.as_lisp_string().cloned() else {
+    let Some(_) = base_message_value.as_lisp_string() else {
         if data.is_empty() {
             return Ok(Value::heap_string(lisp_lit("peculiar error")));
         }
         let detail = join_lisp(
-            data.iter().map(|v| error_arg_lisp(eval, v, true)).collect(),
+            data.iter()
+                .map(|v| error_arg_lisp(eval, v, ErrorDatumPrintMode::Prin1))
+                .collect(),
             ", ",
         );
         return Ok(Value::heap_string(
             lisp_lit("peculiar error: ").concat(&detail),
         ));
     };
+    let base_message = error_arg_lisp(eval, &base_message_value, ErrorDatumPrintMode::Princ);
 
     if data.is_empty() {
         if sym_name == "error" {
@@ -884,14 +889,15 @@ fn error_message_string_rendered(
 
     // `user-error` always renders payload data directly.
     if sym_name == "user-error" {
-        if let Some(first_str) = data.first().and_then(|v| v.as_lisp_string().cloned()) {
+        if let Some(first) = data.first().filter(|v| v.as_lisp_string().is_some()) {
+            let first_str = error_arg_lisp(eval, first, ErrorDatumPrintMode::Princ);
             let rest = &data[1..];
             if rest.is_empty() {
                 return Ok(Value::heap_string(first_str));
             }
             let rest_j = join_lisp(
                 rest.iter()
-                    .map(|v| error_arg_lisp(eval, v, false))
+                    .map(|v| error_arg_lisp(eval, v, ErrorDatumPrintMode::Princ))
                     .collect(),
                 ", ",
             );
@@ -901,7 +907,7 @@ fn error_message_string_rendered(
         }
         let detail = join_lisp(
             data.iter()
-                .map(|v| error_arg_lisp(eval, v, false))
+                .map(|v| error_arg_lisp(eval, v, ErrorDatumPrintMode::Princ))
                 .collect(),
             ", ",
         );
@@ -915,7 +921,9 @@ fn error_message_string_rendered(
     // with all payload elements, even if the first datum is a string.
     if is_file_locked {
         let detail = join_lisp(
-            data.iter().map(|v| error_arg_lisp(eval, v, true)).collect(),
+            data.iter()
+                .map(|v| error_arg_lisp(eval, v, ErrorDatumPrintMode::Prin1))
+                .collect(),
             ", ",
         );
         return Ok(Value::heap_string(
@@ -926,15 +934,20 @@ fn error_message_string_rendered(
     // `error` and file-error-family conditions use a leading string for
     // user-facing detail.
     if sym_name == "error" || is_file_error_family {
-        if let Some(first_str) = data.first().and_then(|v| v.as_lisp_string().cloned()) {
+        if let Some(first) = data.first().filter(|v| v.as_lisp_string().is_some()) {
+            let first_str = error_arg_lisp(eval, first, ErrorDatumPrintMode::Princ);
             let rest = &data[1..];
             if rest.is_empty() {
                 return Ok(Value::heap_string(first_str));
             }
-            let quote_strings = sym_name == "error";
+            let print_mode = if sym_name == "error" {
+                ErrorDatumPrintMode::Prin1
+            } else {
+                ErrorDatumPrintMode::Princ
+            };
             let rest_j = join_lisp(
                 rest.iter()
-                    .map(|v| error_arg_lisp(eval, v, quote_strings))
+                    .map(|v| error_arg_lisp(eval, v, print_mode))
                     .collect(),
                 ", ",
             );
@@ -950,7 +963,7 @@ fn error_message_string_rendered(
             let detail = join_lisp(
                 data[1..]
                     .iter()
-                    .map(|v| error_arg_lisp(eval, v, true))
+                    .map(|v| error_arg_lisp(eval, v, ErrorDatumPrintMode::Prin1))
                     .collect(),
                 ", ",
             );
@@ -961,10 +974,14 @@ fn error_message_string_rendered(
         return Ok(Value::heap_string(lisp_lit("peculiar error")));
     }
 
-    let quote_strings = sym_name != "end-of-file";
+    let print_mode = if sym_name == "end-of-file" {
+        ErrorDatumPrintMode::Princ
+    } else {
+        ErrorDatumPrintMode::Prin1
+    };
     let detail = join_lisp(
         data.iter()
-            .map(|v| error_arg_lisp(eval, v, quote_strings))
+            .map(|v| error_arg_lisp(eval, v, print_mode))
             .collect(),
         ", ",
     );
@@ -982,22 +999,33 @@ fn error_data_tail_to_vec(mut tail: Value) -> Vec<Value> {
     data
 }
 
-/// Issue #131: render an error-data argument as a faithful LispString (Emacs
-/// bytes). String arguments keep their real bytes; other objects go through the
-/// printer, which emits a plain Rust string (octal escapes / U+FFFD, never
-/// storage sentinels), so its bytes become the LispString directly. The result
-/// is multibyte iff the printed text contains a character above one byte.
+/// GNU `print_error_message` chooses between `Fprinc` and `Fprin1` for an
+/// entire error-data object, not only for string quoting.  Keep that protocol
+/// typed so a new condition branch must select the full object printer.
+#[derive(Clone, Copy)]
+enum ErrorDatumPrintMode {
+    Princ,
+    Prin1,
+}
+
+/// Render an error-data argument as faithful Emacs internal-encoding bytes.
+/// Both printer paths are shared with the public Lisp primitives, so buffers,
+/// nested strings, opaque handles, and raw unibyte data keep their GNU-visible
+/// `princ`/`prin1` distinctions.
 fn error_arg_lisp(
     eval: &super::eval::Context,
     value: &Value,
-    quote_strings: bool,
+    mode: ErrorDatumPrintMode,
 ) -> crate::heap_types::LispString {
-    if !quote_strings && let Some(ls) = value.as_lisp_string() {
-        return ls.clone();
-    }
-    let printed = super::error::print_value_with_eval(eval, value);
-    let multibyte = printed.chars().any(|c| c as u32 > 0xFF);
-    super::builtins::plain_str_to_lisp_string(&printed, multibyte)
+    let bytes = match mode {
+        ErrorDatumPrintMode::Princ => {
+            super::builtins::misc_eval::print_value_princ_bytes_to_multibyte_buffer(eval, value)
+        }
+        ErrorDatumPrintMode::Prin1 => {
+            super::error::print_value_bytes_escaped_with_eval(eval, value)
+        }
+    };
+    crate::heap_types::LispString::from_emacs_bytes(bytes)
 }
 
 /// A static ASCII message literal as a LispString piece. Built unibyte so it
