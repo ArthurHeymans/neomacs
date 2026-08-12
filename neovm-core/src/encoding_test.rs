@@ -1685,3 +1685,162 @@ fn last_coding_system_used_stores_passed_alias() {
         "OK cp936"
     );
 }
+
+/// EOL conversion belongs to encoding itself, not to individual encoders.
+///
+/// GNU never lets an encoder decide this.  `consume_chars' (src/coding.c:7607)
+/// expands the newline while filling the character buffer that EVERY encoder
+/// then reads; the eol block is src/coding.c:7683:
+///
+/// ```c
+/// if (! EQ (eol_type, Qunix))
+///   { if (c == '\n') { if (EQ (eol_type, Qdos)) *buf++ = '\r'; else c = '\r'; } }
+/// ```
+///
+/// so `encode_coding_utf_8', `encode_coding_utf_16', `encode_coding_iso_2022'
+/// and the rest never see a bare newline and cannot skip the conversion.  The
+/// headroom comment just above ("Compensate for CRLF and conversion",
+/// src/coding.c:7646) exists because of this expansion.
+///
+/// Ours used to be the inverse: an opt-in `encode_eol_bytes'/`encode_eol_text'
+/// call that some encode paths made and others did not.  Measured against GNU
+/// 31.0.90, the UTF-16, UTF-8-signature, UTF-7, HZ, emacs-mule, ISO-2022 and
+/// elisp pre-write-conversion (vietnamese-viqr) paths wrote LF where GNU writes
+/// CR LF (or CR), while the UTF-8, Latin-1, raw-text, EUC, Shift_JIS and
+/// charset-list paths were already right.
+///
+/// Every row is asserted together on purpose.  The rows that were wrong prove
+/// the fix; the rows that were already right are what stops the fix from
+/// over-applying and emitting CR CR LF.  Expected values are GNU 31.0.90's
+/// output for the same input, taken by running the probe rather than derived.
+#[test]
+fn eol_conversion_applies_to_every_encoder_not_just_some() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(mapcar (lambda (cs) (list cs (string-to-list (encode-coding-string "a\nb" cs))))
+                  '(utf-8-unix
+                    utf-8-dos
+                    utf-8-mac
+                    latin-1-dos
+                    latin-1-mac
+                    raw-text-dos
+                    raw-text-mac
+                    utf-8-with-signature-unix
+                    utf-8-with-signature-dos
+                    utf-8-with-signature-mac
+                    utf-8-auto-dos
+                    utf-16le-dos
+                    utf-16le-mac
+                    utf-16be-dos
+                    utf-16-dos
+                    utf-7-dos
+                    utf-7-imap-dos
+                    chinese-hz-dos
+                    emacs-mule-dos
+                    iso-2022-jp-dos
+                    iso-2022-7bit-dos
+                    japanese-iso-8bit-dos
+                    korean-iso-8bit-dos
+                    chinese-iso-8bit-dos
+                    japanese-shift-jis-dos
+                    shift_jis-dos
+                    in-is13194-devanagari-dos
+                    chinese-big5-dos
+                    vietnamese-viqr-unix
+                    vietnamese-viqr-dos
+                    vietnamese-viqr-mac))"#,
+    );
+    assert_eq!(
+        result,
+        "OK ((utf-8-unix (97 10 98)) \
+             (utf-8-dos (97 13 10 98)) \
+             (utf-8-mac (97 13 98)) \
+             (latin-1-dos (97 13 10 98)) \
+             (latin-1-mac (97 13 98)) \
+             (raw-text-dos (97 13 10 98)) \
+             (raw-text-mac (97 13 98)) \
+             (utf-8-with-signature-unix (239 187 191 97 10 98)) \
+             (utf-8-with-signature-dos (239 187 191 97 13 10 98)) \
+             (utf-8-with-signature-mac (239 187 191 97 13 98)) \
+             (utf-8-auto-dos (239 187 191 97 13 10 98)) \
+             (utf-16le-dos (97 0 13 0 10 0 98 0)) \
+             (utf-16le-mac (97 0 13 0 98 0)) \
+             (utf-16be-dos (0 97 0 13 0 10 0 98)) \
+             (utf-16-dos (254 255 0 97 0 13 0 10 0 98)) \
+             (utf-7-dos (97 13 10 98)) \
+             (utf-7-imap-dos (97 13 10 98)) \
+             (chinese-hz-dos (97 13 10 98)) \
+             (emacs-mule-dos (97 13 10 98)) \
+             (iso-2022-jp-dos (97 13 10 98)) \
+             (iso-2022-7bit-dos (97 13 10 98)) \
+             (japanese-iso-8bit-dos (97 13 10 98)) \
+             (korean-iso-8bit-dos (97 13 10 98)) \
+             (chinese-iso-8bit-dos (97 13 10 98)) \
+             (japanese-shift-jis-dos (97 13 10 98)) \
+             (shift_jis-dos (97 13 10 98)) \
+             (in-is13194-devanagari-dos (97 13 10 98)) \
+             (chinese-big5-dos (97 13 10 98)) \
+             (vietnamese-viqr-unix (97 10 98)) \
+             (vietnamese-viqr-dos (97 13 10 98)) \
+             (vietnamese-viqr-mac (97 13 98)))",
+        "every encoder must see an already-converted newline; the unix row and \
+         the already-correct dos/mac rows guard against double conversion"
+    );
+
+    // The decode side is GNU's mirror image and has the same shape:
+    // `decode_coding` (src/coding.c:7481) runs the decoder and then calls
+    // `decode_eol` once, outside every `decode_coding_*`.  Ours collapsed CR LF
+    // only in four of the ten codec arms, which stayed invisible for as long as
+    // the encode side never wrote a CR -- fixing encode alone made
+    // `utf-8-with-signature-dos` read back as "café\r\n".  Round trip every
+    // dos/mac system: GNU 31.0.90 returns the original "a\nb" for all of them.
+    let roundtrip = crate::test_utils::runtime_startup_eval_one(
+        r#"(mapcar (lambda (cs)
+                     (list cs (string-to-list
+                               (decode-coding-string
+                                (encode-coding-string "a\nb" cs) cs))))
+                  '(utf-8-dos
+                    utf-8-mac
+                    latin-1-dos
+                    raw-text-dos
+                    utf-8-with-signature-dos
+                    utf-8-with-signature-mac
+                    utf-8-auto-dos
+                    utf-16le-dos
+                    utf-16le-mac
+                    utf-16be-dos
+                    utf-16-dos
+                    utf-7-dos
+                    chinese-hz-dos
+                    emacs-mule-dos
+                    iso-2022-jp-dos
+                    japanese-iso-8bit-dos
+                    japanese-shift-jis-dos
+                    chinese-big5-dos
+                    vietnamese-viqr-dos))"#,
+    );
+    assert_eq!(
+        roundtrip,
+        "OK ((utf-8-dos (97 10 98)) \
+             (utf-8-mac (97 10 98)) \
+             (latin-1-dos (97 10 98)) \
+             (raw-text-dos (97 10 98)) \
+             (utf-8-with-signature-dos (97 10 98)) \
+             (utf-8-with-signature-mac (97 10 98)) \
+             (utf-8-auto-dos (97 10 98)) \
+             (utf-16le-dos (97 10 98)) \
+             (utf-16le-mac (97 10 98)) \
+             (utf-16be-dos (97 10 98)) \
+             (utf-16-dos (97 10 98)) \
+             (utf-7-dos (97 10 98)) \
+             (chinese-hz-dos (97 10 98)) \
+             (emacs-mule-dos (97 10 98)) \
+             (iso-2022-jp-dos (97 10 98)) \
+             (japanese-iso-8bit-dos (97 10 98)) \
+             (japanese-shift-jis-dos (97 10 98)) \
+             (chinese-big5-dos (97 10 98)) \
+             (vietnamese-viqr-dos (97 10 98)))",
+        "decoding must undo the EOL expansion for every coding system, not for \
+         the four codec arms that happened to call decode_eol_text"
+    );
+}

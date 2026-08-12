@@ -3740,3 +3740,135 @@ rejecting the test server's certificate as UnknownIssuer where GNU accepts it
 -- also filed separately.
 
 Status: FIXED.
+
+## 73. EOL conversion was opt-in across the encode paths, so half the coding systems never got CRLF -- FIXED
+
+Writing a file with CRLF worked for some coding systems and silently did not
+for others. Same content, same `end_of_line = crlf` rule, different bytes:
+
+```elisp
+(string-to-list (encode-coding-string "a\nb" 'utf-8-dos))
+;; GNU     => (97 13 10 98)
+;; neomacs => (97 13 10 98)                      correct
+(string-to-list (encode-coding-string "a\nb" 'utf-8-with-signature-dos))
+;; GNU     => (239 187 191 97 13 10 98)
+;; neomacs => (239 187 191 97 10 98)             the CR is gone
+(string-to-list (encode-coding-string "a\nb" 'utf-16le-dos))
+;; GNU     => (97 0 13 0 10 0 98 0)
+;; neomacs => (97 0 10 0 98 0)                   the CR is gone
+```
+
+The BOM was written correctly. Only the EOL leg dropped, and it dropped
+without any signal.
+
+TWO EARLIER DESCRIPTIONS OF THIS BUG WERE WRONG, and both are recorded here
+because each would have sent the fix to the wrong place.
+
+The first, from the original backlog note, was "the EOL rule is not reaching
+the coding system". Measured and false: `buffer-file-coding-system` really is
+`utf-8-with-signature-dos` with `(coding-system-eol-type ...)` = 1. The rule
+arrives intact; the encode path ignores it.
+
+The second, recorded in entry 72's "not a cluster" section, was the narrower
+"EOL conversion being skipped by the signature-prefixed and UTF-16 ENCODERS".
+Also false, and false in the direction that matters: it names two encoders when
+the defect is structural. Measured against GNU 31.0.90, `"a\nb"` through
+`encode-coding-string`, the honest split was
+
+| already correct | dropped the CR |
+|---|---|
+| utf-8-dos / -mac | utf-8-with-signature-dos / -mac |
+| latin-1-dos / -mac | utf-8-auto-dos |
+| raw-text-dos / -mac | utf-16le-dos / -mac, utf-16be-dos, utf-16-dos |
+| japanese-iso-8bit-dos, korean-iso-8bit-dos, chinese-iso-8bit-dos | utf-7-dos, utf-7-imap-dos |
+| japanese-shift-jis-dos, shift_jis-dos | chinese-hz-dos |
+| in-is13194-devanagari-dos, chinese-big5-dos | emacs-mule-dos, iso-2022-jp-dos, iso-2022-7bit-dos |
+| | vietnamese-viqr-dos / -mac |
+
+Fourteen coding systems wrong, not two. The statement that survives measurement
+is: EOL conversion was OPT-IN across our encode paths, and whether a coding
+system got it depended on which branch it happened to fall into.
+
+GNU makes the choice impossible. It applies EOL conversion in NO encoder. It
+applies it in `consume_chars` (`src/coding.c:7607`), the single function that
+fills the character buffer every encoder then reads (`src/coding.c:7683`):
+
+```c
+if (! EQ (eol_type, Qunix))
+  { if (c == '\n') { if (EQ (eol_type, Qdos)) *buf++ = '\r'; else c = '\r'; } }
+```
+
+By the time `encode_coding_utf_8`, `encode_coding_utf_16`,
+`encode_coding_iso_2022` or `encode_coding_raw_text` run, the CR is already in
+the charbuf. An encoder cannot skip EOL conversion because it never sees a bare
+newline. The buffer-headroom comment just above -- "Compensate for CRLF and
+conversion", `src/coding.c:7646` -- is there for exactly this expansion.
+
+Ours was the inverse. EOL conversion was an opt-in call, `encode_eol_bytes` /
+`encode_eol_text` in `neovm-core/src/encoding.rs`, made at five scattered
+sites. `encode_lisp_string` opened with an early return into the UTF-16 encoder
+BEFORE any of them. A second dispatch chain in
+`builtin_coding_string_in_context` -- ten arms: utf-7, HZ, emacs-mule,
+no-conversion-multibyte, utf-8-signature, CCL, ISO-2022, EUC, Shift_JIS,
+charset-list -- reached the call only from inside three of its own encoders
+(`encode_via_euc`, `encode_via_sjis`, `encode_via_charset_list`), which is
+precisely why EUC and Shift_JIS were right while ISO-2022 and emacs-mule, one
+arm away, were not.
+
+Fixed by inverting the structure rather than by teaching the failing arms to
+call it. The source text is now expanded ONCE, above every dispatch, by
+`expand_source_eol` (and its `&str` twin `expand_source_eol_text`), mirroring
+`consume_chars`; all five downstream call sites were deleted in the same
+change and `encode_eol_bytes` no longer exists. Teaching two arms to call it
+would have restored exactly the opt-in shape that produced the bug and left the
+other ten silently at the mercy of the next edit.
+
+Two things keep the new shape from decaying. The single pass also SPENDS the
+EOL leg of the coding-system name (`coding_name_with_eol_spent`: `-dos`/`-mac`
+becomes `-unix`), so any second pass anywhere downstream is a no-op by
+construction rather than by discipline. And `encode_via_euc`, `encode_via_sjis`
+and `encode_via_charset_list` no longer take a `coding_system` parameter at
+all -- they took it only to do EOL, and without it they cannot be told about
+EOL again. Removing the parameter turned the invariant into three compile
+errors that had to be answered, which is the point.
+
+One more path was found by measuring rather than by reading: a coding system
+whose conversion is an elisp `:pre-write-conversion` hook (vietnamese-viqr)
+encoded the hook's OUTPUT through the bare base codec name, `utf-8`, which
+carries no EOL leg -- so `vietnamese-viqr-dos` also wrote LF. GNU runs the hook
+and then encodes the result through `encode_coding_object`, whose
+`consume_chars` still expands the newline, so the leg survives. It is now
+carried onto the base codec name in `run_coding_with_conversion_hook`.
+
+THE DECODE SIDE HAD THE SAME DEFECT, and fixing encode alone exposed it. The
+editorconfig parity case writes the file and then reads it back; with the CR
+finally being written, `utf-8-with-signature-dos` read back as `"café\15\n"`.
+Our decode collapsed CR LF in only four of the ten codec arms, and that had
+stayed invisible for exactly as long as the encode side never produced a CR to
+collapse. GNU is symmetric here too: `decode_coding` (`src/coding.c:7481`) runs
+the decoder and then calls `decode_eol` once, outside every `decode_coding_*`.
+So the decode pass is now also single, and it is placed AFTER the decoder
+rather than before it -- in UTF-16 a CR is the byte pair 0D 00, so collapsing
+CR LF in the SOURCE bytes would never find it. The name is spent up front here
+too, which matters more on this side than on the encode side: collapsing is
+NOT idempotent (`"\r\r\n\n"` collapses twice to `"\n\n"`), so a second pass is
+corruption, not a no-op.
+
+The trap in this fix is the reverse of the bug: convert up front and leave the
+old call sites in place, and the coding systems that were CORRECT start
+emitting CR CR LF. So the pin is ONE assertion over ALL 31 measured rows --
+`eol_conversion_applies_to_every_encoder_not_just_some`
+(`neovm-core/src/encoding_test.rs`). The rows that were broken prove the fix;
+the rows that were already right are what stops it over-applying; the `-unix`
+row stops it applying at all. Every expected value was taken by running the
+probe under GNU 31.0.90, not derived -- a derived expectation would have
+pinned our bug. A second assertion in the same test round-trips all 19 dos/mac
+systems back through decode, which is the pin the decode half needed and did
+not have.
+
+The integration check is the editorconfig parity case
+`charset_and_crlf_rules_control_the_exact_bytes_written_on_save`, which asserts
+both halves at once: the bytes on disk (239 187 191 99 97 102 195 169 13 10)
+and the text read back ("café\n").
+
+Status: FIXED.
