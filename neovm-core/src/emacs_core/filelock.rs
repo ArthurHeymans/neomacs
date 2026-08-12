@@ -19,14 +19,17 @@ use super::value::{Value, ValueKind};
 use crate::buffer::BufferId;
 use crate::heap_types::LispString;
 
+/// GNU reports a lock failure with `report_file_errno` (filelock.c:648, 776),
+/// so the DATA must be exactly what `get_file_errno_data` (fileio.c) builds:
+/// `(ACTION STRERROR FILENAME)`, with the errno choosing the condition symbol
+/// and STRERROR being the bare libc text.  Reuse that port rather than
+/// re-deriving the shape here — an ad-hoc triple got the order wrong and
+/// leaked Rust's "(os error N)" suffix.
 fn file_lock_error(context: &str, filename: &LispString, err: io::Error) -> Flow {
-    signal(
-        LispCondition::FileError,
-        vec![
-            Value::string(context),
-            Value::heap_string(filename.clone()),
-            Value::string(err.to_string()),
-        ],
+    super::fileio::signal_file_action_error_value(
+        err,
+        context,
+        Value::heap_string(filename.clone()),
     )
 }
 
@@ -125,7 +128,8 @@ enum LockOwner {
 /// USER@HOST.PID:BOOT.  `lock_file` deliberately ignores that errno (no
 /// prompt), while file-locked-p and unlock-file report it as a file-error.
 fn invalid_lock_contents_error() -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, "Invalid argument")
+    // Carry the real EINVAL so report_file_errno's strerror text matches GNU.
+    io::Error::from_raw_os_error(libc::EINVAL)
 }
 
 /// GNU's `make-lock-file-name` (files.el) prepends ".#" to the non-directory
@@ -498,6 +502,12 @@ pub(crate) fn lock_file(
 
 /// Handler-aware `unlock-file` operation, corresponding to GNU
 /// `Funlock_file`.  GNU discards a file-name handler's return value.
+///
+/// GNU wraps the native path in `internal_condition_case_1` for `file-error`
+/// and routes any such error to `userlock--handle-unlock-error`
+/// (filelock.c:717-720, userlock.el:217), which warns and returns nil — so
+/// `unlock-file` itself never signals a file-error.  The handler path is
+/// deliberately outside that condition case, exactly as in GNU.
 pub(crate) fn unlock_file(
     eval: &mut super::eval::Context,
     filename: &LispString,
@@ -512,8 +522,33 @@ pub(crate) fn unlock_file(
         return Ok(Value::NIL);
     }
 
-    let filename = resolve_filename_lisp_for_eval(eval, filename);
-    unlock_file_resolved(eval, &filename)
+    let resolved = resolve_filename_lisp_for_eval(eval, filename);
+    match unlock_file_resolved(eval, &resolved) {
+        Err(Flow::Signal(sig))
+            if super::errors::signal_matches_condition_value_sym(
+                &eval.obarray,
+                sig.symbol,
+                &Value::symbol("file-error"),
+            ) =>
+        {
+            let error_object = Value::cons(Value::symbol(sig.symbol), signal_payload_value(&sig));
+            eval.apply(
+                Value::symbol("userlock--handle-unlock-error"),
+                vec![error_object],
+            )?;
+            Ok(Value::NIL)
+        }
+        other => other,
+    }
+}
+
+/// The `(SYMBOL . DATA)` object a `condition-case` variable would be bound to.
+fn signal_payload_value(sig: &super::error::SignalData) -> Value {
+    match &sig.raw_data {
+        Some(raw) => *raw,
+        None if sig.data.is_empty() => Value::NIL,
+        None => Value::list(sig.data.clone()),
+    }
 }
 
 /// Handler-aware `file-locked-p` operation, corresponding to GNU

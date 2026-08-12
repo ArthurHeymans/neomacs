@@ -474,3 +474,65 @@ fn stale_boot_time_zaps_even_a_live_pid() {
         _ => panic!("previous-boot lock must be stale"),
     }
 }
+
+/// GNU reports lock failures through report_file_errno, whose DATA is
+/// (ACTION STRERROR FILENAME) — fileio.c get_file_errno_data, filelock.c:648.
+/// The bare strerror text carries no Rust "(os error N)" suffix.
+#[cfg(unix)]
+#[test]
+fn lock_error_data_matches_gnu_report_file_errno_shape() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+    fs::write(dir.path().join(".#note.txt"), b"garbage-not-a-lock").expect("write bogus lock");
+
+    let mut eval = super::super::eval::Context::new();
+    let result = eval.eval_str(&format!("(file-locked-p \"{}\")", visited.display()));
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&result),
+        format!(
+            "ERR (file-error (\"Testing file lock\" \"Invalid argument\" \"{}\"))",
+            visited.display()
+        ),
+    );
+}
+
+/// GNU Funlock_file (filelock.c:717-720) wraps unlock_file in
+/// internal_condition_case_1 for file-error and routes the error to
+/// userlock--handle-unlock-error, returning nil: unlock-file never signals.
+#[cfg(unix)]
+#[test]
+fn unlock_file_routes_lock_errors_to_the_userlock_handler_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+    fs::write(dir.path().join(".#note.txt"), b"garbage-not-a-lock").expect("write bogus lock");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.eval_str(
+        r#"(progn
+             (setq neovm-unlock-errors nil)
+             (fset 'userlock--handle-unlock-error
+                   (lambda (err)
+                     (setq neovm-unlock-errors (cons err neovm-unlock-errors)))))"#,
+    )
+    .expect("define the unlock error handler");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(
+            &eval.eval_str(&format!("(unlock-file \"{}\")", visited.display()))
+        ),
+        "OK nil",
+        "GNU unlock-file swallows file-errors and returns nil"
+    );
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str("neovm-unlock-errors")),
+        format!(
+            "OK ((file-error \"Unlocking file\" \"Invalid argument\" \"{}\"))",
+            visited.display()
+        ),
+        "the error is handed to userlock--handle-unlock-error"
+    );
+}
